@@ -8,6 +8,7 @@ use look::Region;
 use super::jumps::assert_at_the_bottom;
 use super::worlds::{Turns, open_on_a_chat};
 use super::{prompt_rows, row_id, scrolled_to, selected};
+use crate::finding::{FRAME, find, settle_with_the_match_in_view};
 use crate::support::Ui;
 
 /// Presses `key`, and plays the frames it takes to lay the rows out where it sent the chat.
@@ -49,4 +50,23 @@ fn option_up_and_down_step_the_chat_between_its_prompts(cx: &mut TestAppContext)
     ui.click_at(chat.center());
     step(&mut ui, "alt-up");
     assert_at_the_bottom(&mut ui, rows[5], "the last prompt, from the chat");
+}
+
+/// A step pressed in the frame after Find goes on to a match far down the chat, while the chat is on its way there,
+/// goes where it sends the chat. The match gives way, as it does to the keys that scroll a page, rather than go on
+/// being brought into view after the step.
+#[gpui_kit::test]
+fn a_step_as_find_goes_to_a_match_goes_where_it_sends_the_chat(cx: &mut TestAppContext) {
+    let between = Vec::from_fn(60, |part| format!("Part {part}.")).join("\n\n");
+    let turns = Turns::default().prose(4, 0).turn(&[&format!("A needle here.\n\n{between}\n\nA needle there.")]);
+    let (_fake, mut ui, _) = open_on_a_chat(cx, turns);
+    ui.wait("the outline", |ui| ui.has("outline"));
+    let rows = prompt_rows(&ui);
+    find(&mut ui, "needle");
+    settle_with_the_match_in_view(&mut ui);
+
+    ui.press_a_frame_apart(&["enter", "alt-up"]);
+    ui.settle(FRAME);
+
+    assert_at_the_bottom(&mut ui, rows[1], "the prompt the step went back to, rather than the match");
 }

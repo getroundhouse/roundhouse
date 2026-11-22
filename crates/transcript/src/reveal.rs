@@ -111,7 +111,8 @@ impl Reveal {
         self.0.borrow().wanted.is_some()
     }
 
-    /// It's in view, or nothing more can be done.
+    /// It's in view, nothing more can be done, or the person has taken the view elsewhere, such as with the keys that
+    /// scroll a page or a step, which it would otherwise scroll back from.
     pub(crate) fn done(&self) {
         let mut slot = self.0.borrow_mut();
         slot.wanted = None;

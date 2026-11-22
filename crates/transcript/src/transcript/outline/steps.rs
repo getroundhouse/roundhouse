@@ -56,17 +56,27 @@ pub(super) fn step(lines: &[Line], reading: Reading, way: Way) -> Option<Step> {
     }
 }
 
+impl Transcript {
+    /// Takes the chat to `to`, as a step or a click in the outline's list does. What was being brought into view,
+    /// such as Find's match, gives way, as it does to the keys that scroll a page, rather than scroll back to it after.
+    pub(super) fn jump(&mut self, to: Step, cx: &mut Context<Self>) {
+        self.selection.reveal().done();
+        match to {
+            Step::To(row) => self.list.go_to_row_at_bottom(row),
+            Step::End => self.list.go_to_latest(),
+        }
+        cx.notify();
+    }
+}
+
 impl Steps for Transcript {
     /// Steps the chat `way` to the line the outline lists before the one being read or after it, or on from the last
     /// to its end.
     fn step(&mut self, way: Way, cx: &mut Context<Self>) {
         let lines = self.outline.read(&self.log, &self.model.borrow().proposals_by_id);
-        match step(&lines, self.list.reading(), way) {
-            Some(Step::To(row)) => self.list.go_to_row_at_bottom(row),
-            Some(Step::End) => self.list.go_to_latest(),
-            None => return,
+        if let Some(to) = step(&lines, self.list.reading(), way) {
+            self.jump(to, cx);
         }
-        cx.notify();
     }
 
     /// Moves the end of what's selected `way` to the start of a prompt, the one whose turn it's in being the one it's
