@@ -184,16 +184,16 @@ impl<W: Waiter> References<W> {
         *github = Some(Following { view, _listening: listening });
     }
 
-    /// How a chip names `reference`: `#1021` in the repository the chat's workspace is on, as the hub's records say,
-    /// and `owner/name#41` in another, as GitHub writes them.
-    pub(crate) fn label(&self, reference: &Reference) -> String {
+    /// How a chip names what `ask` asks for: `#1021` in the repository the chat's workspace is on, as the hub's records
+    /// say, and `owner/name#41` in another, as GitHub writes them.
+    pub(crate) fn label(&self, ask: &ReferenceAsk) -> String {
         let own = self.0.records.lock().as_ref().and_then(|records| {
             let snapshot = records.snapshot();
             let workspace = snapshot.workspaces().iter().find(|workspace| workspace.id == self.0.workspace)?;
             let repo = snapshot.repos().iter().find(|repo| repo.id == workspace.repo_id)?;
             repo.origin.url()?.on_github()
         });
-        let (repository, number) = (reference.repository.as_str(), reference.number);
+        let (repository, number) = (ask.repository.as_str(), ask.number);
         if own.is_some_and(|own| own.as_str().eq_ignore_ascii_case(repository)) {
             format!("#{number}")
         } else {
@@ -204,10 +204,11 @@ impl<W: Waiter> References<W> {
     /// Which workspace `reference` is in, if it's a pull request one of the hub's workspaces is on.
     pub(crate) fn tie(&self, reference: &Reference) -> Tie {
         let Some(records) = self.0.records.lock().clone() else { return Tie::None };
+        let Some(about) = reference.about() else { return Tie::None };
         let snapshot = records.snapshot();
         // Its own, then one that isn't archived, then the newest archived, since a pull request can be in several.
         let Some(workspace) = (snapshot.workspaces().iter())
-            .filter(|workspace| workspace.pull_request_linked().is_some_and(|link| link.url == reference.url))
+            .filter(|workspace| workspace.pull_request_linked().is_some_and(|link| link.url == about.url))
             .max_by_key(|workspace| {
                 (workspace.id == self.0.workspace, workspace.archived_at_ms.is_none(), workspace.archived_at_ms)
             })

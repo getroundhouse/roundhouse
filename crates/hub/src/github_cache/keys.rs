@@ -82,14 +82,12 @@ impl Subject {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Facet {
     /// What it is and where it stands, with who opened it, its labels and the start of what it says, as a chip and its
-    /// card show it.
+    /// card show it, and for a pull request, the commits it's at and whether it can merge.
     Summary,
     /// A branch's rules for the checks a pull request into it needs.
     Rules,
-    /// A pull request's plain fields: the commits it's at, whether it can merge, and its place in the merge queue.
-    Status,
-    /// When a review last asked for changes.
-    Reviews,
+    /// When a review last asked for changes, and a pull request last left the merge queue.
+    History,
     /// Where a pull request is in its stack.
     Stack,
     /// The checks reported for the commit a pull request's checks run on, with that commit.
@@ -102,8 +100,7 @@ impl Facet {
         match self {
             Self::Summary => "summary",
             Self::Rules => "rules",
-            Self::Status => "status",
-            Self::Reviews => "reviews",
+            Self::History => "history",
             Self::Stack => "stack",
             Self::Checks => "checks",
         }
@@ -111,7 +108,7 @@ impl Facet {
 
     /// The facet [`Facet::name`] names `name`.
     pub(super) fn named(name: &str) -> Option<Self> {
-        [Self::Summary, Self::Rules, Self::Status, Self::Reviews, Self::Stack, Self::Checks]
+        [Self::Summary, Self::Rules, Self::History, Self::Stack, Self::Checks]
             .into_iter()
             .find(|facet| facet.name() == name)
     }

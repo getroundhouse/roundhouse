@@ -3,7 +3,8 @@
 use super::mcp::Called;
 use crate::asks::Asks;
 use protocol::model::{
-    CheckState, PullRequestSelection, PullRequestWatch, PullRequestsSnapshot, SessionId, Wait, WaitEnd, WaitUntil,
+    CheckState, PullRequest, PullRequestSelection, PullRequestWatch, PullRequestsSnapshot, SessionId, Wait, WaitEnd,
+    WaitUntil,
 };
 use protocol::worker::{ReadPullRequests, StartPullRequestWait};
 use serde_json::{Map, Value, json};

@@ -359,12 +359,13 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 | `Done` | `CircleCheck` | `Merged` |
 | `NotPlanned` | `CircleSlash` | `Draft` |
 
-**Every state of a pull request's chip, by its name.** Each is a state in `look::PullRequestState`, with the mark GitHub draws for it, in the colour the sidebar's fan gives that work, so each means the same in both. *Unconfirmed.*
+**Every state of a pull request's chip, by its name.** Each is a state in `look::PullRequestState`, with the mark GitHub draws for it, in the colour the sidebar's fan gives that work, so each means the same in both. One in the merge queue has an open one's mark, since it's still open and the icons have no mark for the queue, in the queue's yellow, as the bar and the sidebar show it. *Unconfirmed.*
 
 | Name | Mark | Coloured as |
 |---|---|---|
 | `Open` | `GitPullRequest` | `Open` |
 | `Draft` | `GitPullRequestDraft` | `Draft` |
+| `Queued` | `GitPullRequest` | `Queued` |
 | `Merged` | `GitMerge` | `Merged` |
 | `Closed` | `GitPullRequestClosed` | `Closed` |
 

@@ -3,12 +3,12 @@ use std::path::Path;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use protocol::model::{Reference, ReferenceRead};
+use protocol::model::{PrState, PullRequest, Read, Reference, ReferenceRead};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, watch};
 use tracing::warn;
 
-use github::{FacetsRead, PullFacets, Rules};
+use github::{Checks, FacetsRead, PullFacets, Rules};
 use protocol::model::{BranchName, GithubRepositoryName, IssueNumber};
 
 use super::file::{CacheFile, Row};
@@ -206,22 +206,76 @@ impl GithubCache {
         }
     }
 
-    /// `item`'s facets past its summary, where each was read within `fresh_for`, as [`KeptPulls::fresh`] says.
-    pub(crate) fn pull(&self, item: &Item, fresh_for: Duration) -> Option<PullFacets> {
-        self.pulls.fresh(item, fresh_for, now_ms())
+    /// `item` as a pull request, where each of its facets was read within `fresh_for` and its checks are of the head
+    /// its summary is at, with them judged by the rules of the branch it merges into that were read within
+    /// `rules_fresh_for`, which counts as its being asked about. `None` where any facet is older, or isn't kept, or
+    /// there are no such rules for an open one's checks, which can't be judged without them.
+    pub(crate) fn fresh_pull_request(
+        &self,
+        item: &Item,
+        fresh_for: Duration,
+        rules_fresh_for: Duration,
+    ) -> Option<PullRequest> {
+        let now_ms = now_ms();
+        let pull_request = self.pull_request_summary(item, now_ms)?;
+        if now_ms - pull_request.summary.read_at_ms >= millis(fresh_for) {
+            return None;
+        }
+        let past = self.pulls.fresh(item, &pull_request.said().head, fresh_for, now_ms)?;
+        let pull_request = PullRequest { history: past.history, stack: past.stack, ..pull_request };
+        let rules = self.rules_into(&pull_request, rules_fresh_for);
+        // A merged or closed one has no checks to judge, so it needs none.
+        if rules.is_none() && pull_request.said().state == PrState::Open {
+            return None;
+        }
+        Some(judged(pull_request, past.checks?, rules.as_ref()))
     }
 
-    /// Keeps the facets of each pull request a read of them found, as of when the read began, but for one a read begun
-    /// since has kept, and forgets what nothing has asked for in [`KEPT_FOR`]. Blocks on the file.
+    /// `item` as a pull request, in whichever facets the cache has however old, but for checks of another head than
+    /// its summary is at, which it leaves out, so a push isn't taken for the commit before it. Its checks are judged by
+    /// the rules of the branch it merges into, however old, or without, so which are required isn't known. Counts as its
+    /// being asked about. `None` where it has no summary of it as a pull request.
+    pub(crate) fn pull_request(&self, item: &Item) -> Option<PullRequest> {
+        let now_ms = now_ms();
+        let pull_request = self.pull_request_summary(item, now_ms)?;
+        let past = self.pulls.known(item, &pull_request.said().head, now_ms);
+        let pull_request = PullRequest { history: past.history, stack: past.stack, ..pull_request };
+        let Some(checks) = past.checks else { return Some(pull_request) };
+        let rules = self.rules_into(&pull_request, Duration::MAX);
+        Some(judged(pull_request, checks, rules.as_ref()))
+    }
+
+    /// The rules of the branch `pull_request` merges into, as its stack says, read within `fresh_for`.
+    fn rules_into(&self, pull_request: &PullRequest, fresh_for: Duration) -> Option<Rules> {
+        let destination = &pull_request.stack_said()?.destination;
+        (self.rules_of(&pull_request.repository, fresh_for).into_iter())
+            .find(|(branch, _)| branch == destination)
+            .map(|(_, rules)| rules)
+    }
+
+    /// `item` as a pull request with its summary alone, if the cache has that, which counts as its being asked about.
+    fn pull_request_summary(&self, item: &Item, now_ms: i64) -> Option<PullRequest> {
+        let mut items = self.items.lock();
+        let kept = items.get_mut(item)?;
+        kept.asked_at_ms = now_ms;
+        let Some(Said::Found { reference }) = &kept.summary.said else { return None };
+        let Reference::PullRequest(pull_request) = &**reference else { return None };
+        Some(pull_request.clone())
+    }
+
+    /// Keeps the facets past its summary of each pull request a read of them found, as of when the read began, but for
+    /// one a read begun since has kept, and forgets what nothing has asked for in [`KEPT_FOR`]. Its summary is kept
+    /// apart, as a read of summaries keeps it. Blocks on the file.
     pub(crate) fn keep_pulls(&self, read: Vec<FacetsRead>) {
         let forgotten = self.forget_unasked(now_ms());
         let read: Vec<_> = (read.into_iter())
-            .filter_map(|FacetsRead { repository, facets, read_at_ms }| {
-                let number = IssueNumber::try_from(facets.status.number).ok()?;
-                Some((Item::new(&repository, number), facets, read_at_ms))
+            .filter_map(|FacetsRead { repository, number, facets, read_at_ms }| {
+                let number = IssueNumber::try_from(number.get()).ok()?;
+                let PullFacets { history, stack, checks, .. } = facets;
+                Some((Item::new(&repository, number), history, stack, checks, read_at_ms))
             })
             .collect();
-        let told = read.iter().map(|(item, _, _)| item.clone()).collect();
+        let told = read.iter().map(|(item, ..)| item.clone()).collect();
         let rows = self.pulls.keep(read);
         self.write(&forgotten, &rows);
         // Only once it's kept, so what's told finds it. Nobody may be listening.
@@ -280,6 +334,15 @@ impl GithubCache {
         for kept in self.items.lock().values_mut() {
             kept.summary.read_at_ms -= millis(by);
             kept.asked_at_ms -= millis(by);
+            // What GitHub said keeps when it was read too, which is what a pull request's freshness goes by.
+            match kept.summary.said.as_mut() {
+                Some(Said::Found { reference }) => match &mut **reference {
+                    Reference::Issue(issue) => issue.summary.read_at_ms -= millis(by),
+                    Reference::PullRequest(pull_request) => pull_request.summary.read_at_ms -= millis(by),
+                    Reference::Unknown => {}
+                },
+                Some(Said::Missing) | None => {}
+            }
         }
         self.rules.age(by);
         self.pulls.age(by);
@@ -289,4 +352,10 @@ impl GithubCache {
 /// `duration` in milliseconds, or the most there are.
 pub(super) fn millis(duration: Duration) -> i64 {
     i64::try_from(duration.as_millis()).unwrap_or(i64::MAX)
+}
+
+/// `pull_request` with `checks`, as they were reported, judged by `rules`, as of when they were read.
+fn judged(pull_request: PullRequest, checks: Read<Checks>, rules: Option<&Rules>) -> PullRequest {
+    let said = github::judged(checks.said, pull_request.said(), rules);
+    PullRequest { checks: Some(Read { said, read_at_ms: checks.read_at_ms }), ..pull_request }
 }

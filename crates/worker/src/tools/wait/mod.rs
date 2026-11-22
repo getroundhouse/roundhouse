@@ -4,7 +4,7 @@
 //! too, which a CLI resumed from before can still ask after.
 
 #[cfg(test)]
-use protocol::model::{PullRequest, Wait, WaitEnd, WaitUntil};
+use protocol::model::{Wait, WaitEnd, WaitUntil};
 #[cfg(test)]
 use serde_json::{Value, json};
 

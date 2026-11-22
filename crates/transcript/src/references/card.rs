@@ -4,7 +4,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{Anchor, AnyElement, App, ClipboardItem, IntoElement, ParentElement as _, Styled as _, div, rgb};
 use look::{CardKind, CardWidth, GithubState, IssueState, Menu, PullRequestState, Region, Space, Type, Typeset as _};
-use protocol::model::{ChecksRollup, Reference, ReferenceKind, Review};
+use protocol::model::{About, ChecksRollup, QueueState, Reference, Review};
 
 use super::kept::{References, Tie};
 use crate::linked_images::Waiter;
@@ -21,45 +21,48 @@ pub(super) fn card<W: Waiter>(
 ) -> AnyElement {
     let colors = look::colors(cx);
     let detail = || div().flex().flex_wrap().items_center().gap(Space::XSmall).typeset(Type::Detail);
-    let (kind, word) = said_of(state);
-    let pull_request = match reference.kind {
-        ReferenceKind::PullRequest(pull_request) => Some(pull_request),
-        ReferenceKind::Issue { .. } | ReferenceKind::Unknown => None,
+    // One this version can't draw has no chip to rest on, so this is never shown.
+    let (Some(about), Some(ask)) = (reference.about(), reference.asked()) else { return div().into_any_element() };
+    let number = ask.number;
+    let pull_request = match reference {
+        Reference::PullRequest(pull_request) => Some(pull_request.said()),
+        Reference::Issue(_) | Reference::Unknown => None,
     };
+    let (kind, word) = said_of(state, pull_request.and_then(|pull_request| pull_request.queue));
     let stands = detail()
         .text_color(colors.text_faint)
         .child(div().text_color(state.color(cx)).child(word))
         .child("·")
-        .child(format!("{kind} #{}", reference.number));
-    let said = detail().text_color(colors.text_faint).child(opened(reference, cx)).when_some(
+        .child(format!("{kind} #{number}"));
+    let said = detail().text_color(colors.text_faint).child(opened(about, cx)).when_some(
         pull_request,
         |line, pull_request| {
             line.child("·").child(look::lines_changed(pull_request.added as usize, pull_request.removed as usize))
         },
     );
-    let labels = (!reference.labels.is_empty()).then(|| {
-        div().flex().flex_wrap().gap(Space::XSmall).children(reference.labels.iter().map(|label| {
+    let labels = (!about.labels.is_empty()).then(|| {
+        div().flex().flex_wrap().gap(Space::XSmall).children(about.labels.iter().map(|label| {
             // GitHub keeps six hex digits. One that isn't is drawn in the muted colour of text that says little.
             let color = u32::from_str_radix(&label.color, 16).map_or(colors.text_muted, |color| rgb(color).into());
             look::label(label.name.clone(), color)
         }))
     });
     let checks = pull_request.and_then(|pull_request| {
-        let words = [checks_words(pull_request.checks), review_words(pull_request.review)];
+        let words = [checks_words(pull_request.rollup), review_words(pull_request.review)];
         let words: Vec<&str> = words.into_iter().flatten().collect();
         (!words.is_empty()).then(|| detail().child(words.join(" · ")))
     });
     let tied = tie_line(tie, cx);
-    let body = (!reference.body.is_empty()).then(|| {
+    let body = (!about.body.is_empty()).then(|| {
         div()
             .typeset(Type::Detail)
             .text_color(colors.text_muted)
             .line_clamp(3)
             .text_ellipsis()
-            .child(reference.body.clone())
+            .child(about.body.clone())
     });
     let (for_menu, tie, references) = (reference.clone(), tie.clone(), references.clone());
-    let heading = look::card_heading(reference.title.clone()).mark(state.icon()).control(
+    let heading = look::card_heading(about.title.clone()).mark(state.icon()).control(
         look::icon_button("reference-more", look::ButtonKind::Faint, look::ControlSize::Small, IconName::Ellipsis)
             .tooltip("More")
             .menu(Anchor::TopRight, move |list, _, cx| menu(&for_menu, &tie, &references, list, cx)),
@@ -76,8 +79,9 @@ pub(super) fn card<W: Waiter>(
         .into_any_element()
 }
 
-/// What it is, and the word for where it stands, which the card says in its state's colour.
-fn said_of(state: GithubState) -> (&'static str, &'static str) {
+/// What it is, and the word for where it stands, which the card says in its state's colour. One in the merge queue,
+/// at `queue`, says where it is in it as the bar does.
+pub(super) fn said_of(state: GithubState, queue: Option<QueueState>) -> (&'static str, &'static str) {
     match state {
         GithubState::Issue(state) => (
             "Issue",
@@ -92,6 +96,9 @@ fn said_of(state: GithubState) -> (&'static str, &'static str) {
             match state {
                 PullRequestState::Open => "Open",
                 PullRequestState::Draft => "Draft",
+                // Only one in the queue is drawn as queued, so it has a step, and without one it says what the bar
+                // says of a step it doesn't know.
+                PullRequestState::Queued => client_core::standing::queued(queue.unwrap_or(QueueState::Unknown)),
                 PullRequestState::Merged => "Merged",
                 PullRequestState::Closed => "Closed",
             },
@@ -100,13 +107,13 @@ fn said_of(state: GithubState) -> (&'static str, &'static str) {
 }
 
 /// Who opened it and when, and how much has been said on it, such as `ada opened this 3 days ago · 6 comments`.
-fn opened(reference: &Reference, cx: &App) -> String {
-    let who = reference.author.as_deref().unwrap_or("Someone");
+fn opened(about: &About, cx: &App) -> String {
+    let who = about.author.as_deref().unwrap_or("Someone");
     let mut said = format!("{who} opened this");
-    if let Some(when) = look::day_ago(reference.opened_at_ms, look::now_ms(cx), cx) {
+    if let Some(when) = look::day_ago(about.opened_at_ms, look::now_ms(cx), cx) {
         said = format!("{said} {when}");
     }
-    match reference.comments {
+    match about.comments {
         0 => said,
         1 => format!("{said} · 1 comment"),
         many => format!("{said} · {many} comments"),
@@ -168,7 +175,8 @@ pub(super) fn menu<W: Waiter>(
     list: Menu,
     _: &mut App,
 ) -> Menu {
-    let (open, copy) = (reference.url.clone(), reference.url.clone());
+    let url = reference.about().map_or_default(|about| about.url.clone());
+    let (open, copy) = (url.clone(), url);
     let (go, to) = match tie {
         Tie::Elsewhere { id, name, archived, .. } => (format!("Go to {name}"), (!archived).then(|| id.clone())),
         Tie::ThisOne { .. } | Tie::None => ("Go to its workspace".to_string(), None),

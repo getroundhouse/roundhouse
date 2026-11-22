@@ -1,7 +1,7 @@
 //! Aggregate waits: one blocker ends the task; success requires every watched PR on its observed revision.
 
 use protocol::model::{
-    CheckState, MergeState, Mergeability, ObservedPullRequest, PrState, PullRequestNumber, PullRequestSelection,
+    CheckState, MergeState, Mergeability, PrState, PullRequest, PullRequestNumber, PullRequestSelection,
     PullRequestWatch, PullRequestsSnapshot, QueueState, Wait, WaitBaseline, WaitEnd, WaitEnded, WaitUntil,
 };
 use std::collections::BTreeSet;

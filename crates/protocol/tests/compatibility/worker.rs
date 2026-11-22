@@ -1,6 +1,8 @@
 //! What has to stay readable between a hub and its workers.
 
+use super::github_shown::{EVERY_FACET, every_facet};
 use protocol::frame;
+use protocol::model::{Local, OwnPullRequest};
 use protocol::model::{Wait, WaitEnd, WaitEnded, WaitUntil};
 use protocol::worker::Request as _;
 use protocol::worker::{
@@ -29,6 +31,17 @@ fn what_a_worker_asks_and_what_its_hub_answers_keep_their_form() {
         }
     );
     assert_eq!(serde_json::to_vec(&answered).unwrap(), answer, "and it's written the way it's read");
+    let found = OwnPullRequest { pull_request: every_facet(), local: Local { uncommitted: 1, ahead: 2, behind: 0 } };
+    let answered = AskAnswer {
+        answer: AskId::new(4),
+        outcome: AskOutcome::Response(AskReply::PullRequest(PullRequestAnswer { pull_request: Some(found) })),
+    };
+    let answer = format!(
+        r#"{{"answer":4,"response":{{"result":"pull_request","pull_request":{{"pull_request":{EVERY_FACET},"local":{{"uncommitted":1,"ahead":2,"behind":0}}}}}}}}"#
+    );
+    assert_eq!(serde_json::to_string(&answered).unwrap(), answer, "a pull request found, in every facet");
+    let ToWorker::Answer(read) = ToWorker::decode(answer.as_bytes()).unwrap() else { panic!("an answer") };
+    assert_eq!(read, answered);
 
     let serving: WorkerCall = frame::decode(br#"{"id":5,"request":{"method":"serve_tools","port":50123}}"#).unwrap();
     assert_eq!(serving.request, WorkerRequest::ServeTools(ServeTools { port: Some(50_123) }));

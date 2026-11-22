@@ -8,9 +8,9 @@ use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, GitDiff, GithubAccount, GithubApp,
-    GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, PORTS_PER_WORKSPACE, Place, PromptCache,
-    Proposal, PullRequest, ReplyHeard, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus, Subagent,
-    SubagentId, Terminal, TerminalId, Title, Workspace, WorkspaceId, WorktreeFiles,
+    GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, OwnPullRequest, PORTS_PER_WORKSPACE,
+    Place, PromptCache, Proposal, ReplyHeard, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus,
+    Subagent, SubagentId, Terminal, TerminalId, Title, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
@@ -49,7 +49,8 @@ pub struct World {
     pub diffs: HashMap<WorkspaceId, GitDiff>,
     pub comments: HashMap<WorkspaceId, Vec<DiffComment>>,
     pub setup_logs: HashMap<WorkspaceId, String>,
-    pub pull_requests: HashMap<WorkspaceId, PullRequest>,
+    /// Each workspace's own pull request, as the hub would have read it.
+    pub pull_requests: HashMap<WorkspaceId, OwnPullRequest>,
     /// The issues and pull requests on GitHub that chats link to, as the hub would have looked them up.
     pub references: Vec<protocol::model::Reference>,
     /// What clients have said they show of GitHub, each time, in order, which a test shares before the hub is given the

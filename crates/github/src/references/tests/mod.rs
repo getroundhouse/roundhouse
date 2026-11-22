@@ -1,7 +1,7 @@
 use protocol::client::ErrorCode;
 use protocol::model::{
-    ChecksRollup, GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceKind, ReferenceLabel,
-    ReferencedPullRequest, Review,
+    About, ChecksRollup, GithubRepositoryName, Issue, IssueNumber, IssueState, IssueSummary, PullRequest, Read,
+    Reference, ReferenceLabel, Review, Summary,
 };
 use serde_json::{Value, json};
 

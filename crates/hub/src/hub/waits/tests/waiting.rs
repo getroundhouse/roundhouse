@@ -1,10 +1,10 @@
 use super::super::*;
-use crate::hub::tests::{hub_in, hub_on_github, hub_with_worktree, open};
+use crate::hub::tests::{hub_in, hub_on_github, hub_with_worktree};
 use crate::store::tests::idle_session;
 use crate::store::{SessionChange, StatusChange};
 use github::PullRequestState;
 use protocol::event::{AgentTask, EventBody, ExitReason, NoticeLevel, TaskKind};
-use protocol::model::{PullRequest, Seq, SessionStatus, Workspace};
+use protocol::model::{OwnPullRequest, Seq, SessionStatus, Workspace};
 use protocol::worker::{
     Answer as _, CancelWait, PullRequestWaitUntil, ReadWait, StartPullRequestWait, WaitAnswer, WorkerAsk,
     WorkerRequest, WorkerResponse,
@@ -20,7 +20,7 @@ pub(super) async fn ask(
     hub: &Arc<Hub>,
     link: &WorkerLink,
     ask: WorkerAsk,
-) -> Result<(Wait, Option<PullRequest>), ApiError> {
+) -> Result<(Wait, Option<OwnPullRequest>), ApiError> {
     let reply = hub.answer_ask(&"w".into(), link, "s".into(), ask).await?;
     let answer = WaitAnswer::read(reply).unwrap_or_else(|reply| panic!("a wait: {reply:?}"));
     Ok((answer.wait, answer.pull_request))
@@ -40,12 +40,13 @@ pub(super) fn how(wait: &Wait) -> Option<WaitEnd> {
     wait.ended.map(|ended| ended.how)
 }
 
+/// A wait on the pull requests it watches carries them in its watch, as last read, apart from any worktree, so it comes
+/// with no pull request of the workspace's own.
 #[tokio::test]
-async fn a_worker_reads_a_wait_with_the_pull_request_as_last_read_and_only_for_its_own_chat() {
+async fn a_worker_reads_a_wait_with_the_pull_requests_as_last_read_and_only_for_its_own_chat() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     hub.store.start_wait(&wait()).unwrap();
-    let last_read = wait().watch.unwrap().snapshot.pull_requests[0].pull_request.clone();
     let mut other = idle_session(1);
     other.session.id = "t".into();
     hub.store.insert_session(&other, None).unwrap();
@@ -55,7 +56,8 @@ async fn a_worker_reads_a_wait_with_the_pull_request_as_last_read_and_only_for_i
     let (wait, pull_request) = ask(&hub, &link, read()).await.unwrap();
     let refused = hub.answer_ask(&"w".into(), &link, "t".into(), read()).await.unwrap_err();
 
-    assert_eq!((wait.id.as_str(), wait.ended, pull_request), ("a", None, Some(last_read)));
+    assert_eq!((wait.id.as_str(), wait.ended, pull_request), ("a", None, None));
+    assert_eq!(wait.watch, self::wait().watch, "as last read");
     assert_eq!(refused.code, ErrorCode::NotFound, "another chat's wait: {refused:?}");
 }
 
@@ -182,9 +184,8 @@ async fn with_no_client_connected_only_a_workspace_waited_on_is_read() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     let w = hub.store.get_workspace(&"w".into()).unwrap();
-    // One that would come first, with an open pull request.
-    let found = Some(PullRequestFound { pull_request: Some(open()) });
-    let other = Workspace { id: "v".into(), name: "other".into(), instance_id: "v".into(), pull_request: found, ..w };
+    // One that would come first.
+    let other = Workspace { id: "v".into(), name: "other".into(), instance_id: "v".into(), ..w };
     hub.store.insert_workspace(&other, &crate::store::WorkspacePlacement::local_checkout("/repo"), None).unwrap();
     let next = || async { hub.to_read_in_turn().await.first().map(|workspace| workspace.id.clone()) };
 

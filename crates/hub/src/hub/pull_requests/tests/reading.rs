@@ -2,7 +2,8 @@
 //! GitHub that the branch checked out pushes to, on the real clock, since a call to the stand-in would race tokio's.
 
 use protocol::model::{
-    Branches, GitFile, GitStatus, Head, Local, PrState, PullRequest, PullRequestFound, PullRequestLinked,
+    Branches, CheckCounts, GitFile, GitStatus, Head, Local, OwnPullRequest, PrState, PullRequestFound,
+    PullRequestLinked,
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
 
@@ -25,8 +26,18 @@ pub(super) const CLIENTS_TAKE_A_READ: Timers =
     Timers { fresh_for_clients: Timers::DEFAULT.fresh_for_clients, ..Timers::FOR_TESTS };
 
 /// The workspace's pull request as the hub knows it, from its record's link and the cache.
-pub(super) fn known(hub: &Hub) -> Option<PullRequest> {
+pub(super) fn known(hub: &Hub) -> Option<OwnPullRequest> {
     hub.known_of(&hub.store.get_workspace(&"w".into()).unwrap()).and_then(|found| found.pull_request)
+}
+
+/// Its number, and whether it's open, merged or closed.
+pub(super) fn numbered(own: &OwnPullRequest) -> (u64, PrState) {
+    (own.pull_request.number.get(), own.pull_request.said().state)
+}
+
+/// How many of its checks passed, failed and are still running, which were read.
+fn counts(own: &OwnPullRequest) -> CheckCounts {
+    own.pull_request.checks_said().expect("its checks were read").counts()
 }
 
 #[tokio::test]
@@ -40,7 +51,7 @@ async fn an_agent_asking_again_soon_after_a_read_waits_for_a_read_of_its_own() {
 
     let again = hub.pull_request_for_agent(&"w".into()).await.unwrap().unwrap();
 
-    assert_eq!(again.checks.passed, 1, "read again, not what the first read found");
+    assert_eq!(counts(&again).passed, 1, "read again, not what the first read found");
     assert!(first_at.elapsed() >= hub.timers.agent_spacing, "after {:?}", first_at.elapsed());
 }
 
@@ -56,7 +67,7 @@ async fn an_agent_hears_that_a_read_failed_where_a_client_is_shown_what_was_know
     let client = hub.workspace_pull_request("w".into()).await;
 
     assert!(agent.is_err(), "{agent:?}");
-    assert_eq!(client.unwrap().map(|pr| pr.number), Some(7));
+    assert_eq!(client.unwrap().map(|pr| numbered(&pr).0), Some(7));
 }
 
 /// GitHub's answer to a client's read said little is left, which an agent's read leaves for everything else.
@@ -88,7 +99,7 @@ async fn a_branch_moving_reads_again_no_sooner_than_an_agent_asking_would() {
     hub.read_pull_request_after_move(&"w".into(), When::Always);
     let hub = &hub;
     waiting::task::until_ok_async(Duration::from_secs(30), || async move {
-        let passed = known(hub).map(|pr| pr.checks.passed);
+        let passed = known(hub).map(|pr| counts(&pr).passed);
         if passed == Some(1) { Ok(()) } else { Err(format!("read again, but {passed:?} checks passed")) }
     })
     .await;
@@ -115,7 +126,7 @@ async fn a_switch_reads_only_while_what_is_known_is_another_branchs() {
 
     assert_eq!(found_on_it, 0, "what's known was found on the branch checked out");
     assert!(queries(&github).len() > a_read);
-    assert_eq!(known(&hub).map(|pr| pr.title), Some("Change 7".into()));
+    assert_eq!(known(&hub).map(|pr| pr.pull_request.said().about.title.clone()), Some("Change 7".into()));
 }
 
 /// The branch's pull request is the one GitHub has from the branch it's pushed to, and with none there, it has none,
@@ -134,7 +145,7 @@ async fn a_workspace_has_the_pull_request_from_the_branch_its_branch_is_pushed_t
     let workspace = hub.store.get_workspace(&"w".into()).unwrap();
     assert_eq!(workspace.pull_request_linked().map(|link| link.number.get()), Some(7));
     assert_eq!(hub.known_of(&workspace), Some(PullRequestFound { pull_request: merged.clone() }));
-    assert_eq!(merged.map(|pr| (pr.number, pr.state)), Some((7, PrState::Merged)));
+    assert_eq!(merged.as_ref().map(numbered), Some((7, PrState::Merged)));
     let asked = queries(&github);
     assert!(asked[0].contains(r#"headRefName:\"branch\""#), "{asked:?}");
 }
@@ -156,7 +167,7 @@ async fn a_clone_of_a_forks_pull_request_is_read_where_it_merges_into() {
 
     let found = hub.workspace_pull_request("w".into()).await.unwrap();
 
-    assert_eq!(found.map(|pr| pr.number), Some(7));
+    assert_eq!(found.map(|pr| numbered(&pr).0), Some(7));
     let asked = queries(&github);
     assert!(asked[0].contains(r#"r0: repository(owner:\"ada\",name:\"project\")"#), "{asked:?}");
     assert!(asked[0].contains(r#"n0: repository(owner:\"ada\",name:\"project\")"#), "{asked:?}");
@@ -242,7 +253,7 @@ async fn a_pull_request_whose_branch_github_deleted_as_it_merged_is_still_the_wo
 
     let merged = hub.workspace_pull_request("w".into()).await.unwrap();
 
-    assert_eq!(merged.map(|pr| (pr.number, pr.state)), Some((7, PrState::Merged)));
+    assert_eq!(merged.as_ref().map(numbered), Some((7, PrState::Merged)));
 }
 
 /// An agent's wait on `numbers` of `w`'s repository until they've merged, started as the tool starts one.
@@ -277,7 +288,7 @@ async fn a_wait_on_the_workspaces_own_pull_request_ends_as_its_read_finds_it_mer
 
     let merged = hub.workspace_pull_request("w".into()).await.unwrap();
 
-    assert_eq!(merged.map(|pr| pr.state), Some(PrState::Merged));
+    assert_eq!(merged.map(|pr| numbered(&pr).1), Some(PrState::Merged));
     assert_eq!(ended(&hub, &wait), Some(protocol::model::WaitEnd::Merged));
     assert_eq!(queries(&github).len() - before, 3, "which branches have which, then one read of #7 for both");
 }
@@ -313,8 +324,9 @@ async fn a_client_asking_just_after_a_read_is_answered_from_it() {
     hub.github_cache.age(CLIENTS_TAKE_A_READ.fresh_for_clients);
     let later = hub.workspace_pull_request("w".into()).await.unwrap().unwrap();
 
-    assert_eq!((soon.number, soon.checks.pending, soon.checks.passed), (7, 1, 0), "what the read found");
-    assert_eq!(later.checks.passed, 1, "read again");
+    let soon_counts = counts(&soon);
+    assert_eq!((numbered(&soon).0, soon_counts.pending, soon_counts.passed), (7, 1, 0), "what the read found");
+    assert_eq!(counts(&later).passed, 1, "read again");
     assert_eq!(queries(&github).len(), 2 * a_read);
 }
 
@@ -331,8 +343,26 @@ async fn a_turn_ending_just_after_a_read_reads_again() {
 
     let hub = &hub;
     waiting::task::until_ok_async(Duration::from_secs(30), || async move {
-        let passed = known(hub).map(|pr| pr.checks.passed);
+        let passed = known(hub).map(|pr| counts(&pr).passed);
         if passed == Some(1) { Ok(()) } else { Err(format!("read again, but {passed:?} checks passed")) }
     })
     .await;
+}
+
+/// One read in turn that finds what the last read did waits twice as long before the next, though each read is newer
+/// than the last, so what's compared is what GitHub said, not when it said it.
+#[tokio::test]
+async fn a_pull_request_that_comes_back_the_same_waits_longer_each_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    // Merged, so it isn't moving on GitHub, which would keep it at the soonest.
+    pull_requests.set(7, PullRequestState::Merged);
+    let id = WorkspaceId::from("w");
+    let mut every = Vec::new();
+    for _ in 0..3 {
+        hub.read_pull_request(&id, Asked::InTurn, When::Always).await.unwrap();
+        every.push(hub.pull_requests.schedules.lock().get(&id).unwrap().every);
+    }
+
+    assert_eq!(every, [Duration::from_mins(2), Duration::from_mins(4), Duration::from_mins(8)]);
 }

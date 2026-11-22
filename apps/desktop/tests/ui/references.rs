@@ -5,24 +5,13 @@
 
 use client_core::fake_hub::events::{first_turn, replied, text, user_prompt};
 use gpui_kit::{AppContext as _, TestAppContext};
-use protocol::model::{GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceKind, SessionStatus};
+use protocol::model::{Reference, SessionStatus};
 
 use crate::support::{one_chat, open_on_the_chat};
 
 /// An open issue, #1 of `example/signals`.
 fn issue() -> Reference {
-    Reference {
-        repository: GithubRepositoryName::new("example", "signals").unwrap(),
-        number: IssueNumber::try_from(1).unwrap(),
-        kind: ReferenceKind::Issue { state: IssueState::Open },
-        url: "https://github.com/example/signals/issues/1".to_string(),
-        title: "Keep the signals' state on the hub".to_string(),
-        author: Some("ada".to_string()),
-        opened_at_ms: 0,
-        comments: 0,
-        labels: Vec::new(),
-        body: String::new(),
-    }
+    protocol::fixtures::issue("example/signals", 1, "Keep the signals' state on the hub")
 }
 
 /// The chat's first reply links to #1, and replies enough to be screens long come after it, so it's out of view at the

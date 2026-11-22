@@ -94,7 +94,7 @@ pub enum SubscriptionItem {
     /// Only on a terminal's.
     Terminal(TerminalUpdate),
     /// Only on one to what GitHub says of what's shown.
-    Github(GithubUpdate),
+    Github(Box<GithubUpdate>),
     /// Only on a terminal's that watches it.
     TerminalPicture(Box<TerminalPicture>),
 }

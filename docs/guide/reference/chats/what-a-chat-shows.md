@@ -163,7 +163,7 @@ A link to an issue or a pull request on GitHub in a reply shows as a chip, whate
 ![A reply's issues and pull requests as chips](../../../spec/screens/references.png)
 
 - **A click opens its link,** to where it goes on GitHub, such as a comment.
-- **Resting the pointer on one shows its card:** where it stands, who opened it and when, its labels, a pull request's lines changed and checks, the workspace it's in, and the start of what it says.
+- **Resting the pointer on one shows its card:** where it stands, such as where a pull request is in the merge queue, in the bar's words, who opened it and when, its labels, a pull request's lines changed and checks, the workspace it's in, and the start of what it says.
 - **A right-click, or the ⋯ on its card, opens its menu:** Open on GitHub, Copy link, and Go to the workspace it's in, unless that's archived.
 - **Copying and Find use the link's words as they're written,** such as `#1021`, not the title.
 - **One that can't be found stays the link it's written as,** such as a typo, or one in a repository the workspace's GitHub account can't read.

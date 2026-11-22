@@ -53,7 +53,6 @@ fn a_pull_request_found_is_kept_through_reopening() {
 
     let listed = store.list_records().unwrap().workspaces;
     assert_eq!(listed[0].pull_request_link, Some(link(2)));
-    assert_eq!(listed[0].pull_request, None, "what GitHub says of it is the cache's");
 }
 
 /// What an older hub kept of each workspace's pull request comes to its link: none where it found none, the pull

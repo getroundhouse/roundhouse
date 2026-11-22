@@ -2,7 +2,7 @@
 
 use super::super::query::Part;
 use super::super::rounds::{PARTS_A_QUERY, batches};
-use super::reader::{answer, answer_with, ask, pull_request, read, repository, rules};
+use super::reader::{answer, answer_with, ask, number, pull_request, read, repository, rules};
 use super::*;
 use crate::Answer;
 
@@ -19,13 +19,13 @@ async fn asks_read_together_share_their_queries_and_one_that_fails_fails_no_othe
 
     let [project, gone] = <[_; 2]>::try_from(read.answers).unwrap();
     let project = project.unwrap();
-    assert_eq!(project.pull_requests.iter().map(|row| row.pull_request.number).collect::<Vec<_>>(), [3]);
+    assert_eq!(project.pull_requests.iter().map(|row| row.number).collect::<Vec<_>>(), [number(3)]);
     let gone = gone.unwrap_err();
     assert_eq!((gone.error.code, gone.affected), (ErrorCode::Unavailable, Vec::new()));
     let summaries: Vec<_> = read
         .summaries
         .iter()
-        .map(|read| (read.number.get(), read.summary.as_ref().map(|summary| summary.comments)))
+        .map(|read| (read.number.get(), read.summary.as_ref().map(|summary| summary.about().unwrap().comments)))
         .collect();
     assert_eq!(summaries, [(3, Ok(2))], "#3's summary, and none of the repository that isn't there");
     assert_eq!(queries.len(), 2);

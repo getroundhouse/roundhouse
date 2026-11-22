@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use protocol::client::ApiError;
-use protocol::model::{CheckState, CommitId, ObservedCheck, PrState, PullRequestNumber, Review};
+use protocol::model::{CheckState, CommitId, ObservedCheck, PrState, PullRequestNumber, QueueState, Review};
 use serde_json::Value;
 
 use super::said::{array, changed, incomplete, string};
@@ -227,6 +227,15 @@ fn conclusion(conclusion: Option<&str>) -> CheckState {
 /// Where `pr`'s review stands, by its `reviewDecision`, which GitHub leaves empty where the repository asks for none.
 pub(crate) fn review(pr: &Value) -> Result<Review, ApiError> {
     serde_json::from_value(pr["reviewDecision"].as_str().unwrap_or("").into()).map_err(|_| incomplete())
+}
+
+/// Where `pr` is in the merge queue, by its `mergeQueueEntry`, which GitHub leaves `null` when it isn't in one.
+pub(crate) fn queue(pr: &Value) -> Result<Option<QueueState>, ApiError> {
+    let entry = pr.get("mergeQueueEntry").ok_or_else(incomplete)?;
+    if entry.is_null() {
+        return Ok(None);
+    }
+    serde_json::from_value(entry["state"].clone()).map(Some).map_err(|_| incomplete())
 }
 
 /// When `value`, a time as GitHub writes one, such as `2026-01-01T00:00:00Z`, was, in milliseconds since the epoch.

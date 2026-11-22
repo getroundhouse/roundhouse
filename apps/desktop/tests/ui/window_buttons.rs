@@ -13,7 +13,7 @@ use gpui_kit::{
     AppContext as _, DispatchEventResult, ElementId, InputEvent as _, MouseButton, MouseDownEvent, MouseUpEvent,
     Pixels, Point, TestAppContext, px, size,
 };
-use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, Review, SessionStatus};
+use protocol::model::{Local, OwnPullRequest, SessionStatus};
 
 use crate::support::{FakeHub, Ui, open_on_the_world};
 
@@ -29,21 +29,8 @@ fn in_a_workspace(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");
     world.chat(&workspace, SessionStatus::Idle, Vec::new());
-    let check_failed = PullRequest {
-        number: 7,
-        url: "https://example.com/pull/7".to_string(),
-        title: "T".to_string(),
-        state: PrState::Open,
-        is_draft: false,
-        base: Some("main".into()),
-        merge_state: MergeState::default(),
-        review: Review::default(),
-        checks: Checks { passed: 0, failed: 1, pending: 0 },
-        queue: None,
-        left_queue: None,
-        changes_requested_at_ms: None,
-        local: Local::default(),
-    };
+    let pull_request = protocol::fixtures::checked(protocol::fixtures::pull_request(7), 0, 1, 0);
+    let check_failed = OwnPullRequest { pull_request, local: Local::default() };
     world.pull_requests.insert(workspace, check_failed);
     let (fake, mut ui) = open_on_the_world(cx, world);
     ui.wait("the workspace", |ui| ui.pane().is_some());

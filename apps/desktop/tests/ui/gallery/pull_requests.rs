@@ -13,7 +13,9 @@ use gpui_kit::{
     Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem, Render,
     Styled as _, Window, div, px, size,
 };
-use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Review, Standing, WorkspaceStatus};
+use protocol::model::{
+    Local, MergeState, OwnPullRequest, PrState, QueueState, Review, Standing, Summary, WorkspaceStatus,
+};
 
 use super::capture::Picture;
 use super::headless;
@@ -30,29 +32,33 @@ const ROW: f32 = 40.;
 const GAP: f32 = 8.;
 const MARGIN: f32 = 16.;
 
-/// An open pull request with nothing in the way of merging it, which each state changes one thing about.
-pub(crate) fn open() -> PullRequest {
-    PullRequest {
-        number: 327,
-        url: "https://example.com/pull/327".to_string(),
-        title: "Queue prompts with Cmd-Enter".to_string(),
-        state: PrState::Open,
-        is_draft: false,
-        base: Some("main".into()),
-        merge_state: MergeState::Clean,
-        review: Review::NotRequired,
-        checks: Checks { passed: 9, failed: 0, pending: 0 },
-        queue: None,
-        left_queue: None,
-        changes_requested_at_ms: None,
-        local: Local::default(),
-    }
+/// An open pull request with nothing in the way of merging it, with 9 checks passed, which each state changes one
+/// thing about.
+pub(crate) fn open() -> OwnPullRequest {
+    let mut pull_request = protocol::fixtures::pull_request(327);
+    let about = &mut pull_request.summary.said.about;
+    about.url = "https://example.com/pull/327".to_string();
+    about.title = "Queue prompts with Cmd-Enter".to_string();
+    checked(OwnPullRequest { pull_request, local: Local::default() }, 9, 0, 0)
 }
 
-fn with(change: impl FnOnce(&mut PullRequest)) -> Lookup {
-    let mut pr = open();
-    change(&mut pr);
-    Lookup::Found(Some(pr))
+/// `own` with this many checks passed, failed and still running.
+pub(crate) fn checked(own: OwnPullRequest, passed: usize, failed: usize, pending: usize) -> OwnPullRequest {
+    OwnPullRequest { pull_request: protocol::fixtures::checked(own.pull_request, passed, failed, pending), ..own }
+}
+
+/// [`open`], with its summary changed by `change`.
+fn with(change: impl FnOnce(&mut Summary)) -> Lookup {
+    let mut own = open();
+    change(&mut own.pull_request.summary.said);
+    Lookup::Found(Some(Box::new(own)))
+}
+
+/// [`open`], changed by `change`.
+fn with_own(change: impl FnOnce(&mut OwnPullRequest)) -> Lookup {
+    let mut own = open();
+    change(&mut own);
+    Lookup::Found(Some(Box::new(own)))
 }
 
 /// In the order the app looks for them, after the two with no pull request to show, and then the one it can't tell.
@@ -68,15 +74,16 @@ fn states() -> Vec<State> {
         with(|pr| pr.queue = Some(QueueState::AwaitingChecks)),
         with(|pr| pr.queue = Some(QueueState::Queued)),
         with(|pr| pr.queue = Some(QueueState::Unmergeable)),
-        with(|pr| pr.local.uncommitted = 3),
-        with(|pr| pr.local = Local { uncommitted: 0, ahead: 1, behind: 2 }),
-        with(|pr| pr.local.behind = 1),
-        with(|pr| pr.local.ahead = 2),
+        with_own(|own| own.local.uncommitted = 3),
+        with_own(|own| own.local = Local { uncommitted: 0, ahead: 1, behind: 2 }),
+        with_own(|own| own.local.behind = 1),
+        with_own(|own| own.local.ahead = 2),
         with(|pr| pr.merge_state = MergeState::Dirty),
         with(|pr| pr.review = Review::ChangesRequested),
         with(|pr| pr.is_draft = true),
-        with(|pr| pr.checks = Checks { passed: 6, failed: 2, pending: 1 }),
-        with(|pr| pr.checks = Checks { passed: 6, failed: 0, pending: 3 }),
+        with_own(|own| own.pull_request.checks = None),
+        with_own(|own| *own = checked(open(), 6, 2, 1)),
+        with_own(|own| *own = checked(open(), 6, 0, 3)),
         with(|pr| pr.review = Review::Required),
         with(|pr| pr.merge_state = MergeState::Blocked),
         with(|pr| pr.merge_state = MergeState::Computing),
@@ -117,6 +124,7 @@ kinds![
     Standing::Draft,
     Standing::ChecksFailed(_),
     Standing::ChecksRunning(_),
+    Standing::Reading,
     Standing::ReviewRequired,
     Standing::Blocked,
     Standing::Checking,

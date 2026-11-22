@@ -1,10 +1,10 @@
 use std::path::Path;
 use std::time::Duration;
 
-use github::{Checks, FacetsRead, PullFacets, Reviews, Rules, Stack, Status};
+use github::{Checks, FacetsRead, PullFacets, Rules};
 use protocol::model::{
-    BranchName, CommitId, GithubRepositoryName, IssueNumber, IssueState, MergeState, Mergeability, PrState, Reference,
-    ReferenceKind, ReferenceRead, Review,
+    About, BranchName, GithubRepositoryName, Issue, IssueNumber, IssueState, IssueSummary, PrState, PullRequest, Read,
+    Reference, ReferenceRead,
 };
 
 use super::file::VERSION;
@@ -15,10 +15,7 @@ use crate::store::now_ms;
 
 /// Issue `n` of `example/project`.
 fn issue(n: u64) -> Reference {
-    Reference {
-        repository: GithubRepositoryName::named("example/project"),
-        number: IssueNumber::try_from(n).unwrap(),
-        kind: ReferenceKind::Issue { state: IssueState::Open },
+    let about = About {
         url: format!("https://github.com/example/project/issues/{n}"),
         title: format!("Issue {n}"),
         author: Some("ada".into()),
@@ -26,33 +23,67 @@ fn issue(n: u64) -> Reference {
         comments: 0,
         labels: Vec::new(),
         body: String::new(),
-    }
+    };
+    Reference::Issue(Issue {
+        repository: project(),
+        number: IssueNumber::try_from(n).unwrap(),
+        summary: Read { said: IssueSummary { about, state: IssueState::Open }, read_at_ms: 1 },
+    })
 }
 
 fn project() -> GithubRepositoryName {
     GithubRepositoryName::named("example/project")
 }
 
-/// Open pull request `n`, alone in no stack, with no checks.
-fn facets(n: u64) -> PullFacets {
-    let status = Status {
-        number: n,
-        url: format!("https://github.com/example/project/pull/{n}"),
-        title: format!("Change {n}"),
-        state: PrState::Open,
-        is_draft: false,
-        base_name: BranchName::from("main"),
-        head: CommitId::from("head"),
-        base: CommitId::from("base"),
-        merge_state: MergeState::Clean,
-        mergeable: Mergeability::Mergeable,
-        review: Review::NotRequired,
-        queue: None,
-        left_queue: None,
-    };
-    let stack = Stack { destination: BranchName::from("main"), dependencies: Vec::new(), linear: Some(true) };
-    let checks = Checks { revision: Some(CommitId::from("head")), reported: Vec::new() };
-    PullFacets { status, reviews: Reviews { changes_requested_at_ms: None }, stack, checks }
+/// Open pull request `n`, alone in no stack, with no checks, every facet read at `read_at_ms`.
+fn pull_request(n: u64, read_at_ms: i64) -> PullRequest {
+    let mut pull_request = protocol::fixtures::pull_request(n);
+    pull_request.summary.read_at_ms = read_at_ms;
+    for read_at in [
+        pull_request.history.as_mut().map(|read| &mut read.read_at_ms),
+        pull_request.stack.as_mut().map(|read| &mut read.read_at_ms),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        *read_at = read_at_ms;
+    }
+    pull_request.checks = None;
+    pull_request
+}
+
+/// `pull_request` with its summary alone, as a read of summaries keeps it.
+fn summary_of(pull_request: &PullRequest) -> Reference {
+    Reference::PullRequest(PullRequest { history: None, stack: None, checks: None, ..pull_request.clone() })
+}
+
+/// What a read of pull requests found of `pull_request`, with no checks reported.
+fn facets(pull_request: &PullRequest) -> PullFacets {
+    let summary = pull_request.said().clone();
+    let checks = Checks { head: summary.head.clone(), revision: Some(summary.head.clone()), reported: Vec::new() };
+    PullFacets {
+        summary,
+        history: pull_request.history_said().unwrap().clone(),
+        stack: pull_request.stack_said().unwrap().clone(),
+        checks,
+    }
+}
+
+/// Keeps `pull_request`, as a read of pull requests does: its summary, then its other facets.
+fn keep_pull(cache: &GithubCache, pull_request: &PullRequest) {
+    let read_at_ms = pull_request.summary.read_at_ms;
+    let item = item(pull_request.number.get());
+    cache.keep(vec![(item, Ok(Some(summary_of(pull_request))))], read_at_ms);
+    let (number, facets) = (pull_request.number, facets(pull_request));
+    cache.keep_pulls(vec![FacetsRead { repository: project(), number, facets, read_at_ms }]);
+}
+
+/// What the cache gives of `pull_request`, kept as [`keep_pull`] keeps it, with no checks reported, which its branch's
+/// rules judge.
+fn given(pull_request: &PullRequest) -> PullRequest {
+    let revision = Some(pull_request.said().head.clone());
+    let said = protocol::model::Checks { revision, requirements_known: true, checks: Vec::new() };
+    PullRequest { checks: Some(Read { said, read_at_ms: pull_request.summary.read_at_ms }), ..pull_request.clone() }
 }
 
 fn item(n: u64) -> Item {
@@ -81,7 +112,8 @@ fn what_was_read_is_kept_across_a_restart() {
         now_ms(),
     );
     cache.keep_rules(vec![(project(), BranchName::from("main"), Rules::default())], now_ms());
-    cache.keep_pulls(vec![FacetsRead { repository: project(), facets: facets(7), read_at_ms: now_ms() }]);
+    let seven = pull_request(7, now_ms());
+    keep_pull(&cache, &seven);
     drop(cache);
 
     let again = GithubCache::open(&path);
@@ -91,7 +123,8 @@ fn what_was_read_is_kept_across_a_restart() {
     assert_eq!(again.summary(&item(3)), None);
     let rules = again.rules_of(&GithubRepositoryName::named("EXAMPLE/project"), Duration::from_secs(60));
     assert_eq!(rules, [(BranchName::from("main"), Rules::default())]);
-    assert_eq!(again.pull(&item(7), Duration::from_secs(60)), Some(facets(7)));
+    let fresh = Duration::from_secs(60);
+    assert_eq!(again.fresh_pull_request(&item(7), fresh, fresh), Some(given(&seven)));
 }
 
 /// A file a build with another form left, older or newer, is emptied rather than read or migrated, and a damaged one
@@ -130,12 +163,12 @@ fn what_nothing_asks_about_is_forgotten() {
     let cache = GithubCache::open(&path);
     cache.keep(vec![(item(1), Ok(Some(issue(1)))), (item(2), Ok(Some(issue(2))))], now_ms());
     cache.age(KEPT_FOR.checked_sub(Duration::from_secs(60)).unwrap());
-    assert_eq!(cache.summary(&item(1)), Some(found(1)), "asked about, so kept");
+    assert!(cache.summary(&item(1)).is_some(), "asked about, so kept");
 
     cache.age(Duration::from_secs(120));
     cache.keep(vec![(item(3), Ok(Some(issue(3))))], now_ms());
 
-    assert_eq!(cache.summary(&item(1)), Some(found(1)));
+    assert!(cache.summary(&item(1)).is_some());
     assert_eq!(cache.summary(&item(2)), None);
     drop(cache);
     let again = GithubCache::open(&path);
@@ -151,22 +184,64 @@ fn a_read_that_lands_late_leaves_what_a_newer_one_kept() {
     let cache = GithubCache::open(&dir.path().join("github-cache.db"));
     let began = now_ms();
     let (older, newer) = (began - 1_000, began);
-    let mut merged = facets(7);
-    merged.status.state = PrState::Merged;
+    let mut merged = pull_request(7, newer);
+    merged.summary.said.state = PrState::Merged;
     let ruled: Rules =
         serde_json::from_value(serde_json::json!({ "required": [["test", null]], "visible_contexts": [] })).unwrap();
 
-    let mut renamed = issue(1);
-    renamed.title = "Renamed".into();
+    let Reference::Issue(mut renamed) = issue(1) else { unreachable!() };
+    renamed.summary.said.about.title = "Renamed".into();
+    let renamed = Reference::Issue(renamed);
     cache.keep(vec![(item(1), Ok(Some(renamed)))], newer);
     cache.keep_rules(vec![(project(), BranchName::from("main"), ruled.clone())], newer);
-    cache.keep_pulls(vec![FacetsRead { repository: project(), facets: merged, read_at_ms: newer }]);
+    keep_pull(&cache, &merged);
     cache.keep(vec![(item(1), Ok(Some(issue(1))))], older);
     cache.keep_rules(vec![(project(), BranchName::from("main"), Rules::default())], older);
-    cache.keep_pulls(vec![FacetsRead { repository: project(), facets: facets(7), read_at_ms: older }]);
+    keep_pull(&cache, &pull_request(7, older));
 
     let Some(ReferenceRead::Found { reference }) = cache.summary(&item(1)) else { panic!("no summary kept") };
-    assert_eq!(reference.title, "Renamed");
+    assert_eq!(reference.about().map(|about| about.title.as_str()), Some("Renamed"));
     assert_eq!(cache.rules_of(&project(), Duration::MAX), vec![(BranchName::from("main"), ruled)]);
-    assert_eq!(cache.pull(&item(7), Duration::MAX).map(|facets| facets.status.state), Some(PrState::Merged));
+    assert_eq!(cache.fresh_pull_request(&item(7), Duration::MAX, Duration::MAX), Some(given(&merged)));
+}
+
+/// A summary read since a pull request's checks were, as a chip's read can be, at a head they weren't run on, leaves
+/// them out, so the commit before a push isn't taken for its head: the pull request is known without them, as checks
+/// not read yet, and isn't fresh.
+#[test]
+fn checks_of_another_head_than_the_summarys_are_left_out() {
+    let dir = tempfile::tempdir().unwrap();
+    let cache = GithubCache::open(&dir.path().join("github-cache.db"));
+    cache.keep_rules(vec![(project(), BranchName::from("main"), Rules::default())], now_ms());
+    let read = pull_request(7, now_ms());
+    keep_pull(&cache, &read);
+    let fresh = Duration::from_secs(60);
+    assert_eq!(cache.fresh_pull_request(&item(7), fresh, fresh), Some(given(&read)), "of the head they ran on");
+
+    let mut pushed = read.clone();
+    pushed.summary.said.head = "pushed".into();
+    cache.keep(vec![(item(7), Ok(Some(summary_of(&pushed))))], now_ms());
+
+    let known = cache.pull_request(&item(7)).unwrap();
+    assert_eq!(known.said().head, "pushed".into());
+    assert_eq!(known.checks, None, "not the head's");
+    assert!(known.history.is_some() && known.stack.is_some(), "the rest still known");
+    assert_eq!(cache.fresh_pull_request(&item(7), fresh, fresh), None);
+}
+
+/// An open pull request's checks can't be judged without its branch's rules, so it isn't fresh without them, but a
+/// merged one's need none.
+#[test]
+fn an_open_pull_request_is_fresh_only_with_its_branchs_rules() {
+    let dir = tempfile::tempdir().unwrap();
+    let cache = GithubCache::open(&dir.path().join("github-cache.db"));
+    let open = pull_request(7, now_ms());
+    keep_pull(&cache, &open);
+    let fresh = Duration::from_secs(60);
+    assert_eq!(cache.fresh_pull_request(&item(7), fresh, fresh), None, "no rules");
+    assert!(cache.pull_request(&item(7)).unwrap().checks_said().is_some_and(|checks| !checks.requirements_known));
+
+    cache.keep_rules(vec![(project(), BranchName::from("main"), Rules::default())], now_ms());
+
+    assert_eq!(cache.fresh_pull_request(&item(7), fresh, fresh), Some(given(&open)));
 }

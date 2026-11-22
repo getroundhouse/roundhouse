@@ -10,7 +10,7 @@ use gpui_kit::{
     Window, div,
 };
 use look::{ChipKind, GithubState, IssueState, PullRequestState, RightClickMenu as _, Typeset as _};
-use protocol::model::{Reference, ReferenceKind, ReferenceRead};
+use protocol::model::{Phase, Reference, ReferenceRead};
 
 use super::card::{card, menu};
 use super::kept::References;
@@ -73,10 +73,9 @@ fn chip<W: Waiter>(
     references: References<W>,
 ) -> Option<gpui_kit::AnyElement> {
     let (kind, state) = kind_and_state(&reference)?;
-    let label = references.label(&reference);
-    let chip = look::chip(kind, SIZE, label.clone())
-        .state(state)
-        .when(named.first, |chip| chip.title(reference.title.clone()));
+    let title = reference.about()?.title.clone();
+    let label = references.label(&named.ask);
+    let chip = look::chip(kind, SIZE, label.clone()).state(state).when(named.first, |chip| chip.title(title));
     // The first mention, which is the one a text titles, is known by its label alone, and a later one by where it
     // is, too, so none share an element.
     let id = |what: &str| {
@@ -104,10 +103,10 @@ fn chip<W: Waiter>(
 /// The kind of chip `reference` is drawn as, and its state, or `None` for a kind or a state this version doesn't
 /// know, which is drawn as it was written.
 pub(super) fn kind_and_state(reference: &Reference) -> Option<(ChipKind, GithubState)> {
-    use protocol::model::{IssueState as Issue, PullRequestState as Pull};
-    match reference.kind {
-        ReferenceKind::Issue { state } => {
-            let state = match state {
+    use protocol::model::IssueState as Issue;
+    match reference {
+        Reference::Issue(issue) => {
+            let state = match issue.summary.said.state {
                 Issue::Open => IssueState::Open,
                 Issue::Done => IssueState::Done,
                 Issue::NotPlanned => IssueState::NotPlanned,
@@ -115,16 +114,17 @@ pub(super) fn kind_and_state(reference: &Reference) -> Option<(ChipKind, GithubS
             };
             Some((ChipKind::Issue, state.into()))
         }
-        ReferenceKind::PullRequest(pull_request) => {
-            let state = match pull_request.state {
-                Pull::Open => PullRequestState::Open,
-                Pull::Draft => PullRequestState::Draft,
-                Pull::Merged => PullRequestState::Merged,
-                Pull::Closed => PullRequestState::Closed,
-                Pull::Unknown => return None,
+        Reference::PullRequest(pull_request) => {
+            let state = match pull_request.phase() {
+                Phase::Open => PullRequestState::Open,
+                Phase::Draft => PullRequestState::Draft,
+                Phase::Queued(_) => PullRequestState::Queued,
+                Phase::Merged => PullRequestState::Merged,
+                Phase::Closed => PullRequestState::Closed,
+                Phase::Unknown => return None,
             };
             Some((ChipKind::PullRequest, state.into()))
         }
-        ReferenceKind::Unknown => None,
+        Reference::Unknown => None,
     }
 }

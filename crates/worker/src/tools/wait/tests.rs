@@ -2,7 +2,7 @@ use protocol::model::WaitEnded;
 use std::time::Duration;
 
 use super::*;
-use crate::tools::pull_request::tests::open_pr;
+use crate::tools::pull_request::tests::{checked, open_pr, with};
 
 /// How often a test's CLI is told to ask after a wait.
 const POLL: Duration = crate::Timers::DEFAULT.wait_poll;
@@ -28,7 +28,7 @@ pub(in crate::tools) fn ended(how: WaitEnd) -> Wait {
 
 #[test]
 fn a_wait_still_waiting_is_a_working_task_saying_where_the_pull_request_stands() {
-    let running = PullRequest { checks: protocol::model::Checks { passed: 1, failed: 0, pending: 3 }, ..open_pr() };
+    let running = checked(open_pr(), 1, 0, 3);
 
     let task = task(&waiting(), Some(&running), Duration::from_millis(1_250));
 
@@ -42,7 +42,7 @@ fn a_wait_still_waiting_is_a_working_task_saying_where_the_pull_request_stands()
 
 #[test]
 fn an_ended_wait_is_a_completed_task_whose_result_says_how_and_where_the_pull_request_stands() {
-    let merged = PullRequest { state: protocol::model::PrState::Merged, ..open_pr() };
+    let merged = with(open_pr(), |said| said.state = protocol::model::PrState::Merged);
 
     let task = task(&ended(WaitEnd::Merged), Some(&merged), POLL);
 

@@ -10,6 +10,7 @@ mod github_accounts;
 mod proposals;
 mod session_accounts;
 mod todos;
+mod waits;
 mod workspaces;
 
 mod sequence;

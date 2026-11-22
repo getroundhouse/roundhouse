@@ -5,13 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    BranchName, GitHubRepository, GithubRepositoryName, ObservedPullRequest, PrState, PullRequestNumber,
-    PullRequestsSnapshot, Reference,
+    BranchName, GitHubRepository, GithubRepositoryName, PrState, PullRequest, PullRequestNumber, PullRequestsSnapshot,
+    Reference,
 };
 use serde_json::Value;
 
 use super::asked::{PullRequestsAsk, Unread};
-use super::facets::{self, Checks, PullFacets, Reviews, Rules, Stack, Status};
+use super::facets::{self, Checks, PullFacets, Rules};
 use super::parse::{self, Metadata, Policy, ReportedCheck};
 use super::query::Part;
 use super::said::{array, changed, incomplete, next, string};
@@ -164,10 +164,7 @@ impl Reading {
             looked.entries.extend(array(connection, "nodes")?.iter().cloned());
             looked.stack_after = next(connection)?;
         }
-        let summary = self.repository.as_ref().ok_or_else(incomplete).and_then(|repository| {
-            let name = GithubRepositoryName::try_from(repository.name_with_owner.clone()).map_err(|_| incomplete())?;
-            pull_request_reference(name, pr)
-        });
+        let summary = self.summary(pr);
         self.summaries.push((number, summary));
         // Only an open one's checks can still matter.
         let rollup = &pr["statusCheckRollup"];
@@ -261,7 +258,19 @@ impl Reading {
             return Err(changed());
         }
         looked.confirmed = Some(pr.clone());
+        // What the read keeps is what it was confirmed to be, as its facets are, rather than what it was first.
+        let summary = self.summary(pr);
+        if let Some((_, kept)) = self.summaries.iter_mut().find(|(looked_at, _)| *looked_at == number) {
+            *kept = summary;
+        }
         Ok(())
+    }
+
+    /// The summary `pr` gives, read as the read began.
+    fn summary(&self, pr: &Value) -> Result<Reference, ApiError> {
+        let repository = self.repository.as_ref().ok_or_else(incomplete)?;
+        let name = GithubRepositoryName::try_from(repository.name_with_owner.clone()).map_err(|_| incomplete())?;
+        pull_request_reference(name, pr, self.began_ms)
     }
 
     /// The summary of each pull request it looked at, or why it couldn't be read, apart from whether the rest could.
@@ -276,13 +285,13 @@ impl Reading {
     }
 
     /// What it found, once [`Reading::parts`] has nothing left to ask, or why it couldn't be read.
-    pub(super) fn finish(mut self) -> Result<(PullRequestsSnapshot, Vec<PullFacets>), Unread> {
+    pub(super) fn finish(mut self) -> Result<(PullRequestsSnapshot, Vec<(PullRequestNumber, PullFacets)>), Unread> {
         if let Some(failed) = self.failed.take() {
             return Err(failed);
         }
         let observed = std::mem::take(&mut self.looked)
             .into_iter()
-            .map(|(number, looked)| self.observed(looked).map_err(|e| (e, number)));
+            .map(|(number, looked)| self.observed(number, looked).map_err(|e| (e, number)));
         let observed: Result<Vec<_>, _> = observed.collect();
         let (pull_requests, facets) = match observed {
             Ok(observed) => observed.into_iter().unzip(),
@@ -296,8 +305,12 @@ impl Reading {
     }
 
     /// What one pull request is: what it was confirmed to be, with the checks read of it and which of them its
-    /// branch's rules require.
-    fn observed(&self, looked: Looked) -> Result<(ObservedPullRequest, PullFacets), ApiError> {
+    /// branch's rules require, and its facets as they're kept.
+    fn observed(
+        &self,
+        number: PullRequestNumber,
+        looked: Looked,
+    ) -> Result<(PullRequest, (PullRequestNumber, PullFacets)), ApiError> {
         let Looked { pr, metadata, checks, confirmed, .. } = looked;
         let (metadata, confirmed) = (metadata.ok_or_else(incomplete)?, confirmed.ok_or_else(incomplete)?);
         let revision = pr["statusCheckRollup"]["commit"]["oid"].as_str().map(Into::into);
@@ -308,11 +321,14 @@ impl Reading {
             .find(|branch| metadata.state == PrState::Open && branch.name == metadata.destination)
             .map(|branch| &branch.policy);
         let facets = PullFacets {
-            status: Status::read(&confirmed)?,
-            reviews: Reviews::read(&confirmed)?,
-            stack: Stack::read(&confirmed, &metadata)?,
-            checks: Checks { revision, reported: checks },
+            summary: crate::references::summary(&confirmed)?,
+            history: facets::history(&confirmed)?,
+            stack: facets::stack(&confirmed, &metadata)?,
+            checks: Checks { head: metadata.head.clone(), revision, reported: checks },
         };
-        Ok((facets::observe(facets.clone(), rules), facets))
+        let name = (self.repository.as_ref())
+            .and_then(|repository| GithubRepositoryName::try_from(repository.name_with_owner.clone()).ok())
+            .ok_or_else(incomplete)?;
+        Ok((facets::observe(name, number, facets.clone(), rules, self.began_ms), (number, facets)))
     }
 }

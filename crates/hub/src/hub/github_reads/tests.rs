@@ -2,7 +2,8 @@ use std::time::Duration;
 
 use github::{References, Script, StandIn};
 use protocol::model::{
-    ChecksRollup, GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceAsk, ReferenceKind, ReferenceRead,
+    About, ChecksRollup, GithubRepositoryName, Issue, IssueNumber, IssueState, IssueSummary, Read, Reference,
+    ReferenceAsk, ReferenceRead,
 };
 
 use super::ShownBy;
@@ -15,20 +16,43 @@ fn number(number: u64) -> IssueNumber {
     IssueNumber::try_from(number).unwrap()
 }
 
-/// An open issue numbered `n` in `repository`.
-fn issue(repository: &'static str, n: u64) -> Reference {
-    Reference {
-        repository: GithubRepositoryName::named(repository),
-        number: number(n),
-        kind: ReferenceKind::Issue { state: IssueState::Open },
+/// Issue `n` in `repository`, titled `title`, where `state` says, read at 1.
+fn titled(repository: &'static str, n: u64, title: &str, state: IssueState) -> Reference {
+    let about = About {
         url: format!("https://github.com/{repository}/issues/{n}"),
-        title: format!("Issue {n}"),
+        title: title.to_string(),
         author: Some("ada".into()),
         opened_at_ms: 1,
         comments: 0,
         labels: Vec::new(),
         body: String::new(),
+    };
+    Reference::Issue(Issue {
+        repository: GithubRepositoryName::named(repository),
+        number: number(n),
+        summary: Read { said: IssueSummary { about, state }, read_at_ms: 1 },
+    })
+}
+
+/// An open issue numbered `n` in `repository`, read at 1.
+fn issue(repository: &'static str, n: u64) -> Reference {
+    titled(repository, n, &format!("Issue {n}"), IssueState::Open)
+}
+
+/// `read` as if what it found was read at 1, as [`issue`]'s are, since a read takes the time it began.
+fn at_one(read: ReferenceRead) -> ReferenceRead {
+    let ReferenceRead::Found { mut reference } = read else { return read };
+    match &mut *reference {
+        Reference::Issue(issue) => issue.summary.read_at_ms = 1,
+        Reference::PullRequest(pull_request) => pull_request.summary.read_at_ms = 1,
+        Reference::Unknown => {}
     }
+    ReferenceRead::Found { reference }
+}
+
+/// Each of `reads`, as [`at_one`] has it.
+fn all_at_one(reads: Vec<ReferenceRead>) -> Vec<ReferenceRead> {
+    reads.into_iter().map(at_one).collect()
 }
 
 /// The issue or pull request numbered `n` in `example/project`, the repository the hub's test workspace is on.
@@ -54,8 +78,8 @@ async fn what_a_chat_names_is_read_from_github_once_while_what_was_found_is_fres
     let github = on_github(&references).await;
     let hub = hub_reading_github(dir.path(), github.api());
 
-    let first = hub.references_read(&"w".into(), vec![own(1021), own(5)]).await.unwrap();
-    let again = hub.references_read(&"w".into(), vec![own(5), own(1021)]).await.unwrap();
+    let first = all_at_one(hub.references_read(&"w".into(), vec![own(1021), own(5)]).await.unwrap());
+    let again = all_at_one(hub.references_read(&"w".into(), vec![own(5), own(1021)]).await.unwrap());
 
     assert_eq!(first, [found(&issue("example/project", 1021)), ReferenceRead::Missing]);
     assert_eq!(again, [ReferenceRead::Missing, found(&issue("example/project", 1021))]);
@@ -77,8 +101,8 @@ async fn a_reference_is_read_in_the_repository_it_names_whatever_its_case() {
         number: number(7),
     };
 
-    let read = hub.references_read(&"w".into(), vec![named("other/tools"), own(7)]).await.unwrap();
-    let again = hub.references_read(&"w".into(), vec![named("Example/Project")]).await.unwrap();
+    let read = all_at_one(hub.references_read(&"w".into(), vec![named("other/tools"), own(7)]).await.unwrap());
+    let again = all_at_one(hub.references_read(&"w".into(), vec![named("Example/Project")]).await.unwrap());
 
     assert_eq!(read, [found(&issue("other/tools", 7)), found(&issue("example/project", 7))]);
     assert_eq!(again, [found(&issue("example/project", 7))]);
@@ -94,17 +118,18 @@ async fn what_was_found_is_read_again_once_its_stale_and_kept_when_github_fails(
     references.set(issue("example/project", 1));
     let github = on_github(&references).await;
     let hub = hub_reading_github(dir.path(), github.api());
-    assert_eq!(hub.references_read(&"w".into(), vec![own(1)]).await.unwrap(), [found(&issue("example/project", 1))]);
+    let first = all_at_one(hub.references_read(&"w".into(), vec![own(1)]).await.unwrap());
+    assert_eq!(first, [found(&issue("example/project", 1))]);
 
-    let closed = Reference { kind: ReferenceKind::Issue { state: IssueState::Done }, ..issue("example/project", 1) };
+    let closed = titled("example/project", 1, "Issue 1", IssueState::Done);
     references.set(closed.clone());
     hub.github_cache.age(FRESH_FOR + Duration::from_secs(1));
-    let read = hub.references_read(&"w".into(), vec![own(1)]).await.unwrap();
+    let read = all_at_one(hub.references_read(&"w".into(), vec![own(1)]).await.unwrap());
     assert_eq!(read, [found(&closed)]);
 
     references.fail(true);
     hub.github_cache.age(FRESH_FOR + Duration::from_secs(1));
-    let failed = hub.references_read(&"w".into(), vec![own(1), own(2)]).await.unwrap();
+    let failed = all_at_one(hub.references_read(&"w".into(), vec![own(1), own(2)]).await.unwrap());
     assert_eq!(failed[0], found(&closed), "what was known before");
     assert!(matches!(failed[1], ReferenceRead::Unread { .. }), "{:?}", failed[1]);
     assert_eq!(references.queries(), 3);
@@ -129,7 +154,7 @@ async fn a_read_that_failed_is_tried_again_only_once_it_would_be_read_again() {
 
     references.fail(false);
     hub.github_cache.age(FRESH_FOR + Duration::from_secs(1));
-    let read = hub.references_read(&"w".into(), vec![own(1)]).await.unwrap();
+    let read = all_at_one(hub.references_read(&"w".into(), vec![own(1)]).await.unwrap());
     assert_eq!(read, [found(&issue("example/project", 1))]);
     assert_eq!(references.queries(), 2);
 }
@@ -171,9 +196,9 @@ async fn an_ask_waits_only_for_the_reads_of_what_it_asks_for() {
     tokio::time::timeout(Duration::from_secs(10), read_meanwhile).await.expect("#2 read while #1 is held");
     references.release();
 
-    assert_eq!(first.await.unwrap(), [found(&issue("example/project", 1))]);
-    assert_eq!(second.await.unwrap(), [found(&issue("example/project", 1))]);
-    assert_eq!(other.await.unwrap(), [found(&issue("example/project", 2))]);
+    assert_eq!(all_at_one(first.await.unwrap()), [found(&issue("example/project", 1))]);
+    assert_eq!(all_at_one(second.await.unwrap()), [found(&issue("example/project", 1))]);
+    assert_eq!(all_at_one(other.await.unwrap()), [found(&issue("example/project", 2))]);
     assert_eq!(references.queries(), 2, "one for #1, and one for #2 while #1 was held");
 }
 
@@ -190,8 +215,9 @@ async fn a_chip_of_a_pull_request_read_for_the_bar_is_what_that_read_found() {
     let read = hub.references_read(&"w".into(), vec![own(7)]).await.unwrap();
 
     let [ReferenceRead::Found { reference }] = &read[..] else { panic!("{read:?}") };
-    let ReferenceKind::PullRequest(pull_request) = reference.kind else { panic!("{reference:?}") };
-    assert_eq!((reference.title.as_str(), pull_request.checks), ("Change 7", Some(ChecksRollup::Failed)));
+    let Reference::PullRequest(pull_request) = &**reference else { panic!("{reference:?}") };
+    let said = pull_request.said();
+    assert_eq!((said.about.title.as_str(), said.rollup), ("Change 7", Some(ChecksRollup::Failed)));
     assert_eq!(github.asked().len(), asked, "GitHub wasn't asked again");
 }
 
@@ -208,7 +234,8 @@ async fn a_branchs_rules_are_read_again_only_once_theyre_stale() {
     let again = hub.workspace_pull_request("w".into()).await.unwrap().unwrap();
 
     assert_eq!(rules_read(), 1);
-    assert_eq!(again.checks.pending, 1, "the check main's rules require, as they were read");
+    let checks = again.pull_request.checks_said().unwrap().counts();
+    assert_eq!(checks.pending, 1, "the check main's rules require, as they were read");
     hub.github_cache.age(super::reading::RULES_FRESH_FOR);
     hub.workspace_pull_request("w".into()).await.unwrap();
     assert_eq!(rules_read(), 2);
@@ -226,16 +253,16 @@ async fn what_a_client_shows_is_read_again_once_its_stale() {
     let shown = GithubShown { references: vec![own(12)], ..GithubShown::default() };
     let showing = hub.show_github(ShownBy { connection: 1, subscription: 1 }, shown);
     let watching = tokio::spawn(hub.clone().watch_shown_references());
-    let titled = |hub: &Hub| match hub.reference_kept(&own(12)) {
-        Some(ReferenceRead::Found { reference }) => Some(reference.title),
+    let title = |hub: &Hub| match hub.reference_kept(&own(12)) {
+        Some(ReferenceRead::Found { reference }) => reference.about().map(|about| about.title.clone()),
         _ => None,
     };
-    waiting::task::until(Duration::from_secs(30), "the chip to be read", || titled(&hub).is_some()).await;
+    waiting::task::until(Duration::from_secs(30), "the chip to be read", || title(&hub).is_some()).await;
 
-    references.set(Reference { title: "Renamed".into(), ..issue("example/project", 12) });
+    references.set(titled("example/project", 12, "Renamed", IssueState::Open));
     hub.github_cache.age(FRESH_FOR);
     waiting::task::until(Duration::from_secs(30), "the chip to be read again", || {
-        titled(&hub).as_deref() == Some("Renamed")
+        title(&hub).as_deref() == Some("Renamed")
     })
     .await;
 

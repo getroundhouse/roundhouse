@@ -27,7 +27,7 @@
     "PullRequest": {
       "x": 268,
       "y": 667,
-      "width": 636,
+      "width": 798,
       "height": 48
     },
     "Server": {
@@ -85,7 +85,7 @@
   },
   "look::PullRequestState": {
     "Closed": {
-      "x": 750,
+      "x": 912,
       "y": 667,
       "width": 154,
       "height": 48
@@ -97,7 +97,7 @@
       "height": 48
     },
     "Merged": {
-      "x": 588,
+      "x": 750,
       "y": 667,
       "width": 154,
       "height": 48
@@ -106,6 +106,12 @@
       "x": 268,
       "y": 667,
       "width": 150,
+      "height": 48
+    },
+    "Queued": {
+      "x": 588,
+      "y": 667,
+      "width": 154,
       "height": 48
     }
   }

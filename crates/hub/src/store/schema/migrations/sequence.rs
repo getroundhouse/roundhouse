@@ -50,4 +50,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Rust(workspaces::pull_request_links),
     // When what's in each session's composer was typed, in `drafts`.
     Sql(drafts::DRAFT_TYPED_AT),
+    // Each wait's watch keeping the pull requests it saw as their facets, in `waits`.
+    Rust(super::waits::pull_requests_as_facets),
 ];

@@ -13,14 +13,14 @@ use protocol::client::{
 };
 use protocol::frame;
 use protocol::model::{
-    GithubRepositoryName, IssueNumber, IssueState, PrState, PullRequest, Reference, ReferenceAsk, ReferenceKind,
-    ReferenceRead, WorkspaceId,
+    About, GithubRepositoryName, Issue, IssueNumber, IssueState, IssueSummary, PrState, PullRequest, Read, Reference,
+    ReferenceAsk, ReferenceRead, WorkspaceId,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, ReadHalf, WriteHalf};
 use tokio::time::timeout;
 
 use crate::hub::Hub;
-use crate::hub::tests::{archived, forget_github, hub_on_github_with};
+use crate::hub::tests::{archived, forget_github, forget_github_but_a_summary, hub_on_github_with};
 use crate::server::admit::Gate;
 use crate::server::connection::serve_connection;
 
@@ -119,10 +119,7 @@ fn own(n: u64) -> ReferenceAsk {
 
 /// An open issue numbered `n` in `example/project`, titled `title`.
 fn issue(n: u64, title: &str) -> Reference {
-    Reference {
-        repository: GithubRepositoryName::named("example/project"),
-        number: number(n),
-        kind: ReferenceKind::Issue { state: IssueState::Open },
+    let about = About {
         url: format!("https://github.com/example/project/issues/{n}"),
         title: title.to_string(),
         author: Some("ada".into()),
@@ -130,7 +127,12 @@ fn issue(n: u64, title: &str) -> Reference {
         comments: 0,
         labels: Vec::new(),
         body: String::new(),
-    }
+    };
+    Reference::Issue(Issue {
+        repository: GithubRepositoryName::named("example/project"),
+        number: number(n),
+        summary: Read { said: IssueSummary { about, state: IssueState::Open }, read_at_ms: 1 },
+    })
 }
 
 /// What the hub last sent of `ask`.
@@ -149,13 +151,13 @@ fn pull_request(updates: &[GithubUpdate], workspace: &str) -> Option<PullRequest
         if *of != workspace {
             return None;
         }
-        found.as_ref().and_then(|found| found.pull_request.clone())
+        found.as_ref().and_then(|found| found.pull_request.clone()).map(|own| own.pull_request)
     })
 }
 
 fn titled(read: Option<ReferenceRead>) -> Option<String> {
     match read {
-        Some(ReferenceRead::Found { reference }) => Some(reference.title),
+        Some(ReferenceRead::Found { reference }) => reference.about().map(|about| about.title.clone()),
         _ => None,
     }
 }
@@ -182,7 +184,9 @@ async fn a_client_is_sent_what_it_shows_and_then_what_changes_of_it() {
     hub.workspace_pull_request("w".into()).await.unwrap();
 
     client
-        .until("the pull request merged", |sent| pull_request(sent, "w").is_some_and(|pr| pr.state == PrState::Merged))
+        .until("the pull request merged", |sent| {
+            pull_request(sent, "w").is_some_and(|pr| pr.said().state == PrState::Merged)
+        })
         .await;
     assert_eq!(titled(reference(&client.updates, &own(12))).as_deref(), Some("Decide"));
 }
@@ -263,9 +267,33 @@ async fn an_archived_workspaces_pull_request_the_cache_forgot_is_read_again_once
     client.show(1, GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() }).await;
 
     client
-        .until("the pull request, merged", |sent| pull_request(sent, "w").is_some_and(|pr| pr.state == PrState::Merged))
+        .until("the pull request, merged", |sent| {
+            pull_request(sent, "w").is_some_and(|pr| pr.said().state == PrState::Merged)
+        })
         .await;
     assert_eq!(linked_to(&hub).await, Some(7), "the record keeps its link");
+}
+
+/// One the cache has only the summary of, as a chip's read keeps it, is read again too, since what the bar shows needs
+/// its checks, and sent whole.
+#[tokio::test]
+async fn an_archived_workspaces_pull_request_the_cache_has_only_the_summary_of_is_read_again_once_shown() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, _github) = hub_on_github_with(dir.path(), &References::default()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    archived(&hub);
+    forget_github_but_a_summary(&hub);
+    pull_requests.set(7, PullRequestState::Merged);
+    let mut client = Client::of(&hub).await;
+
+    client.show(1, GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() }).await;
+
+    client
+        .until("the pull request, merged, with its checks", |sent| {
+            pull_request(sent, "w").is_some_and(|pr| pr.said().state == PrState::Merged && pr.checks.is_some())
+        })
+        .await;
 }
 
 /// One whose first read fails, as while GitHub is down, is tried again while it's shown, until it's read.
@@ -288,7 +316,9 @@ async fn an_archived_workspaces_pull_request_that_couldnt_be_read_again_is_tried
     pull_requests.fail(false);
 
     client
-        .until("the pull request, merged", |sent| pull_request(sent, "w").is_some_and(|pr| pr.state == PrState::Merged))
+        .until("the pull request, merged", |sent| {
+            pull_request(sent, "w").is_some_and(|pr| pr.said().state == PrState::Merged)
+        })
         .await;
     assert_eq!(linked_to(&hub).await, Some(7), "the record keeps its link");
 }

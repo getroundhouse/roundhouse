@@ -15,6 +15,8 @@ mod card;
 mod drawing;
 mod kept;
 mod reading;
+#[cfg(test)]
+mod tests;
 
 pub(crate) use addresses::may_link;
 pub(crate) use drawing::drawing;

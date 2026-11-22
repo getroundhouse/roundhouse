@@ -1,6 +1,6 @@
 use super::super::mcp::Called;
 use crate::asks::Asks;
-use protocol::model::{Checks, MergeState, PullRequest, QueueState, Review, SessionId, Standing};
+use protocol::model::{CheckCounts, MergeState, OwnPullRequest, PullRequest, QueueState, Review, SessionId, Standing};
 use protocol::worker::{PullRequestAnswer, ReadPullRequest};
 use serde_json::{Value, json};
 
@@ -32,21 +32,28 @@ pub(in super::super) async fn call(asks: &Asks, session_id: &SessionId) -> Calle
 }
 
 /// The pull request in words: what it is, where it stands, then what GitHub says of it and what's here that isn't.
-pub(in super::super) fn describe(pull_request: Option<&PullRequest>) -> String {
-    let Some(pr) = pull_request else {
+pub(in super::super) fn describe(pull_request: Option<&OwnPullRequest>) -> String {
+    let Some(own) = pull_request else {
         return "This workspace's branch has no pull request on GitHub.".to_string();
     };
-    let into = pr.base.as_ref().map_or_default(|base| format!(", into {base}"));
-    let stands = Standing::of(Some(pr));
-    let mut lines = vec![format!("Pull request #{}, \"{}\"{into}: {}", pr.number, pr.title, pr.url)];
+    let pr = &own.pull_request;
+    let said = pr.said();
+    let stands = Standing::of(Some(own));
+    let mut lines = vec![format!(
+        "Pull request #{}, \"{}\", into {}: {}",
+        pr.number.get(),
+        said.about.title,
+        said.base_branch,
+        said.about.url
+    )];
     lines.push(standing(stands));
     if matches!(stands, Standing::Merged | Standing::Closed) {
         return lines.join("\n");
     }
-    lines.push(format!("Checks on its newest commit: {}.", checks(pr.checks)));
-    lines.push(format!("Review: {}.", review(pr.review)));
-    lines.push(format!("GitHub's merge state: {}.", merge_state(pr.merge_state)));
-    let local = pr.local;
+    lines.push(format!("Checks on its newest commit: {}.", checks(pr)));
+    lines.push(format!("Review: {}.", review(said.review)));
+    lines.push(format!("GitHub's merge state: {}.", merge_state(said.merge_state)));
+    let local = own.local;
     lines.push(format!(
         "This worktree: {} changed and not committed, {} not pushed, and {} on the pull request that aren't here.",
         count(local.uncommitted, "file", "files"),
@@ -89,6 +96,7 @@ pub(in super::super) fn standing(standing: Standing) -> String {
             checks.passed + checks.failed,
             checks.passed + checks.failed + checks.pending
         ),
+        Standing::Reading => "Roundhouse hasn't read its checks yet, so it can't say what's in the way.".to_string(),
         Standing::ReviewRequired => "It needs a review before it can merge.".to_string(),
         Standing::Blocked => {
             "The repository's rules hold it back, such as needing it up to date with its base branch.".to_string()
@@ -117,11 +125,13 @@ fn queued(queue: QueueState) -> &'static str {
     }
 }
 
-fn checks(checks: Checks) -> String {
-    if checks == Checks::default() {
+fn checks(pr: &PullRequest) -> String {
+    let Some(checks) = pr.checks_said() else { return "not read yet".to_string() };
+    let counts = checks.counts();
+    if counts == CheckCounts::default() {
         return "none".to_string();
     }
-    format!("{} passed, {} failed, {} running", checks.passed, checks.failed, checks.pending)
+    format!("{} passed, {} failed, {} running", counts.passed, counts.failed, counts.pending)
 }
 
 fn review(review: Review) -> &'static str {

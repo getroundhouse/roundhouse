@@ -1,7 +1,7 @@
 //! Taking GitHub's answer apart, ask by ask, from canned answers to a query of example/project's numbers.
 
 use protocol::client::ApiError;
-use protocol::model::{PullRequestState, REFERENCE_BODY_CHARS};
+use protocol::model::{MergeState, Mergeability, PrState, QueueState, REFERENCE_BODY_CHARS};
 
 use super::super::read::taken;
 use super::*;
@@ -24,14 +24,16 @@ fn issue(number: u64, state: &str, reason: Option<&str>) -> Value {
 }
 
 /// Pull request `number`, in `state`, a draft or not, whose newest commit's checks are `rollup`, and whose review is
-/// `review`, as GitHub answers for it.
+/// `review`, out of the merge queue, as GitHub answers for it.
 fn pull_request(number: u64, state: &str, draft: bool, rollup: Option<&str>, review: Option<&str>) -> Value {
     let rollup = rollup.map(|state| json!({ "state": state }));
     let url = format!("https://github.com/example/project/pull/{number}");
     json!({"__typename": "PullRequest", "number": number, "url": url,
         "title": "Synthetic change", "state": state, "isDraft": draft, "createdAt": "2026-01-02T00:00:00Z",
         "author": null, "comments": {"totalCount": 0}, "bodyText": "", "labels": {"nodes": []},
-        "additions": 120, "deletions": 4, "reviewDecision": review,
+        "additions": 120, "deletions": 4, "reviewDecision": review, "mergeQueueEntry": null,
+        "mergeStateStatus": "CLEAN", "mergeable": "MERGEABLE", "baseRefName": "main", "baseRefOid": "base",
+        "headRefOid": format!("head-{number}"),
         "commits": {"nodes": [{"commit": {"statusCheckRollup": rollup}}]}})
 }
 
@@ -44,7 +46,7 @@ fn read(data: &Value, errors: &[Value], asked: &[&[u64]]) -> Vec<Result<Option<R
         .zip(&repositories)
         .map(|(numbers, repository)| (repository, numbers.iter().map(|n| number(*n)).collect()))
         .collect();
-    taken(&json!({ "data": data, "errors": errors }), &batch)
+    taken(&json!({ "data": data, "errors": errors }), &batch, 9)
 }
 
 /// Whatever is asked of `nodes`, as example/project answers for them, as GitHub writes its name.
@@ -74,79 +76,79 @@ fn an_issue_is_read_whole_and_says_how_it_was_closed() {
     let read = read(&project(&nodes), &[], &[&numbers]);
 
     let read: Vec<Reference> = read.into_iter().map(|answer| answer.unwrap().unwrap()).collect();
-    assert_eq!(
-        read[0],
-        Reference {
-            repository: named("Example/Project"),
-            number: number(1),
-            kind: ReferenceKind::Issue { state: IssueState::Open },
-            url: "https://github.com/example/project/issues/1".to_string(),
-            title: "Synthetic issue".to_string(),
-            author: Some("ada".to_string()),
-            opened_at_ms: 1_767_225_600_000,
-            comments: 3,
-            labels: vec![ReferenceLabel { name: "bug".to_string(), color: "d73a4a".to_string() }],
-            body: "What it says.".to_string(),
-        }
-    );
-    let kinds: Vec<ReferenceKind> = read.iter().map(|reference| reference.kind).collect();
-    assert_eq!(kinds, cases.map(|(_, _, state)| ReferenceKind::Issue { state }));
+    let about = About {
+        url: "https://github.com/example/project/issues/1".to_string(),
+        title: "Synthetic issue".to_string(),
+        author: Some("ada".to_string()),
+        opened_at_ms: 1_767_225_600_000,
+        comments: 3,
+        labels: vec![ReferenceLabel { name: "bug".to_string(), color: "d73a4a".to_string() }],
+        body: "What it says.".to_string(),
+    };
+    let summary = Read { said: IssueSummary { about, state: IssueState::Open }, read_at_ms: 9 };
+    assert_eq!(read[0], Reference::Issue(Issue { repository: named("Example/Project"), number: number(1), summary }));
+    let states: Vec<IssueState> = read
+        .iter()
+        .map(|reference| match reference {
+            Reference::Issue(issue) => issue.summary.said.state,
+            other @ (Reference::PullRequest(_) | Reference::Unknown) => panic!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(states, cases.map(|(_, _, state)| state));
 }
 
-/// Open, a draft, merged and closed, with checks that passed, are running, failed or aren't there, and each review.
+/// Open, a draft, merged and closed, with checks that passed, are running, failed or aren't there, each review, and
+/// in the merge queue or not.
 #[test]
-fn a_pull_request_says_where_it_its_checks_and_its_review_stand() {
+fn a_pull_request_says_where_it_its_checks_its_review_and_its_place_in_the_queue_stand() {
     let cases = [
-        (pull_request(1, "OPEN", false, Some("SUCCESS"), Some("APPROVED")), PullRequestState::Open),
-        (pull_request(2, "OPEN", true, Some("PENDING"), None), PullRequestState::Draft),
-        (pull_request(3, "MERGED", false, Some("ERROR"), Some("CHANGES_REQUESTED")), PullRequestState::Merged),
-        (pull_request(4, "CLOSED", false, None, Some("REVIEW_REQUIRED")), PullRequestState::Closed),
-        (pull_request(5, "OPEN", false, Some("EXPECTED"), None), PullRequestState::Open),
-        (pull_request(6, "OPEN", false, Some("FAILURE"), None), PullRequestState::Open),
+        (pull_request(1, "OPEN", false, Some("SUCCESS"), Some("APPROVED")), (PrState::Open, false)),
+        (pull_request(2, "OPEN", true, Some("PENDING"), None), (PrState::Open, true)),
+        (pull_request(3, "MERGED", false, Some("ERROR"), Some("CHANGES_REQUESTED")), (PrState::Merged, false)),
+        (pull_request(4, "CLOSED", false, None, Some("REVIEW_REQUIRED")), (PrState::Closed, false)),
+        (pull_request(5, "OPEN", false, Some("EXPECTED"), None), (PrState::Open, false)),
+        (pull_request(6, "OPEN", false, Some("FAILURE"), None), (PrState::Open, false)),
     ];
     let mut no_commits = pull_request(7, "OPEN", false, None, None);
     no_commits["commits"]["nodes"] = json!([]);
     let mut nodes: Vec<(u64, Value)> = (1..).zip(cases.iter().map(|(node, _)| node.clone())).collect();
     nodes.push((7, no_commits));
+    nodes[4].1["mergeQueueEntry"] = json!({"state": "AWAITING_CHECKS"});
 
     let read = read(&project(&nodes), &[], &[&[1, 2, 3, 4, 5, 6, 7]]);
 
     let read: Vec<Reference> = read.into_iter().map(|answer| answer.unwrap().unwrap()).collect();
-    let pulls: Vec<ReferencedPullRequest> = read
+    let pulls: Vec<&Summary> = read
         .iter()
-        .map(|reference| match reference.kind {
-            ReferenceKind::PullRequest(pull_request) => pull_request,
-            other @ (ReferenceKind::Issue { .. } | ReferenceKind::Unknown) => panic!("{other:?}"),
+        .map(|reference| match reference {
+            Reference::PullRequest(pull_request) => pull_request.said(),
+            other @ (Reference::Issue(_) | Reference::Unknown) => panic!("{other:?}"),
         })
         .collect();
-    assert_eq!((read[0].author.clone(), read[0].opened_at_ms), (None, 1_767_312_000_000));
+    assert_eq!((pulls[0].about.author.clone(), pulls[0].about.opened_at_ms), (None, 1_767_312_000_000));
     assert_eq!(
-        pulls[0],
-        ReferencedPullRequest {
-            state: PullRequestState::Open,
-            added: 120,
-            removed: 4,
-            checks: Some(ChecksRollup::Passed),
-            review: Review::Approved
-        }
+        (pulls[0].added, pulls[0].removed, pulls[0].merge_state, pulls[0].mergeable, pulls[0].head.as_str()),
+        (120, 4, MergeState::Clean, Mergeability::Mergeable, "head-1")
     );
-    let states: Vec<PullRequestState> = pulls.iter().take(6).map(|pull_request| pull_request.state).collect();
+    let states: Vec<(PrState, bool)> = pulls.iter().take(6).map(|pr| (pr.state, pr.is_draft)).collect();
     assert_eq!(states, cases.map(|(_, state)| state));
-    let stood: Vec<_> = pulls.iter().map(|pr| Some((pr.checks, pr.review))).collect();
+    let stood: Vec<_> = pulls.iter().map(|pr| (pr.rollup, pr.review)).collect();
     let passed = Some(ChecksRollup::Passed);
     let (running, failed) = (Some(ChecksRollup::Running), Some(ChecksRollup::Failed));
     assert_eq!(
         stood,
         [
-            Some((passed, Review::Approved)),
-            Some((running, Review::NotRequired)),
-            Some((failed, Review::ChangesRequested)),
-            Some((None, Review::Required)),
-            Some((running, Review::NotRequired)),
-            Some((failed, Review::NotRequired)),
-            Some((None, Review::NotRequired)),
+            (passed, Review::Approved),
+            (running, Review::NotRequired),
+            (failed, Review::ChangesRequested),
+            (None, Review::Required),
+            (running, Review::NotRequired),
+            (failed, Review::NotRequired),
+            (None, Review::NotRequired),
         ]
     );
+    let queues: Vec<_> = pulls.iter().map(|pr| pr.queue).collect();
+    assert_eq!(queues, [None, None, None, None, Some(QueueState::AwaitingChecks), None, None]);
 }
 
 /// #1 is there, #2 isn't, #3 the token is forbidden, #4 GitHub left out without saying why, and example/gone isn't
@@ -162,7 +164,7 @@ fn one_that_isnt_there_is_missing_and_any_other_error_fails_only_its_own() {
     let read = read(&data, &errors, &[&[1, 2, 3, 4], &[5]]);
 
     let [found, missing, forbidden, left_out, gone] = <[_; 5]>::try_from(read).unwrap();
-    assert_eq!(found.unwrap().map(|found| found.number), Some(number(1)));
+    assert_eq!(found.unwrap().and_then(|found| found.asked()).map(|asked| asked.number), Some(number(1)));
     assert_eq!((missing.unwrap(), gone.unwrap()), (None, None));
     assert_eq!(forbidden.unwrap_err().code, ErrorCode::Unavailable);
     assert_eq!(left_out.unwrap_err().code, ErrorCode::Worker);
@@ -187,6 +189,6 @@ fn what_it_says_is_cut_short_between_characters() {
 
     let read = read(&project(&[(1, long)]), &[], &[&[1]]);
 
-    let body = read.into_iter().next().unwrap().unwrap().unwrap().body;
+    let body = read.into_iter().next().unwrap().unwrap().unwrap().about().unwrap().body.clone();
     assert_eq!(body, "é".repeat(REFERENCE_BODY_CHARS));
 }

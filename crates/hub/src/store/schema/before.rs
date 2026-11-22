@@ -16,3 +16,6 @@ pub(crate) const BEFORE_GITHUB_ACCOUNT_REMOVAL: usize = 86;
 
 /// How many migrations there were before each workspace's record kept only which pull request is its own.
 pub(crate) const BEFORE_PULL_REQUEST_LINKS: usize = 90;
+
+/// How many migrations there were before each wait's watch kept the pull requests it saw as their facets.
+pub(crate) const BEFORE_WAITS_AS_FACETS: usize = 92;

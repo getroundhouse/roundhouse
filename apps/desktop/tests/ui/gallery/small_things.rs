@@ -28,6 +28,8 @@ pub(crate) const COUNTS: &str = "count-kinds";
 pub(crate) const SPEC: &str = "components.md";
 const NAME_WIDTH: f32 = 110.;
 const SAMPLE_WIDTH: f32 = 360.;
+/// How far the chips' sheet's samples reach past [`SAMPLE_WIDTH`], for a pull request's chip in each state.
+const PULL_REQUESTS_PAST: f32 = 60.;
 const ROW: f32 = 44.;
 const MARGIN: f32 = 16.;
 
@@ -235,15 +237,16 @@ fn tall(rows: usize) -> gpui_kit::Pixels {
     px(MARGIN * 2. + rows as f32 * ROW)
 }
 
-fn wide() -> gpui_kit::Pixels {
-    px(MARGIN * 2. + NAME_WIDTH + SAMPLE_WIDTH)
+/// A sheet whose samples reach `past` beyond [`SAMPLE_WIDTH`].
+fn wide(past: f32) -> gpui_kit::Pixels {
+    px(MARGIN * 2. + NAME_WIDTH + SAMPLE_WIDTH + past)
 }
 
 /// Every kind of pill, with where it draws each.
 pub(crate) fn pills(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Places) {
     let mut cx = headless::app(text_system);
     let names: Vec<String> = PillKind::ALL.iter().map(|each| each.written()[0].clone()).collect();
-    let size = size(wide(), tall(PillKind::ALL.len()));
+    let size = size(wide(0.), tall(PillKind::ALL.len()));
     headless::draw_and_measure(
         &mut cx,
         size,
@@ -257,7 +260,7 @@ pub(crate) fn pills(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Plac
 pub(crate) fn chips(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Places) {
     let mut cx = headless::app(text_system);
     let names: Vec<String> = ChipKind::ALL.iter().map(|each| each.written()[0].clone()).collect();
-    let size = size(wide(), tall(ChipKind::ALL.len() + 6));
+    let size = size(wide(PULL_REQUESTS_PAST), tall(ChipKind::ALL.len() + 6));
     headless::draw_and_measure(
         &mut cx,
         size,
@@ -288,7 +291,7 @@ fn written(names: impl Iterator<Item = String>) -> Vec<String> {
 pub(crate) fn badges(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Places) {
     let mut cx = headless::app(text_system);
     let names: Vec<String> = BadgeKind::ALL.iter().map(|each| each.written()[0].clone()).collect();
-    let size = size(wide(), tall(BadgeKind::ALL.len() + 1));
+    let size = size(wide(0.), tall(BadgeKind::ALL.len() + 1));
     headless::draw_and_measure(
         &mut cx,
         size,
@@ -302,7 +305,7 @@ pub(crate) fn badges(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Pla
 pub(crate) fn counts(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Places) {
     let mut cx = headless::app(text_system);
     let names: Vec<String> = CountKind::ALL.iter().map(|each| each.written()[0].clone()).collect();
-    let size = size(wide(), tall(CountKind::ALL.len() + 1));
+    let size = size(wide(0.), tall(CountKind::ALL.len() + 1));
     headless::draw_and_measure(
         &mut cx,
         size,

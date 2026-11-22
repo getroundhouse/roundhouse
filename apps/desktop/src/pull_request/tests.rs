@@ -1,5 +1,5 @@
 use look::Work;
-use protocol::model::{Checks, QueueState, Standing};
+use protocol::model::{CheckCounts, QueueState, Standing};
 
 use super::words::action;
 use super::{Action, Ask, Lookup};
@@ -8,7 +8,8 @@ use super::{Action, Ask, Lookup};
 fn what_waits_on_someone_else_offers_nothing_to_do() {
     let waiting = [
         Standing::Queued(QueueState::AwaitingChecks),
-        Standing::ChecksRunning(Checks::default()),
+        Standing::ChecksRunning(CheckCounts::default()),
+        Standing::Reading,
         Standing::ReviewRequired,
         Standing::Blocked,
         Standing::Checking,

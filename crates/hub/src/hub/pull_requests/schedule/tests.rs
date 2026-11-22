@@ -2,29 +2,16 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use protocol::model::{
-    BranchName, Branches, Checks, GithubRepositoryName, Head, IssueNumber, Local, MergeState, PrState, PullRequest,
-    PullRequestLink, PullRequestLinked, Review, Workspace, WorkspaceId, WorkspaceStatus,
+    BranchName, Branches, CheckState, GithubRepositoryName, Head, IssueNumber, Local, OwnPullRequest, PrState,
+    PullRequestLink, PullRequestLinked, Workspace, WorkspaceId, WorkspaceStatus,
 };
 use tokio::time::Instant;
 
 use super::{Asked, LATEST, SHOWN, SOONEST, Schedule, Went, due};
 
-fn pull_request(state: PrState) -> PullRequest {
-    PullRequest {
-        number: 7,
-        url: "https://example.com/pull/7".to_string(),
-        title: "T".to_string(),
-        state,
-        is_draft: false,
-        base: None,
-        merge_state: MergeState::Clean,
-        review: Review::default(),
-        checks: Checks::default(),
-        queue: None,
-        left_queue: None,
-        changes_requested_at_ms: None,
-        local: Local::default(),
-    }
+/// Open #7, with a check still running, as the hub read it.
+fn running() -> OwnPullRequest {
+    OwnPullRequest { pull_request: protocol::fixtures::pull_request(7), local: Local::default() }
 }
 
 /// A workspace whose pull request the hub found to be #7, beside its state as the hub knows it, or that has none.
@@ -192,8 +179,9 @@ fn a_pull_request_still_moving_on_github_is_read_at_the_soonest_even_when_unchan
         Asked::InTurn,
         Went::Same(None),
     );
-    let running = PullRequest { checks: Checks { passed: 1, failed: 0, pending: 2 }, ..pull_request(PrState::Open) };
-    let settled = pull_request(PrState::Open);
+    let running = running();
+    let mut settled = running.clone();
+    settled.pull_request.checks.as_mut().unwrap().said.checks[0].state = CheckState::Passed;
 
     assert_eq!(Schedule::after(Some(long), now, Asked::InTurn, Went::Same(Some(&running))).every, SOONEST);
     assert_eq!(Schedule::after(Some(long), now, Asked::InTurn, Went::Same(Some(&settled))).every, SOONEST * 8);

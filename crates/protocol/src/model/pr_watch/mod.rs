@@ -5,6 +5,5 @@ pub use selection::{PullRequestNumber, PullRequestSelection, SelectionError};
 
 mod records;
 pub use records::{
-    CheckState, GitHubRepository, Mergeability, ObservedCheck, ObservedPullRequest, PullRequestWaitResult,
-    PullRequestWatch, PullRequestsSnapshot, WaitBaseline, WaitOutcome,
+    GitHubRepository, PullRequestWaitResult, PullRequestWatch, PullRequestsSnapshot, WaitBaseline, WaitOutcome,
 };

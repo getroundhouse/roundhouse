@@ -58,7 +58,10 @@ impl Hub {
         let listed: Vec<_> = workspaces
             .into_iter()
             .map(|workspace| {
-                let state = self.known_of(&workspace).and_then(|found| found.pull_request).map(|pr| pr.state);
+                let state = self
+                    .known_of(&workspace)
+                    .and_then(|found| found.pull_request)
+                    .map(|own| own.pull_request.said().state);
                 (workspace, state)
             })
             .collect();

@@ -2,8 +2,7 @@
 //! command line say the same.
 
 use protocol::model::{
-    BranchName, CheckState, ObservedPullRequest, PrState, PullRequestsSnapshot, Standing, Wait, WaitEnd, WaitUntil,
-    Watching,
+    CheckState, PrState, PullRequest, PullRequestsSnapshot, Standing, Wait, WaitEnd, WaitUntil, Watching,
 };
 
 use crate::standing;
@@ -34,6 +33,10 @@ pub fn waiting(wait: &Wait) -> String {
     if watch.read_error.is_some() {
         return format!("Waiting on {what} \u{b7} couldn't refresh GitHub");
     }
+    // Not read since an update emptied what an older hub kept of it, so there's nothing to count yet.
+    if watch.snapshot.pull_requests.is_empty() {
+        return format!("Waiting on {what}");
+    }
     let numbers = numbers_of(&watching_numbers(&watching));
     let snapshot = &watch.snapshot;
     match wait.until {
@@ -63,7 +66,8 @@ fn running(snapshot: &PullRequestsSnapshot, required_only: bool, check: &str) ->
     let running = snapshot
         .pull_requests
         .iter()
-        .flat_map(|row| &row.checks)
+        .filter_map(PullRequest::checks_said)
+        .flat_map(|checks| &checks.checks)
         .filter(|check| {
             (!required_only || check.required) && matches!(check.state, CheckState::Pending | CheckState::Unknown)
         })
@@ -74,12 +78,12 @@ fn running(snapshot: &PullRequestsSnapshot, required_only: bool, check: &str) ->
 /// Where the pull request holding a wait until a merge stands, in the bar's words: the lowest of its stack that hasn't
 /// merged, named when there are several. Nothing where the bar would only say to see it on GitHub.
 fn holding(snapshot: &PullRequestsSnapshot) -> Option<String> {
-    let open: Vec<_> = snapshot.pull_requests.iter().filter(|row| row.pull_request.state != PrState::Merged).collect();
-    let waits_on_another = |row: &ObservedPullRequest| {
-        row.dependencies.iter().any(|below| open.iter().any(|other| other.pull_request.number == below.get()))
+    let open: Vec<_> = snapshot.pull_requests.iter().filter(|row| row.said().state != PrState::Merged).collect();
+    let waits_on_another = |row: &PullRequest| {
+        (row.stack_said().iter().flat_map(|stack| &stack.dependencies))
+            .any(|below| open.iter().any(|other| other.number == *below))
     };
-    let lowest = open.iter().find(|row| !waits_on_another(row)).or(open.first())?;
-    let pr = &lowest.pull_request;
+    let pr = open.iter().find(|row| !waits_on_another(row)).or(open.first())?;
     let stands = match Standing::on_github_alone(pr) {
         Standing::NoPullRequest | Standing::Merged | Standing::Closed | Standing::Unknown => return None,
         standing @ (Standing::Queued(_)
@@ -92,12 +96,13 @@ fn holding(snapshot: &PullRequestsSnapshot) -> Option<String> {
         | Standing::Draft
         | Standing::ChecksFailed(_)
         | Standing::ChecksRunning(_)
+        | Standing::Reading
         | Standing::ReviewRequired
         | Standing::Blocked
         | Standing::Checking
-        | Standing::Ready) => standing::title(standing, pr.base.as_ref().map(BranchName::as_str)),
+        | Standing::Ready) => standing::title(standing, Some(pr.said().base_branch.as_str())),
     };
-    Some(if snapshot.pull_requests.len() > 1 { format!("#{}: {stands}", pr.number) } else { stands })
+    Some(if snapshot.pull_requests.len() > 1 { format!("#{}: {stands}", pr.number.get()) } else { stands })
 }
 
 fn numbers_of(numbers: &[u64]) -> String {
@@ -137,12 +142,19 @@ pub fn why_it_ended(how: WaitEnd) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use protocol::fixtures::{observed_pull_request, pull_request_wait};
+    use protocol::fixtures::{pull_request, pull_request_wait};
     use protocol::model::{
-        Checks, PrState, PullRequest, PullRequestNumber, QueueState, Review, Wait, WaitUntil, Watching,
+        CheckState, PrState, PullRequest, PullRequestNumber, QueueState, Review, Wait, WaitUntil, Watching,
     };
 
     use super::{waiting, watched};
+
+    /// `pr` with every check it has passed.
+    fn passed(pr: &mut PullRequest) {
+        for check in &mut pr.checks.as_mut().unwrap().said.checks {
+            check.state = CheckState::Passed;
+        }
+    }
 
     /// A wait asked about pull requests names them, and what for. One on the branch's names it as the branch's.
     #[test]
@@ -166,7 +178,7 @@ mod tests {
         let wait = pull_request_wait("w1");
         let with = |until, change: fn(&mut PullRequest)| {
             let mut wait = Wait { until, ..wait.clone() };
-            change(&mut wait.watch.as_mut().unwrap().snapshot.pull_requests[0].pull_request);
+            change(&mut wait.watch.as_mut().unwrap().snapshot.pull_requests[0]);
             waiting(&wait)
         };
 
@@ -174,13 +186,13 @@ mod tests {
         assert_eq!(with(WaitUntil::AllChecks, |_| {}), "Waiting on #7 \u{b7} 1 check running");
         assert_eq!(with(WaitUntil::Merged, |_| {}), "Waiting on #7 to merge \u{b7} 1 check running");
         let queued = |pr: &mut PullRequest| {
-            pr.checks = Checks { passed: 1, failed: 0, pending: 0 };
-            pr.queue = Some(QueueState::AwaitingChecks);
+            passed(pr);
+            pr.summary.said.queue = Some(QueueState::AwaitingChecks);
         };
         assert_eq!(with(WaitUntil::Merged, queued), "Waiting on #7 to merge \u{b7} Running checks in the queue");
-        let ready = |pr: &mut PullRequest| pr.checks = Checks { passed: 1, failed: 0, pending: 0 };
+        let ready = |pr: &mut PullRequest| passed(pr);
         assert_eq!(with(WaitUntil::Merged, ready), "Waiting on #7 to merge \u{b7} Ready to merge");
-        let unknown = |pr: &mut PullRequest| pr.state = PrState::Unknown;
+        let unknown = |pr: &mut PullRequest| pr.summary.said.state = PrState::Unknown;
         assert_eq!(with(WaitUntil::Merged, unknown), "Waiting on #7 to merge", "nothing but to see it on GitHub");
     }
 
@@ -189,15 +201,16 @@ mod tests {
     fn a_wait_until_a_stack_merges_names_the_pull_request_holding_it() {
         let mut wait = Wait { until: WaitUntil::Merged, ..pull_request_wait("w1") };
         let snapshot = &mut wait.watch.as_mut().unwrap().snapshot;
-        let mut lower = observed_pull_request(6);
-        lower.pull_request.checks = Checks { passed: 1, failed: 0, pending: 0 };
-        lower.pull_request.review = Review::Required;
-        snapshot.pull_requests[0].dependencies = vec![PullRequestNumber::try_from(6).unwrap()];
+        let mut lower = pull_request(6);
+        passed(&mut lower);
+        lower.summary.said.review = Review::Required;
+        snapshot.pull_requests[0].stack.as_mut().unwrap().said.dependencies =
+            vec![PullRequestNumber::try_from(6).unwrap()];
         snapshot.pull_requests.push(lower);
 
         assert_eq!(waiting(&wait), "Waiting on #7, #6 to merge \u{b7} #6: Review required");
         let snapshot = &mut wait.watch.as_mut().unwrap().snapshot;
-        snapshot.pull_requests[1].pull_request.state = PrState::Merged;
+        snapshot.pull_requests[1].summary.said.state = PrState::Merged;
         assert_eq!(waiting(&wait), "Waiting on #7, #6 to merge \u{b7} #7: 1 check running", "once #6 has merged");
     }
 
@@ -208,6 +221,16 @@ mod tests {
 
         assert_eq!(waiting(&wait), "Waiting on #7's checks");
         assert_eq!(waiting(&Wait { until: WaitUntil::Done, ..wait }), "Waiting on #7");
+    }
+
+    /// A wait an update emptied of what an older hub kept of its pull requests says which it was asked about, and
+    /// nothing of where they stand, until it's read again.
+    #[test]
+    fn a_wait_not_read_since_an_update_says_what_it_was_asked_about() {
+        let mut wait = pull_request_wait("w1");
+        wait.watch.as_mut().unwrap().snapshot.pull_requests.clear();
+
+        assert_eq!(waiting(&wait), "Waiting on #7 for required checks");
     }
 
     /// GitHub couldn't be read, so there's no count, and the line says what it waits until after the numbers.

@@ -20,6 +20,7 @@ The bar says one thing: the first that's true, in this order.
 | `Conflicts with main` | It conflicts with its base | `Resolve` |
 | `Changes requested` | A reviewer asked for changes | `Address` |
 | `Draft` | It's still a draft | `Ready for review` |
+| `Reading its checks` | It's been found, as a chip in a chat finds one, and its checks haven't been read yet | |
 | `2 checks failed` | Checks failed | `Fix checks` |
 | `2 checks running` | Checks are still running | |
 | `Review required` | It's waiting on a review | |
@@ -52,7 +53,7 @@ Where the bar offers nothing, it's waiting on GitHub or on someone else.
 | Muted red | Closed |
 | Grey | A draft, whatever's in the way, such as conflicts |
 
-The colour says what the pull request is, and the words say what's in the way, so a draft that conflicts is grey and says `Conflicts with main`. The workspace's mark in the sidebar takes the same colours, with every open pull request green, since the mark is too small to say what's in the way.
+The colour says what the pull request is, and the words say what's in the way, so a draft that conflicts is grey and says `Conflicts with main`. The workspace's mark in the sidebar takes the same colours, with every open pull request green, since the mark is too small to say what's in the way. A pull request's chip in a chat takes them too, yellow in the merge queue.
 
 ## While the sidebar is hidden
 

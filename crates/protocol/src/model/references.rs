@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{GithubRepositoryName, Review};
+use super::{GithubRepositoryName, PullRequest, Read};
 
 /// An issue's or a pull request's number in its repository, which GitHub counts together, from 1 to GraphQL's largest
 /// whole number.
@@ -47,14 +47,40 @@ pub struct ReferenceAsk {
     pub number: IssueNumber,
 }
 
-/// What the hub found of an issue or a pull request on GitHub.
+/// An issue or a pull request a text links to, as the hub found it on GitHub.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Reference {
-    /// Where it is, as GitHub names it, which can differ from how it was asked for in case.
+#[serde(tag = "type", rename_all = "snake_case")]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a chip names issues as often as pull requests, each kept once, and a read sends it boxed"
+)]
+pub enum Reference {
+    Issue(Issue),
+    PullRequest(PullRequest),
+    /// One this version doesn't know.
+    #[serde(other)]
+    Unknown,
+}
+
+/// An issue on GitHub, as the hub last read it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Issue {
+    /// The repository it's in, as GitHub names it, which can differ from how it was asked for in case.
     pub repository: GithubRepositoryName,
     pub number: IssueNumber,
-    /// Whether it's an issue or a pull request, and where it stands.
-    pub kind: ReferenceKind,
+    pub summary: Read<IssueSummary>,
+}
+
+/// What GitHub says of an issue.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct IssueSummary {
+    pub about: About,
+    pub state: IssueState,
+}
+
+/// What an issue and a pull request both say of themselves, which a chip's card shows.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct About {
     pub url: String,
     pub title: String,
     /// Who opened it, by their login, or `None` for an account that's gone.
@@ -73,19 +99,6 @@ pub struct Reference {
 /// so each client can cut it where it fits.
 pub const REFERENCE_BODY_CHARS: usize = 400;
 
-/// Whether it's an issue or a pull request, with where it stands, which each has its own states for.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ReferenceKind {
-    Issue {
-        state: IssueState,
-    },
-    PullRequest(ReferencedPullRequest),
-    /// One this version doesn't know.
-    #[serde(other)]
-    Unknown,
-}
-
 /// Where an issue stands.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -100,21 +113,6 @@ pub enum IssueState {
     Unknown,
 }
 
-/// Where a pull request stands.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum PullRequestState {
-    Open,
-    /// Open, as a draft.
-    Draft,
-    Merged,
-    /// Closed without merging.
-    Closed,
-    /// One this version doesn't know.
-    #[serde(other)]
-    Unknown,
-}
-
 /// A label on an issue or a pull request, in its colour on GitHub.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ReferenceLabel {
@@ -123,30 +121,29 @@ pub struct ReferenceLabel {
     pub color: String,
 }
 
-/// Where a pull request a text links to stands, and what it changes.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ReferencedPullRequest {
-    pub state: PullRequestState,
-    pub added: u32,
-    pub removed: u32,
-    /// Where its checks stand on its newest commit, or `None` when it has none.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub checks: Option<ChecksRollup>,
-    #[serde(default)]
-    pub review: Review,
-}
+impl Reference {
+    /// Its repository and number, as an ask for it names it, or `None` for one this version doesn't know.
+    pub fn asked(&self) -> Option<ReferenceAsk> {
+        match self {
+            Reference::Issue(issue) => {
+                Some(ReferenceAsk { repository: issue.repository.clone(), number: issue.number })
+            }
+            Reference::PullRequest(pull_request) => Some(ReferenceAsk {
+                repository: pull_request.repository.clone(),
+                number: IssueNumber::try_from(pull_request.number.get()).ok()?,
+            }),
+            Reference::Unknown => None,
+        }
+    }
 
-/// GitHub's word for where a commit's checks stand together.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ChecksRollup {
-    Passed,
-    Failed,
-    /// Queued, running, or waiting to be reported.
-    Running,
-    /// One this version doesn't know.
-    #[serde(other)]
-    Unknown,
+    /// What it says of itself, or `None` for one this version doesn't know.
+    pub fn about(&self) -> Option<&About> {
+        match self {
+            Reference::Issue(issue) => Some(&issue.summary.said.about),
+            Reference::PullRequest(pull_request) => Some(&pull_request.said().about),
+            Reference::Unknown => None,
+        }
+    }
 }
 
 /// What the hub could say of an issue or a pull request that was asked for.

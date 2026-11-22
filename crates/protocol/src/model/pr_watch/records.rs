@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::model::{BranchName, CommitId, PullRequest, WaitEnd};
+use crate::model::{PullRequest, WaitEnd};
 
 use super::{PullRequestNumber, PullRequestSelection};
 
@@ -11,65 +11,17 @@ pub struct GitHubRepository {
     pub name_with_owner: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum CheckState {
-    Passed,
-    Failed,
-    Pending,
-    #[serde(other)]
-    Unknown,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct ObservedCheck {
-    pub name: String,
-    /// Distinguishes providers and workflows with the same check name.
-    pub source: String,
-    pub url: Option<String>,
-    pub state: CheckState,
-    pub required: bool,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum Mergeability {
-    Mergeable,
-    Conflicting,
-    #[serde(other)]
-    Unknown,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct ObservedPullRequest {
-    pub pull_request: PullRequest,
-    pub head: CommitId,
-    pub base: CommitId,
-    /// Effective destination, which is the stack's trunk for stacked pull requests.
-    pub destination: BranchName,
-    /// Open dependencies in stack order, lowest first. Entries above this PR never appear here.
-    pub dependencies: Vec<PullRequestNumber>,
-    pub mergeability: Mergeability,
-    /// Whether the immediately lower stack branch is an ancestor of this head. Unknown never means linear.
-    pub linear: Option<bool>,
-    pub checks: Vec<ObservedCheck>,
-    pub checks_revision: Option<CommitId>,
-    /// False when effective requirements couldn't be established; an empty list is then not success.
-    pub requirements_known: bool,
-    /// Complete reported checks for the revision GitHub associates with this PR, including a test merge commit.
-    pub checks_known: bool,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct PullRequestsSnapshot {
     pub repository: GitHubRepository,
     pub observed_at_ms: i64,
-    pub pull_requests: Vec<ObservedPullRequest>,
+    /// Each with every facet, all read at the same moment.
+    pub pull_requests: Vec<PullRequest>,
 }
 
 impl PullRequestsSnapshot {
-    pub fn get(&self, number: PullRequestNumber) -> Option<&ObservedPullRequest> {
-        self.pull_requests.iter().find(|pr| pr.pull_request.number == number.get())
+    pub fn get(&self, number: PullRequestNumber) -> Option<&PullRequest> {
+        self.pull_requests.iter().find(|pr| pr.number == number)
     }
 }
 
@@ -94,6 +46,18 @@ pub struct PullRequestWatch {
     pub read_error: Option<String>,
     pub last_attempt_at_ms: i64,
     pub affected: Vec<PullRequestNumber>,
+}
+
+impl PullRequestWatch {
+    /// The pull requests it watches: those its last reading had in its scope, or those it was asked for where it has
+    /// none, as after an update emptied what an older hub kept, until it's read again.
+    pub fn numbers(&self) -> Vec<PullRequestNumber> {
+        if self.snapshot.pull_requests.is_empty() {
+            self.requested.numbers().to_vec()
+        } else {
+            self.snapshot.pull_requests.iter().map(|row| row.number).collect()
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

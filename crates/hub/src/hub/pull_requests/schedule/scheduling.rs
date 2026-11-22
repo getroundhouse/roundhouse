@@ -1,5 +1,5 @@
 use super::super::Asked;
-use protocol::model::{MergeState, PrState, PullRequest, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{MergeState, OwnPullRequest, PrState, Workspace, WorkspaceId, WorkspaceStatus};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use tokio::time::Instant;
@@ -22,7 +22,7 @@ pub(in super::super) struct Schedule {
     pub(in super::super) read_at: Instant,
     /// Whether the read then found it.
     pub(in super::super) found: bool,
-    pub(super) every: Duration,
+    pub(in super::super) every: Duration,
 }
 
 impl Schedule {
@@ -62,7 +62,7 @@ pub(in super::super) enum Went<'a> {
     /// It found something other than what was known.
     Changed,
     /// It found what was known.
-    Same(Option<&'a PullRequest>),
+    Same(Option<&'a OwnPullRequest>),
     /// It couldn't be read, such as while GitHub can't be reached, or with no login to read it as. Showing it reads it
     /// at once anyway.
     Failed,
@@ -70,9 +70,12 @@ pub(in super::super) enum Went<'a> {
 
 /// Whether GitHub is still working on it by itself: checks running, a place in the merge queue, or working out
 /// whether it can merge.
-fn moving(pr: &PullRequest) -> bool {
-    pr.state == PrState::Open
-        && (pr.checks.pending > 0 || pr.queue.is_some() || pr.merge_state == MergeState::Computing)
+fn moving(own: &OwnPullRequest) -> bool {
+    let (pr, said) = (&own.pull_request, own.pull_request.said());
+    said.state == PrState::Open
+        && (pr.checks_said().is_some_and(|checks| checks.counts().pending > 0)
+            || said.queue.is_some()
+            || said.merge_state == MergeState::Computing)
 }
 
 /// The ready workspaces of `listed` that are due to be read, in the order to read them, each beside the state of its

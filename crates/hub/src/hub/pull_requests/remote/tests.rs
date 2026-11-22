@@ -3,7 +3,7 @@ use crate::hub::tests::{hub_reading_github, hub_without_account};
 use crate::timers::Timers;
 use github::{Answer, Script, StandIn};
 use protocol::client::github_accounts::GithubAccountConnect;
-use protocol::fixtures::{observed_pull_request, pull_request_wait};
+use protocol::fixtures::{pull_request, pull_request_wait};
 use protocol::model::{GithubToken, PullRequestNumber, Wait};
 
 fn wait(id: &str, numbers: &[u64]) -> Wait {
@@ -13,7 +13,7 @@ fn wait(id: &str, numbers: &[u64]) -> Wait {
         numbers.iter().map(|n| PullRequestNumber::try_from(*n).unwrap()).collect::<Vec<_>>(),
     )
     .unwrap();
-    watch.snapshot.pull_requests = numbers.iter().map(|n| observed_pull_request(*n)).collect();
+    watch.snapshot.pull_requests = numbers.iter().map(|n| pull_request(*n)).collect();
     wait
 }
 
@@ -63,7 +63,7 @@ async fn an_agents_read_goes_as_the_default_account_and_fails_without_one() {
     let refused = as_nobody.unwrap_err();
     assert_eq!(refused.code, ErrorCode::Worker);
     assert!(refused.message.contains("Connect one"), "{}", refused.message);
-    assert_eq!(as_account.unwrap().pull_requests[0].pull_request.number, 7);
+    assert_eq!(as_account.unwrap().pull_requests[0].number.get(), 7);
     assert_eq!(read_with(&github.asked()), ["an-accounts", "an-accounts"]);
 }
 
