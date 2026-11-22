@@ -30,9 +30,11 @@ pub(super) async fn handle(
         R::TerminalRows(rows) => C::TerminalRows(hub.terminal_rows(rows).await?),
         R::TerminalBounds(asked) => C::TerminalBounds(hub.terminal_bounds(asked).await?),
         R::TerminalText(asked) => C::TerminalText(hub.terminal_text(asked).await?),
-        R::TerminalTyped(_) | R::TerminalFit(_) => {
-            unreachable!("sent on as they're read, by terminals::in_order")
-        }
+        // Sent on as the connection reads them, by `terminals::in_order`, so they reach the worker in the order they were
+        // sent, and none comes here. One that did is still sent on and answered, out of order with the rest, rather than
+        // left without a reply.
+        R::TerminalTyped(typed) => hub.terminal_typed(typed).await?.await?,
+        R::TerminalFit(fit) => hub.terminal_fit(fit).await?.await?,
         R::TerminalClose(close) => C::Terminal(hub.terminal_close(close).await?),
 
         R::PairingStart => C::Pairing(hub.pairing_start().await?),
