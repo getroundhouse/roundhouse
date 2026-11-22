@@ -17,6 +17,8 @@ look.workspace = true
 protocol.workspace = true
 
 [dev-dependencies]
+# A window to measure cells in.
+gpui-kit = { workspace = true, features = ["test-support"] }
 # Whether a key is sent as Ghostty encodes it.
 terminal-state.workspace = true
 
