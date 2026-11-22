@@ -8,6 +8,7 @@ use protocol::model::TerminalId;
 use protocol::terminal::{KeyPress, TerminalSize, TerminalUpdate, Typed};
 
 use super::asking::{self, Waiting};
+use super::given::{Given, Queue};
 use super::window::{Ask, Pointer, Replied, SelectBy, Window};
 use crate::client::follow::{Follow, Source};
 use crate::client::{Client, ClientError, FollowError, Result, Subscription, SubscriptionItem};
@@ -33,34 +34,12 @@ pub(super) struct Held {
     /// Whether the view has taken the last frame, so the next can be built. None is built until a view takes one, and
     /// then only once it has taken the one before, so frames never queue.
     wanted: bool,
-    /// What views gave the window since its thread last looked, and the replies to what it asked, oldest first.
-    pub(super) given: Vec<Given>,
+    /// What views gave the window since its thread last looked, and the replies to what it asked.
+    pub(super) given: Queue,
     /// Whether its shell has ended, after which nothing more comes.
     ended: bool,
     /// Since when no view has shown it, while none does.
     hidden_since: Option<Instant>,
-}
-
-/// What a view gives the window, which only the thread it's followed on reaches, and the replies that thread waits for
-/// elsewhere.
-pub(super) enum Given {
-    Key(KeyPress),
-    Paste(String),
-    Text(String),
-    /// Turns the wheel by this many lines, up for fewer than none.
-    Wheel(isize),
-    /// The view has room for this size.
-    Fit(TerminalSize),
-    Colors(Rgb, Rgb),
-    /// The pointer's button went down, to select by what the click of a run it was selects by.
-    Press(Pointer, SelectBy),
-    /// The pointer moved with the button down, since a press on the grid.
-    Drag(Pointer),
-    Release,
-    SelectAll,
-    /// What's selected, as text, for the view to copy. Nothing is sent while nothing is.
-    SelectedText(flume::Sender<String>),
-    Replied(Replied),
 }
 
 impl OpenTerminal {
@@ -198,7 +177,7 @@ impl OpenTerminal {
     }
 
     fn give(&self, given: Given) {
-        self.follow.quietly(|held| held.given.push(given));
+        self.follow.quietly(|held| held.given.give(given));
         self.follow.wake();
     }
 
@@ -292,7 +271,7 @@ impl TerminalSource {
         // what it gave in.
         let (given, wanted) = {
             let mut held = held.lock();
-            (std::mem::take(&mut held.given), held.wanted)
+            (held.given.take(), held.wanted)
         };
         for given in given {
             let asks = self.answer(connection, given);
