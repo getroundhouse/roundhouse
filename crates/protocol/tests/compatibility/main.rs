@@ -37,6 +37,7 @@ mod model_lists;
 mod outputs;
 mod prompts;
 mod proposals;
+mod provider_messages;
 mod references;
 mod refusals;
 mod replies_heard;

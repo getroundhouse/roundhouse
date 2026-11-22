@@ -2,10 +2,6 @@
 //! the wire rather than against these types, and how a newer side's messages read, since adapters don't ship with
 //! the app and can be older or newer than their hub.
 
-#![cfg(test)]
-
-use std::fmt::Debug;
-
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame;
 use protocol::provider::{
@@ -14,13 +10,8 @@ use protocol::provider::{
     ProviderOutcome, ProviderRequest, ProviderResponse, Size, Start, WorkerBinary, WorkerCommand, WorkerEnvironment,
     WorkerFilesystem,
 };
-use serde::Serialize;
-use serde::de::DeserializeOwned;
 
-fn keeps_its_form<T: Serialize + DeserializeOwned + PartialEq + Debug>(message: &T, line: &str) {
-    assert_eq!(String::from_utf8(frame::encode(message).unwrap()).unwrap(), format!("{line}\n"));
-    assert_eq!(&frame::decode::<T>(line.as_bytes()).unwrap(), message);
-}
+use super::keeps_its_form;
 
 fn call(request: ProviderRequest) -> ProviderCall {
     ProviderCall { id: 7, request }
