@@ -120,8 +120,7 @@ impl WorkspacePane {
             let (client, records, shown) = (self.client.clone(), self.shown.all().clone(), subagent.clone());
             let feed = self.records.clone();
             let transcript = cx.new(|cx| {
-                let mut transcript = Transcript::subagent(client, &chat, shown, cx);
-                transcript.follow_records(feed);
+                let mut transcript = Transcript::subagent(client, &feed, &chat, shown, cx);
                 transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
                 transcript.records_changed(&records, cx);
                 transcript

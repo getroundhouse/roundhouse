@@ -1,7 +1,6 @@
 //! Fetches and follows the hub's history for the view an open session requests.
 
-use super::super::feed::Reaches;
-use super::super::follow::Source;
+use super::super::follow::{Reach, Source};
 use super::super::{Client, Result, Subscription, SubscriptionItem};
 use super::View;
 use crate::records::HubRecords;
@@ -26,26 +25,12 @@ pub(super) struct SessionSource {
     pub(super) placed: bool,
     /// The build of the hub its events were read from, as the hub's hello said.
     pub(super) read_from: String,
-    /// The copies of the hub's records that the session's own records go into, from when it first followed the
-    /// session until it ends.
-    pub(super) records: Option<Reaches>,
+    /// The copy of the hub's records the session's own records go into, as its subscription sends them, which wants
+    /// them from when the session is opened until it ends.
+    pub(super) records: Reach<HubRecords>,
 }
 
 impl SessionSource {
-    /// Keeps the session's own records in the copies of the hub's records that replies on `client` go into, from the
-    /// first time it follows the session, as the session's subscription sends them.
-    fn keep_records(&mut self, client: &Client) {
-        if self.records.is_some() {
-            return;
-        }
-        let records = client.inner.folding.reaches();
-        records.change(|records| {
-            records.want_session(&self.session_id);
-            false
-        });
-        self.records = Some(records);
-    }
-
     pub(super) fn subagent(&self) -> Option<&SubagentId> {
         self.view.subagent()
     }
@@ -114,18 +99,15 @@ impl Source for SessionSource {
             View::Own | View::Subagent(_) => LogFrom::Place { subagent: self.subagent().cloned(), place: from.place() },
         };
         let subscription = client.follow(Follow::Session { id: self.session_id.clone(), from: Some(from) })?;
-        self.keep_records(client);
         change(held).retry_failed();
         Ok(subscription)
     }
 
-    /// Takes in what the session's subscription sends: its log, into what's held, and its own records, into the copies
-    /// of the hub's records.
+    /// Takes in what the session's subscription sends: its log, into what's held, and its own records, into the copy of
+    /// the hub's records.
     fn apply(&mut self, _: &Client, held: &Mutex<Arc<SessionLog>>, item: SubscriptionItem) -> Result<bool> {
         let records = |change: &dyn Fn(&mut HubRecords) -> bool| {
-            if let Some(records) = &self.records {
-                records.change(change);
-            }
+            self.records.change(change);
         };
         let mut log = change(held);
         Ok(match item {
@@ -283,8 +265,6 @@ pub(super) fn read_range(
 /// does, since they reach a client only while it follows the session.
 impl Drop for SessionSource {
     fn drop(&mut self) {
-        if let Some(records) = &self.records {
-            records.change(|records| records.forget_session(&self.session_id));
-        }
+        self.records.change(|records| records.forget_session(&self.session_id));
     }
 }

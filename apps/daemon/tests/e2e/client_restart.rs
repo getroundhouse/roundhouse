@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use client_core::session_log::{Row, SessionLog};
-use client_core::{OpenSession, SubscriptionItem};
+use client_core::{OpenSession, RecordsFeed, SubscriptionItem};
 use protocol::client::{ClientRequest, Hello, subscriptions};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{Seq, SessionStatus};
@@ -315,7 +315,8 @@ fn an_open_session_carries_on_from_where_it_got_to_on_a_new_connection() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let open = OpenSession::start(&client, &session);
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start(&client, &feed, &session);
     client.session_prompt(&session.id, "say:before", None).unwrap();
     wait_until("the first turn", || open.read(held).is_some_and(|events| assistant_text(&events).contains("before")));
 

@@ -11,9 +11,9 @@ use std::sync::Arc;
 use super::super::source::SessionSource;
 use super::super::{OpenSession, View};
 use super::{LAST_SEQ, answered_simply, session, start_hub_answering};
-use crate::Client;
 use crate::client::follow::Source as _;
 use crate::session_log::SessionLog;
+use crate::{Client, RecordsFeed};
 use protocol::prompt::PromptFrom;
 
 /// So whatever reads a version, such as a frame drawing each of its rows from it, reads one log however much comes
@@ -23,7 +23,9 @@ fn a_version_stays_as_it_was_while_the_log_goes_on() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let _heard = start_hub_answering(&socket, answered_simply);
-    let open = OpenSession::start(&Client::connect(&socket, "test").unwrap(), &session());
+    let client = Client::connect(&socket, "test").unwrap();
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start(&client, &feed, &session());
     let before = open.version();
 
     open.add_pending(QueuedPrompt {
@@ -57,6 +59,7 @@ fn each_page_fetched_is_told_of_as_it_is_put_in_place() {
         Some(ReplyOutcome::Response(ClientResponse::Events(log::Events { events, last_seq: LAST_SEQ })))
     });
     let client = Client::connect(&socket, "test").unwrap();
+    let feed = RecordsFeed::start(&client);
     let mut source = SessionSource {
         session_id: "s".into(),
         wanted: View::Whole,
@@ -64,7 +67,7 @@ fn each_page_fetched_is_told_of_as_it_is_put_in_place() {
         last_seq: LAST_SEQ,
         placed: true,
         read_from: client.hub_version().to_string(),
-        records: None,
+        records: feed.reach(),
     };
     let mut log = SessionLog::new(LAST_SEQ);
     log.focus_on(300..301, Some(300));

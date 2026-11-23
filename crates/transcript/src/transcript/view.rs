@@ -10,9 +10,8 @@ use crate::references::References;
 use crate::selection::{Asked, Selection};
 use crate::texts::{Of, Texts};
 use client_core::hints::Around;
-use client_core::records::Snapshot;
 use client_core::session_log::{RecordedApprovals, SessionLog};
-use client_core::{Client, OpenSession, View};
+use client_core::{Client, OpenSession, RecordsFeed, View};
 use events::TranscriptEvent;
 use find::Finding;
 use gpui_kit::{
@@ -70,23 +69,33 @@ pub struct Transcript {
 impl EventEmitter<TranscriptEvent> for Transcript {}
 
 impl Transcript {
-    /// A chat: the agent's own events, with each subagent's call drawn from its record, as `records`, the copy it's
-    /// from, reads it. From a hub that can't read them apart, every event, with each subagent's work gathered into its
-    /// call.
-    pub fn new(client: Client, records: &Snapshot, session: &Session, cx: &mut Context<Self>) -> Self {
-        Self::start(client, session, View::Own, AtWork::of(records, session), cx)
+    /// A chat: the agent's own events, with each subagent's call drawn from its record, which `records`, the copy of
+    /// the hub's records it's from, keeps, as it does the chat's other records while this shows it. From a hub that
+    /// can't read them apart, every event, with each subagent's work gathered into its call.
+    pub fn new(client: Client, records: &RecordsFeed, session: &Session, cx: &mut Context<Self>) -> Self {
+        let at_work = AtWork::of(&records.snapshot(), session);
+        Self::start(client, records, session, View::Own, at_work, cx)
     }
 
-    /// The work of `subagent`, alone, for the subagent tab. Whether it's at work is its record's to say, once
-    /// [`Transcript::set_subagents`] passes it on.
-    pub fn subagent(client: Client, session: &Session, subagent: SubagentId, cx: &mut Context<Self>) -> Self {
-        let transcript = Self::start(client, session, View::Subagent(subagent.clone()), AtWork::default(), cx);
+    /// The work of `subagent`, alone, for the subagent tab, with the chat's records kept in `records`, as
+    /// [`Transcript::new`] says. Whether it's at work is its record's to say, once [`Transcript::set_subagents`] passes
+    /// it on.
+    pub fn subagent(
+        client: Client,
+        records: &RecordsFeed,
+        session: &Session,
+        subagent: SubagentId,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let view = View::Subagent(subagent.clone());
+        let transcript = Self::start(client, records, session, view, AtWork::default(), cx);
         transcript.model.borrow_mut().alone = Some(subagent);
         transcript
     }
 
     pub(super) fn start(
         client: Client,
+        records: &RecordsFeed,
         session: &Session,
         view: View,
         at_work: AtWork,
@@ -96,7 +105,7 @@ impl Transcript {
             View::Subagent(call) => format!("{}-{call}", session.id),
             View::Whole | View::Own => session.id.to_string(),
         };
-        let open = OpenSession::start_view(&client, session, view);
+        let open = OpenSession::start_view(&client, records, session, view);
         let log = open.version();
         let (rows, loaded) = rows_and_loaded(&log);
         let this = cx.weak_entity();
@@ -108,6 +117,7 @@ impl Transcript {
         list.set_rows(rows, loaded);
         let linked = LinkedImages::of_transcript(client.clone(), session.id.clone(), cx.weak_entity());
         let references = References::of_transcript(session.workspace_id.clone(), cx.weak_entity());
+        references.follow_records(records.clone());
         let ticking = tick(&at_work, cx);
         let approvals = RecordedApprovals::of(session);
         let model = Rc::new(RefCell::new(Model {
@@ -188,12 +198,6 @@ impl Transcript {
         // changed once it has caught up on the new connection, or lost it, and the transcript is drawn again then.
         self.model.borrow_mut().pictures.retain(|_, picture| !matches!(picture, Picture::Unreadable));
         self.linked.reconnect(client, cx);
-    }
-
-    /// Reads which workspace a pull request the chat names is in, and what the hub says of those it draws, from
-    /// `records`, client-core's copy of the hub's.
-    pub fn follow_records(&mut self, records: client_core::RecordsFeed) {
-        self.references.follow_records(records);
     }
 
     /// The approvals waiting on an answer, newest last.

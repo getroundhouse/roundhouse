@@ -13,7 +13,7 @@ use super::super::{FollowError, OpenSession};
 use super::{
     answered_simply, follows_session, refused, requests_until_unsubscribed, session, start_hub_answering, until,
 };
-use crate::{Client, ClientError};
+use crate::{Client, ClientError, RecordsFeed};
 
 /// A hub that lists the session's prompts, and answers each ask for the list of compactions with the next of `lists`,
 /// and anything else as [`answered_simply`], on each connection it's given. It reports every request it's sent.
@@ -61,7 +61,8 @@ fn the_hubs_compactions_are_listed_once_its_subscription_has_started() {
     let heard = start_hub(&socket, vec![listed(vec![far_back(Seq::new(3))])]);
     let client = Client::connect(&socket, "test").unwrap();
 
-    let open = OpenSession::start(&client, &session());
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start(&client, &feed, &session());
     until("listed", || seqs(&open) == [Seq::new(3)]);
     let errors = open.take_errors();
     drop(open);
@@ -82,7 +83,8 @@ fn a_hub_too_old_to_list_compactions_is_followed_without_them_and_not_asked_agai
     let heard = start_hub(&socket, vec![refused(ErrorCode::Unsupported, "unknown request")]);
     let client = Client::connect(&socket, "test").unwrap();
 
-    let open = OpenSession::start(&client, &session());
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start(&client, &feed, &session());
     until("answered", || open.read(|log| !log.wants_compaction_list() && !log.wants_prompt_list()));
     open.want(0..1, Some(0));
     let errors = open.take_errors();
@@ -101,7 +103,8 @@ fn a_hub_that_fails_to_list_compactions_goes_on_being_followed_and_is_asked_agai
     let lists = vec![refused(ErrorCode::Internal, "the disk is full"), listed(vec![far_back(Seq::new(3))])];
     let heard = start_hub(&socket, lists);
     let client = Client::connect(&socket, "test").unwrap();
-    let open = OpenSession::start(&client, &session());
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start(&client, &feed, &session());
     let mut errors = Vec::new();
 
     until("told of the failure", || {

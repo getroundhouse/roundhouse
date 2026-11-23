@@ -145,9 +145,8 @@ impl WorkspacePane {
     fn make_transcript(&mut self, session: Session, cx: &mut Context<Self>) {
         let (client, records, feed) = (self.client.clone(), self.shown.all().clone(), self.records.clone());
         let view = cx.new(|cx| {
-            let mut transcript = Transcript::new(client, &records, &session, cx);
+            let mut transcript = Transcript::new(client, &feed, &session, cx);
             transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
-            transcript.follow_records(feed);
             transcript.records_changed(&records, cx);
             transcript
         });

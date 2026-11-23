@@ -103,7 +103,7 @@ fn a_hub_whose_revisions_are_lower_is_shown_as_soon_as_it_lists_each_level() {
     waiting::thread::until(TIMEOUT, "the first hub's records", || feed.connected());
     let _followed = feed.follow_workspace(&elm);
     let session = feed.snapshot().session(&chat).unwrap().clone();
-    let open = OpenSession::start(&first, &session);
+    let open = OpenSession::start(&first, &feed, &session);
     let view = feed.github().view();
     view.show(ShownOfGithub { workspaces: Vec::new(), references: vec![twelve()] });
     let read = || Read::of(&feed, &elm, &chat);
