@@ -1,18 +1,22 @@
 //! What watches each worktree's branches and changes, and how a request starts, replaces or stops one.
 
 use std::path::Path;
+use std::sync::Arc;
 
 use protocol::client::ErrorCode;
 use protocol::model::{BranchName, Head};
 use protocol::worker::{Request as _, WatchBranches, WatchChanges, WatchChildBranches, WorkerFrame};
 use tokio::sync::mpsc;
-use tokio::task::AbortHandle;
+use tokio::task::{AbortHandle, JoinHandle};
 
 use super::super::{Watches, add_child, remove, watch_branches, watch_changes};
 use super::support::{Served, added, committed, ends, next_frame, served, watch};
 use crate::branch_watch::Whose;
 use crate::git::tests::run;
+#[cfg(unix)]
+use crate::serve::listen::without_hub;
 use crate::serve::{Outgoing, handle};
+use crate::testing::given;
 
 /// A watch of a worktree replaces the earlier one of it and no other, and stopping one, as removing it does, leaves
 /// the rest.
@@ -66,7 +70,7 @@ fn watching(path: &str, base_ref: Option<&str>) -> WatchChanges {
 
 /// What's watching the changes of the worktree at `path`, if anything is.
 fn changes_watch(served: &Served, path: &str) -> Option<AbortHandle> {
-    served.worker.state.watches.lock().changes.get(Path::new(path)).cloned()
+    served.worker.state.watches.lock().changes.get(Path::new(path)).map(JoinHandle::abort_handle)
 }
 
 /// The commit the next summary of the worktree at `worktree` is against, skipping any other frame.
@@ -109,7 +113,7 @@ async fn a_watch_of_changes_is_replaced_by_the_next_and_stops_when_the_hub_says(
 
 /// Through what the worker does with each request: another worktree is made beside the workspace's own, its watch
 /// sends frames naming it while the watch of the workspace's own goes on, and removing it stops its watches, and only
-/// its.
+/// its, and lets go of what was read of its changes.
 #[tokio::test]
 async fn a_child_worktree_is_made_watched_and_removed_through_the_worker_s_requests() {
     let served = served().await;
@@ -124,6 +128,7 @@ async fn a_child_worktree_is_made_watched_and_removed_through_the_worker_s_reque
     ask(WatchChildBranches { path: child.clone() }.into_request()).await.unwrap();
     ask(watching(&child, None).into_request()).await.unwrap();
     let changes = changes_watch(&served, &child).expect("its changes are watched");
+    worker.state.changes.summarize(&given(), Path::new(&child), None).await.unwrap();
     let watched = next_frame(&mut frames, |frame| {
         let WorkerFrame::ChildBranches { path, branches } = frame else { return None };
         (*path == child).then(|| branches.head.clone())
@@ -138,7 +143,48 @@ async fn a_child_worktree_is_made_watched_and_removed_through_the_worker_s_reque
     let moved_to = served.dir.path().join("ws").join("repo").join(".deleting");
     assert!(moved_to.exists(), "moved aside beside the workspaces, which every archive clears");
     ends(&changes, "of its changes").await;
+    assert!(!worker.state.changes.keeps(Path::new(&child)), "what was read of its changes is kept");
     let left = worker.state.watches.lock();
     assert!(left.children.is_empty() && left.changes.is_empty(), "its watches are still held");
     assert!(left.own.is_some(), "the workspace's own goes on");
+}
+
+/// A stopped watch of a worktree's changes, once waited for, has let go of all it held, the OS's watch among it, as
+/// removing the worktree needs on Windows.
+#[tokio::test]
+async fn a_stopped_changes_watch_has_let_go_of_what_it_held_once_waited_for() {
+    let mut watches = Watches::default();
+    let held = Arc::new(());
+    let holding = held.clone();
+    let watch = async move {
+        std::future::pending::<()>().await;
+        drop(holding);
+    };
+    watches.watch_changes("/w".into(), tokio::spawn(watch));
+    tokio::task::yield_now().await;
+
+    let stopped = watches.stop_changes(Path::new("/w")).expect("it was watched");
+    stopped.ended().await;
+
+    assert_eq!(Arc::strong_count(&held), 1, "the watch still holds what it held");
+}
+
+/// A watch of a worktree's changes is for the hub that asked, so it ends as soon as the worker carries on without that
+/// hub, rather than at its next read, which can be minutes later, since the next hub says again what it wants.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_watch_ends_once_its_hub_has_gone() {
+    let served = served().await;
+    let worker = &served.worker;
+    let (sent, mut frames) = mpsc::channel(64);
+    worker.state.outbox.attach(sent, false).await;
+    watch_changes(&worker.state, watching(&served.own, None)).await.unwrap();
+    let watch = changes_watch(&served, &served.own).expect("its changes are watched");
+    // So the watch is waiting to hear something, rather than reading what it would send to a hub that's gone.
+    next_base(&mut frames, &served.own).await;
+
+    without_hub(worker).await;
+
+    ends(&watch, "of a hub that's gone").await;
+    assert!(worker.state.watches.lock().changes.is_empty(), "a watch is still held");
 }

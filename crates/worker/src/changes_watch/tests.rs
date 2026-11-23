@@ -22,6 +22,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::watch;
+use tokio::time::Instant;
 
 /// Long enough for a busy machine, and only waited out when the watch has failed to send.
 const PATIENCE: Duration = Duration::from_secs(20);
@@ -199,7 +200,7 @@ async fn a_gitignore_changed_changes_what_wakes_a_summary() {
     let worktree = worktree(dir.path()).await;
     std::fs::create_dir_all(worktree.join("logs")).unwrap();
     let heard = heard(&worktree).await;
-    let mut os = system::start(&heard);
+    let mut os = system::start(&heard).await;
     marked(&heard).await;
 
     write(&worktree.join(".gitignore"), "ignored/\nbuild/\nlogs/\n");
@@ -271,9 +272,7 @@ async fn a_watch_of_more_folders_than_it_may_hold_holds_none_and_reads_on_a_time
 /// What reached the hub through a watch's outbox.
 struct Watched {
     frames: mpsc::Receiver<Outgoing>,
-    outbox: Arc<Outbox>,
     _stopping: watch::Sender<bool>,
-    task: tokio::task::JoinHandle<()>,
 }
 
 impl Watched {
@@ -286,8 +285,8 @@ impl Watched {
         let (_, given) = watch::channel(Arc::new(given()));
         let watched = super::Watched { worktree: worktree.to_path_buf(), base_ref: None };
         let watching = watch(given, ChangeSummaries::default(), watched, outbox.clone(), hub, stopping.subscribe());
-        let task = tokio::spawn(watching);
-        Self { frames: received, outbox, _stopping: stopping, task }
+        tokio::spawn(watching);
+        Self { frames: received, _stopping: stopping }
     }
 
     /// The next summary it sent, once it's been written, so the watch can send the next.
@@ -350,17 +349,19 @@ async fn a_file_in_a_new_folder_is_in_the_next_summary() {
     assert_eq!(status_of(&late, "fresh/deeper/late.rs"), Some(ChangeStatus::Untracked));
 }
 
-/// A watch ends once the hub that asked for it has gone, at its next read, since the next hub says again what it
-/// wants.
-#[tokio::test]
-async fn a_watch_ends_once_its_hub_has_gone() {
-    let dir = tempfile::tempdir().unwrap();
-    let worktree = worktree(dir.path()).await;
-    let mut watched = Watched::start(&worktree).await;
-    watched.next(PATIENCE).await.expect("the first summary");
+/// On Windows, where a watch can end without saying, the OS's watch is started again as often as the watch reads
+/// anyway, by the time since it last was, so a worktree that's never quiet is watched again too.
+#[test]
+fn the_os_s_watch_is_due_again_by_the_time_since_it_last_started() {
+    let (started, every) = (Instant::now(), Duration::from_mins(5));
 
-    watched.outbox.detach().await;
-    write(&worktree.join("a.txt"), "changed once the hub had gone\n");
+    let cases = [
+        (Some(every), Duration::from_secs(299), false),
+        (Some(every), Duration::from_secs(300), true),
+        (None, Duration::from_hours(9), false),
+    ];
 
-    tokio::time::timeout(PATIENCE, &mut watched.task).await.expect("the watch ended").unwrap();
+    for (every, after, due) in cases {
+        assert_eq!(due_again(every, started, started + after), due, "every {every:?}, after {after:?}");
+    }
 }

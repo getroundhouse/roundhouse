@@ -30,10 +30,11 @@ const SETTLING: Settling = Settling {
 /// leaves the summary as of each turn's end.
 const WHERE_THE_OS_WONT_WATCH: Settling = Settling { at_least_every: Duration::from_secs(10), ..SETTLING };
 
-/// Whether the watch is started again each time it reads every few minutes, since on Windows notify ends a watch
-/// whose buffer filled without saying so, as `from_the_top::WATCH_EACH_TOP_FOLDER` says. Elsewhere a watch that's
-/// lost track says so.
-const WATCH_AGAIN_WHEN_DUE: bool = cfg!(windows);
+/// How often the OS's watch is started again, whatever it heard, since on Windows notify ends a watch whose buffer
+/// filled without saying so, as `from_the_top::WATCH_EACH_TOP_FOLDER` says: as often as the watch reads anyway,
+/// counted from when it was last started, so a worktree that's never quiet for that long, as one a build fills, is
+/// watched again all the same. Elsewhere a watch that's lost track says so.
+const WATCH_AGAIN_EVERY: Option<Duration> = if cfg!(windows) { Some(SETTLING.at_least_every) } else { None };
 
 /// What a worktree's watch reads and sends.
 pub(crate) struct Watched {
@@ -56,16 +57,17 @@ pub(crate) async fn watch(
     let first = given.borrow().clone();
     let heard = heard_of(&first, &worktree).await;
     // Watching before the first read, so a change made while it reads is heard.
-    let mut os = system::start(&heard);
+    let (mut os, mut watched_at) = (system::start(&heard).await, Instant::now());
     let mut last: Option<ChangeSummary> = None;
     // Held until a frame has been written, so a hub slow to read holds up the next summary rather than queueing them.
     let sending = Arc::new(Semaphore::new(1));
     loop {
-        let now = given.borrow().clone();
-        take_in(&now, &worktree, &heard, &mut os, heard.take()).await;
+        // Before anything is taken in, which can run git or start the OS's watch again, for a hub that's gone.
         if outbox.connection().await != Some(hub) {
             return;
         }
+        let now = given.borrow().clone();
+        take_in(&now, &worktree, &heard, &mut os, heard.take()).await;
         let began = Instant::now();
         match changes.summarize(&now, &worktree, base_ref.as_deref()).await {
             Ok(summary) if last.as_ref() != Some(&summary) => {
@@ -83,17 +85,22 @@ pub(crate) async fn watch(
         let took = began.elapsed();
         match settling(os.as_deref()).wait(&heard.wake, &mut stopping).await {
             Woke::Stopping => return,
-            Woke::Due if WATCH_AGAIN_WHEN_DUE => {
-                // Before the next, so the two don't hold the OS's watches at once.
-                drop(os.take());
-                os = system::start(&heard);
-            }
             Woke::Due | Woke::Heard => {}
+        }
+        if due_again(WATCH_AGAIN_EVERY, watched_at, Instant::now()) {
+            // Before the next, so the two don't hold the OS's watches at once.
+            drop(os.take());
+            (os, watched_at) = (system::start(&heard).await, Instant::now());
         }
         if !paced(began + took * 2, &mut stopping).await {
             return;
         }
     }
+}
+
+/// Whether the OS's watch, last started at `started`, is to be started again by `now`, every `every`, if ever.
+pub(super) fn due_again(every: Option<Duration>, started: Instant, now: Instant) -> bool {
+    every.is_some_and(|every| now.duration_since(started) >= every)
 }
 
 /// How the watch waits for what it hears, given the OS's watch of the worktree, if it has one.
@@ -145,7 +152,7 @@ pub(super) async fn take_in(
         *heard.ignored.write() = ignored(given, worktree).await;
         // Before the next, so the two don't hold the OS's watches at once.
         drop(os.take());
-        *os = system::start(heard);
+        *os = system::start(heard).await;
         return;
     }
     let Some(watching) = os else { return };
@@ -160,7 +167,7 @@ pub(super) async fn take_in(
             *os = None;
             return;
         }
-        level = kept.iter().flat_map(|folder| system::folders_in(folder)).collect();
+        level = system::folders_in_each(kept).await;
     }
 }
 

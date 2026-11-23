@@ -17,4 +17,5 @@ What the OS's file watchers do through `notify`, which a worker uses to watch a 
 
 Read from notify 8.2.2's source, and not run.
 
-- **notify gives each watch a buffer of 16 KB for `ReadDirectoryChangesW`,** and doesn't look at how many bytes a completion returned, so a buffer that overflowed isn't told of as a rescan. An error it doesn't know, such as `ERROR_NOTIFY_ENUM_DIR`, it logs, and ends that watch without telling the program. So a worker watches each folder at the top of a worktree that git doesn't ignore on its own, rather than the top with all in it, and watches again at each read every few minutes.
+- **notify gives each watch a buffer of 16 KB for `ReadDirectoryChangesW`,** and doesn't look at how many bytes a completion returned, so a buffer that overflowed isn't told of as a rescan. An error it doesn't know, such as `ERROR_NOTIFY_ENUM_DIR`, it logs, and ends that watch without telling the program. So a worker watches each folder at the top of a worktree that git doesn't ignore on its own, rather than the top with all in it, and watches again every five minutes, counted from when it last did, whatever it heard meanwhile.
+- **Dropping a watcher only tells notify's thread to stop.** That thread then cancels each read and closes each folder's handle, so a folder can still be open a moment after the watcher has gone.

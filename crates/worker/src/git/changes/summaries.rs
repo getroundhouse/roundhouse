@@ -63,6 +63,17 @@ impl ChangeSummaries {
         Ok(ChangedFilesPage::after(base, files, after, self.most_listed))
     }
 
+    /// Lets go of what was read of the worktree at `worktree`, which has been removed.
+    pub(crate) fn forget(&self, worktree: &Path) {
+        self.seen.lock().remove(worktree);
+    }
+
+    /// Whether anything read of the worktree at `worktree` is kept.
+    #[cfg(test)]
+    pub(crate) fn keeps(&self, worktree: &Path) -> bool {
+        self.seen.lock().contains_key(worktree)
+    }
+
     /// The commit the worktree at `worktree` is compared with, and every file it changes, each with its version.
     async fn changed(
         &self,

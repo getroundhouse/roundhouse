@@ -37,7 +37,7 @@ pub async fn listen(socket: &Path, config: Config, idle_limit: Duration) -> io::
                     Ok(closing) if closing.ended == Ended::Stop => break Some(closing),
                     Ok(closing) => {
                         info!("the hub went, and asked this worker to keep running without it");
-                        worker.state.outbox.detach().await;
+                        without_hub(&worker).await;
                         closing.abandon();
                     }
                     Err(e) => error!("serving a hub failed: {e}"),
@@ -73,6 +73,14 @@ pub async fn listen(socket: &Path, config: Config, idle_limit: Duration) -> io::
     drop(listener);
     worker.stop(last).await;
     Ok(())
+}
+
+/// Carries `worker` on without the hub that was connected, which asked it to keep running without it: nothing more
+/// goes to that hub, and no worktree's changes are watched, since each was watched for that hub, and the next hub says
+/// again what it wants.
+pub(super) async fn without_hub(worker: &Worker) {
+    worker.state.outbox.detach().await;
+    worker.state.watches.lock().stop_all_changes();
 }
 
 /// Only this user can connect.
