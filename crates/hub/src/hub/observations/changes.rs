@@ -8,7 +8,7 @@ use tracing::warn;
 
 use super::file::Write;
 use super::kept::{Change, Changed, Step, Table};
-use super::kinds::{Kind, Owner};
+use super::kinds::{Kind, Owner, SessionKey};
 use super::tables::Gone;
 use crate::hub::Hub;
 use crate::store::Store;
@@ -135,20 +135,21 @@ impl Hub {
         forgot
     }
 
-    /// Forgets every observation of workspace `id`, of every kind, since the workspace is gone, and tells clients. One
-    /// operation, so no kind is left out. Called where a workspace is discarded, and again by whatever may have kept
-    /// one of it as it went, as a read that lands after can. A failure, which only a database that gives no revision
-    /// has, is only logged, and [`Hub::observations_of_no_workspace_gone`] forgets what's left.
+    /// Forgets every observation of workspace `id`, and of its sessions, of every kind, since the workspace is gone,
+    /// and tells clients. One operation, so no kind is left out. Called where a workspace is discarded, and again by
+    /// whatever may have kept one of it as it went, as a read that lands after can. A failure, which only a database
+    /// that gives no revision has, is only logged, and [`Hub::observations_of_no_workspace_gone`] forgets what's left.
     pub(crate) async fn workspace_observations_gone(&self, id: &WorkspaceId) {
         let _changing = self.observations.changing.lock().await;
-        if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::Workspace(id)).await {
+        if let Err(e) = self.forget_observations_of(&|owner| owner.workspace() == Some(id)).await {
             warn!(%id, "forgetting the observations of a workspace that's gone: {}", e.message);
         }
     }
 
-    /// Forgets every observation of a workspace the hub doesn't have, and tells clients: what a hub that stopped
-    /// between removing a workspace and forgetting its observations left, or a working-out kept after a removal it
-    /// missed. The workspaces are listed under the lock every change takes, so none made since has one yet.
+    /// Forgets every observation of a workspace the hub doesn't have, and of its sessions, and tells clients: what a
+    /// hub that stopped between removing a workspace and forgetting its observations left, or a working-out kept after
+    /// a removal it missed. The workspaces are listed under the lock every change takes, so none made since has one
+    /// yet.
     pub(crate) async fn observations_of_no_workspace_gone(&self) {
         let _changing = self.observations.changing.lock().await;
         let workspaces = match self.workspace_list(true).await {
@@ -156,9 +157,18 @@ impl Hub {
             Err(e) => return warn!("listing workspaces to forget the observations of those gone: {}", e.message),
         };
         let have: HashSet<WorkspaceId> = workspaces.into_iter().map(|workspace| workspace.id).collect();
-        let gone = |owner: Owner<'_>| matches!(owner, Owner::Workspace(id) if !have.contains(id));
+        let gone = |owner: Owner<'_>| owner.workspace().is_some_and(|id| !have.contains(id));
         if let Err(e) = self.forget_observations_of(&gone).await {
             warn!("forgetting the observations of workspaces that are gone: {}", e.message);
+        }
+    }
+
+    /// Forgets every observation of session `key`, of every kind, since the session is gone, and tells clients, as
+    /// [`Hub::workspace_observations_gone`] does a workspace's.
+    pub(crate) async fn session_observations_gone(&self, key: &SessionKey) {
+        let _changing = self.observations.changing.lock().await;
+        if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::Session(key)).await {
+            warn!(session = %key.session_id, "forgetting the observations of a session that's gone: {}", e.message);
         }
     }
 

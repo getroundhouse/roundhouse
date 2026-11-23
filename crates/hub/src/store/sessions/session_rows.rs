@@ -6,11 +6,10 @@ use super::super::{
     required_json_at, rev_of, seq_column, seq_of, text_at, text_of,
 };
 use protocol::capability::approvals::ApprovalMode;
-use protocol::capability::output::TodoList;
 use protocol::capability::settings::Settings;
 use protocol::model::{
-    Account, AccountId, AccountSource, AgentKind, AttachmentId, ClientRequestId, ContextUsage, Draft, Interaction,
-    ModelName, PromptCache, QueuedPrompt, Rev, RunId, Session, SessionId, SessionStatus, Title, Wait, WorkspaceId,
+    Account, AccountId, AccountSource, AgentKind, AttachmentId, ClientRequestId, Draft, Interaction, ModelName,
+    PromptCache, QueuedPrompt, Rev, RunId, Session, SessionId, SessionStatus, Title, Wait, WorkspaceId,
 };
 use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
 
@@ -31,9 +30,9 @@ columns! {
     pub(in super::super) struct SessionColumns {
         id, workspace_id, agent, model, mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id,
         agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held,
-        turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, decision_draft,
-        untaken, open_approvals, reply_outcome, agent_capabilities, account_source, todos, placed_automatically,
-        needs_an_account, conversation,
+        turn_started_at_ms, effort, account_id, user_active_at_ms, prompt_cache, draft, decision_draft, untaken,
+        open_approvals, reply_outcome, agent_capabilities, account_source, placed_automatically, needs_an_account,
+        conversation,
     } then {
         waits = "(SELECT json_group_array(json_object('id', id, 'session_id', session_id, 'workspace_id', workspace_id,
             'number', number, 'call', call, 'until', until, 'started_at_ms', started_at_ms, 'watching', json(watch)))
@@ -84,15 +83,15 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
                 .map_or(Interaction::Typing, |device| Interaction::Conversation { device }),
             turn_started_at_ms: row.at(c.turn_started_at_ms)?,
             effort: text_at(row, c.effort)?,
-            // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
-            context: json_at(row, c.context)?,
+            // An observation, which `crate::hub::observations::OldForm` fills it with as it leaves the hub.
+            context: None,
             account: row.at::<Option<String>>(c.account_id)?.map(AccountId::from),
             account_source: maybe_text_at::<AccountSource>(row, c.account_source)?,
             user_active_at_ms: row.at(c.user_active_at_ms)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next asks.
             prompt_cache: json_at(row, c.prompt_cache)?,
-            // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
-            todos: json_at(row, c.todos)?,
+            // The same.
+            todos: None,
             // Written only by this hub, as JSON. One it can't read is as good as nothing typed.
             draft: json_at(row, c.draft)?.unwrap_or_default(),
             // The same.
@@ -148,7 +147,6 @@ impl Store {
             queue_held: &session.queue_held,
             turn_started_at_ms: &session.turn_started_at_ms,
             effort: &text_of(&session.effort),
-            context: &session.context.as_ref().map(serde_json::to_string).transpose()?,
             account_id: &session.account.as_ref().map(AccountId::as_str),
             user_active_at_ms: &session.user_active_at_ms,
             prompt_cache: &session.prompt_cache.as_ref().map(serde_json::to_string).transpose()?,
@@ -159,7 +157,6 @@ impl Store {
             reply_outcome: &session.reply_outcome.as_ref().map(text_of),
             agent_capabilities: &session.agent_capabilities.as_ref().map(serde_json::to_string).transpose()?,
             account_source: &session.account_source.as_ref().map(text_of),
-            todos: &session.todos.as_ref().map(serde_json::to_string).transpose()?,
             placed_automatically: &session.placed_automatically,
             needs_an_account: &session.needs_an_account,
             conversation: &session.interaction.device().map(serde_json::to_string).transpose()?,
@@ -229,24 +226,6 @@ impl Store {
                 effort.as_ref().map(text_of),
                 id.as_str()
             ],
-        )?;
-        Ok(())
-    }
-
-    /// How full the session's agent's context is from here on.
-    pub fn set_session_context(&self, id: &SessionId, context: &ContextUsage) -> Result<(), StoreError> {
-        lock(&self.writer).execute(
-            "UPDATE sessions SET context = ? WHERE id = ?",
-            params![serde_json::to_string(context)?, id.as_str()],
-        )?;
-        Ok(())
-    }
-
-    /// The session's agent's to-do list from here on.
-    pub fn set_session_todos(&self, id: &SessionId, todos: &TodoList) -> Result<(), StoreError> {
-        lock(&self.writer).execute(
-            "UPDATE sessions SET todos = ? WHERE id = ?",
-            params![serde_json::to_string(todos)?, id.as_str()],
         )?;
         Ok(())
     }

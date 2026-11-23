@@ -130,6 +130,7 @@ fn where_each_level_stands_keeps_its_form() {
         subagents: Vec::new(),
         proposals: Vec::new(),
         replies_heard: Vec::new(),
+        observations: Vec::new(),
         rev: Rev::new(10),
     });
 

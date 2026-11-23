@@ -3,12 +3,14 @@
 
 use std::hash::Hash;
 
+use protocol::capability::output::TodoList;
 use protocol::model::{
-    AccountId, ChangeSummary, LineCounts, ModelListKey, Observation, ObservationKey, Observed, OwnPullRequestDetail,
-    OwnPullRequestSaid, RecordKey, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, UsageLimit, WorkspaceId,
+    AccountId, ChangeSummary, ContextUsage, LineCounts, ModelListKey, Observation, ObservationKey, Observed,
+    OwnPullRequestDetail, OwnPullRequestSaid, RecordKey, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, SessionId,
+    UsageLimit, WorkspaceId,
 };
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 use super::kept::Table;
 use super::tables::Tables;
@@ -51,7 +53,8 @@ pub(crate) trait Kind: Sized + 'static {
 }
 
 /// What an observation can be of, which says what owns it, if anything, so the store forgets it with what owns it
-/// whatever its kind, and a new kind of what's of a workspace or an account needs nothing more to be forgotten with it.
+/// whatever its kind, and a new kind of what's of a workspace, a session or an account needs nothing more to be
+/// forgotten with it.
 pub(crate) trait Subject: Clone + Eq + Hash + Serialize + DeserializeOwned + Send + Sync {
     fn owner(&self) -> Option<Owner<'_>>;
 }
@@ -61,9 +64,22 @@ pub(crate) trait Subject: Clone + Eq + Hash + Serialize + DeserializeOwned + Sen
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Owner<'a> {
     Workspace(&'a WorkspaceId),
+    /// A session, which goes with its workspace too.
+    Session(&'a SessionKey),
     Account(&'a AccountId),
     /// The hub itself, for what's of no record, which is never gone, and goes only as the hub lets go of it.
     Hub,
+}
+
+impl<'a> Owner<'a> {
+    /// The workspace it is, or goes with, if any.
+    pub(crate) fn workspace(self) -> Option<&'a WorkspaceId> {
+        match self {
+            Owner::Workspace(workspace) => Some(workspace),
+            Owner::Session(session) => Some(&session.workspace_id),
+            Owner::Account(_) | Owner::Hub => None,
+        }
+    }
 }
 
 impl Subject for WorkspaceId {
@@ -84,6 +100,20 @@ impl Subject for ReferenceAsk {
 impl Subject for ModelListKey {
     fn owner(&self) -> Option<Owner<'_>> {
         Some(Owner::Hub)
+    }
+}
+
+/// A session, as what's observed of it is kept by: with its workspace, which it never leaves, so it's forgotten with
+/// either.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub(crate) struct SessionKey {
+    pub(crate) workspace_id: WorkspaceId,
+    pub(crate) session_id: SessionId,
+}
+
+impl Subject for SessionKey {
+    fn owner(&self) -> Option<Owner<'_>> {
+        Some(Owner::Session(self))
     }
 }
 
@@ -312,5 +342,56 @@ impl Kind for AccountLimits {
 
     fn old_form_on(account: &AccountId) -> Option<RecordKey> {
         Some(RecordKey::Account { id: account.clone() })
+    }
+}
+
+/// How full a session's agent's context is, as the agent of its current run last said, sent at the session's level. A
+/// client of a version from before it reads it on the session's record.
+pub(crate) struct SessionContext;
+
+impl Kind for SessionContext {
+    type Of = SessionKey;
+    type Value = ContextUsage;
+    const FORM: Form = Form { table: "session_context", version: 1 };
+
+    fn observation(of: &SessionKey, context: Observed<ContextUsage>, rev: Rev) -> Observation {
+        Observation::SessionContext { session_id: of.session_id.clone(), context, rev }
+    }
+
+    fn key(of: &SessionKey) -> ObservationKey {
+        ObservationKey::SessionContext { session_id: of.session_id.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.session_context
+    }
+
+    fn old_form_on(of: &SessionKey) -> Option<RecordKey> {
+        Some(RecordKey::Session { id: of.session_id.clone() })
+    }
+}
+
+/// A session's agent's to-do list, as [`SessionContext`] is.
+pub(crate) struct SessionTodos;
+
+impl Kind for SessionTodos {
+    type Of = SessionKey;
+    type Value = TodoList;
+    const FORM: Form = Form { table: "session_todos", version: 1 };
+
+    fn observation(of: &SessionKey, todos: Observed<TodoList>, rev: Rev) -> Observation {
+        Observation::SessionTodos { session_id: of.session_id.clone(), todos, rev }
+    }
+
+    fn key(of: &SessionKey) -> ObservationKey {
+        ObservationKey::SessionTodos { session_id: of.session_id.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.session_todos
+    }
+
+    fn old_form_on(of: &SessionKey) -> Option<RecordKey> {
+        Some(RecordKey::Session { id: of.session_id.clone() })
     }
 }

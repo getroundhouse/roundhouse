@@ -11,9 +11,9 @@ impl Store {
     pub(crate) fn old_form_moved(&self, key: &RecordKey) -> Result<Option<Record>, StoreError> {
         match key {
             RecordKey::Account { id } => Ok(self.account_moved(id)?.map(Record::Account)),
+            RecordKey::Session { id } => Ok(self.session_moved(id)?.map(Record::Session)),
             RecordKey::Repo { .. }
             | RecordKey::Workspace { .. }
-            | RecordKey::Session { .. }
             | RecordKey::Comment { .. }
             | RecordKey::HubSettings
             | RecordKey::NewWorkspaceDraft

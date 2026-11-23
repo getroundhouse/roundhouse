@@ -1,12 +1,13 @@
 //! Observations, spelled out, since a client and its hub can each be a different build: as the feed tells of one and
 //! its removal, and in the list a client reads as it connects.
 
-use protocol::client::listed::{Listed, ReferenceObservations};
+use protocol::capability::output::TodoList;
+use protocol::client::listed::{Listed, ReferenceObservations, SessionRecords};
 use protocol::client::{HubFrame, HubNotice};
 use protocol::model::{
-    About, AccountIdentity, ChangeStatus, ChangeSummary, ChangedFile, FileVersion, GithubRepositoryName, IssueNumber,
-    IssueSaid, IssueState, IssueSummary, LimitWindow, LineCounts, Observation, ObservationKey, Observed, RecordKey,
-    Records, ReferenceAsk, ReferenceSaid, Rev, UsageLimit,
+    About, AccountIdentity, ChangeStatus, ChangeSummary, ChangedFile, ContextUsage, FileVersion, GithubRepositoryName,
+    IssueNumber, IssueSaid, IssueState, IssueSummary, LimitWindow, LineCounts, Observation, ObservationKey, Observed,
+    RecordKey, Records, ReferenceAsk, ReferenceSaid, Rev, UsageLimit,
 };
 use serde::Deserialize;
 
@@ -96,6 +97,67 @@ fn an_account_s_limits_keep_their_form_as_a_notice_and_a_removal() {
     keeps_its_form(
         &gone,
         r#"{"notice":"observation_removed","observation":{"kind":"account_limits","account":"claude-1"},"rev":6}"#,
+    );
+}
+
+/// How full a session's context is, and its to-do list, which a hub sends at the session's level to a client of a
+/// version that reads them so: as a notice, as a removal, and in the session's list.
+#[test]
+fn a_session_s_context_and_todos_keep_their_form_as_notices_and_in_its_list() {
+    let context = ContextUsage {
+        used_tokens: 60_000,
+        max_tokens: 200_000,
+        model_tokens: None,
+        max_set_by: None,
+        parts: Vec::new(),
+    };
+    let context = Observed::AsOf { value: context, as_of_ms: 1_795_230_000_000 };
+    let copy = Observation::SessionContext { session_id: "s".into(), context, rev: Rev::new(5) };
+    let todos = TodoList { items: Vec::new(), note: Some("Nothing left".into()) };
+    let todos = Observation::SessionTodos {
+        session_id: "s".into(),
+        todos: Observed::AsOf { value: todos, as_of_ms: 1_795_230_000_000 },
+        rev: Rev::new(6),
+    };
+    let gone = HubNotice::ObservationRemoved {
+        observation: ObservationKey::SessionContext { session_id: "s".into() },
+        rev: Rev::new(7),
+    };
+    let listed = Listed::Session(SessionRecords {
+        session_id: "s".into(),
+        subagents: Vec::new(),
+        proposals: Vec::new(),
+        replies_heard: Vec::new(),
+        observations: vec![todos.clone()],
+        rev: Rev::new(8),
+    });
+
+    keeps_its_form(
+        &HubNotice::Observation(copy),
+        concat!(
+            r#"{"notice":"observation","kind":"session_context","session_id":"s","context":{"freshness":"as_of","#,
+            r#""value":{"used_tokens":60000,"max_tokens":200000,"parts":[]},"as_of_ms":1795230000000},"rev":5}"#
+        ),
+    );
+    keeps_its_form(
+        &HubNotice::Observation(todos),
+        concat!(
+            r#"{"notice":"observation","kind":"session_todos","session_id":"s","todos":{"freshness":"as_of","#,
+            r#""value":{"items":[],"note":"Nothing left"},"as_of_ms":1795230000000},"rev":6}"#
+        ),
+    );
+    keeps_its_form(
+        &gone,
+        r#"{"notice":"observation_removed","observation":{"kind":"session_context","session_id":"s"},"rev":7}"#,
+    );
+    keeps_its_form(
+        &HubFrame::Listed { subscription_id: 2, listed },
+        concat!(
+            r#"{"frame":"listed","subscription_id":2,"listed":{"level":"session","session_id":"s","subagents":[],"#,
+            r#""proposals":[],"replies_heard":[],"observations":[{"kind":"session_todos","session_id":"s","#,
+            r#""todos":{"freshness":"as_of","value":{"items":[],"note":"Nothing left"},"as_of_ms":1795230000000},"#,
+            r#""rev":6}],"rev":8}}"#
+        ),
     );
 }
 
@@ -192,9 +254,9 @@ fn a_build_from_before_skips_what_this_one_sends_and_this_one_reads_what_that_se
 #[test]
 fn a_newer_kind_or_freshness_reads_as_unknown() {
     let kind: HubNotice =
-        serde_json::from_str(r#"{"notice":"observation","kind":"session_context","session_id":"s","rev":5}"#).unwrap();
+        serde_json::from_str(r#"{"notice":"observation","kind":"weather","station":"s","rev":5}"#).unwrap();
     let key: HubNotice = serde_json::from_str(
-        r#"{"notice":"observation_removed","observation":{"kind":"session_context","session_id":"s"},"rev":6}"#,
+        r#"{"notice":"observation_removed","observation":{"kind":"weather","station":"s"},"rev":6}"#,
     )
     .unwrap();
     let freshness: Observed<LineCounts> = serde_json::from_str(r#"{"freshness":"stale","value":{"added":1}}"#).unwrap();

@@ -56,4 +56,7 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(accounts::IDENTITY_OBSERVED),
     // What's left of each account's limits, which the hub keeps as an observation, in `accounts`.
     Sql(accounts::LIMITS_OBSERVED),
+    // How full each session's agent's context is, and its to-do list, which the hub keeps as observations, in
+    // `sessions`.
+    Sql(super::sessions::CONTEXT_OBSERVED),
 ];

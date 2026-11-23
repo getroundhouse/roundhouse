@@ -78,6 +78,8 @@ impl Store {
             subagents: subagents_of(&tx, session_id)?,
             proposals: proposals_of(&tx, session_id)?,
             replies_heard: replies_heard_of(&tx, session_id)?,
+            // Observations, which the hub keeps, and lists with these.
+            observations: Vec::new(),
             rev: current_rev(&tx)?,
         };
         tx.commit()?;

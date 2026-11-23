@@ -202,6 +202,7 @@ fn a_sessions_subagents_are_listed_as_they_started_and_found_by_their_call() {
         subagents,
         proposals: Vec::new(),
         replies_heard: Vec::new(),
+        observations: Vec::new(),
         rev: Rev::new(5),
     };
     held.apply_session_list(listed);

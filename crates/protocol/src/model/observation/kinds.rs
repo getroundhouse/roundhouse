@@ -3,10 +3,11 @@
 use serde::{Deserialize, Serialize};
 
 use super::{AccountIdentity, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
+use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
 use crate::model::{
-    AccountId, ChangeSummary, Level, LineCounts, ModelListKey, ReferenceAsk, RepositoryUnseen, Rev, UsageLimit,
-    WorkspaceId,
+    AccountId, ChangeSummary, ContextUsage, Level, LineCounts, ModelListKey, ReferenceAsk, RepositoryUnseen, Rev,
+    SessionId, UsageLimit, WorkspaceId,
 };
 
 /// One observation, of any kind, with what it's of, its revision and what it says, as a list or the feed gives it. A
@@ -50,6 +51,14 @@ pub enum Observation {
     /// Settings draw every account's. Never current, since only a running agent says them, and each says only some. A
     /// client of a version from before it reads it on the account's record, as [`ReadFrom::EveryObservation`] says.
     AccountLimits { account: AccountId, limits: Observed<Vec<UsageLimit>>, rev: Rev },
+    /// How full a chat's agent's context is, as the agent last said in a report outside the log, of its current run.
+    /// Sent at the session's level, since only the chat's pane draws it. Never current, since only the agent says it,
+    /// as it works. A client of a version from before it reads it on the session's record, as
+    /// [`ReadFrom::EveryObservation`] says.
+    SessionContext { session_id: SessionId, context: Observed<ContextUsage>, rev: Rev },
+    /// A chat's agent's to-do list, as the agent last said, of its current run. At the session's level, and never
+    /// current, as [`Observation::SessionContext`] is.
+    SessionTodos { session_id: SessionId, todos: Observed<TodoList>, rev: Rev },
     #[serde(other)]
     Unknown,
 }
@@ -86,6 +95,12 @@ pub enum ObservationKey {
     AccountLimits {
         account: AccountId,
     },
+    SessionContext {
+        session_id: SessionId,
+    },
+    SessionTodos {
+        session_id: SessionId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -115,6 +130,12 @@ impl Observation {
                 ObservationKey::AccountIdentity { account: account.clone() }
             }
             Observation::AccountLimits { account, .. } => ObservationKey::AccountLimits { account: account.clone() },
+            Observation::SessionContext { session_id, .. } => {
+                ObservationKey::SessionContext { session_id: session_id.clone() }
+            }
+            Observation::SessionTodos { session_id, .. } => {
+                ObservationKey::SessionTodos { session_id: session_id.clone() }
+            }
             Observation::Unknown => ObservationKey::Unknown,
         }
     }
@@ -131,7 +152,9 @@ impl Observation {
             | Observation::Reference { rev, .. }
             | Observation::ModelCatalog { rev, .. }
             | Observation::AccountIdentity { rev, .. }
-            | Observation::AccountLimits { rev, .. } => *rev,
+            | Observation::AccountLimits { rev, .. }
+            | Observation::SessionContext { rev, .. }
+            | Observation::SessionTodos { rev, .. } => *rev,
             Observation::Unknown => Rev::default(),
         }
     }
@@ -157,6 +180,9 @@ impl ObservationKey {
                 Some(Level::Workspace { id: workspace_id.clone() })
             }
             ObservationKey::Reference { reference } => Some(Level::Reference { reference: reference.clone() }),
+            ObservationKey::SessionContext { session_id } | ObservationKey::SessionTodos { session_id } => {
+                Some(Level::Session { id: session_id.clone() })
+            }
             ObservationKey::Unknown => None,
         }
     }
@@ -172,7 +198,9 @@ impl ObservationKey {
             | ObservationKey::Reference { .. } => Some(ReadFrom::GithubObserved),
             ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
-            | ObservationKey::AccountLimits { .. } => Some(ReadFrom::EveryObservation),
+            | ObservationKey::AccountLimits { .. }
+            | ObservationKey::SessionContext { .. }
+            | ObservationKey::SessionTodos { .. } => Some(ReadFrom::EveryObservation),
             ObservationKey::Unknown => None,
         }
     }

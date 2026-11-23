@@ -91,6 +91,7 @@ fn stands(
                 subagents: world.subagents_of(id),
                 proposals: world.proposals.get(id).cloned().unwrap_or_default(),
                 replies_heard: world.replies_heard_of(id)?,
+                observations: Vec::new(),
                 rev: world.listed_at,
             };
             let listed = HubFrame::Listed { subscription_id, listed: Listed::Session(records) };

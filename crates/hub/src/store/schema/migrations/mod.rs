@@ -9,6 +9,7 @@ mod event_kinds;
 mod github_accounts;
 mod proposals;
 mod session_accounts;
+mod sessions;
 mod todos;
 mod waits;
 mod workspaces;

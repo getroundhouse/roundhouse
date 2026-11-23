@@ -2,9 +2,11 @@ use super::{
     AccountIdentity, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReadFrom,
     ReferenceSaid,
 };
+use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
 use crate::model::{
-    AgentKind, ChangeSummary, GithubRepositoryName, IssueNumber, Level, LineCounts, ModelListKey, ReferenceAsk, Rev,
+    AgentKind, ChangeSummary, ContextUsage, GithubRepositoryName, IssueNumber, Level, LineCounts, ModelListKey,
+    ReferenceAsk, Rev,
 };
 
 /// The level an observation is sent at, and which subscriptions are sent it.
@@ -13,7 +15,7 @@ type Sent = (Option<Level>, Option<ReadFrom>);
 /// An observation of each kind, with the key and revision it's of, and how it's sent.
 fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
     let unknown = (Observation::Unknown, ObservationKey::Unknown, Rev::default(), (None, None));
-    [of_a_workspace(), of_github(), of_an_agent(), of_an_account(), vec![unknown]].concat()
+    [of_a_workspace(), of_github(), of_an_agent(), of_an_account(), of_a_session(), vec![unknown]].concat()
 }
 
 /// Of each kind of what an agent says of itself.
@@ -122,6 +124,41 @@ fn of_an_account() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
         ),
     ]
+}
+
+/// Of each kind of what an agent says of its chat.
+fn of_a_session() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
+    vec![session_context(), session_todos()]
+}
+
+/// How full a session's context is, with its key and revision, and how it's sent.
+fn session_context() -> (Observation, ObservationKey, Rev, Sent) {
+    let context =
+        ContextUsage { used_tokens: 1, max_tokens: 2, model_tokens: None, max_set_by: None, parts: Vec::new() };
+    (
+        Observation::SessionContext {
+            session_id: "s".into(),
+            context: Observed::AsOf { value: context, as_of_ms: 1_000 },
+            rev: Rev::new(21),
+        },
+        ObservationKey::SessionContext { session_id: "s".into() },
+        Rev::new(21),
+        (Some(Level::Session { id: "s".into() }), Some(ReadFrom::EveryObservation)),
+    )
+}
+
+/// A session's to-do list, with its key and revision, and how it's sent.
+fn session_todos() -> (Observation, ObservationKey, Rev, Sent) {
+    (
+        Observation::SessionTodos {
+            session_id: "s".into(),
+            todos: Observed::AsOf { value: TodoList::default(), as_of_ms: 1_000 },
+            rev: Rev::new(12),
+        },
+        ObservationKey::SessionTodos { session_id: "s".into() },
+        Rev::new(12),
+        (Some(Level::Session { id: "s".into() }), Some(ReadFrom::EveryObservation)),
+    )
 }
 
 #[test]
