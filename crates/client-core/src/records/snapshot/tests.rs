@@ -2,9 +2,9 @@ use protocol::client::HubNotice;
 use protocol::client::listed::SessionRecords;
 use protocol::fixtures::{github_account, github_app, github_sign_in};
 use protocol::model::{
-    DiffComment, DiffSide, GithubAccount, GithubApp, GithubAppId, GithubReach, GithubRepositoryName, GithubSettings,
-    GithubUser, GithubUserId, HubSettings, Proposal, Reach, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal,
-    Title, Workspace,
+    AgentKind, DiffComment, DiffSide, GithubAccount, GithubApp, GithubAppId, GithubReach, GithubRepositoryName,
+    GithubSettings, GithubUser, GithubUserId, HubSettings, ModelList, ModelListKey, ModelLookup, Proposal, Reach,
+    Record, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal, Title, Workspace,
 };
 
 use crate::records::HubRecords;
@@ -115,7 +115,22 @@ fn a_view_is_told_which_parts_changed_since_it_last_looked() {
     assert!(changes.comments(&"w".into()), "one went");
     assert!(changes.terminals(&"w2".into()) && !changes.terminals(&"w".into()), "one opened, in the second");
     assert!(!changes.workspace(&"w".into()) && !changes.workspace(&"w2".into()), "no workspace's own record");
+    assert!(!changes.model_lists(), "no list of models");
     assert!(!now.changes_since(&now).any());
+    let key = ModelListKey {
+        agent: AgentKind::Codex,
+        repo: "r".into(),
+        provider: "local".into(),
+        account: None,
+        cli_version: None,
+    };
+    held.apply_record(Record::ModelList(ModelList {
+        key,
+        catalog: None,
+        lookup: ModelLookup::Asking,
+        rev: Rev::new(11),
+    }));
+    assert!(held.snapshot().changes_since(&now).model_lists(), "one came");
 }
 
 #[test]

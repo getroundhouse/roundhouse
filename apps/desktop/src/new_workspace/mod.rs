@@ -13,5 +13,5 @@ pub(crate) use keeping::Keeping;
 mod dialog;
 
 pub use dialog::NewWorkspaceDialog;
-pub(crate) use dialog::{DialogEvent, Offer, open};
+pub(crate) use dialog::{DialogEvent, ModelsOffered, Offer, open};
 pub use request::Request;

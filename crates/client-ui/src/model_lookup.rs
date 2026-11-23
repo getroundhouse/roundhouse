@@ -29,19 +29,20 @@ impl FollowedModels {
     }
 
     /// Follows the list for `agent` where `target` would launch, asking the hub when it's another than the one
-    /// followed, when the hub has let go of that one, or `again`, as Retry does. `held` is what the records hold of the
-    /// list followed. Nothing is asked for an agent that doesn't discover its models.
+    /// followed, when the hub has let go of that one, or `again`, as Retry does. `records` is the copy of the hub's
+    /// records that holds the list followed. Nothing is asked for an agent that doesn't discover its models.
     #[expect(clippy::too_many_arguments, reason = "what's asked, where it's held, and where the answer goes")]
     pub fn follow<T: 'static>(
         &mut self,
         client: &Client,
         agent: Option<&AgentDescription>,
         target: ModelTarget,
-        held: Option<&ModelList>,
+        records: &Snapshot,
         again: bool,
         cx: &mut Context<T>,
         lookup: fn(&mut T) -> &mut Self,
     ) {
+        let held = self.held(records);
         let Some(agent) = agent.filter(|agent| agent.discovers_models()) else {
             if self.asked.is_some() {
                 self.reset();
@@ -88,18 +89,17 @@ impl FollowedModels {
         if self.key().is_some_and(|key| session.account.is_some() && key.account != session.account) {
             self.reset();
         }
-        let list = self.held(records);
-        self.follow(client, agent, target, list, again, cx, lookup);
+        self.follow(client, agent, target, records, again, cx, lookup);
     }
 
     /// What the chat `session`'s agent is offered where it runs, for its model picker, as
     /// [`FollowedModels::description`] says.
     pub fn chat_agent(&self, records: &Snapshot, session: &Session) -> Option<AgentDescription> {
-        self.description(records.agents().of(session.agent)?, self.held(records))
+        self.description(records.agents().of(session.agent)?, records)
     }
 
     /// What `records` hold of the list followed.
-    pub fn held<'a>(&self, records: &'a Snapshot) -> Option<&'a ModelList> {
+    fn held<'a>(&self, records: &'a Snapshot) -> Option<&'a ModelList> {
         self.key().and_then(|key| records.model_list(key))
     }
 
@@ -108,49 +108,52 @@ impl FollowedModels {
         Some(&self.answer.as_ref()?.as_ref().ok()?.key)
     }
 
-    /// The newest of what the records hold of the list followed, `held`, and what the reply had.
-    fn list<'a>(&'a self, held: Option<&'a ModelList>) -> Option<&'a ModelList> {
+    /// The newest of what `records` hold of the list followed and what the reply had.
+    fn list<'a>(&'a self, records: &'a Snapshot) -> Option<&'a ModelList> {
         let answered = self.answer.as_ref()?.as_ref().ok()?;
-        Some(held.filter(|held| held.rev >= answered.rev).unwrap_or(answered))
+        Some(self.held(records).filter(|held| held.rev >= answered.rev).unwrap_or(answered))
     }
 
     /// What `base` offers where the list followed applies: `base` itself for an agent that doesn't discover its models,
-    /// and for one that does, `base` with the list's models, once the agent has given some.
-    pub fn description(&self, base: &AgentDescription, held: Option<&ModelList>) -> Option<AgentDescription> {
+    /// and for one that does, `base` with the list's models, as `records` read them, once the agent has given some.
+    pub fn description(&self, base: &AgentDescription, records: &Snapshot) -> Option<AgentDescription> {
         if !base.discovers_models() {
             return Some(base.clone());
         }
-        let catalog = self.list(held)?.catalog.clone().filter(|catalog| !catalog.offered.is_empty())?;
-        Some(base.clone().with_catalog(catalog))
+        let catalog = records.model_catalog(self.list(records)?).filter(|catalog| !catalog.offered.is_empty())?;
+        Some(base.clone().with_catalog(catalog.clone()))
     }
 
     /// Whether the agent hasn't said yet what it offers, and hasn't failed to, so there's nothing to pick from.
-    pub fn waiting(&self, held: Option<&ModelList>) -> bool {
-        self.asked.is_some() && self.failed(held).is_none() && self.list(held).is_none_or(|list| list.catalog.is_none())
+    pub fn waiting(&self, records: &Snapshot) -> bool {
+        let unlisted = self.list(records).is_none_or(|list| records.model_catalog(list).is_none());
+        self.asked.is_some() && self.failed(records).is_none() && unlisted
     }
 
     /// What the hub said instead of a list, or why the list it holds has nothing to offer.
-    fn failed<'a>(&'a self, held: Option<&'a ModelList>) -> Option<&'a str> {
-        match self.answer.as_ref()? {
-            Err(refused) => Some(refused),
-            Ok(_) => match self.list(held)? {
-                ModelList { catalog: Some(catalog), .. } if !catalog.offered.is_empty() => None,
-                ModelList { lookup: ModelLookup::Failed { message }, .. } => Some(message),
-                ModelList { catalog: Some(_), .. } => Some("This login offers no models"),
-                ModelList { catalog: None, .. } => None,
-            },
+    fn failed<'a>(&'a self, records: &'a Snapshot) -> Option<&'a str> {
+        let list = match self.answer.as_ref()? {
+            Err(refused) => return Some(refused),
+            Ok(_) => self.list(records)?,
+        };
+        match (records.model_catalog(list), &list.lookup) {
+            (Some(catalog), _) if !catalog.offered.is_empty() => None,
+            (_, ModelLookup::Failed { message }) => Some(message),
+            (Some(_), _) => Some("This login offers no models"),
+            (None, _) => None,
         }
     }
 
-    /// "Loading models…" while the agent is asked, and what went wrong, with Retry, once it fails. `retry` asks again.
+    /// "Loading models…" while the agent is asked, and what went wrong, with Retry, once it fails, as `records` hold
+    /// the list followed. `retry` asks again.
     pub fn status<T: 'static>(
         &self,
-        held: Option<&ModelList>,
+        records: &Snapshot,
         cx: &mut Context<T>,
         retry: fn(&mut T, &mut Context<T>),
     ) -> Option<AnyElement> {
-        let error = self.failed(held);
-        if error.is_none() && !self.waiting(held) {
+        let error = self.failed(records);
+        if error.is_none() && !self.waiting(records) {
             return None;
         }
         let label = error.map_or_else(|| "Loading models…".to_owned(), |e| format!("{e} · Retry"));
@@ -167,8 +170,18 @@ impl FollowedModels {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use client_core::records::HubRecords;
     use protocol::capability::settings::ModelCatalog;
-    use protocol::model::Rev;
+    use protocol::model::{Record, Rev};
+
+    /// A client's copy of the hub's records holding `lists`.
+    fn holding(lists: &[&ModelList]) -> Snapshot {
+        let mut held = HubRecords::default();
+        for list in lists {
+            held.apply_record(Record::ModelList((*list).clone()));
+        }
+        held.snapshot()
+    }
 
     fn list(rev: u64, lookup: ModelLookup, catalog: Option<ModelCatalog>) -> ModelList {
         let key = ModelListKey {
@@ -194,8 +207,11 @@ mod tests {
         let older = list(1, ModelLookup::Answered, Some(ModelCatalog::default()));
         let newer = list(3, ModelLookup::Failed { message: "logged out".into() }, None);
 
-        assert!(lookup.waiting(None) && lookup.waiting(Some(&older)), "the reply is newer than what's held");
-        assert_eq!(lookup.failed(Some(&newer)), Some("logged out"));
-        assert!(!lookup.waiting(Some(&newer)));
+        assert!(
+            lookup.waiting(&holding(&[])) && lookup.waiting(&holding(&[&older])),
+            "the reply is newer than what's held"
+        );
+        assert_eq!(lookup.failed(&holding(&[&newer])), Some("logged out"));
+        assert!(!lookup.waiting(&holding(&[&newer])));
     }
 }

@@ -30,13 +30,12 @@ impl WorkspacePane {
 
     /// Whether there's nothing to pick from yet, since the agent hasn't said what it offers.
     pub(super) fn models_waiting(&self) -> bool {
-        self.model_lookup.waiting(self.model_lookup.held(&self.records.snapshot()))
+        self.model_lookup.waiting(&self.records.snapshot())
     }
 
     /// "Loading models…", or what went wrong, with Retry.
     pub(super) fn models_status(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        self.model_lookup
-            .status(self.model_lookup.held(&self.records.snapshot()), cx, |p, cx| p.follow_models(true, cx))
+        self.model_lookup.status(&self.records.snapshot(), cx, |p, cx| p.follow_models(true, cx))
     }
 
     /// Whether the agent of the chat showing compacts when asked, so `Compact now` and a typed `/compact` ask it to.

@@ -31,7 +31,7 @@ impl ChatView {
         let Some(session) = self.shown.as_ref().map(|shown| &shown.session) else { return Vec::new() };
         let records = self.feed.snapshot();
         let mut row: Vec<AnyElement> = self.plus_menu(session, cx).into_iter().collect();
-        let status = self.models.status(self.models.held(&records), cx, |chat, cx| chat.follow_models(true, cx));
+        let status = self.models.status(&records, cx, |chat, cx| chat.follow_models(true, cx));
         let picker = status.unwrap_or_else(|| {
             let agent = self.models.chat_agent(&records, session);
             let this = cx.weak_entity();
