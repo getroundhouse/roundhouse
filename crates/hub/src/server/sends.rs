@@ -97,19 +97,6 @@ impl Sends {
 
     /// Whether it's sent the observation `key` in the form of what GitHub says it reads.
     fn keeps(&self, key: &ObservationKey) -> bool {
-        self.github_observed || !githubs(key)
-    }
-}
-
-/// Whether `key` is of what GitHub says, which a client from before observations is sent as `HubFrame::Github`.
-fn githubs(key: &ObservationKey) -> bool {
-    match key {
-        ObservationKey::WorkspacePullRequest { .. }
-        | ObservationKey::WorkspacePullRequestDetail { .. }
-        | ObservationKey::WorkspaceRepositoryUnseen { .. }
-        | ObservationKey::Reference { .. } => true,
-        ObservationKey::WorkspaceLines { .. } | ObservationKey::WorkspaceChanges { .. } | ObservationKey::Unknown => {
-            false
-        }
+        self.github_observed || !key.is_github()
     }
 }

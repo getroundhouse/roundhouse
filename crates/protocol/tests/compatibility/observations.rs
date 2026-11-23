@@ -11,6 +11,7 @@ use protocol::model::{
 use serde::Deserialize;
 
 use crate::keeps_its_form;
+use crate::workspace_pull_requests::pull_request_said;
 
 fn lines(lines: Observed<LineCounts>) -> Observation {
     Observation::WorkspaceLines { workspace_id: "w".into(), lines, rev: Rev::new(5) }
@@ -181,6 +182,18 @@ fn a_chip_s_observation_keeps_its_form() {
             r#","said":{"freshness":"current","value":{"type":"issue","repository":"o/r","number":41,"summary":"#,
             r#"{"about":{"url":"https://github.com/o/r/issues/41","title":"Decide","opened_at_ms":1,"comments":0,"#,
             r#""labels":[],"body":""},"state":"open"}}},"rev":7}"#,
+        ]
+        .concat(),
+    );
+    let (pull_request, summary) = pull_request_said();
+    keeps_its_form(
+        &HubNotice::Observation(of(Observed::Current { value: ReferenceSaid::PullRequest(pull_request) })),
+        &[
+            r#"{"notice":"observation","kind":"reference","#,
+            ask,
+            r#","said":{"freshness":"current","value":{"type":"pull_request","#,
+            summary,
+            r#"}},"rev":7}"#,
         ]
         .concat(),
     );

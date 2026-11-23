@@ -36,17 +36,6 @@ async fn following(hub: &Arc<Hub>, starts: Vec<Subscription>) -> Connection {
     connection
 }
 
-/// Whether `key` is of what GitHub says.
-fn githubs(key: &ObservationKey) -> bool {
-    matches!(
-        key,
-        ObservationKey::WorkspacePullRequest { .. }
-            | ObservationKey::WorkspacePullRequestDetail { .. }
-            | ObservationKey::WorkspaceRepositoryUnseen { .. }
-            | ObservationKey::Reference { .. }
-    )
-}
-
 /// Every observation `frame` carries, in a list or a notice.
 fn observations(frame: &HubFrame) -> Vec<ObservationKey> {
     let listed = |observations: &[Observation]| observations.iter().map(Observation::key).collect();
@@ -184,8 +173,8 @@ async fn a_start_that_doesn_t_read_github_so_is_sent_github_s_updates_and_none_o
     before.until("the notice after the rest", has_the_rest).await;
 
     let sent: Vec<_> = before.sent.iter().flat_map(observations).collect();
-    assert!(!sent.iter().any(githubs), "{sent:?}");
+    assert!(!sent.iter().any(ObservationKey::is_github), "{sent:?}");
     let ClientResponse::Records(records) = ok(&mut before, 2, RecordsList).await else { panic!("not records") };
     let listed: Vec<_> = records.observations.iter().map(Observation::key).collect();
-    assert!(!listed.iter().any(githubs), "{listed:?}");
+    assert!(!listed.iter().any(ObservationKey::is_github), "{listed:?}");
 }

@@ -29,7 +29,13 @@ pub const CLIENT_PROTOCOL_VERSION: u32 = 4;
 /// older build, as `docs/principles/protocol.md` says. Version 3 is the one a client follows through a request of its
 /// own for each of the hub's records, a session, a terminal and what it shows of GitHub. Nothing a hub sends a client
 /// of version 3 differs from what it sent it before version 4.
-pub const HUB_SPEAKS: Versions = Versions { oldest: 3, newest: CLIENT_PROTOCOL_VERSION };
+///
+/// Both are written out, rather than taken from [`CLIENT_PROTOCOL_VERSION`], since at a break the hub speaks the new
+/// version a merge before clients do, so a client of the build that first speaks it can talk to the hub of the build
+/// before. A hub has to speak its own build's clients' version, which the assertion below holds.
+pub const HUB_SPEAKS: Versions = Versions { oldest: 3, newest: 4 };
+
+const _: () = assert!(HUB_SPEAKS.speaks(CLIENT_PROTOCOL_VERSION), "a hub speaks its own build's clients' version");
 
 /// A request to a hub, which names what the hub answers it with.
 pub trait Request {

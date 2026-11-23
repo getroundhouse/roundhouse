@@ -3,6 +3,7 @@
 //! it, and hears when what it shows changes. What GitHub says of a workspace that only its own level sends comes while
 //! the workspace is followed there, as `client::workspace_level` does.
 
+mod as_read;
 mod held;
 mod source;
 #[cfg(test)]

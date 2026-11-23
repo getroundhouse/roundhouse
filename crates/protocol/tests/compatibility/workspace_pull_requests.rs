@@ -70,25 +70,42 @@ fn a_workspace_s_pull_request_s_detail_keeps_its_form() {
     );
 }
 
-/// A pull request found reads back as it was written, its summary and how the worktree stands against it whole.
+/// A pull request found keeps its form: its summary, and how the worktree stands against it.
 #[test]
-fn a_workspace_s_pull_request_found_reads_back_whole() {
+fn a_workspace_s_pull_request_found_keeps_its_form() {
+    let (said, summary) = pull_request_said();
+    let local = Local { uncommitted: 2, ahead: 1, behind: 0 };
+    let found = OwnPullRequestSaid { pull_request: Some(OwnSummary { pull_request: said, local }) };
+
+    keeps_its_form(
+        &HubNotice::Observation(Observation::WorkspacePullRequest {
+            workspace_id: "w".into(),
+            pull_request: Observed::Current { value: found },
+            rev: Rev::new(5),
+        }),
+        &[
+            r#"{"notice":"observation","kind":"workspace_pull_request","workspace_id":"w","#,
+            r#""pull_request":{"freshness":"current","value":{"pull_request":{"pull_request":{"#,
+            summary,
+            r#"},"local":{"uncommitted":2,"ahead":1,"behind":0}}}},"rev":5}"#,
+        ]
+        .concat(),
+    );
+}
+
+/// A pull request's summary, as an observation says it, and its fields as the wire spells them.
+pub(crate) fn pull_request_said() -> (PullRequestSaid, &'static str) {
     let pull_request = protocol::fixtures::pull_request(7);
     let said = PullRequestSaid {
         repository: pull_request.repository,
         number: pull_request.number,
         summary: pull_request.summary.said,
     };
-    let local = Local { uncommitted: 2, ahead: 1, behind: 0 };
-    let observation = Observation::WorkspacePullRequest {
-        workspace_id: "w".into(),
-        pull_request: Observed::Current {
-            value: OwnPullRequestSaid { pull_request: Some(OwnSummary { pull_request: said, local }) },
-        },
-        rev: Rev::new(5),
-    };
-
-    let line = serde_json::to_string(&observation).unwrap();
-
-    assert_eq!(serde_json::from_str::<Observation>(&line).unwrap(), observation, "{line}");
+    let fields = concat!(
+        r#""repository":"example/project","number":7,"summary":{"about":{"#,
+        r#""url":"https://github.com/example/project/pull/7","title":"Change 7","opened_at_ms":1,"comments":0,"#,
+        r#""labels":[],"body":""},"state":"OPEN","is_draft":false,"review":"","merge_state":"CLEAN","#,
+        r#""mergeable":"mergeable","base_branch":"main","head":"head-7","base":"base","added":0,"removed":0}"#
+    );
+    (said, fields)
 }

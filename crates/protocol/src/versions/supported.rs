@@ -21,7 +21,7 @@ impl Versions {
         Self { oldest: oldest.unwrap_or(newest), newest }
     }
 
-    pub fn speaks(self, version: u32) -> bool {
+    pub const fn speaks(self, version: u32) -> bool {
         self.oldest <= version && version <= self.newest
     }
 
