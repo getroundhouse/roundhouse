@@ -101,8 +101,9 @@ impl WorkspacePane {
     }
 
     fn workspace_around<'a>(&'a self, cx: &'a App) -> Workspace<'a> {
-        let files = self.diff.as_ref().and_then(|diff| diff.review.read(cx).files.as_ref()).into_iter().flatten();
-        let changed = files.map(|patch| patch.path().as_ref()).collect();
+        let listing = self.diff.as_ref().and_then(|diff| diff.review.read(cx).listing());
+        let changed =
+            listing.into_iter().flat_map(|listing| listing.rows.iter()).map(|file| file.path.as_ref()).collect();
         Workspace { shown: &self.shown, pull_request: self.pull_request.pull_request(), changed }
     }
 

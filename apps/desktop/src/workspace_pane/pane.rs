@@ -340,6 +340,9 @@ impl WorkspacePane {
         self.show_next(cx);
         self.pass_on_agents(cx);
         self.follow_models(false, cx);
+        if changes.workspace_changes(&id) {
+            self.take_changed_files(cx);
+        }
         if changes.comments(&id)
             && let Some(diff) = &self.diff
         {

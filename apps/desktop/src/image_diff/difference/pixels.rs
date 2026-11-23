@@ -257,23 +257,10 @@ impl Difference {
         match (self.changed, self.places.len()) {
             (0, _) => "No pixels changed".to_string(),
             (1, _) => "1 pixel changed".to_string(),
-            (changed, 1) => format!("{} pixels in 1 place", thousands(changed)),
-            (changed, places) => format!("{} pixels in {places} places", thousands(changed)),
+            (changed, 1) => format!("{} pixels in 1 place", look::thousands(changed)),
+            (changed, places) => format!("{} pixels in {places} places", look::thousands(changed)),
         }
     }
-}
-
-/// `number` with a comma between each three digits.
-fn thousands(number: u64) -> String {
-    let digits = number.to_string();
-    let mut out = String::new();
-    for (at, digit) in digits.chars().enumerate() {
-        if at > 0 && (digits.len() - at).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(digit);
-    }
-    out
 }
 
 /// A colour of the theme's, as a pixel.

@@ -51,6 +51,12 @@ impl RecordsFeed {
         self.follow.update(|records| records.apply_record(record));
     }
 
+    /// Takes in a copy of `observation` as though the hub had told of it, as [`RecordsFeed::take_record`] does a record.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn take_observation(&self, observation: protocol::model::Observation) {
+        self.follow.update(|records| records.apply_notice(protocol::client::HubNotice::Observation(observation)));
+    }
+
     /// Carries on on a new connection, which takes in what replies on it carry, as [`RecordsFeed::start`] says, and so
     /// does what the same hub says of GitHub.
     pub fn reconnect(&self, client: &Client) {

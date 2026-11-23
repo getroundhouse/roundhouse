@@ -4,6 +4,7 @@
 
 #![cfg(test)]
 
+use desktop::review::Listing;
 use desktop::sidebar_tabs::SidebarTab;
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::model::WorkspaceId;
@@ -25,20 +26,21 @@ fn in_a_new_workspace<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>,
 /// How many files the selected workspace changes, once its changes are read.
 fn changed(ui: &Ui<'_>) -> Option<usize> {
     let review = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.diff.as_ref().map(|d| d.review.clone()))?;
-    ui.cx.read_entity(&review, |r, _| r.files.as_ref().map(Vec::len))
+    ui.cx.read_entity(&review, |r, _| r.listing().map(Listing::changed))
 }
 
-/// A change made outside a turn is found when a tab's click reads the changes again, and the tab clicked is the one
-/// that shows.
+/// A change made outside a turn is found within a moment, while the hub keeps the workspace's changes current, and
+/// the tab clicked after it is the one that shows.
 #[gpui_kit::test]
-fn a_tab_clicked_shows_even_when_its_click_finds_the_first_change(cx: &mut TestAppContext) {
+fn a_tab_clicked_after_a_change_made_outside_a_turn_is_the_one_that_shows(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, workspace) = in_a_new_workspace(cx, &stack);
     std::fs::write(ui.worktree(&workspace).join("new.txt"), "new\n").unwrap();
+    ui.wait("the change counted", |ui| changed(ui) == Some(1));
 
     ui.click("sidebar-tab-all-files");
 
-    ui.wait("the new file, and the change counted", |ui| ui.has("all-file-new.txt") && changed(ui) == Some(1));
+    ui.wait("the new file", |ui| ui.has("all-file-new.txt"));
     assert_eq!(tab(&ui), Some(SidebarTab::AllFiles));
 }
 

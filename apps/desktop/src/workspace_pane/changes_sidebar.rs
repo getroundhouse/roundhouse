@@ -12,7 +12,7 @@ use crate::all_files::{AllFiles, AllFilesEvent};
 use crate::changes::{Changes, ChangesEvent};
 use crate::file_diff::{FileDiff, FileDiffEvent};
 use crate::file_view::FileView;
-use crate::review::{Review, ReviewEvent};
+use crate::review::{Listing, Review, ReviewEvent};
 use crate::sidebar_tabs::{self, SidebarTab, TabShown};
 use crate::sides::{self, Side, Sidebar};
 
@@ -127,7 +127,8 @@ impl WorkspacePane {
     fn make_diff(&mut self, cx: &mut Context<Self>) {
         let (client, id) = (self.client.clone(), self.workspace().id.clone());
         let comments = self.shown.comments().to_vec();
-        let review = cx.new(|cx| Review::new(client.clone(), id.clone(), comments, cx));
+        let changes = self.shown.all().workspace_changes(&id).cloned();
+        let review = cx.new(|cx| Review::new(client.clone(), id.clone(), comments, changes.as_ref(), cx));
         let file = cx.new(|cx| FileDiff::new(review.clone(), cx));
         let viewer = cx.new(|cx| FileView::new(client.clone(), id.clone(), cx));
         let changes = cx.new(|cx| Changes::new(review.clone(), cx));
@@ -137,8 +138,10 @@ impl WorkspacePane {
                 cx.emit(PaneEvent::Error(message.clone()));
                 this.tell_tab(TabShown::read_failed, cx);
             }
+            // What the whole diff found, whatever the list is from, so the read a tab's click makes is what finds the
+            // first change, as it was before the hub kept a summary.
             ReviewEvent::Loaded => {
-                let files = this.diff.as_ref().and_then(|diff| diff.review.read(cx).files.as_ref().map(Vec::len));
+                let files = this.diff.as_ref().and_then(|diff| diff.review.read(cx).whole_diff_changes());
                 if let Some(files) = files {
                     this.tell_tab(|tab| tab.read(files), cx);
                 }
@@ -165,8 +168,24 @@ impl WorkspacePane {
         self.subscriptions.extend([review_events, file_events, changes_events, all_files_events]);
         let (tab, files_behind, sidebar_tab) = (None, false, TabShown::default());
         self.diff = Some(Diff { review, file, viewer, changes, all_files, sidebar_tab, tab, files_behind });
+        // From the hub's summary, where it sends one, rather than waiting for the whole diff.
+        self.take_changed_files(cx);
         // The comment being written, as the hub kept it.
         self.take_writing(cx);
+    }
+
+    /// Takes what client-core holds of the workspace's changed files, which it holds while the pane follows the
+    /// workspace, and tells the tab shown how many files a current summary of them says the workspace changes, as
+    /// reading the whole diff does.
+    pub(super) fn take_changed_files(&mut self, cx: &mut Context<Self>) {
+        let Some(diff) = &self.diff else { return };
+        let summary = self.shown.all().workspace_changes(&self.workspace().id);
+        let current = matches!(summary, Some(protocol::model::Observed::Current { .. }));
+        diff.review.update(cx, |r, cx| r.take_summary(summary, cx));
+        let files = self.diff.as_ref().and_then(|diff| diff.review.read(cx).listing().map(Listing::changed));
+        if let Some(files) = files.filter(|_| current) {
+            self.tell_tab(|tab| tab.read(files), cx);
+        }
     }
 
     /// Whether there's a sidebar of changes to draw beside the chat, shown or hidden.
@@ -183,7 +202,7 @@ impl WorkspacePane {
         let act = cx.listener(|t, action, _, cx| t.act(*action, cx));
         let doing = client_core::moving::doing(self.workspace().status);
         let bar = crate::pull_request::bar(&self.pull_request, &self.busy, doing, act, cx);
-        let changed = diff.review.read(cx).files.as_ref().map(Vec::len);
+        let changed = diff.review.read(cx).listing().map(Listing::changed);
         let chosen = diff.sidebar_tab.tab();
         let (controls, list) = match chosen {
             Some(SidebarTab::Changes) => (

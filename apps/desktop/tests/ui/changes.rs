@@ -49,6 +49,8 @@ fn reviewing<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Diff) {
     std::fs::write(worktree.join("src/app/view.rs"), "fn view() {}\n").unwrap();
     std::fs::write(worktree.join("src/lib.rs"), "mod app;\n").unwrap();
     let diff = ui.open_changes();
+    // Once the hub's summary has them, which follows them by as long as the worker waits for writes to stop.
+    ui.wait("the changes", |ui| ui.has("file-src/lib.rs"));
     (ui, diff)
 }
 
@@ -187,7 +189,7 @@ fn a_folder_closed_stays_closed_when_a_new_file_splits_its_row(cx: &mut TestAppC
     std::fs::create_dir_all(worktree.join("docs/spec")).unwrap();
     std::fs::write(worktree.join("docs/spec/files.md"), "# Files\n").unwrap();
     ui.click("changes-layout");
-    // Choosing Changes again reads the diff again, as a turn's end does.
+    // Choosing Changes again reads the diff again, as a turn's end does, where the hub's summary isn't current.
     ui.click("sidebar-tab-changes");
     ui.wait("the folders, sharing a row", |ui| ui.has("folder-docs/spec"));
     ui.click("folder-docs/spec");

@@ -1,5 +1,4 @@
-//! That a client reads from the fake hub what its world holds, and is refused what would change it, and that where the
-//! fake hub works something out of its world, it does so by the rule the hub follows, as `protocol` states it.
+//! What a client reads of the hub's records, observations, logs and terminals from a fake hub.
 
 use std::time::Duration;
 
@@ -13,19 +12,11 @@ use protocol::model::{
 };
 use protocol::terminal::{Bounds, TerminalPoint, TerminalRow, TerminalSize};
 
-use super::events::{subagent_ended, subagent_started, taken, task, text, user_prompt, within};
-use super::{Following, World, serve};
+use super::super::events::{subagent_ended, subagent_started, taken, task, text, user_prompt, within};
+use super::super::{Following, World};
+use super::served::served;
 use crate::session_log::Row;
 use crate::{Client, ClientError, OpenSession, RecordsFeed, SubscriptionItem};
-
-/// A client of a fake hub serving `world`, and the directory its socket is in, which goes when the test ends.
-fn served(world: World) -> (tempfile::TempDir, Client) {
-    let dir = tempfile::tempdir().unwrap();
-    let socket = dir.path().join("hub");
-    serve(&socket, world);
-    let client = Client::connect(&socket, "test").unwrap();
-    (dir, client)
-}
 
 #[test]
 fn a_client_reads_what_the_world_holds_and_is_refused_a_change() {

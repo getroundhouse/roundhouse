@@ -7,6 +7,8 @@ mod tests;
 mod count;
 mod kinds;
 mod lines;
+mod written;
 pub use count::{Count, count};
 pub use kinds::{CountKind, LinesKind};
 pub use lines::{LinesChanged, lines_changed};
+pub use written::thousands;

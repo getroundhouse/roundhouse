@@ -26,10 +26,9 @@ impl Revised for Observation {
 
     fn key(&self) -> Option<ObservationKey> {
         match self {
-            Observation::WorkspaceLines { .. } => Some(Observation::key(self)),
+            Observation::WorkspaceLines { .. } | Observation::WorkspaceChanges { .. } => Some(Observation::key(self)),
             // Not drawn yet, so not kept.
-            Observation::WorkspaceChanges { .. }
-            | Observation::WorkspacePullRequest { .. }
+            Observation::WorkspacePullRequest { .. }
             | Observation::WorkspacePullRequestDetail { .. }
             | Observation::WorkspaceRepositoryUnseen { .. }
             | Observation::Reference { .. }
@@ -41,7 +40,8 @@ impl Revised for Observation {
         Observation::rev(self)
     }
 
-    /// Only those sent at the hub's level are in the list, as [`ObservationKey::level`] says.
+    /// Only those sent at the hub's level are in the list of everything, as [`ObservationKey::level`] says. A
+    /// workspace's are in its own list, as `HubRecords::apply_workspace_list` takes it.
     fn in_every_list(key: &ObservationKey) -> bool {
         key.level() == Some(Level::Hub)
     }

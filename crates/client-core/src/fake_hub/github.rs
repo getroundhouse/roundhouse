@@ -13,7 +13,7 @@ use super::world::World;
 /// Who `gh` on the hub's machine is, as the world says, or that the hub is too old to say.
 pub(super) fn gh_login(world: &World) -> Answer {
     match &world.hub_gh_login {
-        Some(login) => Ok(Outcome::Reply(ClientResponse::GhLogin(login.clone()), Vec::new())),
+        Some(login) => Ok(Outcome::reply(ClientResponse::GhLogin(login.clone()))),
         None => Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't read gh's login")),
     }
 }
@@ -21,7 +21,7 @@ pub(super) fn gh_login(world: &World) -> Answer {
 /// Who `gh` and the SSH key on the hub's machine are, as the world says, or refused, as a hub from before it read them.
 pub(super) fn machine_logins(world: &World) -> Answer {
     match &world.machine_logins {
-        Some(logins) => Ok(Outcome::Reply(ClientResponse::MachineLogins(logins.clone()), Vec::new())),
+        Some(logins) => Ok(Outcome::reply(ClientResponse::MachineLogins(logins.clone()))),
         None => Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't read its machine's logins")),
     }
 }

@@ -11,12 +11,12 @@ use gpui_kit::{
 use look::{IconSizing as _, LineText};
 use protocol::model::DiffComment;
 
-use crate::patch::FilePatch;
+use crate::review::ChangedRow;
 
 /// How many comments each changed file has, by its path. A comment on a file the branch no longer changes has no row,
 /// so it isn't counted.
-pub(super) fn commented(files: &[FilePatch], comments: &[DiffComment]) -> HashMap<String, usize> {
-    let changed: HashSet<&str> = files.iter().map(|file| file.path().as_ref()).collect();
+pub(super) fn commented(files: &[ChangedRow], comments: &[DiffComment]) -> HashMap<String, usize> {
+    let changed: HashSet<&str> = files.iter().map(|file| file.path.as_ref()).collect();
     let mut counts = HashMap::new();
     for comment in comments.iter().filter(|comment| changed.contains(comment.path.as_str())) {
         *counts.entry(comment.path.clone()).or_insert(0) += 1;
@@ -49,7 +49,7 @@ pub(super) fn mark(path: &str, count: usize, line_text: &LineText, cx: &App) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::{commented, in_folder};
+    use super::{ChangedRow, commented, in_folder};
     use protocol::model::{DiffComment, DiffSide, Rev};
 
     fn comment(path: &str) -> DiffComment {
@@ -67,12 +67,13 @@ mod tests {
 
     #[test]
     fn a_closed_folder_counts_the_comments_on_the_changed_files_under_it() {
-        let files = crate::patch::parse(
-            "diff --git a/src/a.rs b/src/a.rs\n--- a/src/a.rs\n+++ b/src/a.rs\n@@ -1 +1 @@\n-a\n+b\n\
-             diff --git a/src/deep/b.rs b/src/deep/b.rs\n--- a/src/deep/b.rs\n+++ b/src/deep/b.rs\n@@ -1 +1 @@\n-a\n+b\n\
-             diff --git a/srcs.rs b/srcs.rs\n--- a/srcs.rs\n+++ b/srcs.rs\n@@ -1 +1 @@\n-a\n+b\n",
-        )
-        .unwrap();
+        let row = |path: &'static str| ChangedRow {
+            path: path.into(),
+            status: crate::patch::FileStatus::Modified,
+            added: 1,
+            removed: 1,
+        };
+        let files = ["src/a.rs", "src/deep/b.rs", "srcs.rs"].map(row);
         let comments = ["src/a.rs", "src/a.rs", "src/deep/b.rs", "srcs.rs", "src/unchanged.rs"].map(comment);
 
         let counts = commented(&files, &comments);
