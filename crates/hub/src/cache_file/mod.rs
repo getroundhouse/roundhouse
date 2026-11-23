@@ -1,6 +1,6 @@
 //! The file the hub keeps its copies of what others own in, apart from its database: what it last read from GitHub,
-//! and its observations. The hub empties it rather than migrates it, as `docs/principles/observations.md` says, and
-//! each part of it says the form of its own tables, so a build that changes one part's form, or a part whose tables
+//! and its observations. The hub empties it rather than migrates it, as `docs/principles/keeping-observations.md` says,
+//! and each part of it says the form of its own tables, so a build that changes one part's form, or a part whose tables
 //! can't be made, empties only that part.
 
 mod failure;

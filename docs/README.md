@@ -46,7 +46,8 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/principles/serving.md` | The four kinds of thing a hub serves, how a client gets them, and what the hub keeps current |
 | `docs/principles/events.md` | What an event is, how the hub records one, and how a client reads a session's log |
 | `docs/principles/records.md` | What a record is, how one changes, and how a client keeps its copy |
-| `docs/principles/observations.md` | What the hub keeps of state others own, where it comes from, and how fresh it says it is |
+| `docs/principles/observations.md` | What the hub's copy of state others own is, what it holds, and how fresh it says it is |
+| `docs/principles/keeping-observations.md` | Where an observation comes from, where the hub keeps it, and how a client keeps its copy |
 | `docs/principles/live-snapshots.md` | What something running shows now, which the hub doesn't store, and how it reaches a client |
 | `docs/principles/sync.md` | What's common to every kind in a client's copy of a hub's state, and who allocates each ID |
 | `docs/principles/protocol.md` | How a protocol's forms change with no new version, so that peers on different builds keep working together |

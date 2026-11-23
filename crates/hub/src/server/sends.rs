@@ -1,9 +1,9 @@
 //! What each subscription is sent of the feed's notices, decided in one place, [`Sends::notice`], for `FeedSubscribe`
 //! and for every level `Subscribe` follows: the notices of its level, in the forms its client reads. Which those are, a
-//! copy's form from before observations or its observation, as `docs/principles/observations.md` has them, one
-//! function decides, [`Sends::keeps`], by what each kind's [`ObservationKey::read_from`] says, the version of the client
-//! protocol the subscription's connection chose, and whether its start reads GitHub as observations, whatever request
-//! started the subscription. So what decides which clients still read an old form changes in one place.
+//! copy's form from before observations or its observation, as `docs/principles/keeping-observations.md` has them, one
+//! function decides, [`Sends::keeps`], by what each kind's [`ObservationKey::read_from`] says, the version of the
+//! client protocol the subscription's connection chose, and whether its start reads GitHub as observations, whatever
+//! request started the subscription. So what decides which clients still read an old form changes in one place.
 
 use protocol::client::listed::{Listed, ReferenceObservations, WorkspaceObservations};
 use protocol::client::{EVERY_OBSERVATION_FROM, HubNotice};

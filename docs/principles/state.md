@@ -17,7 +17,7 @@ These rules say who owns a piece of state, and how what the hub stores changes f
 
 ## The database
 
-These rules hold for the hub's database, not for its cache of what it reads from GitHub, which is a file of its own that the hub empties rather than migrates, as `docs/principles/observations.md` says.
+These rules hold for the hub's database, not for its cache of what it reads from GitHub, which is a file of its own that the hub empties rather than migrates, as `docs/principles/keeping-observations.md` says.
 
 - **The database migrates forward only.** Migrations run in order, each in its own transaction. A hub rejects a database from a newer build, so it can't damage it.
 - **A hub refuses a database older than its floor, the oldest release it updates from, and leaves it untouched,** so that release can still migrate it. For example, a hub whose floor is 0.1.300 exits on a database 0.1.250 left, and its log says to run 0.1.300 first. Only a build installed by hand, or one taken after the hub failed to start, meets this, since updates step through floors. The floor moves only at a break in the worker protocol. *Unconfirmed:* that only the hub's log says so.

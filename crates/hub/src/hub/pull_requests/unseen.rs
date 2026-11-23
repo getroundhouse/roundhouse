@@ -1,7 +1,7 @@
 //! GitHub showing the default no repository where a workspace's branch's pull requests are, which says nothing of
 //! whether the branch has one. The store owns the last the hub heard of it for each workspace, as the observation
 //! [`WorkspaceRepositoryUnseen`], which the task that works out GitHub's observations keeps from what each read heard,
-//! so a hub that starts again has it as of the read that heard it, as `docs/principles/observations.md` says.
+//! so a hub that starts again has it as of the read that heard it, as `docs/principles/keeping-observations.md` says.
 
 use protocol::client::ApiError;
 use protocol::model::{GithubLoginKind, GithubRepositoryName, RepositoryUnseen, WorkspaceId};
