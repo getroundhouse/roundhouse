@@ -25,30 +25,19 @@ impl Hub {
     /// Keeps that something keeps the observation of `of` up to date from now on, such as a worker watching a worktree,
     /// so each read of it from now is current. What was read before isn't, so it stays as of when it was read until
     /// the next read.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "nothing keeps an observation up to date yet: `docs/principles/serving.md` names the first, a \
-                      worker watching its worktree while a client follows its workspace, as not built"
-        )
-    )]
     pub(crate) async fn observation_kept_current<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
         self.change_observation::<K>(of, Change::KeptCurrent).await
     }
 
-    /// Keeps that nothing keeps the observation of `of` up to date any more, so one that was current is as of its
-    /// last read, which clients are told.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "nothing keeps an observation up to date yet: `docs/principles/serving.md` names the first, a \
-                      worker watching its worktree while a client follows its workspace, as not built"
-        )
-    )]
-    pub(crate) async fn observation_let_go<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
-        self.change_observation::<K>(of, Change::LetGo).await
+    /// Keeps that nothing keeps the observation of `of` up to date any more, since `as_of_ms`, by the hub's clock, so
+    /// one that was current is as of then, which clients are told.
+    pub(crate) async fn observation_let_go<K: Kind>(&self, of: K::Of, as_of_ms: i64) -> Result<(), ApiError> {
+        self.change_observation::<K>(of, Change::LetGo { as_of_ms }).await
+    }
+
+    /// Whether something keeps the observation of `of` up to date now, as [`Hub::observation_kept_current`] said.
+    pub(crate) fn observation_is_kept_current<K: Kind>(&self, of: &K::Of) -> bool {
+        K::table(&mut self.observations.tables.lock()).kept_current(of)
     }
 
     /// Forgets the observation of `of`, since what it's of is gone, such as a workspace, and tells clients it's gone.

@@ -43,6 +43,8 @@ process = { workspace = true, features = ["testing"] }
 proptest.workspace = true
 protocol = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
+# A paused clock, for the waits watches settle with.
+tokio = { workspace = true, features = ["test-util"] }
 tracing-subscriber.workspace = true
 waiting.workspace = true
 

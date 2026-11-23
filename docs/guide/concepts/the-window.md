@@ -15,7 +15,7 @@ On the left. It lists your projects, each with its workspaces under it.
 | Create | Opens the new-workspace dialog, as `Cmd-N` does |
 | Add project | Adds a repository |
 | A project's row | Its name, with a `+` for a new workspace in it. Click it to put its workspaces away under it, and again to bring them back. Drag it to move the project, with its workspaces, among the others |
-| A workspace's row | Its mark, its title, and how many lines it has added and removed, in green and red, as of when a turn last ended in it or its branches last moved, such as with a commit. Click it to show the workspace |
+| A workspace's row | Its mark, its title, and how many lines it has added and removed, in green and red, as of when a turn last ended in it or its branches last moved, such as with a commit, and, while it's shown, within a moment of any file changing in it, once something has been sent to one of its chats since the hub last started. Click it to show the workspace |
 | The build line | At the bottom: which build is running, a question mark whose menu has Check for Updates and Changelog, and a gear for Settings. An update's card shows over it when there's one |
 
 A button at the window's top left, or `Cmd-B`, hides the sidebar and shows it again. On Windows and Linux, the button before it opens the menus. Drag the sidebar's inner edge to change its width.

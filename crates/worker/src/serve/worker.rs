@@ -292,6 +292,7 @@ pub(super) async fn handle(
             Ok(WorkerResponse::ChangeSummary(summary))
         }
         WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
+        WorkerRequest::WatchChanges(asked) => worktrees::watch_changes(state, asked).await,
         WorkerRequest::WatchChildBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Child).await,
         // Only a hub from before Settings' Providers asks, as `FindGithubLogin` says, so it reads with none.
         WorkerRequest::FindGithubLogin => {

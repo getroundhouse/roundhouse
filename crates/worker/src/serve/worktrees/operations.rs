@@ -1,22 +1,23 @@
 use super::super::State;
 use crate::branch_watch::Whose;
-use crate::{branch_watch, git, setup};
+use crate::{branch_watch, changes_watch, git, setup};
 use protocol::client::ApiError;
 use protocol::worker::{
     AddChildWorktree, CaptureArchive, ChildWorktreeAdded, NamesGitHas, NamesGitHasReply, PrepareWorkspace,
-    RemoveWorkspace, RestoreWorkspace, WorkerResponse, WorktreeThere, WorktreeThereReply,
+    RemoveWorkspace, RestoreWorkspace, WatchChanges, WorkerResponse, WorktreeThere, WorktreeThereReply,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::sync::oneshot;
 use tokio::task::AbortHandle;
 
-/// What's watching the branches of each of the workspace's worktrees, so a later watch of one replaces it, and
-/// removing one stops its watch.
+/// What's watching the branches of each of the workspace's worktrees, and the changes of each the hub asked, so a later
+/// watch of one replaces it, and removing one stops its watches.
 #[derive(Default)]
 pub(in super::super) struct Watches {
     pub(super) own: Option<AbortHandle>,
     pub(super) children: HashMap<PathBuf, AbortHandle>,
+    pub(super) changes: HashMap<PathBuf, AbortHandle>,
 }
 
 impl Watches {
@@ -36,9 +37,24 @@ impl Watches {
         }
     }
 
+    /// Watches the changes of the worktree at `path` with `watch`, in place of any watch of them before.
+    pub(super) fn watch_changes(&mut self, path: PathBuf, watch: AbortHandle) {
+        if let Some(earlier) = self.changes.insert(path, watch) {
+            earlier.abort();
+        }
+    }
+
+    pub(super) fn stop_changes(&mut self, path: &Path) {
+        if let Some(watching) = self.changes.remove(path) {
+            watching.abort();
+        }
+    }
+
     /// So they stop now, rather than once whatever they're reading is done.
     pub(in super::super) fn stop_all(&mut self) {
-        self.own.take().into_iter().chain(self.children.drain().map(|(_, watching)| watching)).for_each(|w| w.abort());
+        let changes = self.changes.drain().map(|(_, watching)| watching);
+        let children = self.children.drain().map(|(_, watching)| watching);
+        self.own.take().into_iter().chain(children).chain(changes).for_each(|w| w.abort());
     }
 }
 
@@ -95,6 +111,9 @@ pub(in super::super) async fn restore(state: &State, asked: RestoreWorkspace) ->
 pub(in super::super) async fn remove(state: &State, asked: RemoveWorkspace) -> Result<WorkerResponse, ApiError> {
     let path = Path::new(&asked.path);
     let _alone = state.moves.alone(path).await;
+    // First, since on Windows a watch's open handle on a folder can keep it from being removed. The hub stops it
+    // before it asks, and a hub from before the watch never started one.
+    state.watches.lock().stop_changes(path);
     let repo = state.clones.repository(&asked.source);
     git::remove_workspace(&state.credentials.given(), &repo, &asked, &state.config.deleter).await?;
     state.watches.lock().stop(path);
@@ -121,6 +140,23 @@ pub(in super::super) async fn add_child(state: &State, asked: AddChildWorktree) 
     let copied = setup::copy_local_files(&given, checkout, path, &settings, &mut warnings).await;
     let branches = git::branches::read_now(&given, path).await.ok();
     Ok(WorkerResponse::ChildWorktreeAdded(ChildWorktreeAdded { commit, copied, warnings, branches }))
+}
+
+/// Watches the changes of the worktree the hub asks about, for the hub connected now, or stops, as [`WatchChanges`]
+/// says. Answers at once, so the summary comes after the reply.
+pub(in super::super) async fn watch_changes(state: &State, asked: WatchChanges) -> Result<WorkerResponse, ApiError> {
+    let WatchChanges { path, base_ref, watching } = asked;
+    let worktree = PathBuf::from(path);
+    let hub = state.outbox.connection().await.filter(|_| watching);
+    let Some(hub) = hub else {
+        state.watches.lock().stop_changes(&worktree);
+        return Ok(WorkerResponse::Ok);
+    };
+    let (given, outbox, stopping) = (state.credentials.watching(), state.outbox.clone(), state.stopping.subscribe());
+    let watched = changes_watch::Watched { worktree: worktree.clone(), base_ref };
+    let watch = changes_watch::watch(given, state.changes.clone(), watched, outbox, hub, stopping);
+    state.watches.lock().watch_changes(worktree, tokio::spawn(watch).abort_handle());
+    Ok(WorkerResponse::Ok)
 }
 
 /// Watches the branches of the worktree at `path`, and answers once the first frame of them is queued, ahead of this

@@ -34,7 +34,7 @@ async fn only_a_read_that_finds_something_else_tells_clients_and_moves_the_revis
 }
 
 /// What something keeps up to date is current from the first read after it starts, not before, since what was read
-/// before may be old, and once nothing does, it's as of its last read, which a read that found the same moved.
+/// before may be old, and once nothing does, it's as of when nothing did any more.
 #[tokio::test]
 async fn an_observation_is_current_while_something_keeps_it_up_to_date_and_then_as_of_its_last_read() {
     let dir = tempfile::tempdir().unwrap();
@@ -52,13 +52,14 @@ async fn an_observation_is_current_while_something_keeps_it_up_to_date_and_then_
     let current = told_copy(&mut feed);
     assert_eq!(current, of_w(Observed::Current { value: lines(3, 1) }, current.rev()));
 
-    hub.observation_let_go::<WorkspaceLines>("w".into()).await.unwrap();
+    hub.observation_let_go::<WorkspaceLines>("w".into(), 5_000).await.unwrap();
 
     let let_go = told_copy(&mut feed);
     assert!(let_go.rev() > current.rev());
-    assert_eq!(let_go, of_w(as_of(lines(3, 1), 3_000), let_go.rev()));
+    assert_eq!(let_go, of_w(as_of(lines(3, 1), 5_000), let_go.rev()), "as of when it was let go");
     hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 4_000).await.unwrap();
-    assert_eq!(told(&mut feed), [], "read once more, as of the read it says");
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 6_000).await.unwrap();
+    assert_eq!(told(&mut feed), [], "a read begun before it was let go is dropped, and one after says the same");
 }
 
 /// Once what an observation is of is gone, clients are told it's gone, and it's listed no more. Saying so again, or of

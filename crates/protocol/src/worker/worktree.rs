@@ -72,6 +72,28 @@ impl Reply for model::ChangeSummary {
     }
 }
 
+/// Has the worker keep the change summary of the worktree at `path`, against `base_ref`, current, or stop. While it
+/// watches, it sends a [`super::WorkerFrame::Changes`] at once, and again whenever the summary differs from the last it
+/// sent: once the worktree's files have stopped changing for 100 ms, or have gone on changing for a second, and every
+/// few minutes whatever it heard. A change git ignores, such as a build's output, wakes nothing. The watch ends when the
+/// hub that asked disconnects, since the next hub says again what it wants, and when the worker stops. A later watch of
+/// the same path replaces it, as one with another base ref does. Replies once it's watching, before the first frame. A
+/// worker from before it refuses it as `Unsupported`, and is asked for a summary instead.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct WatchChanges {
+    pub path: String,
+    pub base_ref: Option<String>,
+    pub watching: bool,
+}
+
+impl Request for WatchChanges {
+    type Reply = ();
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::WatchChanges(self)
+    }
+}
+
 /// Watches the branches of the worktree at `path`, and sends a [`super::WorkerFrame::Branches`] with what they are at
 /// once, and again each time they change, until the worker stops. A later watch replaces it. Replies once it's
 /// watching and has sent that first frame, or found it can't read them, so a hub that waits for the reply has the

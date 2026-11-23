@@ -77,13 +77,14 @@ pub(in super::super) async fn read_frames(
             link.calls.reply(id, outcome.into_result());
             continue;
         }
-        // Taken at once, even while what the worker sends is held, since neither an ask nor the branches are about
-        // which agent a session has.
+        // Taken at once, even while what the worker sends is held, since neither an ask, the branches nor the changes
+        // are about which agent a session has.
         if let WorkerFrame::Ask { id, session_id, ask } = parsed {
             start_answering(&hub, &link, &workspace_id, id, session_id, ask);
             continue;
         }
         let Some(parsed) = hub.branches_frame(&workspace_id, &link, parsed).await else { continue };
+        let Some(parsed) = hub.changes_frame(&workspace_id, &link, parsed).await else { continue };
         // Taken at once too, since a terminal isn't an agent's.
         if let WorkerFrame::Terminal { terminal, update } = parsed {
             hub.terminal_update(&link, terminal, &update);
@@ -119,6 +120,7 @@ pub(in super::super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: Wo
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. }
         | WorkerFrame::ChildBranches { .. }
+        | WorkerFrame::Changes { .. }
         | WorkerFrame::Terminal { .. }
         | WorkerFrame::TerminalPicture { .. } => return,
         WorkerFrame::AgentEvent { session_id, run, body, raw, attachments, seq } => {
@@ -158,6 +160,7 @@ fn agent_of(frame: &WorkerFrame) -> Option<(SessionId, RunId)> {
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. }
         | WorkerFrame::ChildBranches { .. }
+        | WorkerFrame::Changes { .. }
         | WorkerFrame::Terminal { .. }
         | WorkerFrame::TerminalPicture { .. } => None,
         WorkerFrame::AgentEvent { session_id, run, .. }

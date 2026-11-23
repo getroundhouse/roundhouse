@@ -1,6 +1,7 @@
 use crate::git::branches;
 use crate::git::branches::{Places, Read};
 use crate::serve::Outbox;
+use crate::settling::{Settling, Woke};
 use notify::event::{AccessKind, AccessMode};
 use notify::{Event, EventKind, PollWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
@@ -13,13 +14,10 @@ use std::time::Duration;
 use tokio::sync::{Notify, oneshot, watch};
 use tracing::{debug, warn};
 
-/// How long git has to have stopped writing before the branches are read, since a checkout or a commit writes several
-/// files one after another. Short enough that the hub hears of a push at once.
-const SETTLE: Duration = Duration::from_millis(100);
-
-/// How long it goes before reading again, whatever the OS has said. It can drop what it says, as inotify does when its
-/// queue fills, and some filesystems, such as a network's or one shared into a VM, don't tell it of every change.
-const READ_AT_LEAST_EVERY: Duration = Duration::from_mins(5);
+/// How the branches wait for git to stop writing: 100 ms, short enough that the hub hears of a push at once, with no
+/// limit, since git writes a ref in a moment, and every five minutes whatever the OS has said.
+const SETTLING: Settling =
+    Settling { quiet: Duration::from_millis(100), at_most: None, at_least_every: Duration::from_mins(5) };
 
 /// How often it looks again for the worktree's repository while it can't find it, which is only while something's
 /// wrong with the worktree.
@@ -79,7 +77,7 @@ pub(crate) async fn watch(
         if let Some(first) = first.take() {
             let _ = first.send(());
         }
-        if !changed(&wakes, &mut stopping).await {
+        if SETTLING.wait(&wakes.wake, &mut stopping).await == Woke::Stopping {
             return;
         }
     }
@@ -183,26 +181,5 @@ async fn read_and_send(given: &Environment, worktree: &Path, whose: Whose, wakes
     };
     if let Some(branches) = news {
         outbox.send(whose.frame(worktree, branches)).await;
-    }
-}
-
-/// Waits for git to change something that matters and then stop writing, or for long enough to read anyway. False
-/// once the worker's stopping.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the branches are read at least every READ_AT_LEAST_EVERY, and once git has stopped writing for SETTLE"
-)]
-async fn changed(wakes: &Wakes, stopping: &mut watch::Receiver<bool>) -> bool {
-    tokio::select! {
-        () = wakes.wake.notified() => {}
-        () = tokio::time::sleep(READ_AT_LEAST_EVERY) => return true,
-        _ = stopping.wait_for(|stopping| *stopping) => return false,
-    }
-    loop {
-        tokio::select! {
-            () = wakes.wake.notified() => {}
-            () = tokio::time::sleep(SETTLE) => return true,
-            _ = stopping.wait_for(|stopping| *stopping) => return false,
-        }
     }
 }

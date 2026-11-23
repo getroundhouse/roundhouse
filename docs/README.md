@@ -61,6 +61,7 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/reference/codex-cli.md` | How Codex's app-server behaves on the wire, and how to probe it |
 | `docs/reference/antigravity-cli.md` | How Antigravity's ACP server behaves on the wire, and how the worker drives it |
 | `docs/reference/git.md` | What git does that took an experiment to find, or that more than one place in the code depends on |
+| `docs/reference/file-watching.md` | What the OS's file watchers do through `notify`, as found by experiment or read from its source |
 | `docs/reference/github.md` | How GitHub and `gh` behave, where more than one place in the code depends on it, or it took an experiment to find |
 | `docs/reference/launchd.md` | What launchd does to a hub run as a launch daemon, and to the processes it starts, as found by experiment |
 | `docs/reference/media-remote.md` | What MediaRemote, the private framework that says what a Mac is playing, does, as found by experiment |

@@ -32,6 +32,8 @@ impl Hub {
         // Refused as everything that needs a ready workspace refuses one that isn't.
         let (_, path) = self.ready_workspace(&id).await?.into_parts();
         let workspace = self.start_move(&id, Move::Archive).await?;
+        // Its worker stops watching the worktree, which isn't ready any more, before the worktree goes.
+        self.changes_watching(&id).await;
         // Until it's archived or put back, and taken once its other worktrees being made are made, so every one of them
         // is removed with it, and none is made after. Its record says it's being archived by now, so none starts.
         let _removing = self.child_gate(&id).write_owned().await;

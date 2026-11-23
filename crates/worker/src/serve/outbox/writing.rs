@@ -165,6 +165,7 @@ impl Writing {
             | WorkerFrame::Ask { .. }
             | WorkerFrame::Branches { .. }
             | WorkerFrame::ChildBranches { .. }
+            | WorkerFrame::Changes { .. }
             | WorkerFrame::Terminal { .. }
             | WorkerFrame::TerminalPicture { .. } => {}
         }
@@ -202,9 +203,10 @@ fn number_of(frame: &mut WorkerFrame) -> Option<&mut Option<u64>> {
         WorkerFrame::AgentEvent { seq, .. } => Some(seq),
         WorkerFrame::AgentReport { report, seq, .. } if kept(report.keeper()) => Some(seq),
         // A reply is only for the hub that asked, an ask is asked again of each hub until it's answered, the branches
-        // are read again for each hub that watches them, what an agent is writing is sent again to each hub that
-        // connects, a report kept nowhere is only for the hub there, a hub that connects lists the terminals that run
-        // rather than hearing which ended, and it watches a terminal again, and is sent a whole picture.
+        // and a worktree's changes are read again for each hub that watches them, what an agent is writing is sent
+        // again to each hub that connects, a report kept nowhere is only for the hub there, a hub that connects lists
+        // the terminals that run rather than hearing which ended, and it watches a terminal again, and is sent a whole
+        // picture.
         WorkerFrame::AgentDelta { .. }
         | WorkerFrame::AgentRetrying { .. }
         | WorkerFrame::AgentReport { .. }
@@ -213,6 +215,7 @@ fn number_of(frame: &mut WorkerFrame) -> Option<&mut Option<u64>> {
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. }
         | WorkerFrame::ChildBranches { .. }
+        | WorkerFrame::Changes { .. }
         | WorkerFrame::Terminal { .. }
         | WorkerFrame::TerminalPicture { .. } => None,
     }

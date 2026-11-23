@@ -27,6 +27,13 @@ impl Hub {
         self.open_worker(workspace_id)
     }
 
+    /// The running worker, if there is one, without marking it wanted, for what only goes along with a worker something
+    /// else started, as watching a worktree does, so a worker an earlier hub left running is still stopped if nothing
+    /// else wants it.
+    pub(crate) fn running_worker(&self, workspace_id: &WorkspaceId) -> Option<Arc<WorkerLink>> {
+        self.workers.lock().get(workspace_id).filter(|link| link.is_open()).cloned()
+    }
+
     /// The running worker, if there is one, kept while the map is locked, which is what makes
     /// [`Hub::stop_worker_unwanted`] safe.
     fn open_worker(&self, workspace_id: &WorkspaceId) -> Option<Arc<WorkerLink>> {
@@ -251,6 +258,8 @@ impl Hub {
         }
         // Their shells have gone with it.
         self.terminals_lost(link.id).await;
+        // And what it watched.
+        self.changes_watcher_gone(workspace_id, link).await;
     }
 
     /// Asks a worker to stop and waits for its output to end. If it's stuck, it's ended as [`Hub::end_stuck_worker`]
