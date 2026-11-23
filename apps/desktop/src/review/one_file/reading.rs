@@ -51,8 +51,10 @@ impl Review {
 
     /// Reads the file the file tab shows with one file's diff, every page of it, showing `previous` until it's read,
     /// unless the summary marks it as named in bytes that aren't UTF-8, so the name it gives names no file to read.
+    /// Nothing, while the worktree can't be read.
     pub(in crate::review) fn read_one_file(&mut self, previous: Option<Taken>, cx: &mut Context<Self>) {
-        let Some(entry) = self.diffed.clone().filter(|entry| !self.names_no_file(entry)) else { return };
+        let read = |entry: &ChangedEntry| self.worktree_readable && !self.names_no_file(entry);
+        let Some(entry) = self.diffed.clone().filter(read) else { return };
         let key = self.key_of(&entry);
         let Some(Listed::Summary(Summary { file: SummaryFile::OneFile(file), .. })) = &mut self.listed else { return };
         let at = key.as_ref().map_or_else(|| entry.at(), |key| key.at.clone());

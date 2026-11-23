@@ -319,6 +319,7 @@ impl WorkspacePane {
             transcript.update(cx, |t, cx| t.records_changed(&now, cx));
         }
         if changes.workspace(&id) {
+            self.tell_review_whether_readable(cx);
             self.take_pull_request(cx);
             // Picks up the last lines of the log once setup has finished, while there's a worktree to read it from.
             if self.setup_log.is_some() && self.workspace().status == WorkspaceStatus::Ready {

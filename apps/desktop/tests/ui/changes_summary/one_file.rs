@@ -9,7 +9,7 @@ use gpui_kit::{AppContext as _, TestAppContext};
 use parking_lot::Mutex;
 use protocol::model::{
     ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, CommitId, FileDiff, FileDiffBody, FileVersion,
-    Observation, Observed, Rev,
+    Observation, Observed, Record, Rev, Workspace, WorkspaceStatus,
 };
 
 use desktop::patch::FilePatch;
@@ -80,6 +80,44 @@ fn the_file_shown_is_read_on_its_own_and_again_only_when_the_summary_moves_it(cx
     let asked = |read: &Arc<Mutex<Vec<(ChangedFileAt, u32)>>>| read.lock().last().map(|(at, _)| at.clone());
     ui.wait("src/new.rs read on its own", |_| asked(&read).is_some_and(|at| at.path == "src/new.rs"));
     assert_eq!(asked(&read).map(|at| at.untracked), Some(true), "as the summary names it");
+}
+
+/// Once the workspace is being archived, the hub refuses every read of its worktree, so nothing is read: the summary
+/// that's no longer current stays listed, the file read before shows as it was read, and another file clicked is read
+/// neither on its own nor with the whole diff, and says it couldn't be read, with no error.
+#[gpui_kit::test]
+fn nothing_is_read_of_a_workspace_being_archived(cx: &mut TestAppContext) {
+    let reads = reading_a_txt();
+    let read = reads.diffs_read.clone();
+    let (_hub, mut ui, diff) = summarized(cx, (versioned(every_file(), VERSION), 2), reads, current);
+    let workspace = ui.view().selected().cloned().unwrap();
+    let whole = |ui: &Ui<'_>| ui.cx.read_entity(&diff.review, |r, _| r.whole_diff_reads());
+    ui.open_diff_of(&diff, "a.txt");
+    let before = (whole(&ui), read.lock().len());
+    let archiving = Workspace {
+        status: WorkspaceStatus::Archiving,
+        rev: Rev::new(10),
+        ..ui.view().records().workspace(&workspace).unwrap().clone()
+    };
+    let as_of = ChangeSummary::listing_at_most(CommitId::from(BASE), versioned(every_file(), VERSION), 2);
+
+    ui.view().feed().unwrap().take_record(Record::Workspace(archiving));
+    ui.view().feed().unwrap().take_observation(Observation::WorkspaceChanges {
+        workspace_id: workspace.clone(),
+        changes: Observed::AsOf { value: as_of, as_of_ms: 1 },
+        rev: Rev::new(11),
+    });
+    ui.wait("the summary as of a read", |ui| !ui.cx.read_entity(&diff.review, |r, _| r.lists_the_summary()));
+    ui.click("file-src/new.rs");
+    ui.wait("src/new.rs to say it couldn't be read", |ui| {
+        ui.cx.read_entity(&diff.file, desktop::file_diff::FileDiff::says_instead) == Some(COULDNT)
+    });
+
+    assert_eq!((whole(&ui), read.lock().len()), before, "nothing read");
+    assert_eq!(ui.view().error.as_deref(), None);
+    assert!(ui.has("changed-files-left-out"), "the summary stays listed");
+    ui.click("file-a.txt");
+    ui.wait("a.txt as it was read", |ui| drawn_line(ui, &diff, 2).as_deref() == Some("read on its own"));
 }
 
 /// Whether the app holds `path` at a version other than the first summary's, which [`VERSION`] gives only `a.txt`.

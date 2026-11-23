@@ -61,6 +61,14 @@ impl WorkspacePane {
         self.workspace().status == WorkspaceStatus::Ready
     }
 
+    /// Tells the diff whether the worktree can be read, for when the workspace's status may have changed, so it reads
+    /// nothing, such as a file clicked, once it can't.
+    pub(super) fn tell_review_whether_readable(&self, cx: &mut Context<Self>) {
+        let Some(diff) = &self.diff else { return };
+        let readable = self.worktree_readable();
+        diff.review.update(cx, |r, cx| r.set_worktree_readable(readable, cx));
+    }
+
     /// Loads the diff, or loads it again, if the sidebar of changes or the file tab shows it, with what else they show
     /// of the worktree.
     pub(super) fn load_changes(&mut self, cx: &mut Context<Self>) {
@@ -128,7 +136,8 @@ impl WorkspacePane {
     fn make_diff(&mut self, cx: &mut Context<Self>) {
         let (client, id) = (self.client.clone(), self.workspace().id.clone());
         let comments = self.shown.comments().to_vec();
-        let review = cx.new(|cx| Review::new(client.clone(), id.clone(), comments, cx));
+        let readable = self.worktree_readable();
+        let review = cx.new(|cx| Review::new(client.clone(), id.clone(), comments, readable, cx));
         let file = cx.new(|cx| FileDiff::new(review.clone(), cx));
         let viewer = cx.new(|cx| FileView::new(client.clone(), id.clone(), cx));
         let changes = cx.new(|cx| Changes::new(review.clone(), cx));
