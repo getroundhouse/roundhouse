@@ -2,14 +2,19 @@
 //! its pull request in full, which the hub then reads more often, and each issue or pull request a chip shows, all
 //! through one subscription, which changes what it follows in one request as what's shown changes. What the hub says of
 //! every workspace's own pull request comes from following the hub, as [`crate::RecordsFeed`] does. What a workspace's
-//! level sends, its own observations, such as its changed files, goes into the copies of the hub's records.
+//! level sends, its own observations, such as its changed files and what GitHub says of its pull request, goes into the
+//! copies of the hub's records, as what an issue's or a pull request's level sends as an observation does, and what's
+//! sent in the form from before observations, `GithubUpdate`, is held here.
 
 use parking_lot::Mutex;
+use std::cell::Cell;
+
+use protocol::client::github::GithubUpdate;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::Follow;
-use protocol::model::{Level, WorkspaceId};
+use protocol::model::{Level, ObservationKey, ReferenceAsk, WorkspaceId};
 
-use super::held::GithubHeld;
+use super::held::{GithubHeld, github_keys, notice_key};
 use crate::client::feed::Reaches;
 use crate::client::follow::Source;
 use crate::client::subscribing::Changing;
@@ -23,10 +28,13 @@ pub(super) struct GithubSource {
     changing: Option<Changing>,
     /// The workspaces followed at their own level.
     workspaces: Vec<WorkspaceId>,
+    /// The issues and pull requests followed at their own level.
+    references: Vec<ReferenceAsk>,
 }
 
 impl GithubSource {
-    /// Takes `wanted` to be what's followed now, letting go of what was held only through a workspace no longer in it.
+    /// Takes `wanted` to be what's followed now, letting go of what was held only through a workspace, or an issue or a
+    /// pull request, no longer in it.
     /// A start the hub refused, such as of a workspace it no longer has, is left out until what's shown next changes,
     /// or a new connection, and the views show it as not known.
     fn followed_now(&mut self, client: &Client, wanted: &[Follow]) {
@@ -40,10 +48,23 @@ impl GithubSource {
                 | Level::Unknown => None,
             })
             .collect::<Vec<_>>();
+        let references = (wanted.iter())
+            .filter_map(|follow| match follow.level() {
+                Level::Reference { reference } => Some(reference),
+                Level::Hub
+                | Level::Workspace { .. }
+                | Level::Session { .. }
+                | Level::Terminal { .. }
+                | Level::Unknown => None,
+            })
+            .collect::<Vec<_>>();
         let gone = std::mem::replace(&mut self.workspaces, now).into_iter().filter(|id| !self.workspaces.contains(id));
+        let gone = gone.map(|id| Level::Workspace { id }).collect::<Vec<_>>();
+        let unshown = std::mem::replace(&mut self.references, references);
+        let unshown = unshown.into_iter().filter(|ask| !self.references.contains(ask));
         let records = records(client);
-        for id in gone {
-            records.change(|records| records.let_go_of(&Level::Workspace { id: id.clone() }));
+        for level in gone.into_iter().chain(unshown.map(|reference| Level::Reference { reference })) {
+            records.change(|records| records.let_go_of(&level));
         }
     }
 }
@@ -76,17 +97,52 @@ impl Source for GithubSource {
         Ok(subscription)
     }
 
+    /// Takes what a workspace's level, or an issue's or a pull request's, sends as observations into the copies of the
+    /// hub's records, telling the views here that show what GitHub says of it, and holds what's sent as
+    /// `GithubUpdate` here, letting go of what the copies hold of it as an observation.
     fn apply(&mut self, client: &Client, held: &Mutex<GithubHeld>, item: SubscriptionItem) -> Result<bool> {
+        let records = records(client);
+        // Whether any copy changed, which it tells its own readers of.
+        let changed = Cell::new(false);
+        let change = |change: &dyn Fn(&mut crate::records::HubRecords) -> bool| {
+            records.change(|records| {
+                let changed_it = change(records);
+                changed.set(changed.get() || changed_it);
+                changed_it
+            });
+        };
         match item {
-            SubscriptionItem::Github(update) => Ok(held.lock().apply(*update)),
-            SubscriptionItem::Listed(listed) => {
-                if let Listed::Workspace(observations) = *listed {
-                    records(client).change(|records| records.apply_workspace_list(observations.clone()));
+            SubscriptionItem::Github(update) => {
+                if let GithubUpdate::Reference { reference, .. } = &*update {
+                    let key = ObservationKey::Reference { reference: reference.clone() };
+                    change(&|records| records.forget_observed(|of| *of == key));
                 }
+                Ok(held.lock().apply(*update))
+            }
+            SubscriptionItem::Listed(listed) => {
+                let keys = match *listed {
+                    Listed::Workspace(observations) => {
+                        let keys = github_keys(&observations.observations);
+                        change(&|records| records.apply_workspace_list(observations.clone()));
+                        keys
+                    }
+                    Listed::Reference(observations) => {
+                        let keys = github_keys(&observations.observations);
+                        change(&|records| records.apply_reference_list(observations.clone()));
+                        keys
+                    }
+                    // Of a level this doesn't follow.
+                    Listed::Hub(_) | Listed::Session(_) | Listed::Unknown => Vec::new(),
+                };
+                held.lock().observed(&keys, changed.get());
                 Ok(false)
             }
             SubscriptionItem::Notice(notice) => {
-                records(client).change(|records| records.apply_notice((*notice).clone()));
+                let key = notice_key(&notice);
+                change(&|records| records.apply_notice((*notice).clone()));
+                if let Some(key) = key {
+                    held.lock().observed(&[key], changed.get());
+                }
                 Ok(false)
             }
             SubscriptionItem::Event(_)

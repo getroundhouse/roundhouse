@@ -126,7 +126,10 @@ impl Changing {
             return Ok(Vec::new());
         }
         let next_id = || self.connection.next_id.fetch_add(1, Ordering::Relaxed);
-        let starts = start.into_iter().map(|follow| Start::new(next_id(), follow)).collect::<Vec<_>>();
+        // Each says it reads what GitHub says as observations, which a hub sends at each level where it can, and a hub
+        // from before them ignores.
+        let start_of = |follow| Start { github_observed: true, ..Start::new(next_id(), follow) };
+        let starts = start.into_iter().map(start_of).collect::<Vec<_>>();
         let started = starts.iter().map(|start| (start.subscription_id, start.follow.level())).collect::<Vec<_>>();
         {
             let mut channels = self.connection.subscriptions.lock();

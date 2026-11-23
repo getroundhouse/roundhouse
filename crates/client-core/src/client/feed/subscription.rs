@@ -1,8 +1,10 @@
 use super::super::follow::{Follow, FollowError, Source};
+use super::super::github::{github_keys, notice_key, own_keys};
 use super::super::{Client, ClientError, GithubFeed, Result, Subscription, SubscriptionItem};
 use crate::Agents;
 use crate::records::{HubRecords, Snapshot};
 use parking_lot::Mutex;
+use protocol::client::github::GithubUpdate;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::Follow as Level;
 
@@ -27,6 +29,7 @@ impl RecordsFeed {
         let github = GithubFeed::start(client);
         let source = RecordsSource { github: github.clone() };
         let follow = Follow::start(client, HubRecords::default(), move || source);
+        github.read_records_from(follow.reach());
         let feed = RecordsFeed { follow, github };
         client.inner.folding.reach(&feed.follow);
         feed
@@ -113,12 +116,31 @@ impl Source for RecordsSource {
     fn apply(&mut self, _: &Client, held: &Mutex<HubRecords>, item: SubscriptionItem) -> Result<bool> {
         Ok(match item {
             SubscriptionItem::Listed(listed) => match *listed {
-                Listed::Hub(records) => held.lock().apply_list(*records),
+                Listed::Hub(records) => {
+                    let keys = github_keys(&records.observations);
+                    let changed = held.lock().apply_list(*records);
+                    self.github.relisted(&keys, changed);
+                    changed
+                }
                 // Of another level, which this doesn't follow.
                 Listed::Session(_) | Listed::Workspace(_) | Listed::Reference(_) | Listed::Unknown => false,
             },
-            SubscriptionItem::Notice(notice) => held.lock().apply_notice(*notice),
+            SubscriptionItem::Notice(notice) => {
+                let key = notice_key(&notice);
+                let changed = held.lock().apply_notice(*notice);
+                if let Some(key) = key {
+                    self.github.observed(&[key], changed);
+                }
+                changed
+            }
             SubscriptionItem::Github(update) => {
+                // The hub sends it in the form from before observations, so what's held of it as one goes.
+                if let GithubUpdate::PullRequest { workspace, .. } = &*update {
+                    let own = own_keys(workspace);
+                    let forgot = held.lock().forget_observed(|key| own.contains(key));
+                    self.github.take(*update);
+                    return Ok(forgot);
+                }
                 self.github.take(*update);
                 false
             }

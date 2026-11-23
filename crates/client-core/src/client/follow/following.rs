@@ -110,6 +110,12 @@ impl<H> Reach<H> {
         true
     }
 
+    /// What `read` makes of what's held, or `None` once every handle on it and its thread have gone.
+    pub(in crate::client) fn read<T>(&self, read: impl FnOnce(&H) -> T) -> Option<T> {
+        let shared = self.0.upgrade()?;
+        Some(read(&shared.held.lock()))
+    }
+
     /// Whether this reaches what `follow` follows.
     pub(in crate::client) fn reaches(&self, follow: &Follow<H>) -> bool {
         std::ptr::eq(self.0.as_ptr(), Arc::as_ptr(&follow.shared))

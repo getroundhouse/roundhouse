@@ -52,9 +52,9 @@ fn workspaces() -> (World, WorkspaceId) {
         change(&mut own.pull_request.summary.said);
         own
     };
-    world.pull_requests.insert(alder, found(|pr| pr.state = PrState::Merged));
-    world.pull_requests.insert(cedar, found(|pr| pr.is_draft = true));
-    world.pull_requests.insert(focus.clone(), found(|_| {}));
+    world.github_says.pull_requests.insert(alder, found(|pr| pr.state = PrState::Merged));
+    world.github_says.pull_requests.insert(cedar, found(|pr| pr.is_draft = true));
+    world.github_says.pull_requests.insert(focus.clone(), found(|_| {}));
     (world, focus)
 }
 

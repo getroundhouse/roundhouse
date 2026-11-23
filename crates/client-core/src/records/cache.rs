@@ -2,7 +2,7 @@ use super::by_revision::ByRevision;
 use super::of_session::BySession;
 use super::snapshot::{Listed, ObservationsListed, Snapshot};
 use crate::Agents;
-use protocol::client::listed::{SessionRecords, WorkspaceObservations};
+use protocol::client::listed::{ReferenceObservations, SessionRecords, WorkspaceObservations};
 use protocol::client::{HubNotice, ObservationNotice, RecordNotice};
 use protocol::model::{
     Level, Observation, Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent, WorkspaceId,
@@ -210,6 +210,29 @@ impl HubRecords {
         let covers = |key: &protocol::model::ObservationKey| key.level() == level;
         let observed = self.observations.apply_list_of(rev, observations, covers, &mut self.taken);
         let changed = self.workspaces_listed.insert(workspace_id) || observed;
+        if changed {
+            self.shown_observations.take();
+        }
+        changed
+    }
+
+    /// Takes in where an issue's or a pull request's level stands, as its subscription lists it, as
+    /// [`HubRecords::apply_workspace_list`] takes a workspace's. Returns whether anything changed.
+    pub(crate) fn apply_reference_list(&mut self, listed: ReferenceObservations) -> bool {
+        let ReferenceObservations { reference, observations, rev } = listed;
+        let level = Some(Level::Reference { reference });
+        let covers = |key: &protocol::model::ObservationKey| key.level() == level;
+        let changed = self.observations.apply_list_of(rev, observations, covers, &mut self.taken);
+        if changed {
+            self.shown_observations.take();
+        }
+        changed
+    }
+
+    /// Lets go of the observations `of` says, as of what GitHub says of one thing, which the hub now sends in the form
+    /// from before observations. Returns whether that dropped any.
+    pub(crate) fn forget_observed(&mut self, of: impl Fn(&protocol::model::ObservationKey) -> bool) -> bool {
+        let changed = self.observations.let_go(of);
         if changed {
             self.shown_observations.take();
         }

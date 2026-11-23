@@ -33,3 +33,4 @@ These rules cover observations, the hub's copies of what others own: what one is
 ## Keeping a copy
 
 - **A client keeps an observation as it keeps a record: by revision, whichever level sent it.** So `client-core` holds records and observations one way, as `docs/principles/records.md` says of a record.
+- **A client holds each thing in the one form its hub sends it in, and reads it from that.** A hub from before an observation sends what it's of in the form from before it, so taking in one form of something lets go of the other, which only a connection to another hub can have left. For example, a workspace's pull request is read from `GithubUpdate` where the hub sends it so, and from its observations where the hub sends those. *Unconfirmed.*

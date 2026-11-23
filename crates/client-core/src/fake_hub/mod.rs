@@ -7,6 +7,7 @@
 #![expect(clippy::unwrap_used, reason = "only tests use it, so failing loudly is what it should do")]
 
 mod base_pages;
+mod chats;
 pub mod events;
 mod following;
 mod github;
@@ -23,6 +24,7 @@ mod worker_reads;
 mod world;
 
 pub use following::Following;
+pub use github::{GithubSays, GithubSends};
 pub use serve::serve;
 pub use stand_in::{BUILD, BUILD_NUMBER};
 pub use worker_reads::WorkerReads;

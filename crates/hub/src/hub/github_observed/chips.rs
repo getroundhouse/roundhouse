@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use protocol::model::{IssueSaid, PullRequestSaid, Reference, ReferenceAsk, ReferenceSaid};
+use protocol::model::{ReferenceAsk, ReferenceSaid};
 
 use super::observing::logged;
 use crate::github_cache::{Item, KeptSummary, Told};
@@ -33,7 +33,7 @@ impl Hub {
         else {
             return;
         };
-        let Some(said) = said(found) else { return };
+        let Some(said) = ReferenceSaid::of(found.as_ref()) else { return };
         let keeping = if current && !failed_since {
             self.observation_kept_current::<Referenced>(ask.clone()).await
         } else {
@@ -92,23 +92,4 @@ impl Chips {
 /// The issue or pull request `ask` names, as the cache keeps it.
 pub(super) fn item_of(ask: &ReferenceAsk) -> Item {
     Item::new(&ask.repository, ask.number)
-}
-
-/// What a chip is sent of what GitHub said, which `found` gives as `None` where there's none to be seen. `None` for one
-/// of a kind this build doesn't know, which the hub never reads.
-fn said(found: Option<Reference>) -> Option<ReferenceSaid> {
-    Some(match found {
-        None => ReferenceSaid::Missing,
-        Some(Reference::Issue(issue)) => ReferenceSaid::Issue(IssueSaid {
-            repository: issue.repository,
-            number: issue.number,
-            summary: issue.summary.said,
-        }),
-        Some(Reference::PullRequest(pull_request)) => ReferenceSaid::PullRequest(PullRequestSaid {
-            repository: pull_request.repository,
-            number: pull_request.number,
-            summary: pull_request.summary.said,
-        }),
-        Some(Reference::Unknown) => return None,
-    })
 }

@@ -53,6 +53,6 @@ pub(crate) fn signed_in_unseen() -> RepositoryUnseen {
 fn unseen() -> World {
     let mut world = diff();
     let focus = world.workspaces.iter().find(|workspace| workspace.name == FOCUS).unwrap().id.clone();
-    world.unseen.insert(focus, signed_in_unseen());
+    world.github_says.unseen.insert(focus, signed_in_unseen());
     world
 }

@@ -1,5 +1,4 @@
 //! Against a stand-in hub on a Unix socket.
-#![cfg(unix)]
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -15,7 +14,7 @@ use protocol::model::{
     RepositoryUnseen,
 };
 
-use super::GithubFeed;
+use super::super::GithubFeed;
 use crate::RecordsFeed;
 use crate::stand_in_hub::{self, Does, subscribed};
 
@@ -154,7 +153,7 @@ fn every_workspaces_pull_request_comes_from_following_the_hub_and_that_it_hasnt_
 /// be what's in front.
 #[test]
 fn past_the_most_chips_the_newest_views_are_kept() {
-    let mut held = super::held::GithubHeld::default();
+    let mut held = super::super::held::GithubHeld::default();
     let (changed, _) = flume::unbounded();
     held.add(1, changed.clone());
     held.add(2, changed);
