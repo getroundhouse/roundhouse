@@ -86,8 +86,8 @@ impl ChangedFile {
 
 /// Where a file is in the one order a summary and its pages list files in: those git tracks, in order of their paths,
 /// and then the untracked ones, in order of theirs. The same path can be in both, as a file deleted from the index and
-/// left in the worktree is, so where a file is names both. Its order is that one, since `untracked` comes first.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// left in the worktree is, so where a file is names both.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ChangedFileAt {
     pub untracked: bool,
     pub path: String,
