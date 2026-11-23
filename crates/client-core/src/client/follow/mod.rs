@@ -3,6 +3,7 @@
 //! again from where it got to.
 
 mod following;
+mod thread;
 
 pub use following::FollowError;
 pub(super) use following::{Follow, Giver, Reach, Source, Teller};
