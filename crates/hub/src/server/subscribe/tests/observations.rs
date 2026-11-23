@@ -3,12 +3,13 @@
 use protocol::client::listed::{Listed, WorkspaceObservations};
 use protocol::client::subscriptions::{FeedSubscribe, Follow, Subscribe, Subscribed};
 use protocol::client::{ClientResponse, HubFrame, HubNotice};
-use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, LineCounts, Observation, ObservationKey, Observed};
+use protocol::model::{LineCounts, Observation, ObservationKey, Observed};
 
 use std::sync::Arc;
 
 use super::super::subscribe;
 use super::given::{Given, ok, start};
+use crate::hub::tests::changes;
 use crate::hub::{WorkspaceChanges, WorkspaceLines};
 use crate::server::subscribing::follow_feed;
 use crate::server::tests::{Connection, WAIT};
@@ -134,13 +135,6 @@ async fn a_workspace_s_files_are_listed_before_the_reply_and_sent_only_to_whoeve
     assert!(matches!(records.observations.as_slice(), [Observation::WorkspaceLines { .. }]), "{records:?}");
     let by_four: Vec<_> = four.sent.iter().filter_map(observation_notice).collect();
     assert!(by_four.iter().all(|told| is_of_lines(*told)), "{by_four:?}");
-}
-
-/// A summary of a worktree whose one changed file adds `added` lines and removes `removed`.
-fn changes(added: u64, removed: u64) -> ChangeSummary {
-    let lines = Some(LineCounts { added, removed });
-    let file = ChangedFile { path: "a.rs".into(), from: None, status: ChangeStatus::Modified, lines, version: None };
-    ChangeSummary::new("base".into(), vec![file])
 }
 
 /// The observations of `w`'s level, if `frame` lists them.
