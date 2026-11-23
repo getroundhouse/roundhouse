@@ -6,8 +6,8 @@
 
 use protocol::client::ApiError;
 use protocol::model::{
-    GithubAccount, GithubAccountId, GithubInstallation, GithubLoginKind, GithubToken, GithubUser, HubSettings,
-    InstalledApp, SentCredential, UnusableLogin,
+    GithubAccount, GithubAccountId, GithubInstallation, GithubLoginKind, GithubToken, GithubUser, GithubUsername,
+    HubSettings, InstalledApp, SentCredential, UnusableLogin,
 };
 use protocol::worker::{GitCredential, GitIdentity};
 use tokio::sync::watch;
@@ -49,6 +49,23 @@ impl GithubLogins {
         let changed = change(&files);
         self.publish(&files, now_ms);
         changed
+    }
+
+    /// Every connected account whose login can be used at `now_ms`, by who GitHub knows it as, with its token: the
+    /// default's first, then the others oldest first. So the hub can read what any of them can see, as it does to link a
+    /// project to its repository. One whose login can't be used now is left out, as GitHub would refuse it.
+    pub(crate) fn readers(&self, now_ms: i64) -> Result<Vec<(GithubUsername, GithubToken)>, ApiError> {
+        let files = self.files.lock();
+        let default = self.store.hub_settings()?.github.and_then(|github| github.account);
+        let mut accounts = self.store.list_github_accounts()?;
+        accounts.sort_by_key(|account| Some(&account.id) != default.as_ref());
+        let mut readers = Vec::new();
+        for account in accounts {
+            if let Ok(token) = self.token_of(&files, &account, now_ms)? {
+                readers.push((account.user.name, token));
+            }
+        }
+        Ok(readers)
     }
 
     /// The token the hub holds for `account`, a token's, a sign-in's or an installation's, or why it can't be used at

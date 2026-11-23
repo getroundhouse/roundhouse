@@ -222,3 +222,32 @@ fn a_chip_s_list_keeps_its_form() {
         .concat(),
     );
 }
+
+/// What GitHub says of a repository a project is linked to, by GitHub's ID for it, as a notice and as its removal.
+#[test]
+fn what_github_says_of_a_linked_repository_keeps_its_form() {
+    let address = |url: &str| protocol::model::RepoUrl::try_from(url.to_owned()).unwrap();
+    let said = protocol::model::GithubRepositorySaid {
+        repository: GithubRepositoryName::named("ada/roundhouse"),
+        https: address("https://github.com/ada/roundhouse"),
+        ssh: address("git@github.com:ada/roundhouse.git"),
+    };
+    let notice = Observation::GithubRepository {
+        id: "R_kgDOJbBqvw".into(),
+        said: Observed::AsOf { value: said, as_of_ms: 7 },
+        rev: Rev::new(5),
+    };
+    let gone = HubNotice::ObservationRemoved {
+        observation: ObservationKey::GithubRepository { id: "R_kgDOJbBqvw".into() },
+        rev: Rev::new(6),
+    };
+
+    keeps_its_form(
+        &HubNotice::Observation(notice),
+        r#"{"notice":"observation","kind":"github_repository","id":"R_kgDOJbBqvw","said":{"freshness":"as_of","value":{"repository":"ada/roundhouse","https":"https://github.com/ada/roundhouse","ssh":"git@github.com:ada/roundhouse.git"},"as_of_ms":7},"rev":5}"#,
+    );
+    keeps_its_form(
+        &gone,
+        r#"{"notice":"observation_removed","observation":{"kind":"github_repository","id":"R_kgDOJbBqvw"},"rev":6}"#,
+    );
+}

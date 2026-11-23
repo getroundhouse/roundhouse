@@ -8,8 +8,8 @@ use protocol::client::ApiError;
 use protocol::event::SessionEvent;
 use protocol::model::{
     Account, AttachmentId, DiffComment, FileContents, GitDiff, GithubAccount, GithubApp, GithubSettings, GithubSignIn,
-    GithubSignInStatus, InstanceId, PORTS_PER_WORKSPACE, Proposal, ReplyHeard, Repo, RepoId, RepoOrigin, Rev, Session,
-    SessionId, Subagent, Terminal, TerminalId, Workspace, WorkspaceId, WorktreeFiles,
+    GithubSignInStatus, InstanceId, Linking, PORTS_PER_WORKSPACE, Proposal, ReplyHeard, Repo, RepoId, RepoOrigin, Rev,
+    Session, SessionId, Subagent, Terminal, TerminalId, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::tail::Tail;
 use protocol::terminal::TerminalSize;
@@ -157,6 +157,7 @@ impl World {
             id: id.clone(),
             name: name.to_string(),
             origin: RepoOrigin::Checkout { path: format!("/src/{name}") },
+            link: Linking::NoAddress,
             created_at_ms,
             rev: Rev::default(),
         });

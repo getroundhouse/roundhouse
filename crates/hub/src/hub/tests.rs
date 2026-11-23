@@ -262,7 +262,27 @@ pub(crate) fn hub_without_account(dir: &Path, api: String, timers: Timers) -> Ar
     hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
     hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
+    linked_on_github(&hub, &address);
     hub
+}
+
+/// Links the hub's repository, `r`, whose address `url` names a repository on github.com, to it, by the ID `R_` and
+/// its name, with what GitHub says of it, as the hub does once GitHub has said which repository it is, without asking
+/// GitHub.
+pub(crate) fn linked_on_github(hub: &Hub, url: &protocol::model::RepoUrl) {
+    use protocol::model::{AddressForm, GithubRepositoryId, GithubRepositorySaid, RepoLink, RepoUrl};
+    let repository = url.on_github().expect("an address on github.com");
+    let id = GithubRepositoryId::from(format!("R_{repository}"));
+    let link = RepoLink::Github { id: id.clone(), by: AddressForm::of(url) };
+    hub.store.link_repo(&"r".into(), url, &link).unwrap();
+    let address = |url: String| RepoUrl::try_from(url).unwrap();
+    let said = GithubRepositorySaid {
+        https: address(format!("https://github.com/{repository}")),
+        ssh: address(format!("git@github.com:{repository}.git")),
+        repository,
+    };
+    let rev = hub.store.next_rev().unwrap();
+    hub.observations.kept_for_tests::<crate::hub::observations::GithubRepositories>(id, said, rev);
 }
 
 /// Has the hub hold `ada`'s token, `a-token`, as its first GitHub account, so its default, as connecting it would,

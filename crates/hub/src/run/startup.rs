@@ -244,6 +244,7 @@ fn watch_while_serving(hub: &Arc<Hub>, serving: &mut JoinSet<()>) {
     serving.spawn(Arc::clone(hub).watch_pull_requests());
     serving.spawn(Arc::clone(hub).observe_github());
     // What it would record is checked again as the next hub starts.
+    serving.spawn(Arc::clone(hub).watch_repo_links());
     serving.spawn(Arc::clone(hub).watch_github_reach());
     serving.spawn(Arc::clone(hub).look_for_updates());
 }

@@ -292,6 +292,7 @@ fn is_as_of(observation: &Observation) -> bool {
         Observation::WorkspaceLines { .. }
         | Observation::WorkspaceChanges { .. }
         | Observation::Reference { .. }
+        | Observation::GithubRepository { .. }
         | Observation::Unknown => false,
     }
 }

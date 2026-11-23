@@ -19,3 +19,6 @@ pub(crate) const BEFORE_PULL_REQUEST_LINKS: usize = 90;
 
 /// How many migrations there were before each wait's watch kept the pull requests it saw as their facets.
 pub(crate) const BEFORE_WAITS_AS_FACETS: usize = 92;
+
+/// How many migrations there were before each repository kept its link to its repository on a host.
+pub(crate) const BEFORE_REPO_LINKS: usize = 93;

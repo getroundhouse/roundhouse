@@ -79,7 +79,8 @@ pub enum Reach {
     /// Not checked, since the default's login can't be used now, so a push to GitHub fails, saying `reason`, as the
     /// hub's block of every worker's git credential does.
     Blocked { repository: GithubRepositoryName, reason: String },
-    /// The repository's `origin` isn't on github.com, or there's none, so the default isn't what it pushes with.
+    /// The repository isn't linked to one on GitHub, as one whose `origin` is elsewhere, or has none, or one GitHub
+    /// hasn't said which repository it is, so the default isn't what it's known to push with.
     NotOnGithub,
     /// From a newer hub.
     #[serde(other)]

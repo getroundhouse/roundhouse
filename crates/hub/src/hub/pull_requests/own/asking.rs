@@ -2,10 +2,10 @@
 //! when it can't be had.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{Workspace, WorkspaceId};
+use protocol::model::{RepoUrl, Workspace, WorkspaceId};
 use tracing::warn;
 
-use super::judging::{Wanted, wanted};
+use super::judging::{OwnRepository, Wanted, wanted};
 use super::scopes::WaitsRead;
 use crate::hub::Hub;
 use crate::hub::pull_requests::reading::couldnt_read;
@@ -90,8 +90,11 @@ impl Hub {
         let mut waited = waited(waits);
         let mut plans = Vec::new();
         for workspace in workspaces {
-            let address = self.repo_of(&workspace).await.ok().and_then(|repo| repo.origin.url().cloned());
-            let own = wanted(&workspace, address.as_ref());
+            let repository = self.repo_of(&workspace).await.ok().and_then(|repo| {
+                let found_as = repo.origin.url().and_then(RepoUrl::on_github);
+                Some(OwnRepository { now: self.github_name_of(&repo)?, found_as })
+            });
+            let own = wanted(&workspace, repository.as_ref());
             plans.push(Plan { waited: waited.remove(&workspace.id).unwrap_or_default(), own, workspace });
         }
         Asking(plans)

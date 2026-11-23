@@ -43,7 +43,8 @@ pub use github::GithubConfig;
 #[cfg(any(test, feature = "testing"))]
 pub use github::{
     Answer as GithubAnswer, Gate as GithubGate, PullRequestState as GithubPullRequestState,
-    PullRequests as GithubPullRequests, Script as GithubScript, StandIn as GithubStandIn,
+    PullRequests as GithubPullRequests, Repositories as GithubRepositories, Script as GithubScript,
+    StandIn as GithubStandIn,
 };
 
 /// The names the hub picks a new workspace's from, so a test can have git hold every one.

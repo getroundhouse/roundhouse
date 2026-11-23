@@ -4,8 +4,8 @@
 use std::hash::Hash;
 
 use protocol::model::{
-    ChangeSummary, LineCounts, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid,
-    ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, WorkspaceId,
+    ChangeSummary, GithubRepositoryId, GithubRepositorySaid, LineCounts, Observation, ObservationKey, Observed,
+    OwnPullRequestDetail, OwnPullRequestSaid, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, WorkspaceId,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -169,5 +169,27 @@ impl Kind for WorkspaceRepositoryUnseen {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.workspace_repository_unseen
+    }
+}
+
+/// What GitHub says of a repository a project is linked to, by GitHub's ID for it, as `crate::hub::repo_links` reads
+/// it.
+pub(crate) struct GithubRepositories;
+
+impl Kind for GithubRepositories {
+    type Of = GithubRepositoryId;
+    type Value = GithubRepositorySaid;
+    const FORM: Form = Form { table: "github_repositories", version: 1 };
+
+    fn observation(id: &GithubRepositoryId, said: Observed<GithubRepositorySaid>, rev: Rev) -> Observation {
+        Observation::GithubRepository { id: id.clone(), said, rev }
+    }
+
+    fn key(id: &GithubRepositoryId) -> ObservationKey {
+        ObservationKey::GithubRepository { id: id.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.github_repositories
     }
 }

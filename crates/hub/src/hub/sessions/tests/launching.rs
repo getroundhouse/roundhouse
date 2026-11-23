@@ -6,11 +6,12 @@ use protocol::prompt::Prompt;
 use crate::hub::stand_in_workers::{a_chat, a_turn, hub_with_stand_in_workers};
 
 #[tokio::test]
-async fn a_launch_names_the_workspaces_repository_on_github_as_its_address_does() {
+async fn a_launch_names_the_workspaces_repository_on_github_as_its_link_does() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let address = RepoUrl::try_from("git@github.com:example/project.git".to_owned()).unwrap();
     hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
+    crate::hub::tests::linked_on_github(&hub, &address);
     let (_, chat) = a_chat(&hub).await;
 
     let spec = a_turn(&hub, &asked, &chat.id, Prompt::new("hi"), None).await;

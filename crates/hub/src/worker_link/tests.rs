@@ -67,6 +67,7 @@ fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub
         timers,
     ));
     reading_as_ada(&hub);
+    crate::hub::tests::linked_on_github(&hub, &address);
     hub
 }
 

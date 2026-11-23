@@ -184,14 +184,14 @@ impl<W: Waiter> References<W> {
         *github = Some(Following { view, _listening: listening });
     }
 
-    /// How a chip names what `ask` asks for: `#1021` in the repository the chat's workspace is on, as the hub's records
-    /// say, and `owner/name#41` in another, as GitHub writes them.
+    /// How a chip names what `ask` asks for: `#1021` in the repository the chat's workspace is on, as GitHub last called
+    /// the one its project is linked to, and `owner/name#41` in another, as GitHub writes them.
     pub(crate) fn label(&self, ask: &ReferenceAsk) -> String {
         let own = self.0.records.lock().as_ref().and_then(|records| {
             let snapshot = records.snapshot();
             let workspace = snapshot.workspaces().iter().find(|workspace| workspace.id == self.0.workspace)?;
             let repo = snapshot.repos().iter().find(|repo| repo.id == workspace.repo_id)?;
-            repo.origin.url()?.on_github()
+            snapshot.github_name(repo).cloned()
         });
         let (repository, number) = (ask.repository.as_str(), ask.number);
         if own.is_some_and(|own| own.as_str().eq_ignore_ascii_case(repository)) {

@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use hub::{GithubAnswer, GithubGate, GithubScript, GithubStandIn};
+use hub::{GithubAnswer, GithubGate, GithubRepositories, GithubScript, GithubStandIn};
 use protocol::client::github_accounts::{GithubAccountConnect, GithubAccountDisconnect, HubMachineLogins};
 use protocol::client::github_apps::{GithubAppMake, GithubManifestCode};
 use protocol::model::{
@@ -167,8 +167,8 @@ fn a_hub_says_who_gh_and_the_ssh_key_on_its_machine_are_as_a_client_asks() {
     assert!(client.records().unwrap().found_github_logins.is_empty(), "nothing's kept of them");
 }
 
-/// Through the real worker of the local provider, which reads the address of its repository's `origin`, checked with
-/// the default's token against a stand-in for GitHub, to every client, with when GitHub answered. A hub that starts
+/// Through the real worker of the local provider, which reads the address of its repository's `origin`, which the hub
+/// links the project by, checked with the default's token against a stand-in for GitHub, to every client, with when GitHub answered. A hub that starts
 /// again has it at once, as the last run's, until it has checked again, which GitHub holds back here until the test
 /// has seen it. Nothing has been fetched from `origin`, so the workspace starts from the checkout's own branch, and
 /// nothing reaches GitHub.
@@ -178,9 +178,12 @@ fn a_hub_records_whether_the_default_can_push_to_a_workspaces_repository_on_gith
     let refused = GithubAnswer::git_says(403, "Permission to cli/cli.git denied to ada.");
     let gate = GithubGate::closed();
     let held = GithubAnswer::After(gate.clone(), Box::new(refused.clone()));
+    let repositories = GithubRepositories::default();
+    repositories.set("R_cli", "cli/cli");
     let github = runtime.block_on(GithubStandIn::with(GithubScript {
         users: vec![(TOKEN, GithubAnswer::user(7, "ada", None))],
         pushes: vec![("cli/cli", vec![refused, held])],
+        repositories: Some(repositories),
         ..GithubScript::default()
     }));
     let mut stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);

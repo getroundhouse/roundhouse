@@ -2,8 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
-use crate::model::{ChangeSummary, Level, LineCounts, ReferenceAsk, RepositoryUnseen, Rev, WorkspaceId};
+use super::{GithubRepositorySaid, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
+use crate::model::{
+    ChangeSummary, GithubRepositoryId, Level, LineCounts, ReferenceAsk, RepositoryUnseen, Rev, WorkspaceId,
+};
 
 /// One observation, of any kind, with what it's of, its revision and what it says, as a list or the feed gives it. A
 /// client keeps whichever copy has the newer revision, as it keeps a record, by [`Observation::key`]. A kind this build
@@ -30,6 +32,9 @@ pub enum Observation {
     /// What GitHub says of an issue or a pull request, as a chip draws it. Sent at the level of that issue or pull
     /// request, by the ask as the client follows it, so two that name it in another case are two observations.
     Reference { reference: ReferenceAsk, said: Observed<ReferenceSaid>, rev: Rev },
+    /// What GitHub says of a repository a project is linked to, by GitHub's ID for it: what it's called now, and where
+    /// git reaches it. Sent at the hub's level, since a project's name for it is drawn wherever its chats are.
+    GithubRepository { id: GithubRepositoryId, said: Observed<GithubRepositorySaid>, rev: Rev },
     #[serde(other)]
     Unknown,
 }
@@ -57,6 +62,9 @@ pub enum ObservationKey {
     Reference {
         reference: ReferenceAsk,
     },
+    GithubRepository {
+        id: GithubRepositoryId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -81,6 +89,7 @@ impl Observation {
                 ObservationKey::WorkspaceRepositoryUnseen { workspace_id: workspace_id.clone() }
             }
             Observation::Reference { reference, .. } => ObservationKey::Reference { reference: reference.clone() },
+            Observation::GithubRepository { id, .. } => ObservationKey::GithubRepository { id: id.clone() },
             Observation::Unknown => ObservationKey::Unknown,
         }
     }
@@ -94,7 +103,8 @@ impl Observation {
             | Observation::WorkspacePullRequest { rev, .. }
             | Observation::WorkspacePullRequestDetail { rev, .. }
             | Observation::WorkspaceRepositoryUnseen { rev, .. }
-            | Observation::Reference { rev, .. } => *rev,
+            | Observation::Reference { rev, .. }
+            | Observation::GithubRepository { rev, .. } => *rev,
             Observation::Unknown => Rev::default(),
         }
     }
@@ -108,7 +118,9 @@ impl ObservationKey {
     /// workspace's. `None` for one of a kind this build doesn't know, which is of no level it can follow.
     pub fn level(&self) -> Option<Level> {
         match self {
-            ObservationKey::WorkspaceLines { .. } | ObservationKey::WorkspacePullRequest { .. } => Some(Level::Hub),
+            ObservationKey::WorkspaceLines { .. }
+            | ObservationKey::WorkspacePullRequest { .. }
+            | ObservationKey::GithubRepository { .. } => Some(Level::Hub),
             ObservationKey::WorkspaceChanges { workspace_id }
             | ObservationKey::WorkspacePullRequestDetail { workspace_id }
             | ObservationKey::WorkspaceRepositoryUnseen { workspace_id } => {

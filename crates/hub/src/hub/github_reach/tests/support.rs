@@ -16,19 +16,26 @@ pub(super) const CLI: GithubRepositoryName = GithubRepositoryName::named("cli/cl
 
 /// Has a stand-in for a worker on the hub's machine read that the checkout of the hub's repository, `r`, fetches from
 /// `url`, as the first worker here to link after `r` is added does, so its record has the address, and pushes through
-/// the git credential.
+/// the git credential, and links it, as the hub does once GitHub says which repository an address on github.com names.
 pub(super) async fn reads(hub: &Arc<Hub>, url: &str) {
     reads_pushing(hub, url, PushRoute::Credential).await;
 }
 
 /// As [`reads`] says, but with its pushes going as `push` says.
 pub(super) async fn reads_pushing(hub: &Arc<Hub>, url: &str, push: PushRoute) {
+    let url_said = url;
     let url = RepoUrl::try_from(url.to_owned()).unwrap();
     let link = WorkerLink::answering(move |request| {
         assert!(matches!(request, WorkerRequest::ReadRepoUrl(_)), "{request:?}");
         Some(Ok(WorkerResponse::RepoUrl(RepoUrlReply { url: Some(url.clone()), push: Some(push) })))
     });
     Arc::clone(hub).read_repo_urls("w".into(), link).await;
+    let read = RepoUrl::try_from(url_said.to_owned()).unwrap();
+    if read.on_github().is_some() {
+        crate::hub::tests::linked_on_github(hub, &read);
+    }
+    // As the hub's links tell it, once they've looked for the link.
+    hub.links_read.notify_one();
 }
 
 /// The credential of `username`'s token `token`.

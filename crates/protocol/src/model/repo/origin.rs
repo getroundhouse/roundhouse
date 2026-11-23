@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 use super::RepoUrl;
 
 /// Where a repository is: a checkout on the hub's machine, the address it lives at, or both, and never neither, so
-/// nothing can take a checkout for granted. The address is the record's, and the truth, what a worker with no checkout
-/// of its own is to clone and fetch from. A linked checkout's is read from its `origin` by a worker on the hub's
-/// machine, since the hub runs no git.
+/// nothing can take a checkout for granted. The address is how the hub found the repository's link, which is what a
+/// worker with no checkout of its own clones, as [`Linking`](super::Linking) says. A checkout's is read from its
+/// `origin` by a worker on the hub's machine, since the hub runs no git.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RepoOrigin {
