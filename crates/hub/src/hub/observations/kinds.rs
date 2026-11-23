@@ -10,7 +10,8 @@ use protocol::model::{
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use super::kept::{Table, Tables};
+use super::kept::Table;
+use super::tables::Tables;
 
 /// A kind of observation. A new kind is added to [`Observation`] and [`ObservationKey`] in `protocol`, gets a type
 /// here, and a table in [`Tables`], whose `each` the compiler stops at.

@@ -5,15 +5,12 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ObservationNotice};
-use protocol::model::{Level, Observation, ObservationKey, Observed, Rev, WorkspaceId};
+use protocol::model::{Level, Observation, Observed, Rev, WorkspaceId};
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
-use super::file::{self, Row, Write};
-use super::kinds::{
-    Form, Kind, Referenced, Subject, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
-    WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
-};
+use super::kinds::Kind;
+use super::tables::Tables;
 use super::writer::Writer;
 use crate::cache_file::CacheFile;
 use crate::store::Store;
@@ -29,22 +26,11 @@ pub(crate) struct Observations {
     pub(super) writer: Writer,
 }
 
-/// Each kind's table, in memory.
-#[derive(Default)]
-pub(crate) struct Tables {
-    pub(super) workspace_lines: Table<WorkspaceLines>,
-    pub(super) workspace_changes: Table<WorkspaceChanges>,
-    pub(super) referenced: Table<Referenced>,
-    pub(super) workspace_pull_request: Table<WorkspacePullRequest>,
-    pub(super) workspace_pull_request_detail: Table<WorkspacePullRequestDetail>,
-    pub(super) workspace_repository_unseen: Table<WorkspaceRepositoryUnseen>,
-}
-
 /// What's kept of one kind of observation.
 pub(crate) struct Table<K: Kind> {
-    kept: HashMap<K::Of, Kept<K::Value>>,
+    pub(super) kept: HashMap<K::Of, Kept<K::Value>>,
     /// What something keeps up to date now, such as a worker watching a worktree, so what's read of it is current.
-    kept_current: HashSet<K::Of>,
+    pub(super) kept_current: HashSet<K::Of>,
 }
 
 impl<K: Kind> Default for Table<K> {
@@ -54,9 +40,9 @@ impl<K: Kind> Default for Table<K> {
 }
 
 /// One observation, as its revision says it.
-struct Kept<V> {
-    said: Said<V>,
-    rev: Rev,
+pub(super) struct Kept<V> {
+    pub(super) said: Said<V>,
+    pub(super) rev: Rev,
 }
 
 /// What an observation says, and when it was read.
@@ -74,7 +60,7 @@ pub(super) struct Said<V> {
 }
 
 impl<V: Clone> Said<V> {
-    fn observed(&self) -> Observed<V> {
+    pub(super) fn observed(&self) -> Observed<V> {
         let value = self.value.clone();
         if self.current { Observed::Current { value } } else { Observed::AsOf { value, as_of_ms: self.as_of_ms } }
     }
@@ -185,6 +171,13 @@ impl<K: Kind> Table<K> {
         self.kept_current.contains(of)
     }
 
+    /// Keeps that the observation of `of` says `value`, as of `read_at_ms`, at `rev`, as the cache file kept it, since
+    /// nothing keeps it up to date yet.
+    pub(super) fn keep_loaded(&mut self, of: K::Of, value: K::Value, read_at_ms: i64, rev: Rev) {
+        let said = Said { value, current: false, as_of_ms: read_at_ms, read_at_ms };
+        self.kept.insert(of, Kept { said, rev });
+    }
+
     /// Keeps when the observation of `of` was read again, as `said` says, under the revision it has.
     pub(super) fn reread(&mut self, of: &K::Of, said: Said<K::Value>) {
         if let Some(kept) = self.kept.get_mut(of) {
@@ -205,95 +198,6 @@ impl<K: Kind> Table<K> {
                 ObservationNotice::Removed { observation: K::key(of), rev }
             }
         }
-    }
-}
-
-/// What the store does with every kind's table alike.
-trait AnyTable {
-    fn form(&self) -> Form;
-    /// Each observation it keeps that's sent at `level`.
-    fn listed(&self, level: &Level) -> Vec<Observation>;
-    /// Keeps what the cache file kept, each as of when it was read, at `rev`.
-    fn load(&mut self, file: &CacheFile, rev: Rev) -> rusqlite::Result<()>;
-    /// Whether it keeps an observation of a workspace that `gone` picks out.
-    fn keeps_of(&self, gone: &dyn Fn(&WorkspaceId) -> bool) -> bool;
-    /// Forgets each observation of a workspace that `gone` picks out, and that anything keeps it current, and queues
-    /// its removal from the file on `writer`. Returns which it forgot.
-    fn forget_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool, writer: &Writer) -> Vec<ObservationKey>;
-}
-
-impl<K: Kind> AnyTable for Table<K> {
-    fn form(&self) -> Form {
-        K::FORM
-    }
-
-    fn listed(&self, level: &Level) -> Vec<Observation> {
-        let at_level = self.kept.iter().filter(|(of, _)| K::key(of).level().as_ref() == Some(level));
-        at_level.map(|(of, kept)| K::observation(of, kept.said.observed(), kept.rev)).collect()
-    }
-
-    fn load(&mut self, file: &CacheFile, rev: Rev) -> rusqlite::Result<()> {
-        for Row { of, value, read_at_ms } in file::load::<K>(file)? {
-            let said = Said { value, current: false, as_of_ms: read_at_ms, read_at_ms };
-            self.kept.insert(of, Kept { said, rev });
-        }
-        Ok(())
-    }
-
-    fn keeps_of(&self, gone: &dyn Fn(&WorkspaceId) -> bool) -> bool {
-        self.kept.keys().any(|of| of.workspace().is_some_and(gone))
-    }
-
-    fn forget_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool, writer: &Writer) -> Vec<ObservationKey> {
-        self.kept_current.retain(|of| !of.workspace().is_some_and(gone));
-        let forgotten: Vec<K::Of> = self.kept.keys().filter(|of| of.workspace().is_some_and(gone)).cloned().collect();
-        for of in &forgotten {
-            self.kept.remove(of);
-            writer.write::<K>(of.clone(), Write::Gone);
-        }
-        forgotten.iter().map(K::key).collect()
-    }
-}
-
-impl Tables {
-    /// Each kind's table, the one list of every kind the store keeps.
-    fn each(&mut self) -> [&mut dyn AnyTable; 6] {
-        let Tables {
-            workspace_lines,
-            workspace_changes,
-            referenced,
-            workspace_pull_request,
-            workspace_pull_request_detail,
-            workspace_repository_unseen,
-        } = self;
-        [
-            workspace_lines,
-            workspace_changes,
-            referenced,
-            workspace_pull_request,
-            workspace_pull_request_detail,
-            workspace_repository_unseen,
-        ]
-    }
-
-    /// Every observation sent at `level`, of every kind.
-    fn listed(&mut self, level: &Level) -> Vec<Observation> {
-        self.each().iter().flat_map(|table| table.listed(level)).collect()
-    }
-
-    /// Whether any kind keeps an observation of a workspace that `gone` picks out.
-    pub(super) fn keep_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool) -> bool {
-        self.each().iter().any(|table| table.keeps_of(gone))
-    }
-
-    /// Forgets every observation of a workspace that `gone` picks out, of every kind, as [`AnyTable::forget_of`] does.
-    pub(super) fn forget_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool, writer: &Writer) -> Vec<ObservationKey> {
-        self.each().into_iter().flat_map(|table| table.forget_of(gone, writer)).collect()
-    }
-
-    /// The form of each kind's table in the cache file.
-    pub(super) fn forms() -> Vec<Form> {
-        Tables::default().each().iter().map(|table| table.form()).collect()
     }
 }
 
