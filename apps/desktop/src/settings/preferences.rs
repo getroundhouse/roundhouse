@@ -1,7 +1,7 @@
 use crate::saving::{Failure, Saver, write_json};
 use crate::settings::Choice;
 use crate::sounds::Sound;
-use crate::workspace_order::Sort;
+use client_core::workspace_order::Sort;
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use protocol::model::RepoId;
 use serde::{Deserialize, Serialize};

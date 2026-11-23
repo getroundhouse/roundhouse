@@ -1,6 +1,7 @@
 //! The hub's workspaces, grouped by repository, each with its mark, and opening one's chat.
 
 use client_core::records::Snapshot;
+use client_core::workspace_order::Sort;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -52,7 +53,8 @@ impl MobileApp {
         v_flex().size_full().child(header).children(error).child(body).into_any_element()
     }
 
-    /// The repositories by name, as client-core keeps them, and newest first in each.
+    /// The repositories by name, as client-core keeps them, and in each its workspaces in the order the desktop's
+    /// sidebar starts in, last active first.
     fn list(
         &self,
         records: &Snapshot,
@@ -63,15 +65,16 @@ impl MobileApp {
     ) -> AnyElement {
         let muted = look::colors(cx).text_muted;
         let mut sections = v_flex().w_full().px(look::ROWS_INSET).pb(bottom);
+        let workspaces = records.workspaces();
         for repo in records.repos() {
-            let mut workspaces: Vec<&Workspace> =
-                records.workspaces().iter().filter(|w| w.repo_id == repo.id && listed(w)).collect();
-            if workspaces.is_empty() {
+            let in_repo = |&w: &usize| workspaces[w].repo_id == repo.id && listed(&workspaces[w]);
+            let mut shown: Vec<usize> = (0..workspaces.len()).filter(in_repo).collect();
+            if shown.is_empty() {
                 continue;
             }
-            workspaces.sort_by_key(|w| std::cmp::Reverse(w.created_at_ms));
+            Sort::default().sort(&mut shown, workspaces);
             sections = sections.child(heading(repo, muted));
-            for workspace in workspaces {
+            for workspace in shown.into_iter().map(|w| &workspaces[w]) {
                 sections = sections.child(self.row(workspace, records, works.of(workspace), ready, cx));
             }
         }

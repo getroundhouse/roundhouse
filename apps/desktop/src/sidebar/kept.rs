@@ -11,7 +11,7 @@ use protocol::model::{RepoId, WorkspaceId};
 use super::LineId;
 use super::drag::Dragging;
 use crate::reorder::{Hold, Places};
-use crate::workspace_order::Sort;
+use client_core::workspace_order::Sort;
 
 #[derive(Default)]
 pub(crate) struct Kept {
