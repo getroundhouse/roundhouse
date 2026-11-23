@@ -1,4 +1,5 @@
-//! Notifications and their sound, which tell of a chat that comes to need the person, unless it's the one being read.
+//! Notifications, their sound and the Dock's badge, which tell of a chat that comes to need the person, unless it's
+//! the one being read.
 
 #![cfg(test)]
 
@@ -95,24 +96,31 @@ fn clicking_a_notification_shows_its_chat_and_reads_no_other_on_the_way(cx: &mut
     assert!(stack.client().session_get(&showing_there).unwrap().unread(), "the chat showing there wasn't read");
 }
 
-/// A chat that finished is read by showing its workspace, which takes its notification back. One that waits on you is
-/// the next test's.
+fn dock_badge(ui: &mut Ui<'_>) -> usize {
+    ui.cx.read(desktop::dock_badge)
+}
+
+/// A chat that finished is read by showing its workspace, which takes its notification back, and its workspace off the
+/// Dock's badge. One that waits on you is the next test's.
 #[gpui_kit::test]
 fn reading_a_chat_takes_its_notification_back(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, elsewhere, chat) = open_with_one_elsewhere(cx, &stack);
     stack.client().session_prompt(&chat, "say:read me", None).unwrap();
     let finished = told_of_saying(&mut ui, &elsewhere, "Finished");
+    assert_eq!(dock_badge(&mut ui), 1);
 
     ui.click(SharedString::from(format!("workspace-{elsewhere}")));
 
     ui.wait("the notification to go", |ui| taken_back(ui, &finished));
     ui.wait("its workspace to show", |ui| ui.view().selected() == Some(&elsewhere));
+    ui.wait("its workspace to go off the Dock's badge", |ui| dock_badge(ui) == 0);
 }
 
 /// One that waits on you isn't read, so nothing on its record changes as it shows, and showing it in its workspace is
-/// what takes its notification back. Which chat is read is the app's, so a fake hub will do, and the chat's coming to
-/// wait is handed to client-core as the feed would hand it, since what a fake hub holds never changes.
+/// what takes its notification back. It stays on the Dock's badge until it's answered, as its row stays bright. Which
+/// chat is read is the app's, so a fake hub will do, and the chat's coming to wait is handed to client-core as the feed
+/// would hand it, since what a fake hub holds never changes.
 #[gpui_kit::test]
 fn showing_a_chat_that_waits_on_you_takes_its_notification_back(cx: &mut TestAppContext) {
     let mut world = World::default();
@@ -132,9 +140,12 @@ fn showing_a_chat_that_waits_on_you_takes_its_notification_back(cx: &mut TestApp
     ui.view().feed().unwrap().take_record(Record::Session(waiting));
     let note = told_of_saying(&mut ui, &workspace, "Waiting on you");
 
+    assert_eq!(dock_badge(&mut ui), 1);
+
     ui.show_chat(&asking);
 
     ui.wait("the notification to go", |ui| taken_back(ui, &note));
+    assert_eq!(dock_badge(&mut ui), 1, "showing it doesn't answer it");
 }
 
 /// Two chats coming to need you one after another, each told of on its own, sound once while the app's clock stands

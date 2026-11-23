@@ -39,6 +39,30 @@ fn the_first_look_tells_of_nothing_already_waiting() {
     assert_eq!(changes, Changes::default());
 }
 
+/// Two chats in one workspace count once, and the first look counts what already needed the person as the app opened.
+/// The chat being read counts while it's waiting on them, as its row stays bright, and a closed one or one at work
+/// doesn't count.
+#[test]
+fn the_workspaces_with_a_chat_that_needs_the_person_are_counted_from_the_first_look() {
+    let mut watch = Watch::default();
+    let at = |workspace: &str, session: Session| Session { workspace_id: workspace.into(), ..session };
+    let closed = Session { closed_at_ms: Some(1), ..chat("closed", SessionStatus::Idle, 2, 0) };
+
+    watch.look(
+        &[
+            at("both", chat("unread", SessionStatus::Idle, 5, 0)),
+            at("both", chat("asking", SessionStatus::WaitingApproval, 0, 0)),
+            at("stopped", chat("stopped", SessionStatus::Interrupted, 0, 0)),
+            at("reading", chat("reading", SessionStatus::WaitingApproval, 0, 0)),
+            at("closed", closed),
+            at("working", working("working")),
+        ],
+        Some(&SessionId::from("reading")),
+    );
+
+    assert_eq!(watch.workspaces_needing(), 3);
+}
+
 #[test]
 fn a_reply_nobody_has_read_is_told_of_once() {
     let mut watch = having_seen(&[working("a")]);

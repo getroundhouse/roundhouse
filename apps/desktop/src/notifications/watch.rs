@@ -66,6 +66,8 @@ pub(crate) struct Watch {
     pub(super) seen: HashMap<SessionId, Seen>,
     /// The chats told of, whose notification may still show.
     pub(super) told: HashSet<SessionId>,
+    /// How many workspaces have a chat that needs the person, as of the last look.
+    workspaces_needing: usize,
 }
 
 impl Watch {
@@ -84,8 +86,9 @@ impl Watch {
             .filter_map(|s| Some((s, came_to_need(*self.seen.get(&s.id)?, s)?)))
             .map(|(s, why)| Came { chat: s.id.clone(), workspace: s.workspace_id.clone(), title: s.title.clone(), why })
             .collect();
-        let still: HashSet<&SessionId> =
-            open.iter().filter(|s| Some(&s.id) != reading && needs_the_person(s)).map(|s| &s.id).collect();
+        let needing = open.iter().filter(|s| needs_the_person(s));
+        self.workspaces_needing = needing.clone().map(|s| &s.workspace_id).collect::<HashSet<_>>().len();
+        let still: HashSet<&SessionId> = needing.filter(|s| Some(&s.id) != reading).map(|s| &s.id).collect();
         let went: Vec<SessionId> = self.told.iter().filter(|id| !still.contains(id)).cloned().collect();
         for id in &went {
             self.told.remove(id);
@@ -93,6 +96,13 @@ impl Watch {
         self.told.extend(came.iter().map(|came| came.chat.clone()));
         self.seen = open.iter().map(|s| (s.id.clone(), Seen::of(s))).collect();
         Changes { came, went }
+    }
+
+    /// How many workspaces have a chat that needs the person, as of the last look, as the sidebar shows them. The chats
+    /// that already did as the app opened count, and so does the chat being read while it still needs them, such as
+    /// one waiting on an answer, since showing a chat reads its reply but answers nothing.
+    pub(crate) fn workspaces_needing(&self) -> usize {
+        self.workspaces_needing
     }
 }
 
