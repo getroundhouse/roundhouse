@@ -1,6 +1,6 @@
-//! Summaries of real repositories' changes, made with a git that reads none of the person's config.
+//! Summaries of real repositories' changes.
 
-use super::ChangeSummaries;
+use super::super::ChangeSummaries;
 use crate::git::tests::{new_repo, prepare, run};
 use crate::testing::given;
 use protocol::model::{ChangeStatus, ChangeSummary, CommitId, FileVersion, LineCounts};

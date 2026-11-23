@@ -4,7 +4,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{ClientRequestId, GitDiff, GitStatus, OwnPullRequest, RepoId, Workspace, WorkspaceId};
+use crate::model::{
+    ChangedFileAt, ChangedFilesPage, ClientRequestId, GitDiff, GitStatus, OwnPullRequest, RepoId, Workspace,
+    WorkspaceId,
+};
 
 /// Generates a name if none is given. Uses the repository's default branch if no base is given. Sending the same
 /// `client_request_id` again returns the workspace it made, in whatever state it has reached, rather than making
@@ -163,6 +166,37 @@ impl Reply for GitDiff {
     fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
         let ClientResponse::GitDiff(diff) = response else { return Err(response) };
         Ok(diff)
+    }
+}
+
+/// The page of the files the workspace changes that follows the file `after` names, in the order its
+/// [`ChangeSummary`](crate::model::ChangeSummary) lists them: first `after` the summary's last file, and then the last
+/// of the page before, until a page leaves none out. The hub reads it from the workspace's worker, starting the worker
+/// if it isn't running, and keeps none of it.
+///
+/// A page starts after a file rather than at a count, so a file added or removed ahead of it shifts nothing the client
+/// has yet to read. What changes behind it, such as a file added that sorts before it, or one whose tracking changes
+/// so it moves across, is in no page after, so a client throws its pages away whenever the summary's observation
+/// changes, and reads them again from its new last file. A hub from before it refuses it as `Unsupported`, and so does
+/// a hub whose worker is from before it, after which a client shows only how many files the summary leaves out.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct WorkspaceChangedFiles {
+    pub id: WorkspaceId,
+    pub after: ChangedFileAt,
+}
+
+impl Request for WorkspaceChangedFiles {
+    type Reply = ChangedFilesPage;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::WorkspaceChangedFiles(self)
+    }
+}
+
+impl Reply for ChangedFilesPage {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::ChangedFilesPage(page) = response else { return Err(response) };
+        Ok(page)
     }
 }
 

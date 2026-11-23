@@ -89,6 +89,7 @@ pub enum ClientResponse {
     Workspaces(workspaces::Workspaces),
     GitStatus(GitStatus),
     GitDiff(GitDiff),
+    ChangedFilesPage(crate::model::ChangedFilesPage),
     SetupLog(workspaces::SetupLog),
     PullRequest(workspaces::PullRequestReply),
     Comment(DiffComment),

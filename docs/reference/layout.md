@@ -161,7 +161,7 @@ A hub of this build lists no `FoundGithubLogin`, which `client-core` reads only 
 | What | Whose | Kept in | Sent by |
 |---|---|---|---|
 | A workspace's lines added and removed | Git's | The hub's memory and `observed_workspace_lines`, each with when it was read. The hub reads them from the worker as a turn ends in the workspace and as its branches move, and while a client follows the workspace its worker, if it's running, watches the worktree and sends them as they change | The hub's level, as an observation, listed and then each change |
-| A workspace's changed files, each with its lines and version | Git's | The hub's memory and `observed_workspace_changes`, each with when it was read, from the same read as the lines, and current with them while watched. Forgotten as the workspace is archived. The diff isn't kept: `WorkspaceDiff` reads it whole from the worker | The workspace's level, as an observation, listed and then each change. `WorkspaceDiff` |
+| A workspace's changed files, each with its lines and version | Git's | The hub's memory and `observed_workspace_changes`, each with when it was read, from the same read as the lines, and current with them while watched. Forgotten as the workspace is archived. The files past the 5,000 a summary lists aren't kept: `WorkspaceChangedFiles` reads them a page at a time from the worker. Nor is the diff: `WorkspaceDiff` reads it whole | The workspace's level, as an observation, listed and then each change. `WorkspaceChangedFiles` and `WorkspaceDiff` |
 | How many files a workspace has uncommitted | Git's | `workspaces.pull_request_link`, as of the hub's last read of the workspace's pull request | The hub's level |
 | A workspace's branches, and each of its other worktrees' | Git's | `workspaces.branches` and `child_worktrees.branches` | The hub's level, for a workspace's own. Another worktree's reaches no client |
 | Which build a workspace's worker is | The worker's | `workspaces.worker_build` | The hub's level |
@@ -183,7 +183,7 @@ A hub of this build lists no `FoundGithubLogin`, which `client-core` reads only 
 
 ### Read on request, and not kept
 
-The hub reads these from a worker, or from its own machine, each time a client asks, and keeps nothing of them: one file's diff and the whole diff, the file list, a file's lines, a folder, the setup log, git's status for an archive, a terminal's rows and text, who `gh` and the SSH key on the hub's machine are, and whose login a session's agent runs under (`SessionAccount`). It answers from its memory with its status (`HubStatus`), what each kind of agent it runs offers (`AgentList`), and a code to pair a device, which it keeps only until the code expires.
+The hub reads these from a worker, or from its own machine, each time a client asks, and keeps nothing of them: one file's diff and the whole diff, the pages of the changed files past those a summary lists, the file list, a file's lines, a folder, the setup log, git's status for an archive, a terminal's rows and text, who `gh` and the SSH key on the hub's machine are, and whose login a session's agent runs under (`SessionAccount`). It answers from its memory with its status (`HubStatus`), what each kind of agent it runs offers (`AgentList`), and a code to pair a device, which it keeps only until the code expires.
 
 ### The hub's own, served to no client
 

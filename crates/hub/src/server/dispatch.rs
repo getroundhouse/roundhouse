@@ -100,6 +100,9 @@ pub(super) async fn handle(
         }
         R::WorkspaceStatus(workspaces::WorkspaceStatus { id }) => C::GitStatus(hub.workspace_status(id).await?),
         R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => C::GitDiff(hub.workspace_diff(id).await?),
+        R::WorkspaceChangedFiles(workspaces::WorkspaceChangedFiles { id, after }) => {
+            C::ChangedFilesPage(hub.workspace_changed_files(id, after).await?)
+        }
         R::WorkspaceFiles(files::WorkspaceFiles { id }) => C::WorktreeFiles(hub.workspace_files(id).await?),
         R::WorkspaceFolderRead(files::WorkspaceFolderRead { id, path }) => {
             C::WorktreeFiles(hub.workspace_folder_read(id, path).await?)

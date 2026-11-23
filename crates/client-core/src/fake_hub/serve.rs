@@ -102,6 +102,10 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => {
             reply(C::GitDiff(world.diffs.get(&id).cloned().unwrap_or_else(GitDiff::default)))
         }
+        // As a hub from before it, since a fake hub sends no summary of a workspace's changes to page on from.
+        R::WorkspaceChangedFiles(_) => {
+            Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't page through a workspace's changed files"))
+        }
         R::WorkspaceSetupLog(workspaces::WorkspaceSetupLog { id }) => {
             reply(C::SetupLog(workspaces::SetupLog { text: world.setup_logs.get(&id).cloned().unwrap_or_default() }))
         }

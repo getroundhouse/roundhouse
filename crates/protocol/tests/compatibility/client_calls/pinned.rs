@@ -59,6 +59,7 @@ pinned! {
     "replies_heard.rs" => [SessionReplyHeard(_), SessionRepliesHeard(_), SessionSpeaking(_)],
     "proposals.rs" => [ProposalAnswer(_), ProposalAnotherRound(_), ProposalRevisionsRead(_)],
     "references.rs" => [ReferencesRead(_)],
+    "change_summaries.rs" => [WorkspaceChangedFiles(_)],
     "github_shown.rs" => [GithubSubscribe(_)],
     "subscribe.rs" => [Subscribe(_)],
     "terminals.rs" => [TerminalOpen(_), TerminalWatch(_), TerminalRows(_), TerminalClose(_)],

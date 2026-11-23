@@ -8,7 +8,7 @@ Facts about git that took an experiment to find, or that more than one place in 
 
 ## Diffs
 
-A worker's change summary reads these, in `crates/worker/src/git/changes/listing.rs`. Seen on git 2.39.
+A worker's change summary reads these, and so does each page of the files past those it lists, in `crates/worker/src/git/changes/listing.rs`. Seen on git 2.39.
 
 - **`git diff --raw --numstat -z` prints every file's raw entry, then every file's counts, in the same order.** A rename's raw entry ends with its status and score, such as `R100`, then the old path and the new one. Its counts have nothing after the second tab, then the two paths, each ended by a NUL.
 - **git counts no lines of a file larger than `core.bigFileThreshold`, 512 MiB unless set,** and prints `-` for each count, as it does for a binary file.
