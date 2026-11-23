@@ -30,7 +30,7 @@ fn summary(added: u64, removed: u64) -> WorkerResponse {
 
 /// Every observation the hub holds at the workspace's own level.
 async fn of_its_own_level(hub: &Hub, id: &WorkspaceId) -> Vec<Observation> {
-    hub.workspace_observations(id).await.unwrap().observations
+    hub.observations_at(&protocol::model::Level::Workspace { id: id.clone() }).await.unwrap().0
 }
 
 /// What a stand-in answers when asked to sum up its worktree's changes, as [`answering_first`] has it.

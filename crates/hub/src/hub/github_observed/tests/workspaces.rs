@@ -266,7 +266,7 @@ async fn a_hub_that_starts_again_has_each_as_of_its_read_and_its_first_pass_send
     let again = crate::hub::tests::hub_in_again(dir.path());
     let mut feed = again.subscribe_feed();
     let mut kept = again.records_list().await.unwrap().observations;
-    kept.extend(again.workspace_observations(&"w".into()).await.unwrap().observations);
+    kept.extend(again.observations_at(&protocol::model::Level::Workspace { id: "w".into() }).await.unwrap().0);
     again.observe_github_once().await;
 
     let kinds: Vec<_> = kept.iter().map(Observation::key).collect();

@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use protocol::client::ApiError;
 use protocol::client::github::GithubShown;
-use protocol::client::listed::Listed;
-use protocol::model::ReferenceAsk;
+use protocol::client::listed::{Listed, ReferenceObservations};
+use protocol::model::{Level, ReferenceAsk};
 use tokio::sync::{mpsc, watch};
 
 use super::notices::{forward, send_listed};
@@ -37,13 +37,19 @@ pub(super) async fn feeding(
     }
     // Before the list, so nothing that changes after it is missed.
     let feed = hub.subscribe_feed();
-    let listed = hub.reference_listed(&reference).await?;
+    let first = listed(hub, &reference).await?;
     let hub = hub.clone();
     Ok(Box::pin(async move {
-        if !send_listed(&frames, &sends, subscription_id, Listed::Reference(listed)).await {
+        if !send_listed(&frames, &sends, subscription_id, Listed::Reference(first)).await {
             return;
         }
-        let list = || async { Ok(Listed::Reference(hub.reference_listed(&reference).await?)) };
+        let list = || async { Ok(Listed::Reference(listed(&hub, &reference).await?)) };
         forward(feed, &sends, subscription_id, &frames, list, |_| {}).await;
     }))
+}
+
+/// Every observation of `reference`'s level, as a chip that follows it draws them.
+async fn listed(hub: &Hub, reference: &ReferenceAsk) -> Result<ReferenceObservations, ApiError> {
+    let (observations, rev) = hub.observations_at(&Level::Reference { reference: reference.clone() }).await?;
+    Ok(ReferenceObservations { reference: reference.clone(), observations, rev })
 }
