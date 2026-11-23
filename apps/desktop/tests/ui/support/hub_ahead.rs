@@ -6,7 +6,6 @@
 
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
-use std::time::Duration;
 
 use client_core::Client;
 use process::testing::WholeEnvironment;
@@ -42,13 +41,11 @@ impl Stack {
 }
 
 impl Drop for HubAhead {
-    /// The way the app stops a hub, so it has removed its socket by the time the stack looks.
+    /// The way the app stops a hub, so it has removed its socket by the time the stack looks, and then as the stack
+    /// stops a hub it started. Before the stack goes, so a stand-in the hub calls, which goes with this, is still there
+    /// as it stops.
     fn drop(&mut self) {
-        if let Ok(client) = Client::connect(&self.socket, "test") {
-            let _ = client.hub_shutdown();
-        }
-        waiting::thread::up_to(Duration::from_secs(5), || !matches!(self.hub.try_wait(), Ok(None)));
-        let _ = self.hub.kill();
-        let _ = self.hub.wait();
+        let _ = client_core::stop_hub(&self.socket);
+        super::stopping::stop(&mut self.hub);
     }
 }

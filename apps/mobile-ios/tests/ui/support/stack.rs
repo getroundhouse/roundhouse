@@ -37,8 +37,7 @@ pub(crate) struct Stack {
 
 impl Stack {
     pub(crate) fn new() -> Stack {
-        // Under /tmp because of the socket path limit.
-        let dir = tempfile::Builder::new().prefix("phui-").tempdir_in("/tmp").unwrap();
+        let dir = process::testing::tmp_dir("phui-");
         let root = dir.path().to_path_buf();
         process::testing::repository_with_a_commit(&root.join("repo"));
         let paths = protocol::paths::resolve(|name| match name {

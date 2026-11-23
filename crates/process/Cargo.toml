@@ -6,14 +6,18 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-# What tests of the crates that start processes share. Cargo says in JSON where it built the hub.
-testing = ["dep:serde_json"]
+# What tests of the crates that start processes share. Cargo says in JSON where it built the hub, and `protocol` names
+# the variable that says which process is the test.
+testing = ["dep:protocol", "dep:serde_json", "dep:tempfile"]
 
 [dependencies]
+protocol = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
+# For `testing::tmp_dir`, which only Unix's tests use, since only there is a hub's socket a path with a limit.
+tempfile = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
@@ -25,6 +29,7 @@ windows-sys = { workspace = true, features = [
 
 [dev-dependencies]
 # What the `testing` feature brings in, which the tests have without it.
+protocol.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 waiting.workspace = true

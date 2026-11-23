@@ -40,6 +40,8 @@ impl Running {
             agents: Vec::new(),
             timers: hub::Timers::DEFAULT,
             github: hub::GithubConfig::from_env(|_| Some("http://127.0.0.1:9".into())),
+            // It runs in the test's own process, so it goes with it.
+            stops_with: None,
         };
         let task = std::thread::spawn(move || {
             let runtime = tokio::runtime::Runtime::new().unwrap();

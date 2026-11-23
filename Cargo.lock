@@ -5188,6 +5188,7 @@ version = "0.1.0"
 dependencies = [
  "client-core",
  "libc",
+ "parking_lot",
  "private-files",
  "process",
  "protocol",
@@ -7396,6 +7397,7 @@ name = "process"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "protocol",
  "serde_json",
  "tempfile",
  "waiting",

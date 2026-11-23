@@ -210,6 +210,9 @@ jobs:
       # a run with a failure too, so both are said.
       - if: ${{ !cancelled() && hashFiles('target/nextest/ci/junit.xml') != '' }}
         run: python3 .github/tests-over-limit.py target/nextest/ci/junit.xml
+      # Fails the job for each hub or worker the tests left running, after a run with a failure too.
+      - if: ${{ !cancelled() }}
+        run: .github/hubs-left-running.sh
       - run: cargo test --workspace --doc --locked
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --workspace

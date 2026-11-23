@@ -30,6 +30,7 @@ mod shown;
 mod stand_in;
 mod stand_in_gh;
 mod stand_in_github;
+mod stopping;
 mod terminal;
 mod workspaces;
 
