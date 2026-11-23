@@ -47,7 +47,7 @@ impl Hub {
     }
 
     /// Records that the workspace is archived, on `branch` if its worktree said which it was on, as
-    /// [`Hub::end_move`] does, and forgets the files it changed, as [`Hub::changes_forgotten`] says.
+    /// [`Hub::end_move`] does, and forgets its lines and the files it changed, as [`Hub::changes_forgotten`] says.
     pub(super) async fn record_archived(
         self: &Arc<Self>,
         id: &WorkspaceId,

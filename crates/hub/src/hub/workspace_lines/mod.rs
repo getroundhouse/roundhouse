@@ -7,8 +7,8 @@
 //! and they're as of that read until the next: when a turn ends in the workspace, and when its worker says what its
 //! branches are, which it does as the hub takes it on and as they move. A worker from before the request refuses it,
 //! which leaves them as they were until the hub replaces that worker with one of its own build, whose first word of the
-//! branches reads them. Only a ready workspace's are read. An archived one keeps its lines as last read, as of then,
-//! until it's brought back, and forgets its files, and a removed one's both go with it.
+//! branches reads them. Only a ready workspace's are read. An archived one forgets both, since no client draws them,
+//! and a removed one's go with it.
 
 mod kept;
 mod reading;

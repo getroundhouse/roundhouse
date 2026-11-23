@@ -5,14 +5,14 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ObservationNotice};
-use protocol::model::{Level, Observation, Observed, Rev};
+use protocol::model::{Level, Observation, ObservationKey, Observed, Rev, WorkspaceId};
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
-use super::file::{self, Row};
+use super::file::{self, Row, Write};
 use super::kinds::{
-    Form, Kind, Referenced, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail,
-    WorkspaceRepositoryUnseen,
+    Form, Kind, Referenced, Subject, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
+    WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
 use super::writer::Writer;
 use crate::cache_file::CacheFile;
@@ -215,6 +215,11 @@ trait AnyTable {
     fn listed(&self, level: &Level) -> Vec<Observation>;
     /// Keeps what the cache file kept, each as of when it was read, at `rev`.
     fn load(&mut self, file: &CacheFile, rev: Rev) -> rusqlite::Result<()>;
+    /// Whether it keeps an observation of a workspace that `gone` picks out.
+    fn keeps_of(&self, gone: &dyn Fn(&WorkspaceId) -> bool) -> bool;
+    /// Forgets each observation of a workspace that `gone` picks out, and that anything keeps it current, and queues
+    /// its removal from the file on `writer`. Returns which it forgot.
+    fn forget_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool, writer: &Writer) -> Vec<ObservationKey>;
 }
 
 impl<K: Kind> AnyTable for Table<K> {
@@ -233,6 +238,20 @@ impl<K: Kind> AnyTable for Table<K> {
             self.kept.insert(of, Kept { said, rev });
         }
         Ok(())
+    }
+
+    fn keeps_of(&self, gone: &dyn Fn(&WorkspaceId) -> bool) -> bool {
+        self.kept.keys().any(|of| of.workspace().is_some_and(gone))
+    }
+
+    fn forget_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool, writer: &Writer) -> Vec<ObservationKey> {
+        self.kept_current.retain(|of| !of.workspace().is_some_and(gone));
+        let forgotten: Vec<K::Of> = self.kept.keys().filter(|of| of.workspace().is_some_and(gone)).cloned().collect();
+        for of in &forgotten {
+            self.kept.remove(of);
+            writer.write::<K>(of.clone(), Write::Gone);
+        }
+        forgotten.iter().map(K::key).collect()
     }
 }
 
@@ -262,6 +281,16 @@ impl Tables {
         self.each().iter().flat_map(|table| table.listed(level)).collect()
     }
 
+    /// Whether any kind keeps an observation of a workspace that `gone` picks out.
+    pub(super) fn keep_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool) -> bool {
+        self.each().iter().any(|table| table.keeps_of(gone))
+    }
+
+    /// Forgets every observation of a workspace that `gone` picks out, of every kind, as [`AnyTable::forget_of`] does.
+    pub(super) fn forget_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool, writer: &Writer) -> Vec<ObservationKey> {
+        self.each().into_iter().flat_map(|table| table.forget_of(gone, writer)).collect()
+    }
+
     /// The form of each kind's table in the cache file.
     pub(super) fn forms() -> Vec<Form> {
         Tables::default().each().iter().map(|table| table.form()).collect()
@@ -272,7 +301,9 @@ impl Observations {
     /// The store kept in `file`, whose tables [`prepare`](super::prepare) made, with each observation it kept from
     /// before as of when it was read, under one revision newer than any a client holds, since a client of the hub
     /// before can hold any revision that hub gave. Where there's no revision to give, as when the database fails, it
-    /// starts with none of them, as the log says, and each is not known until it's read again.
+    /// starts with none of them, as the log says, and each is not known until it's read again. Those of a workspace
+    /// the database doesn't have are forgotten, as one a hub stopped before forgetting, or a file refused to, leaves,
+    /// so no client is listed them.
     pub(crate) fn open(file: Arc<CacheFile>, store: &Store) -> Self {
         let mut tables = Tables::default();
         match store.next_rev() {
@@ -287,7 +318,16 @@ impl Observations {
                 warn!("leaving the observations in the cache's file unread, with no revision for them: {error}");
             }
         }
-        Self { changing: AsyncMutex::new(()), tables: Mutex::new(tables), writer: Writer::new(file) }
+        let writer = Writer::new(file);
+        match store.list_workspaces(true) {
+            Ok(workspaces) => {
+                let have: HashSet<WorkspaceId> = workspaces.into_iter().map(|workspace| workspace.id).collect();
+                tables.forget_of(&|id| !have.contains(id), &writer);
+            }
+            // The task that works out GitHub's observations forgets them as it starts.
+            Err(error) => warn!("keeping observations of workspaces the database may not have: {error}"),
+        }
+        Self { changing: AsyncMutex::new(()), tables: Mutex::new(tables), writer }
     }
 
     /// Lists the records along with `list`, and every observation the hub sends at its own level, under the lock a

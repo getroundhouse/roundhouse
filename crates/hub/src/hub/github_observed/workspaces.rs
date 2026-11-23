@@ -68,13 +68,6 @@ impl Hub {
         };
         logged(kept);
     }
-
-    /// Forgets what GitHub says of workspace `id`'s pull request, since the workspace is gone.
-    pub(crate) async fn github_observations_gone(&self, id: &WorkspaceId) {
-        logged(self.observation_gone::<WorkspacePullRequest>(id.clone()).await);
-        logged(self.observation_gone::<WorkspacePullRequestDetail>(id.clone()).await);
-        logged(self.observation_gone::<WorkspaceRepositoryUnseen>(id.clone()).await);
-    }
 }
 
 impl Workspaces {
@@ -132,7 +125,7 @@ impl Workspaces {
         self.linked.remove(id);
         self.failed.remove(id);
         // Again, since a read kept as it went may have worked it out after it was forgotten.
-        hub.github_observations_gone(id).await;
+        hub.workspace_observations_gone(id).await;
     }
 
     /// Takes in that a read of `id`'s pull request ended, failed or not.
@@ -151,8 +144,10 @@ impl Workspaces {
         hub.work_out_unseen(id, self.current(id)).await;
     }
 
-    /// Works out every workspace again, as as the hub starts, or after missing some of what it's told.
+    /// Works out every workspace again, as as the hub starts, or after missing some of what it's told, once every
+    /// observation of a workspace that's gone is forgotten, as one worked out after a removal the task missed is.
     pub(super) async fn all_again(&mut self, hub: &Hub) {
+        hub.observations_of_no_workspace_gone().await;
         let Ok(workspaces) = hub.workspace_list(true).await else { return };
         self.linked.retain(|id, _| workspaces.iter().any(|workspace| workspace.id == *id));
         for workspace in workspaces {
