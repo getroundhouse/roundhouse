@@ -8,7 +8,7 @@ use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, LineCounts, Obse
 use super::super::workspace_level;
 use super::given::{Given, ok, start};
 use crate::hub::{WorkspaceChanges, WorkspaceLines};
-use crate::server::tests::Connection;
+use crate::server::tests::{Connection, WAIT};
 
 /// The subscriptions' IDs: one that follows the hub, one that follows the session `s`, and one that follows the
 /// workspace `w`.
@@ -71,8 +71,9 @@ async fn a_workspace_s_lines_are_listed_and_sent_to_whoever_follows_the_hub_and_
 
 /// A client that follows a workspace is listed the files it changes, as the store keeps them, before the reply to its
 /// `Subscribe`, and nothing of another workspace or of the hub's level, and is then sent each change to them and their
-/// removal. One that follows only the hub is sent none of it, and neither is one that follows through `FeedSubscribe`,
-/// which no client that reads a workspace's level uses.
+/// removal, current, since following it has the worker that serves it watch its worktree. One that follows only the
+/// hub is sent none of it, and neither is one that follows through `FeedSubscribe`, which no client that reads a
+/// workspace's level uses.
 #[tokio::test]
 async fn a_workspace_s_files_are_listed_before_the_reply_and_sent_only_to_whoever_follows_it() {
     let dir = tempfile::tempdir().unwrap();
@@ -91,6 +92,12 @@ async fn a_workspace_s_files_are_listed_before_the_reply_and_sent_only_to_whoeve
 
     let subscribed = ok(&mut one, 1, follows).await;
     let listed_first = one.sent.iter().find_map(workspace_listed).cloned();
+    // Told on a task of its own once `w` is followed, so a read before it would be as of its time, and one after it
+    // current.
+    waiting::task::until(WAIT, "w's worker to be told to watch", || {
+        hub.observation_is_kept_current::<WorkspaceChanges>(&"w".into())
+    })
+    .await;
 
     hub.observation_read::<WorkspaceChanges>("v".into(), changes(5, 0), 2_000).await.unwrap();
     hub.observation_read::<WorkspaceChanges>("w".into(), changes(4, 0), 2_000).await.unwrap();
@@ -117,7 +124,7 @@ async fn a_workspace_s_files_are_listed_before_the_reply_and_sent_only_to_whoeve
     else {
         panic!("{told:?}")
     };
-    assert_eq!(*changed, of_w(as_of(changes(4, 0), 2_000), changed.rev()));
+    assert_eq!(*changed, of_w(Observed::Current { value: changes(4, 0) }, changed.rev()));
     assert_eq!(*observation, ObservationKey::WorkspaceChanges { workspace_id: "w".into() });
     let records = one.sent.iter().find_map(listed_hub).unwrap();
     assert!(matches!(records.observations.as_slice(), [Observation::WorkspaceLines { .. }]), "{records:?}");
