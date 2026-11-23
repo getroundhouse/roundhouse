@@ -46,7 +46,7 @@ fn row(drawing: &Drawing<'_>, agent: &AgentDescription, accounts: &[&Account], c
         _ if automatic => "Automatic".to_string(),
         (_, None, _) => "Machine login".to_string(),
         (_, Some(_), None) => "Loading account…".to_string(),
-        (_, _, Some(account)) => crate::names::called(account),
+        (_, _, Some(account)) => crate::names::called(drawing.records, account),
     };
     // Automatic leaves out an account whose login can't be used, so that one blocks nothing.
     let blocked = !automatic && account.is_some_and(|account| !account.works_for(agent.kind, drawing.now_ms));
@@ -84,8 +84,8 @@ fn picker(
         .iter()
         .filter(|account| account.works_for(agent.kind, drawing.now_ms))
         .map(|account| {
-            let week = crate::limits::week_left(account, drawing.now_ms);
-            (account.id.clone(), crate::names::called(account), week)
+            let week = crate::limits::week_left(drawing.records, account, drawing.now_ms);
+            (account.id.clone(), crate::names::called(drawing.records, account), week)
         })
         .collect();
     let kept = drawing.kept.read(cx);

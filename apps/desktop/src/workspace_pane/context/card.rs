@@ -72,7 +72,7 @@ pub(super) fn usage_card(usage: &Usage, called: SharedString, hold: &HoldOpen, c
         let reserve = crate::limits::reserve_for(&usage.account, limit);
         crate::limits::in_a_card(at, name, limit, reserve, cx)
     });
-    let plan = usage.account.plan.clone().map(SharedString::from);
+    let plan = usage.records.account_identity(&usage.account).plan.map(SharedString::from);
     let limits = v_flex().gap(look::Space::Medium).child(heading(called, plan, cx)).children(limits);
     let whose = whose(usage, Plan::BesideHeading, hold, cx);
     under_a_rule(surface(Region::UsageCard).child(limits), whose).into_any_element()
@@ -147,12 +147,11 @@ enum Plan {
 /// another account, if there's one to move it to, with the card's `hold`. `None` when nothing says any of them.
 fn whose(usage: &Usage, plan: Plan, hold: &HoldOpen, cx: &App) -> Option<AnyElement> {
     let colors = look::colors(cx);
-    let account = &usage.account;
-    let who = crate::names::account(account);
-    let plan = account.plan.clone().filter(|_| plan == Plan::WithWhose);
+    let who = crate::names::account(&usage.records, &usage.account);
+    let identity = usage.records.account_identity(&usage.account);
+    let plan = identity.plan.filter(|_| plan == Plan::WithWhose);
     let chosen = (usage.chosen == Chosen::Automatically).then(|| "Chosen automatically".to_string());
-    let how: Vec<String> =
-        [plan, account.login.clone(), account.model_provider.clone(), chosen].into_iter().flatten().collect();
+    let how: Vec<String> = [plan, identity.login, identity.model_provider, chosen].into_iter().flatten().collect();
     if who.is_none() && how.is_empty() {
         return None;
     }

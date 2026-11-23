@@ -7,14 +7,14 @@ use protocol::model::{Account, HeldLogin, LimitWindow};
 
 use super::super::card::card;
 use super::super::words;
-use super::made_up::{DAY_MS, MINUTE_MS, NOW_MS, added, limit};
+use super::made_up::{DAY_MS, MINUTE_MS, NOW_MS, added, holding, limit};
 
 /// What the card of `account` says at [`NOW_MS`], with days in UTC, or `None` for no card.
 fn said(cx: &mut TestAppContext, account: &Account) -> Option<String> {
     cx.update(|cx| {
         look::hold_still(NOW_MS, cx);
         let standing = account.login_agent.map(|_| words::standing(account.held_login.as_ref(), NOW_MS, cx));
-        card(account, standing.as_ref(), NOW_MS, cx).map(|card| card.said)
+        card(&holding([account]), account, standing.as_ref(), NOW_MS, cx).map(|card| card.said)
     })
 }
 

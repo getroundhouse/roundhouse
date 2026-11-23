@@ -2,6 +2,7 @@
 //! whichever card says that. The hub decides whether moving needs the person's say, since only it knows whether the
 //! chat's agent is at work, so this asks them only once it's refused.
 
+use client_core::records::Snapshot;
 use gpui_kit::{Anchor, AnyElement, Context, IntoElement, SharedString, WeakEntity, Window};
 use look::HoldOpen;
 use protocol::model::{Account, AccountId, AgentKind, Session, SessionId};
@@ -42,19 +43,14 @@ struct Choice {
 /// What the menu offers a chat of `agent`'s kind that's `on` an account, of `accounts` at `now_ms`, in order of what
 /// they're called: each login added for its kind that works, and the one it's on, whatever its login, so the menu says
 /// which it's on. `None` when there's nowhere else to move it: no login that works but the one it's on.
-fn offered<'a>(
-    agent: AgentKind,
-    on: Option<&AccountId>,
-    accounts: impl Iterator<Item = &'a Account>,
-    now_ms: i64,
-) -> Option<Vec<Choice>> {
-    let mut choices: Vec<Choice> = accounts
+fn offered(agent: AgentKind, on: Option<&AccountId>, records: &Snapshot, now_ms: i64) -> Option<Vec<Choice>> {
+    let mut choices: Vec<Choice> = (records.accounts())
         .filter(|account| account.login_agent == Some(agent))
         .map(|account| Choice {
             id: account.id.clone(),
-            called: crate::names::called(account).into(),
+            called: crate::names::called(records, account).into(),
             works: account.works_for(agent, now_ms),
-            week: crate::limits::week_left(account, now_ms),
+            week: crate::limits::week_left(records, account, now_ms),
         })
         .filter(|choice| choice.works || on == Some(&choice.id))
         .collect();
@@ -73,7 +69,7 @@ impl WorkspacePane {
         let all = self.shown.all();
         all.hub_settings()?.account_defaults.as_ref()?;
         let on = session.hub_account().cloned();
-        let accounts = offered(session.agent, on.as_ref(), all.accounts(), look::now_ms(cx))?;
+        let accounts = offered(session.agent, on.as_ref(), all, look::now_ms(cx))?;
         let off = self.hub == Hub::Away;
         Some(Moves { session: session.id.clone(), accounts, on, off, pane: cx.weak_entity() })
     }
@@ -108,7 +104,7 @@ impl WorkspacePane {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let called = crate::names::called(account).into();
+        let called = crate::names::called(self.shown.all(), account).into();
         let to = Choice { id: account.id.clone(), called, works: true, week: None };
         self.move_chat(session, to, false, window, cx);
     }
@@ -178,7 +174,8 @@ fn menu_of(moves: &Moves, menu: look::Menu) -> look::Menu {
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::HeldLogin;
+    use client_core::records::HubRecords;
+    use protocol::model::{HeldLogin, Records};
 
     use super::*;
 
@@ -202,7 +199,9 @@ mod tests {
     /// What's offered, as (what it's called, whether it works), of `accounts` for a Claude chat on `on`.
     fn offered_to(on: Option<&str>, accounts: &[Account]) -> Option<Vec<(String, bool)>> {
         let on = on.map(AccountId::from);
-        let choices = offered(AgentKind::Claude, on.as_ref(), accounts.iter(), NOW)?;
+        let mut held = HubRecords::default();
+        held.apply_list(Records { accounts: accounts.to_vec(), ..Records::default() });
+        let choices = offered(AgentKind::Claude, on.as_ref(), &held.snapshot(), NOW)?;
         Some(choices.into_iter().map(|choice| (choice.called.to_string(), choice.works)).collect())
     }
 

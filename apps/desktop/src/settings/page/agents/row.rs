@@ -3,6 +3,7 @@
 //! account whose login the person added has, and its card, for what its line has no room for. The panel for renewing
 //! its login, or connecting it again, opens under it.
 
+use client_core::records::Snapshot;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::h_flex;
 use gpui_kit::{
@@ -28,9 +29,9 @@ const BAR: Pixels = px(4.);
 pub(super) fn row(drawing: &Drawing<'_>, account: &Account, cx: &App) -> AnyElement {
     let colors = look::colors(cx);
     let standing = account.login_agent.map(|_| words::standing(account.held_login.as_ref(), drawing.now_ms, cx));
-    let called = crate::names::called(account);
+    let called = crate::names::called(drawing.records, account);
     let id = SharedString::from(format!("account-{}", account.id));
-    let detail = match words::says(account, standing.as_ref(), drawing.now_ms) {
+    let detail = match words::says(drawing.records, account, standing.as_ref(), drawing.now_ms) {
         Says::Standing(said, tone) => Some(Detail::Said(said, tone)),
         Says::Limits(limits) => Some(Detail::Drawn(limits_left(&id, &limits, cx))),
         Says::NoLimitsYet => Some(Detail::Said(words::NO_LIMITS_YET.to_string(), Tone::Faint)),
@@ -49,10 +50,10 @@ pub(super) fn row(drawing: &Drawing<'_>, account: &Account, cx: &App) -> AnyElem
         picture: Picture::Mark(Lucide::Bot),
         dim: standing == Some(Standing::Disconnected),
         default: drawing.is_default(account),
-        how: words::how(account, drawing.agents).map(SharedString::from),
+        how: words::how(drawing.records, account, drawing.agents).map(SharedString::from),
         detail,
         menu: account.login_agent.map(|agent| account_menu::menu(drawing, account, agent, &called, cx)),
-        card: card::card(account, standing.as_ref(), drawing.now_ms, cx),
+        card: card::card(drawing.records, account, standing.as_ref(), drawing.now_ms, cx),
         name: called,
         under: not_disconnected.into_iter().chain(panel).chain(reserving::panel(drawing, account, cx)).collect(),
     };
@@ -93,6 +94,7 @@ fn limits_left(id: &SharedString, limits: &[(SharedString, u8, Option<Reserve>)]
 /// `next_day_at_ms`, for a row that says how many days its login has left, or a card that says which day the account
 /// was last used, or the day a limit starts again.
 pub(super) fn changes_at_ms<'a>(
+    records: &Snapshot,
     accounts: impl Iterator<Item = &'a Account>,
     now_ms: i64,
     next_day_at_ms: Option<i64>,
@@ -101,7 +103,8 @@ pub(super) fn changes_at_ms<'a>(
     let mut says_a_day = false;
     for account in accounts {
         let held = account.held_login.filter(|held| held.ends_at_ms.is_some_and(|ends_at_ms| ends_at_ms > now_ms));
-        let resets = account.limits.iter().filter_map(|limit| limit.resets_at_ms).filter(|at_ms| *at_ms > now_ms);
+        let heard = records.account_limits(account).0.iter();
+        let resets = heard.filter_map(|limit| limit.resets_at_ms).filter(|at_ms| *at_ms > now_ms);
         says_a_day |= account.used_at_ms.is_some() || held.is_some() || resets.clone().next().is_some();
         let ends = held.iter().flat_map(|held| [words::warns_from_ms(held), held.ends_at_ms]).flatten();
         at_ms.extend(ends.chain(resets).filter(|at_ms| *at_ms > now_ms));

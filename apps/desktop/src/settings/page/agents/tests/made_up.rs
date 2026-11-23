@@ -1,8 +1,11 @@
 //! What the page's unit tests are drawn from: a moment held still, logins, accounts and how a hub describes Claude,
 //! each plainly made up.
 
+use client_core::records::{HubRecords, Snapshot};
 use protocol::fixtures::account;
-use protocol::model::{Account, AgentDescription, AgentKind, HeldLogin, LimitWindow, LoginDescription, UsageLimit};
+use protocol::model::{
+    Account, AgentDescription, AgentKind, HeldLogin, LimitWindow, LoginDescription, Records, UsageLimit,
+};
 
 /// Sunday 1 November 2026, at 3 PM in UTC, which held still is the local time zone.
 pub(super) const NOW_MS: i64 = 1_793_545_200_000;
@@ -17,6 +20,13 @@ pub(super) fn added(id: &str, name: &str) -> Account {
         held_login: Some(HeldLogin { connected_at_ms: 0, ends_at_ms: None }),
         ..account(id)
     }
+}
+
+/// A client's copy of a hub's records that holds `accounts`, which the page reads them from.
+pub(super) fn holding<'a>(accounts: impl IntoIterator<Item = &'a Account>) -> Snapshot {
+    let mut held = HubRecords::default();
+    held.apply_list(Records { accounts: accounts.into_iter().cloned().collect(), ..Records::default() });
+    held.snapshot()
 }
 
 /// A limit of `window` with `used_percent` of it used, which starts again at `resets_at_ms`.

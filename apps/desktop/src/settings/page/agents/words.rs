@@ -3,6 +3,7 @@
 //! disconnecting asks, and what the hub's refusals mean for a login, with why it refused otherwise as client-core's
 //! `refusals` says it.
 
+use client_core::records::Snapshot;
 use client_core::{Agents, ClientError, refusals};
 use gpui_kit::{App, SharedString};
 use protocol::client::ErrorCode;
@@ -101,9 +102,10 @@ pub(super) fn standing(held: Option<&HeldLogin>, now_ms: i64, cx: &App) -> Stand
 
 /// How an account's login was made, as its row says: the kind of agent it's for, for one the person added, then its
 /// plan and how it's logged in, where its record says, such as `Max · Claude account` for one found where agents ran.
-pub(super) fn how(account: &Account, agents: &Agents) -> Option<String> {
+pub(super) fn how(records: &Snapshot, account: &Account, agents: &Agents) -> Option<String> {
     let kind = account.login_agent.and_then(|kind| agents.of(kind)).map(|agent| agent.name.clone());
-    let parts: Vec<String> = [kind, account.plan.clone(), account.login.clone()].into_iter().flatten().collect();
+    let identity = records.account_identity(account);
+    let parts: Vec<String> = [kind, identity.plan, identity.login].into_iter().flatten().collect();
     (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
@@ -125,17 +127,18 @@ pub(super) enum Says {
 /// What else the row of `account`, whose login stands as `standing` says, if the person added it, says at `now_ms`: how
 /// its login stands, once that needs saying, since an agent can't run under it once it has ended or been disconnected,
 /// and otherwise what's left of its limits, as the chat's card of them would show them.
-pub(super) fn says(account: &Account, standing: Option<&Standing>, now_ms: i64) -> Says {
+pub(super) fn says(records: &Snapshot, account: &Account, standing: Option<&Standing>, now_ms: i64) -> Says {
     match standing {
         Some(Standing::EndingSoon(said)) => return Says::Standing(said.clone(), Tone::Warning),
         Some(Standing::Ended(said)) => return Says::Standing(said.clone(), Tone::Problem),
         Some(Standing::Disconnected) => return Says::Standing("Disconnected".to_string(), Tone::Plain),
         Some(Standing::Held(_)) | None => {}
     }
-    if account.limits.is_empty() {
+    let heard = records.account_limits(account).0;
+    if heard.is_empty() {
         return Says::NoLimitsYet;
     }
-    let shown = crate::limits::shown_by_window(&account.limits, now_ms);
+    let shown = crate::limits::shown_by_window(heard, now_ms);
     if shown.is_empty() {
         return Says::Nothing;
     }

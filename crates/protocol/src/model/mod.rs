@@ -13,6 +13,7 @@ mod draft;
 mod files;
 mod git;
 mod github_account;
+mod heard_limits;
 mod hub_settings;
 mod hub_update;
 mod interaction;
@@ -66,6 +67,7 @@ pub use github_account::{
     GithubSignInStatus, GithubToken, GithubUser, GithubUserId, HeldGithubLogin, InstalledApp, MachineLogins, Reach,
     SentCredential, SshLogin, UnusableLogin,
 };
+pub use heard_limits::HeardLimits;
 pub use hub_settings::{AccountDefault, GithubSettings, HubSettings, HubSettingsChange};
 pub use hub_update::{HubUpdate, UpdateAttempt};
 pub use interaction::{Interaction, InteractionMode};

@@ -17,9 +17,9 @@ pub(super) fn menu(drawing: &Drawing<'_>, account: &Account, agent: AgentKind, c
     let id = SharedString::from(format!("account-more-{}", account.id));
     account_row::menu(id, called, off, move |menu: look::Menu, _, _| {
         let open = {
-            let (kept, account) = (kept.clone(), account.clone());
+            let (kept, account, name) = (kept.clone(), account.clone(), name.clone());
             move |window: &mut Window, cx: &mut App| {
-                kept.update(cx, |kept, cx| kept.open_for(agent, &account, window, cx));
+                kept.update(cx, |kept, cx| kept.open_for(agent, &account, name.clone(), window, cx));
             }
         };
         let connect = if account.held_login.is_some() { "Renew" } else { "Connect again" };

@@ -118,7 +118,7 @@ fn name_of(provider: &ProviderName) -> SharedString {
 fn hub_reads_as(records: &Snapshot) -> Option<String> {
     let default = records.hub_settings()?.github.as_ref()?.account.as_ref()?;
     let account = records.github_accounts().iter().find(|account| &account.id == default)?;
-    Some(account.user.name.to_string())
+    Some(records.github_username(account).to_string())
 }
 
 /// What a provider's section shows.

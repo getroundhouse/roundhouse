@@ -32,8 +32,9 @@ pub(super) struct Renewing {
 }
 
 impl Renewing {
-    pub(super) fn of(account: &GithubAccount) -> Renewing {
-        Renewing { id: account.id.clone(), name: account.user.name.to_string(), held: account.held_login.is_some() }
+    /// Renewing `account`, whose user is called `name`.
+    pub(super) fn of(account: &GithubAccount, name: &str) -> Renewing {
+        Renewing { id: account.id.clone(), name: name.to_string(), held: account.held_login.is_some() }
     }
 }
 

@@ -3,6 +3,7 @@
 //! of its limits and when each starts again, which the row has room only for the percentages of, and none for while it
 //! warns of the login's end.
 
+use client_core::records::Snapshot;
 use gpui_kit::base::ObservedElement;
 use gpui_kit::component::v_flex;
 use gpui_kit::{
@@ -18,17 +19,24 @@ use super::words::{self, Standing};
 /// What `account`'s card says at `now_ms`, with how its login stands as `standing`, if the person added it. `None`
 /// when it would say nothing: for an account nobody has used, whose login has no end the hub knows of, and every one
 /// of whose limits heard has started again.
-pub(super) fn card(account: &Account, standing: Option<&Standing>, now_ms: i64, cx: &App) -> Option<Card> {
+pub(super) fn card(
+    records: &Snapshot,
+    account: &Account,
+    standing: Option<&Standing>,
+    now_ms: i64,
+    cx: &App,
+) -> Option<Card> {
     let ends = standing.and_then(words::ends).map(str::to_string);
     let lines: Vec<String> = [words::last_used(account, now_ms, cx), ends].into_iter().flatten().collect();
-    let limits: Vec<Limit> = crate::limits::shown(&account.limits, now_ms)
+    let heard = records.account_limits(account).0;
+    let limits: Vec<Limit> = crate::limits::shown(heard, now_ms)
         .into_iter()
         .map(|(name, limit)| {
             let reserve = crate::limits::reserve_for(account, &limit);
             (name, limit, reserve)
         })
         .collect();
-    let none_heard = account.limits.is_empty();
+    let none_heard = heard.is_empty();
     if lines.is_empty() && limits.is_empty() && !none_heard {
         return None;
     }

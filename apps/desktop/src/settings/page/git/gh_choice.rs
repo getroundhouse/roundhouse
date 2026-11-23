@@ -2,8 +2,9 @@
 //! machine is logged in: using that login, whose token the hub reads from `gh` and keeps no copy of. The hub is asked
 //! who `gh` is each time the panel opens, since `gh` can be logged in or out at any time.
 
+use client_core::records::Snapshot;
 use gpui_kit::{Context, Task, Window};
-use protocol::model::{GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, GithubUsername};
+use protocol::model::{GhLogin, GhLoginWorks, GithubLoginKind, GithubUsername};
 
 use super::kept::{Kept, Shows};
 use super::words;
@@ -23,13 +24,13 @@ pub(super) struct ChoosingPanel {
 }
 
 impl ChoosingPanel {
-    /// Who to offer `gh`'s login as, by its username: only one GitHub takes, and that none of `accounts` holds as `gh`'s
-    /// already.
-    pub(super) fn offered<'a>(&'a self, accounts: &[GithubAccount]) -> Option<&'a GithubUsername> {
+    /// Who to offer `gh`'s login as, by its username: only one GitHub takes, and that none of the GitHub accounts of
+    /// `records` holds as `gh`'s already.
+    pub(super) fn offered<'a>(&'a self, records: &Snapshot) -> Option<&'a GithubUsername> {
         let Some(GhLogin::LoggedIn { username, works }) = &self.gh else { return None };
-        let held = accounts.iter().any(|account| {
+        let held = records.github_accounts().iter().any(|account| {
             account.held_login.is_some_and(|held| held.how == GithubLoginKind::Gh)
-                && account.user.name.as_str().eq_ignore_ascii_case(username.as_str())
+                && records.github_username(account).as_str().eq_ignore_ascii_case(username.as_str())
         });
         (*works != GhLoginWorks::Refused && !held).then_some(username)
     }

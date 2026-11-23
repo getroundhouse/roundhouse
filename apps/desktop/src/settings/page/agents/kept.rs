@@ -101,14 +101,11 @@ impl Kept {
         &mut self,
         agent: AgentKind,
         account: &Account,
+        called: String,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let to = To::Account {
-            id: account.id.clone(),
-            name: crate::names::called(account),
-            held: account.held_login.is_some(),
-        };
+        let to = To::Account { id: account.id.clone(), name: called, held: account.held_login.is_some() };
         self.open(agent, to, window, cx);
     }
 

@@ -9,19 +9,21 @@ use protocol::model::{Account, AgentDescription, AgentKind, HeldLogin};
 
 use super::super::older_hub;
 use super::super::words::{self, Refused, Standing};
-use super::made_up::{DAY_MS, MINUTE_MS, NOW_MS, added, claude, setup_token};
+use super::made_up::{DAY_MS, MINUTE_MS, NOW_MS, added, claude, holding, setup_token};
+
+/// What `account` is called, as a client that holds it reads it.
+fn called(account: &Account) -> String {
+    crate::names::called(&holding([account]), account)
+}
 
 #[test]
 fn an_added_account_is_called_by_its_name_and_a_found_one_by_its_email() {
     let both = |account: Account| Account { email: Some("ada@example.com".to_string()), ..account };
 
-    assert_eq!(crate::names::called(&both(added("a", "Work"))), "Work");
-    assert_eq!(
-        crate::names::called(&both(Account { name: Some("Work".to_string()), ..account("a") })),
-        "ada@example.com"
-    );
-    assert_eq!(crate::names::called(&Account { login: Some("API key".to_string()), ..account("a") }), "API key");
-    assert_eq!(crate::names::called(&account("claude-1")), "claude-1", "with nothing else to go by");
+    assert_eq!(called(&both(added("a", "Work"))), "Work");
+    assert_eq!(called(&both(Account { name: Some("Work".to_string()), ..account("a") })), "ada@example.com");
+    assert_eq!(called(&Account { login: Some("API key".to_string()), ..account("a") }), "API key");
+    assert_eq!(called(&account("claude-1")), "claude-1", "with nothing else to go by");
 }
 
 #[test]
