@@ -39,7 +39,7 @@ pinned! {
         WorkspaceDiff(_), WorkspaceSetupLog(_), WorkspaceRerunSetup(_), WorkspacePullRequest(_),
         WorkspaceCommentDraft(_), CommentAdd(_), CommentList(_), CommentEdit(_), CommentDelete(_), WorkspaceFiles(_),
         WorkspaceFolderRead(_), WorkspaceFileRead(_), WorkspaceFileReadAt(_), WorkspaceFileOpenAt(_),
-        WorkspaceFilePages(_),
+        WorkspaceFilePages(_), WorkspaceFileReadRange(_),
     ],
     "client_calls/session_requests.rs" => [
         SessionCreate(_), SessionEnsure(_), SessionList(_), SessionGet(_), SessionConfigure(_), SessionClose(_),
@@ -49,7 +49,7 @@ pinned! {
         SessionFind(_), SessionReadPlaces(_), SessionSubscribe(_), SessionSubscribePlaces(_), SessionUnsubscribe(_),
         FeedSubscribe(_), SessionPrompt(_), SessionQueue(_), SessionChangeQueued(_), SessionUnqueue(_),
         SessionSendQueued(_), SessionDecide(_), SessionCancel(_), SessionCompact(_), AttachmentAdd(_),
-        AttachmentRead(_), AttachmentRemove(_), SessionDraft(_), SessionDecisionDraft(_), NewWorkspaceDraftKeep(_),
+        AttachmentRead(_), AttachmentReadRange(_), AttachmentRemove(_), SessionDraft(_), SessionDecisionDraft(_), NewWorkspaceDraftKeep(_),
         NewWorkspaceDraftFileAdd(_), NewWorkspaceDraftFileRead(_), NewWorkspaceDraftFileRemove(_),
         NewWorkspaceCreate(_),
     ],

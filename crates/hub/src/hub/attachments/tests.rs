@@ -1,12 +1,12 @@
 //! What the hub keeps of a file added to a chat, what it refuses, and what a prompt that carries one gives the agent,
 //! on a hub whose workspaces have stand-ins for their workers, which put each file a prompt carries in the worktree.
 
-use protocol::attachment::{Attachment, AttachmentBytes, AttachmentFile, MediaType};
+use protocol::attachment::{Attachment, AttachmentBytes, AttachmentFile, MediaType, NewAttachment};
 use protocol::capability::Control;
 use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, AttachmentId, Seq, SessionId};
+use protocol::model::{AgentKind, AttachmentId, ByteRange, Seq, SessionId};
 use protocol::prompt::Prompt;
 use protocol::worker::WorkerRequest;
 
@@ -172,4 +172,34 @@ async fn a_prompt_can_be_only_files_and_can_only_carry_what_was_added_to_its_own
         Some(prompt.files)
     });
     assert_eq!(recorded.collect::<Vec<_>>(), [vec![shot]], "only the prompt of only files");
+}
+
+/// What the agent's text points to is kept if the transcript shows it, an image whole, and a video it plays a part at a
+/// time, and anything else a worker sends is left out. A video a person added is read whole, as a draft's files are.
+#[tokio::test]
+async fn the_hub_keeps_what_the_transcript_shows_of_the_agent_s() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let (webm, mp4) = (protocol::fixtures::webm(1000), b"\0\0\0\x18ftypisom\0\0\x02\0".to_vec());
+    let sent = |id: &str, media_type, data: &[u8]| NewAttachment {
+        attachment: Attachment {
+            id: id.into(),
+            name: id.into(),
+            media_type,
+            size_bytes: data.len().try_into().unwrap(),
+        },
+        data: AttachmentBytes::new(data.to_vec()),
+    };
+
+    let kept =
+        [sent("a1", MediaType::Png, &png(64)), sent("a2", MediaType::Webm, &webm), sent("a3", MediaType::Mp4, &mp4)];
+    hub.keep_from_agent(&s(), kept.to_vec()).await;
+    add(&hub, &s(), "a4", "mine.webm", MediaType::Webm, &webm).await.unwrap();
+
+    let part = hub.file_read_range(FileFor::Session(s()), "a2".into(), ByteRange::new(4, 8).unwrap()).await.unwrap();
+    assert_eq!(read(&hub, &s(), &"a1".into()).await.unwrap(), png(64));
+    assert_eq!((part.data.as_slice(), part.file_bytes), (&webm[4..12], 1000));
+    assert_eq!(read(&hub, &s(), &"a2".into()).await, Err(ErrorCode::InvalidRequest), "not whole");
+    assert_eq!(read(&hub, &s(), &"a4".into()).await.unwrap(), webm, "a person's");
+    assert_eq!(read(&hub, &s(), &"a3".into()).await, Err(ErrorCode::NotFound), "a video the app doesn't play");
 }

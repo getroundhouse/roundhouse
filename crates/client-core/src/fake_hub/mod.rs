@@ -13,6 +13,7 @@ mod github;
 mod listing;
 mod logs;
 mod model_lists;
+mod parts;
 mod serve;
 mod stand_in;
 mod terminals;

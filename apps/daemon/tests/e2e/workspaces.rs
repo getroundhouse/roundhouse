@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 
 use client_core::{ClientError, new_request_id};
+use protocol::attachment::MediaType;
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::EventBody;
 use protocol::model::{
@@ -124,8 +125,8 @@ fn status_and_diff_come_from_the_worker() {
     assert!(diff.patch.contains("+new"), "{}", diff.patch);
 }
 
-/// The worker lists and reads them, as they are and as the diff's base has them, whole or a page at a time, and its
-/// own tests cover what it leaves out and refuses.
+/// The worker lists and reads them, as they are and as the diff's base has them, whole or a page at a time, or a video
+/// a part at a time, and its own tests cover what it leaves out and refuses.
 #[test]
 fn a_client_browses_the_worktree_s_files_through_the_hub() {
     let stack = Stack::start();
@@ -136,6 +137,8 @@ fn a_client_browses_the_worktree_s_files_through_the_hub() {
     client.session_prompt(&session.id, script, None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     let base = client.workspace_diff(&workspace.id).unwrap().base_commit.unwrap();
+    let webm = protocol::fixtures::webm(2000);
+    std::fs::write(PathBuf::from(workspace.path.clone().unwrap()).join("board.webm"), &webm).unwrap();
 
     let files = client.workspace_files(&workspace.id).unwrap();
     let folder = client.workspace_folder_read(&workspace.id, "build/out").unwrap();
@@ -145,6 +148,8 @@ fn a_client_browses_the_worktree_s_files_through_the_hub() {
         panic!("a.txt isn't text");
     };
     let pages = client.workspace_file_pages(&workspace.id, &base, "a.txt", opened.page_lines, &[0]).unwrap();
+    let video = client.workspace_file_read(&workspace.id, "board.webm").unwrap();
+    let part = client.workspace_file_read_range(&workspace.id, "board.webm", 4, 8).unwrap();
 
     assert!(files.paths.iter().any(|path| path == "a.txt"), "a tracked file: {:?}", files.paths);
     assert!(files.paths.iter().any(|path| path == "src/main.rs"), "a new one: {:?}", files.paths);
@@ -155,6 +160,8 @@ fn a_client_browses_the_worktree_s_files_through_the_hub() {
     let one = vec![FilePage { index: 0, lines: vec![PageLine { text: "one".to_string(), cut: None }] }];
     assert_eq!((opened.lines, &opened.pages), (1, &one), "opened to be read in pages, and small enough to come whole");
     assert_eq!(pages.pages, one, "and read a page at a time");
+    assert_eq!(video, FileContents::Video { media_type: MediaType::Webm, bytes: 2000 });
+    assert_eq!(part.data.as_slice(), &webm[4..12], "and read a part at a time");
 }
 
 #[test]

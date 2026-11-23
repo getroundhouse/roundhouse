@@ -36,8 +36,8 @@ use workspaces::{
     SetupLog, SetupLogReply, SetupWorkspace, WorkspaceReady, WorktreeThere, WorktreeThereReply,
 };
 use worktree::{
-    AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead, GitDiff, GitStatus,
-    ListFiles, SummarizeChanges, WatchBranches, WatchChanges,
+    AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FileReadRange, FolderRead,
+    GitDiff, GitStatus, ListFiles, SummarizeChanges, WatchBranches, WatchChanges,
 };
 
 /// The worker protocol's version, apart from the client protocol's, so a break in one doesn't break the other. It
@@ -115,6 +115,7 @@ pub enum WorkerRequest {
     ListFiles(ListFiles),
     FolderRead(FolderRead),
     FileRead(FileRead),
+    FileReadRange(FileReadRange),
     FileReadAt(FileReadAt),
     FileOpenAt(FileOpenAt),
     FilePages(FilePages),
@@ -166,6 +167,7 @@ pub enum WorkerResponse {
     FileContents(FileContents),
     FileOpened(FileOpened),
     FilePages(model::FilePages),
+    FileRange(model::FileRange),
     AgentStarted(AgentStarted),
     /// The session has no running agent. The hub starts one and sends the request again.
     AgentNotRunning,

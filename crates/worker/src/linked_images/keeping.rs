@@ -92,18 +92,15 @@ impl<'a> Reading<'a> {
     }
 }
 
-/// The image at `address`, under a new ID, if it's an image inside the worktree that fits in what's `left`.
+/// The image or video at `address`, under a new ID, if it's one inside the worktree that fits in what's `left`.
 fn read_one(worktree: &Path, address: &str, left: &mut u64) -> Option<NewAttachment> {
     let path = addresses::path(address)?;
-    let (media_type, bytes) = crate::images::read(worktree, &path)
-        .inspect_err(|e| debug!(path, "not keeping an image the agent's text points to: {e}"))
+    // What's left of what one event can carry, which a file bigger than is read no further than that.
+    let (media_type, bytes) = crate::images::read(worktree, &path, *left)
+        .inspect_err(|e| debug!(path, "not keeping what the agent's text points to: {e}"))
         .ok()?;
     let size_bytes = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
-    let Some(after) = left.checked_sub(size_bytes) else {
-        debug!(path, "not keeping an image the agent's text points to, past what one event can carry");
-        return None;
-    };
-    *left = after;
+    *left = left.saturating_sub(size_bytes);
     let id = AttachmentId::from(uuid::Uuid::new_v4().to_string());
     let name = Path::new(&path).file_name().map_or_else(|| path.clone(), |name| name.to_string_lossy().into_owned());
     let attachment = Attachment { id, name, media_type, size_bytes };

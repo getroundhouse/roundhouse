@@ -1,10 +1,10 @@
-//! The calls for files: adding what a prompt carries, reading the images the transcript draws, and browsing a
-//! worktree's files.
+//! The calls for files: adding what a prompt carries, reading the images the transcript draws and the videos it
+//! plays, and browsing a worktree's files.
 
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::{attachments, files};
 use protocol::model::{
-    AttachmentId, CommitId, FileContents, FileOpened, FilePages, SessionId, WorkspaceId, WorktreeFiles,
+    AttachmentId, CommitId, FileContents, FileOpened, FilePages, FileRange, SessionId, WorkspaceId, WorktreeFiles,
 };
 
 use super::{Client, Result};
@@ -64,6 +64,28 @@ impl Client {
     /// See [`files::WorkspaceFolderRead`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn workspace_folder_read(&self, id: &WorkspaceId, path: &str) -> Result<WorktreeFiles> {
         self.call(files::WorkspaceFolderRead { id: id.clone(), path: path.to_string() })
+    }
+
+    /// See [`attachments::AttachmentReadRange`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn attachment_read_range(
+        &self,
+        session_id: &SessionId,
+        id: &AttachmentId,
+        start: u64,
+        length: u32,
+    ) -> Result<FileRange> {
+        self.call(attachments::AttachmentReadRange { session_id: session_id.clone(), id: id.clone(), start, length })
+    }
+
+    /// See [`files::WorkspaceFileReadRange`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn workspace_file_read_range(
+        &self,
+        id: &WorkspaceId,
+        path: &str,
+        start: u64,
+        length: u32,
+    ) -> Result<FileRange> {
+        self.call(files::WorkspaceFileReadRange { id: id.clone(), path: path.to_string(), start, length })
     }
 
     /// See [`files::WorkspaceFileRead`]. A hub older than this refuses it, as `is_unsupported` says.

@@ -16,13 +16,13 @@ use outbox::Outbox;
 use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{RunId, SessionId};
+use protocol::model::{ByteRange, RunId, SessionId};
 use protocol::paths::AGENTS_DIR;
 use protocol::prompt::Prompt;
 use protocol::worker::{
-    AccountFor, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead,
-    GitDiff, GitStatus, ReadRepoUrl, Received, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply,
-    SummarizeChanges, TerminalStop, TitleFor, ToolsServing, WorkerFrame, WorkerRequest, WorkerResponse,
+    AccountFor, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt,
+    FileReadRange, FolderRead, GitDiff, GitStatus, ReadRepoUrl, Received, RunningAgentsReply, ServeTools, SetupLog,
+    SetupLogReply, SummarizeChanges, TerminalStop, TitleFor, ToolsServing, WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 use std::collections::HashMap;
@@ -335,6 +335,13 @@ pub(super) async fn handle(
                 .await
                 .map_err(|e| ApiError::new(ErrorCode::Internal, format!("reading a file stopped: {e}")))??;
             Ok(WorkerResponse::FileContents(contents))
+        }
+        WorkerRequest::FileReadRange(FileReadRange { path, file, start, length }) => {
+            let range = ByteRange::new(start, length)?;
+            let part = tokio::task::spawn_blocking(move || crate::files::read_range(Path::new(&path), &file, range))
+                .await
+                .map_err(|e| ApiError::new(ErrorCode::Internal, format!("reading part of a file stopped: {e}")))??;
+            Ok(WorkerResponse::FileRange(part))
         }
         WorkerRequest::FileReadAt(FileReadAt { path, commit, file }) => {
             Ok(WorkerResponse::FileContents(crate::files::read_at(&given, Path::new(&path), &commit, &file).await?))

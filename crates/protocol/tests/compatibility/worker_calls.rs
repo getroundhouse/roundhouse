@@ -7,8 +7,8 @@ use protocol::capability::settings::{Effort, Settings};
 use protocol::capability::{Capabilities, Claimed};
 use protocol::frame;
 use protocol::model::{
-    AgentAccount, AgentKind, AgentLogin, Branches, FileContents, FileOpened, FilePage, FilePages, GitDiff, GitStatus,
-    GithubRepositoryName, Head, LoginToken, ModelName, PageLine, RunId, WorktreeFiles,
+    AgentAccount, AgentKind, AgentLogin, Branches, FileContents, FileOpened, FilePage, FilePages, FileRange, GitDiff,
+    GitStatus, GithubRepositoryName, Head, LoginToken, ModelName, PageLine, RunId, WorktreeFiles,
 };
 use protocol::worker::{
     self, AgentSpec, RepoSource, RunningAgent, ToolsToken, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest,
@@ -188,6 +188,13 @@ fn every_request_about_the_worktree_keeps_its_form() {
         pages: vec![0, 2],
     });
     asked(pages, r#"{"method":"file_pages","path":"/w","commit":"c1","file":"a.rs","page_lines":500,"pages":[0,2]}"#);
+    let range = WorkerRequest::FileReadRange(worker::FileReadRange {
+        path: "/w".into(),
+        file: "a.webm".into(),
+        start: 8,
+        length: 4,
+    });
+    asked(range, r#"{"method":"file_read_range","path":"/w","file":"a.webm","start":8,"length":4}"#);
 }
 
 #[test]
@@ -356,6 +363,11 @@ fn every_reply_about_the_worktree_keeps_its_form() {
     answered(
         WorkerResponse::FilePages(pages),
         r#"{"result":"file_pages","pages":[{"index":0,"lines":[{"text":"fn main() {}"}]}]}"#,
+    );
+    let range = FileRange { start: 8, data: AttachmentBytes::new(b"webm".to_vec()), file_bytes: 12 };
+    answered(
+        WorkerResponse::FileRange(range),
+        r#"{"result":"file_range","start":8,"data":"d2VibQ==","file_bytes":12}"#,
     );
 }
 

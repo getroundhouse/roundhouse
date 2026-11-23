@@ -1,9 +1,11 @@
 use crate::error::internal;
+use protocol::attachment::AttachmentBytes;
 use protocol::client::ApiError;
-use protocol::model::{AttachmentId, SessionId};
+use protocol::model::{AttachmentId, ByteRange, FileRange, SessionId};
 use protocol::paths;
 use std::collections::HashSet;
 use std::io;
+use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -66,6 +68,21 @@ impl AttachmentFiles {
         }
     }
 
+    /// Part of its bytes, such as a video's, which a player reads as it needs them. `None` as [`Self::read`] says.
+    pub(crate) async fn read_range(
+        &self,
+        kept_for: &FileFor,
+        id: &AttachmentId,
+        range: ByteRange,
+    ) -> Result<Option<FileRange>, ApiError> {
+        let path = self.path(kept_for, id)?;
+        match on_disk(move || read_part(&path, range)).await {
+            Ok(part) => Ok(Some(part)),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(internal(format!("couldn't read an attachment: {e}"))),
+        }
+    }
+
     pub(crate) async fn remove(&self, kept_for: &FileFor, id: &AttachmentId) -> Result<(), ApiError> {
         let path = self.path(kept_for, id)?;
         match on_disk(move || std::fs::remove_file(path)).await {
@@ -113,6 +130,16 @@ impl AttachmentFiles {
 /// Off the async threads, since a file can be large.
 async fn on_disk<T: Send + 'static>(f: impl FnOnce() -> io::Result<T> + Send + 'static) -> io::Result<T> {
     tokio::task::spawn_blocking(f).await.unwrap_or_else(|e| Err(io::Error::other(e)))
+}
+
+fn read_part(path: &Path, range: ByteRange) -> io::Result<FileRange> {
+    let mut file = std::fs::File::open(path)?;
+    let file_bytes = file.metadata()?.len();
+    let within = range.within(file_bytes);
+    file.seek(SeekFrom::Start(within.start))?;
+    let mut data = Vec::new();
+    file.take(within.end - within.start).read_to_end(&mut data)?;
+    Ok(FileRange { start: range.start(), data: AttachmentBytes::new(data), file_bytes })
 }
 
 fn write_whole(path: &Path, partial: &Path, data: &[u8]) -> io::Result<()> {

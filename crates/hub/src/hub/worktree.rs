@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use protocol::client::{ApiError, files};
-use protocol::model::{CommitId, FileContents, FileOpened, FilePages, GitDiff, GitStatus, WorkspaceId, WorktreeFiles};
+use protocol::model::{
+    ByteRange, CommitId, FileContents, FileOpened, FilePages, FileRange, GitDiff, GitStatus, WorkspaceId, WorktreeFiles,
+};
 use protocol::worker;
 
 use super::Hub;
@@ -47,6 +49,20 @@ impl Hub {
         let worktree = self.ready_worktree(&id).await?;
         let path = worktree.path().to_owned();
         worktree.link().call(worker::FileRead { path, file }).await
+    }
+
+    /// Part of a file in the workspace's worktree, such as a video's, as the worker reads it. A worker older than this
+    /// refuses it as unsupported, which the client is told.
+    pub(crate) async fn workspace_file_read_range(
+        self: &Arc<Self>,
+        id: WorkspaceId,
+        file: String,
+        range: ByteRange,
+    ) -> Result<FileRange, ApiError> {
+        let worktree = self.ready_worktree(&id).await?;
+        let path = worktree.path().to_owned();
+        let (start, length) = (range.start(), range.length());
+        worktree.link().call(worker::FileReadRange { path, file, start, length }).await
     }
 
     /// What a file held in a commit of the workspace's repository, as the worker finds it.

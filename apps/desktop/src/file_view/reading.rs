@@ -89,7 +89,8 @@ pub(crate) fn what_it_gives(contents: Result<FileContents, ClientError>) -> Read
         Ok(FileContents::Text { text }) if text.is_empty() => Read::Instead(Unshown::Empty),
         Ok(FileContents::Text { text }) => Read::Text(text),
         Ok(FileContents::Image { media_type, data }) => Read::Image(media_type, data.into_vec()),
-        Ok(FileContents::Binary | FileContents::Unknown) => Read::Instead(Unshown::Binary),
+        // A video shows as a file that isn't text until the file tab plays one.
+        Ok(FileContents::Binary | FileContents::Video { .. } | FileContents::Unknown) => Read::Instead(Unshown::Binary),
         Ok(FileContents::TooBig { bytes }) => Read::Instead(Unshown::TooBig(bytes)),
         Err(e) if e.is_unsupported() => Read::Instead(Unshown::Unsupported),
         Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => Read::Instead(Unshown::Gone),

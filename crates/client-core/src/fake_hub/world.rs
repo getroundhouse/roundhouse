@@ -58,8 +58,8 @@ pub struct World {
     /// What clients follow now, which a test shares before the hub is given the world, to tell what a client follows
     /// and when.
     pub following: super::Following,
-    /// The bytes of the images the hub keeps, by attachment: the files prompts carry, and the images tools send back
-    /// and the agent's text points to.
+    /// The bytes of the files the hub keeps, by attachment: the files prompts carry, the images tools send back, and
+    /// the images and videos the agent's text points to.
     pub attachments: HashMap<AttachmentId, Vec<u8>>,
     /// The files and folders in the world's worktree, as All files lists them.
     pub worktree: WorktreeFiles,
@@ -67,6 +67,8 @@ pub struct World {
     pub worktree_folders: HashMap<String, WorktreeFiles>,
     /// What the files in the world's worktree that can be opened hold, by path.
     pub worktree_files: HashMap<String, FileContents>,
+    /// The bytes of the videos in the world's worktree, which a player reads a part at a time, by path.
+    pub worktree_videos: HashMap<String, Vec<u8>>,
     /// What the files the world's diff changes held in the commit it was taken from, by path.
     pub base_files: HashMap<String, FileContents>,
     /// Whether the hub is from before it read the agent's own events apart from its subagents', so a chat holds every

@@ -1,3 +1,4 @@
+use super::containers;
 use crate::model::AttachmentId;
 use serde::{Deserialize, Serialize};
 
@@ -8,9 +9,9 @@ pub const MAX_PER_PROMPT: usize = 10;
 /// under [`crate::frame::MAX_FRAME_BYTES`] once it's base64.
 pub const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
 
-/// What kind of file an attachment is. The kinds named are the ones an agent can be given in a prompt, or the
-/// transcript draws, and anything else is `Other`, which an agent opens from the worktree. Each is sent as its MIME
-/// type.
+/// What kind of file an attachment is. The kinds named are the ones an agent can be given in a prompt, the transcript
+/// draws or plays, or a client opens in the system's player, and anything else is `Other`, which an agent opens from
+/// the worktree. Each is sent as its MIME type.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MediaType {
     #[serde(rename = "image/png")]
@@ -28,6 +29,16 @@ pub enum MediaType {
     /// UTF-8 text, such as a log or a source file.
     #[serde(rename = "text/plain")]
     Text,
+    /// A video the app plays: VP8 or VP9 in WebM, which is what agents are told to record, as
+    /// `docs/decisions/webm-through-libvpx.md` says.
+    #[serde(rename = "video/webm")]
+    Webm,
+    /// A video a client opens in the system's player.
+    #[serde(rename = "video/mp4")]
+    Mp4,
+    /// A QuickTime movie, which a client opens in the system's player.
+    #[serde(rename = "video/quicktime")]
+    Mov,
     #[serde(rename = "application/octet-stream")]
     Other,
     #[serde(other)]
@@ -43,6 +54,9 @@ impl MediaType {
             MediaType::Webp => "image/webp",
             MediaType::Svg => "image/svg+xml",
             MediaType::Text => "text/plain",
+            MediaType::Webm => "video/webm",
+            MediaType::Mp4 => "video/mp4",
+            MediaType::Mov => "video/quicktime",
             MediaType::Other | MediaType::Unknown => "application/octet-stream",
         }
     }
@@ -51,7 +65,12 @@ impl MediaType {
     pub const fn is_image(self) -> bool {
         match self {
             MediaType::Png | MediaType::Jpeg | MediaType::Gif | MediaType::Webp | MediaType::Svg => true,
-            MediaType::Text | MediaType::Other | MediaType::Unknown => false,
+            MediaType::Text
+            | MediaType::Webm
+            | MediaType::Mp4
+            | MediaType::Mov
+            | MediaType::Other
+            | MediaType::Unknown => false,
         }
     }
 
@@ -60,8 +79,35 @@ impl MediaType {
     pub const fn is_bitmap(self) -> bool {
         match self {
             MediaType::Png | MediaType::Jpeg | MediaType::Gif | MediaType::Webp => true,
-            MediaType::Svg | MediaType::Text | MediaType::Other | MediaType::Unknown => false,
+            MediaType::Svg
+            | MediaType::Text
+            | MediaType::Webm
+            | MediaType::Mp4
+            | MediaType::Mov
+            | MediaType::Other
+            | MediaType::Unknown => false,
         }
+    }
+
+    /// A video, which the app plays if it's WebM, and otherwise opens in the system's player.
+    pub const fn is_video(self) -> bool {
+        match self {
+            MediaType::Webm | MediaType::Mp4 | MediaType::Mov => true,
+            MediaType::Png
+            | MediaType::Jpeg
+            | MediaType::Gif
+            | MediaType::Webp
+            | MediaType::Svg
+            | MediaType::Text
+            | MediaType::Other
+            | MediaType::Unknown => false,
+        }
+    }
+
+    /// What the transcript shows where an agent's text points to it, which the hub keeps: an image, or a video the app
+    /// plays.
+    pub const fn is_shown_in_transcript(self) -> bool {
+        self.is_image() || matches!(self, MediaType::Webm)
     }
 
     /// Text, which an agent can be given as it's written: plain text, or a drawing.
@@ -72,13 +118,17 @@ impl MediaType {
             | MediaType::Jpeg
             | MediaType::Gif
             | MediaType::Webp
+            | MediaType::Webm
+            | MediaType::Mp4
+            | MediaType::Mov
             | MediaType::Other
             | MediaType::Unknown => false,
         }
     }
 
     /// What `bytes` are, from what they start with rather than from a file's name, which can say anything. Text is
-    /// UTF-8 with no NUL in it, and a drawing is text whose first element is `<svg`.
+    /// UTF-8 with no NUL in it, a drawing is text whose first element is `<svg`, and a video is known by its container,
+    /// as [`containers`] says.
     pub fn sniff(bytes: &[u8]) -> MediaType {
         if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
             MediaType::Png
@@ -88,6 +138,8 @@ impl MediaType {
             MediaType::Gif
         } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
             MediaType::Webp
+        } else if let Some(video) = containers::video(bytes) {
+            video
         } else if !bytes.contains(&0)
             && let Ok(text) = std::str::from_utf8(bytes)
         {

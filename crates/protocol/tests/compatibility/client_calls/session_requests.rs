@@ -251,6 +251,11 @@ fn every_request_about_files_and_drafts_keeps_its_form() {
         ClientRequest::AttachmentRead(attachments::AttachmentRead { session_id: "s".into(), id: "a1".into() }),
         r#"{"method":"attachment_read","session_id":"s","id":"a1"}"#,
     );
+    let range = attachments::AttachmentReadRange { session_id: "s".into(), id: "a1".into(), start: 4096, length: 1024 };
+    asked(
+        ClientRequest::AttachmentReadRange(range),
+        r#"{"method":"attachment_read_range","session_id":"s","id":"a1","start":4096,"length":1024}"#,
+    );
     asked(
         ClientRequest::AttachmentRemove(attachments::AttachmentRemove { session_id: "s".into(), id: "a1".into() }),
         r#"{"method":"attachment_remove","session_id":"s","id":"a1"}"#,

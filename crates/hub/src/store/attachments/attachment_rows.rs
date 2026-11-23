@@ -119,6 +119,20 @@ impl Store {
         file_on(&lock(&self.reader), kept_for, id)
     }
 
+    /// Whether the agent added `id` to what it's kept for, as an image or a video its text points to, rather than a
+    /// client. Only a session's can be the agent's.
+    pub(crate) fn added_by_agent(&self, kept_for: &FileFor, id: &AttachmentId) -> Result<bool, StoreError> {
+        let FileFor::Session(session_id) = kept_for else { return Ok(false) };
+        let by_client: Option<bool> = lock(&self.reader)
+            .query_row(
+                "SELECT by_client FROM attachments WHERE session_id = ? AND id = ?",
+                params![session_id.as_str(), id.as_str()],
+                OneValue::read,
+            )
+            .optional()?;
+        Ok(by_client == Some(false))
+    }
+
     /// Records `file` for what it's kept for, as a session's or the new-workspace dialog's, whose files only a client
     /// adds, and returns the one recorded, so adding the same ID again returns the first.
     pub(crate) fn add_file(

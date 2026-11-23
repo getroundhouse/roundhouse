@@ -27,6 +27,9 @@ pub use builders::{
     plan, question, request_failed, session, subagent, subagent_started, to_run, turn_ended, workspace,
 };
 
+mod files;
+pub use files::{WEBM_START, webm};
+
 mod decisions;
 pub use decisions::passed_decisions;
 

@@ -124,8 +124,9 @@ pub(crate) fn read_folder(worktree: &Path, folder: &str) -> Result<WorktreeFiles
 }
 
 /// What the file at `path`, relative to the worktree at `worktree`, holds. Refused unless it's a file inside the
-/// worktree. It reads any kind of file there, where [`crate::images::read`] reads only an image, since a person chose
-/// this path, and the agent's text chose that one.
+/// worktree. It reads any kind of file there, where [`crate::images::read`] reads only an image or a video, since a
+/// person chose this path, and the agent's text chose that one. A video is only said to be one, and read in parts with
+/// [`super::read_range`].
 pub(crate) fn read(worktree: &Path, path: &str) -> Result<FileContents, ApiError> {
     relative(path)?;
     let file = crate::worktree_file::find(worktree, path)?;
@@ -134,8 +135,12 @@ pub(crate) fn read(worktree: &Path, path: &str) -> Result<FileContents, ApiError
     let size = |opened: &std::fs::File| opened.metadata().map(|metadata| metadata.len()).map_err(failed);
     let mut data = Vec::new();
     (&opened).take(length(SNIFF_BYTES)).read_to_end(&mut data).map_err(failed)?;
-    let most = most_sent(&data);
     let bytes = size(&opened)?;
+    let media_type = MediaType::sniff(&data);
+    if media_type.is_video() {
+        return Ok(FileContents::Video { media_type, bytes });
+    }
+    let most = most_sent(&data);
     if bytes > most {
         return Ok(FileContents::TooBig { bytes });
     }

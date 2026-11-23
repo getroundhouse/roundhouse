@@ -51,8 +51,8 @@ pub use workspaces::{
     SetupDone, SetupLog, SetupLogReply, SetupWorkspace, WorkspaceReady, WorktreeThere, WorktreeThereReply,
 };
 pub use worktree::{
-    AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead, GitDiff, GitStatus,
-    ListFiles, SummarizeChanges, WatchBranches, WatchChanges,
+    AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FileReadRange, FolderRead,
+    GitDiff, GitStatus, ListFiles, SummarizeChanges, WatchBranches, WatchChanges,
 };
 
 mod messages;

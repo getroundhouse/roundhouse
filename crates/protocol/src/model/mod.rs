@@ -52,7 +52,10 @@ pub use draft::{
     AnswerSoFar, CommentDraft, DecisionDraft, Draft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep, SoFar,
     UseChoice,
 };
-pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
+pub use files::{
+    ByteRange, FileContents, FileOpened, FilePage, FilePages, FileRange, MAX_RANGE_BYTES, OpenedText, PageLine,
+    WorktreeFiles,
+};
 pub use git::{GitDiff, GitFile, GitStatus};
 pub use github_account::{
     FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubInstallation,

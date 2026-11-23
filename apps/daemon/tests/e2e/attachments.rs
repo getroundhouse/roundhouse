@@ -72,14 +72,17 @@ fn linked(events: &[protocol::event::SessionEvent]) -> Vec<Vec<LinkedImage>> {
     texts.collect()
 }
 
+/// And a video it points to the same way, which a client reads a part at a time.
 #[test]
 fn an_image_a_reply_points_to_is_kept_as_it_was_when_the_reply_came() {
     let stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
     let worktree = PathBuf::from(workspace.path.clone().unwrap());
+    let webm = protocol::fixtures::webm(2000);
     std::fs::write(worktree.join("shot.png"), png(64)).unwrap();
-    client.session_prompt(&session.id, "say:![The shot](shot.png)", None).unwrap();
+    std::fs::write(worktree.join("board.webm"), &webm).unwrap();
+    client.session_prompt(&session.id, "say:![The shot](shot.png) ![The board](board.webm)", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     std::fs::write(worktree.join("shot.png"), png(128)).unwrap();
 
@@ -87,10 +90,13 @@ fn an_image_a_reply_points_to_is_kept_as_it_was_when_the_reply_came() {
 
     let events = wait_for_turn_end(&client, &session.id, 2);
     let [first, second] = linked(&events).try_into().unwrap_or_else(|all| panic!("{all:?}"));
-    let ([first], [second]) = (first.as_slice(), second.as_slice()) else { panic!("{first:?} {second:?}") };
+    let ([first, board], [second]) = (first.as_slice(), second.as_slice()) else { panic!("{first:?} {second:?}") };
     assert_eq!((first.address.as_str(), second.address.as_str()), ("shot.png", "shot.png"));
     assert_eq!(client.attachment_read(&session.id, &first.attachment.id).unwrap(), png(64), "as it was then");
     assert_eq!(client.attachment_read(&session.id, &second.attachment.id).unwrap(), png(128));
+    assert_eq!((board.address.as_str(), board.attachment.media_type), ("board.webm", MediaType::Webm));
+    let part = client.attachment_read_range(&session.id, &board.attachment.id, 1990, 64).unwrap();
+    assert_eq!((part.data.as_slice(), part.file_bytes), (&webm[1990..], 2000), "a part, up to its end");
 }
 
 #[test]

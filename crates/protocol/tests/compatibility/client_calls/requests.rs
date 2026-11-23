@@ -266,6 +266,11 @@ fn every_request_about_what_a_workspace_holds_keeps_its_form() {
         ClientRequest::WorkspaceFilePages(pages),
         r#"{"method":"workspace_file_pages","id":"w","commit":"c1","path":"a.rs","page_lines":256,"pages":[0,3]}"#,
     );
+    let range = files::WorkspaceFileReadRange { id: "w".into(), path: "a.webm".into(), start: 4096, length: 1024 };
+    asked(
+        ClientRequest::WorkspaceFileReadRange(range),
+        r#"{"method":"workspace_file_read_range","id":"w","path":"a.webm","start":4096,"length":1024}"#,
+    );
 }
 
 /// A unit request reads with fields a newer client added to it, as any request does.
