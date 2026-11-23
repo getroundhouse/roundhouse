@@ -104,8 +104,8 @@ pub struct AppView {
     pub(super) finishing: Option<Task<()>>,
     /// Asking the older hub whether it's idle.
     pub(super) looking: Option<Task<()>>,
-    /// What the window shows of workspaces' pull requests, once it has followed a hub's records.
-    pub(super) shown_of_github: Option<super::pull_requests::ShownOfGithub>,
+    /// What the window shows of the hub beyond its records, once it has followed a hub's records.
+    pub(super) shown: Option<super::pull_requests::Shown>,
     /// Draws the window again when what's said of a chat's cache next changes.
     pub(super) cache_clock: Option<Task<()>>,
     /// What the app goes on reading of the hub's status for the updater, as `keeping_workers` says.
@@ -171,7 +171,7 @@ impl AppView {
             asking: None,
             finishing: None,
             looking: None,
-            shown_of_github: None,
+            shown: None,
             cache_clock: None,
             keeping: keeping_workers::KeepingWorkers::default(),
             menus_open: None,

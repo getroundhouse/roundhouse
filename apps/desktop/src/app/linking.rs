@@ -82,7 +82,7 @@ impl AppView {
         // Of the hub before, if this is another, or of this one before it restarted on the release it was asked for.
         self.hub_update_asked = None;
         self.keep_drafts_on(client, cx);
-        if self.shown_of_github.is_none()
+        if self.shown.is_none()
             && let Some(feed) = self.feed()
         {
             self.show_pull_requests(&feed, cx);

@@ -6,9 +6,8 @@ use std::sync::Arc;
 
 use client_core::link::{Connect, Link, Lost, Refused};
 use client_core::records::Snapshot;
-use client_core::{Client, ClientError, Drafts, GithubView, RecordsFeed, RemoteHub};
+use client_core::{Client, ClientError, Drafts, GithubView, RecordsFeed, RemoteHub, ShownOfGithub};
 use gpui_kit::{App, Context, EventEmitter, Task};
-use protocol::client::github::GithubShown;
 use protocol::model::{PullRequestFound, Workspace, WorkspaceStatus};
 
 /// What the hub's list of clients calls the app.
@@ -178,7 +177,7 @@ impl HubLink {
         if let Some(feed) = self.link.feed() {
             let (marks, _) = self.marks.get_or_insert_with(|| hear(&feed, cx));
             let listed = feed.snapshot().workspaces().iter().filter(|w| listed(w)).map(|w| w.id.clone()).collect();
-            marks.show(GithubShown { workspaces: listed, ..GithubShown::default() });
+            marks.show(ShownOfGithub { workspaces: listed, references: Vec::new() });
         }
         cx.notify();
     }

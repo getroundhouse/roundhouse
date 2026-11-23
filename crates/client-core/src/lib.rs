@@ -52,11 +52,11 @@ pub use new_chat::new_chat_settings;
 pub use sending::{NotTaken, Taking, Written};
 
 pub use client::{
-    Client, ClientError, Commands, Ended, FollowError, GithubFeed, GithubView, HubAdmin, IdleStop, Introduction,
-    LiveItem, LiveLog, OpenFile, OpenSession, OpenTerminal, Opening, PairingWait, Pointer, RecordsFeed, Reply, Restart,
-    Result, Search, Searched, SelectBy, Stretch, Subscription, SubscriptionItem, View, hub_is_missing,
-    new_attachment_id, new_device_id, new_github_sign_in_id, new_message_id, new_request_id, new_terminal_id,
-    restart_hub, stop_hub, stop_hub_if_idle, stop_hub_if_still,
+    Client, ClientError, Commands, Ended, FollowError, FollowedWorkspace, GithubFeed, GithubView, HubAdmin, IdleStop,
+    Introduction, LiveItem, LiveLog, OpenFile, OpenSession, OpenTerminal, Opening, PairingWait, Pointer, RecordsFeed,
+    Reply, Restart, Result, Search, Searched, SelectBy, ShownOfGithub, Stretch, Subscription, SubscriptionItem, View,
+    hub_is_missing, new_attachment_id, new_device_id, new_github_sign_in_id, new_message_id, new_request_id,
+    new_terminal_id, restart_hub, stop_hub, stop_hub_if_idle, stop_hub_if_still,
 };
 
 #[cfg(any(test, feature = "testing"))]

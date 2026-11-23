@@ -45,7 +45,7 @@ impl AppView {
             self.show_selected(cx);
         }
         // Once the selection has fallen back, so the workspace it falls back to is followed at its own level.
-        self.say_which_pull_requests_show();
+        self.say_what_shows();
         self.show_kept_in_dialog(cx);
         // After a reconnect, the pane on screen catches up once the records have, and the rest when they're shown.
         if let Some(pane) = self.selected_pane() {

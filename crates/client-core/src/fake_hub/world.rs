@@ -115,6 +115,9 @@ pub struct World {
     pub worker_reads: HashMap<WorkspaceId, super::WorkerReads>,
     /// What the feed tells of observations once a client follows their level, in order: what changed after the list.
     pub feed: Vec<protocol::client::ObservationNotice>,
+    /// Whether the hub takes a start at a workspace's level and sends nothing there, as a hub from before a workspace's
+    /// level had a list does.
+    pub lists_no_workspace_level: bool,
     /// The hub's newest revision, which its lists are at, as [`World::rev`] finds it once the world is served.
     pub(super) listed_at: Rev,
     records: i64,

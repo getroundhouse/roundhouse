@@ -3,8 +3,10 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use protocol::client::github::{GithubShown, GithubUpdate};
-use protocol::model::{ObservationKey, PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen, Workspace};
+use protocol::client::github::GithubUpdate;
+use protocol::model::{
+    ObservationKey, PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen, Workspace, WorkspaceId,
+};
 
 use super::held::GithubHeld;
 use super::source::GithubSource;
@@ -12,8 +14,9 @@ use crate::client::Client;
 use crate::client::follow::{Follow, Reach};
 use crate::records::{HubRecords, Snapshot};
 
-/// What one hub says of GitHub, of every workspace's own pull request and of what every view made from this shows,
-/// kept current until every clone of this, and every view, has gone. It carries on from a new connection given to
+/// What one hub says of GitHub, of every workspace's own pull request and of the chips every view made from this shows,
+/// kept current until every clone of this, and every view, has gone. A workspace's checks, history and stack come only
+/// while it's followed at its own level, as [`crate::RecordsFeed::follow_workspace`] does. It carries on from a new connection given to
 /// [`GithubFeed::reconnect`].
 #[derive(Clone)]
 pub struct GithubFeed {
@@ -25,7 +28,7 @@ pub struct GithubFeed {
 }
 
 impl GithubFeed {
-    /// Starts following, on a thread of its own, with nothing shown until a view says what it shows, reading and
+    /// Starts following, on a thread of its own, with no chip shown until a view says what it shows, reading and
     /// writing what's sent as observations in `records`, the copy of the same hub's records.
     pub(in crate::client) fn start(client: &Client, records: Reach<HubRecords>) -> GithubFeed {
         let written = records.clone();
@@ -40,7 +43,7 @@ impl GithubFeed {
         self.follow.read(|held| read(held, &observed))
     }
 
-    /// Carries on on a new connection, following again what's shown.
+    /// Carries on on a new connection, following again the chips shown.
     pub fn reconnect(&self, client: &Client) {
         self.follow.reconnect(client);
     }
@@ -101,6 +104,16 @@ impl GithubFeed {
     }
 }
 
+/// What a view shows of what one hub says of GitHub, all of it, each time it says.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ShownOfGithub {
+    /// The workspaces whose own pull requests it shows, as their marks in a sidebar do. The hub's level sends every
+    /// workspace's, so showing one has the hub read nothing more, and the view is told when one changes.
+    pub workspaces: Vec<WorkspaceId>,
+    /// The issues and pull requests it shows as chips, by their numbers, which the hub reads and sends while one shows.
+    pub references: Vec<ReferenceAsk>,
+}
+
 /// A view's part of what the hub says of GitHub: what it shows, and what tells it that some of that changed. What it
 /// shows is let go of as it's dropped.
 pub struct GithubView {
@@ -110,9 +123,9 @@ pub struct GithubView {
 }
 
 impl GithubView {
-    /// Takes `shown` to be what this view shows from now on, all of it, and tells the hub if that changes what any view
-    /// shows.
-    pub fn show(&self, shown: GithubShown) {
+    /// Takes `shown` to be what this view shows from now on, all of it, and tells the hub if that changes the chips any
+    /// view shows.
+    pub fn show(&self, shown: ShownOfGithub) {
         self.feed.follow.quietly(|held| held.show(self.id, shown));
         self.feed.follow.wake();
     }
