@@ -73,6 +73,11 @@ impl Github {
         Self { config, client: OnceCell::new() }
     }
 
+    /// GitHub's page for the OAuth App people sign in through, as [`GithubConfig::app_page`] says.
+    pub fn app_page(&self) -> String {
+        self.config.app_page()
+    }
+
     /// Who `token` is, its user's name and public email, and when it ends, as `GET /user` says, within [`ASK_WITHIN`],
     /// whatever GitHub does. A name or an email that's only blank is none. Refused with `InvalidRequest` when GitHub
     /// doesn't take the token as a user's, as with one that has ended or been revoked, and with `Unavailable` when

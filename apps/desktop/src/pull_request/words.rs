@@ -9,6 +9,8 @@ pub enum Action {
     /// Asks the agent, which knows why the changes were made and how this repository works.
     Ask(Ask),
     Archive,
+    /// Opens Git in Settings, where an account that can see the repository is connected or made the default.
+    OpenGit,
 }
 
 /// Something the agent is asked to do with the branch or its pull request.
@@ -57,6 +59,7 @@ impl Action {
     pub(crate) fn label(self) -> &'static str {
         match self {
             Action::Archive => "Archive",
+            Action::OpenGit => "Open Settings",
             Action::Ask(ask) => match ask {
                 Ask::CreatePr => "Create PR",
                 // It pushes too, which a pull request's commits always need, and the longer label leaves the bar no

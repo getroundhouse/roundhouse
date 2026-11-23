@@ -61,7 +61,8 @@ fn with_own(change: impl FnOnce(&mut OwnPullRequest)) -> Lookup {
     Lookup::Found(Some(Box::new(own)))
 }
 
-/// In the order the app looks for them, after the two with no pull request to show, and then the one it can't tell.
+/// In the order the app looks for them, after the three with no pull request to show, the last of them a repository
+/// GitHub shows the default none of, and then the one it can't tell.
 /// Merged shows twice more: while the app archives another workspace, which greys out its Archive, and while this one
 /// is being archived, when it says Archiving…, from its record. Every other state is drawn with nothing under way.
 fn states() -> Vec<State> {
@@ -69,6 +70,7 @@ fn states() -> Vec<State> {
     let free = [
         Lookup::Looking,
         Lookup::Found(None),
+        Lookup::Unseen(Box::new(super::unseen_screens::signed_in_unseen())),
         merged(),
         with(|pr| pr.state = PrState::Closed),
         with(|pr| pr.queue = Some(QueueState::AwaitingChecks)),
@@ -91,8 +93,8 @@ fn states() -> Vec<State> {
         with(|pr| pr.merge_state = MergeState::Unknown),
     ];
     let mut states: Vec<_> = free.into_iter().map(|lookup| (lookup, Busy::Free, WorkspaceStatus::Ready)).collect();
-    states.insert(3, (merged(), Busy::Moving, WorkspaceStatus::Ready));
-    states.insert(4, (merged(), Busy::Moving, WorkspaceStatus::Archiving));
+    states.insert(4, (merged(), Busy::Moving, WorkspaceStatus::Ready));
+    states.insert(5, (merged(), Busy::Moving, WorkspaceStatus::Archiving));
     states
 }
 

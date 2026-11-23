@@ -121,7 +121,7 @@ async fn a_switch_reads_only_while_what_is_known_is_another_branchs() {
 
     hub.read_pull_request(&id, Asked::Waiting, When::OnAnotherBranch).await.unwrap();
     let found_on_it = queries(&github).len() - a_read;
-    hub.store.set_workspace_pull_request(&id, &linked, Some(&BranchName::from("aspen"))).unwrap();
+    hub.store.set_workspace_pull_request(&id, Some(&linked), Some(&BranchName::from("aspen"))).unwrap();
     hub.read_pull_request(&id, Asked::Waiting, When::OnAnotherBranch).await.unwrap();
 
     assert_eq!(found_on_it, 0, "what's known was found on the branch checked out");

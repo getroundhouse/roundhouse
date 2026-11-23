@@ -8,20 +8,22 @@ use tracing::warn;
 use super::judging::{Wanted, wanted};
 use super::scopes::WaitsRead;
 use crate::hub::Hub;
-use crate::hub::pull_requests::reading::{Found, couldnt_read};
+use crate::hub::pull_requests::reading::couldnt_read;
+use crate::hub::pull_requests::recording::Found;
 use crate::hub::pull_requests::remote::{Waited, waited};
+use crate::hub::pull_requests::unseen::OwnUnread;
 use crate::store::Store;
 
 /// What a read found of one workspace: its own pull request, and what its waits watch, for them to judge.
 pub(in crate::hub::pull_requests) struct WorkspaceRead {
-    pub(in crate::hub::pull_requests) own: Result<Found, ApiError>,
+    pub(in crate::hub::pull_requests) own: Result<Found, OwnUnread>,
     pub(in crate::hub::pull_requests) waits: Vec<WaitsRead>,
 }
 
 impl WorkspaceRead {
     /// Unread, as `error` says, with nothing for its waits.
     pub(in crate::hub::pull_requests) fn unread(error: ApiError) -> Self {
-        Self { own: Err(error), waits: Vec::new() }
+        Self { own: Err(error.into()), waits: Vec::new() }
     }
 }
 
@@ -66,8 +68,8 @@ impl Asking {
         let read = |Plan { workspace, own, waited }: Plan| {
             let own = match own {
                 Wanted::Nothing { on } => Ok(Found::nothing(on)),
-                Wanted::Unreadable { error, .. } => Err(error),
-                Wanted::Heads { .. } => Err(error.clone()),
+                Wanted::Unreadable { error, .. } => Err(error.into()),
+                Wanted::Heads { .. } => Err(error.clone().into()),
             };
             let waits =
                 waited.into_iter().map(|waited| WaitsRead::failed(waited.repository, for_waits.clone())).collect();

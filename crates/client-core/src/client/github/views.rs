@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use protocol::client::github::GithubShown;
-use protocol::model::{PullRequestFound, ReferenceAsk, ReferenceRead, Workspace};
+use protocol::model::{PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen, Workspace};
 
 use super::held::GithubHeld;
 use super::source::GithubSource;
@@ -47,6 +47,13 @@ impl GithubFeed {
     /// `workspace`'s pull request, as the hub said while a view shows it. `None` until the hub has looked.
     pub fn pull_request(&self, workspace: &Workspace) -> Option<PullRequestFound> {
         self.follow.read(|held| held.pull_request(&workspace.id))
+    }
+
+    /// The repository GitHub last showed the default none of, where `workspace`'s branch's pull requests are, as the hub
+    /// said while a view shows it, so what [`GithubFeed::pull_request`] says is only what was known before. `None` from
+    /// a hub from before it said.
+    pub fn unseen(&self, workspace: &Workspace) -> Option<RepositoryUnseen> {
+        self.follow.read(|held| held.unseen(&workspace.id))
     }
 
     /// Whether the hub has said what it knows of `workspace`'s pull request while a view shows it, even that it hasn't

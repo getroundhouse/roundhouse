@@ -13,7 +13,7 @@ On your own machine, where the hub runs, Roundhouse sets up nothing of GitHub: a
 - Their pull requests are yours, so GitHub won't let you approve them, and nothing on GitHub tells their work from yours.
 - What they ask of GitHub counts against your rate limit.
 
-Signing in shows a code, which you type on GitHub and approve there. Agents can then do what `gh` logged in as you could: reach every repository you can, in every organization that lets Roundhouse in. An organization that limits which apps can reach it has to approve Roundhouse first. The hub renews the login by itself, so it keeps working until you disconnect it, unless GitHub won't renew it, such as after about six months with the hub stopped. Then it needs signing in again.
+Signing in shows a code, which you type on GitHub and approve there. Agents can then do what `gh` logged in as you could: reach every repository you can, in every organization that lets Roundhouse in. An organization that limits which apps can reach it has to approve Roundhouse first. Until it does, a workspace of one of its private repositories says, in the card its name opens, that Roundhouse can't see it, with **Approve on GitHub**. The hub renews the login by itself, so it keeps working until you disconnect it, unless GitHub won't renew it, such as after about six months with the hub stopped. Then it needs signing in again.
 
 A token does the same. Use one when an organization hasn't approved Roundhouse but allows tokens, or to keep agents to a few repositories: a fine-grained token reaches only the repositories you choose, of one owner. It ends when you said it would, and you renew it yourself, with a new one, from its row's `…` menu.
 
@@ -70,7 +70,7 @@ A signed-in account's token lasts 8 hours, and the hub renews it before it ends,
 
 The hub asks GitHub whether the default can push to the repository on GitHub that each repository's `origin` names, as `git push` would ask, so it meets what a push would: your access, a fine-grained token's repositories, the repositories an app of your own is installed on, and an organization that hasn't approved Roundhouse. It asks as it starts, whenever the default or its login changes, and every half hour, since what an account can do changes on GitHub too.
 
-If GitHub refuses, has no such repository the default can see, or doesn't take its token, every workspace of that repository on a machine Roundhouse sets up GitHub on says so in a line above the composer, with GitHub's words and what to do. **Open Git** opens the Git page, where you can make another account the default or add one that can push there. It blocks nothing: agents push as they would anyway. The line goes once the hub finds a push would be taken.
+If GitHub refuses, has no such repository the default can see, or doesn't take its token, every workspace of that repository on a machine Roundhouse sets up GitHub on says so in a line above the composer, with GitHub's words and what to do. **Open Settings** opens the Git page, where you can make another account the default or add one that can push there. It blocks nothing: agents push as they would anyway. The line goes once the hub finds a push would be taken.
 
 A workspace on your own machine has no line, since its agents push as your own login, not the default.
 

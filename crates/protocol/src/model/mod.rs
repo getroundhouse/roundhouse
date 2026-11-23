@@ -72,7 +72,7 @@ pub(crate) use pull_request::deserialize_looked;
 pub use pull_request::{
     CheckCounts, CheckState, Checks, ChecksRollup, History, LeftQueue, Local, MergeState, Mergeability, ObservedCheck,
     OwnPullRequest, Phase, PrState, PullRequest, PullRequestFound, PullRequestLink, PullRequestLinked, QueueState,
-    Read, Review, Stack, Standing, Summary,
+    Read, RepositoryUnseen, Review, Stack, Standing, Summary,
 };
 pub use queue::QueuedPrompt;
 pub use record::{Record, RecordKey, Records};

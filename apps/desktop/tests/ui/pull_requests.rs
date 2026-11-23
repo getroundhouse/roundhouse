@@ -2,9 +2,11 @@
 
 #![cfg(test)]
 
+use client_core::ClientError;
 use desktop::pull_request::Lookup;
 use gpui_kit::{AppContext as _, TestAppContext};
 use look::Work;
+use protocol::client::ErrorCode;
 use protocol::model::{PrState, WorkspaceId, WorkspaceStatus};
 
 use hub::GithubPullRequestState::{Merged, Open};
@@ -37,6 +39,37 @@ fn the_pull_request_showing_is_what_the_hub_last_read(cx: &mut TestAppContext) {
     github.pull_requests.set_from(7, Merged, &branch);
     stack.client().workspace_pull_request(&id).unwrap();
     ui.wait("it to merge", |ui| state(ui) == Some(PrState::Merged));
+}
+
+/// GitHub showing the default no repository says nothing of whether the branch has a pull request, so the hub knows
+/// none, and the bar says it can't see it, rather than offer to create one. Its action opens Git in Settings, where an
+/// account that can see it is connected, and so does the warning in the workspace's card.
+#[gpui_kit::test]
+fn a_repository_github_doesnt_show_has_a_bar_that_says_so_and_opens_git(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let github = stack.start_hub_reading_stand_in_github();
+    github.pull_requests.hide(true);
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let id = ui.new_workspace();
+    let branch = ui.push_unseen(&id);
+    github.pull_requests.set_from(7, Open, &branch);
+
+    let unread = stack.client().workspace_pull_request(&id).unwrap_err();
+
+    let code = match unread {
+        ClientError::Api(e) => Some(e.code),
+        _ => None,
+    };
+    assert_eq!(code, Some(ErrorCode::Unavailable), "not the none known before the branch was pushed");
+    assert!(matches!(lookup(&ui), Lookup::Unseen(_)), "{:?}", lookup(&ui));
+    assert!(ui.shows_label("pull-request-bar", "Open Settings"), "and offers no Create PR");
+    ui.click("pull-request-action");
+    ui.wait("Git in Settings", |ui| ui.has("git-connect"));
+    ui.click("settings-back");
+    ui.hover("workspace-title");
+    ui.wait_out_a_tooltip();
+    ui.click("warning-open-git");
+    ui.wait("Git in Settings from the card", |ui| ui.has("git-connect"));
 }
 
 #[gpui_kit::test]

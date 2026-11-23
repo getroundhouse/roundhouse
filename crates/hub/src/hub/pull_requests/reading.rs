@@ -1,16 +1,15 @@
 use super::super::Hub;
 use super::own::{WaitsRead, WorkspaceRead};
+use super::recording::Found;
 use super::schedule;
 use super::token_limits::TokenLimits;
+use super::unseen::Unseens;
 use crate::jobs;
 use crate::store::now_ms;
 use github::{Leaving, Unread};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{
-    BranchName, GithubRepositoryName, IssueNumber, OwnPullRequest, PullRequestFound, PullRequestLink,
-    PullRequestLinked, Workspace, WorkspaceId,
-};
+use protocol::model::{OwnPullRequest, PullRequestFound, Workspace, WorkspaceId};
 use schedule::{Schedule, Went};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -103,6 +102,8 @@ pub(in super::super) struct Reading {
     /// no worker, and so don't wait behind a workspace's read whose worker is slow to say how its worktree stands.
     pub(super) agent_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
     pub(super) remote_read_at: Mutex<HashMap<WorkspaceId, Instant>>,
+    /// What GitHub last said of each workspace's repository being unseen.
+    pub(super) unseen: Unseens,
 }
 
 impl Reading {
@@ -113,6 +114,7 @@ impl Reading {
             limits: TokenLimits::default(),
             agent_gates: Mutex::new(HashMap::new()),
             remote_read_at: Mutex::new(HashMap::new()),
+            unseen: Unseens::new(),
         }
     }
 
@@ -166,8 +168,9 @@ impl Hub {
     ///
     /// Says what was known when it can't read: when GitHub's limit for its token can't spare it, or GitHub can't be
     /// reached. Where it can't be read at all, such as with no login to read it as, what's known is kept, and with
-    /// nothing known it's recorded as none, so the app offers to create one rather than looking for ever. It reads what
-    /// the workspace's waits watch too, and they judge what it finds.
+    /// nothing known it's recorded as none, so the app offers to create one rather than looking for ever. Where GitHub
+    /// shows no repository, a none known before is no longer known, as [`Hub::record`] says. It reads what the
+    /// workspace's waits watch too, and they judge what it finds.
     pub(super) async fn read_pull_request(
         self: &Arc<Self>,
         id: &WorkspaceId,
@@ -252,7 +255,8 @@ impl Hub {
             // Every read is newer than the last, so it's what it says that's compared.
             Ok(Found { read, .. }) if !known.as_ref().is_some_and(|known| known.says_the_same(read)) => Went::Changed,
             Ok(Found { read, .. }) => Went::Same(read.pull_request.as_ref()),
-            Err(e) => {
+            Err(unread) => {
+                let e = unread.error();
                 debug!(%id, code = ?e.code, "the pull request couldn't be read: {}", e.message);
                 Went::Failed
             }
@@ -267,36 +271,18 @@ impl Hub {
                 }
             }
         }
+        // What's known once it's recorded, which is no longer the none known before where GitHub showed no repository.
+        let known = changed.as_ref().map_or(known, |changed| self.known_of(changed));
         if let Some(workspace) = changed {
             self.notify(HubNotice::Workspace(workspace));
         }
+        // After the workspace, so whoever's told has it as it's recorded now.
+        self.keep_unseen(id, &read).await;
         let answer = match read {
             Ok(Found { read, .. }) => Answer::Read(read.pull_request),
-            Err(e) => Answer::Known(recorded.or(known), e),
+            Err(unread) => Answer::Known(recorded.or(known), unread.error()),
         };
         Ok(answer)
-    }
-
-    /// Records which pull request a read found, with the branch it found it on, and where it can't be read at all and
-    /// none was found before, that there's none. Returns what it found, or that there's none where it recorded that,
-    /// and the workspace if that changed it.
-    pub(super) async fn record(
-        &self,
-        workspace: &Workspace,
-        read: &Result<Found, ApiError>,
-    ) -> Result<(Option<PullRequestFound>, Option<Workspace>), ApiError> {
-        let found = match read {
-            Ok(found) => found.clone(),
-            // What was found before is kept, on the branch it was found on, since nothing new was found.
-            Err(e) if e.code == ErrorCode::Unavailable && workspace.pull_request_link.is_none() => {
-                Found::nothing(workspace.pull_request_branch.clone())
-            }
-            Err(_) => return Ok((None, None)),
-        };
-        let Some(linked) = found.linked() else { return Ok((None, None)) };
-        let (id, on) = (workspace.id.clone(), found.on);
-        let changed = self.blocking(move |store| store.set_workspace_pull_request(&id, &linked, on.as_ref())).await?;
-        Ok((Some(found.read), changed))
     }
 
     /// For a workspace just made, whose branch was only now taken from its base, so there's no pull request to find
@@ -337,40 +323,6 @@ pub(super) struct Taking {
     pub(super) read_at: Instant,
     pub(super) asked: Asked,
     pub(super) _held: ReadsHeld,
-}
-
-/// What a read found, the repository it's in, and the branch it found it on.
-#[derive(Clone)]
-pub(super) struct Found {
-    pub(super) read: PullRequestFound,
-    /// The repository the pull request found merges into, `None` where none was.
-    into: Option<GithubRepositoryName>,
-    pub(super) on: Option<BranchName>,
-}
-
-impl Found {
-    /// `pull_request`, into `into`, found on `on`.
-    pub(super) fn of(pull_request: OwnPullRequest, into: GithubRepositoryName, on: Option<BranchName>) -> Self {
-        Self { read: PullRequestFound { pull_request: Some(pull_request) }, into: Some(into), on }
-    }
-
-    /// None, on `on`, as for a branch pushed nowhere.
-    pub(super) fn nothing(on: Option<BranchName>) -> Self {
-        Self { read: PullRequestFound { pull_request: None }, into: None, on }
-    }
-
-    /// Which pull request it found, as the workspace's record keeps it. `None` for one whose number no pull request
-    /// can have, which GitHub doesn't give.
-    fn linked(&self) -> Option<PullRequestLinked> {
-        let Some(own) = &self.read.pull_request else { return Some(PullRequestLinked { link: None }) };
-        let link = PullRequestLink {
-            repository: self.into.clone()?,
-            number: IssueNumber::try_from(own.pull_request.number.get()).ok()?,
-            url: own.pull_request.said().about.url.clone(),
-            uncommitted: own.local.uncommitted,
-        };
-        Some(PullRequestLinked { link: Some(link) })
-    }
 }
 
 fn limit_used_up() -> ApiError {

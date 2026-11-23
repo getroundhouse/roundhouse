@@ -50,7 +50,8 @@ pub(super) fn reference(world: &World, ask: &ReferenceAsk) -> ReferenceRead {
 }
 
 /// What a hub sends at once of what `subscribe` shows, since nothing here changes after: each chip as the world has
-/// it, and each workspace's pull request as a read would find it, from the world's.
+/// it, and each workspace's pull request as a read would find it, from the world's. One whose repository GitHub showed
+/// none of is what was known before, which is the world's pull request, if it has one, and otherwise not looked for.
 pub(super) fn shown(world: &World, subscribe: GithubSubscribe) -> Vec<HubFrame> {
     let GithubSubscribe { subscription_id, shown } = subscribe;
     world.github_shown.lock().push(shown.clone());
@@ -58,8 +59,13 @@ pub(super) fn shown(world: &World, subscribe: GithubSubscribe) -> Vec<HubFrame> 
         .map(|ask| GithubUpdate::Reference { reference: ask.clone(), read: reference(world, ask) });
     let pull_requests =
         shown.workspaces.iter().filter(|id| world.workspaces.iter().any(|workspace| workspace.id == **id)).map(|id| {
-            let found = PullRequestFound { pull_request: world.pull_requests.get(id).cloned() };
-            GithubUpdate::PullRequest { workspace: id.clone(), found: Some(found) }
+            let own = world.pull_requests.get(id).cloned();
+            let unseen = world.unseen.get(id).cloned();
+            let found = match &unseen {
+                Some(_) => own.map(|own| PullRequestFound { pull_request: Some(own) }),
+                None => Some(PullRequestFound { pull_request: own }),
+            };
+            GithubUpdate::PullRequest { workspace: id.clone(), found, unseen }
         });
     references.chain(pull_requests).map(|update| HubFrame::Github { subscription_id, update }).collect()
 }

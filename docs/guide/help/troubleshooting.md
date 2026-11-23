@@ -27,6 +27,16 @@ Roundhouse reads pull requests from GitHub as the default account in [Settings](
 
 Everything else works without `gh`.
 
+## The pull request's bar says it can't see the pull request
+
+GitHub shows the default account no repository where the branch's pull requests are, so Roundhouse can't tell whether there's one. The workspace's name has a warning's sign after it. Rest the pointer on the name, or on the bar's words, for what GitHub said and what to do:
+
+- **If you signed in with GitHub,** and the repository's organization limits which apps can reach it, it has to approve Roundhouse. **Approve on GitHub** opens Roundhouse's page on GitHub, where you grant the organization access, or ask its owners to.
+- **If the default is a token,** give the token the repository, or use one that has it.
+- **Otherwise,** ask the repository's owner to give the account access, or connect an account that can see it in [Settings](../reference/settings.md#git), which **Open Settings** opens.
+
+The bar shows the pull request once Roundhouse reads it again, as it does each time the workspace is shown.
+
 ## An agent can't read or wait on a pull request
 
 The agent's call says why. Roundhouse reads the pull requests agents ask for and wait on from GitHub itself, so check that:
@@ -42,7 +52,7 @@ A call that says the pull requests kept changing as they were read, as while a b
 
 Open the Git page in [Settings](../reference/settings.md#git):
 
-- **If the workspace says `Agents can't push to` its repository,** above the composer, GitHub refused the default, has no such repository it can see, or doesn't take its token, and the line says GitHub's words and what to do: make another account the default, add one that can push there, or ask the repository's owner for access, or to approve Roundhouse. **Open Git** at its end opens the Git page. For an app of your own, it names the app's bot, and says to install the app on the repository's owner with access to the repository, which **Install on GitHub** opens GitHub's page for, or, for a repository of an owner the app isn't installed on, to make another the default.
+- **If the workspace says `Agents can't push to` its repository,** above the composer, GitHub refused the default, has no such repository it can see, or doesn't take its token, and the line says GitHub's words and what to do: make another account the default, add one that can push there, or ask the repository's owner for access, or to approve Roundhouse. **Open Settings** at its end opens the Git page. For an app of your own, it names the app's bot, and says to install the app on the repository's owner with access to the repository, which **Install on GitHub** opens GitHub's page for, or, for a repository of an owner the app isn't installed on, to make another the default.
 - **If Git says `Roundhouse can't use its GitHub account.`,** the default GitHub account can't be used, so Roundhouse can't read pull requests and agents on the providers it sets up can't push, and it says why and what to do: renew its token, sign in again, or make another account the default. Agents don't fall back on the machine's own login.
 - **If the workspace is on your own machine,** agents push with your own `git` and `gh`, SSH key and all, whoever the default is, so it says nothing of the default. Check that you can push there from your own terminal.
 - **If you've added no account,** agents on the machines Roundhouse sets up GitHub on can't push, and Roundhouse can't read pull requests. Connect one in Git. On your own machine, **Providers** in Settings says who `gh` is logged in as and whose SSH key GitHub takes.

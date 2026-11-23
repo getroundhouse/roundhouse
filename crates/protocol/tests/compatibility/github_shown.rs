@@ -5,8 +5,9 @@ use protocol::client::github::{GithubShown, GithubSubscribe, GithubUpdate};
 use protocol::client::{ClientRequest, HubFrame};
 use protocol::frame;
 use protocol::model::{
-    ChecksRollup, GithubRepositoryName, IssueNumber, LeftQueue, Local, OwnPullRequest, PullRequest, PullRequestFound,
-    PullRequestNumber, QueueState, ReferenceAsk, ReferenceLabel, ReferenceRead, Review,
+    ChecksRollup, GithubLoginKind, GithubRepositoryName, IssueNumber, LeftQueue, Local, OwnPullRequest, PullRequest,
+    PullRequestFound, PullRequestNumber, QueueState, ReferenceAsk, ReferenceLabel, ReferenceRead, RepositoryUnseen,
+    Review,
 };
 
 use super::keeps_its_form;
@@ -79,21 +80,40 @@ fn what_the_hub_sends_of_what_github_says_keeps_its_form() {
         &sent(GithubUpdate::PullRequest {
             workspace: "w".into(),
             found: Some(PullRequestFound { pull_request: None }),
+            unseen: None,
         }),
         r#"{"frame":"github","subscription_id":3,"update":{"of":"own_pull_request","workspace":"w","found":null}}"#,
+    );
+    let unseen = RepositoryUnseen {
+        repository: GithubRepositoryName::named("o/r"),
+        username: "ada".into(),
+        login: GithubLoginKind::SignIn,
+        installation: None,
+        said: "Could not resolve to a Repository with the name 'o/r'.".into(),
+        approve_at: Some("https://github.com/settings/connections/applications/an-app".into()),
+    };
+    keeps_its_form(
+        &sent(GithubUpdate::PullRequest { workspace: "w".into(), found: None, unseen: Some(unseen) }),
+        concat!(
+            r#"{"frame":"github","subscription_id":3,"update":{"of":"own_pull_request","workspace":"w","unseen":"#,
+            r#"{"repository":"o/r","username":"ada","login":"sign_in","#,
+            r#""said":"Could not resolve to a Repository with the name 'o/r'.","#,
+            r#""approve_at":"https://github.com/settings/connections/applications/an-app"}}}"#
+        ),
     );
     let own = OwnPullRequest { pull_request: every_facet(), local: Local { uncommitted: 1, ahead: 2, behind: 0 } };
     keeps_its_form(
         &sent(GithubUpdate::PullRequest {
             workspace: "w".into(),
             found: Some(PullRequestFound { pull_request: Some(own) }),
+            unseen: None,
         }),
         &format!(
             r#"{{"frame":"github","subscription_id":3,"update":{{"of":"own_pull_request","workspace":"w","found":{{"pull_request":{EVERY_FACET},"local":{{"uncommitted":1,"ahead":2,"behind":0}}}}}}}}"#
         ),
     );
     keeps_its_form(
-        &sent(GithubUpdate::PullRequest { workspace: "w".into(), found: None }),
+        &sent(GithubUpdate::PullRequest { workspace: "w".into(), found: None, unseen: None }),
         r#"{"frame":"github","subscription_id":3,"update":{"of":"own_pull_request","workspace":"w"}}"#,
     );
 }

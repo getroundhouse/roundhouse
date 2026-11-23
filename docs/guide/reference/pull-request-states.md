@@ -30,7 +30,7 @@ The bar says one thing: the first that's true, in this order.
 
 What's in the worktree comes before what GitHub says, because GitHub's answers are about an older commit until it's pushed.
 
-A workspace with no pull request says `No pull request`, and offers `Create PR`.
+A workspace with no pull request says `No pull request`, and offers `Create PR`. One whose repository GitHub doesn't show the default account says `Can't see its pull request`, and offers `Open Settings`, as [Troubleshooting](../help/troubleshooting.md#the-pull-requests-bar-says-it-cant-see-the-pull-request) says.
 
 Wherever GitHub says something this version doesn't know, the bar says `See it on GitHub` and offers nothing, rather than guess.
 

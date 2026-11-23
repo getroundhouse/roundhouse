@@ -25,6 +25,9 @@ struct Set {
     held: Option<Gate>,
     /// Whether every read fails, as GitHub does when it can't answer.
     failing: bool,
+    /// Whether example/project is hidden from the token, as a private repository its account can't see is, so GitHub
+    /// answers for none.
+    hidden: bool,
     /// What each answer says is left of GitHub's limit, if a test says, and otherwise most of it.
     remaining: Option<u32>,
     /// The branches that are gone from example/project, as GitHub can delete one as its pull request merges, so their
@@ -104,6 +107,12 @@ impl PullRequests {
         self.0.lock().failing = failing;
     }
 
+    /// GitHub shows the token no example/project from now on, as for a private repository its account can't see, or
+    /// shows it again.
+    pub fn hide(&self, hidden: bool) {
+        self.0.lock().hidden = hidden;
+    }
+
     /// Each answer says `remaining` of the limit's 5000 is left, from now on.
     pub fn leave(&self, remaining: u32) {
         self.0.lock().remaining = Some(remaining);
@@ -132,6 +141,11 @@ impl PullRequests {
         }
         let (mut data, mut errors) = (json!({}), Vec::new());
         for (alias, asks) in aliased(query, ": repository(") {
+            if set.hidden {
+                errors.push(unseen(alias));
+                data[alias] = Value::Null;
+                continue;
+            }
             let mut parts = Vec::new();
             for (part, number) in aliased(asks, ": pullRequest(number:") {
                 let number: u64 = number.split(')').next().and_then(|n| n.parse().ok()).unwrap_or_default();
@@ -205,6 +219,12 @@ impl Set {
             .collect();
         json!({ "nodes": nodes })
     }
+}
+
+/// The error GitHub gives about the repository asked of as `alias` when it doesn't show the token one.
+fn unseen(alias: &str) -> Value {
+    let message = "Could not resolve to a Repository with the name 'example/project'.";
+    json!({"type": "NOT_FOUND", "path": [alias], "message": message})
 }
 
 /// Each alias in `query` before `marker`, with what follows it up to the next, as `r0: repository(` names the

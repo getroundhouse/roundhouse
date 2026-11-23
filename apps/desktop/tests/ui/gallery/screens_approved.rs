@@ -164,6 +164,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(terminal_screens::SCREENS)
         .chain(UPDATE_SCREENS)
         .chain(workspace_screens::SCREENS)
+        .chain(super::unseen_screens::SCREENS)
         .chain(turn_screens::SCREENS)
         .chain(call_screens::SCREENS)
         .chain(sidebar_screens::SCREENS)

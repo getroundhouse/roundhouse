@@ -13,7 +13,7 @@
 //! many lists it asks for, so both lists of fifty branches cost a point or so, which is less than a second query for
 //! the branches that are gone.
 
-use protocol::client::ApiError;
+use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{BranchName, CommitId, GithubRepositoryName, GithubToken, PrState, PullRequestNumber};
 use serde_json::Value;
 
@@ -59,11 +59,34 @@ pub struct Headed {
 /// What a query found of each ask, in the order they were asked, the newest pull request first.
 #[derive(Debug)]
 pub struct HeadsRead {
-    pub answers: Vec<Result<Vec<Headed>, ApiError>>,
+    pub answers: Vec<Result<Vec<Headed>, HeadsUnread>>,
     /// What GitHub last said is left of its limit for the token, if it said.
     pub rate_limit: Option<RateLimit>,
     /// Whether GitHub refused the token.
     pub refused: bool,
+}
+
+/// Why GitHub gave none of a branch's pull requests.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HeadsUnread {
+    /// GitHub showed the token no repository by the name the branch's pull requests are asked of, in an error of type
+    /// `NOT_FOUND` or `FORBIDDEN` about the repository itself, saying `said`: there's none, or it's private and the
+    /// token's account can't see it, or its organization keeps out the OAuth App the token is from. Reading again
+    /// won't change that until someone does something on GitHub, and it says nothing of whether the branch has a pull
+    /// request.
+    Unseen { said: String },
+    /// Anything else, as [`failed`] says of GitHub's errors.
+    Failed(ApiError),
+}
+
+impl HeadsUnread {
+    /// It as an error, for whoever only reports it.
+    pub fn error(&self) -> ApiError {
+        match self {
+            Self::Unseen { said } => ApiError::new(ErrorCode::Unavailable, format!("GitHub couldn't be read: {said}")),
+            Self::Failed(error) => error.clone(),
+        }
+    }
 }
 
 impl Github {
@@ -76,7 +99,7 @@ impl Github {
         for (batch, first) in asks.chunks(BRANCHES_A_QUERY).zip((0..).step_by(BRANCHES_A_QUERY)) {
             match self.spend(token, &query(batch, first), &mut spent).await {
                 Ok(answer) => answers.extend(taken(&answer, batch, first)),
-                Err(error) => answers.extend(batch.iter().map(|_| Err(error.clone()))),
+                Err(error) => answers.extend(batch.iter().map(|_| Err(HeadsUnread::Failed(error.clone())))),
             }
         }
         HeadsRead { answers, rate_limit: spent.rate_limit, refused: spent.refused }
@@ -107,9 +130,10 @@ fn query(batch: &[HeadsAsk], first: usize) -> String {
 }
 
 /// Each ask's answer from `answer`, by its aliases, with the errors GitHub gave about either: one about the branch
-/// itself, as for a fork deleted since, leaves those its name finds, and one about those fails the ask. One whose path
-/// names no ask, as one about the query itself, fails them all.
-fn taken(answer: &Value, batch: &[HeadsAsk], first: usize) -> Vec<Result<Vec<Headed>, ApiError>> {
+/// itself, as for a fork deleted since, leaves those its name finds, and one about those fails the ask, as
+/// [`HeadsUnread::Unseen`] where it's about the repository they're asked of. One whose path names no ask, as one about
+/// the query itself, fails them all.
+fn taken(answer: &Value, batch: &[HeadsAsk], first: usize) -> Vec<Result<Vec<Headed>, HeadsUnread>> {
     let mut errors: Vec<Errors> = batch.iter().map(|_| Errors::default()).collect();
     for error in answer["errors"].as_array().into_iter().flatten() {
         let alias = error["path"].as_array().and_then(|path| path.first()).and_then(Value::as_str);
@@ -117,8 +141,8 @@ fn taken(answer: &Value, batch: &[HeadsAsk], first: usize) -> Vec<Result<Vec<Hea
         let at = alias.and_then(|alias| alias.strip_prefix(['r', 'n'])).and_then(|at| at.parse::<usize>().ok());
         match at.and_then(|at| at.checked_sub(first)).filter(|at| *at < batch.len()) {
             Some(at) if side == Some('r') => errors[at].branch = Some(failed(error)),
-            Some(at) => errors[at].by_name = Some(failed(error)),
-            None => return batch.iter().map(|_| Err(failed(error))).collect(),
+            Some(at) => errors[at].by_name = Some(unread(error)),
+            None => return batch.iter().map(|_| Err(HeadsUnread::Failed(failed(error)))).collect(),
         }
     }
     batch
@@ -128,9 +152,11 @@ fn taken(answer: &Value, batch: &[HeadsAsk], first: usize) -> Vec<Result<Vec<Hea
         .map(|((ask, at), errors)| {
             let branch = &answer["data"][format!("r{at}")]["h"];
             match (errors, branch.is_object()) {
-                (Errors { branch: None, .. }, true) => of_branch(branch),
+                (Errors { branch: None, .. }, true) => of_branch(branch).map_err(HeadsUnread::Failed),
                 (Errors { by_name: Some(error), .. }, _) => Err(error),
-                (Errors { by_name: None, .. }, _) => by_name(&answer["data"][format!("n{at}")]["h"], ask),
+                (Errors { by_name: None, .. }, _) => {
+                    by_name(&answer["data"][format!("n{at}")]["h"], ask).map_err(HeadsUnread::Failed)
+                }
             }
         })
         .collect()
@@ -140,7 +166,21 @@ fn taken(answer: &Value, batch: &[HeadsAsk], first: usize) -> Vec<Result<Vec<Hea
 #[derive(Default)]
 struct Errors {
     branch: Option<ApiError>,
-    by_name: Option<ApiError>,
+    by_name: Option<HeadsUnread>,
+}
+
+/// What `error`, about the pull requests asked for by a branch's name, means: GitHub showing no repository by the name
+/// they're asked of, where it's about the repository itself and says there's none or it's forbidden, and otherwise
+/// what [`failed`] says.
+fn unread(error: &Value) -> HeadsUnread {
+    let of_the_repository = error["path"].as_array().is_some_and(|path| path.len() == 1);
+    match error["type"].as_str() {
+        Some("NOT_FOUND" | "FORBIDDEN") if of_the_repository => {
+            let said = error["message"].as_str().unwrap_or("GitHub said nothing more");
+            HeadsUnread::Unseen { said: said.to_string() }
+        }
+        _ => HeadsUnread::Failed(failed(error)),
+    }
 }
 
 /// The pull requests `branch`, the branch itself, lists, all of them its own, whatever repository each merges into.

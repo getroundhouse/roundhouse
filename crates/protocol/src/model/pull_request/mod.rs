@@ -9,6 +9,7 @@ mod link;
 mod phase;
 mod standing;
 mod status;
+mod unseen;
 pub use facets::{
     CheckCounts, CheckState, Checks, ChecksRollup, History, Mergeability, ObservedCheck, PullRequest, Read, Stack,
     Summary,
@@ -18,3 +19,4 @@ pub use phase::Phase;
 pub use standing::Standing;
 pub(crate) use status::deserialize_looked;
 pub use status::{LeftQueue, Local, MergeState, OwnPullRequest, PrState, PullRequestFound, QueueState, Review};
+pub use unseen::RepositoryUnseen;

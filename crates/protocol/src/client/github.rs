@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, Request};
-use crate::model::{PullRequestFound, ReferenceAsk, ReferenceRead, WorkspaceId};
+use crate::model::{PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen, WorkspaceId};
 
 /// Follows what GitHub says of what [`GithubShown`] names. The hub sends a [`GithubUpdate`] for each of them it knows
 /// something of, then another each time what it knows changes, and reads them from GitHub more often than what no
@@ -64,6 +64,12 @@ pub enum GithubUpdate {
             deserialize_with = "crate::model::deserialize_looked"
         )]
         found: Option<PullRequestFound>,
+        /// That GitHub showed the default no repository where the branch's pull requests are, as the hub last read
+        /// it, so `found` is a pull request found before, if one was, and otherwise says the hub hasn't looked, since a
+        /// none found before is no longer known. A client from before skips it, and reads `found`. `None` from a hub
+        /// from before.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        unseen: Option<RepositoryUnseen>,
     },
     /// From a newer hub, which this client skips.
     #[serde(other)]

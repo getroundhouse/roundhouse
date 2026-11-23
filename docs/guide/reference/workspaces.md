@@ -34,11 +34,16 @@ Making a workspace, its setup, its name and title, and archiving it. [Workspaces
 
 Rest the pointer on a workspace's name in its header for a card that says where it is:
 
+- **Its warnings,** first, while it has any, with what to do about each. A warning's sign after the name says there are some.
 - **The path of its worktree,** with a button that copies it.
 - **The version its agents run on,** and where they run.
 - **Its ten ports.**
 
 ![The card a workspace's name opens](../../spec/screens/workspace-card.png)
+
+A workspace warns when GitHub shows the default account no repository where the workspace's pull requests are, as [Troubleshooting](../help/troubleshooting.md#the-pull-requests-bar-says-it-cant-see-the-pull-request) says.
+
+![The card a workspace's name opens, with a warning that Roundhouse can't see the repository](../../spec/screens/workspace-card-warning.png)
 
 ## Setup
 

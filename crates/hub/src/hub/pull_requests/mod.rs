@@ -18,6 +18,8 @@ mod tests;
 mod token_limits;
 
 mod reading;
+mod recording;
+mod unseen;
 
 use reading::Asked;
 pub(super) use reading::{Reading, When};

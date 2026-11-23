@@ -211,7 +211,8 @@ impl Request for WorkspaceRerunSetup {
 /// hears of. Safe to send again, since one asked for while another read waits shares the answer of the next. The reply
 /// is `None` if there isn't one, or if it can't be read here, such as without GitHub's CLI, a login to it or a GitHub
 /// remote, and none was known. When it can't be read just now, such as while GitHub can't be reached or its hourly
-/// limit is used up, the reply is what was known, and an error if nothing was.
+/// limit is used up, the reply is what was known, and an error if nothing was. So it is when GitHub shows no repository
+/// where it would be, but for none known before, which that leaves no longer known.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspacePullRequest {
     pub id: WorkspaceId,

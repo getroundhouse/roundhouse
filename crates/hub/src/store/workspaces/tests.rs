@@ -26,10 +26,10 @@ fn finding_the_same_pull_request_again_changes_nothing() {
     let id = WorkspaceId::from("w");
     let (nothing, something) = (PullRequestLinked { link: None }, link(0));
 
-    let none = store.set_workspace_pull_request(&id, &nothing, None).unwrap();
-    let none_again = store.set_workspace_pull_request(&id, &nothing, None).unwrap();
-    let found = store.set_workspace_pull_request(&id, &something, None).unwrap();
-    let found_again = store.set_workspace_pull_request(&id, &something, None).unwrap();
+    let none = store.set_workspace_pull_request(&id, Some(&nothing), None).unwrap();
+    let none_again = store.set_workspace_pull_request(&id, Some(&nothing), None).unwrap();
+    let found = store.set_workspace_pull_request(&id, Some(&something), None).unwrap();
+    let found_again = store.set_workspace_pull_request(&id, Some(&something), None).unwrap();
 
     let none = none.expect("looking for the first time is a change, even finding none");
     assert_eq!(none.pull_request_link, Some(nothing));
@@ -46,7 +46,7 @@ fn finding_the_same_pull_request_again_changes_nothing() {
 fn a_pull_request_found_is_kept_through_reopening() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.set_workspace_pull_request(&"w".into(), &link(2), None).unwrap();
+    store.set_workspace_pull_request(&"w".into(), Some(&link(2)), None).unwrap();
     drop(store);
 
     let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
@@ -83,7 +83,8 @@ fn a_workspace_from_before_records_kept_only_the_link_keeps_the_link_to_what_it_
     assert_eq!(linked("elsewhere"), None);
     let rev = |id: &str| store.get_workspace(&id.into()).unwrap().rev;
     assert!(rev("w") > rev("unlooked"), "a record that changed moves its revision");
-    let again = store.set_workspace_pull_request(&"w".into(), &link(2), Some(&BranchName::from("alder"))).unwrap();
+    let again =
+        store.set_workspace_pull_request(&"w".into(), Some(&link(2)), Some(&BranchName::from("alder"))).unwrap();
     assert_eq!(again, None, "a read that finds the same after the update changes nothing");
 }
 
@@ -137,10 +138,10 @@ fn finding_the_same_pull_request_on_another_branch_records_that_branch() {
     let id = WorkspaceId::from("w");
     let found = link(0);
     let (aspen, header) = (BranchName::from("aspen"), BranchName::from("header"));
-    store.set_workspace_pull_request(&id, &found, Some(&aspen)).unwrap();
+    store.set_workspace_pull_request(&id, Some(&found), Some(&aspen)).unwrap();
 
-    let same = store.set_workspace_pull_request(&id, &found, Some(&aspen)).unwrap();
-    let elsewhere = store.set_workspace_pull_request(&id, &found, Some(&header)).unwrap();
+    let same = store.set_workspace_pull_request(&id, Some(&found), Some(&aspen)).unwrap();
+    let elsewhere = store.set_workspace_pull_request(&id, Some(&found), Some(&header)).unwrap();
 
     assert_eq!(same, None);
     assert_eq!(elsewhere.unwrap().pull_request_branch, Some(header));

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use protocol::client::github::{GithubShown, GithubUpdate};
 use protocol::client::{HubFrame, HubNotice};
-use protocol::model::{PullRequestFound, ReferenceAsk, ReferenceRead, Workspace, WorkspaceId};
+use protocol::model::{PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen, Workspace, WorkspaceId};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{mpsc, watch};
 use tracing::warn;
@@ -25,6 +25,7 @@ pub(super) async fn pump(
     // Before anything's read to send, so nothing kept meanwhile is missed.
     let mut kept = hub.github_kept();
     let mut feed = hub.subscribe_feed();
+    let mut unseen = hub.unseen_told();
     let mut feeding = Feeding { hub, shown: GithubShown::default(), workspaces: HashMap::new(), sent: Sent::default() };
     let deliver = async |updates: Vec<GithubUpdate>| {
         for update in updates {
@@ -56,6 +57,11 @@ pub(super) async fn pump(
                     Err(RecvError::Lagged(_)) => continue 'whole,
                     Err(RecvError::Closed) => return,
                 },
+                told = unseen.recv() => match told {
+                    Ok(id) => feeding.told(&id),
+                    Err(RecvError::Lagged(_)) => continue 'whole,
+                    Err(RecvError::Closed) => return,
+                },
             };
             if deliver(updates).await.is_err() {
                 return;
@@ -77,8 +83,15 @@ struct Feeding {
 #[derive(Default)]
 struct Sent {
     references: HashMap<ReferenceAsk, ReferenceRead>,
-    /// `None` where it said the hub hasn't looked.
-    pull_requests: HashMap<WorkspaceId, Option<PullRequestFound>>,
+    pull_requests: HashMap<WorkspaceId, Own>,
+}
+
+/// What the hub knows of a workspace's own pull request: what was found, `None` where the hub hasn't looked, and
+/// whether GitHub last showed its repository at all.
+#[derive(Clone, PartialEq)]
+struct Own {
+    found: Option<PullRequestFound>,
+    unseen: Option<RepositoryUnseen>,
 }
 
 impl Feeding {
@@ -106,7 +119,7 @@ impl Feeding {
             .map(|workspace| (workspace.id.clone(), workspace))
             .collect();
         for workspace in self.workspaces.values() {
-            updates.extend(self.sent.pull_request(&workspace.id, self.hub.known_of(workspace)));
+            updates.extend(self.sent.pull_request(&workspace.id, self.own(workspace)));
         }
         // Without waiting for the hub's next look for them.
         let forgotten = self.workspaces.values().filter_map(|workspace| self.hub.forgotten_link(workspace));
@@ -123,7 +136,7 @@ impl Feeding {
         for workspace in self.workspaces.values() {
             let Some(link) = workspace.pull_request_linked() else { continue };
             if items.contains(&Item::new(&link.repository, link.number)) {
-                updates.extend(self.sent.pull_request(&workspace.id, self.hub.known_of(workspace)));
+                updates.extend(self.sent.pull_request(&workspace.id, Own::of(&self.hub, workspace)));
             }
         }
         updates
@@ -135,7 +148,24 @@ impl Feeding {
             return Vec::new();
         }
         self.workspaces.insert(workspace.id.clone(), workspace.clone());
-        self.sent.pull_request(&workspace.id, self.hub.known_of(workspace)).into_iter().collect()
+        self.sent.pull_request(&workspace.id, self.own(workspace)).into_iter().collect()
+    }
+
+    /// What's to send now that whether GitHub showed `id`'s repository has changed.
+    fn told(&mut self, id: &WorkspaceId) -> Vec<GithubUpdate> {
+        let Some(workspace) = self.workspaces.get(id) else { return Vec::new() };
+        let own = self.own(workspace);
+        self.sent.pull_request(id, own).into_iter().collect()
+    }
+
+    fn own(&self, workspace: &Workspace) -> Own {
+        Own::of(&self.hub, workspace)
+    }
+}
+
+impl Own {
+    fn of(hub: &Hub, workspace: &Workspace) -> Self {
+        Self { found: hub.known_of(workspace), unseen: hub.unseen_of(&workspace.id) }
     }
 }
 
@@ -150,14 +180,14 @@ impl Sent {
         Some(GithubUpdate::Reference { reference: ask.clone(), read })
     }
 
-    /// What to send of `workspace`'s pull request, now that the hub knows it as `found`, unless that's what was sent
+    /// What to send of `workspace`'s pull request, now that the hub knows it as `own` says, unless that's what was sent
     /// last. Even that the hub hasn't looked is sent the first time, so a client that heard otherwise on a connection
     /// before hears it.
-    fn pull_request(&mut self, workspace: &WorkspaceId, found: Option<PullRequestFound>) -> Option<GithubUpdate> {
-        if self.pull_requests.get(workspace) == Some(&found) {
+    fn pull_request(&mut self, workspace: &WorkspaceId, own: Own) -> Option<GithubUpdate> {
+        if self.pull_requests.get(workspace) == Some(&own) {
             return None;
         }
-        self.pull_requests.insert(workspace.clone(), found.clone());
-        Some(GithubUpdate::PullRequest { workspace: workspace.clone(), found })
+        self.pull_requests.insert(workspace.clone(), own.clone());
+        Some(GithubUpdate::PullRequest { workspace: workspace.clone(), found: own.found, unseen: own.unseen })
     }
 }

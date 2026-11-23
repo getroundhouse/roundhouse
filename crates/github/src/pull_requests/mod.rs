@@ -8,7 +8,7 @@ pub use asked::{FacetsRead, PullRequestsAsk, PullRequestsRead, RulesRead, Summar
 pub use facets::{Checks, PullFacets, Rules, judged, observe};
 mod graphql;
 mod heads;
-pub use heads::{BRANCHES_A_QUERY, Headed, HeadsAsk, HeadsRead};
+pub use heads::{BRANCHES_A_QUERY, Headed, HeadsAsk, HeadsRead, HeadsUnread};
 mod parse;
 pub use parse::ReportedCheck;
 pub(crate) use parse::{queue, review, time};
