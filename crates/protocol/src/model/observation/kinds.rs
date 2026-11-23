@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Observed;
-use crate::model::{Rev, WorkspaceId};
+use crate::model::{LineCounts, Rev, WorkspaceId};
 
 /// One observation, of any kind, with what it's of, its revision and what it says, as a list or the feed gives it. A
 /// client keeps whichever copy has the newer revision, as it keeps a record, by [`Observation::key`]. A kind this build
@@ -28,13 +28,6 @@ pub enum ObservationKey {
     },
     #[serde(other)]
     Unknown,
-}
-
-/// Lines added and removed, as git counts them.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct LineCounts {
-    pub added: u64,
-    pub removed: u64,
 }
 
 impl Observation {

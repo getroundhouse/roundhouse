@@ -255,6 +255,9 @@ security-framework = "3.7.0"
 serde = { version = "1.0.229", features = ["derive"] }
 # With `raw_value`, so a terminal's rows are kept, compared and passed on as JSON, rather than read into their types.
 serde_json = { version = "1.0.154", features = ["raw_value"] }
+# Already under uuid, whose v5 IDs the worker makes. Hashes a changed file as git hashes a blob, to give it a version
+# that changes when its content does.
+sha1_smol = "1.0.1"
 # Already under gpui-kit, whose diff uses it. Works out an edit's lines before its patch comes back, and what changed
 # within a line of a diff.
 similar = "2.7.0"

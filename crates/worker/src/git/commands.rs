@@ -82,6 +82,17 @@ impl GitOutput {
     }
 }
 
+/// What git printed, byte for byte, if it succeeded, for output whose paths a person's files can have in bytes that
+/// aren't UTF-8, such as a list git separates with NULs.
+pub(super) async fn git_ok_bytes(given: &Environment, cwd: &Path, args: &[&str]) -> Result<Vec<u8>, ApiError> {
+    let output = run(given, cwd, args).await?;
+    if output.status.success() {
+        return Ok(output.stdout);
+    }
+    let said = String::from_utf8_lossy(&output.stderr);
+    Err(git_error(format!("git {} failed: {}", args.join(" "), said.trim())))
+}
+
 /// For commands that print NUL-separated paths, such as `git ls-files -z`.
 pub(crate) async fn list_nul_separated(
     given: &Environment,
@@ -269,7 +280,11 @@ pub async fn diff(given: &Environment, worktree_path: &str, base_ref: Option<&st
 /// The commit a diff is taken from, by its full object ID, so a client can read a file as it was there: the merge base
 /// with `base_ref`, or HEAD's commit when there's no base ref or git finds no merge base with it. `None` only when
 /// HEAD has no commit yet.
-async fn diff_base(given: &Environment, worktree: &Path, base_ref: Option<&str>) -> Result<Option<CommitId>, ApiError> {
+pub(super) async fn diff_base(
+    given: &Environment,
+    worktree: &Path,
+    base_ref: Option<&str>,
+) -> Result<Option<CommitId>, ApiError> {
     if let Some(base) = base_ref {
         let merge_base = git(given, worktree, &["merge-base", base, "HEAD"]).await?;
         if merge_base.success {

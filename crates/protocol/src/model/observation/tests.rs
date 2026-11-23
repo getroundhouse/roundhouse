@@ -1,5 +1,5 @@
-use super::{LineCounts, Observation, ObservationKey, Observed};
-use crate::model::Rev;
+use super::{Observation, ObservationKey, Observed};
+use crate::model::{LineCounts, Rev};
 
 /// An observation of each kind, with the key and revision it's of, and whether it's sent at the hub's level.
 fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, bool)> {

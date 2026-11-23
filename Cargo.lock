@@ -11563,6 +11563,7 @@ dependencies = [
  "protocol",
  "serde",
  "serde_json",
+ "sha1_smol",
  "tempfile",
  "terminal-state",
  "thiserror 2.0.21",

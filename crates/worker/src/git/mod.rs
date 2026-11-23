@@ -3,6 +3,7 @@
 
 pub(crate) mod blob;
 pub(crate) mod branches;
+mod changes;
 mod children;
 mod clones;
 pub(crate) mod files;
@@ -15,6 +16,7 @@ mod repository_variables;
 pub(crate) mod tests;
 mod worktrees;
 
+pub(crate) use changes::ChangeSummaries;
 pub(crate) use children::add_child_worktree;
 pub(crate) use clones::{Clones, capture_archived, restore_archived};
 pub use making::prepare_workspace;
@@ -31,7 +33,7 @@ mod commands;
 pub(crate) use commands::list_nul_separated;
 pub(crate) use commands::version;
 use commands::{
-    GitOutput, command, commit_of, exists, git, git_error, git_ok, off_thread, ref_exists, reject_option_like, run,
-    valid_branch_name,
+    GitOutput, command, commit_of, diff_base, exists, git, git_error, git_ok, git_ok_bytes, off_thread, ref_exists,
+    reject_option_like, run, valid_branch_name,
 };
 pub use commands::{diff, restore_workspace, status, worktree_there};
