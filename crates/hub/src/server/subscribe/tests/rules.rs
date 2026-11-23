@@ -99,15 +99,17 @@ async fn a_stop_sent_straight_after_its_start_leaves_nothing_followed() {
     }
 }
 
-/// A session followed from a `seq`, or from the agent's own place, is sent only its events from there.
+/// A session followed from a `seq`, or from the agent's own place, is sent only its events from there. A subagent's
+/// event comes before the agent's last, so the agent's places aren't its `seq`s.
 #[tokio::test]
 async fn a_session_followed_from_where_a_client_got_to_is_sent_its_events_from_there() {
     let dir = tempfile::tempdir().unwrap();
     let given = Given::new(dir.path()).await;
     let run = RunId::new(1);
-    for text in ["one", "two", "three"] {
+    for (text, subagent) in [("one", None), ("two", None), ("looked", Some("helper")), ("three", None)] {
         let blocks = vec![ContentBlock::Text { text: text.into(), images: Vec::new() }];
-        let body = EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None };
+        let subagent = subagent.map(Into::into);
+        let body = EventBody::Assistant { message_id: None, subagent, model: None, blocks, first_index: None };
         given
             .session
             .send_item(Item::Event { run, body: Box::new(body), raw: None, attachments: Vec::new(), seq: None })
@@ -117,7 +119,7 @@ async fn a_session_followed_from_where_a_client_got_to_is_sent_its_events_from_t
     let mut one = Connection::greeted(&given.hub, 4).await;
     let from = |subscription_id, from| start(subscription_id, Follow::Session { id: "s".into(), from: Some(from) });
     let starts = vec![
-        from(1, LogFrom::Seq { seq: Seq::new(2) }),
+        from(1, LogFrom::Seq { seq: Seq::new(3) }),
         from(2, LogFrom::Place { subagent: None, place: Place::new(3) }),
     ];
 
@@ -132,6 +134,7 @@ async fn a_session_followed_from_where_a_client_got_to_is_sent_its_events_from_t
         });
         events.collect::<Vec<_>>()
     };
-    assert_eq!((sent_on(1), sent_on(2)), (vec![2, 3], vec![3]));
+    assert_eq!(sent_on(1), [3, 4], "from the subagent's event, at seq 3");
+    assert_eq!(sent_on(2), [4], "the agent's third event, at seq 4");
     assert!(given.hub.followed(&Followed::Session("s".into())));
 }
