@@ -141,8 +141,12 @@ fn hub(world: &World, subscription_id: u64, observed: bool) -> Vec<HubFrame> {
 
 /// The workspace `id`'s own observations, then what the feed says of its level, as a hub sends them at its level, with
 /// what GitHub says of its pull request among them where `observed`. Its changed files are sent either way, as a hub
-/// sends them to a start that reads GitHub in the form from before observations.
+/// sends them to a start that reads GitHub in the form from before observations. Nothing, where the world says its hub
+/// lists no workspace's level.
 fn workspace(world: &World, id: &WorkspaceId, subscription_id: u64, observed: bool) -> Vec<HubFrame> {
+    if world.lists_no_workspace_level {
+        return Vec::new();
+    }
     let level = Level::Workspace { id: id.clone() };
     let mut observations = world.observations_at(&level);
     if observed {

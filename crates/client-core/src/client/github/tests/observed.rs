@@ -3,7 +3,6 @@
 
 use std::time::Duration;
 
-use protocol::client::github::GithubShown;
 use protocol::client::listed::{ReferenceObservations, WorkspaceObservations};
 use protocol::client::{HubNotice, ObservationNotice};
 use protocol::model::{
@@ -15,7 +14,7 @@ use protocol::model::{
 use super::super::held::{GithubHeld, github_keys, notice_key};
 use crate::fake_hub::{GithubSends, World, serve};
 use crate::records::HubRecords;
-use crate::{Client, GithubFeed, RecordsFeed};
+use crate::{Client, FollowedWorkspace, GithubFeed, RecordsFeed, ShownOfGithub};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -62,21 +61,23 @@ fn unseen() -> RepositoryUnseen {
     }
 }
 
-/// What a view reads of each, once the hub has said it all, with the views that showed it, and the feed they read.
-fn read_once_said(client: &Client) -> (Read, RecordsFeed, crate::GithubView) {
+/// What a view reads of each, once the hub has said it all, with every workspace followed at its own level, as the
+/// handles on them say, the view that showed them, and the feed they read.
+fn read_once_said(client: &Client) -> (Read, RecordsFeed, (Vec<FollowedWorkspace>, crate::GithubView)) {
     let records = RecordsFeed::start(client);
     waiting::thread::until(TIMEOUT, "the hub's records", || records.connected());
     let feed = records.github();
     let view = feed.view();
     let workspaces = records.snapshot().workspaces().iter().map(|workspace| workspace.id.clone()).collect::<Vec<_>>();
     let elm = workspaces.iter().find(|id| records.snapshot().workspace(id).unwrap().name == "elm").unwrap().clone();
-    view.show(GithubShown { workspaces: workspaces.clone(), closely: workspaces.clone(), references: vec![twelve()] });
+    let followed = workspaces.iter().map(|id| records.follow_workspace(id)).collect();
+    view.show(ShownOfGithub { workspaces, references: vec![twelve()] });
     let read = || Read::of(&feed, &records, &elm);
     waiting::thread::until(TIMEOUT, "the pull request with its checks, the unseen repository and the chip", || {
         let read = read();
         read.checks.is_some() && read.unseen.is_some() && read.chip.is_some()
     });
-    (read(), records, view)
+    (read(), records, (followed, view))
 }
 
 /// What views read of GitHub, in the forms they read it in, and each of which form the hub sent.
@@ -131,7 +132,7 @@ fn a_view_reads_the_same_of_github_whichever_form_its_hub_sends_it_in() {
         (GithubSends::ChipsObserved, [(false, true), (true, false)]),
     ] {
         let (_dir, client) = served(sends);
-        let (said, records, _view) = read_once_said(&client);
+        let (said, records, _shown) = read_once_said(&client);
         let elm = records.snapshot().workspaces().iter().find(|w| w.name == "elm").unwrap().id.clone();
         assert_eq!(forms(&records.github(), &elm), held, "{sends:?}");
         read.push(said);
@@ -272,8 +273,8 @@ fn a_view_is_told_of_a_change_to_what_it_shows_and_of_nothing_else() {
     let (shows_chip, chip_told) = flume::unbounded();
     holding.held.add(1, shows_w);
     holding.held.add(2, shows_chip);
-    holding.held.show(1, GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() });
-    holding.held.show(2, GithubShown { references: vec![twelve()], ..GithubShown::default() });
+    holding.held.show(1, ShownOfGithub { workspaces: vec!["w".into()], ..ShownOfGithub::default() });
+    holding.held.show(2, ShownOfGithub { references: vec![twelve()], ..ShownOfGithub::default() });
     let told = |told: &flume::Receiver<()>| told.drain().count();
 
     holding.notice(stands("w", "head-7", PrState::Open, 5));

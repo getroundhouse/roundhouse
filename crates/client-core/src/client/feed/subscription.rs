@@ -1,5 +1,6 @@
 use super::super::follow::{Follow, FollowError, Source};
 use super::super::github::{github_keys, notice_key, own_keys};
+use super::super::workspace_level::{FollowedWorkspace, Workspaces};
 use super::super::{Client, ClientError, GithubFeed, Result, Subscription, SubscriptionItem};
 use crate::Agents;
 use crate::records::{HubRecords, Snapshot};
@@ -7,6 +8,7 @@ use parking_lot::Mutex;
 use protocol::client::github::GithubUpdate;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::Follow as Level;
+use protocol::model::WorkspaceId;
 
 /// One hub's records, and what GitHub says of each workspace's own pull request, kept current by following the hub, at
 /// its level, until every clone of this has gone. It carries on from a new connection given to
@@ -16,6 +18,8 @@ pub struct RecordsFeed {
     pub(super) follow: Follow<HubRecords>,
     /// What the same hub says of GitHub, which the hub's level sends of every workspace's own pull request.
     github: GithubFeed,
+    /// What follows the workspaces followed at their own level, into the same copy.
+    workspaces: Workspaces,
 }
 
 impl RecordsFeed {
@@ -28,9 +32,10 @@ impl RecordsFeed {
     pub fn start(client: &Client) -> RecordsFeed {
         let records = Follow::unstarted(HubRecords::default());
         let github = GithubFeed::start(client, records.reach());
+        let workspaces = Workspaces::start(client, records.reach(), github.clone());
         let source = RecordsSource { github: github.clone() };
         let follow = records.start(client, move || source);
-        let feed = RecordsFeed { follow, github };
+        let feed = RecordsFeed { follow, github, workspaces };
         client.inner.folding.reach(&feed.follow);
         feed
     }
@@ -61,11 +66,20 @@ impl RecordsFeed {
     }
 
     /// Carries on on a new connection, which takes in what replies on it carry, as [`RecordsFeed::start`] says, and so
-    /// does what the same hub says of GitHub.
+    /// does what the same hub says of GitHub, and following each workspace followed at its own level.
     pub fn reconnect(&self, client: &Client) {
         client.inner.folding.reach(&self.follow);
         self.follow.reconnect(client);
         self.github.reconnect(client);
+        self.workspaces.reconnect(client);
+    }
+
+    /// Follows workspace `id` at its own level, as [`FollowedWorkspace`] says, until the handle this returns is dropped,
+    /// and every other kept on it. A view that shows what only a workspace's own pane draws keeps one while it shows
+    /// it. One from a hub from before workspaces had a level of their own follows nothing, and what's read of the
+    /// workspace's changed files says the hub sends none.
+    pub fn follow_workspace(&self, id: &WorkspaceId) -> FollowedWorkspace {
+        self.workspaces.follow(id)
     }
 
     /// What the same hub says of GitHub, of every workspace's own pull request and of what views show.

@@ -4,10 +4,9 @@
 
 use std::sync::{Arc, Weak};
 
-use client_core::{GithubView, RecordsFeed};
+use client_core::{GithubView, RecordsFeed, ShownOfGithub};
 use gpui_kit::{App, Task, WeakEntity};
 use parking_lot::Mutex;
-use protocol::client::github::GithubShown;
 use protocol::model::{Reference, ReferenceAsk, ReferenceRead, Seq, WorkspaceId};
 
 use super::book::Book;
@@ -146,7 +145,7 @@ impl<W: Waiter> References<W> {
         };
         // Apart from the book's lock, as hearing from the hub takes them the other way round.
         if hides && let Some(following) = &*self.0.github.lock() {
-            following.view.show(GithubShown::default());
+            following.view.show(ShownOfGithub::default());
         }
         again
     }
@@ -159,7 +158,7 @@ impl<W: Waiter> References<W> {
             let Some(shown) = references.0.known.lock().settled(in_sight) else { return };
             references.follow_github(cx);
             if let Some(following) = &*references.0.github.lock() {
-                following.view.show(GithubShown { references: shown, ..GithubShown::default() });
+                following.view.show(ShownOfGithub { references: shown, ..ShownOfGithub::default() });
             }
         });
     }

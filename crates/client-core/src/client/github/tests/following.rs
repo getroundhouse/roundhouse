@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use protocol::client::github::{GithubShown, GithubUpdate};
+use protocol::client::github::GithubUpdate;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame, ReplyOutcome};
@@ -15,8 +15,8 @@ use protocol::model::{
 };
 
 use super::super::held::GithubHeld;
-use crate::RecordsFeed;
 use crate::stand_in_hub::{self, Does, subscribed};
+use crate::{RecordsFeed, ShownOfGithub};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -24,8 +24,8 @@ fn ask(n: u64) -> ReferenceAsk {
     ReferenceAsk { repository: GithubRepositoryName::named("o/r"), number: IssueNumber::try_from(n).unwrap() }
 }
 
-fn chips(numbers: &[u64]) -> GithubShown {
-    GithubShown { references: numbers.iter().map(|n| ask(*n)).collect(), ..GithubShown::default() }
+fn chips(numbers: &[u64]) -> ShownOfGithub {
+    ShownOfGithub { references: numbers.iter().map(|n| ask(*n)).collect(), ..ShownOfGithub::default() }
 }
 
 /// What a stand-in hub has been asked to follow, by subscription ID, and each `Subscribe` it was sent, in order.
@@ -82,9 +82,9 @@ fn chip(n: u64) -> Level {
     Level::Reference { reference: ask(n) }
 }
 
-/// What every view shows is followed together, under one subscription, which each change to what's shown changes in
-/// one request, and what the hub sends of it reaches the views that show it. What a view showed is let go of once it's
-/// gone. A workspace a view shows the pull request of in full is followed at its own level.
+/// The chips every view shows are followed together, under one subscription, which each change to what's shown changes
+/// in one request, and what the hub sends of them reaches the views that show them. What a view showed is let go of
+/// once it's gone. A workspace a view shows the pull request of is followed only at the hub's level.
 #[test]
 fn what_views_show_is_followed_together_and_what_the_hub_sends_reaches_them() {
     let dir = tempfile::tempdir().unwrap();
@@ -96,15 +96,14 @@ fn what_views_show_is_followed_together_and_what_the_hub_sends_reaches_them() {
     first.show(chips(&[1, 2]));
     first.changed().recv_timeout(TIMEOUT).expect("the first view hears of what it shows");
     waiting::thread::until(TIMEOUT, "what the hub sent", || feed.reference(&ask(2)).is_some());
-    second.show(GithubShown { closely: vec!["w".into()], ..chips(&[2, 3]) });
+    second.show(ShownOfGithub { workspaces: vec!["w".into()], ..chips(&[2, 3]) });
     waiting::thread::until(TIMEOUT, "the third", || feed.reference(&ask(3)).is_some());
     let both = asked.follows();
     drop(first);
     waiting::thread::until(TIMEOUT, "the first view to go", || !asked.follows().contains(&chip(1)));
 
-    let workspace = Level::Workspace { id: "w".into() };
-    assert_eq!(both, [Level::Hub, chip(1), chip(2), chip(3), workspace.clone()], "both views' together, each once");
-    assert_eq!(asked.follows(), [Level::Hub, chip(2), chip(3), workspace]);
+    assert_eq!(both, [Level::Hub, chip(1), chip(2), chip(3)], "both views' together, each once");
+    assert_eq!(asked.follows(), [Level::Hub, chip(2), chip(3)]);
     let last = asked.subscribes.lock().last().cloned().unwrap();
     assert_eq!((last.stop.len(), last.start.len()), (1, 0), "one request stops what's no longer shown: {last:?}");
     assert_eq!(feed.reference(&ask(1)), None, "no view shows it now");

@@ -6,12 +6,14 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use protocol::client::github::{GithubShown, GithubUpdate, MOST_REFERENCES_SHOWN};
+use protocol::client::github::{GithubUpdate, MOST_REFERENCES_SHOWN};
 use protocol::client::{HubNotice, ObservationNotice};
 use protocol::model::{
     Level, Observation, ObservationKey, Observed as Freshness, OwnPullRequestSaid, PullRequestFound, ReferenceAsk,
     ReferenceRead, RepositoryUnseen, WorkspaceId,
 };
+
+use super::views::ShownOfGithub;
 
 /// The observation a key names, where the copy of the hub's records holds it.
 pub(super) type Observed<'a> = &'a dyn Fn(&ObservationKey) -> Option<&'a Observation>;
@@ -20,7 +22,7 @@ pub(super) type Observed<'a> = &'a dyn Fn(&ObservationKey) -> Option<&'a Observa
 #[derive(Default)]
 pub(super) struct GithubHeld {
     /// By ID, which is in the order they were made, so all they show is said in the same order each time.
-    views: BTreeMap<u64, Shown>,
+    views: BTreeMap<u64, View>,
     references: HashMap<ReferenceAsk, ReferenceRead>,
     /// Of every workspace, which the hub's level sends.
     pull_requests: HashMap<WorkspaceId, Own>,
@@ -38,19 +40,19 @@ struct Own {
 }
 
 /// What one view shows, and what tells it that some of that changed.
-struct Shown {
-    shown: GithubShown,
+struct View {
+    shown: ShownOfGithub,
     changed: flume::Sender<()>,
 }
 
-impl Shown {
+impl View {
     /// Whether it shows what `key` is of.
     fn shows(&self, key: &ObservationKey) -> bool {
         match key {
             ObservationKey::WorkspacePullRequest { workspace_id }
             | ObservationKey::WorkspacePullRequestDetail { workspace_id }
             | ObservationKey::WorkspaceRepositoryUnseen { workspace_id } => {
-                self.shown.workspaces.contains(workspace_id) || self.shown.closely.contains(workspace_id)
+                self.shown.workspaces.contains(workspace_id)
             }
             ObservationKey::Reference { reference } => self.shown.references.contains(reference),
             ObservationKey::WorkspaceLines { .. }
@@ -63,11 +65,11 @@ impl Shown {
 impl GithubHeld {
     /// Adds the view `view`, which shows nothing yet, and is told of a change on `changed`.
     pub(super) fn add(&mut self, view: u64, changed: flume::Sender<()>) {
-        self.views.insert(view, Shown { shown: GithubShown::default(), changed });
+        self.views.insert(view, View { shown: ShownOfGithub::default(), changed });
     }
 
     /// Takes `shown` to be what the view `view` shows.
-    pub(super) fn show(&mut self, view: u64, shown: GithubShown) {
+    pub(super) fn show(&mut self, view: u64, shown: ShownOfGithub) {
         if let Some(view) = self.views.get_mut(&view) {
             view.shown = shown;
         }
@@ -79,11 +81,10 @@ impl GithubHeld {
 
     /// All that every view shows, each once, but for chips past the most a hub takes, which are those of the views made
     /// longest ago, since the newest is likeliest to be what's in front.
-    pub(super) fn shown(&self) -> GithubShown {
-        let mut all = GithubShown::default();
-        for Shown { shown, .. } in self.views.values().rev() {
+    pub(super) fn shown(&self) -> ShownOfGithub {
+        let mut all = ShownOfGithub::default();
+        for View { shown, .. } in self.views.values().rev() {
             add(&mut all.workspaces, &shown.workspaces);
-            add(&mut all.closely, &shown.closely);
             add(&mut all.references, &shown.references);
         }
         all.references.truncate(MOST_REFERENCES_SHOWN);
@@ -100,7 +101,7 @@ impl GithubHeld {
     /// Takes in `update`, telling each view that shows what it's of. Returns whether it changed anything. What the
     /// copy of the hub's records holds of the same, as an observation, the caller lets go of.
     pub(super) fn apply(&mut self, update: GithubUpdate) -> bool {
-        let shows: Box<dyn Fn(&GithubShown) -> bool> = match update {
+        let shows: Box<dyn Fn(&ShownOfGithub) -> bool> = match update {
             GithubUpdate::Reference { reference, read } => {
                 if self.references.get(&reference) == Some(&read) {
                     return false;

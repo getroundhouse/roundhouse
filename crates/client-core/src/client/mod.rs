@@ -26,13 +26,14 @@ mod sent_call;
 mod stream;
 mod terminals;
 mod typed;
+mod workspace_level;
 
 pub use admin::{HubAdmin, IdleStop, Restart, restart_hub, stop_hub, stop_hub_if_idle, stop_hub_if_still};
 pub use api::{new_attachment_id, new_device_id, new_message_id, new_request_id, new_terminal_id};
 pub use commands::{Commands, Reply};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;
-pub use github::{GithubFeed, GithubView};
+pub use github::{GithubFeed, GithubView, ShownOfGithub};
 pub use github_account::new_github_sign_in_id;
 pub use introduction::Introduction;
 pub(crate) use lines::Place;
@@ -41,6 +42,7 @@ pub use open_file::{OpenFile, Opening};
 pub use open_session::{OpenSession, Search, Searched, Stretch, View};
 pub use open_terminal::{OpenTerminal, Pointer, SelectBy};
 pub(crate) use queueing::Shown;
+pub use workspace_level::FollowedWorkspace;
 
 #[cfg(test)]
 mod tests;
