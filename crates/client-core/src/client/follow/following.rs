@@ -66,7 +66,7 @@ pub(in crate::client) struct Shared<H> {
 }
 
 /// A handle on something followed. Its thread stops once every clone of this has gone.
-pub(in crate::client) struct Follow<H> {
+pub(in crate::client) struct Following<H> {
     shared: Arc<Shared<H>>,
     pub(in crate::client) changed: flume::Receiver<()>,
     wake: flume::Sender<()>,
@@ -83,7 +83,7 @@ impl Teller {
     }
 }
 
-impl<H> Clone for Follow<H> {
+impl<H> Clone for Following<H> {
     fn clone(&self) -> Self {
         Self { shared: self.shared.clone(), changed: self.changed.clone(), wake: self.wake.clone() }
     }
@@ -117,7 +117,7 @@ impl<H> Reach<H> {
     }
 
     /// Whether this reaches what `follow` follows.
-    pub(in crate::client) fn reaches(&self, follow: &Follow<H>) -> bool {
+    pub(in crate::client) fn reaches(&self, follow: &Following<H>) -> bool {
         std::ptr::eq(self.0.as_ptr(), Arc::as_ptr(&follow.shared))
     }
 }
@@ -140,14 +140,14 @@ impl<H> Giver<H> {
     }
 }
 
-impl<H: Send + 'static> Follow<H> {
+impl<H: Send + 'static> Following<H> {
     /// Starts following on a thread of its own, so this doesn't wait for the hub, with the source `source` makes there.
     pub(in crate::client) fn start<S: Source<Held = H>>(
         client: &Client,
         held: H,
         source: impl FnOnce() -> S + Send + 'static,
     ) -> Self {
-        Follow::unstarted(held).start(client, source)
+        Following::unstarted(held).start(client, source)
     }
 
     /// What's to be followed, holding `held`, before its thread starts, so what its source needs can be given a handle
@@ -163,7 +163,7 @@ impl<H: Send + 'static> Follow<H> {
             errors: Mutex::new(Vec::new()),
             signal,
         });
-        Unstarted { follow: Follow { shared, changed, wake }, woken }
+        Unstarted { follow: Following { shared, changed, wake }, woken }
     }
 
     pub(in crate::client) fn read<T>(&self, read: impl FnOnce(&H) -> T) -> T {
@@ -222,22 +222,22 @@ impl<H: Send + 'static> Follow<H> {
 
 /// What's to be followed, before the thread that follows it has started.
 pub(in crate::client) struct Unstarted<H> {
-    follow: Follow<H>,
+    follow: Following<H>,
     woken: flume::Receiver<()>,
 }
 
 impl<H: Send + 'static> Unstarted<H> {
-    /// A handle on what's held that doesn't keep it followed, as [`Follow::reach`] gives once it's started.
+    /// A handle on what's held that doesn't keep it followed, as [`Following::reach`] gives once it's started.
     pub(in crate::client) fn reach(&self) -> Reach<H> {
         self.follow.reach()
     }
 
-    /// Starts following on a thread of its own, as [`Follow::start`] does.
+    /// Starts following on a thread of its own, as [`Following::start`] does.
     pub(in crate::client) fn start<S: Source<Held = H>>(
         self,
         client: &Client,
         source: impl FnOnce() -> S + Send + 'static,
-    ) -> Follow<H> {
+    ) -> Following<H> {
         let Unstarted { follow, woken } = self;
         let (client, shared) = (client.clone(), follow.shared.clone());
         let thread = move || {

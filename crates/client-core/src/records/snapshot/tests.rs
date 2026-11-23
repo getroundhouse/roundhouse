@@ -175,6 +175,8 @@ fn a_change_from_a_hub_without_revisions_is_still_told_of() {
     assert!(now.changes_since(&before).workspace(&"w".into()));
 }
 
+/// A session's subagents are listed in the order they started, each found by its call, and go as the feed removes
+/// them, as any record does.
 #[test]
 fn a_sessions_subagents_are_listed_as_they_started_and_found_by_their_call() {
     let mut held = HubRecords::default();
@@ -199,6 +201,9 @@ fn a_sessions_subagents_are_listed_as_they_started_and_found_by_their_call() {
     assert!(!now.changes_since(&before).subagents(&"t".into()));
     let unchanged = |snapshot: &super::Snapshot| snapshot.subagent(&"s".into(), &"b".into()).cloned().unwrap();
     assert!(std::sync::Arc::ptr_eq(&unchanged(&before), &unchanged(&now)), "one that didn't change is shared");
+    let gone = RecordKey::Subagent { session_id: "s".into(), subagent: subagent("s", "b", 2, 5).id() };
+    assert!(held.apply_notice(HubNotice::Removed { record: gone, rev: Rev::new(7) }), "removed, as a record can be");
+    assert_eq!(ids(held.snapshot().subagents(&"s".into()), |s| s.call.as_str()), ["a"]);
 }
 
 /// Two accounts of one user and one of another, a sign-in, and three apps of your own.

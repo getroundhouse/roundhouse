@@ -6,7 +6,9 @@ mod following;
 mod thread;
 
 pub use following::FollowError;
-pub(super) use following::{Follow, Giver, Reach, Source, Teller};
+#[cfg(test)]
+pub(super) use following::Unstarted;
+pub(super) use following::{Following, Giver, Reach, Source, Teller};
 
 #[cfg(test)]
 mod tests;

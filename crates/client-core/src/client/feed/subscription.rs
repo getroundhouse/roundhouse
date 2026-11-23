@@ -1,4 +1,4 @@
-use super::super::follow::{Follow, FollowError, Source};
+use super::super::follow::{FollowError, Following, Source};
 use super::super::github::{github_keys, notice_key, own_keys};
 use super::super::workspace_level::{FollowedWorkspace, Workspaces};
 use super::super::{Client, ClientError, GithubFeed, Result, Subscription, SubscriptionItem};
@@ -7,7 +7,7 @@ use crate::records::{HubRecords, Snapshot};
 use parking_lot::Mutex;
 use protocol::client::github::GithubUpdate;
 use protocol::client::listed::Listed;
-use protocol::client::subscriptions::Follow as Level;
+use protocol::client::subscriptions::Follow;
 use protocol::model::WorkspaceId;
 
 /// One hub's records, and what GitHub says of each workspace's own pull request, kept current by following the hub, at
@@ -15,7 +15,7 @@ use protocol::model::WorkspaceId;
 /// [`RecordsFeed::reconnect`].
 #[derive(Clone)]
 pub struct RecordsFeed {
-    pub(super) follow: Follow<HubRecords>,
+    pub(super) follow: Following<HubRecords>,
     /// What the same hub says of GitHub, which the hub's level sends of every workspace's own pull request.
     github: GithubFeed,
     /// What follows the workspaces followed at their own level, into the same copy.
@@ -30,7 +30,7 @@ impl RecordsFeed {
     /// on, and what's shown needn't wait for the hub to say the same. So are the records of each session a view follows,
     /// as its subscription sends them.
     pub fn start(client: &Client) -> RecordsFeed {
-        let records = Follow::unstarted(HubRecords::default());
+        let records = Following::unstarted(HubRecords::default());
         let github = GithubFeed::start(client, records.reach());
         let workspaces = Workspaces::start(client, records.reach(), github.clone());
         let source = RecordsSource { github: github.clone() };
@@ -109,7 +109,7 @@ impl Source for RecordsSource {
     /// Follows the hub, and takes in where its records stand, which the hub sends first, before it returns, so it's
     /// caught up once it has.
     fn resume(&mut self, client: &Client, held: &Mutex<HubRecords>) -> Result<Subscription> {
-        let subscription = client.follow(Level::Hub)?;
+        let subscription = client.follow(Follow::Hub)?;
         // Asked for on each connection, since it may be to another hub, and taken in with the records, so a view that
         // has a chat's record has what its agent offers.
         let agents = Agents::read(client)?;

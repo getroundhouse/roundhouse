@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use protocol::client::ObservationNotice;
 use protocol::model::{
-    ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, Level, MOST_FILES_LISTED, Observation, Observed, Rev,
+    ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, ChangedFilesPage, Level, Observation, Observed, Rev,
     WorkspaceId,
 };
 
@@ -99,8 +99,12 @@ fn a_page_of_changed_files_is_read_from_the_world_by_the_worker_s_rule() {
     let mut world = World::default();
     let repo = world.repo("aspen");
     let (elm, oak) = (world.workspace(&repo, "elm"), world.workspace(&repo, "oak"));
-    let files = vec![file("u.rs", ChangeStatus::Untracked), file("b.rs", ChangeStatus::Modified)];
-    let reads = WorkerReads { changed_files: Some(("c1".into(), files.clone())), ..WorkerReads::default() };
+    let files = vec![
+        file("u.rs", ChangeStatus::Untracked),
+        file("b.rs", ChangeStatus::Modified),
+        file("a.rs", ChangeStatus::Modified),
+    ];
+    let reads = WorkerReads { changed_files: Some(("c1".into(), files)), ..WorkerReads::default() };
     world.worker_reads.insert(elm.clone(), reads);
     let (_dir, client) = served(world);
     let after = ChangedFileAt { untracked: false, path: "a.rs".into() };
@@ -109,8 +113,9 @@ fn a_page_of_changed_files_is_read_from_the_world_by_the_worker_s_rule() {
     let older = client.workspace_changed_files(&oak, after.clone()).unwrap_err();
     let nowhere = client.workspace_changed_files(&"nowhere".into(), after.clone()).unwrap_err();
 
-    let by_the_rule = protocol::model::ChangedFilesPage::after("c1".into(), files, &after, MOST_FILES_LISTED);
-    assert_eq!(page, by_the_rule);
+    let tracked_then_untracked = vec![file("b.rs", ChangeStatus::Modified), file("u.rs", ChangeStatus::Untracked)];
+    let by_the_rule = ChangedFilesPage { base_commit: "c1".into(), files: tracked_then_untracked, left_out: 0 };
+    assert_eq!(page, by_the_rule, "those after a.rs, tracked first");
     assert!(older.is_unsupported(), "{older}");
     assert!(matches!(nowhere, ClientError::Api(refused) if refused.code == protocol::client::ErrorCode::NotFound));
 }

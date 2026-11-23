@@ -11,7 +11,7 @@ use protocol::model::{
 use super::held::GithubHeld;
 use super::source::GithubSource;
 use crate::client::Client;
-use crate::client::follow::{Follow, Reach};
+use crate::client::follow::{Following, Reach};
 use crate::records::{HubRecords, Snapshot};
 
 /// What one hub says of GitHub, of every workspace's own pull request and of the chips every view made from this shows,
@@ -20,7 +20,7 @@ use crate::records::{HubRecords, Snapshot};
 /// [`GithubFeed::reconnect`].
 #[derive(Clone)]
 pub struct GithubFeed {
-    follow: Follow<GithubHeld>,
+    follow: Following<GithubHeld>,
     next_view: Arc<AtomicU64>,
     /// The copy of the hub's records that what the hub sends of GitHub as observations is held in, with every other
     /// observation.
@@ -32,7 +32,7 @@ impl GithubFeed {
     /// writing what's sent as observations in `records`, the copy of the same hub's records.
     pub(in crate::client) fn start(client: &Client, records: Reach<HubRecords>) -> GithubFeed {
         let written = records.clone();
-        let follow = Follow::start(client, GithubHeld::default(), move || GithubSource::new(written));
+        let follow = Following::start(client, GithubHeld::default(), move || GithubSource::new(written));
         GithubFeed { follow, next_view: Arc::new(AtomicU64::new(0)), records }
     }
 

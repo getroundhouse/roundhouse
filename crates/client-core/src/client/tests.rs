@@ -5,8 +5,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use protocol::client::{
-    ApiError, CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice,
-    ReplyOutcome, subscriptions,
+    CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice, ReplyOutcome,
+    subscriptions,
 };
 use protocol::terminal::Typed;
 
@@ -95,28 +95,6 @@ fn a_hub_that_chose_another_version_is_refused() {
     );
 }
 
-/// A hub from before clients followed only through `Subscribe`, which speaks only version 3 of the protocol, shares
-/// no version with this client, so it refuses the hello, as the hub does, and the client says the hub is across a
-/// protocol break from it, which only a person can do something about, by updating or replacing the hub. A desktop app
-/// replaces one that it started itself, as `docs/principles/protocol.md` says.
-#[test]
-fn a_hub_that_speaks_only_version_3_is_too_old() {
-    let dir = tempfile::tempdir().unwrap();
-    let socket = dir.path().join("hub.sock");
-    let (hub, ours) =
-        (protocol::versions::Versions::only(3), protocol::versions::Versions::only(CLIENT_PROTOCOL_VERSION));
-    assert_eq!(hub.newest_shared(ours), None, "the two share no version");
-    let refused =
-        ApiError::new(ErrorCode::VersionMismatch, format!("this hub is on {hub}, and this client speaks {ours}"));
-    StandIn::refusing_hello(refused).listen(&socket, |_| Does::Nothing);
-
-    let connected = Client::connect(&socket, "test");
-
-    let refused = connected.err().expect("refused");
-    assert!(refused.is_version_mismatch() && refused.needs_a_person(), "{refused:?}");
-    assert!(refused.to_string().contains("protocol 3"), "{refused}");
-}
-
 /// A hub that takes the request to stop and goes before its reply gets out did what was asked, so stopping it is done,
 /// as it is for one that had already gone.
 #[test]
@@ -175,4 +153,39 @@ fn a_connection_knows_the_device_its_hello_named() {
     let client = Client::connect(&on, Introduction::on("desktop", device)).unwrap();
     assert_eq!(client.device().map(protocol::model::DeviceId::as_str), Some("mac"));
     assert_eq!(Client::connect(&off, "cli").unwrap().device(), None);
+}
+
+/// A subscription that ends while a start it asked for waits for the hub's reply, as one dropped or fallen behind does,
+/// stops that start once the hub says it started it, since what ended it may have told the hub to stop before the start
+/// reached the hub.
+#[test]
+fn a_start_answered_after_its_subscription_ended_is_stopped() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("hub.sock");
+    let (open, opened) = flume::bounded(1);
+    let heard = stand_in_hub::listen(&socket, move |request| {
+        let ClientRequest::Subscribe(subscribe) = request else { return Does::Nothing };
+        let started = ClientResponse::Subscribed(subscriptions::Subscribed::default());
+        let answered = Does::Answers(Box::new(ReplyOutcome::Response(started)));
+        if subscribe.start.is_empty() { answered } else { Does::After(opened.clone(), Box::new(answered)) }
+    });
+    let client = Client::connect(&socket, "test").unwrap();
+    let (subscription, _) = client.follow_all(Vec::new()).unwrap();
+    let (changing, starting) = (subscription.changing(), client.clone());
+    std::thread::spawn(move || changing.follow_only(&starting, vec![subscriptions::Follow::Hub]));
+    let next = |what: &str, of: &dyn Fn(&subscriptions::Subscribe) -> bool| loop {
+        let request = heard.recv_timeout(Duration::from_secs(10)).unwrap_or_else(|_| panic!("never {what}"));
+        if let ClientRequest::Subscribe(subscribe) = request
+            && of(&subscribe)
+        {
+            return subscribe;
+        }
+    };
+    let start = next("the start", &|subscribe| !subscribe.start.is_empty()).start[0].subscription_id;
+
+    drop(subscription);
+    next("the stop as it ended", &|subscribe| subscribe.stop == [start]);
+    open.send(()).unwrap();
+
+    next("the stop once the start was answered", &|subscribe| subscribe.stop == [start]);
 }

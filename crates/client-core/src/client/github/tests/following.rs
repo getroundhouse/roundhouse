@@ -6,17 +6,20 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use protocol::client::github::GithubUpdate;
-use protocol::client::listed::Listed;
+use protocol::client::listed::{Listed, ReferenceObservations};
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame, ReplyOutcome};
 use protocol::model::{
-    GithubLoginKind, GithubRepositoryName, IssueNumber, Level, ObservationKey, PullRequestFound, ReferenceAsk,
-    ReferenceRead, RepositoryUnseen,
+    GithubLoginKind, GithubRepositoryName, IssueNumber, Level, Observation, ObservationKey, Observed, PullRequestFound,
+    ReferenceAsk, ReferenceRead, ReferenceSaid, RepositoryUnseen, Rev,
 };
 
 use super::super::held::GithubHeld;
-use crate::stand_in_hub::{self, Does, subscribed};
-use crate::{RecordsFeed, ShownOfGithub};
+use super::super::source::GithubSource;
+use crate::client::follow::{Following, Source as _};
+use crate::records::HubRecords;
+use crate::stand_in_hub::{self, Does, refusing_every_start, starts, subscribed};
+use crate::{Client, RecordsFeed, ShownOfGithub, SubscriptionItem};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -177,4 +180,64 @@ fn past_the_most_chips_the_newest_views_are_kept() {
     assert_eq!(shown.len(), protocol::client::github::MOST_REFERENCES_SHOWN);
     assert_eq!(shown.first(), Some(&ask(most + 1)), "the newest view's");
     assert!(!shown.contains(&ask(most)), "the oldest view's last");
+}
+
+/// A start the hub refused isn't asked for again each time a view says what it shows, as views do whenever what they
+/// draw from changes, only once what's shown changes.
+#[test]
+fn a_refused_start_is_asked_for_again_only_once_what_s_shown_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("hub.sock");
+    let heard = stand_in_hub::listen(&socket, |request| {
+        Does::Answers(Box::new(refusing_every_start(&request, ErrorCode::NotFound, "a stand-in has no issues")))
+    });
+    let client = Client::connect(&socket, "test").unwrap();
+    let records = Following::unstarted(HubRecords::default());
+    let (held, mut source) = (Mutex::new(GithubHeld::default()), GithubSource::new(records.reach()));
+    held.lock().add(1, flume::unbounded().0);
+    let _subscription = source.resume(&client, &held).unwrap();
+    let mut show = |shown| {
+        held.lock().show(1, shown);
+        source.asked(Some(&client), &held, &|| {}).unwrap();
+    };
+
+    for _ in 0..3 {
+        show(chips(&[1]));
+    }
+    let while_the_same = starts(&heard);
+    show(chips(&[1, 2]));
+
+    assert_eq!(while_the_same, [1], "asked for once, and refused");
+    assert_eq!(starts(&heard), [2], "both, once what's shown changed");
+}
+
+/// What a chip's level sends that was already on its way as the chip was let go of, such as its list after falling
+/// behind, is dropped, so nothing brings back what letting go of it let go of.
+#[test]
+fn what_s_sent_of_a_chip_no_longer_followed_is_dropped() {
+    let dir = tempfile::tempdir().unwrap();
+    let (client, _) = hub_that_says_missing(&dir.path().join("hub.sock"));
+    let records = Following::unstarted(HubRecords::default());
+    let (held, mut source) = (Mutex::new(GithubHeld::default()), GithubSource::new(records.reach()));
+    held.lock().add(1, flume::unbounded().0);
+    held.lock().show(1, chips(&[1]));
+    let _subscription = source.resume(&client, &held).unwrap();
+    let listed = || {
+        let said = Observed::Current { value: ReferenceSaid::Missing };
+        let observation = Observation::Reference { reference: ask(1), said, rev: Rev::new(1) };
+        let listed = ReferenceObservations { reference: ask(1), observations: vec![observation], rev: Rev::new(1) };
+        SubscriptionItem::Listed(Box::new(Listed::Reference(listed)))
+    };
+    let held_of_it = || {
+        let key = ObservationKey::Reference { reference: ask(1) };
+        records.reach().read(|records| records.snapshot().github_observation(&key).is_some()).unwrap()
+    };
+    source.apply(&client, &held, listed()).unwrap();
+    assert!(held_of_it(), "followed");
+
+    held.lock().show(1, ShownOfGithub::default());
+    source.asked(Some(&client), &held, &|| {}).unwrap();
+    source.apply(&client, &held, listed()).unwrap();
+
+    assert!(!held_of_it(), "let go of, and not listed again by what came after");
 }

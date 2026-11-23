@@ -81,9 +81,10 @@ fn a_copy_with_no_revision_replaces_the_one_held_as_any_records_does() {
 }
 
 /// A session's list says which of its subagents there are, so one held that it lacks is gone, unless the copy held is
-/// newer than the list, as for any list.
+/// newer than the list, and a copy no newer than it is already said, as for any level's list. A removal drops an older
+/// copy, as for any record.
 #[test]
-fn a_sessions_list_drops_what_it_lacks_unless_whats_held_is_newer() {
+fn a_sessions_list_and_removals_keep_the_rule_every_level_keeps() {
     let mut subagents = Subagents::default();
     subagents.want("s".into());
     subagents.apply(subagent("s", "a", 1, 5));
@@ -92,6 +93,10 @@ fn a_sessions_list_drops_what_it_lacks_unless_whats_held_is_newer() {
     assert!(subagents.apply_list(&"s".into(), vec![subagent("s", "b", 2, 6)], Rev::new(7)));
 
     assert_eq!(calls(&subagents, "s"), ["b", "c"], "a is gone, and c came after the list");
+    assert!(!subagents.apply(subagent("s", "a", 1, 6)), "older than the list, which lacks it");
+    assert!(subagents.remove(&"s".into(), subagent("s", "c", 3, 8).id(), Rev::new(9)));
+    assert!(!subagents.apply(subagent("s", "c", 3, 8)), "older than its removal");
+    assert_eq!(calls(&subagents, "s"), ["b"]);
 }
 
 /// A session is followed once for each subscription that follows it, so its subagents are kept until the last lets go,

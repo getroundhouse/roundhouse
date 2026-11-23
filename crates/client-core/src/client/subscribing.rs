@@ -9,6 +9,7 @@ use std::sync::atomic::Ordering;
 
 use parking_lot::Mutex;
 
+use protocol::client::github::GithubUpdate;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, LogFrom, Refused, Subscribe, Subscribed, Subscription as Start};
 use protocol::client::{ClientRequest, Request as _};
@@ -66,11 +67,6 @@ impl Subscription {
         } else {
             None
         }
-    }
-
-    /// The IDs the hub sends what it follows under.
-    pub fn ids(&self) -> Vec<u64> {
-        self.changing.followed.lock().iter().map(|(id, _)| *id).collect()
     }
 
     /// What changes what it follows, for a source that follows many things, while it lasts.
@@ -157,13 +153,25 @@ impl Changing {
         };
         // Ended meanwhile, so nothing it started is followed.
         let going = channels.senders.contains_key(&self.channel);
-        let mut followed = self.followed.lock();
-        for (id, level) in started {
-            if going && !refused.iter().any(|refused| refused.subscription_id == id) {
-                followed.push((id, level));
-            } else {
-                channels.of.remove(&id);
+        let mut ended = Vec::new();
+        {
+            let mut followed = self.followed.lock();
+            for (id, level) in started {
+                let started = !refused.iter().any(|refused| refused.subscription_id == id);
+                if going && started {
+                    followed.push((id, level));
+                } else {
+                    channels.of.remove(&id);
+                    ended.extend(started.then_some(id));
+                }
             }
+        }
+        drop(channels);
+        // What ended it told the hub to stop, but that can have reached the hub before the start did, so the start
+        // would run with nothing to stop it. The hub stops nothing it isn't following, so stopping it again costs a
+        // request.
+        if !ended.is_empty() {
+            let _ = self.connection.send_only(Subscribe { stop: ended, start: Vec::new() }.into_request());
         }
         Ok(refused)
     }
@@ -208,6 +216,34 @@ impl Client {
             }
         }
         Err(ClientError::Disconnected)
+    }
+}
+
+impl SubscriptionItem {
+    /// The level it's of, where it says, so a source can drop what was already on its way from a level it has stopped
+    /// following: a list's or a notice's level, and for what's sent in the form from before observations, `GithubUpdate`,
+    /// the level of what it's of, a chip's or a workspace's.
+    pub(super) fn level(&self) -> Option<Level> {
+        match self {
+            SubscriptionItem::Github(update) => match &**update {
+                GithubUpdate::Reference { reference, .. } => Some(Level::Reference { reference: reference.clone() }),
+                GithubUpdate::PullRequest { workspace, .. } => Some(Level::Workspace { id: workspace.clone() }),
+                GithubUpdate::Unknown => None,
+            },
+            SubscriptionItem::Listed(listed) => match &**listed {
+                Listed::Workspace(observations) => Some(Level::Workspace { id: observations.workspace_id.clone() }),
+                Listed::Reference(observations) => Some(Level::Reference { reference: observations.reference.clone() }),
+                Listed::Hub(_) => Some(Level::Hub),
+                Listed::Session(records) => Some(Level::Session { id: records.session_id.clone() }),
+                Listed::Unknown => None,
+            },
+            SubscriptionItem::Notice(notice) => notice.level(),
+            SubscriptionItem::Event(_)
+            | SubscriptionItem::Tail(_)
+            | SubscriptionItem::Delta(_)
+            | SubscriptionItem::Terminal(_)
+            | SubscriptionItem::TerminalPicture(_) => None,
+        }
     }
 }
 

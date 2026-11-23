@@ -5,7 +5,7 @@ use std::cell::Cell;
 
 use parking_lot::Mutex;
 use protocol::client::listed::Listed;
-use protocol::client::subscriptions::Follow as Start;
+use protocol::client::subscriptions::Follow;
 use protocol::model::{Level, WorkspaceId};
 
 use super::followed::Wanted;
@@ -23,19 +23,23 @@ pub(super) struct WorkspacesSource {
     /// when that changes.
     github: GithubFeed,
     changing: Option<Changing>,
+    /// What was last asked for on this connection, which isn't asked for again until it changes, so a start the hub
+    /// refused isn't sent again each time a handle comes or goes on a workspace already followed.
+    asked_for: Vec<Follow>,
     /// The workspaces followed on this connection.
     followed: Vec<WorkspaceId>,
 }
 
 impl WorkspacesSource {
     pub(super) fn new(records: Reach<HubRecords>, github: GithubFeed) -> Self {
-        WorkspacesSource { records, github, changing: None, followed: Vec::new() }
+        WorkspacesSource { records, github, changing: None, asked_for: Vec::new(), followed: Vec::new() }
     }
 
     /// Takes `wanted` to be what's followed now, letting go of what was held only through a workspace no longer in it.
-    /// A start the hub refused, such as of a workspace it no longer has, is left out until a handle comes or goes, or a
-    /// new connection, and what's read of it is as of a workspace nothing follows.
-    fn followed_now(&mut self, wanted: &[Start]) {
+    /// A start the hub refused, such as of a workspace it no longer has, is left out until the workspaces followed
+    /// change, as a handle on another comes or the last on one goes, or a new connection, and what's read of it is as of
+    /// a workspace nothing follows.
+    fn followed_now(&mut self, wanted: &[Follow]) {
         let now = (wanted.iter())
             .filter_map(|start| match start.level() {
                 Level::Workspace { id } => Some(id),
@@ -64,6 +68,7 @@ impl Source for WorkspacesSource {
         let wanted = held.lock().follows();
         let (subscription, _refused) = client.follow_all(wanted.clone())?;
         self.followed_now(&wanted);
+        self.asked_for.clone_from(&wanted);
         let mut listed = Vec::new();
         for item in subscription.items.try_iter() {
             if let SubscriptionItem::Listed(of) = &item
@@ -81,8 +86,14 @@ impl Source for WorkspacesSource {
     }
 
     /// Takes what a workspace's level sends into the copy of the hub's records, telling the GitHub feed what it took in
-    /// of what GitHub says, and hands it what's sent in the form from before observations, `GithubUpdate`.
+    /// of what GitHub says, and hands it what's sent in the form from before observations, `GithubUpdate`. What's sent of
+    /// a workspace no longer followed, which was already on its way as it was let go of, is dropped, so nothing brings
+    /// back what letting go of it let go of.
     fn apply(&mut self, _: &Client, _: &Mutex<Wanted>, item: SubscriptionItem) -> Result<bool> {
+        let Some(Level::Workspace { id }) = item.level() else { return Ok(false) };
+        if !self.followed.contains(&id) {
+            return Ok(false);
+        }
         // Whether the copy changed, which it tells its own readers of.
         let changed = Cell::new(false);
         let change = |change: &dyn Fn(&mut HubRecords) -> bool| {
@@ -121,8 +132,12 @@ impl Source for WorkspacesSource {
     fn asked(&mut self, connection: Option<&Client>, held: &Mutex<Wanted>, _: &dyn Fn()) -> Result<bool> {
         let wanted = held.lock().follows();
         let (Some(client), Some(changing)) = (connection, &self.changing) else { return Ok(false) };
+        if wanted == self.asked_for {
+            return Ok(false);
+        }
         changing.follow_only(client, wanted.clone())?;
         self.followed_now(&wanted);
+        self.asked_for = wanted;
         Ok(false)
     }
 

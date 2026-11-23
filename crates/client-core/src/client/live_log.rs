@@ -8,7 +8,7 @@ use protocol::event::SessionEvent;
 use protocol::model::{Seq, Session, SessionId};
 use protocol::tail::{StreamDelta, Tail};
 
-use super::follow::{Follow, Source};
+use super::follow::{Following, Source};
 use super::{Client, Result, Subscription, SubscriptionItem};
 
 /// One of what the hub sent, in order.
@@ -34,14 +34,14 @@ struct Items {
 /// A session's log from when it was made, on a thread of its own, carrying on from where it got to on a new connection.
 #[derive(Clone)]
 pub struct LiveLog {
-    follow: Follow<Items>,
+    follow: Following<Items>,
 }
 
 impl LiveLog {
     /// Starts following `session` from the event after its last as it's recorded here.
     pub fn start(client: &Client, session: &Session) -> Self {
         let source = LiveSource { id: session.id.clone(), next: session.last_seq.next() };
-        let follow = Follow::start(client, Items::default(), move || source);
+        let follow = Following::start(client, Items::default(), move || source);
         follow.wake();
         Self { follow }
     }

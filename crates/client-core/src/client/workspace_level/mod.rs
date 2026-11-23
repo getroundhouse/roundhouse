@@ -5,6 +5,8 @@
 
 mod followed;
 mod source;
+#[cfg(test)]
+mod tests;
 
 pub use followed::FollowedWorkspace;
 pub(super) use followed::Workspaces;

@@ -11,9 +11,9 @@ use protocol::model::{PromptLine, Seq, Session};
 
 use super::super::{FollowError, OpenSession};
 use super::{
-    answered_simply, follows_session, refused, refusing_every_start, requests_until_unsubscribed, session,
-    start_hub_answering, until,
+    answered_simply, follows_session, refused, requests_until_unsubscribed, session, start_hub_answering, until,
 };
+use crate::stand_in_hub::refusing_every_start;
 use crate::{Client, ClientError};
 
 /// A session the hub has deleted, so it refuses to follow it.
