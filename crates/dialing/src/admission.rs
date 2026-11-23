@@ -2,6 +2,8 @@
 //! frame, read a byte at a time, so nothing after it is read too: the stream goes on with the worker protocol.
 
 use iroh::endpoint::{RecvStream, SendStream};
+use protocol::client::Outcome;
+use protocol::dialing::{Admission, Admitted, TicketSecret};
 use protocol::frame;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -11,6 +13,20 @@ use crate::DialError;
 
 /// The most either side's frame takes, far more than a secret or an instance's ID.
 const MAX_BYTES: usize = 4096;
+
+/// Says `secret` on a stream the worker opened, and returns what the hub admitted it as. A refusal is
+/// [`DialError::Refused`].
+pub(crate) async fn say(
+    send: &mut SendStream,
+    recv: &mut RecvStream,
+    secret: TicketSecret,
+) -> Result<Admitted, DialError> {
+    write_frame(send, &Admission { secret }).await?;
+    match read_frame(recv).await? {
+        Outcome::Response(admitted) => Ok(admitted),
+        Outcome::Error(refused) => Err(DialError::Refused(refused.message)),
+    }
+}
 
 /// One frame of what the other side says, read a byte at a time.
 pub async fn read_frame<T: DeserializeOwned>(recv: &mut RecvStream) -> Result<T, DialError> {

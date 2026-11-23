@@ -10,6 +10,7 @@ mod runtime;
 mod service_builds;
 mod service_log;
 mod signals;
+mod worker_reach;
 mod worker_role;
 
 pub use config::{Config, StopsWith};

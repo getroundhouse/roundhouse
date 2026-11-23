@@ -15,4 +15,6 @@ pub enum DialError {
     Dial(String),
     #[error("reading or writing what's said before the worker protocol: {0}")]
     Said(String),
+    #[error("the hub refused the worker: {0}")]
+    Refused(String),
 }

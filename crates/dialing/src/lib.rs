@@ -21,7 +21,7 @@ pub use admission::{read_frame, write_frame};
 pub use error::DialError;
 pub use hub_endpoint::{HubEndpoint, Relays};
 pub use iroh::endpoint::{Connection, Incoming, RecvStream, SendStream};
-pub use worker_endpoint::WorkerEndpoint;
+pub use worker_endpoint::{Admitted, WorkerEndpoint};
 
 /// The key a connection's other end proved it holds, as iroh writes it, which is how the hub knows a worker again.
 pub fn remote_key(connection: &Connection) -> String {
