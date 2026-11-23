@@ -65,6 +65,13 @@ impl Hub {
         K::table(&mut self.observations.tables.lock()).kept_current(of)
     }
 
+    /// Holds the lock every change to an observation and every list takes, until what this returns is dropped, so each
+    /// waits as it would for a change under way.
+    #[cfg(test)]
+    pub(crate) async fn holding_observations(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.observations.changing.lock().await
+    }
+
     /// Forgets the observation of `of`, since what it's of is gone, such as a workspace, and tells clients it's gone.
     pub(crate) async fn observation_gone<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
         self.change_observation::<K>(of, Change::Gone).await

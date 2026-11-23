@@ -1,8 +1,8 @@
 //! Serving clients, on the Unix socket and over TLS for paired devices. Each connection reads its requests in order,
-//! and answers them alongside one another.
+//! and answers them alongside one another, but for what `super::in_order` takes in the order it was sent.
 
 use super::counted::Counted;
-use super::in_order::{Answering, in_order};
+use super::in_order::{Answering, Subscribes, in_order};
 use super::subscribing::Subscription;
 use super::{admit, dispatch};
 
@@ -13,8 +13,9 @@ use std::time::Duration;
 
 use crate::listener::Listener;
 use parking_lot::Mutex;
-use protocol::client::{HubFrame, ReplyOutcome};
+use protocol::client::{ClientRequest, HubFrame, ReplyOutcome};
 use protocol::frame;
+use protocol::model::ClientDevice;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{OwnedSemaphorePermit, mpsc, watch};
 use tokio::task::JoinHandle;
@@ -153,6 +154,8 @@ where
     R: tokio::io::AsyncBufRead + Unpin,
 {
     let mut line = Vec::new();
+    // Dropped as the connection stops reading, which ends its task once it has taken each `Subscribe` read before.
+    let subscribes = Subscribes::start(hub, connection);
     loop {
         line.clear();
         let read = read_line(&mut reader, &mut line, gate.max_frame_bytes(), gate.deadline()).await;
@@ -164,7 +167,7 @@ where
         if !read {
             return Ending::Closed;
         }
-        let request = match frame::read_call::<protocol::client::ClientRequest>(&line) {
+        let request = match frame::read_call::<ClientRequest>(&line) {
             Ok(request) => request,
             Err(e) => {
                 debug!("closing a connection that sent a bad frame: {e}");
@@ -173,34 +176,15 @@ where
         };
         let (asked, unreadable) = match request.request {
             Ok(asked) => (asked, None),
-            Err(error) => (protocol::client::ClientRequest::Unknown, Some(error)),
+            Err(error) => (ClientRequest::Unknown, Some(error)),
         };
         let (outcome, close) = match gate.admit(hub, asked).await {
             Admit::Handle(handled) => {
-                let (hub, connection, device) = (hub.clone(), connection.clone(), gate.client_device());
-                // Then held by the request's task, so the count comes down however the request ends, even if the
-                // connection stops reading before the task starts, as it can while typing waits for room at its worker.
-                let under_way = Counted::request(&hub);
                 let read = match unreadable {
                     Some(error) => Err(error),
                     None => Ok(handled),
                 };
-                let answering = in_order(&hub, &connection, read).await;
-                // On a task of its own, which outlasts the connection, so a request the hub has read is carried out
-                // whether or not its client is still there, as a prompt sent just before a client quits is.
-                tokio::spawn(async move {
-                    let answered = match answering {
-                        Answering::Queued(queued) => queued.await,
-                        Answering::OnATask(Ok(request)) => dispatch::handle(&hub, &connection, device, request).await,
-                        Answering::OnATask(Err(error)) => Err(hub.unsupported(Some(&error))),
-                    };
-                    let outcome = match answered {
-                        Ok(response) => ReplyOutcome::Response(response),
-                        Err(error) => ReplyOutcome::Error(error),
-                    };
-                    drop(under_way);
-                    let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }.into()).await;
-                });
+                answer(hub, connection, &subscribes, gate.client_device(), request.id, read).await;
                 continue;
             }
             Admit::Answer(outcome) => (outcome, false),
@@ -211,6 +195,41 @@ where
             return Ending::Closed;
         }
     }
+}
+
+/// Answers call `id`, which asked `read` from `device`: one taken in order before the next request is read, and any
+/// other on a task of its own.
+async fn answer(
+    hub: &Arc<Hub>,
+    connection: &Arc<Connection>,
+    subscribes: &Subscribes,
+    device: Option<ClientDevice>,
+    id: u64,
+    read: Result<ClientRequest, serde_json::Error>,
+) {
+    let (hub, connection) = (hub.clone(), connection.clone());
+    // Then held by the request's task, so the count comes down however the request ends, even if the connection stops
+    // reading before the task starts, as it can while typing waits for room at its worker.
+    let under_way = Counted::request(&hub);
+    let answering = match read {
+        Ok(ClientRequest::Subscribe(asked)) => return subscribes.queue(&connection, id, asked, under_way).await,
+        read => in_order(&hub, read).await,
+    };
+    // On a task of its own, which outlasts the connection, so a request the hub has read is carried out whether or not
+    // its client is still there, as a prompt sent just before a client quits is.
+    tokio::spawn(async move {
+        let answered = match answering {
+            Answering::Queued(queued) => queued.await,
+            Answering::OnATask(Ok(request)) => dispatch::handle(&hub, &connection, device, request).await,
+            Answering::OnATask(Err(error)) => Err(hub.unsupported(Some(&error))),
+        };
+        let outcome = match answered {
+            Ok(response) => ReplyOutcome::Response(response),
+            Err(error) => ReplyOutcome::Error(error),
+        };
+        drop(under_way);
+        let _ = connection.frames.send(HubFrame::Reply { id, outcome }.into()).await;
+    });
 }
 
 /// Reads one line into `line`. False once there's nothing more to read: the connection closed or failed, the line

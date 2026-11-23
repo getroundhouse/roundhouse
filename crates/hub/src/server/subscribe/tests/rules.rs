@@ -1,8 +1,9 @@
 //! The rules of the request itself: what it refuses, what it does sent again, and its order.
 
+use protocol::client::admin::HubStatus;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, LogFrom, Refused, Subscribe, Subscribed};
-use protocol::client::{ClientResponse, ErrorCode, HubFrame, Request};
+use protocol::client::{ClientResponse, ErrorCode, HubFrame, ReplyOutcome, Request};
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{Place, RunId, Seq};
 
@@ -97,6 +98,30 @@ async fn a_stop_sent_straight_after_its_start_leaves_nothing_followed() {
 
         assert!(!given.hub.followed(&Followed::Workspace("w".into())));
     }
+}
+
+/// A `Subscribe` whose start waits for its list holds back only the connection's next `Subscribe`, so another kind of
+/// request sent after it is answered meanwhile. A workspace's list still goes before the reply.
+#[tokio::test]
+async fn a_subscribe_whose_start_waits_holds_back_no_other_kind_of_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let given = Given::new(dir.path()).await;
+    let mut one = Connection::greeted(&given.hub, 4).await;
+    // Every list of observations waits for it, a workspace's too.
+    let changing = given.hub.holding_observations().await;
+    let w = start(1, Follow::Workspace { id: "w".into() });
+
+    one.write(1, &Subscribe { stop: Vec::new(), start: vec![w] }.into_request()).await;
+    let status = one.reply(2, &HubStatus.into_request()).await;
+
+    assert!(matches!(status, ReplyOutcome::Response(ClientResponse::HubStatus(_))), "{status:?}");
+    let subscribed = |frame: &HubFrame| matches!(frame, HubFrame::Reply { id: 1, .. } | HubFrame::Listed { .. });
+    assert!(!one.sent.iter().any(subscribed), "the start waits for its list: {:?}", one.sent);
+    drop(changing);
+    let started = one.reply_to(1).await;
+    assert_eq!(started, ReplyOutcome::Response(ClientResponse::Subscribed(Subscribed::default())));
+    let listed = |frame: &HubFrame| matches!(frame, HubFrame::Listed { listed: Listed::Workspace(_), .. });
+    assert!(one.sent.iter().any(listed), "the list goes before the reply: {:?}", one.sent);
 }
 
 /// A session followed from a `seq`, or from the agent's own place, is sent only its events from there.
