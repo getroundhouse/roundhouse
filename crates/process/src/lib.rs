@@ -9,10 +9,10 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
-mod account;
 mod busy;
 mod environment;
 mod group;
+mod os_user;
 mod printed_environment;
 mod record;
 mod running_from;
@@ -32,14 +32,14 @@ use unix as sys;
 #[cfg(windows)]
 use windows as sys;
 
-#[cfg(unix)]
-pub use account::Account;
-pub use account::account_shell;
 pub use busy::{check_version, run_once_not_busy};
 pub use environment::{Environment, TakesEnvironment};
 #[cfg(unix)]
 pub use group::group_running;
 pub use group::{Signal, detach, own_group, signal_group};
+#[cfg(unix)]
+pub use os_user::OsUser;
+pub use os_user::{HomeAndShell, home_and_shell};
 pub use printed_environment::{ENVIRONMENT_PRINTER, PRINTS_ENVIRONMENT, print_environment, printed_environment};
 pub use record::{ProcessRecord, start_time};
 pub use running_from::{Claimed, RunningFrom, claim_unused};

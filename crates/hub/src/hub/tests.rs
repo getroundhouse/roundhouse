@@ -78,7 +78,7 @@ pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<H
 /// The same, started again on the store and the files a hub left in `dir`, as a hub that restarts is.
 pub(crate) fn hub_in_again(dir: &Path) -> Arc<Hub> {
     let github = Github::new(GithubConfig::at(NO_GITHUB.to_string()));
-    Arc::new(hub_on(open_in(dir), dir, local(dir), vec![described()], github, Timers::DEFAULT))
+    Arc::new(hub_on(open_in(dir), dir, local(dir), vec![described()], github, Timers::DEFAULT, &[]))
 }
 
 /// The same, which calls GitHub's API at `api`, such as a stand-in's, and asks after a sign-in's token as often as a
@@ -88,10 +88,16 @@ pub(crate) fn hub_calling_github(dir: &Path, api: String) -> Arc<Hub> {
     hub_timed(dir, vec![described()], Github::new(GithubConfig::at(api)), CALLING_GITHUB)
 }
 
+/// The same, whose machine's environment, as the profile would give it, has `given` too.
+pub(crate) fn hub_calling_github_given(dir: &Path, api: String, given: &[(&str, &str)]) -> Arc<Hub> {
+    let github = Github::new(GithubConfig::at(api));
+    Arc::new(hub_on(store_with_session(dir), dir, local(dir), vec![described()], github, CALLING_GITHUB, given))
+}
+
 /// The same, started again on the store and the files a hub left in `dir`, as a hub that restarts is.
 pub(crate) fn hub_calling_github_again(dir: &Path, api: String) -> Arc<Hub> {
     let github = Github::new(GithubConfig::at(api));
-    Arc::new(hub_on(open_in(dir), dir, local(dir), vec![described()], github, CALLING_GITHUB))
+    Arc::new(hub_on(open_in(dir), dir, local(dir), vec![described()], github, CALLING_GITHUB, &[]))
 }
 
 /// How [`hub_calling_github`] times what it does.
@@ -113,7 +119,7 @@ fn hub_of(dir: &Path, agents: Vec<AgentDescription>, github: Github) -> Arc<Hub>
 }
 
 fn hub_timed(dir: &Path, agents: Vec<AgentDescription>, github: Github, timers: Timers) -> Arc<Hub> {
-    Arc::new(hub_on(store_with_session(dir), dir, local(dir), agents, github, timers))
+    Arc::new(hub_on(store_with_session(dir), dir, local(dir), agents, github, timers, &[]))
 }
 
 /// The local provider, with no worker to start.
@@ -134,11 +140,13 @@ fn hub_on(
     agents: Vec<AgentDescription>,
     github: Github,
     timers: Timers,
+    given: &[(&str, &str)],
 ) -> Hub {
     let (store, providers) = (Arc::new(store), ProviderSet::only(provider));
     // Only `bin` in the test's directory, where a test about `gh` puts a stand-in for it, so no test runs the real one.
-    let machine =
-        crate::machine_environment::MachineEnvironment::only(&[("PATH", &dir.join("bin").display().to_string())]);
+    let path = dir.join("bin").display().to_string();
+    let vars: Vec<(&str, &str)> = [("PATH", path.as_str())].into_iter().chain(given.iter().copied()).collect();
+    let machine = crate::machine_environment::MachineEnvironment::only(&vars);
     Hub::new(
         Build::UNSTAMPED,
         store,
@@ -155,7 +163,7 @@ fn hub_on(
 /// A hub as [`hub_describing`] makes one, before anything shares it, whose workspaces are all `provider`'s.
 pub(super) fn hub_provided_by(dir: &Path, provider: Arc<dyn Provider>, agents: Vec<AgentDescription>) -> Hub {
     let github = Github::new(GithubConfig::at(NO_GITHUB.to_string()));
-    hub_on(store_with_session(dir), dir, provider, agents, github, Timers::DEFAULT)
+    hub_on(store_with_session(dir), dir, provider, agents, github, Timers::DEFAULT, &[])
 }
 
 /// A stand-in for `w`'s worker, which fails every call, as `hub`'s worker.

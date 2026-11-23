@@ -1,18 +1,17 @@
-//! A user of this machine, as the system's database of users has them.
+//! A user of this machine, as the system's database of users has them. Not an account, which is an agent's login.
 
 #[cfg(unix)]
-use std::ffi::{CStr, CString, OsStr};
+use std::ffi::{CStr, CString, OsStr, OsString};
 #[cfg(unix)]
 use std::io;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt as _;
-#[cfg(unix)]
 use std::path::PathBuf;
 
 /// A user of this machine.
 #[cfg(unix)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Account {
+pub struct OsUser {
     pub name: String,
     pub uid: u32,
     pub gid: u32,
@@ -30,7 +29,7 @@ enum Key {
 }
 
 #[cfg(unix)]
-impl Account {
+impl OsUser {
     /// The user called `name`, or `None` if this machine has none.
     pub fn named(name: &str) -> io::Result<Option<Self>> {
         let name = CString::new(name).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
@@ -46,23 +45,32 @@ impl Account {
     }
 }
 
-/// The login shell of the user this process runs as, which a hub asks for the environment the user's profile gives
-/// when it wasn't told one.
-#[cfg(unix)]
-pub fn account_shell() -> Option<String> {
-    Account::of_this_process().ok().flatten().and_then(|account| account.shell)
+/// The home directory and login shell of the user this process runs as, which a hub falls back on for whichever
+/// whatever started it didn't say, as a service manager or a container may not.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HomeAndShell {
+    pub home: Option<PathBuf>,
+    pub shell: Option<String>,
 }
 
-/// None, since Windows gives an account no login shell.
+/// What the system's database of users has for the user this process runs as, with neither where it has no entry.
+#[cfg(unix)]
+pub fn home_and_shell() -> HomeAndShell {
+    let user = OsUser::of_this_process().ok().flatten();
+    user.map_or_else(HomeAndShell::default, |user| HomeAndShell { home: user.home, shell: user.shell })
+}
+
+/// Neither, since Windows gives a user no login shell, and a hub there has its home from its environment, as
+/// Windows gives every process.
 #[cfg(windows)]
-pub fn account_shell() -> Option<String> {
-    None
+pub fn home_and_shell() -> HomeAndShell {
+    HomeAndShell::default()
 }
 
 /// With `getpwnam_r` or `getpwuid_r`, which unlike `getpwnam` and `getpwuid` write to memory of the caller's, so
 /// another thread looking someone up can't overwrite what's read.
 #[cfg(unix)]
-fn look_up(key: &Key) -> io::Result<Option<Account>> {
+fn look_up(key: &Key) -> io::Result<Option<OsUser>> {
     // SAFETY: `passwd` is a struct of integers and pointers, for which all zeros is a valid value.
     let mut entry: libc::passwd = unsafe { std::mem::zeroed() };
     let mut found: *mut libc::passwd = std::ptr::null_mut();
@@ -86,14 +94,24 @@ fn look_up(key: &Key) -> io::Result<Option<Account>> {
     if found.is_null() {
         return Ok(None);
     }
-    // SAFETY: `found` is `entry`, whose strings the lookup set to null or to strings ending in `buffer`.
-    let text = |pointer: *const libc::c_char| unsafe {
-        (!pointer.is_null()).then(|| OsStr::from_bytes(CStr::from_ptr(pointer).to_bytes()).to_owned())
-    };
-    let name = text(entry.pw_name).and_then(|name| name.into_string().ok()).unwrap_or_default();
-    let home = text(entry.pw_dir).filter(|home| !home.is_empty()).map(PathBuf::from);
-    let shell = text(entry.pw_shell).and_then(|shell| shell.into_string().ok()).filter(|shell| !shell.is_empty());
-    Ok(Some(Account { name, uid: entry.pw_uid, gid: entry.pw_gid, home, shell }))
+    // SAFETY: `found` is `entry`, whose strings the lookup set to null or to strings ending in `buffer`, which lives
+    // until this function returns.
+    let (name, home, shell) = unsafe { (text(entry.pw_name), text(entry.pw_dir), text(entry.pw_shell)) };
+    let name = name.and_then(|name| name.into_string().ok()).unwrap_or_default();
+    let home = home.filter(|home| !home.is_empty()).map(PathBuf::from);
+    let shell = shell.and_then(|shell| shell.into_string().ok()).filter(|shell| !shell.is_empty());
+    Ok(Some(OsUser { name, uid: entry.pw_uid, gid: entry.pw_gid, home, shell }))
+}
+
+/// The string `pointer` points to, or `None` if it's null.
+///
+/// # Safety
+///
+/// `pointer` is null, or points to a string ending in NUL that lives at least as long as the call.
+#[cfg(unix)]
+unsafe fn text(pointer: *const libc::c_char) -> Option<OsString> {
+    // SAFETY: it's not null, so it's a string ending in NUL that lives through this, as the caller promises.
+    (!pointer.is_null()).then(|| OsStr::from_bytes(unsafe { CStr::from_ptr(pointer) }.to_bytes()).to_owned())
 }
 
 #[cfg(all(test, unix))]
@@ -103,13 +121,13 @@ mod tests {
     /// Looked up by its ID and then by the name that gave, the user running the tests is the same both ways.
     #[test]
     fn this_processs_user_is_found_by_its_id_and_its_name() {
-        let by_id = Account::of_this_process().unwrap().expect("the user running the tests has an entry");
+        let by_id = OsUser::of_this_process().unwrap().expect("the user running the tests has an entry");
 
-        let by_name = Account::named(&by_id.name).unwrap();
+        let by_name = OsUser::named(&by_id.name).unwrap();
 
         // SAFETY: getuid takes nothing and can't fail.
         assert_eq!(by_id.uid, unsafe { libc::getuid() });
         assert_eq!(by_name, Some(by_id));
-        assert_eq!(Account::named("no-such-user-here").unwrap(), None);
+        assert_eq!(OsUser::named("no-such-user-here").unwrap(), None);
     }
 }

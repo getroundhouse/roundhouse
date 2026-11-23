@@ -28,6 +28,18 @@ const ASKED: [&str; 8] = ["auth", "status", "--active", "--hostname", "github.co
 /// [`ASKED`] without `--no-refresh`, for a `gh` older than the one that has it, which has nothing to renew.
 const ASKED_OF_AN_OLDER_GH: [&str; 7] = ["auth", "status", "--active", "--hostname", "github.com", "--json", "hosts"];
 
+/// Whether `gh` is given the tokens for github.com it takes from its environment over its own login, as [`TOKENS`]
+/// names them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GhTokens {
+    /// As agents on the hub's machine have them, so what's read is who `gh` is to an agent there: the owner of a
+    /// `GH_TOKEN` the profile exports, rather than `gh auth`'s login.
+    AsAgentsHaveThem,
+    /// Taken out, so what's read is the login `gh auth login` and `gh auth switch` change, which connecting `gh`'s
+    /// login holds, and which a block says to run, whatever the hub was started with or the profile exports.
+    TakenOut,
+}
+
 /// What `gh` on the hub's machine is logged in to github.com with.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum GhRead {
@@ -63,9 +75,9 @@ impl Gh {
     /// [`READ_WITHIN`]. Refused when `gh` took longer than that, failed, as one older than 2.81 does, since 2.81 is the
     /// first to say in JSON, printed what the hub can't read, or named nobody, as for a token in the environment whose
     /// owner GitHub didn't say.
-    pub(crate) async fn read(&self) -> Result<GhRead, GhUnread> {
+    pub(crate) async fn read(&self, tokens: GhTokens) -> Result<GhRead, GhUnread> {
         let until = Instant::now() + READ_WITHIN;
-        let given = self.given();
+        let given = self.given(tokens);
         let Some(printed) = status(&given, &self.dir, until).await? else { return Ok(GhRead::NotInstalled) };
         let Read::LoggedIn { username, refreshable } =
             parse(&printed.stdout).ok_or_else(|| GhUnread("gh printed something else, or named nobody".into()))?
@@ -78,16 +90,17 @@ impl Gh {
 
     /// The token `gh` uses for github.com once it has renewed one it renews by itself whose time is up, as any run of
     /// `gh` the person makes would, for a token GitHub refused. `None` when it printed none.
-    pub(crate) async fn renewed(&self) -> Option<GithubToken> {
-        token(READ_WITHIN, &self.given(), &self.dir, true).await
+    pub(crate) async fn renewed(&self, tokens: GhTokens) -> Option<GithubToken> {
+        token(READ_WITHIN, &self.given(tokens), &self.dir, true).await
     }
 
     /// What `gh` is given: the machine's environment, as the login shell has it, so a `gh` installed with Homebrew is
-    /// found by a hub an app started. And none of [`TOKENS`], which `gh` would use over its own login, so what's read is
-    /// the login `gh auth login` and `gh auth switch` change, as a block says to run, whatever the hub was started with
-    /// or the profile exports.
-    pub(super) fn given(&self) -> Environment {
-        TOKENS.into_iter().fold(self.machine.given(), Environment::without)
+    /// found by a hub an app started, and [`TOKENS`] as `tokens` says.
+    pub(super) fn given(&self, tokens: GhTokens) -> Environment {
+        match tokens {
+            GhTokens::AsAgentsHaveThem => self.machine.given(),
+            GhTokens::TakenOut => TOKENS.into_iter().fold(self.machine.given(), Environment::without),
+        }
     }
 }
 

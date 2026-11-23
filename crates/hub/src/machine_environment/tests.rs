@@ -65,7 +65,7 @@ mod login_shell {
     use std::path::{Path, PathBuf};
 
     use process::Environment;
-    use process::testing::{Example, WholeEnvironment};
+    use process::testing::{Example, WholeEnvironment, login_shell};
 
     use super::super::login_shell::deadline;
     use super::super::{LoginShell, MachineEnvironment};
@@ -73,8 +73,8 @@ mod login_shell {
     /// Stands in for the daemon printing what it was started with.
     static PRINTER: Example = Example::new("environment_printer");
 
-    /// What `/bin/sh` reads as a login shell in `home`: a `.profile` that prints, as rc files can, adds to `PATH`,
-    /// exports a variable built on one the hub had, and says where it started.
+    /// What the stand-in for a login shell, [`login_shell`], reads in `home`: a `.profile` that prints, as rc files
+    /// can, adds to `PATH`, exports a variable built on one the hub had, and says where it started.
     const PROFILE: &str = "echo noise\nexport PATH=\"$HOME/profile-bin:$PATH\"\nexport BUILT_ON=\"$SET_FOR_THE_HUB, \
                            then the profile\"\nexport STARTED_IN=\"$(pwd)\"\n";
 
@@ -100,13 +100,14 @@ mod login_shell {
         WholeEnvironment::for_a_test(home).set("SET_FOR_THE_HUB", "the hub's").given()
     }
 
-    /// `/bin/sh` reads `.profile` in its home as a login shell, started there, in the hub's environment, and runs the
+    /// The login shell reads `.profile` in its home, started there, in the hub's environment, and runs the
     /// daemon, which prints what it has, but where the daemon is. The profile's `PATH` entry comes before the hub's.
     #[tokio::test]
     async fn the_login_shell_builds_on_the_hubs_environment() {
         let home = home();
         let given = hubs(home.path());
-        let login = LoginShell { shell: "/bin/sh", home: Some(home.path()), given: &given };
+        let shell = login_shell().display().to_string();
+        let login = LoginShell { shell: &shell, home: Some(home.path()), given: &given };
         // The test's own, which `hubs` keeps.
         let hubs_path = std::env::var("PATH").unwrap();
 
@@ -131,7 +132,8 @@ mod login_shell {
     async fn a_shell_that_cant_run_the_daemon_still_gives_its_path() {
         let home = home();
         let given = hubs(home.path());
-        let login = LoginShell { shell: "/bin/sh", home: Some(home.path()), given: &given };
+        let shell = login_shell().display().to_string();
+        let login = LoginShell { shell: &shell, home: Some(home.path()), given: &given };
         let unstarted = LoginShell { shell: "/no/such/shell", ..login };
         let nowhere = home.path().join("no-printer-here");
 
@@ -145,20 +147,21 @@ mod login_shell {
         assert_eq!(didnt.get("PATH"), Some("/hub/bin"));
     }
 
-    /// Runs the person's own login shell, in this test's own environment, so this also covers their rc files, which
-    /// can print, and how their shell runs a program whose path has a space, which fish quotes its own way.
+    /// Runs the user's own login shell, such as fish on a Mac, which the stand-in doesn't, so this covers how that
+    /// shell runs a program whose path has a space, which fish quotes its own way. It's in a home of the test's own
+    /// and the test's whole environment, so none of the person's own setup runs, and it asks only for what the test
+    /// gave it.
     #[tokio::test]
-    async fn the_accounts_login_shell_really_says_its_environment() {
-        let dir = tempfile::tempdir().unwrap();
-        let shell = process::account_shell().unwrap_or_else(|| "/bin/sh".to_string());
-        let given = Environment::NONE;
-        let login = LoginShell { shell: &shell, home: None, given: &given };
+    async fn the_users_login_shell_runs_the_daemon_by_a_path_with_a_space() {
+        let home = tempfile::tempdir().unwrap();
+        let shell = process::home_and_shell().shell.unwrap_or_else(|| "/bin/sh".to_string());
+        let given = hubs(home.path());
+        let login = LoginShell { shell: &shell, home: Some(home.path()), given: &given };
 
-        let read = login.environment(&printer(dir.path()), deadline()).await;
+        let read = login.environment(&printer(home.path()), deadline()).await.unwrap();
 
-        // Only the names, since the values can hold the person's secrets.
-        let names: Vec<&str> = read.iter().flatten().map(|(name, _)| name.as_str()).collect();
-        let path = read.iter().flatten().find(|(name, _)| name == "PATH");
-        assert!(path.is_some_and(|(_, path)| path.contains('/')), "{shell} said {names:?}");
+        let has = |name: &str| read.iter().find(|(its, _)| its == name).map(|(_, value)| value.as_str());
+        assert_eq!(has("SET_FOR_THE_HUB"), Some("the hub's"), "{shell} said {read:?}");
+        assert_eq!(has(process::ENVIRONMENT_PRINTER), None);
     }
 }

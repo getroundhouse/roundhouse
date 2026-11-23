@@ -7,7 +7,7 @@ use std::path::Path;
 use protocol::model::GithubToken;
 
 use super::reading::GhUnread;
-use super::{Gh, GhRead};
+use super::{Gh, GhRead, GhTokens};
 use crate::machine_environment::MachineEnvironment;
 
 /// The login `gh` uses, logged in through its own config, as it prints it once GitHub has said its token works.
@@ -48,7 +48,7 @@ async fn found(status: &str, token: &str) -> (Result<GhRead, GhUnread>, String) 
     let dir = tempfile::tempdir().unwrap();
     let path = gh(dir.path(), status, token);
 
-    let found = Gh::new(path, dir.path().to_path_buf()).read().await;
+    let found = Gh::new(path, dir.path().to_path_buf()).read(GhTokens::TakenOut).await;
 
     (found, std::fs::read_to_string(dir.path().join("asked")).unwrap_or_default())
 }
@@ -98,7 +98,7 @@ async fn a_renewed_token_is_asked_for_without_no_refresh() {
     let dir = tempfile::tempdir().unwrap();
     let path = gh(dir.path(), &format!("echo '{ADA_RENEWED_BY_GH}'"), &token_is("ghu_renewed"));
 
-    let renewed = Gh::new(path, dir.path().to_path_buf()).renewed().await;
+    let renewed = Gh::new(path, dir.path().to_path_buf()).renewed(GhTokens::TakenOut).await;
 
     assert_eq!(renewed, Some(GithubToken::new("ghu_renewed")));
     let asked = std::fs::read_to_string(dir.path().join("asked")).unwrap();
@@ -135,7 +135,7 @@ async fn no_gh_on_the_path_is_not_installed() {
     let dir = tempfile::tempdir().unwrap();
 
     let path = MachineEnvironment::only(&[("PATH", &dir.path().display().to_string())]);
-    let found = Gh::new(path, dir.path().to_path_buf()).read().await;
+    let found = Gh::new(path, dir.path().to_path_buf()).read(GhTokens::TakenOut).await;
 
     assert_eq!(found.unwrap(), GhRead::NotInstalled);
 }
@@ -156,18 +156,27 @@ async fn what_cant_be_read_is_refused_rather_than_taken_for_logged_out() {
 }
 
 /// `gh`'s own login, and not a token the hub was started with or the profile exports, which `gh` would use over it,
-/// and which `gh auth login` or `gh auth switch`, as a block says to run, wouldn't change.
+/// and which `gh auth login` or `gh auth switch`, as a block says to run, wouldn't change. Read as agents have it, the
+/// profile's token stays.
 #[tokio::test]
 async fn gh_is_read_without_the_tokens_the_hub_was_started_with() {
     let dir = tempfile::tempdir().unwrap();
     let machine = MachineEnvironment::only(&[("GH_TOKEN", "the-profiles"), ("PATH", "/bin")]);
     let gh = Gh::new(machine, dir.path().to_path_buf());
-    let mut command = std::process::Command::new("gh");
-    command.env("GH_TOKEN", "the-hubs-own").env("GITHUB_TOKEN", "the-hubs-own").env("PATH", "/usr/bin");
+    let command = || {
+        let mut command = std::process::Command::new("gh");
+        command.env("GH_TOKEN", "the-hubs-own").env("GITHUB_TOKEN", "the-hubs-own").env("PATH", "/usr/bin");
+        command
+    };
+    let (mut taken_out, mut as_agents) = (command(), command());
 
-    gh.given().apply(&mut command);
+    gh.given(GhTokens::TakenOut).apply(&mut taken_out);
+    gh.given(GhTokens::AsAgentsHaveThem).apply(&mut as_agents);
 
-    let given: Vec<_> = command.get_envs().collect();
     let os = std::ffi::OsStr::new;
+    let given: Vec<_> = taken_out.get_envs().collect();
     assert_eq!(given, [(os("GH_TOKEN"), None), (os("GITHUB_TOKEN"), None), (os("PATH"), Some(os("/bin")))]);
+    let given: Vec<_> = as_agents.get_envs().collect();
+    let expected = [("GH_TOKEN", "the-profiles"), ("GITHUB_TOKEN", "the-hubs-own"), ("PATH", "/bin")];
+    assert_eq!(given, expected.map(|(name, value)| (os(name), Some(os(value)))));
 }

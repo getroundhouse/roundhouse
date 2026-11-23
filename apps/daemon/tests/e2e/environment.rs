@@ -26,10 +26,13 @@ fn nothing_of_the_tests_own_environment_reaches_what_the_stack_starts() {
 }
 
 /// What a hub merges over its own environment: what the user's login shell has once it has read their profile, started
-/// in the hub's environment and in the user's home. Here that's `/bin/sh`, whose `.profile` adds to `PATH`, exports a
-/// variable built on one the test set for the hub, says where it started, and exports one of a parent Claude session's.
+/// in the hub's environment and in the user's home. Here that's a stand-in that reads only this `.profile`, as
+/// `process::testing::login_shell` says, which adds to `PATH`, exports a variable built on one the test set for the
+/// hub, says where it started, and exports one of a parent Claude session's, an API key over the hub's, and a token
+/// `claude setup-token` made, as a machine with no browser logs the CLI in.
 const PROFILE: &str = "export PATH=\"$HOME/profile-bin:$PATH\"\nexport FROM_PROFILE=\"$SET_FOR_THE_HUB-then-profile\"\n\
-                       export STARTED_IN=\"$(pwd)\"\nexport CLAUDE_CODE_ENTRYPOINT=profiles\n";
+                       export STARTED_IN=\"$(pwd)\"\nexport CLAUDE_CODE_ENTRYPOINT=profiles\n\
+                       export ANTHROPIC_API_KEY=profiles-key\nexport CLAUDE_CODE_OAUTH_TOKEN=profiles-token\n";
 
 /// What a parent Claude session sets, the first two in the hub's environment, as when it's started from inside one,
 /// and the last by the profile.
@@ -37,15 +40,16 @@ const PARENT_SESSIONS: [&str; 3] = ["CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLA
 
 /// An agent and a setup script have what the profile exports, built on what the hub was started with, and the
 /// profile's `PATH` entry before the hub's own. A hub started from inside a Claude session, such as by an agent, has
-/// what the session sets for what it starts, and the daemon forgets it as it starts, whatever it runs as, so neither has
-/// it, even when the profile exports it. The user's own login settings stay.
+/// what the session sets for what it starts, and the daemon forgets it as it starts, whatever it runs as, so neither
+/// has it, even when the profile exports it. The profile's login settings, a key and a token, reach the agent too,
+/// which runs on the machine's own login, since no account is connected.
 #[test]
 fn what_the_stack_starts_has_the_profiles_environment_and_no_parent_claude_sessions() {
     let home = tempfile::tempdir().unwrap();
     std::fs::write(home.path().join(".profile"), PROFILE).unwrap();
     let hubs = vec![
         ("HOME", home.path().to_str().unwrap().to_string()),
-        ("SHELL", "/bin/sh".to_string()),
+        ("SHELL", process::testing::login_shell().display().to_string()),
         ("SET_FOR_THE_HUB", "hubs".to_string()),
         ("CLAUDECODE", "1".to_string()),
         ("CLAUDE_CODE_SESSION_ID", "parent".to_string()),
@@ -57,7 +61,12 @@ fn what_the_stack_starts_has_the_profiles_environment_and_no_parent_claude_sessi
     let (workspace, session) = stack.workspace(&client);
 
     assert_eq!(wait_for_setup(&client, &workspace.id), SetupStatus::Succeeded);
-    let names = PARENT_SESSIONS.iter().chain(&["SET_FOR_THE_HUB", "FROM_PROFILE", "ANTHROPIC_API_KEY"]);
+    let names = PARENT_SESSIONS.iter().chain(&[
+        "SET_FOR_THE_HUB",
+        "FROM_PROFILE",
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+    ]);
     let asked: Vec<String> = names.map(|name| format!("env:{name}; ")).collect();
     // `PATH` last, so it's read to the end of what the agent says.
     let asked = format!("{}env:CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS; env:PATH", asked.concat());
@@ -73,8 +82,13 @@ fn what_the_stack_starts_has_the_profiles_environment_and_no_parent_claude_sessi
     // As a path, since `pwd` can say it through a symbolic link, as macOS's temporary folders are.
     let started_in = script_has("STARTED_IN").map(|dir| std::fs::canonicalize(dir).unwrap());
     assert_eq!(started_in, Some(std::fs::canonicalize(home.path()).unwrap()), "the login shell's folder");
-    let values = [("SET_FOR_THE_HUB", "hubs"), ("FROM_PROFILE", "hubs-then-profile"), ("ANTHROPIC_API_KEY", "kept")];
-    for (name, value) in values {
+    let profiles = [
+        ("SET_FOR_THE_HUB", "hubs"),
+        ("FROM_PROFILE", "hubs-then-profile"),
+        ("ANTHROPIC_API_KEY", "profiles-key"),
+        ("CLAUDE_CODE_OAUTH_TOKEN", "profiles-token"),
+    ];
+    for (name, value) in profiles {
         assert_eq!(script_has(name), Some(value), "the setup script's: {script}");
         assert!(agent.contains(&format!("{name}={value}")), "the agent's: {agent}");
     }

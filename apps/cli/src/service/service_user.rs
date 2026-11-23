@@ -1,10 +1,10 @@
-//! The account a hub installed as a service runs as, from the system's database of users.
+//! The user of this machine a hub installed as a service runs as, from the system's database of users.
 
 use std::path::PathBuf;
 use std::process::Command;
 
 /// A user of this machine, as the system's database of users has them.
-pub(crate) struct Account {
+pub(crate) struct ServiceUser {
     pub(crate) name: String,
     ids: Ids,
     pub(crate) home: PathBuf,
@@ -19,19 +19,19 @@ struct Ids {
     gid: u32,
 }
 
-/// None, since Windows runs no hub as a service yet, so no account is found there.
+/// None, since Windows runs no hub as a service yet, so no user is found there.
 #[cfg(windows)]
 enum Ids {}
 
 #[cfg(unix)]
-impl Account {
+impl ServiceUser {
     /// The user called `name`.
     pub(crate) fn named(name: &str) -> anyhow::Result<Self> {
-        let found = process::Account::named(name)?;
-        let account = found.ok_or_else(|| anyhow::anyhow!("this machine has no user called {name}"))?;
-        let home = account.home.ok_or_else(|| anyhow::anyhow!("{name} has no home directory"))?;
-        let ids = Ids { uid: account.uid, gid: account.gid };
-        Ok(Self { name: name.to_owned(), ids, home, shell: account.shell })
+        let found = process::OsUser::named(name)?;
+        let user = found.ok_or_else(|| anyhow::anyhow!("this machine has no user called {name}"))?;
+        let home = user.home.ok_or_else(|| anyhow::anyhow!("{name} has no home directory"))?;
+        let ids = Ids { uid: user.uid, gid: user.gid };
+        Ok(Self { name: name.to_owned(), ids, home, shell: user.shell })
     }
 
     /// Has `command` run as this user, rather than as this process's.
@@ -43,13 +43,13 @@ impl Account {
 }
 
 #[cfg(windows)]
-impl Account {
-    /// Refused, since a hub can't be installed as a service on Windows yet, so no account is needed for one.
+impl ServiceUser {
+    /// Refused, since a hub can't be installed as a service on Windows yet, so no user is needed for one.
     pub(crate) fn named(_name: &str) -> anyhow::Result<Self> {
         anyhow::bail!("installing a hub as a service isn't built on Windows yet")
     }
 
-    /// Never called, since no account is found on Windows.
+    /// Never called, since no user is found on Windows.
     pub(crate) fn runs(&self, _command: &mut Command) {
         match self.ids {}
     }
@@ -62,7 +62,7 @@ pub(crate) fn is_administrator() -> bool {
     unsafe { libc::geteuid() == 0 }
 }
 
-/// Never, since Windows registers no service yet, and [`Account::named`] says so first.
+/// Never, since Windows registers no service yet, and [`ServiceUser::named`] says so first.
 #[cfg(windows)]
 pub(crate) fn is_administrator() -> bool {
     false

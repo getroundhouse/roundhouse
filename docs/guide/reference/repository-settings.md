@@ -49,7 +49,9 @@ Patterns mean what they do in `.gitignore`, one to a line. A line that starts wi
 
 ## Variables
 
-Set for both scripts, and for every agent in the workspace. Everything else they run with is what your login shell exports once it has read your profile, such as a `GH_TOKEN` in `.zshrc`, over what started the hub: the app, a terminal, or the service a hub is installed as. A variable your profile doesn't set keeps the value it had there, and `PATH` has your profile's entries first. On Windows, it's what started the hub.
+Set for both scripts, and for every agent in the workspace. Everything else they run with is what your login shell exports once it has read your profile, such as a `GH_TOKEN` in `.zshrc`, over what started the hub: the app, a terminal, or the service a hub is installed as. A variable your profile doesn't set keeps the value it had there, and `PATH` has your profile's entries first. On Windows, it's what started the hub. That includes Claude's login settings, such as an `ANTHROPIC_API_KEY`, for an agent on the machine's own login, as [the hub](../concepts/the-hub.md) says.
+
+The hub reads your profile once, as it starts. After you change `.zshrc`, a workspace's new terminal has the change at once, since its shell reads the profile itself, but its scripts and agents have it only once the hub has restarted and the workspace's worker has started again.
 
 | Variable | What it holds |
 |---|---|
