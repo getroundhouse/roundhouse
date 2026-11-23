@@ -1,6 +1,7 @@
 use super::HubDirs;
 use super::agents::ModelLists;
 use super::followers::Followers;
+use super::observations::{self, Observations};
 use super::terminals::Terminals;
 use super::updates::Updates;
 use super::{awake, feed, github_reads, pull_requests, sessions, setup};
@@ -95,6 +96,8 @@ pub(crate) struct Hub {
     pub(super) pull_requests: pull_requests::Reading,
     /// What the hub last read from GitHub, for every part of it that reads GitHub, and every client.
     pub(super) github_cache: Arc<GithubCache>,
+    /// The hub's observations of what others own, as it last observed them.
+    pub(super) observations: Observations,
     /// Who follows what, which is what the hub keeps current.
     pub(super) followers: Followers,
     /// When the hub last tried to read each pull request of an archived workspace that the cache had forgotten.
@@ -143,7 +146,7 @@ impl Hub {
         start: HubStart,
         timers: Timers,
     ) -> Self {
-        let cache_file = Arc::new(CacheFile::open(&dirs.cache_file, &[github_cache::prepare]));
+        let cache_file = Arc::new(CacheFile::open(&dirs.cache_file, &[github_cache::prepare, observations::prepare]));
         Self {
             remote: crate::remote::Remote::new(crate::remote::RemoteConfig {
                 address: dirs.network_address,
@@ -157,6 +160,7 @@ impl Hub {
             ssh: Ssh::new(machine.clone()),
             gh: Gh::new(machine, dirs.data.clone()),
             addresses_read: Notify::new(),
+            observations: Observations::open(cache_file.clone(), &store),
             github_cache: Arc::new(GithubCache::open(cache_file)),
             store,
             attachment_files: AttachmentFiles::new(dirs.attachments),
@@ -254,12 +258,14 @@ impl Hub {
         self.blocking(move |store| store.made_by(&id)).await
     }
 
-    /// Every record, as of one revision, for a client starting to follow the feed.
+    /// Every record, and every observation the hub sends at its own level, as of one revision, for a client starting to
+    /// follow the feed.
     pub(crate) async fn records_list(&self) -> Result<Records, ApiError> {
         let listing = self.model_lists.listed_with(self.blocking(Store::list_records));
-        let listing = self.terminals.listed_with(listing);
-        let (((listed, model_lists), terminals), hub_update) = self.updates.listed_with(listing).await;
-        Ok(Records { terminals, model_lists, hub_update, ..listed? })
+        let listing = self.updates.listed_with(self.terminals.listed_with(listing));
+        let ((((listed, model_lists), terminals), hub_update), observations) =
+            self.observations.listed_with(listing).await;
+        Ok(Records { terminals, model_lists, hub_update, observations, ..listed? })
     }
 
     pub(crate) async fn workspace(&self, id: &WorkspaceId) -> Result<Workspace, ApiError> {

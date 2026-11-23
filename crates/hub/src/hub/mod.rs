@@ -27,6 +27,7 @@ mod instances;
 mod logins;
 mod new_workspace;
 mod new_workspace_draft;
+mod observations;
 mod proposals;
 mod pull_requests;
 mod queues;
