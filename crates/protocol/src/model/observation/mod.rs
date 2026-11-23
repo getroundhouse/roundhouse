@@ -9,7 +9,8 @@ mod github;
 mod kinds;
 mod observed;
 pub use github::{
-    IssueSaid, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReferenceSaid,
+    GithubRepositorySaid, IssueSaid, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail,
+    PullRequestSaid, ReferenceSaid,
 };
 pub use kinds::{Observation, ObservationKey};
 pub use observed::Observed;

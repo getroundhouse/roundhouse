@@ -8,7 +8,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use serde_json::{Value, json};
 
-use super::{Answer, Gate};
+use super::{Answer, Gate, Repositories};
 
 /// The pull requests of example/project the stand-in answers any read of, as a test sets them. One a test hasn't set
 /// isn't there, as GitHub answers for a number it has no pull request of.
@@ -30,6 +30,8 @@ struct Set {
     hidden: bool,
     /// What each answer says is left of GitHub's limit, if a test says, and otherwise most of it.
     remaining: Option<u32>,
+    /// What example/project is called now, if a test has renamed it, after which it's found by that name alone.
+    renamed: Option<String>,
     /// The branches that are gone from example/project, as GitHub can delete one as its pull request merges, so their
     /// pull requests are found only by the branch's name.
     deleted: Vec<String>,
@@ -113,6 +115,22 @@ impl PullRequests {
         self.0.lock().hidden = hidden;
     }
 
+    /// example/project is called `repository` from now on, as after it's renamed or moved to another owner, so it's
+    /// found by that name alone, and its pull requests say they're of it.
+    pub fn rename(&self, repository: &str) {
+        self.0.lock().renamed = Some(repository.to_string());
+    }
+
+    /// The repository they're of, as GitHub's ID for it is `R_project`, hidden while they are, as a read of
+    /// repositories is answered with when a test sets no repositories of its own.
+    pub(super) fn repositories(&self) -> Repositories {
+        let set = self.0.lock();
+        let repositories = Repositories::default();
+        repositories.set("R_project", set.named());
+        repositories.hide("R_project", set.hidden);
+        repositories
+    }
+
     /// Each answer says `remaining` of the limit's 5000 is left, from now on.
     pub fn leave(&self, remaining: u32) {
         self.0.lock().remaining = Some(remaining);
@@ -130,8 +148,8 @@ impl PullRequests {
     }
 
     /// What GitHub would answer the query in `body` with, from the pull requests as they are, held back while reads
-    /// are. Each repository asked of is example/project, and each part of it is answered by its alias, as the hub's
-    /// queries name them.
+    /// are. Each repository asked of is example/project, by whatever name until it's renamed, and each part of it is
+    /// answered by its alias, as the hub's queries name them.
     pub(super) fn answer(&self, body: &str) -> Answer {
         let asked: Value = serde_json::from_str(body).unwrap_or_default();
         let query = asked["query"].as_str().unwrap_or_default();
@@ -141,7 +159,7 @@ impl PullRequests {
         }
         let (mut data, mut errors) = (json!({}), Vec::new());
         for (alias, asks) in aliased(query, ": repository(") {
-            if set.hidden {
+            if !set.shows(asks) {
                 errors.push(unseen(alias));
                 data[alias] = Value::Null;
                 continue;
@@ -177,7 +195,7 @@ impl PullRequests {
                     serde_json::from_str(branch.split(',').next().unwrap_or_default()).unwrap_or_default();
                 parts.push((part.to_string(), set.heads(&branch)));
             }
-            data[alias] = repository(&parts);
+            data[alias] = repository(set.named(), &parts);
         }
         let mut answer = answered(data);
         if let Answer::With { body, .. } = &mut answer {
@@ -198,6 +216,19 @@ impl PullRequests {
 }
 
 impl Set {
+    /// Whether GitHub shows the token the repository asked of as `asked`, what follows `repository(` in a query: not
+    /// while it's hidden, and once it's renamed, only by its new name.
+    fn shows(&self, asked: &str) -> bool {
+        let quoted: Vec<&str> = asked.split(')').next().unwrap_or_default().split('"').skip(1).step_by(2).collect();
+        let asked_of = quoted.join("/");
+        !self.hidden && self.renamed.as_ref().is_none_or(|renamed| asked_of.eq_ignore_ascii_case(renamed))
+    }
+
+    /// What example/project is called now.
+    fn named(&self) -> &str {
+        self.renamed.as_deref().unwrap_or("example/project")
+    }
+
     fn head(&self, number: u64) -> String {
         self.heads.get(&number).cloned().unwrap_or_else(|| format!("head-{number}"))
     }
@@ -213,8 +244,8 @@ impl Set {
                 let state = if *state == PullRequestState::Merged { "MERGED" } else { "OPEN" };
                 json!({"number": number, "url": format!("https://github.com/example/project/pull/{number}"),
                     "state": state, "headRefOid": self.head(*number),
-                    "headRepository": {"nameWithOwner": "example/project"},
-                    "baseRepository": {"nameWithOwner": "example/project"}})
+                    "headRepository": {"nameWithOwner": self.named()},
+                    "baseRepository": {"nameWithOwner": self.named()}})
             })
             .collect();
         json!({ "nodes": nodes })
@@ -223,7 +254,7 @@ impl Set {
 
 /// The error GitHub gives about the repository asked of as `alias` when it doesn't show the token one.
 fn unseen(alias: &str) -> Value {
-    let message = "Could not resolve to a Repository with the name 'example/project'.";
+    let message = "Could not resolve to a Repository with the name asked for.";
     json!({"type": "NOT_FOUND", "path": [alias], "message": message})
 }
 
@@ -262,15 +293,17 @@ impl Answer {
         let (mut looked, mut confirmed) = (json!({}), json!({}));
         for (at, (number, passed)) in asked.iter().enumerate() {
             let pr = pull_request(*number, *passed, &format!("head-{number}"));
-            looked[format!("r{at}")] = repository(&[(format!("p{number}"), pr.clone())]);
-            confirmed[format!("r{at}")] = repository(&[("b0".to_string(), rules.clone()), (format!("v{number}"), pr)]);
+            looked[format!("r{at}")] = repository("example/project", &[(format!("p{number}"), pr.clone())]);
+            let parts = [("b0".to_string(), rules.clone()), (format!("v{number}"), pr)];
+            confirmed[format!("r{at}")] = repository("example/project", &parts);
         }
         vec![answered(looked), answered(confirmed)]
     }
 }
 
-fn repository(parts: &[(String, Value)]) -> Value {
-    let mut repository = json!({"nameWithOwner":"example/project","url":"https://github.com/example/project"});
+/// The repository called `named`, with each of `parts` under its alias.
+fn repository(named: &str, parts: &[(String, Value)]) -> Value {
+    let mut repository = json!({"nameWithOwner": named, "url": format!("https://github.com/{named}")});
     for (alias, part) in parts {
         repository[alias] = part.clone();
     }

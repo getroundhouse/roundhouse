@@ -110,6 +110,10 @@ ids!(
     /// What GitHub calls a GitHub App in its addresses, such as `ada-roundhouse`, which its bot is named for, as
     /// `ada-roundhouse[bot]`. GitHub gives it as the app is made, from the name the person chose.
     GithubAppSlug,
+    /// GitHub's ID for a repository, the `id` its GraphQL API gives it, such as `R_kgDOJbBqvw`, by which `node(id:)`
+    /// finds it. GitHub keeps it through a rename and a move to another owner, as its docs say, so a project linked by
+    /// it goes on naming the same repository.
+    GithubRepositoryId,
     /// Chosen by the client that opens the terminal, as a UUID, so opening it again can't open two. It names the files
     /// the worker records the terminal's processes in, so the worker refuses one that can't name a file, as
     /// [`crate::paths::can_name_a_file`] says.

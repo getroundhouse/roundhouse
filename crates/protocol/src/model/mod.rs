@@ -73,8 +73,8 @@ pub use level::Level;
 pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
 pub use observation::{
-    IssueSaid, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary,
-    PullRequestDetail, PullRequestSaid, ReferenceSaid,
+    GithubRepositorySaid, IssueSaid, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid,
+    OwnSummary, PullRequestDetail, PullRequestSaid, ReferenceSaid,
 };
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
 pub use proposal::{
@@ -108,9 +108,9 @@ pub(crate) use ids::ids;
 mod tokens;
 pub use ids::{
     AccountId, AgentSessionId, ApprovalId, AskKey, AttachmentId, BranchName, ChildWorktreeId, ClientMessageId,
-    ClientRequestId, CommentId, CommitId, DeviceId, GithubAccountId, GithubAppSlug, GithubSignInId, GithubUserCode,
-    GithubUsername, HubId, InstanceId, MessageId, ProposalId, ProviderName, RemoteName, RepoId, SessionId, SubagentId,
-    TaskId, TerminalId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
+    ClientRequestId, CommentId, CommitId, DeviceId, GithubAccountId, GithubAppSlug, GithubRepositoryId, GithubSignInId,
+    GithubUserCode, GithubUsername, HubId, InstanceId, MessageId, ProposalId, ProviderName, RemoteName, RepoId,
+    SessionId, SubagentId, TaskId, TerminalId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
 };
 mod repo;
 pub use repo::{Repo, RepoOrigin, RepoUrl, RepoUrlError};

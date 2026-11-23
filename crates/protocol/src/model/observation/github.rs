@@ -1,13 +1,14 @@
-//! What the hub's observations of GitHub say: an issue or a pull request, as one read of GitHub found it, and a
-//! workspace's own pull request. None holds a time of its own, since when each was read is
-//! [`Observed`](super::Observed)'s, so a read that finds the same says the same. Each is made from, and makes, the
-//! form a read of GitHub has, [`PullRequest`] and [`Reference`], which hold when each part was read.
+//! What the hub's observations of GitHub say: an issue or a pull request, as one read of GitHub found it, a
+//! workspace's own pull request, and a repository a project is linked to. None holds a time of its own, since when
+//! each was read is [`Observed`](super::Observed)'s, so a read that finds the same says the same. Each issue and pull
+//! request is made from, and makes, the form a read of GitHub has, [`PullRequest`] and [`Reference`], which hold when
+//! each part was read.
 
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
     Checks, CommitId, GithubRepositoryName, History, Issue, IssueNumber, IssueSummary, Local, OwnPullRequest,
-    PullRequest, PullRequestNumber, Read, Reference, ReferenceRead, Stack, Summary,
+    PullRequest, PullRequestNumber, Read, Reference, ReferenceRead, RepoUrl, Stack, Summary,
 };
 
 /// What GitHub says of an issue or a pull request a chip names.
@@ -179,4 +180,16 @@ impl PullRequestDetail {
             stack: pull_request.stack_said().cloned(),
         }
     }
+}
+
+/// What GitHub says of a repository, asked for by its ID: what it's called now, and where git reaches it, by HTTPS and
+/// by SSH. A rename or a move to another owner changes all three, and not the ID.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct GithubRepositorySaid {
+    /// Its owner and name, as GitHub writes them, such as `getroundhouse/roundhouse`.
+    pub repository: GithubRepositoryName,
+    /// Its address over HTTPS, GitHub's `url`, such as `https://github.com/getroundhouse/roundhouse`.
+    pub https: RepoUrl,
+    /// Its address over SSH, GitHub's `sshUrl`, such as `git@github.com:getroundhouse/roundhouse.git`.
+    pub ssh: RepoUrl,
 }
