@@ -10,10 +10,11 @@ use protocol::client::github_apps::{GithubAppManifest, GithubAppManifestWrite};
 use protocol::client::{ApiError, ClientResponse, ErrorCode};
 use protocol::model::{
     Level, Observation, Observed, OwnPullRequest, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary,
-    PullRequestDetail, PullRequestFound, Reference, ReferenceAsk, ReferenceRead, ReferenceSaid, RepositoryUnseen, Rev,
+    PullRequestDetail, PullRequestFound, Reference, ReferenceAsk, ReferenceRead, ReferenceSaid, RepositoryUnseen,
     WorkspaceId,
 };
 
+use super::revisions::MADE;
 use super::serve::{Answer, Outcome, read_only};
 use super::world::World;
 
@@ -121,7 +122,7 @@ pub(super) fn own_observed(world: &World) -> Vec<Observation> {
             return None;
         }
         let value = OwnPullRequestSaid { pull_request: own.map(OwnSummary::of) };
-        Some(Observation::WorkspacePullRequest { workspace_id: id, pull_request: current(value), rev: Rev::default() })
+        Some(Observation::WorkspacePullRequest { workspace_id: id, pull_request: current(value), rev: MADE })
     };
     world.workspaces_listed(true).into_iter().filter_map(|workspace| stands(workspace.id)).collect()
 }
@@ -134,12 +135,12 @@ pub(super) fn workspace_observed(world: &World, id: &WorkspaceId) -> Vec<Observa
     let detail = (own.is_some() || unseen.is_none()).then(|| Observation::WorkspacePullRequestDetail {
         workspace_id: id.clone(),
         detail: current(OwnPullRequestDetail { pull_request: own.map(|own| PullRequestDetail::of(&own.pull_request)) }),
-        rev: Rev::default(),
+        rev: MADE,
     });
     let unseen = unseen.map(|unseen| Observation::WorkspaceRepositoryUnseen {
         workspace_id: id.clone(),
         unseen: current(Some(unseen)),
-        rev: Rev::default(),
+        rev: MADE,
     });
     detail.into_iter().chain(unseen).collect()
 }
@@ -148,7 +149,7 @@ pub(super) fn workspace_observed(world: &World, id: &WorkspaceId) -> Vec<Observa
 pub(super) fn reference_observed(world: &World, ask: &ReferenceAsk) -> Vec<Observation> {
     let found = world.github_says.references.iter().find(|reference| reference.asked().as_ref() == Some(ask));
     let said = ReferenceSaid::of(found);
-    said.map(|said| Observation::Reference { reference: ask.clone(), said: current(said), rev: Rev::default() })
+    said.map(|said| Observation::Reference { reference: ask.clone(), said: current(said), rev: MADE })
         .into_iter()
         .collect()
 }

@@ -15,6 +15,7 @@ mod listing;
 mod logs;
 mod model_lists;
 mod parts;
+mod revisions;
 mod serve;
 mod stand_in;
 mod terminals;

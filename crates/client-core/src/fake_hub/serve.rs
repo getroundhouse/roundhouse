@@ -14,7 +14,7 @@ use protocol::client::{
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
-use protocol::model::{CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, Rev, Seq, Session};
+use protocol::model::{CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, Seq, Session};
 
 use super::base_pages::{opened, paged};
 use super::following::not_found;
@@ -29,6 +29,8 @@ use super::world::{LoginSupport, NOW_MS, World};
 /// another's.
 pub fn serve(socket: &Path, world: World) {
     let listener = UnixListener::bind(socket).unwrap();
+    let mut world = world;
+    world.listed_at = world.rev();
     let world = Arc::new(world);
     std::thread::spawn(move || {
         for stream in listener.incoming() {
@@ -154,7 +156,7 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         // a screen can show how a sign-in the app started went. The app shows it from the record the answer carries.
         R::GithubSignInStart(github_accounts::GithubSignInStart { id }) => {
             let status = world.sign_in_answer.clone().ok_or_else(|| read_only("change anything"))?;
-            reply(C::GithubSignIn(GithubSignIn { id, status, rev: Rev::default() }))
+            reply(C::GithubSignIn(GithubSignIn { id, status, rev: world.after_listed() }))
         }
         R::WorkspaceFileDiff(workspaces::WorkspaceFileDiff { id, path, first_line, .. }) => {
             reply(C::FileDiff(reads_of(world, &id)?.file_diff(&path, first_line)?))

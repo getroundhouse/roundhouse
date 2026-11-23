@@ -4,9 +4,10 @@
 use std::cmp::Ordering;
 
 use protocol::model::{
-    DiffComment, HubSettings, Level, Observation, Records, Repo, Rev, Session, Workspace, WorkspaceId, WorkspaceStatus,
+    DiffComment, HubSettings, Level, Observation, Records, Repo, Session, Workspace, WorkspaceId, WorkspaceStatus,
 };
 
+use super::revisions::MADE;
 use super::world::{LoginSupport, World};
 
 impl World {
@@ -23,7 +24,7 @@ impl World {
                 keep_awake: true,
                 allow_asked_in_full_access: Some(false),
                 github: self.github.clone(),
-                rev: Rev::default(),
+                rev: MADE,
             }),
             accounts: self.accounts.clone(),
             // As from a hub that doesn't keep one, since its hub refuses to.
@@ -38,8 +39,8 @@ impl World {
             model_lists: self.model_lists.clone(),
             hub_update: self.hub_update.clone(),
             observations: self.observations_at(&Level::Hub),
-            // The world's records have none, so the newest is its observations', as a hub's list is at its newest.
-            rev: self.observations.iter().map(Observation::rev).max().unwrap_or_default(),
+            // As a hub's list is, at its newest.
+            rev: self.listed_at,
         }
     }
 

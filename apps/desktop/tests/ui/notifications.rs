@@ -128,6 +128,7 @@ fn showing_a_chat_that_waits_on_you_takes_its_notification_back(cx: &mut TestApp
     let workspace = world.workspace(&repo, "ledger");
     let reading = world.chat(&workspace, SessionStatus::Idle, Vec::new());
     let asking = world.chat(&workspace, SessionStatus::Idle, Vec::new());
+    let later = world.after();
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
     ui.bring_to_front();
@@ -137,6 +138,8 @@ fn showing_a_chat_that_waits_on_you_takes_its_notification_back(cx: &mut TestApp
     ui.show_chat(&reading);
     let mut waiting = ui.view().records().session(&asking).unwrap().clone();
     waiting.status = SessionStatus::WaitingApproval;
+    // As the feed would send it, after the hub's list.
+    waiting.rev = later;
     ui.view().feed().unwrap().take_record(Record::Session(waiting));
     let note = told_of_saying(&mut ui, &workspace, "Waiting on you");
 
