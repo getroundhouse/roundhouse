@@ -1,0 +1,28 @@
+# Moving a nightly job: what's typed already names tools in lowercase, and the person goes on to name more.
+field = "composer"
+typed = "Move the nightly backup off cron and onto systemd timers."
+said = "Have it run restic to the bucket, and send the logs to journalctl so we can see what failed."
+terms = [
+  { written = "restic" },
+  { written = "journalctl" },
+]
+
+[workspace]
+name = "backup-timer"
+branch = "tobiah/backup-timer"
+repo = "seedvault"
+
+[[chat]]
+person = "The backup didn't run last night and nothing told us. Find out why."
+
+[[chat]]
+call = { kind = "command", command = "crontab -l", description = "See what the backup's schedule is" }
+
+[[chat]]
+call = { kind = "read", path = "scripts/backup.sh" }
+
+[[chat]]
+agent = """
+The crontab entry points at the old path of the script, so it failed at once, and cron's mail goes nowhere on this machine.
+
+The script itself copies the database with rsync to a second disk. If you'd rather it went offsite, restic can send encrypted snapshots to the storage bucket and keep a week of them. Under systemd, a failed run also shows in the journal, where journalctl can read it back."""

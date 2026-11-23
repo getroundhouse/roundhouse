@@ -1,11 +1,13 @@
-//! Pulling code spans, file paths, identifiers and mid-sentence proper nouns out of Markdown prose and commands.
+//! Pulling code spans, file paths, identifiers, mid-sentence proper nouns and lowercase words English rarely uses out
+//! of Markdown prose and commands.
 
 use super::HintCollector;
-use super::english::is_common_word;
+use super::english::{is_common_word, is_rare_lowercase};
 
 impl HintCollector {
     /// Extracts inline Markdown code spans (`` `…` ``), paths, code identifiers (`CamelCase`, `snake_case`, acronyms),
-    /// and mid-sentence proper nouns (`Core ML`, `Neural Engine`, `Whisper`, `Parakeet`) from `text`.
+    /// mid-sentence proper nouns (`Core ML`, `Neural Engine`, `Whisper`, `Parakeet`) and lowercase words English rarely
+    /// uses (`tokio`, `kustomize`) from `text`.
     pub(super) fn add_prose(&mut self, text: &str) {
         let mut inside = false;
         for part in text.split('`') {
@@ -69,6 +71,8 @@ impl HintCollector {
                 if !is_common_word(word) {
                     self.add_proper_noun(word);
                 }
+            } else if is_rare_lowercase(word) {
+                self.add_term(word);
             }
             at_sentence_start = ends_clause;
             idx += 1;

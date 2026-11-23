@@ -1,5 +1,6 @@
 //! Filtering out directory boilerplate and everyday English words that the speech model already recognizes without
-//! hinting, so hint slots go to proper nouns, acronyms, package names and technical jargon.
+//! hinting, so hint slots go to proper nouns, acronyms, package names and technical jargon, and telling a lowercase
+//! word typed in prose that English rarely uses, which needs a hint, from one it uses often.
 
 use std::collections::HashSet;
 use std::sync::LazyLock;
@@ -81,6 +82,20 @@ while who whole why wide width will window windows with within without word word
 workspace workspaces write writing written wrong yes yet you your zero";
 
 static COMMON_WORDS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| COMMON_WORDS_LIST.split_whitespace().collect());
+
+/// The words English uses most, as `common-words/README.md` says, past which the model starts to get a word wrong
+/// unhinted.
+static COMMONEST: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| include_str!("common-words/words.txt").lines().collect());
+
+/// Whether `word`, typed in lower case, is one the model may not spell unhinted: letters and digits, in parts between
+/// hyphens or dots, such as `tokio`, `ingress-nginx` or `ntfy.sh`, with a part that has letters and isn't among the
+/// words English uses most. A contraction or a possessive, such as "doesn't", is a common word whose parts the counts don't
+/// hold, so a word with an apostrophe isn't.
+pub(super) fn is_rare_lowercase(word: &str) -> bool {
+    let fits = word.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '-' | '.'));
+    fits && word.split(['-', '.']).any(|part| part.chars().any(|c| c.is_ascii_lowercase()) && !COMMONEST.contains(part))
+}
 
 pub(super) fn is_boilerplate(segment: &str) -> bool {
     BOILERPLATE_SEGMENTS.iter().any(|b| b.eq_ignore_ascii_case(segment))
