@@ -8,7 +8,8 @@ use look::Region;
 use protocol::model::{GithubRepositoryName, GithubUsername, InstalledApp, Reach};
 
 use super::{PaneEvent, WorkspacePane};
-use crate::github_app_pages::install_page;
+use crate::github_app_pages::{install_page, installed_on_owner};
+use crate::warnings::sentence;
 
 /// The line's button, which opens Git in Settings.
 pub const OPEN_GIT: &str = "push-line-git";
@@ -141,17 +142,6 @@ fn token_refused(installation: Option<&InstalledApp>) -> ToDo {
     (then, Some(install_page(slug)))
 }
 
-/// Whether `repository` is of the owner an app is installed `on`, as GitHub compares names, without case.
-fn installed_on_owner(repository: &GithubRepositoryName, on: &GithubUsername) -> bool {
-    repository.owner().eq_ignore_ascii_case(on.as_str())
-}
-
-/// `words` ending as a sentence does, so what follows them starts one of its own.
-fn sentence(words: &str) -> String {
-    let words = words.trim();
-    if words.ends_with(['.', '!', '?', '…']) { words.to_string() } else { format!("{words}.") }
-}
-
 impl WorkspacePane {
     /// A line above the composer while agents can't push to the workspace's repository on GitHub as the default, with
     /// a way to Git in Settings, where what it says to do is done, and to GitHub's page for installing the default's
@@ -166,7 +156,7 @@ impl WorkspacePane {
                 .icon(Lucide::ExternalLink)
                 .on_click(move |_, _, cx| cx.open_url(&page))
         });
-        let open_git = look::button(OPEN_GIT, look::ButtonKind::Borderless, size, "Open Git")
+        let open_git = look::button(OPEN_GIT, look::ButtonKind::Borderless, size, "Open Settings")
             .on_click(cx.listener(|_, _, _, cx| cx.emit(PaneEvent::OpenGit)));
         let banner = look::banner(look::BannerKind::Warning).region(Region::PushLine).child(words);
         Some(install.into_iter().chain([open_git]).fold(banner, look::Banner::answer).into_any_element())

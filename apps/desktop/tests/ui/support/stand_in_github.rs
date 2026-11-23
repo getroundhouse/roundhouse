@@ -4,7 +4,7 @@
 #![cfg(test)]
 
 use hub::{GithubAnswer, GithubPullRequests, GithubScript, GithubStandIn};
-use protocol::model::{GithubToken, WorkspaceId};
+use protocol::model::{GithubToken, Workspace, WorkspaceId};
 
 use super::hub_ahead::HubAhead;
 use super::stand_in_gh::StandInGh;
@@ -70,17 +70,34 @@ impl Ui<'_> {
     /// would leave it, once the hub's record says so, and once the read of its pull request the push brings has found
     /// what GitHub has from it, so that read can't land after a test's own. Returns the branch, and the commit it's at.
     pub(crate) fn push(&mut self, id: &WorkspaceId) -> (String, String) {
-        let record = |ui: &Self| ui.view().records().workspaces().iter().find(|w| &w.id == id).cloned().unwrap();
-        let workspace = record(self);
-        let (path, branch) = (std::path::PathBuf::from(workspace.path.unwrap()), workspace.branch.to_string());
-        git(&path, &["update-ref", &format!("refs/remotes/origin/{branch}"), "HEAD"]);
-        git(&path, &["branch", "-q", "--set-upstream-to", &format!("origin/{branch}")]);
+        let (path, branch) = pushed(self, id);
         self.wait("the push to be read", |ui| {
-            let workspace = record(ui);
+            let workspace = record(ui, id);
             let pushed = workspace.branches.as_ref().and_then(|branches| branches.checked_out());
             pushed.is_some_and(|branch| branch.upstream.is_some()) && workspace.pull_request_link.is_some()
         });
         let head = git(&path, &["rev-parse", "HEAD"]).trim().to_string();
         (branch, head)
     }
+
+    /// As [`Ui::push`], to a repository GitHub doesn't show, so the read the push brings records nothing, and has the
+    /// pull request's bar say it can't see it. Returns the branch.
+    pub(crate) fn push_unseen(&mut self, id: &WorkspaceId) -> String {
+        let (_, branch) = pushed(self, id);
+        self.wait("the push to be read", |ui| ui.has("pull-request-unseen"));
+        branch
+    }
+}
+
+fn record(ui: &Ui<'_>, id: &WorkspaceId) -> Workspace {
+    ui.view().records().workspaces().iter().find(|w| &w.id == id).cloned().unwrap()
+}
+
+/// Has workspace `id`'s branch pushed to `origin`, as far as its worktree knows. Returns its worktree and its branch.
+fn pushed(ui: &Ui<'_>, id: &WorkspaceId) -> (std::path::PathBuf, String) {
+    let workspace = record(ui, id);
+    let (path, branch) = (std::path::PathBuf::from(workspace.path.unwrap()), workspace.branch.to_string());
+    git(&path, &["update-ref", &format!("refs/remotes/origin/{branch}"), "HEAD"]);
+    git(&path, &["branch", "-q", "--set-upstream-to", &format!("origin/{branch}")]);
+    (path, branch)
 }

@@ -164,6 +164,7 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::Home
         | Region::UpdateDetails
         | Region::WorkspaceCard
+        | Region::WarningsCard
         | Region::AccountCard
         | Region::BuildLineCard
         | Region::CheckoutDetails => false,

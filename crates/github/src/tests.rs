@@ -189,3 +189,14 @@ async fn a_github_that_never_answers_a_push_fails_the_check_at_its_time_limit() 
     assert_eq!(refused.unwrap_err().code, ErrorCode::Unavailable);
     assert!(started.elapsed() >= ASK_WITHIN, "it ended after {:?}, before its limit", started.elapsed());
 }
+
+/// The page a person grants an organization access to the app on is the app's own, by its client ID, on GitHub itself
+/// or wherever a test's stand-in serves the device flow.
+#[test]
+fn the_app_s_page_is_its_connection_on_whichever_github_signs_people_in() {
+    let own = GithubConfig::from_env(|_| None);
+    let stand_in = GithubConfig::at("http://127.0.0.1:9".to_string());
+
+    assert_eq!(own.app_page(), "https://github.com/settings/connections/applications/Ov23liWtqywYN3M2m6EU");
+    assert_eq!(stand_in.app_page(), "http://127.0.0.1:9/settings/connections/applications/a-made-up-client-id");
+}

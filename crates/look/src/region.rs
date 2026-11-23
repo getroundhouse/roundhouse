@@ -66,8 +66,12 @@ pub enum Region {
     Home,
     /// The card that says what an update does, above its card in the sidebar.
     UpdateDetails,
-    /// Where a workspace's worktree is and which build its agents are on, shown from its name in the header.
+    /// Where a workspace's worktree is and which build its agents are on, with any of its warnings, shown from its name
+    /// in the header.
     WorkspaceCard,
+    /// A workspace's warnings alone, shown from the pull request's bar when they're why it can't say where the pull
+    /// request stands.
+    WarningsCard,
     /// What an account's row in Settings has no room for, shown from the row.
     AccountCard,
     /// What the version's place says in full, such as what went wrong updating, shown from it.
@@ -112,6 +116,7 @@ impl Region {
             Region::Home => "home-page",
             Region::UpdateDetails => "update-details-card",
             Region::WorkspaceCard => "workspace-card",
+            Region::WarningsCard => "warnings-card",
             Region::AccountCard => "account-card",
             Region::BuildLineCard => "build-line-card",
             Region::CheckoutDetails => "checkout-details-card",

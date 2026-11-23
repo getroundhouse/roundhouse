@@ -147,7 +147,7 @@ fn reference(updates: &[GithubUpdate], ask: &ReferenceAsk) -> Option<ReferenceRe
 fn pull_request(updates: &[GithubUpdate], workspace: &str) -> Option<PullRequest> {
     let workspace = WorkspaceId::from(workspace);
     updates.iter().rev().find_map(|update| {
-        let GithubUpdate::PullRequest { workspace: of, found } = update else { return None };
+        let GithubUpdate::PullRequest { workspace: of, found, .. } = update else { return None };
         if *of != workspace {
             return None;
         }
@@ -245,7 +245,7 @@ async fn a_workspace_not_looked_at_yet_is_sent_as_that() {
     client
         .until("that the hub hasn't looked", |sent| {
             sent.iter().any(|update| {
-                matches!(update, GithubUpdate::PullRequest { workspace, found: None } if *workspace == WorkspaceId::from("w"))
+                matches!(update, GithubUpdate::PullRequest { workspace, found: None, .. } if *workspace == WorkspaceId::from("w"))
             })
         })
         .await;

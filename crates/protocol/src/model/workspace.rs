@@ -61,7 +61,7 @@ pub struct Workspace {
     #[serde(default)]
     pub title_source: TitleSource,
     /// Which pull request its branch has, as the hub last found, kept across restarts, or that it has none. `None` until
-    /// the hub has looked, and from a hub too old to keep it.
+    /// the hub has looked, again once GitHub shows no repository where it found none, and from a hub too old to keep it.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "pull_request::deserialize_looked")]
     pub pull_request_link: Option<PullRequestLinked>,
     /// The comment being written on its diff and not saved, as [`CommentDraft`] says. `None` from a hub that doesn't
@@ -73,7 +73,7 @@ pub struct Workspace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branches: Option<Branches>,
     /// The branch the worktree had checked out when the hub last looked for its pull request, which is the branch
-    /// `pull_request` is. `None` before the hub kept it, and when HEAD was detached.
+    /// `pull_request` is. `None` before the hub kept it, when HEAD was detached, and while `pull_request_link` is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pull_request_branch: Option<BranchName>,
     /// Which build its worker is, while that's another than the hub's: one an earlier hub left running, as after an

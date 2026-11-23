@@ -66,6 +66,14 @@ impl GithubConfig {
         }
     }
 
+    /// GitHub's page for the OAuth App people sign in through, as the person signed in sees it, where they grant an
+    /// organization access to the app, or ask one to, such as
+    /// `https://github.com/settings/connections/applications/Ov23liWtqywYN3M2m6EU`. An organization that restricts OAuth
+    /// Apps shows none of its private repositories to a sign-in's token until it's granted.
+    pub fn app_page(&self) -> String {
+        format!("{}/settings/connections/applications/{}", self.login, self.client_id.as_str())
+    }
+
     fn of(api: String, login: String, git: String) -> Self {
         Self { api, login, git, client_id: GithubClientId::new(ROUNDHOUSE_APP) }
     }

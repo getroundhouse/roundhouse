@@ -18,9 +18,11 @@ use super::judging::{Wanted, chosen, local};
 use super::scopes::{Scope, WaitsRead, scopes};
 use crate::hub::Hub;
 use crate::hub::pull_requests::Asked;
-use crate::hub::pull_requests::reading::{Found, couldnt_read};
+use crate::hub::pull_requests::reading::couldnt_read;
+use crate::hub::pull_requests::recording::Found;
+use crate::hub::pull_requests::unseen::OwnUnread;
 use crate::jobs;
-use github::{Headed, HeadsAsk, PullRequestsAsk, RateLimit, Unread};
+use github::{Headed, HeadsAsk, HeadsUnread, PullRequestsAsk, RateLimit, Unread};
 
 /// How long a read waits for a worker that's running already to say how many files are uncommitted, which it reads
 /// without asking GitHub anything.
@@ -36,7 +38,7 @@ pub(in crate::hub::pull_requests) struct OwnRead {
 struct Reading {
     workspace: Workspace,
     /// What its own comes to, when that's known without reading it, as for a branch with none.
-    settled: Option<Result<Found, ApiError>>,
+    settled: Option<Result<Found, OwnUnread>>,
     /// The repository its own merges into, and the branch it was found on, when it's read.
     own: Option<(GithubRepositoryName, BranchName)>,
     scopes: Vec<Scope>,
@@ -117,13 +119,19 @@ fn heads_of(plan: &Plan) -> Option<&HeadsAsk> {
 /// What reading `plan` asks of GitHub once `headed`, the answers to every plan's branch in turn, has said which pull
 /// request is its own: that one, read where it merges into, which for a clone of a fork is the repository it was
 /// forked from, together with what its waits watch.
-fn reading(plan: Plan, headed: &mut impl Iterator<Item = Result<Vec<Headed>, ApiError>>) -> Reading {
+fn reading(plan: Plan, headed: &mut impl Iterator<Item = Result<Vec<Headed>, HeadsUnread>>) -> Reading {
     let Plan { workspace, own, waited } = plan;
     let (settled, own) = match own {
         Wanted::Nothing { on } => (Some(Ok(Found::nothing(on))), None),
-        Wanted::Unreadable { error, .. } => (Some(Err(error)), None),
-        Wanted::Heads { on, .. } => {
-            let answer = headed.next().unwrap_or_else(|| Err(couldnt_read()));
+        Wanted::Unreadable { error, .. } => (Some(Err(error.into())), None),
+        Wanted::Heads { ask, on } => {
+            let answer =
+                headed.next().unwrap_or_else(|| Err(HeadsUnread::Failed(couldnt_read()))).map_err(
+                    |unread| match unread {
+                        HeadsUnread::Unseen { said } => OwnUnread::Unseen { repository: ask.repository.clone(), said },
+                        HeadsUnread::Failed(error) => OwnUnread::Failed(error),
+                    },
+                );
             let known = (workspace.pull_request_linked())
                 .filter(|_| workspace.pull_request_branch.as_ref() == Some(&on))
                 .map(|link| link.url.as_str());
@@ -153,13 +161,13 @@ impl Reading {
         for scope in std::mem::take(&mut self.scopes) {
             let answer = answers.next().unwrap_or_else(|| Err(Unread { error: couldnt_read(), affected: Vec::new() }));
             if let (Some(number), Some((into, on))) = (scope.own, self.own.clone()) {
-                own = Some(self.own_found(&answer, number, into, on, uncommitted));
+                own = Some(self.own_found(&answer, number, into, on, uncommitted).map_err(OwnUnread::from));
             }
             if let Some(repository) = scope.waited {
                 waits.push(WaitsRead { repository, read: answer });
             }
         }
-        WorkspaceRead { own: own.unwrap_or_else(|| Err(couldnt_read())), waits }
+        WorkspaceRead { own: own.unwrap_or_else(|| Err(couldnt_read().into())), waits }
     }
 
     /// The workspace's own pull request, `number` of `into`, found on `on`, as `answer` has it, with how its worktree

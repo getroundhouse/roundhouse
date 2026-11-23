@@ -75,6 +75,7 @@ mod tool_chats;
 mod tool_screens;
 mod turn_screens;
 mod typed_chats;
+mod unseen_screens;
 mod update_screens;
 mod weights;
 mod workspace_screens;

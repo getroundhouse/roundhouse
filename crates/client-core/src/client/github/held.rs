@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use protocol::client::github::{GithubShown, GithubUpdate, MOST_REFERENCES_SHOWN};
-use protocol::model::{PullRequestFound, ReferenceAsk, ReferenceRead, WorkspaceId};
+use protocol::model::{PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen, WorkspaceId};
 
 /// What each view shows, and what the hub has sent of what any shows.
 #[derive(Default)]
@@ -11,10 +11,17 @@ pub(super) struct GithubHeld {
     /// By ID, which is in the order they were made, so all they show is said in the same order each time.
     views: BTreeMap<u64, Shown>,
     references: HashMap<ReferenceAsk, ReferenceRead>,
-    /// `None` where the hub said it hasn't looked.
-    pull_requests: HashMap<WorkspaceId, Option<PullRequestFound>>,
+    pull_requests: HashMap<WorkspaceId, Own>,
     /// Whether the hub is too old to send what GitHub says, until a new connection.
     pub(super) unsupported: bool,
+}
+
+/// What the hub said of a workspace's own pull request: what was found, `None` where it said it hasn't looked, and
+/// whether GitHub last showed the default its repository at all.
+#[derive(Clone, PartialEq)]
+struct Own {
+    found: Option<PullRequestFound>,
+    unseen: Option<RepositoryUnseen>,
 }
 
 /// What one view shows, and what tells it that some of that changed.
@@ -70,11 +77,12 @@ impl GithubHeld {
                 self.references.insert(reference.clone(), read);
                 Box::new(move |shown| shown.references.contains(&reference))
             }
-            GithubUpdate::PullRequest { workspace, found } => {
-                if self.pull_requests.get(&workspace) == Some(&found) {
+            GithubUpdate::PullRequest { workspace, found, unseen } => {
+                let own = Own { found, unseen };
+                if self.pull_requests.get(&workspace) == Some(&own) {
                     return false;
                 }
-                self.pull_requests.insert(workspace.clone(), found);
+                self.pull_requests.insert(workspace.clone(), own);
                 Box::new(move |shown| shown.workspaces.contains(&workspace))
             }
             GithubUpdate::Unknown => return false,
@@ -97,7 +105,11 @@ impl GithubHeld {
     }
 
     pub(super) fn pull_request(&self, workspace: &WorkspaceId) -> Option<PullRequestFound> {
-        self.pull_requests.get(workspace).cloned().flatten()
+        self.pull_requests.get(workspace).and_then(|own| own.found.clone())
+    }
+
+    pub(super) fn unseen(&self, workspace: &WorkspaceId) -> Option<RepositoryUnseen> {
+        self.pull_requests.get(workspace).and_then(|own| own.unseen.clone())
     }
 
     /// Whether the hub has said what it knows of `workspace`'s pull request, even that it hasn't looked.

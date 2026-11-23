@@ -48,6 +48,7 @@ mod sides;
 mod sounds;
 mod status_box;
 pub mod updates;
+mod warnings;
 pub mod why_quit;
 #[cfg(target_os = "windows")]
 mod window_handle;

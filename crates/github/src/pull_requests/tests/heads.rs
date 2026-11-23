@@ -1,6 +1,6 @@
 //! Finding the pull requests of branches on GitHub, many in one query, each to its own answer.
 
-use super::super::heads::{HeadsAsk, HeadsRead};
+use super::super::heads::{HeadsAsk, HeadsRead, HeadsUnread};
 use super::reader::answer_with;
 use super::*;
 use crate::{Answer, Github, GithubConfig, Leaving, Script, StandIn};
@@ -41,8 +41,9 @@ async fn read(answers: Vec<Answer>, asks: &[HeadsAsk]) -> (HeadsRead, Vec<String
 /// however many forks' branches of the same name have one, and one of a clone of a fork, ada/project, whose own merge
 /// into the repository it was forked from. One is gone, as GitHub deletes one as its pull request merges, so its are
 /// those its name finds from its own repository, but for one from a fork since deleted. One was pushed to a fork
-/// that's been deleted since, so GitHub has no repository to ask of the branch in, and its name finds none. And one is
-/// of example/gone, which isn't there, so neither can be asked.
+/// that's been deleted since, so GitHub has no repository to ask of the branch in, and its name finds none. One is of
+/// example/gone, which isn't there, so neither can be asked. And one is of example/kept-out, whose organization keeps
+/// the token's app out, so GitHub forbids both.
 #[tokio::test]
 async fn a_branch_thats_there_has_its_own_pull_requests_and_one_thats_gone_those_its_name_finds() {
     let forks = || vec![node(10, "OPEN", Some("someone/project"), "example/project"); 5];
@@ -53,11 +54,13 @@ async fn a_branch_thats_there_has_its_own_pull_requests_and_one_thats_gone_those
     let fork_gone_by_name = json!({"h": {"nodes": [node(3, "MERGED", None, "example/project")]}});
     let not_found =
         |alias: &str| json!({"type":"NOT_FOUND","path":[alias],"message":"Could not resolve to a Repository."});
+    let kept_out = "The `example` organization has enabled OAuth App access restrictions.";
+    let forbidden = |alias: &str| json!({"type":"FORBIDDEN","path":[alias],"message":kept_out});
     let answer = answer_with(
         json!({"r0": own, "n0": own_by_name, "r1": forked, "n1": forked_by_name, "r2": {"h": null}, "n2": gone_by_name,
-            "r3": null, "n3": fork_gone_by_name, "r4": null, "n4": null}),
+            "r3": null, "n3": fork_gone_by_name, "r4": null, "n4": null, "r5": null, "n5": null}),
         4900,
-        &[not_found("r3"), not_found("r4"), not_found("n4")],
+        &[not_found("r3"), not_found("r4"), not_found("n4"), forbidden("r5"), forbidden("n5")],
     );
     let asks = [
         heads("example/project", "example/project", "birch"),
@@ -65,11 +68,12 @@ async fn a_branch_thats_there_has_its_own_pull_requests_and_one_thats_gone_those
         heads("example/project", "example/project", "elm"),
         heads("example/project", "old/project", "birch"),
         heads("example/gone", "example/gone", "birch"),
+        heads("example/kept-out", "example/kept-out", "birch"),
     ];
 
     let (read, queries) = read(vec![answer], &asks).await;
 
-    let [own, forked, gone, fork_gone, missing] = <[_; 5]>::try_from(read.answers).unwrap();
+    let [own, forked, gone, fork_gone, missing, kept] = <[_; 6]>::try_from(read.answers).unwrap();
     let numbers = |found: &[super::super::heads::Headed]| found.iter().map(|pr| pr.number.get()).collect::<Vec<_>>();
     let (own, forked) = (own.unwrap(), forked.unwrap());
     assert_eq!(numbers(&own), [7], "its own, and no fork's");
@@ -79,7 +83,9 @@ async fn a_branch_thats_there_has_its_own_pull_requests_and_one_thats_gone_those
     assert_eq!(forked[0].into, name("example/project"), "read where it merges into, rather than in the fork");
     assert_eq!(numbers(&gone.unwrap()), [5], "by its name, from its own repository");
     assert_eq!(numbers(&fork_gone.unwrap()), [] as [u64; 0], "a fork's branch that's gone has no head to be it");
-    assert_eq!(missing.unwrap_err().code, ErrorCode::Unavailable);
+    let unseen = |said: &str| HeadsUnread::Unseen { said: said.to_string() };
+    assert_eq!(missing.unwrap_err(), unseen("Could not resolve to a Repository."), "unseen, rather than failed");
+    assert_eq!(kept.unwrap_err(), unseen(kept_out));
     assert_eq!(queries.len(), 1, "{queries:?}");
     assert!(queries[0].contains(r#"r1: repository(owner:\"ada\",name:\"project\")"#), "{}", queries[0]);
     assert!(queries[0].contains(r#"ref(qualifiedName:\"refs/heads/birch\")"#), "{}", queries[0]);
@@ -100,7 +106,7 @@ async fn an_error_about_the_whole_query_fails_every_branch_in_it() {
 
     let (read, _) = read(answers, &asks).await;
 
-    assert!(read.answers.iter().all(Result::is_err), "{:?}", read.answers);
+    assert!(read.answers.iter().all(|answer| matches!(answer, Err(HeadsUnread::Failed(_)))), "{:?}", read.answers);
 }
 
 /// More than a query carries, so a second query asks after the rest, and none once GitHub says its limit is down to
@@ -118,6 +124,8 @@ async fn branches_past_what_a_query_carries_go_in_the_next_until_githubs_limit_i
 
     assert_eq!(queries.len(), 1, "the second waits for GitHub's limit to reset");
     assert!(read.answers[..50].iter().all(Result::is_ok));
-    assert!(read.answers[50..].iter().all(|answer| answer.as_ref().is_err_and(|e| e.code == ErrorCode::Worker)));
+    let waits =
+        |answer: &Result<_, HeadsUnread>| matches!(answer, Err(HeadsUnread::Failed(e)) if e.code == ErrorCode::Worker);
+    assert!(read.answers[50..].iter().all(waits));
     assert!(queries[0].contains("r49: repository(") && !queries[0].contains("r50: repository("));
 }

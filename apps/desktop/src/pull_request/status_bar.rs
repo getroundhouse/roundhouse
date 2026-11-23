@@ -5,11 +5,15 @@ use crate::sides::AtTheTop;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::{
-    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div,
+    Anchor, AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, StyleRefinement,
+    Styled as _, TestSupportExt as _, Window, div,
 };
 use look::{IconSizing as _, Sign, Typeset as _, Work};
-use protocol::model::{OwnPullRequest, PullRequest, PullRequestFound, Standing};
+use protocol::model::{OwnPullRequest, PullRequest, PullRequestFound, RepositoryUnseen, Standing};
+use std::rc::Rc;
 use words::Action;
+
+use crate::warnings::{self, OpenGit, Warning};
 
 /// What the app knows of a workspace's pull request.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -18,32 +22,42 @@ pub enum Lookup {
     Looking,
     /// Boxed, as a pull request is many times the size of the rest.
     Found(Option<Box<OwnPullRequest>>),
+    /// GitHub showed the default no repository where the branch's pull requests are, and none was known before, so
+    /// whether it has one can't be said. Boxed, as `Found` is.
+    Unseen(Box<RepositoryUnseen>),
 }
 
 impl Lookup {
-    /// What the hub `found`, which is `None` until it has looked.
-    pub fn of(found: Option<PullRequestFound>) -> Self {
-        found.map_or(Lookup::Looking, |found| Lookup::Found(found.pull_request.map(Box::new)))
+    /// What the hub `found`, which is `None` until it has looked, and whether GitHub showed it the repository, as
+    /// `unseen` says. A pull request known before still shows, since it's still the workspace's, and a workspace's
+    /// warning says it can't be read now.
+    pub fn of(found: Option<PullRequestFound>, unseen: Option<RepositoryUnseen>) -> Self {
+        match (found, unseen) {
+            (Some(PullRequestFound { pull_request: Some(own) }), _) => Lookup::Found(Some(Box::new(own))),
+            (_, Some(unseen)) => Lookup::Unseen(Box::new(unseen)),
+            (Some(PullRequestFound { pull_request: None }), None) => Lookup::Found(None),
+            (None, None) => Lookup::Looking,
+        }
     }
 
     pub fn pull_request(&self) -> Option<&PullRequest> {
         match self {
-            Lookup::Looking => None,
+            Lookup::Looking | Lookup::Unseen(_) => None,
             Lookup::Found(own) => own.as_ref().map(|own| &own.pull_request),
         }
     }
 
-    /// `None` until it's known.
+    /// `None` until it's known, and while it can't be.
     pub fn standing(&self) -> Option<Standing> {
         match self {
-            Lookup::Looking => None,
+            Lookup::Looking | Lookup::Unseen(_) => None,
             Lookup::Found(pr) => Some(Standing::of(pr.as_deref())),
         }
     }
 
     pub fn work(&self) -> Work {
         match self {
-            Lookup::Looking => Work::NoPr,
+            Lookup::Looking | Lookup::Unseen(_) => Work::NoPr,
             Lookup::Found(pr) => client_ui::work(pr.as_deref()),
         }
     }
@@ -62,10 +76,19 @@ pub fn bar(
 ) -> AnyElement {
     let work = lookup.work();
     let colors = look::colors(cx);
+    let on_action: OnAction = Rc::new(on_action);
     let row = look::bar(look::BarKind::Words, look::BarSize::Regular)
         .id("pull-request-bar")
         .clear(gpui_kit::px(0.), sides::clearance(AtTheTop::RightSidebar, cx).end)
         .of_work(work);
+    if let Lookup::Unseen(unseen) = lookup {
+        let open_git = on_action.clone();
+        let words = unseen_words(unseen, Rc::new(move |window, cx| open_git(&Action::OpenGit, window, cx)), cx);
+        return row
+            .child(div().flex_1().min_w_0().child(words))
+            .child(action_button(Action::OpenGit, work, (busy, doing), on_action))
+            .into_any_element();
+    }
     let Some(standing) = lookup.standing() else {
         return row
             .child(div().typeset(look::Type::Body).text_color(colors.text_faint).child("Looking for its pull request…"))
@@ -87,6 +110,32 @@ pub fn bar(
         .child(words);
     row.child(giving_way(pr.map(|pr| number(pr, work)), title))
         .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), on_action)))
+        .into_any_element()
+}
+
+/// What the bar does with its action.
+type OnAction = Rc<dyn Fn(&Action, &mut Window, &mut App)>;
+
+/// That the pull request can't be seen, after the warning's sign, in its colour, which opens the workspace's warning
+/// about it, its Open Settings doing what `open_git` does.
+fn unseen_words(unseen: &RepositoryUnseen, open_git: OpenGit, cx: &App) -> AnyElement {
+    let warnings = vec![Warning::unseen(unseen)];
+    let words = h_flex()
+        .id("pull-request-unseen")
+        .gap(look::Space::XSmall)
+        .typeset(look::Type::Body)
+        .emphasis()
+        .text_color(look::colors(cx).warning)
+        .child(warnings::sign(cx))
+        .child(
+            div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child("Can't see its pull request"),
+        )
+        .test_support();
+    look::hover_card_with_a_button("pull-request-unseen-card")
+        .anchor(Anchor::TopLeft)
+        .trigger_style(StyleRefinement::default().min_w_0().overflow_hidden())
+        .trigger(words)
+        .content(move |_, _, cx| warnings::card(&warnings, &open_git, cx))
         .into_any_element()
 }
 
@@ -113,7 +162,7 @@ fn giving_way(number: Option<AnyElement>, title: Div) -> impl IntoElement {
 
 /// The same, for the header while the sidebar is hidden: the number and the action, without the words, which the
 /// sidebar has room for and the header doesn't. What's in the way shows by its sign beside the number, so a problem
-/// shows there too.
+/// shows there too. Nothing while it can't be seen, since the workspace's name has the warning's sign beside it then.
 pub fn controls(
     lookup: &Lookup,
     busy: &Busy,
@@ -130,7 +179,7 @@ pub fn controls(
         .gap(look::Space::Small)
         .children(sign.map(|sign| signed(sign, work, cx)))
         .children(pr.map(|pr| number(pr, work)))
-        .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), on_action)));
+        .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), Rc::new(on_action))));
     Some(controls.into_any_element())
 }
 
@@ -159,10 +208,11 @@ fn action_button(
     action: Action,
     work: Work,
     (busy, doing): (&Busy, Option<&'static str>),
-    on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
+    on_action: OnAction,
 ) -> AnyElement {
     // Greyed out while the app is making, archiving or restoring a workspace, as every button that archives is, so it
-    // can't be pressed twice, and while this one is on its way out, whoever asked. The other actions only ask the agent.
+    // can't be pressed twice, and while this one is on its way out, whoever asked. The others ask the agent or open Settings,
+    // which nothing holds up.
     let doing = doing.filter(|_| action == Action::Archive);
     let disabled = action == Action::Archive && (!busy.is_free() || doing.is_some());
     let label = doing.unwrap_or(action.label());

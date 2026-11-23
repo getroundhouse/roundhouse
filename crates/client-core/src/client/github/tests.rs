@@ -7,7 +7,9 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use protocol::client::github::{GithubShown, GithubSubscribe, GithubUpdate};
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
-use protocol::model::{GithubRepositoryName, IssueNumber, PullRequestFound, ReferenceAsk, ReferenceRead};
+use protocol::model::{
+    GithubLoginKind, GithubRepositoryName, IssueNumber, PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen,
+};
 
 use super::GithubFeed;
 use crate::stand_in_hub::{self, Does};
@@ -87,18 +89,29 @@ fn a_hub_too_old_to_say_never_says_a_pull_request() {
 }
 
 /// That the hub hasn't looked at a workspace's pull request is held as said, apart from the hub not having said
-/// anything yet, so a bar that showed one it found can say it's looking once the hub's cache has forgotten it.
+/// anything yet, so a bar that showed one it found can say it's looking once the hub's cache has forgotten it. And
+/// GitHub showing the default no repository to look in is held beside it.
 #[test]
 fn that_the_hub_hasnt_looked_is_held_apart_from_it_not_having_said() {
     let dir = tempfile::tempdir().unwrap();
-    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), |request| {
+    let unseen = RepositoryUnseen {
+        repository: GithubRepositoryName::named("o/r"),
+        username: "ada".into(),
+        login: GithubLoginKind::Token,
+        installation: None,
+        said: "Could not resolve to a Repository with the name 'o/r'.".into(),
+        approve_at: None,
+    };
+    let told = unseen.clone();
+    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
         let ClientRequest::GithubSubscribe(subscribe) = request else { return Does::Nothing };
-        let said = |found| HubFrame::Github {
+        let said = |found, unseen| HubFrame::Github {
             subscription_id: subscribe.subscription_id,
-            update: GithubUpdate::PullRequest { workspace: "w".into(), found },
+            update: GithubUpdate::PullRequest { workspace: "w".into(), found, unseen },
         };
         let none_found = Some(PullRequestFound { pull_request: None });
-        Does::AnswersThen(Box::new(ReplyOutcome::Response(ClientResponse::Ok)), vec![said(none_found), said(None)])
+        let frames = vec![said(none_found, None), said(None, Some(told.clone()))];
+        Does::AnswersThen(Box::new(ReplyOutcome::Response(ClientResponse::Ok)), frames)
     });
     let feed = GithubFeed::start(&client);
     let view = feed.view();
@@ -106,9 +119,13 @@ fn that_the_hub_hasnt_looked_is_held_apart_from_it_not_having_said() {
     assert!(!feed.said_pull_request(&workspace), "nothing's said before anything's shown");
 
     view.show(GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() });
-    waiting::thread::until(TIMEOUT, "the hub to say it hasn't looked", || {
-        feed.said_pull_request(&workspace) && feed.pull_request(&workspace).is_none()
+    waiting::thread::until(TIMEOUT, "the hub to say it hasn't looked, and can't see where to", || {
+        feed.said_pull_request(&workspace)
+            && feed.pull_request(&workspace).is_none()
+            && feed.unseen(&workspace).is_some()
     });
+
+    assert_eq!(feed.unseen(&workspace), Some(unseen));
 }
 
 /// Past the most chips a hub takes, those of the views made longest ago are left out, since the newest is likeliest to

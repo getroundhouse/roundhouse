@@ -19,7 +19,7 @@ use super::setup::setup_log_view;
 use super::workspace_card;
 use super::{Opened, PaneEvent, Showing, WorkspacePane, reserving, tab};
 use crate::sides::{self, AtTheTop, Side, Sidebar};
-use crate::{NewChat, NewTerminal, ToggleDiff, prompt_cache};
+use crate::{NewChat, NewTerminal, ToggleDiff, prompt_cache, warnings};
 
 /// What the `+` after the tabs is called, for whoever can't see it, and in its tooltip.
 const NEW_TAB_LABEL: &str = "New chat or terminal";
@@ -163,7 +163,8 @@ impl WorkspacePane {
     /// give way and end in an ellipsis, so the button beside the title is never pushed out of view. The branch and
     /// where it started are smaller, and the branch is in the code font, so they're set on the title's baseline, as
     /// words on one line are, rather than centred, which would leave them sitting higher. Resting the pointer on the
-    /// title shows where the workspace is, as `workspace_card.rs` says.
+    /// title shows where the workspace is, and its warnings, as `workspace_card.rs` says, and a warning's sign after
+    /// the title says there are some.
     fn heading(&self, line_text: &LineText, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = look::colors(cx);
         let (muted, faint) = (colors.text_muted, colors.text_faint);
@@ -172,7 +173,18 @@ impl WorkspacePane {
         let title = self.workspace().label().to_string();
         let title = words().id("workspace-title").role(gpui_kit::Role::Heading).aria_label(title.clone()).child(title);
         let title = body.set(title).emphasis().test_support();
-        let title = workspace_card::card(title, self.workspace(), self.client.hub_version());
+        // A warning's sign after the name says there's one in the card the name opens.
+        let title = if self.warnings.is_empty() {
+            title.into_any_element()
+        } else {
+            h_flex().min_w_0().gap(look::Space::Small).child(title).child(warnings::sign(cx)).into_any_element()
+        };
+        let this = cx.weak_entity();
+        let open_git: warnings::OpenGit = Rc::new(move |_, cx| {
+            let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::OpenGit));
+        });
+        let said = workspace_card::Said::of(self.workspace(), self.client.hub_version(), &self.warnings);
+        let title = workspace_card::card(title, said, open_git);
         let branch = words().text_color(muted).child(self.workspace().branch.to_string());
         let base = words().text_color(faint);
         let base = base.child(format!("from {}", self.workspace().base_ref.as_deref().unwrap_or("?")));

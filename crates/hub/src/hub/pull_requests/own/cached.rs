@@ -11,7 +11,7 @@ use super::reading::checked_out;
 use crate::github_cache::Item;
 use crate::hub::Hub;
 use crate::hub::github_reads::RULES_FRESH_FOR;
-use crate::hub::pull_requests::reading::Found;
+use crate::hub::pull_requests::recording::Found;
 
 impl Hub {
     /// The workspace's own pull request as the hub knows it: which it is, as its record keeps it, and what GitHub last

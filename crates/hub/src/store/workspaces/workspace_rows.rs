@@ -275,16 +275,16 @@ impl Store {
         Ok(left)
     }
 
-    /// Records which pull request the hub found is the workspace's, or that it has none, and on which branch it looked.
-    /// Returns the workspace only when that changed it, so finding the same again moves no revision and announces
-    /// nothing.
+    /// Records which pull request the hub found is the workspace's, or that it has none, and on which branch it looked,
+    /// or with `None`, that it's no longer known. Returns the workspace only when that changed it, so finding the same
+    /// again moves no revision and announces nothing.
     pub fn set_workspace_pull_request(
         &self,
         id: &WorkspaceId,
-        linked: &PullRequestLinked,
+        linked: Option<&PullRequestLinked>,
         branch: Option<&BranchName>,
     ) -> Result<Option<Workspace>, StoreError> {
-        let linked = linked_text(Some(linked))?;
+        let linked = linked_text(linked)?;
         let changed = lock(&self.writer).execute(
             "UPDATE workspaces SET pull_request_link = ?1, pull_request_branch = ?2
                  WHERE id = ?3 AND (pull_request_link IS NOT ?1 OR pull_request_branch IS NOT ?2)",

@@ -8,6 +8,7 @@ use crate::file_view::FileView;
 use crate::pull_request::Lookup;
 use crate::review::Review;
 use crate::sidebar_tabs::TabShown;
+use crate::warnings::Warning;
 use attaching::{Composed, Waiting};
 use client_core::records::InWorkspace;
 use client_core::{Client, Drafts, RecordsFeed};
@@ -150,6 +151,9 @@ pub struct WorkspacePane {
     pub(super) terminals: terminals::Terminals,
     pub(super) proposals: proposal_tab::Proposals,
     pub pull_request: Lookup,
+    /// What's wrong that the workspace can't put right itself, which the card its name opens says, as the hub last
+    /// said.
+    pub(super) warnings: Vec<Warning>,
     /// How many times the pull request has been asked for, so only the newest answer is shown.
     pub setup_log: Option<String>,
     /// Keeps the open log current while setup runs.
@@ -189,7 +193,7 @@ impl WorkspacePane {
         // The microphone is as dictation stands.
         let on_dictation = crate::dictating::observe(cx, |_, cx| cx.notify());
         let [needs_dictation, needs_speech] = crate::conversing::observe_needs(window, cx, Self::start_once_ready);
-        let pull_request = Lookup::of(records.github().pull_request(shown.workspace()));
+        let (pull_request, warnings) = Self::known(&records.github(), shown.workspace());
         let mut this = Self {
             client,
             records,
@@ -220,6 +224,7 @@ impl WorkspacePane {
             terminals: terminals::Terminals::default(),
             proposals: proposal_tab::Proposals::default(),
             pull_request,
+            warnings,
             setup_log: None,
             setup_log_refresh: None,
             cache_clock: None,

@@ -1,9 +1,12 @@
 //! The workspace's pull request: taking it as the hub sends it, and doing what its bar offers.
 
+use client_core::GithubFeed;
 use gpui_kit::Context;
+use protocol::model::Workspace;
 
 use super::{PaneEvent, WorkspacePane};
 use crate::pull_request::{Action, Ask, Lookup};
+use crate::warnings::Warning;
 
 impl WorkspacePane {
     pub fn create_pull_request(&mut self, cx: &mut Context<Self>) {
@@ -15,6 +18,7 @@ impl WorkspacePane {
         match action {
             Action::Ask(ask) => self.ask(ask, cx),
             Action::Archive => cx.emit(PaneEvent::Archive(self.workspace().id.clone(), false)),
+            Action::OpenGit => cx.emit(PaneEvent::OpenGit),
         }
     }
 
@@ -36,15 +40,22 @@ impl WorkspacePane {
         from.trim_prefix("origin/")
     }
 
+    /// The workspace's pull request and its warnings, as the hub last said them in `github`.
+    pub(super) fn known(github: &GithubFeed, workspace: &Workspace) -> (Lookup, Vec<Warning>) {
+        let unseen = github.unseen(workspace);
+        let warnings = unseen.iter().map(Warning::unseen).collect();
+        (Lookup::of(github.pull_request(workspace), unseen), warnings)
+    }
+
     /// Takes the pull request as the hub sent it, or as the workspace's record has it from a hub too old to send it,
     /// once the hub has said anything of it: looking where it said it hasn't looked, as once its cache has forgotten
     /// it. Until then the bar keeps what it showed, as between connecting and the hub's first word.
     pub(crate) fn take_pull_request(&mut self, cx: &mut Context<Self>) {
         let github = self.records.github();
         if github.said_pull_request(self.workspace()) {
-            let lookup = Lookup::of(github.pull_request(self.workspace()));
-            if lookup != self.pull_request {
-                self.pull_request = lookup;
+            let (lookup, warnings) = Self::known(&github, self.workspace());
+            if lookup != self.pull_request || warnings != self.warnings {
+                (self.pull_request, self.warnings) = (lookup, warnings);
                 cx.notify();
             }
         }
