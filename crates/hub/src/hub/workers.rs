@@ -244,6 +244,9 @@ impl Hub {
         if current {
             *cleared = clear_instance(provider, instance_id).await;
         }
+        // The instance is free, so a replacement can start or stop from here on. What's left waits on other workers,
+        // such as a replacement told to watch, which mustn't keep the gate from the next.
+        drop(cleared);
         // A replacement may have started already, once this one ended. A session tells them apart by the link's ID.
         let sessions: Vec<_> = self
             .sessions

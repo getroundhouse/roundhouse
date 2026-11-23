@@ -38,14 +38,14 @@ impl Hub {
     }
 
     /// The same, waiting until the worker has sent what the branches are now, and the hub has recorded it, for a
-    /// worktree that's just come back, so its record says which branch it's on before it's announced.
+    /// worktree that's just come back, so its record says which branch it's on before it's announced. Whether it
+    /// watches the worktree's files is told as the workspace's move ends, as [`Hub::end_move`] says.
     pub(in super::super) async fn watch_branches_from_now(
         self: &Arc<Self>,
         ready: &ReadyWorkspace,
         link: &Arc<WorkerLink>,
     ) {
         self.settle_children_later(ready.id(), link);
-        self.changes_watching_soon(ready.id());
         let path = ready.path().to_owned();
         let first = tokio::time::timeout(FIRST_READ_TIMEOUT, link.call(WatchBranches { path })).await;
         let id = ready.id();
