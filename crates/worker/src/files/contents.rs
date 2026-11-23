@@ -1,4 +1,5 @@
 use crate::git::files::{Tracked, entries};
+use crate::worktree_file::relative;
 use process::Environment;
 use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::client::{ApiError, ErrorCode};
@@ -6,7 +7,7 @@ use protocol::model::{CommitId, FileContents, WorktreeFiles};
 use std::collections::HashSet;
 use std::io;
 use std::io::Read as _;
-use std::path::{Component, Path};
+use std::path::Path;
 
 /// Far more than a repository an agent works in usually has, and few enough that a client lays them out in a moment.
 const MAX_FILES: usize = 50_000;
@@ -194,16 +195,4 @@ fn contents(data: Vec<u8>) -> FileContents {
 
 fn length(bytes: usize) -> u64 {
     u64::try_from(bytes).unwrap_or(u64::MAX)
-}
-
-/// Refuses a path that isn't written as a list gives it, names between single slashes: one that's absolute, or that
-/// has `.` or `..` in it, which would be read from somewhere else, or an empty name, which would name it differently
-/// from how it's listed.
-pub(super) fn relative(path: &str) -> Result<(), ApiError> {
-    let names = path.split('/').all(|name| !matches!(name, "" | "." | ".."));
-    let parts = Path::new(path).components();
-    if !names || !parts.into_iter().all(|part| matches!(part, Component::Normal(_))) {
-        return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{path} isn't a path in the worktree")));
-    }
-    Ok(())
 }

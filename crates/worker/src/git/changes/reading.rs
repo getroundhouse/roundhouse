@@ -1,5 +1,6 @@
 //! Reading what the worktree holds of a changed file: a version of it, and, as git would count them, its lines.
 
+use crate::worktree_file::{self, Last};
 use protocol::model::FileVersion;
 use sha1_smol::Sha1;
 use std::fs::{File, Metadata};
@@ -52,15 +53,10 @@ pub(super) fn read(path: &Path, meta: &Metadata) -> io::Result<Option<Read>> {
 }
 
 /// The version of what the worktree at `worktree` holds at `path` now, as a summary names it, or `None` where there's
-/// nothing to read there, or it's outside the worktree. The folders on the way are followed, and the last link isn't,
-/// since git tracks a link as itself.
-pub(in crate::git) fn version_now(worktree: &Path, path: &Path) -> Option<FileVersion> {
-    let named = worktree.join(path);
-    let folder = named.parent()?.canonicalize().ok()?;
-    if !folder.starts_with(worktree.canonicalize().ok()?) {
-        return None;
-    }
-    let found = folder.join(named.file_name()?);
+/// nothing to read there, or it's outside the worktree, as [`worktree_file::inside`] finds it with the last link taken
+/// as itself, since git tracks a link as itself.
+pub(in crate::git) fn version_now(worktree: &Path, path: &str) -> Option<FileVersion> {
+    let found = worktree_file::inside(worktree, path, Last::AsItself).ok()?;
     let meta = std::fs::symlink_metadata(&found).ok()?;
     Some(read(&found, &meta).ok()??.version)
 }

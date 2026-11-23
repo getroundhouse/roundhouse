@@ -129,8 +129,30 @@ async fn diff_file_takes_each_kind_of_change_against_the_summary_s_base_with_its
     }
 }
 
+/// A link is diffed as itself, as git tracks one, so its version is the summary's, of the path it leads to, and a file
+/// reached through a link to a folder outside the worktree, which git lists nothing of, has no version.
+#[cfg(unix)]
+#[tokio::test]
+async fn diff_file_takes_a_link_as_itself_and_reads_nothing_through_one_out_of_the_worktree() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    write(dir.path(), "outside.txt", "secret\n");
+    std::os::unix::fs::symlink(dir.path().join("outside.txt"), repo.join("link.txt")).unwrap();
+    std::os::unix::fs::symlink(dir.path(), repo.join("up")).unwrap();
+    let summary = ChangeSummaries::default().summarize(&given(), &repo, None).await.unwrap();
+
+    let link = diff_of(&repo, ("link.txt", true), None, 0).await.unwrap();
+    let through_a_link = diff(&repo, "up/outside.txt", None, 0).await.unwrap();
+
+    let listed = summary.files.iter().find(|listed| listed.path == "link.txt").expect("the link is listed");
+    assert!(link.version.is_some(), "{link:?}");
+    assert_eq!(link.version, listed.version, "as the summary names it");
+    assert_eq!((through_a_link.version, through_a_link.body), (None, FileDiffBody::Unchanged));
+}
+
 /// A path that names nothing in the worktree, as one going up a folder or from the root does, is refused rather than
-/// handed to git, which would read a file anywhere as one it doesn't track.
+/// handed to git, which would read a file anywhere as one it doesn't track, and so is one no summary would name, as
+/// `worktree_file::relative` says.
 #[tokio::test]
 async fn diff_file_refuses_a_path_from_outside_the_worktree() {
     let dir = tempfile::tempdir().unwrap();
@@ -138,9 +160,8 @@ async fn diff_file_refuses_a_path_from_outside_the_worktree() {
     let outside = dir.path().join("outside.txt");
     write(dir.path(), "outside.txt", "secret\n");
 
-    for (file, from) in
-        [("../outside.txt", None), (outside.to_str().unwrap(), None), ("a.txt", Some("../a.txt")), ("", None)]
-    {
+    let asked = [("../outside.txt", None), (outside.to_str().unwrap(), None), ("a.txt", Some("../a.txt")), ("", None)];
+    for (file, from) in asked.into_iter().chain([("./a.txt", None), ("a.txt", Some("a//b.txt"))]) {
         let refused = diff(&repo, file, from, 0).await.unwrap_err();
 
         assert_eq!(refused.code, ErrorCode::InvalidRequest, "{file}, from {from:?}");
@@ -184,8 +205,8 @@ async fn diff_file_gives_no_version_of_a_file_that_changed_while_it_was_diffed()
     let repo = new_repo(dir.path());
     write(&repo, "a.txt", "two\n");
 
-    let (still, ()) = of_one_version(&repo, Path::new("a.txt"), async { Ok(()) }).await.unwrap();
-    let (changed, ()) = of_one_version(&repo, Path::new("a.txt"), async {
+    let (still, ()) = of_one_version(&repo, "a.txt", async { Ok(()) }).await.unwrap();
+    let (changed, ()) = of_one_version(&repo, "a.txt", async {
         write(&repo, "a.txt", "three\n");
         Ok(())
     })
