@@ -258,3 +258,54 @@ async fn a_job_called_off_ends_where_it_is_and_its_after_step_runs_once_what_it_
     assert!(how.finished_or_ran_uncut());
     until(|| jobs.busy().is_empty()).await;
 }
+
+/// Asked for several times while one of its kind about its key runs, a job of a kind that runs once more does, once,
+/// as the last asked for, once the one running and its after-step have ended, while a job of another kind about the
+/// key is refused. One asked for again goes with the job about its key when that's called off.
+#[tokio::test(start_paused = true)]
+async fn a_job_asked_for_again_while_one_about_its_key_runs_runs_once_more_after_it() {
+    const ONCE_MORE: JobKind = JobKind::ReadWorkspaceChanges;
+    let jobs = Jobs::new();
+    let (ends, mut ended) = mpsc::unbounded_channel();
+    let happened = Arc::new(parking_lot::Mutex::new(Vec::<String>::new()));
+    let saying = |what: String| {
+        let happened = happened.clone();
+        async move { happened.lock().push(what) }
+    };
+    let (finish, finished) = tokio::sync::oneshot::channel::<()>();
+    let (tell, after_step) = (telling(&ends), saying("the first's after-step".into()));
+    let after = move |ended| async move {
+        after_step.await;
+        tell(ended).await;
+    };
+    jobs.start(ONCE_MORE, "w", LIMITS, async move { drop(finished.await) }, after).unwrap();
+
+    let asked: Vec<_> =
+        (1..=3).map(|n| jobs.start(ONCE_MORE, "w", LIMITS, saying(format!("asked {n}")), telling(&ends))).collect();
+    let other_kind = jobs.start(KIND, "w", LIMITS, async {}, telling(&ends));
+    finish.send(()).unwrap();
+
+    assert_eq!(asked, [Ok(()); 3]);
+    assert_eq!(other_kind, Err(NotStarted::KeyBusy));
+    assert_eq!([next(&mut ended).await, next(&mut ended).await], [Ended::Finished, Ended::Finished]);
+    until(|| jobs.busy().is_empty()).await;
+    assert_eq!(*happened.lock(), ["the first's after-step", "asked 3"]);
+
+    let (began, beginning) = tokio::sync::oneshot::channel();
+    let waiting = async move {
+        began.send(()).unwrap();
+        std::future::pending::<()>().await;
+    };
+    jobs.start(ONCE_MORE, "v", LIMITS, waiting, telling(&ends)).unwrap();
+    jobs.start(ONCE_MORE, "v", LIMITS, saying("asked again".into()), telling(&ends)).unwrap();
+    reached(beginning, "the job never began").await;
+
+    jobs.call_off(&"v");
+
+    let how = next(&mut ended).await;
+    assert!(matches!(how, Ended::CalledOff { .. }), "{how:?}");
+    until(|| jobs.busy().is_empty()).await;
+    drop(ends);
+    assert_eq!(ended.recv().await, None, "nothing else ran");
+    assert_eq!(*happened.lock(), ["the first's after-step", "asked 3"]);
+}

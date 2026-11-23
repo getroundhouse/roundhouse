@@ -61,7 +61,7 @@ fn observations_told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) 
 
 /// Once the hub has finished reading the workspace's lines, for a test that counts what its worker is asked.
 pub(in crate::hub) async fn read(hub: &Hub, id: &WorkspaceId) {
-    waiting::task::until(TIMEOUT, "the hub to finish reading the lines", || !hub.line_reads.under_way(id)).await;
+    waiting::task::until(TIMEOUT, "the hub to finish reading the lines", || !hub.line_reads.busy().contains(id)).await;
 }
 
 /// Each time a worker that kept what it was asked in `requests` was asked to sum up its changes.

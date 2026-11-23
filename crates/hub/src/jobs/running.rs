@@ -6,24 +6,33 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use tokio::sync::Notify;
-use tokio::task::{AbortHandle, JoinHandle};
-use tracing::{error, info, warn};
+use tokio::task::AbortHandle;
 
-use super::{JobKind, Progress};
+use super::JobKind;
+use super::kind::AskedAgain;
+use super::supervising::{Asked, Leaves, supervise};
 
 /// The jobs running, by the key of what each is about, such as a workspace, so one about a key runs at a time.
 pub(crate) struct Jobs<K> {
-    /// `None` once the jobs have stopped, so none starts after.
-    running: Arc<Mutex<Option<HashMap<K, Running>>>>,
+    running: Table<K>,
 }
 
-struct Running {
-    kind: JobKind,
-    work: AbortHandle,
-    /// What waits for the work within its limit and then runs its after-step.
+/// The jobs running, by key, which their supervisors take theirs off as they end. `None` once the jobs have stopped,
+/// so none starts after.
+pub(super) type Table<K> = Arc<Mutex<Option<HashMap<K, Running>>>>;
+
+pub(super) struct Running {
+    pub(super) kind: JobKind,
+    /// The work of the run going now, which is the job asked for again once it has begun.
+    pub(super) work: AbortHandle,
+    /// What waits for the work within its limit and then runs its after-step, and then begins the job asked for
+    /// again, if one was.
     supervisor: AbortHandle,
-    /// Tells the supervisor the job is called off, as [`Jobs::call_off`] says.
-    called_off: Arc<Notify>,
+    /// Tells the supervisor the run going now is called off, as [`Jobs::call_off`] says.
+    pub(super) called_off: Arc<Notify>,
+    /// The last job of its kind asked for about the key since this one began, of a kind that runs once more, as
+    /// [`AskedAgain::RunsOnceMore`] says, which begins once this one has ended.
+    pub(super) again: Option<Asked>,
 }
 
 /// How long a job's work has, and then its after-step.
@@ -69,7 +78,8 @@ impl Ended {
 /// Why a job wasn't started.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum NotStarted {
-    /// One about the same key is running.
+    /// One about the same key is running, and the job's kind is one that's refused then, as
+    /// [`AskedAgain::Refused`] says, or the one running is of another kind.
     KeyBusy,
     /// As many of its kind as may run at once are running.
     KindBusy,
@@ -97,14 +107,16 @@ impl<K: Clone + Eq + Hash + Display + Send + Sync + 'static> Jobs<K> {
         }
     }
 
-    /// The keys of what jobs are running about, of any kind, for whatever decides what's due to pass over.
+    /// The keys of what jobs are running about, of any kind, for whatever decides what's due to pass over. A key stays
+    /// on it until the job asked for again about it, if one was, has ended too.
     pub(crate) fn busy(&self) -> Vec<K> {
         self.running.lock().as_ref().map_or_default(|running| running.keys().cloned().collect())
     }
 
     /// Starts `work`, which says where it has got to with [`super::step`], and has `limits.work` to finish. Then
     /// `after` runs, however the work ended, once the work is gone, within `limits.after`. Neither is waited on here,
-    /// and the key is free again once both are done.
+    /// and the key is free again once both are done. Asked for while one of its kind about `key` runs, it's refused,
+    /// or it starts once that one has ended, as the kind's [`AskedAgain`] says, in place of any asked for meanwhile.
     pub(crate) fn start<W, A>(
         &self,
         kind: JobKind,
@@ -117,34 +129,47 @@ impl<K: Clone + Eq + Hash + Display + Send + Sync + 'static> Jobs<K> {
         W: Future<Output = ()> + Send + 'static,
         A: Future<Output = ()> + Send + 'static,
     {
+        let asked = Asked::new(kind, limits, work, after);
         let mut guard = self.running.lock();
         let running = guard.as_mut().ok_or(NotStarted::Stopped)?;
-        Self::room(running, kind, &key)?;
-        let progress = Progress::default();
-        let work = tokio::spawn(progress.scope(work));
-        let work_task = work.abort_handle();
-        // The supervisor takes the key off the list as it ends, which it can't before this lock is let go of, so the
-        // key is always on the list first.
-        let leaves = Leaves { running: self.running.clone(), key: key.clone() };
-        let called_off = Arc::new(Notify::new());
-        let watching = Watching { limits, progress, called_off: called_off.clone() };
-        let supervisor = tokio::spawn(supervise(kind, leaves, watching, work, after));
-        running.insert(key, Running { kind, work: work_task, supervisor: supervisor.abort_handle(), called_off });
+        if let Some(busy) = running.get_mut(&key) {
+            if busy.kind != kind || kind.asked_again() == AskedAgain::Refused {
+                return Err(NotStarted::KeyBusy);
+            }
+            // What it takes the place of goes once the lock is let go of, since dropping it drops what its work holds.
+            let replaced = busy.again.replace(asked);
+            drop(guard);
+            drop(replaced);
+            return Ok(());
+        }
+        if !Self::kind_has_room(running, kind) {
+            return Err(NotStarted::KindBusy);
+        }
+        let run = asked.begin();
+        let (work, called_off) = (run.work.abort_handle(), run.called_off.clone());
+        // The supervisor takes the key off the table as it ends, which it can't before this lock is let go of, so the
+        // key is always on the table first.
+        let supervisor = tokio::spawn(supervise(Leaves::new(self.running.clone(), key.clone()), run));
+        running.insert(key, Running { kind, work, supervisor: supervisor.abort_handle(), called_off, again: None });
         Ok(())
     }
 
     /// Ends the work of the job about `key` where it is, as its limit would, as when what it's for is no longer wanted,
     /// and then runs its after-step, told it was called off. What its work runs [`super::uncut`] runs to its end, as
-    /// it does at the limit. Does nothing when no job is about `key`, or once its work has ended.
+    /// it does at the limit. One asked for again about `key` is let go of, unbegun, since it's for the same. Does
+    /// nothing when no job is about `key`, or once its work has ended.
     pub(crate) fn call_off(&self, key: &K) {
-        if let Some(job) = self.running.lock().as_ref().and_then(|running| running.get(key)) {
-            job.called_off.notify_one();
-        }
+        let mut guard = self.running.lock();
+        let Some(job) = guard.as_mut().and_then(|running| running.get_mut(key)) else { return };
+        job.called_off.notify_one();
+        let again = job.again.take();
+        drop(guard);
+        drop(again);
     }
 
-    /// Ends every job where it is, without its after-step, and starts none after, as the hub stops. The next hub puts
-    /// back what a job left, as it starts: it ends a worker nothing carries on with, and records a sign-in left waiting
-    /// as ended.
+    /// Ends every job where it is, without its after-step, and starts none after, nor any asked for again, as the hub
+    /// stops. The next hub puts back what a job left, as it starts: it ends a worker nothing carries on with, and
+    /// records a sign-in left waiting as ended.
     pub(crate) fn stop(&self) {
         let running = self.running.lock().take().unwrap_or_default();
         for job in running.into_values() {
@@ -153,99 +178,7 @@ impl<K: Clone + Eq + Hash + Display + Send + Sync + 'static> Jobs<K> {
         }
     }
 
-    fn room(running: &HashMap<K, Running>, kind: JobKind, key: &K) -> Result<(), NotStarted> {
-        if running.contains_key(key) {
-            return Err(NotStarted::KeyBusy);
-        }
-        if !Self::kind_has_room(running, kind) {
-            return Err(NotStarted::KindBusy);
-        }
-        Ok(())
-    }
-
     fn kind_has_room(running: &HashMap<K, Running>, kind: JobKind) -> bool {
         running.values().filter(|job| job.kind == kind).count() < kind.at_once()
-    }
-}
-
-/// What the supervisor of a job watches its work by.
-struct Watching {
-    limits: Limits,
-    progress: Progress,
-    called_off: Arc<Notify>,
-}
-
-/// Waits for the work within its limit, stopping it there, or once it's called off, and then runs the after-step.
-async fn supervise<K: Eq + Hash + Display, A: Future<Output = ()>>(
-    kind: JobKind,
-    leaves: Leaves<K>,
-    watching: Watching,
-    mut work: JoinHandle<()>,
-    after: impl FnOnce(Ended) -> A,
-) {
-    let Watching { limits, progress, called_off } = watching;
-    let key = &leaves.key;
-    // `None` once it's called off.
-    let ran = tokio::select! {
-        ran = tokio::time::timeout(limits.work, &mut work) => Some(ran),
-        () = called_off.notified() => None,
-    };
-    let (ended, stopping) = match ran {
-        Some(Ok(Ok(()))) => (Ended::Finished, None),
-        Some(Ok(Err(e))) if e.is_panic() => {
-            let at = progress.last();
-            error!(%key, %at, "a job of the hub's panicked: {kind}");
-            (Ended::Panicked { at }, None)
-        }
-        // Stopped, as the hub stops, which ends this task too.
-        Some(Ok(Err(_))) => return,
-        Some(Err(_)) => {
-            let at = progress.last();
-            warn!(%key, %at, limit = ?limits.work, "a job of the hub's didn't finish in time, so it was stopped: {kind}");
-            work.abort();
-            (Ended::Overran { at, began_uncut: false }, Some(work))
-        }
-        None => {
-            let at = progress.last();
-            info!(%key, %at, "a job of the hub's was called off: {kind}");
-            work.abort();
-            (Ended::CalledOff { at, began_uncut: false }, Some(work))
-        }
-    };
-    let afterwards = async {
-        // Once a stopped job's work is gone, so what it held is let go of before the after-step puts things back.
-        if let Some(work) = stopping {
-            super::step("waiting for its work to stop");
-            let _ = work.await;
-        }
-        // And what it runs uncut, which goes on, so the after-step doesn't undo what that does.
-        super::step("waiting for what its work runs uncut");
-        let began = progress.uncut_ended().await;
-        let mut ended = ended;
-        if let Ended::Overran { began_uncut, .. } | Ended::CalledOff { began_uncut, .. } = &mut ended {
-            *began_uncut = began;
-        }
-        super::step("putting back what its work left, before it said how");
-        after(ended).await;
-    };
-    // Where the after-step says it is, too, for the log if it doesn't finish.
-    let afterwards = progress.scope(afterwards);
-    if tokio::time::timeout(limits.after, afterwards).await.is_err() {
-        let at = progress.last();
-        warn!(%key, %at, limit = ?limits.after, "a job of the hub's didn't finish putting things back in time: {kind}");
-    }
-}
-
-/// Takes a job's key off the list of those running, however its supervisor ends.
-struct Leaves<K: Eq + Hash> {
-    running: Arc<Mutex<Option<HashMap<K, Running>>>>,
-    key: K,
-}
-
-impl<K: Eq + Hash> Drop for Leaves<K> {
-    fn drop(&mut self) {
-        if let Some(running) = self.running.lock().as_mut() {
-            running.remove(&self.key);
-        }
     }
 }
