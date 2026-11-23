@@ -6,8 +6,10 @@ use std::sync::Arc;
 use gpui_kit::{AppContext as _, Context, SharedString};
 use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, CommitId, LineCounts, Observed};
 
+use super::listed::{Listed, Summary, SummaryFile};
 use super::{Review, ReviewEvent};
 use crate::patch::{FilePatch, FileStatus};
+use client_core::workspace_lines::counted;
 
 /// One changed file as Changes lists it.
 #[derive(Clone, Debug, PartialEq)]
@@ -51,12 +53,15 @@ pub struct Listing {
     pub left_out: u64,
     /// Whether they can be read, as [`Paging`] says, where any are left out.
     pub paging: Option<Paging>,
+    /// The whole diff left out some untracked files, and doesn't say how many. A summary counts every file it leaves
+    /// out in `left_out`, so this is never so of one.
+    pub truncated: bool,
 }
 
 impl Listing {
     /// How many files the workspace changes, those left out included.
     pub fn changed(&self) -> usize {
-        self.rows.len().saturating_add(usize::try_from(self.left_out).unwrap_or(usize::MAX))
+        self.rows.len().saturating_add(counted(self.left_out))
     }
 }
 
@@ -68,43 +73,70 @@ impl Review {
     /// worker goes, or the connection does, stays listed until the whole diff is next read, at the moments it's read.
     pub fn take_summary(&mut self, changes: Option<&Observed<ChangeSummary>>, cx: &mut Context<Self>) {
         let Some(Observed::Current { value: summary }) = changes else {
-            self.summary_current = false;
+            if let Some(Listed::Summary(listed)) = &mut self.listed {
+                listed.current = false;
+            }
             return;
         };
-        let paging = self.summarized.as_ref().map(|summarized| summarized.paging);
-        self.summarized = Some(Summarized {
+        self.summaries_taken += 1;
+        let (paging, file, seen) = match self.listed.take() {
+            // Of the same worker, since one that goes takes the summary's currency with it, so what it refused it
+            // refuses still.
+            Some(Listed::Summary(Summary { current: true, summarized, file })) => (summarized.paging, file, None),
+            // The worker may be another now, so what was refused is asked for again.
+            Some(Listed::Summary(mut listed @ Summary { current: false, .. })) => {
+                listed.ask_again();
+                (listed.summarized.paging, listed.file, None)
+            }
+            Some(Listed::WholeDiff(whole)) => {
+                (Paging::Idle, SummaryFile::OneFile(None), self.diffed.as_ref().map(|path| whole.taken(path)))
+            }
+            None => (Paging::Idle, SummaryFile::OneFile(None), None),
+        };
+        let summarized = Summarized {
             base_commit: summary.base_commit.clone(),
             files: summary.files.clone(),
             lines: summary.lines,
             left_out: summary.left_out,
-            // A hub that refused a page refuses the next.
-            paging: if paging == Some(Paging::Refused) { Paging::Refused } else { Paging::Idle },
-        });
-        self.summary_current = true;
-        self.pages_asked += 1;
+            // A page being read is of the summary before, so it isn't listed with this one.
+            paging: if paging == Paging::Refused { Paging::Refused } else { Paging::Idle },
+        };
+        self.listed = Some(Listed::Summary(Summary { summarized, current: true, file }));
         self.list_again(cx);
-        self.read_the_file_again_if_it_moved(cx);
+        self.say_what_changes(cx);
+        // The file the whole diff showed shows until it's read on its own.
+        match seen {
+            Some(seen) => self.read_one_file(Some(seen), cx),
+            None => self.read_the_file_again_if_it_moved(cx),
+        }
     }
 
     /// Reads the page of files past those listed, as the hub's summary lists them, unless one is being read, and lists
-    /// it once it comes, unless the summary has changed since.
+    /// it once it comes, unless the summary has changed since, or the page is against another base than the summary,
+    /// which it then doesn't follow.
     pub fn read_more(&mut self, cx: &mut Context<Self>) {
-        let Some(summarized) = self.summarized.as_mut().filter(|s| s.left_out > 0 && s.paging == Paging::Idle) else {
+        let Some(Listed::Summary(Summary { summarized, .. })) = &mut self.listed else { return };
+        if summarized.left_out == 0 || summarized.paging != Paging::Idle {
             return;
-        };
+        }
         let Some(after) = summarized.files.last().map(ChangedFile::at) else { return };
         summarized.paging = Paging::Reading;
-        let (asked, client, id) = (self.pages_asked, self.client.clone(), self.workspace_id.clone());
+        let (asked, client, id) = (self.summaries_taken, self.client.clone(), self.workspace_id.clone());
         cx.spawn(async move |this, cx| {
             let read = cx.background_spawn(async move { client.workspace_changed_files(&id, after) }).await;
             let _ = this.update(cx, |t, cx| {
-                let Some(summarized) = t.summarized.as_mut().filter(|_| t.pages_asked == asked) else { return };
+                let Some(Listed::Summary(Summary { summarized, .. })) = &mut t.listed else { return };
+                if t.summaries_taken != asked {
+                    return;
+                }
                 match read {
-                    Ok(page) => {
+                    Ok(page) if page.base_commit == summarized.base_commit => {
                         summarized.files.extend(page.files);
                         summarized.left_out = page.left_out;
                         summarized.paging = Paging::Idle;
                     }
+                    // Of the worktree after its base moved, which the next summary lists.
+                    Ok(_) => summarized.paging = Paging::Idle,
                     Err(e) if e.is_unsupported() => summarized.paging = Paging::Refused,
                     Err(e) => {
                         summarized.paging = Paging::Idle;
@@ -125,32 +157,46 @@ impl Review {
     /// How many lines the workspace's changes add and remove, in all: the summary's totals, over every file, or the
     /// sums of the whole diff's files.
     pub fn totals(&self) -> (usize, usize) {
-        if let Some(summarized) = &self.summarized {
-            let count = |lines: u64| usize::try_from(lines).unwrap_or(usize::MAX);
-            return (count(summarized.lines.added), count(summarized.lines.removed));
+        match &self.listed {
+            Some(Listed::Summary(Summary { summarized, .. })) => {
+                (counted(summarized.lines.added), counted(summarized.lines.removed))
+            }
+            Some(Listed::WholeDiff(whole)) => whole
+                .files
+                .iter()
+                .fold((0, 0), |(added, removed), file| (added + file.added(), removed + file.removed())),
+            None => (0, 0),
         }
-        let files = self.files.iter().flatten();
-        files.fold((0, 0), |(added, removed), file| (added + file.added(), removed + file.removed()))
     }
 
-    /// Lists again what Changes shows, from the summary where there is one, and otherwise from the whole diff.
+    /// Lists again what Changes shows, from what's listed.
     pub(super) fn list_again(&mut self, cx: &mut Context<Self>) {
-        self.listing = match (&self.summarized, &self.files) {
-            (Some(summarized), _) => Some(Listing {
+        self.listing = self.listed.as_ref().map(|listed| match listed {
+            Listed::Summary(Summary { summarized, .. }) => Listing {
                 rows: by_path(summarized.files.iter().map(summarized_row).collect()),
                 left_out: summarized.left_out,
                 paging: (summarized.left_out > 0).then_some(summarized.paging),
-            }),
-            (None, Some(files)) => {
-                Some(Listing { rows: by_path(files.iter().map(patched_row).collect()), left_out: 0, paging: None })
-            }
-            (None, None) => None,
-        };
+                truncated: false,
+            },
+            Listed::WholeDiff(whole) => Listing {
+                rows: by_path(whole.files.iter().map(patched_row).collect()),
+                left_out: 0,
+                paging: None,
+                truncated: whole.truncated,
+            },
+        });
         cx.notify();
     }
 }
 
 impl Summarized {
+    /// A hub that refused a page is asked for the next, as from another.
+    pub(super) fn ask_again(&mut self) {
+        if self.paging == Paging::Refused {
+            self.paging = Paging::Idle;
+        }
+    }
+
     /// What the summary, or a page read past it, says of the file at `path`, if it lists it.
     pub(super) fn file(&self, path: &str) -> Option<&ChangedFile> {
         self.files.iter().find(|file| file.path == path)
@@ -177,9 +223,7 @@ fn by_path(mut rows: Vec<ChangedRow>) -> Arc<[ChangedRow]> {
 /// A file as the summary has it, with the status the whole diff would give it.
 fn summarized_row(file: &ChangedFile) -> ChangedRow {
     let status = file_status(file.status);
-    let count = |lines: fn(LineCounts) -> u64| {
-        file.lines.map_or(0, |counts| usize::try_from(lines(counts)).unwrap_or(usize::MAX))
-    };
+    let count = |lines: fn(LineCounts) -> u64| file.lines.map_or(0, |counts| counted(lines(counts)));
     ChangedRow {
         path: file.path.clone().into(),
         status,

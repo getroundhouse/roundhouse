@@ -269,7 +269,7 @@ impl ImageDiff {
         let review = self.review.read(cx);
         let Some(file) = review.file(path).filter(|file| file.is_binary()) else { return };
         let (before, after) = (file.old_path().map(ToString::to_string), file.new_path().map(ToString::to_string));
-        let ((client, id), base) = (review.source(), review.base_commit.clone());
+        let ((client, id), base) = (review.source(), review.base_commit().cloned());
         let from = base.clone().zip(before.clone());
         let read_before = from.is_none() || from != self.before_from || !matches!(self.before, Side::Image(_));
         let shown = (self.before.hash(), self.after.hash());

@@ -138,8 +138,7 @@ impl Render for Changes {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let layout = layout(cx);
         let review = self.review.read(cx);
-        // Only the whole diff leaves untracked files out unsaid.
-        let truncated = review.truncated && review.listing().is_some_and(|listing| listing.paging.is_none());
+        let truncated = review.listing().is_some_and(|listing| listing.truncated);
         let listing = review.listing().cloned();
         let changed = listing.as_ref().map(|listing| {
             if self.laid_out != Some(layout) {

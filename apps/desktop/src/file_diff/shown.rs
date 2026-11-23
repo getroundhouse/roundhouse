@@ -58,7 +58,7 @@ impl FileDiff {
             self.lay_out_again(cx);
             return;
         };
-        let (base, (client, id)) = (review.base_commit.clone().zip(file.old_path().cloned()), review.source());
+        let (base, (client, id)) = (review.base_commit().cloned().zip(file.old_path().cloned()), review.source());
         let from = Some((file.clone(), base.clone()));
         if self.making.from == from {
             return;

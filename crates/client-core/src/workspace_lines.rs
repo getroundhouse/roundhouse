@@ -47,7 +47,7 @@ pub fn drawn(status: WorkspaceStatus, lines: &Observed<LineCounts>) -> Option<Dr
         | WorkspaceStatus::Restoring
         | WorkspaceStatus::Unknown => false,
     };
-    let drawn = Drawn { added: lines_of(counts.added), removed: lines_of(counts.removed), as_last_read };
+    let drawn = Drawn { added: counted(counts.added), removed: counted(counts.removed), as_last_read };
     (ready && (drawn.added > 0 || drawn.removed > 0)).then_some(drawn)
 }
 
@@ -66,8 +66,9 @@ pub fn shortened(count: usize) -> String {
     count.to_string()
 }
 
-/// A count as a client counts lines. `usize` is 64 bits on every platform a client runs on, so it never saturates.
-fn lines_of(count: u64) -> usize {
+/// A count the hub sends, of lines or of files, as a client counts them. `usize` is 64 bits on every platform a client
+/// runs on, so it never saturates.
+pub fn counted(count: u64) -> usize {
     usize::try_from(count).unwrap_or(usize::MAX)
 }
 

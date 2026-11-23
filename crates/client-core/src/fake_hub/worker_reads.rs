@@ -14,10 +14,13 @@ use protocol::model::{ChangedFile, ChangedFileAt, ChangedFilesPage, CommitId, Fi
 pub struct WorkerReads {
     /// Every file the workspace changes, against its base, which the hub pages through past its summary.
     pub changed_files: Option<(CommitId, Vec<ChangedFile>)>,
-    /// Each page of one file's diff, by the file's path and the patch's line the page starts at.
-    pub file_diffs: HashMap<(String, u32), FileDiff>,
-    /// The path of each page of one file's diff read, in order, which every clone shares, for a test to read.
-    pub diffs_read: Arc<Mutex<Vec<String>>>,
+    /// Each page of one file's diff, by the file's path and the patch's line the page starts at, as the worker reads it
+    /// each time it's asked for: the first the first time, and so on, and the last from then on, so a test has the file
+    /// change between reads.
+    pub file_diffs: HashMap<(String, u32), Vec<FileDiff>>,
+    /// The path of each page of one file's diff asked for, and the line it starts at, in order, refused or not, which
+    /// every clone shares, for a test to read.
+    pub diffs_read: Arc<Mutex<Vec<(String, u32)>>>,
 }
 
 impl WorkerReads {
@@ -27,13 +30,17 @@ impl WorkerReads {
         Ok(ChangedFilesPage::after(base.clone(), files.clone(), after, MOST_FILES_LISTED))
     }
 
-    /// The page of `path`'s diff from line `first_line`.
+    /// The page of `path`'s diff from line `first_line`, as it reads this time.
     pub(super) fn file_diff(&self, path: &str, first_line: u32) -> Result<FileDiff, ApiError> {
+        let asked = (path.to_string(), first_line);
+        let mut read = self.diffs_read.lock();
+        let before = read.iter().filter(|read| **read == asked).count();
+        read.push(asked.clone());
         if self.file_diffs.is_empty() {
             return Err(older("read one file's diff"));
         }
-        self.diffs_read.lock().push(path.to_string());
-        let page = self.file_diffs.get(&(path.to_string(), first_line));
+        let reads = self.file_diffs.get(&asked);
+        let page = reads.and_then(|reads| reads.get(before).or(reads.last()));
         page.cloned().ok_or_else(|| ApiError::new(ErrorCode::NotFound, format!("no page of {path} at {first_line}")))
     }
 }
