@@ -12,14 +12,10 @@ use protocol::model::{
 use protocol::worker::{WatchChanges, WorkerFrame, WorkerRequest, WorkerResponse};
 use tokio::sync::broadcast;
 
+use crate::hub::Hub;
 use crate::hub::stand_in_workers::TIMEOUT;
 use crate::hub::tests::serving;
-use crate::hub::{FollowerId, Hub};
 use crate::worker_link::WorkerLink;
-
-pub(super) fn by(subscription: u64) -> FollowerId {
-    FollowerId { connection: 1, subscription }
-}
 
 pub(super) fn w() -> WorkspaceId {
     "w".into()

@@ -2,7 +2,6 @@
 //! terminal's worker make. On a paused clock, as `stand_in::settled` says.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use parking_lot::Mutex;
 use protocol::client::terminals::{TerminalRows, TerminalWatch};
@@ -19,7 +18,7 @@ use tokio::time::timeout;
 use super::super::watching::Watching;
 use super::stand_in::{Connected, WAIT, settled};
 use crate::hub::tests::{hub_with_worktree, serving, terminal_in_w};
-use crate::hub::{Followed, FollowerId, Following, Hub};
+use crate::hub::{Followed, Following, Hub};
 use crate::server::Outgoing;
 use crate::worker_link::WorkerLink;
 
@@ -112,16 +111,12 @@ struct Viewer {
     sent: mpsc::Receiver<Outgoing>,
 }
 
-/// The connection each viewer is on, a connection of its own, so each is a follower of its own.
-static NEXT_VIEWER: AtomicU64 = AtomicU64::new(0);
-
 impl Viewer {
     fn watch(hub: &Arc<Hub>) -> Self {
         let watcher = hub.terminal_watch(&"t".into()).unwrap();
         let (frames, sent) = mpsc::channel(1024);
         let watching = tokio::spawn(Watching { subscription_id: 5, frames }.watch(watcher));
-        let by = FollowerId { connection: NEXT_VIEWER.fetch_add(1, Ordering::Relaxed), subscription: 5 };
-        Self { watching, following: hub.follow(by, [Followed::Terminal("t".into())]), sent }
+        Self { watching, following: hub.follow([Followed::Terminal("t".into())]), sent }
     }
 
     async fn next(&mut self) -> HubFrame {

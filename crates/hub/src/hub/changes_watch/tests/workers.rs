@@ -5,7 +5,7 @@ use std::sync::Arc;
 use protocol::model::{LineCounts, Observed};
 use protocol::worker::WorkerResponse;
 
-use super::stand_in::{Watch, by, frame, next_changes, next_lines, summary, until_watches, w, worker};
+use super::stand_in::{Watch, frame, next_changes, next_lines, summary, until_watches, w, worker};
 use crate::hub::changes_watch::telling::WATCH_LIMIT;
 use crate::hub::observations::{WorkspaceChanges, WorkspaceLines};
 use crate::hub::stand_in_workers::TIMEOUT;
@@ -28,7 +28,7 @@ async fn a_watched_workspace_s_changes_are_as_of_when_its_worker_went() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let (link, asked) = worker(&hub, Watch::Watching);
-    let _following = hub.follow(by(1), [Followed::Workspace(w())]);
+    let _following = hub.follow([Followed::Workspace(w())]);
     until_watches(&asked, 1).await;
     hub.changes_frame(&w(), &link, frame(summary(3, 1))).await;
     let mut feed = hub.subscribe_feed();
@@ -53,7 +53,7 @@ async fn a_worker_that_never_answers_a_watch_holds_its_telling_only_until_the_li
     let hub = hub_with_worktree(dir.path());
     let before = WorkerLink::answering(|_| Some(Ok(WorkerResponse::Ok)));
     let (_stuck, asked) = worker(&hub, Watch::Stuck);
-    let _following = hub.follow(by(1), [Followed::Workspace(w())]);
+    let _following = hub.follow([Followed::Workspace(w())]);
     until_watches(&asked, 1).await;
 
     let going = tokio::spawn({

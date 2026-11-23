@@ -1,7 +1,7 @@
 //! The hub's state, and what the rest of it shares: its workers, live sessions and feed.
 
 pub(crate) use carrying_on::LeftAtWork;
-pub(crate) use followers::{Followed, FollowerId, Following};
+pub(crate) use followers::{Followed, Following};
 pub(crate) use terminals::{Queued, Watcher};
 pub use updates::UpdateFeed;
 

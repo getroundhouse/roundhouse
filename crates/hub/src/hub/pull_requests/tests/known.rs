@@ -10,7 +10,7 @@ use protocol::model::{GithubLoginKind, PrState, PullRequestLinked};
 use super::reading::{CLIENTS_TAKE_A_READ, known, numbered, queries};
 use crate::github_logins::DefaultCredential;
 use crate::hub::tests::{forget_github, hub_on_github, hub_on_github_timed, pushed};
-use crate::hub::{Followed, FollowerId, Hub};
+use crate::hub::{Followed, Hub};
 use crate::timers::Timers;
 
 /// Asked for again while a read is on its way, the next read is still needed, since the first began before the ask.
@@ -83,7 +83,7 @@ async fn a_pull_request_the_cache_forgot_is_not_known_until_its_read_again() {
     let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
     pull_requests.set(7, PullRequestState::Merged);
     hub.workspace_pull_request("w".into()).await.unwrap();
-    let _following = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Hub]);
+    let _following = hub.follow([Followed::Hub]);
     let due = |hub: &std::sync::Arc<Hub>| {
         let hub = hub.clone();
         hub.pull_requests.schedules.lock().clear();

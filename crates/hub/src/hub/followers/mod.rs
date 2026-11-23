@@ -7,5 +7,5 @@ mod list;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use followed::{Followed, FollowerId};
+pub(crate) use followed::Followed;
 pub(crate) use list::{Followers, Following};

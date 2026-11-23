@@ -5,14 +5,16 @@ use parking_lot::Mutex;
 use protocol::model::{GithubRepositoryName, IssueNumber, ReferenceAsk, WorkspaceId};
 use tokio::sync::watch;
 
-use super::{Followed, FollowerId};
+use super::Followed;
 use crate::github_cache::Item;
 use crate::hub::Hub;
 
 /// Who follows what, by what's followed. A terminal's worker sends what it shows, and the hub reads a workspace's pull
 /// request or a chip's issue more often, only while something here follows it.
 pub(crate) struct Followers {
-    by: Mutex<HashMap<Followed, HashSet<FollowerId>>>,
+    /// How many subscriptions follow each that any follows. Each [`Following`] adds what it newly follows, and takes
+    /// out what it no longer does, once, so the count is of subscriptions.
+    by: Mutex<HashMap<Followed, usize>>,
     /// Told as [`Hub::newly_followed`] and [`Hub::no_longer_followed`] act on a change to what's followed, for what works
     /// out GitHub's observations to read the list again, as a workspace's watch does.
     changed: watch::Sender<()>,
@@ -25,19 +27,19 @@ impl Default for Followers {
 }
 
 impl Followers {
-    fn add<'a>(&self, by: FollowerId, of: impl IntoIterator<Item = &'a Followed>) {
+    fn add<'a>(&self, of: impl IntoIterator<Item = &'a Followed>) {
         let mut followers = self.by.lock();
         for followed in of {
-            followers.entry(followed.clone()).or_default().insert(by);
+            *followers.entry(followed.clone()).or_default() += 1;
         }
     }
 
-    fn remove<'a>(&self, by: FollowerId, of: impl IntoIterator<Item = &'a Followed>) {
+    fn remove<'a>(&self, of: impl IntoIterator<Item = &'a Followed>) {
         let mut followers = self.by.lock();
         for followed in of {
-            if let Some(by_now) = followers.get_mut(followed) {
-                by_now.remove(&by);
-                if by_now.is_empty() {
+            if let Some(count) = followers.get_mut(followed) {
+                *count -= 1;
+                if *count == 0 {
                     followers.remove(followed);
                 }
             }
@@ -101,7 +103,6 @@ impl Followers {
 /// subscription stops, or its connection ends.
 pub(crate) struct Following {
     hub: Weak<Hub>,
-    by: FollowerId,
     of: HashSet<Followed>,
 }
 
@@ -112,8 +113,8 @@ impl Following {
         let Some(hub) = self.hub.upgrade() else { return };
         let newly: Vec<Followed> = of.difference(&self.of).cloned().collect();
         let gone: Vec<Followed> = self.of.difference(&of).cloned().collect();
-        hub.followers.add(self.by, &newly);
-        hub.followers.remove(self.by, &gone);
+        hub.followers.add(&newly);
+        hub.followers.remove(&gone);
         self.of = of;
         hub.newly_followed(&newly);
         hub.no_longer_followed(&gone);
@@ -125,7 +126,7 @@ impl Drop for Following {
         let Some(hub) = self.hub.upgrade() else { return };
         let of: Vec<Followed> = self.of.drain().collect();
         // Taken out first, so what's done next never counts it.
-        hub.followers.remove(self.by, &of);
+        hub.followers.remove(&of);
         hub.no_longer_followed(&of);
     }
 }
@@ -137,9 +138,9 @@ impl Hub {
         self.followers.follows(followed)
     }
 
-    /// Has `by` follow each of `of` until what this returns is dropped.
-    pub(crate) fn follow(self: &Arc<Self>, by: FollowerId, of: impl IntoIterator<Item = Followed>) -> Following {
-        let mut following = Following { hub: Arc::downgrade(self), by, of: HashSet::new() };
+    /// Has a subscription follow each of `of` until what this returns is dropped.
+    pub(crate) fn follow(self: &Arc<Self>, of: impl IntoIterator<Item = Followed>) -> Following {
+        let mut following = Following { hub: Arc::downgrade(self), of: HashSet::new() };
         following.replace(of);
         following
     }

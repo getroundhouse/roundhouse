@@ -13,7 +13,7 @@ use protocol::model::{
 use tokio::sync::broadcast;
 
 use crate::hub::tests::hub_on_github;
-use crate::hub::{Followed, FollowerId, Hub};
+use crate::hub::{Followed, Hub};
 
 /// Long enough for anything here on a busy machine.
 const WAIT: Duration = Duration::from_secs(10);
@@ -116,7 +116,7 @@ async fn a_followed_workspace_s_pull_request_is_current_from_its_read_until_a_re
     pull_requests.set(7, PullRequestState::Open);
     let mut feed = hub.subscribe_feed();
 
-    let following = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Workspace("w".into())]);
+    let following = hub.follow([Followed::Workspace("w".into())]);
 
     let (first, first_rev) = next(&mut feed, summary).await;
     assert_eq!(state(&first), Some((PrState::Open, true)), "{first:?}");
@@ -315,14 +315,14 @@ async fn a_pull_request_that_s_both_a_workspace_s_and_a_chip_s_is_read_once_and_
     tokio::spawn(hub.clone().observe_github());
     pull_requests.set(7, PullRequestState::Open);
     let mut feed = hub.subscribe_feed();
-    let _workspace = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Workspace("w".into())]);
+    let _workspace = hub.follow([Followed::Workspace("w".into())]);
     let (stands, _) = next(&mut feed, summary).await;
     let Observed::Current { value: OwnPullRequestSaid { pull_request: Some(workspace_s) } } = stands else {
         panic!("{stands:?}")
     };
     let chip = ReferenceAsk { repository: own(), number: IssueNumber::try_from(7).unwrap() };
 
-    let _chip = hub.follow(FollowerId { connection: 1, subscription: 2 }, [Followed::Reference(chip.clone())]);
+    let _chip = hub.follow([Followed::Reference(chip.clone())]);
 
     let said = next(&mut feed, |notice| {
         let ObservationNotice::Copy(Observation::Reference { reference, said, .. }) = notice else { return None };

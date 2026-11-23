@@ -12,12 +12,12 @@ use tokio::task::AbortHandle;
 
 use super::pump::{Following, pump};
 use super::{Connection, Outgoing};
-use crate::hub::{Followed, FollowerId, Hub};
+use crate::hub::{Followed, Hub};
 use crate::server::sends::Sends;
 
-/// One subscription of a connection, which ends as it's dropped: its task stops, and its entries leave the hub's list of
-/// who follows what.
-pub(super) struct Subscription {
+/// One subscription the hub serves a connection, which ends as it's dropped: its task stops, and its entries leave the
+/// hub's list of who follows what.
+pub(super) struct Served {
     /// What sends what it follows.
     task: AbortHandle,
     pub(super) following: crate::hub::Following,
@@ -27,16 +27,10 @@ pub(super) struct Subscription {
     pub(super) followed: Option<Followed>,
 }
 
-impl Subscription {
-    /// Subscription `subscription_id` of `connection`, fed by `task`, which follows each of `followed` from now on.
-    pub(super) fn new(
-        hub: &Arc<Hub>,
-        connection: &Connection,
-        subscription_id: u64,
-        followed: impl IntoIterator<Item = Followed>,
-        task: AbortHandle,
-    ) -> Self {
-        let following = hub.follow(FollowerId { connection: connection.id, subscription: subscription_id }, followed);
+impl Served {
+    /// A subscription fed by `task`, which follows each of `followed` from now on.
+    pub(super) fn new(hub: &Arc<Hub>, followed: impl IntoIterator<Item = Followed>, task: AbortHandle) -> Self {
+        let following = hub.follow(followed);
         Self { task, following, shown: None, followed: None }
     }
 
@@ -53,7 +47,7 @@ impl Subscription {
     }
 }
 
-impl Drop for Subscription {
+impl Drop for Served {
     fn drop(&mut self) {
         self.task.abort();
     }
@@ -102,7 +96,7 @@ pub(super) fn add_subscription(
     if subscriptions.contains_key(&subscription_id) {
         return Err(taken(subscription_id));
     }
-    let subscription = Subscription::new(hub, connection, subscription_id, [followed], start());
+    let subscription = Served::new(hub, [followed], start());
     subscriptions.insert(subscription_id, subscription);
     Ok(())
 }

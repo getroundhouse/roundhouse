@@ -1,12 +1,5 @@
 use protocol::model::{Level, ReferenceAsk, SessionId, TerminalId, WorkspaceId};
 
-/// Which subscription of which connection follows something.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct FollowerId {
-    pub(crate) connection: u64,
-    pub(crate) subscription: u64,
-}
-
 /// What a client follows, at one of the levels `docs/principles/serving.md` names, as the hub counts who follows it. It's
 /// a `protocol::model::Level` that the hub knows, so nothing in the list is from a newer client.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

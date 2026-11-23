@@ -1,6 +1,6 @@
 use super::super::*;
+use crate::hub::Followed;
 use crate::hub::tests::{hub_in, hub_on_github, hub_with_worktree};
-use crate::hub::{Followed, FollowerId};
 use crate::store::tests::idle_session;
 use crate::store::{SessionChange, StatusChange};
 use github::PullRequestState;
@@ -193,7 +193,7 @@ async fn with_no_client_following_the_hub_only_a_workspace_waited_on_is_read() {
     let unwaited = next().await;
     hub.store.start_wait(&wait()).unwrap();
     let waited = next().await;
-    let _following = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Hub]);
+    let _following = hub.follow([Followed::Hub]);
     let seen = next().await;
 
     assert_eq!(unwaited, None, "nobody would see it");

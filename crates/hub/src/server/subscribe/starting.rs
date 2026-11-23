@@ -68,7 +68,7 @@ async fn start_one(
             return Err(taken(subscription_id));
         }
         let task = tokio::spawn(feeding).abort_handle();
-        let subscription = subscribing::Subscription::new(hub, connection, subscription_id, [followed.clone()], task);
+        let subscription = subscribing::Served::new(hub, [followed.clone()], task);
         subscriptions.insert(subscription_id, subscription.of_subscribe(followed));
     }
     // Only an error once the subscription has stopped, as another kind of request can stop it, which leaves no list to

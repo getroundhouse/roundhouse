@@ -3,7 +3,7 @@
 
 use super::counted::Counted;
 use super::in_order::{Answering, Subscribes, in_order};
-use super::subscribing::Subscription;
+use super::subscribing::Served;
 use super::{admit, dispatch};
 
 use std::collections::HashMap;
@@ -58,7 +58,7 @@ pub(super) struct Connection {
     pub(super) id: u64,
     pub(super) frames: mpsc::Sender<Outgoing>,
     /// Each ended as it's dropped, which happens as the connection does.
-    pub(super) subscriptions: Mutex<HashMap<u64, Subscription>>,
+    pub(super) subscriptions: Mutex<HashMap<u64, Served>>,
     /// True once nothing more will be read, so a request that only waits, with nothing to carry on with, can stop.
     pub(super) closed: Arc<watch::Sender<bool>>,
 }
