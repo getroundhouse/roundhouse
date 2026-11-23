@@ -53,6 +53,7 @@ pinned! {
         NewWorkspaceDraftFileAdd(_), NewWorkspaceDraftFileRead(_), NewWorkspaceDraftFileRemove(_),
         NewWorkspaceCreate(_),
     ],
+    "client_calls/file_diffs.rs" => [WorkspaceFileDiff(_)],
     "client_calls/github_apps.rs" => [
         GithubAppManifestWrite(_), GithubAppMake(_), GithubAppInstallationsConnect(_), GithubAppRemove(_),
     ],

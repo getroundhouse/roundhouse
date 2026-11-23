@@ -51,6 +51,20 @@ pub(super) fn read(path: &Path, meta: &Metadata) -> io::Result<Option<Read>> {
     }
 }
 
+/// The version of what the worktree at `worktree` holds at `path` now, as a summary names it, or `None` where there's
+/// nothing to read there, or it's outside the worktree. The folders on the way are followed, and the last link isn't,
+/// since git tracks a link as itself.
+pub(in crate::git) fn version_now(worktree: &Path, path: &Path) -> Option<FileVersion> {
+    let named = worktree.join(path);
+    let folder = named.parent()?.canonicalize().ok()?;
+    if !folder.starts_with(worktree.canonicalize().ok()?) {
+        return None;
+    }
+    let found = folder.join(named.file_name()?);
+    let meta = std::fs::symlink_metadata(&found).ok()?;
+    Some(read(&found, &meta).ok()??.version)
+}
+
 /// For a file too large to read, which changes when either does, so it changes when the file is only touched too. It
 /// can't be taken for a hash, which has no `-`.
 fn by_size_and_time(meta: &Metadata) -> io::Result<FileVersion> {

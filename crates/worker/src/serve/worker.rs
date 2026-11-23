@@ -296,6 +296,7 @@ pub(super) async fn handle(
             let page = state.changes.page_after(&given, Path::new(&path), base_ref.as_deref(), &after).await?;
             Ok(WorkerResponse::ChangedFilesPage(page))
         }
+        WorkerRequest::DiffFile(asked) => Ok(WorkerResponse::FileDiff(git::diff_file(&given, &asked).await?)),
         WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
         WorkerRequest::WatchChanges(asked) => worktrees::watch_changes(state, asked).await,
         WorkerRequest::WatchChildBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Child).await,

@@ -2,6 +2,7 @@
 //! since clients and hubs of different builds meet each other.
 
 mod devices;
+mod file_diffs;
 mod github_apps;
 mod pinned;
 mod pinned_replies;

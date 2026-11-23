@@ -8,11 +8,14 @@ Facts about git that took an experiment to find, or that more than one place in 
 
 ## Diffs
 
-A worker's change summary reads these, and so does each page of the files past those it lists, in `crates/worker/src/git/changes/listing.rs`. Seen on git 2.39.
+A worker reads these in `crates/worker/src/git/changes/listing.rs`, for a change summary and for each page of the files past those it lists, and in `crates/worker/src/git/diff_file/`, for its diff of one file. Seen on git 2.39.
 
 - **`git diff --raw --numstat -z` prints every file's raw entry, then every file's counts, in the same order.** A rename's raw entry ends with its status and score, such as `R100`, then the old path and the new one. Its counts have nothing after the second tab, then the two paths, each ended by a NUL.
 - **git counts no lines of a file larger than `core.bigFileThreshold`, 512 MiB unless set,** and prints `-` for each count, as it does for a binary file.
 - **A diff against a commit gives a file in conflict as `M`,** and not `U`.
+- **A path after `--` is a pattern unless git is told `--literal-pathspecs`.** So `git diff HEAD -- 'a*.txt'` diffs `ab.txt` too.
+- **A rename is found only when both its paths are named.** `git diff --find-renames <base> -- new.txt` gives `new.txt` as added, and naming `old.txt` before it gives the rename.
+- **`git diff --no-index` exits with 1 when the two files differ,** and reads `/dev/null` as no file. Its `--numstat` prints `-` for each count of a binary file, as a diff against a commit does.
 
 ## What git ignores
 

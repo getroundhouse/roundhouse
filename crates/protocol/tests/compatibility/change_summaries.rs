@@ -1,12 +1,13 @@
-//! What a hub asks its worker of what a worktree changes, and the summary the worker sends back, spelled out, since a
-//! worker can outlive the hub that started it, and the next hub can be of another build. And a client's read of a page
-//! of the files a summary leaves out, which the hub passes on to the worker.
+//! What a hub asks its worker of what a worktree changes, and what the worker sends back, the summary or one file's
+//! diff, spelled out, since a worker can outlive the hub that started it, and the next hub can be of another build.
+//! And a client's read of a page of the files a summary leaves out, which the hub passes on to the worker.
 
 use protocol::client::workspaces::WorkspaceChangedFiles;
 use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HubFrame, ReplyOutcome};
 use protocol::frame;
 use protocol::model::{
-    ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, ChangedFilesPage, FileVersion, LineCounts,
+    ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, ChangedFilesPage, FileDiff, FileDiffBody, FileVersion,
+    LineCounts,
 };
 use protocol::worker::{self, WorkerFrame, WorkerRequest, WorkerResponse};
 
@@ -142,4 +143,32 @@ fn the_request_for_a_page_of_changed_files_and_its_reply_keep_their_form() {
         &format!(r#"{{"method":"list_changed_files","path":"/w","base_ref":"origin/main",{AFTER}}}"#),
     );
     answered(WorkerResponse::ChangedFilesPage(page()), &format!(r#"{{"result":"changed_files_page",{PAGE}}}"#));
+}
+
+#[test]
+fn the_request_for_one_file_s_diff_and_its_reply_keep_their_forms() {
+    let asking = worker::DiffFile {
+        path: "/w".into(),
+        base_ref: Some("origin/main".into()),
+        file: "b.rs".into(),
+        from: Some("a.rs".into()),
+        first_line: 0,
+    };
+    let diff = FileDiff {
+        base_commit: "c1".into(),
+        version: Some(FileVersion::from("0123abcd".to_string())),
+        body: FileDiffBody::Patch { patch: "+b\n".into(), next_line: None },
+    };
+
+    asked(
+        WorkerRequest::DiffFile(asking),
+        r#"{"method":"diff_file","path":"/w","base_ref":"origin/main","file":"b.rs","from":"a.rs","first_line":0}"#,
+    );
+    answered(
+        WorkerResponse::FileDiff(diff),
+        concat!(
+            r#"{"result":"file_diff","base_commit":"c1","version":"0123abcd","#,
+            r#""body":{"diff":"patch","patch":"+b\n","next_line":null}}"#,
+        ),
+    );
 }

@@ -9,7 +9,8 @@ use protocol::attachment::MediaType;
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentKind, ClientRequestId, DiffSide, FileContents, FileOpened, FilePage, PageLine, SessionStatus, WorkspaceStatus,
+    AgentKind, ClientRequestId, DiffSide, FileContents, FileDiffBody, FileOpened, FilePage, PageLine, SessionStatus,
+    WorkspaceStatus,
 };
 
 use crate::support::{
@@ -123,6 +124,10 @@ fn status_and_diff_come_from_the_worker() {
     let diff = client.workspace_diff(&workspace.id).unwrap();
     assert!(diff.patch.contains("+changed"), "{}", diff.patch);
     assert!(diff.patch.contains("+new"), "{}", diff.patch);
+    let one = client.workspace_file_diff(&workspace.id, "a.txt", None, 0).unwrap();
+    assert_eq!(Some(&one.base_commit), diff.base_commit.as_ref());
+    let FileDiffBody::Patch { patch, next_line: None } = one.body else { panic!("{one:?}") };
+    assert!(patch.contains("+changed") && !patch.contains("+new"), "{patch}");
 }
 
 /// The worker lists and reads them, as they are and as the diff's base has them, whole or a page at a time, or a video

@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use protocol::client::{ApiError, files};
+use protocol::client::{ApiError, files, workspaces};
 use protocol::model::{
-    ByteRange, ChangedFileAt, ChangedFilesPage, CommitId, FileContents, FileOpened, FilePages, FileRange, GitDiff,
-    GitStatus, WorkspaceId, WorktreeFiles,
+    ByteRange, ChangedFileAt, ChangedFilesPage, CommitId, FileContents, FileDiff, FileOpened, FilePages, FileRange,
+    GitDiff, GitStatus, WorkspaceId, WorktreeFiles,
 };
 use protocol::worker;
 
@@ -33,6 +33,17 @@ impl Hub {
         let worktree = self.ready_worktree(&id).await?;
         let (path, base_ref) = (worktree.path().to_owned(), worktree.workspace().base_ref.clone());
         worktree.link().call(worker::ListChangedFiles { path, base_ref, after }).await
+    }
+
+    /// One page of one changed file's diff, as the worker reads it against the workspace's base.
+    pub(crate) async fn workspace_file_diff(
+        self: &Arc<Self>,
+        asked: workspaces::WorkspaceFileDiff,
+    ) -> Result<FileDiff, ApiError> {
+        let workspaces::WorkspaceFileDiff { id, path: file, from, first_line } = asked;
+        let worktree = self.ready_worktree(&id).await?;
+        let (path, base_ref) = (worktree.path().to_owned(), worktree.workspace().base_ref.clone());
+        worktree.link().call(worker::DiffFile { path, base_ref, file, from, first_line }).await
     }
 
     /// The files in the workspace's worktree, as the worker lists them.

@@ -8,7 +8,7 @@ use protocol::event::SessionEvent;
 use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ChangedFileAt, ChangedFilesPage, ClientMessageId, ClientRequestId, CommentId,
-    DeviceId, DiffComment, DiffSide, Ending, GitDiff, GitStatus, HubSettings, HubSettingsChange, MessageId,
+    DeviceId, DiffComment, DiffSide, Ending, FileDiff, GitDiff, GitStatus, HubSettings, HubSettingsChange, MessageId,
     OwnPullRequest, Proposal, ReferenceAsk, ReferenceRead, Repo, RepoId, Seq, Session, SessionId, SpokenThrough,
     SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
 };
@@ -98,6 +98,21 @@ impl Client {
     /// names, which keeps nothing. A hub older than this, or whose worker is, refuses it, as `is_unsupported` says.
     pub fn workspace_changed_files(&self, id: &WorkspaceId, after: ChangedFileAt) -> Result<ChangedFilesPage> {
         self.call(workspaces::WorkspaceChangedFiles { id: id.clone(), after })
+    }
+
+    /// See [`workspaces::WorkspaceFileDiff`]: the page of `path`'s diff from the patch's line `first_line`, which is 0
+    /// or the `next_line` of the page before. Nothing of it is kept. A hub older than this refuses it, and so does one
+    /// whose worker is, as `is_unsupported` says. `docs/principles/observations.md` plans the Changes tab's reads of
+    /// it.
+    pub fn workspace_file_diff(
+        &self,
+        id: &WorkspaceId,
+        path: &str,
+        from: Option<&str>,
+        first_line: u32,
+    ) -> Result<FileDiff> {
+        let (path, from) = (path.to_string(), from.map(str::to_string));
+        self.call(workspaces::WorkspaceFileDiff { id: id.clone(), path, from, first_line })
     }
 
     pub fn workspace_setup_log(&self, id: &WorkspaceId) -> Result<String> {

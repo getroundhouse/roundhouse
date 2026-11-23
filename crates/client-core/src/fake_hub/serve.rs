@@ -140,6 +140,9 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             let status = world.sign_in_answer.clone().ok_or_else(|| read_only("change anything"))?;
             reply(C::GithubSignIn(GithubSignIn { id, status, rev: Rev::default() }))
         }
+        // As a hub from before it, since the world holds each workspace's diff whole, and nothing reads it from a fake
+        // hub yet.
+        R::WorkspaceFileDiff(_) => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't read one file's diff")),
         // As a hub too old to keep it, so a comment being written is what restarting would lose.
         R::WorkspaceCommentDraft(_) => {
             Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't keep a comment being written"))
