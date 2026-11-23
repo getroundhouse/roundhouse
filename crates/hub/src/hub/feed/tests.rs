@@ -35,8 +35,22 @@ fn heard(client: &mut broadcast::Receiver<Fed>) -> Vec<HubNotice> {
 
 /// The same, with what each moves.
 fn heard_as_fed(client: &mut broadcast::Receiver<Fed>) -> Vec<(HubNotice, Moves)> {
-    std::iter::from_fn(|| client.try_recv().ok().map(|fed| (std::sync::Arc::unwrap_or_clone(fed.notice), fed.moves)))
-        .collect()
+    heard_fed(client).into_iter().map(|fed| (std::sync::Arc::unwrap_or_clone(fed.notice), fed.moves)).collect()
+}
+
+/// Every notice a client following the feed has heard so far, as the feed told it.
+fn heard_fed(client: &mut broadcast::Receiver<Fed>) -> Vec<Fed> {
+    std::iter::from_fn(|| client.try_recv().ok()).collect()
+}
+
+/// The revisions of each copy of a session's record in `fed` that a client sent `kept` hears, by session.
+fn revs_heard(fed: &[Fed], kept: impl Fn(&Fed) -> bool) -> std::collections::HashMap<String, Vec<u64>> {
+    let mut heard = std::collections::HashMap::<String, Vec<u64>>::new();
+    for fed in fed.iter().filter(|fed| kept(fed)) {
+        let HubNotice::Session(session) = &*fed.notice else { continue };
+        heard.entry(session.id.to_string()).or_default().push(session.rev.get());
+    }
+    heard
 }
 
 proptest! {
@@ -97,6 +111,27 @@ proptest! {
             .map(|&(record, rev, old_form_only)| (told(&session(IDS[record], rev)), moves(old_form_only)))
             .collect();
         prop_assert_eq!(heard_as_fed(&mut client), expected);
+    }
+
+    /// However they interleave, a client sent copies that move an old form alone, and so not those marked as told in
+    /// one, hears each copy of a record newer than the last, as one that isn't sent them does.
+    #[test]
+    fn a_client_of_either_form_hears_each_copy_newer_than_the_last(
+        sent in vec((0..IDS.len(), 1..8u64, any::<bool>()), 0..40),
+    ) {
+        let feed = Feed::new();
+        let mut client = feed.subscribe();
+        for &(record, rev, old_form_only) in &sent {
+            let moves = if old_form_only { Moves::OldFormOnly } else { Moves::Anything };
+            feed.send(told(&session(IDS[record], rev)), moves);
+        }
+
+        let fed = heard_fed(&mut client);
+        let old_forms = revs_heard(&fed, |fed| fed.moves == Moves::OldFormOnly || !fed.told_in_old_form);
+        let observations = revs_heard(&fed, |fed| fed.moves == Moves::Anything);
+        for revs in old_forms.values().chain(observations.values()) {
+            prop_assert!(revs.windows(2).all(|pair| pair[0] < pair[1]), "{:?}", revs);
+        }
     }
 }
 

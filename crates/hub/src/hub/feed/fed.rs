@@ -13,6 +13,10 @@ use tokio::sync::broadcast::error::TryRecvError;
 pub(crate) struct Fed {
     pub(crate) notice: Arc<HubNotice>,
     pub(crate) moves: Moves,
+    /// A copy of its record that moves an old form alone, as new as it or newer, was told already, so a client that's
+    /// sent those has heard what this says, and isn't sent it, as `crate::server::sends` decides. Such a copy is read
+    /// from the database after this one's change, and filled with what the observations say then.
+    pub(crate) told_in_old_form: bool,
 }
 
 /// What a notice moves of what a client holds.

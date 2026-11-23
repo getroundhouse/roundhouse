@@ -49,7 +49,7 @@ impl Sends {
     }
 
     /// Whether it's sent `fed`: a notice of its level, in a form its client reads, and that moves something its client
-    /// reads.
+    /// reads, which it hasn't heard in a copy as new.
     pub(super) fn notice(&self, fed: &Fed) -> bool {
         let notice = &*fed.notice;
         let of = match &self.of {
@@ -57,7 +57,7 @@ impl Sends {
             Of::Feed => !matches!(notice.level(), Some(Level::Workspace { .. })),
         };
         let moves = match fed.moves {
-            Moves::Anything => true,
+            Moves::Anything => !fed.told_in_old_form || self.reads_every_observation(),
             Moves::OldFormOnly => !self.reads_every_observation(),
         };
         of && moves && self.sends(notice)
