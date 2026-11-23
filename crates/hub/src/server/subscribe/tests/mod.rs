@@ -6,6 +6,7 @@ mod as_the_four;
 mod falling_behind;
 mod github;
 mod given;
+mod models;
 mod observations;
 mod rules;
 mod workspace_github;

@@ -4,7 +4,7 @@
 use std::hash::Hash;
 
 use protocol::model::{
-    AccountId, ChangeSummary, LineCounts, Observation, ObservationKey, Observed, OwnPullRequestDetail,
+    AccountId, ChangeSummary, LineCounts, ModelListKey, Observation, ObservationKey, Observed, OwnPullRequestDetail,
     OwnPullRequestSaid, RecordKey, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, UsageLimit, WorkspaceId,
 };
 use serde::Serialize;
@@ -62,6 +62,8 @@ pub(crate) trait Subject: Clone + Eq + Hash + Serialize + DeserializeOwned + Sen
 pub(crate) enum Owner<'a> {
     Workspace(&'a WorkspaceId),
     Account(&'a AccountId),
+    /// The hub itself, for what's of no record, which is never gone, and goes only as the hub lets go of it.
+    Hub,
 }
 
 impl Subject for WorkspaceId {
@@ -74,6 +76,14 @@ impl Subject for WorkspaceId {
 impl Subject for ReferenceAsk {
     fn owner(&self) -> Option<Owner<'_>> {
         None
+    }
+}
+
+/// A list of models, which the hub keeps for whichever agent, project, provider and account a chat would launch with,
+/// and lets go of itself, so it's the hub's.
+impl Subject for ModelListKey {
+    fn owner(&self) -> Option<Owner<'_>> {
+        Some(Owner::Hub)
     }
 }
 
@@ -218,6 +228,28 @@ impl Kind for WorkspaceRepositoryUnseen {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.workspace_repository_unseen
+    }
+}
+
+/// What an agent offers where a chat would launch, as its CLI last listed it, sent at the hub's level. A client of a
+/// version from before it reads it on the list's record, which the hub keeps in memory, and moves as its lookup does.
+pub(crate) struct ModelCatalog;
+
+impl Kind for ModelCatalog {
+    type Of = ModelListKey;
+    type Value = protocol::capability::settings::ModelCatalog;
+    const FORM: Form = Form { table: "model_catalog", version: 1 };
+
+    fn observation(list: &ModelListKey, catalog: Observed<Self::Value>, rev: Rev) -> Observation {
+        Observation::ModelCatalog { list: list.clone(), catalog, rev }
+    }
+
+    fn key(list: &ModelListKey) -> ObservationKey {
+        ObservationKey::ModelCatalog { list: list.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.model_catalog
     }
 }
 

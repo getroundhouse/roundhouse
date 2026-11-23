@@ -5,8 +5,8 @@ use protocol::model::{Level, Observation, ObservationKey, Rev};
 use super::file::{self, Row, Write};
 use super::kept::Table;
 use super::kinds::{
-    AccountIdentity, AccountLimits, Form, Kind, Owner, Referenced, Subject, WorkspaceChanges, WorkspaceLines,
-    WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
+    AccountIdentity, AccountLimits, Form, Kind, ModelCatalog, Owner, Referenced, Subject, WorkspaceChanges,
+    WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
 use super::writer::Writer;
 use crate::cache_file::CacheFile;
@@ -20,6 +20,7 @@ pub(crate) struct Tables {
     pub(super) workspace_pull_request: Table<WorkspacePullRequest>,
     pub(super) workspace_pull_request_detail: Table<WorkspacePullRequestDetail>,
     pub(super) workspace_repository_unseen: Table<WorkspaceRepositoryUnseen>,
+    pub(super) model_catalog: Table<ModelCatalog>,
     pub(super) account_identity: Table<AccountIdentity>,
     pub(super) account_limits: Table<AccountLimits>,
 }
@@ -75,7 +76,7 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 8] {
+    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 9] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -83,6 +84,7 @@ impl Tables {
             workspace_pull_request,
             workspace_pull_request_detail,
             workspace_repository_unseen,
+            model_catalog,
             account_identity,
             account_limits,
         } = self;
@@ -93,6 +95,7 @@ impl Tables {
             workspace_pull_request,
             workspace_pull_request_detail,
             workspace_repository_unseen,
+            model_catalog,
             account_identity,
             account_limits,
         ]

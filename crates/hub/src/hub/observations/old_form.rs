@@ -7,11 +7,11 @@
 //! and one of a version that reads the observation itself doesn't read it.
 
 use protocol::client::ClientResponse;
-use protocol::model::{Account, Record, RecordKey, Records, UsageLimit};
+use protocol::model::{Account, ModelList, Record, RecordKey, Records, UsageLimit};
 use tracing::warn;
 
 use super::kept::Observations;
-use super::kinds::{AccountIdentity, AccountLimits, Kind};
+use super::kinds::{AccountIdentity, AccountLimits, Kind, ModelCatalog};
 use super::tables::Tables;
 use crate::hub::Hub;
 
@@ -32,10 +32,18 @@ impl OldForm for Account {
     }
 }
 
+/// What its agent offers, on a list of models' record, which the hub keeps in memory with how its lookup stands.
+impl OldForm for ModelList {
+    fn fill(&mut self, tables: &mut Tables) {
+        self.catalog = ModelCatalog::table(tables).value(&self.key).cloned();
+    }
+}
+
 impl OldForm for Record {
     fn fill(&mut self, tables: &mut Tables) {
         match self {
             Record::Account(account) => account.fill(tables),
+            Record::ModelList(list) => list.fill(tables),
             // Hold no observation's old form.
             Record::Repo(_)
             | Record::Workspace(_)
@@ -50,7 +58,6 @@ impl OldForm for Record {
             | Record::GithubApp(_)
             | Record::GithubReach(_)
             | Record::Terminal(_)
-            | Record::ModelList(_)
             | Record::HubUpdate(_)
             | Record::Proposal(_)
             | Record::ReplyHeard(_) => {}
@@ -64,15 +71,26 @@ impl OldForm for Records {
         for account in &mut self.accounts {
             account.fill(tables);
         }
+        for list in &mut self.model_lists {
+            list.fill(tables);
+        }
     }
 }
 
-/// The replies that carry a record holding an observation's old form, which are an account's alone. Those that carry
-/// every record are filled as they're listed, and the hub reads a `SessionAccount` from an account's record it fills.
+/// The replies that carry a record holding an observation's old form: an account's, and a list of models'. Those that
+/// carry every record are filled as they're listed, and the hub reads a `SessionAccount` from an account's record it
+/// fills.
 impl OldForm for ClientResponse {
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "picks out the replies that carry an account's record or a list of models', and leaves every other \
+                  reply as it is"
+    )]
     fn fill(&mut self, tables: &mut Tables) {
-        if let ClientResponse::Account(account) = self {
-            account.fill(tables);
+        match self {
+            ClientResponse::Account(account) => account.fill(tables),
+            ClientResponse::ModelList(list) => list.fill(tables),
+            _ => {}
         }
     }
 }

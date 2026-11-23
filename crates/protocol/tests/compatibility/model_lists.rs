@@ -4,7 +4,9 @@
 use protocol::capability::settings::Effort;
 use protocol::capability::settings::{EffortOffer, ModelCatalog, ModelOffer, Models, Stage};
 use protocol::client::{ClientResponse, HubFrame, HubNotice, ReplyOutcome};
-use protocol::model::{ModelList, ModelListKey, ModelLookup, ModelName, RecordKey, Records, Rev};
+use protocol::model::{
+    ModelList, ModelListKey, ModelLookup, ModelName, Observation, ObservationKey, Observed, RecordKey, Records, Rev,
+};
 
 use crate::keeps_its_form;
 
@@ -55,6 +57,30 @@ fn a_list_keeps_its_form_as_a_reply_a_notice_and_a_removal() {
     keeps_its_form(
         &failed,
         &format!(r#"{{{KEY},"catalog":null,"lookup":{{"state":"failed","message":"logged out"}},"rev":9}}"#),
+    );
+}
+
+/// What an agent offers, which a hub sends at its own level to a client of a version that reads it so, as a notice and
+/// as its removal, keyed as its list is.
+#[test]
+fn a_catalog_keeps_its_form_as_an_observation_and_its_removal() {
+    let catalog = Observed::AsOf { value: list().catalog.unwrap(), as_of_ms: 1_795_230_000_000 };
+    let copy = HubNotice::Observation(Observation::ModelCatalog { list: key(), catalog, rev: Rev::new(5) });
+    let gone =
+        HubNotice::ObservationRemoved { observation: ObservationKey::ModelCatalog { list: key() }, rev: Rev::new(6) };
+    let catalog = &CATALOG["\"catalog\":".len()..];
+
+    keeps_its_form(
+        &copy,
+        &format!(
+            r#"{{"notice":"observation","kind":"model_catalog","list":{{{KEY}}},"catalog":{{"freshness":"as_of","value":{catalog},"as_of_ms":1795230000000}},"rev":5}}"#
+        ),
+    );
+    keeps_its_form(
+        &gone,
+        &format!(
+            r#"{{"notice":"observation_removed","observation":{{"kind":"model_catalog","list":{{{KEY}}}}},"rev":6}}"#
+        ),
     );
 }
 

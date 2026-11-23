@@ -18,6 +18,6 @@ pub(crate) use file::PART;
 pub(crate) use kept::Observations;
 pub(crate) use kinds::Kind;
 pub(crate) use kinds::{
-    AccountIdentity, AccountLimits, Referenced, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
+    AccountIdentity, AccountLimits, ModelCatalog, Referenced, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
     WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };

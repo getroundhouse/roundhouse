@@ -344,6 +344,7 @@ fn is_as_of(observation: &Observation) -> bool {
         Observation::WorkspaceLines { .. }
         | Observation::WorkspaceChanges { .. }
         | Observation::Reference { .. }
+        | Observation::ModelCatalog { .. }
         | Observation::AccountIdentity { .. }
         | Observation::AccountLimits { .. }
         | Observation::Unknown => false,
