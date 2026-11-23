@@ -31,7 +31,8 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/standards/platforms.md` | How code is written so that it runs on macOS, Windows and Linux |
 | `docs/standards/gpui.md` | How code that uses GPUI is written |
 | `docs/standards/components.md` | How code makes and uses the components screens are built from, and how a component's API is laid out |
-| `docs/standards/testing.md` | Where each kind of test goes, what a test runs in, and how a test is written |
+| `docs/standards/test-levels.md` | Where each kind of test goes, and the hub it runs on |
+| `docs/standards/testing.md` | What a test runs in, and how a test is written |
 | `docs/standards/workarounds.md` | The kinds of workaround, and what one needs before it's kept |
 | `docs/standards/pull-requests.md` | How a pull request and its commit are written |
 | `docs/standards/stacks.md` | Where to split a change into stacked pull requests, and in what order |
