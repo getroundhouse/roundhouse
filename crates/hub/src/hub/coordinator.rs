@@ -1,12 +1,14 @@
+use super::HubDirs;
 use super::agents::ModelLists;
 use super::followers::Followers;
 use super::terminals::Terminals;
 use super::updates::Updates;
 use super::{awake, feed, github_reads, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
+use crate::cache_file::CacheFile;
 use crate::error::internal;
 use crate::gh::Gh;
-use crate::github_cache::GithubCache;
+use crate::github_cache::{self, GithubCache};
 use crate::github_logins::GithubLogins;
 use crate::jobs::Jobs;
 use crate::logins::Logins;
@@ -27,7 +29,6 @@ use protocol::model::{
     AgentDescription, AgentKind, ClientRequestId, GithubSignInId, ProviderName, Records, SessionId, Workspace,
     WorkspaceId,
 };
-use protocol::paths::Paths;
 use providers::Provider;
 use providers::local::MachinePath;
 use sessions::Sessions;
@@ -126,50 +127,6 @@ pub(crate) struct Hub {
     pub(crate) requests: AtomicU32,
 }
 
-/// Where in its data directory the hub keeps what it keeps outside the database.
-pub(crate) struct HubDirs {
-    pub(crate) attachments: PathBuf,
-    pub(crate) bundles: PathBuf,
-    pub(crate) worker_logs: PathBuf,
-    /// The file the hub keeps what it last read from GitHub in.
-    pub(crate) github_cache: PathBuf,
-    /// The data directory itself, in which the files of each kind of login have a directory of their own, as
-    /// `LoginSecret::DIR` says.
-    pub(crate) data: PathBuf,
-    /// Where a hub installed as a service keeps its builds, beside which an update places the next.
-    pub(crate) service_builds: PathBuf,
-    pub(crate) network_address: std::net::SocketAddr,
-}
-
-impl HubDirs {
-    /// Where `paths` has each.
-    pub(crate) fn of(paths: &Paths) -> Self {
-        Self {
-            attachments: paths.attachments_dir.clone(),
-            bundles: paths.bundles_dir.clone(),
-            worker_logs: paths.worker_logs_dir.clone(),
-            github_cache: paths.github_cache.clone(),
-            data: paths.data_dir.clone(),
-            service_builds: paths.service_builds_dir(),
-            network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
-        }
-    }
-
-    /// Each in `dir`, for a test's hub.
-    #[cfg(test)]
-    pub(crate) fn in_dir(dir: &std::path::Path) -> Self {
-        Self {
-            attachments: dir.join("attachments"),
-            bundles: dir.join("bundles"),
-            worker_logs: dir.join("worker-logs"),
-            github_cache: dir.join("github-cache.db"),
-            data: dir.to_path_buf(),
-            service_builds: dir.join("service"),
-            network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
-        }
-    }
-}
-
 impl Hub {
     #[expect(
         clippy::too_many_arguments,
@@ -186,6 +143,7 @@ impl Hub {
         start: HubStart,
         timers: Timers,
     ) -> Self {
+        let cache_file = Arc::new(CacheFile::open(&dirs.cache_file, &[github_cache::prepare]));
         Self {
             remote: crate::remote::Remote::new(crate::remote::RemoteConfig {
                 address: dirs.network_address,
@@ -199,6 +157,7 @@ impl Hub {
             ssh: Ssh::new(machine.clone()),
             gh: Gh::new(machine, dirs.data.clone()),
             addresses_read: Notify::new(),
+            github_cache: Arc::new(GithubCache::open(cache_file)),
             store,
             attachment_files: AttachmentFiles::new(dirs.attachments),
             bundles_dir: dirs.bundles,
@@ -218,7 +177,6 @@ impl Hub {
             model_lists: ModelLists::default(),
             updates: Updates::new(dirs.service_builds),
             pull_requests: pull_requests::Reading::new(),
-            github_cache: Arc::new(GithubCache::open(&dirs.github_cache)),
             followers: Followers::default(),
             github_forgotten: github_reads::Forgotten::default(),
             own_reads: Jobs::new(),

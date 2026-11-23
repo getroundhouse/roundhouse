@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use github::{Checks, FacetsRead, PullFacets, Rules};
@@ -10,6 +11,7 @@ use protocol::model::{
 use super::file::VERSION;
 use super::kept::KEPT_FOR;
 use super::{GithubCache, Item};
+use crate::cache_file::CacheFile;
 use crate::store::columns::OneValue;
 use crate::store::now_ms;
 
@@ -94,6 +96,11 @@ fn found(n: u64) -> ReferenceRead {
     ReferenceRead::Found { reference: Box::new(issue(n)) }
 }
 
+/// The cache kept in the file at `path`, which has GitHub's part alone.
+fn open(path: &Path) -> GithubCache {
+    GithubCache::open(Arc::new(CacheFile::open(path, &[super::prepare])))
+}
+
 /// The version the file at `path` says it's of.
 fn version_of(path: &Path) -> i64 {
     let conn = rusqlite::Connection::open(path).unwrap();
@@ -106,7 +113,7 @@ fn version_of(path: &Path) -> i64 {
 fn what_was_read_is_kept_across_a_restart() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("github-cache.db");
-    let cache = GithubCache::open(&path);
+    let cache = open(&path);
     cache.keep(
         vec![(item(1), Ok(Some(issue(1)))), (item(2), Ok(None)), (item(3), Err("GitHub is down".into()))],
         now_ms(),
@@ -116,7 +123,7 @@ fn what_was_read_is_kept_across_a_restart() {
     keep_pull(&cache, &seven);
     drop(cache);
 
-    let again = GithubCache::open(&path);
+    let again = open(&path);
 
     assert_eq!(again.summary(&item(1)), Some(found(1)));
     assert_eq!(again.summary(&item(2)), Some(ReferenceRead::Missing));
@@ -133,12 +140,12 @@ fn what_was_read_is_kept_across_a_restart() {
 fn a_file_of_another_form_or_damaged_is_started_again_empty() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("github-cache.db");
-    GithubCache::open(&path).keep(vec![(item(1), Ok(Some(issue(1))))], now_ms());
+    open(&path).keep(vec![(item(1), Ok(Some(issue(1))))], now_ms());
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.pragma_update(None, "user_version", VERSION + 1).unwrap();
     drop(conn);
 
-    let of_another_form = GithubCache::open(&path);
+    let of_another_form = open(&path);
 
     assert_eq!(of_another_form.summary(&item(1)), None);
     assert_eq!(version_of(&path), VERSION);
@@ -146,12 +153,12 @@ fn a_file_of_another_form_or_damaged_is_started_again_empty() {
     drop(of_another_form);
     std::fs::write(&path, "not a database").unwrap();
 
-    let damaged = GithubCache::open(&path);
+    let damaged = open(&path);
 
     assert_eq!(damaged.summary(&item(1)), None);
     damaged.keep(vec![(item(2), Ok(Some(issue(2))))], now_ms());
     drop(damaged);
-    assert_eq!(GithubCache::open(&path).summary(&item(2)), Some(found(2)), "kept in the file made again");
+    assert_eq!(open(&path).summary(&item(2)), Some(found(2)), "kept in the file made again");
 }
 
 /// What nothing has asked about for as long as the cache keeps things is forgotten, in memory and in the file, as the
@@ -160,7 +167,7 @@ fn a_file_of_another_form_or_damaged_is_started_again_empty() {
 fn what_nothing_asks_about_is_forgotten() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("github-cache.db");
-    let cache = GithubCache::open(&path);
+    let cache = open(&path);
     cache.keep(vec![(item(1), Ok(Some(issue(1)))), (item(2), Ok(Some(issue(2))))], now_ms());
     cache.age(KEPT_FOR.checked_sub(Duration::from_secs(60)).unwrap());
     assert!(cache.summary(&item(1)).is_some(), "asked about, so kept");
@@ -171,7 +178,7 @@ fn what_nothing_asks_about_is_forgotten() {
     assert!(cache.summary(&item(1)).is_some());
     assert_eq!(cache.summary(&item(2)), None);
     drop(cache);
-    let again = GithubCache::open(&path);
+    let again = open(&path);
     assert_eq!(again.summary(&item(2)), None, "forgotten in the file too");
     assert_eq!(again.summary(&item(3)), Some(found(3)));
 }
@@ -181,7 +188,7 @@ fn what_nothing_asks_about_is_forgotten() {
 #[test]
 fn a_read_that_lands_late_leaves_what_a_newer_one_kept() {
     let dir = tempfile::tempdir().unwrap();
-    let cache = GithubCache::open(&dir.path().join("github-cache.db"));
+    let cache = open(&dir.path().join("github-cache.db"));
     let began = now_ms();
     let (older, newer) = (began - 1_000, began);
     let mut merged = pull_request(7, newer);
@@ -211,7 +218,7 @@ fn a_read_that_lands_late_leaves_what_a_newer_one_kept() {
 #[test]
 fn checks_of_another_head_than_the_summarys_are_left_out() {
     let dir = tempfile::tempdir().unwrap();
-    let cache = GithubCache::open(&dir.path().join("github-cache.db"));
+    let cache = open(&dir.path().join("github-cache.db"));
     cache.keep_rules(vec![(project(), BranchName::from("main"), Rules::default())], now_ms());
     let read = pull_request(7, now_ms());
     keep_pull(&cache, &read);
@@ -234,7 +241,7 @@ fn checks_of_another_head_than_the_summarys_are_left_out() {
 #[test]
 fn an_open_pull_request_is_fresh_only_with_its_branchs_rules() {
     let dir = tempfile::tempdir().unwrap();
-    let cache = GithubCache::open(&dir.path().join("github-cache.db"));
+    let cache = open(&dir.path().join("github-cache.db"));
     let open = pull_request(7, now_ms());
     keep_pull(&cache, &open);
     let fresh = Duration::from_secs(60);

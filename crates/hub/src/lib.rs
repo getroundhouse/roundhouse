@@ -4,6 +4,7 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 
 mod attachment_files;
+mod cache_file;
 mod calls;
 mod child_process;
 mod error;

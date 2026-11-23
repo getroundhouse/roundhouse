@@ -53,7 +53,9 @@ mod worktree;
 use crate::store::now_ms;
 
 mod coordinator;
-pub(crate) use coordinator::{Hub, HubDirs};
+pub(crate) use coordinator::Hub;
 use coordinator::{KEEPS_WORKERS, new_id, off_thread};
+pub(crate) use dirs::HubDirs;
 
 mod devices;
+mod dirs;

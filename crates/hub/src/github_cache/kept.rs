@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
@@ -11,10 +11,11 @@ use tracing::warn;
 use github::{Checks, FacetsRead, PullFacets, Rules};
 use protocol::model::{BranchName, GithubRepositoryName, IssueNumber};
 
-use super::file::{CacheFile, Row};
+use super::file::{GithubFile, Row};
 use super::keys::{BranchOf, Facet, Item, Subject};
 use super::pulls::KeptPulls;
 use super::rules::KeptRules;
+use crate::cache_file::CacheFile;
 use crate::store::now_ms;
 
 /// How long the cache keeps what nothing has asked for since, in memory and in its file, so it doesn't keep everything
@@ -31,7 +32,7 @@ pub(crate) struct GithubCache {
     reading: Mutex<HashMap<(Item, Facet), watch::Receiver<()>>>,
     rules: KeptRules,
     pulls: KeptPulls,
-    file: CacheFile,
+    file: GithubFile,
     /// Tells of each read kept, by the issues and pull requests it was of.
     kept: broadcast::Sender<Vec<Item>>,
 }
@@ -107,12 +108,13 @@ impl Drop for Reading<'_> {
 }
 
 impl GithubCache {
-    /// The cache kept in the file at `path`, with what it kept from before that's still to be kept.
-    pub(crate) fn open(path: &Path) -> Self {
-        let file = CacheFile::open(path);
+    /// The cache kept in `file`, whose tables [`prepare`](super::prepare) made, with what it kept from before that's
+    /// still to be kept.
+    pub(crate) fn open(file: Arc<CacheFile>) -> Self {
+        let file = GithubFile::new(file);
         let since_ms = now_ms().saturating_sub(millis(KEPT_FOR));
         let rows = file.load(since_ms).unwrap_or_else(|error| {
-            warn!("reading what was last read from GitHub from {}: {error}", path.display());
+            warn!("reading what was last read from GitHub from the cache's file: {error}");
             Vec::new()
         });
         let (mut items, rules, pulls) = (HashMap::new(), KeptRules::default(), KeptPulls::default());
