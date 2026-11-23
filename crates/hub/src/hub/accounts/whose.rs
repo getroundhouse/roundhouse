@@ -9,8 +9,9 @@ use protocol::model::{
 use protocol::worker::AccountFor;
 use tracing::error;
 
+use super::limits_heard::merged;
 use crate::hub::Hub;
-use crate::hub::observations::AccountIdentity;
+use crate::hub::observations::{AccountIdentity, AccountLimits};
 use crate::store::Launched;
 
 impl Hub {
@@ -38,8 +39,8 @@ impl Hub {
             return Ok(held);
         }
         let account = self.account_of(&session.workspace_id, session.agent).await?;
-        let limits = match account.logged_in_as().cloned() {
-            Some(id) => self.blocking(move |store| store.account_limits(&id)).await?,
+        let limits = match account.logged_in_as() {
+            Some(id) => self.observations.value_of::<AccountLimits>(id).unwrap_or_default(),
             // A login that can't be told from another has no limits kept for it.
             None => Vec::new(),
         };
@@ -61,8 +62,9 @@ impl Hub {
     }
 
     /// Keeps what an agent under `account` heard of its limits at `heard_at_ms`, which holds every model's own week the
-    /// account has when `every_models_week` says so, and tells every client when it changed the account's record,
-    /// since every session under the account shows it.
+    /// account has when `every_models_week` says so, merged with what's kept, as [`merged`] says, as an observation,
+    /// and tells every client, since every session under the account shows it. An account nobody has launched an agent
+    /// under since the hub's database was made gets a record, which owns what's heard of it.
     pub(crate) async fn hear_limits(
         &self,
         account: AccountId,
@@ -71,10 +73,15 @@ impl Hub {
         heard_at_ms: i64,
     ) {
         let kept = account.clone();
-        match self.blocking(move |store| store.hear_limits(&kept, &limits, every_models_week, heard_at_ms)).await {
-            Ok(Some(record)) => self.notify(HubNotice::Account(record)),
+        match self.blocking(move |store| store.account_made(&kept)).await {
+            Ok(Some(made)) => self.notify(HubNotice::Account(made)),
             Ok(None) => {}
-            Err(e) => error!(%account, "could not keep what an agent heard of its account's limits: {e}"),
+            Err(e) => return error!(%account, "could not keep what an agent heard of its account's limits: {e}"),
+        }
+        let merge =
+            |held: Option<&Vec<UsageLimit>>| merged(held.map(Vec::as_slice), &limits, every_models_week, heard_at_ms);
+        if let Err(e) = self.observation_updated::<AccountLimits>(account.clone(), heard_at_ms, merge).await {
+            error!(%account, "could not keep what an agent heard of its account's limits: {}", e.message);
         }
     }
 

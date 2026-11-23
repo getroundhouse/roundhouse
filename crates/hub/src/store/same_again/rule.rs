@@ -71,7 +71,7 @@ const ROWS: &[Row] = &[
     row("hub_settings", "what workers are sent", nothing, hub::sent, hub::settings),
     row("hub_settings", "the GitHub default", github::by_token, hub::no_default, hub::settings),
     row("hub_settings", "the providers GitHub is set up on", nothing, hub::providers, hub::settings),
-    row("accounts", "its limits, heard", nothing, hub::limits, hub::account),
+    row("accounts", "its reserve", hub::ada, hub::reserve, hub::account),
     row("subagents", "its model", sessions::started, sessions::model, sessions::subagent),
     row("replies_heard", "how a reply ended, said again", nothing, sessions::reply_heard, sessions::reply_heard_rev),
     row("subagents", "what it holds", sessions::started, sessions::holds, sessions::subagent),

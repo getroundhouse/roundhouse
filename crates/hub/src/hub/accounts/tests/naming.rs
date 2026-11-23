@@ -58,7 +58,8 @@ async fn a_chat_whose_agent_relaunches_under_another_login_names_that_account_an
     let grace = named(&hub, &chat.id, |account| Some(&account.id) != ada.id.as_ref() && account.email.is_some()).await;
 
     assert_eq!((grace.email.as_deref(), grace.limits), (Some("grace@example.com"), vec![]), "Ada's limits aren't hers");
-    let ada_now = hub.store.account(&ada.id.unwrap()).unwrap().unwrap();
+    let mut ada_now = hub.store.account(&ada.id.unwrap()).unwrap().unwrap();
+    hub.fill_old_forms(&mut ada_now);
     assert_eq!(without_when(&ada_now.limits), [the_week()]);
 }
 

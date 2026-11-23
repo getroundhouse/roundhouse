@@ -2,10 +2,11 @@
 //! person puts the chat on one.
 
 use protocol::client::accounts::{AccountSetAutomatic, AccountSetReserve};
-use protocol::model::{AccountId, AgentKind, Reserve};
+use protocol::model::{AccountId, AgentKind, LimitWindow, Reserve, UsageLimit};
 
 use super::two_accounts::{Chats, TwoAccounts};
 use crate::logins::NO_ACCOUNT_TO_SPARE;
+use crate::store::now_ms;
 
 async fn reserve_all(chats: &Chats, account: &AccountId) {
     let asked = AccountSetReserve { account: account.clone(), reserve: Some(Reserve::ALL) };
@@ -36,4 +37,36 @@ async fn a_new_chat_goes_on_the_account_with_usage_to_spare_and_with_none_stops_
     assert!(!moved.needs_an_account && moved.hub_account() == Some(work));
     assert_eq!(stopped_under.as_deref(), Some("work-token"), "a chat put on an account spends what it reserves");
     assert!(!chats.record(&stopped).placed_automatically, "the person chose it");
+}
+
+/// Automatic decides by what's been heard of each account's limits, which the hub keeps in memory: one whose week is
+/// used up has none to spare, and one whose limits nobody has heard has all of its week, as a new one has.
+#[tokio::test]
+async fn a_new_chat_goes_on_an_account_by_what_was_heard_of_its_limits() {
+    let dir = tempfile::tempdir().unwrap();
+    let accounts = TwoAccounts::start(dir.path()).await;
+    let (chats, work, personal) = (&accounts.chats, &accounts.work.id, &accounts.personal.id);
+    let used_up = || {
+        vec![UsageLimit {
+            window: LimitWindow::SevenDays,
+            model: None,
+            used_percent: 100,
+            resets_at_ms: None,
+            heard_at_ms: None,
+        }]
+    };
+    chats.hub.account_set_automatic(AccountSetAutomatic { agent: AgentKind::Claude }).await.unwrap();
+    chats.hub.hear_limits(personal.clone(), used_up(), false, now_ms()).await;
+    let (placed, stopped) = (accounts.another_chat().await, accounts.another_chat().await);
+
+    let placed_under = chats.token_in_turn(&placed, None).await;
+    chats.hub.hear_limits(work.clone(), used_up(), false, now_ms()).await;
+    let failed = chats.refused_launch(&stopped).await;
+
+    assert_eq!(
+        placed_under.as_deref(),
+        Some("work-token"),
+        "Personal's week is used up, and nothing's heard of Work's"
+    );
+    assert!(failed.contains(NO_ACCOUNT_TO_SPARE), "{failed}");
 }

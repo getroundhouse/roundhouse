@@ -5,8 +5,8 @@ use protocol::model::{Level, Observation, ObservationKey, Rev};
 use super::file::{self, Row, Write};
 use super::kept::Table;
 use super::kinds::{
-    AccountIdentity, Form, Kind, Owner, Referenced, Subject, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
-    WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
+    AccountIdentity, AccountLimits, Form, Kind, Owner, Referenced, Subject, WorkspaceChanges, WorkspaceLines,
+    WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
 use super::writer::Writer;
 use crate::cache_file::CacheFile;
@@ -21,6 +21,7 @@ pub(crate) struct Tables {
     pub(super) workspace_pull_request_detail: Table<WorkspacePullRequestDetail>,
     pub(super) workspace_repository_unseen: Table<WorkspaceRepositoryUnseen>,
     pub(super) account_identity: Table<AccountIdentity>,
+    pub(super) account_limits: Table<AccountLimits>,
 }
 
 /// Which owners' observations are to be forgotten, since they're gone.
@@ -74,7 +75,7 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 7] {
+    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 8] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -83,6 +84,7 @@ impl Tables {
             workspace_pull_request_detail,
             workspace_repository_unseen,
             account_identity,
+            account_limits,
         } = self;
         [
             workspace_lines,
@@ -92,6 +94,7 @@ impl Tables {
             workspace_pull_request_detail,
             workspace_repository_unseen,
             account_identity,
+            account_limits,
         ]
     }
 

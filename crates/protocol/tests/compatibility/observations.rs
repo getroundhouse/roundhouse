@@ -5,8 +5,8 @@ use protocol::client::listed::{Listed, ReferenceObservations};
 use protocol::client::{HubFrame, HubNotice};
 use protocol::model::{
     About, AccountIdentity, ChangeStatus, ChangeSummary, ChangedFile, FileVersion, GithubRepositoryName, IssueNumber,
-    IssueSaid, IssueState, IssueSummary, LineCounts, Observation, ObservationKey, Observed, RecordKey, Records,
-    ReferenceAsk, ReferenceSaid, Rev,
+    IssueSaid, IssueState, IssueSummary, LimitWindow, LineCounts, Observation, ObservationKey, Observed, RecordKey,
+    Records, ReferenceAsk, ReferenceSaid, Rev, UsageLimit,
 };
 use serde::Deserialize;
 
@@ -67,6 +67,35 @@ fn who_an_account_is_keeps_its_form_as_a_notice_and_a_removal() {
     keeps_its_form(
         &gone,
         r#"{"notice":"observation_removed","observation":{"kind":"account_identity","account":"claude-1"},"rev":6}"#,
+    );
+}
+
+/// What's left of an account's limits, which a hub sends at its own level to a client of a version that reads it so,
+/// each limit with when it was heard, as a notice and as its removal.
+#[test]
+fn an_account_s_limits_keep_their_form_as_a_notice_and_a_removal() {
+    let week = UsageLimit {
+        window: LimitWindow::SevenDays,
+        model: None,
+        used_percent: 40,
+        resets_at_ms: Some(1_795_400_000_000),
+        heard_at_ms: Some(1_795_230_000_000),
+    };
+    let limits = Observed::AsOf { value: vec![week], as_of_ms: 1_795_230_000_000 };
+    let copy =
+        HubNotice::Observation(Observation::AccountLimits { account: "claude-1".into(), limits, rev: Rev::new(5) });
+    let gone = HubNotice::ObservationRemoved {
+        observation: ObservationKey::AccountLimits { account: "claude-1".into() },
+        rev: Rev::new(6),
+    };
+
+    keeps_its_form(
+        &copy,
+        r#"{"notice":"observation","kind":"account_limits","account":"claude-1","limits":{"freshness":"as_of","value":[{"window":"seven_days","used_percent":40,"resets_at_ms":1795400000000,"heard_at_ms":1795230000000}],"as_of_ms":1795230000000},"rev":5}"#,
+    );
+    keeps_its_form(
+        &gone,
+        r#"{"notice":"observation_removed","observation":{"kind":"account_limits","account":"claude-1"},"rev":6}"#,
     );
 }
 

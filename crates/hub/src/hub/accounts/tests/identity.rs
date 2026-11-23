@@ -4,6 +4,7 @@
 use protocol::model::{AccountId, AccountIdentity, AgentAccount, Observation, Observed};
 use rusqlite::Connection;
 
+use super::on_a_machine::the_week;
 use crate::hub::Hub;
 use crate::hub::tests::{hub_in, hub_in_again};
 use crate::store::BEFORE_ACCOUNT_IDENTITY_OBSERVED;
@@ -86,14 +87,18 @@ async fn an_account_from_before_opens_with_who_it_is_not_known() {
     assert_eq!((record.name.as_deref(), record.email, record.plan), (Some("Work"), None, None));
 }
 
-/// Who an account is goes with the account: a hub that starts on a database without the account doesn't keep it.
+/// Who an account is and what's left of its limits go with the account: a hub that starts on a database without the
+/// account keeps neither.
 #[tokio::test]
-async fn who_an_account_is_is_forgotten_with_its_account() {
+async fn what_s_observed_of_an_account_is_forgotten_with_it() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     let account = AccountId::from("claude-ada");
-    hub.store.hear_limits(&account, &[], false, 1).unwrap();
-    hub.observation_read::<crate::hub::observations::AccountIdentity>(account, ada_is("Max"), 1_000).await.unwrap();
+    hub.store.account_made(&account).unwrap();
+    hub.observation_read::<crate::hub::observations::AccountIdentity>(account.clone(), ada_is("Max"), 1_000)
+        .await
+        .unwrap();
+    hub.hear_limits(account, vec![the_week()], false, 1_000).await;
     hub.observations_written().await;
     drop(hub);
     let db = Connection::open(dir.path().join("hub.db")).unwrap();
@@ -102,4 +107,6 @@ async fn who_an_account_is_is_forgotten_with_its_account() {
     let again = hub_in_again(dir.path());
 
     assert_eq!(listed(&again, "claude-ada").await, (None, None));
+    let kept = again.records_list().await.unwrap().observations;
+    assert!(!kept.iter().any(|observation| matches!(observation, Observation::AccountLimits { .. })), "{kept:?}");
 }

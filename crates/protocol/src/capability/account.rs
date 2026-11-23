@@ -10,13 +10,13 @@ area! { "the account";
     /// Who the agent runs as, from a one-off call that starts no conversation: the account's ID, which is the same in
     /// every build, its email, its plan and its organization, as far as the agent says.
     Account => account: Claimed,
-    /// How much of each of the account's limits is used, as a [`Limit`] each, when the agent hears, which is an event
-    /// in the log, and when the adapter asks, as a [`Report::Limits`](super::Report::Limits), which the worker has it
-    /// do while the agent works, at most every five minutes, where the agent doesn't say by itself. The hub keeps the
-    /// newest on the account's record.
+    /// How much of each of the account's limits is used, as a [`Limit`] each, in a [`Report::Limits`](super::Report::Limits),
+    /// when the agent hears, and when the adapter asks, which the worker has it do while the agent works, at most every
+    /// five minutes, where the agent doesn't say by itself. The hub keeps the newest of each, by the account, as an
+    /// observation.
     Limits => limits: Claimed,
     /// What the account can spend past its limits, such as credits or extra usage, how much of it is used, and
-    /// whether the agent goes on into it. The hub keeps the newest on the account's record.
+    /// whether the agent goes on into it. The hub keeps nothing of it, and drops the report.
     Credits => credits: Claimed,
     /// The hub can hold a login for the account, which the person makes as the [`LoginDescription`] says, and hand it
     /// to the agent for as long as it runs, so an agent on another machine needs no login of its own there.

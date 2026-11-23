@@ -5,7 +5,7 @@
 #[cfg(test)]
 use super::{Store, lock};
 #[cfg(test)]
-use protocol::model::{AccountId, AgentAccount, LimitWindow, ModelLabel, UsageLimit};
+use protocol::model::{AccountId, AgentAccount};
 
 #[cfg(test)]
 mod tests;

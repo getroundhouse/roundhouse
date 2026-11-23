@@ -5,7 +5,7 @@
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{AccountId, AgentKind, AgentLogin, HubSettings, LoginToken};
 
-use super::automatic::{self, Candidate};
+use super::automatic::{self, Candidate, Heard};
 use super::{Handed, Logins};
 use crate::error::internal;
 use crate::login_files::Locked;
@@ -118,8 +118,14 @@ impl Logins {
     /// or else, for a chat on none yet, its kind's default. One whose login can't be used fails closed, whichever it
     /// is. A chat on the ambient login is handed none, whatever the default is, and so is one on none of a kind with no
     /// default, which goes on the ambient login once its worker says whose that is.
-    pub(crate) fn to_hand(&self, agent: AgentKind, on: &SessionLogin, now_ms: i64) -> Result<Option<Handed>, ApiError> {
-        match self.to_launch(agent, on, now_ms)? {
+    pub(crate) fn to_hand(
+        &self,
+        agent: AgentKind,
+        on: &SessionLogin,
+        heard: &Heard,
+        now_ms: i64,
+    ) -> Result<Option<Handed>, ApiError> {
+        match self.to_launch(agent, on, heard, now_ms)? {
             Launching::Handed(handed) => Ok(Some(handed)),
             Launching::Ambient => Ok(None),
             Launching::NoAccountToSpare => Err(ApiError::new(ErrorCode::Conflict, NO_ACCOUNT_TO_SPARE)),
@@ -128,9 +134,15 @@ impl Logins {
 
     /// The login a launch of a chat of `agent`'s kind that's `on` a login runs under, as [`Logins::to_hand`] says, but
     /// with Automatic finding no account to spare said apart, since the chat says so.
-    pub(crate) fn to_launch(&self, agent: AgentKind, on: &SessionLogin, now_ms: i64) -> Result<Launching, ApiError> {
+    pub(crate) fn to_launch(
+        &self,
+        agent: AgentKind,
+        on: &SessionLogin,
+        heard: &Heard,
+        now_ms: i64,
+    ) -> Result<Launching, ApiError> {
         let files = self.files.lock();
-        let target = match self.target(agent, on, now_ms)? {
+        let target = match self.target(agent, on, heard, now_ms)? {
             Aim::At(target) => target,
             Aim::Ambient => return Ok(Launching::Ambient),
             Aim::NoAccountToSpare => return Ok(Launching::NoAccountToSpare),
@@ -142,7 +154,7 @@ impl Logins {
 
     /// The account whose login a chat of `agent`'s kind that's `on` a login runs under at `now_ms`: the one it's on, or
     /// else the kind's default, or the one Automatic chooses, while the kind's chats are put on accounts automatically.
-    fn target(&self, agent: AgentKind, on: &SessionLogin, now_ms: i64) -> Result<Aim, ApiError> {
+    fn target(&self, agent: AgentKind, on: &SessionLogin, heard: &Heard, now_ms: i64) -> Result<Aim, ApiError> {
         match on {
             SessionLogin::Hub(account) => return Ok(Aim::At(Target::Session(account.clone()))),
             SessionLogin::Ambient => return Ok(Aim::Ambient),
@@ -152,20 +164,20 @@ impl Logins {
         let default = settings.account_defaults.unwrap_or_default().into_iter().find(|choice| choice.agent == agent);
         Ok(match default {
             Some(choice) if choice.automatic => self
-                .automatic(agent, now_ms)?
+                .automatic(agent, heard, now_ms)?
                 .map_or(Aim::NoAccountToSpare, |account| Aim::At(Target::Automatic(account))),
             Some(choice) => Aim::At(Target::Default(choice.account)),
             None => Aim::Ambient,
         })
     }
 
-    /// The account Automatic puts a chat of `agent`'s kind on at `now_ms`, of the logins added for the kind, as
-    /// [`automatic::choose`] says. Refused with `Conflict` when none has a login that works, which renewing or
-    /// reconnecting one is what helps, and `None` when none has usage to spare.
-    fn automatic(&self, agent: AgentKind, now_ms: i64) -> Result<Option<AccountId>, ApiError> {
+    /// The account Automatic puts a chat of `agent`'s kind on at `now_ms`, of the logins added for the kind, by what's
+    /// been `heard` of their limits, as [`automatic::choose`] says. Refused with `Conflict` when none has a login that
+    /// works, which renewing or reconnecting one is what helps, and `None` when none has usage to spare.
+    fn automatic(&self, agent: AgentKind, heard: &Heard, now_ms: i64) -> Result<Option<AccountId>, ApiError> {
         let mut accounts = Vec::new();
         for held in self.store.held_logins(agent)? {
-            accounts.extend(self.store.account(&held.account)?);
+            accounts.extend(self.store.account(&held.account)?.map(|account| automatic::with_heard(account, heard)));
         }
         if !accounts.iter().any(|account| account.works_for(agent, now_ms)) {
             return Err(ApiError::new(ErrorCode::Conflict, NO_LOGIN_WORKS));

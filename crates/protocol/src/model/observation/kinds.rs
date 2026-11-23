@@ -3,7 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::{AccountIdentity, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
-use crate::model::{AccountId, ChangeSummary, Level, LineCounts, ReferenceAsk, RepositoryUnseen, Rev, WorkspaceId};
+use crate::model::{
+    AccountId, ChangeSummary, Level, LineCounts, ReferenceAsk, RepositoryUnseen, Rev, UsageLimit, WorkspaceId,
+};
 
 /// One observation, of any kind, with what it's of, its revision and what it says, as a list or the feed gives it. A
 /// client keeps whichever copy has the newer revision, as it keeps a record, by [`Observation::key`]. A kind this build
@@ -35,6 +37,11 @@ pub enum Observation {
     /// since nothing tells the hub when it changes. A client of a version from before it reads it on the account's
     /// record, as [`ReadFrom::EveryObservation`] says.
     AccountIdentity { account: AccountId, identity: Observed<AccountIdentity>, rev: Rev },
+    /// What's left of an account's usage limits, as its agents last said them, each with when it was heard, shortest
+    /// window first and models' weeks by their models. Sent at the hub's level, since a chat's card and Agents in
+    /// Settings draw every account's. Never current, since only a running agent says them, and each says only some. A
+    /// client of a version from before it reads it on the account's record, as [`ReadFrom::EveryObservation`] says.
+    AccountLimits { account: AccountId, limits: Observed<Vec<UsageLimit>>, rev: Rev },
     #[serde(other)]
     Unknown,
 }
@@ -65,6 +72,9 @@ pub enum ObservationKey {
     AccountIdentity {
         account: AccountId,
     },
+    AccountLimits {
+        account: AccountId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -92,6 +102,7 @@ impl Observation {
             Observation::AccountIdentity { account, .. } => {
                 ObservationKey::AccountIdentity { account: account.clone() }
             }
+            Observation::AccountLimits { account, .. } => ObservationKey::AccountLimits { account: account.clone() },
             Observation::Unknown => ObservationKey::Unknown,
         }
     }
@@ -106,7 +117,8 @@ impl Observation {
             | Observation::WorkspacePullRequestDetail { rev, .. }
             | Observation::WorkspaceRepositoryUnseen { rev, .. }
             | Observation::Reference { rev, .. }
-            | Observation::AccountIdentity { rev, .. } => *rev,
+            | Observation::AccountIdentity { rev, .. }
+            | Observation::AccountLimits { rev, .. } => *rev,
             Observation::Unknown => Rev::default(),
         }
     }
@@ -123,7 +135,8 @@ impl ObservationKey {
         match self {
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspacePullRequest { .. }
-            | ObservationKey::AccountIdentity { .. } => Some(Level::Hub),
+            | ObservationKey::AccountIdentity { .. }
+            | ObservationKey::AccountLimits { .. } => Some(Level::Hub),
             ObservationKey::WorkspaceChanges { workspace_id }
             | ObservationKey::WorkspacePullRequestDetail { workspace_id }
             | ObservationKey::WorkspaceRepositoryUnseen { workspace_id } => {
@@ -143,7 +156,9 @@ impl ObservationKey {
             | ObservationKey::WorkspacePullRequestDetail { .. }
             | ObservationKey::WorkspaceRepositoryUnseen { .. }
             | ObservationKey::Reference { .. } => Some(ReadFrom::GithubObserved),
-            ObservationKey::AccountIdentity { .. } => Some(ReadFrom::EveryObservation),
+            ObservationKey::AccountIdentity { .. } | ObservationKey::AccountLimits { .. } => {
+                Some(ReadFrom::EveryObservation)
+            }
             ObservationKey::Unknown => None,
         }
     }

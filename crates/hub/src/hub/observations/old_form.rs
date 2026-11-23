@@ -7,11 +7,11 @@
 //! and one of a version that reads the observation itself doesn't read it.
 
 use protocol::client::ClientResponse;
-use protocol::model::{Account, Record, RecordKey, Records};
+use protocol::model::{Account, Record, RecordKey, Records, UsageLimit};
 use tracing::warn;
 
 use super::kept::Observations;
-use super::kinds::{AccountIdentity, Kind};
+use super::kinds::{AccountIdentity, AccountLimits, Kind};
 use super::tables::Tables;
 use crate::hub::Hub;
 
@@ -21,12 +21,14 @@ pub(crate) trait OldForm {
     fn fill(&mut self, tables: &mut Tables);
 }
 
-/// Who the account is, on its record.
+/// Who the account is, and what's left of its limits, on its record, which says nothing of when each was heard.
 impl OldForm for Account {
     fn fill(&mut self, tables: &mut Tables) {
         let identity = AccountIdentity::table(tables).value(&self.id).cloned().unwrap_or_default();
         let protocol::model::AccountIdentity { model_provider, plan, login, email } = identity;
         (self.model_provider, self.plan, self.login, self.email) = (model_provider, plan, login, email);
+        let limits = AccountLimits::table(tables).value(&self.id).map_or_default(Vec::as_slice);
+        self.limits = limits.iter().map(|limit| UsageLimit { heard_at_ms: None, ..limit.clone() }).collect();
     }
 }
 
