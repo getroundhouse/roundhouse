@@ -1,15 +1,16 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use protocol::client::HubNotice;
 use protocol::model::{Observation, ObservationKey, Observed, Rev};
 
 use rusqlite::Connection;
 use tokio::sync::oneshot;
 
 use super::super::kinds::{Kind, WorkspaceChanges, WorkspaceLines};
-use super::seen::{as_of, changes, lines, listed, of_w, told_copy};
+use super::seen::{as_of, changes, lines, listed, of_w, told, told_copy};
 use crate::hub::Hub;
-use crate::hub::tests::hub_in;
+use crate::hub::tests::{hub_in, hub_in_again};
 
 /// How long a test gives a change, or a list, to finish while what it waits for is held, which it mustn't.
 const HELD_FOR: Duration = Duration::from_millis(200);
@@ -52,9 +53,9 @@ async fn a_change_made_while_the_records_are_listed_is_told_after_the_list() {
     assert_eq!(changed, of_w(as_of(lines(4, 0), 2_000), changed.rev()));
 }
 
-/// A list asked for while a change is being made, once the change has its revision and before it's kept, waits for
-/// it, and has the new copy, so no list's revision takes in a change the list lacks: the hub's, with the records, and a
-/// workspace's. The change is held where it writes the cache file, by another writer holding the file.
+/// A list asked for while a change is being made, before it's kept, waits for it, and has the new copy, so no list's
+/// revision takes in a change the list lacks: the hub's, with the records, and a workspace's. The change is held where
+/// it takes its revision, by holding the database's writer.
 #[tokio::test]
 async fn a_list_asked_for_while_a_change_is_made_has_the_new_copy() {
     let of_the_hub = |hub: Arc<Hub>| async move {
@@ -71,6 +72,10 @@ async fn a_list_asked_for_while_a_change_is_made_has_the_new_copy() {
 
 /// What [`a_list_asked_for_while_a_change_is_made_has_the_new_copy`] does for one kind, `K`, which it reads as
 /// `values` in turn, and the list `list` reads, which has it.
+#[expect(
+    clippy::await_holding_lock,
+    reason = "it holds the database's writer while the change waits for it, and nothing here writes the database"
+)]
 async fn a_list_waits_for_a_change_made<K: Kind, F: Future<Output = (Vec<Observation>, Rev)> + Send + 'static>(
     [before, after]: [K::Value; 2],
     list: impl FnOnce(Arc<Hub>) -> F,
@@ -80,21 +85,19 @@ async fn a_list_waits_for_a_change_made<K: Kind, F: Future<Output = (Vec<Observa
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     hub.observation_read::<K>("w".into(), before, 1_000).await.unwrap();
-    let listed_before = hub.store.list_records().unwrap().rev;
     let mut feed = hub.subscribe_feed();
-    let writer = Connection::open(dir.path().join("github-cache.db")).unwrap();
-    writer.execute_batch("BEGIN IMMEDIATE;").unwrap();
+    let writes = hub.store.holding_writes();
     let making = tokio::spawn({
         let (hub, after) = (hub.clone(), after.clone());
         async move { hub.observation_read::<K>("w".into(), after, 2_000).await }
     });
-    let revised = || hub.store.list_records().unwrap().rev > listed_before;
-    waiting::task::until(Duration::from_secs(5), "the change took no revision", revised).await;
+    let changing = || hub.observations.changing.try_lock().is_err();
+    waiting::task::until(Duration::from_secs(5), "the change didn't take the lock", changing).await;
 
     let mut asking = tokio::spawn(list(hub.clone()));
 
     assert!(tokio::time::timeout(HELD_FOR, &mut asking).await.is_err(), "the list waits for the change");
-    writer.execute_batch("ROLLBACK;").unwrap();
+    drop(writes);
     making.await.unwrap().unwrap();
     let (observations, rev) = asking.await.unwrap();
     let changed = told_copy(&mut feed);
@@ -102,6 +105,39 @@ async fn a_list_waits_for_a_change_made<K: Kind, F: Future<Output = (Vec<Observa
     assert!(rev >= changed.rev());
     let read_then = Observed::AsOf { value: after, as_of_ms: 2_000 };
     assert_eq!(changed, K::observation(&"w".into(), read_then, changed.rev()));
+}
+
+/// A change made while another process holds the cache file, which can hold up its write for seconds, is kept and told
+/// at once, and a list asked for then has it, since nothing waits on the file under the lock lists take. Its writes
+/// land once the file is let go, in the order the changes were made, and dropping the hub waits for them, so a hub
+/// that starts again has the last.
+#[tokio::test]
+async fn a_list_waits_for_no_write_to_the_cache_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let mut feed = hub.subscribe_feed();
+    let writer = Connection::open(dir.path().join("github-cache.db")).unwrap();
+    writer.execute_batch("BEGIN IMMEDIATE;").unwrap();
+
+    let changing = async {
+        hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
+        hub.observation_read::<WorkspaceLines>("w".into(), lines(4, 0), 2_000).await.unwrap();
+        listed(&hub).await
+    };
+    // Well inside the 5 s a write waits for the file, so a change that waited for its write would fail this.
+    let quickly = Duration::from_secs(2);
+    let (observations, _) = tokio::time::timeout(quickly, changing).await.expect("nothing waits on the file");
+
+    let changed = told(&mut feed);
+    let [.., HubNotice::Observation(last)] = changed.as_slice() else { panic!("told of no change: {changed:?}") };
+    assert_eq!(observations, std::slice::from_ref(last), "the new copy");
+    let mut dropping = tokio::task::spawn_blocking(move || drop(hub));
+    assert!(tokio::time::timeout(HELD_FOR, &mut dropping).await.is_err(), "dropping the hub waits for its writes");
+    writer.execute_batch("ROLLBACK;").unwrap();
+    dropping.await.unwrap();
+    let (observations, _) = listed(&hub_in_again(dir.path())).await;
+    let [kept] = observations.try_into().unwrap();
+    assert_eq!(kept, of_w(as_of(lines(4, 0), 2_000), kept.rev()), "the last write lands last");
 }
 
 /// Each observation's list, at its own level, sends only the observations of that level: the hub's has a workspace's

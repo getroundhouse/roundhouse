@@ -38,6 +38,7 @@ async fn a_read_that_finds_the_same_writes_only_when_it_was_read() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     hub.observation_read::<WorkspaceChanges>("w".into(), changes(3, 1), 1_000).await.unwrap();
+    hub.observations_written().await;
     let file = Connection::open(dir.path().join("github-cache.db")).unwrap();
     let elsewhere = serde_json::to_string(&changes(9, 9)).unwrap();
     file.execute("UPDATE observed_workspace_changes SET said = ?", [elsewhere]).unwrap();

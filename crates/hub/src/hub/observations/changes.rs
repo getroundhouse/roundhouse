@@ -2,10 +2,11 @@
 
 use protocol::client::{ApiError, ObservationNotice};
 
-use super::file::{self, Write};
+use super::file::Write;
 use super::kept::{Change, Changed, Step};
 use super::kinds::Kind;
 use crate::hub::Hub;
+use crate::store::Store;
 
 impl Hub {
     /// Keeps that the observation of `of` was read at `read_at_ms`, by the hub's clock, and found `value`. It's current
@@ -69,42 +70,37 @@ impl Hub {
         self.change_observation::<K>(of, Change::Gone).await
     }
 
+    /// Waits until every change made before has been written to the cache file, as the hub does as it stops, so the
+    /// next hub starts with them.
+    pub(crate) async fn observations_written(&self) {
+        self.observations.writer.written().await;
+    }
+
     /// Makes `change` to the observation of `of`, under the lock every change takes, from before it takes a revision
-    /// until clients are told, so a list of records has every change its revision takes in, and the file is written in
-    /// the order the changes are made. Fails only where the database gives no revision, and then changes nothing but
-    /// whether something keeps it current.
+    /// until clients are told, so a list of records has every change its revision takes in. Its write to the file is
+    /// queued under the lock too, so the file is written in the order the changes are made, and made after, so no list
+    /// waits on the file. Fails only where the database gives no revision, and then changes nothing but whether
+    /// something keeps it current.
     async fn change_observation<K: Kind>(&self, of: K::Of, change: Change<K::Value>) -> Result<(), ApiError> {
         let observations = &self.observations;
         let _changing = observations.changing.lock().await;
         let step = K::table(&mut observations.tables.lock()).step(&of, change);
-        let (takes_rev, write) = match &step {
+        let changed = match step {
             Step::Same => return Ok(()),
-            Step::Reread(said) => (false, Write::ReadAgain { read_at_ms: said.read_at_ms }),
-            Step::Changed(Changed::Says(said)) => {
-                (true, Write::Says { value: said.value.clone(), read_at_ms: said.read_at_ms })
+            Step::Reread(said) => {
+                observations.writer.write::<K>(of.clone(), Write::ReadAgain { read_at_ms: said.read_at_ms });
+                K::table(&mut observations.tables.lock()).reread(&of, said);
+                return Ok(());
             }
-            Step::Changed(Changed::Gone) => (true, Write::Gone),
+            Step::Changed(changed) => changed,
         };
-        let (cache, written) = (observations.file.clone(), of.clone());
-        let rev = self
-            .blocking(move |store| {
-                let rev = takes_rev.then(|| store.next_rev()).transpose()?;
-                file::write::<K>(&cache, &written, write);
-                Ok(rev)
-            })
-            .await?;
-        let notice = {
-            let mut tables = observations.tables.lock();
-            let table = K::table(&mut tables);
-            match (step, rev) {
-                (Step::Changed(changed), Some(rev)) => table.change(&of, changed, rev),
-                (Step::Reread(said), _) => {
-                    table.reread(&of, said);
-                    return Ok(());
-                }
-                (Step::Same | Step::Changed(_), _) => return Ok(()),
-            }
+        let rev = self.blocking(Store::next_rev).await?;
+        let write = match &changed {
+            Changed::Says(said) => Write::Says { value: said.value.clone(), read_at_ms: said.read_at_ms },
+            Changed::Gone => Write::Gone,
         };
+        observations.writer.write::<K>(of.clone(), write);
+        let notice = K::table(&mut observations.tables.lock()).change(&of, changed, rev);
         self.tell_of_observation(notice);
         Ok(())
     }
