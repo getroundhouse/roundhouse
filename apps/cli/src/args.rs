@@ -115,7 +115,7 @@ pub(crate) enum HubCmd {
     Uninstall,
     /// Put this build where a hub installed as a service runs it from, and point the service at it. `hub install` runs
     /// it as the hub's user, so what it makes is that user's. An older hub runs a newer release's to update to it, so it
-    /// keeps taking no arguments and finding where to place the build from its environment, as `docs/principles/protocol.md`
+    /// keeps taking no arguments and finding where to place the build from its environment, as `docs/principles/versions.md`
     /// says.
     #[command(hide = true)]
     Place,
@@ -264,7 +264,7 @@ mod tests {
         assert_eq!(from(&["roundhouse", "attach", "s"]), Seq::FIRST);
     }
 
-    /// An older hub runs a newer release's `hub place` to update to it, as `docs/principles/protocol.md` says.
+    /// An older hub runs a newer release's `hub place` to update to it, as `docs/principles/versions.md` says.
     #[test]
     fn hub_place_takes_no_arguments() {
         let parsed = Args::try_parse_from(["roundhouse", "hub", "place"]).unwrap();

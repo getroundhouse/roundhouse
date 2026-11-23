@@ -249,7 +249,7 @@ pub enum Stranded<'a> {
 impl Release<'_> {
     /// Whether an update from `running` can take it, which is whether it's past both of this release's floors. Its hub
     /// speaks the workers the update has to keep, so the update ends none of them and crosses at most one break in the
-    /// worker protocol, as `docs/principles/protocol.md` says. And `running`, and the hub it names, are at least the
+    /// worker protocol, as `docs/principles/versions.md` says. And `running`, and the hub it names, are at least the
     /// oldest release it updates from, so its hub can migrate the database, as "The database" in
     /// `docs/principles/state.md` says. A hub not heard from yet is past no floor. An app or a hub takes the newest
     /// release it can, so it steps through each floor.

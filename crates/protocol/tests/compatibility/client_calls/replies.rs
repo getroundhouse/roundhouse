@@ -186,7 +186,7 @@ fn every_list_of_a_chats_own_records_keeps_its_form() {
     );
 }
 
-/// What a client reads of a hub across a break, to see it and stop or restart it, as `docs/principles/protocol.md`
+/// What a client reads of a hub across a break, to see it and stop or restart it, as `docs/principles/versions.md`
 /// says.
 #[test]
 fn the_hub_s_status_keeps_its_form() {

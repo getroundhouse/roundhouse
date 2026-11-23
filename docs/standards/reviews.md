@@ -75,7 +75,7 @@ Before any code is written, the reviewer reads the change's design: parts 2 and 
 - Does something in the repo already do this, or could it be extended to?
 - Does it fit `docs/principles/`, for the iPhone app as well as the desktop, and including the parts that aren't built, such as workers on other machines?
 - Does it change what an owner doc says, without saying so?
-- What does it commit, and in which PR: the forms it stores or sends, any migration, and any protocol break, as `docs/principles/protocol.md` says?
+- What does it commit, and in which PR: the forms it stores or sends, any migration, and any protocol break, as `docs/principles/versions.md` says?
 - For a stack, are its splits and their order right, by `docs/standards/stacks.md`?
 
 A rule changed in words alone is read the same way, the rule being its design, and the reviewer also asks where an agent following it would go wrong, on either side of its line.
@@ -89,7 +89,7 @@ Whether the change does what it's for, and whether it can do harm that can't be 
 - Logic that's wrong in the case the change was built for: conditions, bounds, and assumptions about input.
 - Stored data lost or garbled, including by a migration run on whatever an older build could have stored, and on a large store, and by code that reads rows an older build wrote.
 - A person's work lost, such as a prompt or an agent's output, an action taken on someone's behalf that can't be taken back, such as a push, a merge or a delete, and a credential exposed.
-- A newer client or worker with an older hub, and the reverse, as `docs/principles/protocol.md` says, since a build can't be changed once it's published.
+- A newer client or worker with an older hub, and the reverse, as `docs/principles/versions.md` says, since a build can't be changed once it's published.
 
 It doesn't hunt for edge cases beyond these. One it comes across is a minor finding, unless it's a sign that the structure is wrong, as "Findings" says.
 
@@ -149,6 +149,6 @@ Once a stack is built, the reviewer reads it as one change, against its design. 
 - State with the wrong owner, by `docs/principles/state.md`, that only shows with both layers in view.
 - Code that exists only for the middle of the stack, beyond what `docs/standards/stacks.md` lets in, and any of it left at the top.
 - Two forms of one shape at the top, where "Each message type has one serialized form" in `docs/principles/protocol.md` asks for one, and readers of an old form the top no longer needs.
-- A pairing of versions in `docs/principles/protocol.md` that the stack breaks, and a migration that makes a different form from the live path given the same input.
+- A pairing of versions in `docs/principles/versions.md` that the stack breaks, and a migration that makes a different form from the live path given the same input.
 - No test that follows the data across the layers.
 - A doc that isn't true at the top of the stack.

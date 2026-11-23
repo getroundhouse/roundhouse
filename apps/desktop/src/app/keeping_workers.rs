@@ -1,6 +1,6 @@
 //! Telling the updater which workers its update has to keep running, and which release the hub's database is from,
 //! from the hub's status, so the update crosses one break in the worker protocol at a time, as
-//! `docs/principles/protocol.md` says, and its hub can migrate the database. While the app is connected, the
+//! `docs/principles/versions.md` says, and its hub can migrate the database. While the app is connected, the
 //! oldest can only rise, as each workspace on a worker of another build moves to one of the hub's own, so the app reads
 //! the status again whenever fewer workspaces are on one, and once an hour while the hub runs older workers, for one
 //! that leaves without its workspace's record changing, such as one the hub is ending as it starts. *Unconfirmed:* when

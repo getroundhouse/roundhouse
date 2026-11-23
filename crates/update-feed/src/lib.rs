@@ -2,7 +2,7 @@
 //! That's its two floors: which versions of the worker protocol its hub speaks, which `tools/package/publish.py`
 //! writes, and the oldest release it updates from, if it says one. The app and a hub installed as a service read them
 //! to take the newest release past both, so an update crosses one break in the worker protocol at a time, as
-//! `docs/principles/protocol.md` says, and reaches no hub that can't migrate its database. `tools/update-steps` reads
+//! `docs/principles/versions.md` says, and reaches no hub that can't migrate its database. `tools/update-steps` reads
 //! them to hold back a change that would leave an app no release to step to, as "A break in the worker protocol" in
 //! `docs/standards/merging.md` says. It also holds this build's floor, the oldest release it updates from, which the
 //! hub's store reads to refuse a database older than that. It does no IO, so the app, a hub and the tools share it

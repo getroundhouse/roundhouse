@@ -21,12 +21,12 @@ use request::ClientRequest;
 use serde::{Deserialize, Serialize};
 
 /// The client protocol's version, apart from the worker protocol's, so a break in one doesn't break the other. It
-/// changes only for a real break, as `docs/principles/protocol.md` says. Version 4 is the one a client follows
+/// changes only for a real break, as `docs/principles/versions.md` says. Version 4 is the one a client follows
 /// everything through [`Subscribe`](super::subscriptions::Subscribe) alone in.
 pub const CLIENT_PROTOCOL_VERSION: u32 = 4;
 
 /// The versions of the client protocol a hub of this build speaks: its own, and the one before it, for a client of an
-/// older build, as `docs/principles/protocol.md` says. Version 3 is the one a client follows through a request of its
+/// older build, as `docs/principles/versions.md` says. Version 3 is the one a client follows through a request of its
 /// own for each of the hub's records, a session, a terminal and what it shows of GitHub. Nothing a hub sends a client
 /// of version 3 differs from what it sent it before version 4.
 ///
