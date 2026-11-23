@@ -95,6 +95,13 @@ impl Connection {
         }
     }
 
+    /// Reads what the hub sends into `sent` until it closes the connection.
+    pub(super) async fn until_closed(&mut self) {
+        while let Some(frame) = self.next().await {
+            self.sent.push(frame);
+        }
+    }
+
     /// The next frame the hub sends, or `None` once it has closed the connection.
     async fn next(&mut self) -> Option<HubFrame> {
         let line = timeout(WAIT, self.replies.next_line()).await;

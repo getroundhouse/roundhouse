@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::model::{Observation, Proposal, Records, ReferenceAsk, ReplyHeard, Rev, SessionId, Subagent, WorkspaceId};
 
 /// Every record, and every observation, of one level, read at one moment, as `HubFrame::Listed` carries it. A
-/// subscription is sent one as it starts, and again whenever it has fallen behind. Each copy in it replaces the
-/// client's, unless the client's is newer. One of the level the client holds that's missing from it, and isn't newer
+/// subscription is sent one as it starts, and again whenever it has fallen behind, or, where the hub can't list it
+/// again, its connection closes, so the client follows everything again. Each copy in it replaces the client's, unless
+/// the client's is newer. One of the level the client holds that's missing from it, and isn't newer
 /// than its revision, is gone.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "level", rename_all = "snake_case")]

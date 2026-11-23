@@ -12,9 +12,9 @@ use tokio::sync::mpsc;
 use super::notices::{forward, send_listed};
 use super::starting::{Feeding, unknown};
 use crate::hub::Hub;
-use crate::server::Outgoing;
 use crate::server::pump::{Following, pump};
 use crate::server::sends::Sends;
+use crate::server::{Closer, Outgoing};
 
 /// What feeds a subscription at session `id`'s level, from `from`, once the hub has the session and its records, so
 /// one it doesn't have is refused.
@@ -25,6 +25,7 @@ pub(super) async fn feeding(
     sends: Sends,
     subscription_id: u64,
     frames: mpsc::Sender<Outgoing>,
+    closer: Closer,
 ) -> Result<Feeding, ApiError> {
     let following = match from {
         None => Following::Log { next: Seq::FIRST },
@@ -46,7 +47,7 @@ pub(super) async fn feeding(
             return;
         }
         let list = || async { Ok(Listed::Session(hub.session_records(id.clone()).await?)) };
-        let records = forward(feed, &sends, subscription_id, &frames, list, |_| {});
+        let records = forward(feed, &sends, subscription_id, &frames, &closer, list, |_| {});
         let log = pump(hub.clone(), session, id.clone(), subscription_id, following, live, frames.clone());
         // The log's ends once its session has gone, and both once the connection has.
         tokio::select! {

@@ -111,5 +111,6 @@ fn unread_connection() -> Arc<Connection> {
         frames: mpsc::channel(1).0,
         subscriptions: Mutex::new(HashMap::new()),
         closed: Arc::new(watch::Sender::new(false)),
+        closer: crate::server::Closer::default(),
     })
 }

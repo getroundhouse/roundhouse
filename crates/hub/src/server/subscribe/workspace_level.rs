@@ -12,8 +12,8 @@ use tokio::sync::{mpsc, oneshot};
 use super::notices::{forward, send_listed};
 use super::starting::Feeding;
 use crate::hub::Hub;
-use crate::server::Outgoing;
 use crate::server::sends::Sends;
+use crate::server::{Closer, Outgoing};
 
 /// What feeds a subscription at workspace `id`'s level, and what says once its first list is queued, so one the hub
 /// doesn't have is refused. What feeds it queues the list first, so it goes only to a subscription that has started,
@@ -25,6 +25,7 @@ pub(super) async fn feeding(
     sends: Sends,
     subscription_id: u64,
     frames: mpsc::Sender<Outgoing>,
+    closer: Closer,
 ) -> Result<(Feeding, oneshot::Receiver<()>), ApiError> {
     hub.workspace(&id).await?;
     // Before the list, so nothing that changes after it is missed.
@@ -40,7 +41,7 @@ pub(super) async fn feeding(
             return;
         }
         let list = || async { Ok(Listed::Workspace(listed(&hub, &id).await?)) };
-        forward(feed, &sends, subscription_id, &frames, list, |_| {}).await;
+        forward(feed, &sends, subscription_id, &frames, &closer, list, |_| {}).await;
     });
     Ok((feeding, is_queued))
 }

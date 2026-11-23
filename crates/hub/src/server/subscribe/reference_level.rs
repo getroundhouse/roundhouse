@@ -12,9 +12,9 @@ use tokio::sync::{mpsc, watch};
 use super::notices::{forward, send_listed};
 use super::starting::Feeding;
 use crate::hub::Hub;
-use crate::server::Outgoing;
 use crate::server::github::pump;
 use crate::server::sends::Sends;
+use crate::server::{Closer, Outgoing};
 
 /// What feeds a subscription that follows `reference`, in the form of what GitHub says that `sends` has it sent: its
 /// observations, listed first and then each change, or `HubFrame::Github` of it once the hub has read it and as that
@@ -25,6 +25,7 @@ pub(super) async fn feeding(
     sends: Sends,
     subscription_id: u64,
     frames: mpsc::Sender<Outgoing>,
+    closer: Closer,
 ) -> Result<Feeding, ApiError> {
     if !sends.github_observed() {
         let (shown, showing) = watch::channel(GithubShown { references: vec![reference], ..GithubShown::default() });
@@ -44,7 +45,7 @@ pub(super) async fn feeding(
             return;
         }
         let list = || async { Ok(Listed::Reference(listed(&hub, &reference).await?)) };
-        forward(feed, &sends, subscription_id, &frames, list, |_| {}).await;
+        forward(feed, &sends, subscription_id, &frames, &closer, list, |_| {}).await;
     }))
 }
 
