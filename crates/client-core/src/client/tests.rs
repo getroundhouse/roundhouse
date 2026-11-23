@@ -176,3 +176,38 @@ fn a_connection_knows_the_device_its_hello_named() {
     assert_eq!(client.device().map(protocol::model::DeviceId::as_str), Some("mac"));
     assert_eq!(Client::connect(&off, "cli").unwrap().device(), None);
 }
+
+/// A subscription that ends while a start it asked for waits for the hub's reply, as one dropped or fallen behind does,
+/// stops that start once the hub says it started it, since what ended it may have told the hub to stop before the start
+/// reached the hub.
+#[test]
+fn a_start_answered_after_its_subscription_ended_is_stopped() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("hub.sock");
+    let (open, opened) = flume::bounded(1);
+    let heard = stand_in_hub::listen(&socket, move |request| {
+        let ClientRequest::Subscribe(subscribe) = request else { return Does::Nothing };
+        let started = ClientResponse::Subscribed(subscriptions::Subscribed::default());
+        let answered = Does::Answers(Box::new(ReplyOutcome::Response(started)));
+        if subscribe.start.is_empty() { answered } else { Does::After(opened.clone(), Box::new(answered)) }
+    });
+    let client = Client::connect(&socket, "test").unwrap();
+    let (subscription, _) = client.follow_all(Vec::new()).unwrap();
+    let (changing, starting) = (subscription.changing(), client.clone());
+    std::thread::spawn(move || changing.follow_only(&starting, vec![subscriptions::Follow::Hub]));
+    let next = |what: &str, of: &dyn Fn(&subscriptions::Subscribe) -> bool| loop {
+        let request = heard.recv_timeout(Duration::from_secs(10)).unwrap_or_else(|_| panic!("never {what}"));
+        if let ClientRequest::Subscribe(subscribe) = request
+            && of(&subscribe)
+        {
+            return subscribe;
+        }
+    };
+    let start = next("the start", &|subscribe| !subscribe.start.is_empty()).start[0].subscription_id;
+
+    drop(subscription);
+    next("the stop as it ended", &|subscribe| subscribe.stop == [start]);
+    open.send(()).unwrap();
+
+    next("the stop once the start was answered", &|subscribe| subscribe.stop == [start]);
+}

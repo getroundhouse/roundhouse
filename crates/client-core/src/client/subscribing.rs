@@ -152,13 +152,25 @@ impl Changing {
         };
         // Ended meanwhile, so nothing it started is followed.
         let going = channels.senders.contains_key(&self.channel);
-        let mut followed = self.followed.lock();
-        for (id, level) in started {
-            if going && !refused.iter().any(|refused| refused.subscription_id == id) {
-                followed.push((id, level));
-            } else {
-                channels.of.remove(&id);
+        let mut ended = Vec::new();
+        {
+            let mut followed = self.followed.lock();
+            for (id, level) in started {
+                let started = !refused.iter().any(|refused| refused.subscription_id == id);
+                if going && started {
+                    followed.push((id, level));
+                } else {
+                    channels.of.remove(&id);
+                    ended.extend(started.then_some(id));
+                }
             }
+        }
+        drop(channels);
+        // What ended it told the hub to stop, but that can have reached the hub before the start did, so the start
+        // would run with nothing to stop it. The hub stops nothing it isn't following, so stopping it again costs a
+        // request.
+        if !ended.is_empty() {
+            let _ = self.connection.send_only(Subscribe { stop: ended, start: Vec::new() }.into_request());
         }
         Ok(refused)
     }
