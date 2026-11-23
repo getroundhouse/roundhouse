@@ -183,7 +183,8 @@ impl WorkspacePane {
         let open_git: warnings::OpenGit = Rc::new(move |_, cx| {
             let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::OpenGit));
         });
-        let said = workspace_card::Said::of(self.workspace(), self.client.hub_version(), &self.warnings);
+        let said =
+            workspace_card::Said::of(self.shown.all(), self.workspace(), self.client.hub_version(), &self.warnings);
         let title = workspace_card::card(title, said, open_git);
         let branch = words().text_color(muted).child(self.workspace().branch.to_string());
         let base = words().text_color(faint);

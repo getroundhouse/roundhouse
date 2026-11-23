@@ -1,9 +1,10 @@
 //! What the bottom of the sidebar says about which build is running, and where updating it has got to.
 
 use client_core::Client;
+use client_core::records::Snapshot;
 use gpui_kit::App;
 use protocol::event::AgentTask;
-use protocol::model::{HubUpdate, SessionStatus, UpdateAttempt};
+use protocol::model::{SessionStatus, UpdateAttempt};
 
 use super::AppView;
 use super::updating_hub::HubUpdateAsk;
@@ -19,8 +20,8 @@ impl AppView {
         let holding = Holding::of(restarting, chats, terminals.sum());
         let may_restart = self.restartable_hub.is_some();
         let ready = crate::updates::ready(cx);
-        let (found, asked) = (self.records.hub_update(), self.hub_update_asked.as_ref());
-        BuildLine::new(self.hub.build_version, hub, may_restart, holding, ready, found, asked)
+        let (records, asked) = (&self.records, self.hub_update_asked.as_ref());
+        BuildLine::new(self.hub.build_version, hub, may_restart, holding, ready, records, asked)
     }
 }
 
@@ -103,8 +104,8 @@ impl Holding {
 impl BuildLine {
     /// `hub` is `None` while there's no connection. `may_restart` says whether the app may restart the hub it's
     /// connected to, `holding` what's on it that holds that up, `ready` is the version of an update that's downloaded,
-    /// `found` what the hub found in the update feed, as one installed as a service reads it, and `asked` the app's own
-    /// request to update it. A downloaded update comes first, since it's what installs, and the app's own update
+    /// `records` the copy of the hub's records, which say what it found in the update feed, as one installed as a service
+    /// reads it, and `asked` the app's own request to update it. A downloaded update comes first, since it's what installs, and the app's own update
     /// finishing next, since it's under way.
     pub(super) fn new(
         app: &str,
@@ -112,7 +113,7 @@ impl BuildLine {
         may_restart: bool,
         holding: Holding,
         ready: Option<&str>,
-        found: Option<&HubUpdate>,
+        records: &Snapshot,
         asked: Option<&HubUpdateAsk>,
     ) -> Self {
         let another = hub.filter(|hub| *hub != app).map(str::to_string);
@@ -123,20 +124,22 @@ impl BuildLine {
                 let Holding { agents, terminals } = holding;
                 Some(Updating::Finishing { hub, agents, terminals })
             }
-            (None, _) => hub.zip(found).and_then(|(hub, found)| hub_update(hub, found, asked)),
+            (None, _) => hub.and_then(|hub| hub_update(hub, records, asked)),
         };
         Self { app: app.to_string(), other_hub, update }
     }
 }
 
-/// Where the update of `hub` has got to, as what it found in the feed says, and the app's own request to update it,
-/// while it found one. It's updating from when the app asks, until the hub says the update it took failed, or refuses.
-fn hub_update(hub: &str, found: &HubUpdate, asked: Option<&HubUpdateAsk>) -> Option<Updating> {
+/// Where the update of `hub` has got to, as what it found in the feed says, in `records`, and the app's own request to
+/// update it, while it found one. It's updating from when the app asks, until the hub says the update it took failed, or
+/// refuses.
+fn hub_update(hub: &str, records: &Snapshot, asked: Option<&HubUpdateAsk>) -> Option<Updating> {
+    let found = records.hub_update()?;
     let under_way = match &found.attempt {
-        Some(UpdateAttempt::UnderWay { to }) => Some(to),
+        Some(UpdateAttempt::UnderWay { to }) => Some(to.as_str()),
         Some(UpdateAttempt::Failed { .. } | UpdateAttempt::Unknown) | None => None,
     };
-    let next = under_way.or(found.version.as_ref())?.clone();
+    let next = under_way.or(records.release_offered())?.to_string();
     let failed = match &found.attempt {
         Some(UpdateAttempt::Failed { to, why }) if *to == next => Some(why),
         Some(_) | None => None,
@@ -157,8 +160,9 @@ fn hub_update(hub: &str, found: &HubUpdate, asked: Option<&HubUpdateAsk>) -> Opt
 #[cfg(test)]
 mod tests {
     use SessionStatus::{Background, Idle, Interrupted, Running, Unknown, WaitingApproval};
+    use client_core::records::HubRecords;
     use protocol::event::TaskKind;
-    use protocol::model::Rev;
+    use protocol::model::{HubUpdate, Record, Rev};
 
     use super::*;
 
@@ -196,7 +200,8 @@ mod tests {
     #[test]
     fn the_line_names_the_hub_only_when_its_another_the_app_leaves_alone_and_says_where_an_update_has_got_to() {
         for (name, hub, may_restart, holding, downloaded, want) in lines() {
-            assert_eq!(BuildLine::new("abc", hub, may_restart, holding, downloaded, None, None), want, "{name}");
+            let records = HubRecords::default().snapshot();
+            assert_eq!(BuildLine::new("abc", hub, may_restart, holding, downloaded, &records, None), want, "{name}");
         }
     }
 
@@ -211,9 +216,16 @@ mod tests {
         Updating::Hub { hub, next, updating, problem }
     }
 
+    /// A client's copy of the records of a hub that found `found`.
+    fn holding(found: &HubUpdate) -> Snapshot {
+        let mut held = HubRecords::default();
+        held.apply_record(Record::HubUpdate(found.clone()));
+        held.snapshot()
+    }
+
     /// The line on an app connected to a hub `def` that found `found`, having asked as `asked`.
     fn line_with(downloaded: Option<&str>, found: &HubUpdate, asked: Option<&HubUpdateAsk>) -> BuildLine {
-        BuildLine::new("abc", Some("def"), false, NOTHING, downloaded, Some(found), asked)
+        BuildLine::new("abc", Some("def"), false, NOTHING, downloaded, &holding(found), asked)
     }
 
     /// The hub's update shows once nothing of the app's own is under way, and says when it's updating.
@@ -232,7 +244,8 @@ mod tests {
         let ready = Some(Updating::Ready { next: "jkl".to_string() });
         assert_eq!(line_with(Some("jkl"), &found(Some("ghi"), None, 1), None), line(Some("def"), ready));
         assert_eq!(line_with(None, &found(None, None, 1), None), line(Some("def"), None), "nothing newer");
-        let unconnected = BuildLine::new("abc", None, false, NOTHING, None, Some(&found(Some("ghi"), None, 1)), None);
+        let records = holding(&found(Some("ghi"), None, 1));
+        let unconnected = BuildLine::new("abc", None, false, NOTHING, None, &records, None);
         assert_eq!(unconnected, line(None, None));
     }
 

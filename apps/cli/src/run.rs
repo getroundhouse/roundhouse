@@ -4,12 +4,13 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use anyhow::Context;
+use client_core::records::{HubRecords, Snapshot};
 use client_core::{Approval, Client, FileToSend, HubAdmin, Written};
 use local_hub::Daemon;
 use protocol::capability::approvals::Decision;
 use protocol::client::{HubStart, HubStatus, admin};
 use protocol::event::SessionEvent;
-use protocol::model::{ApprovalId, HubUpdate, Repo, RepoOrigin, Session, UpdateAttempt};
+use protocol::model::{ApprovalId, Records, Repo, RepoOrigin, Session, UpdateAttempt};
 use protocol::paths::Paths;
 use protocol::prompt::Prompt;
 use protocol::versions::Versions;
@@ -155,13 +156,13 @@ enum Admin {
 
 /// Through [`HubAdmin`], so these work on a hub of any version.
 /// What a hub installed as a service last found in the update feed, and how an update it was asked for went, as `hub
-/// status` says it.
-fn updates_line(update: Option<&HubUpdate>) -> String {
-    let Some(update) = update else { return "it hasn't read the update feed yet".to_owned() };
+/// status` says it, from `records`, the copy of the hub's records.
+fn updates_line(records: &Snapshot) -> String {
+    let Some(update) = records.hub_update() else { return "it hasn't read the update feed yet".to_owned() };
     if let Some(UpdateAttempt::UnderWay { to }) = &update.attempt {
         return format!("it's updating to {to}");
     }
-    let mut line = match &update.version {
+    let mut line = match records.release_offered() {
         Some(version) => format!("it would update to {version}"),
         None => "no newer release it can update to".to_owned(),
     };
@@ -212,8 +213,8 @@ fn admin_command(paths: &Paths, command: Admin) -> anyhow::Result<()> {
                 );
             } else if status.start() == HubStart::AsService {
                 // The hub is running, so this connects to it rather than starting one.
-                let records = connect(paths)?.records()?;
-                println!("{}", updates_line(records.hub_update.as_ref()));
+                let records = held(connect(paths)?.records()?);
+                println!("{}", updates_line(&records));
             }
         }
         Admin::Update => update_hub(paths, &hub.status()?)?,
@@ -225,6 +226,13 @@ fn admin_command(paths: &Paths, command: Admin) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// A copy of the hub's records as `list` has them, to read them as every client does.
+fn held(list: Records) -> Snapshot {
+    let mut held = HubRecords::default();
+    held.apply_list(list);
+    held.snapshot()
 }
 
 /// How a hub was started, as `hub status` says it.
@@ -245,9 +253,9 @@ fn update_hub(paths: &Paths, status: &HubStatus) -> anyhow::Result<()> {
     }
     // The hub is running, so this connects to it rather than starting one.
     let client = connect(paths)?;
-    let found = client.records()?.hub_update;
-    let Some(version) = found.as_ref().and_then(|update| update.version.clone()) else {
-        println!("{}", updates_line(found.as_ref()));
+    let records = held(client.records()?);
+    let Some(version) = records.release_offered().map(str::to_string) else {
+        println!("{}", updates_line(&records));
         return Ok(());
     };
     match client.call(admin::HubUpdateTo { version: version.clone() }) {
@@ -285,9 +293,9 @@ pub(crate) fn short(id: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::{HubUpdate, Rev, UpdateAttempt};
+    use protocol::model::{HubUpdate, Records, Rev, UpdateAttempt};
 
-    use super::{stopped, updates_line};
+    use super::{held, stopped, updates_line};
 
     #[test]
     fn stopping_the_hub_says_how_many_agents_it_stopped() {
@@ -311,21 +319,16 @@ mod tests {
         };
         let attempt = |attempt| HubUpdate { attempt: Some(attempt), ..found(Some("0.1.9"), None) };
         let failed = UpdateAttempt::Failed { to: "0.1.9".into(), why: "offline".into() };
+        let line = |found: Option<HubUpdate>| updates_line(&held(Records { hub_update: found, ..Records::default() }));
 
-        assert_eq!(updates_line(None), "it hasn't read the update feed yet");
-        assert_eq!(updates_line(Some(&found(Some("0.1.9"), None))), "it would update to 0.1.9");
-        assert_eq!(updates_line(Some(&found(None, None))), "no newer release it can update to");
+        assert_eq!(line(None), "it hasn't read the update feed yet");
+        assert_eq!(line(Some(found(Some("0.1.9"), None))), "it would update to 0.1.9");
+        assert_eq!(line(Some(found(None, None))), "no newer release it can update to");
         assert_eq!(
-            updates_line(Some(&found(Some("0.1.9"), Some("offline")))),
+            line(Some(found(Some("0.1.9"), Some("offline")))),
             "it would update to 0.1.9, though its last read of the update feed failed: offline"
         );
-        assert_eq!(
-            updates_line(Some(&attempt(UpdateAttempt::UnderWay { to: "0.1.9".into() }))),
-            "it's updating to 0.1.9"
-        );
-        assert_eq!(
-            updates_line(Some(&attempt(failed))),
-            "it would update to 0.1.9. Its update to 0.1.9 failed: offline"
-        );
+        assert_eq!(line(Some(attempt(UpdateAttempt::UnderWay { to: "0.1.9".into() }))), "it's updating to 0.1.9");
+        assert_eq!(line(Some(attempt(failed))), "it would update to 0.1.9. Its update to 0.1.9 failed: offline");
     }
 }

@@ -2,6 +2,7 @@
 //! button that copies the path, which build its agents are on, where they run, and the ports set aside for it. One
 //! worker does all of a workspace's work, every chat's included, so this is the workspace's rather than a chat's.
 
+use client_core::records::Snapshot;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
@@ -42,10 +43,11 @@ pub(super) struct Said {
 }
 
 impl Said {
-    /// `hub_version` is the hub's build, which the next worker is, empty when the app hasn't heard it.
-    pub(super) fn of(workspace: &Workspace, hub_version: &str, warnings: &[Warning]) -> Self {
+    /// Of `workspace`, as `records`, the copy it's from, reads it. `hub_version` is the hub's build, which the next
+    /// worker is, empty when the app hasn't heard it.
+    pub(super) fn of(records: &Snapshot, workspace: &Workspace, hub_version: &str, warnings: &[Warning]) -> Self {
         let hub = (!hub_version.is_empty()).then(|| SharedString::from(hub_version.to_string()));
-        let worker = workspace.worker_build.as_deref().map(|build| SharedString::from(build.to_string()));
+        let worker = records.worker_build(workspace).map(|build| SharedString::from(build.to_string()));
         let moving_to = hub.clone().filter(|hub| worker.as_ref().is_some_and(|worker| worker != hub));
         // A workspace from before each had its own ports has none.
         let ports = (workspace.port_base > 0).then(|| {
@@ -122,15 +124,25 @@ fn runs_on(workspace: &Workspace) -> SharedString {
 
 #[cfg(test)]
 mod tests {
+    use client_core::records::HubRecords;
+    use protocol::model::Records;
+
     use super::*;
 
     fn aspen() -> Workspace {
         Workspace { path: Some("/workspaces/aspen".into()), port_base: 4000, ..protocol::fixtures::workspace("w") }
     }
 
+    /// What the card says of `workspace`, as a client that holds it reads it, with the hub at `hub_version`.
+    fn said_of(workspace: &Workspace, hub_version: &str) -> Said {
+        let mut held = HubRecords::default();
+        held.apply_list(Records { workspaces: vec![workspace.clone()], ..Records::default() });
+        Said::of(&held.snapshot(), workspace, hub_version, &[])
+    }
+
     #[test]
     fn a_workspace_on_the_hub_s_build_says_only_that() {
-        let said = Said::of(&aspen(), "1.0.0", &[]);
+        let said = said_of(&aspen(), "1.0.0");
 
         assert_eq!(said.version.as_deref(), Some("1.0.0"));
         assert_eq!(said.moving_to, None);
@@ -142,7 +154,7 @@ mod tests {
     fn a_workspace_still_on_another_build_says_which_it_moves_to() {
         let workspace = Workspace { worker_build: Some("0.9.0".into()), ..aspen() };
 
-        let said = Said::of(&workspace, "1.0.0", &[]);
+        let said = said_of(&workspace, "1.0.0");
 
         assert_eq!((said.version.as_deref(), said.moving_to.as_deref()), (Some("0.9.0"), Some("1.0.0")));
     }
@@ -151,7 +163,7 @@ mod tests {
     fn what_isn_t_known_is_left_out() {
         let workspace = Workspace { path: None, port_base: 0, ..aspen() };
 
-        let said = Said::of(&workspace, "", &[]);
+        let said = said_of(&workspace, "");
 
         assert_eq!((said.path, said.version, said.ports), (None, None, None));
     }
