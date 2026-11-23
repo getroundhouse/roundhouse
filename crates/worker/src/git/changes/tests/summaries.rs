@@ -133,18 +133,39 @@ async fn a_summary_against_a_base_ref_that_s_gone_is_against_head() {
     assert_eq!(rows(&summary), [("a.txt", None, ChangeStatus::Modified, Some((1, 0)))]);
 }
 
-/// Its name has a byte that isn't UTF-8, which Linux lets a name have, and macOS and Windows don't. It's counted and
-/// versioned as its bytes name it, and named with the byte replaced.
+/// A name with a byte that isn't UTF-8, which Linux lets a file have, and macOS and Windows don't, so it's tested only
+/// on Linux. The file is counted and versioned as its bytes name it, named with the byte replaced, and marked, as a file
+/// renamed from such a name is, since neither can be asked for by the name sent.
 #[cfg(target_os = "linux")]
 #[tokio::test]
-async fn a_file_whose_name_isn_t_utf_8_is_read_by_its_bytes() {
+async fn a_file_whose_name_isn_t_utf_8_is_read_by_its_bytes_and_marked() {
     use std::os::unix::ffi::OsStrExt as _;
     let dir = tempfile::tempdir().unwrap();
     let repo = new_repo(dir.path());
-    std::fs::write(repo.join(std::ffi::OsStr::from_bytes(b"caf\xe9.txt")), "one\n").unwrap();
+    let named = |name: &[u8]| repo.join(std::ffi::OsStr::from_bytes(name));
+    std::fs::write(named(b"tracked\xe9.txt"), "one\n").unwrap();
+    std::fs::write(named(b"was\xe9.txt"), "moves\nwith\nme\n").unwrap();
+    run(&repo, &["add", "."]);
+    run(&repo, &["commit", "-qm", "names"]);
+    std::fs::write(named(b"tracked\xe9.txt"), "one\ntwo\n").unwrap();
+    std::fs::rename(named(b"was\xe9.txt"), repo.join("now.txt")).unwrap();
+    run(&repo, &["add", "--all"]);
+    std::fs::write(named(b"caf\xe9.txt"), "one\n").unwrap();
+    std::fs::write(repo.join("a.txt"), "one\nand two\n").unwrap();
 
     let summary = summarize(&ChangeSummaries::default(), &repo, None).await;
 
-    assert_eq!(rows(&summary), [("caf\u{fffd}.txt", None, ChangeStatus::Untracked, Some((1, 0)))]);
+    assert_eq!(
+        rows(&summary),
+        [
+            ("a.txt", None, ChangeStatus::Modified, Some((1, 0))),
+            ("now.txt", Some("was\u{fffd}.txt"), ChangeStatus::Renamed, Some((0, 0))),
+            ("tracked\u{fffd}.txt", None, ChangeStatus::Modified, Some((1, 0))),
+            ("caf\u{fffd}.txt", None, ChangeStatus::Untracked, Some((1, 0))),
+        ]
+    );
+    let marked: Vec<_> = summary.files.iter().map(|file| file.name_not_utf8).collect();
+    assert_eq!(marked, [false, true, true, true]);
     assert!(version(&summary, "caf\u{fffd}.txt").is_some());
+    assert!(version(&summary, "tracked\u{fffd}.txt").is_some());
 }

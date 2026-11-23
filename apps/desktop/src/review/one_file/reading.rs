@@ -18,7 +18,8 @@ impl Review {
     /// Reads the file the file tab shows again if the summary says something else of it than when it was last read,
     /// its last read failed, or it's another file, and lets go of the one read once the tab shows none. Once the
     /// summary listed isn't current, the file read with it shows as it was read, and another file is read with the
-    /// whole diff, which then takes over, as it would at the next moment that reads it.
+    /// whole diff, which then takes over, as it would at the next moment that reads it, but for one the summary marks
+    /// as named in bytes that aren't UTF-8, which is read neither way.
     pub(in crate::review) fn read_the_file_again_if_it_moved(&mut self, cx: &mut Context<Self>) {
         let Some(entry) = self.diffed.clone() else {
             if let Some(Listed::Summary(Summary { file: SummaryFile::OneFile(file), .. })) = &mut self.listed {
@@ -33,7 +34,7 @@ impl Review {
         };
         let read_for = file.as_ref().filter(|file| file.of(&entry));
         if !*current {
-            if read_for.is_none() {
+            if read_for.is_none() && !self.names_no_file(&entry) {
                 self.refresh(cx);
             }
             return;
@@ -48,9 +49,10 @@ impl Review {
         self.read_one_file(previous, cx);
     }
 
-    /// Reads the file the file tab shows with one file's diff, every page of it, showing `previous` until it's read.
+    /// Reads the file the file tab shows with one file's diff, every page of it, showing `previous` until it's read,
+    /// unless the summary marks it as named in bytes that aren't UTF-8, so the name it gives names no file to read.
     pub(in crate::review) fn read_one_file(&mut self, previous: Option<Taken>, cx: &mut Context<Self>) {
-        let Some(entry) = self.diffed.clone() else { return };
+        let Some(entry) = self.diffed.clone().filter(|entry| !self.names_no_file(entry)) else { return };
         let key = self.key_of(&entry);
         let Some(Listed::Summary(Summary { file: SummaryFile::OneFile(file), .. })) = &mut self.listed else { return };
         let at = key.as_ref().map_or_else(|| entry.at(), |key| key.at.clone());

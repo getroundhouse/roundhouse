@@ -52,9 +52,16 @@ fn a_summary_of_changes_keeps_its_form() {
         status: ChangeStatus::Renamed,
         lines: Some(LineCounts { added: 2, removed: 1 }),
         version: Some(FileVersion::from("0123abcd".to_string())),
+        name_not_utf8: false,
     };
-    let deleted =
-        ChangedFile { path: "c.png".into(), from: None, status: ChangeStatus::Deleted, lines: None, version: None };
+    let deleted = ChangedFile {
+        path: "c.png".into(),
+        from: None,
+        status: ChangeStatus::Deleted,
+        lines: None,
+        version: None,
+        name_not_utf8: false,
+    };
     let summary = ChangeSummary::new("c1".into(), vec![renamed, deleted]);
 
     answered(
@@ -87,6 +94,29 @@ fn a_summary_says_how_many_files_it_leaves_out_and_one_from_before_the_bound_lea
     assert_eq!(read.left_out, 0);
 }
 
+/// A file whose name isn't UTF-8 says so, and one that's named in UTF-8 leaves the mark out, so a summary from a worker
+/// from before the mark, which names such a file the same, reads with every file unmarked.
+#[test]
+fn a_changed_file_whose_name_isn_t_utf_8_is_marked_and_one_from_before_the_mark_reads_as_unmarked() {
+    let marked = ChangedFile {
+        path: "caf\u{fffd}.txt".into(),
+        from: None,
+        status: ChangeStatus::Untracked,
+        lines: Some(LineCounts { added: 1, removed: 0 }),
+        version: Some(FileVersion::from("0123abcd".to_string())),
+        name_not_utf8: true,
+    };
+    let form = |mark: &str| {
+        let file = r#"{"path":"caf�.txt","from":null,"status":"untracked","lines":{"added":1,"removed":0},"#;
+        format!(r#"{file}"version":"0123abcd"{mark}}}"#)
+    };
+
+    keeps_its_form(&marked, &form(r#","name_not_utf8":true"#));
+    let before = form("");
+    let read: ChangedFile = frame::decode(before.as_bytes()).unwrap();
+    assert_eq!(read, ChangedFile { name_not_utf8: false, ..marked });
+}
+
 #[test]
 fn a_changed_file_from_a_newer_worker_reads_with_what_this_build_knows() {
     let line = br#"{"path":"d","status":"copied","mode":"executable"}"#;
@@ -110,6 +140,7 @@ fn page() -> ChangedFilesPage {
         status: ChangeStatus::Untracked,
         lines: None,
         version: None,
+        name_not_utf8: false,
     };
     ChangedFilesPage { base_commit: "c1".into(), files: vec![file], left_out: 0 }
 }

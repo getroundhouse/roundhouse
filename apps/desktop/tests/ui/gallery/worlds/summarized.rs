@@ -34,5 +34,6 @@ fn changed(file: &desktop::patch::FilePatch) -> ChangedFile {
         status,
         lines: Some(LineCounts { added: count(file.added()), removed: count(file.removed()) }),
         version: None,
+        name_not_utf8: false,
     }
 }

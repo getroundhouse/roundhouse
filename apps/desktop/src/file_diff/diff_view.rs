@@ -164,7 +164,7 @@ impl FileDiff {
     }
 
     /// The file it draws the diff of, or what it says in place of one: while the file is read, or its sides are made,
-    /// or once it changes nothing, or couldn't be read.
+    /// or once it changes nothing, or couldn't be read, or can't be named to be read.
     fn drawn(&self, cx: &App) -> Result<FilePatch, &'static str> {
         let diffed = self.path.as_ref().map_or(Diffed::Loading, |_| self.review.read(cx).diffed());
         match diffed {
@@ -172,6 +172,7 @@ impl FileDiff {
             Diffed::Patch(_) | Diffed::Loading => Err("Loading…"),
             Diffed::Unchanged => Err("This file has no changes now"),
             Diffed::Failed => Err("Couldn't read this file's changes"),
+            Diffed::NameNotUtf8 => Err("This file's name isn't valid UTF-8, so its changes can't be shown"),
         }
     }
 

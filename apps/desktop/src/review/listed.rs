@@ -66,6 +66,9 @@ pub enum Diffed<'a> {
     /// It couldn't be read, nor had it been before. It's read again with the next summary, or at the next moment that
     /// reads the changes again, as on a new connection.
     Failed,
+    /// Its name isn't UTF-8, as the summary marks it, so the name the summary gives it, with those bytes replaced,
+    /// names no file, and nothing is read for it.
+    NameNotUtf8,
 }
 
 impl Summary {
@@ -106,9 +109,13 @@ impl WholeDiff {
 
 impl Review {
     /// What the file tab has of the diff of the file it shows: from the whole diff, where Changes lists it or the hub
-    /// refused one file's diff, and otherwise as one file's diff read it.
+    /// refused one file's diff, otherwise as one file's diff read it, and nothing of a file the summary marks as named
+    /// in bytes that aren't UTF-8.
     pub fn diffed(&self) -> Diffed<'_> {
         let Some(entry) = &self.diffed else { return Diffed::Loading };
+        if self.names_no_file(entry) {
+            return Diffed::NameNotUtf8;
+        }
         match &self.listed {
             None => Diffed::Loading,
             Some(Listed::WholeDiff(whole)) => whole.diffed(entry),
@@ -120,12 +127,19 @@ impl Review {
         }
     }
 
+    /// Whether the summary listed marks `entry` as named in bytes that aren't UTF-8, so the name it gives names no file
+    /// a request could read.
+    pub(super) fn names_no_file(&self, entry: &ChangedEntry) -> bool {
+        let Some(Listed::Summary(Summary { summarized, .. })) = &self.listed else { return false };
+        entry.in_summary(summarized).is_some_and(|file| file.name_not_utf8)
+    }
+
     /// The patch of the file the file tab shows, as [`Self::diffed`] has it. `None` once it no longer changes anything,
     /// and until it's read.
     pub fn file(&self) -> Option<&FilePatch> {
         match self.diffed() {
             Diffed::Patch(found) => Some(found),
-            Diffed::Loading | Diffed::Unchanged | Diffed::Failed => None,
+            Diffed::Loading | Diffed::Unchanged | Diffed::Failed | Diffed::NameNotUtf8 => None,
         }
     }
 

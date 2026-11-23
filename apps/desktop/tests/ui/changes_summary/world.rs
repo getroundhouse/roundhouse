@@ -35,7 +35,14 @@ index 0000000..3b18e51
 ";
 
 pub(super) fn file(path: &str, status: ChangeStatus, added: u64) -> ChangedFile {
-    ChangedFile { path: path.into(), from: None, status, lines: Some(LineCounts { added, removed: 0 }), version: None }
+    ChangedFile {
+        path: path.into(),
+        from: None,
+        status,
+        lines: Some(LineCounts { added, removed: 0 }),
+        version: None,
+        name_not_utf8: false,
+    }
 }
 
 /// Every file the workspace changes: two it lists, and two past them, which it leaves out.

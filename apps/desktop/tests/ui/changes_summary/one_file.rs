@@ -16,8 +16,8 @@ use desktop::patch::FilePatch;
 use desktop::review::Diffed;
 
 use super::world::{
-    BASE, VERSION, current, drawn_line, every_file, file, page_with, pages_of, patch_of, reading_a_txt, summarized,
-    tracked, versioned,
+    BASE, VERSION, current, drawn_line, every_file, file, listing, page_with, pages_of, patch_of, reading_a_txt,
+    summarized, tracked, versioned,
 };
 use crate::support::{Diff, Ui};
 
@@ -169,6 +169,8 @@ fn read_and_shown() -> Vec<Row> {
         row("shot.png", vec![(0, vec![page_with(FileDiffBody::Binary, Some("v2"))])], Shows::Image, 1),
         // Pages that are never of one version, which are read again from the first, and then no more.
         row("kept-changing.txt", vec![(0, vec![changing_head]), (4, vec![changing_hunk])], Shows::Says(COULDNT), 8),
+        // Marked, as its name has a byte replaced, so it's never asked for.
+        row(NOT_UTF8, Vec::new(), Shows::Says("This file's name isn't valid UTF-8, so its changes can't be shown"), 0),
         // Read again at the next summary, and at the next connection, after which it can be read.
         row("unreadable.txt", vec![(0, vec![unreadable.clone(), unreadable, read_at_last])], Shows::Says(COULDNT), 1),
     ]
@@ -176,6 +178,9 @@ fn read_and_shown() -> Vec<Row> {
 
 /// What the file tab says of a file it couldn't read.
 const COULDNT: &str = "Couldn't read this file's changes";
+
+/// The name of a file whose name has a byte that isn't UTF-8, which the worker replaces, and marks the file.
+const NOT_UTF8: &str = "caf\u{fffd}.txt";
 
 /// Opens the file at `path` in Changes, and waits for the file tab to show it as `shows` says.
 fn open_and_see(ui: &mut Ui<'_>, diff: &Diff, path: &str, shows: Shows) {
@@ -208,7 +213,8 @@ fn see(ui: &mut Ui<'_>, diff: &Diff, path: &str, shows: Shows) {
 /// image's comparison, and a file the worktree no longer changes, or whose patch can't be read, as that. Its pages are
 /// joined only where each is a patch of the version the first is of, and otherwise read again from the first, but for
 /// a file that keeps changing as it's read. One whose read fails is read again with the next summary, and on the next
-/// connection.
+/// connection. One the summary marks as named in bytes that aren't UTF-8 says why it shows no diff, and nothing is
+/// read for it, while its row keeps its lines.
 #[gpui_kit::test]
 fn the_file_tab_draws_what_one_file_s_diff_says_of_the_file(cx: &mut TestAppContext) {
     let rows = read_and_shown();
@@ -220,16 +226,23 @@ fn the_file_tab_draws_what_one_file_s_diff_says_of_the_file(cx: &mut TestAppCont
     }
     let read = reads.diffs_read.clone();
     let reads_of = |path: &str| read.lock().iter().filter(|(read, _)| read.path == path).count();
-    let listed =
-        |path: &&str| ChangedFile { version: Some("v2".to_string().into()), ..file(path, ChangeStatus::Modified, 1) };
+    let listed = |path: &&str| ChangedFile {
+        version: Some("v2".to_string().into()),
+        name_not_utf8: *path == NOT_UTF8,
+        ..file(path, ChangeStatus::Modified, 1)
+    };
     let files: Vec<_> = rows.iter().map(|row| listed(&row.path)).collect();
     let (_hub, mut ui, diff) = summarized(cx, (files.clone(), rows.len()), reads, current);
+    let whole_diff_reads = ui.cx.read_entity(&diff.review, |r, _| r.whole_diff_reads());
 
     for Row { path, shows, pages, .. } in rows {
         open_and_see(&mut ui, &diff, path, shows);
 
         assert_eq!(reads_of(path), pages, "{path}'s pages read");
     }
+    assert_eq!(ui.cx.read_entity(&diff.review, |r, _| r.whole_diff_reads()), whole_diff_reads, "nor the whole diff");
+    let not_utf8 = listing(&ui).and_then(|listing| listing.rows.iter().find(|row| row.path == NOT_UTF8).cloned());
+    assert_eq!(not_utf8.map(|row| (row.added, row.removed)), Some((1, 0)), "{NOT_UTF8}'s row keeps its lines");
 
     let workspace_id = ui.view().selected().cloned().unwrap();
     let changes = current(ChangeSummary::new(CommitId::from(BASE), files));

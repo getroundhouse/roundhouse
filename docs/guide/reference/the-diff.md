@@ -49,6 +49,7 @@ Clicking a file shows it in the workspace's file tab: its diff from Changes, or 
 - **A Markdown file's diff can show rendered,** the fourth choice on the switch: what the change removed is struck through on red, and what it added is on green, each where it was. A paragraph that changed shows as it was, then as it is.
 - **The file shown is read again when it changes,** whoever changes it, and where the hub can't keep up with the workspace's files, when a turn ends.
 - **What you've opened stays open** when the diff is read again.
+- **A file whose name isn't valid UTF-8, which Linux allows, shows no diff,** and says why in its place. Its row in Changes still shows its lines added and removed.
 
 ![A file's diff side by side](../../spec/screens/diff-split.png)
 
