@@ -77,6 +77,29 @@ async fn a_worker_that_never_answers_a_watch_holds_its_telling_only_until_the_li
     assert_eq!(hub.changes_watches.kept(), 1, "that it was asked, for it to be told to stop once nothing follows");
 }
 
+/// A worker that never answers a watch holds each telling only until the limit, and a client that stops following the
+/// workspace and follows it again meanwhile leaves one telling waiting for its turn, which tells the worker what's so
+/// once it has it, rather than one for each.
+#[tokio::test(start_paused = true)]
+#[expect(clippy::disallowed_methods, reason = "tokio's clock is paused, so sleeping moves it past every limit")]
+async fn a_worker_that_never_answers_a_watch_leaves_one_telling_waiting() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_worktree(dir.path());
+    let (_stuck, asked) = worker(&hub, Watch::Stuck);
+    let mut following = hub.follow([Followed::Workspace(w())]);
+    until_watches(&asked, 1).await;
+
+    for _ in 0..5 {
+        drop(following);
+        following = hub.follow([Followed::Workspace(w())]);
+    }
+    tokio::time::sleep(ANSWERED_WITHIN * 20).await;
+
+    let told = watches(&asked).iter().map(|watch| watch.watching).collect::<Vec<_>>();
+    assert_eq!(told, [true, true], "asked once more, as it's followed once the first ran out");
+    drop(following);
+}
+
 /// A worker that answers a watch only once the limit has run out has been asked all the same, and can be watching, so
 /// it's told to stop once nothing follows the workspace, and asked again while something does.
 #[tokio::test(start_paused = true)]
