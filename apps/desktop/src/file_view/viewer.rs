@@ -1,4 +1,5 @@
 use super::markdown::{MarkdownView, is_markdown};
+use super::video::FileVideo;
 use super::{lines, reading};
 use crate::file_header::file_header;
 use crate::file_image::{FileImage, Placed, fitted};
@@ -14,6 +15,8 @@ use lines::Lines;
 use look::Typeset as _;
 use protocol::model::WorkspaceId;
 use reading::Unshown;
+use std::path::PathBuf;
+use tempfile::TempPath;
 use transcript::Document;
 
 /// The height of a line of a file, and of a line of a diff, so the two read alike.
@@ -24,6 +27,7 @@ pub(super) enum Contents {
     Loading,
     Lines(Lines),
     Image(FileImage),
+    Video(FileVideo),
     Instead(Unshown),
 }
 
@@ -43,6 +47,11 @@ pub struct FileView {
     pub(super) shown: Option<u64>,
     /// A Markdown file, rendered, which shows in place of its lines while the file tab's switch says so.
     pub(super) document: Entity<Document>,
+    /// Where the worktree is on this machine, if its worker is on the hub's machine, which the app's hub may be on, so
+    /// a video the system plays can be opened where it is.
+    pub(super) worktree_here: Option<PathBuf>,
+    /// The copy of a video last opened in the system's player, which goes with the next, or with the tab.
+    pub(super) copy: Option<TempPath>,
     pub(super) _releasing: Subscription,
     _choosing: Subscription,
 }
@@ -70,16 +79,30 @@ impl FileView {
             reads: 0,
             shown: None,
             document: cx.new(Document::new),
+            worktree_here: None,
+            copy: None,
             _releasing: releasing,
             _choosing: cx.observe_global::<Chosen<MarkdownView>>(|_, cx| cx.notify()),
         }
     }
 
+    /// Says where the worktree is on the worker's machine, if the worker is on the hub's machine, which is this one if
+    /// the app's hub is.
+    pub fn set_worktree_here(&mut self, worktree: Option<PathBuf>) {
+        self.worktree_here = worktree;
+    }
+
     /// Carries on on a new connection to the hub. A read on the old one is dropped, and the file is read again on this
-    /// one with the next [`Self::refresh`].
-    pub fn reconnect(&mut self, client: &Client) {
+    /// one with the next [`Self::refresh`]. A video playing carries on on it, and one the app couldn't play is read
+    /// again, in case the old connection was why.
+    pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.client = client.clone();
         self.reads += 1;
+        if let Contents::Video(video) = &self.contents
+            && !video.reconnect(client, cx)
+        {
+            self.shown = None;
+        }
     }
 
     /// Why the file couldn't be read, if that's what shows.
@@ -100,6 +123,21 @@ impl FileView {
     #[cfg(any(test, feature = "testing"))]
     pub fn rendered(&self, cx: &App) -> Option<String> {
         self.shows_rendered(cx).then(|| self.document.read(cx).copied_whole())
+    }
+
+    /// What it says of the video it shows, and whether it plays it in the tab, or `None` while it shows something
+    /// else.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn shown_video(&self) -> Option<(String, bool)> {
+        let Contents::Video(video) = &self.contents else { return None };
+        Some((video.describe(), video.plays_here()))
+    }
+
+    /// What plays the video it shows in the tab, or `None` while it doesn't play one there.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn video_player(&self) -> Option<gpui_kit::Entity<transcript::VideoPlayer>> {
+        let Contents::Video(video) = &self.contents else { return None };
+        video.player()
     }
 
     /// What it says of the image it shows, or `None` while it shows something in its place.
@@ -181,6 +219,9 @@ impl FileView {
             Contents::Image(image) => Some(
                 div().flex_none().text_color(look::colors(cx).text_muted).child(image.describe()).into_any_element(),
             ),
+            Contents::Video(video) => Some(
+                div().flex_none().text_color(look::colors(cx).text_muted).child(video.describe()).into_any_element(),
+            ),
             Contents::Lines(_) if is_markdown(path) => Some(switch::<MarkdownView>(cx)),
             _ => None,
         };
@@ -207,6 +248,7 @@ impl Render for FileView {
         let body = match &self.contents {
             Contents::Loading => look::nothing_to_show("Loading…").into_any_element(),
             Contents::Image(image) => picture(image),
+            Contents::Video(video) => video.drawn(cx),
             Contents::Instead(why) => look::nothing_to_show(why.said()).into_any_element(),
             Contents::Lines(_) if self.shows_rendered(cx) => self.document.clone().into_any_element(),
             Contents::Lines(lines) => {

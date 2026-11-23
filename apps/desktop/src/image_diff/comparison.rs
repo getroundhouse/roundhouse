@@ -322,6 +322,7 @@ pub(super) fn side(contents: Result<FileContents, ClientError>, shown: Option<u6
             return Some(image.map_or_else(|| Side::Other(Unshown::Unreadable.said().into()), Side::Image));
         }
         Read::Text(_) => Unshown::Text,
+        Read::Video(..) => Unshown::Video,
         Read::Instead(why) => why,
     };
     Some(Side::Other(why.said().into()))

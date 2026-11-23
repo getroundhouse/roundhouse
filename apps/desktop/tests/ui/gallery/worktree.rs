@@ -8,6 +8,7 @@ use protocol::model::{FileContents, WorktreeFiles};
 
 use super::pictures;
 use client_core::fake_hub::World;
+use video::fixtures::RECORDING_WEBM;
 
 /// Gives the world's hub the worktree to list, to read a folder of, and to open a file from.
 pub(crate) fn put_in(world: &mut World) {
@@ -21,6 +22,26 @@ pub(crate) fn put_in(world: &mut World) {
     world.worktree_files.insert(README.to_string(), FileContents::Text { text: README_TEXT.to_string() });
     world.worktree_files.insert(PICTURE.to_string(), png(pictures::badge(SHOT_HEIGHT, false)));
 }
+
+/// Puts two recordings in the gallery's own folder, besides the image there, for the screens of a video opened.
+pub(crate) fn put_videos_in(world: &mut World) {
+    let paths = [PICTURE, RECORDING, RECORDING_MP4].map(ToString::to_string).to_vec();
+    world
+        .worktree_folders
+        .insert(".context/gallery".to_string(), WorktreeFiles { paths, folders: Vec::new(), truncated: false });
+    for (path, media_type, bytes) in
+        [(RECORDING, MediaType::Webm, RECORDING_WEBM), (RECORDING_MP4, MediaType::Mp4, video::fixtures::RECORDING_MP4)]
+    {
+        let contents = FileContents::Video { media_type, bytes: u64::try_from(bytes.len()).unwrap() };
+        world.worktree_files.insert(path.to_string(), contents);
+        world.worktree_videos.insert(path.to_string(), bytes.to_vec());
+    }
+}
+
+/// A WebM the screen of a video opened plays, and an MP4 the screen of one for the system's player opens, recordings
+/// an agent made of the app, which the gallery's own folder holds.
+pub(crate) const RECORDING: &str = ".context/gallery/setting-up.webm";
+pub(crate) const RECORDING_MP4: &str = ".context/gallery/setting-up.mp4";
 
 /// An image, as the worker reads one.
 pub(crate) fn png(data: Vec<u8>) -> FileContents {

@@ -338,6 +338,13 @@ pub(in super::super) fn codex_images(world: &mut World) -> (Attachment, Attachme
     )
 }
 
+/// [`diff`], with two recordings in the gallery's own folder.
+pub(in super::super) fn videos() -> World {
+    let mut world = diff();
+    worktree::put_videos_in(&mut world);
+    world
+}
+
 pub(in super::super) fn diff() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);

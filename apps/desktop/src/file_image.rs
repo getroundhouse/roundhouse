@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use gpui_kit::component::h_flex;
 use gpui_kit::{
-    AnyElement, App, AvailableSpace, Div, IntoElement, ObjectFit, ParentElement as _, RenderImage, Styled,
-    StyledImage as _, canvas, checkerboard, div, img, px,
+    AnyElement, App, AvailableSpace, Div, IntoElement, ObjectFit, ParentElement as _, Pixels, RenderImage, Styled,
+    StyledImage as _, canvas, checkerboard, div, img, px, size,
 };
 use image::{DynamicImage, Frame, ImageDecoder as _, ImageReader, RgbaImage};
 use look::{fit, pixels};
@@ -179,6 +179,17 @@ pub(crate) fn fitted(
     placed: Placed,
     draw: impl FnOnce(f32, &App) -> Div + 'static,
 ) -> impl IntoElement + Styled {
+    fitted_over(covers, px(0.), placed, draw)
+}
+
+/// What `draw` makes at the scale that fits `covers` pixels into the room this element is given, less `below` at its
+/// foot for what's drawn under them at its own size, such as a video's bar, as [`fitted`] fits them.
+pub(crate) fn fitted_over(
+    covers: (u32, u32),
+    below: Pixels,
+    placed: Placed,
+    draw: impl FnOnce(f32, &App) -> Div + 'static,
+) -> impl IntoElement + Styled {
     canvas(
         move |bounds, window, cx| {
             let row = h_flex().size_full().justify_center();
@@ -186,7 +197,8 @@ pub(crate) fn fitted(
                 Placed::Top => row.items_start(),
                 Placed::Middle => row.items_center(),
             };
-            let mut element: AnyElement = row.child(draw(fit(covers, bounds.size), cx)).into_any_element();
+            let room = size(bounds.size.width, (bounds.size.height - below).max(px(0.)));
+            let mut element: AnyElement = row.child(draw(fit(covers, room), cx)).into_any_element();
             element.prepaint_as_root(bounds.origin, bounds.size.map(AvailableSpace::Definite), window, cx);
             element
         },

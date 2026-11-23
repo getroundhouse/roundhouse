@@ -80,5 +80,7 @@ Any other file that isn't text says so, and takes no comments.
 - **Its lines are numbered and highlighted for its language.** A file over 1 MB stays plain.
 - **A Markdown file shows rendered,** as the chat shows Markdown, and its text is selected as the chat's is, with `Shift` and an arrow too. The switch at the right end of the bar shows its source instead, and the choice holds for every Markdown file until the app quits.
 - **Text is shown up to 4 MB, and an image up to 64 MB.**
+- **A WebM video plays in the tab,** as one in a reply does, with what kind it is, its size and how long it is above it.
+- **Any other video, such as an MP4 or a QuickTime movie, says what it is, with Open in system player,** which opens it in the app your system plays it with. When the workspace is on another machine, the file is copied to this one first.
 - **A file shown is read again when a turn ends,** keeping where it's scrolled to.
-- **A file that can't be shown says why:** it isn't text or an image, it's too big, it's empty, or it's gone.
+- **A file that can't be shown says why:** it isn't text, an image or a video, it's too big, it's empty, or it's gone.

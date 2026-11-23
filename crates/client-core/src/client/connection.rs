@@ -180,6 +180,11 @@ impl Client {
         Self::from_transport(Transport::local(socket)?)
     }
 
+    /// Whether its hub is on this machine, which a client reaches by its socket, rather than over the network.
+    pub fn hub_on_this_machine(&self) -> bool {
+        self.closer.is_local()
+    }
+
     pub(super) fn from_transport(transport: Transport) -> Result<Client> {
         let Transport { reader, writer, closer } = transport;
         let closer = Arc::new(closer);

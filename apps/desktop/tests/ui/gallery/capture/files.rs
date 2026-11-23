@@ -34,7 +34,9 @@ impl Driver {
             viewer.is_some_and(|viewer| {
                 let viewer = viewer.read(cx);
                 viewer.path.as_deref() == Some(path)
-                    && (viewer.shown_text().is_some() || viewer.shown_image().is_some())
+                    && (viewer.shown_text().is_some()
+                        || viewer.shown_image().is_some()
+                        || viewer.shown_video().is_some())
             })
         });
     }
