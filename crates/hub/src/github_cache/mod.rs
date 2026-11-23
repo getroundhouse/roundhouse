@@ -12,7 +12,7 @@ mod rules;
 mod tests;
 mod told;
 
-pub(crate) use file::prepare;
+pub(crate) use file::PART;
 pub(crate) use kept::{GithubCache, KeptSummary};
 pub(crate) use keys::{Facet, Item};
 pub(crate) use told::Told;

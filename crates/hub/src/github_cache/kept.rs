@@ -118,8 +118,8 @@ impl Drop for Reading<'_> {
 }
 
 impl GithubCache {
-    /// The cache kept in `file`, whose tables [`prepare`](super::prepare) made, with what it kept from before that's
-    /// still to be kept.
+    /// The cache kept in `file`, opened with [`PART`](super::PART), with what it kept from before that's still to be
+    /// kept.
     pub(crate) fn open(file: Arc<CacheFile>) -> Self {
         let file = GithubFile::new(file);
         let since_ms = now_ms().saturating_sub(millis(KEPT_FOR));

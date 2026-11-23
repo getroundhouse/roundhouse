@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, TransactionBehavior, params};
 
 use super::keys::{Facet, Subject};
-use crate::cache_file::CacheFile;
+use crate::cache_file::{CacheFile, Part, drop_named};
 use crate::store::columns::{ByColumn, Columns, OneValue, columns};
 
 /// The form of what GitHub's part of the cache file keeps, which is the file's `user_version`. Another, as a build that
@@ -29,14 +29,16 @@ columns! {
     }
 }
 
-/// Makes GitHub's table of this [`VERSION`], emptying it where the file's is another, as [`CacheFile::open`] has each
-/// part do.
-pub(crate) fn prepare(conn: &Connection) -> rusqlite::Result<()> {
+/// GitHub's part of the cache file, under its own [`VERSION`].
+pub(crate) static PART: Part = Part { name: "GitHub's cache", prepare, empty };
+
+/// Makes GitHub's table of this [`VERSION`], emptying it where the file's is another.
+fn prepare(conn: &mut Connection) -> rusqlite::Result<()> {
     let version: i64 = conn.pragma_query_value(None, "user_version", OneValue::read)?;
     if version != VERSION {
-        conn.execute_batch(&format!(
-            "BEGIN;
-             DROP TABLE IF EXISTS facets;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        tx.execute_batch(&format!(
+            "DROP TABLE IF EXISTS facets;
              CREATE TABLE facets (
                  repository TEXT NOT NULL,
                  subject TEXT NOT NULL,
@@ -45,15 +47,21 @@ pub(crate) fn prepare(conn: &Connection) -> rusqlite::Result<()> {
                  read_at_ms INTEGER NOT NULL,
                  PRIMARY KEY (repository, subject, facet)
              ) WITHOUT ROWID;
-             PRAGMA user_version = {VERSION};
-             COMMIT;"
+             PRAGMA user_version = {VERSION};"
         ))?;
+        tx.commit()?;
     }
     Ok(())
 }
 
+/// Removes GitHub's table, whatever its form, and its version, so [`prepare`] makes it again.
+fn empty(conn: &Connection) -> rusqlite::Result<()> {
+    drop_named(conn, ["facets"])?;
+    conn.pragma_update(None, "user_version", 0)
+}
+
 impl GithubFile {
-    /// GitHub's part of `file`, whose tables [`prepare`] made.
+    /// GitHub's part of `file`, opened with [`PART`].
     pub(super) fn new(file: Arc<CacheFile>) -> Self {
         Self(file)
     }
@@ -61,7 +69,7 @@ impl GithubFile {
     /// What it keeps that was read at or after `since_ms`, after it forgets the rest. A row it can't read, which
     /// only a file of its own version could hold, is left out.
     pub(super) fn load(&self, since_ms: i64) -> rusqlite::Result<Vec<Row>> {
-        let rows = self.0.with(|conn| {
+        let rows = self.0.with(&PART, |conn| {
             conn.execute("DELETE FROM facets WHERE read_at_ms < ?", [since_ms])?;
             let mut statement = conn.prepare(&format!("SELECT {} FROM facets", FacetColumns::LIST))?;
             let c = FacetColumns::at(0);
@@ -79,7 +87,7 @@ impl GithubFile {
     /// Forgets each of `forgotten`, a facet of what it's about, and keeps each of `rows` in place of what was kept of its
     /// facet, all at once, so a pull request's facets are never from two reads, even after a crash part way.
     pub(super) fn keep(&self, forgotten: &[(Subject, Facet)], rows: &[Row]) -> rusqlite::Result<()> {
-        self.0.with(|conn| {
+        self.0.with(&PART, |conn| {
             let tx = conn.transaction()?;
             for (subject, facet) in forgotten {
                 tx.execute(
