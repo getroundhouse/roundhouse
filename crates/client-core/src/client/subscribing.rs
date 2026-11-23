@@ -9,6 +9,7 @@ use std::sync::atomic::Ordering;
 
 use parking_lot::Mutex;
 
+use protocol::client::github::GithubUpdate;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, LogFrom, Refused, Subscribe, Subscribed, Subscription as Start};
 use protocol::client::{ClientRequest, Request as _};
@@ -215,6 +216,34 @@ impl Client {
             }
         }
         Err(ClientError::Disconnected)
+    }
+}
+
+impl SubscriptionItem {
+    /// The level it's of, where it says, so a source can drop what was already on its way from a level it has stopped
+    /// following: a list's or a notice's level, and for what's sent in the form from before observations, `GithubUpdate`,
+    /// the level of what it's of, a chip's or a workspace's.
+    pub(super) fn level(&self) -> Option<Level> {
+        match self {
+            SubscriptionItem::Github(update) => match &**update {
+                GithubUpdate::Reference { reference, .. } => Some(Level::Reference { reference: reference.clone() }),
+                GithubUpdate::PullRequest { workspace, .. } => Some(Level::Workspace { id: workspace.clone() }),
+                GithubUpdate::Unknown => None,
+            },
+            SubscriptionItem::Listed(listed) => match &**listed {
+                Listed::Workspace(observations) => Some(Level::Workspace { id: observations.workspace_id.clone() }),
+                Listed::Reference(observations) => Some(Level::Reference { reference: observations.reference.clone() }),
+                Listed::Hub(_) => Some(Level::Hub),
+                Listed::Session(records) => Some(Level::Session { id: records.session_id.clone() }),
+                Listed::Unknown => None,
+            },
+            SubscriptionItem::Notice(notice) => notice.level(),
+            SubscriptionItem::Event(_)
+            | SubscriptionItem::Tail(_)
+            | SubscriptionItem::Delta(_)
+            | SubscriptionItem::Terminal(_)
+            | SubscriptionItem::TerminalPicture(_) => None,
+        }
     }
 }
 

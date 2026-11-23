@@ -25,13 +25,16 @@ pub(super) struct GithubSource {
     /// The copy of the same hub's records, which the GitHub feed reads.
     records: Reach<HubRecords>,
     changing: Option<Changing>,
+    /// What was last asked for on this connection, which isn't asked for again until it changes, so a start the hub
+    /// refused isn't sent again each time a view says what it shows.
+    asked_for: Vec<Follow>,
     /// The issues and pull requests followed at their own level.
     references: Vec<ReferenceAsk>,
 }
 
 impl GithubSource {
     pub(super) fn new(records: Reach<HubRecords>) -> Self {
-        GithubSource { records, changing: None, references: Vec::new() }
+        GithubSource { records, changing: None, asked_for: Vec::new(), references: Vec::new() }
     }
 
     /// Takes `wanted` to be what's followed now, letting go of what was held only through an issue or a pull request no
@@ -65,14 +68,20 @@ impl Source for GithubSource {
         let wanted = followed(&held.lock());
         let (subscription, _refused) = client.follow_all(wanted.clone())?;
         self.followed_now(&wanted);
+        self.asked_for.clone_from(&wanted);
         self.changing = Some(subscription.changing());
         Ok(subscription)
     }
 
     /// Takes what an issue's or a pull request's level sends as observations into the copy of the hub's records, telling
     /// the views here that show it, and holds what's sent as `GithubUpdate` here, letting go of what the copy holds of
-    /// it as an observation.
+    /// it as an observation. What's sent of a chip no longer followed, which was already on its way as it was let go
+    /// of, is dropped, so nothing brings back what letting go of it let go of.
     fn apply(&mut self, _: &Client, held: &Mutex<GithubHeld>, item: SubscriptionItem) -> Result<bool> {
+        let Some(Level::Reference { reference }) = item.level() else { return Ok(false) };
+        if !self.references.contains(&reference) {
+            return Ok(false);
+        }
         // Whether the copy changed, which it tells its own readers of.
         let changed = Cell::new(false);
         let change = |change: &dyn Fn(&mut HubRecords) -> bool| {
@@ -127,8 +136,12 @@ impl Source for GithubSource {
             followed(&held)
         };
         let (Some(client), Some(changing)) = (connection, &self.changing) else { return Ok(false) };
+        if wanted == self.asked_for {
+            return Ok(false);
+        }
         changing.follow_only(client, wanted.clone())?;
         self.followed_now(&wanted);
+        self.asked_for = wanted;
         Ok(false)
     }
 

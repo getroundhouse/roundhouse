@@ -118,6 +118,15 @@ pub fn stops(request: &ClientRequest) -> bool {
     matches!(request, ClientRequest::Subscribe(subscribe) if subscribe.start.is_empty() && !subscribe.stop.is_empty())
 }
 
+/// How many starts each `Subscribe` that starts any asks for, of those `heard` has had since it was last read.
+pub fn starts(heard: &flume::Receiver<ClientRequest>) -> Vec<usize> {
+    let started = heard.drain().filter_map(|request| {
+        let ClientRequest::Subscribe(subscribe) = request else { return None };
+        (!subscribe.start.is_empty()).then_some(subscribe.start.len())
+    });
+    started.collect()
+}
+
 /// Stands in for a hub on `socket`, doing with each request what `does` says, and connects to it.
 pub fn connect(socket: &Path, does: impl FnMut(ClientRequest) -> Does + Send + 'static) -> Client {
     listen(socket, does);

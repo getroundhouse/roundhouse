@@ -20,11 +20,11 @@ impl Wanted {
         self.0.keys().map(|id| Follow::Workspace { id: id.clone() }).collect()
     }
 
-    fn want(&mut self, id: WorkspaceId) {
+    pub(super) fn want(&mut self, id: WorkspaceId) {
         *self.0.entry(id).or_default() += 1;
     }
 
-    fn unwant(&mut self, id: &WorkspaceId) {
+    pub(super) fn unwant(&mut self, id: &WorkspaceId) {
         if let Some(wanted) = self.0.get_mut(id) {
             *wanted -= 1;
             if *wanted == 0 {
