@@ -9,7 +9,7 @@ use protocol::model::Seq;
 use super::frame::{Frame, SIDEBAR, SIDEBAR_MENU};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::worlds::conversation;
+use super::worlds::{conversation, with_lines};
 use client_core::fake_hub::{PairingWorld, World};
 
 /// What's typed in the screen's own workspace and left unsent.
@@ -20,7 +20,7 @@ pub(crate) const SCREENS: &[Screen] = &[
     Screen {
         name: "sidebar-on-home",
         spec: "sidebar.md",
-        world: Some(conversation),
+        world: Some(|| with_lines(conversation())),
         frame: SIDEBAR,
         steps: &[Step::Select(FOCUS), Step::Type(DRAFT), Step::Click("home"), Step::MoveAway],
     },
@@ -132,9 +132,9 @@ fn pairing_connected() -> World {
     world
 }
 
-/// The conversation, whose chat's cache is about to expire, nine minutes from now.
+/// The conversation, with its workspaces' lines, whose chat's cache is about to expire, nine minutes from now.
 fn expiring() -> World {
-    let mut world = conversation();
+    let mut world = with_lines(conversation());
     let chat = world.sessions.iter().rfind(|session| session.last_seq > Seq::default()).unwrap().id.clone();
     world.cached(&chat, 51);
     world

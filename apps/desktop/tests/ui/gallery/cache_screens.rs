@@ -11,7 +11,7 @@ use protocol::model::{Seq, SessionId, SessionStatus};
 use super::frame::{CHAT, Frame, Part, TURN_CARD};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::worlds::{chat_world, conversation, titled};
+use super::worlds::{chat_world, conversation, titled, with_lines};
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{replied, text, turn_ending_with, user_prompt};
 use spec_screens::chats::{self, finished};
@@ -62,7 +62,7 @@ pub(crate) const SCREENS: &[Screen] = &[
     Screen {
         name: "home-cache",
         spec: "home.md",
-        world: Some(|| cached(titled(), 51)),
+        world: Some(|| cached(with_lines(titled()), 51)),
         frame: Frame::Exactly(Part::Region(Region::Home), &[]),
         steps: &[Step::Select(FOCUS), Step::Click("home")],
     },

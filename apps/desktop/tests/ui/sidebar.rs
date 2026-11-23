@@ -8,7 +8,7 @@ use client_core::fake_hub::World;
 use desktop::busy::Busy;
 use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
 use gpui_kit::{AppContext as _, ElementId, MouseButton, ScrollDelta, SharedString, TestAppContext, point, px};
-use protocol::model::{WorkspaceId, WorkspaceStatus};
+use protocol::model::{LineCounts, Observation, Observed, Rev, WorkspaceId, WorkspaceStatus};
 
 use crate::support::{
     FakeHub, Held, MORE_THAN_FIT, Stack, Ui, home_row, open_on_the_world, pencil, sidebar_row as row, with_a_chat,
@@ -19,6 +19,10 @@ const ELSEWHERE: &str = "workspace-title";
 
 fn archive_button(id: &WorkspaceId) -> ElementId {
     ElementId::Name(SharedString::from(format!("archive-{id}")))
+}
+
+fn lines(id: &WorkspaceId) -> ElementId {
+    ElementId::Name(SharedString::from(format!("lines-{id}")))
 }
 
 fn archived(ui: &Ui, id: &WorkspaceId) -> bool {
@@ -277,6 +281,42 @@ fn a_rows_pencil_rests_in_its_buttons_place_and_slides_aside_while_the_button_sh
     assert_eq!(ui.bounds(pencil.clone()), rests, "back where it rests");
     assert!(!ui.has(button), "and the button has gone");
     assert_eq!(ui.play(look::motion::FADE), 0, "nothing asks for another frame");
+}
+
+/// What the hub has read of each workspace's lines added and removed, whether it's current or as of when it was read,
+/// and nothing for one it hasn't read or one with no changes, whose row has no side to draw.
+#[gpui_kit::test]
+fn a_rows_lines_show_once_the_hub_has_read_them_and_slide_aside_for_its_button(cx: &mut TestAppContext) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let [read, current, not_read, unchanged] =
+        ["ledger", "points", "relay", "siding"].map(|name| with_a_chat(&mut world, &repo, name));
+    let observed = |workspace_id: &WorkspaceId, rev, added, removed, as_of_ms: Option<i64>| {
+        let value = LineCounts { added, removed };
+        let lines = match as_of_ms {
+            Some(as_of_ms) => Observed::AsOf { value, as_of_ms },
+            None => Observed::Current { value },
+        };
+        Observation::WorkspaceLines { workspace_id: workspace_id.clone(), lines, rev: Rev::new(rev) }
+    };
+    world.observations = vec![
+        observed(&read, 1, 37_412, 1_250, Some(1_000)),
+        observed(&current, 2, 3, 0, None),
+        observed(&unchanged, 3, 0, 0, None),
+    ];
+    let (_fake, mut ui) = open_on_the_world(cx, world);
+
+    ui.wait("the lines read", |ui| ui.has(lines(&read)));
+
+    assert!(ui.shows_label(&format!("lines-{read}"), "37412 lines added and 1250 removed, as last read"));
+    assert!(ui.shows_label(&format!("lines-{current}"), "3 lines added"));
+    assert!(!ui.has(lines(&not_read)), "nothing while they're not known");
+    assert!(!ui.has(lines(&unchanged)), "nothing for no changes");
+    let alone = ui.bounds(lines(&read));
+    ui.hover(row(&read));
+    ui.settle(look::motion::FADE);
+    let button = ui.bounds(archive_button(&read));
+    assert!(alone.right() > button.left() && ui.bounds(lines(&read)).right() <= button.left(), "aside for the button");
 }
 
 /// Create, at the sidebar's top, is off until there's a project to make a workspace in.

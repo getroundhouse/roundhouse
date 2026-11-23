@@ -6,7 +6,7 @@
 
 use client_core::fake_hub::World;
 use gpui_kit::{SharedString, TestAppContext};
-use protocol::model::{WorkspaceId, WorkspaceStatus};
+use protocol::model::{LineCounts, Observation, Observed, Rev, WorkspaceId, WorkspaceStatus};
 
 use crate::support::{FakeHub, Held, Stack, Ui, home_row, open_on_the_world, with_a_chat};
 
@@ -53,6 +53,23 @@ fn home_shows_in_place_of_the_workspace_until_one_is_picked(cx: &mut TestAppCont
 
     ui.wait("the workspace", |ui| ui.view().selected() == Some(&first) && ui.has("workspace-title"));
     assert!(!ui.has("home-page"));
+}
+
+/// The sidebar's rows draw them by the same rule, which its tests go through.
+#[gpui_kit::test]
+fn a_row_shows_its_workspaces_lines_added_and_removed(cx: &mut TestAppContext) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace_id = with_a_chat(&mut world, &repo, "ledger");
+    let lines = Observed::Current { value: LineCounts { added: 12, removed: 3 } };
+    world.observations =
+        vec![Observation::WorkspaceLines { workspace_id: workspace_id.clone(), lines, rev: Rev::new(1) }];
+    let (_fake, mut ui) = open_on_the_world(cx, world);
+    ui.wait("the workspace", |ui| ui.view().selected().is_some());
+
+    to_home(&mut ui);
+
+    assert!(ui.shows_label(&format!("home-lines-{workspace_id}"), "12 lines added and 3 removed"));
 }
 
 #[gpui_kit::test]
