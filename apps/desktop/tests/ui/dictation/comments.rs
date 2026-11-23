@@ -11,15 +11,16 @@ fn a_comment_can_be_dictated_cancelled_and_saved_with_its_last_words(cx: &mut Te
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     let workspace = ui.new_workspace();
     let engine = ready(&mut ui);
-    std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
+    std::fs::write(ui.worktree(&workspace).join("signals.txt"), "one\ntwo\n").unwrap();
     let diff = ui.open_changes();
-    ui.open_diff_of(&diff, "a.txt");
-    ui.start_comment(&diff, "a.txt", 2);
+    ui.open_diff_of(&diff, "signals.txt");
+    ui.start_comment(&diff, "signals.txt", 2);
     ui.input("Please");
     hold_option_space(&mut ui);
     let audio = engine.saying("fix the test. / in hub");
     hear(&mut ui, &audio);
     hearing(&mut ui, "in");
+    assert_eq!(engine.last_hints().words(), ["signals"], "the file it's on");
     assert!(!ui.has("save-comment") && !ui.has("cancel-comment"));
 
     ui.click(dictation_ui::CANCEL);

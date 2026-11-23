@@ -48,8 +48,9 @@ pub use selection::{KEY_CONTEXT, Way};
 pub use step_keys::{SelectStepBack, SelectStepOn, StepBack, StepOn, Steps};
 pub use transcript::{Transcript, TranscriptEvent};
 
-/// What the app adds to the words a field dictated into here favours, such as the workspace's, after the field's own.
-type DictationHints = Box<dyn Fn(&mut client_core::hints::HintCollector, &gpui_kit::App)>;
+/// What the app knows around a field dictated into here, such as its workspace, whose words the field favours after
+/// its own.
+type DictationHints = Box<dyn for<'a> Fn(&'a gpui_kit::App) -> client_core::hints::Around<'a>>;
 
 /// How long what's just been asked in the composer's place ignores keys, which a test can wait out.
 #[cfg(any(test, feature = "testing"))]

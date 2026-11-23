@@ -1,7 +1,7 @@
 //! Attaches shared dictation to the composer. The pane keeps only the chat being edited and the action to perform
 //! after transcription, so recording mechanics are identical in prompts, question answers and a proposal's note.
 
-use client_core::hints::HintCollector;
+use client_core::hints::{Around, Field, Workspace};
 use gpui_kit::{App, Context, Window};
 use protocol::model::SessionId;
 use protocol::prompt::says_or_carries;
@@ -70,20 +70,14 @@ impl WorkspacePane {
         self.after_dictation.wait(&self.dictation, content, then, cx)
     }
 
+    /// The words to favour in the composer: what's typed, its files, then the workspace's and the chat's.
     pub(super) fn composer_hints(&self, cx: &App) -> dictation_ui::Hints {
-        let mut collector = HintCollector::new();
-        collector.add_prose(&self.composer.read(cx).text().to_string());
-        for name in self.attached.names() {
-            collector.add_path(&name);
-        }
-        if let Some(tab) = self.diff.as_ref().and_then(|diff| diff.tab.as_ref()) {
-            collector.add_path(&tab.path);
-        }
-        self.collect_workspace_hints(&mut collector, cx);
-        if let Some(transcript) = self.transcript() {
-            collector.add_session_log(transcript.read(cx).log());
-        }
-        dictation_ui::Hints::new(collector.finish())
+        let typed = self.composer.read(cx).text().to_string();
+        let attached = self.attached.names();
+        let open_file = self.diff.as_ref().and_then(|diff| diff.tab.as_ref()).map(|tab| tab.path.as_ref());
+        let chat = self.transcript().map(|transcript| transcript.read(cx).log());
+        let around = Around { workspace: Some(self.workspace_around(cx)), chat };
+        dictation_ui::Hints::new(Field::Composer { typed: &typed, attached: &attached, open_file, around }.hint_words())
     }
 
     pub(super) fn attach_transcript_hints(
@@ -92,32 +86,24 @@ impl WorkspacePane {
     ) {
         let pane = cx.weak_entity();
         transcript.update(cx, |t, _| {
-            t.set_dictation_hints(move |collector, cx| {
-                if let Some(pane) = pane.upgrade() {
-                    pane.read(cx).collect_workspace_hints(collector, cx);
-                }
+            t.set_dictation_hints(move |cx| {
+                let workspace = pane.upgrade().map(|pane| pane.read(cx).workspace_around(cx));
+                Around { workspace, chat: None }
             });
         });
     }
 
-    /// The workspace's hint words, then those of the chat `session`, for what's dictated about it outside it.
-    pub(super) fn collect_chat_hints(&self, session: &SessionId, collector: &mut HintCollector, cx: &App) {
-        self.collect_workspace_hints(collector, cx);
-        if let Some((transcript, _)) = self.chats.get(session).and_then(|chat| chat.transcript.as_ref()) {
-            collector.add_session_log(transcript.read(cx).log());
-        }
+    /// What's around what's dictated about the chat `session` outside it: the workspace, then that chat.
+    pub(super) fn chat_around<'a>(&'a self, session: &SessionId, cx: &'a App) -> Around<'a> {
+        let transcript = self.chats.get(session).and_then(|chat| chat.transcript.as_ref());
+        let chat = transcript.map(|(transcript, _)| transcript.read(cx).log());
+        Around { workspace: Some(self.workspace_around(cx)), chat }
     }
 
-    fn collect_workspace_hints(&self, collector: &mut HintCollector, cx: &App) {
-        collector.add_workspace(&self.shown);
-        if let Some(pull_request) = self.pull_request.pull_request() {
-            collector.add_pull_request(pull_request);
-        }
-        if let Some(files) = self.diff.as_ref().and_then(|diff| diff.review.read(cx).files.as_ref()) {
-            for patch in files {
-                collector.add_path(patch.path());
-            }
-        }
+    fn workspace_around<'a>(&'a self, cx: &'a App) -> Workspace<'a> {
+        let files = self.diff.as_ref().and_then(|diff| diff.review.read(cx).files.as_ref()).into_iter().flatten();
+        let changed = files.map(|patch| patch.path().as_ref()).collect();
+        Workspace { shown: &self.shown, pull_request: self.pull_request.pull_request(), changed }
     }
 
     #[cfg(any(test, feature = "testing"))]

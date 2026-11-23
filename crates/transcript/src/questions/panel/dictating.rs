@@ -1,7 +1,7 @@
 //! Question answers opt into shared shortcuts and live text, with no microphone button. Each input keeps its own
 //! attachment; navigation and hiding explicitly end it because the panel retains its answers while out of sight.
 
-use client_core::hints::HintCollector;
+use client_core::hints::{Around, Field};
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::{App, Context, Entity, Window};
 
@@ -45,17 +45,11 @@ impl QuestionPanel {
     /// The words to favour in question `q`'s typed answer, `typed`: what's typed there, the question, then the
     /// workspace's and the chat's.
     pub(super) fn answer_hints(&self, q: usize, typed: &Entity<TextareaState>, cx: &App) -> dictation_ui::Hints {
-        let mut collector = HintCollector::new();
-        collector.add_prose(&typed.read(cx).text().to_string());
-        if let Some(asked) = self.asked.get(q) {
-            collector.add_question(&asked.question);
-        }
-        if let Some(transcript) = self.transcript.upgrade() {
-            let transcript = transcript.read(cx);
-            transcript.add_dictation_hints(&mut collector, cx);
-            collector.add_session_log(transcript.log());
-        }
-        dictation_ui::Hints::new(collector.finish())
+        let Some(asked) = self.asked.get(q) else { return dictation_ui::Hints::default() };
+        let typed = typed.read(cx).text().to_string();
+        let transcript = self.transcript.upgrade();
+        let around = transcript.as_ref().map_or_else(Around::default, |t| t.read(cx).dictation_around(cx));
+        dictation_ui::Hints::new(Field::Answer { typed: &typed, question: &asked.question, around }.hint_words())
     }
 
     pub(super) fn dictation_event(

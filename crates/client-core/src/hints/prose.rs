@@ -6,7 +6,7 @@ use super::english::is_common_word;
 impl HintCollector {
     /// Extracts inline Markdown code spans (`` `…` ``), paths, code identifiers (`CamelCase`, `snake_case`, acronyms),
     /// and mid-sentence proper nouns (`Core ML`, `Neural Engine`, `Whisper`, `Parakeet`) from `text`.
-    pub fn add_prose(&mut self, text: &str) {
+    pub(super) fn add_prose(&mut self, text: &str) {
         let mut inside = false;
         for part in text.split('`') {
             if inside {
