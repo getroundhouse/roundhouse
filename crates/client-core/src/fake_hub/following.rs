@@ -10,7 +10,7 @@ use protocol::client::github::GithubUpdate;
 use protocol::client::listed::{Listed, ReferenceObservations, SessionRecords, WorkspaceObservations};
 use protocol::client::subscriptions::{Follow, LogFrom, Refused, Subscribe, Subscribed, Subscription};
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubFrame, HubNotice, ObservationNotice};
-use protocol::model::{Level, Observation, Place, Rev, Seq, WorkspaceId};
+use protocol::model::{Level, Place, Seq, WorkspaceId};
 
 use super::github;
 use super::logs::{log_from, places_from};
@@ -91,7 +91,7 @@ fn stands(
                 subagents: world.subagents_of(id),
                 proposals: world.proposals.get(id).cloned().unwrap_or_default(),
                 replies_heard: world.replies_heard_of(id)?,
-                rev: Rev::default(),
+                rev: world.listed_at,
             };
             let listed = HubFrame::Listed { subscription_id, listed: Listed::Session(records) };
             let log = match from {
@@ -111,7 +111,7 @@ fn stands(
         Follow::Terminal { id } => terminals::pictures(world, id, subscription_id),
         Follow::Reference { reference } if observed => {
             let observations = github::reference_observed(world, reference);
-            let listed = ReferenceObservations { reference: reference.clone(), observations, rev: Rev::default() };
+            let listed = ReferenceObservations { reference: reference.clone(), observations, rev: world.listed_at };
             Ok(vec![HubFrame::Listed { subscription_id, listed: Listed::Reference(listed) }])
         }
         Follow::Reference { reference } => {
@@ -148,8 +148,8 @@ fn workspace(world: &World, id: &WorkspaceId, subscription_id: u64, observed: bo
     if observed {
         observations.extend(github::workspace_observed(world, id));
     }
-    let rev = observations.iter().map(Observation::rev).max().unwrap_or_default();
-    let listed = Listed::Workspace(WorkspaceObservations { workspace_id: id.clone(), observations, rev });
+    let listed =
+        Listed::Workspace(WorkspaceObservations { workspace_id: id.clone(), observations, rev: world.listed_at });
     std::iter::once(HubFrame::Listed { subscription_id, listed }).chain(told(world, &level, subscription_id)).collect()
 }
 
