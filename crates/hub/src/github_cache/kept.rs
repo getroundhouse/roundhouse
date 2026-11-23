@@ -15,6 +15,7 @@ use super::file::{GithubFile, Row};
 use super::keys::{BranchOf, Facet, Item, Subject};
 use super::pulls::KeptPulls;
 use super::rules::KeptRules;
+use super::told::Told;
 use crate::cache_file::CacheFile;
 use crate::store::now_ms;
 
@@ -33,12 +34,19 @@ pub(crate) struct GithubCache {
     rules: KeptRules,
     pulls: KeptPulls,
     file: GithubFile,
-    /// Tells of each read kept, by the issues and pull requests it was of.
-    kept: broadcast::Sender<Vec<Item>>,
+    /// Tells of each read kept, and of what's forgotten, by the issues and pull requests they were of.
+    pub(super) told: broadcast::Sender<Told>,
 }
 
-/// How many reads kept a subscriber can fall behind by before it's told it missed some, and sends everything again.
-const KEPT_TOLD: usize = 64;
+/// What the cache keeps of an issue's or a pull request's summary, as [`GithubCache::summary_kept`] gives it.
+pub(crate) struct KeptSummary {
+    /// What GitHub said of it, or `None` where it said there's none to be seen.
+    pub(crate) found: Option<Reference>,
+    /// When the read that found it began.
+    pub(crate) read_at_ms: i64,
+    /// Whether the read after that failed, so it's what was known before.
+    pub(crate) failed_since: bool,
+}
 
 /// What's kept of one issue or pull request.
 struct Kept {
@@ -54,6 +62,8 @@ struct LastRead {
     failed: Option<String>,
     /// When it was last read, or tried.
     read_at_ms: i64,
+    /// When the read that found what GitHub said began.
+    said_at_ms: i64,
 }
 
 /// What GitHub said of an issue's or a pull request's summary, as the cache's file keeps it too.
@@ -123,17 +133,11 @@ impl GithubCache {
             pulls.load(&row);
             let Row { subject: Subject::Item(item), facet: Facet::Summary, said, read_at_ms } = row else { continue };
             let Ok(said) = serde_json::from_str::<Said>(&said) else { continue };
-            let summary = LastRead { said: Some(said), failed: None, read_at_ms };
+            let summary = LastRead { said: Some(said), failed: None, read_at_ms, said_at_ms: read_at_ms };
             items.insert(item, Kept { summary, asked_at_ms: read_at_ms });
         }
-        let kept = broadcast::Sender::new(KEPT_TOLD);
-        Self { items: Mutex::new(items), reading: Mutex::new(HashMap::new()), rules, pulls, file, kept }
-    }
-
-    /// Tells of each read kept from now on, by the issues and pull requests it was of, whether or not what it found
-    /// changed.
-    pub(crate) fn changes(&self) -> broadcast::Receiver<Vec<Item>> {
-        self.kept.subscribe()
+        let told = broadcast::Sender::new(super::told::KEPT_TOLD);
+        Self { items: Mutex::new(items), reading: Mutex::new(HashMap::new()), rules, pulls, file, told }
     }
 
     /// Which of `items` have a `facet` older than `fresh_for`, each once: those this ask is to read itself, which no
@@ -186,19 +190,24 @@ impl GithubCache {
                     Ok(found) => {
                         let said = Said::from(found);
                         rows.extend(said.row(&item, read_at_ms));
-                        LastRead { said: Some(said), failed: None, read_at_ms }
+                        LastRead { said: Some(said), failed: None, read_at_ms, said_at_ms: read_at_ms }
                     }
                     Err(why) => {
-                        let before = items.remove(&item).and_then(|kept| kept.summary.said);
-                        LastRead { said: before, failed: Some(why), read_at_ms }
+                        let before = items.remove(&item).map(|kept| kept.summary);
+                        let said_at_ms = before.as_ref().map_or(read_at_ms, |before| before.said_at_ms);
+                        LastRead {
+                            said: before.and_then(|before| before.said),
+                            failed: Some(why),
+                            read_at_ms,
+                            said_at_ms,
+                        }
                     }
                 };
                 items.insert(item, Kept { summary, asked_at_ms: now_ms });
             }
         }
         self.write(&forgotten, &rows);
-        // Only once it's kept, so what's told finds it. Nobody may be listening.
-        let _ = self.kept.send(told);
+        self.tell(told, &forgotten);
     }
 
     /// Forgets `forgotten` in the file, and writes `rows` to it, at once.
@@ -280,8 +289,7 @@ impl GithubCache {
         let told = read.iter().map(|(item, ..)| item.clone()).collect();
         let rows = self.pulls.keep(read);
         self.write(&forgotten, &rows);
-        // Only once it's kept, so what's told finds it. Nobody may be listening.
-        let _ = self.kept.send(told);
+        self.tell(told, &forgotten);
     }
 
     /// The rules of the branches of `repository` the cache has read within `fresh_for`, for a read of pull requests
@@ -299,6 +307,7 @@ impl GithubCache {
         let read = read.into_iter().map(|(repository, branch, rules)| (BranchOf::new(&repository, branch), rules));
         let rows = self.rules.keep(read.collect(), read_at_ms, now_ms);
         self.write(&forgotten, &rows);
+        self.tell(Vec::new(), &forgotten);
     }
 
     /// Forgets, in memory, what nothing has asked for in [`KEPT_FOR`] by `now_ms`, and returns it.
@@ -313,6 +322,18 @@ impl GithubCache {
             keep
         });
         forgotten
+    }
+
+    /// What the cache keeps of `item`'s summary, if GitHub has said anything of it, which doesn't count as its being
+    /// asked about, so what works out what's sent of it from this keeps nothing longer than [`KEPT_FOR`].
+    pub(crate) fn summary_kept(&self, item: &Item) -> Option<KeptSummary> {
+        let items = self.items.lock();
+        let summary = &items.get(item)?.summary;
+        let found = match summary.said.as_ref()? {
+            Said::Found { reference } => Some((**reference).clone()),
+            Said::Missing => None,
+        };
+        Some(KeptSummary { found, read_at_ms: summary.said_at_ms, failed_since: summary.failed.is_some() })
     }
 
     /// What's known of `item`'s summary, which counts as its being asked about: what GitHub last said of it, or, if
@@ -335,6 +356,7 @@ impl GithubCache {
     pub(crate) fn age(&self, by: Duration) {
         for kept in self.items.lock().values_mut() {
             kept.summary.read_at_ms -= millis(by);
+            kept.summary.said_at_ms -= millis(by);
             kept.asked_at_ms -= millis(by);
             // What GitHub said keeps when it was read too, which is what a pull request's freshness goes by.
             match kept.summary.said.as_mut() {

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use protocol::client::github::GithubShown;
 use protocol::client::listed::Listed;
 use protocol::client::{ApiError, HubNotice};
-use protocol::model::{Level, RecordKey, Records};
+use protocol::model::{RecordKey, Records};
 use tokio::sync::{mpsc, watch};
 
 use super::notices::{forward, send_listed};
@@ -15,10 +15,12 @@ use super::starting::Feeding;
 use crate::hub::Hub;
 use crate::server::Outgoing;
 use crate::server::github::pump;
+use crate::server::sends::Sends;
 
 /// What feeds a subscription at the hub's level, once the hub has listed its records, so one it can't list is refused.
 pub(super) async fn feeding(
     hub: &Arc<Hub>,
+    sends: Sends,
     subscription_id: u64,
     frames: mpsc::Sender<Outgoing>,
 ) -> Result<Feeding, ApiError> {
@@ -38,7 +40,7 @@ pub(super) async fn feeding(
             Ok(Listed::Hub(Box::new(listed)))
         };
         let seen = |notice: &HubNotice| shows_every_workspace(&shown, notice);
-        let records = forward(feed, &Level::Hub, subscription_id, &frames, list, seen);
+        let records = forward(feed, &sends, subscription_id, &frames, list, seen);
         // Each ends only once the connection has gone, and with it the other.
         tokio::select! {
             () = github => {}

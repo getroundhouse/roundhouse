@@ -13,6 +13,7 @@ use tokio::task::AbortHandle;
 use super::pump::{Following, pump};
 use super::{Connection, Outgoing};
 use crate::hub::{Followed, FollowerId, Hub};
+use crate::server::sends::Sends;
 
 /// One subscription of a connection, which ends as it's dropped: its task stops, and its entries leave the hub's list of
 /// who follows what.
@@ -111,14 +112,13 @@ pub(super) fn taken(subscription_id: u64) -> ApiError {
     ApiError::new(ErrorCode::InvalidRequest, format!("subscription {subscription_id} already exists"))
 }
 
-/// Sends subscription `subscription_id` every notice of `feed`, but those of a workspace's level, which only `Subscribe`
-/// follows, so no client of the version `FeedSubscribe` is kept for reads them, and the largest, such as a workspace's
-/// changed files, would be sent for every workspace.
+/// Sends subscription `subscription_id` each notice of `feed` that `FeedSubscribe` is sent, as [`Sends::feed`] says.
 async fn pump_feed(mut feed: broadcast::Receiver<HubNotice>, subscription_id: u64, frames: mpsc::Sender<Outgoing>) {
+    let sends = Sends::feed();
     loop {
         let notice = match feed.recv().await {
-            Ok(notice) if matches!(notice.level(), Some(Level::Workspace { .. })) => continue,
-            Ok(notice) => notice,
+            Ok(notice) if sends.notice(&notice) => notice,
+            Ok(_) => continue,
             Err(broadcast::error::RecvError::Lagged(_)) => HubNotice::Resync,
             Err(broadcast::error::RecvError::Closed) => return,
         };

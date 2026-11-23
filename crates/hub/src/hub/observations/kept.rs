@@ -10,7 +10,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
 use super::file::{self, Row};
-use super::kinds::{Form, Kind, WorkspaceChanges, WorkspaceLines};
+use super::kinds::{Form, Kind, Referenced, WorkspaceChanges, WorkspaceLines};
 use crate::cache_file::CacheFile;
 use crate::store::Store;
 
@@ -29,6 +29,7 @@ pub(crate) struct Observations {
 pub(crate) struct Tables {
     pub(super) workspace_lines: Table<WorkspaceLines>,
     pub(super) workspace_changes: Table<WorkspaceChanges>,
+    pub(super) referenced: Table<Referenced>,
 }
 
 /// What's kept of one kind of observation.
@@ -75,11 +76,16 @@ impl<V: Clone> Said<V> {
 pub(super) enum Change<V> {
     /// It was read, and found `value`.
     Read { value: V, read_at_ms: i64 },
+    /// It was worked out now, from what was read at `as_of_ms`, and says `value`.
+    WorkedOut { value: V, as_of_ms: i64 },
     /// Something keeps it up to date from now on, so what's read of it from now is current.
     KeptCurrent,
     /// Nothing keeps it up to date any more, since `as_of_ms`, so it's as of then: what kept it up to date would have
     /// said of any change before. As of its last read where that's later, as one that landed since can be.
     LetGo { as_of_ms: i64 },
+    /// Nothing reads it again to keep it up to date any more, so it's as of its last read, since nothing would have
+    /// said of a change since.
+    NoLongerReadAgain,
     /// What it's of is gone.
     Gone,
 }
@@ -117,6 +123,19 @@ impl<K: Kind> Table<K> {
                     _ => Step::Changed(Changed::Says(Said { value, current, as_of_ms: read_at_ms, read_at_ms })),
                 }
             }
+            Change::WorkedOut { value, as_of_ms } => {
+                let current = self.kept_current.contains(of);
+                match kept {
+                    Some(kept) if kept.value == value && kept.current == current => {
+                        if kept.read_at_ms == as_of_ms {
+                            Step::Same
+                        } else {
+                            Step::Reread(Said { read_at_ms: as_of_ms, ..kept.clone() })
+                        }
+                    }
+                    _ => Step::Changed(Changed::Says(Said { value, current, as_of_ms, read_at_ms: as_of_ms })),
+                }
+            }
             Change::KeptCurrent => {
                 // What was read before isn't current, so it's not said to be until the next read.
                 self.kept_current.insert(of.clone());
@@ -133,6 +152,15 @@ impl<K: Kind> Table<K> {
                             read_at_ms: at,
                             ..kept.clone()
                         }))
+                    }
+                    Some(_) | None => Step::Same,
+                }
+            }
+            Change::NoLongerReadAgain => {
+                self.kept_current.remove(of);
+                match kept {
+                    Some(kept) if kept.current => {
+                        Step::Changed(Changed::Says(Said { current: false, as_of_ms: kept.read_at_ms, ..kept.clone() }))
                     }
                     Some(_) | None => Step::Same,
                 }
@@ -202,9 +230,9 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    fn each(&mut self) -> [&mut dyn AnyTable; 2] {
-        let Tables { workspace_lines, workspace_changes } = self;
-        [workspace_lines, workspace_changes]
+    fn each(&mut self) -> [&mut dyn AnyTable; 3] {
+        let Tables { workspace_lines, workspace_changes, referenced } = self;
+        [workspace_lines, workspace_changes, referenced]
     }
 
     /// Every observation sent at `level`, of every kind.
@@ -259,5 +287,10 @@ impl Observations {
         let _changing = self.changing.lock().await;
         let rev = rev_now.await?;
         Ok((self.tables.lock().listed(level), rev))
+    }
+
+    /// What each observation of kind `K` the store keeps is of.
+    pub(crate) fn kept_of<K: Kind>(&self) -> Vec<K::Of> {
+        K::table(&mut self.tables.lock()).kept.keys().cloned().collect()
     }
 }

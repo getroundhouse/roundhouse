@@ -69,7 +69,7 @@ pub use interaction::{Interaction, InteractionMode};
 pub use level::Level;
 pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
-pub use observation::{Observation, ObservationKey, Observed};
+pub use observation::{IssueSaid, Observation, ObservationKey, Observed, PullRequestSaid, ReferenceSaid};
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
 pub use proposal::{
     AnswerProblem, Choice, ChosenOption, MAX_HEADER_CHARS, MAX_NOTE_BYTES, MAX_OPTIONS, MAX_PROPOSAL_BYTES,

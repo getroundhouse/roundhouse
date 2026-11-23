@@ -1,5 +1,6 @@
 use super::super::*;
 use crate::hub::tests::{hub_in, hub_on_github, hub_with_worktree};
+use crate::hub::{Followed, FollowerId};
 use crate::store::tests::idle_session;
 use crate::store::{SessionChange, StatusChange};
 use github::PullRequestState;
@@ -180,7 +181,7 @@ async fn a_chat_whose_record_lists_only_a_wait_isnt_counted_as_running() {
 }
 
 #[tokio::test]
-async fn with_no_client_connected_only_a_workspace_waited_on_is_read() {
+async fn with_no_client_following_the_hub_only_a_workspace_waited_on_is_read() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     let w = hub.store.get_workspace(&"w".into()).unwrap();
@@ -192,10 +193,10 @@ async fn with_no_client_connected_only_a_workspace_waited_on_is_read() {
     let unwaited = next().await;
     hub.store.start_wait(&wait()).unwrap();
     let waited = next().await;
-    hub.clients.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let _following = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Hub]);
     let seen = next().await;
 
     assert_eq!(unwaited, None, "nobody would see it");
     assert_eq!(waited, Some("w".into()), "not the other, which nobody would see either");
-    assert_eq!(seen, Some("v".into()), "once a client would");
+    assert_eq!(seen, Some("v".into()), "once a client follows the hub");
 }

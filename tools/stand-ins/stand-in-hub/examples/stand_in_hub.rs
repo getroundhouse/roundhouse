@@ -136,7 +136,7 @@ fn notice_agents(writer: &Writer, subscription_id: u64, mut said: u32, args: &Ar
 /// which it refuses as a hub with nothing of them would.
 fn followed(subscribe: subscriptions::Subscribe) -> (Option<u64>, Vec<subscriptions::Refused>) {
     let (mut hub, mut refused) = (None, Vec::new());
-    for subscriptions::Subscription { subscription_id, follow } in subscribe.start {
+    for subscriptions::Subscription { subscription_id, follow, .. } in subscribe.start {
         if follow == subscriptions::Follow::Hub {
             hub = Some(subscription_id);
         } else {

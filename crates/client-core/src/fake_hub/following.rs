@@ -49,7 +49,7 @@ pub(super) fn subscribe(world: &World, connection: u64, subscribe: Subscribe) ->
         following.remove(&(connection, subscription_id));
     }
     let (mut refused, mut frames) = (Vec::new(), Vec::new());
-    for Subscription { subscription_id, follow } in start {
+    for Subscription { subscription_id, follow, .. } in start {
         match stands(world, subscription_id, &follow) {
             Ok(sent) => {
                 following.insert((connection, subscription_id), follow.level());

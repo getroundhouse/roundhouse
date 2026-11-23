@@ -137,5 +137,5 @@ pub(super) async fn ok(connection: &mut Connection, id: u64, request: impl Reque
 }
 
 pub(super) fn start(subscription_id: u64, follow: Follow) -> Subscription {
-    Subscription { subscription_id, follow }
+    Subscription::new(subscription_id, follow)
 }

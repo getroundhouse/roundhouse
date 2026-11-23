@@ -20,6 +20,7 @@ mod feed;
 mod followers;
 mod github_accounts;
 mod github_apps;
+mod github_observed;
 mod github_reach;
 pub(crate) mod github_reads;
 mod github_sign_ins;

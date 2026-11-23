@@ -8,6 +8,7 @@ use std::path::Path;
 use client_core::{Client, ClientError};
 use hub::GithubPullRequestState::{Merged, Open};
 use protocol::client::ErrorCode;
+use protocol::client::subscriptions::Follow;
 use protocol::model::{BranchName, Head, PrState, PullRequestLinked, WorkspaceId};
 
 use crate::support::github::{StandInGithub, push, pushed_workspace, workspace_on_github};
@@ -121,10 +122,17 @@ fn a_starting_hub_reads_every_workspaces_pull_request_without_being_asked() {
 
     stack.restart_hub();
     let client = stack.client();
+    let _following = following_the_hub(&client);
 
     wait_until("both to be read", || {
         recorded(&client, &first.id) == Some(7) && recorded(&client, &second.id) == Some(8)
     });
+}
+
+/// `client` following the hub, as an app does as it connects, which has the hub read what nobody asked for, until
+/// what this returns is dropped.
+fn following_the_hub(client: &Client) -> client_core::Subscription {
+    client.follow(Follow::Hub).unwrap()
 }
 
 /// An agent may have opened one in its turn, so its end reads it, whether or not anyone is looking at the workspace.
@@ -181,6 +189,7 @@ fn a_worker_started_only_for_a_read_is_stopped_after() {
 
     stack.restart_hub();
     let client = stack.client();
+    let _following = following_the_hub(&client);
     wait_until("it to be read", || recorded(&client, &workspace.id) == Some(7));
 
     wait_until("its worker to stop", || client.hub_status().unwrap().workers == 0);
@@ -202,6 +211,7 @@ fn a_worker_started_only_for_a_read_stays_once_a_prompt_wants_it() {
 
     stack.restart_hub();
     let client = stack.client();
+    let _following = following_the_hub(&client);
     wait_until("it to be read again", || github.queries() > asked);
     client.session_prompt(&session.id, "hang", None).unwrap();
     let mut agent = None;
@@ -229,6 +239,7 @@ fn reads_nobody_asked_for_leave_the_last_of_githubs_limit_to_the_rest() {
 
     stack.restart_hub();
     let client = stack.client();
+    let _following = following_the_hub(&client);
     wait_until("GitHub to be asked", || github.queries() > asked);
     wait_until("the worker started for the token to stop", || client.hub_status().unwrap().workers == 0);
 

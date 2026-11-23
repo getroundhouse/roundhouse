@@ -1,7 +1,7 @@
 //! What the one request is sent, beside what the four requests from before it send.
 
 use protocol::client::github::{GithubShown, GithubSubscribe};
-use protocol::client::listed::{Listed, SessionRecords, WorkspaceObservations};
+use protocol::client::listed::{Listed, ReferenceObservations, SessionRecords, WorkspaceObservations};
 use protocol::client::records::{RecordsList, SessionProposals, SessionRepliesHeard, SessionSubagents};
 use protocol::client::subscriptions::{FeedSubscribe, Follow, SessionSubscribe, Subscribe, Subscribed};
 use protocol::client::terminals::TerminalWatch;
@@ -54,6 +54,7 @@ fn without_revisions(listed: Listed) -> Listed {
         Listed::Workspace(observations) => {
             Listed::Workspace(WorkspaceObservations { rev: Rev::default(), ..observations })
         }
+        Listed::Reference(observed) => Listed::Reference(ReferenceObservations { rev: Rev::default(), ..observed }),
         Listed::Unknown => Listed::Unknown,
     }
 }

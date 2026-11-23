@@ -39,6 +39,19 @@ pub struct Subscription {
     pub subscription_id: u64,
     #[serde(flatten)]
     pub follow: Follow,
+    /// Whether the client reads what GitHub says as observations. At a level where the hub sends every kind of it as
+    /// one, which is an issue's or a pull request's, the hub sends them in place of `HubFrame::Github`. Where it's
+    /// false, as every client from before it sends, and at every other level, the hub sends `HubFrame::Github` as
+    /// [`Follow`] says, and none of GitHub's observations. A hub from before it ignores it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub github_observed: bool,
+}
+
+impl Subscription {
+    /// A start of `follow` under `subscription_id`, reading what GitHub says as `HubFrame::Github`.
+    pub fn new(subscription_id: u64, follow: Follow) -> Self {
+        Self { subscription_id, follow, github_observed: false }
+    }
 }
 
 /// What a subscription follows, with what each level needs to start it: for a session, where in its log.
@@ -67,9 +80,11 @@ pub enum Follow {
     },
     /// Sends what the terminal shows, as [`TerminalWatch`](super::terminals::TerminalWatch) does.
     Terminal { id: TerminalId },
-    /// Sends a `HubFrame::Github` of what GitHub says of the issue or pull request once the hub has read it, and again
-    /// as that changes, as a `GithubSubscribe` sends them for its `references`, and has the hub read it again once
-    /// it's stale.
+    /// Has the hub read the issue or pull request again once it's stale, as a `GithubSubscribe` that shows it as a
+    /// chip does. To a start that reads GitHub as observations, as [`Subscription::github_observed`] says, sends a
+    /// [`Listed::Reference`](super::listed::Listed::Reference), then each change to the observations it lists. To
+    /// any other, sends a `HubFrame::Github` of what GitHub says of it once the hub has read it, and again as that
+    /// changes, as a `GithubSubscribe` sends them for its `references`.
     Reference { reference: ReferenceAsk },
     /// From a newer client. Refused as unsupported.
     #[serde(other)]

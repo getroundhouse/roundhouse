@@ -6,6 +6,7 @@ use protocol::model::{Level, Rev, Subagent};
 use tokio::sync::{broadcast, mpsc};
 
 use super::super::notices::forward;
+use crate::server::sends::{Sends, Started};
 
 /// A subscription that falls behind the feed is sent where its level stands again, in place of the notices it missed,
 /// and then each notice after, rather than `Resync`.
@@ -30,7 +31,8 @@ async fn a_subscription_that_falls_behind_is_sent_where_its_level_stands_again()
 
     let level = Level::Session { id: "s".into() };
     drop(feed);
-    forward(behind, &level, 7, &frames, list, |_| {}).await;
+    let sends = Sends::at(level, Started::Subscribe { github_observed: false });
+    forward(behind, &sends, 7, &frames, list, |_| {}).await;
     drop(frames);
 
     let mut frames = Vec::new();

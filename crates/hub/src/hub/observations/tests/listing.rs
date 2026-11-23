@@ -126,3 +126,31 @@ async fn each_level_is_listed_only_its_own_observations() {
     let read_then = Observed::AsOf { value: changes(3, 1), as_of_ms: 1_000 };
     assert_eq!(files, Observation::WorkspaceChanges { workspace_id: "w".into(), changes: read_then, rev: files.rev() });
 }
+
+/// A level's list has the observations of that level alone, under the revision the hub was at as it listed them, and
+/// the hub's level keeps none of another.
+#[tokio::test]
+async fn a_level_s_list_has_its_own_observations_alone() {
+    use protocol::model::{
+        GithubRepositoryName, IssueNumber, Level, Observation, Observed, ReferenceAsk, ReferenceSaid,
+    };
+
+    use super::super::kinds::Referenced;
+
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let ask =
+        |n| ReferenceAsk { repository: GithubRepositoryName::named("o/r"), number: IssueNumber::try_from(n).unwrap() };
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
+    hub.observation_worked_out::<Referenced>(ask(1), ReferenceSaid::Missing, 1_000).await.unwrap();
+    hub.observation_worked_out::<Referenced>(ask(2), ReferenceSaid::Missing, 2_000).await.unwrap();
+    let rev_now = async { Ok(hub.store.current_rev().unwrap()) };
+
+    let (listed_at, rev) = hub.observations.listed_at(&Level::Reference { reference: ask(1) }, rev_now).await.unwrap();
+
+    let missing = Observed::AsOf { value: ReferenceSaid::Missing, as_of_ms: 1_000 };
+    let [one] = listed_at.as_slice() else { panic!("{listed_at:?}") };
+    assert_eq!(*one, Observation::Reference { reference: ask(1), said: missing, rev: one.rev() });
+    assert!(rev > one.rev(), "{rev} covers the second, made after");
+    assert_eq!(listed(&hub).await.0.len(), 1, "the hub's level lists only the lines");
+}

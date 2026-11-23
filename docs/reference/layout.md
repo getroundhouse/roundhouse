@@ -112,7 +112,7 @@ third_party/       Copies of other projects' code, as `third_party/README.md` sa
 
 Everything a hub holds or serves, which of the four kinds in `docs/principles/serving.md` it is, where it's kept and how a client gets it. Something new takes its kind by the same test: the hub owns it, so it's a record, or the hub only observes it, so it's an observation. What an agent says in an event is the log's, so what the hub works out from it is a record, and what an agent says outside the log is an observation. For example, a session's status is worked out from its events, so it's a record, and how full its agent's context is comes in a report that isn't an event, so it's an observation.
 
-A table named here is in the hub's database, except `facets`, `observed_workspace_lines` and `observed_workspace_changes`, which are in the cache file `github-cache.db`. Each is sent at the level its row names, to a client that follows that level through `Subscribe`: where a level that holds records or observations stands first, as a list, and then each change. A client of version 3 follows each through a request of its own for its level: `FeedSubscribe` and `RecordsList` for the hub's, `SessionSubscribe` and the lists by session for a session's, `TerminalWatch` for a terminal's, and `GithubSubscribe` for what GitHub says of a workspace's own pull request and of a chip.
+A table named here is in the hub's database, except `facets`, `observed_workspace_lines`, `observed_workspace_changes` and `observed_referenced`, which are in the cache file `github-cache.db`. Each is sent at the level its row names, to a client that follows that level through `Subscribe`: where a level that holds records or observations stands first, as a list, and then each change. A client of version 3 follows each through a request of its own for its level: `FeedSubscribe` and `RecordsList` for the hub's, `SessionSubscribe` and the lists by session for a session's, `TerminalWatch` for a terminal's, and `GithubSubscribe` for what GitHub says of a workspace's own pull request and of a chip. A start with `github_observed` is sent what GitHub says of a chip as an observation, in place of the old form, as `crate::server::sends` decides.
 
 ### Events and live snapshots
 
@@ -156,7 +156,7 @@ A hub of this build lists no `FoundGithubLogin`, which `client-core` reads only 
 
 ### Observations
 
-*Not built:* any observation but a workspace's lines added and removed and its changed files, so each of the others is kept as its row says: as a record or a field of one, in GitHub's cache, which reaches a client with no revision, or not at all.
+*Not built:* any observation but a workspace's lines added and removed, its changed files and what a chip draws of GitHub, so each of the others is kept as its row says: as a record or a field of one, in GitHub's cache, which reaches a client with no revision, or not at all.
 
 | What | Whose | Kept in | Sent by |
 |---|---|---|---|
@@ -166,6 +166,7 @@ A hub of this build lists no `FoundGithubLogin`, which `client-core` reads only 
 | A workspace's branches, and each of its other worktrees' | Git's | `workspaces.branches` and `child_worktrees.branches` | The hub's level, for a workspace's own. Another worktree's reaches no client |
 | Which build a workspace's worker is | The worker's | `workspaces.worker_build` | The hub's level |
 | What GitHub says of an issue or a pull request: its summary, checks, stack, when a review last asked for changes and when it last left the merge queue, and its branch's rules for checks | GitHub's | The hub's memory and `facets`, each facet with when it was read, under one version | An issue's or pull request's level, and the hub's for a workspace's own, with no revision, and `ReferencesRead` and `WorkspacePullRequest`. The rules only say which checks are required |
+| What GitHub says of an issue or a pull request, as a chip draws it | Worked out from GitHub's | The hub's memory and `observed_referenced`, worked out from `facets` while a client follows it, and gone once `facets` forgets it | An issue's or pull request's level, as an observation, to a start with `github_observed`, and otherwise as the row above says |
 | How a workspace's pull request stands: the pull request, and how far its worktree is ahead and behind | Worked out from git's and GitHub's | Not kept. Worked out from the workspace's record and GitHub's cache each time it's sent | The hub's level, as `own_pull_request` |
 | That GitHub showed the default GitHub account no repository where a workspace's pull request would be | GitHub's | The hub's memory | The hub's level, in `own_pull_request` |
 | The pull requests each wait watches, as last read | GitHub's | `waits.watch` | The hub's level, on the session's record |
