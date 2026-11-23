@@ -7,7 +7,7 @@ mod listed;
 mod listing;
 mod one_file;
 pub use listed::Diffed;
-pub use listing::{ChangedEntry, ChangedRow, Listing, Paging};
+pub use listing::{ChangedEntry, ChangedRow, Listing};
 
 mod review_view;
 pub use review_view::{Review, ReviewEvent};

@@ -179,6 +179,9 @@ impl Reply for GitDiff {
 /// so it moves across, is in no page after, so a client throws its pages away whenever the summary's observation
 /// changes, and reads them again from its new last file. A hub from before it refuses it as `Unsupported`, and so does
 /// a hub whose worker is from before it, after which a client shows only how many files the summary leaves out.
+///
+/// No client of this build sends it, since Changes reads none of the files past a summary. A hub answers it for the
+/// clients of earlier builds, since a request goes only at a break of the client protocol.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspaceChangedFiles {
     pub id: WorkspaceId,

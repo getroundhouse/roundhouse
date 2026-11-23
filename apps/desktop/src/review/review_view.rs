@@ -32,8 +32,6 @@ pub struct Review {
     /// How many times the whole diff has been asked for, so only the newest answer is taken, and an older one that comes
     /// late isn't shown over it, or taken for what the workspace changes now.
     pub(super) asks: u64,
-    /// How many times a summary has been taken, so a page asked for before it changed isn't listed after it.
-    pub(super) summaries_taken: u64,
     /// The file the file tab shows the diff of, which is read on its own while the summary is current.
     pub(super) diffed: Option<ChangedEntry>,
     /// How many times one file's diff has been asked for, so only the newest answer is taken.
@@ -58,7 +56,6 @@ impl Review {
             listed: None,
             listing: None,
             asks: 0,
-            summaries_taken: 0,
             diffed: None,
             one_file_asks: 0,
             comments: Vec::new(),

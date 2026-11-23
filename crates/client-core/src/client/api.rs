@@ -7,8 +7,8 @@ use protocol::client::{
 use protocol::event::SessionEvent;
 use protocol::find::Found;
 use protocol::model::{
-    AgentKind, ApprovalId, AttachmentId, ChangedFileAt, ChangedFilesPage, ClientMessageId, ClientRequestId, CommentId,
-    DeviceId, DiffComment, DiffSide, Ending, FileDiff, GitDiff, GitStatus, HubSettings, HubSettingsChange, MessageId,
+    AgentKind, ApprovalId, AttachmentId, ChangedFileAt, ClientMessageId, ClientRequestId, CommentId, DeviceId,
+    DiffComment, DiffSide, Ending, FileDiff, GitDiff, GitStatus, HubSettings, HubSettingsChange, MessageId,
     OwnPullRequest, Proposal, ReferenceAsk, ReferenceRead, Repo, RepoId, Seq, Session, SessionId, SpokenThrough,
     SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
 };
@@ -92,12 +92,6 @@ impl Client {
 
     pub fn workspace_diff(&self, id: &WorkspaceId) -> Result<GitDiff> {
         self.call(workspaces::WorkspaceDiff { id: id.clone() })
-    }
-
-    /// See [`workspaces::WorkspaceChangedFiles`]: the page of the workspace's changed files after the one `after`
-    /// names, which keeps nothing. A hub older than this, or whose worker is, refuses it, as `is_unsupported` says.
-    pub fn workspace_changed_files(&self, id: &WorkspaceId, after: ChangedFileAt) -> Result<ChangedFilesPage> {
-        self.call(workspaces::WorkspaceChangedFiles { id: id.clone(), after })
     }
 
     /// See [`workspaces::WorkspaceFileDiff`]: the page of the diff of the entry `at` names, as a summary names it,

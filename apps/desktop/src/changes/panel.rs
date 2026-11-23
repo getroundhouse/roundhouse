@@ -1,14 +1,15 @@
 use super::{comments_mark, rows};
 use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
 use crate::patch::FileStatus;
-use crate::review::{ChangedEntry, ChangedRow, Paging, Review};
+use crate::review::{ChangedEntry, ChangedRow, Review};
 use crate::shared_choice::{choose, chosen};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, Entity, EventEmitter, IntoElement, ParentElement, Render, Styled, Subscription, Window,
-    div, uniform_list,
+    AnyElement, App, Context, Entity, EventEmitter, InteractiveElement as _, IntoElement, ParentElement, Render, Role,
+    SharedString, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div,
+    uniform_list,
 };
 use look::{IconSizing as _, LineText, Placed, Typeset as _};
 use rows::Layout;
@@ -185,24 +186,24 @@ impl Render for Changes {
                 )
             })
             .child(body)
-            .children(listing.and_then(|listing| Some(left_out(listing.left_out, listing.paging?, cx))))
+            .children(listing.filter(|listing| listing.left_out > 0).map(|listing| left_out(listing.left_out, cx)))
     }
 }
 
-/// The row under the list that says how many files it leaves out, which reads the next page of them when it's
-/// clicked, unless the hub is from before pages, or the page is being read.
-fn left_out(count: u64, paging: Paging, cx: &mut Context<Changes>) -> AnyElement {
+/// The row under the list that says how many files the hub's summary leaves out, which aren't read, so a click on it
+/// does nothing. Its words are a status to assistive apps, since the kit tells them nothing of plain text.
+fn left_out(count: u64, cx: &App) -> AnyElement {
     let files = if count == 1 { "file" } else { "files" };
-    let says = match paging {
-        Paging::Idle | Paging::Refused => format!("{} more {files}", look::thousands(count)),
-        Paging::Reading => format!("Reading {} more {files}…", look::thousands(count)),
-    };
-    let row = look::list_row("changed-files-left-out", look::RowSize::Small)
-        .child(div().typeset(look::Type::Body).text_color(look::colors(cx).text_muted).child(says.clone()));
-    let row = match paging {
-        Paging::Idle => row.button(says).on_click(cx.listener(|t, _, _, cx| t.review.update(cx, Review::read_more))),
-        Paging::Reading | Paging::Refused => row,
-    };
+    let says = SharedString::from(format!("{} more {files} not shown", look::thousands(count)));
+    let words = div()
+        .id("changed-files-left-out-words")
+        .role(Role::Status)
+        .aria_label(says.clone())
+        .typeset(look::Type::Body)
+        .text_color(look::colors(cx).text_muted)
+        .child(says)
+        .test_support();
+    let row = look::list_row("changed-files-left-out", look::RowSize::Small).child(words);
     div().flex_none().px(look::ROWS_INSET).pb(look::ROWS_INSET).child(row).into_any_element()
 }
 

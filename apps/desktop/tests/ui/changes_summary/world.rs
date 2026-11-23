@@ -38,7 +38,7 @@ pub(super) fn file(path: &str, status: ChangeStatus, added: u64) -> ChangedFile 
     ChangedFile { path: path.into(), from: None, status, lines: Some(LineCounts { added, removed: 0 }), version: None }
 }
 
-/// Every file the workspace changes: two it lists, and two past them, which the hub reads as a page.
+/// Every file the workspace changes: two it lists, and two past them, which it leaves out.
 pub(super) fn every_file() -> Vec<ChangedFile> {
     vec![
         file("a.txt", ChangeStatus::Modified, 1),
@@ -72,10 +72,10 @@ pub(super) fn page_with(body: FileDiffBody, version: Option<&str>) -> FileDiff {
     FileDiff { base_commit: CommitId::from(BASE), version: version.map(|version| version.to_string().into()), body }
 }
 
-/// What a worker reads on request of [`every_file`]: the pages of those past the summary, and `a.txt`'s diff, in two
-/// pages, of [`VERSION`] and then of `814f4a4`, once it's written again, each with a line the whole diff lacks.
-pub(super) fn reading_everything() -> WorkerReads {
-    let mut reads = WorkerReads { changed_files: Some((CommitId::from(BASE), every_file())), ..WorkerReads::default() };
+/// What a worker reads on request of [`every_file`]: `a.txt`'s diff, in two pages, of [`VERSION`] and then of
+/// `814f4a4`, once it's written again, each with a line the whole diff lacks.
+pub(super) fn reading_a_txt() -> WorkerReads {
+    let mut reads = WorkerReads::default();
     let [head, hunk] = pages_of("a.txt", &["read on its own"], VERSION);
     let [head_again, hunk_again] = pages_of("a.txt", &["read on its own", "and read again"], "814f4a4");
     reads.file_diffs.insert((tracked("a.txt"), 0), vec![head, head_again]);
