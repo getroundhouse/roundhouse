@@ -12,9 +12,9 @@ use tokio::sync::{Mutex as AsyncMutex, watch};
 use tokio::time::Instant;
 use tracing::warn;
 
-use super::super::Hub;
+use super::super::{Hub, observations};
 use crate::jobs::{Ended, JobKind, Jobs, Limits, NotStarted, step, uncut};
-use crate::store::Store;
+use crate::store::{Store, now_ms};
 
 /// How old a list from the machine's own CLI gets before the next need of it asks the agent again, in the background,
 /// since whoever looks after that machine can update the CLI at any time, and nothing tells the hub. *Unconfirmed.*
@@ -69,10 +69,14 @@ impl ModelLists {
         self.lookups.stop();
     }
 
-    /// Whether the agent is due to be asked for the list at `key`, as [`Hub::ensure_model_list`] says.
-    fn due(&self, key: &ModelListKey, again: bool) -> Due {
+    /// Whether the agent is due to be asked for the list at `key`, as [`Hub::ensure_model_list`] says, where the hub
+    /// knows a catalog there if `known`, as the cache file can keep one that no list held now has.
+    fn due(&self, key: &ModelListKey, again: bool, known: bool) -> Due {
         let held = self.held.lock();
-        let Some(held) = held.get(key) else { return Due::Yes { catalog: None } };
+        let Some(held) = held.get(key) else {
+            // Of a CLI a provider installed, whose version says what it offers, so it needn't be asked again.
+            return if known && key.cli_version.is_some() && !again { Due::Known } else { Due::Yes };
+        };
         let list = held.list.borrow().clone();
         let old = key.cli_version.is_none() && held.answered_at.is_none_or(|at| at.elapsed() >= ASK_AGAIN_AFTER);
         let due = match &list.lookup {
@@ -81,7 +85,7 @@ impl ModelLists {
             ModelLookup::Failed { .. } => false,
             ModelLookup::Answered | ModelLookup::Unknown => old,
         };
-        if due { Due::Yes { catalog: list.catalog } } else { Due::No(Box::new(list)) }
+        if due { Due::Yes } else { Due::No(Box::new(list)) }
     }
 
     fn set(&self, list: ModelList, answered: bool) {
@@ -101,8 +105,10 @@ impl ModelLists {
 enum Due {
     /// Not now, so the list as it is stands.
     No(Box<ModelList>),
-    /// Yes, keeping the last catalog it gave meanwhile, if it gave one.
-    Yes { catalog: Option<ModelCatalog> },
+    /// Not now, with no list held, since the hub knows what it offers, as answered.
+    Known,
+    /// Yes, keeping the last catalog it gave meanwhile, if it gave one, which the hub keeps as an observation.
+    Yes,
 }
 
 impl Hub {
@@ -116,13 +122,20 @@ impl Hub {
     ) -> Result<ModelList, ApiError> {
         let lists = &self.model_lists;
         let _changing = lists.changing.lock().await;
-        let catalog = match lists.due(&lookup.key, again) {
-            Due::No(list) => return Ok(*list),
-            Due::Yes { catalog } => catalog,
-        };
+        let known = self.observations.keeps::<observations::ModelCatalog>(&lookup.key);
+        let due = lists.due(&lookup.key, again, known);
+        if let Due::No(list) = due {
+            return Ok(*list);
+        }
         let rev = self.blocking(Store::next_rev).await?;
         let key = lookup.key.clone();
-        let asking = ModelList { key: key.clone(), catalog: catalog.clone(), lookup: ModelLookup::Asking, rev };
+        if let Due::Known = due {
+            let list = ModelList { key, catalog: None, lookup: ModelLookup::Answered, rev };
+            lists.set(list.clone(), false);
+            self.notify(HubNotice::ModelList(list.clone()));
+            return Ok(list);
+        }
+        let asking = ModelList { key: key.clone(), catalog: None, lookup: ModelLookup::Asking, rev };
         let list = match self.start_lookup(lookup) {
             Ok(()) => asking,
             Err(not) => {
@@ -132,7 +145,7 @@ impl Hub {
                     }
                     NotStarted::Stopped => "the hub is stopping",
                 };
-                ModelList { key, catalog, lookup: ModelLookup::Failed { message: message.into() }, rev }
+                ModelList { key, catalog: None, lookup: ModelLookup::Failed { message: message.into() }, rev }
             }
         };
         lists.set(list.clone(), false);
@@ -140,17 +153,21 @@ impl Hub {
         Ok(list)
     }
 
-    /// The list `lookup` is for, once the agent has said what it offers there, or has failed to, starting it as
-    /// [`Hub::ensure_model_list`] does. The catalog is the last the agent gave, which a failure since keeps. One that
-    /// failed with none is asked for again, since what checks it is something asked for, such as a chat, rather than a
-    /// read, and a client with no Retry, such as the command line, would otherwise be refused until another asked.
+    /// What the agent offers where `lookup` is, once it has said, or has failed to, starting it as
+    /// [`Hub::ensure_model_list`] does. The catalog is the last the agent gave, which a failure since keeps, from the
+    /// hub's observations. One that failed with none is asked for again, since what checks it is something asked for,
+    /// such as a chat, rather than a read, and a client with no Retry, such as the command line, would otherwise be
+    /// refused until another asked. One the cache file kept, which no list holds yet, as after the hub starts again,
+    /// serves at once, while the agent is asked again where that's due.
     pub(super) async fn model_catalog(self: &Arc<Self>, lookup: Lookup) -> Result<ModelCatalog, ApiError> {
         let key = lookup.key.clone();
-        let failed_with_none = self.model_lists.held.lock().get(&key).is_some_and(|held| {
-            let list = held.list.borrow();
-            matches!(list.lookup, ModelLookup::Failed { .. }) && list.catalog.is_none()
-        });
+        let known = self.observations.value_of::<observations::ModelCatalog>(&key);
+        let held = self.model_lists.held.lock().get(&key).map(|held| held.list.borrow().lookup.clone());
+        let failed_with_none = matches!(held, Some(ModelLookup::Failed { .. })) && known.is_none();
         self.ensure_model_list(lookup, failed_with_none).await?;
+        if let (None, Some(kept)) = (held, known) {
+            return Ok(kept);
+        }
         let Some(mut list) = self.model_lists.held.lock().get(&key).map(|held| held.list.subscribe()) else {
             return Err(ApiError::new(ErrorCode::Unavailable, "the hub let go of the list of models meanwhile"));
         };
@@ -161,7 +178,7 @@ impl Hub {
             Ok(Err(_)) => return Err(unavailable("the hub let go of the list of models meanwhile".into())),
             Err(_) => return Err(unavailable("the agent didn't say which models it offers in time".into())),
         };
-        match (list.catalog, list.lookup) {
+        match (self.observations.value_of::<observations::ModelCatalog>(&key), list.lookup) {
             (Some(catalog), _) => Ok(catalog),
             (None, ModelLookup::Failed { message }) => Err(unavailable(message)),
             (None, ModelLookup::Asking | ModelLookup::Answered | ModelLookup::Unknown) => {
@@ -173,12 +190,12 @@ impl Hub {
     /// Lets go of every list whose key is `gone`, as when which login a launch is handed changes, so a client asks
     /// again for the list where it is, under the login it would be handed now. A lookup still running is called off,
     /// and finds its list gone.
-    pub(crate) async fn forget_model_lists(&self, gone: impl Fn(&ModelListKey) -> bool) {
+    pub(crate) async fn forget_model_lists(&self, is_gone: impl Fn(&ModelListKey) -> bool) {
         let lists = &self.model_lists;
-        let _changing = lists.changing.lock().await;
+        let changing = lists.changing.lock().await;
         let gone: Vec<ModelListKey> = {
             let mut held = lists.held.lock();
-            let gone: Vec<_> = held.keys().filter(|key| gone(key)).cloned().collect();
+            let gone: Vec<_> = held.keys().filter(|key| is_gone(key)).cloned().collect();
             for key in &gone {
                 held.remove(key);
                 lists.lookups.call_off(key);
@@ -189,6 +206,14 @@ impl Hub {
             match self.blocking(Store::next_rev).await {
                 Ok(rev) => self.notify(HubNotice::Removed { record: RecordKey::ModelList(key), rev }),
                 Err(e) => warn!(list = %key, "letting go of a list of models: {}", e.message),
+            }
+        }
+        drop(changing);
+        // What each offered goes with it, and so does one the cache file kept that no list held. After the lock a
+        // list's change takes, as `settle_model_list` says.
+        for key in self.observations.kept_of::<observations::ModelCatalog>().into_iter().filter(|key| is_gone(key)) {
+            if let Err(e) = self.observation_gone::<observations::ModelCatalog>(key.clone()).await {
+                warn!(list = %key, "letting go of which models an agent offers: {}", e.message);
             }
         }
     }
@@ -213,8 +238,17 @@ impl Hub {
     }
 
     /// Records what the agent answered, or that it failed, keeping the last catalog it gave, unless the hub has let go
-    /// of the list meanwhile.
+    /// of the list meanwhile. What it answered is kept as an observation first, so the list's record, which holds it
+    /// for a client of a version from before it, says it as it's told. That's before the lock a list's change takes,
+    /// since listing every record takes that lock under the one an observation's change takes.
     async fn settle_model_list(&self, key: &ModelListKey, answer: Result<ModelCatalog, ApiError>) {
+        if let Ok(catalog) = &answer
+            && self.model_lists.held.lock().contains_key(key)
+            && let Err(e) =
+                self.observation_read::<observations::ModelCatalog>(key.clone(), catalog.clone(), now_ms()).await
+        {
+            warn!(list = %key, "keeping which models an agent offers: {}", e.message);
+        }
         let lists = &self.model_lists;
         let _changing = lists.changing.lock().await;
         let Some(was) = lists.held.lock().get(key).map(|held| held.list.borrow().clone()) else { return };
@@ -228,11 +262,21 @@ impl Hub {
         };
         let answered = answer.is_ok();
         let list = match answer {
-            Ok(catalog) => ModelList { catalog: Some(catalog), lookup: ModelLookup::Answered, rev, ..was },
+            Ok(_) => ModelList { lookup: ModelLookup::Answered, rev, ..was },
             Err(e) => ModelList { lookup: ModelLookup::Failed { message: e.message }, rev, ..was },
         };
         lists.set(list.clone(), answered);
         self.notify(HubNotice::ModelList(list));
+    }
+}
+
+/// Has the list at `key` answered `catalog`, as a lookup the hub started does, for a test that runs none.
+#[cfg(test)]
+impl Hub {
+    pub(crate) async fn model_list_answered(&self, key: &ModelListKey, catalog: ModelCatalog) {
+        let rev = self.blocking(Store::next_rev).await.unwrap();
+        self.model_lists.set(ModelList { key: key.clone(), catalog: None, lookup: ModelLookup::Asking, rev }, false);
+        self.settle_model_list(key, Ok(catalog)).await;
     }
 }
 
@@ -252,12 +296,13 @@ mod tests {
     }
 
     /// The machine's own CLI can be updated at any time, so its list is asked for again once it's old, and a failure
-    /// waits for a person to ask again, so not every read starts the agent.
+    /// waits for a person to ask again, so not every read starts the agent. A catalog the cache file kept, which no
+    /// list holds, is asked for again only for the machine's own CLI, or when asked to.
     #[tokio::test(start_paused = true)]
     async fn the_agent_is_asked_for_a_list_it_hasnt_given_one_asked_for_again_or_an_old_one_of_its_own_cli() {
         let (own, installed) = (key(None), key(Some("0.170.0")));
         let failed = ModelLookup::Failed { message: "logged out".into() };
-        let asked = |lists: &ModelLists, key, again| matches!(lists.due(key, again), Due::Yes { .. });
+        let asked = |lists: &ModelLists, key, again| matches!(lists.due(key, again, false), Due::Yes);
 
         let lists = ModelLists::default();
         let none = (asked(&lists, &own, false), asked(&lists, &own, true));
@@ -270,19 +315,14 @@ mod tests {
         let answered = (asked(&lists, &own, false), asked(&lists, &own, true));
         tokio::time::advance(ASK_AGAIN_AFTER).await;
         let old = (asked(&lists, &own, false), asked(&lists, &installed, false));
-        let catalog = Some(ModelCatalog::default());
-        lists.set(ModelList { key: own.clone(), catalog, lookup: failed, rev: Rev::new(2) }, false);
-        let failed_since = lists.due(&own, true);
+        let kept = ModelLists::default();
+        let known = (kept.due(&installed, false, true), kept.due(&installed, true, true), kept.due(&own, false, true));
 
         assert_eq!(none, (true, true), "with no list");
         assert_eq!(asking, (false, false), "while asking already");
         assert_eq!(failing, (false, true), "once it failed");
         assert_eq!(answered, (false, true), "once it answered");
         assert_eq!(old, (true, false), "once its list is old, for its own CLI and one its provider installs");
-        assert_eq!(
-            failed_since,
-            Due::Yes { catalog: Some(ModelCatalog::default()) },
-            "it keeps the list it gave before"
-        );
+        assert_eq!(known, (Due::Known, Due::Yes, Due::Yes), "with a catalog the cache file kept, and no list");
     }
 }

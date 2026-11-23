@@ -256,6 +256,8 @@ impl Observations {
                 let gone = |owner: Owner<'_>| match owner {
                     Owner::Workspace(id) => !workspaces.contains(id),
                     Owner::Account(id) => !accounts.contains(id),
+                    // Never gone: what it owns goes only as the hub lets go of it.
+                    Owner::Hub => false,
                 };
                 tables.forget_of(&gone, &writer);
             }

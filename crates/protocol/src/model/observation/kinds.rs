@@ -3,8 +3,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::{AccountIdentity, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
+use crate::capability::settings::ModelCatalog;
 use crate::model::{
-    AccountId, ChangeSummary, Level, LineCounts, ReferenceAsk, RepositoryUnseen, Rev, UsageLimit, WorkspaceId,
+    AccountId, ChangeSummary, Level, LineCounts, ModelListKey, ReferenceAsk, RepositoryUnseen, Rev, UsageLimit,
+    WorkspaceId,
 };
 
 /// One observation, of any kind, with what it's of, its revision and what it says, as a list or the feed gives it. A
@@ -32,6 +34,12 @@ pub enum Observation {
     /// What GitHub says of an issue or a pull request, as a chip draws it. Sent at the level of that issue or pull
     /// request, by the ask as the client follows it, so two that name it in another case are two observations.
     Reference { reference: ReferenceAsk, said: Observed<ReferenceSaid>, rev: Rev },
+    /// What an agent offers where a chat would launch, as its CLI last listed it, by the list's key, which says the
+    /// agent, the project, the provider, the account and the CLI's version. Sent at the hub's level, since the new
+    /// workspace dialog and every chat's picker draw it. Never current, since the hub asks again only when it's due.
+    /// Whether the hub is asking now, and how that went, is the record [`ModelList`](crate::model::ModelList)'s. A
+    /// client of a version from before it reads it on that record, as [`ReadFrom::EveryObservation`] says.
+    ModelCatalog { list: ModelListKey, catalog: Observed<ModelCatalog>, rev: Rev },
     /// Who an agent's account is, as a worker last read it from the agent's login, which it does after a launch on a
     /// login on the worker's machine. Sent at the hub's level, since every view of an account names it. Never current,
     /// since nothing tells the hub when it changes. A client of a version from before it reads it on the account's
@@ -69,6 +77,9 @@ pub enum ObservationKey {
     Reference {
         reference: ReferenceAsk,
     },
+    ModelCatalog {
+        list: ModelListKey,
+    },
     AccountIdentity {
         account: AccountId,
     },
@@ -99,6 +110,7 @@ impl Observation {
                 ObservationKey::WorkspaceRepositoryUnseen { workspace_id: workspace_id.clone() }
             }
             Observation::Reference { reference, .. } => ObservationKey::Reference { reference: reference.clone() },
+            Observation::ModelCatalog { list, .. } => ObservationKey::ModelCatalog { list: list.clone() },
             Observation::AccountIdentity { account, .. } => {
                 ObservationKey::AccountIdentity { account: account.clone() }
             }
@@ -117,6 +129,7 @@ impl Observation {
             | Observation::WorkspacePullRequestDetail { rev, .. }
             | Observation::WorkspaceRepositoryUnseen { rev, .. }
             | Observation::Reference { rev, .. }
+            | Observation::ModelCatalog { rev, .. }
             | Observation::AccountIdentity { rev, .. }
             | Observation::AccountLimits { rev, .. } => *rev,
             Observation::Unknown => Rev::default(),
@@ -135,6 +148,7 @@ impl ObservationKey {
         match self {
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspacePullRequest { .. }
+            | ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
             | ObservationKey::AccountLimits { .. } => Some(Level::Hub),
             ObservationKey::WorkspaceChanges { workspace_id }
@@ -156,9 +170,9 @@ impl ObservationKey {
             | ObservationKey::WorkspacePullRequestDetail { .. }
             | ObservationKey::WorkspaceRepositoryUnseen { .. }
             | ObservationKey::Reference { .. } => Some(ReadFrom::GithubObserved),
-            ObservationKey::AccountIdentity { .. } | ObservationKey::AccountLimits { .. } => {
-                Some(ReadFrom::EveryObservation)
-            }
+            ObservationKey::ModelCatalog { .. }
+            | ObservationKey::AccountIdentity { .. }
+            | ObservationKey::AccountLimits { .. } => Some(ReadFrom::EveryObservation),
             ObservationKey::Unknown => None,
         }
     }

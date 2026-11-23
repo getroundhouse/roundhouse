@@ -2,7 +2,10 @@ use super::{
     AccountIdentity, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReadFrom,
     ReferenceSaid,
 };
-use crate::model::{ChangeSummary, GithubRepositoryName, IssueNumber, Level, LineCounts, ReferenceAsk, Rev};
+use crate::capability::settings::ModelCatalog;
+use crate::model::{
+    AgentKind, ChangeSummary, GithubRepositoryName, IssueNumber, Level, LineCounts, ModelListKey, ReferenceAsk, Rev,
+};
 
 /// The level an observation is sent at, and which subscriptions are sent it.
 type Sent = (Option<Level>, Option<ReadFrom>);
@@ -10,7 +13,25 @@ type Sent = (Option<Level>, Option<ReadFrom>);
 /// An observation of each kind, with the key and revision it's of, and how it's sent.
 fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
     let unknown = (Observation::Unknown, ObservationKey::Unknown, Rev::default(), (None, None));
-    [of_a_workspace(), of_github(), of_an_account(), vec![unknown]].concat()
+    [of_a_workspace(), of_github(), of_an_agent(), of_an_account(), vec![unknown]].concat()
+}
+
+/// Of each kind of what an agent says of itself.
+fn of_an_agent() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
+    let list = ModelListKey {
+        agent: AgentKind::Codex,
+        repo: "r".into(),
+        provider: "local".into(),
+        account: None,
+        cli_version: None,
+    };
+    let catalog = Observed::AsOf { value: ModelCatalog::default(), as_of_ms: 1_000 };
+    vec![(
+        Observation::ModelCatalog { list: list.clone(), catalog, rev: Rev::new(12) },
+        ObservationKey::ModelCatalog { list },
+        Rev::new(12),
+        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+    )]
 }
 
 /// Of each kind of what git says of a workspace.

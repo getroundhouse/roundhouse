@@ -166,7 +166,7 @@ async fn an_account_s_limits_reach_each_client_in_the_form_its_version_reads() {
 }
 
 /// Waits until `client` is sent a notice `hub` tells after all it told before, so it has been sent everything before.
-async fn mark(hub: &crate::hub::Hub, client: &mut Connection) {
+pub(super) async fn mark(hub: &crate::hub::Hub, client: &mut Connection) {
     let marker = HubNotice::Comment(DiffComment {
         id: "c".into(),
         workspace_id: "w".into(),
