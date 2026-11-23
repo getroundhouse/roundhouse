@@ -1,5 +1,6 @@
-//! What tells the task that works out GitHub's observations that a read of a workspace's pull request has ended,
-//! whether it failed, and what it heard of the workspace's repository, which nothing the cache keeps says.
+//! What tells the task that works out GitHub's observations how each read of a workspace's pull request ended, and
+//! what it heard of the workspace's repository, which nothing the cache keeps says. Every read that's due ends with
+//! word of how it went, so the task marks what's worked out of a workspace current only from a read that was made.
 
 use parking_lot::Mutex;
 use protocol::model::{RepositoryUnseen, WorkspaceId};
@@ -27,11 +28,22 @@ impl Default for ReadsEnded {
 #[derive(Debug)]
 pub(super) struct ReadEnded {
     pub(super) workspace: WorkspaceId,
-    /// Whether it couldn't be read, as while GitHub can't be reached, or GitHub showed no repository to read it in.
-    pub(super) failed: bool,
+    pub(super) went: ReadWent,
     pub(super) heard: Heard,
     /// When it ended, by the hub's clock, which is when what it heard was heard.
     pub(super) at_ms: i64,
+}
+
+/// How a read of a workspace's pull request went.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ReadWent {
+    /// GitHub answered it, as did a read that needed nothing of GitHub, such as of a branch pushed nowhere.
+    Read,
+    /// It was made and failed, as while GitHub can't be reached, or GitHub showed no repository to read it in.
+    Failed,
+    /// It was due, and wasn't made, as when GitHub's limit for its token holds it back, or there's no login to read it
+    /// as, so nothing was read, and nothing needs working out again.
+    HeldBack,
 }
 
 /// What a read of a workspace's pull request heard of whether GitHub showed the default the repository where the
@@ -60,10 +72,10 @@ impl ReadsEnded {
 }
 
 impl Hub {
-    /// Tells of a read of `workspace`'s pull request that has ended, once what it found is recorded, failed or not,
+    /// Tells of a read of `workspace`'s pull request that has ended, as `went` says, once what it found is recorded,
     /// with what it heard of the repository.
-    pub(crate) fn github_read_ended(&self, workspace: &WorkspaceId, failed: bool, heard: Heard) {
-        let ended = ReadEnded { workspace: workspace.clone(), failed, heard, at_ms: now_ms() };
+    pub(crate) fn github_read_ended(&self, workspace: &WorkspaceId, went: ReadWent, heard: Heard) {
+        let ended = ReadEnded { workspace: workspace.clone(), went, heard, at_ms: now_ms() };
         // Fails only once the task's end is dropped, as the hub stops, which leaves nobody to tell.
         let _ = self.github_reads_ended.queue.send(ended);
     }

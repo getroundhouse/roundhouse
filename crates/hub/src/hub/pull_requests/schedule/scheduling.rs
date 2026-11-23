@@ -56,6 +56,12 @@ impl Schedule {
     }
 }
 
+/// Whether the hub reads `workspace`'s pull request when nobody asks, which it does only for a ready workspace, so
+/// nothing keeps another's up to date.
+pub(in crate::hub) fn read_in_turn(workspace: &Workspace) -> bool {
+    workspace.status == WorkspaceStatus::Ready
+}
+
 /// How a read went.
 #[derive(Clone, Copy, Debug)]
 pub(in super::super) enum Went<'a> {
@@ -105,7 +111,7 @@ pub(in super::super) fn due<'a>(
     };
     let mut due: Vec<_> = listed
         .iter()
-        .filter(|(w, state)| w.status == WorkspaceStatus::Ready && !done(w, *state))
+        .filter(|(w, state)| read_in_turn(w) && !done(w, *state))
         .map(|(w, state)| (w, *state, schedules.get(&w.id).map(|schedule| due_at(w, schedule))))
         .filter(|(_, _, due_at)| due_at.is_none_or(|due_at| due_at <= now))
         .collect();

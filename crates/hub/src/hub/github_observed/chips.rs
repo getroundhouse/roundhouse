@@ -9,10 +9,14 @@ use crate::github_cache::{Item, KeptSummary, Told};
 use crate::hub::Hub;
 use crate::hub::observations::Referenced;
 
-/// The chips the task last saw clients follow.
+/// The chips the task last saw clients follow, and which of them the cache has kept a read of since.
 #[derive(Default)]
 pub(super) struct Chips {
     followed: HashSet<ReferenceAsk>,
+    /// Those followed whose summary the cache kept a read of since they were followed, so what's worked out of them is
+    /// current, unless that read failed, until nothing follows them. Only a read the cache keeps says so, so working
+    /// everything out again, as after the task falls behind, makes nothing current that wasn't.
+    read: HashSet<ReferenceAsk>,
 }
 
 impl Hub {
@@ -46,15 +50,15 @@ impl Hub {
 
 impl Chips {
     /// Takes in what clients follow now. What's newly followed is worked out at once from what the cache has, as of
-    /// when that was read, and is current from the read following it starts. What's no longer followed is as of its
-    /// last read.
+    /// when that was read, and is current from the first read the cache keeps after. What's no longer followed is as
+    /// of its last read.
     pub(super) async fn follow_now(&mut self, hub: &Hub) {
         let now = hub.followers.reference_asks();
         for ask in now.difference(&self.followed) {
             hub.work_out_chip(ask, false).await;
-            logged(hub.observation_kept_current::<Referenced>(ask.clone()).await);
         }
         for ask in self.followed.difference(&now) {
+            self.read.remove(ask);
             logged(hub.observation_no_longer_read_again::<Referenced>(ask.clone()).await);
         }
         self.followed = now;
@@ -62,22 +66,27 @@ impl Chips {
 
     /// Takes in what the cache kept and forgot: each observation worked out from a read it kept is worked out again,
     /// and each of what it forgot is gone.
-    pub(super) async fn told(&self, hub: &Hub, told: &Told) {
+    pub(super) async fn told(&mut self, hub: &Hub, told: &Told) {
         let Told { kept, forgotten } = told;
         for ask in self.asks(hub) {
             let item = item_of(&ask);
             if forgotten.contains(&item) {
+                self.read.remove(&ask);
                 logged(hub.observation_gone::<Referenced>(ask).await);
             } else if kept.contains(&item) {
-                hub.work_out_chip(&ask, self.followed.contains(&ask)).await;
+                if self.followed.contains(&ask) {
+                    self.read.insert(ask.clone());
+                }
+                hub.work_out_chip(&ask, self.read.contains(&ask)).await;
             }
         }
     }
 
-    /// Works out every observation of a chip again, as after missing some of what the cache told.
+    /// Works out every observation of a chip again, as after missing some of what the cache told, each current only
+    /// where a read the cache kept since it was followed says so.
     pub(super) async fn work_out_all(&self, hub: &Hub) {
         for ask in self.asks(hub) {
-            hub.work_out_chip(&ask, self.followed.contains(&ask)).await;
+            hub.work_out_chip(&ask, self.read.contains(&ask)).await;
         }
     }
 

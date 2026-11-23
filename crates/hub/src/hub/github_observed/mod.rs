@@ -8,8 +8,10 @@
 //! the repository is kept nowhere else, so it's kept from what each read that ends heard of it. One task works them
 //! out, in turn, so no value worked out from older state lands after one worked out from newer.
 //!
-//! Each is current while a client follows what it's of, from the first read after, until a read fails or the last
-//! follower stops, and otherwise as of the read that found what it says. A chip's is gone once the cache forgets what
+//! Each is current while a client follows what it's of, from the first read after that's made and answered, until a
+//! read fails or is held back, as by GitHub's limit, the hub stops reading it, or the last follower stops, and otherwise
+//! as of the read that found what it says. Only what reads it says how each read went, so nothing is current by a
+//! guess. A chip's is gone once the cache forgets what
 //! it's of, as it does what nothing has asked for in a week. A workspace's go with the workspace, and those of its
 //! pull request once the cache forgets that pull request, or the record links to another.
 
@@ -20,4 +22,4 @@ mod reads;
 mod tests;
 mod workspaces;
 
-pub(crate) use reads::{Heard, ReadsEnded};
+pub(crate) use reads::{Heard, ReadWent, ReadsEnded};

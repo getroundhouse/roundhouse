@@ -7,6 +7,7 @@ use tokio::time::Instant;
 use tracing::debug;
 
 use crate::hub::Followed;
+use crate::hub::github_observed::{Heard, ReadWent};
 use crate::hub::pull_requests::own::WorkspaceRead;
 use crate::hub::pull_requests::reading::{Taking, couldnt_read};
 use crate::hub::pull_requests::remote::{ReadsAs, waited};
@@ -77,7 +78,8 @@ impl Hub {
     }
 
     /// Starts reading the workspaces that are due, a job for each token they're read as, but for a token whose read
-    /// is under way, or whose GitHub limit is down to the part kept for everything else.
+    /// is under way, or whose GitHub limit is down to the part kept for everything else. A read held back by that
+    /// limit, or by there being no login, is told as its end, so what's worked out of it isn't said to be current.
     async fn start_due_own_reads(self: &Arc<Self>) {
         let listed_at = Instant::now();
         let mut by_token: Vec<(ReadsAs, Vec<Workspace>)> = Vec::new();
@@ -85,6 +87,7 @@ impl Hub {
             let Ok(reads_as) = self.reads_as() else {
                 // So it doesn't come up again at once, ahead of the rest.
                 self.pull_requests.wait_longer(&workspace.id);
+                self.github_read_ended(&workspace.id, ReadWent::HeldBack, Heard::Nothing);
                 continue;
             };
             match by_token.iter_mut().find(|(read_as, _)| *read_as == reads_as) {
@@ -95,6 +98,9 @@ impl Hub {
         let busy = self.own_reads.busy();
         for (reads_as, workspaces) in by_token.into_iter().filter(|(reads_as, _)| !busy.contains(reads_as)) {
             if self.pull_requests.limits.allows(&reads_as, Asked::InTurn, now_ms()).is_err() {
+                for workspace in &workspaces {
+                    self.github_read_ended(&workspace.id, ReadWent::HeldBack, Heard::Nothing);
+                }
                 continue;
             }
             if !self.own_reads.has_room(JobKind::ReadOwnPullRequests) {
@@ -106,7 +112,7 @@ impl Hub {
 
     /// Starts reading `workspaces`, as they were at `listed_at`, as `reads_as`, as a job, within the limits of a read
     /// that makes [`QUERIES_AT_MOST`], as it says. Once it ends, however it ended, each one it didn't finish waits
-    /// longer for its next, and says so on its waits.
+    /// longer for its next, and says so on its waits, and as its read's end.
     async fn start_own_read(self: &Arc<Self>, reads_as: ReadsAs, workspaces: Vec<Workspace>, listed_at: Instant) {
         if workspaces.is_empty() {
             return;
@@ -127,6 +133,7 @@ impl Hub {
                 for (id, before) in before {
                     hub.pull_requests.wait_longer_than(&id, before);
                     hub.remote_waits_failed(&id, None, &error, &[]).await;
+                    hub.github_read_ended(&id, ReadWent::Failed, Heard::Nothing);
                 }
             }
         };

@@ -8,6 +8,7 @@ use super::Asked;
 mod tests;
 
 mod scheduling;
+pub(in crate::hub) use scheduling::read_in_turn;
 #[cfg(test)]
 use scheduling::{LATEST, SHOWN, SOONEST};
 pub(super) use scheduling::{Schedule, Went, due};
