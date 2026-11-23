@@ -1,7 +1,7 @@
 use super::bar;
 use crate::app::AppView;
 use crate::reorder::{Arrangement, Drawn, Hold, Places};
-use crate::sidebar::{Standing, doing, standing};
+use crate::sidebar::{Standing, doing, lines, standing};
 use crate::workspace_order::Sort;
 use crate::{prompt_cache, reorder};
 use gpui_kit::assets::IconName as Lucide;
@@ -197,10 +197,10 @@ pub(crate) fn page(app: &AppView, rows: Rows, cx: &mut Context<AppView>) -> impl
         .when(!empty, |d| d.child(list))
 }
 
-/// A workspace's row: its mark and name, when one of its chats' caches is about to expire, its repository, and a
-/// button to archive it or bring it back, which says so while it does. Clicking the rest of the row shows the
-/// workspace, as its row in the sidebar does, or brings an archived one back. The repository and what the row says are
-/// smaller, on the name's baseline.
+/// A workspace's row: its mark and name, when one of its chats' caches is about to expire, its lines added and removed,
+/// its repository, and a button to archive it or bring it back, which says so while it does. Clicking the rest of the
+/// row shows the workspace, as its row in the sidebar does, or brings an archived one back. The repository, the lines
+/// and what the row says are smaller, on the name's baseline.
 fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Context<AppView>) -> AnyElement {
     let muted = look::colors(cx).text_muted;
     let Standing { signal, work, needs_a_look } = standing(app, workspace, cx);
@@ -208,6 +208,8 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
     let its_chats = app.records().sessions(&workspace.id).iter().filter(|_| prompt_cache::told_of(workspace));
     let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx))
         .map(|left_ms| line_text.detail.set(div().flex_none().text_color(muted).child(look::expires_in(left_ms))));
+    let drawn = client_core::workspace_lines::drawn(workspace.status, app.records().workspace_lines(&workspace.id));
+    let lines = drawn.map(|drawn| lines(format!("home-lines-{}", workspace.id), drawn, &line_text.code));
     let id = workspace.id.clone();
     let row = look::list_row(ElementId::Name(format!("home-{}", workspace.id).into()), ROW_SIZE)
         .on_click(cx.listener(move |t, _, _, cx| t.open_workspace(id.clone(), cx)))
@@ -222,6 +224,7 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
                 .child(workspace.label().to_string()),
         )
         .children(expiring)
+        .children(lines)
         .child(line_text.detail.set(div().flex_none().w(REPO_WIDTH).truncate().text_color(muted).child(repo)))
         .child(row_button(app, workspace, &line_text.detail, cx));
     // In from the pane's edges, as a list's rows are, since the list places each row itself.

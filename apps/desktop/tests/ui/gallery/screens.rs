@@ -13,7 +13,7 @@ use super::frame::{
 use super::steps::{Screen, Step, Target};
 use super::worlds::{
     archiving, attachments, chat_tabs, chat_world, closed_chats, conversation, planning, queue_held, queued,
-    setup_failed, steered, streaming, titled, unread, unread_titled, waiting_on_checks, waiting_on_stacks,
+    setup_failed, steered, streaming, titled, unread, unread_titled, waiting_on_checks, waiting_on_stacks, with_lines,
     working_background,
 };
 use super::{long_chats, pictures};
@@ -231,7 +231,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         frame: TABS_MENU,
         steps: &[Step::Select(FOCUS), Step::Click("closed-chats"), Step::MoveAway],
     },
-    Screen { name: "unread", spec: "sidebar.md", world: Some(unread), frame: SIDEBAR, steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "unread",
+        spec: "sidebar.md",
+        world: Some(|| with_lines(unread())),
+        frame: SIDEBAR,
+        steps: &[Step::Select(FOCUS)],
+    },
     Screen { name: "unread-tab", spec: "sidebar.md", world: Some(unread), frame: TABS, steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "sidebar-hidden",
@@ -244,7 +250,7 @@ pub(crate) const SCREENS: &[Screen] = &[
     Screen {
         name: "home",
         spec: "home.md",
-        world: Some(titled),
+        world: Some(|| with_lines(titled())),
         frame: Frame::Exactly(Part::Region(Region::Home), &[]),
         steps: &[Step::Select(FOCUS), Step::Click("home")],
     },
@@ -267,7 +273,7 @@ pub(crate) const SCREENS: &[Screen] = &[
     Screen {
         name: "archive-button",
         spec: "sidebar.md",
-        world: Some(conversation),
+        world: Some(|| with_lines(conversation())),
         frame: SIDEBAR,
         steps: &[Step::Select(FOCUS), Step::Point("workspace-ws-1")],
     },
@@ -275,14 +281,14 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "archiving",
         spec: "sidebar.md",
         // Its record says it's being archived, which its row draws whichever app asked, with the pointer away from it.
-        world: Some(archiving),
+        world: Some(|| with_lines(archiving())),
         frame: SIDEBAR,
         steps: &[Step::Select(FOCUS)],
     },
     Screen {
         name: "drafts",
         spec: "sidebar.md",
-        world: Some(conversation),
+        world: Some(|| with_lines(conversation())),
         // Each workspace is shown to type in its composer, then left for the screen's own.
         frame: SIDEBAR,
         steps: &[

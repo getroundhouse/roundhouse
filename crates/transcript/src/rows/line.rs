@@ -205,7 +205,7 @@ impl Part {
                 .set(div().min_w_0().overflow_hidden().text_ellipsis().text_color(colors.text_faint).child(text))
                 .into_any_element(),
             Part::Counts(Counts { added, removed }) => {
-                look::lines_changed(added, removed).placed(&line_text.code).into_any_element()
+                look::lines_changed(look::LinesKind::Plain, added, removed).placed(&line_text.code).into_any_element()
             }
         }
     }

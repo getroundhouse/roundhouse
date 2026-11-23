@@ -8,7 +8,7 @@ use gpui_kit::{
 use super::{ChipKind, ChipSize, GithubState, IssueState, PullRequestState};
 use crate::baseline::LineText;
 use crate::colors::colors;
-use crate::counts::lines_changed;
+use crate::counts::{LinesKind, lines_changed};
 use crate::file_icons::{file_icon_at, folder_icon};
 use crate::icon_sizes::IconSizing as _;
 use crate::shape::{Corner, EDGE, Shaped as _};
@@ -173,7 +173,7 @@ impl RenderOnce for Chip {
         let changed = self
             .changed
             .zip(text.as_ref())
-            .map(|((added, removed), text)| lines_changed(added, removed).placed(&text.code));
+            .map(|((added, removed), text)| lines_changed(LinesKind::Plain, added, removed).placed(&text.code));
         let title = self.title.map(|title| {
             div()
                 .min_w_0()

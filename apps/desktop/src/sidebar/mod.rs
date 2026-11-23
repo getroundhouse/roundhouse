@@ -12,7 +12,7 @@ mod row;
 mod standing;
 
 pub(crate) use kept::Kept;
-pub(crate) use row::doing;
+pub(crate) use row::{doing, lines};
 use standing::needs_a_look;
 pub(crate) use standing::{Standing, needing_a_look, standing};
 

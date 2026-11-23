@@ -1,27 +1,64 @@
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{App, IntoElement, ParentElement as _, RenderOnce, Styled as _, Window, div};
+use gpui_kit::{
+    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
+};
 
+use super::LinesKind;
 use crate::baseline::Placed;
 use crate::colors::colors;
 use crate::space::Space;
-use crate::typography::Typeset as _;
+use crate::typography::Typeset;
 
-/// The lines added to a file and removed from it, `+12 −3`, leaving out whichever is none.
-pub fn lines_changed(added: usize, removed: usize) -> LinesChanged {
-    LinesChanged { added, removed, placed: None }
+/// How strongly lines last read some time ago are drawn, rather than kept current: enough of their colours to tell
+/// green from red, faint enough that they don't read as now.
+const AS_LAST_READ: f32 = 0.55;
+
+/// The lines added and removed of `kind`, `+12 −3`, leaving out whichever is none.
+pub fn lines_changed(kind: LinesKind, added: usize, removed: usize) -> LinesChanged {
+    LinesChanged { kind, added, removed, written: whole, as_last_read: false, said: None, placed: None }
 }
 
-/// How much a file changed, which [`lines_changed`] makes.
+/// How much changed, which [`lines_changed`] makes.
 #[derive(IntoElement)]
 #[must_use]
 pub struct LinesChanged {
+    kind: LinesKind,
     added: usize,
     removed: usize,
+    written: fn(usize) -> String,
+    as_last_read: bool,
+    said: Option<(ElementId, SharedString)>,
     placed: Option<Placed>,
 }
 
+/// A count as it is, every figure of it.
+fn whole(count: usize) -> String {
+    count.to_string()
+}
+
 impl LinesChanged {
+    /// Writes each count as `write` does, such as shortened to a few figures where there's room for no more. Every
+    /// figure of it otherwise.
+    pub fn written_as(mut self, write: fn(usize) -> String) -> Self {
+        self.written = write;
+        self
+    }
+
+    /// Drawn fainter, as lines read some time ago rather than kept current, so they don't read as now.
+    pub fn as_last_read(mut self, as_last_read: bool) -> Self {
+        self.as_last_read = as_last_read;
+        self
+    }
+
+    /// Says what they are to assistive apps, as `said`, such as `12 lines added and 3 removed`, with `id`, which a test
+    /// finds them by.
+    pub fn said(mut self, id: impl Into<ElementId>, said: impl Into<SharedString>) -> Self {
+        self.said = Some((id.into(), said.into()));
+        self
+    }
+
     /// On the baseline of the line it's in, beside body text, such as a call's line.
     pub fn placed(mut self, placed: &Placed) -> Self {
         self.placed = Some(placed.clone());
@@ -31,8 +68,8 @@ impl LinesChanged {
     /// What it says, as it's written: a plus before what's added, and a minus sign, not a hyphen, before what's
     /// removed.
     pub(super) fn written(&self) -> (Option<String>, Option<String>) {
-        let added = (self.added > 0).then(|| format!("+{}", self.added));
-        let removed = (self.removed > 0).then(|| format!("\u{2212}{}", self.removed));
+        let added = (self.added > 0).then(|| format!("+{}", (self.written)(self.added)));
+        let removed = (self.removed > 0).then(|| format!("\u{2212}{}", (self.written)(self.removed)));
         (added, removed)
     }
 }
@@ -40,16 +77,24 @@ impl LinesChanged {
 impl RenderOnce for LinesChanged {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let colors = colors(cx);
+        let strength = if self.as_last_read { AS_LAST_READ } else { 1. };
         let (added, removed) = self.written();
         let drawn = h_flex()
             .flex_none()
             .gap(Space::XSmall)
             .typeset_code(cx)
-            .when_some(added, |d, added| d.child(div().text_color(colors.added).child(added)))
-            .when_some(removed, |d, removed| d.child(div().text_color(colors.removed).child(removed)));
-        match self.placed {
+            .when(self.kind.stronger(), Typeset::emphasis)
+            .when_some(added, |d, added| d.child(div().text_color(colors.added.opacity(strength)).child(added)))
+            .when_some(removed, |d, removed| {
+                d.child(div().text_color(colors.removed.opacity(strength)).child(removed))
+            });
+        let drawn = match self.placed {
             Some(placed) => placed.set(drawn),
             None => drawn,
+        };
+        match self.said {
+            Some((id, said)) => drawn.id(id).role(Role::Status).aria_label(said).test_support().into_any_element(),
+            None => drawn.into_any_element(),
         }
     }
 }

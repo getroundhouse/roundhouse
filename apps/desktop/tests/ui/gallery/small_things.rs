@@ -1,8 +1,8 @@
 //! The small things that sit in a line, each kind in one picture of its own: every kind of pill, every kind of chip,
 //! an issue's and a pull request's in each state and before it's known, with a file's chip with the lines it's about,
 //! with what changed in it and deleted, a small chip among words, every kind of badge
-//! beside what it's said of, with labels in four colours, and every kind of count beside what it counts, with the
-//! lines a file gained and lost, as `look` has them, at the app's scale.
+//! beside what it's said of, with labels in four colours, and every kind of count beside what it counts, with every
+//! kind of lines added and removed, as `look` has them, at the app's scale.
 
 #![cfg(test)]
 
@@ -13,7 +13,9 @@ use gpui_kit::{
     AnyElement, App, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem,
     Render, Styled as _, TestSupportExt as _, Window, div, px, rgb, size,
 };
-use look::{BadgeKind, ChipKind, CountKind, GithubState, IssueState, PillKind, PullRequestState, Type, Typeset as _};
+use look::{
+    BadgeKind, ChipKind, CountKind, GithubState, IssueState, LinesKind, PillKind, PullRequestState, Type, Typeset as _,
+};
 
 use super::capture::Picture;
 use super::headless;
@@ -219,15 +221,31 @@ impl Render for Counts {
                 row(name, sample, cx)
             })
             .collect();
-        let lines = h_flex().gap(look::Space::Large).typeset(Type::Body).text_color(colors.text_muted).children(
-            [(12, 3, "model.rs"), (40, 0, "Cargo.toml"), (0, 120, "legacy.rs")].map(|(added, removed, file)| {
-                h_flex()
-                    .gap(look::Space::Small)
-                    .child(line_text.body.set(div().child(file)))
-                    .child(look::lines_changed(added, removed).placed(&line_text.code))
-            }),
-        );
-        rows.push(row("Lines".to_string(), lines.into_any_element(), cx));
+        rows.extend(LinesKind::ALL.iter().map(|&kind| {
+            let [name] = kind.written();
+            // A workspace's are shortened, and the last of them as last read, rather than kept current.
+            let samples: [(usize, usize, &str, bool); 3] = match kind {
+                LinesKind::Plain => {
+                    [(12, 3, "model.rs", false), (40, 0, "Cargo.toml", false), (0, 120, "legacy.rs", false)]
+                }
+                LinesKind::Workspace => {
+                    [(37_412, 1_250, "alder", false), (48, 0, "birch", false), (12, 3, "cedar", true)]
+                }
+            };
+            let lines = h_flex().gap(look::Space::Large).typeset(Type::Body).text_color(colors.text_muted).children(
+                samples.map(|(added, removed, words, as_last_read)| {
+                    let lines = look::lines_changed(kind, added, removed).as_last_read(as_last_read);
+                    let lines = match kind {
+                        LinesKind::Plain => lines,
+                        LinesKind::Workspace => lines.written_as(client_core::workspace_lines::shortened),
+                    };
+                    let lines = lines.placed(&line_text.code);
+                    h_flex().gap(look::Space::Small).child(line_text.body.set(div().child(words))).child(lines)
+                }),
+            );
+            let sample = div().id(places::id("look::LinesKind", &name)).flex().child(lines).test_support();
+            row(name, sample.into_any_element(), cx)
+        }));
         v_flex().size_full().bg(colors.pane).text_color(colors.text).p(px(MARGIN)).children(rows)
     }
 }
@@ -301,16 +319,17 @@ pub(crate) fn badges(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Pla
     )
 }
 
-/// Every kind of count, and lines changed, with where it draws each count.
+/// Every kind of count, and every kind of lines added and removed, with where it draws each.
 pub(crate) fn counts(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Places) {
     let mut cx = headless::app(text_system);
     let names: Vec<String> = CountKind::ALL.iter().map(|each| each.written()[0].clone()).collect();
-    let size = size(wide(0.), tall(CountKind::ALL.len() + 1));
+    let lines: Vec<String> = LinesKind::ALL.iter().map(|each| each.written()[0].clone()).collect();
+    let size = size(wide(0.), tall(CountKind::ALL.len() + LinesKind::ALL.len()));
     headless::draw_and_measure(
         &mut cx,
         size,
         None,
         |_| Counts,
-        |window| Places::of(window, &[("look::CountKind", &names)]),
+        |window| Places::of(window, &[("look::CountKind", &names), ("look::LinesKind", &lines)]),
     )
 }

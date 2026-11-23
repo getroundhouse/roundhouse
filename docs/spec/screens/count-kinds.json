@@ -12,5 +12,19 @@
       "width": 16,
       "height": 39
     }
+  },
+  "look::LinesKind": {
+    "Plain": {
+      "x": 252,
+      "y": 228,
+      "width": 720,
+      "height": 45
+    },
+    "Workspace": {
+      "x": 252,
+      "y": 316,
+      "width": 720,
+      "height": 45
+    }
   }
 }

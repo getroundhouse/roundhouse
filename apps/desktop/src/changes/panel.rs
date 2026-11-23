@@ -191,7 +191,7 @@ pub(crate) fn controls(changes: &Entity<Changes>, code: &Placed, cx: &App) -> An
         // Out past the bar's room by the room around the button's icon, so the icon lines up with the rows' marks.
         .mr(-look::ControlSize::Regular.inset())
         // On the baseline of the tabs' names beside it.
-        .child(look::lines_changed(added, removed).placed(code))
+        .child(look::lines_changed(look::LinesKind::Plain, added, removed).placed(code))
         .child(
             look::icon_button(
                 "changes-layout",
@@ -257,7 +257,9 @@ fn file_row(
                 .flex_none()
                 .gap(look::Space::Small)
                 .children(comments)
-                .child(look::lines_changed(file.added(), file.removed()).placed(&line_text.code))
+                .child(
+                    look::lines_changed(look::LinesKind::Plain, file.added(), file.removed()).placed(&line_text.code),
+                )
                 .child(status),
         )
         .on_click(cx.listener(move |_, _, _, cx| cx.emit(ChangesEvent::Open(path.clone()))))

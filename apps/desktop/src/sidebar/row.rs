@@ -1,9 +1,10 @@
-//! A workspace's row in the sidebar: its mark and name, a pencil while something typed in it isn't sent, a clock while
-//! one of its chats' caches is about to expire, the button that archives it under the pointer, which they make room
-//! for, what it's waiting on the hub for, and what a right-click on it offers.
+//! A workspace's row in the sidebar: its mark and name, its lines added and removed, a pencil while something typed in
+//! it isn't sent, a clock while one of its chats' caches is about to expire, the button that archives it under the
+//! pointer, which they make room for, what it's waiting on the hub for, and what a right-click on it offers.
 
 use std::rc::Rc;
 
+use client_core::workspace_lines;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::motion::transition;
 use gpui_kit::component::{Icon, h_flex};
@@ -51,8 +52,9 @@ pub(super) fn workspace_row(
         };
     let its_chats = app.records().sessions(&workspace.id).iter();
     let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx));
-    let end = End { drafted, expiring, pointing, waiting };
-    let end = right_end(app, workspace, end, &line_text.detail, window, cx);
+    let lines = workspace_lines::drawn(workspace.status, app.records().workspace_lines(&workspace.id));
+    let end = End { lines, drafted, expiring, pointing, waiting };
+    let end = right_end(app, workspace, end, line_text, window, cx);
     let row = look::list_row(ElementId::Name(format!("workspace-{}", workspace.id).into()), ROW_SIZE);
     let row = follows_the_pointer(row, &workspace.id, cx)
         .button(label.clone())
@@ -120,6 +122,8 @@ fn follows_the_pointer(row: look::ListRow, id: &WorkspaceId, cx: &mut Context<Ap
 /// What a row has at its right end.
 #[derive(Clone, Copy)]
 struct End {
+    /// Its lines added and removed, if it has any that are known.
+    lines: Option<workspace_lines::Drawn>,
     /// Something typed or attached in one of its chats isn't sent.
     drafted: bool,
     /// How long the soonest to expire of its chats' caches has left, of those about to.
@@ -130,25 +134,28 @@ struct End {
     waiting: Option<&'static str>,
 }
 
-/// A pencil while something typed in the workspace isn't sent, then a clock while one of its chats' caches is about to
-/// expire, and after them what the workspace is waiting on the hub for, or else under the pointer the button that
-/// archives it. The button's place is the row's right end, and whichever of the pencil and the clock is last rests in
-/// the middle of it, under the project's button for a new workspace, so no name is cut short for a button that isn't
-/// there. As the pointer comes, they slide aside while the button fades in, and back as it goes. Nothing says the
-/// cache while the workspace is waiting on the hub, since that's it going or coming. None when there's nothing, so the
-/// name has the row's width.
+/// The workspace's lines added and removed, a pencil while something typed in it isn't sent, then a clock while one of
+/// its chats' caches is about to expire, and after them what the workspace is waiting on the hub for, or else under
+/// the pointer the button that archives it. The button's place is the row's right end, and whichever of the pencil and
+/// the clock is last rests in the middle of it, under the project's button for a new workspace, so no name is cut
+/// short for a button that isn't there. Lines with neither after them end at the row's right end, as text ends. As
+/// the pointer comes, they slide aside while the button fades in, and back as it goes. Nothing says the lines or the
+/// cache while the workspace is waiting on the hub, since that's it going or coming, or its name changing. None when
+/// there's nothing, so the name has the row's width.
 fn right_end(
     app: &AppView,
     workspace: &Workspace,
     end: End,
-    small: &Placed,
+    line_text: &LineText,
     window: &mut Window,
     cx: &mut Context<AppView>,
 ) -> Option<AnyElement> {
     let muted = look::colors(cx).text_muted;
-    let End { drafted, expiring, pointing, waiting } = end;
+    let End { lines, drafted, expiring, pointing, waiting } = end;
     let expiring = expiring.filter(|_| waiting.is_none());
+    let lines = lines.filter(|_| waiting.is_none());
     let icons = drafted || expiring.is_some();
+    let shows = icons || lines.is_some();
     // How far the button has come, from 0 to 1. The kit keeps it for as long as the row is drawn, so it goes on from
     // wherever it has got to. A row scrolled out of sight partway finds it at its end once it's back, rather than
     // where it was, which only cuts short a fade that set off under the pointer and that nobody saw the rest of.
@@ -156,7 +163,7 @@ fn right_end(
     let came = ElementId::Name(format!("archive-came-{}", workspace.id).into());
     let came = transition(came, wanted, look::motion::fade(), window, cx);
     let button = waiting.is_none() && (pointing || came > 0.);
-    if !icons && !button && waiting.is_none() {
+    if !shows && !button && waiting.is_none() {
         return None;
     }
     let pencil = Icon::new(Lucide::Pencil).sized(look::IconSize::Regular).text_color(muted);
@@ -167,13 +174,15 @@ fn right_end(
         .test_support();
     let clock = expiring
         .map(|left_ms| icon_box(prompt_cache::clock(format!("row-cache-{}", workspace.id), left_ms, muted, cx)));
-    let icons_drawn = h_flex().gap(look::Space::XSmall).when(drafted, |d| d.child(pencil)).children(clock);
+    let lines = lines.map(|drawn| self::lines(format!("lines-{}", workspace.id), drawn, &line_text.code));
+    let icons_drawn =
+        h_flex().gap(look::Space::XSmall).children(lines).when(drafted, |d| d.child(pencil)).children(clock);
     // With nothing else at the row's end, the room between the name and the button comes and goes with the button.
-    let before = if icons || waiting.is_some() { MARK_GAP.size() } else { MARK_GAP.size() * came };
+    let before = if shows || waiting.is_some() { MARK_GAP.size() } else { MARK_GAP.size() * came };
     let end = h_flex().flex_none().pl(before).child(icons_drawn);
     // Text has no padding of its own to keep it off the pencil, as the button has.
     let end = if let Some(waiting) = waiting {
-        let doing = doing(format!("doing-{}", workspace.id), waiting, small, cx);
+        let doing = doing(format!("doing-{}", workspace.id), waiting, &line_text.detail, cx);
         end.child(div().when(drafted, |d| d.pl(MARK_GAP)).child(doing))
     } else {
         // The icons rest in the middle of the button's place, half of what the button is wider than their box by in
@@ -193,6 +202,16 @@ fn right_end(
 /// `icon` in the middle of a box as wide as the sidebar's icons.
 fn icon_box(icon: impl IntoElement) -> gpui_kit::Div {
     div().flex_none().size(ICON_BOX.size()).flex().items_center().justify_center().child(icon)
+}
+
+/// A workspace's lines added and removed, as every client draws them, with each count shortened, found by `id`. They're
+/// code, which is smaller than the workspace's name, so they're set on the name's baseline.
+pub(crate) fn lines(id: String, drawn: workspace_lines::Drawn, code: &Placed) -> look::LinesChanged {
+    look::lines_changed(look::LinesKind::Workspace, drawn.added, drawn.removed)
+        .written_as(workspace_lines::shortened)
+        .as_last_read(drawn.as_last_read)
+        .said(ElementId::Name(id.into()), drawn.said())
+        .placed(code)
 }
 
 /// What a workspace is waiting on the hub for, such as `Archiving…`, in place of its button to do that. It shows
