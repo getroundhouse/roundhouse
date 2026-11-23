@@ -139,9 +139,9 @@ pub(super) fn description(input: &Value) -> Option<&str> {
     str_field(input, "description").map(str::trim).filter(|d| !d.is_empty())
 }
 
-/// How many of something there are, in words, such as `1 line` or `3 lines`.
+/// How many of something there are, in words, such as `1 line` or `1,204 lines`, with the count whole.
 pub fn count(n: usize, one: &str, many: &str) -> String {
-    if n == 1 { format!("1 {one}") } else { format!("{n} {many}") }
+    if n == 1 { format!("1 {one}") } else { format!("{} {many}", written_counts::whole(n)) }
 }
 
 /// The first line of `text` with anything on it, trimmed, which is all a line about a call has room for.

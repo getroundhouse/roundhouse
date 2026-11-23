@@ -20,6 +20,7 @@ use look::Lined as _;
 use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
 use protocol::model::{DiffComment, DiffSide};
 use std::sync::Arc;
+use written_counts::whole;
 
 /// A small row's, taller than a line, so a fold reads as a band across the code rather than as a line of it.
 pub(in super::super) const FOLD: look::RowSize = look::RowSize::Small;
@@ -222,20 +223,25 @@ fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
     let (start, end) = (fold.old.start, fold.old.end);
     let mut arrows = Vec::new();
     if fold.opens && !fold.top && !fold.end && lines <= STEP || fold.opens && fold.top && fold.end {
-        arrows.push(("fold-all", IconName::ChevronsUpDown, format!("Show the {lines} lines"), start..end));
+        arrows.push(("fold-all", IconName::ChevronsUpDown, format!("Show the {} lines", whole(lines)), start..end));
     } else if fold.opens {
         if !fold.top {
             let shown = lines.min(STEP);
             arrows.push((
                 "fold-down",
                 IconName::ChevronDown,
-                format!("Show {shown} lines below"),
+                format!("Show {} lines below", whole(shown)),
                 start..start + shown,
             ));
         }
         if !fold.end {
             let shown = lines.min(STEP);
-            arrows.push(("fold-up", IconName::ChevronUp, format!("Show {shown} lines above"), end - shown..end));
+            arrows.push((
+                "fold-up",
+                IconName::ChevronUp,
+                format!("Show {} lines above", whole(shown)),
+                end - shown..end,
+            ));
         }
     }
     let arrows = arrows.into_iter().map(|(id, icon, tooltip, opens)| {
@@ -246,7 +252,7 @@ fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
                 let _ = view.update(cx, |t, cx| t.open(opens.clone(), cx));
             })
     });
-    let said = format!("{lines} unchanged line{}", if lines == 1 { "" } else { "s" });
+    let said = format!("{} unchanged line{}", whole(lines), if lines == 1 { "" } else { "s" });
     h_flex()
         .w_full()
         .h(FOLD.height())

@@ -86,6 +86,7 @@ crates/
   video/           Decoding the WebM videos agents make, with libvpx
   libvpx-build/    What video's build script compiles of libvpx, for a target
   waiting/         How tests wait
+  written-counts/  A count as a person reads it, whole or shortened, for every client and for look
   spec-screens/    The spec's screens, for the galleries that draw them: approving a picture, and what the screens' chats say
 apps/
   daemon/          `roundhoused`, which runs as a hub or a worker

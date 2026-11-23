@@ -33,7 +33,7 @@ pub(super) fn lsp_place(lsp: &Lsp) -> String {
     }
 }
 
-/// How long, in its largest whole unit, such as `20 minutes`, `90 seconds` or `1500 milliseconds`.
+/// How long, in its largest whole unit, such as `20 minutes`, `90 seconds` or `1,500 milliseconds`.
 pub(super) fn how_long(sleep: Sleep) -> String {
     let (ms, seconds) = (sleep.duration_ms, sleep.duration_ms / 1000);
     if ms % 1000 != 0 || seconds == 0 {
@@ -113,7 +113,7 @@ mod tests {
         let find = FindInPage { url: "https://example.com".into(), pattern: "may_pass".into() };
         assert_eq!(said(Call::FindInPage(find)), words("Find in a page", Some("may_pass")));
         let waited: Vec<_> = [1_200_000, 90_000, 7_200_000, 1500].map(|ms| said(sleep(ms)).1.unwrap()).to_vec();
-        assert_eq!(waited, ["20 minutes", "90 seconds", "2 hours", "1500 milliseconds"]);
+        assert_eq!(waited, ["20 minutes", "90 seconds", "2 hours", "1,500 milliseconds"]);
         assert_eq!(said(Call::Questions), words("Ask questions", None));
         assert!(matches!(ToolCall::read(Recorded::Typed(&Call::Advisor)), ToolCall::Advisor), "drawn as Claude's is");
     }

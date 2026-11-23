@@ -1266,6 +1266,7 @@ dependencies = [
  "uuid",
  "waiting",
  "windows-sys 0.61.2",
+ "written-counts",
 ]
 
 [[package]]
@@ -2044,6 +2045,7 @@ dependencies = [
  "windows-icon",
  "windows-sys 0.61.2",
  "worker",
+ "written-counts",
 ]
 
 [[package]]
@@ -5232,6 +5234,7 @@ dependencies = [
  "similar",
  "syntect",
  "two-face",
+ "written-counts",
 ]
 
 [[package]]
@@ -10017,6 +10020,7 @@ dependencies = [
  "usvg 0.46.0",
  "video",
  "waiting",
+ "written-counts",
 ]
 
 [[package]]
@@ -11657,6 +11661,10 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
+
+[[package]]
+name = "written-counts"
+version = "0.1.0"
 
 [[package]]
 name = "x11"

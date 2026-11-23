@@ -23,6 +23,8 @@ similar.workspace = true
 # highlighting a large diff from 12.2 s of CPU to 2.6 s.
 syntect = { workspace = true, features = ["default-fancy", "regex-onig"] }
 two-face = { workspace = true, features = ["syntect-onig"] }
+# Writes a count as every client writes it, whole or shortened.
+written-counts.workspace = true
 
 # Reads the file icons' manifest into tables, so the app never parses it.
 [build-dependencies]

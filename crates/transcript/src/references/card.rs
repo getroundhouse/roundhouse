@@ -120,7 +120,7 @@ fn opened(about: &About, cx: &App) -> String {
     match about.comments {
         0 => said,
         1 => format!("{said} · 1 comment"),
-        many => format!("{said} · {many} comments"),
+        many => format!("{said} · {} comments", written_counts::whole(many)),
     }
 }
 

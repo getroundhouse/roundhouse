@@ -308,7 +308,7 @@ fn a_rows_lines_show_once_the_hub_has_read_them_and_slide_aside_for_its_button(c
 
     ui.wait("the lines read", |ui| ui.has(lines(&read)));
 
-    assert!(ui.shows_label(&format!("lines-{read}"), "37412 lines added and 1250 removed, as last read"));
+    assert!(ui.shows_label(&format!("lines-{read}"), "37,412 lines added and 1,250 removed, as last read"));
     assert!(ui.shows_label(&format!("lines-{current}"), "3 lines added"));
     assert!(!ui.has(lines(&not_read)), "nothing while they're not known");
     assert!(!ui.has(lines(&unchanged)), "nothing for no changes");

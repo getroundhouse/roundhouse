@@ -236,6 +236,8 @@ fn the_bar_says_whether_there_may_be_more() {
     assert_eq!(says(Some(0), 3, More::Counting), "1 of 3…");
     assert_eq!(says(Some(0), 3, More::Unlooked), "1 of 3+");
     assert_eq!(says(None, 2, More::Unlooked), "2 found+");
+    assert_eq!(says(Some(999), 1_212, More::No), "1,000 of 1,212", "each count whole");
+    assert_eq!(says(None, 1_212, More::Counting), "1,212 found…");
     assert_eq!(says(None, 0, More::No), "No matches");
     assert_eq!(says(None, 0, More::Counting), "Finding…");
     assert_eq!(says(None, 0, More::Unlooked), "No matches loaded");

@@ -72,7 +72,11 @@ fn running(snapshot: &PullRequestsSnapshot, required_only: bool, check: &str) ->
             (!required_only || check.required) && matches!(check.state, CheckState::Pending | CheckState::Unknown)
         })
         .count();
-    if running == 1 { format!("1 {check} running") } else { format!("{running} {check}s running") }
+    if running == 1 {
+        format!("1 {check} running")
+    } else {
+        format!("{} {check}s running", written_counts::whole(running))
+    }
 }
 
 /// Where the pull request holding a wait until a merge stands, in the bar's words: the lowest of its stack that hasn't

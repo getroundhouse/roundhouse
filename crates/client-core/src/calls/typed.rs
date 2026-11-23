@@ -273,7 +273,9 @@ pub fn output(output: &CallOutput) -> String {
         // An image says what it was made from, if it's one the agent made.
         CallOutput::Image { prompt, .. } => prompt.clone().unwrap_or_default(),
         CallOutput::Encrypted | CallOutput::Backgrounded { .. } => String::new(),
-        CallOutput::Document { pages } => pages.map_or_else(|| "Document".into(), |n| format!("{n} pages")),
+        CallOutput::Document { pages } => {
+            pages.map_or_else(|| "Document".into(), |n| format!("{} pages", written_counts::whole(n)))
+        }
         CallOutput::Unknown => "Unknown tool output".into(),
         CallOutput::Found(found) => found_text(found),
         CallOutput::WebResults { results, summary } => {

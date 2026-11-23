@@ -31,6 +31,7 @@ members = [
     "crates/update-feed",
     "crates/windows-icon",
     "crates/waiting",
+    "crates/written-counts",
     "crates/spec-screens",
     "crates/terminal-view",
     "crates/video",
@@ -77,6 +78,7 @@ default-members = [
     "crates/update-feed",
     "crates/windows-icon",
     "crates/waiting",
+    "crates/written-counts",
     "crates/video",
     "crates/libvpx-build",
     "tools/policy",
@@ -137,6 +139,7 @@ now-playing = { path = "crates/now-playing" }
 update-feed = { path = "crates/update-feed" }
 windows-icon = { path = "crates/windows-icon" }
 waiting = { path = "crates/waiting" }
+written-counts = { path = "crates/written-counts" }
 spec-screens = { path = "crates/spec-screens" }
 terminal-state = { path = "crates/terminal-state" }
 terminal-view = { path = "crates/terminal-view" }

@@ -90,7 +90,7 @@ pub use colors::{Colors, colors};
 pub use control_sizes::ControlSize;
 pub use controls::{Button, ButtonKind, MenuButton, Side, Sizing, button, glyph_button, icon_button, stop_button};
 pub use copy::{copy_button, copy_button_shown_while_over};
-pub use counts::{Count, CountKind, LinesChanged, LinesKind, count, lines_changed, thousands};
+pub use counts::{Count, CountKind, LinesChanged, LinesKind, count, lines_changed};
 #[cfg(any(test, feature = "testing"))]
 pub use dialogs::shown_dialog;
 pub use dialogs::{

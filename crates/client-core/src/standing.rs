@@ -44,7 +44,7 @@ fn failed(checks: CheckCounts) -> String {
 }
 
 fn count(n: u32, thing: &str) -> String {
-    if n == 1 { format!("1 {thing}") } else { format!("{n} {thing}s") }
+    if n == 1 { format!("1 {thing}") } else { format!("{} {thing}s", written_counts::whole(n)) }
 }
 
 #[cfg(test)]
@@ -64,6 +64,7 @@ mod tests {
         );
         assert_eq!(title(Standing::Unpushed(3), Some("main")), "3 commits to push");
         assert_eq!(title(Standing::Uncommitted(1), Some("main")), "1 uncommitted file");
+        assert_eq!(title(Standing::Behind(1_212), Some("main")), "1,212 commits to pull", "whole");
         assert_eq!(title(Standing::Conflicts, Some("trunk")), "Conflicts with trunk");
         assert_eq!(title(Standing::Conflicts, None), "Conflicts with its base");
     }

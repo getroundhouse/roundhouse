@@ -12,6 +12,7 @@ use protocol::find::Needle;
 use std::collections::BTreeSet;
 use std::ops::Range;
 use std::rc::Rc;
+use written_counts::whole;
 
 /// Where finding has got to in one chat, while its bar is open.
 pub(crate) struct Finding {
@@ -96,8 +97,8 @@ pub(super) fn says(place: Option<usize>, total: usize, more: More) -> String {
         More::Unlooked => "+",
     };
     match (place, more) {
-        (Some(place), _) => format!("{} of {total}{mark}", place + 1),
-        (None, _) if total > 0 => format!("{total} found{mark}"),
+        (Some(place), _) => format!("{} of {}{mark}", whole(place + 1), whole(total)),
+        (None, _) if total > 0 => format!("{} found{mark}", whole(total)),
         (None, More::No) => "No matches".to_string(),
         (None, More::Counting) => "Finding…".to_string(),
         (None, More::Unlooked) => "No matches loaded".to_string(),
