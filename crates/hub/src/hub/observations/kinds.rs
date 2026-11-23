@@ -16,7 +16,7 @@ use super::kept::{Table, Tables};
 /// here, and a table in [`Tables`], whose `each` the compiler stops at.
 pub(crate) trait Kind: Sized + 'static {
     /// What it's of, such as a workspace, which its table in the cache file keys it by, in its serde form.
-    type Of: Clone + Eq + Hash + Serialize + DeserializeOwned + Send + Sync;
+    type Of: Subject;
     /// What it says, which its table in the cache file keeps in its serde form.
     type Value: Clone + PartialEq + Serialize + DeserializeOwned + Send + Sync;
     /// Its table in the cache file, and that table's version. Raise the version with any change to the serde form of
@@ -32,6 +32,25 @@ pub(crate) trait Kind: Sized + 'static {
 
     /// Its table among the store's.
     fn table(tables: &mut Tables) -> &mut Table<Self>;
+}
+
+/// What an observation can be of, which says the workspace it's of, if any, so the store forgets it with that workspace
+/// whatever its kind, and a new kind of what's of a workspace needs nothing more to be forgotten with it.
+pub(crate) trait Subject: Clone + Eq + Hash + Serialize + DeserializeOwned + Send + Sync {
+    fn workspace(&self) -> Option<&WorkspaceId>;
+}
+
+impl Subject for WorkspaceId {
+    fn workspace(&self) -> Option<&WorkspaceId> {
+        Some(self)
+    }
+}
+
+/// A chip's issue or pull request, which is of no workspace, since chips in any chat can name it.
+impl Subject for ReferenceAsk {
+    fn workspace(&self) -> Option<&WorkspaceId> {
+        None
+    }
 }
 
 /// A kind's table in the cache file, and the version of its form.

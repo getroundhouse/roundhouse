@@ -1,6 +1,10 @@
 //! How the code that reads something changes what the store keeps of it, and the one place that tells clients.
 
+use std::collections::HashSet;
+
 use protocol::client::{ApiError, ObservationNotice};
+use protocol::model::WorkspaceId;
+use tracing::warn;
 
 use super::file::Write;
 use super::kept::{Change, Changed, Step};
@@ -75,6 +79,48 @@ impl Hub {
     /// Forgets the observation of `of`, since what it's of is gone, such as a workspace, and tells clients it's gone.
     pub(crate) async fn observation_gone<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
         self.change_observation::<K>(of, Change::Gone).await
+    }
+
+    /// Forgets every observation of workspace `id`, of every kind, since the workspace is gone, and tells clients. One
+    /// operation, so no kind is left out. Called where a workspace is discarded, and again by whatever may have kept
+    /// one of it as it went, as a read that lands after can. A failure, which only a database that gives no revision
+    /// has, is only logged, and [`Hub::observations_of_no_workspace_gone`] forgets what's left.
+    pub(crate) async fn workspace_observations_gone(&self, id: &WorkspaceId) {
+        let _changing = self.observations.changing.lock().await;
+        if let Err(e) = self.forget_observations_of(&|of| of == id).await {
+            warn!(%id, "forgetting the observations of a workspace that's gone: {}", e.message);
+        }
+    }
+
+    /// Forgets every observation of a workspace the hub doesn't have, and tells clients: what a hub that stopped
+    /// between removing a workspace and forgetting its observations left, or a working-out kept after a removal it
+    /// missed. The workspaces are listed under the lock every change takes, so none made since has one yet.
+    pub(crate) async fn observations_of_no_workspace_gone(&self) {
+        let _changing = self.observations.changing.lock().await;
+        let workspaces = match self.workspace_list(true).await {
+            Ok(workspaces) => workspaces,
+            Err(e) => return warn!("listing workspaces to forget the observations of those gone: {}", e.message),
+        };
+        let have: HashSet<WorkspaceId> = workspaces.into_iter().map(|workspace| workspace.id).collect();
+        if let Err(e) = self.forget_observations_of(&|id| !have.contains(id)).await {
+            warn!("forgetting the observations of workspaces that are gone: {}", e.message);
+        }
+    }
+
+    /// Forgets every observation of a workspace that `gone` picks out, under one revision, since a client compares a
+    /// removal's revision only with what it holds of that observation and with its level's list. The caller holds the
+    /// lock every change takes. Changes nothing where there's no revision to give.
+    async fn forget_observations_of(&self, gone: &(dyn Fn(&WorkspaceId) -> bool + Sync)) -> Result<(), ApiError> {
+        let observations = &self.observations;
+        if !observations.tables.lock().keep_of(gone) {
+            return Ok(());
+        }
+        let rev = self.blocking(Store::next_rev).await?;
+        let forgotten = observations.tables.lock().forget_of(gone, &observations.writer);
+        for observation in forgotten {
+            self.tell_of_observation(ObservationNotice::Removed { observation, rev });
+        }
+        Ok(())
     }
 
     /// Waits until every change made before has been written to the cache file, as the hub does as it stops, so the

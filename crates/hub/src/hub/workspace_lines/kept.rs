@@ -28,18 +28,13 @@ impl Hub {
         }
     }
 
-    /// Forgets every observation of the workspace, which is gone.
-    pub(crate) async fn workspace_observations_gone(&self, id: &WorkspaceId) {
-        if let Err(e) = self.observation_gone::<WorkspaceLines>(id.clone()).await {
-            warn!(%id, "forgetting the lines of a workspace that's gone: {}", e.message);
-        }
-        self.changes_forgotten(id).await;
-        self.github_observations_gone(id).await;
-    }
-
-    /// Forgets the files the workspace changes, as when it's archived, since no pane draws an archived workspace's
-    /// changes from a worktree that's gone. Its lines are kept, as the sidebar and Home draw them.
+    /// Forgets the workspace's changes, its lines and its files, as when it's archived, since no client draws either
+    /// for a workspace whose worktree is gone, and bringing it back reads them again once its worker says its
+    /// branches. What GitHub says of it stays, since Home draws an archived workspace's pull request.
     pub(crate) async fn changes_forgotten(&self, id: &WorkspaceId) {
+        if let Err(e) = self.observation_gone::<WorkspaceLines>(id.clone()).await {
+            warn!(%id, "forgetting the lines a workspace added and removed: {}", e.message);
+        }
         if let Err(e) = self.observation_gone::<WorkspaceChanges>(id.clone()).await {
             warn!(%id, "forgetting the files a workspace changed: {}", e.message);
         }

@@ -107,10 +107,10 @@ async fn a_turn_that_ends_keeps_its_workspace_s_lines_for_every_client_and_its_f
     assert_eq!(asked.requests(summing_up_asked), [wanted]);
 }
 
-/// Archiving a workspace forgets the files it changes, which no pane draws once its worktree is gone, and keeps its
-/// lines, which the sidebar draws, as does a read that lands once it's archived.
+/// Archiving a workspace forgets its lines and the files it changes, which no client draws once its worktree is gone,
+/// as does a read that lands once it's archived.
 #[tokio::test]
-async fn an_archived_workspace_keeps_its_lines_and_forgets_its_files() {
+async fn an_archived_workspace_forgets_its_lines_and_its_files() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (workspace, chat) = a_chat(&hub).await;
@@ -118,15 +118,15 @@ async fn an_archived_workspace_keeps_its_lines_and_forgets_its_files() {
     a_turn(&hub, &asked, &chat.id, Prompt::new("Change a.rs"), None).await;
     waiting::task::until(TIMEOUT, "the worker to be asked", || !asked.requests(summing_up_asked).is_empty()).await;
     read(&hub, &workspace.id).await;
-    let lines = hub.records_list().await.unwrap().observations;
+    assert_eq!(hub.records_list().await.unwrap().observations.len(), 1, "its lines");
 
     hub.workspace_archive(workspace.id.clone(), true).await.unwrap();
 
     assert_eq!(of_its_own_level(&hub, &workspace.id).await, []);
-    assert_eq!(hub.records_list().await.unwrap().observations, lines, "the lines kept");
+    assert_eq!(hub.records_list().await.unwrap().observations, []);
     hub.changes_read(&workspace.id, changes(4, 0), now_ms()).await;
     assert_eq!(of_its_own_level(&hub, &workspace.id).await, [], "a read that lands after");
-    assert_eq!(hub.records_list().await.unwrap().observations.len(), 1);
+    assert_eq!(hub.records_list().await.unwrap().observations, [], "a read that lands after");
 }
 
 /// A worker from before the request refuses it, which leaves the lines and files not known and tells clients nothing.
@@ -181,7 +181,7 @@ async fn a_workspace_removed_has_its_lines_and_files_gone() {
 
 /// What the worker says of its branches, which it says first as the hub takes it on, has the lines read, so a workspace
 /// made before the hub read them has them without waiting for a turn. Not while it's archived, since its worktree is
-/// gone, which leaves what was read as it was.
+/// gone.
 #[tokio::test]
 async fn the_worker_s_word_of_its_branches_has_the_lines_read_while_the_workspace_is_ready() {
     let dir = tempfile::tempdir().unwrap();
@@ -213,7 +213,6 @@ async fn the_worker_s_word_of_its_branches_has_the_lines_read_while_the_workspac
     read(&hub, &id).await;
 
     assert_eq!(summed_up(&requests).len(), 1, "an archived one's worktree is gone");
-    assert_eq!(hub.records_list().await.unwrap().observations.len(), 1, "what was read stays");
 }
 
 /// A workspace is read once at a time, and something that says its lines may have changed while a read is under way

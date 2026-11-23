@@ -121,3 +121,26 @@ fn keep_one(conn: &Connection, table: &str) {
 fn rows(conn: &Connection, table: &str) -> i64 {
     conn.query_row(&format!("SELECT count(*) FROM observed_{table}"), [], OneValue::read).unwrap()
 }
+
+/// A hub that starts again forgets what the file keeps of a workspace its database doesn't have, from the file too, as
+/// a hub that stopped between removing the workspace and forgetting its observations leaves it, or a file that refused
+/// the removal, so no client is listed it.
+#[tokio::test]
+async fn a_hub_that_starts_again_forgets_the_observations_of_a_workspace_that_s_gone() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
+    hub.observation_read::<WorkspaceLines>("gone".into(), lines(4, 0), 1_000).await.unwrap();
+    hub.observation_read::<WorkspaceChanges>("gone".into(), changes(4, 0), 1_000).await.unwrap();
+    drop(hub);
+
+    let again = hub_in_again(dir.path());
+
+    let [kept] = listed(&again).await.0.try_into().unwrap();
+    assert_eq!(kept, of_w(as_of(lines(3, 1), 1_000), kept.rev()));
+    let (gone, _) = again.observations_at(&Level::Workspace { id: "gone".into() }).await.unwrap();
+    assert_eq!(gone, []);
+    drop(again);
+    let file = Connection::open(dir.path().join("github-cache.db")).unwrap();
+    assert_eq!((rows(&file, "workspace_lines"), rows(&file, "workspace_changes")), (1, 0), "forgotten from the file");
+}
