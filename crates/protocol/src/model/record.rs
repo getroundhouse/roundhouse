@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use super::{
     Account, AccountId, CommentId, DiffComment, FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp,
     GithubAppId, GithubReach, GithubSignIn, GithubSignInId, HubSettings, HubUpdate, MessageId, ModelList, ModelListKey,
-    NewWorkspaceDraft, Proposal, ProposalId, ProviderName, ReplyHeard, Repo, RepoId, Rev, Session, SessionId, Subagent,
-    SubagentId, Terminal, TerminalId, Workspace, WorkspaceId,
+    NewWorkspaceDraft, Observation, Proposal, ProposalId, ProviderName, ReplyHeard, Repo, RepoId, Rev, Session,
+    SessionId, Subagent, SubagentId, Terminal, TerminalId, Workspace, WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -171,7 +171,8 @@ impl Record {
     }
 }
 
-/// Every record a hub holds, read at one moment, but for subagents and proposals, which are listed by session.
+/// Every record a hub holds, read at one moment, but for subagents and proposals, which are listed by session, and the
+/// observations it sends at its own level.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 pub struct Records {
     pub repos: Vec<Repo>,
@@ -214,13 +215,20 @@ pub struct Records {
     /// [`HubUpdate`] says. `None` from any other hub, and from one from before it read the feed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hub_update: Option<HubUpdate>,
-    /// The hub's newest revision when this was read. A record missing from the list is gone, unless
-    /// a client holds a copy newer than this.
+    /// The observations the hub sends at its own level, as
+    /// [`ObservationKey::at_hub_level`](super::ObservationKey::at_hub_level) says, under the list's own
+    /// `rev`, as its records are. One of another level isn't here, so the list doesn't say it's gone. Empty from a hub
+    /// from before observations.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observations: Vec<Observation>,
+    /// The hub's newest revision when this was read. A record missing from the list is gone, unless a client holds a
+    /// copy newer than this, and so is an observation of the hub's level.
     pub rev: Rev,
 }
 
 impl Records {
-    /// Each record in the list, of every kind. The list's own revision is `rev`, which this leaves out.
+    /// Each record in the list, of every kind. It leaves out the list's observations, which aren't records, and its own
+    /// revision, `rev`.
     pub fn into_records(self) -> impl Iterator<Item = Record> {
         let Records {
             repos,
@@ -238,6 +246,7 @@ impl Records {
             terminals,
             model_lists,
             hub_update,
+            observations: _,
             rev: _,
         } = self;
         let records = repos.into_iter().map(Record::Repo);

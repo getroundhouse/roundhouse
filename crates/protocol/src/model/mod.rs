@@ -1,4 +1,4 @@
-//! Records the hub owns and serves.
+//! Records the hub owns and serves, and its observations of what others own.
 
 mod account;
 mod agent;
@@ -17,6 +17,7 @@ mod hub_update;
 mod interaction;
 mod model_list;
 mod model_name;
+mod observation;
 mod pr_watch;
 mod prompt_line;
 mod proposal;
@@ -61,6 +62,7 @@ pub use hub_update::{HubUpdate, UpdateAttempt};
 pub use interaction::{Interaction, InteractionMode};
 pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
+pub use observation::{LineCounts, Observation, ObservationKey, Observed};
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
 pub use proposal::{
     AnswerProblem, Choice, ChosenOption, MAX_HEADER_CHARS, MAX_NOTE_BYTES, MAX_OPTIONS, MAX_PROPOSAL_BYTES,

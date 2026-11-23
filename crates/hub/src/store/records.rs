@@ -55,6 +55,8 @@ impl Store {
             terminals: Vec::new(),
             model_lists: Vec::new(),
             hub_update: None,
+            // Kept apart from the database, as `docs/principles/observations.md` says.
+            observations: Vec::new(),
             rev: current_rev(&tx)?,
         };
         tx.commit()?;

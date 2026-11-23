@@ -1,7 +1,7 @@
 use crate::model::{
     Account, DiffComment, FoundGithubLogin, GithubAccount, GithubApp, GithubReach, GithubSignIn, HubSettings,
-    HubUpdate, ModelList, NewWorkspaceDraft, Proposal, Record, RecordKey, ReplyHeard, Repo, Rev, Session, Subagent,
-    Terminal, Workspace,
+    HubUpdate, ModelList, NewWorkspaceDraft, Observation, ObservationKey, Proposal, Record, RecordKey, ReplyHeard,
+    Repo, Rev, Session, Subagent, Terminal, Workspace,
 };
 use serde::{Deserialize, Serialize};
 
@@ -49,6 +49,15 @@ pub enum HubNotice {
         record: RecordKey,
         rev: Rev,
     },
+    /// An observation changed: a copy of it, whole, with its revision, as a record's notice carries the record. A
+    /// client from before observations reads it as `Unknown`.
+    Observation(Observation),
+    /// The observation is gone, as of `rev`, as `Removed` says of a record, such as once what it's of is gone. A client
+    /// from before observations reads it as `Unknown`.
+    ObservationRemoved {
+        observation: ObservationKey,
+        rev: Rev,
+    },
     /// This client fell behind and missed some. List everything again, and the subagents, proposals and replies heard
     /// of each session it's showing, which aren't among everything.
     Resync,
@@ -88,7 +97,7 @@ impl RecordNotice {
 }
 
 impl TryFrom<HubNotice> for RecordNotice {
-    /// A notice that isn't of one record, `Resync` or `Unknown`, handed back as it came.
+    /// A notice that isn't of one record, such as one of an observation, `Resync` or `Unknown`, handed back as it came.
     type Error = HubNotice;
 
     fn try_from(notice: HubNotice) -> Result<Self, HubNotice> {
@@ -112,7 +121,10 @@ impl TryFrom<HubNotice> for RecordNotice {
             HubNotice::ReplyHeard(heard) => Record::ReplyHeard(heard),
             HubNotice::HubUpdate(update) => Record::HubUpdate(update),
             HubNotice::Removed { record, rev } => return Ok(RecordNotice::Removed { record, rev }),
-            HubNotice::Resync | HubNotice::Unknown => return Err(notice),
+            HubNotice::Observation(_)
+            | HubNotice::ObservationRemoved { .. }
+            | HubNotice::Resync
+            | HubNotice::Unknown => return Err(notice),
         };
         Ok(RecordNotice::Copy(record))
     }
@@ -148,6 +160,59 @@ impl From<RecordNotice> for HubNotice {
         match notice {
             RecordNotice::Copy(record) => record.into(),
             RecordNotice::Removed { record, rev } => HubNotice::Removed { record, rev },
+        }
+    }
+}
+
+/// What a notice says of one observation, whatever its kind, as [`RecordNotice`] says of one record.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ObservationNotice {
+    /// A copy of the observation.
+    Copy(Observation),
+    /// The observation is gone, as of `rev`.
+    Removed { observation: ObservationKey, rev: Rev },
+}
+
+impl ObservationNotice {
+    /// Which observation it's of.
+    pub fn key(&self) -> ObservationKey {
+        match self {
+            ObservationNotice::Copy(observation) => observation.key(),
+            ObservationNotice::Removed { observation, .. } => observation.clone(),
+        }
+    }
+
+    /// The revision of what it says: of the copy, or of the removal.
+    pub fn rev(&self) -> Rev {
+        match self {
+            ObservationNotice::Copy(observation) => observation.rev(),
+            ObservationNotice::Removed { rev, .. } => *rev,
+        }
+    }
+}
+
+impl TryFrom<HubNotice> for ObservationNotice {
+    /// A notice that isn't of one observation, handed back as it came.
+    type Error = HubNotice;
+
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "picks out `Observation` and `ObservationRemoved`, and every other notice is handed back the same"
+    )]
+    fn try_from(notice: HubNotice) -> Result<Self, HubNotice> {
+        match notice {
+            HubNotice::Observation(observation) => Ok(ObservationNotice::Copy(observation)),
+            HubNotice::ObservationRemoved { observation, rev } => Ok(ObservationNotice::Removed { observation, rev }),
+            _ => Err(notice),
+        }
+    }
+}
+
+impl From<ObservationNotice> for HubNotice {
+    fn from(notice: ObservationNotice) -> Self {
+        match notice {
+            ObservationNotice::Copy(observation) => HubNotice::Observation(observation),
+            ObservationNotice::Removed { observation, rev } => HubNotice::ObservationRemoved { observation, rev },
         }
     }
 }

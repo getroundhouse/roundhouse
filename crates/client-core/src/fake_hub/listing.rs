@@ -35,6 +35,8 @@ impl World {
             terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),
             model_lists: self.model_lists.clone(),
             hub_update: self.hub_update.clone(),
+            // As from a hub from before observations.
+            observations: Vec::new(),
             rev: Rev::default(),
         }
     }

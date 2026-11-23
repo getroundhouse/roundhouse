@@ -31,7 +31,7 @@ pub mod terminals;
 pub mod waits;
 pub mod workspaces;
 
-pub use feed::{HubNotice, RecordNotice};
+pub use feed::{HubNotice, ObservationNotice, RecordNotice};
 pub use hello::{Hello, HelloReply};
 pub use request::ClientRequest;
 

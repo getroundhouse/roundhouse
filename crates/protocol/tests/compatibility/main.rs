@@ -34,6 +34,7 @@ mod hellos;
 mod hub_updates;
 mod interactions;
 mod model_lists;
+mod observations;
 mod outputs;
 mod prompts;
 mod proposals;
