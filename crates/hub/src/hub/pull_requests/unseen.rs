@@ -1,21 +1,17 @@
 //! GitHub showing the default no repository where a workspace's branch's pull requests are, which says nothing of
-//! whether the branch has one. The hub keeps the last it heard of it for each workspace, in memory, since a read finds
-//! it again as soon as a client shows the workspace, and tells clients that show the workspace as it changes.
+//! whether the branch has one. The store owns the last the hub heard of it for each workspace, as the observation
+//! [`WorkspaceRepositoryUnseen`], which the task that works out GitHub's observations keeps from what each read heard,
+//! so a hub that starts again has it as of the read that heard it, as `docs/principles/observations.md` says.
 
-use std::collections::HashMap;
-
-use parking_lot::Mutex;
 use protocol::client::ApiError;
 use protocol::model::{GithubLoginKind, GithubRepositoryName, RepositoryUnseen, WorkspaceId};
-use tokio::sync::broadcast;
 use tracing::warn;
 
 use super::recording::Found;
 use crate::github_logins::DefaultCredential;
 use crate::hub::Hub;
-
-/// How many changes a client's subscription can fall behind on before it reads everything it shows again.
-const TOLD_BEHIND: usize = 64;
+use crate::hub::github_observed::Heard;
+use crate::hub::observations::WorkspaceRepositoryUnseen;
 
 /// Why a workspace's own pull request couldn't be read.
 #[derive(Clone, Debug)]
@@ -45,53 +41,22 @@ impl From<ApiError> for OwnUnread {
     }
 }
 
-/// What the hub last heard of each workspace's repository being unseen, and who's told as that changes.
-pub(in crate::hub) struct Unseens {
-    kept: Mutex<HashMap<WorkspaceId, RepositoryUnseen>>,
-    told: broadcast::Sender<WorkspaceId>,
-}
-
-impl Unseens {
-    pub(in crate::hub) fn new() -> Self {
-        Self { kept: Mutex::new(HashMap::new()), told: broadcast::channel(TOLD_BEHIND).0 }
-    }
-}
-
 impl Hub {
     /// The repository GitHub last showed the default none of, where `id`'s branch's pull requests are, unless a read
-    /// has found its pull request, or that it has none, since.
+    /// has found its pull request, or that it has none, since, as the store keeps it, across restarts too.
     pub(crate) fn unseen_of(&self, id: &WorkspaceId) -> Option<RepositoryUnseen> {
-        self.pull_requests.unseen.kept.lock().get(id).cloned()
+        self.observations.value_of::<WorkspaceRepositoryUnseen>(id).flatten()
     }
 
-    /// Each workspace whose [`Hub::unseen_of`] changes, as it does.
-    pub(crate) fn unseen_told(&self) -> broadcast::Receiver<WorkspaceId> {
-        self.pull_requests.unseen.told.subscribe()
-    }
-
-    /// Keeps what `read` of `id`'s pull request says of its repository: GitHub showing it none, or found or none
-    /// found, which shows it was seen. A read that failed otherwise says nothing of it, so what was heard before stays.
-    pub(in crate::hub::pull_requests) async fn keep_unseen(&self, id: &WorkspaceId, read: &Result<Found, OwnUnread>) {
-        let now = match read {
-            Ok(_) => None,
-            Err(OwnUnread::Unseen { repository, said }) => match self.unseen_as_default(repository, said).await {
-                Some(unseen) => Some(unseen),
-                None => return,
-            },
-            Err(OwnUnread::Failed(_)) => return,
-        };
-        let changed = {
-            let mut kept = self.pull_requests.unseen.kept.lock();
-            let changed = kept.get(id) != now.as_ref();
-            match now {
-                Some(unseen) => kept.insert(id.clone(), unseen),
-                None => kept.remove(id),
-            };
-            changed
-        };
-        if changed {
-            // Nobody may be listening, which leaves nobody to tell.
-            let _ = self.pull_requests.unseen.told.send(id.clone());
+    /// What `read` of a workspace's pull request heard of its repository: GitHub showing it none, or found or none
+    /// found, which shows it was seen. A read that failed otherwise heard nothing of it.
+    pub(in crate::hub::pull_requests) async fn heard_of_repository(&self, read: &Result<Found, OwnUnread>) -> Heard {
+        match read {
+            Ok(_) => Heard::Seen,
+            Err(OwnUnread::Unseen { repository, said }) => {
+                self.unseen_as_default(repository, said).await.map_or(Heard::Nothing, Heard::Unseen)
+            }
+            Err(OwnUnread::Failed(_)) => Heard::Nothing,
         }
     }
 

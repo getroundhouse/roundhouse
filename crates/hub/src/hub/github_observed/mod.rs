@@ -4,8 +4,9 @@
 //! hub's level, and its checks, history and stack, and whether GitHub showed its repository, at the workspace's. The
 //! cache keeps what's read once, by what it describes, and this keeps each observation in the store as a kind of its
 //! own, worked out again whenever what it's worked out from changes: a read the cache keeps, something it forgets, a
-//! workspace's record, a read of a workspace's pull request that ends, or what clients follow. One task works them out,
-//! in turn, so no value worked out from older state lands after one worked out from newer.
+//! workspace's record, a read of a workspace's pull request that ends, or what clients follow. Whether GitHub showed
+//! the repository is kept nowhere else, so it's kept from what each read that ends heard of it. One task works them
+//! out, in turn, so no value worked out from older state lands after one worked out from newer.
 //!
 //! Each is current while a client follows what it's of, from the first read after, until a read fails or the last
 //! follower stops, and otherwise as of the read that found what it says. A chip's is gone once the cache forgets what
@@ -19,4 +20,4 @@ mod reads;
 mod tests;
 mod workspaces;
 
-pub(crate) use reads::ReadsEnded;
+pub(crate) use reads::{Heard, ReadsEnded};

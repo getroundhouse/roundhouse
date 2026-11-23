@@ -5,13 +5,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use github::{PullRequestState, PullRequests, StandIn};
-use protocol::client::{HubNotice, ObservationNotice};
+use protocol::client::{ErrorCode, HubNotice, ObservationNotice};
 use protocol::model::{
-    GithubRepositoryName, IssueNumber, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid,
-    PrState, PullRequest, PullRequestLink, PullRequestLinked, RecordKey, Reference, ReferenceAsk, RepositoryUnseen,
+    GithubRepositoryName, IssueNumber, Level, Observation, ObservationKey, Observed, OwnPullRequestDetail,
+    OwnPullRequestSaid, PrState, PullRequest, PullRequestLink, PullRequestLinked, RecordKey, Reference, ReferenceAsk,
+    RepositoryUnseen,
 };
 use tokio::sync::broadcast;
 
+use crate::github_logins::DefaultCredential;
 use crate::hub::observations::WorkspacePullRequest;
 use crate::hub::tests::hub_on_github;
 use crate::hub::{Followed, Hub};
@@ -281,7 +283,7 @@ async fn a_hub_that_starts_again_has_each_as_of_its_read_and_its_first_pass_send
     let again = crate::hub::tests::hub_in_again(dir.path());
     let mut feed = again.subscribe_feed();
     let mut kept = again.records_list().await.unwrap().observations;
-    kept.extend(again.observations_at(&protocol::model::Level::Workspace { id: "w".into() }).await.unwrap().0);
+    kept.extend(again.observations_at(&Level::Workspace { id: "w".into() }).await.unwrap().0);
     again.observe_github_once().await;
 
     let kinds: Vec<_> = kept.iter().map(Observation::key).collect();
@@ -299,6 +301,36 @@ async fn a_hub_that_starts_again_has_each_as_of_its_read_and_its_first_pass_send
         .filter_map(|notice| ObservationNotice::try_from(notice).ok())
         .collect();
     assert_eq!(told, [], "the first pass found what was kept");
+}
+
+/// A hub that starts again has what it last heard of whether GitHub showed a workspace's repository, as of the read that
+/// heard it, so a read that fails for another reason, as without a login to read it as, leaves the warning as it was,
+/// and records no none, which would have an app offer to create a pull request there.
+#[tokio::test]
+async fn a_hub_that_starts_again_keeps_a_repository_unseen_through_a_read_that_fails_otherwise() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = observing(dir.path()).await;
+    pull_requests.hide(true);
+    let mut feed = hub.subscribe_feed();
+    let _ = hub.workspace_pull_request("w".into()).await;
+    let Observed::AsOf { value: Some(heard), as_of_ms } = next(&mut feed, unseen).await else { panic!("not unseen") };
+    hub.observations_written().await;
+    drop((hub, github));
+    let again = crate::hub::tests::hub_in_again(dir.path());
+    let DefaultCredential::Account { account, .. } = again.git_credential().borrow().clone() else { panic!() };
+    again.github_account_disconnect(account).await.unwrap();
+
+    let failed = again.workspace_pull_request("w".into()).await;
+    again.observe_reads_ended().await;
+
+    assert_eq!(failed.unwrap_err().code, ErrorCode::Unavailable);
+    let (kept, _) = again.observations_at(&Level::Workspace { id: "w".into() }).await.unwrap();
+    let kept = kept.into_iter().find_map(|observation| {
+        let Observation::WorkspaceRepositoryUnseen { unseen, .. } = observation else { return None };
+        Some(unseen)
+    });
+    assert_eq!(kept, Some(Observed::AsOf { value: Some(heard), as_of_ms }), "as the read before the restart heard");
+    assert_eq!(again.store.get_workspace(&"w".into()).unwrap().pull_request_link, None, "no none recorded");
 }
 
 /// Whether `observation` says it's as of a read.

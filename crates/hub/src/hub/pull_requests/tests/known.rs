@@ -102,8 +102,7 @@ async fn a_pull_request_the_cache_forgot_is_not_known_until_its_read_again() {
 
 /// GitHub showing the default no repository to look in says nothing of whether the branch has a pull request, so the
 /// hub no longer knows the none it found before, as on a branch it found none on before it was pushed, and keeps that
-/// GitHub showed none, as whom and how its login is held, telling whoever listens, until a read sees the repository
-/// again.
+/// GitHub showed none, as whom and how its login is held, until a read sees the repository again.
 #[tokio::test]
 async fn a_repository_github_doesnt_show_leaves_the_pull_request_unknown_until_it_does() {
     let dir = tempfile::tempdir().unwrap();
@@ -111,9 +110,9 @@ async fn a_repository_github_doesnt_show_leaves_the_pull_request_unknown_until_i
     pull_requests.set(7, PullRequestState::Open);
     pull_requests.hide(true);
     hub.store.set_workspace_pull_request(&"w".into(), Some(&PullRequestLinked { link: None }), None).unwrap();
-    let mut told = hub.unseen_told();
 
     let unread = hub.workspace_pull_request("w".into()).await;
+    hub.observe_reads_ended().await;
 
     assert_eq!(unread.unwrap_err().code, ErrorCode::Unavailable);
     assert_eq!(hub.store.get_workspace(&"w".into()).unwrap().pull_request_link, None, "none is no longer known");
@@ -121,14 +120,13 @@ async fn a_repository_github_doesnt_show_leaves_the_pull_request_unknown_until_i
     let who = (unseen.repository.as_str(), unseen.username.as_str(), unseen.login);
     assert_eq!(who, ("example/project", "ada", GithubLoginKind::Token));
     assert_eq!(unseen.approve_at, None, "a token's account has no app to approve");
-    assert_eq!(told.try_recv().ok(), Some("w".into()));
 
     pull_requests.hide(false);
     let found = hub.workspace_pull_request("w".into()).await.unwrap();
+    hub.observe_reads_ended().await;
 
     assert_eq!(found.map(|pr| numbered(&pr).0), Some(7));
     assert_eq!(hub.unseen_of(&"w".into()), None);
-    assert_eq!(told.try_recv().ok(), Some("w".into()), "told it's seen again");
 }
 
 /// A read that fails after GitHub showed no repository, as without a login to read it as, says nothing new, so the hub
@@ -139,10 +137,12 @@ async fn a_read_that_fails_after_github_showed_no_repository_records_no_none() {
     let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
     pull_requests.hide(true);
     hub.workspace_pull_request("w".into()).await.unwrap_err();
+    hub.observe_reads_ended().await;
     let DefaultCredential::Account { account, .. } = hub.git_credential().borrow().clone() else { panic!() };
     hub.github_account_disconnect(account).await.unwrap();
 
     let failed = hub.workspace_pull_request("w".into()).await;
+    hub.observe_reads_ended().await;
 
     assert_eq!(failed.unwrap_err().code, ErrorCode::Unavailable);
     assert_eq!(hub.store.get_workspace(&"w".into()).unwrap().pull_request_link, None, "not recorded as none");

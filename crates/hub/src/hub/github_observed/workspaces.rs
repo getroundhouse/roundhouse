@@ -9,6 +9,7 @@ use protocol::model::{
 };
 
 use super::observing::logged;
+use super::reads::{Heard, ReadEnded};
 use crate::github_cache::{Item, Told};
 use crate::hub::Hub;
 use crate::hub::observations::{Kind, WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen};
@@ -46,17 +47,18 @@ impl Hub {
         linked(&workspace)
     }
 
-    /// Works out whether GitHub showed workspace `id`'s repository, as the hub last heard. One it always showed, as
-    /// most are, is kept of no workspace, which a client reads as showing it. Only as a read of it ends, or the hub hears
-    /// of it, since the hub keeps what it heard in memory alone, so a hub that starts again has heard nothing, and what
-    /// the store kept of it from before is as of then until the next read.
-    async fn work_out_unseen(&self, id: &WorkspaceId, current: bool) {
-        let unseen = self.unseen_of(id);
-        if unseen.is_none() && !self.observations.keeps::<WorkspaceRepositoryUnseen>(id) {
-            return;
-        }
+    /// Keeps what a read of workspace `id`'s pull request that ended at `read_at_ms` heard of whether GitHub showed its
+    /// repository, current from now if `current`. One it always showed, as most are, is kept of no workspace, which a
+    /// client reads as showing it. A read that heard nothing of it, as one that failed otherwise does, leaves what's
+    /// kept, so a hub that starts again, which has it as of the read that heard it, keeps it through such a read.
+    async fn keep_unseen(&self, id: &WorkspaceId, heard: Heard, read_at_ms: i64, current: bool) {
         self.keep_current_or_not::<WorkspaceRepositoryUnseen>(id, current).await;
-        logged(self.observation_worked_out::<WorkspaceRepositoryUnseen>(id.clone(), unseen, now_ms()).await);
+        let unseen = match heard {
+            Heard::Unseen(unseen) => Some(unseen),
+            Heard::Seen if self.observations.keeps::<WorkspaceRepositoryUnseen>(id) => None,
+            Heard::Seen | Heard::Nothing => return,
+        };
+        logged(self.observation_read::<WorkspaceRepositoryUnseen>(id.clone(), unseen, read_at_ms).await);
     }
 
     /// Keeps the observation `K` of `id` current from now, or as of its last read.
@@ -128,20 +130,15 @@ impl Workspaces {
         hub.workspace_observations_gone(id).await;
     }
 
-    /// Takes in that a read of `id`'s pull request ended, failed or not.
-    pub(super) async fn read_ended(&mut self, hub: &Hub, id: &WorkspaceId, failed: bool) {
+    /// Takes in that a read of a workspace's pull request ended, failed or not, and what it heard of the repository.
+    pub(super) async fn read_ended(&mut self, hub: &Hub, ReadEnded { workspace: id, failed, heard, at_ms }: ReadEnded) {
         if failed {
             self.failed.insert(id.clone());
         } else {
-            self.failed.remove(id);
+            self.failed.remove(&id);
         }
-        self.again(hub, id).await;
-        hub.work_out_unseen(id, self.current(id)).await;
-    }
-
-    /// Takes in that what the hub heard of whether GitHub showed `id`'s repository changed.
-    pub(super) async fn unseen(&self, hub: &Hub, id: &WorkspaceId) {
-        hub.work_out_unseen(id, self.current(id)).await;
+        self.again(hub, &id).await;
+        hub.keep_unseen(&id, heard, at_ms, self.current(&id)).await;
     }
 
     /// Works out every workspace again, as as the hub starts, or after missing some of what it's told, once every
