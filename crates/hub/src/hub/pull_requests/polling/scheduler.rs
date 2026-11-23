@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::Workspace;
 use tokio::time::Instant;
 use tracing::debug;
 
+use crate::hub::Followed;
 use crate::hub::pull_requests::own::WorkspaceRead;
 use crate::hub::pull_requests::reading::{Taking, couldnt_read};
 use crate::hub::pull_requests::remote::{ReadsAs, waited};
@@ -41,19 +41,19 @@ impl Hub {
     }
 
     /// The workspaces whose pull requests are due to be read now that nobody has asked, as [`schedule::due`] says,
-    /// those first that are due first, of those no read is under way for. While no client is connected, only those an
-    /// agent waits on, since nobody would see the rest. Once one connects again, whatever has come due meanwhile is
-    /// read.
+    /// those first that are due first, of those no read is under way for. While no client follows the hub or a
+    /// workspace, only those an agent waits on, since nobody would see the rest, as what's followed says what the hub
+    /// keeps current. Once one follows again, whatever has come due meanwhile is read.
     pub(in crate::hub) async fn to_read_in_turn(&self) -> Vec<Workspace> {
         // A store that fails says why as it does, and those waited on wait their turn with the rest meanwhile.
         let waited = self.blocking(Store::workspaces_waited_on).await.unwrap_or_default();
-        let seen = self.clients.load(Ordering::Relaxed) > 0;
+        let shown = self.followers.workspaces();
+        let seen = !shown.is_empty() || self.followers.follows(&Followed::Hub);
         if !seen && waited.is_empty() {
             return Vec::new();
         }
         let Ok(mut workspaces) = self.workspace_list(false).await else { return Vec::new() };
         workspaces.retain(|workspace| seen || waited.contains(&workspace.id));
-        let shown = self.followers.workspaces();
         // One whose pull request the cache has forgotten, as after it was emptied, is known as none until it's read.
         let listed: Vec<_> = workspaces
             .into_iter()
