@@ -1,11 +1,14 @@
 //! Telling a worker to watch as workers go, and as one doesn't answer.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use protocol::model::{LineCounts, Observed};
 use protocol::worker::WorkerResponse;
 
-use super::stand_in::{Watch, frame, next_changes, next_lines, summary, until_watches, w, worker};
+use super::stand_in::{
+    Watch, frame, late_worker, next_changes, next_lines, summary, until_watches, w, watches, worker,
+};
 use crate::hub::observations::{WorkspaceChanges, WorkspaceLines};
 use crate::hub::stand_in_workers::TIMEOUT;
 use crate::hub::tests::hub_with_worktree;
@@ -43,8 +46,8 @@ async fn a_watched_workspace_s_changes_are_as_of_when_its_worker_went() {
     assert_eq!(changes, Observed::AsOf { value: summary(3, 1), as_of_ms }, "as of when the lines are");
 }
 
-/// A worker that takes a watch and never answers holds its workspace's telling only until the limit, which then goes
-/// as a watch that failed does. Meanwhile the worker before it can go, without keeping the next worker from starting.
+/// A worker that takes a watch and never answers holds its workspace's telling only until the limit, which then lets
+/// both kinds go, as a watch that failed does, and keeps that it was asked. Meanwhile the worker before it can go, without keeping the next worker from starting.
 #[tokio::test(start_paused = true)]
 #[expect(clippy::disallowed_methods, reason = "tokio's clock is paused, so sleeping moves it to before the limit")]
 async fn a_worker_that_never_answers_a_watch_holds_its_telling_only_until_the_limit() {
@@ -71,5 +74,36 @@ async fn a_worker_that_never_answers_a_watch_holds_its_telling_only_until_the_li
     waiting::task::until(TIMEOUT, "the telling to run out, and let both kinds go", || !current()).await;
 
     assert!(gate_free, "the worker before kept the gate a worker starts under while it waited");
-    assert_eq!(hub.changes_watches.kept(), 0, "it kept a watch that failed");
+    assert_eq!(hub.changes_watches.kept(), 1, "that it was asked, for it to be told to stop once nothing follows");
+}
+
+/// A worker that answers a watch only once the limit has run out has been asked all the same, and can be watching, so
+/// it's told to stop once nothing follows the workspace, and asked again while something does.
+#[tokio::test(start_paused = true)]
+async fn a_worker_that_answers_a_watch_late_is_told_to_stop_once_nothing_follows() {
+    for followed_still in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let hub = hub_with_worktree(dir.path());
+        let (_link, asked, reply) = late_worker(&hub);
+        let following = hub.follow([Followed::Workspace(w())]);
+        until_watches(&asked, 1).await;
+        past_the_limit().await;
+        reply.send(Ok(WorkerResponse::Ok)).unwrap();
+
+        if followed_still {
+            hub.changes_watching(&w()).await;
+        } else {
+            drop(following);
+        }
+        until_watches(&asked, 2).await;
+
+        let told = watches(&asked).iter().map(|watch| watch.watching).collect::<Vec<_>>();
+        assert_eq!(told, [true, followed_still], "followed still: {followed_still}");
+    }
+}
+
+/// Moves tokio's paused clock past the time a worker has to answer.
+#[expect(clippy::disallowed_methods, reason = "tokio's clock is paused, so sleeping moves it past the limit")]
+async fn past_the_limit() {
+    tokio::time::sleep(ANSWERED_WITHIN + Duration::from_secs(1)).await;
 }
