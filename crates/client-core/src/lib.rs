@@ -29,6 +29,7 @@ pub mod refusals;
 pub mod session_log;
 pub mod standing;
 pub mod waits;
+pub mod workspace_lines;
 
 mod agents;
 mod approval;

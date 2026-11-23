@@ -37,7 +37,11 @@ pub(super) fn card<W: Waiter>(
     let said = detail().text_color(colors.text_faint).child(opened(about, cx)).when_some(
         pull_request,
         |line, pull_request| {
-            line.child("·").child(look::lines_changed(pull_request.added as usize, pull_request.removed as usize))
+            line.child("·").child(look::lines_changed(
+                look::LinesKind::Plain,
+                pull_request.added as usize,
+                pull_request.removed as usize,
+            ))
         },
     );
     let labels = (!about.labels.is_empty()).then(|| {

@@ -190,7 +190,7 @@ What's done on a card as a whole, such as keeping the keyboard's focus or measur
 | Say what's true of the thing beside it, in a word or two | `look::badge(kind, words)`, with a `look::BadgeKind`, and `id` for a test to find it and an assistive app to read it |
 | Show a tag someone chose, in their colour | `look::label(words, color)` |
 | Say how many | `look::count(kind, how_many)`, with a `look::CountKind`, and `said` for what it counts, as an assistive app reads it |
-| Show the lines a file gained and lost | `look::lines_changed(added, removed)` |
+| Show the lines something gained and lost | `look::lines_changed(kind, added, removed)` |
 | Set a count or lines on the baseline of the line they're in | `placed`, with the `look::LineText` part for their text |
 
 ## Bars
