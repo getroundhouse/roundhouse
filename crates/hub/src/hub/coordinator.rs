@@ -4,7 +4,7 @@ use super::followers::Followers;
 use super::observations::{self, Observations};
 use super::terminals::Terminals;
 use super::updates::Updates;
-use super::{awake, feed, github_reads, pull_requests, sessions, setup};
+use super::{awake, feed, github_reads, pull_requests, sessions, setup, workspace_lines};
 use crate::attachment_files::AttachmentFiles;
 use crate::cache_file::CacheFile;
 use crate::error::internal;
@@ -98,6 +98,8 @@ pub(crate) struct Hub {
     pub(super) github_cache: Arc<GithubCache>,
     /// The hub's observations of what others own, as it last observed them.
     pub(super) observations: Observations,
+    /// The workspaces whose lines added and removed are being read.
+    pub(super) line_reads: workspace_lines::Reads,
     /// Who follows what, which is what the hub keeps current.
     pub(super) followers: Followers,
     /// When the hub last tried to read each pull request of an archived workspace that the cache had forgotten.
@@ -162,6 +164,7 @@ impl Hub {
             addresses_read: Notify::new(),
             observations: Observations::open(cache_file.clone(), &store),
             github_cache: Arc::new(GithubCache::open(cache_file)),
+            line_reads: workspace_lines::Reads::default(),
             store,
             attachment_files: AttachmentFiles::new(dirs.attachments),
             bundles_dir: dirs.bundles,

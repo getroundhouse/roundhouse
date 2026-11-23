@@ -26,7 +26,6 @@ These are part of the design, and the app is built to take them. None is built.
 ## Smaller things that aren't built
 
 - **Search in the sidebar.** The button is there, and does nothing.
-- **Lines added and removed, on each workspace's row.**
 - **A workspace from another branch or a pull request,** and linking one to an issue.
 - **A page of what each update changes.**
 - **A sound on Windows and Linux,** when an agent needs you.

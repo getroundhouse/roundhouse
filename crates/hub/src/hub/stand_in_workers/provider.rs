@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use parking_lot::Mutex;
 use protocol::capability::{context, settings, turns};
 use protocol::client::ApiError;
-use protocol::model::{AgentAccount, CacheTtl, InstanceId, ProviderName, Workspace};
+use protocol::model::{AgentAccount, CacheTtl, ChangeSummary, InstanceId, ProviderName, Workspace};
 use protocol::worker::{
     AgentStarted, ArchivedBranch, ArchivedBundle, ArchivedGit, AttachmentWritten, NamesGitHasReply, SetupDone,
     WorkerRequest, WorkerResponse, WorkspaceReady,
@@ -109,10 +109,10 @@ impl Asked {
 }
 
 /// What a stand-in worker answers, which refuses nothing. Git has no name a workspace might take, so each worktree
-/// asked for is made, in `/ws`, on the branch asked for, with nothing in it to lose, its setup script passes, a file a
-/// prompt carries is written to it, and an agent starts there and takes what it's sent. Nobody is logged in to an
-/// agent's CLI on its machine, so the account it's asked an agent runs under is nobody's. Anything else is answered as
-/// done, with nothing to say.
+/// asked for is made, in `/ws`, on the branch asked for, with nothing in it to lose and nothing changed, its setup
+/// script passes, a file a prompt carries is written to it, and an agent starts there and takes what it's sent. Nobody
+/// is logged in to an agent's CLI on its machine, so the account it's asked an agent runs under is nobody's. Anything
+/// else is answered as done, with nothing to say.
 pub(super) fn answer(request: WorkerRequest) -> WorkerResponse {
     if let WorkerRequest::NamesGitHas(_) = request {
         return WorkerResponse::NamesGitHas(NamesGitHasReply { names: Vec::new() });
@@ -128,6 +128,9 @@ pub(super) fn answer(request: WorkerRequest) -> WorkerResponse {
     }
     if let WorkerRequest::SetupWorkspace(_) = request {
         return WorkerResponse::SetupDone(SetupDone { code: Some(0) });
+    }
+    if let WorkerRequest::SummarizeChanges(_) = request {
+        return WorkerResponse::ChangeSummary(ChangeSummary::new("c0ffee".into(), Vec::new()));
     }
     if let WorkerRequest::GitStatus(_) = request {
         return WorkerResponse::GitStatus(protocol::model::GitStatus::default());

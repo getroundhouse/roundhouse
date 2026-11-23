@@ -60,4 +60,5 @@ mod terminals;
 mod titles;
 mod tools;
 mod worker_versions;
+mod workspace_lines;
 mod workspaces;

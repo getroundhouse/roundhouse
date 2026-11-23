@@ -37,4 +37,4 @@ Every workspace in one list, to find one, and to see where they all stand withou
 
   ![A row saying a chat's cache is about to expire](screens/home-cache.png)
 
-- **A row shows how many lines its workspace has added and removed,** in green and red, before its project. They're after when a chat's cache is about to expire, and nothing shows while they're not known, for a workspace with no changes, or for one that's archived or on its way out or back, whose worktree is gone or going. *Unconfirmed:* their place beside the cache, and when nothing shows. *Not built:* the hub doesn't send them.
+- **A row shows how many lines its workspace has added and removed,** in green and red, before its project. They're after when a chat's cache is about to expire, and nothing shows while they're not known, for a workspace with no changes, or for one that's archived or on its way out or back, whose worktree is gone or going. *Unconfirmed:* their place beside the cache, and when nothing shows.

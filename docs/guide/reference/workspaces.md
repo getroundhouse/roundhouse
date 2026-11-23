@@ -101,7 +101,7 @@ Home lists archived workspaces. Clicking one brings it back: the worktree is mad
 
 Home, at the top of the sidebar, shows every workspace in one list, in place of the workspace.
 
-- **A row is a workspace:** its mark, its title, its project, and a button to archive it or bring it back.
+- **A row is a workspace:** its mark, its title, how many lines it has added and removed, its project, and a button to archive it or bring it back.
 - **The search matches a workspace's title or its branch.**
 - **The list can show one project or all,** hide archived workspaces, show them too or show only them, and sort by last active, by when each was made, or by title, which the menu calls `Name`.
 

@@ -49,8 +49,8 @@ impl Reply for model::GitDiff {
 }
 
 /// What the worktree at `path` changes against `base_ref`, file by file, as [`model::ChangeSummary`] says, with no
-/// patch. It's for the lines added and removed that the sidebar and Home show, which `docs/spec/sidebar.md` marks not
-/// built, so no hub asks for it yet. A worker from before it refuses it as `Unsupported`.
+/// patch. The hub asks for it for the lines added and removed that the sidebar and Home show, and keeps only those. A
+/// worker from before it refuses it as `Unsupported`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SummarizeChanges {
     pub path: String,

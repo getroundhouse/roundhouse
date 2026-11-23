@@ -186,6 +186,7 @@ impl LiveSession {
         }
         if made.turn_ended {
             hub.read_pull_request_after_turn(&self.workspace_id);
+            hub.read_lines_after_turn(&self.workspace_id);
         }
     }
 

@@ -1,3 +1,4 @@
+use super::super::observations::WorkspaceLines;
 use super::super::ready::ReadyWorkspace;
 use super::super::{Hub, new_id};
 use super::naming;
@@ -192,7 +193,7 @@ impl Hub {
 
     /// Ends the workspace's worker, if it has one, and destroys its instance, whose record goes once it's gone, and
     /// then the workspace's record.
-    pub(super) async fn discard_workspace(&self, workspace: &Workspace, provider: &dyn Provider) {
+    pub(in super::super) async fn discard_workspace(&self, workspace: &Workspace, provider: &dyn Provider) {
         let id = &workspace.id;
         self.first_chats.lock().remove(id);
         let link = self.workers.lock().get(id).cloned();
@@ -206,7 +207,10 @@ impl Hub {
         match self.blocking(move |store| store.delete_workspace(&owned)).await {
             Ok(Some(rev)) => self.notify(HubNotice::Removed { record: RecordKey::Workspace { id: id.clone() }, rev }),
             Ok(None) => {}
-            Err(e) => error!(%id, "removing a failed workspace: {e}"),
+            Err(e) => return error!(%id, "removing a failed workspace: {e}"),
+        }
+        if let Err(e) = self.observation_gone::<WorkspaceLines>(id.clone()).await {
+            warn!(%id, "forgetting the lines of a failed workspace: {}", e.message);
         }
     }
 
