@@ -68,6 +68,43 @@ fn a_body_as_long_as_the_limit_is_taken() {
 }
 
 #[test]
+fn a_range_asks_for_its_bytes_and_takes_them() {
+    let server = serve(vec![("archive".to_string(), vec![Reply::partial("clip")])]).unwrap();
+
+    let fetched = fetcher().range(&format!("{}/archive", server.base), 10, 4);
+
+    assert_eq!(fetched.unwrap(), b"clip");
+    assert!(server.requests()[0].to_lowercase().contains("range: bytes=10-13"), "{:?}", server.requests());
+}
+
+#[test]
+fn a_range_of_nothing_asks_for_nothing() {
+    let server = serve(vec![("archive".to_string(), vec![Reply::partial("clip")])]).unwrap();
+
+    assert_eq!(fetcher().range(&format!("{}/archive", server.base), 10, 0).unwrap(), b"");
+    assert!(server.requests().is_empty(), "{:?}", server.requests());
+}
+
+/// A server that doesn't answer ranges sends the whole file, which isn't the bytes asked for.
+#[test]
+fn a_range_answered_with_the_whole_file_is_refused() {
+    let server = serve(vec![("archive".to_string(), vec![Reply::file("the whole archive")])]).unwrap();
+
+    let fetched = fetcher().range(&format!("{}/archive", server.base), 10, 4);
+
+    assert!(matches!(fetched, Err(FetchError::Status { status: 200, .. })), "{fetched:?}");
+}
+
+#[test]
+fn a_range_shorter_than_asked_for_is_refused() {
+    let server = serve(vec![("archive".to_string(), vec![Reply::partial("cl")])]).unwrap();
+
+    let fetched = fetcher().range(&format!("{}/archive", server.base), 10, 4);
+
+    assert!(matches!(fetched, Err(FetchError::CutShort { expected_bytes: 4, got_bytes: 2, .. })), "{fetched:?}");
+}
+
+#[test]
 fn a_redirect_is_an_answer_and_not_followed() {
     let elsewhere = serve(vec![("feed".to_string(), vec![Reply::file("the feed")])]).unwrap();
     let server = serve(vec![("feed".to_string(), vec![Reply::redirect(&format!("{}/feed", elsewhere.base))])]).unwrap();

@@ -1,0 +1,36 @@
+[package]
+name = "speech-eval"
+description = "Scores dictation's model on real recordings, by hand on a Mac: how it writes the terms said with no hint words, with only those terms, and with them among unrelated ones, so a change to hints, their boost or the model shows what it gained and lost."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+# The recordings, which are FLAC.
+claxon.workspace = true
+clap.workspace = true
+# What the engine's thread tells the feeder it has heard.
+flume.workspace = true
+# Hears each recording as the app does, cut at its pauses, from audio it's fed, with the boost the run asks for.
+dictation = { workspace = true, features = ["testing"] }
+# The datasets' indexes and LibriSpeech's archive, checked against their SHA-256, and Tech-Sentences' clips by range.
+fetching.workspace = true
+# The model's files, downloaded into the eval's cache if they aren't there.
+models = { workspace = true, features = ["download"] }
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Converts a 48 kHz recording to the 16 kHz the model hears, as the microphone's audio is.
+sound.workspace = true
+# LibriSpeech's archive.
+flate2.workspace = true
+tar.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

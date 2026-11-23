@@ -18,7 +18,8 @@ pub(super) const VOCABULARY: &str = "coreml/vocab.json";
 /// The longest piece the offline encoder takes: 15 s, as it was exported.
 pub(super) const LONGEST: Samples = Samples::from_secs(15);
 
-/// Per-token log-probability boost awarded to hint matches during beam search. *Unconfirmed.*
+/// Per-token log-probability boost awarded to hint matches during beam search, unless a test sets another with
+/// [`Nemotron::with_hint_boost`]. *Unconfirmed.*
 const HINT_BOOST: f32 = 2.0;
 
 /// The oldest macOS that runs the model, since the export is Core ML's specification 8.
@@ -47,6 +48,7 @@ pub struct Nemotron {
     pub(super) vocabulary: Vocabulary,
     /// The pieces a recording isn't heard as, for each alphabet it can be heard in.
     pub(super) left_out: LeftOut,
+    hint_boost: f32,
 }
 
 impl Nemotron {
@@ -66,11 +68,32 @@ impl Nemotron {
 
     fn with(parts: Parts, vocabulary: Vocabulary) -> Self {
         let left_out = LeftOut::new(&vocabulary);
-        Self { parts, mel: Mel::new(), vocabulary, left_out }
+        Self { parts, mel: Mel::new(), vocabulary, left_out, hint_boost: HINT_BOOST }
+    }
+
+    /// The engine, boosting each token of a hint match by `boost` rather than the boost the app uses, so the speech
+    /// eval can compare boosts.
+    #[cfg(any(test, feature = "testing"))]
+    #[must_use]
+    pub fn with_hint_boost(self, boost: f32) -> Self {
+        Self { hint_boost: boost, ..self }
+    }
+
+    /// The engine, with each encoder remembering what it made of its latest inputs, so a recording heard again, as
+    /// the speech eval hears each with several sets of hint words, is encoded once. Its text is the same, since the
+    /// encoders never see the hints.
+    #[cfg(any(test, feature = "testing"))]
+    #[must_use]
+    pub fn remembering_encodings(self) -> Self {
+        use super::remembering::Remembering;
+        let Parts { live, offline, transducer } = self.parts;
+        let parts =
+            Parts { live: Box::new(Remembering::new(live)), offline: Box::new(Remembering::new(offline)), transducer };
+        Self { parts, ..self }
     }
 
     pub(super) fn hint_graph(&self, hints: &Hints) -> HintGraph {
-        HintGraph::new(self.vocabulary.pieces(), hints, HINT_BOOST)
+        HintGraph::new(self.vocabulary.pieces(), hints, self.hint_boost)
     }
 
     /// What `encoder`, given `prompt`, makes out of `padded`, a window that starts at `first` in the recording, whose
@@ -157,6 +180,67 @@ mod tests {
         assert_eq!(engine.transcribe(&one_second, &Hints::default(), Language::Auto).unwrap(), "bat");
         assert_eq!(engine.transcribe(&one_second, &Hints::new(["cat"]), Language::Auto).unwrap(), "cat");
         assert!(calls.load(Ordering::Relaxed) < 100, "only the 1 s audio steps are decoded, not the 14 s of padding");
+    }
+
+    #[test]
+    fn a_boost_of_nothing_leaves_the_hints_unheard() {
+        let vocabulary = || {
+            Vocabulary::parse(
+                r#"{"0": "<unk>", "1": "▁cat", "2": "▁bat", "3": "▁ca", "4": "▁c", "5": "▁", "6": "c", "7": "a", "8": "t"}"#,
+            )
+            .unwrap()
+        };
+        let transducer = || {
+            ScriptedTransducer(|_, history: &[usize]| {
+                if history.is_empty() { vec![(2, 4.0), (1, 3.0), (BLANK, -5.0)] } else { vec![(BLANK, 10.0)] }
+            })
+        };
+        let engine = |boost: Option<f32>| {
+            let engine = Nemotron::standing_in(stand_in::parts_with_transducer(transducer()), vocabulary());
+            match boost {
+                Some(boost) => engine.with_hint_boost(boost),
+                None => engine,
+            }
+        };
+        let one_second = vec![0.0; Samples::from_secs(1).0];
+        let heard = |boost| engine(boost).transcribe(&one_second, &Hints::new(["cat"]), Language::Auto).unwrap();
+
+        assert_eq!(heard(None), "cat");
+        assert_eq!(heard(Some(0.0)), "bat");
+    }
+
+    /// Live and whole, as the speech eval hears a recording under each set of hint words.
+    fn heard(engine: &Nemotron, audio: &[f32], hints: &Hints) -> (String, String) {
+        let mut listening = engine.listen(hints, Language::Auto);
+        let mut live: Vec<_> = audio.chunks(160).flat_map(|buffer| listening.hear(buffer).unwrap()).collect();
+        live.extend(listening.finish().unwrap());
+        let live = live.into_iter().map(|heard| heard.text).collect();
+        (live, engine.transcribe(audio, hints, Language::Auto).unwrap())
+    }
+
+    #[test]
+    fn an_engine_remembering_its_encodings_encodes_a_recording_heard_again_once_and_hears_it_the_same() {
+        let vocabulary = || Vocabulary::parse(r#"{"0": "<unk>", "1": "▁cat", "2": "▁bat"}"#).unwrap();
+        let transducer = || {
+            ScriptedTransducer(|step, history: &[usize]| {
+                if history.len() < step / 4 { vec![(2, 4.0), (1, 3.0), (BLANK, -5.0)] } else { vec![(BLANK, 10.0)] }
+            })
+        };
+        // A tone that rises, so no two windows of it are the same.
+        let audio: Vec<f32> =
+            (0..Samples::from_secs(4).0).map(|i| (stand_in::real(i * i) * 1e-7).sin() * 0.1).collect();
+        let (parts, encoded) = stand_in::parts_noting_prompts(transducer());
+        let remembering = Nemotron::standing_in(parts, vocabulary()).remembering_encodings();
+        let plain = Nemotron::standing_in(stand_in::parts_with_transducer(transducer()), vocabulary());
+
+        let first = heard(&remembering, &audio, &Hints::default());
+        let calls = encoded.lock().len();
+        let again = heard(&remembering, &audio, &Hints::new(["cat"]));
+
+        assert!(calls > 20, "{calls} calls, so the windows weren't all the same");
+        assert_eq!(encoded.lock().len(), calls, "heard again, neither encoder is called");
+        assert_eq!(first, heard(&plain, &audio, &Hints::default()));
+        assert_eq!(again, heard(&plain, &audio, &Hints::new(["cat"])));
     }
 
     #[test]

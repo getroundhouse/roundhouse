@@ -7,7 +7,8 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-# What only tests use: an engine that stands in for the model, and audio a test feeds a recording itself.
+# What only tests and the speech eval use: an engine that stands in for the model, audio a test feeds a recording
+# itself, and a hint boost other than the one the app uses.
 testing = []
 
 [dependencies]

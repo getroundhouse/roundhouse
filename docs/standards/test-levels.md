@@ -15,6 +15,7 @@ Where each kind of test goes, and the hub a test of the hub or the window runs o
 | The kit's tool | That it makes the copy of gpui-kit and keeps its patches in step with it, against stand-ins for upstream's repository and this one | `tools/kit-sync/tests/` |
 | Publishing updates | That a release signs only a feed it computed, finishes after stopping partway, and reads back as apps would, against a directory standing in for the bucket | `tools/package/test_publish.py` |
 | Dictation's hint words | Which terms each made-up case's field hints, against a baseline | `tools/dictation-eval/` |
+| Dictation's model | How it hears real recordings, with hints and without, against a baseline. By hand on a Mac, since the model runs only there | `tools/speech-eval/` |
 | An agent's CLI | That a version of it does what Roundhouse needs, as `docs/reference/conformance.md` says | `crates/agents/src/conformance/` |
 | The real CLI | That the fake agent is still honest. By hand, since it costs money | `tools/smoke/` |
 

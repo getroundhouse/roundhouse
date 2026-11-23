@@ -1,0 +1,53 @@
+# Everyday words said in Tech-Sentences' training split, each with a technical word that sounds like it, hinted as a
+# field could hint it though it isn't said. A clip is heard with it hinted, and writing it is a hinted word written
+# that wasn't said. Where it's the word said with a capital, a product's name, its clips are the `capitals` set, and
+# the rest are `sound-alikes`. Each is in at least eight of the split's sentences somewhere other than a sentence's
+# start, so their clips are spread through it.
+
+[[pair]]
+said = "create"
+hinted = "crate"
+
+[[pair]]
+said = "view"
+hinted = "Vue"
+
+[[pair]]
+said = "cloud"
+hinted = "Claude"
+
+[[pair]]
+said = "traffic"
+hinted = "Traefik"
+
+[[pair]]
+said = "rough"
+hinted = "Ruff"
+
+[[pair]]
+said = "signal"
+hinted = "Signal"
+
+[[pair]]
+said = "go"
+hinted = "Go"
+
+[[pair]]
+said = "node"
+hinted = "Node"
+
+[[pair]]
+said = "vault"
+hinted = "Vault"
+
+[[pair]]
+said = "render"
+hinted = "Render"
+
+[[pair]]
+said = "photos"
+hinted = "Photos"
+
+[[pair]]
+said = "home"
+hinted = "Home"
