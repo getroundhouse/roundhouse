@@ -79,7 +79,9 @@ impl HubRecords {
         };
         let observed = match ObservationNotice::try_from(notice) {
             Ok(ObservationNotice::Copy(observation)) => self.observations.apply(observation, &mut self.taken),
-            Ok(ObservationNotice::Removed { observation, rev }) => self.observations.remove(&observation, rev),
+            Ok(ObservationNotice::Removed { observation, rev }) => {
+                self.observations.remove(&observation, rev, &mut self.taken)
+            }
             Err(_) => false,
         };
         if observed {
@@ -148,7 +150,7 @@ impl HubRecords {
             | RecordKey::ModelList(_)
             | RecordKey::HubUpdate
             | RecordKey::Unknown) => {
-                let changed = self.records.remove(listed, rev);
+                let changed = self.records.remove(listed, rev, &mut self.taken);
                 if changed {
                     self.shown.take();
                 }
@@ -253,6 +255,18 @@ impl HubRecords {
             self.shown_observations.take();
         }
         changed
+    }
+
+    /// Starts a new connection, maybe to another hub, after which the first list of each level replaces what's held of
+    /// it, whatever the revisions, as [`ByRevision::apply_list`] says, so a hub whose revisions started again, as after
+    /// its database is replaced from a copy, is shown as soon as it lists them. What's taken in on one connection is
+    /// kept by revision.
+    pub(crate) fn connected_again(&mut self) {
+        self.records.connected_again(&mut self.taken);
+        self.observations.connected_again(&mut self.taken);
+        self.subagents.connected_again();
+        self.proposals.connected_again();
+        self.replies_heard.connected_again();
     }
 
     /// Takes in what the hub said of its agents. Returns whether that changed anything.
