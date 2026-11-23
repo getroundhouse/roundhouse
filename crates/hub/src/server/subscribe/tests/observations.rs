@@ -3,15 +3,16 @@
 use protocol::client::listed::{Listed, WorkspaceObservations};
 use protocol::client::subscriptions::{FeedSubscribe, Follow, Subscribe, Subscribed};
 use protocol::client::{ClientResponse, HubFrame, HubNotice};
-use protocol::model::{
-    ChangeStatus, ChangeSummary, ChangedFile, Level, LineCounts, Observation, ObservationKey, Observed,
-};
+use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, LineCounts, Observation, ObservationKey, Observed};
 
-use super::super::workspace_level;
+use std::sync::Arc;
+
+use super::super::subscribe;
 use super::given::{Given, ok, start};
 use crate::hub::{WorkspaceChanges, WorkspaceLines};
-use crate::server::sends::Sends;
+use crate::server::subscribing::follow_feed;
 use crate::server::tests::{Connection, WAIT};
+use parking_lot::Mutex;
 
 /// The subscriptions' IDs: one that follows the hub, one that follows the session `s`, and one that follows the
 /// workspace `w`.
@@ -172,21 +173,37 @@ fn is_removal((_, notice): (u64, &HubNotice)) -> bool {
     matches!(notice, HubNotice::ObservationRemoved { .. })
 }
 
-/// A workspace's list is queued by the time what feeds its subscription is made, so before the reply to the
-/// `Subscribe` that starts it, rather than by what feeds it, which runs only once it's spawned.
+/// A `Subscribe` that starts following a workspace is done only once the workspace's list is queued, so its reply goes
+/// after the list. And the list is queued by what feeds the subscription, so a start refused after it has read the
+/// list, as when another kind of request has taken its ID meanwhile, sends none.
 #[tokio::test]
-async fn a_workspace_s_list_is_queued_before_what_feeds_its_subscription_runs() {
+async fn a_workspace_s_list_is_queued_before_the_reply_and_only_for_a_start_that_was_made() {
+    // The other start's, which is made.
+    const MADE: u64 = 4;
     let dir = tempfile::tempdir().unwrap();
     let given = Given::new(dir.path()).await;
     let (frames, mut queued) = tokio::sync::mpsc::channel(4);
+    let closed = Arc::new(tokio::sync::watch::Sender::new(false));
+    let connection = Arc::new(crate::server::Connection { id: 0, frames, subscriptions: Mutex::default(), closed });
+    let follows = |id| Subscribe { stop: Vec::new(), start: vec![start(id, Follow::Workspace { id: "w".into() })] };
+    let changing = given.hub.holding_observations().await;
+    let receivers = given.hub.feed_receivers();
 
-    let sends = Sends::at(Level::Workspace { id: "w".into() }, false);
-    let feeding = workspace_level::feeding(&given.hub, "w".into(), sends, WORKSPACE, frames).await.unwrap();
+    let taken = tokio::spawn({
+        let (hub, connection) = (given.hub.clone(), connection.clone());
+        async move { subscribe(&hub, &connection, follows(WORKSPACE)).await }
+    });
+    // It follows the feed once it has checked its ID, and then waits to list w's observations.
+    waiting::task::until(WAIT, "the start to follow the feed", || given.hub.feed_receivers() > receivers).await;
+    follow_feed(&given.hub, &connection, WORKSPACE).unwrap();
+    drop(changing);
+    let Subscribed { refused } = taken.await.unwrap();
+    let made = subscribe(&given.hub, &connection, follows(MADE)).await;
 
-    let first = queued.try_recv().map(|queued| queued.frame);
-    assert!(
-        matches!(first, Ok(HubFrame::Listed { subscription_id: WORKSPACE, listed: Listed::Workspace(_) })),
-        "{first:?}"
-    );
-    drop(feeding);
+    assert_eq!(refused.iter().map(|refused| refused.subscription_id).collect::<Vec<_>>(), [WORKSPACE]);
+    assert_eq!(made, Subscribed::default());
+    let sent: Vec<_> = std::iter::from_fn(|| queued.try_recv().ok()).map(|queued| queued.frame).collect();
+    let [HubFrame::Listed { subscription_id: MADE, listed: Listed::Workspace(_) }] = sent.as_slice() else {
+        panic!("one list, for the start that was made, queued by the time it was: {sent:?}")
+    };
 }

@@ -24,6 +24,12 @@ impl Feed {
         self.sender.subscribe()
     }
 
+    /// How many follow it.
+    #[cfg(test)]
+    pub(in super::super) fn receivers(&self) -> usize {
+        self.sender.receiver_count()
+    }
+
     /// Tells every client following the feed of `notice`, unless it's a copy of a record no newer than one it has told
     /// of, or than that record's removal, so each copy of a record that a client hears is newer than the last. Several
     /// tasks can announce one record, each with a copy read at or after its own change, so two can carry the same copy,

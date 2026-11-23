@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use protocol::client::github::GithubShown;
 use protocol::client::{ApiError, ErrorCode, HubFrame, HubNotice};
-use protocol::model::{Level, SessionId};
+use protocol::model::SessionId;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::AbortHandle;
 
@@ -24,7 +24,7 @@ pub(super) struct Subscription {
     /// For a subscription to what GitHub says of what the client shows, what it shows, which the client can change.
     pub(super) shown: Option<watch::Sender<GithubShown>>,
     /// What it follows, for one that `Subscribe` started, so a start sent again can be told from one that takes its ID.
-    pub(super) level: Option<Level>,
+    pub(super) followed: Option<Followed>,
 }
 
 impl Subscription {
@@ -37,7 +37,7 @@ impl Subscription {
         task: AbortHandle,
     ) -> Self {
         let following = hub.follow(FollowerId { connection: connection.id, subscription: subscription_id }, followed);
-        Self { task, following, shown: None, level: None }
+        Self { task, following, shown: None, followed: None }
     }
 
     /// The same, for one to what GitHub says of what the client shows, which the client changes through `shown`.
@@ -46,9 +46,9 @@ impl Subscription {
         self
     }
 
-    /// The same, for one that `Subscribe` started, which follows `level`.
-    pub(super) fn of_level(mut self, level: Level) -> Self {
-        self.level = Some(level);
+    /// The same, for one that `Subscribe` started, which follows `followed`.
+    pub(super) fn of_subscribe(mut self, followed: Followed) -> Self {
+        self.followed = Some(followed);
         self
     }
 }
