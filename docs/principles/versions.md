@@ -1,0 +1,30 @@
+# Protocol versions
+
+These rules say what a break of a protocol is, how two sides agree a version, and which versions of peers on different builds work together. `docs/principles/protocol.md` says how a form changes with no new version, which is how most changes are made. They hold for all three protocols that cross between processes: the client protocol, between clients and a hub, the worker protocol, between a hub and its workers, and the provider protocol, between a hub and its provider adapters.
+
+## Versions
+
+- **A new version means a break: a change that a peer on the previous version can't read under the rules in `docs/principles/protocol.md`.** Those rules cover most changes, so a break is rare. Each protocol has its own version, so a break in one doesn't break another. The provider protocol is the exception until an adapter that speaks it ships: a change that would break it is made to version 1 in place, since no peer of another build speaks it.
+- **A hello gives the newest and the oldest version its sender speaks, and both sides use the newest version they share.** The reply names the chosen version. A hello that names one version speaks only that one, which is what a peer built before version ranges sends. A side whose hello is answered with a version it doesn't speak stops there. *Unconfirmed:* stopping there.
+- **The hub speaks the current and the previous version of each protocol, and clients, workers and provider adapters speak only their own.** The hub is the only party that meets older and newer peers. A client talks only to hubs, a worker talks only to the hub that started it, from that hub's build, and a provider adapter talks only to the hub that runs it. So the code for an old version is in one place, and only until the next break.
+- **A protocol breaks whenever a change needs a break, however soon after the last one, and a peer two breaks behind its hub is cut off.** The hub stops a worker that's two breaks behind, with its agents, as the hub starts. A client that's two breaks behind reports that it can't talk to the hub. The app's update crosses one break at a time, and the app updates together with the hub it starts, so the app's update cuts off neither.
+- **The hellos, `hub_status`, `hub_shutdown`, `hub_restart` and the `Unsupported` error reply never change form, even in a break, but for gaining a field that's optional, which older peers ignore.** Every older form still reads, and means what it meant. The hellos are how two versions find one they share. The three requests work before a hello, so a client of any version can see a hub and stop or restart it. For example, `roundhouse hub stop` works across a break this way, and so does the app when it restarts a hub to update it. A client's hello gained which device it's on this way. `crates/protocol/tests/compatibility/` writes out each form, so a change to one fails a test.
+- **What an older hub runs of a newer release to update to it never changes either: `roundhoused --version`, which says `roundhoused <version>`, and `roundhouse hub place`, which takes no arguments and finds where to place the build from its environment.** A published hub can't change, so a release that changed either would fail every client update of a hub installed before it, until someone installed it by hand. The daemon's and the command line's tests pin both. *Unconfirmed.*
+
+## Which versions work together
+
+The table follows from the rules above and those in `docs/principles/protocol.md`.
+
+| Pairing | After a change that needs no new version | After a break |
+|---|---|---|
+| Older client, newer hub | Works, but for terminals, as below. The client ignores what it doesn't know | Works. The hub speaks the client's version until the hub's next break |
+| Newer client, older hub | Works, but for terminals, as below. The client hides each feature whose request the hub rejects | Doesn't work. The client reports that the hub is too old. The desktop app replaces a local hub that it started, using `hub_status` and `hub_shutdown` |
+| Newer hub, older worker | Works, but for terminals, as below. The hub does without what the worker rejects | Works. The hub speaks the worker's version |
+| Older hub, newer worker, after a rollback | Works, but for terminals, as below | Doesn't work. The hub stops the worker and its agents |
+
+Wherever a hub works with a worker of another build, it replaces that worker with one of its own build once the worker's workspace is idle. So updating a hub never stops an agent, as long as the update crosses one break at a time.
+
+## Terminals, the one exception
+
+- **A terminal shows only where its hub, worker and client all send it as rows.** The requests that sent a terminal's bytes into a copy of Ghostty in each client were removed without a new version, so a build from before is refused with `Unsupported`, and shows no terminal with a newer peer. Everything else in such a pairing works as the table says. Keeping them a version longer would have kept Ghostty in every client.
+- **No other request is removed without a break.**

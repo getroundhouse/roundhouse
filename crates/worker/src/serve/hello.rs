@@ -6,7 +6,7 @@ use protocol::versions::Versions;
 use protocol::worker::{HelloReply, WORKER_PROTOCOL_VERSION, WorkerResponse};
 
 /// A worker speaks only its own version, and takes a hub whose hello names it, since a hub speaks the one before its
-/// own too once a protocol breaks, as `docs/principles/protocol.md` says.
+/// own too once a protocol breaks, as `docs/principles/versions.md` says.
 pub(super) fn hello(build: Build, newest: u32, oldest: Option<u32>) -> Result<WorkerResponse, ApiError> {
     let (ours, hub) = (Versions::only(WORKER_PROTOCOL_VERSION), Versions::from_hello(newest, oldest));
     let Some(chosen) = ours.newest_shared(hub) else {

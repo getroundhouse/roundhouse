@@ -127,9 +127,8 @@ impl Hub {
     }
 
     /// Keeps that nothing keeps either observation of the workspace's changes up to date any more, as of now, since
-    /// what watched them would have said of any change until then. That's the owner's choice to make, proposed and not
-    /// yet confirmed: the other was as of the last summary that differed, which can show an hour-old time for one that
-    /// was right a moment ago.
+    /// what watched them would have said of any change until then. That's the owner's choice. The other was as of the
+    /// last summary that differed, which can show an hour-old time for one that was right a moment ago.
     async fn changes_let_go(&self, id: &WorkspaceId) {
         let as_of_ms = now_ms();
         if let Err(e) = self.observation_let_go::<WorkspaceLines>(id.clone(), as_of_ms).await {

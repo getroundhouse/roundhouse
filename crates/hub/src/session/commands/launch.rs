@@ -287,9 +287,10 @@ impl LiveSession {
     }
 
     /// Puts `claims` on the session's record, and tells everyone if it didn't hold them already, for a run found
-    /// running, unless it has exited since, in order with what's recorded, so its exit finds them to take off. One that
-    /// can't be recorded is only said: the run is held to them all the same, and a client offers what its kind claims
-    /// until the next launch says them.
+    /// running, unless it has exited since, in order with what's recorded, so its exit finds them to take off. It's a
+    /// write outside any event, which repairs a record that let go of what the run's start set, so the claims stay a
+    /// record, as `docs/principles/observations.md` says. One that can't be recorded is only said: the run is held to
+    /// them all the same, and a client offers what its kind claims until the next launch says them.
     pub(super) async fn keep_claims(&self, hub: &Hub, claims: RunCapabilities) {
         let _in_order = self.recording.lock().await;
         if self.state.lock().agent.is_none_or(|agent| agent.run != claims.run) {

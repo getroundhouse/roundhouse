@@ -49,7 +49,8 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/principles/observations.md` | What the hub keeps of state others own, where it comes from, and how fresh it says it is |
 | `docs/principles/live-snapshots.md` | What something running shows now, which the hub doesn't store, and how it reaches a client |
 | `docs/principles/sync.md` | What's common to every kind in a client's copy of a hub's state, and who allocates each ID |
-| `docs/principles/protocol.md` | How a protocol changes so that peers on different builds keep working together |
+| `docs/principles/protocol.md` | How a protocol's forms change with no new version, so that peers on different builds keep working together |
+| `docs/principles/versions.md` | What a break of a protocol is, how two sides agree a version, and which versions work together |
 | `docs/principles/failure.md` | What happens when a process dies, and how a slow one is kept from delaying the others |
 | `docs/principles/outside-systems.md` | How the code deals with a system the project doesn't own, how the hub reads GitHub, and how credentials are kept |
 | `docs/principles/agents.md` | How the hub and clients deal with each kind of agent through its adapter, and how an agent uses Roundhouse's tools |

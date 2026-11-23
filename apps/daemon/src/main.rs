@@ -216,7 +216,7 @@ mod tests {
     use super::*;
 
     /// What a client checks a daemon is before it runs it, and what an older hub reads of a newer release to update to
-    /// it, as `docs/principles/protocol.md` says.
+    /// it, as `docs/principles/versions.md` says.
     #[test]
     fn the_version_the_daemon_says_is_the_line_its_checked_by() {
         let said = Args::command().render_version();

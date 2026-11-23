@@ -395,7 +395,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 - **A count is how many, as a number in the text, never in a box,** in a detail's text, and its kind says its colour and weight. One beside text of another size, such as a tab's name, sits on its baseline. `look::CountKind` holds the kinds. *Unconfirmed.*
 - **A count is written in one of two forms, in both apps: whole, with a comma between each three figures, such as `1,212` files or `+48,221` lines, wherever it's written out, and shortened where there's room for only a few figures, as a workspace's lines are in the sidebar and Home, `+37k`, and a count of tokens is, `313k`,** so a long count reads at a glance in either. `written_counts` writes both.
 - **The lines a file gained and lost are `+12 −3`, in the added and removed colours, in code's type, 4px apart,** with a minus sign rather than a hyphen, and whichever is none left out, wherever they're drawn. *Unconfirmed.*
-- **A workspace's lines in all are in medium weight, and a count of a thousand or more is shortened, such as `+37k` or `−1.2k`,** so they read at a glance down a list of names, as each workspace's row does in the sidebar and Home. A count is in thousands, and from a million in millions, with a tenth below ten of either, cut rather than rounded, so it never reads as more than it is. Lines the hub last read some time ago, rather than keeps current, are fainter, so an old reading doesn't read as now. `look::LinesKind` holds the kinds. *Unconfirmed.*
+- **A workspace's lines in all are in medium weight, and a count of a thousand or more is shortened, such as `+37k` or `−1.2k`,** so they read at a glance down a list of names, as each workspace's row does in the sidebar and Home. A count is in thousands, and from a million in millions, with a tenth below ten of either, cut rather than rounded, so it never reads as more than it is. Lines the hub last read some time ago, rather than keeps current, are fainter, so an old reading doesn't read as now. `look::LinesKind` holds the kinds.
 
 **Every kind of count, by its name.** Each is a kind in `look::CountKind`. *Unconfirmed.*
 
@@ -404,7 +404,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 | `NeedsALook` | How many need a look, in the text's colour and stronger, such as a collapsed project's workspaces |
 | `HowMany` | Only how many there are, muted, such as the files Changes lists |
 
-**Every kind of lines added and removed, by its name.** Each is a kind in `look::LinesKind`. *Unconfirmed.*
+**Every kind of lines added and removed, by its name.** Each is a kind in `look::LinesKind`.
 
 | Name | For |
 |---|---|

@@ -13,4 +13,4 @@ A client tells the hub what it follows: the hub, a workspace, a session, a termi
 
 ## What it costs
 
-A client has one way to follow and no other to fall back on, so one built for it can't use a hub from before it. Moving clients to it is a break of the client protocol, as `docs/principles/protocol.md` says of one. A client that needs less than a level sends is still sent all of it, as every client that follows the hub is sent every record.
+A client has one way to follow and no other to fall back on, so one built for it can't use a hub from before it. Moving clients to it is a break of the client protocol, as `docs/principles/versions.md` says of one. A client that needs less than a level sends is still sent all of it, as every client that follows the hub is sent every record.

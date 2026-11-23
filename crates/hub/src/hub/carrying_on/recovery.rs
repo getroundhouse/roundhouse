@@ -175,8 +175,10 @@ impl Hub {
         }
     }
 
-    /// `claims` are what the agent's worker says its run claims, while it's running. One that has gone since says none,
-    /// and the record keeps what it held, since a hub that stops records no exit.
+    /// `claims` are what the agent's worker says its run claims, while it's running, and they go on the session's
+    /// record. It's a write outside any event, which repairs a record that lacks them, so the claims stay a record, as
+    /// `docs/principles/observations.md` says. One that has gone since says none, and the record keeps what it held,
+    /// since a hub that stops records no exit.
     pub(super) async fn carry_on_session(
         self: &Arc<Self>,
         id: &SessionId,

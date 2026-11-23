@@ -23,7 +23,7 @@ For a flaky test, repeat it only enough to see how often it fails, find the caus
 
 ## A break in the worker protocol
 
-A PR that breaks the worker protocol merges only once each platform whose apps update in steps, which are macOS and Linux, has published a release that includes the previous break. The app's update crosses one break at a time, as `docs/principles/protocol.md` says, so it needs a published release between every two breaks to step to. Until then, CI's `steps` job, which runs `tools/update-steps`, fails the PR, in the queue too. Queue it again once those releases are published.
+A PR that breaks the worker protocol merges only once each platform whose apps update in steps, which are macOS and Linux, has published a release that includes the previous break. The app's update crosses one break at a time, as `docs/principles/versions.md` says, so it needs a published release between every two breaks to step to. Until then, CI's `steps` job, which runs `tools/update-steps`, fails the PR, in the queue too. Queue it again once those releases are published.
 
 A build can also say the oldest release it updates from, its floor, since its hub can't migrate the database of a release before that one, as "The database" in `docs/principles/state.md` says. The floor moves only at a break in the worker protocol, to a release the update feed keeps for apps to step to on every platform, and, where apps step, to none newer than the last release whose hub doesn't speak the break's oldest workers. An app from before releases said their floors then steps through it as it steps through the break. The `steps` job fails a floor that breaks either rule, and `tools/package/publish.py` refuses one that got past it, as it does a break. *Unconfirmed.*
 
