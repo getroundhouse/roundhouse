@@ -43,7 +43,7 @@ fn resting_on_a_finished_turn_shows_what_it_asked_of_the_model_just_above_its_li
 
     assert!(ui.visible("turn-card"), "resting on it does");
     // What the fake hub's turns ask of the model.
-    for said in ["Input 6", "Output 1.8k", "Cache read 412.4k", "Cache write 9.6k"] {
+    for said in ["Input 6", "Output 1.8k", "Cache read 412k", "Cache write 9.6k"] {
         assert_eq!(ui.labelled(said).len(), 1, "{said}");
     }
     assert_eq!(ui.labelled("Cache 59 min left").len(), 1, "what the hub keeps of the turn's request");

@@ -5,7 +5,7 @@ use super::*;
 const OPUS: ModelName = ModelName::named("claude-opus-5-5");
 const HAIKU: ModelName = ModelName::named("claude-haiku-5-5");
 
-/// What a request to Opus sent at 1 s left: 252.8k tokens of a conversation, warm for an hour.
+/// What a request to Opus sent at 1 s left: 252,800 tokens of a conversation, warm for an hour.
 fn before() -> PromptCache {
     PromptCache { used_at_ms: 1_000, ttl: CacheTtl::OneHour, model: Some(OPUS), tokens: 252_800 }
 }

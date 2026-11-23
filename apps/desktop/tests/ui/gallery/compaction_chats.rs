@@ -104,7 +104,7 @@ fn long_with_compactions() -> Vec<EventBody> {
 }
 
 /// The label of the compaction someone asked for in [`asked`] and [`asked_last`], which opens its summary.
-const ASKED_LABEL: &str = "Compacted, 226.9k to 9.0k tokens, 51s";
+const ASKED_LABEL: &str = "Compacted, 226k to 9k tokens, 51s";
 
 /// What the agent carries on from, in the shape Claude writes one: numbered sections, each a few lines, so it's taller
 /// than the box it opens in.

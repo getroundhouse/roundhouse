@@ -86,15 +86,18 @@ fn room(context: &ContextUsage, cx: &App) -> Div {
     let kept_back = context.tokens_of(ContextPartKind::Buffer);
     let left = words::room_left(room_left(context), kept_back > 0);
     let used = format!("{} used", words::whole_percent(context.used_fraction()));
-    let of = format!("{}/{}", look::tokens(context.used_tokens), look::tokens(context.max_tokens));
+    let of =
+        format!("{}/{}", written_counts::shortened(context.used_tokens), written_counts::shortened(context.max_tokens));
     let under = h_flex()
         .justify_between()
         .gap(look::Space::Medium)
         .typeset(look::Type::Detail)
         .child(div().min_w_0().truncate().text_color(colors.text_muted).child(left))
         .child(div().flex_none().text_color(colors.text_faint).child(of));
-    let parts: Vec<Div> =
-        in_it(context).into_iter().map(|part| share(part.name.clone(), look::tokens(part.tokens), cx)).collect();
+    let parts: Vec<Div> = in_it(context)
+        .into_iter()
+        .map(|part| share(part.name.clone(), written_counts::shortened(part.tokens), cx))
+        .collect();
     v_flex()
         .gap(look::Space::XSmall)
         .child(heading("Context", Some(used.into()), cx))

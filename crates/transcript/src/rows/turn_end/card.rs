@@ -67,7 +67,7 @@ fn counts(tokens: TokenUsage) -> Vec<(&'static str, String)> {
         ("Cache read", tokens.cache_read_tokens),
         ("Cache write", tokens.cache_write_tokens),
     ];
-    counts.into_iter().map(|(name, count)| (name, look::tokens(count))).collect()
+    counts.into_iter().map(|(name, count)| (name, written_counts::shortened(count))).collect()
 }
 
 /// Rows, each a name and what it says.

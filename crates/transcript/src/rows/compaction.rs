@@ -60,7 +60,7 @@ pub(crate) fn who(by: CompactedBy) -> &'static str {
 /// outline's list, if the agent said both.
 pub(crate) fn freed(before_tokens: Option<u64>, after_tokens: Option<u64>, to: &str) -> Option<String> {
     let (before, after) = before_tokens.zip(after_tokens)?;
-    Some(format!("{} {to} {} tokens", look::tokens(before), look::tokens(after)))
+    Some(format!("{} {to} {} tokens", written_counts::shortened(before), written_counts::shortened(after)))
 }
 
 /// The rule, with what it freed and how long it took in the middle. With a summary, the middle opens it.

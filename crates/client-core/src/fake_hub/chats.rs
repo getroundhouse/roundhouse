@@ -91,7 +91,7 @@ impl World {
     }
 
     /// Has the turn a chat's log ends with end this many minutes before [`NOW_MS`], and three seconds after its agent's
-    /// newest request was sent to Opus 5.5 with a 1h cache, as the chat's record says, with its context holding 313.5k
+    /// newest request was sent to Opus 5.5 with a 1h cache, as the chat's record says, with its context holding 313,500
     /// tokens unless it says otherwise. The turn takes as long as it did. It's the chat's newest reply, which has been
     /// read.
     pub fn cached(&mut self, id: &SessionId, minutes_before_now: i64) {
