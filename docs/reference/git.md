@@ -14,6 +14,14 @@ A worker's change summary reads these, in `crates/worker/src/git/changes/listing
 - **git counts no lines of a file larger than `core.bigFileThreshold`, 512 MiB unless set,** and prints `-` for each count, as it does for a binary file.
 - **A diff against a commit gives a file in conflict as `M`,** and not `U`.
 
+## What git ignores
+
+A worker's watch of a worktree reads these, in `crates/worker/src/git/ignored.rs`. Seen on git 2.39.
+
+- **`git ls-files --others --ignored --exclude-standard --directory -z` lists the topmost folders git ignores whole, each ending in `/`, and the files it ignores in folders it doesn't,** such as `target/`, `node_modules/` and `pkg/build/` for a `build` pattern. An empty folder it ignores is listed too. A folder holding a file git tracks isn't listed whole, and its ignored files are, one by one.
+- **`git check-ignore -z --stdin` says a path inside an ignored folder is ignored,** such as `target/debug/deep`, so a new folder's own folders can be asked about without listing again. It exits 1, not 0, when none of what it was asked is ignored.
+- **git's own reads raise no write that a watch hears,** with `GIT_OPTIONAL_LOCKS=0`, which the worker runs every git with, since `diff` and `status` then don't write the index back. On Linux they still open and read files, which inotify tells of as access, and which a watch has to drop.
+
 ## Config given in the environment
 
 - **git 2.31 is the first to read config from `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>`.** It reads them again on every run, as the command's own config, which wins over the repository's and the person's. So a file named there as `include.path` can be rewritten under a process that's running, and its next `git` reads the new one. A worker gives every process its git config this way (`Files::environment`, in `crates/worker/src/git_credential/files.rs`), and asks its git's version once (`reads_the_config`).

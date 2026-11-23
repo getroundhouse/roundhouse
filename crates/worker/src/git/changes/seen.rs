@@ -1,9 +1,10 @@
 //! What the worker last read of a worktree's changed files, so it reads one again only once its size or modified time
 //! differs from when it last looked.
 
+use super::super::path_from_git;
 use super::reading::{Read, read};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 /// How long after a file's modified time the worker reads the file again each time it looks, whatever its size and
@@ -43,17 +44,4 @@ impl Seen {
         seen_now.0.insert(path.to_vec(), Looked { size, modified, settled, read: read.clone() });
         Some(read)
     }
-}
-
-/// A path git writes, which on Unix is the bytes it has, whether or not they're UTF-8.
-#[cfg(unix)]
-fn path_from_git(path: &[u8]) -> PathBuf {
-    use std::os::unix::ffi::OsStrExt as _;
-    PathBuf::from(std::ffi::OsStr::from_bytes(path))
-}
-
-/// A path git writes, which Git for Windows writes as UTF-8, since a Windows path is always Unicode.
-#[cfg(windows)]
-fn path_from_git(path: &[u8]) -> PathBuf {
-    PathBuf::from(String::from_utf8_lossy(path).into_owned())
 }

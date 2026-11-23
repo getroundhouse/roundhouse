@@ -117,14 +117,17 @@ impl Hub {
     }
 
     /// Does what's to be done now that a subscription follows each of `of`: a terminal's worker is told, if no other
-    /// follower has had it told, and a workspace's pull request, or an issue or a pull request a chip shows, is read,
+    /// follower has had it told, as is a workspace's, to watch its worktree, and a workspace's pull request, or an issue or a pull request a chip shows, is read,
     /// as a client asking for it would have it read.
     fn newly_followed(self: &Arc<Self>, of: &[Followed]) {
         let (mut references, mut workspaces) = (Vec::new(), Vec::new());
         for followed in of {
             match followed {
                 Followed::Terminal(id) => self.terminal_watching_soon(id),
-                Followed::Workspace(id) => workspaces.push(id.clone()),
+                Followed::Workspace(id) => {
+                    self.changes_watching_soon(id);
+                    workspaces.push(id.clone());
+                }
                 Followed::Reference(ask) => references.push(ask.clone()),
                 Followed::Hub | Followed::Session(_) => {}
             }
@@ -133,12 +136,14 @@ impl Hub {
     }
 
     /// Does what's to be done now that a subscription no longer follows each of `of`: a terminal's worker is told,
-    /// once nothing follows the terminal. What's read of GitHub is read less often by itself.
+    /// once nothing follows the terminal, and so is a workspace's, once nothing follows the workspace. What's read of
+    /// GitHub is read less often by itself.
     fn no_longer_followed(self: &Arc<Self>, of: &[Followed]) {
         for followed in of {
             match followed {
                 Followed::Terminal(id) => self.terminal_watching_soon(id),
-                Followed::Hub | Followed::Workspace(_) | Followed::Session(_) | Followed::Reference(_) => {}
+                Followed::Workspace(id) => self.changes_watching_soon(id),
+                Followed::Hub | Followed::Session(_) | Followed::Reference(_) => {}
             }
         }
     }

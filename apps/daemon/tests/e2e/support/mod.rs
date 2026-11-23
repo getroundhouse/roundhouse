@@ -15,7 +15,7 @@ pub(crate) mod gh;
 pub(crate) mod github;
 mod processes;
 mod raw;
-pub(crate) use raw::RawConnection;
+pub(crate) use raw::{RawConnection, changes_in, following};
 
 mod stack;
 pub(crate) use stack::{

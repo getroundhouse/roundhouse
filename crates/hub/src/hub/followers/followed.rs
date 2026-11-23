@@ -14,8 +14,8 @@ pub(crate) enum Followed {
     /// The hub's records, as `FeedSubscribe` follows them. While anything follows it, the hub reads again the pull
     /// requests of archived workspaces that its cache has forgotten, as `Hub::read_forgotten_followed` says.
     Hub,
-    /// A workspace, as a client follows it while it shows the workspace's pull request in full, which the hub reads
-    /// more often.
+    /// A workspace, as a client follows it while it shows the workspace, whose pull request the hub reads more often,
+    /// and whose worker, if it's running, watches its worktree.
     Workspace(WorkspaceId),
     /// A session's log. Nothing is kept current for it alone, since its agent says what changes whether or not
     /// anything follows it.

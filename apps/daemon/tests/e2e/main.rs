@@ -11,6 +11,7 @@ mod attachments;
 mod background;
 mod cancelling;
 mod carrying_on;
+mod changes_watch;
 mod chat_accounts;
 mod chats;
 mod claiming;

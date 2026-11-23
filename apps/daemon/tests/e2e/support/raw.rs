@@ -1,10 +1,13 @@
 //! A connection that sends frames as written in a test, for what `Client` has no way to send, and keeps what the hub
 //! sends on it.
 
-use std::io::{BufRead as _, BufReader, Write as _};
+use std::io::{BufRead as _, BufReader, ErrorKind, Write as _};
 use std::os::unix::net::UnixStream;
+use std::time::Duration;
 
-use protocol::client::{ClientRequest, HubFrame, ReplyOutcome};
+use protocol::client::subscriptions::{Follow, Subscribe, Subscription};
+use protocol::client::{ClientRequest, ClientResponse, HUB_SPEAKS, Hello, HubFrame, HubNotice, ReplyOutcome};
+use protocol::model::{ChangeSummary, Observation, Observed};
 
 use super::{Stack, TIMEOUT};
 
@@ -53,6 +56,24 @@ impl RawConnection {
         }
     }
 
+    /// Reads into `sent` what the hub sends within `bound`, for a test of what it doesn't send, and gives back what
+    /// came.
+    pub(crate) fn within(&mut self, bound: Duration) -> &[HubFrame] {
+        let before = self.sent.len();
+        self.socket.set_read_timeout(Some(bound)).unwrap();
+        loop {
+            let mut line = String::new();
+            match self.replies.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => self.sent.push(protocol::frame::decode(line.as_bytes()).unwrap()),
+                Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => break,
+                Err(e) => panic!("reading what the hub sent: {e}"),
+            }
+        }
+        self.socket.set_read_timeout(Some(TIMEOUT)).unwrap();
+        &self.sent[before..]
+    }
+
     /// The next frame the hub sends, or `None` once it has closed the connection.
     fn next(&mut self) -> Option<HubFrame> {
         let mut line = String::new();
@@ -61,4 +82,31 @@ impl RawConnection {
         }
         Some(protocol::frame::decode(line.as_bytes()).unwrap())
     }
+}
+
+/// A connection that has said hello at the newest version this hub speaks, and follows each of `follows` through one
+/// `Subscribe`, and sends nothing after.
+pub(crate) fn following(stack: &Stack, follows: Vec<Follow>) -> RawConnection {
+    let mut connection = RawConnection::open(stack);
+    let hello = Hello {
+        protocol_version: HUB_SPEAKS.newest,
+        client: "following".into(),
+        oldest_protocol_version: None,
+        device: None,
+    };
+    let greeted = connection.call(0, &ClientRequest::Hello(hello));
+    assert!(matches!(greeted, ReplyOutcome::Response(ClientResponse::Hello(_))), "{greeted:?}");
+    let start = (1..).zip(follows).map(|(subscription_id, follow)| Subscription { subscription_id, follow }).collect();
+    let subscribed = connection.call(1, &ClientRequest::Subscribe(Subscribe { stop: Vec::new(), start }));
+    assert!(matches!(subscribed, ReplyOutcome::Response(ClientResponse::Subscribed(_))), "{subscribed:?}");
+    connection
+}
+
+/// The changed files `frame` tells of, if it tells of any.
+pub(crate) fn changes_in(frame: &HubFrame) -> Option<&Observed<ChangeSummary>> {
+    let HubFrame::Notice { notice: HubNotice::Observation(Observation::WorkspaceChanges { changes, .. }), .. } = frame
+    else {
+        return None;
+    };
+    Some(changes)
 }

@@ -26,13 +26,15 @@ impl Hub {
     /// Has a ready workspace's worker watch its worktree's branches. Not waited on: the worker
     /// answers only that it's watching, and what it sees comes in frames of its own.
     ///
-    /// Its other worktrees' records are settled, and those there watched, on a task of their own.
+    /// Its other worktrees' records are settled, and those there watched, on a task of their own, and its worktree's
+    /// files are watched too while a client follows the workspace, as each worker the hub takes on is told.
     pub(in super::super) async fn watch_branches(self: &Arc<Self>, ready: &ReadyWorkspace, link: &Arc<WorkerLink>) {
         let path = ready.path().to_owned();
         if let Err(e) = link.send(WatchBranches { path }).await {
             debug!(id = %ready.id(), "asking the worker to watch the branches: {}", e.message);
         }
         self.settle_children_later(ready.id(), link);
+        self.changes_watching_soon(ready.id());
     }
 
     /// The same, waiting until the worker has sent what the branches are now, and the hub has recorded it, for a
@@ -43,6 +45,7 @@ impl Hub {
         link: &Arc<WorkerLink>,
     ) {
         self.settle_children_later(ready.id(), link);
+        self.changes_watching_soon(ready.id());
         let path = ready.path().to_owned();
         let first = tokio::time::timeout(FIRST_READ_TIMEOUT, link.call(WatchBranches { path })).await;
         let id = ready.id();

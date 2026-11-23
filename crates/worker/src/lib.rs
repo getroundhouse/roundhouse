@@ -7,6 +7,7 @@ mod asks;
 mod attach;
 pub mod attachments;
 mod branch_watch;
+mod changes_watch;
 mod claim;
 mod context_dir;
 mod deleting;
@@ -17,6 +18,7 @@ mod images;
 mod instructions;
 mod linked_images;
 mod serve;
+mod settling;
 pub mod setup;
 mod terminals;
 #[cfg(test)]

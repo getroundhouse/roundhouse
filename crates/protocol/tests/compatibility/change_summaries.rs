@@ -3,8 +3,9 @@
 
 use protocol::frame;
 use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, FileVersion, LineCounts};
-use protocol::worker::{self, WorkerRequest, WorkerResponse};
+use protocol::worker::{self, WorkerFrame, WorkerRequest, WorkerResponse};
 
+use super::keeps_its_form;
 use super::worker_calls::{answered, asked};
 
 #[test]
@@ -14,6 +15,26 @@ fn the_request_for_a_summary_of_changes_keeps_its_form() {
     asked(
         WorkerRequest::SummarizeChanges(asking),
         r#"{"method":"summarize_changes","path":"/w","base_ref":"origin/main"}"#,
+    );
+}
+
+#[test]
+fn the_request_to_watch_a_worktree_s_changes_keeps_its_form() {
+    let asking = worker::WatchChanges { path: "/w".into(), base_ref: Some("origin/main".into()), watching: true };
+
+    asked(
+        WorkerRequest::WatchChanges(asking),
+        r#"{"method":"watch_changes","path":"/w","base_ref":"origin/main","watching":true}"#,
+    );
+}
+
+#[test]
+fn a_watched_worktree_s_summary_keeps_its_form() {
+    let summary = ChangeSummary::new("c1".into(), Vec::new());
+
+    keeps_its_form(
+        &WorkerFrame::Changes { path: "/w".into(), summary },
+        r#"{"frame":"changes","path":"/w","summary":{"base_commit":"c1","lines":{"added":0,"removed":0},"files":[]}}"#,
     );
 }
 

@@ -10,6 +10,7 @@ use tracing::{debug, warn};
 
 use super::reads::Reading;
 use crate::hub::Hub;
+use crate::hub::observations::WorkspaceLines;
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
 
@@ -29,8 +30,12 @@ impl Hub {
 
     /// Reads the workspace's lines from `link`, its worker, on a task of its own, so whatever said they may have
     /// changed doesn't wait for the worker, as [`super::Reads`] says. What it reads is kept as of when the read
-    /// began, and a read that fails leaves what's kept as it was.
+    /// began, and a read that fails leaves what's kept as it was. Not while its worker watches its worktree, which
+    /// sends them as they change.
     pub(crate) fn read_lines(self: &Arc<Self>, id: &WorkspaceId, link: &Arc<WorkerLink>) {
+        if self.observation_is_kept_current::<WorkspaceLines>(id) {
+            return;
+        }
         let Some(mut reading) = self.line_reads.begin(id, link) else { return };
         let (hub, mut link) = (self.clone(), link.clone());
         tokio::spawn(async move {

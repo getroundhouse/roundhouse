@@ -57,7 +57,7 @@ pub(super) struct Said<V> {
     /// Whether it's read as something keeps it up to date.
     current: bool,
     /// When it was read, as clients are told while it isn't current: the read that found what it says, or, once
-    /// nothing keeps it current, the last read. A later read that finds the same moves no revision, so it moves this
+    /// nothing keeps it current, when nothing did any more. A later read that finds the same moves no revision, so it moves this
     /// neither, and every client of one revision is told the same.
     as_of_ms: i64,
     /// When it was last read, which the cache file keeps.
@@ -77,8 +77,9 @@ pub(super) enum Change<V> {
     Read { value: V, read_at_ms: i64 },
     /// Something keeps it up to date from now on, so what's read of it from now is current.
     KeptCurrent,
-    /// Nothing keeps it up to date any more, so it's as of its last read.
-    LetGo,
+    /// Nothing keeps it up to date any more, since `as_of_ms`, so it's as of then: what kept it up to date would have
+    /// said of any change before. As of its last read where that's later, as one that landed since can be.
+    LetGo { as_of_ms: i64 },
     /// What it's of is gone.
     Gone,
 }
@@ -121,11 +122,17 @@ impl<K: Kind> Table<K> {
                 self.kept_current.insert(of.clone());
                 Step::Same
             }
-            Change::LetGo => {
+            Change::LetGo { as_of_ms } => {
                 self.kept_current.remove(of);
                 match kept {
                     Some(kept) if kept.current => {
-                        Step::Changed(Changed::Says(Said { current: false, as_of_ms: kept.read_at_ms, ..kept.clone() }))
+                        let at = as_of_ms.max(kept.read_at_ms);
+                        Step::Changed(Changed::Says(Said {
+                            current: false,
+                            as_of_ms: at,
+                            read_at_ms: at,
+                            ..kept.clone()
+                        }))
                     }
                     Some(_) | None => Step::Same,
                 }
@@ -135,6 +142,11 @@ impl<K: Kind> Table<K> {
                 if kept.is_some() { Step::Changed(Changed::Gone) } else { Step::Same }
             }
         }
+    }
+
+    /// Whether something keeps the observation of `of` up to date now.
+    pub(super) fn kept_current(&self, of: &K::Of) -> bool {
+        self.kept_current.contains(of)
     }
 
     /// Keeps when the observation of `of` was read again, as `said` says, under the revision it has.

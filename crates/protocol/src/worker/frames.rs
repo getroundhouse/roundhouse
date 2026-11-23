@@ -7,7 +7,7 @@ use super::{AskId, WorkerAsk, WorkerOutcome};
 use crate::attachment::NewAttachment;
 use crate::capability::Report;
 use crate::event::EventBody;
-use crate::model::{Branches, RunId, SessionId, TerminalId};
+use crate::model::{Branches, ChangeSummary, RunId, SessionId, TerminalId};
 use crate::tail::{Retrying, StreamDelta, Tail};
 use crate::terminal::{TerminalPicture, TerminalUpdate};
 
@@ -85,6 +85,13 @@ pub enum WorkerFrame {
     ChildBranches {
         path: String,
         branches: Branches,
+    },
+    /// The change summary of the watched worktree at `path`, whole, as [`WatchChanges`](super::WatchChanges) asked,
+    /// so a frame replaces every one before it for that worktree. Sent only to a hub that asked, so a hub from before
+    /// the request never receives one, and never kept for a hub that isn't there.
+    Changes {
+        path: String,
+        summary: ChangeSummary,
     },
     /// What happens next in a terminal besides what it shows: its shell's end. It isn't kept for a hub that isn't
     /// there, since a hub that connects lists the terminals that run.

@@ -37,7 +37,7 @@ use workspaces::{
 };
 use worktree::{
     AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead, GitDiff, GitStatus,
-    ListFiles, SummarizeChanges, WatchBranches,
+    ListFiles, SummarizeChanges, WatchBranches, WatchChanges,
 };
 
 /// The worker protocol's version, apart from the client protocol's, so a break in one doesn't break the other. It
@@ -104,6 +104,7 @@ pub enum WorkerRequest {
     GitDiff(GitDiff),
     SummarizeChanges(SummarizeChanges),
     WatchBranches(WatchBranches),
+    WatchChanges(WatchChanges),
     WatchChildBranches(WatchChildBranches),
     SetupWorkspace(SetupWorkspace),
     /// See [`CancelSetup`](super::CancelSetup).
