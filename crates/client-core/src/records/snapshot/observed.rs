@@ -2,7 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use protocol::model::{ChangeSummary, LineCounts, Observation, ObservationKey, Observed, WorkspaceId};
+use protocol::model::{
+    ChangeSummary, GithubRepositoryName, LineCounts, Observation, ObservationKey, Observed, Repo, WorkspaceId,
+};
 
 use super::super::Taken;
 use super::{Changes, Snapshot};
@@ -16,7 +18,8 @@ pub(in super::super) struct ObservationsListed {
     workspace_changes: HashMap<WorkspaceId, (Observed<ChangeSummary>, Taken)>,
     /// The workspaces whose own level the hub has listed since they were followed.
     workspaces_listed: HashSet<WorkspaceId>,
-    /// What GitHub says, of every level, which what the client holds of GitHub reads, as `client::github` says.
+    /// What GitHub says, of every level, which what the client holds of GitHub reads, as `client::github` says, and a
+    /// project's name for its repository on GitHub, as [`Snapshot::github_name`] reads it.
     github: HashMap<ObservationKey, Observation>,
 }
 
@@ -44,7 +47,8 @@ impl ObservationsListed {
                 Observation::WorkspacePullRequest { .. }
                 | Observation::WorkspacePullRequestDetail { .. }
                 | Observation::WorkspaceRepositoryUnseen { .. }
-                | Observation::Reference { .. } => {
+                | Observation::Reference { .. }
+                | Observation::GithubRepository { .. } => {
                     listed.github.insert(observation.key(), observation.clone());
                 }
                 // Never held, as `Revised` says.
@@ -78,6 +82,17 @@ impl Snapshot {
     /// The observation of GitHub `key` names, if the hub has sent it, for what the client holds of GitHub to read.
     pub(crate) fn github_observation(&self, key: &ObservationKey) -> Option<&Observation> {
         self.observations.github.get(key)
+    }
+
+    /// What `repo`'s repository on GitHub is called now, as GitHub last said, where it's linked to one and the hub has
+    /// sent what GitHub says of it.
+    pub fn github_name(&self, repo: &Repo) -> Option<&GithubRepositoryName> {
+        let key = ObservationKey::GithubRepository { id: repo.link.github()?.clone() };
+        let Some(Observation::GithubRepository { said, .. }) = self.github_observation(&key) else { return None };
+        match said {
+            Observed::Current { value } | Observed::AsOf { value, .. } => Some(&value.repository),
+            Observed::NotKnown | Observed::Unknown => None,
+        }
     }
 }
 

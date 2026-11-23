@@ -107,7 +107,7 @@ impl Hub {
                     info!(repo = name, "{link} read that its checkout fetches from {said}");
                     self.notify(HubNotice::Repo(repo));
                 }
-                self.addresses_read.notify_one();
+                self.links_wanted.notify_one();
             }
             Err(e) => warn!(repo = name, "keeping the address {link} read: {}", e.message),
         }

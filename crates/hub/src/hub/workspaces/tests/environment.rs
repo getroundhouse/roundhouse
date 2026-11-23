@@ -5,7 +5,7 @@ use protocol::capability::settings::Settings;
 use protocol::client::terminals::TerminalOpen;
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::fixtures;
-use protocol::model::{AgentKind, Repo, RepoOrigin, RepoUrl, Rev, WorkspaceStatus};
+use protocol::model::{AgentKind, Linking, Repo, RepoLink, RepoOrigin, RepoUrl, Rev, WorkspaceStatus};
 use protocol::prompt::Prompt;
 use protocol::provider::{ClonePersistence, WorkerEnvironment, WorkerFilesystem};
 use protocol::terminal::TerminalSize;
@@ -145,10 +145,11 @@ fn hub_machine_uses_clone_source_for_remote_only_repo_and_omits_root_path() {
         id: "r".into(),
         name: "repo".into(),
         origin: RepoOrigin::Remote { url: url.clone() },
+        link: Linking::Linked { link: RepoLink::Plain { url: url.clone() } },
         created_at_ms: 0,
         rev: Rev::default(),
     };
-    let placement = resolve_placement(&repo, "local", WorkerEnvironment::HUB_MACHINE).unwrap();
+    let placement = resolve_placement(&repo, Ok(url.clone()), "local", WorkerEnvironment::HUB_MACHINE).unwrap();
     assert_eq!(placement.source, RepoSource::Clone { url: url.as_str().to_owned() });
 
     let env = workspace_env_for(&fixtures::workspace("w"), &placement);

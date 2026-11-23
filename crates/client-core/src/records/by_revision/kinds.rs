@@ -31,7 +31,8 @@ impl Revised for Observation {
             | Observation::WorkspacePullRequest { .. }
             | Observation::WorkspacePullRequestDetail { .. }
             | Observation::WorkspaceRepositoryUnseen { .. }
-            | Observation::Reference { .. } => Some(Observation::key(self)),
+            | Observation::Reference { .. }
+            | Observation::GithubRepository { .. } => Some(Observation::key(self)),
             Observation::Unknown => None,
         }
     }

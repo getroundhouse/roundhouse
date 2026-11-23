@@ -2,7 +2,7 @@
 //! workspace's, and how its worktree stands against it, each from what's known with nothing to run.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{Branch, BranchName, Local, PrState, RepoUrl, Upstream, Workspace};
+use protocol::model::{Branch, BranchName, GithubRepositoryName, Local, PrState, RepoUrl, Upstream, Workspace};
 
 use github::{Headed, HeadsAsk};
 
@@ -18,15 +18,25 @@ pub(in crate::hub) enum Wanted {
     Unreadable { on: BranchName, error: ApiError },
 }
 
+/// A workspace's repository on GitHub, as its project's link names it.
+#[derive(Debug)]
+pub(in crate::hub) struct OwnRepository {
+    /// What GitHub calls it now.
+    pub(in crate::hub) now: GithubRepositoryName,
+    /// What the address it was linked by names, which a worktree's remote can still name after a rename, as a
+    /// checkout's `origin` does, since GitHub sends the old name on to the new one.
+    pub(in crate::hub) found_as: Option<GithubRepositoryName>,
+}
+
 /// What reading `workspace`'s pull request asks of GitHub, by the branch it has checked out and where that's pushed,
-/// as its record says, in the repository at `repository`, the workspace's repository's own address. Its pull requests
-/// are in that repository, the one its work merges into, and their head is the upstream's branch, of the repository
-/// the upstream's remote names, which is a fork's when it's pushed to one. A remote whose address isn't known, as from
-/// a worker from before it said, is taken for the repository's own. An upstream of another name than the branch's
+/// as its record says, in `repository`, the workspace's repository's own on GitHub. Its pull requests are in that
+/// repository, the one its work merges into, and their head is the upstream's branch, of the repository the
+/// upstream's remote names, which is a fork's when it's pushed to one. A remote whose address isn't known, as from
+/// a worker from before it said, is taken for the repository's own, and so is one that names it as it was found. An upstream of another name than the branch's
 /// is where the branch was taken from, as `git switch -c next origin/main` leaves it, not where it's pushed, since git
 /// pushes a branch to the branch of its own name unless it's told otherwise each time, so it's pushed nowhere yet,
 /// rather than having the pull requests of `main`. *Unconfirmed.*
-pub(in crate::hub) fn wanted(workspace: &Workspace, repository: Option<&RepoUrl>) -> Wanted {
+pub(in crate::hub) fn wanted(workspace: &Workspace, repository: Option<&OwnRepository>) -> Wanted {
     let Some(branch) = workspace.branches.as_ref().and_then(|branches| branches.checked_out()) else {
         return Wanted::Nothing { on: None };
     };
@@ -35,15 +45,16 @@ pub(in crate::hub) fn wanted(workspace: &Workspace, repository: Option<&RepoUrl>
     let Some(upstream) = branch.upstream.as_ref().filter(pushed) else {
         return Wanted::Nothing { on: Some(on) };
     };
-    let Some(into) = repository.and_then(RepoUrl::on_github) else {
+    let Some(OwnRepository { now: into, found_as }) = repository else {
         let error = ApiError::new(
             ErrorCode::Unavailable,
-            "the repository isn't on github.com, so it has no pull request the hub can read",
+            "the repository isn't linked to one on github.com, so it has no pull request the hub can read",
         );
         return Wanted::Unreadable { on, error };
     };
     let from = match upstream.address.as_ref().map(RepoUrl::on_github) {
         None => into.clone(),
+        Some(Some(from)) if found_as.as_ref() == Some(&from) => into.clone(),
         Some(Some(from)) => from,
         Some(None) => {
             let error = ApiError::new(
@@ -53,7 +64,7 @@ pub(in crate::hub) fn wanted(workspace: &Workspace, repository: Option<&RepoUrl>
             return Wanted::Unreadable { on, error };
         }
     };
-    Wanted::Heads { ask: HeadsAsk { repository: into, from, branch: upstream.name.clone() }, on }
+    Wanted::Heads { ask: HeadsAsk { repository: into.clone(), from, branch: upstream.name.clone() }, on }
 }
 
 /// Which of `headed`, the pull requests of the branch on GitHub `branch` pushes to, newest first, is the workspace's:

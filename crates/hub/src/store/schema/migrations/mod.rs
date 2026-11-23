@@ -8,6 +8,7 @@ mod drafts;
 mod event_kinds;
 mod github_accounts;
 mod proposals;
+mod repos;
 mod session_accounts;
 mod todos;
 mod waits;

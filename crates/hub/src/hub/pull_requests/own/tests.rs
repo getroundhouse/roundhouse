@@ -5,7 +5,7 @@ use protocol::model::{
     PullRequestNumber, PullRequestSelection, RemoteName, RepoUrl, Upstream, Workspace,
 };
 
-use super::judging::{Wanted, chosen, local, wanted};
+use super::judging::{OwnRepository, Wanted, chosen, local, wanted};
 use super::scopes::scopes;
 use crate::hub::pull_requests::remote::Waited;
 use github::{Headed, HeadsAsk};
@@ -36,8 +36,8 @@ fn on(branch: Branch) -> Workspace {
     Workspace { branches: Some(branches), ..workspace("w") }
 }
 
-fn project() -> RepoUrl {
-    url("https://github.com/example/project.git")
+fn project() -> OwnRepository {
+    OwnRepository { now: name("example/project"), found_as: Some(name("example/project")) }
 }
 
 #[test]
@@ -59,16 +59,20 @@ fn a_branch_pushed_to_github_is_asked_after_in_the_repository_its_work_merges_in
     let mut tracking = birch("a", Some(("origin", Some("https://github.com/example/project.git"), "b")));
     tracking.upstream.as_mut().unwrap().name = BranchName::from("main");
     let tracking = wanted(&on(tracking), Some(&project()));
+    let renamed = OwnRepository { now: name("example/renamed"), found_as: Some(name("example/project")) };
+    let after_a_rename =
+        wanted(&on(birch("a", Some(("origin", Some("git@github.com:example/project.git"), "b")))), Some(&renamed));
 
     assert_eq!(unpushed, Wanted::Nothing { on: birch_on() });
     assert_eq!(to_itself, Wanted::Nothing { on: birch_on() });
     assert_eq!(tracking, Wanted::Nothing { on: birch_on() }, "taken from main, and pushed nowhere yet");
     assert_eq!(wanted(&detached, Some(&project())), Wanted::Nothing { on: None });
-    let heads = |from: &str| HeadsAsk {
-        repository: name("example/project"),
+    let heads_in = |repository: &str, from: &str| HeadsAsk {
+        repository: name(repository),
         from: name(from),
         branch: BranchName::from("birch"),
     };
+    let heads = |from: &str| heads_in("example/project", from);
     assert_eq!(origin, Wanted::Heads { on: BranchName::from("birch"), ask: heads("example/project") });
     assert_eq!(fork, Wanted::Heads { on: BranchName::from("birch"), ask: heads("ada/project") });
     assert_eq!(
@@ -76,18 +80,20 @@ fn a_branch_pushed_to_github_is_asked_after_in_the_repository_its_work_merges_in
         Wanted::Heads { on: BranchName::from("birch"), ask: heads("example/project") },
         "as the repository's own"
     );
+    let as_renamed = heads_in("example/renamed", "example/renamed");
+    assert_eq!(after_a_rename, Wanted::Heads { on: BranchName::from("birch"), ask: as_renamed }, "by its name now");
 }
 
+/// One linked to none on GitHub, as one elsewhere is, or one pushed elsewhere.
 #[test]
 fn a_repository_or_a_remote_elsewhere_than_github_has_none_to_read() {
     let pushed = on(birch("a", Some(("origin", None, "b"))));
     let to_gitlab = on(birch("a", Some(("lab", Some("https://gitlab.com/ada/project.git"), "b"))));
 
-    let elsewhere = wanted(&pushed, Some(&url("https://gitlab.com/example/project.git")));
-    let unknown = wanted(&pushed, None);
+    let unlinked = wanted(&pushed, None);
     let pushed_elsewhere = wanted(&to_gitlab, Some(&project()));
 
-    for wanted in [elsewhere, unknown, pushed_elsewhere] {
+    for wanted in [unlinked, pushed_elsewhere] {
         let Wanted::Unreadable { on, error } = wanted else { panic!("{wanted:?}") };
         assert_eq!((on.as_str(), error.code), ("birch", ErrorCode::Unavailable));
     }

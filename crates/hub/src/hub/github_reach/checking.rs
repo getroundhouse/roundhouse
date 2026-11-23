@@ -3,8 +3,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::client::HubNotice;
-#[cfg(doc)]
-use protocol::model::RepoUrl;
 use protocol::model::{GithubReach, GithubRepositoryName, GithubUsername, Reach, RepoId};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -25,14 +23,15 @@ pub(super) const CHECKED_AGAIN_EVERY: Duration = Duration::from_mins(30);
 impl Hub {
     /// Checks whether the default GitHub account can push to each repository's repository on GitHub, and records each
     /// answer as the repository's `GithubReach`, announced as records are, until the hub stops: as it starts, as a
-    /// worker reads a repository's address, as `Hub::read_repo_urls` says, for one whose address then names another
-    /// repository on GitHub, as what workers give their processes for github.com changes, which it does as the
-    /// default, its login or its commit identity changes, and every [`CHECKED_AGAIN_EVERY`]. Once a repository and login, not a workspace, and each repository's checks side by
-    /// side, each within GitHub's time limit, never under the logins' lock.
+    /// the hub has read its repositories' links, as `Hub::watch_repo_links` says, for one that's then another repository
+    /// on GitHub, as what workers give their processes for github.com changes, which it does as the default, its login
+    /// or its commit identity changes, and every [`CHECKED_AGAIN_EVERY`]. Once a repository and login, not a workspace,
+    /// and each repository's checks side by side, each within GitHub's time limit, never under the logins' lock.
     ///
-    /// Which repository on GitHub a repository is, is the one its record's address names, as [`RepoUrl::on_github`]
-    /// says, so one with no address, or an address elsewhere, isn't on GitHub. That's where its checkout fetches from,
-    /// and a `pushurl` of the checkout's can send its pushes elsewhere, which this doesn't see. *Unconfirmed.* What it
+    /// Which repository on GitHub a repository is, is what GitHub last called the one it's linked to, as
+    /// `Hub::github_name_of` says, so one that isn't linked to one isn't on GitHub. Its link was found by where its
+    /// checkout fetches from, and a `pushurl` of the checkout's can send its pushes elsewhere, which this doesn't see.
+    /// *Unconfirmed.* What it
     /// finds is what a push meets on a provider where Roundhouse sets up GitHub. A workspace on one where it leaves
     /// GitHub to the machine says nothing of it, as `GithubSettings::left_to_machine` says.
     pub(crate) async fn watch_github_reach(self: Arc<Self>) {
@@ -95,7 +94,7 @@ impl Checks {
                         Ok(()) => break,
                         Err(_) => return,
                     },
-                    () = self.hub.addresses_read.notified() => {
+                    () = self.hub.links_read.notified() => {
                         let read = self.newly_read().await;
                         self.check(&credential, read);
                     }
@@ -110,8 +109,8 @@ impl Checks {
         }
     }
 
-    /// Which repository on GitHub each repository is, as its record's address names it, so the hub checks them as it
-    /// starts and as a worker reads an address. One with no address whose address a worker is still to read, as each
+    /// Which repository on GitHub each repository is, as its link names it, so the hub checks them as it starts and as
+    /// the hub has read the links. One with no address whose address a worker is still to read, as each
     /// is once the hub that added it is upgraded to keep addresses, is checked for the one its last check was of, if
     /// any, so it isn't left unchecked until a worker on the hub's machine links. *Unconfirmed.* `None` if the store
     /// can't say.
@@ -131,8 +130,8 @@ impl Checks {
         let mut checked: HashMap<_, _> =
             reaches.into_iter().filter_map(|record| Some((record.repo, record.reach.repository()?.clone()))).collect();
         let named = repos.into_iter().filter_map(|repo| {
-            let repository = match repo.origin.url() {
-                Some(url) => url.on_github(),
+            let repository = match self.hub.github_name_of(&repo) {
+                Some(repository) => Some(repository),
                 None if to_read.contains(&repo.id) => Some(checked.remove(&repo.id)?),
                 None => None,
             };

@@ -55,6 +55,7 @@ impl Shown {
             ObservationKey::Reference { reference } => self.shown.references.contains(reference),
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspaceChanges { .. }
+            | ObservationKey::GithubRepository { .. }
             | ObservationKey::Unknown => false,
         }
     }
@@ -144,6 +145,7 @@ impl GithubHeld {
                 }
                 ObservationKey::WorkspaceLines { .. }
                 | ObservationKey::WorkspaceChanges { .. }
+                | ObservationKey::GithubRepository { .. }
                 | ObservationKey::Unknown => {}
             }
         }
@@ -217,21 +219,25 @@ impl GithubHeld {
             ObservationKey::Reference { reference } => self.references.contains_key(reference),
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspaceChanges { .. }
+            | ObservationKey::GithubRepository { .. }
             | ObservationKey::Unknown => false,
         }
     }
 }
 
-/// Whether `key` is of what GitHub says.
+/// Whether `key` is of what GitHub says that a view shows, which a hub from before observations sent as
+/// `GithubUpdate`. What GitHub says of a project's repository never was, and no view shows it: the copy of the hub's
+/// records holds it with the rest, and `Snapshot::github_name` reads it there.
 pub(super) fn githubs(key: &ObservationKey) -> bool {
     match key {
         ObservationKey::WorkspacePullRequest { .. }
         | ObservationKey::WorkspacePullRequestDetail { .. }
         | ObservationKey::WorkspaceRepositoryUnseen { .. }
         | ObservationKey::Reference { .. } => true,
-        ObservationKey::WorkspaceLines { .. } | ObservationKey::WorkspaceChanges { .. } | ObservationKey::Unknown => {
-            false
-        }
+        ObservationKey::WorkspaceLines { .. }
+        | ObservationKey::WorkspaceChanges { .. }
+        | ObservationKey::GithubRepository { .. }
+        | ObservationKey::Unknown => false,
     }
 }
 

@@ -6,6 +6,8 @@ A project holds workspaces, and a workspace holds chats. The workspace is how yo
 
 A project is a git repository on your disk that you've added to Roundhouse. The sidebar lists your projects, each with its workspaces under it.
 
+A project whose `origin` is on github.com is linked to that repository on GitHub once a connected GitHub account can see it, so renaming it on GitHub, or moving it to another owner, needs nothing done in Roundhouse. Pointing `origin` somewhere else later leaves the link as it was, so add the folder again to link the project to where `origin` points now.
+
 ## A workspace is one task
 
 A workspace is everything one piece of work needs, kept apart from every other:

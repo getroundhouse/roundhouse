@@ -7,7 +7,7 @@
 use client_core::fake_hub::{NOW_MS, World};
 use desktop::workspace_pane::{INSTALL_APP, OPEN_GIT};
 use gpui_kit::TestAppContext;
-use hub::{GithubAnswer, GithubScript};
+use hub::{GithubAnswer, GithubRepositories, GithubScript};
 use protocol::model::{GithubReach, GithubRepositoryName, GithubToken, InstalledApp, Reach, Rev, SessionStatus};
 
 use crate::support::{Stack, Ui, git, open_on_the_world};
@@ -16,15 +16,18 @@ const TOKEN: &str = "github_pat_made_up_for_a_test";
 
 /// The hub checks the repository with the default, and GitHub refuses `ada`, but a workspace on the local provider
 /// says nothing of it, since Roundhouse leaves GitHub on this machine to the machine, as the hub's settings say. The
-/// repository's `origin` is `cli/cli` on GitHub. Nothing has been fetched from it, so the workspace starts from the
+/// repository's `origin` is `cli/cli` on GitHub, which the hub links the project to. Nothing has been fetched from it, so the workspace starts from the
 /// checkout's own branch, and nothing reaches GitHub.
 #[gpui_kit::test]
 fn a_workspace_on_this_machine_says_nothing_of_whether_the_default_can_push(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let refused = GithubAnswer::git_says(403, "Permission to cli/cli.git denied to ada.");
+    let repositories = GithubRepositories::default();
+    repositories.set("R_cli", "cli/cli");
     let script = GithubScript {
         users: vec![(TOKEN, GithubAnswer::user(7, "ada", None))],
         pushes: vec![("cli/cli", vec![refused])],
+        repositories: Some(repositories),
         ..GithubScript::default()
     };
     let _github = stack.start_hub_with_stand_in_github(script);

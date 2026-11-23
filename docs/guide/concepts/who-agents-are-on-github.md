@@ -68,7 +68,7 @@ A signed-in account's token lasts 8 hours, and the hub renews it before it ends,
 
 ## When the default can't push to a repository
 
-The hub asks GitHub whether the default can push to the repository on GitHub that each repository's `origin` names, as `git push` would ask, so it meets what a push would: your access, a fine-grained token's repositories, the repositories an app of your own is installed on, and an organization that hasn't approved Roundhouse. It asks as it starts, whenever the default or its login changes, and every half hour, since what an account can do changes on GitHub too.
+The hub asks GitHub whether the default can push to the repository on GitHub each project is linked to, which is the one its checkout's `origin` named as it was added, wherever GitHub has it now, as `git push` would ask, so it meets what a push would: your access, a fine-grained token's repositories, the repositories an app of your own is installed on, and an organization that hasn't approved Roundhouse. It asks as it starts, whenever the default or its login changes, and every half hour, since what an account can do changes on GitHub too.
 
 If GitHub refuses, has no such repository the default can see, or doesn't take its token, every workspace of that repository on a machine Roundhouse sets up GitHub on says so in a line above the composer, with GitHub's words and what to do. **Open Settings** opens the Git page, where you can make another account the default or add one that can push there. It blocks nothing: agents push as they would anyway. The line goes once the hub finds a push would be taken.
 

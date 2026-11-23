@@ -70,7 +70,7 @@ pub use made::{Made, MadeByRequest};
 pub use proposals::{AnswerToKeep, Answering, NewRevision, Revising, Withdrawing};
 pub use queue::{Changed, Queued, Queuing, Unqueued};
 pub use reading::Reading;
-pub use repos::RepoToRead;
+pub use repos::{RepoToLink, RepoToRead};
 pub(crate) use run_logins::Placed;
 pub(crate) use sessions::SessionLogin;
 pub use titles::{Retitle, Retitled};

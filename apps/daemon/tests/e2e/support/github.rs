@@ -48,9 +48,11 @@ impl StandInGithub {
         self.pull_requests.leave(remaining);
     }
 
-    /// How many GraphQL queries it has been sent.
+    /// How many GraphQL queries it has been sent of pull requests, leaving out those of what a repository is, which the
+    /// hub reads to link its project.
     pub(crate) fn queries(&self) -> usize {
-        self.stand_in.asked().iter().filter(|asked| asked.starts_with("post /graphql ")).count()
+        let of_pull_requests = |asked: &&String| asked.starts_with("post /graphql ") && !asked.contains(" sshUrl ");
+        self.stand_in.asked().iter().filter(of_pull_requests).count()
     }
 
     /// Holds every read back until [`StandInGithub::release`].

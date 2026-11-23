@@ -41,16 +41,18 @@ fn the_pull_request_showing_is_what_the_hub_last_read(cx: &mut TestAppContext) {
     ui.wait("it to merge", |ui| state(ui) == Some(PrState::Merged));
 }
 
-/// GitHub showing the default no repository says nothing of whether the branch has a pull request, so the hub knows
+/// GitHub showing the default no repository, once the project is linked to it, says nothing of whether the branch has a pull request, so the hub knows
 /// none, and the bar says it can't see it, rather than offer to create one. Its action opens Git in Settings, where an
 /// account that can see it is connected, and so does the warning in the workspace's card.
 #[gpui_kit::test]
 fn a_repository_github_doesnt_show_has_a_bar_that_says_so_and_opens_git(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let github = stack.start_hub_reading_stand_in_github();
-    github.pull_requests.hide(true);
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     let id = ui.new_workspace();
+    // Once the project is linked, since one on github.com that no account can see isn't.
+    ui.wait("the project linked", |ui| ui.view().records().repos().iter().all(|repo| repo.link.link().is_some()));
+    github.pull_requests.hide(true);
     let branch = ui.push_unseen(&id);
     github.pull_requests.set_from(7, Open, &branch);
 

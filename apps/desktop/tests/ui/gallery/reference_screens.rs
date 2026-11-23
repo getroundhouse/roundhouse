@@ -6,8 +6,9 @@
 use client_core::fake_hub::{NOW_MS, World};
 use look::Region;
 use protocol::model::{
-    About, ChecksRollup, GithubRepositoryName, Issue, IssueNumber, IssueState, IssueSummary, PrState, PullRequest,
-    PullRequestLink, PullRequestLinked, Read, Reference, ReferenceLabel, RepoOrigin, RepoUrl, Review, SessionStatus,
+    About, AddressForm, ChecksRollup, GithubRepositoryId, GithubRepositoryName, GithubRepositorySaid, Issue,
+    IssueNumber, IssueState, IssueSummary, Linking, Observation, Observed, PrState, PullRequest, PullRequestLink,
+    PullRequestLinked, Read, Reference, ReferenceLabel, RepoLink, RepoOrigin, RepoUrl, Rev, Review, SessionStatus,
     Summary,
 };
 
@@ -134,8 +135,18 @@ fn references() -> Vec<Reference> {
 fn on_github(world: &mut World) {
     for repo in &mut world.repos {
         let path = repo.origin.checkout().unwrap_or_default().to_string();
-        let url = RepoUrl::try_from(format!("https://github.com/example/{}", repo.name)).unwrap();
-        repo.origin = RepoOrigin::Linked { path, url };
+        let address = |url: String| RepoUrl::try_from(url).unwrap();
+        let url = address(format!("https://github.com/example/{}", repo.name));
+        repo.origin = RepoOrigin::Linked { path, url: url.clone() };
+        let id = GithubRepositoryId::from(format!("R_{}", repo.name));
+        repo.link = Linking::Linked { link: RepoLink::Github { id: id.clone(), by: AddressForm::Https } };
+        let said = GithubRepositorySaid {
+            repository: GithubRepositoryName::try_from(format!("example/{}", repo.name)).unwrap(),
+            https: url,
+            ssh: address(format!("git@github.com:example/{}.git", repo.name)),
+        };
+        let said = Observed::AsOf { value: said, as_of_ms: NOW_MS };
+        world.observations.push(Observation::GithubRepository { id, said, rev: Rev::new(1) });
     }
 }
 

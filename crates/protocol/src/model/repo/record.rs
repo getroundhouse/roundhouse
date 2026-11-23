@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::RepoOrigin;
+use super::{Linking, RepoOrigin};
 use crate::model::{RepoId, Rev};
 
 /// A repository added to a hub, which the interface calls a project.
@@ -9,7 +9,10 @@ use crate::model::{RepoId, Rev};
 pub struct Repo {
     pub id: RepoId,
     pub name: String,
+    /// Where it is, with the address it was found by: its checkout's `origin`, as a worker on the hub's machine last
+    /// read it. That address is only how the hub finds the link, which says what a machine with no checkout clones.
     pub origin: RepoOrigin,
+    pub link: Linking,
     pub created_at_ms: i64,
     pub rev: Rev,
 }
@@ -33,6 +36,9 @@ struct RepoForm {
     path: Option<String>,
     #[serde(default)]
     origin: Option<RepoOrigin>,
+    /// Not known from a hub from before links.
+    #[serde(default)]
+    link: Linking,
     created_at_ms: i64,
     #[serde(default)]
     rev: Rev,
@@ -40,21 +46,21 @@ struct RepoForm {
 
 impl From<RepoForm> for Repo {
     fn from(form: RepoForm) -> Self {
-        let RepoForm { id, name, path, origin, created_at_ms, rev } = form;
+        let RepoForm { id, name, path, origin, link, created_at_ms, rev } = form;
         let origin = match (origin, path) {
             (Some(origin), _) => origin,
             (None, Some(path)) => RepoOrigin::Checkout { path },
             // Neither form, which no hub writes.
             (None, None) => RepoOrigin::Unknown,
         };
-        Self { id, name, origin, created_at_ms, rev }
+        Self { id, name, origin, link, created_at_ms, rev }
     }
 }
 
 impl From<Repo> for RepoForm {
     fn from(repo: Repo) -> Self {
-        let Repo { id, name, origin, created_at_ms, rev } = repo;
+        let Repo { id, name, origin, link, created_at_ms, rev } = repo;
         let path = Some(origin.checkout().unwrap_or_default().to_owned());
-        Self { id, name, path, origin: Some(origin), created_at_ms, rev }
+        Self { id, name, path, origin: Some(origin), link, created_at_ms, rev }
     }
 }

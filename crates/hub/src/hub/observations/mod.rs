@@ -15,6 +15,6 @@ pub(crate) use file::prepare;
 pub(crate) use kept::Observations;
 pub(crate) use kinds::Kind;
 pub(crate) use kinds::{
-    Referenced, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail,
+    GithubRepositories, Referenced, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail,
     WorkspaceRepositoryUnseen,
 };

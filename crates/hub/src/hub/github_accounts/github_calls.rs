@@ -74,6 +74,8 @@ impl Hub {
         let GithubAccountChange { account, changed, settings } = change;
         if changed {
             self.notify(HubNotice::GithubAccount(account.clone()));
+            // It may see a repository no account could before.
+            self.links_wanted.notify_one();
         }
         if let Some(settings) = settings {
             self.notify(HubNotice::HubSettings(settings));

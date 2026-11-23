@@ -1,5 +1,5 @@
 //! Whether the default GitHub account can push to each repository's repository on GitHub: which one each is, as its
-//! record's address names it, and GitHub's answer, as the hub checks it with the default's login and records it as the
+//! link names it, and GitHub's answer, as the hub checks it with the default's login and records it as the
 //! repository's `GithubReach`, as that says.
 
 #[cfg(test)]

@@ -11,8 +11,8 @@ use tracing::warn;
 
 use super::file::{self, Row};
 use super::kinds::{
-    Form, Kind, Referenced, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail,
-    WorkspaceRepositoryUnseen,
+    Form, GithubRepositories, Kind, Referenced, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
+    WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
 use crate::cache_file::CacheFile;
 use crate::store::Store;
@@ -36,6 +36,7 @@ pub(crate) struct Tables {
     pub(super) workspace_pull_request: Table<WorkspacePullRequest>,
     pub(super) workspace_pull_request_detail: Table<WorkspacePullRequestDetail>,
     pub(super) workspace_repository_unseen: Table<WorkspaceRepositoryUnseen>,
+    pub(super) github_repositories: Table<GithubRepositories>,
 }
 
 /// What's kept of one kind of observation.
@@ -236,7 +237,7 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    fn each(&mut self) -> [&mut dyn AnyTable; 6] {
+    fn each(&mut self) -> [&mut dyn AnyTable; 7] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -244,6 +245,7 @@ impl Tables {
             workspace_pull_request,
             workspace_pull_request_detail,
             workspace_repository_unseen,
+            github_repositories,
         } = self;
         [
             workspace_lines,
@@ -252,6 +254,7 @@ impl Tables {
             workspace_pull_request,
             workspace_pull_request_detail,
             workspace_repository_unseen,
+            github_repositories,
         ]
     }
 
@@ -312,6 +315,19 @@ impl Observations {
     /// Whether the store keeps an observation of kind `K` of `of`.
     pub(crate) fn keeps<K: Kind>(&self, of: &K::Of) -> bool {
         K::table(&mut self.tables.lock()).kept.contains_key(of)
+    }
+
+    /// What the observation of kind `K` of `of` says, if the store keeps one, however fresh it is.
+    pub(crate) fn said<K: Kind>(&self, of: &K::Of) -> Option<K::Value> {
+        K::table(&mut self.tables.lock()).kept.get(of).map(|kept| kept.said.value.clone())
+    }
+
+    /// Keeps that the observation of kind `K` of `of` says `value`, at `rev`, as of no time, without the cache file or
+    /// telling clients, for a test that needs it said before it starts.
+    #[cfg(test)]
+    pub(crate) fn kept_for_tests<K: Kind>(&self, of: K::Of, value: K::Value, rev: Rev) {
+        let said = Said { value, current: false, as_of_ms: 0, read_at_ms: 0 };
+        K::table(&mut self.tables.lock()).kept.insert(of, Kept { said, rev });
     }
 
     /// What each observation of kind `K` the store keeps is of.

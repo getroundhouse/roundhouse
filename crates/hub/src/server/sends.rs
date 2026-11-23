@@ -141,15 +141,17 @@ fn observed_at(level: &Level) -> bool {
     }
 }
 
-/// Whether `key` is of what GitHub says, which a client from before observations is sent as `HubFrame::Github`.
+/// Whether `key` is of what GitHub says, which a client from before observations is sent as `HubFrame::Github`. What
+/// GitHub says of a project's repository never was, so it's sent as an observation to every client.
 fn githubs(key: &ObservationKey) -> bool {
     match key {
         ObservationKey::WorkspacePullRequest { .. }
         | ObservationKey::WorkspacePullRequestDetail { .. }
         | ObservationKey::WorkspaceRepositoryUnseen { .. }
         | ObservationKey::Reference { .. } => true,
-        ObservationKey::WorkspaceLines { .. } | ObservationKey::WorkspaceChanges { .. } | ObservationKey::Unknown => {
-            false
-        }
+        ObservationKey::WorkspaceLines { .. }
+        | ObservationKey::WorkspaceChanges { .. }
+        | ObservationKey::GithubRepository { .. }
+        | ObservationKey::Unknown => false,
     }
 }

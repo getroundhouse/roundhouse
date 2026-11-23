@@ -113,7 +113,7 @@ pub use ids::{
     SessionId, SubagentId, TaskId, TerminalId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
 };
 mod repo;
-pub use repo::{Repo, RepoOrigin, RepoUrl, RepoUrlError};
+pub use repo::{AddressForm, Linking, Repo, RepoLink, RepoOrigin, RepoUrl, RepoUrlError, Unlinked};
 mod comment;
 pub use comment::{DiffComment, DiffSide};
 mod workspace;

@@ -115,6 +115,11 @@ impl Store {
         Ok(conn.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], OneValue::read)?)
     }
 
+    /// Every GitHub account, oldest first.
+    pub(crate) fn list_github_accounts(&self) -> Result<Vec<GithubAccount>, StoreError> {
+        Ok(github_accounts(&lock(&self.reader))?)
+    }
+
     pub(crate) fn github_account(&self, id: &GithubAccountId) -> Result<Option<GithubAccount>, StoreError> {
         Ok(row_of(&lock(&self.reader), id)?.map(|(account, _)| account))
     }

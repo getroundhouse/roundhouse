@@ -1,30 +1,47 @@
-use protocol::model::{Repo, RepoId, RepoOrigin, RepoUrl};
+use protocol::model::{Linking, Repo, RepoId, RepoLink, RepoOrigin, RepoUrl, Unlinked};
 use rusqlite::types::Type;
 use rusqlite::{OptionalExtension, Row, params};
 
-use super::super::{At, ByColumn, Column, Columns, Store, StoreError, columns, lock, rev_of};
+use super::super::{At, ByColumn, Column, Columns, Store, StoreError, columns, json_at, lock, rev_of};
 
 columns! {
     /// The columns every read of a repository's record takes, as [`repo_from_row`] reads them.
-    pub(in super::super) struct RepoColumns { id, name, path, url, created_at_ms, rev }
+    pub(in super::super) struct RepoColumns { id, name, path, url, link, unlinked, created_at_ms, rev }
 }
 
-/// A row's record: its checkout, with the address a worker read from it, where one has. Every row has a checkout,
-/// since a repository is added by one.
+/// A row's record: its checkout, with the address a worker read from it, where one has, and its link. Every row has a
+/// checkout, since a repository is added by one.
 pub(in super::super) fn repo_from_row(row: &Row) -> rusqlite::Result<Repo> {
     let c = RepoColumns::at(0);
     let path = row.at(c.path)?;
-    let origin = match row.at::<Option<String>>(c.url)? {
-        Some(url) => RepoOrigin::Linked { path, url: url_at(c.url, url)? },
+    let url = row.at::<Option<String>>(c.url)?.map(|url| url_at(c.url, url)).transpose()?;
+    let link = linking(url.as_ref(), json_at(row, c.link)?, json_at(row, c.unlinked)?);
+    let origin = match url {
+        Some(url) => RepoOrigin::Linked { path, url },
         None => RepoOrigin::Checkout { path },
     };
     Ok(Repo {
         id: row.at::<String>(c.id)?.into(),
         name: row.at(c.name)?,
         origin,
+        link,
         created_at_ms: row.at(c.created_at_ms)?,
         rev: rev_of(row, c.rev)?,
     })
+}
+
+/// Whether a repository whose address is `url` is linked, by its `link` and why it isn't, as its row keeps them. One
+/// whose address is on github.com and that has no link is linked once GitHub says which repository it is, and one
+/// whose address is anywhere else is linked by it as it's read, so a row with neither is one changed by hand, which
+/// has no address to link by.
+fn linking(url: Option<&RepoUrl>, link: Option<RepoLink>, unlinked: Option<Unlinked>) -> Linking {
+    if let Some(link) = link {
+        return Linking::Linked { link };
+    }
+    match url.and_then(RepoUrl::on_github) {
+        Some(repository) => Linking::NotLinked { repository, why: unlinked.unwrap_or(Unlinked::NotAskedYet) },
+        None => Linking::NoAddress,
+    }
 }
 
 /// The address in `column`, which is refused as a row that can't be read if it holds a credential, though only a
@@ -89,7 +106,10 @@ impl Store {
 
     /// Keeps `url` as the address of the repository `id`, as a worker read it from `checkout`, if its address is to be
     /// read and that's its checkout, and returns the record if that changed it, for the feed to tell of. Either way its
-    /// address isn't to be read once that's what it is, so a second answer to the same ask changes nothing.
+    /// address isn't to be read once that's what it is, so a second answer to the same ask changes nothing. An address
+    /// other than the one it had takes the link with it, as adding the checkout again links it to what `origin` says
+    /// then: one that isn't on github.com is its link at once, and one on github.com is linked once GitHub says which
+    /// repository it names.
     pub fn read_repo_url(
         &self,
         id: &RepoId,
@@ -102,9 +122,17 @@ impl Store {
             "UPDATE repos SET url_to_read = 0 WHERE id = ? AND path = ? AND url_to_read = 1",
             params![id.as_str(), checkout],
         )?;
-        let url = url.map(RepoUrl::as_str);
+        let link = match url {
+            Some(url) if url.on_github().is_none() => {
+                Some(serde_json::to_string(&RepoLink::Plain { url: url.clone() })?)
+            }
+            Some(_) | None => None,
+        };
         let changed = was_to_read > 0
-            && tx.execute("UPDATE repos SET url = ?2 WHERE id = ?1 AND url IS NOT ?2", params![id.as_str(), url])? > 0;
+            && tx.execute(
+                "UPDATE repos SET url = ?2, link = ?3, unlinked = NULL WHERE id = ?1 AND url IS NOT ?2",
+                params![id.as_str(), url.map(RepoUrl::as_str), link],
+            )? > 0;
         let repo = if changed {
             let select = format!("SELECT {} FROM repos WHERE id = ?", RepoColumns::LIST);
             Some(tx.query_row(&select, [id.as_str()], repo_from_row)?)
