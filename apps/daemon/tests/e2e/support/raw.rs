@@ -96,7 +96,8 @@ pub(crate) fn following(stack: &Stack, follows: Vec<Follow>) -> RawConnection {
     };
     let greeted = connection.call(0, &ClientRequest::Hello(hello));
     assert!(matches!(greeted, ReplyOutcome::Response(ClientResponse::Hello(_))), "{greeted:?}");
-    let start = (1..).zip(follows).map(|(subscription_id, follow)| Subscription { subscription_id, follow }).collect();
+    let start =
+        (1..).zip(follows).map(|(subscription_id, follow)| Subscription::new(subscription_id, follow)).collect();
     let subscribed = connection.call(1, &ClientRequest::Subscribe(Subscribe { stop: Vec::new(), start }));
     assert!(matches!(subscribed, ReplyOutcome::Response(ClientResponse::Subscribed(_))), "{subscribed:?}");
     connection

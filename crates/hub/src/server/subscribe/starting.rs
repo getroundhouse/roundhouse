@@ -4,15 +4,15 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use protocol::client::github::{GithubShown, MOST_REFERENCES_SHOWN};
+use protocol::client::github::MOST_REFERENCES_SHOWN;
 use protocol::client::subscriptions::{Follow, Refused, Subscribe, Subscribed, Subscription};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::Level;
-use tokio::sync::watch;
 
-use super::{hub_level, session_level, workspace_level};
+use super::{hub_level, reference_level, session_level, workspace_level};
 use crate::hub::{Followed, Hub};
 use crate::server::Connection;
+use crate::server::sends::{Sends, Started};
 use crate::server::subscribing::{self, taken, unsubscribe};
 use crate::server::terminals::Watching;
 
@@ -26,8 +26,9 @@ pub(in crate::server) async fn subscribe(hub: &Arc<Hub>, connection: &Connection
         unsubscribe(connection, subscription_id);
     }
     let mut refused = Vec::new();
-    for Subscription { subscription_id, follow } in start {
-        if let Err(error) = start_one(hub, connection, subscription_id, follow).await {
+    for Subscription { subscription_id, follow, github_observed } in start {
+        let started = Started::Subscribe { github_observed };
+        if let Err(error) = start_one(hub, connection, subscription_id, follow, started).await {
             refused.push(Refused { subscription_id, error });
         }
     }
@@ -40,6 +41,7 @@ async fn start_one(
     connection: &Connection,
     subscription_id: u64,
     follow: Follow,
+    started: Started,
 ) -> Result<(), ApiError> {
     let level = follow.level();
     {
@@ -55,7 +57,8 @@ async fn start_one(
             return Err(ApiError::new(ErrorCode::InvalidRequest, message));
         }
     }
-    let (followed, feeding) = feeding(hub, connection, subscription_id, follow).await?;
+    let sends = Sends::at(level.clone(), started);
+    let (followed, feeding) = feeding(hub, connection, subscription_id, follow, sends).await?;
     let mut subscriptions = connection.subscriptions.lock();
     // Another kind of request, which doesn't wait its turn as this does, may have taken the ID meanwhile.
     if subscriptions.contains_key(&subscription_id) {
@@ -67,23 +70,25 @@ async fn start_one(
     Ok(())
 }
 
-/// What `follow` follows, as the hub counts it, and what feeds it, once the hub has what that needs: refused with
-/// `NotFound` for what it doesn't have, and `Unsupported` for a level, or a place in a log, it doesn't know.
+/// What `follow` follows, as the hub counts it, and what feeds it, in the forms of what GitHub says that `forms` has it
+/// sent, once the hub has what that needs: refused with `NotFound` for what it doesn't have, and `Unsupported` for a
+/// level, or a place in a log, it doesn't know.
 async fn feeding(
     hub: &Arc<Hub>,
     connection: &Connection,
     subscription_id: u64,
     follow: Follow,
+    sends: Sends,
 ) -> Result<(Followed, Feeding), ApiError> {
     let frames = connection.frames.clone();
     Ok(match follow {
-        Follow::Hub => (Followed::Hub, hub_level::feeding(hub, subscription_id, frames).await?),
+        Follow::Hub => (Followed::Hub, hub_level::feeding(hub, sends, subscription_id, frames).await?),
         Follow::Workspace { id } => {
-            let feeding = workspace_level::feeding(hub, id.clone(), subscription_id, frames).await?;
+            let feeding = workspace_level::feeding(hub, id.clone(), sends, subscription_id, frames).await?;
             (Followed::Workspace(id), feeding)
         }
         Follow::Session { id, from } => {
-            let feeding = session_level::feeding(hub, id.clone(), from, subscription_id, frames).await?;
+            let feeding = session_level::feeding(hub, id.clone(), from, sends, subscription_id, frames).await?;
             (Followed::Session(id), feeding)
         }
         Follow::Terminal { id } => {
@@ -92,15 +97,8 @@ async fn feeding(
             (Followed::Terminal(id), Box::pin(feeding))
         }
         Follow::Reference { reference } => {
-            let (shown, showing) =
-                watch::channel(GithubShown { references: vec![reference.clone()], ..GithubShown::default() });
-            let pump = crate::server::github::pump(hub.clone(), showing, subscription_id, frames);
-            // What it shows is held for as long as it's fed, since its pump ends once nothing can change it.
-            let feeding = async move {
-                let _shown = shown;
-                pump.await;
-            };
-            (Followed::Reference(reference), Box::pin(feeding))
+            let feeding = reference_level::feeding(hub, reference.clone(), sends, subscription_id, frames).await?;
+            (Followed::Reference(reference), feeding)
         }
         Follow::Unknown => return Err(unknown("a level")),
     })

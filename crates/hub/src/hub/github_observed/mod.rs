@@ -9,6 +9,7 @@
 //! the last follower stops, and otherwise as of the read that found what it says. It's gone once the cache forgets
 //! what it's of, as it does what nothing has asked for in a week.
 
+mod listed;
 mod observing;
 #[cfg(test)]
 mod tests;

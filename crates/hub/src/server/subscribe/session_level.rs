@@ -6,7 +6,7 @@ use std::sync::Arc;
 use protocol::client::ApiError;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::LogFrom;
-use protocol::model::{Level, Place, Seq, SessionId};
+use protocol::model::{Place, Seq, SessionId};
 use tokio::sync::mpsc;
 
 use super::notices::{forward, send_listed};
@@ -14,6 +14,7 @@ use super::starting::{Feeding, unknown};
 use crate::hub::Hub;
 use crate::server::Outgoing;
 use crate::server::pump::{Following, pump};
+use crate::server::sends::Sends;
 
 /// What feeds a subscription at session `id`'s level, from `from`, once the hub has the session and its records, so
 /// one it doesn't have is refused.
@@ -21,6 +22,7 @@ pub(super) async fn feeding(
     hub: &Arc<Hub>,
     id: SessionId,
     from: Option<LogFrom>,
+    sends: Sends,
     subscription_id: u64,
     frames: mpsc::Sender<Outgoing>,
 ) -> Result<Feeding, ApiError> {
@@ -43,9 +45,8 @@ pub(super) async fn feeding(
         if !send_listed(&frames, subscription_id, Listed::Session(records)).await {
             return;
         }
-        let level = Level::Session { id: id.clone() };
         let list = || async { Ok(Listed::Session(hub.session_records(id.clone()).await?)) };
-        let records = forward(feed, &level, subscription_id, &frames, list, |_| {});
+        let records = forward(feed, &sends, subscription_id, &frames, list, |_| {});
         let log = pump(hub.clone(), session, id.clone(), subscription_id, following, live, frames.clone());
         // The log's ends once its session has gone, and both once the connection has.
         tokio::select! {

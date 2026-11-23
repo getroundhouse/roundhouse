@@ -6,13 +6,14 @@ use std::sync::Arc;
 
 use protocol::client::ApiError;
 use protocol::client::listed::Listed;
-use protocol::model::{Level, WorkspaceId};
+use protocol::model::WorkspaceId;
 use tokio::sync::mpsc;
 
 use super::notices::{forward, send_listed};
 use super::starting::Feeding;
 use crate::hub::Hub;
 use crate::server::Outgoing;
+use crate::server::sends::Sends;
 
 /// What feeds a subscription at workspace `id`'s level, once its first list is queued, so one the hub doesn't have is
 /// refused. The list is queued here, before the reply to the `Subscribe` that starts it, rather than by what feeds it,
@@ -20,6 +21,7 @@ use crate::server::Outgoing;
 pub(super) async fn feeding(
     hub: &Arc<Hub>,
     id: WorkspaceId,
+    sends: Sends,
     subscription_id: u64,
     frames: mpsc::Sender<Outgoing>,
 ) -> Result<Feeding, ApiError> {
@@ -33,8 +35,7 @@ pub(super) async fn feeding(
         if !connected {
             return;
         }
-        let level = Level::Workspace { id: id.clone() };
         let list = || async { Ok(Listed::Workspace(hub.workspace_observations(&id).await?)) };
-        forward(feed, &level, subscription_id, &frames, list, |_| {}).await;
+        forward(feed, &sends, subscription_id, &frames, list, |_| {}).await;
     }))
 }
