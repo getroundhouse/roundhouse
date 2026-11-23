@@ -24,12 +24,6 @@ impl Folding {
         }
     }
 
-    /// The copies replies go into now, for what takes records in that come another way, as a session's subscription
-    /// sends its own, and lets go of them once it ends.
-    pub(in super::super) fn reaches(&self) -> Reaches {
-        Reaches(self.into.lock().iter().cloned().collect())
-    }
-
     /// Takes each record `response` carries into every copy, letting go of those no longer kept. A copy keeps whichever
     /// of the reply and what the feed tells of is newer, so it doesn't matter which comes first.
     pub(in super::super) fn fold(&self, response: &ClientResponse) {
@@ -46,18 +40,6 @@ impl Folding {
                 changed
             })
         });
-    }
-}
-
-/// Copies of the hub's records, which last only as long as each is kept.
-pub(in super::super) struct Reaches(Vec<Reach<HubRecords>>);
-
-impl Reaches {
-    /// Changes each copy, telling its readers where `change` says it changed it.
-    pub(in super::super) fn change(&self, change: impl Fn(&mut HubRecords) -> bool) {
-        for reach in &self.0 {
-            reach.change(&change);
-        }
     }
 }
 

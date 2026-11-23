@@ -137,8 +137,8 @@ fn a_view_holds_only_the_agents_own_events_or_one_subagents_and_the_feed_keeps_t
     client.session_prompt(&session.id, "agent-calls:1:Look around", None).unwrap();
     let (_, id) = subagent(&client, &session.id);
 
-    let own = OpenSession::start_view(&client, &session, View::Own);
-    let work = OpenSession::start_view(&client, &session, View::Subagent(id.clone()));
+    let own = OpenSession::start_view(&client, &feed, &session, View::Own);
+    let work = OpenSession::start_view(&client, &feed, &session, View::Subagent(id.clone()));
     wait_for_turn_end(&client, &session.id, 1);
 
     let hub_has = |subagent| client.session_read_places(&session.id, subagent, Place::new(1), 1000).unwrap().0;

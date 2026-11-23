@@ -1,5 +1,5 @@
-use super::super::Client;
 use super::super::follow::{FollowError, Following};
+use super::super::{Client, RecordsFeed};
 use super::search;
 use super::source::SessionSource;
 use crate::session_log::{By, Changes, RecordedApprovals, SessionLog};
@@ -44,15 +44,18 @@ pub struct OpenSession {
 }
 
 impl OpenSession {
-    /// Starts following every event, on a thread of its own, so this doesn't wait for the hub. Once it has subscribed,
-    /// it asks for the session's prompts.
-    pub fn start(client: &Client, session: &Session) -> OpenSession {
-        OpenSession::start_view(client, session, View::Whole)
+    /// Starts following every event, on a thread of its own, so this doesn't wait for the hub, with the session's own
+    /// records kept in `records`, as [`OpenSession::start_view`] says. Once it has subscribed, it asks for the
+    /// session's prompts.
+    pub fn start(client: &Client, records: &RecordsFeed, session: &Session) -> OpenSession {
+        OpenSession::start_view(client, records, session, View::Whole)
     }
 
     /// Starts following the events `view` takes, on a thread of its own. Once it has subscribed, it asks for the
-    /// session's prompts, unless it follows a subagent, whose events hold none.
-    pub fn start_view(client: &Client, session: &Session, view: View) -> OpenSession {
+    /// session's prompts, unless it follows a subagent, whose events hold none. `records`, the copy of the same hub's
+    /// records, holds the session's own records, its subagents, proposals and how its replies were heard, as its
+    /// subscription sends them, until every clone of this has gone.
+    pub fn start_view(client: &Client, records: &RecordsFeed, session: &Session, view: View) -> OpenSession {
         // One by place doesn't know how far it goes until the hub says.
         let mut log = match view {
             View::Whole => SessionLog::new(session.last_seq),
@@ -69,8 +72,12 @@ impl OpenSession {
             last_seq: session.last_seq,
             placed: false,
             read_from: client.hub_version().to_string(),
-            records: None,
+            records: records.reach(),
         };
+        source.records.change(|records| {
+            records.want_session(&session.id);
+            false
+        });
         let follow = Following::start(client, Arc::new(log), move || source);
         follow.wake();
         OpenSession { follow, session_id: session.id.clone(), view, searches: Arc::default() }

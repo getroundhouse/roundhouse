@@ -10,9 +10,9 @@ use protocol::model::{Place, Seq, Session, SubagentId};
 
 use super::super::{OpenSession, View};
 use super::follows_session;
-use crate::Client;
 use crate::session_log::{By, Row, SessionLog};
 use crate::stand_in_hub::{Does, StandIn, subscribed};
+use crate::{Client, RecordsFeed};
 
 /// When a scripted hub is from: before it could read the agent's own events apart, or now.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -155,7 +155,8 @@ fn the_agents_own_events_from_a_hub_that_cant_read_them_apart_are_every_event_by
     let asked = start_hub(&socket, Era::BeforePlaces, "1", LAST_SEQ);
     let client = Client::connect(&socket, "test").unwrap();
 
-    let open = OpenSession::start_view(&client, &session(), View::Own);
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start_view(&client, &feed, &session(), View::Own);
 
     wait_for(&open, &EVERY);
     assert_eq!(open.read(SessionLog::by), By::Seq);
@@ -171,7 +172,9 @@ fn an_open_view_reads_by_place_again_once_it_reaches_a_hub_that_can() {
     let (older, newer) = (dir.path().join("older.sock"), dir.path().join("newer.sock"));
     start_hub(&older, Era::BeforePlaces, "1", LAST_SEQ);
     let asked = start_hub(&newer, Era::Now, "1", LAST_SEQ);
-    let open = OpenSession::start_view(&Client::connect(&older, "test").unwrap(), &session(), View::Own);
+    let client = Client::connect(&older, "test").unwrap();
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start_view(&client, &feed, &session(), View::Own);
     wait_for(&open, &EVERY);
 
     open.reconnect(&Client::connect(&newer, "test").unwrap());
@@ -189,7 +192,9 @@ fn an_open_view_carries_on_by_seq_from_one_hub_that_cant_read_by_place_to_anothe
     let (first_hub, second_hub) = (dir.path().join("first.sock"), dir.path().join("second.sock"));
     start_hub(&first_hub, Era::BeforePlaces, "1", LAST_SEQ);
     let asked = start_hub(&second_hub, Era::BeforePlaces, "1", LAST_SEQ);
-    let open = OpenSession::start_view(&Client::connect(&first_hub, "test").unwrap(), &session(), View::Own);
+    let client = Client::connect(&first_hub, "test").unwrap();
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start_view(&client, &feed, &session(), View::Own);
     wait_for(&open, &EVERY);
     let added = open.read(SessionLog::events_added);
 
@@ -222,7 +227,8 @@ fn an_open_view_reads_its_events_again_from_a_hub_of_another_build_once() {
         start_hub(&socket("after.sock"), era, "2", LAST_SEQ);
         let asked = start_hub(&socket("again.sock"), era, "2", LAST_SEQ);
         let client = Client::connect(&socket("before.sock"), "test").unwrap();
-        let open = OpenSession::start_view(&client, &session(), view.clone());
+        let feed = RecordsFeed::start(&client);
+        let open = OpenSession::start_view(&client, &feed, &session(), view.clone());
         wait_for(&open, held);
 
         open.reconnect(&Client::connect(&socket("after.sock"), "test").unwrap());
@@ -244,7 +250,9 @@ fn an_open_view_reads_its_events_again_as_far_as_the_new_hub_has_them() {
     // The agent's own events are every other one, so 740 of them, then 755, and the one in row 300 is at 601.
     start_hub(&before, Era::Now, "1", 1480);
     start_hub(&after, Era::Now, "2", 1510);
-    let open = OpenSession::start_view(&Client::connect(&before, "test").unwrap(), &session(), View::Own);
+    let client = Client::connect(&before, "test").unwrap();
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start_view(&client, &feed, &session(), View::Own);
     let row_300 = |open: &OpenSession| said(open).get(300).cloned().flatten();
     open.want(300..301, Some(300));
     wait_until(&open, row_300, &Some("601 from 1".into()));

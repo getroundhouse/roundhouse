@@ -12,6 +12,7 @@ use super::super::tests::{
     LAST_PLACE, answered_simply, answers, refused, requests_until_unsubscribed, session, start_hub_answering, until,
 };
 use super::*;
+use crate::RecordsFeed;
 use crate::session_log::{By, SessionLog};
 use crate::stand_in_hub::{self, Does};
 
@@ -92,7 +93,8 @@ fn connect(socket: &std::path::Path) -> Client {
 
 /// The chat's own events, followed by place, as the app follows them.
 fn own(client: &Client) -> OpenSession {
-    OpenSession::start_view(client, &session(), View::Own)
+    let feed = RecordsFeed::start(client);
+    OpenSession::start_view(client, &feed, &session(), View::Own)
 }
 
 #[test]
@@ -104,7 +106,8 @@ fn what_the_hub_names_is_read_with_what_s_around_it_a_stretch_at_a_time() {
     });
     let client = connect(&socket);
     let helper: SubagentId = "helper".into();
-    let open = OpenSession::start_view(&client, &session(), View::Subagent(helper.clone()));
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start_view(&client, &feed, &session(), View::Subagent(helper.clone()));
     let mut heard = Vec::new();
     let starts = |reads: Vec<(u64, Option<SubagentId>)>| -> Vec<u64> {
         assert!(reads.iter().all(|(_, of)| of.as_ref() == Some(&helper)), "{reads:?}");
@@ -233,7 +236,8 @@ fn a_log_by_seq_isn_t_looked_through_at_the_hub() {
     let socket = dir.path().join("hub.sock");
     let requests = start_hub_answering(&socket, answered_simply);
     let client = connect(&socket);
-    let open = OpenSession::start(&client, &session());
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start(&client, &feed, &session());
 
     assert_eq!(open.read(SessionLog::by), By::Seq);
     assert_eq!(open.search(&client, needle("parser"), 64).searched(), Searched::CantFind);

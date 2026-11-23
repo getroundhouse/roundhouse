@@ -11,5 +11,5 @@ mod tests;
 
 mod folding;
 mod subscription;
-pub(super) use folding::{Folding, Reaches};
+pub(super) use folding::Folding;
 pub use subscription::RecordsFeed;

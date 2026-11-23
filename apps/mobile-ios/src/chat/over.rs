@@ -98,8 +98,7 @@ impl ChatView {
             let (client, feed, session) = (self.client.clone(), self.feed.clone(), shown.session.clone());
             let id = subagent.clone();
             let transcript = cx.new(|cx| {
-                let mut transcript = Transcript::subagent(client, &session, id, cx);
-                transcript.follow_records(feed);
+                let mut transcript = Transcript::subagent(client, &feed, &session, id, cx);
                 transcript.records_changed(&records, cx);
                 transcript
             });

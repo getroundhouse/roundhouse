@@ -1,4 +1,4 @@
-use super::super::follow::{FollowError, Following, Source};
+use super::super::follow::{FollowError, Following, Reach, Source};
 use super::super::github::{github_keys, notice_key, own_keys};
 use super::super::workspace_level::{FollowedWorkspace, Workspaces};
 use super::super::{Client, ClientError, GithubFeed, Result, Subscription, SubscriptionItem};
@@ -27,8 +27,8 @@ impl RecordsFeed {
     /// records stand.
     ///
     /// Every record a reply on `client` carries is taken in too, as it comes, so whoever made the call needn't hand it
-    /// on, and what's shown needn't wait for the hub to say the same. So are the records of each session a view follows,
-    /// as its subscription sends them.
+    /// on, and what's shown needn't wait for the hub to say the same. So are the records of each session an
+    /// [`OpenSession`](crate::OpenSession) handed this follows, as its subscription sends them.
     pub fn start(client: &Client) -> RecordsFeed {
         let records = Following::unstarted(HubRecords::default());
         let github = GithubFeed::start(client, records.reach());
@@ -84,6 +84,12 @@ impl RecordsFeed {
     /// workspace's changed files says the hub sends none.
     pub fn follow_workspace(&self, id: &WorkspaceId) -> FollowedWorkspace {
         self.workspaces.follow(id)
+    }
+
+    /// A handle on the copy of the hub's records that doesn't keep it followed, for what takes records into it that come
+    /// another way, as a session's subscription sends its own.
+    pub(in crate::client) fn reach(&self) -> Reach<HubRecords> {
+        self.follow.reach()
     }
 
     /// What the same hub says of GitHub, of every workspace's own pull request and of what views show.

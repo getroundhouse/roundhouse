@@ -9,6 +9,7 @@ use protocol::model::QueuedPrompt;
 use protocol::prompt::Prompt;
 
 use super::*;
+use crate::RecordsFeed;
 use crate::stand_in_hub::{self, Does};
 
 #[test]
@@ -79,7 +80,8 @@ fn a_prompt_being_sent_shows_in_its_chat_and_stays_once_the_hub_has_recorded_it(
             duplicate: false,
         }))))
     });
-    let open = OpenSession::start(&client, &protocol::fixtures::session("s"));
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start(&client, &feed, &protocol::fixtures::session("s"));
     let written = Written::new(Prompt::new("next"));
     let shown = written.on_its_way();
 
@@ -104,7 +106,8 @@ fn a_prompt_the_hub_refuses_stops_showing_though_nothing_waits_to_hear() {
         let _ = answered.recv();
         Does::Answers(Box::new(ReplyOutcome::Error(ApiError::new(ErrorCode::Conflict, "the workspace is archived"))))
     });
-    let open = OpenSession::start(&client, &protocol::fixtures::session("s"));
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start(&client, &feed, &protocol::fixtures::session("s"));
 
     drop(open.start_sending(&client, Written::new(Prompt::new("next"))));
 

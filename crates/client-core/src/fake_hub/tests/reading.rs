@@ -302,6 +302,27 @@ fn a_terminal_is_watched_and_read_by_row_number_and_refuses_a_change() {
     assert!(matches!(fit, Err(ClientError::Api(refused)) if refused.code == ErrorCode::Unsupported));
 }
 
+/// A session's own records go into the copy of the hub's records its view is handed, not whichever copies its
+/// connection's replies go into, so a copy started on another connection, which no reply on the session's reaches,
+/// holds them.
+#[test]
+fn a_session_s_records_go_into_the_copy_its_view_is_handed() {
+    let mut world = World::default();
+    let repo = world.repo("aspen");
+    let workspace = world.workspace(&repo, "elm");
+    let chat =
+        world.chat(&workspace, SessionStatus::Running, vec![subagent_started("toolu_1", "explore", "Look", "Look")]);
+    let session = world.sessions.iter().find(|session| session.id == chat).unwrap().clone();
+    let (dir, client) = served(world);
+    let elsewhere = Client::connect(&dir.path().join("hub"), "test").unwrap();
+    let feed = RecordsFeed::start(&elsewhere);
+
+    let _open = OpenSession::start(&client, &feed, &session);
+
+    let held = || feed.snapshot().subagents(&chat).len();
+    waiting::thread::until(Duration::from_secs(10), "the chat's subagent to be held", || held() == 1);
+}
+
 /// A session's own records reach a client only while it follows the session, as an open chat does, so once nothing it
 /// follows of the session is left, they're let go of, while a session still followed by another, such as a subagent's
 /// tab beside its chat, keeps them.
@@ -317,7 +338,8 @@ fn a_client_that_stops_following_a_session_lets_go_of_its_records() {
     let (_dir, client) = served(world);
     let feed = RecordsFeed::start(&client);
     let held = |feed: &RecordsFeed| feed.snapshot().subagents(&chat).len();
-    let (chat_open, subagent_tab) = (OpenSession::start(&client, &session), OpenSession::start(&client, &session));
+    let (chat_open, subagent_tab) =
+        (OpenSession::start(&client, &feed, &session), OpenSession::start(&client, &feed, &session));
     waiting::thread::until(Duration::from_secs(10), "the chat's subagent to be held", || held(&feed) == 1);
     // Each says it keeps the session's records once the hub has answered its follow, which is after the hub counts it
     // as following, and takes in what the subscription sends after that: the records, then the session's one event.

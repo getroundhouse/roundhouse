@@ -14,7 +14,7 @@ use super::{
     answered_simply, follows_session, refused, requests_until_unsubscribed, session, start_hub_answering, until,
 };
 use crate::stand_in_hub::refusing_every_start;
-use crate::{Client, ClientError};
+use crate::{Client, ClientError, RecordsFeed};
 
 /// A session the hub has deleted, so it refuses to follow it.
 const GONE: &str = "gone";
@@ -62,7 +62,8 @@ fn a_hub_too_old_to_list_prompts_is_followed_without_them_and_not_asked_again() 
     let heard = start_hub(&socket, vec![refused(ErrorCode::Unsupported, "unknown request")]);
     let client = Client::connect(&socket, "test").unwrap();
 
-    let open = OpenSession::start(&client, &session());
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start(&client, &feed, &session());
     until("answered", || open.read(|log| !log.wants_prompt_list()));
     open.want(0..1, Some(0));
     let errors = open.take_errors();
@@ -88,7 +89,8 @@ fn a_hub_that_fails_to_list_prompts_goes_on_being_followed_and_is_asked_again_on
     ];
     let heard = start_hub(&socket, lists);
     let client = Client::connect(&socket, "test").unwrap();
-    let open = OpenSession::start(&client, &session());
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start(&client, &feed, &session());
     let mut errors = Vec::new();
 
     until("told of the failure", || {
@@ -122,7 +124,8 @@ fn a_session_thats_been_deleted_is_let_go_of_rather_than_reported() {
     let heard = start_hub(&socket, Vec::new());
     let client = Client::connect(&socket, "test").unwrap();
 
-    let open = OpenSession::start(&client, &Session { id: GONE.into(), ..session() });
+    let feed = RecordsFeed::start(&client);
+    let open = OpenSession::start(&client, &feed, &Session { id: GONE.into(), ..session() });
 
     open.follow.changed.recv_timeout(Duration::from_secs(10)).expect("never heard back");
     let mut requests = std::iter::from_fn(|| heard.recv_timeout(Duration::from_secs(10)).ok());

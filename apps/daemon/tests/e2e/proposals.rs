@@ -51,7 +51,7 @@ fn a_proposal_is_kept_for_the_call_that_made_it_shown_to_a_client_following_its_
     let (_, chat) = stack.workspace(&client);
     let feed = RecordsFeed::start(&client);
     // The chat open, as a client that shows it has it, which follows its session, and with it the session's records.
-    let _open = OpenSession::start(&client, &chat);
+    let _open = OpenSession::start(&client, &feed, &chat);
     wait_until("the feed to follow", || feed.connected());
 
     let proposed = calls(&client, &chat.id, PROPOSE, 1);
