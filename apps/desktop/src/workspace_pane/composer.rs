@@ -198,8 +198,9 @@ impl WorkspacePane {
     /// The model and its effort of the chat showing, and what its agent is offered.
     fn picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (now_ms, agent) = (look::now_ms(cx), self.picker_agent());
-        let model_and_effort =
-            self.session().map(|s| (s.model.clone(), s.effort.clone(), prompt_cache::switching_note(s, now_ms)));
+        let model_and_effort = self
+            .session()
+            .map(|s| (s.model.clone(), s.effort.clone(), prompt_cache::switching_note(self.shown.all(), s, now_ms)));
         let this = cx.weak_entity();
         let models = move |picked: Picked, _: &mut Window, cx: &mut gpui_kit::App| {
             let _ = this.update(cx, |t, cx| {

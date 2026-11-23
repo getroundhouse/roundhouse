@@ -16,7 +16,7 @@ mod shown;
 #[cfg(any(test, feature = "testing"))]
 mod testing;
 
-pub(crate) use record::{AtWork, IdleCache};
+pub(crate) use record::{AtWork, IdleCache, OpenWait};
 
 mod view;
 pub(crate) use model::{Did, Model, ProposalCall, SubagentRecords};

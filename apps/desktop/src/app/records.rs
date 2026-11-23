@@ -65,7 +65,7 @@ impl AppView {
     fn wind_cache_clock(&mut self, cx: &mut Context<Self>) {
         let told = self.records.workspaces().iter().filter(|workspace| prompt_cache::told_of(workspace));
         let sessions = told.flat_map(|workspace| self.records.sessions(&workspace.id));
-        let Some(wait_ms) = prompt_cache::next_change_in_ms(sessions, look::now_ms(cx)) else {
+        let Some(wait_ms) = prompt_cache::next_change_in_ms(&self.records, sessions, look::now_ms(cx)) else {
             self.cache_clock = None;
             return;
         };

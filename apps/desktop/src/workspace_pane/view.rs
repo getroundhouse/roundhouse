@@ -32,7 +32,7 @@ impl WorkspacePane {
         let unread = self.shows_unread(session);
         let needs_a_look = unread || client_core::marking::waiting_on_you([session]);
         let mark = client_ui::chat_signal(session);
-        let expiring = prompt_cache::expiring_in_ms(session, look::now_ms(cx))
+        let expiring = prompt_cache::expiring_in_ms(self.shown.all(), session, look::now_ms(cx))
             .map(|left_ms| prompt_cache::clock(format!("tab-cache-{}", session.id), left_ms, muted, cx));
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
         let close_id = ElementId::Name(format!("close-chat-{}", session.id).into());
@@ -258,7 +258,8 @@ impl WorkspacePane {
         let (muted, faint) = (colors.text_muted, colors.text_faint);
         // A chat that needs an account says so in its card, which says what to do instead.
         let interrupted = self.session().is_some_and(|s| s.status == SessionStatus::Interrupted && !s.needs_an_account);
-        let cache_expired = self.session().and_then(|s| prompt_cache::expired_line(s, look::now_ms(cx)));
+        let cache_expired =
+            self.session().and_then(|s| prompt_cache::expired_line(self.shown.all(), s, look::now_ms(cx)));
         let setup_line = self.setup_line(cx);
         let push_line = self.push_line(cx);
         let usage = self.usage(cx);

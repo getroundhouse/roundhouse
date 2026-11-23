@@ -12,7 +12,7 @@ use gpui_kit::{
 use look::Tooltipped as _;
 use look::{Moving, TaskRing};
 use protocol::event::AgentTask;
-use protocol::model::{Wait, WaitId, WaitUntil};
+use protocol::model::{WaitId, WaitUntil};
 
 use super::{clipped, tail_line};
 use crate::folds::{Fold, Folds};
@@ -20,6 +20,7 @@ use crate::rows::Shared;
 use crate::rows::line::{START_CHARS, lead, opening};
 use crate::rows::tools::agent::{Opens, open_tab};
 use crate::task_lines::{TaskGroup, TaskLine, task_lines};
+use crate::transcript::OpenWait;
 use crate::transcript::Transcript;
 use client_core::calls::agent;
 
@@ -101,8 +102,9 @@ fn going(group: TaskGroup, task: &AgentTask, by: By, shared: &Shared, cx: &App) 
 /// The agent's wait on pull requests, as the hub keeps it: the ring a monitor has, held still, since nothing runs for
 /// it here, what it waits on, and where its pull requests stand, as the hub last read them, then Stop, which calls it
 /// off. Pointing at it says what ends it.
-pub(super) fn wait_line(wait: &Wait, shared: &Shared, cx: &App) -> Div {
-    let (text, pointed_at) = wait_words(wait);
+pub(super) fn wait_line(open: &OpenWait, shared: &Shared, cx: &App) -> Div {
+    let (text, pointed_at) = wait_words(open);
+    let wait = &open.wait;
     let stop = stop_waiting(&wait.id, &shared.this);
     in_the_background(("wait", wait.id.as_str()), ring(TaskRing::Watching, cx), text, pointed_at, Some(stop), cx)
 }
@@ -110,8 +112,8 @@ pub(super) fn wait_line(wait: &Wait, shared: &Shared, cx: &App) -> Div {
 /// What a wait's line says, and what pointing at it says: what it waits on, and where its pull requests stand, from
 /// the hub's reading of them. A wait the singular tool started, which only a hub from before it was dropped can still
 /// have open, has no reading, so it says only what it waits on.
-fn wait_words(wait: &Wait) -> (String, &'static str) {
-    let pointed_at = match (&wait.watch, wait.until) {
+fn wait_words(OpenWait { wait, read }: &OpenWait) -> (String, &'static str) {
+    let pointed_at = match (read, wait.until) {
         (Some(_), _) => {
             "Until every watched pull request reaches the condition, or one needs the agent; Stop ends only this wait"
         }
@@ -122,7 +124,7 @@ fn wait_words(wait: &Wait) -> (String, &'static str) {
             "Until it's merged or closed, or needs the agent"
         }
     };
-    (waits::waiting(wait), pointed_at)
+    (waits::waiting(wait, read.as_ref()), pointed_at)
 }
 
 /// Calls off the wait. Its line goes as the hub records that, and the agent's CLI hears as it next asks after its task,

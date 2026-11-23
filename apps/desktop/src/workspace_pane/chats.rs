@@ -145,7 +145,7 @@ impl WorkspacePane {
     fn make_transcript(&mut self, session: Session, cx: &mut Context<Self>) {
         let (client, records, feed) = (self.client.clone(), self.shown.all().clone(), self.records.clone());
         let view = cx.new(|cx| {
-            let mut transcript = Transcript::new(client, &session, cx);
+            let mut transcript = Transcript::new(client, &records, &session, cx);
             transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
             transcript.follow_records(feed);
             transcript.records_changed(&records, cx);
@@ -276,7 +276,9 @@ impl WorkspacePane {
     /// [`prompt_cache::composer_line_changes_in_ms`] says, then winds itself for the change after.
     fn wind_cache_clock(&mut self, cx: &mut Context<Self>) {
         let now_ms = look::now_ms(cx);
-        let wait_ms = self.session().and_then(|session| prompt_cache::composer_line_changes_in_ms(session, now_ms));
+        let records = self.shown.all();
+        let wait_ms =
+            self.session().and_then(|session| prompt_cache::composer_line_changes_in_ms(records, session, now_ms));
         self.cache_clock = wait_ms.map(|wait_ms| {
             cx.spawn(async move |this, cx| {
                 cx.background_executor().timer(Duration::from_millis(wait_ms.unsigned_abs())).await;

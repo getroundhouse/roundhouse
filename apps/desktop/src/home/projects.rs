@@ -206,7 +206,7 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
     let Standing { signal, work, needs_a_look } = standing(app, workspace, cx);
     let repo = app.repo(&workspace.repo_id).map_or_default(|r| r.name.clone());
     let its_chats = app.records().sessions(&workspace.id).iter().filter(|_| prompt_cache::told_of(workspace));
-    let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx))
+    let expiring = prompt_cache::soonest_expiring(app.records(), its_chats, look::now_ms(cx))
         .map(|left_ms| line_text.detail.set(div().flex_none().text_color(muted).child(look::expires_in(left_ms))));
     let drawn = client_core::workspace_lines::drawn(workspace.status, app.records().workspace_lines(&workspace.id));
     let lines = drawn.map(|drawn| lines(format!("home-lines-{}", workspace.id), drawn, &line_text.code));

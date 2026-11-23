@@ -1,7 +1,7 @@
 //! What the app says of a chat's prompt cache outside its transcript, and when that changes: a clock on its tab and
 //! its workspace's row once it's about to expire, how long it has left on Home, a line above the composer once it has
 //! expired, and a note on the other models in the picker while it's warm. Each says it only in a chat big enough for
-//! writing the cache again to cost something, as [`Session::cache_worth_telling`](protocol::model::Session::cache_worth_telling) says. `docs/spec/chats.md` has the
+//! writing the cache again to cost something, as [`client_core::prompt_cache::cache_worth_telling`] says. `docs/spec/chats.md` has the
 //! rules.
 
 #[cfg(test)]

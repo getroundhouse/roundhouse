@@ -59,7 +59,7 @@ impl WorkspacePane {
     /// shows. It says whose account it is only when no limits are drawn, since their card says it otherwise.
     pub(in super::super) fn context_ring(&self, usage: Option<&Usage>, cx: &mut Context<Self>) -> Option<Slot> {
         let session = self.session()?;
-        let context = session.context.clone()?;
+        let context = self.shown.all().context(session)?.clone();
         let usage = usage.filter(|usage| usage.limits.is_empty()).cloned();
         let used = context.used_fraction();
         // The whole slot is the ring's to point at, and what the card lines up with, so the ring's own square is as
