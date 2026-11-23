@@ -17,7 +17,7 @@ enum Reaching {
     /// Off the Mac, where the app's shortcuts are on Ctrl, as Ctrl-W closes a chat, in a terminal it deletes the word
     /// before it, as a shell has it. On a Mac, where Ctrl-W was never the app's, the same holds.
     CtrlW,
-    /// Ctrl-C interrupts the program, as in terminal apps, though off the Mac it's Copy everywhere else, so `cat` ends
+    /// Ctrl-C interrupts the program, as in terminal apps, though off the Mac it's Copy everywhere else, so `tr` ends
     /// and the shell runs what's typed after.
     CtrlC,
     /// On a Mac, the keys Ghostty gives a meaning there edit the shell's line as they do in Ghostty: Command-Backspace
@@ -43,7 +43,12 @@ impl Reaching {
                 type_keys(ui, &["ctrl-w", "enter"]);
             }
             Reaching::CtrlC => {
-                type_line(ui, "cat");
+                type_line(ui, "tr a b");
+                // Once the program is running, since the interrupt goes to whatever is in front as the key is pressed:
+                // a shell still starting the program takes it, and the program then reads what's typed after. A row
+                // only `tr` prints shows it's running, where what `cat` gives back is the line as typed.
+                type_line(ui, "aaa");
+                wait_for_a_row(ui, "CtrlC: the program to be running", "bbb");
                 ui.press("ctrl-c");
                 type_line(ui, "echo interrupted");
             }
