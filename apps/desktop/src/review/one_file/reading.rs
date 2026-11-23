@@ -101,7 +101,7 @@ impl Review {
     /// What the summary says of `entry`.
     fn key_of(&self, entry: &ChangedEntry) -> Option<Key> {
         let Some(Listed::Summary(Summary { summarized, .. })) = &self.listed else { return None };
-        let file = summarized.file(entry)?;
+        let file = entry.in_summary(summarized)?;
         Some(Key {
             at: file.at(),
             base: summarized.base_commit.clone(),

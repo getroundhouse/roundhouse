@@ -7,13 +7,11 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{ChangedFile, ChangedFileAt, ChangedFilesPage, CommitId, FileDiff, MOST_FILES_LISTED};
+use protocol::model::{ChangedFileAt, FileDiff};
 
 /// What a workspace's worker reads on request. What it has none of, it reads as a worker from before the request.
 #[derive(Clone, Debug, Default)]
 pub struct WorkerReads {
-    /// Every file the workspace changes, against its base, which the hub pages through past its summary.
-    pub changed_files: Option<(CommitId, Vec<ChangedFile>)>,
     /// Each page of one file's diff, by the file's entry, as a summary names it, and the patch's line the page starts
     /// at, as the worker reads it each time it's asked for: the first the first time, and so on, and the last from then
     /// on, so a test has the file change between reads.
@@ -24,12 +22,6 @@ pub struct WorkerReads {
 }
 
 impl WorkerReads {
-    /// The page of the changed files after the one `after` names, as a worker pages through them.
-    pub(super) fn page_after(&self, after: &ChangedFileAt) -> Result<ChangedFilesPage, ApiError> {
-        let (base, files) = self.changed_files.as_ref().ok_or_else(|| older("page through its files"))?;
-        Ok(ChangedFilesPage::after(base.clone(), files.clone(), after, MOST_FILES_LISTED))
-    }
-
     /// The page of the diff of the entry `asked` names from line `first_line`, as it reads this time. One that isn't
     /// said to be untracked is the tracked entry, or the untracked one where there's none, as the worker has it.
     pub(super) fn file_diff(&self, asked: ChangedFileAt, first_line: u32) -> Result<FileDiff, ApiError> {

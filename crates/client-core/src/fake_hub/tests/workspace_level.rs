@@ -1,17 +1,13 @@
-//! What a client holds of a workspace's own level, as a fake hub sends it to a client that follows the workspace, and
-//! the pages of its changed files past the summary.
+//! What a client holds of a workspace's own level, as a fake hub sends it to a client that follows the workspace.
 
 use std::time::Duration;
 
 use protocol::client::ObservationNotice;
-use protocol::model::{
-    ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, ChangedFilesPage, Level, Observation, Observed, Rev,
-    WorkspaceId,
-};
+use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, Level, Observation, Observed, Rev, WorkspaceId};
 
-use super::super::{WorkerReads, World};
+use super::super::World;
 use super::served::served;
-use crate::{ClientError, RecordsFeed};
+use crate::RecordsFeed;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -90,32 +86,4 @@ fn a_hub_that_lists_no_workspace_level_sends_none_of_its_changed_files() {
 
     waiting::thread::until(TIMEOUT, "the older hub to be followed", || following.any(|level| *level != Level::Hub));
     waiting::thread::until(TIMEOUT, "elm's files to be let go of", || paths(&feed, &elm).is_none());
-}
-
-/// The fake hub reads a page of a workspace's changed files past the one named by the rule a worker does, refuses one
-/// of a workspace it doesn't have, and one whose world has no files, as from a worker from before the request.
-#[test]
-fn a_page_of_changed_files_is_read_from_the_world_by_the_worker_s_rule() {
-    let mut world = World::default();
-    let repo = world.repo("aspen");
-    let (elm, oak) = (world.workspace(&repo, "elm"), world.workspace(&repo, "oak"));
-    let files = vec![
-        file("u.rs", ChangeStatus::Untracked),
-        file("b.rs", ChangeStatus::Modified),
-        file("a.rs", ChangeStatus::Modified),
-    ];
-    let reads = WorkerReads { changed_files: Some(("c1".into(), files)), ..WorkerReads::default() };
-    world.worker_reads.insert(elm.clone(), reads);
-    let (_dir, client) = served(world);
-    let after = ChangedFileAt { untracked: false, path: "a.rs".into() };
-
-    let page = client.workspace_changed_files(&elm, after.clone()).unwrap();
-    let older = client.workspace_changed_files(&oak, after.clone()).unwrap_err();
-    let nowhere = client.workspace_changed_files(&"nowhere".into(), after.clone()).unwrap_err();
-
-    let tracked_then_untracked = vec![file("b.rs", ChangeStatus::Modified), file("u.rs", ChangeStatus::Untracked)];
-    let by_the_rule = ChangedFilesPage { base_commit: "c1".into(), files: tracked_then_untracked, left_out: 0 };
-    assert_eq!(page, by_the_rule, "those after a.rs, tracked first");
-    assert!(older.is_unsupported(), "{older}");
-    assert!(matches!(nowhere, ClientError::Api(refused) if refused.code == protocol::client::ErrorCode::NotFound));
 }

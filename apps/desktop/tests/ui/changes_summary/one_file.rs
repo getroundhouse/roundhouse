@@ -16,8 +16,8 @@ use desktop::patch::FilePatch;
 use desktop::review::Diffed;
 
 use super::world::{
-    BASE, VERSION, current, drawn_line, every_file, file, page_with, pages_of, patch_of, reading_everything,
-    summarized, tracked, versioned,
+    BASE, VERSION, current, drawn_line, every_file, file, page_with, pages_of, patch_of, reading_a_txt, summarized,
+    tracked, versioned,
 };
 use crate::support::{Diff, Ui};
 
@@ -28,7 +28,7 @@ use crate::support::{Diff, Ui};
 /// once a summary is current again, that file is read on its own as the summary names it.
 #[gpui_kit::test]
 fn the_file_shown_is_read_on_its_own_and_again_only_when_the_summary_moves_it(cx: &mut TestAppContext) {
-    let reads = reading_everything();
+    let reads = reading_a_txt();
     let read = reads.diffs_read.clone();
     let (_hub, mut ui, diff) = summarized(cx, (versioned(every_file(), VERSION), 2), reads, current);
     let workspace = ui.view().selected().cloned().unwrap();

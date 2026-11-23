@@ -10,9 +10,9 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
   ![The sidebar of changes as a list](screens/changes.png)
 
-- **While the hub keeps a workspace's changed files current, the list is the hub's summary of them, and past 5,000 files a row at its end says how many more there are.** The files git tracks come first, so an unignored folder of generated files doesn't crowd out the agent's edits. Clicking the row lists up to 5,000 more, read from the worktree as it is then, until none are left, and the row says it's reading them meanwhile. A hub too old to read them leaves the row saying how many. The list goes back to the summary's files whenever the summary changes. Where the hub's summary is only as of an earlier read, or the hub keeps none, the list is read from the whole diff, at the moments below, since an earlier read can be older than what switching to Changes reads. *Unconfirmed.*
+- **While the hub keeps a workspace's changed files current, the list is the hub's summary of them, and past 5,000 files a row at its end says how many more there are.** The files git tracks come first, so an unignored folder of generated files doesn't crowd out the agent's edits. The row says `1,204 more files not shown`, or `1 more file not shown`, and nothing past the summary's files is read, so a click on it does nothing. Where the hub's summary is only as of an earlier read, or the hub keeps none, the list is read from the whole diff, at the moments below, since an earlier read can be older than what switching to Changes reads. *Unconfirmed.*
 
-  **The sidebar of changes with more files than its summary lists, and the row that says how many more.** *Unconfirmed.*
+  **The sidebar of changes with more files than its summary lists, and the row that says how many more aren't shown.** *Unconfirmed.*
 
   ![The sidebar of changes with files left out](screens/changes-left-out.png)
 

@@ -121,9 +121,6 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => {
             reply(C::GitDiff(world.diffs.get(&id).cloned().unwrap_or_else(GitDiff::default)))
         }
-        R::WorkspaceChangedFiles(workspaces::WorkspaceChangedFiles { id, after }) => {
-            reply(C::ChangedFilesPage(reads_of(world, &id)?.page_after(&after)?))
-        }
         R::WorkspaceSetupLog(workspaces::WorkspaceSetupLog { id }) => {
             reply(C::SetupLog(workspaces::SetupLog { text: world.setup_logs.get(&id).cloned().unwrap_or_default() }))
         }
@@ -358,6 +355,8 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         | R::SessionRepliesHeard(_)
         | R::GithubSubscribe(_)
         | R::TerminalWatch(_)
+        // What no client of this build sends, since Changes reads none of the files past a summary.
+        | R::WorkspaceChangedFiles(_)
         | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't know that request")),
         R::TerminalRows(rows) => super::terminals::rows(world, &rows),
         R::TerminalBounds(bounds) => super::terminals::bounds(world, &bounds),

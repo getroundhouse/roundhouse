@@ -17,7 +17,7 @@ Two tabs switch what it lists:
 - **Changes shows as a list of paths, or in folders,** switched by the button at the sidebar's top right.
 - **Each changed file has an icon for how it changed:** added, modified, removed or renamed.
 - **While the workspace shows, Changes follows its files as they change,** whoever changes them: the agent, your editor or git. Where the hub can't keep up with them, as with an older worker, the list is read again when a turn ends.
-- **A workspace that changes over 5,000 files lists 5,000,** the ones git tracks first, with a row at the end that says how many more there are. Click it to list the next 5,000.
+- **A workspace that changes over 5,000 files lists 5,000,** the ones git tracks first, with a row at the end that says how many more there are, such as `1,204 more files not shown`. The Changes tab's count, and the lines added and removed at the right end of the tabs, cover every file.
 - **Dragging the sidebar's inner edge changes its width,** from 300px to 800px.
 
 ![The same changes in folders](../../spec/screens/changes-tree.png)

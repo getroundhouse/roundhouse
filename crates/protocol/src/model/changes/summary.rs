@@ -22,9 +22,8 @@ pub struct ChangeSummary {
     /// agent's ten edits.
     pub files: Vec<ChangedFile>,
     /// How many changed files `files` leaves out past [`MOST_FILES_LISTED`], which come after its last in the same
-    /// order, and which a client reads a page at a time with
-    /// [`WorkspaceChangedFiles`](crate::client::workspaces::WorkspaceChangedFiles). 0 from a worker from before the
-    /// bound, which leaves none out.
+    /// order. A client says how many there are, and reads none of them. 0 from a worker from before the bound, which
+    /// leaves none out.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub left_out: u64,
 }

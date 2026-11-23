@@ -1,10 +1,10 @@
 //! What Changes lists, which is either the whole diff or the hub's summary of the changed files, and where the file the
 //! file tab shows is read from with each, so every reader asks one value which of them it is.
 
-use protocol::model::CommitId;
+use protocol::model::{ChangeSummary, CommitId};
 
 use super::Review;
-use super::listing::{ChangedEntry, Summarized};
+use super::listing::ChangedEntry;
 use super::one_file::{OneFile, Taken};
 use crate::patch::FilePatch;
 
@@ -14,7 +14,7 @@ use crate::patch::FilePatch;
 pub(super) enum Listed {
     /// The whole diff, as last read, which lists every file and holds each one's patch.
     WholeDiff(WholeDiff),
-    /// The hub's summary of the changed files, with the pages read past it.
+    /// The hub's summary of the changed files.
     Summary(Summary),
 }
 
@@ -33,7 +33,8 @@ pub(super) struct WholeDiff {
 /// A summary the hub sent, while Changes lists it.
 #[derive(Debug)]
 pub(super) struct Summary {
-    pub(super) summarized: Summarized,
+    /// What it lists, as the hub sent it. The files it leaves out aren't read, so only how many there are shows.
+    pub(super) summarized: ChangeSummary,
     /// Whether the hub keeps it current now. One that stops being current, as when its worker goes, or the
     /// connection does, stays listed until the whole diff is next read, at the moments it's read, with the file read
     /// with it.
@@ -68,12 +69,11 @@ pub enum Diffed<'a> {
 }
 
 impl Summary {
-    /// What the hub, or its worker, refused is asked for again, as from another.
+    /// One file's diff, which the hub, or its worker, refused, is asked for again, as from another.
     pub(super) fn ask_again(&mut self) {
         if let SummaryFile::WholeDiff(_) = self.file {
             self.file = SummaryFile::OneFile(None);
         }
-        self.summarized.ask_again();
     }
 }
 
