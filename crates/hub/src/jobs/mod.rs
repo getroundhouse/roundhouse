@@ -4,11 +4,13 @@
 //! where it is, which releases what it held, and the log says which job it was, what it was about and where it had got
 //! to. Then its after-step runs, however it ended, within a limit of its own, to put back what the job may have left,
 //! such as a worker it started. A job's work is written to be dropped at any `await`, since that's how it's stopped,
-//! but for what it runs [`uncut`], which mustn't stop partway once it has begun.
+//! but for what it runs [`uncut`], which mustn't stop partway once it has begun. A job asked for while one of its kind
+//! about the same key runs is refused, or runs once more after it, as its kind says.
 
 mod kind;
 mod progress;
 mod running;
+mod supervising;
 #[cfg(test)]
 mod tests;
 mod uncut;

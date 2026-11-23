@@ -4,9 +4,7 @@ use super::followers::Followers;
 use super::observations::{self, Observations};
 use super::terminals::Terminals;
 use super::updates::Updates;
-use super::{
-    awake, changes_watch, feed, github_observed, github_reads, pull_requests, sessions, setup, workspace_lines,
-};
+use super::{awake, changes_watch, feed, github_observed, github_reads, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
 use crate::cache_file::CacheFile;
 use crate::error::internal;
@@ -102,8 +100,9 @@ pub(crate) struct Hub {
     pub(super) github_cache: Arc<GithubCache>,
     /// The hub's observations of what others own, as it last observed them.
     pub(super) observations: Observations,
-    /// The workspaces whose lines added and removed are being read.
-    pub(super) line_reads: workspace_lines::Reads,
+    /// The reads of workspaces' changes from their workers that are running now, by workspace, as `Hub::read_lines`
+    /// says.
+    pub(super) line_reads: Jobs<WorkspaceId>,
     /// What each workspace's worker was last told of watching its worktree.
     pub(super) changes_watches: changes_watch::Watches,
     /// Who follows what, which is what the hub keeps current.
@@ -173,7 +172,7 @@ impl Hub {
             addresses_read: Notify::new(),
             observations: Observations::open(cache_file.clone(), &store),
             github_cache: Arc::new(GithubCache::open(cache_file)),
-            line_reads: workspace_lines::Reads::default(),
+            line_reads: Jobs::new(),
             changes_watches: changes_watch::Watches::default(),
             store,
             attachment_files: AttachmentFiles::new(dirs.attachments),
@@ -243,11 +242,13 @@ impl Hub {
         self.providers.workers()
     }
 
-    /// Ends every job where it is, sign-ins' and lookups of models included, and starts none after, as the hub stops,
-    /// before its workers are stopped or left. A sign-in left waiting is recorded as ended as the next hub starts, and
-    /// lists of models aren't kept.
+    /// Ends every job where it is, sign-ins', lookups of models and reads of workspaces' changes included, and starts
+    /// none after, as the hub stops, before its workers are stopped or left. A sign-in left waiting is recorded as
+    /// ended as the next hub starts, lists of models aren't kept, and a workspace's changes are read again as its
+    /// worker says its branches to the next hub.
     pub(crate) fn stop_jobs(&self) {
         self.own_reads.stop();
+        self.line_reads.stop();
         self.sign_ins.stop();
         self.model_lists.stop();
     }

@@ -12,8 +12,5 @@
 
 mod kept;
 mod reading;
-mod reads;
 #[cfg(test)]
 pub(super) mod tests;
-
-pub(super) use reads::Reads;
