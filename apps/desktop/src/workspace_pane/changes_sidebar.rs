@@ -127,7 +127,8 @@ impl WorkspacePane {
     fn make_diff(&mut self, cx: &mut Context<Self>) {
         let (client, id) = (self.client.clone(), self.workspace().id.clone());
         let comments = self.shown.comments().to_vec();
-        let review = cx.new(|cx| Review::new(client.clone(), id.clone(), comments, cx));
+        let changes = self.shown.all().workspace_changes(&id).cloned();
+        let review = cx.new(|cx| Review::new(client.clone(), id.clone(), comments, changes.as_ref(), cx));
         let file = cx.new(|cx| FileDiff::new(review.clone(), cx));
         let viewer = cx.new(|cx| FileView::new(client.clone(), id.clone(), cx));
         let changes = cx.new(|cx| Changes::new(review.clone(), cx));
@@ -140,7 +141,7 @@ impl WorkspacePane {
             // What the whole diff found, whatever the list is from, so the read a tab's click makes is what finds the
             // first change, as it was before the hub kept a summary.
             ReviewEvent::Loaded => {
-                let files = this.diff.as_ref().and_then(|diff| diff.review.read(cx).files.as_ref().map(Vec::len));
+                let files = this.diff.as_ref().and_then(|diff| diff.review.read(cx).whole_diff_changes());
                 if let Some(files) = files {
                     this.tell_tab(|tab| tab.read(files), cx);
                 }

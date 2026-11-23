@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use gpui_kit::{AppContext as _, Context, SharedString};
-use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, LineCounts, Observed};
+use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, CommitId, LineCounts, Observed};
 
 use super::{Review, ReviewEvent};
 use crate::patch::{FilePatch, FileStatus};
@@ -21,6 +21,8 @@ pub struct ChangedRow {
 /// What the hub's summary of the workspace's changes lists, and the pages read past it, until the summary changes.
 #[derive(Debug)]
 pub(super) struct Summarized {
+    /// The commit the summary is taken against.
+    pub(super) base_commit: CommitId,
     /// The summary's files, then each page's, in the order the hub lists them, which a page goes on from.
     files: Vec<ChangedFile>,
     /// Over every file the workspace changes, whether listed or not.
@@ -62,22 +64,26 @@ impl Review {
     /// Takes what client-core holds of the workspace's changed files, `None` where the hub doesn't send them, and lists
     /// them while they're current, letting go of the pages read past the summary before. Otherwise the whole diff's
     /// files are listed, as from a hub that doesn't send them: a summary as of an earlier read can be older than the
-    /// whole diff, which is read again as the tab is switched to.
+    /// whole diff, which is read again as the tab is switched to. A summary that was current and isn't now, as when its
+    /// worker goes, or the connection does, stays listed until the whole diff is next read, at the moments it's read.
     pub fn take_summary(&mut self, changes: Option<&Observed<ChangeSummary>>, cx: &mut Context<Self>) {
-        let summary = match changes {
-            Some(Observed::Current { value }) => Some(value),
-            Some(Observed::AsOf { .. } | Observed::NotKnown | Observed::Unknown) | None => None,
+        let Some(Observed::Current { value: summary }) = changes else {
+            self.summary_current = false;
+            return;
         };
         let paging = self.summarized.as_ref().map(|summarized| summarized.paging);
-        self.summarized = summary.map(|summary| Summarized {
+        self.summarized = Some(Summarized {
+            base_commit: summary.base_commit.clone(),
             files: summary.files.clone(),
             lines: summary.lines,
             left_out: summary.left_out,
             // A hub that refused a page refuses the next.
             paging: if paging == Some(Paging::Refused) { Paging::Refused } else { Paging::Idle },
         });
+        self.summary_current = true;
         self.pages_asked += 1;
         self.list_again(cx);
+        self.read_the_file_again_if_it_moved(cx);
     }
 
     /// Reads the page of files past those listed, as the hub's summary lists them, unless one is being read, and lists
@@ -144,21 +150,33 @@ impl Review {
     }
 }
 
+impl Summarized {
+    /// What the summary, or a page read past it, says of the file at `path`, if it lists it.
+    pub(super) fn file(&self, path: &str) -> Option<&ChangedFile> {
+        self.files.iter().find(|file| file.path == path)
+    }
+}
+
+/// How a file of the summary changed, as the whole diff would say it: one that isn't tracked as added, and one that
+/// changed between a file, a link and a submodule as modified.
+pub(super) fn file_status(status: ChangeStatus) -> FileStatus {
+    match status {
+        ChangeStatus::Added | ChangeStatus::Untracked => FileStatus::Added,
+        ChangeStatus::Deleted => FileStatus::Removed,
+        ChangeStatus::Renamed => FileStatus::Renamed,
+        ChangeStatus::Modified | ChangeStatus::TypeChanged | ChangeStatus::Unknown => FileStatus::Modified,
+    }
+}
+
 /// `rows` in order of their paths, as Changes lists them.
 fn by_path(mut rows: Vec<ChangedRow>) -> Arc<[ChangedRow]> {
     rows.sort_by(|a, b| a.path.cmp(&b.path));
     rows.into()
 }
 
-/// A file as the summary has it. One that isn't tracked lists as added, and one that changed between a file, a link
-/// and a submodule as modified, as the whole diff shows them.
+/// A file as the summary has it, with the status the whole diff would give it.
 fn summarized_row(file: &ChangedFile) -> ChangedRow {
-    let status = match file.status {
-        ChangeStatus::Added | ChangeStatus::Untracked => FileStatus::Added,
-        ChangeStatus::Deleted => FileStatus::Removed,
-        ChangeStatus::Renamed => FileStatus::Renamed,
-        ChangeStatus::Modified | ChangeStatus::TypeChanged | ChangeStatus::Unknown => FileStatus::Modified,
-    };
+    let status = file_status(file.status);
     let count = |lines: fn(LineCounts) -> u64| {
         file.lines.map_or(0, |counts| usize::try_from(lines(counts)).unwrap_or(usize::MAX))
     };

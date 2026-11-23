@@ -117,9 +117,8 @@ pub struct World {
     pub hub_update: Option<protocol::model::HubUpdate>,
     /// The observations the hub keeps, of its level, listed with its records, and of a workspace's, to its followers.
     pub observations: Vec<protocol::model::Observation>,
-    /// Every file each workspace changes, against its base, which the hub pages through past its summary. One with none
-    /// is as if its worker were too old to read them.
-    pub changed_files: HashMap<WorkspaceId, (protocol::model::CommitId, Vec<protocol::model::ChangedFile>)>,
+    /// What each workspace's worker reads of its changes on request, as [`WorkerReads`] says.
+    pub worker_reads: HashMap<WorkspaceId, super::WorkerReads>,
     /// What the feed tells of observations once a client follows their level, in order: what changed after the list.
     pub feed: Vec<protocol::client::ObservationNotice>,
     records: i64,

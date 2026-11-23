@@ -19,9 +19,11 @@ mod stand_in;
 mod terminals;
 #[cfg(test)]
 mod tests;
+mod worker_reads;
 mod world;
 
 pub use following::Following;
 pub use serve::serve;
 pub use stand_in::{BUILD, BUILD_NUMBER};
+pub use worker_reads::WorkerReads;
 pub use world::{HOUR_MS, HubBuild, LoginSupport, NOW_MS, PairingWorld, TerminalShows, World};

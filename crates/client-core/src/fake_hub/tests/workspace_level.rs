@@ -9,7 +9,7 @@ use protocol::model::{
     ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, MOST_FILES_LISTED, Observation, Observed, Rev, WorkspaceId,
 };
 
-use super::super::World;
+use super::super::{WorkerReads, World};
 use super::served::served;
 use crate::{ClientError, RecordsFeed};
 
@@ -62,7 +62,8 @@ fn a_page_of_changed_files_is_read_from_the_world_by_the_worker_s_rule() {
     let repo = world.repo("aspen");
     let (elm, oak) = (world.workspace(&repo, "elm"), world.workspace(&repo, "oak"));
     let files = vec![file("u.rs", ChangeStatus::Untracked), file("b.rs", ChangeStatus::Modified)];
-    world.changed_files.insert(elm.clone(), ("c1".into(), files.clone()));
+    let reads = WorkerReads { changed_files: Some(("c1".into(), files.clone())), ..WorkerReads::default() };
+    world.worker_reads.insert(elm.clone(), reads);
     let (_dir, client) = served(world);
     let after = ChangedFileAt { untracked: false, path: "a.rs".into() };
 

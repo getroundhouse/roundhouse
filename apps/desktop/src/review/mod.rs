@@ -4,6 +4,7 @@
 
 mod comments;
 mod listing;
+mod one_file;
 pub use listing::{ChangedRow, Listing, Paging};
 
 mod review_view;

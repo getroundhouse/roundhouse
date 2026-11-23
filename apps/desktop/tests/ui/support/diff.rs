@@ -55,12 +55,14 @@ impl Ui<'_> {
         });
         let diff = diff.unwrap();
         // A diff made just now loads what's there now. One made before loads again, and only that load is new.
+        // While the hub keeps the changed files current, Changes lists its summary of them, and nothing reads the
+        // whole diff.
+        let summarized = |ui: &Ui| ui.cx.read_entity(&diff.review, |r, _| r.lists_the_summary());
         match before {
-            Some(_) => self.wait("the diff to load again", |_| loaded.get()),
-            None => self.wait("the diff to load", |ui| ui.cx.read_entity(&diff.review, |r, _| r.files.is_some())),
+            Some(_) => self.wait("the diff to load again", |ui| loaded.get() || summarized(ui)),
+            None => self.wait("the diff to load", |ui| ui.cx.read_entity(&diff.review, |r, _| r.listing().is_some())),
         }
-        // A hub that keeps the changed files current lists them from its summary, which follows a file written just
-        // before by as long as the worker waits for writes to stop.
+        // A summary of them follows a file written just before by as long as the worker waits for writes to stop.
         self.wait("Changes to list every file the diff has", |ui| ui.cx.read_entity(&diff.review, lists_the_diff));
         diff
     }
@@ -68,7 +70,10 @@ impl Ui<'_> {
     /// Clicks a file in Changes, and waits for the file tab to show its diff, made with the file as it was, or for a
     /// file that isn't text, to start comparing its sides.
     pub(crate) fn open_diff_of(&mut self, diff: &Diff, path: &str) {
-        self.click(SharedString::from(format!("file-{path}")));
+        // Listed once the summary of the changes has it, which follows a file written just before.
+        let row = SharedString::from(format!("file-{path}"));
+        self.wait("its row in Changes", |ui| ui.has(row.clone()));
+        self.click(row);
         self.wait("the file tab to show it", |ui| {
             ui.cx.read_entity(&diff.file, |view, cx| {
                 view.file(cx).is_some_and(|file| file.path() == path && (file.is_binary() || view.is_ready()))

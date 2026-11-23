@@ -77,6 +77,7 @@ impl WorkspacePane {
             Some((Opened::File, path)) => (None, Some(path)),
             None => (None, None),
         };
+        diff.review.update(cx, |r, cx| r.show_diff_of(diffed.clone(), cx));
         diff.file.update(cx, |f, cx| f.show(diffed.clone(), cx));
         diff.changes.update(cx, |c, cx| c.set_showing(diffed, cx));
         diff.viewer.update(cx, |v, cx| {

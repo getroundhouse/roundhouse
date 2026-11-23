@@ -75,6 +75,14 @@ impl Unchanged {
 }
 
 impl FilePatch {
+    /// A file git takes as binary, which has no lines, at `path`, moved from `from` where it was renamed, as one file's
+    /// diff says of it.
+    pub fn binary(path: SharedString, from: Option<SharedString>, status: FileStatus) -> Self {
+        let old_path = (status != FileStatus::Added).then(|| from.unwrap_or_else(|| path.clone()));
+        let new_path = (status != FileStatus::Removed).then(|| path.clone());
+        Self { path, old_path, new_path, status, binary: true, hunks: Arc::from([]), added: 0, removed: 0 }
+    }
+
     /// The lines before each hunk, in order, and then those after the last, up to before line `end` of the old side.
     pub fn unchanged(&self, end: u32) -> Vec<Unchanged> {
         let (mut old, mut new_start) = (1, 1);

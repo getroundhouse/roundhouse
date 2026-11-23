@@ -14,9 +14,7 @@ use protocol::client::{
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
-use protocol::model::{
-    ChangedFilesPage, CompactionLine, GitDiff, GitStatus, GithubSignIn, MOST_FILES_LISTED, Place, Rev, Seq, Session,
-};
+use protocol::model::{CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, Rev, Seq, Session};
 
 use super::base_pages::{opened, paged};
 use super::following::not_found;
@@ -24,6 +22,7 @@ use super::github;
 use super::logs::{prompt_lines, read};
 use super::parts::{part, worktree_video};
 use super::stand_in::{claude, fixed_pairing, status, version};
+use super::worker_reads::WorkerReads;
 use super::world::{LoginSupport, NOW_MS, World};
 
 /// Listens until the process ends, since nothing stops it. Each world gets a socket of its own, so no test reaches
@@ -71,6 +70,13 @@ fn serve_requests(world: &World, connection: u64, stream: UnixStream) {
 
 pub(super) type Answer = Result<Outcome, ApiError>;
 
+/// What the worker of the world's workspace `id` reads on request, which is nothing for one whose world says none,
+/// as a worker from before the requests, and refused for a workspace the world doesn't have.
+fn reads_of(world: &World, id: &protocol::model::WorkspaceId) -> Result<WorkerReads, ApiError> {
+    world.workspaces.iter().find(|workspace| workspace.id == *id).ok_or_else(|| not_found("workspace"))?;
+    Ok(world.worker_reads.get(id).cloned().unwrap_or_default())
+}
+
 impl Outcome {
     /// The reply alone.
     pub(super) fn reply(response: ClientResponse) -> Self {
@@ -114,12 +120,7 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             reply(C::GitDiff(world.diffs.get(&id).cloned().unwrap_or_else(GitDiff::default)))
         }
         R::WorkspaceChangedFiles(workspaces::WorkspaceChangedFiles { id, after }) => {
-            world.workspaces.iter().find(|workspace| workspace.id == id).ok_or_else(|| not_found("workspace"))?;
-            // As a hub whose worker is too old to read them.
-            let Some((base, files)) = world.changed_files.get(&id) else {
-                return Err(ApiError::new(ErrorCode::Unsupported, "the workspace's worker can't page through its files"));
-            };
-            reply(C::ChangedFilesPage(ChangedFilesPage::after(base.clone(), files.clone(), &after, MOST_FILES_LISTED)))
+            reply(C::ChangedFilesPage(reads_of(world, &id)?.page_after(&after)?))
         }
         R::WorkspaceSetupLog(workspaces::WorkspaceSetupLog { id }) => {
             reply(C::SetupLog(workspaces::SetupLog { text: world.setup_logs.get(&id).cloned().unwrap_or_default() }))
@@ -155,9 +156,9 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             let status = world.sign_in_answer.clone().ok_or_else(|| read_only("change anything"))?;
             reply(C::GithubSignIn(GithubSignIn { id, status, rev: Rev::default() }))
         }
-        // As a hub from before it, since the world holds each workspace's diff whole, and nothing reads it from a fake
-        // hub yet.
-        R::WorkspaceFileDiff(_) => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't read one file's diff")),
+        R::WorkspaceFileDiff(workspaces::WorkspaceFileDiff { id, path, first_line, .. }) => {
+            reply(C::FileDiff(reads_of(world, &id)?.file_diff(&path, first_line)?))
+        }
         // As a hub too old to keep it, so a comment being written is what restarting would lose.
         R::WorkspaceCommentDraft(_) => {
             Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't keep a comment being written"))
