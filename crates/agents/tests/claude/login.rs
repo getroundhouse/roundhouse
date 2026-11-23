@@ -12,7 +12,7 @@ use std::path::Path;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-static PROGRAM: agents::testing::Example = agents::testing::Example::new("login_standin");
+static PROGRAM: process::testing::Example = process::testing::Example::new("login_standin");
 
 const TOKEN: &str = "sentinel-selected-token";
 

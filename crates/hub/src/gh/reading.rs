@@ -5,9 +5,10 @@ use std::time::Duration;
 
 use process::Environment;
 use protocol::model::{GithubToken, GithubUsername};
-use providers::local::MachinePath;
 use serde::Deserialize;
 use tokio::time::Instant;
+
+use crate::machine_environment::MachineEnvironment;
 
 use super::running::{Unran, run_gh};
 use super::token::token;
@@ -44,16 +45,18 @@ pub(crate) enum GhRead {
 #[error("couldn't tell who gh is logged in to github.com as: {0}")]
 pub(crate) struct GhUnread(String);
 
-/// `gh` on the hub's machine: the machine's `PATH`, which it's found on, and where it's run.
+/// `gh` on the hub's machine: what it's given, as everything the hub starts there is, which has the `PATH` it's found
+/// on, and where it's run.
 pub(crate) struct Gh {
-    path: MachinePath,
+    machine: MachineEnvironment,
     dir: PathBuf,
 }
 
 impl Gh {
-    /// `gh` on the `PATH` `path` says, run in `dir`, which is the hub's data directory, so it's in no repository.
-    pub(crate) fn new(path: MachinePath, dir: PathBuf) -> Self {
-        Self { path, dir }
+    /// `gh` given `machine`, and so found on the `PATH` it has, run in `dir`, which is the hub's data directory, so
+    /// it's in no repository.
+    pub(crate) fn new(machine: MachineEnvironment, dir: PathBuf) -> Self {
+        Self { machine, dir }
     }
 
     /// Who `gh` is logged in to github.com as, and the token it uses for that login. Every run of `gh` for it shares
@@ -62,7 +65,7 @@ impl Gh {
     /// owner GitHub didn't say.
     pub(crate) async fn read(&self) -> Result<GhRead, GhUnread> {
         let until = Instant::now() + READ_WITHIN;
-        let given = self.given().await;
+        let given = self.given();
         let Some(printed) = status(&given, &self.dir, until).await? else { return Ok(GhRead::NotInstalled) };
         let Read::LoggedIn { username, refreshable } =
             parse(&printed.stdout).ok_or_else(|| GhUnread("gh printed something else, or named nobody".into()))?
@@ -76,18 +79,15 @@ impl Gh {
     /// The token `gh` uses for github.com once it has renewed one it renews by itself whose time is up, as any run of
     /// `gh` the person makes would, for a token GitHub refused. `None` when it printed none.
     pub(crate) async fn renewed(&self) -> Option<GithubToken> {
-        token(READ_WITHIN, &self.given().await, &self.dir, true).await
+        token(READ_WITHIN, &self.given(), &self.dir, true).await
     }
 
-    /// What `gh` is given: the machine's `PATH`, as the login shell has it, so a `gh` installed with Homebrew is found
-    /// by a hub an app started. And none of [`TOKENS`], which `gh` would use over its own login, so what's read is the
-    /// login `gh auth login` and `gh auth switch` change, as a block says to run, whatever the hub was started with.
-    pub(super) async fn given(&self) -> Environment {
-        let given = TOKENS.into_iter().fold(Environment::NONE, Environment::without);
-        match self.path.path().await {
-            Some(path) => given.with("PATH", path),
-            None => given,
-        }
+    /// What `gh` is given: the machine's environment, as the login shell has it, so a `gh` installed with Homebrew is
+    /// found by a hub an app started. And none of [`TOKENS`], which `gh` would use over its own login, so what's read is
+    /// the login `gh auth login` and `gh auth switch` change, as a block says to run, whatever the hub was started with
+    /// or the profile exports.
+    pub(super) fn given(&self) -> Environment {
+        TOKENS.into_iter().fold(self.machine.given(), Environment::without)
     }
 }
 

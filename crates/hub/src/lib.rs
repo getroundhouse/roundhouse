@@ -20,6 +20,7 @@ mod listener;
 mod logged;
 mod login_files;
 mod logins;
+mod machine_environment;
 mod names;
 mod pasted_token;
 mod provider_link;

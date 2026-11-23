@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
+use crate::machine_environment::MachineEnvironment;
 use protocol::model::SshLogin;
-use providers::local::MachinePath;
 
 use super::Ssh;
 use super::reading::said;
@@ -15,7 +15,7 @@ const GREETED: &str =
 
 /// A stand-in for `ssh` in `dir`, alone on the `PATH` it's given, that writes what it's asked to `asked`, then runs
 /// `answer`, which uses only what the shell has built in.
-fn ssh(dir: &Path, answer: &str) -> MachinePath {
+fn ssh(dir: &Path, answer: &str) -> MachineEnvironment {
     use std::os::unix::fs::PermissionsExt as _;
     let bin = dir.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
@@ -23,7 +23,7 @@ fn ssh(dir: &Path, answer: &str) -> MachinePath {
     let script = format!("#!/bin/sh\nprintf '%s\\n' \"$*\" > '{asked}'\n{answer}\n");
     std::fs::write(bin.join("ssh"), script).unwrap();
     std::fs::set_permissions(bin.join("ssh"), std::fs::Permissions::from_mode(0o755)).unwrap();
-    MachinePath::only(Some(bin.display().to_string()))
+    MachineEnvironment::only(&[("PATH", &bin.display().to_string())])
 }
 
 /// What [`Ssh::read`] makes of a stand-in that runs `answer`, and what the stand-in was asked.
@@ -55,7 +55,7 @@ async fn a_machine_whose_keys_github_refuses_has_none() {
 async fn no_ssh_on_the_path_couldnt_tell() {
     let dir = tempfile::tempdir().unwrap();
 
-    let read = Ssh::new(MachinePath::only(Some(dir.path().display().to_string()))).read().await;
+    let read = Ssh::new(MachineEnvironment::only(&[("PATH", &dir.path().display().to_string())])).read().await;
 
     assert_eq!(read, SshLogin::CouldntTell);
 }

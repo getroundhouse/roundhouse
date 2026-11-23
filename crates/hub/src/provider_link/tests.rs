@@ -10,6 +10,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream};
 
 use super::*;
 use crate::Timers;
+use crate::machine_environment::MachineEnvironment;
 
 /// The product's limit for a hello, for the tests that aren't about it.
 const HELLO_WITHIN: Duration = Timers::DEFAULT.adapter_hello_within;
@@ -34,7 +35,6 @@ fn local(dir: &Path) -> Arc<dyn Provider> {
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
-        path: providers::local::MachinePath::new(Some("/bin/sh".to_string()), None),
     }))
 }
 
@@ -252,7 +252,10 @@ fn script(dir: &Path, then: &str) -> Open {
     let reply = String::from_utf8(reply).unwrap();
     let pid = dir.join("pid");
     let script = format!("echo $$ > {}; read -r hello; printf '%s' '{reply}'; {then}", pid.display());
-    process(AdapterCommand { program: "/bin/sh".into(), args: vec!["-c".into(), script] })
+    process(
+        AdapterCommand { program: "/bin/sh".into(), args: vec!["-c".into(), script] },
+        MachineEnvironment::only(&[]),
+    )
 }
 
 fn pid(dir: &Path) -> u32 {

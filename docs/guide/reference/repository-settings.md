@@ -49,7 +49,7 @@ Patterns mean what they do in `.gitignore`, one to a line. A line that starts wi
 
 ## Variables
 
-Set for both scripts, and for every agent in the workspace.
+Set for both scripts, and for every agent in the workspace. Everything else they run with is what your login shell exports once it has read your profile, such as a `GH_TOKEN` in `.zshrc`, over what started the hub: the app, a terminal, or the service a hub is installed as. A variable your profile doesn't set keeps the value it had there, and `PATH` has your profile's entries first. On Windows, it's what started the hub.
 
 | Variable | What it holds |
 |---|---|

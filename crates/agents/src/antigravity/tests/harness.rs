@@ -17,7 +17,7 @@ use crate::antigravity::launch::Purpose;
 use crate::antigravity::running::{AntigravityProcess, start_conversation};
 use crate::{AgentError, AgentOptions, AgentOutput, BinaryLookup, ToolServer};
 
-pub(super) static PROGRAM: crate::testing::Example = crate::testing::Example::new("native_standin");
+pub(super) static PROGRAM: process::testing::Example = process::testing::Example::new("native_standin");
 
 pub(super) struct Harness {
     /// The agent's working directory, and its home, where the stand-in records what it was asked.

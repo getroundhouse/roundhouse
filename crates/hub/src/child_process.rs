@@ -13,6 +13,8 @@ use tokio::process::{Child, Command};
 use tokio::sync::{Notify, watch};
 use tracing::{info, warn};
 
+use crate::machine_environment::MachineEnvironment;
+
 /// The running child. Dropping this leaves it running, and the task watching it reaps it.
 pub(crate) struct ChildProcess {
     program: String,
@@ -35,12 +37,14 @@ pub(crate) enum Stderr<'a> {
     Hubs,
 }
 
-/// Starts `program` as the leader of a process group of its own, so Ctrl-C on a foreground hub goes through the hub's
-/// clean shutdown, and ending it ends whatever it started.
+/// Starts `program`, given `machine`'s variables and its command's `own` over them, over what it inherits from the
+/// hub, as the leader of a process group of its own, so Ctrl-C on a foreground hub goes through the hub's clean
+/// shutdown, and ending it ends whatever it started.
 pub(crate) fn spawn(
     program: &str,
     args: &[String],
-    env: &[(String, String)],
+    own: &[(String, String)],
+    machine: &MachineEnvironment,
     stderr: Stderr<'_>,
 ) -> io::Result<Spawned> {
     let context = |what: String| move |e: io::Error| io::Error::new(e.kind(), format!("{what}: {e}"));
@@ -55,13 +59,8 @@ pub(crate) fn spawn(
         Stderr::Hubs => Stdio::inherit(),
     };
     let mut child = Command::new(program);
-    child
-        .args(args)
-        .envs(env.iter().map(|(name, value)| (name, value)))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(stderr)
-        .kill_on_drop(true);
+    child.args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(stderr).kill_on_drop(true);
+    machine.with(own).apply(child.as_std_mut());
     process::own_group(child.as_std_mut());
     let mut child = child.spawn().map_err(context(format!("starting {program}")))?;
     let (Some(writer), Some(reader)) = (child.stdin.take(), child.stdout.take()) else {
@@ -144,7 +143,22 @@ mod tests {
     use super::*;
 
     fn sh(dir: &Path, script: &str) -> Spawned {
-        spawn("sh", &["-c".into(), script.into()], &[], Stderr::Log(&dir.join("logs/worker.log"))).unwrap()
+        let (args, machine) = (["-c".into(), script.into()], MachineEnvironment::only(&[]));
+        spawn("sh", &args, &[], &machine, Stderr::Log(&dir.join("logs/worker.log"))).unwrap()
+    }
+
+    /// As a worker's command, a preflight and a provider's adapter are started.
+    #[tokio::test]
+    async fn a_child_has_the_machines_environment_with_its_commands_own_over_it() {
+        let machine = MachineEnvironment::only(&[("FROM_THE_MACHINE", "the machine's"), ("BOTH", "the machine's")]);
+        let args = ["-c".into(), r#"echo "$FROM_THE_MACHINE, $BOTH""#.into()];
+        let own = [("BOTH".to_string(), "the command's".to_string())];
+
+        let Spawned { reader, .. } = spawn("sh", &args, &own, &machine, Stderr::Hubs).unwrap();
+
+        let mut line = String::new();
+        BufReader::new(reader).read_line(&mut line).await.unwrap();
+        assert_eq!(line, "the machine's, the command's\n");
     }
 
     #[tokio::test]

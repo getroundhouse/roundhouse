@@ -27,35 +27,11 @@ enum Ids {}
 impl Account {
     /// The user called `name`.
     pub(crate) fn named(name: &str) -> anyhow::Result<Self> {
-        use std::ffi::{CStr, CString, OsStr};
-        use std::os::unix::ffi::OsStrExt as _;
-
-        let c_name = CString::new(name)?;
-        // SAFETY: `passwd` is a struct of integers and pointers, for which all zeros is a valid value.
-        let mut entry: libc::passwd = unsafe { std::mem::zeroed() };
-        let mut found: *mut libc::passwd = std::ptr::null_mut();
-        let mut buffer: Vec<libc::c_char> = vec![0; 4096];
-        loop {
-            // SAFETY: every pointer is to memory this function owns for the call, `buffer`'s length is what's passed,
-            // and the strings `entry` points to are in `buffer`, which outlives their use below.
-            let error = unsafe {
-                libc::getpwnam_r(c_name.as_ptr(), &raw mut entry, buffer.as_mut_ptr(), buffer.len(), &raw mut found)
-            };
-            match error {
-                0 => break,
-                libc::ERANGE => buffer.resize(buffer.len() * 2, 0),
-                error => return Err(std::io::Error::from_raw_os_error(error).into()),
-            }
-        }
-        anyhow::ensure!(!found.is_null(), "this machine has no user called {name}");
-        // SAFETY: `found` is `entry`, whose strings getpwnam_r set to null or to strings ending in `buffer`.
-        let text = |pointer: *const libc::c_char| unsafe {
-            (!pointer.is_null()).then(|| OsStr::from_bytes(CStr::from_ptr(pointer).to_bytes()).to_owned())
-        };
-        let home = text(entry.pw_dir).filter(|home| !home.is_empty()).map(PathBuf::from);
-        let home = home.ok_or_else(|| anyhow::anyhow!("{name} has no home directory"))?;
-        let shell = text(entry.pw_shell).and_then(|shell| shell.into_string().ok()).filter(|shell| !shell.is_empty());
-        Ok(Self { name: name.to_owned(), ids: Ids { uid: entry.pw_uid, gid: entry.pw_gid }, home, shell })
+        let found = process::Account::named(name)?;
+        let account = found.ok_or_else(|| anyhow::anyhow!("this machine has no user called {name}"))?;
+        let home = account.home.ok_or_else(|| anyhow::anyhow!("{name} has no home directory"))?;
+        let ids = Ids { uid: account.uid, gid: account.gid };
+        Ok(Self { name: name.to_owned(), ids, home, shell: account.shell })
     }
 
     /// Has `command` run as this user, rather than as this process's.

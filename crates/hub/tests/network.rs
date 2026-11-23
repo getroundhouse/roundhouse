@@ -33,6 +33,7 @@ impl Running {
             worker_exe: dir.path().join("unused-worker"),
             paths,
             shell: None,
+            home: None,
             path: None,
             start: protocol::client::HubStart::ByHand,
             update_feed: None,

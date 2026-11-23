@@ -9,6 +9,7 @@ use tracing::warn;
 
 use crate::child_process::{self, Spawned, Stderr};
 use crate::error::provider_failed;
+use crate::machine_environment::MachineEnvironment;
 
 /// The worker a link is opened to.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -31,6 +32,7 @@ pub(super) async fn reach(
     log: &std::path::Path,
     opening: Opening,
     before_serving: Duration,
+    machine: &MachineEnvironment,
 ) -> Result<Spawned, ApiError> {
     let command = match opening {
         Opening::Started => {
@@ -47,7 +49,7 @@ pub(super) async fn reach(
         },
     };
     let spawned = command.and_then(|command| {
-        child_process::spawn(&command.program, &command.args, &command.env, Stderr::Log(log))
+        child_process::spawn(&command.program, &command.args, &command.env, machine, Stderr::Log(log))
             .map_err(|e| ApiError::new(ErrorCode::Worker, e.to_string()))
     });
     if spawned.is_err()
