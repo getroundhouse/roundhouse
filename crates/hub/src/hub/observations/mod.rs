@@ -1,7 +1,7 @@
 //! The hub's observations, its copies of what others own, as it last observed them: one store for every kind, in
 //! memory and in the cache file, [`crate::cache_file`], with a table and a version for each kind, so a build that
-//! changes one kind's form empties only that kind. `docs/principles/observations.md` has the rules. Nothing fills it
-//! yet: `docs/principles/serving.md` names the first kind, a workspace's lines added and removed, as not read yet.
+//! changes one kind's form empties only that kind. `docs/principles/observations.md` has the rules. The code that reads
+//! each kind fills it, as `super::workspace_lines` does a workspace's lines added and removed.
 
 mod changes;
 mod file;
@@ -12,5 +12,4 @@ mod tests;
 
 pub(crate) use file::prepare;
 pub(crate) use kept::Observations;
-#[cfg(test)]
 pub(crate) use kinds::WorkspaceLines;

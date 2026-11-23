@@ -48,6 +48,7 @@ mod tools;
 mod updates;
 mod waits;
 mod workers;
+mod workspace_lines;
 mod workspaces;
 mod worktree;
 

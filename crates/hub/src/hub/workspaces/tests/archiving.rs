@@ -8,6 +8,7 @@ use protocol::prompt::Prompt;
 use protocol::worker::{GitStatus, WorkerRequest};
 
 use crate::hub::stand_in_workers::{TIMEOUT, a_chat, a_turn, answering_first, hub_with_stand_in_workers};
+use crate::hub::workspace_lines;
 
 /// Where the workspace's other worktree is.
 const OTHER: &str = "/ws/.children/try";
@@ -24,6 +25,7 @@ async fn a_worktree_whose_status_cant_be_read_is_archived_only_when_forced() {
         let (workspace, chat) = a_chat(&hub).await;
         waiting::task::until(TIMEOUT, "the first setup to finish", || hub.setup_gates.lock().is_empty()).await;
         a_turn(&hub, &asked, &chat.id, Prompt::new("go"), None).await;
+        workspace_lines::tests::read(&hub, &workspace.id).await;
         let other = ChildWorktree {
             workspace_id: workspace.id.clone(),
             session_id: chat.id.clone(),

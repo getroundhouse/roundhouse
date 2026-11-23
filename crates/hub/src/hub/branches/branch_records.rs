@@ -66,6 +66,9 @@ impl Hub {
         if let WorkerFrame::Branches { branches } = frame {
             if current() {
                 self.branches_read(id, branches).await;
+                // Its first word of them, as the hub takes it on, or a checkout, a rebase or a reset, which can change
+                // what the worktree adds and removes against its base.
+                self.read_lines(id, link);
             }
             return None;
         }

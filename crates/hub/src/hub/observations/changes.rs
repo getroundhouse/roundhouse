@@ -7,14 +7,6 @@ use super::kept::{Change, Changed, Step};
 use super::kinds::Kind;
 use crate::hub::Hub;
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the hub reads nothing into the store yet: `docs/principles/serving.md` names the first, a workspace's \
-                  lines added and removed, as not read yet"
-    )
-)]
 impl Hub {
     /// Keeps that the observation of `of` was read at `read_at_ms`, by the hub's clock, and found `value`. It's current
     /// if something keeps it up to date, as [`Hub::observation_kept_current`] says, and otherwise as of `read_at_ms`. A
@@ -33,12 +25,28 @@ impl Hub {
     /// Keeps that something keeps the observation of `of` up to date from now on, such as a worker watching a worktree,
     /// so each read of it from now is current. What was read before isn't, so it stays as of when it was read until
     /// the next read.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "nothing keeps an observation up to date yet: `docs/principles/serving.md` names the first, a \
+                      worker watching its worktree while a client follows its workspace, as not built"
+        )
+    )]
     pub(crate) async fn observation_kept_current<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
         self.change_observation::<K>(of, Change::KeptCurrent).await
     }
 
     /// Keeps that nothing keeps the observation of `of` up to date any more, so one that was current is as of its
     /// last read, which clients are told.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "nothing keeps an observation up to date yet: `docs/principles/serving.md` names the first, a \
+                      worker watching its worktree while a client follows its workspace, as not built"
+        )
+    )]
     pub(crate) async fn observation_let_go<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
         self.change_observation::<K>(of, Change::LetGo).await
     }
