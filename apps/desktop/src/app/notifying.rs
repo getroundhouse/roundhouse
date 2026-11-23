@@ -1,5 +1,6 @@
 //! Telling the person of each chat that has come to need them, by a notification and a sound as Settings chooses,
-//! and taking back the notification of one that no longer does. Clicking a notification opens its chat.
+//! and taking back the notification of one that no longer does. Clicking a notification opens its chat. The Dock's
+//! badge counts the workspaces with a chat that needs them.
 
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -28,8 +29,8 @@ pub(super) struct Telling {
 
 impl AppView {
     /// Tells of each chat in a listed workspace that has come to need the person since the last look, unless it's the
-    /// one being read, and takes back what told of one that no longer needs them. For after anything that changes the
-    /// records or which chat is being read.
+    /// one being read, takes back what told of one that no longer needs them, and counts their workspaces on the Dock's
+    /// badge. For after anything that changes the records or which chat is being read.
     pub(super) fn tell_of_needs(&mut self, cx: &mut Context<Self>) {
         if !self.visible {
             return;
@@ -38,6 +39,9 @@ impl AppView {
         let listed: HashSet<WorkspaceId> = self.visible_workspaces().into_iter().map(|w| w.id.clone()).collect();
         let sessions = self.records.every_session().filter(|s| listed.contains(&s.workspace_id));
         let changes = self.telling.watch.look(sessions, reading.as_ref());
+        // Before what's told, since reading a chat that already needed the person as the app opened lowers the count
+        // and tells of nothing.
+        crate::dock::show_badge(self.telling.watch.workspaces_needing(), cx);
         if changes.came.is_empty() && changes.went.is_empty() {
             return;
         }

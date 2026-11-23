@@ -13,6 +13,7 @@ pub mod checkout;
 mod composing;
 pub mod conversing;
 pub mod dictating;
+mod dock;
 #[cfg(test)]
 mod executor_waits;
 pub mod file_diff;
@@ -75,6 +76,10 @@ pub const WINDOW_SETTLES_AFTER: std::time::Duration = window_place::SETTLES_AFTE
 /// The sounds the app has played, by name, for a test to read.
 #[cfg(any(test, feature = "testing"))]
 pub use sounds::played as sounds_played;
+
+/// How many workspaces the Dock's badge says, for a test to read.
+#[cfg(any(test, feature = "testing"))]
+pub use dock::says as dock_badge;
 
 /// What a browser and GitHub do with the page the app serves while an app of your own is made, for a test to do.
 #[cfg(any(test, feature = "testing"))]
@@ -176,8 +181,10 @@ pub fn open_main_window(
 pub fn run(build: protocol::Build, checkout: Option<Checkout>) {
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
-        // Only the app as it runs plays sounds, so a test or a picture of the app is quiet.
+        // Only the app as it runs plays sounds and shows a badge on the Dock, so a test or a picture of the app is quiet
+        // and leaves the Dock alone.
         cx.set_global(sounds::Speaker);
+        cx.set_global(dock::Tile);
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         why_quit::say(checkout.as_ref(), cx);

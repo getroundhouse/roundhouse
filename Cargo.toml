@@ -201,9 +201,9 @@ memchr = "2.8.3"
 notify = "8.2.2"
 # Already under GPUI. Gives GPUI's view on a Mac the accessibility answer it lacks.
 objc2 = "0.6.5"
-# Already under GPUI. Taps a Mac's trackpad as a sidebar's edge takes its usual width, and plays the sound for a chat
-# that needs a look.
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSHapticFeedback", "NSSound"] }
+# Already under GPUI. Taps a Mac's trackpad as a sidebar's edge takes its usual width, plays the sound for a chat
+# that needs a look, and badges the Dock's icon with how many workspaces have one.
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSApplication", "NSDockTile", "NSHapticFeedback", "NSResponder", "NSSound"] }
 # Asks a Mac whether the app may use the microphone, and has the system ask the person. The gallery writes its clips as
 # videos with it too.
 objc2-av-foundation = { version = "0.3.2", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
