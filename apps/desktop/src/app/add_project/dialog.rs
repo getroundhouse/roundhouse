@@ -2,7 +2,6 @@
 //! pick from, and a field for an address on another host.
 
 use client_core::Client;
-use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -40,18 +39,13 @@ struct AddProject {
     _subscriptions: Vec<Subscription>,
 }
 
-/// What picking a folder on this computer does, in place of the dialog, on this computer's hub.
-pub(crate) type Folder = Box<dyn Fn(&mut App)>;
-
-/// Opens the dialog over `window`, adding to the hub `client` reaches, with a button for a folder on this computer
-/// where `folder` is given.
-pub(crate) fn open(client: Client, folder: Option<Folder>, window: &mut Window, cx: &mut App) {
+/// Opens the dialog over `window`, adding to the hub `client` reaches.
+pub(crate) fn open(client: Client, window: &mut Window, cx: &mut App) {
     let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search your repositories on GitHub"));
     let address = cx.new(|cx| InputState::new(window, cx).placeholder("https://gitlab.com/owner/repository.git"));
     let (searched, typed) = (search.clone(), address.clone());
     let dialog = cx.new(|cx| AddProject::new(client, searched, typed, cx));
-    let folder: Option<std::rc::Rc<Folder>> = folder.map(std::rc::Rc::new);
-    look::open_dialog(window, cx, move |_, cx| AddProject::dialog(&dialog, folder.clone(), cx));
+    look::open_dialog(window, cx, move |_, cx| AddProject::dialog(&dialog, cx));
     search.update(cx, |search, cx| search.focus(window, cx));
 }
 
@@ -141,7 +135,7 @@ impl AddProject {
     }
 
     /// The dialog as it stands now, built each time it's drawn.
-    fn dialog(this: &Entity<Self>, folder: Option<std::rc::Rc<Folder>>, cx: &App) -> look::Dialog {
+    fn dialog(this: &Entity<Self>, cx: &App) -> look::Dialog {
         let adding = this.read(cx);
         let can_add = adding.to_add(cx).is_some() && !adding.adding;
         let shown = v_flex()
@@ -168,7 +162,7 @@ impl AddProject {
             })
             .test_support();
         let confirming = this.clone();
-        let dialog = look::dialog("Add project")
+        look::dialog("Add project")
             .lead("Pick a repository your GitHub accounts can see. Its workspaces clone it.")
             .width(DialogWidth::Wide)
             .child(shown)
@@ -181,11 +175,7 @@ impl AddProject {
             .on_confirm(move |window, cx| {
                 confirming.update(cx, |this, cx| this.add(window, cx));
                 false
-            });
-        match folder {
-            Some(folder) => dialog.start(folder_button(folder)),
-            None => dialog,
-        }
+            })
     }
 }
 
@@ -212,14 +202,4 @@ fn list(this: &Entity<AddProject>, adding: &AddProject, cx: &App) -> AnyElement 
         })
     });
     v_flex().id("add-project-list").max_h(px(LIST_UP_TO)).overflow_y_scroll().children(rows).into_any_element()
-}
-
-/// The button at the dialog's foot that picks a folder on this computer instead.
-fn folder_button(folder: std::rc::Rc<Folder>) -> look::Button {
-    look::button("add-project-folder", look::ButtonKind::Edged, look::ControlSize::Large, "Choose a Folder…")
-        .icon(Lucide::FolderOpen)
-        .on_click(move |_, window, cx| {
-            look::close_dialog(window, cx);
-            folder(cx);
-        })
 }

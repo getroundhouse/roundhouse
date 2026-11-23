@@ -199,16 +199,20 @@ impl AppView {
         });
     }
 
-    /// Opens Add project's dialog, which on this computer's hub also offers a folder here.
+    /// Adds a project as Add project's menu does on this computer's hub, from a folder here, and on another hub opens
+    /// the dialog of what its GitHub accounts can see.
     pub fn add_repository(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.hub.remote.is_some() {
+            self.add_from_github(window, cx);
+        } else {
+            self.add_folder(cx);
+        }
+    }
+
+    /// Opens the dialog of the repositories the hub's GitHub accounts can see, to add a project from.
+    pub fn add_from_github(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
-        let this = cx.weak_entity();
-        let folder = self.hub.remote.is_none().then(|| -> crate::app::add_project::Folder {
-            Box::new(move |cx: &mut gpui_kit::App| {
-                let _ = this.update(cx, Self::add_folder);
-            })
-        });
-        crate::app::add_project::open(client, folder, window, cx);
+        crate::app::add_project::open(client, window, cx);
     }
 
     /// Adds the project whose checkout on this computer the person picks, on this computer's hub.

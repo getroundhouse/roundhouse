@@ -2,5 +2,5 @@
 //! checkout on the hub's machine.
 
 mod dialog;
-pub(crate) use dialog::{Folder, open};
+pub(crate) use dialog::open;
 mod rows;

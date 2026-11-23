@@ -17,6 +17,29 @@ const GROUP: &str = "workspaces-heading";
 
 /// What the list is, small and faint, as a section's label, and at its right end the Add project button, in words, so
 /// it isn't taken for a repository's button for a new workspace under it. Greyed out while there's no hub to add to.
+/// Add project: on this computer's hub, a menu of a folder here or a repository on GitHub, and on another hub, the
+/// dialog of what its GitHub accounts can see.
+fn add_button(app: &AppView, can_add: bool, cx: &mut Context<AppView>) -> AnyElement {
+    let button = look::button("add-project", look::ButtonKind::Faint, look::ControlSize::Small, "Add project")
+        .icon(IconName::Plus)
+        .off(!can_add);
+    if app.hub.remote.is_some() {
+        return button.on_click(cx.listener(|t, _, window, cx| t.add_from_github(window, cx))).into_any_element();
+    }
+    let (from_github, from_folder) = (cx.weak_entity(), cx.weak_entity());
+    button
+        .menu(Anchor::TopRight, move |menu: look::Menu, _: &mut Window, _| {
+            let (github, folder) = (from_github.clone(), from_folder.clone());
+            menu.row(look::menu_row("From GitHub…").on_choose(move |window, cx| {
+                let _ = github.update(cx, |t, cx| t.add_from_github(window, cx));
+            }))
+            .row(look::menu_row("From a Folder…").on_choose(move |_, cx| {
+                let _ = folder.update(cx, AppView::add_folder);
+            }))
+        })
+        .into_any_element()
+}
+
 /// Before it, the button that chooses the order, while the pointer is on the heading.
 pub(super) fn heading(app: &AppView, connected: bool, cx: &mut Context<AppView>) -> AnyElement {
     let faint = look::colors(cx).text_muted.opacity(0.7);
@@ -29,12 +52,7 @@ pub(super) fn heading(app: &AppView, connected: bool, cx: &mut Context<AppView>)
         .px(ROW_PAD)
         .child(div().flex_1().typeset(look::Type::Detail).emphasis().text_color(faint).child("Workspaces"))
         .child(sort_button(app, cx))
-        .child(
-            look::button("add-project", look::ButtonKind::Faint, look::ControlSize::Small, "Add project")
-                .icon(IconName::Plus)
-                .off(!can_add)
-                .on_click(cx.listener(|t, _, window, cx| t.add_repository(window, cx))),
-        )
+        .child(add_button(app, can_add, cx))
         .test_support()
         .into_any_element()
 }

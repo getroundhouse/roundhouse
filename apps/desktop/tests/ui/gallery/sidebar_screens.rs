@@ -17,7 +17,15 @@ const DRAFT: &str = "Keep the badge at its own width";
 const SAMPLE_PAIR_LINK: &str = "roundhouse://pair?v=1&name=Mac%20Studio&fp=q3B0ZWxsZXJzLWZpbmdlcnByaW50LXNoYTI1Ni1oYXN&code=9f3k-7m2p&host=mac-studio.local:7867&host=100.64.0.7:7867";
 
 pub(crate) const SCREENS: &[Screen] = &[
-    // Add project's dialog on this computer's hub, with the repositories its GitHub accounts can see, one chosen.
+    // Add project's menu on this computer's hub, a folder here or a repository on GitHub.
+    Screen {
+        name: "add-project-menu",
+        spec: "sidebar.md",
+        world: Some(with_github_repositories),
+        frame: SIDEBAR_MENU,
+        steps: &[Step::Select(FOCUS), Step::Click("add-project"), Step::MoveAway],
+    },
+    // From GitHub…, with the repositories the hub's GitHub accounts can see, one chosen.
     Screen {
         name: "add-project",
         spec: "sidebar.md",
@@ -26,6 +34,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[
             Step::Select(FOCUS),
             Step::Click("add-project"),
+            Step::ClickItem("From GitHub…"),
             Step::WaitFor("github-repository-R_roundhouse"),
             Step::Click("github-repository-R_roundhouse"),
             Step::MoveAway,
