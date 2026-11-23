@@ -9,7 +9,6 @@ use std::time::Duration;
 use protocol::client::HubNotice;
 use protocol::model::{GithubLoginKind, GithubSignInId, GithubSignInStatus, RecordKey};
 use protocol::worker::{GitIdentity, GithubCredential};
-use tokio::sync::broadcast;
 
 use super::*;
 use crate::hub::Hub;
@@ -50,7 +49,7 @@ async fn soon<T>(what: &str, waited: impl Future<Output = T>) -> T {
 }
 
 /// The next notice of a sign-in, or its removal, passing over the rest.
-async fn next_sign_in(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> HubNotice {
+async fn next_sign_in(feed: &mut crate::hub::Notices) -> HubNotice {
     soon("a notice of a sign-in", async {
         loop {
             if let notice @ (HubNotice::GithubSignIn(_) | HubNotice::Removed { .. }) =
@@ -64,7 +63,7 @@ async fn next_sign_in(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>)
 }
 
 /// The next notice of a sign-in that has ended, passing over the rest.
-async fn next_ended(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> protocol::model::GithubSignIn {
+async fn next_ended(feed: &mut crate::hub::Notices) -> protocol::model::GithubSignIn {
     loop {
         if let HubNotice::GithubSignIn(sign_in) = next_sign_in(feed).await
             && !sign_in.status.is_waiting()

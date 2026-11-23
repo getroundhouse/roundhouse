@@ -1,4 +1,7 @@
-use super::{Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReadFrom, ReferenceSaid};
+use super::{
+    AccountIdentity, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReadFrom,
+    ReferenceSaid,
+};
 use crate::model::{ChangeSummary, GithubRepositoryName, IssueNumber, Level, LineCounts, ReferenceAsk, Rev};
 
 /// The level an observation is sent at, and which subscriptions are sent it.
@@ -63,8 +66,23 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             Rev::new(9),
             (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::GithubObserved)),
         ),
+        account_identity(),
         (Observation::Unknown, ObservationKey::Unknown, Rev::default(), (None, None)),
     ]
+}
+
+/// Who an account is, with its key and revision, and how it's sent.
+fn account_identity() -> (Observation, ObservationKey, Rev, Sent) {
+    (
+        Observation::AccountIdentity {
+            account: "a".into(),
+            identity: Observed::AsOf { value: AccountIdentity::default(), as_of_ms: 1_000 },
+            rev: Rev::new(10),
+        },
+        ObservationKey::AccountIdentity { account: "a".into() },
+        Rev::new(10),
+        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+    )
 }
 
 #[test]

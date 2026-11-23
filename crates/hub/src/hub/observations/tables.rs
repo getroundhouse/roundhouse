@@ -1,11 +1,11 @@
 //! What the store does with every kind's table alike, and the one list of every kind it keeps.
 
-use protocol::model::{Level, Observation, ObservationKey, Rev, WorkspaceId};
+use protocol::model::{Level, Observation, ObservationKey, Rev};
 
 use super::file::{self, Row, Write};
 use super::kept::Table;
 use super::kinds::{
-    Form, Kind, Referenced, Subject, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
+    AccountIdentity, Form, Kind, Owner, Referenced, Subject, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
     WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
 use super::writer::Writer;
@@ -20,7 +20,11 @@ pub(crate) struct Tables {
     pub(super) workspace_pull_request: Table<WorkspacePullRequest>,
     pub(super) workspace_pull_request_detail: Table<WorkspacePullRequestDetail>,
     pub(super) workspace_repository_unseen: Table<WorkspaceRepositoryUnseen>,
+    pub(super) account_identity: Table<AccountIdentity>,
 }
+
+/// Which owners' observations are to be forgotten, since they're gone.
+pub(super) type Gone<'a> = &'a (dyn Fn(Owner<'_>) -> bool + Sync);
 
 /// What the store does with every kind's table alike.
 pub(super) trait AnyTable {
@@ -29,11 +33,11 @@ pub(super) trait AnyTable {
     fn listed(&self, level: &Level) -> Vec<Observation>;
     /// Keeps what the cache file kept, each as of when it was read, at `rev`.
     fn load(&mut self, file: &CacheFile, rev: Rev) -> rusqlite::Result<()>;
-    /// Whether it keeps an observation of a workspace that `gone` picks out.
-    fn keeps_of(&self, gone: &dyn Fn(&WorkspaceId) -> bool) -> bool;
-    /// Forgets each observation of a workspace that `gone` picks out, and that anything keeps it current, and queues
-    /// its removal from the file on `writer`. Returns which it forgot.
-    fn forget_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool, writer: &Writer) -> Vec<ObservationKey>;
+    /// Whether it keeps an observation of an owner that `gone` picks out.
+    fn keeps_of(&self, gone: Gone<'_>) -> bool;
+    /// Forgets each observation of an owner that `gone` picks out, and that anything keeps it current, and queues its
+    /// removal from the file on `writer`. Returns which it forgot.
+    fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey>;
 }
 
 impl<K: Kind> AnyTable for Table<K> {
@@ -53,13 +57,13 @@ impl<K: Kind> AnyTable for Table<K> {
         Ok(())
     }
 
-    fn keeps_of(&self, gone: &dyn Fn(&WorkspaceId) -> bool) -> bool {
-        self.kept.keys().any(|of| of.workspace().is_some_and(gone))
+    fn keeps_of(&self, gone: Gone<'_>) -> bool {
+        self.kept.keys().any(|of| of.owner().is_some_and(gone))
     }
 
-    fn forget_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool, writer: &Writer) -> Vec<ObservationKey> {
-        self.kept_current.retain(|of| !of.workspace().is_some_and(gone));
-        let forgotten: Vec<K::Of> = self.kept.keys().filter(|of| of.workspace().is_some_and(gone)).cloned().collect();
+    fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey> {
+        self.kept_current.retain(|of| !of.owner().is_some_and(gone));
+        let forgotten: Vec<K::Of> = self.kept.keys().filter(|of| of.owner().is_some_and(gone)).cloned().collect();
         for of in &forgotten {
             self.kept.remove(of);
             writer.write::<K>(of.clone(), Write::Gone);
@@ -70,7 +74,7 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 6] {
+    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 7] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -78,6 +82,7 @@ impl Tables {
             workspace_pull_request,
             workspace_pull_request_detail,
             workspace_repository_unseen,
+            account_identity,
         } = self;
         [
             workspace_lines,
@@ -86,6 +91,7 @@ impl Tables {
             workspace_pull_request,
             workspace_pull_request_detail,
             workspace_repository_unseen,
+            account_identity,
         ]
     }
 
@@ -94,13 +100,13 @@ impl Tables {
         self.each().iter().flat_map(|table| table.listed(level)).collect()
     }
 
-    /// Whether any kind keeps an observation of a workspace that `gone` picks out.
-    pub(super) fn keep_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool) -> bool {
+    /// Whether any kind keeps an observation of an owner that `gone` picks out.
+    pub(super) fn keep_of(&mut self, gone: Gone<'_>) -> bool {
         self.each().iter().any(|table| table.keeps_of(gone))
     }
 
-    /// Forgets every observation of a workspace that `gone` picks out, of every kind, as [`AnyTable::forget_of`] does.
-    pub(super) fn forget_of(&mut self, gone: &dyn Fn(&WorkspaceId) -> bool, writer: &Writer) -> Vec<ObservationKey> {
+    /// Forgets every observation of an owner that `gone` picks out, of every kind, as [`AnyTable::forget_of`] does.
+    pub(super) fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey> {
         self.each().into_iter().flat_map(|table| table.forget_of(gone, writer)).collect()
     }
 

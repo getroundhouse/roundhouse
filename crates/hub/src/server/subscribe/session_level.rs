@@ -37,7 +37,7 @@ pub(super) async fn feeding(
     };
     let session = hub.live_session(&id).await?;
     // Before the list, so nothing that changes after it is missed.
-    let feed = hub.subscribe_feed();
+    let feed = hub.subscribe_fed();
     let records = hub.session_records(id.clone()).await?;
     let live = session.subscribe();
     let hub = hub.clone();

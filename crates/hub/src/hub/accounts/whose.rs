@@ -10,6 +10,7 @@ use protocol::worker::AccountFor;
 use tracing::error;
 
 use crate::hub::Hub;
+use crate::hub::observations::AccountIdentity;
 use crate::store::Launched;
 
 impl Hub {
@@ -49,10 +50,11 @@ impl Hub {
     /// with what's been heard of its limits.
     async fn held_login_account(&self, id: Option<AccountId>) -> Result<Option<SessionAccount>, ApiError> {
         let Some(id) = id else { return Ok(None) };
-        let Some(record) = self.blocking(move |store| store.account(&id)).await? else { return Ok(None) };
+        let Some(mut record) = self.blocking(move |store| store.account(&id)).await? else { return Ok(None) };
         if record.login_agent.is_none() {
             return Ok(None);
         }
+        self.observations.fill(&mut record);
         let Account { id, model_provider, plan, login, email, limits, .. } = record;
         let account = AgentAccount { id: Some(id), logged_in: true, model_provider, plan, login, email };
         Ok(Some(SessionAccount { account, limits }))
@@ -76,14 +78,26 @@ impl Hub {
         }
     }
 
-    /// Files that `session`'s agent launched under `under`, as its worker read it, and tells every client what that
-    /// changed of the account's record. What it changed of the session's record is returned, for the session to follow
-    /// and announce itself, since only it knows how.
-    pub(crate) async fn launched_under(&self, session: &SessionId, under: AgentAccount) -> Result<Launched, ApiError> {
+    /// Files that `session`'s agent launched under `under`, as its worker read it at `read_at_ms`, and tells every
+    /// client what that changed of the account's record, and then of who the account is, which is an observation.
+    /// What it changed of the session's record is returned, for the session to follow and announce itself, since only
+    /// it knows how.
+    pub(crate) async fn launched_under(
+        &self,
+        session: &SessionId,
+        under: AgentAccount,
+        read_at_ms: i64,
+    ) -> Result<Launched, ApiError> {
         let id = session.clone();
-        let mut launched = self.blocking(move |store| store.launched_under(&id, &under)).await?;
+        let filed = under.clone();
+        let mut launched = self.blocking(move |store| store.launched_under(&id, &filed)).await?;
         if let Some(record) = launched.account.take() {
             self.notify(HubNotice::Account(record));
+        }
+        if let Some(account) = under.logged_in_as().cloned() {
+            let AgentAccount { model_provider, plan, login, email, .. } = under;
+            let identity = protocol::model::AccountIdentity { model_provider, plan, login, email };
+            self.observation_read::<AccountIdentity>(account, identity, read_at_ms).await?;
         }
         Ok(launched)
     }

@@ -12,7 +12,6 @@ use protocol::event::{AgentRunState, EventBody, TurnOutcome};
 use protocol::fixtures::turn_ended;
 use protocol::model::{AgentKind, RecordKey, Seq, Session, SessionId, SessionStatus};
 use protocol::prompt::Prompt;
-use tokio::sync::broadcast;
 
 use crate::hub::Hub;
 use crate::hub::stand_in_workers::{Asked, TIMEOUT, a_chat, a_turn, hub_with_stand_in_workers, the_agent_says};
@@ -28,11 +27,7 @@ async fn given(asked: &Asked, chat: &SessionId, seq: Seq) {
 }
 
 /// The next copy of `chat`'s record the feed tells of that `wanted` says is the one.
-async fn told(
-    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
-    chat: &SessionId,
-    wanted: impl Fn(&Session) -> bool,
-) -> Session {
+async fn told(feed: &mut crate::hub::Notices, chat: &SessionId, wanted: impl Fn(&Session) -> bool) -> Session {
     let next = async {
         loop {
             if let Ok(HubNotice::Session(told)) = feed.recv().await.map(std::sync::Arc::unwrap_or_clone)

@@ -9,6 +9,7 @@ use protocol::client::listed::{Listed, ReferenceObservations, WorkspaceObservati
 use protocol::client::{EVERY_OBSERVATION_FROM, HubNotice};
 use protocol::model::{Level, Observation, ObservationKey, ReadFrom, Records};
 
+use crate::hub::{Fed, Moves};
 use crate::versions;
 
 /// What one subscription is sent of the feed.
@@ -47,13 +48,19 @@ impl Sends {
         Self { of: Of::Feed, github_observed: false, version: versions::CLIENTS.oldest }
     }
 
-    /// Whether it's sent `notice`: one of its level, and in a form its client reads.
-    pub(super) fn notice(&self, notice: &HubNotice) -> bool {
+    /// Whether it's sent `fed`: a notice of its level, in a form its client reads, and that moves something its client
+    /// reads.
+    pub(super) fn notice(&self, fed: &Fed) -> bool {
+        let notice = &*fed.notice;
         let of = match &self.of {
             Of::Level(level) => notice.level().as_ref() == Some(level),
             Of::Feed => !matches!(notice.level(), Some(Level::Workspace { .. })),
         };
-        of && self.sends(notice)
+        let moves = match fed.moves {
+            Moves::Anything => true,
+            Moves::OldFormOnly => !self.reads_every_observation(),
+        };
+        of && moves && self.sends(notice)
     }
 
     /// `listed`, a list of where a level stands, as it's sent: with only the observations its client reads as such.
@@ -84,7 +91,13 @@ impl Sends {
     /// Whether it's sent what GitHub says as GitHub's observations, rather than as `HubFrame::Github`: where its start
     /// asked for them, and on a connection of a version that reads every observation.
     pub(super) fn github_observed(&self) -> bool {
-        self.github_observed || self.version >= EVERY_OBSERVATION_FROM
+        self.github_observed || self.reads_every_observation()
+    }
+
+    /// Whether its client reads every copy of what the hub only observes as an observation, and none in the form it
+    /// replaced, so it's sent no copy of a record that moves only such a form.
+    fn reads_every_observation(&self) -> bool {
+        self.version >= EVERY_OBSERVATION_FROM
     }
 
     /// Whether it's sent `notice` in a form it reads: every notice but those of an observation its client reads in a
@@ -109,6 +122,7 @@ impl Sends {
         match key.read_from() {
             Some(ReadFrom::Every) | None => true,
             Some(ReadFrom::GithubObserved) => self.github_observed(),
+            Some(ReadFrom::EveryObservation) => self.reads_every_observation(),
         }
     }
 }

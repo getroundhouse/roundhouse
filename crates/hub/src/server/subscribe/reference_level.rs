@@ -37,7 +37,7 @@ pub(super) async fn feeding(
         }));
     }
     // Before the list, so nothing that changes after it is missed.
-    let feed = hub.subscribe_feed();
+    let feed = hub.subscribe_fed();
     let first = listed(hub, &reference).await?;
     let hub = hub.clone();
     Ok(Box::pin(async move {

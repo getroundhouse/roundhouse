@@ -68,7 +68,7 @@ async fn start_one(
     }
     let Some(followed) = followed else { return Err(unknown("a level")) };
     let sends = sends(followed.level());
-    let Fed { feeding, listed } = feeding(hub, connection, subscription_id, follow, sends).await?;
+    let Started { feeding, listed } = feeding(hub, connection, subscription_id, follow, sends).await?;
     {
         let mut subscriptions = connection.subscriptions.lock();
         // Another kind of request, which doesn't wait its turn as this does, may have taken the ID meanwhile.
@@ -89,12 +89,12 @@ async fn start_one(
 
 /// What feeds one subscription, and, at a level whose list is queued before the reply to the `Subscribe` that starts
 /// it, what says that the list is queued.
-struct Fed {
+struct Started {
     feeding: Feeding,
     listed: Option<oneshot::Receiver<()>>,
 }
 
-impl From<Feeding> for Fed {
+impl From<Feeding> for Started {
     fn from(feeding: Feeding) -> Self {
         Self { feeding, listed: None }
     }
@@ -108,13 +108,13 @@ async fn feeding(
     subscription_id: u64,
     follow: Follow,
     sends: Sends,
-) -> Result<Fed, ApiError> {
+) -> Result<Started, ApiError> {
     let (frames, closer) = (connection.frames.clone(), connection.closer.clone());
     Ok(match follow {
         Follow::Hub => hub_level::feeding(hub, sends, subscription_id, frames, closer).await?.into(),
         Follow::Workspace { id } => {
             let (feeding, listed) = workspace_level::feeding(hub, id, sends, subscription_id, frames, closer).await?;
-            Fed { feeding, listed: Some(listed) }
+            Started { feeding, listed: Some(listed) }
         }
         Follow::Session { id, from } => {
             session_level::feeding(hub, id, from, sends, subscription_id, frames, closer).await?.into()

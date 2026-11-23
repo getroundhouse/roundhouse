@@ -4,13 +4,13 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use protocol::client::{ApiError, ErrorCode, HubNotice, ObservationNotice};
+use protocol::client::{ApiError, ErrorCode, ObservationNotice};
 use protocol::model::WorkspaceId;
 use protocol::model::{
     ChangeStatus, ChangeSummary, ChangedFile, GitFile, GitStatus, LineCounts, Observation, Observed,
 };
 use protocol::worker::{WatchChanges, WorkerFrame, WorkerRequest, WorkerResponse};
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::oneshot;
 
 use crate::hub::Hub;
 use crate::hub::stand_in_workers::TIMEOUT;
@@ -111,7 +111,7 @@ pub(super) async fn until_watches(asked: &Mutex<Vec<WorkerRequest>>, count: usiz
 }
 
 /// The lines of `w` as the feed tells of them next.
-pub(super) async fn next_lines(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Observed<LineCounts> {
+pub(super) async fn next_lines(feed: &mut crate::hub::Notices) -> Observed<LineCounts> {
     let next = async {
         loop {
             if let Ok(ObservationNotice::Copy(Observation::WorkspaceLines { lines, .. })) =
@@ -125,7 +125,7 @@ pub(super) async fn next_lines(feed: &mut broadcast::Receiver<std::sync::Arc<Hub
 }
 
 /// The changed files of `w` as the feed tells of them next.
-pub(super) async fn next_changes(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Observed<ChangeSummary> {
+pub(super) async fn next_changes(feed: &mut crate::hub::Notices) -> Observed<ChangeSummary> {
     let next = async {
         loop {
             if let Ok(ObservationNotice::Copy(Observation::WorkspaceChanges { changes, .. })) =

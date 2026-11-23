@@ -9,7 +9,7 @@ use protocol::model::{Level, Observation, Observed, Rev, WorkspaceId};
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
-use super::kinds::Kind;
+use super::kinds::{Kind, Owner};
 use super::tables::Tables;
 use super::writer::Writer;
 use crate::cache_file::CacheFile;
@@ -171,6 +171,11 @@ impl<K: Kind> Table<K> {
         self.kept_current.contains(of)
     }
 
+    /// What the observation of `of` says, however fresh it is.
+    pub(super) fn value(&self, of: &K::Of) -> Option<&K::Value> {
+        self.kept.get(of).map(|kept| &kept.said.value)
+    }
+
     /// Keeps that the observation of `of` says `value`, as of `read_at_ms`, at `rev`, as the cache file kept it, since
     /// nothing keeps it up to date yet.
     pub(super) fn keep_loaded(&mut self, of: K::Of, value: K::Value, read_at_ms: i64, rev: Rev) {
@@ -205,8 +210,8 @@ impl Observations {
     /// The store kept in `file`, opened with [`PART`](super::PART), with each observation it kept from before as of
     /// when it was read, under one revision newer than any a client holds, since a client of the hub before can hold
     /// any revision that hub gave. Where there's no revision to give, as when the database fails, it starts with none
-    /// of them, as the log says, and each is not known until it's read again. Those of a workspace the database
-    /// doesn't have are forgotten, as one a hub stopped before forgetting, or a file refused to, leaves, so no client
+    /// of them, as the log says, and each is not known until it's read again. Those of a workspace or an account the
+    /// database doesn't have are forgotten, as one a hub stopped before forgetting, or a file refused to, leaves, so no client
     /// is listed them.
     pub(crate) fn open(file: Arc<CacheFile>, store: &Store) -> Self {
         let mut tables = Tables::default();
@@ -223,13 +228,19 @@ impl Observations {
             }
         }
         let writer = Writer::new(file);
-        match store.list_workspaces(true) {
-            Ok(workspaces) => {
-                let have: HashSet<WorkspaceId> = workspaces.into_iter().map(|workspace| workspace.id).collect();
-                tables.forget_of(&|id| !have.contains(id), &writer);
+        match (store.list_workspaces(true), store.account_ids()) {
+            (Ok(workspaces), Ok(accounts)) => {
+                let workspaces: HashSet<WorkspaceId> = workspaces.into_iter().map(|workspace| workspace.id).collect();
+                let gone = |owner: Owner<'_>| match owner {
+                    Owner::Workspace(id) => !workspaces.contains(id),
+                    Owner::Account(id) => !accounts.contains(id),
+                };
+                tables.forget_of(&gone, &writer);
             }
-            // The task that works out GitHub's observations forgets them as it starts.
-            Err(error) => warn!("keeping observations of workspaces the database may not have: {error}"),
+            // The task that works out GitHub's observations forgets those of workspaces as it starts.
+            (Err(error), _) | (_, Err(error)) => {
+                warn!("keeping observations of what the database may not have: {error}");
+            }
         }
         Self { changing: AsyncMutex::new(()), tables: Mutex::new(tables), writer }
     }

@@ -9,7 +9,6 @@ use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{Repo, RepoOrigin, RepoUrl, Workspace};
 use protocol::provider::WorkerEnvironment;
 use protocol::worker::{ReadRepoUrl, RepoSource, RepoUrlReply, WorkerRequest, WorkerResponse};
-use tokio::sync::broadcast;
 
 use super::READ_WITHIN;
 use crate::hub::Hub;
@@ -42,7 +41,7 @@ fn worker_answering(answer: Answer) -> (Arc<WorkerLink>, Arc<Mutex<Vec<String>>>
 }
 
 /// The next repository the feed tells of.
-async fn told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Repo {
+async fn told(feed: &mut crate::hub::Notices) -> Repo {
     let repo = async {
         loop {
             if let HubNotice::Repo(repo) = std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()) {

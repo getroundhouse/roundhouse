@@ -28,7 +28,7 @@ use feed::Feed;
 use github::Github;
 use parking_lot::Mutex;
 use protocol::Build;
-use protocol::client::{ApiError, ErrorCode, HubNotice, HubStart, HubStatus};
+use protocol::client::{ApiError, ErrorCode, HubStart, HubStatus};
 use protocol::model::{
     AgentDescription, AgentKind, ClientRequestId, GithubSignInId, ProviderName, Records, SessionId, Workspace,
     WorkspaceId,
@@ -40,7 +40,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, watch};
+use tokio::sync::{Mutex as AsyncMutex, Notify, watch};
 use tracing::warn;
 
 /// Whether a restart leaves the hub's workers running. On Windows the local provider's workers run on the hub's pipes,
@@ -284,28 +284,16 @@ impl Hub {
         let listing = self.updates.listed_with(self.terminals.listed_with(listing));
         let ((((listed, model_lists), terminals), hub_update), observations) =
             self.observations.listed_with(listing).await;
-        Ok(Records { terminals, model_lists, hub_update, observations, ..listed? })
+        let mut records = Records { terminals, model_lists, hub_update, observations, ..listed? };
+        // After the list, with what's kept then, which is never older than what the list's revision takes in. Newer is
+        // only of a change whose record's revision moves after, so a client is sent the record again.
+        self.observations.fill(&mut records);
+        Ok(records)
     }
 
     pub(crate) async fn workspace(&self, id: &WorkspaceId) -> Result<Workspace, ApiError> {
         let id = id.clone();
         self.blocking(move |store| store.get_workspace(&id)).await
-    }
-
-    pub(crate) fn subscribe_feed(&self) -> broadcast::Receiver<Arc<HubNotice>> {
-        self.feed.subscribe()
-    }
-
-    /// How many follow the feed, each subscription and each of the hub's own tasks that reads it, for a test that waits
-    /// for one to start.
-    #[cfg(test)]
-    pub(crate) fn feed_receivers(&self) -> usize {
-        self.feed.receivers()
-    }
-
-    /// Tells every client following the feed of `notice`, as [`Feed::send`] says.
-    pub(crate) fn notify(&self, notice: HubNotice) {
-        self.feed.send(notice);
     }
 
     /// Output for a session goes through here on its way to the log.

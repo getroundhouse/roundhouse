@@ -9,6 +9,7 @@ use protocol::client::{ApiError, HubFrame, HubNotice};
 use tokio::sync::{broadcast, mpsc};
 use tracing::warn;
 
+use crate::hub::Fed;
 use crate::server::sends::Sends;
 use crate::server::{Closer, Outgoing};
 
@@ -29,7 +30,7 @@ pub(super) async fn send_listed(
 /// session is deleted meanwhile, `closer` closes the connection, as the log says, so the client follows everything
 /// again, rather than going on without what it missed.
 pub(super) async fn forward<F: Future<Output = Result<Listed, ApiError>>>(
-    mut feed: broadcast::Receiver<Arc<HubNotice>>,
+    mut feed: broadcast::Receiver<Fed>,
     sends: &Sends,
     subscription_id: u64,
     frames: &mpsc::Sender<Outgoing>,
@@ -39,9 +40,9 @@ pub(super) async fn forward<F: Future<Output = Result<Listed, ApiError>>>(
 ) {
     loop {
         let frame = match feed.recv().await {
-            Ok(notice) if sends.notice(&notice) => {
-                seen(&notice);
-                HubFrame::Notice { subscription_id, notice: Arc::unwrap_or_clone(notice) }
+            Ok(told) if sends.notice(&told) => {
+                seen(&told.notice);
+                HubFrame::Notice { subscription_id, notice: Arc::unwrap_or_clone(told.notice) }
             }
             Ok(_) => continue,
             Err(broadcast::error::RecvError::Lagged(_)) => match list().await {

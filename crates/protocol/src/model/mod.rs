@@ -73,8 +73,8 @@ pub use level::Level;
 pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
 pub use observation::{
-    IssueSaid, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary,
-    PullRequestDetail, PullRequestSaid, ReadFrom, ReferenceSaid,
+    AccountIdentity, IssueSaid, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid,
+    OwnSummary, PullRequestDetail, PullRequestSaid, ReadFrom, ReferenceSaid,
 };
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
 pub use proposal::{

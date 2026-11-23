@@ -52,4 +52,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(drafts::DRAFT_TYPED_AT),
     // Each wait's watch keeping the pull requests it saw as their facets, in `waits`.
     Rust(super::waits::pull_requests_as_facets),
+    // Who each account is, which the hub keeps as an observation, in `accounts`.
+    Sql(accounts::IDENTITY_OBSERVED),
 ];

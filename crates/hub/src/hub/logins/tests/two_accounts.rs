@@ -13,7 +13,6 @@ use protocol::model::{
     Account, AccountId, AgentKind, CacheRequest, CacheTtl, LoginToken, Seq, Session, SessionId, Workspace,
 };
 use protocol::prompt::Prompt;
-use tokio::sync::broadcast;
 
 use crate::hub::Hub;
 use crate::hub::stand_in_workers::{Asked, TIMEOUT, a_chat, a_turn, hub_with_stand_in_workers, the_agent_says};
@@ -153,10 +152,7 @@ impl TwoAccounts {
 }
 
 /// The account the feed first announces `chat` as on.
-pub(super) async fn announced_on(
-    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
-    chat: &SessionId,
-) -> AccountId {
+pub(super) async fn announced_on(feed: &mut crate::hub::Notices, chat: &SessionId) -> AccountId {
     loop {
         let told = tokio::time::timeout(TIMEOUT, feed.recv()).await.expect("the chat to be announced as on an account");
         if let HubNotice::Session(told) = std::sync::Arc::unwrap_or_clone(told.expect("the feed goes on"))

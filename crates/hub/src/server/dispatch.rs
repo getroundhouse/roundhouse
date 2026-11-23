@@ -15,8 +15,21 @@ use protocol::client::{
 };
 use protocol::model::{ByteRange, Place, Seq};
 use std::sync::Arc;
-#[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
+/// The reply to `request`, with each field of a record in it that holds an observation's old form filled from the
+/// observation, as `crate::hub::observations::OldForm` says.
 pub(super) async fn handle(
+    hub: &Arc<Hub>,
+    connection: &Arc<Connection>,
+    greeting: Greeting,
+    request: ClientRequest,
+) -> Result<ClientResponse, ApiError> {
+    let mut reply = answered(hub, connection, greeting, request).await?;
+    hub.fill_old_forms(&mut reply);
+    Ok(reply)
+}
+
+#[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
+async fn answered(
     hub: &Arc<Hub>,
     connection: &Arc<Connection>,
     greeting: Greeting,

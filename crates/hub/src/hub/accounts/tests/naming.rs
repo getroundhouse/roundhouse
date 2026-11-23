@@ -26,7 +26,8 @@ async fn a_chat_names_its_account_as_soon_as_its_agent_launches_and_one_login_in
     let mut accounts = Vec::new();
     for chat in [&first, &second] {
         a_turn_hearing(&hub, &asked, &chat.id, Vec::new()).await;
-        accounts.push(named(&hub, &chat.id, |_| true).await);
+        // Who it is is told once the session names it, so it's waited for too.
+        accounts.push(named(&hub, &chat.id, |account| account.email.is_some()).await);
     }
 
     let [account, other] = &accounts[..] else { unreachable!() };
@@ -53,7 +54,7 @@ async fn a_chat_whose_agent_relaunches_under_another_login_names_that_account_an
     // Someone else, with the same model provider, whose agent hears nothing of its limits.
     *machine.lock() = Ok(logged_in_as("grace@example.com", "Max"));
     a_turn_hearing(&hub, &asked, &chat.id, Vec::new()).await;
-    let grace = named(&hub, &chat.id, |account| Some(&account.id) != ada.id.as_ref()).await;
+    let grace = named(&hub, &chat.id, |account| Some(&account.id) != ada.id.as_ref() && account.email.is_some()).await;
 
     assert_eq!((grace.email.as_deref(), grace.limits), (Some("grace@example.com"), vec![]), "Ada's limits aren't hers");
     let ada_now = hub.store.account(&ada.id.unwrap()).unwrap().unwrap();

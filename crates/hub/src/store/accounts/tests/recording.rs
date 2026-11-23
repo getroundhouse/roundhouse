@@ -214,8 +214,10 @@ fn hearing_the_same_again_isnt_a_change_to_the_record_but_is_kept_as_heard_later
     assert_eq!(kept(&store, "ada"), [(LimitWindow::SevenDays, 4, Some(200))]);
 }
 
+/// The record says nothing of who the account is, which the hub keeps as an observation, as
+/// `crate::hub::observations::AccountIdentity` says.
 #[test]
-fn a_launch_names_its_account_on_the_session_and_says_who_it_is_on_the_account() {
+fn a_launch_names_its_account_on_the_session_and_makes_its_record() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let before = store.get_session(&"s".into()).unwrap().session.rev;
@@ -223,7 +225,7 @@ fn a_launch_names_its_account_on_the_session_and_says_who_it_is_on_the_account()
     let launched = store.launched_under(&"s".into(), &logged_in("ada@example.com", "Max")).unwrap();
 
     let account = launched.account.expect("a new record");
-    assert_eq!((account.email.as_deref(), account.plan.as_deref()), (Some("ada@example.com"), Some("Max")));
+    assert_eq!((account.id.as_str(), account.email), ("claude-ada@example.com", None));
     assert!(launched.session);
     assert_eq!(named(&store), Some(account.id.clone()));
     assert!(store.get_session(&"s".into()).unwrap().session.rev > before, "the feed has to announce it");
@@ -240,32 +242,6 @@ fn a_launch_under_the_same_account_as_before_changes_nothing() {
 
     assert_eq!(launched, Launched::default());
     assert_eq!(store.list_records().unwrap().rev, rev);
-}
-
-#[test]
-fn a_new_plan_is_a_change_to_the_account_and_not_the_session() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = store_with_session(dir.path());
-    store.launched_under(&"s".into(), &logged_in("ada@example.com", "Pro")).unwrap();
-
-    let launched = store.launched_under(&"s".into(), &logged_in("ada@example.com", "Max")).unwrap();
-
-    assert_eq!(launched.account.and_then(|account| account.plan).as_deref(), Some("Max"));
-    assert!(!launched.session);
-}
-
-#[test]
-fn whose_account_it_is_stays_beside_the_limits_heard_before() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = store_with_session(dir.path());
-    let under = logged_in("ada@example.com", "Max");
-    let id = under.id.clone().unwrap();
-    store.hear_limits(&id, &[limit(LimitWindow::SevenDays, 4)], false, 100).unwrap();
-
-    let account = store.launched_under(&"s".into(), &under).unwrap().account.unwrap();
-
-    assert_eq!(account.limits.len(), 1, "who it is joins what was heard");
-    assert_eq!(account.email.as_deref(), Some("ada@example.com"));
 }
 
 #[test]
@@ -291,8 +267,7 @@ fn every_account_is_listed_with_every_record() {
 
     let records = store.list_records().unwrap();
 
-    let listed: Vec<(&str, Option<&str>)> =
-        records.accounts.iter().map(|account| (account.id.as_str(), account.email.as_deref())).collect();
-    assert_eq!(listed, [("claude-ada@example.com", Some("ada@example.com")), ("grace", None)]);
+    let listed: Vec<&str> = records.accounts.iter().map(|account| account.id.as_str()).collect();
+    assert_eq!(listed, ["claude-ada@example.com", "grace"]);
     assert!(records.accounts.iter().all(|account| account.rev > Rev::default() && account.rev <= records.rev));
 }

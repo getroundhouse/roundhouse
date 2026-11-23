@@ -5,10 +5,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::client::{HubNotice, ObservationNotice};
+use protocol::client::ObservationNotice;
 use protocol::fixtures::{pull_request_wait, workspace};
 use protocol::model::{Observation, Observed, OwnPullRequestSaid, WaitEnd, WaitId, WorkspaceId};
-use tokio::sync::broadcast;
 use tokio::time::Instant;
 
 use crate::hub::tests::{hub_on_github, hub_reading_github, pushed};
@@ -158,7 +157,7 @@ async fn a_read_of_waits_github_fails_says_so_on_them_and_backs_off() {
 }
 
 /// The next copy the feed tells of how `w`'s pull request stands.
-async fn next_said_of_w(feed: &mut broadcast::Receiver<Arc<HubNotice>>) -> Observed<OwnPullRequestSaid> {
+async fn next_said_of_w(feed: &mut crate::hub::Notices) -> Observed<OwnPullRequestSaid> {
     let next = async {
         loop {
             let notice = Arc::unwrap_or_clone(feed.recv().await.unwrap());

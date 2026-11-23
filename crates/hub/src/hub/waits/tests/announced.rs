@@ -1,12 +1,10 @@
 //! The feed announcing a chat as its wait starts or ends, since its record shows the wait it has open.
 
-use tokio::sync::broadcast::Receiver;
-
 use super::*;
 use crate::store::StoreError;
 
 /// The wait each copy of chat `s` the feed has announced since this was last asked shows, by its ID.
-fn announced(feed: &mut Receiver<std::sync::Arc<HubNotice>>) -> Vec<Option<WaitId>> {
+fn announced(feed: &mut crate::hub::Notices) -> Vec<Option<WaitId>> {
     let mut copies = Vec::new();
     while let Ok(notice) = feed.try_recv().map(std::sync::Arc::unwrap_or_clone) {
         if let HubNotice::Session(session) = notice

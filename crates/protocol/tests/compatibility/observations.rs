@@ -4,9 +4,9 @@
 use protocol::client::listed::{Listed, ReferenceObservations};
 use protocol::client::{HubFrame, HubNotice};
 use protocol::model::{
-    About, ChangeStatus, ChangeSummary, ChangedFile, FileVersion, GithubRepositoryName, IssueNumber, IssueSaid,
-    IssueState, IssueSummary, LineCounts, Observation, ObservationKey, Observed, RecordKey, Records, ReferenceAsk,
-    ReferenceSaid, Rev,
+    About, AccountIdentity, ChangeStatus, ChangeSummary, ChangedFile, FileVersion, GithubRepositoryName, IssueNumber,
+    IssueSaid, IssueState, IssueSummary, LineCounts, Observation, ObservationKey, Observed, RecordKey, Records,
+    ReferenceAsk, ReferenceSaid, Rev,
 };
 use serde::Deserialize;
 
@@ -39,6 +39,34 @@ fn an_observation_keeps_its_form_however_fresh_as_a_notice_and_a_removal() {
     keeps_its_form(
         &gone,
         r#"{"notice":"observation_removed","observation":{"kind":"workspace_lines","workspace_id":"w"},"rev":6}"#,
+    );
+}
+
+/// Who an agent's account is, which a hub sends at its own level to a client of a version that reads it so, as a
+/// notice and as its removal.
+#[test]
+fn who_an_account_is_keeps_its_form_as_a_notice_and_a_removal() {
+    let identity = AccountIdentity {
+        model_provider: Some("Anthropic".into()),
+        plan: Some("max".into()),
+        login: Some("Claude account".into()),
+        email: Some("ada@example.com".into()),
+    };
+    let identity = Observed::AsOf { value: identity, as_of_ms: 1_795_230_000_000 };
+    let copy =
+        HubNotice::Observation(Observation::AccountIdentity { account: "claude-1".into(), identity, rev: Rev::new(5) });
+    let gone = HubNotice::ObservationRemoved {
+        observation: ObservationKey::AccountIdentity { account: "claude-1".into() },
+        rev: Rev::new(6),
+    };
+
+    keeps_its_form(
+        &copy,
+        r#"{"notice":"observation","kind":"account_identity","account":"claude-1","identity":{"freshness":"as_of","value":{"model_provider":"Anthropic","plan":"max","login":"Claude account","email":"ada@example.com"},"as_of_ms":1795230000000},"rev":5}"#,
+    );
+    keeps_its_form(
+        &gone,
+        r#"{"notice":"observation_removed","observation":{"kind":"account_identity","account":"claude-1"},"rev":6}"#,
     );
 }
 

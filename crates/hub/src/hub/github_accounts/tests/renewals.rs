@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use protocol::model::{GithubToken, SentCredential, UnusableLogin};
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
-use tokio::sync::broadcast;
 
 use super::*;
 use crate::github_logins::tests::{ada_signed_in, login_ending};
@@ -33,7 +32,7 @@ pub(super) async fn renewing(answers: Vec<Answer>) -> StandIn {
 }
 
 /// Every notice in `feed` so far.
-fn told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Vec<HubNotice> {
+fn told(feed: &mut crate::hub::Notices) -> Vec<HubNotice> {
     std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect()
 }
 
