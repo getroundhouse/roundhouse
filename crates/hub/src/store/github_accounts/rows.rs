@@ -2,19 +2,18 @@ use super::super::hub_settings::hub_settings;
 use super::super::{
     ByColumn, Columns, OneValue, Store, StoreError, columns, current_rev, lock, rev_of, text_from, text_of,
 };
-use super::profiles::keep_profile;
 use crate::login_files::LoginFile;
-use github::GithubProfile;
 use protocol::model::{
     GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
     GithubUserId, HeldGithubLogin, HubSettings, Rev,
 };
 use rusqlite::{Connection, OptionalExtension as _, Row, Transaction, params};
+use std::collections::HashSet;
 
 columns! {
     /// The columns every read of a GitHub account's row takes, as [`account_at`] reads them.
     pub(super) struct GithubAccountColumns {
-        id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms, rev,
+        id, user_id, login_kind, login_file, login_connected_at_ms, login_ends_at_ms, rev,
         login_needs_sign_in, app_id, installation_id, installed_on_id, installed_on,
     }
 }
@@ -30,9 +29,6 @@ pub(crate) struct GithubConnecting<'a> {
     pub(crate) ends_at_ms: Option<i64>,
     /// Where it's installed, for an app's installation, and `None` for any other login.
     pub(crate) installation: Option<&'a GithubInstallation>,
-    /// What GitHub's profile of `user` said as the hub asked whose the login is, at `connected_at_ms`, and `None` for
-    /// an app's installation, whose bot has none.
-    pub(crate) profile: Option<&'a GithubProfile>,
 }
 
 /// The account as connecting left it, the file of the login it replaced, for the hub to let go of, and the settings,
@@ -45,7 +41,9 @@ pub(crate) struct GithubConnected {
 
 /// A row's record, and the file of the login it holds. It holds one only when the file is one the hub names, and it
 /// says how and when it was connected, so every read takes the same to be held. One that names another file is cleared
-/// as the hub starts.
+/// as the hub starts. What GitHub calls its user isn't kept here, since the hub only observes it, as
+/// `crate::hub::observations::GithubUsername` says, so the record names the user by its number, as `#<number>`, which
+/// the hub fills with the username it holds as the record leaves it, as `crate::hub::observations::OldForm` says.
 pub(super) fn account_at(row: &Row<'_>) -> rusqlite::Result<(GithubAccount, Option<LoginFile>)> {
     let c = GithubAccountColumns::at(0);
     let file = row.at::<Option<String>>(c.login_file)?.as_deref().and_then(LoginFile::parse);
@@ -63,12 +61,18 @@ pub(super) fn account_at(row: &Row<'_>) -> rusqlite::Result<(GithubAccount, Opti
     };
     let account = GithubAccount {
         id: row.at::<String>(c.id)?.into(),
-        user: GithubUser { id: GithubUserId::new(row.at(c.user_id)?), name: row.at::<String>(c.username)?.into() },
+        user: unnamed(GithubUserId::new(row.at(c.user_id)?)),
         held_login: held.as_ref().map(|(_, held)| *held),
         installation: installation_at(row)?,
         rev: rev_of(row, c.rev)?,
     };
     Ok((account, held.map(|(file, _)| file)))
+}
+
+/// The GitHub user `id`, named by its number, `#<number>`, as a record names it while what GitHub calls it isn't known.
+/// *Unconfirmed:* a client of a version from before the username was an observation is sent that.
+fn unnamed(id: GithubUserId) -> GithubUser {
+    GithubUser { id, name: format!("#{id}").into() }
 }
 
 /// Where a row's account is installed, when it's an app's installation, as all four of its columns say.
@@ -115,6 +119,14 @@ impl Store {
         Ok(conn.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], OneValue::read)?)
     }
 
+    /// Every GitHub account's ID.
+    pub(crate) fn github_account_ids(&self) -> Result<HashSet<GithubAccountId>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn.prepare("SELECT id FROM github_accounts")?;
+        let ids = statement.query_map([], OneValue::read::<String>)?;
+        Ok(ids.map(|id| id.map(GithubAccountId::from)).collect::<rusqlite::Result<_>>()?)
+    }
+
     pub(crate) fn github_account(&self, id: &GithubAccountId) -> Result<Option<GithubAccount>, StoreError> {
         Ok(row_of(&lock(&self.reader), id)?.map(|(account, _)| account))
     }
@@ -125,6 +137,15 @@ impl Store {
         let row = row_of(&lock(&self.reader), id)?;
         let (_, file) = row.ok_or_else(|| StoreError::NotFound { kind: "GitHub account", id: id.to_string() })?;
         Ok(file)
+    }
+
+    /// Every GitHub account, oldest first, with the file of the login it holds, if it holds one, for the hub's daily
+    /// read of who each is on GitHub.
+    pub(crate) fn github_accounts_and_files(&self) -> Result<Vec<(GithubAccount, Option<LoginFile>)>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement =
+            conn.prepare_cached(&format!("SELECT {} FROM github_accounts ORDER BY rowid", GithubAccountColumns::LIST))?;
+        Ok(statement.query_map([], account_at)?.collect::<rusqlite::Result<_>>()?)
     }
 
     /// Every login the hub holds for a GitHub account, by account, with its file, for finding the one that holds a
@@ -198,6 +219,18 @@ impl Store {
         Ok(row_of(&conn, id)?.map(|(account, _)| account))
     }
 
+    /// Moves the revision of `id`'s record, since what GitHub calls its user changed, which the record holds the old
+    /// form of, and returns the record. `None` for an account with none.
+    pub(in super::super) fn github_account_moved(
+        &self,
+        id: &GithubAccountId,
+    ) -> Result<Option<GithubAccount>, StoreError> {
+        let conn = lock(&self.writer);
+        // Moves the revision, as `github_accounts_rev_on_update` does for any update that doesn't.
+        conn.execute("UPDATE github_accounts SET id = id WHERE id = ?", [id.as_str()])?;
+        Ok(row_of(&conn, id)?.map(|(account, _)| account))
+    }
+
     /// Says the login the GitHub account `id` holds needs signing in again, as when GitHub has refused what renews a
     /// sign-in's token, or nothing can, and returns the record when that changed it.
     pub(crate) fn github_login_needs_sign_in(&self, id: &GithubAccountId) -> Result<Option<GithubAccount>, StoreError> {
@@ -231,8 +264,8 @@ impl Store {
         Ok(row_of(&conn, id)?.map(|(account, _)| account))
     }
 
-    /// Forgets the GitHub account `id`, as disconnecting any but an app's installation does: its record, what GitHub's
-    /// profile of its user said, and the hub's settings' naming it as the default, in one transaction. Returns the
+    /// Forgets the GitHub account `id`, as disconnecting any but an app's installation does: its record, and the hub's
+    /// settings' naming it as the default, in one transaction. Returns the
     /// record as it last was, the revision its removal moved the records to, and the settings when it was the default,
     /// or `None` when there's no such account. The hub lets go of the login's file first, so a power cut that takes
     /// this back leaves a row naming a file that's gone, which is removed as the hub next starts.
@@ -242,7 +275,6 @@ impl Store {
         let Some((account, _)) = row_of(&tx, id)? else { return Ok(None) };
         let was_default =
             tx.execute("UPDATE hub_settings SET github_account_id = NULL WHERE github_account_id = ?", [id.as_str()])?;
-        tx.execute("DELETE FROM github_profiles WHERE account_id = ?", [id.as_str()])?;
         tx.execute("DELETE FROM github_accounts WHERE id = ?", [id.as_str()])?;
         let rev = current_rev(&tx)?;
         let settings = if was_default > 0 { Some(hub_settings(&tx)?) } else { None };
@@ -261,24 +293,23 @@ pub(crate) struct GithubRemoved {
 }
 
 /// Has `connecting.account` hold the login whose token is in `connecting.file`, as `connecting.user`, which needs no
-/// signing in again, in `tx`, and makes the account's record if it has none, and keeps what GitHub's profile of the
-/// user said, if it was asked. The first GitHub account the hub has a record of becomes the default, in the same
+/// signing in again, in `tx`, and makes the account's record if it has none. What GitHub calls the user, and what its
+/// profile says, the hub keeps as observations. The first GitHub account the hub has a record of becomes the default, in the same
 /// transaction.
 pub(in super::super) fn connect_login(
     tx: &Transaction<'_>,
     connecting: &GithubConnecting<'_>,
 ) -> rusqlite::Result<GithubConnected> {
-    let GithubConnecting { account: id, user, how, file, connected_at_ms, ends_at_ms, installation, profile } =
-        *connecting;
+    let GithubConnecting { account: id, user, how, file, connected_at_ms, ends_at_ms, installation } = *connecting;
     let first = !tx.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], OneValue::read::<bool>)?;
     let replaced = row_of(tx, id)?.and_then(|(_, file)| file);
     tx.execute(
         "INSERT INTO github_accounts
-             (id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms,
-              login_needs_sign_in, app_id, installation_id, installed_on_id, installed_on)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, ?9, ?10, ?11)
+             (id, user_id, login_kind, login_file, login_connected_at_ms, login_ends_at_ms, login_needs_sign_in,
+              app_id, installation_id, installed_on_id, installed_on)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8, ?9, ?10)
              ON CONFLICT (id) DO UPDATE
-             SET user_id = excluded.user_id, username = excluded.username, login_kind = excluded.login_kind,
+             SET user_id = excluded.user_id, login_kind = excluded.login_kind,
                  login_file = excluded.login_file, login_connected_at_ms = excluded.login_connected_at_ms,
                  login_ends_at_ms = excluded.login_ends_at_ms, login_needs_sign_in = 0, app_id = excluded.app_id,
                  installation_id = excluded.installation_id, installed_on_id = excluded.installed_on_id,
@@ -286,7 +317,6 @@ pub(in super::super) fn connect_login(
         params![
             id.as_str(),
             user.id.get(),
-            user.name.as_str(),
             text_of(&how),
             file.as_str(),
             connected_at_ms,
@@ -297,9 +327,6 @@ pub(in super::super) fn connect_login(
             installation.map(|installation| installation.on.name.as_str()),
         ],
     )?;
-    if let Some(profile) = profile {
-        keep_profile(tx, id, profile, connected_at_ms)?;
-    }
     if first {
         tx.execute("UPDATE hub_settings SET github_account_id = ?", [id.as_str()])?;
     }

@@ -14,6 +14,7 @@ use tracing::error;
 
 use super::super::Hub;
 use crate::github_logins::DefaultCredential;
+use crate::hub::{GithubProfile, GithubUsername};
 use crate::store::now_ms;
 
 impl Hub {
@@ -45,14 +46,20 @@ impl Hub {
     /// Checks the GitHub logins as the hub starts and every
     /// [`check_github_logins_every`](crate::Timers::check_github_logins_every) after, by the wall clock, as
     /// [`Hub::check_github_logins`] says, each once the last has finished, until
-    /// [`Hub::stop_checking_github_logins`].
+    /// [`Hub::stop_checking_github_logins`]. Meanwhile what GitHub calls each account's user, and what its profile says,
+    /// is kept current, since the checks read each again each day.
     pub(crate) async fn watch_github_logins(self: Arc<Self>) {
+        // Each is read again each day while the checks run, so what's read of it meanwhile is current.
+        self.observations_kept_current::<GithubUsername>().await;
+        self.observations_kept_current::<GithubProfile>().await;
         let stopped = stopped(self.github_checks_stopped.subscribe());
         check_by_the_wall_clock(self.timers.check_github_logins_every, now_ms, stopped, |now_ms| {
             let hub = Arc::clone(&self);
             async move { hub.check_github_logins(now_ms).await }
         })
         .await;
+        self.observations_no_longer_read_again::<GithubUsername>().await;
+        self.observations_no_longer_read_again::<GithubProfile>().await;
     }
 
     /// Stops checking the GitHub logins, as the hub stops, and waits for `watching`, the task

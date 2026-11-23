@@ -179,9 +179,9 @@ fn workspaces_from_before_placement_migrate_to_their_repos_checkout_without_movi
     );
 }
 
+/// What GitHub's profile of its user said goes with every other account's, as `github_profiles` leaves the database.
 #[test]
-fn a_github_account_disconnected_before_removal_is_removed_with_its_profile_and_as_the_default_but_an_installation_isnt()
- {
+fn a_github_account_disconnected_before_removal_is_removed_and_as_the_default_but_an_installation_isnt() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("hub.db");
     let backups = dir.path().join("backups");
@@ -204,10 +204,4 @@ fn a_github_account_disconnected_before_removal_is_removed_with_its_profile_and_
     let ids = store.list_records().unwrap().github_accounts.into_iter().map(|account| account.id.to_string());
     assert_eq!(ids.collect::<Vec<_>>(), ["installed", "held"]);
     assert_eq!(store.hub_settings().unwrap().github.and_then(|github| github.account), None);
-    let profiles: Vec<String> = {
-        let conn = open_connection(&path).unwrap();
-        let mut statement = conn.prepare("SELECT account_id FROM github_profiles ORDER BY account_id").unwrap();
-        statement.query_map([], OneValue::read).unwrap().collect::<Result<_, _>>().unwrap()
-    };
-    assert_eq!(profiles, ["held"]);
 }

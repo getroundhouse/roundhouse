@@ -49,9 +49,11 @@ impl Hub {
                 continue;
             };
             let token = InstallationToken { token, token_ends_at_ms: ends_at_ms };
-            let (logins, bot) = (Arc::clone(&self.github_logins), bot.clone());
-            let connecting = move || logins.connect_installation(id, &bot, &installation, token, by_person, now_ms());
+            let (logins, told, connected_at_ms) = (Arc::clone(&self.github_logins), bot.clone(), now_ms());
+            let connecting =
+                move || logins.connect_installation(id, &told, &installation, token, by_person, connected_at_ms);
             if let Some(change) = off_thread(connecting).await? {
+                let change = self.github_user_connected(change, bot.clone(), None, connected_at_ms).await;
                 self.announce_github_account(change);
             }
         }

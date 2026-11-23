@@ -1,5 +1,6 @@
 //! What the stand-in answers about apps: making one from its manifest's code, its bot, and what it's asked as the app,
-//! with a JWT it checks against the public half of [`MADE_UP_APP_KEY`], as GitHub checks one against the app's.
+//! with a JWT it checks against the public half of [`MADE_UP_APP_KEY`], as GitHub checks one against the app's, and a
+//! user by number, asked with no login, as an app's bot or any account whose own login can't be used is.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -41,6 +42,17 @@ pub(super) fn named(answering: &Answering, head: &str) -> Option<Answer> {
     let (name, _) = head.strip_prefix("GET /users/")?.split_once(' ')?;
     let name = name.replace("%5B", "[").replace("%5D", "]");
     Some(answering.named.get(&name).cloned().unwrap_or_else(|| Answer::status(404, Vec::new())))
+}
+
+/// What the script has for `head` when it's `GET /user/{number}`, as an account's user is asked for with no login, and
+/// `None` for any other call. One asked with a login is a 401.
+pub(super) fn numbered(answering: &mut Answering, head: &str) -> Option<Answer> {
+    let (number, _) = head.strip_prefix("GET /user/")?.split_once(' ')?;
+    if head.lines().any(|line| line.to_ascii_lowercase().starts_with("authorization:")) {
+        return Some(Answer::status(401, Vec::new()));
+    }
+    let answers = answering.numbered.get_mut(&number.parse().ok()?);
+    Some(answers.and_then(Answering::next).unwrap_or_else(|| Answer::status(404, Vec::new())))
 }
 
 /// Whether `head` asks as an app, with a JWT signed with [`MADE_UP_APP_KEY`] with RS256, from an app by its number,

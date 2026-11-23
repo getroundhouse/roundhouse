@@ -12,7 +12,6 @@ use protocol::model::{
     RepositoryUnseen,
 };
 
-use crate::github_logins::DefaultCredential;
 use crate::hub::observations::WorkspacePullRequest;
 use crate::hub::tests::hub_on_github;
 use crate::hub::{Followed, Hub};
@@ -319,7 +318,7 @@ async fn a_hub_that_starts_again_keeps_a_repository_unseen_through_a_read_that_f
     hub.observations_written().await;
     drop((hub, github));
     let again = crate::hub::tests::hub_in_again(dir.path());
-    let DefaultCredential::Account { account, .. } = again.git_credential().borrow().clone() else { panic!() };
+    let account = again.store.hub_settings().unwrap().github.and_then(|github| github.account).unwrap();
     again.github_account_disconnect(account).await.unwrap();
 
     let failed = again.workspace_pull_request("w".into()).await;
@@ -344,6 +343,7 @@ fn is_as_of(observation: &Observation) -> bool {
         Observation::WorkspaceLines { .. }
         | Observation::WorkspaceChanges { .. }
         | Observation::Reference { .. }
+        | Observation::GithubUsername { .. }
         | Observation::ModelCatalog { .. }
         | Observation::AccountIdentity { .. }
         | Observation::AccountLimits { .. }

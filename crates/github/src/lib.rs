@@ -17,7 +17,7 @@ mod tests;
 mod apps;
 pub use apps::{GithubAppKey, Installation, MadeApp, Minted, manifest};
 mod client;
-pub use client::{ASK_WITHIN, Github, TokenOwner};
+pub use client::{ASK_WITHIN, Github, NotRead, TokenOwner};
 mod config;
 pub use config::GithubConfig;
 mod device_flow;

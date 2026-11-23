@@ -36,3 +36,7 @@ pub(crate) const BEFORE_SESSION_CACHE_OBSERVED: usize = 96;
 
 /// How many migrations there were before what each open wait last read left the database, as an observation.
 pub(crate) const BEFORE_WAIT_READ_OBSERVED: usize = 97;
+
+/// How many migrations there were before what GitHub calls each GitHub account's user, and its profile, left the
+/// database, as observations.
+pub(crate) const BEFORE_GITHUB_USERS_OBSERVED: usize = 98;

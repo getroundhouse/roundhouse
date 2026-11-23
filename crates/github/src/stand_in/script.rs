@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use super::Answer;
-use super::apps::{as_the_app, named};
+use super::apps::{as_the_app, named, numbered};
 use super::pull_requests::PullRequests;
 use super::references::References;
 
@@ -23,6 +23,9 @@ pub struct Script {
     pub conversions: Vec<(&'static str, Answer)>,
     /// `GET /users/{name}`, by the name, such as `ada-roundhouse[bot]`. Any other is a 404.
     pub named: Vec<(&'static str, Answer)>,
+    /// `GET /user/{number}` asked with no login, by the number, in turn. Any other number is a 404, and any asked with
+    /// a login a 401, so a test sees it was asked as nobody.
+    pub numbered: Vec<(u64, Vec<Answer>)>,
     /// `GET /app/installations`, in turn, to a JWT signed with [`MADE_UP_APP_KEY`](super::MADE_UP_APP_KEY) that
     /// hasn't ended. Any other JWT is a 401, as GitHub answers one it doesn't take.
     pub installations: Vec<Answer>,
@@ -50,6 +53,7 @@ pub(super) struct Answering {
     renewals: HashMap<String, VecDeque<Answer>>,
     pub(super) conversions: HashMap<String, Answer>,
     pub(super) named: HashMap<String, Answer>,
+    pub(super) numbered: HashMap<u64, VecDeque<Answer>>,
     pub(super) installations: VecDeque<Answer>,
     pub(super) minted: HashMap<u64, VecDeque<Answer>>,
     pushes: HashMap<&'static str, VecDeque<Answer>>,
@@ -68,6 +72,7 @@ impl Answering {
             renewals: script.renewals.into_iter().map(in_turn).collect(),
             conversions: script.conversions.into_iter().map(|(code, answer)| (code.to_string(), answer)).collect(),
             named: script.named.into_iter().map(|(name, answer)| (name.to_string(), answer)).collect(),
+            numbered: script.numbered.into_iter().map(|(number, answers)| (number, answers.into())).collect(),
             installations: script.installations.into(),
             minted: script.minted.into_iter().map(|(id, answers)| (id, answers.into())).collect(),
             pushes: script.pushes.into_iter().map(|(repository, answers)| (repository, answers.into())).collect(),
@@ -84,7 +89,9 @@ impl Answering {
 
 /// What the script has for the request whose head is `head`, and whose body is `body`.
 pub(super) fn chosen(answering: &mut Answering, head: &str, body: &str) -> Answer {
-    if let Some(answer) = as_the_app(answering, head).or_else(|| named(answering, head)) {
+    if let Some(answer) =
+        as_the_app(answering, head).or_else(|| named(answering, head)).or_else(|| numbered(answering, head))
+    {
         return answer;
     }
     if head.starts_with("POST /graphql ") {

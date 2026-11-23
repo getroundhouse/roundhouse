@@ -26,11 +26,12 @@ pub(crate) trait Kind: Sized + 'static {
     /// migrating it.
     const FORM: Form;
 
-    /// It, as a client is sent it.
-    fn observation(of: &Self::Of, said: Observed<Self::Value>, rev: Rev) -> Observation;
+    /// It, as a client is sent it, or `None` for a kind the hub keeps and sends nowhere, which no list has, and whose
+    /// change and removal tell nobody anything.
+    fn observation(of: &Self::Of, said: Observed<Self::Value>, rev: Rev) -> Option<Observation>;
 
-    /// Which it is, as its removal names it.
-    fn key(of: &Self::Of) -> ObservationKey;
+    /// Which it is, as its removal names it, or `None` for a kind sent nowhere, as [`Kind::observation`] says.
+    fn key(of: &Self::Of) -> Option<ObservationKey>;
 
     /// Its table among the store's.
     fn table(tables: &mut Tables) -> &mut Table<Self>;
@@ -66,12 +67,12 @@ impl Kind for WorkspaceLines {
     type Value = LineCounts;
     const FORM: Form = Form { table: "workspace_lines", version: 1 };
 
-    fn observation(workspace_id: &WorkspaceId, lines: Observed<LineCounts>, rev: Rev) -> Observation {
-        Observation::WorkspaceLines { workspace_id: workspace_id.clone(), lines, rev }
+    fn observation(workspace_id: &WorkspaceId, lines: Observed<LineCounts>, rev: Rev) -> Option<Observation> {
+        Some(Observation::WorkspaceLines { workspace_id: workspace_id.clone(), lines, rev })
     }
 
-    fn key(workspace_id: &WorkspaceId) -> ObservationKey {
-        ObservationKey::WorkspaceLines { workspace_id: workspace_id.clone() }
+    fn key(workspace_id: &WorkspaceId) -> Option<ObservationKey> {
+        Some(ObservationKey::WorkspaceLines { workspace_id: workspace_id.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -88,12 +89,12 @@ impl Kind for WorkspaceChanges {
     type Value = ChangeSummary;
     const FORM: Form = Form { table: "workspace_changes", version: 1 };
 
-    fn observation(workspace_id: &WorkspaceId, changes: Observed<ChangeSummary>, rev: Rev) -> Observation {
-        Observation::WorkspaceChanges { workspace_id: workspace_id.clone(), changes, rev }
+    fn observation(workspace_id: &WorkspaceId, changes: Observed<ChangeSummary>, rev: Rev) -> Option<Observation> {
+        Some(Observation::WorkspaceChanges { workspace_id: workspace_id.clone(), changes, rev })
     }
 
-    fn key(workspace_id: &WorkspaceId) -> ObservationKey {
-        ObservationKey::WorkspaceChanges { workspace_id: workspace_id.clone() }
+    fn key(workspace_id: &WorkspaceId) -> Option<ObservationKey> {
+        Some(ObservationKey::WorkspaceChanges { workspace_id: workspace_id.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -110,12 +111,12 @@ impl Kind for Referenced {
     type Value = ReferenceSaid;
     const FORM: Form = Form { table: "referenced", version: 1 };
 
-    fn observation(reference: &ReferenceAsk, said: Observed<ReferenceSaid>, rev: Rev) -> Observation {
-        Observation::Reference { reference: reference.clone(), said, rev }
+    fn observation(reference: &ReferenceAsk, said: Observed<ReferenceSaid>, rev: Rev) -> Option<Observation> {
+        Some(Observation::Reference { reference: reference.clone(), said, rev })
     }
 
-    fn key(reference: &ReferenceAsk) -> ObservationKey {
-        ObservationKey::Reference { reference: reference.clone() }
+    fn key(reference: &ReferenceAsk) -> Option<ObservationKey> {
+        Some(ObservationKey::Reference { reference: reference.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -132,12 +133,16 @@ impl Kind for WorkspacePullRequest {
     type Value = OwnPullRequestSaid;
     const FORM: Form = Form { table: "workspace_pull_request", version: 1 };
 
-    fn observation(workspace_id: &WorkspaceId, pull_request: Observed<OwnPullRequestSaid>, rev: Rev) -> Observation {
-        Observation::WorkspacePullRequest { workspace_id: workspace_id.clone(), pull_request, rev }
+    fn observation(
+        workspace_id: &WorkspaceId,
+        pull_request: Observed<OwnPullRequestSaid>,
+        rev: Rev,
+    ) -> Option<Observation> {
+        Some(Observation::WorkspacePullRequest { workspace_id: workspace_id.clone(), pull_request, rev })
     }
 
-    fn key(workspace_id: &WorkspaceId) -> ObservationKey {
-        ObservationKey::WorkspacePullRequest { workspace_id: workspace_id.clone() }
+    fn key(workspace_id: &WorkspaceId) -> Option<ObservationKey> {
+        Some(ObservationKey::WorkspacePullRequest { workspace_id: workspace_id.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -154,12 +159,16 @@ impl Kind for WorkspacePullRequestDetail {
     type Value = OwnPullRequestDetail;
     const FORM: Form = Form { table: "workspace_pull_request_detail", version: 1 };
 
-    fn observation(workspace_id: &WorkspaceId, detail: Observed<OwnPullRequestDetail>, rev: Rev) -> Observation {
-        Observation::WorkspacePullRequestDetail { workspace_id: workspace_id.clone(), detail, rev }
+    fn observation(
+        workspace_id: &WorkspaceId,
+        detail: Observed<OwnPullRequestDetail>,
+        rev: Rev,
+    ) -> Option<Observation> {
+        Some(Observation::WorkspacePullRequestDetail { workspace_id: workspace_id.clone(), detail, rev })
     }
 
-    fn key(workspace_id: &WorkspaceId) -> ObservationKey {
-        ObservationKey::WorkspacePullRequestDetail { workspace_id: workspace_id.clone() }
+    fn key(workspace_id: &WorkspaceId) -> Option<ObservationKey> {
+        Some(ObservationKey::WorkspacePullRequestDetail { workspace_id: workspace_id.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -176,12 +185,16 @@ impl Kind for WorkspaceRepositoryUnseen {
     type Value = Option<RepositoryUnseen>;
     const FORM: Form = Form { table: "workspace_repository_unseen", version: 1 };
 
-    fn observation(workspace_id: &WorkspaceId, unseen: Observed<Option<RepositoryUnseen>>, rev: Rev) -> Observation {
-        Observation::WorkspaceRepositoryUnseen { workspace_id: workspace_id.clone(), unseen, rev }
+    fn observation(
+        workspace_id: &WorkspaceId,
+        unseen: Observed<Option<RepositoryUnseen>>,
+        rev: Rev,
+    ) -> Option<Observation> {
+        Some(Observation::WorkspaceRepositoryUnseen { workspace_id: workspace_id.clone(), unseen, rev })
     }
 
-    fn key(workspace_id: &WorkspaceId) -> ObservationKey {
-        ObservationKey::WorkspaceRepositoryUnseen { workspace_id: workspace_id.clone() }
+    fn key(workspace_id: &WorkspaceId) -> Option<ObservationKey> {
+        Some(ObservationKey::WorkspaceRepositoryUnseen { workspace_id: workspace_id.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -198,12 +211,12 @@ impl Kind for ModelCatalog {
     type Value = protocol::capability::settings::ModelCatalog;
     const FORM: Form = Form { table: "model_catalog", version: 1 };
 
-    fn observation(list: &ModelListKey, catalog: Observed<Self::Value>, rev: Rev) -> Observation {
-        Observation::ModelCatalog { list: list.clone(), catalog, rev }
+    fn observation(list: &ModelListKey, catalog: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
+        Some(Observation::ModelCatalog { list: list.clone(), catalog, rev })
     }
 
-    fn key(list: &ModelListKey) -> ObservationKey {
-        ObservationKey::ModelCatalog { list: list.clone() }
+    fn key(list: &ModelListKey) -> Option<ObservationKey> {
+        Some(ObservationKey::ModelCatalog { list: list.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -220,12 +233,12 @@ impl Kind for AccountIdentity {
     type Value = protocol::model::AccountIdentity;
     const FORM: Form = Form { table: "account_identity", version: 1 };
 
-    fn observation(account: &AccountId, identity: Observed<Self::Value>, rev: Rev) -> Observation {
-        Observation::AccountIdentity { account: account.clone(), identity, rev }
+    fn observation(account: &AccountId, identity: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
+        Some(Observation::AccountIdentity { account: account.clone(), identity, rev })
     }
 
-    fn key(account: &AccountId) -> ObservationKey {
-        ObservationKey::AccountIdentity { account: account.clone() }
+    fn key(account: &AccountId) -> Option<ObservationKey> {
+        Some(ObservationKey::AccountIdentity { account: account.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -247,12 +260,12 @@ impl Kind for AccountLimits {
     type Value = Vec<UsageLimit>;
     const FORM: Form = Form { table: "account_limits", version: 1 };
 
-    fn observation(account: &AccountId, limits: Observed<Self::Value>, rev: Rev) -> Observation {
-        Observation::AccountLimits { account: account.clone(), limits, rev }
+    fn observation(account: &AccountId, limits: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
+        Some(Observation::AccountLimits { account: account.clone(), limits, rev })
     }
 
-    fn key(account: &AccountId) -> ObservationKey {
-        ObservationKey::AccountLimits { account: account.clone() }
+    fn key(account: &AccountId) -> Option<ObservationKey> {
+        Some(ObservationKey::AccountLimits { account: account.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -282,12 +295,12 @@ impl Kind for SessionContext {
     type Value = ContextUsage;
     const FORM: Form = Form { table: "session_context", version: 1 };
 
-    fn observation(of: &SessionKey, context: Observed<ContextUsage>, rev: Rev) -> Observation {
-        Observation::SessionContext { session_id: of.session_id.clone(), context, rev }
+    fn observation(of: &SessionKey, context: Observed<ContextUsage>, rev: Rev) -> Option<Observation> {
+        Some(Observation::SessionContext { session_id: of.session_id.clone(), context, rev })
     }
 
-    fn key(of: &SessionKey) -> ObservationKey {
-        ObservationKey::SessionContext { session_id: of.session_id.clone() }
+    fn key(of: &SessionKey) -> Option<ObservationKey> {
+        Some(ObservationKey::SessionContext { session_id: of.session_id.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -307,12 +320,12 @@ impl Kind for SessionTodos {
     type Value = TodoList;
     const FORM: Form = Form { table: "session_todos", version: 1 };
 
-    fn observation(of: &SessionKey, todos: Observed<TodoList>, rev: Rev) -> Observation {
-        Observation::SessionTodos { session_id: of.session_id.clone(), todos, rev }
+    fn observation(of: &SessionKey, todos: Observed<TodoList>, rev: Rev) -> Option<Observation> {
+        Some(Observation::SessionTodos { session_id: of.session_id.clone(), todos, rev })
     }
 
-    fn key(of: &SessionKey) -> ObservationKey {
-        ObservationKey::SessionTodos { session_id: of.session_id.clone() }
+    fn key(of: &SessionKey) -> Option<ObservationKey> {
+        Some(ObservationKey::SessionTodos { session_id: of.session_id.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -334,12 +347,12 @@ impl Kind for SessionCache {
     type Value = ConversationCache;
     const FORM: Form = Form { table: "session_cache", version: 1 };
 
-    fn observation(of: &SessionKey, cache: Observed<ConversationCache>, rev: Rev) -> Observation {
-        Observation::SessionCache { session_id: of.session_id.clone(), cache, rev }
+    fn observation(of: &SessionKey, cache: Observed<ConversationCache>, rev: Rev) -> Option<Observation> {
+        Some(Observation::SessionCache { session_id: of.session_id.clone(), cache, rev })
     }
 
-    fn key(of: &SessionKey) -> ObservationKey {
-        ObservationKey::SessionCache { session_id: of.session_id.clone() }
+    fn key(of: &SessionKey) -> Option<ObservationKey> {
+        Some(ObservationKey::SessionCache { session_id: of.session_id.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
@@ -361,12 +374,12 @@ impl Kind for WaitRead {
     type Value = protocol::model::WaitRead;
     const FORM: Form = Form { table: "wait_read", version: 1 };
 
-    fn observation(of: &WaitKey, read: Observed<Self::Value>, rev: Rev) -> Observation {
-        Observation::WaitRead { session_id: of.session_id.clone(), wait: of.wait.clone(), read, rev }
+    fn observation(of: &WaitKey, read: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
+        Some(Observation::WaitRead { session_id: of.session_id.clone(), wait: of.wait.clone(), read, rev })
     }
 
-    fn key(of: &WaitKey) -> ObservationKey {
-        ObservationKey::WaitRead { session_id: of.session_id.clone(), wait: of.wait.clone() }
+    fn key(of: &WaitKey) -> Option<ObservationKey> {
+        Some(ObservationKey::WaitRead { session_id: of.session_id.clone(), wait: of.wait.clone() })
     }
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {

@@ -91,6 +91,9 @@ async fn a_sign_in_waits_with_its_code_and_once_approved_every_client_hears_of_i
         heard.push(std::sync::Arc::unwrap_or_clone(soon("a notice", feed.recv()).await.unwrap()));
     }
     let again = hub.github_sign_in_start(start("s")).await.unwrap();
+    // But for the observation of what GitHub calls the account's user, and the copy of its record told for that alone.
+    heard.retain(|notice| !matches!(notice, HubNotice::Observation(_)));
+    heard.dedup();
 
     let GithubSignInStatus::Waiting { code, address, .. } = &started.status else { panic!("{started:?}") };
     assert_eq!((code.as_str(), address.as_str()), ("WDJB-MJHT", "https://github.com/login/device"));

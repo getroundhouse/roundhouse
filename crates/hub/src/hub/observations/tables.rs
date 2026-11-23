@@ -3,6 +3,7 @@
 use protocol::model::{Level, Observation, ObservationKey, Rev};
 
 use super::file::{self, Row, Write};
+use super::github_kinds::{GithubProfile, GithubUsername};
 use super::kept::Table;
 use super::kinds::{
     AccountIdentity, AccountLimits, Form, Kind, ModelCatalog, Owner, Referenced, SessionCache, SessionContext,
@@ -21,6 +22,7 @@ pub(crate) struct Tables {
     pub(super) workspace_pull_request: Table<WorkspacePullRequest>,
     pub(super) workspace_pull_request_detail: Table<WorkspacePullRequestDetail>,
     pub(super) workspace_repository_unseen: Table<WorkspaceRepositoryUnseen>,
+    pub(super) github_username: Table<GithubUsername>,
     pub(super) model_catalog: Table<ModelCatalog>,
     pub(super) account_identity: Table<AccountIdentity>,
     pub(super) account_limits: Table<AccountLimits>,
@@ -28,6 +30,7 @@ pub(crate) struct Tables {
     pub(super) session_todos: Table<SessionTodos>,
     pub(super) session_cache: Table<SessionCache>,
     pub(super) wait_read: Table<WaitRead>,
+    pub(super) github_profile: Table<GithubProfile>,
 }
 
 /// Which owners' observations are to be forgotten, since they're gone.
@@ -53,8 +56,9 @@ impl<K: Kind> AnyTable for Table<K> {
     }
 
     fn listed(&self, level: &Level) -> Vec<Observation> {
-        let at_level = self.kept.iter().filter(|(of, _)| K::key(of).level().as_ref() == Some(level));
-        at_level.map(|(of, kept)| K::observation(of, kept.said.observed(), kept.rev)).collect()
+        let at_level =
+            self.kept.iter().filter(|(of, _)| K::key(of).and_then(|key| key.level()).as_ref() == Some(level));
+        at_level.filter_map(|(of, kept)| K::observation(of, kept.said.observed(), kept.rev)).collect()
     }
 
     fn load(&mut self, file: &CacheFile, rev: Rev) -> rusqlite::Result<()> {
@@ -75,13 +79,13 @@ impl<K: Kind> AnyTable for Table<K> {
             self.kept.remove(of);
             writer.write::<K>(of.clone(), Write::Gone);
         }
-        forgotten.iter().map(K::key).collect()
+        forgotten.iter().filter_map(K::key).collect()
     }
 }
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 13] {
+    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 15] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -89,6 +93,7 @@ impl Tables {
             workspace_pull_request,
             workspace_pull_request_detail,
             workspace_repository_unseen,
+            github_username,
             model_catalog,
             account_identity,
             account_limits,
@@ -96,6 +101,7 @@ impl Tables {
             session_todos,
             session_cache,
             wait_read,
+            github_profile,
         } = self;
         [
             workspace_lines,
@@ -104,6 +110,7 @@ impl Tables {
             workspace_pull_request,
             workspace_pull_request_detail,
             workspace_repository_unseen,
+            github_username,
             model_catalog,
             account_identity,
             account_limits,
@@ -111,6 +118,7 @@ impl Tables {
             session_todos,
             session_cache,
             wait_read,
+            github_profile,
         ]
     }
 

@@ -13,11 +13,11 @@ use protocol::worker::{GitCredential, GitIdentity};
 use tokio::sync::watch;
 use tracing::{error, info};
 
-use super::blocks::{Unusable, lost, no_account, reason};
+use super::blocks::{Unusable, lost, no_account, reason, unnamed};
 use super::{DefaultCredential, GithubLogin, GithubLogins};
+use crate::hub::{GithubProfile, GithubUsername as Username};
 use crate::login_files::{Locked, Stored};
 use crate::store::StoreError;
-use github::GithubProfile;
 
 /// Who git says it is as it gives GitHub an installation's token, as GitHub's docs give.
 const INSTALLATION_USERNAME: &str = "x-access-token";
@@ -134,9 +134,12 @@ impl GithubLogins {
     /// What workers are to give their processes for github.com at `now_ms`, with who GitHub knows the default as, as
     /// [`DefaultCredential`] says: a block saying to connect an account while there's no default, the default's username and
     /// token while its login can be used, with its commit identity, an installation's bot, or as GitHub's profile of a
-    /// token's or a sign-in's user said, once the hub has asked, and otherwise a block that says what to do, and why,
-    /// never the machine's own in its place. So is a default the hub can't read, one whose profile it can't read, and an
-    /// installation whose app's record it can't read. *Unconfirmed:* blocking for what the hub can't read.
+    /// token's or a sign-in's user says, or the address GitHub gives the user while the hub doesn't know what it says,
+    /// and otherwise a block that says what to do, and why, never the machine's own in its place. So is a default the
+    /// hub can't read, and an installation whose app's record it can't read. *Unconfirmed:* blocking for what the hub
+    /// can't read. A default whose login can be used, but whose username the hub doesn't know yet, as on the first
+    /// start after the hub stopped keeping usernames in its database, is [`DefaultCredential::Unnamed`] until the hub
+    /// has asked GitHub, which it does as it starts.
     fn worked_out(&self, files: &Locked<'_, GithubLogin>, now_ms: i64) -> DefaultCredential {
         let unread = |e: &dyn std::fmt::Display| {
             reason(
@@ -160,7 +163,7 @@ impl GithubLogins {
             return DefaultCredential::NoAccount { reason: no_account(has_accounts) };
         };
         let blocked = |why, reason| DefaultCredential::Blocked { reason, account: Some(id.clone()), why };
-        let account = match self.store.github_account(&id) {
+        let mut account = match self.store.github_account(&id) {
             Ok(Some(account)) => account,
             Ok(None) => {
                 let why = "Roundhouse's default GitHub account is one it has no record of";
@@ -168,14 +171,20 @@ impl GithubLogins {
             }
             Err(e) => return blocked(UnusableLogin::Unreadable, unread(&e)),
         };
+        // Named as the hub last heard GitHub call its user, for what a block says.
+        self.observations.fill(&mut account);
         let token = match self.token_of(files, &account, now_ms) {
             Ok(Ok(token)) => token,
             Ok(Err(unusable)) => return blocked(unusable.said(), lost(&account, &unusable)),
             Err(e) => return blocked(UnusableLogin::Unreadable, unread(&e.message)),
         };
+        let Some(username) = self.observations.value_of::<Username>(&account.id) else {
+            return DefaultCredential::Unnamed { account: account.id, reason: unnamed() };
+        };
+        let user = GithubUser { id: account.user.id, name: username };
         if let Some(installation) = &account.installation {
             return match self.installed_app(installation) {
-                Ok(Some(installed)) => installation_credential(account.id, account.user, installed, token),
+                Ok(Some(installed)) => installation_credential(account.id, user, installed, token),
                 // Removing an app forgets its installations' logins first, so only a store changed behind the hub's
                 // back has one whose login can be used without the app.
                 Ok(None) => {
@@ -188,15 +197,12 @@ impl GithubLogins {
                 Err(e) => blocked(UnusableLogin::Unreadable, unread(&e)),
             };
         }
-        match self.store.github_profile(&account.id) {
-            Ok(profile) => {
-                let identity = profile.map(|profile| identity_of(&account.user, profile));
-                let credential = GitCredential { username: account.user.name.clone(), token, identity };
-                let username = account.user.name;
-                DefaultCredential::Account { account: account.id, credential, username, installation: None }
-            }
-            Err(e) => blocked(UnusableLogin::Unreadable, unread(&e)),
-        }
+        // One not known yet, as before the hub has first asked GitHub since it last started with none, commits as the
+        // address GitHub gives the user, as for an account whose profile says no name or email, until it's read.
+        let profile = self.observations.value_of::<GithubProfile>(&account.id).unwrap_or_default();
+        let identity = Some(identity_of(&user, profile));
+        let credential = GitCredential { username: user.name.clone(), token, identity };
+        DefaultCredential::Account { account: account.id, credential, username: user.name, installation: None }
     }
 
     /// Where `installation`'s app is installed, as a reach says of it, unless the hub has no record of the app.
@@ -217,7 +223,7 @@ fn installation_credential(
     installed: InstalledApp,
     token: GithubToken,
 ) -> DefaultCredential {
-    let identity = identity_of(&bot, GithubProfile::default());
+    let identity = identity_of(&bot, github::GithubProfile::default());
     let credential = GitCredential { username: INSTALLATION_USERNAME.into(), token, identity: Some(identity) };
     DefaultCredential::Account { account, credential, username: bot.name, installation: Some(installed) }
 }
@@ -227,7 +233,7 @@ fn installation_credential(
 /// it, `<number>+<username>@users.noreply.github.com`, which GitHub links to the user whatever it's named later, and
 /// which no one can mail, as the owner decided. Never the primary email a sign-in can read, since GitHub refuses a push
 /// of commits by one the person keeps private when they've asked it to.
-fn identity_of(user: &GithubUser, profile: GithubProfile) -> GitIdentity {
+fn identity_of(user: &GithubUser, profile: github::GithubProfile) -> GitIdentity {
     let GithubUser { id, name: username } = user;
     GitIdentity {
         name: profile.name.filter(|name| git_commits_as(name)).unwrap_or_else(|| username.to_string()),

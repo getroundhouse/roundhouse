@@ -8,9 +8,11 @@ use process::testing::{git, git_in};
 use protocol::client::ApiError;
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 
-use super::credential::sent;
+use super::credential::{reason, sent};
 use super::sign_ins::{ada_signed_in, login_ending, sign_in_kept};
 use super::*;
+use crate::github_logins::NOBODY_ASKS_AN_HOUR;
+use crate::hub::GithubUsername;
 use github::GithubProfile;
 
 /// [`PROFILE_READ_EVERY`], in milliseconds.
@@ -39,7 +41,7 @@ fn a_default_connected_by_a_token_or_signed_in_commits_as_its_name_and_public_em
     let ada = owner_with(7, "ada", Some("Ada Lovelace"), Some("ada@example.com"));
     let grace = owner_with(8, "grace", Some("Grace Hopper"), Some("grace@example.com"));
 
-    logins.connect(&connect("a-token", None, "g1"), &ada).unwrap();
+    logins.connected(&connect("a-token", None, "g1"), &ada).unwrap();
     let by_token = commits_as(&sent(&logins));
     let signed_in = sign_in_kept(&logins, &store, &grace, "g2", login_ending("b-token", 9000));
     logins.set_default(Some(&signed_in), 2000).unwrap();
@@ -54,11 +56,13 @@ fn a_name_falls_back_to_the_username_and_an_email_to_the_address_github_gives_th
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
 
-    logins.connect(&connect("first", None, "g1"), &owner_with(7, "ada", None, None)).unwrap();
+    logins.connected(&connect("first", None, "g1"), &owner_with(7, "ada", None, None)).unwrap();
     let neither = commits_as(&sent(&logins));
-    logins.connect(&connect("second", Some("g1"), "g2"), &owner_with(7, "ada", Some("Ada Lovelace"), None)).unwrap();
+    logins.connected(&connect("second", Some("g1"), "g2"), &owner_with(7, "ada", Some("Ada Lovelace"), None)).unwrap();
     let only_a_name = commits_as(&sent(&logins));
-    logins.connect(&connect("third", Some("g1"), "g3"), &owner_with(7, "ada", None, Some("ada@example.com"))).unwrap();
+    logins
+        .connected(&connect("third", Some("g1"), "g3"), &owner_with(7, "ada", None, Some("ada@example.com")))
+        .unwrap();
     let only_an_email = commits_as(&sent(&logins));
 
     assert_eq!(neither.as_deref(), Some("ada <7+ada@users.noreply.github.com>"));
@@ -74,11 +78,11 @@ const NAMES: [&str; 7] = [".", "<>", r#" .,:;"\' "#, "\n<\t>\n", "Ada.", "<Ada>"
 fn identities_of_each_name() -> Vec<GitIdentity> {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
-    logins.connect(&connect("a-token", None, "g1"), &owner_with(7, "ada", None, None)).unwrap();
+    logins.connected(&connect("a-token", None, "g1"), &owner_with(7, "ada", None, None)).unwrap();
     let mut identities = Vec::new();
     for (at, name) in NAMES.into_iter().enumerate() {
         let token = format!("token-{at}");
-        logins.connect(&connect(&token, Some("g1"), "unused"), &owner_with(7, "ada", Some(name), None)).unwrap();
+        logins.connected(&connect(&token, Some("g1"), "unused"), &owner_with(7, "ada", Some(name), None)).unwrap();
         let GithubCredential::Account(credential) = sent(&logins) else { panic!("{:?}", sent(&logins)) };
         identities.push(credential.identity.unwrap());
     }
@@ -117,13 +121,13 @@ fn a_name_git_wont_commit_as_falls_back_to_the_username_and_git_commits_as_every
     }
 }
 
-/// Her name, her email and her username changed on GitHub. The username is on the account's record, which every client
-/// follows, so it's answered with.
+/// Her name, her email and her username changed on GitHub. What the hub heard is answered with, for the hub to keep, and
+/// once it has, workers are sent what it makes of the default.
 #[test]
-fn a_check_a_day_on_has_github_asked_again_and_whats_changed_there_reaches_workers_and_a_new_username_the_record() {
+fn a_check_a_day_on_has_github_asked_again_and_whats_changed_there_reaches_workers() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
-    logins.connect(&connect("a-token", None, "g1"), &owner_with(7, "ada", Some("Ada"), None)).unwrap();
+    logins.connected(&connect("a-token", None, "g1"), &owner_with(7, "ada", Some("Ada"), None)).unwrap();
     let mut following = logins.git_credential();
     following.borrow_and_update();
 
@@ -131,11 +135,13 @@ fn a_check_a_day_on_has_github_asked_again_and_whats_changed_there_reaches_worke
     let mut a_day_on = logins.check(1000 + a_day_ms()).unwrap().profiles;
     let due = a_day_on.pop().unwrap();
     let changed = owner_with(7, "ada-lovelace", Some("Ada Lovelace"), Some("ada@example.com"));
-    let renamed = logins.profile_read(&due, Ok(changed), 1000 + a_day_ms()).unwrap().unwrap();
+    let heard = logins.profile_read(&due, Ok(changed.clone()), 1000 + a_day_ms()).unwrap().unwrap();
+    super::heard(&logins, &heard.account, &changed, heard.at_ms);
 
     assert!(before_a_day.is_empty(), "{before_a_day:?}");
-    assert_eq!(due.token.as_str(), "a-token");
-    assert_eq!((renamed.account.user.name.as_str(), renamed.changed), ("ada-lovelace", true));
+    assert!(matches!(&due.from, ReadFrom::Github(token) if token.as_str() == "a-token"), "{due:?}");
+    let profile = Some(changed.profile.clone());
+    assert_eq!((heard.username.as_str(), heard.profile), ("ada-lovelace", profile));
     let credential = following.borrow_and_update().for_workers();
     assert_eq!(commits_as(&credential).as_deref(), Some("Ada Lovelace <ada@example.com>"));
     assert!(
@@ -143,13 +149,36 @@ fn a_check_a_day_on_has_github_asked_again_and_whats_changed_there_reaches_worke
     );
 }
 
-/// No answer, and GitHub naming another user, keep nothing, so the next check asks again. GitHub refusing the token, as
-/// one revoked, is asked about again only a day on, and what GitHub said before stands.
+/// As on the first start after the hub stopped keeping them in its database. Until the hub has heard what GitHub calls
+/// the default's user, workers are sent a block, which no check of reach reads as the default's, and the account is
+/// due to be asked at once. Once the username is known, and the profile isn't, she commits as the address GitHub gives
+/// her, never as nobody.
 #[test]
-fn a_token_github_refuses_is_asked_about_again_only_a_day_on_and_any_other_failure_at_the_next_check() {
+fn an_account_whose_user_isnt_known_is_asked_at_once_and_blocks_until_then_and_its_profile_falls_back_meanwhile() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
     logins.connect(&connect("a-token", None, "g1"), &owner_with(7, "ada", Some("Ada"), None)).unwrap();
+
+    let unnamed = logins.git_credential().borrow().clone();
+    let due = logins.check(1001).unwrap().profiles;
+    logins.observations.keep_as_read::<GithubUsername>("g1".into(), "ada".into(), 1001);
+    logins.heard_of(1001).unwrap();
+
+    assert!(matches!(unnamed, DefaultCredential::Unnamed { .. }), "{unnamed:?}");
+    assert!(reason(unnamed.for_workers()).starts_with("Roundhouse is asking GitHub who"));
+    assert_eq!(due.iter().map(|due| due.account.as_str()).collect::<Vec<_>>(), ["g1"]);
+    assert_eq!(commits_as(&sent(&logins)).as_deref(), Some("ada <7+ada@users.noreply.github.com>"));
+    assert_eq!(logins.check(1002).unwrap().profiles.len(), 1, "its profile is still to be read");
+}
+
+/// No answer, and GitHub naming another user, keep nothing, so the next check asks again. GitHub refusing the token, as
+/// one revoked, has the next check ask with no login, until the account is connected again, and what GitHub said
+/// before stands.
+#[test]
+fn a_token_github_refuses_is_asked_about_with_no_login_and_any_other_failure_with_it_at_the_next_check() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, _) = logins_in(dir.path());
+    logins.connected(&connect("a-token", None, "g1"), &owner_with(7, "ada", Some("Ada"), None)).unwrap();
     let at = 1000 + a_day_ms();
     let due_at = |now_ms| logins.check(now_ms).unwrap().profiles.pop();
 
@@ -159,26 +188,63 @@ fn a_token_github_refuses_is_asked_about_again_only_a_day_on_and_any_other_failu
     logins.profile_read(&after_no_answer, Ok(owner_with(8, "grace", Some("Grace"), None)), at + 1).unwrap();
     let after_another_user = due_at(at + 2).unwrap();
     logins.profile_read(&after_another_user, Err(ApiError::new(ErrorCode::InvalidRequest, "revoked")), at + 2).unwrap();
-    let after_a_refusal = due_at(at + 3);
-    let a_day_after_it = due_at(at + 2 + a_day_ms());
+    let after_a_refusal = due_at(at + 3).unwrap();
+    logins
+        .connected(&Connect { connected_at_ms: at + 4, ..connect("b-token", Some("g1"), "g2") }, &owner(7, "ada", None))
+        .unwrap();
+    let connected_again = due_at(at + 4 + a_day_ms()).unwrap();
 
-    assert!(after_a_refusal.is_none(), "{after_a_refusal:?}");
-    assert!(a_day_after_it.is_some());
-    assert_eq!(commits_as(&sent(&logins)).as_deref(), Some("Ada <7+ada@users.noreply.github.com>"));
+    assert!(matches!(after_no_answer.from, ReadFrom::Github(_)), "{after_no_answer:?}");
+    assert!(matches!(after_another_user.from, ReadFrom::Github(_)), "{after_another_user:?}");
+    assert_eq!(after_a_refusal.from, ReadFrom::Nobody);
+    assert!(
+        matches!(&connected_again.from, ReadFrom::Github(token) if token.as_str() == "b-token"),
+        "{connected_again:?}"
+    );
 }
 
 /// A sign-in the check renews, whose token GitHub revokes as it gives the next, is asked about at the next check, with
-/// that one. A token that has ended can't be.
+/// that one. A token that has ended can't be asked with, so it's asked about with no login.
 #[test]
-fn a_check_leaves_a_sign_in_it_renews_for_the_next_and_has_nothing_asked_of_an_ended_token() {
+fn a_check_leaves_a_sign_in_it_renews_for_the_next_and_asks_with_no_login_of_an_ended_token() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
     let now_ms = 1000 + a_day_ms();
     ada_signed_in(&logins, &store, login_ending("a-token", now_ms + 1));
-    logins.connect(&connect("b-token", None, "g2"), &owner(8, "grace", Some(now_ms))).unwrap();
+    logins.connected(&connect("b-token", None, "g2"), &owner(8, "grace", Some(now_ms))).unwrap();
 
     let checked = logins.check(now_ms).unwrap();
 
     assert_eq!(checked.due.len(), 1, "ada's sign-in is renewed");
-    assert!(checked.profiles.is_empty(), "{:?}", checked.profiles);
+    let asked: Vec<(&str, &ReadFrom)> = checked.profiles.iter().map(|due| (due.account.as_str(), &due.from)).collect();
+    assert_eq!(asked, [("g2", &ReadFrom::Nobody)]);
+}
+
+/// However many accounts can't be asked about with their own login, the hub asks GitHub with no login at most
+/// [`NOBODY_ASKS_AN_HOUR`] times an hour, leaving the rest for later in the hour after, and none for an hour once GitHub
+/// says it's limiting such calls, each then not known as it was.
+#[test]
+fn asks_with_no_login_are_kept_well_under_githubs_limit_and_stop_for_an_hour_once_it_limits_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, _) = logins_in(dir.path());
+    for n in 0..30u64 {
+        let id = format!("g{n}");
+        logins.connected(&connect(&format!("token-{n}"), None, &id), &owner(100 + n, "user", Some(1001))).unwrap();
+        logins.observations.forget_for_a_test::<crate::hub::GithubUsername>(&id.as_str().into());
+    }
+    let hour_ms = 60 * 60 * 1000;
+
+    let first = logins.check(2000).unwrap().profiles;
+    let in_the_hour = logins.check(2000 + hour_ms - 1).unwrap().profiles;
+    let an_hour_on = logins.check(2000 + hour_ms).unwrap().profiles;
+    let limited = &an_hour_on[0];
+    let heard = logins.nobody_read(limited, Err(github::NotRead::Limited), 2000 + hour_ms).unwrap();
+    let while_limited = logins.check(2000 + 2 * hour_ms - 1).unwrap().profiles;
+    let after = logins.check(2000 + 2 * hour_ms).unwrap().profiles;
+
+    assert!(first.iter().all(|due| due.from == ReadFrom::Nobody));
+    assert_eq!((first.len(), in_the_hour.len(), an_hour_on.len()), (NOBODY_ASKS_AN_HOUR, 0, NOBODY_ASKS_AN_HOUR));
+    assert_eq!(heard, None, "not known, and nothing decided");
+    assert_eq!(while_limited.len(), 0);
+    assert_eq!(after.len(), NOBODY_ASKS_AN_HOUR);
 }

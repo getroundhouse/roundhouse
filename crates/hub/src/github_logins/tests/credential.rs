@@ -46,7 +46,7 @@ fn workers_are_sent_a_block_saying_to_connect_an_account_while_theres_no_default
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
     let with_none = sent(&logins);
-    logins.connect(&connect("a-token", None, "g1"), &ada()).unwrap();
+    logins.connected(&connect("a-token", None, "g1"), &ada()).unwrap();
 
     logins.set_default(None, 2000).unwrap();
 
@@ -65,11 +65,11 @@ fn workers_are_sent_the_defaults_username_and_token_as_its_connected_and_renewed
     let (logins, _) = logins_in(dir.path());
     let mut following = logins.git_credential();
 
-    logins.connect(&connect("first-token", None, "g1"), &owner(7, "ada", Some(5000))).unwrap();
+    logins.connected(&connect("first-token", None, "g1"), &owner(7, "ada", Some(5000))).unwrap();
     let connected = following.borrow_and_update().for_workers();
-    logins.connect(&connect("renewed-token", Some("g1"), "g2"), &ada()).unwrap();
+    logins.connected(&connect("renewed-token", Some("g1"), "g2"), &ada()).unwrap();
     let renewed = following.borrow_and_update().for_workers();
-    logins.connect(&connect("another-token", None, "g3"), &owner(8, "grace", None)).unwrap();
+    logins.connected(&connect("another-token", None, "g3"), &owner(8, "grace", None)).unwrap();
     logins.check(6000).unwrap();
 
     assert_eq!(connected, as_ada("first-token"), "the first account became the default");
@@ -81,8 +81,8 @@ fn workers_are_sent_the_defaults_username_and_token_as_its_connected_and_renewed
 fn a_disconnected_default_leaves_a_block_saying_to_choose_another_or_connect_one() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
-    logins.connect(&connect("a-token", None, "g1"), &ada()).unwrap();
-    logins.connect(&connect("b-token", None, "g2"), &owner(8, "grace", None)).unwrap();
+    logins.connected(&connect("a-token", None, "g1"), &ada()).unwrap();
+    logins.connected(&connect("b-token", None, "g2"), &owner(8, "grace", None)).unwrap();
 
     logins.disconnect(&"g1".into(), 2000).unwrap();
     let choose = reason(sent(&logins));
@@ -98,7 +98,7 @@ fn a_disconnected_default_leaves_a_block_saying_to_choose_another_or_connect_one
 fn a_default_whose_token_has_ended_blocks_from_its_end_saying_to_renew_it() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
-    logins.connect(&connect("a-token", None, "g1"), &owner(7, "ada", Some(5000))).unwrap();
+    logins.connected(&connect("a-token", None, "g1"), &owner(7, "ada", Some(5000))).unwrap();
 
     logins.check(4999).unwrap();
     let before_its_end = sent(&logins);
@@ -113,7 +113,7 @@ fn a_default_whose_token_has_ended_blocks_from_its_end_saying_to_renew_it() {
 fn a_default_whose_tokens_file_is_gone_or_cant_be_read_blocks() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
-    logins.connect(&connect("a-token", None, "g1"), &ada()).unwrap();
+    logins.connected(&connect("a-token", None, "g1"), &ada()).unwrap();
     let file = file_holding(dir.path(), "a-token");
 
     std::fs::remove_file(&file).unwrap();
@@ -131,7 +131,7 @@ fn a_default_whose_tokens_file_is_gone_or_cant_be_read_blocks() {
 /// The sign-in `id` approved as ada, with `token`, which ends at 9000, as the account `g` if the hub holds no sign-in as
 /// ada.
 fn signed_in(logins: &GithubLogins, store: &Store, id: &str, token: &str) {
-    logins.approve_sign_in(&approved(&started(store, id), token, "g"), &ada()).unwrap();
+    logins.approved_as(&approved(&started(store, id), token, "g"), &ada()).unwrap();
 }
 
 /// The one file among the GitHub logins' in `dir`.

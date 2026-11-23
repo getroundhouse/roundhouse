@@ -12,13 +12,13 @@ impl Store {
         match key {
             RecordKey::Account { id } => Ok(self.account_moved(id)?.map(Record::Account)),
             RecordKey::Session { id } => Ok(self.session_moved(id)?.map(Record::Session)),
+            RecordKey::GithubAccount { id } => Ok(self.github_account_moved(id)?.map(Record::GithubAccount)),
             RecordKey::Repo { .. }
             | RecordKey::Workspace { .. }
             | RecordKey::Comment { .. }
             | RecordKey::HubSettings
             | RecordKey::NewWorkspaceDraft
             | RecordKey::Subagent { .. }
-            | RecordKey::GithubAccount { .. }
             | RecordKey::GithubSignIn { .. }
             | RecordKey::FoundGithubLogin { .. }
             | RecordKey::GithubApp { .. }

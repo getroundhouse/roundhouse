@@ -34,13 +34,16 @@ mod gh_login;
 pub(crate) use default_credential::DefaultCredential;
 pub(crate) use gh_login::{GhSaid, NoGhLogin};
 mod installations;
+mod nobody;
 #[cfg(test)]
 pub(crate) use installations::MINTED_WITH_LEFT;
 pub(crate) use installations::{Looked, MintDue};
+#[cfg(test)]
+pub(crate) use nobody::NOBODY_ASKS_AN_HOUR;
 mod profiles;
 #[cfg(test)]
 pub(crate) use profiles::PROFILE_READ_EVERY;
-pub(crate) use profiles::ProfileDue;
+pub(crate) use profiles::{Heard, ProfileDue, ReadFrom};
 mod renewals;
 pub(crate) use renewals::{Checked, Due};
 mod secret;

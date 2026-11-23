@@ -87,7 +87,11 @@ async fn making_an_app_keeps_it_connects_where_its_installed_and_workers_commit_
     assert_eq!(app.bot.as_ref().map(|bot| (bot.id.get(), bot.name.as_str())), Some((41, "ada-roundhouse[bot]")));
     assert_eq!(again, app, "the same code again finds the app it made");
     assert_eq!((asked, github.asked().len()), (4, 4), "making it, its bot, its installations and a token, and once");
-    let told = told(&mut feed);
+    let mut told = told(&mut feed);
+    // But for the observation of what GitHub calls the installation's user, its bot, and the copy of its record told
+    // for that alone.
+    told.retain(|notice| !matches!(notice, HubNotice::Observation(_)));
+    told.dedup();
     let [HubNotice::GithubApp(kept), HubNotice::GithubApp(with_bot), HubNotice::GithubAccount(account), ..] =
         told.as_slice()
     else {

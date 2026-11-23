@@ -31,3 +31,11 @@ pub(super) const GITHUB_ACCOUNT_REMOVAL: &str = r"
         (SELECT id FROM github_accounts WHERE login_kind IS NULL AND app_id IS NULL);
     DELETE FROM github_accounts WHERE login_kind IS NULL AND app_id IS NULL;
 ";
+
+/// What GitHub calls each GitHub account's user, and what its profile says, which the hub keeps as observations, in its
+/// cache file, and no longer here. Nothing of either is carried there: the hub asks GitHub again as it starts, since
+/// one it doesn't know is due at once.
+pub(super) const GITHUB_USERS_OBSERVED: &str = r"
+    ALTER TABLE github_accounts DROP COLUMN username;
+    DROP TABLE github_profiles;
+";

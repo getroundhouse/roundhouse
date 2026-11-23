@@ -19,7 +19,7 @@ pub(super) fn account(store: &Store) -> Rev {
 /// The GitHub account `g`, ada's, connected `how`, which makes it the default.
 fn connected(store: &Store, how: GithubLoginKind, ends_at_ms: Option<i64>) {
     let (account, user, file) = (GithubAccountId::from("g"), ada(), LoginFile::new());
-    let (connected_at_ms, installation, profile) = (100, None, None);
+    let (connected_at_ms, installation) = (100, None);
     let connecting = GithubConnecting {
         account: &account,
         user: &user,
@@ -28,7 +28,6 @@ fn connected(store: &Store, how: GithubLoginKind, ends_at_ms: Option<i64>) {
         connected_at_ms,
         ends_at_ms,
         installation,
-        profile,
     };
     store.connect_github_login(&connecting).unwrap();
 }

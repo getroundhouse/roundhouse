@@ -3,7 +3,6 @@ use protocol::model::{GithubAccountId, GithubLoginKind};
 use super::*;
 use crate::store::tests::open_in;
 use crate::store::{GithubApproving, Store};
-use github::GithubProfile;
 
 fn waiting() -> GithubSignInStatus {
     protocol::fixtures::github_sign_in("s").status
@@ -21,8 +20,7 @@ fn approving<'a>(
     file: &'a LoginFile,
     new_account: &'a GithubAccountId,
 ) -> GithubApproving<'a> {
-    const NONE: &GithubProfile = &GithubProfile { name: None, email: None };
-    GithubApproving { sign_in, user, profile: NONE, file, new_account, signed_in_at_ms: 100, ends_at_ms: Some(900) }
+    GithubApproving { sign_in, user, file, new_account, signed_in_at_ms: 100, ends_at_ms: Some(900) }
 }
 
 fn started(store: &Store, id: &str) -> GithubSignInId {
@@ -64,7 +62,6 @@ fn approving_makes_an_account_then_renews_the_one_signed_in_as_the_same_user_in_
         connected_at_ms: 1,
         ends_at_ms: None,
         installation: None,
-        profile: None,
     };
     store.connect_github_login(&connecting).unwrap();
     let [first, second] = ["first", "second"].map(|id| started(&store, id));

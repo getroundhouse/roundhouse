@@ -63,4 +63,7 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::sessions::CACHE_OBSERVED),
     // What each open wait last read, which the hub keeps as an observation, in `waits`.
     Rust(super::waits::reads_observed),
+    // What GitHub calls each GitHub account's user, and its profile, which the hub keeps as observations, in
+    // `github_accounts`.
+    Sql(super::github_accounts::GITHUB_USERS_OBSERVED),
 ];

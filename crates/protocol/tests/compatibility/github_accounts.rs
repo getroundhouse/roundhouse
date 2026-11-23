@@ -1,12 +1,15 @@
 //! GitHub accounts' and sign-ins' records, as the feed and a list carry them, spelled out, since a client of another
-//! build finds a record by its kind's name and its key, and what the settings say workers are sent for the default.
+//! build finds a record by its kind's name and its key, what the settings say workers are sent for the default, and
+//! what GitHub calls an account's user, as an observation.
 
 use protocol::client::{ClientResponse, HubNotice};
 use protocol::frame;
 use protocol::model::{
     GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId,
-    HeldGithubLogin, RecordKey, Records, Rev, SentCredential, UnusableLogin,
+    HeldGithubLogin, Observation, ObservationKey, Observed, RecordKey, Records, Rev, SentCredential, UnusableLogin,
 };
+
+use crate::keeps_its_form;
 
 const ACCOUNT: &str = r#""id":"g","user":{"id":7,"name":"ada"},"held_login":{"how":"token","connected_at_ms":1,"ends_at_ms":null,"needs_sign_in":false},"rev":2"#;
 
@@ -197,4 +200,26 @@ fn no_account_is_one_an_older_client_cant_tell() {
     let read: OlderSent = serde_json::from_str(r#"{"kind":"no_account","reason":"Connect one."}"#).unwrap();
 
     assert_eq!(read, OlderSent::Unknown);
+}
+
+/// What GitHub calls a GitHub account's user, which a hub sends at its own level to a client of a version that reads it
+/// so, as a notice and as its removal.
+#[test]
+fn a_github_username_keeps_its_form_as_a_notice_and_a_removal() {
+    let username = Observed::Current { value: "ada".into() };
+    let copy =
+        HubNotice::Observation(Observation::GithubUsername { account: "g-1".into(), username, rev: Rev::new(5) });
+    let gone = HubNotice::ObservationRemoved {
+        observation: ObservationKey::GithubUsername { account: "g-1".into() },
+        rev: Rev::new(6),
+    };
+
+    keeps_its_form(
+        &copy,
+        r#"{"notice":"observation","kind":"github_username","account":"g-1","username":{"freshness":"current","value":"ada"},"rev":5}"#,
+    );
+    keeps_its_form(
+        &gone,
+        r#"{"notice":"observation_removed","observation":{"kind":"github_username","account":"g-1"},"rev":6}"#,
+    );
 }

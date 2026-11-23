@@ -64,7 +64,9 @@ mod coordinator;
 pub(crate) use coordinator::Hub;
 use coordinator::{KEEPS_WORKERS, new_id, off_thread};
 pub(crate) use dirs::HubDirs;
-pub(crate) use observations::{Kind, SessionCache, SessionContext, SessionKey, SessionTodos};
+pub(crate) use observations::{
+    GithubProfile, GithubUsername, Kind, Observations, SessionCache, SessionContext, SessionKey, SessionTodos,
+};
 #[cfg(test)]
 pub(crate) use observations::{WaitKey, WaitRead, WorkspaceChanges, WorkspaceLines};
 

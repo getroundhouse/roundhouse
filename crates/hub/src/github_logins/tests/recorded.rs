@@ -58,7 +58,7 @@ fn the_settings_say_what_workers_are_sent_and_move_as_it_changes_but_not_as_a_re
 fn the_settings_say_why_a_default_blocks_as_workers_are_told() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
-    let first = logins.connect(&connect("a-token", None, "g1"), &owner(7, "ada", Some(5000))).unwrap();
+    let first = logins.connected(&connect("a-token", None, "g1"), &owner(7, "ada", Some(5000))).unwrap();
     let why = |store: &Store| match recorded(store) {
         Some(SentCredential::Blocked { why, reason, .. }) => Some((why, reason)),
         _ => None,
@@ -67,13 +67,13 @@ fn the_settings_say_why_a_default_blocks_as_workers_are_told() {
     let before_its_end = recorded(&store);
     logins.check(5000).unwrap();
     let ended = why(&store).unwrap();
-    logins.connect(&connect("another-token", Some("g1"), "g2"), &ada()).unwrap();
+    logins.connected(&connect("another-token", Some("g1"), "g2"), &ada()).unwrap();
     let renewed = recorded(&store);
     logins.disconnect(&"g1".into(), 6000).unwrap();
     let disconnected = recorded(&store);
 
     assert_eq!(before_its_end, Some(SentCredential::Account { account: "g1".into() }));
-    assert_eq!(first.settings.and_then(|settings| settings.github).and_then(|github| github.sent), before_its_end);
+    assert_eq!(first.settings.map(|settings| settings.github.is_some()), Some(true), "connecting made it the default");
     assert_eq!(ended.0, UnusableLogin::Ended);
     assert!(ended.1.contains("ada, the default account, has ended") && ended.1.contains("Renew it"), "{}", ended.1);
     assert_eq!(renewed, before_its_end, "connecting a token to it again has it sent again");

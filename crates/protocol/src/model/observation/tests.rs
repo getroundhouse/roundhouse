@@ -15,7 +15,16 @@ type Sent = (Option<Level>, Option<ReadFrom>);
 /// An observation of each kind, with the key and revision it's of, and how it's sent.
 fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
     let unknown = (Observation::Unknown, ObservationKey::Unknown, Rev::default(), (None, None));
-    [of_a_workspace(), of_github(), of_an_agent(), of_an_account(), of_a_session(), vec![unknown]].concat()
+    [
+        of_a_workspace(),
+        of_github(),
+        of_a_github_account(),
+        of_an_agent(),
+        of_an_account(),
+        of_a_session(),
+        vec![unknown],
+    ]
+    .concat()
 }
 
 /// Of each kind of what an agent says of itself.
@@ -102,6 +111,20 @@ fn of_github() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::GithubObserved)),
         ),
     ]
+}
+
+/// Of each kind of what GitHub says of a GitHub account the hub holds a login for.
+fn of_a_github_account() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
+    vec![(
+        Observation::GithubUsername {
+            account: "g".into(),
+            username: Observed::Current { value: "ada".into() },
+            rev: Rev::new(12),
+        },
+        ObservationKey::GithubUsername { account: "g".into() },
+        Rev::new(12),
+        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+    )]
 }
 
 /// Of each kind of what an agent's account is, as its agents say.

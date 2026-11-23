@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ObservationNotice};
-use protocol::model::{Level, Observation, Observed, Rev, WorkspaceId};
+use protocol::model::{AccountId, GithubAccountId, Level, Observation, Observed, Rev, SessionId, WaitId, WorkspaceId};
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
@@ -13,7 +13,7 @@ use super::kinds::{Kind, Owner};
 use super::tables::Tables;
 use super::writer::Writer;
 use crate::cache_file::CacheFile;
-use crate::store::Store;
+use crate::store::{Store, StoreError};
 
 /// Every observation the hub holds, in memory, and in the cache file.
 pub(crate) struct Observations {
@@ -31,11 +31,14 @@ pub(crate) struct Table<K: Kind> {
     pub(super) kept: HashMap<K::Of, Kept<K::Value>>,
     /// What something keeps up to date now, such as a worker watching a worktree, so what's read of it is current.
     pub(super) kept_current: HashSet<K::Of>,
+    /// Whether something keeps every observation of the kind up to date now, as the hub's own reads on a schedule do,
+    /// such as of every GitHub account's username each day, so what's read of any is current, whatever it's of.
+    pub(super) all_kept_current: bool,
 }
 
 impl<K: Kind> Default for Table<K> {
     fn default() -> Self {
-        Self { kept: HashMap::new(), kept_current: HashSet::new() }
+        Self { kept: HashMap::new(), kept_current: HashSet::new(), all_kept_current: false }
     }
 }
 
@@ -115,7 +118,7 @@ impl<K: Kind> Table<K> {
         let kept = self.kept.get(of).map(|kept| &kept.said);
         match change {
             Change::Read { value, read_at_ms } => {
-                let current = self.kept_current.contains(of);
+                let current = self.kept_current(of);
                 match kept {
                     // A read that began before the one kept, and lands after it, as a slow one can.
                     Some(kept) if kept.read_at_ms > read_at_ms => Step::Same,
@@ -126,7 +129,7 @@ impl<K: Kind> Table<K> {
                 }
             }
             Change::WorkedOut { value, as_of_ms } => {
-                let current = self.kept_current.contains(of);
+                let current = self.kept_current(of);
                 match kept {
                     Some(kept) if kept.value == value && kept.current == current => {
                         if kept.read_at_ms == as_of_ms {
@@ -175,9 +178,9 @@ impl<K: Kind> Table<K> {
         }
     }
 
-    /// Whether something keeps the observation of `of` up to date now.
+    /// Whether something keeps the observation of `of` up to date now, on its own or with every one of its kind.
     pub(super) fn kept_current(&self, of: &K::Of) -> bool {
-        self.kept_current.contains(of)
+        self.all_kept_current || self.kept_current.contains(of)
     }
 
     /// What a [`Change::Merged`] of `value`, heard at `heard_at_ms`, makes of the observation of `of`.
@@ -212,17 +215,18 @@ impl<K: Kind> Table<K> {
         }
     }
 
-    /// Keeps what `changed` made of the observation of `of`, at `rev`, and returns what clients are to be told of it.
-    pub(super) fn change(&mut self, of: &K::Of, changed: Changed<K::Value>, rev: Rev) -> ObservationNotice {
+    /// Keeps what `changed` made of the observation of `of`, at `rev`, and returns what clients are to be told of it,
+    /// which is nothing for a kind sent nowhere.
+    pub(super) fn change(&mut self, of: &K::Of, changed: Changed<K::Value>, rev: Rev) -> Option<ObservationNotice> {
         match changed {
             Changed::Says(said) => {
                 let observation = K::observation(of, said.observed(), rev);
                 self.kept.insert(of.clone(), Kept { said, rev });
-                ObservationNotice::Copy(observation)
+                observation.map(ObservationNotice::Copy)
             }
             Changed::Gone => {
                 self.kept.remove(of);
-                ObservationNotice::Removed { observation: K::key(of), rev }
+                K::key(of).map(|observation| ObservationNotice::Removed { observation, rev })
             }
         }
     }
@@ -233,8 +237,8 @@ impl Observations {
     /// when it was read, under one revision newer than any a client holds, since a client of the hub before can hold
     /// any revision that hub gave. Where there's no revision to give, as when the database fails, it starts with none
     /// of them, as the log says, and each is not known until it's read again. Those of a workspace, a session, an
-    /// open wait or an account the database doesn't have are forgotten, as one a hub stopped before forgetting, or a file refused to,
-    /// leaves, so no client is listed them.
+    /// agent's account, a GitHub account or an open wait the database doesn't have are forgotten, as one a hub
+    /// stopped before forgetting, or a file refused to, leaves, so no client is listed them.
     pub(crate) fn open(file: Arc<CacheFile>, store: &Store) -> Self {
         let mut tables = Tables::default();
         match store.next_rev() {
@@ -250,14 +254,14 @@ impl Observations {
             }
         }
         let writer = Writer::new(file);
-        match (store.list_workspaces(true), store.session_ids(), store.open_wait_ids(), store.account_ids()) {
-            (Ok(workspaces), Ok(sessions), Ok(waits), Ok(accounts)) => {
-                let workspaces: HashSet<WorkspaceId> = workspaces.into_iter().map(|workspace| workspace.id).collect();
+        match owners(store) {
+            Ok(Owners { workspaces, sessions, waits, accounts, github_accounts }) => {
                 let gone = |owner: Owner<'_>| match owner {
                     Owner::Workspace(id) => !workspaces.contains(id),
                     Owner::Session(key) => !sessions.contains(&key.session_id),
                     Owner::Wait(key) => !waits.contains(&key.wait),
                     Owner::Account(id) => !accounts.contains(id),
+                    Owner::GithubAccount(id) => !github_accounts.contains(id),
                     // Never gone: what it owns goes only as the hub lets go of it.
                     Owner::Hub => false,
                 };
@@ -265,11 +269,17 @@ impl Observations {
             }
             // The task that works out GitHub's observations forgets those of workspaces, and their sessions', as it
             // starts.
-            (Err(error), _, _, _) | (_, Err(error), _, _) | (_, _, Err(error), _) | (_, _, _, Err(error)) => {
-                warn!("keeping observations of what the database may not have: {error}");
-            }
+            Err(error) => warn!("keeping observations of what the database may not have: {error}"),
         }
         Self { changing: AsyncMutex::new(()), tables: Mutex::new(tables), writer }
+    }
+
+    /// The store kept in the cache file `cache.db` in `dir`, as [`Observations::open`] opens it, for a test of what reads
+    /// it that has no hub.
+    #[cfg(test)]
+    pub(crate) fn in_a_test(dir: &std::path::Path, store: &Store) -> Arc<Self> {
+        let file = CacheFile::open(&dir.join("cache.db"), &[&super::PART]);
+        Arc::new(Self::open(Arc::new(file), store))
     }
 
     /// Lists the records of `level` along with `list`, and every observation the hub sends at that level, under the
@@ -308,8 +318,49 @@ impl Observations {
         K::table(&mut self.tables.lock()).kept.iter().map(|(of, kept)| (of.clone(), kept.said.value.clone())).collect()
     }
 
+    /// When the observation of kind `K` of `of` was last read, however fresh it is, or `None` while it isn't known, for
+    /// what reads it again on a schedule of its own.
+    pub(crate) fn read_at<K: Kind>(&self, of: &K::Of) -> Option<i64> {
+        K::table(&mut self.tables.lock()).kept.get(of).map(|kept| kept.said.read_at_ms)
+    }
+
+    /// Keeps that the observation of kind `K` of `of` was read at `read_at_ms` and found `value`, as of then, under no
+    /// revision, telling nobody, for a test of what reads it that has no hub to keep it, as one of
+    /// `crate::github_logins`'s.
+    #[cfg(test)]
+    pub(crate) fn keep_as_read<K: Kind>(&self, of: K::Of, value: K::Value, read_at_ms: i64) {
+        K::table(&mut self.tables.lock()).keep_loaded(of, value, read_at_ms, Rev::default());
+    }
+
+    /// Forgets the observation of kind `K` of `of`, telling nobody, for a test of what reads it that has no hub, as
+    /// [`Observations::keep_as_read`] keeps one.
+    #[cfg(test)]
+    pub(crate) fn forget_for_a_test<K: Kind>(&self, of: &K::Of) {
+        K::table(&mut self.tables.lock()).kept.remove(of);
+    }
+
     /// What each observation of kind `K` the store keeps is of.
     pub(crate) fn kept_of<K: Kind>(&self) -> Vec<K::Of> {
         K::table(&mut self.tables.lock()).kept.keys().cloned().collect()
     }
+}
+
+/// Each owner the database has, of each kind an observation can be of but the hub.
+struct Owners {
+    workspaces: HashSet<WorkspaceId>,
+    sessions: HashSet<SessionId>,
+    waits: HashSet<WaitId>,
+    accounts: HashSet<AccountId>,
+    github_accounts: HashSet<GithubAccountId>,
+}
+
+/// Each owner `store` has, as [`Observations::open`] forgets the observations of the rest.
+fn owners(store: &Store) -> Result<Owners, StoreError> {
+    Ok(Owners {
+        workspaces: store.list_workspaces(true)?.into_iter().map(|workspace| workspace.id).collect(),
+        sessions: store.session_ids()?,
+        waits: store.open_wait_ids()?,
+        accounts: store.account_ids()?,
+        github_accounts: store.github_account_ids()?,
+    })
 }

@@ -37,7 +37,7 @@ pub(super) fn sign_in_kept(
 ) -> GithubAccountId {
     let sign_in = started(store, &uuid::Uuid::new_v4().to_string());
     let approved = Approved { sign_in, login, new_id: new_id.into(), signed_in_at_ms: 1000 };
-    logins.approve_sign_in(&approved, owner).unwrap().account.unwrap().account.id
+    logins.approved_as(&approved, owner).unwrap().account.unwrap().account.id
 }
 
 /// The same, as ada, as the account `g` if the hub holds no sign-in as ada, which is the default as the first account.
@@ -81,13 +81,13 @@ fn approving_keeps_what_github_gave_in_a_file_of_its_own_and_makes_an_account_th
     let id = started(&store, "s");
     let given = approved(&id, "a-token", "g");
 
-    let change = logins.approve_sign_in(&given, &ada()).unwrap();
+    let change = logins.approved_as(&given, &ada()).unwrap();
 
     assert!(change.changed);
     assert_eq!(change.sign_in.status, GithubSignInStatus::Approved { account: "g".into() });
     let account = change.account.unwrap();
     assert!(account.changed);
-    assert_eq!(account.account.user, ada().user);
+    assert_eq!((account.account.user.id, logins.named(&account.account)), (ada().user.id, ada().user.name));
     let held = account.account.held_login.unwrap();
     assert_eq!((held.how, held.connected_at_ms, held.ends_at_ms), (GithubLoginKind::SignIn, 1000, Some(9000)));
     assert_eq!(account.settings.and_then(|settings| settings.github).unwrap().account, Some("g".into()));
@@ -98,16 +98,17 @@ fn approving_keeps_what_github_gave_in_a_file_of_its_own_and_makes_an_account_th
 fn a_second_sign_in_as_the_same_user_renews_its_login_in_place_keeping_the_default_and_a_token_is_another_account() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
-    logins.connect(&connect("a-pasted-token", None, "by-token"), &ada()).unwrap();
+    logins.connected(&connect("a-pasted-token", None, "by-token"), &ada()).unwrap();
     let [first, second] = ["first", "second"].map(|id| started(&store, id));
-    logins.approve_sign_in(&approved(&first, "an-old-token", "signed-in"), &ada()).unwrap();
+    logins.approved_as(&approved(&first, "an-old-token", "signed-in"), &ada()).unwrap();
     logins.set_default(Some(&"signed-in".into()), 2000).unwrap();
     let renamed = owner(7, "ada-renamed", None);
 
-    let change = logins.approve_sign_in(&approved(&second, "a-new-token", "unused"), &renamed).unwrap();
+    let change = logins.approved_as(&approved(&second, "a-new-token", "unused"), &renamed).unwrap();
 
     let account = change.account.unwrap();
-    assert_eq!((account.account.id.as_str(), account.account.user.name.as_str()), ("signed-in", "ada-renamed"));
+    let named = logins.named(&account.account);
+    assert_eq!((account.account.id.as_str(), named.as_str()), ("signed-in", "ada-renamed"));
     assert_eq!(change.sign_in.status, GithubSignInStatus::Approved { account: "signed-in".into() });
     assert_eq!(default_of(&store), Some("signed-in".into()));
     let accounts = store.list_records().unwrap().github_accounts;
@@ -135,7 +136,7 @@ fn a_sign_in_that_ended_first_keeps_nothing_and_ending_one_that_has_ended_change
     let id = started(&store, "s");
 
     let cancelled = logins.end_sign_in(&id, SignInEnd::Cancelled).unwrap();
-    let approved_after = logins.approve_sign_in(&approved(&id, "a-token", "g"), &ada()).unwrap();
+    let approved_after = logins.approved_as(&approved(&id, "a-token", "g"), &ada()).unwrap();
     let refused_after = logins.end_sign_in(&id, SignInEnd::Refused).unwrap();
     let nobodys = logins.end_sign_in(&"nobody's".into(), SignInEnd::Ended);
 

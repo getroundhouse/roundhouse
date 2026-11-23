@@ -31,7 +31,7 @@ const HOUR_MS: i64 = 60 * 60 * 1000;
 /// The GitHub logins of a hub whose data directory is `dir`, started at 0, and its store.
 fn logins_in(dir: &std::path::Path) -> (Arc<GithubLogins>, Arc<Store>) {
     let store = Arc::new(store_with_session(dir));
-    (Arc::new(GithubLogins::new(Arc::clone(&store), dir, 0)), store)
+    (Arc::new(crate::github_logins::tests::logins_over(&store, dir, 0)), store)
 }
 
 fn sent(logins: &GithubLogins) -> GithubCredential {
@@ -61,9 +61,9 @@ async fn a_defaults_token_that_ends_while_the_hub_runs_blocks_at_the_next_check_
     let (logins, _) = logins_in(dir.path());
     let connect = Connect::new(GithubAccountConnect { token: GithubToken::new("a-token"), id: None }, 0).unwrap();
     let user = GithubUser { id: GithubUserId::new(7), name: "ada".into() };
-    logins
-        .connect(&connect, &TokenOwner { user, profile: GithubProfile::default(), ends_at_ms: Some(ENDS_AT_MS) })
-        .unwrap();
+    let owner = TokenOwner { user, profile: GithubProfile::default(), ends_at_ms: Some(ENDS_AT_MS) };
+    let account = logins.connect(&connect, &owner).unwrap().account.id;
+    crate::github_logins::tests::heard(&logins, &account, &owner, 0);
     let wall_clock = Arc::new(AtomicI64::new(ENDS_AT_MS - 8 * HOUR_MS));
     let mut checks = checking(&logins, &wall_clock);
     checks.recv().await.unwrap();
