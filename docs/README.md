@@ -41,11 +41,16 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/standards/manual-checks.md` | What a person has to judge by hand |
 | `docs/principles/parts.md` | Which process does which job: hubs, workers, providers and clients |
 | `docs/principles/layers.md` | Which crate can depend on which, how code is layered, and how an error crosses the layers |
-| `docs/principles/state.md` | Who owns a piece of state, what goes on a record and what in a log, and how the database changes |
-| `docs/principles/sync.md` | How a client's copy of a hub's state stays correct, and who allocates each ID |
+| `docs/principles/state.md` | Who owns a piece of state, and how what the hub stores changes form |
+| `docs/principles/serving.md` | The four kinds of thing a hub serves, how a client gets them, and what the hub keeps current |
+| `docs/principles/events.md` | What an event is, how the hub records one, and how a client reads a session's log |
+| `docs/principles/records.md` | What a record is, how one changes, and how a client keeps its copy |
+| `docs/principles/observations.md` | What the hub keeps of state others own, where it comes from, and how fresh it says it is |
+| `docs/principles/live-snapshots.md` | What something running shows now, which the hub doesn't store, and how it reaches a client |
+| `docs/principles/sync.md` | What's common to every kind in a client's copy of a hub's state, and who allocates each ID |
 | `docs/principles/protocol.md` | How a protocol changes so that peers on different builds keep working together |
 | `docs/principles/failure.md` | What happens when a process dies, and how a slow one is kept from delaying the others |
-| `docs/principles/outside-systems.md` | How the code deals with a system the project doesn't own, and how its credentials are kept |
+| `docs/principles/outside-systems.md` | How the code deals with a system the project doesn't own, how the hub reads GitHub, and how credentials are kept |
 | `docs/principles/agents.md` | How the hub and clients deal with each kind of agent through its adapter, and how an agent uses Roundhouse's tools |
 | `docs/decisions/` | One record a file, listed in its `README.md` |
 | `docs/reference/terms.md` | What the project's words mean, and which to write |

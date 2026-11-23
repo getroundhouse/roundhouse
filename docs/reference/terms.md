@@ -175,6 +175,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Raw line | The agent's original output, stored beside the event made from it | `raw` |
 | Tail | Text the agent is still writing, which isn't in the log yet. The end of the chat draws it, with the prompts the agent hasn't read yet and the working line | `Tail` |
 | Delta | One change to the tail. Deltas aren't stored | `StreamDelta` |
+| Live snapshot | What something running shows now, which the hub doesn't store: a session's tail, or what a terminal shows. A client holds the whole of it and takes each change, and one that falls behind is sent it whole again | `Tail`, `StreamDelta`, `TerminalPicture` |
 | Transcript | What a person sees: the log and tail, drawn as rows | `crates/transcript` |
 | Frame | One message on the wire, as one line of JSON | `protocol::frame`, `HubFrame`, `WorkerFrame` |
 | Hello | The first request on a connection, which names the versions of the protocol its side speaks, so both can use the newest they share | `ClientRequest::Hello`, `WorkerRequest::Hello`, `ProviderRequest::Hello` |
@@ -190,6 +191,8 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Update feed | The signed list of published builds that the app checks to update itself. Always written in full, so it isn't confused with the hub's feed | `releases.macos-arm64.json`, `updates::source`, `UpdateFeedKey` |
 | Record | Something a hub owns that changes in place, rather than being added to a log: a repository, workspace, session, subagent, comment or terminal, or per-user state such as unread. One of any kind is a `Record`, which its `RecordKey` names | `Record`, `RecordKey`, `Records`, `Repo`, `Workspace`, `Session`, `Subagent`, `DiffComment`, `Terminal` |
 | Revision | When a record last changed, from one counter per hub, so a client can tell which of two copies is newer | `Rev`, `rev` |
+| Observation | The hub's copy of state someone else owns, as the hub last observed it, such as a workspace's lines added and removed. It says whether it's current or as of when it was read. `docs/principles/observations.md` has the rules. Not built | None |
+| Level | What a client follows: the hub, a workspace, a session, a terminal, or an issue or a pull request. What it follows is what it's sent, and what the hub keeps current. Not built | None |
 | Proposal | A decision too large for a question that an agent asks the person to make, written as a structure of questions and options, which the person reads and answers in a tab of its own. A record of the chat it was made in | `Proposal`, `Proposed`, `ProposalView` |
 | Proposal's revision | One version of a proposal, as its agent wrote it, numbered from 1, with the person's response to it. A proposal keeps every one, and only the newest can be answered. Not a record's revision, which a proposal has too | `ProposalRevision`, `RevisionNumber`, `Response` |
 
@@ -231,7 +234,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Provider, model provider | A provider is where a hub runs workers. A model provider is who serves an agent's model | "Provider" alone only for the first. Always "model provider" for the second, in code and in the interface |
 | Account | An agent's account is the login its CLI runs under. A GitHub account is one the hub holds a login for, which agents push as. A hub's accounts, once a hub serves several people, are who may use it | "Account" alone means the agent's, until hubs have their own. Then say which. Always "GitHub account" for the second, and `Github*` in code |
 | Notice | `EventBody::Notice` is a message in a session's log. `HubNotice` is on the feed, and says a record changed | "Log notice" or "feed notice" |
-| Snapshot | `session::Snapshot` is what a subscriber starts from. A provider's `snapshot` saves a filesystem, and isn't built | Say which |
+| Snapshot | `session::Snapshot` is what a subscriber starts from. A live snapshot is what something running shows now, which the hub doesn't store. A provider's `snapshot` saves a filesystem, and isn't built | Say which, and "live snapshot" in full |
 | Frame, step, window | A protocol frame, one message on the wire, and, in `dictation`, a short stretch of audio measured as one, for finding pauses or for the model's features. The model's encoder makes out a step, which is decoded as one, and its live encoder takes a window at a time | "Frame" alone means the protocol's. In `dictation`, say what a frame is of, such as "the features' frames", and "step" and "window" for the encoder's |
 | Record, recording | A hub's record, such as a session's, and the hub recording something, against a recording of what's said to dictate a prompt | "Record" and "recorded" for the hub's, and "recording" only for dictation's, as `dictation::Recording` |
 | Restore | `workspace_restore` recreates an archived worktree from its branch, and the workspace's record says `WorkspaceStatus::Restoring` meanwhile. A provider's `restore` rolls back a filesystem, and isn't built | "Restore" alone means the workspace's |

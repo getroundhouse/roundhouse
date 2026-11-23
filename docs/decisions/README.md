@@ -7,6 +7,8 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [hub-and-workers.md](hub-and-workers.md) | A hub owns the state and workers do the work, with the same code for local and remote |
 | [no-sync-engine.md](no-sync-engine.md) | Clients stay in sync through the hub's own protocol, not a sync engine |
 | [session-log-not-crdt.md](session-log-not-crdt.md) | A session's history is a log that clients read by range, not a CRDT |
+| [observations-are-a-kind.md](observations-are-a-kind.md) | The hub's copies of what others own are a kind of their own, sent as records are and kept in a cache file. Not built |
+| [one-way-to-subscribe.md](one-way-to-subscribe.md) | A client follows everything through one kind of subscription, at one of a few fixed levels. Not built |
 | [newline-delimited-json.md](newline-delimited-json.md) | The wire format is newline-delimited JSON |
 | [hub-speaks-previous-version.md](hub-speaks-previous-version.md) | Only the hub speaks the previous protocol version |
 | [typed-capabilities.md](typed-capabilities.md) | What an agent can do is one typed set of capabilities, which each adapter fits its agent to |

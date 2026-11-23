@@ -1,6 +1,6 @@
 # Who owns each piece of state
 
-These rules say who owns a piece of state, what goes on a record and what goes in a session's log, and how the hub's database changes. Decide who owns the state before choosing where a change goes.
+These rules say who owns a piece of state, and how what the hub stores changes form. Decide who owns the state before choosing where a change goes. `docs/principles/serving.md` says which kind of thing it then is, and each kind has a doc of its own.
 
 ## Owners
 
@@ -9,26 +9,15 @@ These rules say who owns a piece of state, what goes on a record and what goes i
 - **A client keeps or computes only what's about its own device.** For example, a client owns which workspace and chat are open, and the scroll position. A fix that finds a client keeping or computing more moves the state to the hub, usually with a protocol change, even when fixing the client would be the smaller change.
 - **State that's one person's is kept for that person, on the hub.** How far a chat is read, and what's typed and not sent, belong to whoever read or typed, not to the chat. *Not built:* a hub has one user, so these are on the session's and the workspace's records. *Unconfirmed.*
 - **A client reads a fact from the record or event that states it, and never infers it from the events it has loaded.** A client holds a session's log in pages, so the event that settles a question can be in a page it hasn't loaded. For example, a session's record lists the approvals the agent is waiting on, so a client doesn't search its loaded events for a request with no answer.
-- **What only the hub can say of an event, the hub adds to the event as it records it.** A client then reads it from the event, and a hub that starts again reads it from the log. For example, the hub adds when a turn started to the event that ends it, and whether a failed request repeats the one before to the event that records the failure. *Unconfirmed.*
 - **State is keyed on the thing it describes.** Whether the default GitHub account can push to a repository is keyed on the repository, not on its project or a workspace, so it still holds when a project has more than one repository. A pull request belongs to its branch on GitHub, so two workspaces on the same branch have the same pull request.
-- **State that no client shows stays off the records that clients sync.** The hub stores it in a table or a row of its own, and changing it moves no revision. For example, the hub stores a workspace's `RepoSource` and `WorkerEnvironment` in SQLite apart from the workspace's record, and the port a worker serves its agents' tools on is in a table of its own.
 
-## Records and the log
+## What's stored
 
-- **A prompt or an approval is real only once the hub has recorded it.** Until then a client shows it as pending. A session's settings follow the same rule: a change to the model, approval mode or effort goes to the running agent first, and the hub saves it only when the agent accepts it. So a record is never ahead of what's true.
-- **The hub checks a request that's only safe in one state as it acts on it, and a client never acts on what it last read.** A client's copy can be a moment old, so something can start between its read and its request. The request says what it needs, and the hub refuses with a code the client can tell apart. For example, `hub_shutdown_if_idle` stops the hub only if it's still idle, and otherwise returns `Conflict`, so a prompt sent after the app last saw the hub idle isn't cut off. *Unconfirmed.*
-- **A record tells "not known" apart from "none", and nothing records a guess.** For example, a session's record from a hub too old to list open approvals has no list, and a client doesn't read that as an empty list. An adapter that can't tell why its agent started a turn by itself records no `OwnTurn` event.
 - **What a newer build stored in a form this build can't read is kept as it is, and never taken for nothing and deleted.** Going back a build then loses nothing. For example, a login file in a newer form stays in `github-logins/`, and its account blocks until a build that can read it runs. *Unconfirmed.*
-- **A record that repeats what the log holds changes in the same transaction as the event that changes it.** A client that reads the record after receiving the event then can't see an older value. A session's status and its open approvals both change this way, and a record's revision moves in the same transaction as the change.
-- **A value where only the newest reading matters goes on a record, or in the session's tail if it's live output, and isn't an event.** Nothing that reads the log would use the older readings. For example, the hub keeps how full an agent's context is on the session's record, and keeps an agent's retry of a failed model request in the tail.
-- **A session's log has one writer, its hub.** So its events get a plain sequence number, `seq`, and the log needs no merge logic.
-- **What a session's log opens, it closes once, and the hub closes it where the agent can't.** The agent's adapter records how a prompt, an approval or a run ended. When the agent can't, such as when its worker is lost, the hub records it. So a client reads how each ended from the log, and never works it out from what came after. *Unconfirmed.*
-- **The hub records every event an adapter sends it, and the client decides whether to show an event.** An event's place in the log records which session or subagent it belongs to, not whether it's worth showing. For example, `session_find` returns which events hold the text, and the client counts the matches in what those events render.
-- **The hub stores everything the transcript renders, as it was when the event was recorded, before it records the event.** The transcript then doesn't need the worker, shows the same on every client, and keeps its images after a restart and after the workspace is archived. A client also never requests something the hub doesn't have. For example, the worker reads an image that an agent's reply links to as the finished message passes through, and the hub stores it as an attachment before it records the message. If the agent later changes the file, the reply still shows the earlier image.
 
 ## The database
 
-These rules hold for the hub's database, not for its cache of what it reads from GitHub, which is a file of its own that the hub empties rather than migrates, as `docs/principles/outside-systems.md` says.
+These rules hold for the hub's database, not for its cache of what it reads from GitHub, which is a file of its own that the hub empties rather than migrates, as `docs/principles/observations.md` says.
 
 - **The database migrates forward only.** Migrations run in order, each in its own transaction. A hub rejects a database from a newer build, so it can't damage it.
 - **A hub refuses a database older than its floor, the oldest release it updates from, and leaves it untouched,** so that release can still migrate it. For example, a hub whose floor is 0.1.300 exits on a database 0.1.250 left, and its log says to run 0.1.300 first. Only a build installed by hand, or one taken after the hub failed to start, meets this, since updates step through floors. The floor moves only at a break in the worker protocol. *Unconfirmed:* that only the hub's log says so.
