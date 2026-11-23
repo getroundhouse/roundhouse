@@ -80,6 +80,12 @@ impl GitOutput {
     pub(super) fn succeeded(self) -> Result<String, ApiError> {
         if self.success { Ok(self.stdout) } else { Err(git_error(format!("{} failed: {}", self.command, self.stderr))) }
     }
+
+    /// What a `git diff --no-index` printed, as [`Self::succeeded`] says, but that it exits with 1 when the two files
+    /// differ, which isn't a failure.
+    pub(super) fn compared(self) -> Result<String, ApiError> {
+        if self.code == Some(1) { Ok(self.stdout) } else { self.succeeded() }
+    }
 }
 
 /// What git printed, byte for byte, if it succeeded, for output whose paths a person's files can have in bytes that
@@ -264,17 +270,21 @@ pub async fn diff(given: &Environment, worktree_path: &str, base_ref: Option<&st
             truncated = true;
             break;
         }
-        // --no-index exits 1 when the files differ, so success here doesn't mean exit 0.
-        let output =
-            git(given, worktree, &["diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", file])
-                .await?;
-        if output.code == Some(0) || output.code == Some(1) {
-            patch.push_str(&output.stdout);
-        } else {
-            return Err(git_error(format!("diffing untracked file {file} failed: {}", output.stderr)));
-        }
+        let args = ["diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", file];
+        patch.push_str(&git(given, worktree, &args).await?.compared()?);
     }
     Ok(GitDiff { base_commit: base, patch, truncated })
+}
+
+/// The commit a change summary, or one file's diff, is compared with, as [`diff_base`] finds it. Fails when HEAD has
+/// no commit yet, since there's nothing to compare with.
+pub(super) async fn compared_base(
+    given: &Environment,
+    worktree: &Path,
+    base_ref: Option<&str>,
+) -> Result<CommitId, ApiError> {
+    let base = diff_base(given, worktree, base_ref).await?;
+    base.ok_or_else(|| git_error("HEAD has no commit yet, so there's nothing to compare it with"))
 }
 
 /// The commit a diff is taken from, by its full object ID, so a client can read a file as it was there: the merge base

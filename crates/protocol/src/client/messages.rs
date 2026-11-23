@@ -6,9 +6,9 @@ use crate::attachment::Attachment;
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
-    Account, DiffComment, FileContents, FileOpened, FilePages, FileRange, GhLogin, GitDiff, GitStatus, GithubAccount,
-    GithubApp, GithubSignIn, HubSettings, MachineLogins, NewWorkspaceDraft, Proposal, Records, Repo, Session,
-    SessionAccount, Terminal, Workspace, WorktreeFiles,
+    Account, DiffComment, FileContents, FileDiff, FileOpened, FilePages, FileRange, GhLogin, GitDiff, GitStatus,
+    GithubAccount, GithubApp, GithubSignIn, HubSettings, MachineLogins, NewWorkspaceDraft, Proposal, Records, Repo,
+    Session, SessionAccount, Terminal, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 use crate::terminal::{
@@ -90,6 +90,7 @@ pub enum ClientResponse {
     GitStatus(GitStatus),
     GitDiff(GitDiff),
     ChangedFilesPage(crate::model::ChangedFilesPage),
+    FileDiff(FileDiff),
     SetupLog(workspaces::SetupLog),
     PullRequest(workspaces::PullRequestReply),
     Comment(DiffComment),

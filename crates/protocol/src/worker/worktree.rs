@@ -48,6 +48,35 @@ impl Reply for model::GitDiff {
     }
 }
 
+/// The worker's side of [`WorkspaceFileDiff`](crate::client::workspaces::WorkspaceFileDiff): one page of the diff of
+/// `file`, from the top of the worktree at `path`, against `base_ref`, from the patch's line `first_line`. `from` is
+/// where a rename moved it from, as the change summary names it. It's taken against the same base as
+/// [`SummarizeChanges`], and names its version as the summary does. A worker from before it refuses it as
+/// `Unsupported`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct DiffFile {
+    pub path: String,
+    pub base_ref: Option<String>,
+    pub file: String,
+    pub from: Option<String>,
+    pub first_line: u32,
+}
+
+impl Request for DiffFile {
+    type Reply = model::FileDiff;
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::DiffFile(self)
+    }
+}
+
+impl Reply for model::FileDiff {
+    fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
+        let WorkerResponse::FileDiff(diff) = response else { return Err(response) };
+        Ok(diff)
+    }
+}
+
 /// What the worktree at `path` changes against `base_ref`, file by file, as [`model::ChangeSummary`] says, with no
 /// patch. The hub asks for it for the lines added and removed that the sidebar and Home show, and keeps only those. A
 /// worker from before it refuses it as `Unsupported`.

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{
-    ChangedFileAt, ChangedFilesPage, ClientRequestId, GitDiff, GitStatus, OwnPullRequest, RepoId, Workspace,
+    ChangedFileAt, ChangedFilesPage, ClientRequestId, FileDiff, GitDiff, GitStatus, OwnPullRequest, RepoId, Workspace,
     WorkspaceId,
 };
 
@@ -197,6 +197,37 @@ impl Reply for ChangedFilesPage {
     fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
         let ClientResponse::ChangedFilesPage(page) = response else { return Err(response) };
         Ok(page)
+    }
+}
+
+/// One page of the diff of one file the workspace changes, against the base its change summary is taken from, as
+/// [`FileDiff`] says. The hub reads it from the workspace's worker, starting the worker if need be, and keeps none of
+/// it. It's keyed by the file's path, and by where a rename moved it from, as the summary names them. The reply says
+/// which version of the file, and which base, it's of, so a client can tell whether it matches the summary it holds.
+/// A hub from before it refuses it as `Unsupported`, and so does a hub whose worker is from before it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct WorkspaceFileDiff {
+    pub id: WorkspaceId,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    /// The patch's first line in this page: 0, or the `next_line` of the page before.
+    #[serde(default)]
+    pub first_line: u32,
+}
+
+impl Request for WorkspaceFileDiff {
+    type Reply = FileDiff;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::WorkspaceFileDiff(self)
+    }
+}
+
+impl Reply for FileDiff {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::FileDiff(diff) = response else { return Err(response) };
+        Ok(diff)
     }
 }
 

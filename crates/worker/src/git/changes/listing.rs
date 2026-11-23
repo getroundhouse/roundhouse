@@ -1,50 +1,81 @@
 //! Which files a worktree changes, as git lists them: those it tracks with their lines, from one diff against the base
 //! commit, and those it doesn't track or ignore.
 
-use super::super::{diff_base, git_error, git_ok_bytes};
+use super::super::{compared_base, git_error, git_ok_bytes};
 use process::Environment;
 use protocol::client::ApiError;
 use protocol::model::{ChangeStatus, CommitId, LineCounts};
 use std::path::Path;
 
-/// A file the summary names, before the worker reads what the worktree holds of it.
-pub(super) struct Listed {
+/// A file git lists as changed, before the worker reads what the worktree holds of it.
+pub(in crate::git) struct Listed {
     /// As git wrote it, which is how the worker finds it in the worktree.
-    pub(super) path: Vec<u8>,
-    pub(super) from: Option<Vec<u8>>,
-    pub(super) status: ChangeStatus,
+    pub(in crate::git) path: Vec<u8>,
+    pub(in crate::git) from: Option<Vec<u8>>,
+    pub(in crate::git) status: ChangeStatus,
     /// git's count. `None` for a file git counts no lines of, and for an untracked one, which git doesn't count.
-    pub(super) lines: Option<LineCounts>,
+    pub(in crate::git) lines: Option<LineCounts>,
 }
 
-/// The commit the worktree at `worktree` is compared with, as [`diff_base`] finds it from `base_ref`, and each file it
-/// changes: the tracked ones in git's order, then the untracked ones. Fails when HEAD has no commit yet, as a diff
-/// does, since there's nothing to compare with.
+/// The commit the worktree at `worktree` is compared with, as [`compared_base`] finds it from `base_ref`, and each
+/// file it changes: the tracked ones in git's order, then the untracked ones.
 pub(super) async fn listed(
     given: &Environment,
     worktree: &Path,
     base_ref: Option<&str>,
 ) -> Result<(CommitId, Vec<Listed>), ApiError> {
     let tracked = async {
-        let base = diff_base(given, worktree, base_ref).await?;
-        let base = base.ok_or_else(|| git_error("HEAD has no commit yet, so there's nothing to compare it with"))?;
-        // Renames are looked for whatever `diff.renames` says, and copies aren't, so a copy is an added file with all
-        // its lines added. No program a person's config names runs, so lines are counted from what the files hold.
-        let args = ["diff", "--raw", "--numstat", "-z", "--find-renames", "--no-ext-diff", "--no-textconv"];
-        let output = git_ok_bytes(given, worktree, &[&args[..], &[base.as_str(), "--"]].concat()).await?;
-        Ok::<_, ApiError>((base, tracked_files(&output)?))
+        let base = compared_base(given, worktree, base_ref).await?;
+        let files = tracked(given, worktree, &base, &[]).await?;
+        Ok::<_, ApiError>((base, files))
     };
     // Beside the diff, since neither changes anything. Its failure is taken first, whichever finishes first.
-    let untracked = git_ok_bytes(given, worktree, &["ls-files", "--others", "--exclude-standard", "-z"]);
-    let (tracked, untracked) = tokio::join!(tracked, untracked);
+    let (tracked, untracked) = tokio::join!(tracked, untracked(given, worktree, &[]));
     let (base, mut files) = tracked?;
-    files.extend(untracked?.split(|b| *b == 0).filter(|path| !path.is_empty()).map(|path| Listed {
-        path: path.to_vec(),
-        from: None,
-        status: ChangeStatus::Untracked,
-        lines: None,
-    }));
+    files.extend(untracked?);
     Ok((base, files))
+}
+
+/// Each file git tracks that the worktree at `worktree` changes against `base`, in git's order: those at `paths`, as
+/// they're written, or every one where `paths` is empty.
+pub(in crate::git) async fn tracked(
+    given: &Environment,
+    worktree: &Path,
+    base: &CommitId,
+    paths: &[&str],
+) -> Result<Vec<Listed>, ApiError> {
+    // Renames are looked for whatever `diff.renames` says, and copies aren't, so a copy is an added file with all its
+    // lines added. No program a person's config names runs, so lines are counted from what the files hold. A path
+    // with `*` or `:` in it names only itself.
+    let args = [
+        "--literal-pathspecs",
+        "diff",
+        "--raw",
+        "--numstat",
+        "-z",
+        "--find-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        base.as_str(),
+        "--",
+    ];
+    let output = git_ok_bytes(given, worktree, &[&args[..], paths].concat()).await?;
+    tracked_files(&output)
+}
+
+/// Each file at `paths` in the worktree at `worktree`, or every one where `paths` is empty, that git neither tracks
+/// nor ignores, which git counts no lines of.
+pub(in crate::git) async fn untracked(
+    given: &Environment,
+    worktree: &Path,
+    paths: &[&str],
+) -> Result<Vec<Listed>, ApiError> {
+    let args = ["--literal-pathspecs", "ls-files", "--others", "--exclude-standard", "-z", "--"];
+    let output = git_ok_bytes(given, worktree, &[&args[..], paths].concat()).await?;
+    let listed = output.split(|b| *b == 0).filter(|path| !path.is_empty());
+    Ok(listed
+        .map(|path| Listed { path: path.to_vec(), from: None, status: ChangeStatus::Untracked, lines: None })
+        .collect())
 }
 
 /// What `git diff --raw --numstat -z` printed: every file's raw entry, `:` and its modes, objects and status, then its

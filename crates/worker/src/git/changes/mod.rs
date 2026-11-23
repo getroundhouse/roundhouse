@@ -9,4 +9,6 @@ mod summaries;
 #[cfg(test)]
 mod tests;
 
+pub(super) use listing::{tracked, untracked};
+pub(super) use reading::version_now;
 pub(crate) use summaries::ChangeSummaries;

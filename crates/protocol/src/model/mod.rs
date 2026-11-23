@@ -44,8 +44,8 @@ pub use agent::{AgentDescription, LoginDescription, NotOffered, RunCapabilities}
 pub use branches::{Apart, Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
 pub use changes::{
-    ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, ChangedFilesPage, FileVersion, LineCounts,
-    MOST_FILES_LISTED,
+    ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, ChangedFilesPage, FileDiff, FileDiffBody, FileVersion,
+    LineCounts, MOST_FILES_LISTED, MOST_PATCH_PAGE_BYTES,
 };
 pub use client_device::ClientDevice;
 pub use compaction_line::CompactionLine;

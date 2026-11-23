@@ -33,6 +33,7 @@ pinned! {
         Account(_), GithubAccount(_), GithubSignIn(_), GhLogin(_), MachineLogins(_), WorktreeFiles(_), FileContents(_),
         FileOpened(_), FilePages(_), FileRange(_),
     ],
+    "client_calls/file_diffs.rs" => [FileDiff(_)],
     "client_calls/github_apps.rs" => [GithubApp(_), GithubAppManifest(_)],
     "replies_heard.rs" => [RepliesHeard(_)],
     "proposals.rs" => [Proposal(_), ProposalRevisions(_)],

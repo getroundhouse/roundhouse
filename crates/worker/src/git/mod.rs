@@ -6,6 +6,7 @@ pub(crate) mod branches;
 mod changes;
 mod children;
 mod clones;
+mod diff_file;
 pub(crate) mod files;
 pub(crate) mod ignored;
 mod making;
@@ -21,6 +22,7 @@ mod worktrees;
 pub(crate) use changes::ChangeSummaries;
 pub(crate) use children::add_child_worktree;
 pub(crate) use clones::{Clones, capture_archived, restore_archived};
+pub(crate) use diff_file::diff_file;
 pub use making::prepare_workspace;
 use making::{made_there, make_on_branch, make_on_new_branch};
 pub use names::names_git_has;
@@ -36,7 +38,7 @@ mod commands;
 pub(crate) use commands::list_nul_separated;
 pub(crate) use commands::version;
 use commands::{
-    GitOutput, command, commit_of, diff_base, exists, git, git_error, git_ok, git_ok_bytes, off_thread, ref_exists,
+    GitOutput, command, commit_of, compared_base, exists, git, git_error, git_ok, git_ok_bytes, off_thread, ref_exists,
     reject_option_like, run, valid_branch_name,
 };
 pub use commands::{diff, restore_workspace, status, worktree_there};
