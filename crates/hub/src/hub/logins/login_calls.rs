@@ -1,4 +1,5 @@
 use super::super::{Hub, off_thread};
+use crate::hub::observations::AccountLimits;
 use crate::logins::{AccountChange, Connect, Handed, Launching, Logins};
 use crate::store::{SessionLogin, now_ms};
 use protocol::client::accounts::{AccountConnect, AccountSetAutomatic, AccountSetDefault, AccountSetReserve};
@@ -56,14 +57,16 @@ impl Hub {
 
     /// The login a launch of a chat of `agent`'s kind that's `on` a login runs under, as [`Logins::to_launch`] says.
     pub(crate) async fn launching(&self, agent: AgentKind, on: SessionLogin) -> Result<Launching, ApiError> {
-        self.on_logins(move |logins| logins.to_launch(agent, &on, now_ms())).await
+        let heard = self.observations.values_of::<AccountLimits>();
+        self.on_logins(move |logins| logins.to_launch(agent, &on, &heard, now_ms())).await
     }
 
     /// The login a launch of a chat of `agent`'s kind that's `on` a login is handed, as [`Logins::to_hand`] says: the
     /// hub's, for the account it's on or its kind's default, which wins over ambient credentials on every provider, or
     /// none, for a chat on the ambient login.
     pub(crate) async fn login_for(&self, agent: AgentKind, on: SessionLogin) -> Result<Option<Handed>, ApiError> {
-        self.on_logins(move |logins| logins.to_hand(agent, &on, now_ms())).await
+        let heard = self.observations.values_of::<AccountLimits>();
+        self.on_logins(move |logins| logins.to_hand(agent, &on, &heard, now_ms())).await
     }
 
     /// Moves a chat to another account, as `SessionAssignAccount` says. Not through the session's queue, which a prompt

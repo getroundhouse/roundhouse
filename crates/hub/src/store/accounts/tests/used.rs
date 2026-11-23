@@ -74,7 +74,7 @@ fn a_chat_that_moves_to_another_account_leaves_what_it_was_sent_with_the_first()
 fn a_launch_filed_after_another_chat_used_its_account_leaves_that_later_use() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.hear_limits(&"claude-ada@example.com".into(), &[limit(LimitWindow::SevenDays, 4)], false, 100).unwrap();
+    store.account_made(&"claude-ada@example.com".into()).unwrap();
     store.append(&"s".into(), None, &prompt("go", 0), None, None, None).unwrap();
     lock(&store.writer).execute("UPDATE accounts SET used_at_ms = ?", [i64::MAX]).unwrap();
 

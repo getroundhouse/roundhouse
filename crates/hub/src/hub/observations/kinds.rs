@@ -5,7 +5,7 @@ use std::hash::Hash;
 
 use protocol::model::{
     AccountId, ChangeSummary, LineCounts, Observation, ObservationKey, Observed, OwnPullRequestDetail,
-    OwnPullRequestSaid, RecordKey, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, WorkspaceId,
+    OwnPullRequestSaid, RecordKey, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, UsageLimit, WorkspaceId,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -33,6 +33,13 @@ pub(crate) trait Kind: Sized + 'static {
 
     /// Its table among the store's.
     fn table(tables: &mut Tables) -> &mut Table<Self>;
+
+    /// Whether `read` says what `held` says, so a client isn't told of it, and no revision moves: whether the two are
+    /// equal, but for a kind that holds what clients aren't told of a change to, such as when each of an account's
+    /// limits was heard, which memory and the file keep all the same.
+    fn says_the_same(held: &Self::Value, read: &Self::Value) -> bool {
+        held == read
+    }
 
     /// The record whose field a client of a version from before this kind reads it in, as
     /// [`OldForm`](super::old_form::OldForm) fills it, whose revision moves as the observation of `of` changes, so such a client
@@ -233,6 +240,42 @@ impl Kind for AccountIdentity {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.account_identity
+    }
+
+    fn old_form_on(account: &AccountId) -> Option<RecordKey> {
+        Some(RecordKey::Account { id: account.clone() })
+    }
+}
+
+/// What's left of an account's usage limits, as its agents last said them, each with when it was heard, sent at the
+/// hub's level. A client of a version from before it reads it on the account's record. An agent says only some at a
+/// time, so each hearing is merged with what's kept, as `crate::hub::accounts` merges it.
+pub(crate) struct AccountLimits;
+
+impl Kind for AccountLimits {
+    type Of = AccountId;
+    type Value = Vec<UsageLimit>;
+    const FORM: Form = Form { table: "account_limits", version: 1 };
+
+    fn observation(account: &AccountId, limits: Observed<Self::Value>, rev: Rev) -> Observation {
+        Observation::AccountLimits { account: account.clone(), limits, rev }
+    }
+
+    fn key(account: &AccountId) -> ObservationKey {
+        ObservationKey::AccountLimits { account: account.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.account_limits
+    }
+
+    /// When each was heard, which hearing the same again changes, isn't what a client is told of, since it would be
+    /// told on every hearing of limits that haven't moved.
+    fn says_the_same(held: &Self::Value, read: &Self::Value) -> bool {
+        let without_when = |limits: &[UsageLimit]| -> Vec<UsageLimit> {
+            limits.iter().map(|limit| UsageLimit { heard_at_ms: None, ..limit.clone() }).collect()
+        };
+        without_when(held) == without_when(read)
     }
 
     fn old_form_on(account: &AccountId) -> Option<RecordKey> {

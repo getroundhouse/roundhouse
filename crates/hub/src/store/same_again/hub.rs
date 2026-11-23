@@ -1,7 +1,7 @@
 //! The rule's rows for what the hub keeps for every workspace: its settings, the accounts agents run under, and the
 //! new workspace's draft.
 
-use protocol::model::{HubSettingsChange, LimitWindow, NewWorkspaceDraftToKeep, Rev, SentCredential, UsageLimit};
+use protocol::model::{HubSettingsChange, NewWorkspaceDraftToKeep, Reserve, Rev, SentCredential};
 
 use super::super::Store;
 use super::rule::Said;
@@ -33,19 +33,17 @@ pub(super) fn providers(store: &Store) -> Said {
     Said::Changed(store.record_github_providers(&["local".into()], &["vms".into()]).unwrap().is_some())
 }
 
+/// The account `ada`, which agents ran under.
+pub(super) fn ada(store: &Store) {
+    store.account_made(&"ada".into()).unwrap();
+}
+
 pub(super) fn account(store: &Store) -> Rev {
     store.account(&"ada".into()).unwrap().unwrap().rev
 }
 
-pub(super) fn limits(store: &Store) -> Said {
-    let limit = UsageLimit {
-        window: LimitWindow::SevenDays,
-        model: None,
-        used_percent: 4,
-        resets_at_ms: Some(9_000),
-        heard_at_ms: None,
-    };
-    Said::Changed(store.hear_limits(&"ada".into(), &[limit], false, 100).unwrap().is_some())
+pub(super) fn reserve(store: &Store) -> Said {
+    Said::Changed(store.set_reserve(&"ada".into(), Reserve::new(20)).unwrap().is_some())
 }
 
 pub(super) fn new_draft_rev(store: &Store) -> Rev {

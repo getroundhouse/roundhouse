@@ -59,6 +59,7 @@ impl View {
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspaceChanges { .. }
             | ObservationKey::AccountIdentity { .. }
+            | ObservationKey::AccountLimits { .. }
             | ObservationKey::Unknown => false,
         }
     }
@@ -148,6 +149,7 @@ impl GithubHeld {
                 ObservationKey::WorkspaceLines { .. }
                 | ObservationKey::WorkspaceChanges { .. }
                 | ObservationKey::AccountIdentity { .. }
+                | ObservationKey::AccountLimits { .. }
                 | ObservationKey::Unknown => {}
             }
         }
@@ -224,6 +226,7 @@ impl GithubHeld {
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspaceChanges { .. }
             | ObservationKey::AccountIdentity { .. }
+            | ObservationKey::AccountLimits { .. }
             | ObservationKey::Unknown => false,
         }
     }

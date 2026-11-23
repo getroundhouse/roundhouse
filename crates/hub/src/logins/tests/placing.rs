@@ -1,6 +1,7 @@
 //! Which account Automatic hands a launch of a chat on none yet, of the logins the hub holds, and how choosing an
 //! account ends it.
 
+use super::super::automatic::Heard;
 use super::super::*;
 use super::{connect, logins_in};
 use crate::store::{Placed, SessionLogin};
@@ -9,7 +10,7 @@ use protocol::model::{HubSettings, Reserve};
 
 /// The account a launch of a chat on none yet is handed at `now`, and what put it there.
 fn placed(logins: &Logins, now: i64) -> Result<(AccountId, Placed), ApiError> {
-    let handed = logins.to_hand(AgentKind::Claude, &SessionLogin::NoneYet, now)?.unwrap();
+    let handed = logins.to_hand(AgentKind::Claude, &SessionLogin::NoneYet, &Heard::default(), now)?.unwrap();
     Ok((handed.account, handed.placed))
 }
 

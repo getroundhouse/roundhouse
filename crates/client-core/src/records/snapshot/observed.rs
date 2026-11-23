@@ -50,7 +50,7 @@ impl ObservationsListed {
                     listed.github.insert(observation.key(), observation);
                 }
                 // Never held, as `Revised` says.
-                Observation::AccountIdentity { .. } | Observation::Unknown => {}
+                Observation::AccountIdentity { .. } | Observation::AccountLimits { .. } | Observation::Unknown => {}
             }
         }
         listed

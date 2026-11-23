@@ -1,6 +1,5 @@
 use super::super::*;
 use crate::store::tests::store_with_session;
-use protocol::model::{LimitWindow, UsageLimit};
 use std::path::Path;
 use std::sync::Barrier;
 
@@ -108,18 +107,10 @@ fn the_same_token_again_finds_its_account_and_under_another_name_is_refused() {
 }
 
 #[test]
-fn renewing_replaces_the_login_and_the_name_and_keeps_what_was_heard_of_the_accounts_limits() {
+fn renewing_replaces_the_login_and_the_name() {
     let dir = tempfile::tempdir().unwrap();
-    let (logins, store) = logins_in(dir.path());
+    let (logins, _) = logins_in(dir.path());
     let id = logins.connect(&connect("Work", "an-old-token", None)).unwrap().account.id;
-    let week = UsageLimit {
-        window: LimitWindow::SevenDays,
-        model: None,
-        used_percent: 40,
-        resets_at_ms: None,
-        heard_at_ms: None,
-    };
-    store.hear_limits(&id, &[week], false, 1200).unwrap();
 
     let renewed =
         Connect { connected_at_ms: 3000, ends_at_ms: Some(4000), ..connect("Day job", "a-new-token", Some(&id)) };
@@ -127,7 +118,6 @@ fn renewing_replaces_the_login_and_the_name_and_keeps_what_was_heard_of_the_acco
 
     assert_eq!((&account.id, account.name.as_deref()), (&id, Some("Day job")));
     assert_eq!(account.held_login.map(|held| (held.connected_at_ms, held.ends_at_ms)), Some((3000, Some(4000))));
-    assert_eq!(account.limits.iter().map(|limit| limit.used_percent).collect::<Vec<_>>(), [40]);
     assert_eq!(tokens_kept(dir.path()), ["a-new-token"], "the old token is gone");
 }
 
@@ -151,7 +141,7 @@ fn renewing_is_refused_for_no_account_an_adapters_account_and_a_token_another_ho
     let work = logins.connect(&connect("Work", "work-token", None)).unwrap().account;
     logins.connect(&connect("Home", "home-token", None)).unwrap();
     let adapters = AccountId::from("claude-0123456789abcdef");
-    store.hear_limits(&adapters, &[], false, 0).unwrap();
+    store.account_made(&adapters).unwrap();
     let records = || store.list_records().unwrap().accounts;
     let before = records();
 

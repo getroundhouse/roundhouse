@@ -1,7 +1,7 @@
 use super::super::logins::{IdFrom, LoginColumns, login_at};
 use super::super::sessions::on_the_hubs;
-use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock, rev_of, text_at, text_of};
-use protocol::model::{Account, AccountId, AgentAccount, LimitWindow, ModelLabel, Reserve, Rev, SessionId, UsageLimit};
+use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock, rev_of};
+use protocol::model::{Account, AccountId, AgentAccount, Reserve, SessionId};
 use rusqlite::{Connection, OptionalExtension as _, params};
 use std::collections::HashSet;
 
@@ -33,142 +33,54 @@ columns! {
     struct AccountColumns { id, rev, name, used_at_ms, reserve_percent }
 }
 
-/// The record of `id`, with what's left of its limits, and none of who it is, which is an observation that
+/// The record of `id`, with none of who it is or what's left of its limits, which are observations that
 /// `crate::hub::observations::OldForm` fills it with as it leaves the hub. `None` for an account with none.
 pub(in super::super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::Result<Option<Account>> {
-    let Some(mut account) = conn
-        .query_row(
-            &format!(
-                "SELECT {}, {}
+    conn.query_row(
+        &format!(
+            "SELECT {}, {}
                      FROM accounts
                      WHERE id = ?",
-                AccountColumns::LIST,
-                LoginColumns::LIST
-            ),
-            [id.as_str()],
-            |row| {
-                let c = AccountColumns::at(0);
-                let (id_from, held) = login_at(row, LoginColumns::at(AccountColumns::COUNT))?;
-                Ok(Account {
-                    id: row.at::<String>(c.id)?.into(),
-                    model_provider: None,
-                    plan: None,
-                    login: None,
-                    email: None,
-                    name: row.at(c.name)?,
-                    login_agent: match id_from {
-                        IdFrom::Hub(agent) => Some(agent),
-                        IdFrom::Adapter => None,
-                    },
-                    limits: Vec::new(),
-                    held_login: held.map(|(_, held)| held),
-                    used_at_ms: row.at(c.used_at_ms)?,
-                    // Only a reserve the hub took is kept, so one it can't read is as good as none.
-                    reserve: row
-                        .at::<Option<i64>>(c.reserve_percent)?
-                        .and_then(|percent| u8::try_from(percent).ok())
-                        .and_then(Reserve::new),
-                    rev: rev_of(row, c.rev)?,
-                })
-            },
-        )
-        .optional()?
-    else {
-        return Ok(None);
-    };
-    // When each was heard isn't on the record, since hearing the same again isn't a change to it.
-    account.limits = limits_of(conn, id)?.into_iter().map(|limit| UsageLimit { heard_at_ms: None, ..limit }).collect();
-    Ok(Some(account))
-}
-
-/// What's been heard of `account`'s limits, shortest window first, and models' weeks by their models, each with when
-/// it was heard.
-fn limits_of(conn: &Connection, account: &AccountId) -> rusqlite::Result<Vec<UsageLimit>> {
-    columns! {
-        struct LimitColumns { window, model, used_percent, resets_at_ms, heard_at_ms }
-    }
-    let c = LimitColumns::at(0);
-    let mut statement =
-        conn.prepare_cached(&format!("SELECT {} FROM account_limits WHERE account_id = ?", LimitColumns::LIST))?;
-    let rows = statement.query_map([account.as_str()], |row| {
-        let model: String = row.at(c.model)?;
-        Ok(UsageLimit {
-            window: text_at(row, c.window)?,
-            // Empty for a window of no model's, as the table says.
-            model: (!model.is_empty()).then(|| ModelLabel::new(model)),
-            used_percent: row.at(c.used_percent)?,
-            resets_at_ms: row.at(c.resets_at_ms)?,
-            heard_at_ms: Some(row.at(c.heard_at_ms)?),
-        })
-    })?;
-    let mut limits = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-    limits.sort_by(|a, b| (a.window, &a.model).cmp(&(b.window, &b.model)));
-    Ok(limits)
-}
-
-/// What `limit` is kept by besides its window: its model, without spaces around it, for a model's own week, and an
-/// empty one for any other window, whatever it says. `None` for a limit that isn't kept, since it couldn't be told from another: one over a
-/// window this build has no name for, or a model's week that doesn't say whose.
-fn kept_by(limit: &UsageLimit) -> Option<&str> {
-    match limit.window {
-        LimitWindow::ModelSevenDays => {
-            limit.model.as_ref().map(|model| model.as_str().trim()).filter(|model| !model.is_empty())
-        }
-        LimitWindow::FiveHours | LimitWindow::SevenDays => Some(""),
-        LimitWindow::Unknown => None,
-    }
+            AccountColumns::LIST,
+            LoginColumns::LIST
+        ),
+        [id.as_str()],
+        |row| {
+            let c = AccountColumns::at(0);
+            let (id_from, held) = login_at(row, LoginColumns::at(AccountColumns::COUNT))?;
+            Ok(Account {
+                id: row.at::<String>(c.id)?.into(),
+                model_provider: None,
+                plan: None,
+                login: None,
+                email: None,
+                name: row.at(c.name)?,
+                login_agent: match id_from {
+                    IdFrom::Hub(agent) => Some(agent),
+                    IdFrom::Adapter => None,
+                },
+                limits: Vec::new(),
+                held_login: held.map(|(_, held)| held),
+                used_at_ms: row.at(c.used_at_ms)?,
+                // Only a reserve the hub took is kept, so one it can't read is as good as none.
+                reserve: row
+                    .at::<Option<i64>>(c.reserve_percent)?
+                    .and_then(|percent| u8::try_from(percent).ok())
+                    .and_then(Reserve::new),
+                rev: rev_of(row, c.rev)?,
+            })
+        },
+    )
+    .optional()
 }
 
 impl Store {
-    /// Keeps what an agent under `account` heard at `heard_at_ms`, and returns the account's record when that changed
-    /// it, with a newer revision, in the same transaction. Each window is kept by itself, and each model's week by its
-    /// model, so hearing of one leaves what's known of another, and something heard earlier never replaces something
-    /// heard later. When the limits are `every_models_week` the account has, as an answer that lists them all is, a
-    /// model's week heard earlier that isn't among them has gone, such as one whose label changed, and is forgotten. Hearing the same again changes only when it was heard, which isn't on the record. A window this
-    /// build has no name for isn't kept, nor a model's week that doesn't say whose, since there'd be nothing to tell
-    /// either from another by. An account nobody has launched an agent under since this build gets a record of its
-    /// limits alone.
-    pub fn hear_limits(
-        &self,
-        account: &AccountId,
-        limits: &[UsageLimit],
-        every_models_week: bool,
-        heard_at_ms: i64,
-    ) -> Result<Option<Account>, StoreError> {
-        let mut conn = lock(&self.writer);
-        let tx = conn.transaction()?;
-        let before: Option<Rev> = tx
-            .query_row("SELECT rev FROM accounts WHERE id = ?", [account.as_str()], |row| rev_of(row, OneValue))
-            .optional()?;
-        tx.execute("INSERT INTO accounts (id) VALUES (?) ON CONFLICT DO NOTHING", [account.as_str()])?;
-        for (limit, model) in limits.iter().filter_map(|limit| Some((limit, kept_by(limit)?))) {
-            tx.execute(
-                "INSERT INTO account_limits (account_id, window, model, used_percent, resets_at_ms, heard_at_ms)
-                     VALUES (?, ?, ?, ?, ?, ?)
-                     ON CONFLICT (account_id, window, model) DO UPDATE
-                     SET used_percent = excluded.used_percent, resets_at_ms = excluded.resets_at_ms,
-                         heard_at_ms = excluded.heard_at_ms
-                     WHERE excluded.heard_at_ms >= heard_at_ms",
-                params![
-                    account.as_str(),
-                    text_of(&limit.window),
-                    model,
-                    limit.used_percent,
-                    limit.resets_at_ms,
-                    heard_at_ms
-                ],
-            )?;
-        }
-        // Those it names were kept as heard just now, and one another agent heard later stays.
-        if every_models_week {
-            tx.execute(
-                "DELETE FROM account_limits WHERE account_id = ? AND window = ? AND heard_at_ms < ?",
-                params![account.as_str(), text_of(&LimitWindow::ModelSevenDays), heard_at_ms],
-            )?;
-        }
-        let record = account_or_missing(&tx, account)?;
-        tx.commit()?;
-        Ok((before != Some(record.rev)).then_some(record))
+    /// Makes a record of `account`, if it has none, as hearing of its limits does for one nobody has launched an agent
+    /// under since the database was made, and returns the record it made.
+    pub fn account_made(&self, id: &AccountId) -> Result<Option<Account>, StoreError> {
+        let conn = lock(&self.writer);
+        let made = conn.execute("INSERT INTO accounts (id) VALUES (?) ON CONFLICT DO NOTHING", [id.as_str()])? > 0;
+        Ok(if made { account(&conn, id)? } else { None })
     }
 
     /// Files that `session`'s agent launched under `under`, as its worker read it: that the account is there, and that
@@ -183,11 +95,6 @@ impl Store {
     /// returns, as a held login's launch is, since a power cut that took it back would leave the session on none.
     pub fn launched_under(&self, session: &SessionId, under: &AgentAccount) -> Result<Launched, StoreError> {
         self.lasting(|tx| launched_under(tx, session, under))
-    }
-
-    /// What's been heard of `account`'s limits, shortest window first, each with when it was heard.
-    pub fn account_limits(&self, account: &AccountId) -> Result<Vec<UsageLimit>, StoreError> {
-        Ok(limits_of(&lock(&self.reader), account)?)
     }
 
     /// Every account's ID.

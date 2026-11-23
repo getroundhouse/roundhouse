@@ -54,4 +54,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Rust(super::waits::pull_requests_as_facets),
     // Who each account is, which the hub keeps as an observation, in `accounts`.
     Sql(accounts::IDENTITY_OBSERVED),
+    // What's left of each account's limits, which the hub keeps as an observation, in `accounts`.
+    Sql(accounts::LIMITS_OBSERVED),
 ];

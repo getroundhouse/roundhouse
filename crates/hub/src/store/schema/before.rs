@@ -22,3 +22,6 @@ pub(crate) const BEFORE_WAITS_AS_FACETS: usize = 92;
 
 /// How many migrations there were before who each account is left the database, as an observation.
 pub(crate) const BEFORE_ACCOUNT_IDENTITY_OBSERVED: usize = 93;
+
+/// How many migrations there were before what's left of each account's limits left the database, as an observation.
+pub(crate) const BEFORE_ACCOUNT_LIMITS_OBSERVED: usize = 94;

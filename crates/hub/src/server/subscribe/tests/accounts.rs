@@ -4,14 +4,16 @@
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
-use protocol::model::{Account, AgentAccount, DiffComment, DiffSide, Observation, Observed, Rev};
+use protocol::model::{
+    Account, AgentAccount, DiffComment, DiffSide, LimitWindow, Observation, Observed, Rev, UsageLimit,
+};
 
 use super::given::{ok, start};
 use crate::hub::tests::{hub_in_again, store_of};
 use crate::server::tests::Connection;
-use crate::store::BEFORE_ACCOUNT_IDENTITY_OBSERVED;
 use crate::store::older::store_from_before;
 use crate::store::tests::idle_session;
+use crate::store::{BEFORE_ACCOUNT_IDENTITY_OBSERVED, BEFORE_ACCOUNT_LIMITS_OBSERVED};
 
 /// Ada's account, as a worker says it, on the plan `plan`.
 fn ada(plan: &str) -> AgentAccount {
@@ -88,24 +90,8 @@ async fn who_an_account_is_reaches_each_client_in_the_form_its_version_reads() {
     let again = store_of(&hub).account(&"claude-ada".into()).unwrap().unwrap();
     hub.notify(HubNotice::Account(again));
 
-    let marker = HubNotice::Comment(DiffComment {
-        id: "c".into(),
-        workspace_id: "w".into(),
-        path: "a.rs".into(),
-        side: DiffSide::New,
-        line: 1,
-        text: "after".into(),
-        created_at_ms: 1,
-        // A copy with no revision is always sent.
-        rev: Rev::default(),
-    });
-    hub.notify(marker.clone());
-
     for client in [&mut before, &mut observing] {
-        let at_the_marker = |sent: &[HubFrame]| {
-            sent.iter().any(|frame| matches!(frame, HubFrame::Notice { notice, .. } if *notice == marker))
-        };
-        client.until("the marker", at_the_marker).await;
+        mark(&hub, client).await;
     }
     let copies = accounts_sent(&before);
     let plans: Vec<Option<&str>> = copies.iter().map(|account| account.plan.as_deref()).collect();
@@ -120,4 +106,81 @@ async fn who_an_account_is_reaches_each_client_in_the_form_its_version_reads() {
         .filter_map(|account| account.plan.is_some().then_some(account.plan))
         .collect();
     assert_eq!(filled, [Some("Team".to_string())], "no copy that moves only who it is, but the one told again");
+}
+
+/// A hub on a database from before what's left of an account's limits left it lists the account to a client of version
+/// 4 with no limits, and to one of the version that reads every observation with no observation of them. What an agent
+/// says of them next fills them: the first client is sent the record again, with them, under a newer revision, as they
+/// change, and the second is sent the observation, and no copy of the record that moves only them.
+#[tokio::test]
+async fn an_account_s_limits_reach_each_client_in_the_form_its_version_reads() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = "INSERT INTO accounts (id) VALUES ('claude-ada');
+                INSERT INTO account_limits (account_id, window, used_percent, heard_at_ms)
+                    VALUES ('claude-ada', 'seven_days', 30, 1000);";
+    drop(store_from_before(dir.path(), BEFORE_ACCOUNT_LIMITS_OBSERVED, rows));
+    let hub = hub_in_again(dir.path());
+    let mut before = Connection::greeted(&hub, 4).await;
+    let mut observing = Connection::speaking(&hub, EVERY_OBSERVATION_FROM);
+    for client in [&mut before, &mut observing] {
+        ok(client, 1, Subscribe { stop: Vec::new(), start: vec![start(1, Follow::Hub)] }).await;
+        client.until("the list", |sent| sent.iter().any(|frame| matches!(frame, HubFrame::Listed { .. }))).await;
+    }
+    let (listed, observations) = listed_account(&before);
+    assert_eq!((listed.limits.as_slice(), observations.as_slice()), (&[][..], &[][..]), "not known");
+    assert!(listed_account(&observing).1.is_empty(), "not known");
+
+    for (used_percent, heard_at_ms) in [(40, 1_000), (50, 2_000)] {
+        let week = UsageLimit {
+            window: LimitWindow::SevenDays,
+            model: None,
+            used_percent,
+            resets_at_ms: None,
+            heard_at_ms: None,
+        };
+        hub.hear_limits("claude-ada".into(), vec![week], false, heard_at_ms).await;
+    }
+    for client in [&mut before, &mut observing] {
+        mark(&hub, client).await;
+    }
+
+    let used = |account: &Account| account.limits.iter().map(|limit| limit.used_percent).collect::<Vec<_>>();
+    let copies = accounts_sent(&before);
+    assert_eq!(copies.iter().map(used).collect::<Vec<_>>(), [vec![40], vec![50]]);
+    assert!(copies.iter().all(|copy| copy.rev > listed.rev) && copies[1].rev > copies[0].rev, "{copies:?}");
+    let told = |sent: &[HubFrame]| {
+        let each = sent.iter().filter_map(|frame| {
+            let HubFrame::Notice { notice: HubNotice::Observation(Observation::AccountLimits { limits, .. }), .. } =
+                frame
+            else {
+                return None;
+            };
+            let Observed::AsOf { value, .. } = limits else { return None };
+            Some(value.iter().map(|limit| limit.used_percent).collect::<Vec<_>>())
+        });
+        each.collect::<Vec<_>>()
+    };
+    assert_eq!(told(&before.sent), Vec::<Vec<u8>>::new(), "no observation to a client of version 4");
+    assert_eq!(told(&observing.sent), [vec![40], vec![50]]);
+    assert!(accounts_sent(&observing).iter().all(|copy| copy.limits.is_empty()), "no copy that moves only them");
+}
+
+/// Waits until `client` is sent a notice `hub` tells after all it told before, so it has been sent everything before.
+async fn mark(hub: &crate::hub::Hub, client: &mut Connection) {
+    let marker = HubNotice::Comment(DiffComment {
+        id: "c".into(),
+        workspace_id: "w".into(),
+        path: "a.rs".into(),
+        side: DiffSide::New,
+        line: 1,
+        text: "after".into(),
+        created_at_ms: 1,
+        // A copy with no revision is always sent.
+        rev: Rev::default(),
+    });
+    hub.notify(marker.clone());
+    let at_the_marker = |sent: &[HubFrame]| {
+        sent.iter().any(|frame| matches!(frame, HubFrame::Notice { notice, .. } if *notice == marker))
+    };
+    client.until("the marker", at_the_marker).await;
 }

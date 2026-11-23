@@ -7,7 +7,7 @@ use protocol::model::WorkspaceId;
 use tracing::warn;
 
 use super::file::Write;
-use super::kept::{Change, Changed, Step};
+use super::kept::{Change, Changed, Step, Table};
 use super::kinds::{Kind, Owner};
 use super::tables::Gone;
 use crate::hub::Hub;
@@ -25,7 +25,22 @@ impl Hub {
         value: K::Value,
         read_at_ms: i64,
     ) -> Result<(), ApiError> {
-        self.change_observation::<K>(of, Change::Read { value, read_at_ms }).await
+        self.change_observation::<K>(of, |_| Change::Read { value, read_at_ms }).await
+    }
+
+    /// Keeps what `merge` makes of what the store keeps of the observation of `of`, or of nothing where it keeps none,
+    /// with what was heard at `heard_at_ms`, for a kind whose every hearing says only part of it, such as what an agent
+    /// hears of its account's limits, which can leave out what hasn't changed. Under the lock every change takes, so of
+    /// two at once, each merges what the other left. It's as of the newest hearing, and a hearing that lands late isn't
+    /// dropped, since `merge` keeps each part as it was last heard.
+    pub(crate) async fn observation_updated<K: Kind>(
+        &self,
+        of: K::Of,
+        heard_at_ms: i64,
+        merge: impl FnOnce(Option<&K::Value>) -> K::Value,
+    ) -> Result<(), ApiError> {
+        let held = of.clone();
+        self.change_observation::<K>(of, |table| Change::Merged { value: merge(table.value(&held)), heard_at_ms }).await
     }
 
     /// Keeps that the observation of `of`, worked out now from what it's worked out from, says `value`, as of
@@ -40,14 +55,14 @@ impl Hub {
         value: K::Value,
         as_of_ms: i64,
     ) -> Result<(), ApiError> {
-        self.change_observation::<K>(of, Change::WorkedOut { value, as_of_ms }).await
+        self.change_observation::<K>(of, |_| Change::WorkedOut { value, as_of_ms }).await
     }
 
     /// Keeps that something keeps the observation of `of` up to date from now on, such as the hub reading again what a
     /// client follows, so each read of it from now is current. What was read before isn't, so it stays as of when it was read until
     /// the next read.
     pub(crate) async fn observation_kept_current<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
-        self.change_observation::<K>(of, Change::KeptCurrent).await
+        self.change_observation::<K>(of, |_| Change::KeptCurrent).await
     }
 
     /// Keeps that nothing watches the observation of `of` any more, since `as_of_ms`, by the hub's clock, so one that
@@ -55,14 +70,14 @@ impl Hub {
     /// have said of any change before. For what's kept up to date by reading it again, see
     /// [`Hub::observation_no_longer_read_again`].
     pub(crate) async fn observation_let_go<K: Kind>(&self, of: K::Of, as_of_ms: i64) -> Result<(), ApiError> {
-        self.change_observation::<K>(of, Change::LetGo { as_of_ms }).await
+        self.change_observation::<K>(of, |_| Change::LetGo { as_of_ms }).await
     }
 
     /// Keeps that the hub no longer reads the observation of `of` again to keep it up to date, as GitHub's are while a
     /// client follows them, so one that was current is as of its last read, which clients are told. Unlike
     /// [`Hub::observation_let_go`], nothing said of a change between the last read and now, so it's as of no later.
     pub(crate) async fn observation_no_longer_read_again<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
-        self.change_observation::<K>(of, Change::NoLongerReadAgain).await
+        self.change_observation::<K>(of, |_| Change::NoLongerReadAgain).await
     }
 
     /// Whether something keeps the observation of `of` up to date now, as [`Hub::observation_kept_current`] said.
@@ -79,7 +94,7 @@ impl Hub {
 
     /// Forgets the observation of `of`, since what it's of is gone, such as a workspace, and tells clients it's gone.
     pub(crate) async fn observation_gone<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
-        self.change_observation::<K>(of, Change::Gone).await
+        self.change_observation::<K>(of, |_| Change::Gone).await
     }
 
     /// Forgets every observation of workspace `id`, of every kind, since the workspace is gone, and tells clients. One
@@ -137,7 +152,11 @@ impl Hub {
     /// waits on the file. Fails only where the database gives no revision, and then changes nothing but whether
     /// something keeps it current. Then, outside the lock, moves the revision of the record that holds its old form, if
     /// any, as [`Hub::old_form_moved`] says, so that record's newest copy holds what it says now.
-    async fn change_observation<K: Kind>(&self, of: K::Of, change: Change<K::Value>) -> Result<(), ApiError> {
+    async fn change_observation<K: Kind>(
+        &self,
+        of: K::Of,
+        change: impl FnOnce(&Table<K>) -> Change<K::Value>,
+    ) -> Result<(), ApiError> {
         let old_form_on = K::old_form_on(&of);
         if self.changed_observation::<K>(of, change).await?
             && let Some(record) = old_form_on
@@ -149,14 +168,29 @@ impl Hub {
 
     /// What [`Hub::change_observation`] does under the lock every change takes. Whether it changed what clients are
     /// told.
-    async fn changed_observation<K: Kind>(&self, of: K::Of, change: Change<K::Value>) -> Result<bool, ApiError> {
+    async fn changed_observation<K: Kind>(
+        &self,
+        of: K::Of,
+        change: impl FnOnce(&Table<K>) -> Change<K::Value>,
+    ) -> Result<bool, ApiError> {
         let observations = &self.observations;
         let _changing = observations.changing.lock().await;
-        let step = K::table(&mut observations.tables.lock()).step(&of, change);
+        let step = {
+            let mut tables = observations.tables.lock();
+            let table = K::table(&mut tables);
+            let change = change(table);
+            table.step(&of, change)
+        };
         let changed = match step {
             Step::Same => return Ok(false),
             Step::Reread(said) => {
                 observations.writer.write::<K>(of.clone(), Write::ReadAgain { read_at_ms: said.read_at_ms });
+                K::table(&mut observations.tables.lock()).reread(&of, said);
+                return Ok(false);
+            }
+            Step::Reheard(said) => {
+                let write = Write::Says { value: said.value.clone(), read_at_ms: said.read_at_ms };
+                observations.writer.write::<K>(of.clone(), write);
                 K::table(&mut observations.tables.lock()).reread(&of, said);
                 return Ok(false);
             }

@@ -72,6 +72,10 @@ pub(super) enum Change<V> {
     Read { value: V, read_at_ms: i64 },
     /// It was worked out now, from what was read at `as_of_ms`, and says `value`.
     WorkedOut { value: V, as_of_ms: i64 },
+    /// Part of it was heard at `heard_at_ms`, and `value` is what's kept merged with that part, as an account's limits
+    /// are, each kept as it was last heard. It's as of the newest hearing, and never dropped as a late read, since the
+    /// merge keeps each part as it was last heard, however late a hearing lands.
+    Merged { value: V, heard_at_ms: i64 },
     /// Something keeps it up to date from now on, so what's read of it from now is current.
     KeptCurrent,
     /// Nothing keeps it up to date any more, since `as_of_ms`, so it's as of then: what kept it up to date would have
@@ -90,6 +94,10 @@ pub(super) enum Step<V> {
     Same,
     /// It says what it said, read again since, which the file keeps. Nothing is told, and its revision stays.
     Reread(Said<V>),
+    /// It says what it said, as its kind compares what it says, but holds something newer that clients aren't told of,
+    /// such as when each of an account's limits was heard, which memory and the file keep. Nothing is told, and its
+    /// revision stays.
+    Reheard(Said<V>),
     /// It says something new, or is gone, under a new revision.
     Changed(Changed<V>),
 }
@@ -130,6 +138,7 @@ impl<K: Kind> Table<K> {
                     _ => Step::Changed(Changed::Says(Said { value, current, as_of_ms, read_at_ms: as_of_ms })),
                 }
             }
+            Change::Merged { value, heard_at_ms } => self.merged(of, value, heard_at_ms),
             Change::KeptCurrent => {
                 // What was read before isn't current, so it's not said to be until the next read.
                 self.kept_current.insert(of.clone());
@@ -169,6 +178,19 @@ impl<K: Kind> Table<K> {
     /// Whether something keeps the observation of `of` up to date now.
     pub(super) fn kept_current(&self, of: &K::Of) -> bool {
         self.kept_current.contains(of)
+    }
+
+    /// What a [`Change::Merged`] of `value`, heard at `heard_at_ms`, makes of the observation of `of`.
+    fn merged(&self, of: &K::Of, value: K::Value, heard_at_ms: i64) -> Step<K::Value> {
+        let (kept, current) = (self.kept.get(of).map(|kept| &kept.said), self.kept_current.contains(of));
+        let at = kept.map_or(heard_at_ms, |kept| kept.read_at_ms.max(heard_at_ms));
+        match kept {
+            Some(kept) if kept.value == value && kept.read_at_ms == at => Step::Same,
+            Some(kept) if K::says_the_same(&kept.value, &value) && kept.current == current => {
+                Step::Reheard(Said { value, read_at_ms: at, ..kept.clone() })
+            }
+            _ => Step::Changed(Changed::Says(Said { value, current, as_of_ms: at, read_at_ms: at })),
+        }
     }
 
     /// What the observation of `of` says, however fresh it is.
@@ -274,6 +296,11 @@ impl Observations {
     /// What the store keeps of the observation of kind `K` of `of`, however fresh it is.
     pub(crate) fn value_of<K: Kind>(&self, of: &K::Of) -> Option<K::Value> {
         K::table(&mut self.tables.lock()).kept.get(of).map(|kept| kept.said.value.clone())
+    }
+
+    /// What the store keeps of each observation of kind `K`, by what it's of, however fresh each is.
+    pub(crate) fn values_of<K: Kind>(&self) -> HashMap<K::Of, K::Value> {
+        K::table(&mut self.tables.lock()).kept.iter().map(|(of, kept)| (of.clone(), kept.said.value.clone())).collect()
     }
 
     /// What each observation of kind `K` the store keeps is of.

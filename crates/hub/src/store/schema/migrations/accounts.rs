@@ -15,3 +15,10 @@ pub(super) const IDENTITY_OBSERVED: &str = r"
     ALTER TABLE accounts DROP COLUMN login;
     ALTER TABLE accounts DROP COLUMN email;
 ";
+
+/// What's left of each account's limits, which the hub keeps as an observation, in its cache file, and no longer here.
+/// The table's triggers, which moved the account's revision as a limit changed, go with it. Nothing of it is carried
+/// there: each account's limits are known again once an agent under it next says them.
+pub(super) const LIMITS_OBSERVED: &str = r"
+    DROP TABLE account_limits;
+";

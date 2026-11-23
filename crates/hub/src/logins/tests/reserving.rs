@@ -31,7 +31,7 @@ fn reserving_is_refused_for_no_account_and_an_adapters_and_changes_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
     let adapters = AccountId::from("claude-0123456789abcdef");
-    store.hear_limits(&adapters, &[], false, 0).unwrap();
+    store.account_made(&adapters).unwrap();
     let before = store.list_records().unwrap().accounts;
 
     let nobody = logins.set_reserve(&"claude-login-nobody".into(), Reserve::new(10));

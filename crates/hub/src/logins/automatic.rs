@@ -2,7 +2,20 @@
 //! spare, as `AccountSetAutomatic` says. What's left of a week is gone once it starts again, so an account whose week
 //! starts again sooner has more to spare for each hour, and the chats already at work on an account share what it has.
 
-use protocol::model::{Account, AccountId, AgentKind, Reserve};
+use std::collections::HashMap;
+
+use protocol::model::{Account, AccountId, AgentKind, Reserve, UsageLimit};
+
+/// What's been heard of each account's limits, as the hub keeps it, which Automatic decides by, each with when it was
+/// heard. An account with none here is one no agent under it has said any of since the hub last knew, as after the
+/// hub's cache file was emptied, which Automatic takes to have all of its week, as a new one.
+pub(crate) type Heard = HashMap<AccountId, Vec<UsageLimit>>;
+
+/// `account`'s record, with what's been `heard` of its limits, which its record from the store says nothing of.
+pub(crate) fn with_heard(account: Account, heard: &Heard) -> Account {
+    let limits = heard.get(&account.id).cloned().unwrap_or_default();
+    Account { limits, ..account }
+}
 
 /// The week, in hours, which an account whose week no agent has heard is taken to have all of.
 const WEEK_HOURS: f64 = 7. * 24.;

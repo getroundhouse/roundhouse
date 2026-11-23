@@ -9,10 +9,14 @@ type Sent = (Option<Level>, Option<ReadFrom>);
 
 /// An observation of each kind, with the key and revision it's of, and how it's sent.
 fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
+    let unknown = (Observation::Unknown, ObservationKey::Unknown, Rev::default(), (None, None));
+    [of_a_workspace(), of_github(), of_an_account(), vec![unknown]].concat()
+}
+
+/// Of each kind of what git says of a workspace.
+fn of_a_workspace() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
     let lines = Observed::Current { value: LineCounts { added: 3, removed: 1 } };
     let changes = Observed::AsOf { value: ChangeSummary::new("c1".into(), Vec::new()), as_of_ms: 1_000 };
-    let reference =
-        ReferenceAsk { repository: GithubRepositoryName::named("o/r"), number: IssueNumber::try_from(41).unwrap() };
     vec![
         (
             Observation::WorkspaceLines { workspace_id: "w".into(), lines, rev: Rev::new(4) },
@@ -26,6 +30,14 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             Rev::new(5),
             (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::Every)),
         ),
+    ]
+}
+
+/// Of each kind of what GitHub says.
+fn of_github() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
+    let reference =
+        ReferenceAsk { repository: GithubRepositoryName::named("o/r"), number: IssueNumber::try_from(41).unwrap() };
+    vec![
         (
             Observation::Reference {
                 reference: reference.clone(),
@@ -66,23 +78,29 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             Rev::new(9),
             (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::GithubObserved)),
         ),
-        account_identity(),
-        (Observation::Unknown, ObservationKey::Unknown, Rev::default(), (None, None)),
     ]
 }
 
-/// Who an account is, with its key and revision, and how it's sent.
-fn account_identity() -> (Observation, ObservationKey, Rev, Sent) {
-    (
-        Observation::AccountIdentity {
-            account: "a".into(),
-            identity: Observed::AsOf { value: AccountIdentity::default(), as_of_ms: 1_000 },
-            rev: Rev::new(10),
-        },
-        ObservationKey::AccountIdentity { account: "a".into() },
-        Rev::new(10),
-        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
-    )
+/// Of each kind of what an agent's account is, as its agents say.
+fn of_an_account() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
+    vec![
+        (
+            Observation::AccountIdentity {
+                account: "a".into(),
+                identity: Observed::AsOf { value: AccountIdentity::default(), as_of_ms: 1_000 },
+                rev: Rev::new(10),
+            },
+            ObservationKey::AccountIdentity { account: "a".into() },
+            Rev::new(10),
+            (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+        ),
+        (
+            Observation::AccountLimits { account: "a".into(), limits: Observed::NotKnown, rev: Rev::new(11) },
+            ObservationKey::AccountLimits { account: "a".into() },
+            Rev::new(11),
+            (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+        ),
+    ]
 }
 
 #[test]
