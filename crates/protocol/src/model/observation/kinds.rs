@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Observed;
-use crate::model::{LineCounts, Rev, WorkspaceId};
+use crate::model::{Level, LineCounts, Rev, WorkspaceId};
 
 /// One observation, of any kind, with what it's of, its revision and what it says, as a list or the feed gives it. A
 /// client keeps whichever copy has the newer revision, as it keeps a record, by [`Observation::key`]. A kind this build
@@ -52,14 +52,14 @@ impl Observation {
 }
 
 impl ObservationKey {
-    /// Whether the hub sends it at its own level, to every client that follows the hub, and so lists it in
+    /// The level the hub sends it at, and so whose subscriptions it reaches. One at the hub's level is listed in
     /// [`Records`](crate::model::Records), which a client reads as it connects. One of another level, such as a
     /// workspace's or a session's, reaches a client only while it follows that, so a list that lacks it doesn't say
-    /// it's gone. One of a kind this build doesn't know is of no level it can follow.
-    pub fn at_hub_level(&self) -> bool {
+    /// it's gone. `None` for one of a kind this build doesn't know, which is of no level it can follow.
+    pub fn level(&self) -> Option<Level> {
         match self {
-            ObservationKey::WorkspaceLines { .. } => true,
-            ObservationKey::Unknown => false,
+            ObservationKey::WorkspaceLines { .. } => Some(Level::Hub),
+            ObservationKey::Unknown => None,
         }
     }
 }

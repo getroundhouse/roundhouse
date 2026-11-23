@@ -1,6 +1,8 @@
-//! Every record at once, for a client that's starting to follow the feed.
+//! Every record at once, for a client that's starting to follow the feed, and the records of one session at once, for
+//! one that's starting to follow the session.
 
-use protocol::model::Records;
+use protocol::client::listed::SessionRecords;
+use protocol::model::{Records, SessionId};
 use rusqlite::{Row, Transaction};
 
 use super::accounts::accounts;
@@ -11,8 +13,11 @@ use super::github_reach::github_reach;
 use super::github_sign_ins::github_sign_ins;
 use super::hub_settings::hub_settings;
 use super::new_workspace_draft::new_workspace_draft;
+use super::proposals::proposals_of;
+use super::replies_heard::replies_heard_of;
 use super::repos::{RepoColumns, repo_from_row};
 use super::sessions::{SessionColumns, session_from_row};
+use super::subagents::subagents_of;
 use super::workspaces::{WorkspaceColumns, workspace_from_row};
 use super::{Columns, Store, StoreError, current_rev, lock};
 
@@ -57,6 +62,22 @@ impl Store {
             hub_update: None,
             // Kept apart from the database, as `docs/principles/observations.md` says.
             observations: Vec::new(),
+            rev: current_rev(&tx)?,
+        };
+        tx.commit()?;
+        Ok(records)
+    }
+
+    /// The records of one session, read in one transaction, so they're all as of one revision, as
+    /// [`Store::list_records`] reads every other record.
+    pub fn list_session_records(&self, session_id: &SessionId) -> Result<SessionRecords, StoreError> {
+        let mut conn = lock(&self.reader);
+        let tx = conn.transaction()?;
+        let records = SessionRecords {
+            session_id: session_id.clone(),
+            subagents: subagents_of(&tx, session_id)?,
+            proposals: proposals_of(&tx, session_id)?,
+            replies_heard: replies_heard_of(&tx, session_id)?,
             rev: current_rev(&tx)?,
         };
         tx.commit()?;

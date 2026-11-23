@@ -70,13 +70,7 @@ impl Store {
     pub fn list_replies_heard(&self, session_id: &SessionId) -> Result<(Vec<ReplyHeard>, Rev), StoreError> {
         let mut conn = lock(&self.reader);
         let tx = conn.transaction()?;
-        let heard = tx
-            .prepare_cached(&format!(
-                "SELECT {} FROM replies_heard WHERE session_id = ? ORDER BY rev",
-                ReplyHeardColumns::LIST
-            ))?
-            .query_map([session_id.as_str()], reply_heard_from_row)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let heard = replies_heard_of(&tx, session_id)?;
         let rev = current_rev(&tx)?;
         tx.commit()?;
         Ok((heard, rev))
@@ -114,4 +108,15 @@ fn reply_heard_from_row(row: &Row<'_>) -> rusqlite::Result<ReplyHeard> {
         settled_by: maybe_text_at(row, c.settled_by)?.unwrap_or(SettledBy::Device),
         rev: rev_of(row, c.rev)?,
     })
+}
+
+/// How each of the session's replies said out loud ended, as `conn` reads them.
+pub(in crate::store) fn replies_heard_of(
+    conn: &Connection,
+    session_id: &SessionId,
+) -> Result<Vec<ReplyHeard>, StoreError> {
+    let sql = format!("SELECT {} FROM replies_heard WHERE session_id = ? ORDER BY rev", ReplyHeardColumns::LIST);
+    let mut statement = conn.prepare_cached(&sql)?;
+    let heard = statement.query_map([session_id.as_str()], reply_heard_from_row)?;
+    Ok(heard.collect::<rusqlite::Result<Vec<_>>>()?)
 }

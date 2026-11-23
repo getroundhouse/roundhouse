@@ -5,9 +5,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::client::{
-    CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome,
+    CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HUB_SPEAKS, Hello, HelloReply, HubFrame,
+    ReplyOutcome,
 };
 use protocol::frame;
+use protocol::versions::Versions;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, ReadHalf, WriteHalf};
 use tokio::time::timeout;
 
@@ -23,6 +25,8 @@ pub(super) const WAIT: Duration = Duration::from_secs(10);
 pub(super) struct Connection {
     replies: Lines<BufReader<ReadHalf<DuplexStream>>>,
     frames: WriteHalf<DuplexStream>,
+    /// What the hub has sent but replies, in order, as [`Connection::reply`] and [`Connection::until`] read it.
+    pub(super) sent: Vec<HubFrame>,
 }
 
 impl Connection {
@@ -31,7 +35,21 @@ impl Connection {
         let (read, write) = tokio::io::split(served);
         tokio::spawn(serve_connection(hub.clone(), read, write, Gate::local(hub)));
         let (replies, frames) = tokio::io::split(client);
-        Self { replies: BufReader::new(replies).lines(), frames }
+        Self { replies: BufReader::new(replies).lines(), frames, sent: Vec::new() }
+    }
+
+    /// One that has said hello to `hub` at version `version` of the client protocol.
+    pub(super) async fn greeted(hub: &Arc<Hub>, version: u32) -> Self {
+        let mut connection = Self::open(hub);
+        let hello = ClientRequest::Hello(Hello {
+            protocol_version: version,
+            client: "test".into(),
+            oldest_protocol_version: None,
+            device: None,
+        });
+        let greeted = connection.reply(0, &hello).await;
+        assert!(matches!(greeted, ReplyOutcome::Response(ClientResponse::Hello(_))), "{greeted:?}");
+        connection
     }
 
     /// Sends `line`, for `case`, and gives back the next frame, or `None` once the hub has closed the connection.
@@ -44,21 +62,43 @@ impl Connection {
         next.map(|line| frame::decode(line.as_bytes()).unwrap())
     }
 
-    /// Sends `request` as call `id`, and gives back its reply, passing over whatever else the hub sends first.
+    /// Sends `request` as call `id`, and gives back its reply, keeping in `sent` whatever else the hub sends first.
     pub(super) async fn reply(&mut self, id: u64, request: &ClientRequest) -> ReplyOutcome {
+        self.write(id, request).await;
+        self.reply_to(id).await
+    }
+
+    /// Sends `request` as call `id`, without waiting for its reply.
+    pub(super) async fn write(&mut self, id: u64, request: &ClientRequest) {
         let line = call(id, &serde_json::to_string(request).unwrap());
-        let mut next = self.send(&line, "a call").await;
+        self.frames.write_all(format!("{line}\n").as_bytes()).await.unwrap();
+    }
+
+    /// The reply to call `id`, keeping in `sent` whatever else the hub sends first.
+    pub(super) async fn reply_to(&mut self, id: u64) -> ReplyOutcome {
         loop {
-            match next {
+            match self.next().await {
                 Some(HubFrame::Reply { id: answered, outcome }) if answered == id => return outcome,
-                Some(_) => next = timeout(WAIT, self.next()).await.expect("a reply"),
+                Some(frame) => self.sent.push(frame),
                 None => panic!("the hub closed the connection"),
             }
         }
     }
 
+    /// Reads what the hub sends into `sent` until it holds `done`.
+    pub(super) async fn until(&mut self, what: &str, done: impl Fn(&[HubFrame]) -> bool) {
+        while !done(&self.sent) {
+            match self.next().await {
+                Some(frame) => self.sent.push(frame),
+                None => panic!("the hub closed the connection waiting for {what}, having sent {:#?}", self.sent),
+            }
+        }
+    }
+
+    /// The next frame the hub sends, or `None` once it has closed the connection.
     async fn next(&mut self) -> Option<HubFrame> {
-        let line = self.replies.next_line().await.unwrap();
+        let line = timeout(WAIT, self.replies.next_line()).await;
+        let line = line.unwrap_or_else(|_| panic!("the hub sent nothing more, having sent {:#?}", self.sent)).unwrap();
         line.map(|line| frame::decode(line.as_bytes()).unwrap())
     }
 }
@@ -102,7 +142,8 @@ impl Then {
                     ReplyOutcome::Response(ClientResponse::Hello(HelloReply { protocol_version, .. })),
                 ) => protocol_version == version,
                 (Then::ShowsStatus, ReplyOutcome::Response(ClientResponse::HubStatus(status))) => {
-                    status.pid == std::process::id()
+                    let speaks = Versions::from_hello(status.protocol_version, status.oldest_protocol_version);
+                    status.pid == std::process::id() && speaks == HUB_SPEAKS
                 }
                 (Then::Handles, ReplyOutcome::Response(_)) => true,
                 (Then::Handles, ReplyOutcome::Error(error)) => error.code != ErrorCode::VersionMismatch,
@@ -125,12 +166,13 @@ fn calls(requests: Vec<(&str, Then)>) -> Vec<Step> {
 /// What a connection sends first, and what the hub does with each frame. A refusal that closes the connection is
 /// followed by a request for the hub's status, which goes unanswered.
 fn cases() -> Vec<(&'static str, Vec<Step>)> {
-    let ours = CLIENT_PROTOCOL_VERSION;
-    let (hello_ours, newer_range) = (hello(ours, None), hello(ours + 1, Some(ours)));
+    let (ours, newest) = (CLIENT_PROTOCOL_VERSION, HUB_SPEAKS.newest);
+    let (hello_ours, hello_newest, newer_range) =
+        (hello(ours, None), hello(newest, None), hello(newest + 1, Some(ours)));
     let (past_range, unspoken, unreadable) =
-        (hello(ours + 2, Some(ours + 1)), hello(9999, None), hello(r#""3""#, None));
+        (hello(newest + 2, Some(newest + 1)), hello(9999, None), hello(r#""3""#, None));
     let mismatch = |says: &str| Then::Refuses(ErrorCode::VersionMismatch, says.to_string());
-    let past = mismatch(&format!("protocols {} to {}", ours + 1, ours + 2));
+    let past = mismatch(&format!("protocols {} to {}", newest + 1, newest + 2));
     let unsupported = || Then::Refuses(ErrorCode::Unsupported, String::new());
     let repos = r#"{"method":"repo_list"}"#;
     // As a request this hub doesn't know: here, the answer a client sent before decisions were typed.
@@ -138,8 +180,12 @@ fn cases() -> Vec<(&'static str, Vec<Step>)> {
     vec![
         ("a hello at this version", calls(vec![(&hello_ours, Then::Greets(ours)), (STATUS, Then::ShowsStatus)])),
         (
-            "a hello naming a range that reaches this version",
-            calls(vec![(&newer_range, Then::Greets(ours)), (STATUS, Then::ShowsStatus)]),
+            "a hello at the newest version this hub speaks",
+            calls(vec![(&hello_newest, Then::Greets(newest)), (STATUS, Then::ShowsStatus)]),
+        ),
+        (
+            "a hello naming a range that reaches past the newest version this hub speaks",
+            calls(vec![(&newer_range, Then::Greets(newest)), (STATUS, Then::ShowsStatus)]),
         ),
         (
             "a hello naming a range that starts past this version",

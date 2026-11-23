@@ -4,8 +4,6 @@
 #[cfg(test)]
 mod tests;
 
-mod in_order;
 mod watching;
 
-pub(super) use in_order::{Answering, in_order};
-pub(super) use watching::watch;
+pub(super) use watching::{Watching, watch};

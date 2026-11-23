@@ -41,6 +41,7 @@ pinned! {
     "terminal_text.rs" => [TerminalBounds(_), TerminalText(_)],
     "terminal_fit.rs" => [TerminalFit(_)],
     "model_lists.rs" => [ModelList(_)],
+    "subscribe.rs" => [Subscribed(_)],
 }
 
 #[test]

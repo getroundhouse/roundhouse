@@ -4,5 +4,6 @@
 mod following;
 pub(super) use following::follow;
 mod pumping;
+pub(super) use pumping::pump;
 #[cfg(test)]
 mod tests;

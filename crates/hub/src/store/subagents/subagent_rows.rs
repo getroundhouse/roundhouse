@@ -20,13 +20,7 @@ impl Store {
     pub fn list_subagents(&self, session_id: &SessionId) -> Result<(Vec<Subagent>, Rev), StoreError> {
         let mut conn = lock(&self.reader);
         let tx = conn.transaction()?;
-        let subagents = tx
-            .prepare_cached(&format!(
-                "SELECT {} FROM subagents WHERE session_id = ? ORDER BY started_at_ms, rowid",
-                SubagentColumns::LIST
-            ))?
-            .query_map([session_id.as_str()], subagent_from_row)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let subagents = subagents_of(&tx, session_id)?;
         let rev = current_rev(&tx)?;
         tx.commit()?;
         Ok((subagents, rev))
@@ -56,6 +50,15 @@ impl Store {
         let found = conn.query_row(sql, params![session_id.as_str(), named.as_str()], OneValue::read::<String>);
         Ok(found.optional()?.map(SubagentId::from))
     }
+}
+
+/// The session's subagents, oldest first, as `conn` reads them.
+pub(in crate::store) fn subagents_of(conn: &Connection, session_id: &SessionId) -> Result<Vec<Subagent>, StoreError> {
+    let sql =
+        format!("SELECT {} FROM subagents WHERE session_id = ? ORDER BY started_at_ms, rowid", SubagentColumns::LIST);
+    let mut statement = conn.prepare_cached(&sql)?;
+    let subagents = statement.query_map([session_id.as_str()], subagent_from_row)?;
+    Ok(subagents.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 /// Changes the records of the subagents `event` says something about, in the transaction that records it, as

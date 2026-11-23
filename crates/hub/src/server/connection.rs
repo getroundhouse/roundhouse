@@ -2,8 +2,8 @@
 //! and answers them alongside one another.
 
 use super::counted::Counted;
+use super::in_order::{Answering, in_order};
 use super::subscribing::Subscription;
-use super::terminals::{self, Answering};
 use super::{admit, dispatch};
 
 use std::collections::HashMap;
@@ -185,7 +185,7 @@ where
                     Some(error) => Err(error),
                     None => Ok(handled),
                 };
-                let answering = terminals::in_order(&hub, read).await;
+                let answering = in_order(&hub, &connection, read).await;
                 // On a task of its own, which outlasts the connection, so a request the hub has read is carried out
                 // whether or not its client is still there, as a prompt sent just before a client quits is.
                 tokio::spawn(async move {

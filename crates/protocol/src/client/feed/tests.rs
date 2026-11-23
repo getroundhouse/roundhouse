@@ -1,6 +1,7 @@
 use crate::model::{
-    DiffComment, DiffSide, FoundGithubLogin, GithubAccount, GithubReach, GithubSignIn, HubSettings, LineCounts,
-    NewWorkspaceDraft, Observation, ObservationKey, Observed, Record, RecordKey, Repo, Rev, Subagent, Terminal,
+    DiffComment, DiffSide, Ending, FoundGithubLogin, GithubAccount, GithubReach, GithubSignIn, HubSettings, Level,
+    LineCounts, NewWorkspaceDraft, Observation, ObservationKey, Observed, Record, RecordKey, ReplyHeard, Repo, Rev,
+    SettledBy, Subagent, Terminal,
 };
 
 use super::{HubNotice, ObservationNotice, RecordNotice};
@@ -124,5 +125,37 @@ fn a_notice_that_is_not_of_one_observation_is_handed_back() {
     let removed = HubNotice::Removed { record: RecordKey::Session { id: "s".into() }, rev: Rev::new(7) };
     for notice in [HubNotice::Subagent(subagent(6)), removed, HubNotice::Resync, HubNotice::Unknown] {
         assert_eq!(ObservationNotice::try_from(notice.clone()), Err(notice));
+    }
+}
+
+/// Every notice goes to one level, or to none, and only a `FeedSubscribe` is sent what goes to none.
+#[test]
+fn each_notice_is_sent_at_the_level_it_is_of() {
+    let s = || Some(Level::Session { id: "s".into() });
+    let heard = ReplyHeard {
+        session_id: "s".into(),
+        message: "m".into(),
+        ending: Ending::ToTheEnd,
+        settled_by: SettledBy::default(),
+        rev: Rev::new(12),
+    };
+    let removed = |record| HubNotice::Removed { record, rev: Rev::new(13) };
+    let of_one_session = [
+        (HubNotice::Proposal(crate::fixtures::proposal("p")), s()),
+        (HubNotice::ReplyHeard(heard), s()),
+        (removed(RecordKey::Subagent { session_id: "s".into(), subagent: "c".into() }), s()),
+        (removed(RecordKey::ReplyHeard { session_id: "s".into(), message: "m".into() }), s()),
+        (removed(RecordKey::Proposal { id: "p".into() }), None),
+        (HubNotice::Resync, None),
+        (HubNotice::Unknown, None),
+    ];
+    let records = of_a_record().into_iter().map(|(notice, key, _)| {
+        let level = if matches!(key, RecordKey::Subagent { .. }) { s() } else { Some(Level::Hub) };
+        (notice, level)
+    });
+    let observations = of_an_observation().into_iter().map(|(notice, _, _)| (notice, Some(Level::Hub)));
+
+    for (notice, level) in records.chain(observations).chain(of_one_session) {
+        assert_eq!(notice.level(), level, "{notice:?}");
     }
 }

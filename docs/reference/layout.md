@@ -110,7 +110,7 @@ third_party/       Copies of other projects' code, as `third_party/README.md` sa
 
 Everything a hub holds or serves, which of the four kinds in `docs/principles/serving.md` it is, where it's kept and how a client gets it. Something new takes its kind by the same test: the hub owns it, so it's a record, or the hub only observes it, so it's an observation. What an agent says in an event is the log's, so what the hub works out from it is a record, and what an agent says outside the log is an observation. For example, a session's status is worked out from its events, so it's a record, and how full its agent's context is comes in a report that isn't an event, so it's an observation.
 
-A table named here is in the hub's database, except `facets`, which is in the cache file `github-cache.db`. `FeedSubscribe` sends each change to a record, and `RecordsList` lists them.
+A table named here is in the hub's database, except `facets`, which is in the cache file `github-cache.db`. `FeedSubscribe` sends each change to a record, and `RecordsList` lists them. `Subscribe` sends each of these too: what `FeedSubscribe` and `RecordsList` send at the hub's level, what `SessionSubscribe` and the session's lists send at a session's, what `TerminalWatch` sends at a terminal's, and what `GithubSubscribe` sends of a workspace's own pull request at the hub's level and of a chip at an issue's or pull request's.
 
 ### Events and live snapshots
 

@@ -14,6 +14,7 @@ use crate::tail::{StreamDelta, Tail};
 use crate::terminal::{
     TerminalBoundsReply, TerminalFitReply, TerminalPicture, TerminalRowsReply, TerminalTextReply, TerminalUpdate,
 };
+use crate::versions::Versions;
 use feed::HubNotice;
 use hello::HelloReply;
 use request::ClientRequest;
@@ -22,6 +23,11 @@ use serde::{Deserialize, Serialize};
 /// The client protocol's version, apart from the worker protocol's, so a break in one doesn't break the other. It
 /// changes only for a real break, as `docs/principles/protocol.md` says.
 pub const CLIENT_PROTOCOL_VERSION: u32 = 3;
+
+/// The versions of the client protocol a hub of this build speaks. Version 4 says only that the hub has
+/// [`Subscribe`](super::subscriptions::Subscribe), and changes nothing a hub sends a client of version 3. A client
+/// speaks 3 until it follows only through `Subscribe`, and then 4, so it works with the hub of the build before it.
+pub const HUB_SPEAKS: Versions = Versions { oldest: 3, newest: 4 };
 
 /// A request to a hub, which names what the hub answers it with.
 pub trait Request {
@@ -118,6 +124,7 @@ pub enum ClientResponse {
     TerminalBounds(TerminalBoundsReply),
     TerminalText(TerminalTextReply),
     TerminalFit(TerminalFitReply),
+    Subscribed(super::subscriptions::Subscribed),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -245,6 +252,12 @@ pub enum HubFrame {
     TerminalPicture {
         subscription_id: u64,
         picture: TerminalPicture,
+    },
+    /// Where what a [`super::subscriptions::Subscribe`] subscription follows stands, as [`super::listed::Listed`] says.
+    /// Sent first, and again whenever the subscription has fallen behind.
+    Listed {
+        subscription_id: u64,
+        listed: super::listed::Listed,
     },
 }
 

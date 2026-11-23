@@ -54,6 +54,9 @@ pub(super) fn read_frames(inner: &Arc<Inner>, stream: impl std::io::Read) {
             HubFrame::TerminalPicture { subscription_id, picture } => {
                 deliver(inner, subscription_id, SubscriptionItem::TerminalPicture(Box::new(picture)));
             }
+            // Sent only on a subscription that `Subscribe` started, which this client doesn't send, and skipped as a
+            // frame it can't read would be.
+            HubFrame::Listed { .. } => {}
         }
     }
     end_connection(inner);

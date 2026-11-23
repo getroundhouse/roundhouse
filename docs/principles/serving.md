@@ -26,7 +26,7 @@ These rules say what a hub serves, how a client gets it, and what the hub keeps 
   | A terminal | The live snapshot of its screen |
   | An issue or a pull request | The observation of it that a chip draws |
 
-  *Not built:* the hub's records, a session, a terminal and what a client shows of GitHub each have a request of their own to follow them, `FeedSubscribe`, `SessionSubscribe`, `TerminalWatch` and `GithubSubscribe`, and each recovers in its own way.
+  *Not built:* clients follow the hub's records, a session, a terminal and what they show of GitHub through a request of their own for each, `FeedSubscribe`, `SessionSubscribe`, `TerminalWatch` and `GithubSubscribe`, and each recovers in its own way. The hub has the one way, `Subscribe`, beside them, and keeps the four for clients of version 3.
 - **The levels are a short fixed list, and a client can't narrow one by a condition.** So the hub evaluates no query to decide what to send, and every client that follows the same thing is sent the same. A new level is the owner's to add.
 
 ## What the hub keeps current

@@ -4,5 +4,6 @@
 #[cfg(test)]
 mod tests;
 
+mod levels;
 mod notices;
 pub use notices::{HubNotice, ObservationNotice, RecordNotice};

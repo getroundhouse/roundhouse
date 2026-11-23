@@ -13,4 +13,4 @@ mod tests;
 
 mod subagent_rows;
 
-pub(super) use subagent_rows::note_subagents;
+pub(super) use subagent_rows::{note_subagents, subagents_of};
