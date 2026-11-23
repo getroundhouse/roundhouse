@@ -12,7 +12,7 @@ use protocol::model::Level;
 use super::{hub_level, reference_level, session_level, workspace_level};
 use crate::hub::{Followed, Hub};
 use crate::server::Connection;
-use crate::server::sends::{Sends, Started};
+use crate::server::sends::Sends;
 use crate::server::subscribing::{self, taken, unsubscribe};
 use crate::server::terminals::Watching;
 
@@ -27,8 +27,7 @@ pub(in crate::server) async fn subscribe(hub: &Arc<Hub>, connection: &Connection
     }
     let mut refused = Vec::new();
     for Subscription { subscription_id, follow, github_observed } in start {
-        let started = Started::Subscribe { github_observed };
-        if let Err(error) = start_one(hub, connection, subscription_id, follow, started).await {
+        if let Err(error) = start_one(hub, connection, subscription_id, follow, github_observed).await {
             refused.push(Refused { subscription_id, error });
         }
     }
@@ -41,7 +40,7 @@ async fn start_one(
     connection: &Connection,
     subscription_id: u64,
     follow: Follow,
-    started: Started,
+    github_observed: bool,
 ) -> Result<(), ApiError> {
     let level = follow.level();
     {
@@ -57,7 +56,7 @@ async fn start_one(
             return Err(ApiError::new(ErrorCode::InvalidRequest, message));
         }
     }
-    let sends = Sends::at(level.clone(), started);
+    let sends = Sends::at(level.clone(), github_observed);
     let (followed, feeding) = feeding(hub, connection, subscription_id, follow, sends).await?;
     let mut subscriptions = connection.subscriptions.lock();
     // Another kind of request, which doesn't wait its turn as this does, may have taken the ID meanwhile.

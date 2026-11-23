@@ -10,7 +10,7 @@ use protocol::model::{
 use super::super::workspace_level;
 use super::given::{Given, ok, start};
 use crate::hub::{WorkspaceChanges, WorkspaceLines};
-use crate::server::sends::{Sends, Started};
+use crate::server::sends::Sends;
 use crate::server::tests::{Connection, WAIT};
 
 /// The subscriptions' IDs: one that follows the hub, one that follows the session `s`, and one that follows the
@@ -180,7 +180,7 @@ async fn a_workspace_s_list_is_queued_before_what_feeds_its_subscription_runs() 
     let given = Given::new(dir.path()).await;
     let (frames, mut queued) = tokio::sync::mpsc::channel(4);
 
-    let sends = Sends::at(Level::Workspace { id: "w".into() }, Started::Subscribe { github_observed: false });
+    let sends = Sends::at(Level::Workspace { id: "w".into() }, false);
     let feeding = workspace_level::feeding(&given.hub, "w".into(), sends, WORKSPACE, frames).await.unwrap();
 
     let first = queued.try_recv().map(|queued| queued.frame);
