@@ -23,6 +23,16 @@ pub enum Field<'a> {
     DiffComment { typed: &'a str, path: &'a str, changed: Vec<&'a str> },
 }
 
+/// A word or phrase a field favours, most immediate first, as `dictation`'s `Hint` takes it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HintWord {
+    pub text: String,
+    /// Whether it's written as it's hinted where it's hyphenated and its words are heard spaced or joined, as a
+    /// package's name is. The workspace's own names, its branches', repositories' and files', aren't, since a person
+    /// says their words in prose too, such as "the stale reports" on a branch `stale-reports`.
+    pub spelled: bool,
+}
+
 /// The workspace and the chat a field is in, as far as they're known.
 #[derive(Default)]
 pub struct Around<'a> {
@@ -39,7 +49,7 @@ pub struct Workspace<'a> {
 
 impl Field<'_> {
     /// The words to favour, most immediate first.
-    pub fn hint_words(&self) -> Vec<String> {
+    pub fn hint_words(&self) -> Vec<HintWord> {
         let mut collector = HintCollector::new();
         match self {
             Self::Composer { typed, attached, open_file, around } => {
@@ -64,7 +74,7 @@ impl Field<'_> {
                 collector.add_prose(typed);
                 collector.add_paths(attached.iter().map(String::as_str));
                 for name in chosen_repo.iter().chain(repos) {
-                    collector.add_name(name);
+                    collector.add_own_name(name);
                 }
             }
             Self::DiffComment { typed, path, changed } => {

@@ -7,7 +7,7 @@ mod field;
 mod prose;
 
 use collect::HintCollector;
-pub use field::{Around, Field, Workspace};
+pub use field::{Around, Field, HintWord, Workspace};
 
 #[cfg(test)]
 mod tests;

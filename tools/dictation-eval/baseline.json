@@ -8,8 +8,8 @@
     "missed": [
       "paper_stock"
     ],
-    "hints": 14,
-    "unused": 10
+    "hints": 15,
+    "unused": 11
   },
   "chat-terms/clock-hooks": {
     "hinted": [
@@ -20,8 +20,8 @@
     "missed": [
       "onTimeout"
     ],
-    "hints": 19,
-    "unused": 14
+    "hints": 20,
+    "unused": 15
   },
   "chat-terms/exif-orientation": {
     "hinted": [
@@ -29,8 +29,8 @@
       "parse_orientation"
     ],
     "missed": [],
-    "hints": 13,
-    "unused": 10
+    "hints": 14,
+    "unused": 11
   },
   "chat-terms/stale-reports": {
     "hinted": [],
@@ -38,8 +38,8 @@
       "ErrStaleReport",
       "slog"
     ],
-    "hints": 15,
-    "unused": 15
+    "hints": 16,
+    "unused": 16
   },
   "chat-terms/station-names": {
     "hinted": [
@@ -48,8 +48,8 @@
       "Thornwick"
     ],
     "missed": [],
-    "hints": 14,
-    "unused": 10
+    "hints": 16,
+    "unused": 12
   },
   "chat-terms/tunnel-pool": {
     "hinted": [
@@ -57,8 +57,8 @@
       "TunnelPool"
     ],
     "missed": [],
-    "hints": 15,
-    "unused": 12
+    "hints": 16,
+    "unused": 13
   },
   "diff-code/dwell-clamp": {
     "hinted": [],
@@ -105,8 +105,8 @@
       "quire-web"
     ],
     "missed": [],
-    "hints": 5,
-    "unused": 3
+    "hints": 9,
+    "unused": 5
   },
   "hyphenated/date-packages": {
     "hinted": [
@@ -116,8 +116,8 @@
       "dayjs",
       "react-query"
     ],
-    "hints": 21,
-    "unused": 20
+    "hints": 25,
+    "unused": 23
   },
   "hyphenated/migration-flags-answer": {
     "hinted": [],
@@ -126,8 +126,8 @@
       "dry-run",
       "fail-fast"
     ],
-    "hints": 14,
-    "unused": 14
+    "hints": 16,
+    "unused": 16
   },
   "hyphenated/signal-box-workspace": {
     "hinted": [
@@ -136,8 +136,8 @@
     "missed": [
       "route-setter"
     ],
-    "hints": 4,
-    "unused": 3
+    "hints": 7,
+    "unused": 5
   },
   "hyphenated/test-runner-crates": {
     "hinted": [
@@ -147,8 +147,8 @@
     "missed": [
       "env-filter"
     ],
-    "hints": 12,
-    "unused": 10
+    "hints": 15,
+    "unused": 11
   },
   "long-chat/calibration-answer": {
     "hinted": [],
@@ -156,8 +156,8 @@
       "gravity_offset",
       "hydrometer-sim"
     ],
-    "hints": 41,
-    "unused": 41
+    "hints": 43,
+    "unused": 43
   },
   "long-chat/newtype-review": {
     "hinted": [],
@@ -165,8 +165,8 @@
       "AccessionId",
       "Halvard"
     ],
-    "hints": 40,
-    "unused": 40
+    "hints": 41,
+    "unused": 41
   },
   "long-chat/reminder-proposal-note": {
     "hinted": [],
@@ -174,8 +174,8 @@
       "HoldQueue",
       "RENEWAL_LIMIT"
     ],
-    "hints": 55,
-    "unused": 55
+    "hints": 58,
+    "unused": 58
   },
   "lowercase/catalog-database-note": {
     "hinted": [
@@ -185,8 +185,8 @@
       "sqlite"
     ],
     "missed": [],
-    "hints": 19,
-    "unused": 15
+    "hints": 20,
+    "unused": 16
   },
   "lowercase/cluster-ingress": {
     "hinted": [
@@ -195,8 +195,8 @@
       "traefik"
     ],
     "missed": [],
-    "hints": 19,
-    "unused": 16
+    "hints": 23,
+    "unused": 19
   },
   "lowercase/config-crates": {
     "hinted": [
@@ -205,8 +205,8 @@
       "toml_edit"
     ],
     "missed": [],
-    "hints": 17,
-    "unused": 14
+    "hints": 18,
+    "unused": 15
   },
   "lowercase/log-search-tools": {
     "hinted": [
@@ -216,8 +216,8 @@
       "ripgrep"
     ],
     "missed": [],
-    "hints": 10,
-    "unused": 6
+    "hints": 11,
+    "unused": 7
   },
   "lowercase/nightly-timers": {
     "hinted": [
@@ -225,8 +225,8 @@
       "restic"
     ],
     "missed": [],
-    "hints": 17,
-    "unused": 15
+    "hints": 18,
+    "unused": 16
   },
   "lowercase/python-checks-answer": {
     "hinted": [
@@ -236,8 +236,8 @@
       "ruff"
     ],
     "missed": [],
-    "hints": 15,
-    "unused": 11
+    "hints": 16,
+    "unused": 12
   },
   "lowercase/tokio-runtime-answer": {
     "hinted": [
@@ -246,25 +246,25 @@
       "tokio"
     ],
     "missed": [],
-    "hints": 16,
-    "unused": 13
+    "hints": 17,
+    "unused": 14
   },
   "plain/bigger-buttons-workspace": {
     "hinted": [],
     "missed": [],
-    "hints": 6,
-    "unused": 6
+    "hints": 10,
+    "unused": 10
   },
   "plain/leave-a-note": {
     "hinted": [],
     "missed": [],
-    "hints": 16,
-    "unused": 16
+    "hints": 18,
+    "unused": 18
   },
   "plain/thumbnail-cache-note": {
     "hinted": [],
     "missed": [],
-    "hints": 25,
-    "unused": 25
+    "hints": 26,
+    "unused": 26
   }
 }

@@ -23,7 +23,10 @@ impl FileDiff {
             let listing = diff.review.read(cx).listing();
             let changed =
                 listing.into_iter().flat_map(|listing| listing.rows.iter()).map(|file| file.path.as_ref()).collect();
-            dictation_ui::Hints::new(Field::DiffComment { typed: &typed, path: &path, changed }.hint_words())
+            let words = Field::DiffComment { typed: &typed, path: &path, changed }.hint_words();
+            dictation_ui::Hints::new(
+                words.into_iter().map(|word| dictation_ui::Hint { text: word.text, spelled: word.spelled }),
+            )
         };
         let on_event =
             |this: &mut Self, event: &dictation_ui::Event, window: &mut Window, cx: &mut Context<Self>| match event {

@@ -242,7 +242,7 @@ impl Hearing<'_> {
         let live: String = words.map(|heard| heard.text.as_str()).collect();
         let audio: Vec<f32> = pieces.into_iter().flat_map(|piece| piece.audio).collect();
         let heard = self.engine.transcribe(&audio, self.hints, self.language)?;
-        let text = if joins::has_words(&heard) { heard } else { live };
+        let text = self.hints.spell(if joins::has_words(&heard) { &heard } else { &live });
         let carries_on = std::mem::take(&mut self.carries_on);
         if let Some((text, next_carries_on)) = joins::final_text(&text, carries_on, ends) {
             self.carries_on = next_carries_on;
@@ -258,9 +258,9 @@ impl Hearing<'_> {
         let pieces = self.ended.iter().flat_map(|piece| &piece.live);
         let words = pieces.chain(&self.live).skip_while(|heard| is_mark(heard));
         let live: String = words.map(|heard| heard.text.as_str()).collect();
-        let live = live.trim_start();
+        let live = self.hints.spell(live.trim_start());
         if live != self.shown {
-            self.shown = live.to_string();
+            self.shown = live;
             self.send(Update::Hearing(self.shown.clone()));
         }
     }

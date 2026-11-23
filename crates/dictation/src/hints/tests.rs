@@ -1,7 +1,7 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
-use super::{HintGraph, HintState, Hints};
+use super::{Hint, HintGraph, HintState, Hints};
 
 /// Merged subwords first (in BPE merge order), followed by the single-character alphabet (including `▁`), just as
 /// `SentencePiece` BPE `vocab.json` orders them.
@@ -45,12 +45,56 @@ fn hints_clean_deduplicate_and_expand_identifiers() {
         "WorkspacePane",
         "CBLAS_SGEMM",
         "SQLite",
+        "sqlite-vec",
+        "docs/test-levels",
         "a",
         "1234",
         "deadbeefcafe01",
     ]);
 
-    assert_eq!(hints.words(), ["Tokio", "workspace pane", "WorkspacePane", "cblas sgemm", "SQLite"]);
+    assert_eq!(
+        hints.words(),
+        [
+            "Tokio",
+            "workspace pane",
+            "WorkspacePane",
+            "cblas sgemm",
+            "SQLite",
+            "sqlite-vec",
+            "sqlite vec",
+            "docs/test-levels"
+        ]
+    );
+}
+
+#[test]
+fn a_hyphenated_hint_is_written_as_hinted_where_its_words_are_written_spaced_or_joined() {
+    let hints = Hints::new([
+        Hint::from("sqlite-vec"),
+        Hint::from("JSON-RPC"),
+        Hint::from("node-fetch"),
+        Hint::from("Gemini Flash-Lite"),
+        Hint { text: "stale-reports".to_string(), spelled: false },
+    ]);
+
+    for (written, spelled) in [
+        ("load sqlite vec first", "load sqlite-vec first"),
+        ("Sqlite vec failed.", "Sqlite-vec failed."),
+        ("so. Sqlite vec failed", "so. Sqlite-vec failed"),
+        ("the json rpc call", "the JSON-RPC call"),
+        ("add NodeFetch, then", "add node-fetch, then"),
+        ("use gemini flash lite", "use Gemini Flash-Lite"),
+        ("use gemini flashlite", "use Gemini Flash-Lite"),
+        // A space in the hint is a space or a hyphen written, never nothing.
+        ("use geminiflash lite", "use geminiflash lite"),
+        // Not where it's part of a longer word or name.
+        ("a sqlite vector", "a sqlite vector"),
+        ("my-sqlite-vec", "my-sqlite-vec"),
+        // Not one of the workspace's own names, whose words prose says.
+        ("the stale reports", "the stale reports"),
+    ] {
+        assert_eq!(hints.spell(written), spelled, "{written:?}");
+    }
 }
 
 #[test]

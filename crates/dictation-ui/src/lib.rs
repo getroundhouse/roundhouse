@@ -20,7 +20,7 @@ mod text;
 mod view;
 
 pub use controls::{CANCEL, STOP};
-pub use dictation::Hints;
+pub use dictation::{Hint, Hints};
 pub use field::{Event, Field};
 pub use holding::{SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER, SPACE_TALKS_AFTER};
 #[cfg(target_os = "macos")]

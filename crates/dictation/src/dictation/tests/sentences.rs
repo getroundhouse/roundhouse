@@ -29,6 +29,21 @@ fn live_text_grows_as_words_are_said_and_a_sentence_turns_final_once_the_next_be
 }
 
 #[test]
+fn a_hyphenated_hint_heard_as_words_is_written_as_hinted_live_and_final() {
+    let engine = FakeEngine::new(&["load", "sqlite", "vec", "now"]);
+    let audio = engine.saying("load sqlite vec now");
+    let dictation = dictation(engine);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::new(["sqlite-vec"]), crate::Language::Auto);
+
+    feed(&recording, &audio);
+    let live = until(&updates, &hearing("load sqlite-vec"));
+    recording.stop();
+
+    assert!(!live.iter().any(|u| matches!(u, Update::Hearing(text) if text.contains("sqlite vec"))), "{live:?}");
+    assert!(the_rest(&updates).contains(&final_text("Load sqlite-vec now.")));
+}
+
+#[test]
 fn a_pause_in_the_middle_of_a_sentence_ends_nothing_and_it_is_heard_whole() {
     let engine = FakeEngine::new(SCRIPT);
     let audio = engine.saying("fix the flaky test / run it again");
