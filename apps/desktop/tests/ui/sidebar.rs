@@ -379,3 +379,22 @@ fn nothing_else_is_archived_or_restored_while_a_workspace_is_being_archived(cx: 
     let restored = workspaces.iter().any(|w| w.id == earlier && w.status != WorkspaceStatus::Archived);
     assert!(!restored, "pressing an archived row meanwhile didn't restore it");
 }
+
+/// An app that opens with nothing selected falls back to the workspace at the top of the sidebar, and follows it at its
+/// own level, as it does one a person selects, though nothing changes in the hub's records after, which until then was
+/// all that had it say which workspace shows.
+#[gpui_kit::test]
+fn the_workspace_the_selection_falls_back_to_is_followed_at_its_own_level(cx: &mut TestAppContext) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let [first, second] = ["ledger", "points"].map(|name| with_a_chat(&mut world, &repo, name));
+    let following = world.following.clone();
+
+    let (_fake, mut ui) = open_on_the_world(cx, world);
+
+    ui.wait("a workspace to be selected", |ui| ui.view().selected().is_some());
+    let selected = ui.view().selected().cloned().unwrap();
+    assert!(selected == first || selected == second, "{selected}");
+    let followed = move || following.any(|level| *level == protocol::model::Level::Workspace { id: selected.clone() });
+    ui.wait("it to be followed at its own level", |_| followed());
+}

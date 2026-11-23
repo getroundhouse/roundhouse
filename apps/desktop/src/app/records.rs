@@ -32,7 +32,6 @@ impl AppView {
             pane.update(cx, |p, cx| p.set_records(shown, cx));
         }
         self.records = records;
-        self.say_which_pull_requests_show();
         self.keep_workers_as_they_move(cx);
         let still_there = self.selected().and_then(|id| self.records.workspace(id)).is_some_and(crate::sidebar::lists);
         if !still_there {
@@ -45,6 +44,8 @@ impl AppView {
         if !still_there || !has_pane {
             self.show_selected(cx);
         }
+        // Once the selection has fallen back, so the workspace it falls back to is followed at its own level.
+        self.say_which_pull_requests_show();
         self.show_kept_in_dialog(cx);
         // After a reconnect, the pane on screen catches up once the records have, and the rest when they're shown.
         if let Some(pane) = self.selected_pane() {
