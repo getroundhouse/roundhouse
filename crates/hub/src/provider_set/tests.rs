@@ -7,6 +7,7 @@ use providers::{Capabilities, ProviderError};
 
 use super::*;
 use crate::Timers;
+use crate::machine_environment::MachineEnvironment;
 
 fn local(dir: &Path) -> Arc<dyn Provider> {
     Arc::new(LocalProvider::new(LocalConfig {
@@ -14,7 +15,6 @@ fn local(dir: &Path) -> Arc<dyn Provider> {
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
-        path: providers::local::MachinePath::new(Some("/bin/sh".to_string()), None),
     }))
 }
 
@@ -40,7 +40,8 @@ fn loaded(dir: &Path, file: Option<String>) -> ProviderSet {
     if let Some(file) = file {
         std::fs::write(&path, file).unwrap();
     }
-    ProviderSet::load(local(dir), &path, &"h".into(), Build::UNSTAMPED, Timers::DEFAULT.adapter_hello_within)
+    let (within, machine) = (Timers::DEFAULT.adapter_hello_within, MachineEnvironment::only(&[]));
+    ProviderSet::load(local(dir), &path, &"h".into(), Build::UNSTAMPED, within, &machine)
 }
 
 fn default_name(set: &ProviderSet) -> Result<String, ApiError> {

@@ -14,7 +14,7 @@ use crate::codex::launch::Purpose;
 use crate::codex::running::{CodexProcess, start_conversation};
 use crate::{AgentOptions, AgentOutput};
 
-pub(super) static PROGRAM: crate::testing::Example = crate::testing::Example::new("native_standin");
+pub(super) static PROGRAM: process::testing::Example = process::testing::Example::new("native_standin");
 
 pub(super) struct Harness {
     pub(super) room: tempfile::TempDir,

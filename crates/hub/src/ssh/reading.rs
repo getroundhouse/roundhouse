@@ -3,10 +3,10 @@
 use std::process::Stdio;
 use std::time::Duration;
 
-use process::Environment;
 use protocol::model::SshLogin;
-use providers::local::MachinePath;
 use tokio::process::Command;
+
+use crate::machine_environment::MachineEnvironment;
 
 /// How long the hub lets `ssh` take, connecting and all, before it stops it, so one that hangs holds up only the read.
 const READ_WITHIN: Duration = Duration::from_secs(15);
@@ -17,14 +17,14 @@ const READ_WITHIN: Duration = Duration::from_secs(15);
 /// [`READ_WITHIN`] does.
 const ASKED: [&str; 7] = ["-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--", "git@github.com"];
 
-/// `ssh` on the hub's machine, found on the `PATH` `path` says.
+/// `ssh` on the hub's machine, given what everything the hub starts there is, and found on the `PATH` that has.
 pub(crate) struct Ssh {
-    path: MachinePath,
+    machine: MachineEnvironment,
 }
 
 impl Ssh {
-    pub(crate) fn new(path: MachinePath) -> Self {
-        Self { path }
+    pub(crate) fn new(machine: MachineEnvironment) -> Self {
+        Self { machine }
     }
 
     /// Whose key GitHub takes from this machine, or that it takes none, or [`SshLogin::CouldntTell`] when there's no
@@ -33,9 +33,7 @@ impl Ssh {
     pub(crate) async fn read(&self) -> SshLogin {
         let mut command = Command::new("ssh");
         command.args(ASKED).stdin(Stdio::null()).kill_on_drop(true);
-        if let Some(path) = self.path.path().await {
-            Environment::NONE.with("PATH", path).apply(command.as_std_mut());
-        }
+        self.machine.given().apply(command.as_std_mut());
         match tokio::time::timeout(READ_WITHIN, command.output()).await {
             Ok(Ok(output)) => said(&String::from_utf8_lossy(&output.stderr)),
             Ok(Err(_)) | Err(_) => SshLogin::CouldntTell,

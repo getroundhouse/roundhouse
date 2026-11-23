@@ -18,9 +18,10 @@ use crate::support::{self, Stack, is_alive, parent_of, signal, wait_until};
 const SIZE: TerminalSize = TerminalSize { cols: 400, rows: 24 };
 
 /// A stack whose hubs start each terminal's shell as `/bin/sh`, so it's the same shell for everyone, rather than the login
-/// shell that says nothing, which every other stack's hubs are given.
+/// shell that says nothing, which every other stack's hubs are given. It's through a stand-in for a login shell that
+/// reads none of the machine's setup, so what the hub reads of it doesn't turn on that either.
 fn stack() -> Stack {
-    Stack::start_with(vec![("SHELL", "/bin/sh".to_string())])
+    Stack::start_with(vec![("SHELL", process::testing::login_shell().display().to_string())])
 }
 
 /// What `open` shows, as text, once it includes `wanted`.

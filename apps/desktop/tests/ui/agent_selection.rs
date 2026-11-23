@@ -132,7 +132,7 @@ fn pick(ui: &mut Ui<'_>, picked: &Picked, agent: AgentKind) {
 
 fn codex_stack() -> Stack {
     let mut environment = crate::support::hub_environment();
-    environment.set(agents::ENV_CODEX_BIN, agents::testing::Example::new("native_standin").path());
+    environment.set(agents::ENV_CODEX_BIN, process::testing::Example::new("native_standin").path());
     Stack::in_environment(&environment)
 }
 

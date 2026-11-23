@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 #[test]
 fn a_fresh_hub_discovers_the_model_and_effort_it_sends_on_the_first_turn() {
-    let program = agents::testing::Example::new("native_standin").path();
+    let program = process::testing::Example::new("native_standin").path();
     let mut stack = Stack::start_with(vec![(agents::ENV_CODEX_BIN, program.to_string_lossy().into_owned())]);
     stack.make_through_an_adapter();
     let client = stack.client();

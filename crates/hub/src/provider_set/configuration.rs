@@ -1,3 +1,4 @@
+use crate::machine_environment::MachineEnvironment;
 use crate::provider_link;
 use crate::provider_link::{ADAPTER_GRACE, AdapterCommand, AdapterProvider};
 use protocol::Build;
@@ -105,6 +106,7 @@ impl ProviderSet {
         hub_id: &HubId,
         build: Build,
         adapter_hello_within: Duration,
+        machine: &MachineEnvironment,
     ) -> Self {
         let local_name = ProviderName::from(local.name());
         let mut set = Self::only(local);
@@ -130,7 +132,8 @@ impl ProviderSet {
             if !entry.set_up_github {
                 set.left_to_machine.insert(entry.name.clone());
             }
-            let open = provider_link::process(AdapterCommand { program: entry.program, args: entry.args });
+            let command = AdapterCommand { program: entry.program, args: entry.args };
+            let open = provider_link::process(command, machine.clone());
             let (name, hub_id) = (entry.name.to_string(), hub_id.clone());
             let adapter = Arc::new(AdapterProvider::new(name, hub_id, build, adapter_hello_within, open));
             set.by_name.insert(entry.name, adapter.clone());

@@ -11,7 +11,7 @@ use protocol::model::{GhLogin, GhLoginWorks, GithubAccount, GithubToken, GithubU
 use tracing::warn;
 
 use super::super::{Hub, off_thread};
-use crate::gh::GhRead;
+use crate::gh::{GhRead, GhTokens};
 use crate::github_logins::{GhSaid, NoGhLogin};
 use crate::store::now_ms;
 use github::TokenOwner;
@@ -41,9 +41,15 @@ impl Said {
 }
 
 impl Hub {
-    /// Who `gh` on the hub's machine is logged in as, and whether GitHub takes its token, as `HubGhLogin` says.
+    /// Who `gh` on the hub's machine is logged in as, and whether GitHub takes its token, as `HubGhLogin` says: the
+    /// login connecting it would hold, without the tokens `gh` would take from its environment.
     pub(crate) async fn hub_gh_login(&self) -> Result<GhLogin, ApiError> {
-        let GhAsked { username, said } = self.ask_gh(false).await?;
+        self.gh_login(GhTokens::TakenOut).await
+    }
+
+    /// Who `gh` is to `tokens`, and whether GitHub takes its token.
+    async fn gh_login(&self, tokens: GhTokens) -> Result<GhLogin, ApiError> {
+        let GhAsked { username, said } = self.ask_gh(false, tokens).await?;
         let Some(username) = username else {
             let installed = !matches!(said, Said::NoLogin(NoGhLogin::NotInstalled));
             return Ok(if installed { GhLogin::LoggedOut } else { GhLogin::NotInstalled });
@@ -56,10 +62,11 @@ impl Hub {
         Ok(GhLogin::LoggedIn { username, works })
     }
 
-    /// Who `gh` and the SSH key on the hub's machine are, as `HubMachineLogins` says, read at once. `gh` is `None`
-    /// when it couldn't be read, which the log says.
+    /// Who `gh` and the SSH key on the hub's machine are, as `HubMachineLogins` says, read at once. `gh` is who it is
+    /// to an agent there, so a `GH_TOKEN` the profile exports is who it names, since that's who agents act as. It's
+    /// `None` when it couldn't be read, which the log says.
     pub(crate) async fn hub_machine_logins(&self) -> MachineLogins {
-        let (gh, ssh) = tokio::join!(self.hub_gh_login(), self.ssh.read());
+        let (gh, ssh) = tokio::join!(self.gh_login(GhTokens::AsAgentsHaveThem), self.ssh.read());
         let gh = gh.inspect_err(|e| warn!("couldn't read gh's login on this machine: {}", e.message)).ok();
         MachineLogins { gh, ssh }
     }
@@ -67,7 +74,7 @@ impl Hub {
     /// Has the hub hold the login `gh` has on its machine, as `GithubAccountConnectGh` says, and tells every client
     /// what that changed of the account's record, and of the settings when it made the account the default.
     pub(crate) async fn github_account_connect_gh(&self) -> Result<GithubAccount, ApiError> {
-        let (owner, token) = match self.ask_gh(true).await?.said {
+        let (owner, token) = match self.ask_gh(true, GhTokens::TakenOut).await?.said {
             Said::Works { owner: Some(owner), token, .. } => (owner, token),
             // Never, since a fresh ask always asks GitHub.
             Said::Works { owner: None, .. } => {
@@ -88,7 +95,7 @@ impl Hub {
     /// to, so what workers are sent follows `gh` logging out, switching, or renewing its token. A read that fails is
     /// said in the log, since it leaves the last token for a few minutes, and the rest is the default's block to say.
     pub(in super::super) async fn read_gh(&self) {
-        let said = match self.ask_gh(false).await {
+        let said = match self.ask_gh(false, GhTokens::TakenOut).await {
             Ok(asked) => asked.said.said(),
             Err(e) => GhSaid::Unread { why: e.message },
         };
@@ -101,10 +108,11 @@ impl Hub {
         }
     }
 
-    /// Reads `gh`, and asks GitHub whose its token is, unless it's the token the hub read last and `fresh` isn't asked
-    /// for, since a token is only ever one user's. Refused only when the hub couldn't run `gh` at all.
-    async fn ask_gh(&self, fresh: bool) -> Result<GhAsked, ApiError> {
-        let read = self.gh.read().await.map_err(|e| ApiError::new(ErrorCode::Unavailable, e.to_string()))?;
+    /// Reads `gh`, given `tokens`, and asks GitHub whose its token is, unless it's the token the hub read last and
+    /// `fresh` isn't asked for, since a token is only ever one user's. Refused only when the hub couldn't run `gh` at
+    /// all.
+    async fn ask_gh(&self, fresh: bool, tokens: GhTokens) -> Result<GhAsked, ApiError> {
+        let read = self.gh.read(tokens).await.map_err(|e| ApiError::new(ErrorCode::Unavailable, e.to_string()))?;
         let (username, token, renews) = match read {
             GhRead::LoggedIn { username, token: Some(token), renews } => (username, token, renews),
             GhRead::LoggedIn { username, token: None, .. } => {
@@ -121,17 +129,17 @@ impl Hub {
         if !fresh && let Some((user, known)) = known.filter(|(_, known)| *known == token) {
             return Ok(GhAsked { username: Some(username), said: Said::Works { user, token: known, owner: None } });
         }
-        Ok(GhAsked { username: Some(username), said: self.whose(token, renews).await })
+        Ok(GhAsked { username: Some(username), said: self.whose(token, renews, tokens).await })
     }
 
     /// Who GitHub says `token`, `gh`'s, is. One GitHub refuses that `gh` renews by itself is renewed, as a run of `gh`
     /// the person made would, and asked about again.
-    async fn whose(&self, token: GithubToken, renews: bool) -> Said {
+    async fn whose(&self, token: GithubToken, renews: bool, tokens: GhTokens) -> Said {
         let mut asked = self.github.token_owner(&token).await;
         let mut token = token;
         if renews
             && asked.as_ref().is_err_and(|e| e.code == ErrorCode::InvalidRequest)
-            && let Some(renewed) = self.gh.renewed().await
+            && let Some(renewed) = self.gh.renewed(tokens).await
         {
             asked = self.github.token_owner(&renewed).await;
             token = renewed;

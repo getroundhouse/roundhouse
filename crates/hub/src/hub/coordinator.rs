@@ -13,6 +13,7 @@ use crate::github_cache::{self, GithubCache};
 use crate::github_logins::GithubLogins;
 use crate::jobs::Jobs;
 use crate::logins::Logins;
+use crate::machine_environment::MachineEnvironment;
 use crate::provider_set::ProviderSet;
 use crate::session::{Item, LiveSession, Starting};
 use crate::ssh::Ssh;
@@ -31,7 +32,6 @@ use protocol::model::{
     WorkspaceId,
 };
 use providers::Provider;
-use providers::local::MachinePath;
 use sessions::Sessions;
 use setup::SetupGate;
 use std::collections::HashMap;
@@ -61,6 +61,8 @@ pub(crate) struct Hub {
     pub(super) gh: Gh,
     /// `ssh` on the hub's own machine, whose key GitHub takes as someone's.
     pub(super) ssh: Ssh,
+    /// What everything the hub starts on its machine is given, such as a worker's command.
+    pub(crate) machine: MachineEnvironment,
     /// Told each time a worker has read a repository's address, whatever it read, for the check of reach to look again
     /// at which repository on GitHub each repository's record names.
     pub(super) addresses_read: Notify,
@@ -145,7 +147,7 @@ impl Hub {
         dirs: HubDirs,
         providers: ProviderSet,
         github: Github,
-        machine: MachinePath,
+        machine: MachineEnvironment,
         agents: Vec<AgentDescription>,
         start: HubStart,
         timers: Timers,
@@ -162,7 +164,8 @@ impl Hub {
             github_logins: Arc::new(GithubLogins::new(store.clone(), &dirs.data, now_ms())),
             github,
             ssh: Ssh::new(machine.clone()),
-            gh: Gh::new(machine, dirs.data.clone()),
+            gh: Gh::new(machine.clone(), dirs.data.clone()),
+            machine,
             addresses_read: Notify::new(),
             observations: Observations::open(cache_file.clone(), &store),
             github_cache: Arc::new(GithubCache::open(cache_file)),

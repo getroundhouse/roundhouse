@@ -11,11 +11,12 @@ use crate::support::{Stack, Ui, hub_environment};
 
 /// A stack whose hubs start each terminal's shell as `/bin/sh`, so it's the same shell for everyone, with the prompt
 /// these tests wait for, rather than whichever one whoever runs the tests uses, or the login shell that says nothing,
-/// which [`hub_environment`] gives every other test.
+/// which [`hub_environment`] gives every other test. It's through a stand-in for a login shell that reads none of the
+/// machine's setup, so what the hub reads of it doesn't turn on that either.
 pub(super) fn stack() -> Stack {
     let mut environment = hub_environment();
     #[cfg(unix)]
-    environment.set("SHELL", "/bin/sh");
+    environment.set("SHELL", process::testing::login_shell());
     Stack::in_environment(&environment)
 }
 

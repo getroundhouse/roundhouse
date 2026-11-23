@@ -1,0 +1,15 @@
+[package]
+name = "environment-printer"
+description = "Stands in for the daemon printing its environment in tests of the hub asking its login shell for the profile's, as the example environment_printer."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# Dev-dependencies, whose features only a build that names an example, test or bench takes in, so a build of the
+# product's code across the workspace, such as `cargo clippy --workspace --locked`, is as it ships.
+[dev-dependencies]
+process.workspace = true
+
+[lints]
+workspace = true

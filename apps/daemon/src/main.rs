@@ -58,6 +58,12 @@ enum Role {
     /// as are the file the workflow keeps it in and the publisher's flag that reads it, until #2275 renames them.
     #[command(hide = true)]
     WorkerVersions,
+    /// Prints the environment this was started in, as `process::print_environment` says. Run by the login shell a hub
+    /// asks for the environment the profile gives, after it has read the profile, so reading it needs nothing of the
+    /// machine's own, such as its `env`. A parent Claude session's variables are forgotten first, as for every role, so
+    /// a profile can't give them back.
+    #[command(hide = true, name = process::PRINTS_ENVIRONMENT)]
+    PrintEnvironment,
     /// Answer one question about the prospective launch and exit.
     #[command(hide = true)]
     Preflight {
@@ -170,6 +176,7 @@ fn main() -> anyhow::Result<ExitCode> {
         )?),
         Role::Preflight { agent, checkout } => preflight::run(agent, &checkout, claude_bin, codex_bin, antigravity_bin),
         Role::WorkerVersions => say_worker_versions(),
+        Role::PrintEnvironment => Ok(process::print_environment(std::env::vars_os(), &mut std::io::stdout().lock())?),
         Role::Delete { paths } => {
             let failed = worker::delete_trees(&paths);
             for (path, e) in &failed {

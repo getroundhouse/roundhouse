@@ -166,7 +166,7 @@ A hub from before hubs kept GitHub accounts can't connect one, and agents use ea
 
 Where agents run, and who they are on GitHub there.
 
-- **This Mac** is your own, so Roundhouse hands agents nothing for GitHub there: their `git` and `gh` are yours, as in your terminal. Its rows say who `gh` is logged in as and whose SSH key GitHub takes, which the hub reads each time you open the page, and that a key isn't `gh`'s account when it isn't. Under them, it says who Roundhouse itself reads pull requests as, the default in Git. While `gh` is logged out or not there, it says agents there can't use `gh`, and what to run.
+- **This Mac** is your own, so Roundhouse hands agents nothing for GitHub there: their `git` and `gh` are yours, as in your terminal. Its rows say who `gh` is to agents and whose SSH key GitHub takes, which the hub reads each time you open the page, and that a key isn't `gh`'s account when it isn't. Who `gh` is to agents is the owner of a `GH_TOKEN` your profile exports, since `gh` uses it over its own login, or else who `gh` is logged in as. **Use gh's login** in Git connects `gh`'s own login, the one `gh auth login` sets, whatever token your profile exports. Under them, it says who Roundhouse itself reads pull requests as, the default in Git. While `gh` is logged out or not there, it says agents there can't use `gh`, and what to run.
 - **A provider Roundhouse sets up GitHub on** says its agents are the default in Git, or that there's none to connect.
 
 ![Providers, with gh and the SSH key on this Mac both ada's](../../spec/screens/settings-providers.png)

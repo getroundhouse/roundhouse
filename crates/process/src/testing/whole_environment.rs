@@ -17,8 +17,8 @@ const KEPT: &[&str] =
 /// Where a process finds its user's home.
 const HOME: &str = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
 
-/// A login shell that prints nothing and fails, so a hub that asks the login shell for the `PATH` its workers get, as
-/// the local provider does, gives them its own, and none of the person's shell setup runs.
+/// A login shell that prints nothing and fails, so a hub, which asks the login shell for the environment everything it
+/// starts gets, gives each its own, and none of the person's shell setup runs.
 const SAYS_NOTHING: &str = "/usr/bin/false";
 
 /// The whole environment of a process a test starts, in place of the test's own, as against a

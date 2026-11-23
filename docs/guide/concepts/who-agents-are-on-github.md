@@ -48,7 +48,7 @@ Removing the app, from its row's `…` menu, has the hub forget its key, and del
 
 ## Your own machine's login
 
-On your own machine, agents always use the login it already has: whoever `gh` is logged in as, and the SSH key or other credential `git` pushes with. The Providers page in Settings says who `gh` is there and whose SSH key GitHub takes, which the hub reads each time you open it, beside who Roundhouse itself reads pull requests as, so you see when they differ.
+On your own machine, agents always use the login it already has: whoever `gh` is logged in as, or the owner of a `GH_TOKEN` your profile exports, which `gh` uses over its login, and the SSH key or other credential `git` pushes with. The Providers page in Settings says who `gh` is there and whose SSH key GitHub takes, which the hub reads each time you open it, beside who Roundhouse itself reads pull requests as, so you see when they differ.
 
 ![Providers, with gh and the SSH key on this Mac both ada's](../../spec/screens/settings-providers.png)
 

@@ -25,7 +25,12 @@ pub(crate) fn run(start: HubStart) -> anyhow::Result<ExitCode> {
     let running =
         std::env::current_exe().and_then(std::fs::canonicalize).context("finding this binary to run workers")?;
     let (worker_exe, _marked) = workers_from(&paths, BUILD.stamped(), running);
-    let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty());
+    // The user's own home and login shell when whatever started the hub didn't say, as a service manager or a
+    // container may not.
+    let users = process::home_and_shell();
+    let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty()).or(users.shell);
+    let home = std::env::var_os(protocol::paths::HOME_VAR).filter(|home| !home.is_empty()).map(PathBuf::from);
+    let home = home.or(users.home);
     let path = std::env::var("PATH").ok();
     // The hub doesn't depend on the adapters, so it's told what each kind of agent offers from here.
     let agents = agents::descriptions();
@@ -43,6 +48,7 @@ pub(crate) fn run(start: HubStart) -> anyhow::Result<ExitCode> {
         paths,
         worker_exe,
         shell,
+        home,
         path,
         start,
         agents,

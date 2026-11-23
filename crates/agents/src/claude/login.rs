@@ -27,7 +27,9 @@ pub(super) const OUTRANKS_THE_TOKEN: &[&str] = &[
 const SENDS_IT_ELSEWHERE: &str = "ANTHROPIC_BASE_URL";
 
 /// Has `command` run the CLI under `login`, at Anthropic's own API, and under nothing that would outrank it. With
-/// none, the command is left as it is, so the CLI uses this machine's own login. [`start`](super::process::start)
+/// none, the command is left as it is, so the CLI uses this machine's own login, whatever the person's environment
+/// gives it, such as an API key, another provider, another base URL or a token `claude setup-token` made, as GitHub's
+/// tokens pass to an agent unless its hub holds a GitHub login. [`start`](super::process::start)
 /// calls it just before the CLI starts, so nothing set after it puts back what this takes out. The stream startup then pins these settings in the CLI's memory and verifies them with `login_check`,
 /// since settings can otherwise put credentials back after the process starts.
 pub(in crate::claude) fn run_under(command: &mut Command, login: Option<&AgentLogin>) {
@@ -69,15 +71,21 @@ mod tests {
         }
     }
 
+    /// Whatever login the person's environment gives the CLI, such as a profile's key, base URL or token.
     #[test]
     fn without_a_login_the_machines_own_is_left_alone() {
         let mut command = Command::new("claude");
-        command.env("ANTHROPIC_API_KEY", "the-machines-own");
+        let machines = [
+            ("ANTHROPIC_API_KEY", "the-machines-own"),
+            ("ANTHROPIC_BASE_URL", "https://elsewhere.example"),
+            (TOKEN_ENV, "the-machines-token"),
+        ];
+        command.envs(machines);
 
         run_under(&mut command, None);
 
-        assert_eq!(given(&command, TOKEN_ENV), None);
-        assert!(!taken_out(&command, TOKEN_ENV));
-        assert_eq!(given(&command, "ANTHROPIC_API_KEY"), Some(OsStr::new("the-machines-own")));
+        for (name, value) in machines {
+            assert_eq!(given(&command, name), Some(OsStr::new(value)), "{name}");
+        }
     }
 }

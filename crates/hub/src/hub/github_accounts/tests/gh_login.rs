@@ -11,23 +11,44 @@ use protocol::worker::GithubCredential;
 
 use crate::github_logins::GhSaid;
 use crate::hub::Hub;
-use crate::hub::tests::{hub_calling_github, hub_calling_github_again};
+use crate::hub::tests::{hub_calling_github, hub_calling_github_again, hub_calling_github_given};
 use crate::store::now_ms;
 use github::{Answer, StandIn};
 
-/// A stand-in for `gh` in `dir`'s `bin`, logged in as nobody until [`log_in`] says.
+/// A stand-in for `gh` in `dir`'s `bin`, logged in as nobody until [`log_in`] says. Given `GH_TOKEN`, it uses that
+/// over its own login, as `gh` does, and says it's whoever [`GH_TOKEN_OWNER`] names, as `gh` says who GitHub named.
 fn gh(dir: &Path) {
     use std::os::unix::fs::PermissionsExt as _;
     let bin = dir.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     let (status, token) = (dir.join("gh-status").display().to_string(), dir.join("gh-token").display().to_string());
+    let by_token = format!(
+        r#"{{"hosts":{{"github.com":[{{"active":true,"login":"{GH_TOKEN_OWNER}","tokenSource":"GH_TOKEN"}}]}}}}"#
+    );
     let script = format!(
-        "#!/bin/sh\ncase \"$1 $2\" in\n'auth status') /bin/cat '{status}';;\n'auth token') /bin/cat '{token}' || exit 1;;\n*) exit 9;;\nesac\n"
+        r#"#!/bin/sh
+if [ -n "$GH_TOKEN" ]; then
+  case "$1 $2" in
+  'auth status') printf '%s\n' '{by_token}';;
+  'auth token') printf '%s\n' "$GH_TOKEN";;
+  *) exit 9;;
+  esac
+  exit
+fi
+case "$1 $2" in
+'auth status') /bin/cat '{status}';;
+'auth token') /bin/cat '{token}' || exit 1;;
+*) exit 9;;
+esac
+"#
     );
     std::fs::write(bin.join("gh"), script).unwrap();
     std::fs::set_permissions(bin.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
     log_out(dir);
 }
+
+/// Who the stand-in for `gh` says a `GH_TOKEN` is.
+const GH_TOKEN_OWNER: &str = "bob";
 
 /// Has the stand-in say it's logged in as `name`, with `token`.
 fn log_in(dir: &Path, name: &str, token: &str) {
@@ -68,6 +89,39 @@ async fn who_gh_is_logged_in_as_is_said_with_whether_github_takes_its_token() {
     assert_eq!(ada, GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes });
     assert_eq!(refused, GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Refused });
     assert_eq!(hub.records_list().await.unwrap().github_accounts, [], "asking connects nothing");
+}
+
+/// A `GH_TOKEN` the profile exports is who agents on the hub's machine act as, so Providers' line for it names that
+/// token's owner rather than `gh auth`'s login, and names one when `gh auth` has none. What connecting it would hold is
+/// still `gh auth`'s login.
+#[tokio::test]
+async fn the_machines_line_names_the_profiles_gh_token_and_connecting_still_takes_gh_s_own() {
+    let users = [("ada-token", Answer::user(7, "ada", None)), ("bob-token", Answer::user(8, "bob", None))];
+    let github = StandIn::start(users.into()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github_given(dir.path(), github.api(), &[("GH_TOKEN", "bob-token")]);
+    gh(dir.path());
+
+    let only_the_token = hub.hub_machine_logins().await.gh;
+    log_in(dir.path(), "ada", "ada-token");
+    let both = hub.hub_machine_logins().await.gh;
+    let offered = hub.hub_gh_login().await.unwrap();
+    let connected = hub.github_account_connect_gh().await.unwrap();
+    let once_connected = hub.hub_machine_logins().await.gh;
+    hub.check_github_logins(now_ms()).await;
+
+    let bob = GhLogin::LoggedIn { username: GH_TOKEN_OWNER.into(), works: GhLoginWorks::Yes };
+    assert_eq!(only_the_token, Some(bob.clone()));
+    assert_eq!(both, Some(bob.clone()));
+    assert_eq!(offered, GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes });
+    assert_eq!(connected.user.name.as_str(), "ada");
+    assert_eq!(once_connected, Some(bob), "the line reads as agents do, whatever the hub holds");
+    let GithubCredential::Account(credential) = hub.git_credential().borrow().for_workers() else { panic!() };
+    assert_eq!(
+        (credential.username.as_str(), credential.token.as_str()),
+        ("ada", "ada-token"),
+        "reading the line, and checking the logins after, keep what's held gh's own"
+    );
 }
 
 /// Connecting `gh`'s login while it has none that works is refused, saying what's wrong with `gh` on the hub's machine,

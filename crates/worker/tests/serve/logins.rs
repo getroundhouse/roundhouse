@@ -11,7 +11,7 @@ use tokio::time::timeout;
 
 use super::{Worker, agent_start, config, hello, reply, start_worker};
 
-static PROGRAM: agents::testing::Example = agents::testing::Example::new("login_standin");
+static PROGRAM: process::testing::Example = process::testing::Example::new("login_standin");
 
 /// Uses the adapter's native stand-in, which answers the login controls before taking prompts.
 fn cli(dir: &Path) -> PathBuf {

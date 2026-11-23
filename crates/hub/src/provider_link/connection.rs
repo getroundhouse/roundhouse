@@ -1,6 +1,7 @@
 use crate::calls::{Calls, NotSent};
 use crate::child_process::{ChildProcess, Spawned, Stderr};
 use crate::frames::FrameReader;
+use crate::machine_environment::MachineEnvironment;
 use crate::{child_process, versions};
 use async_trait::async_trait;
 use parking_lot::Mutex;
@@ -176,11 +177,11 @@ fn unexpected(response: &ProviderResponse) -> ProviderError {
     ProviderError::io("a provider's adapter", io::Error::other(format!("unexpected answer {response:?}")))
 }
 
-/// Runs `command` as the adapter. What it writes to stderr goes to the hub's.
-pub(crate) fn process(command: AdapterCommand) -> Open {
+/// Runs `command` as the adapter, given `machine`'s variables. What it writes to stderr goes to the hub's.
+pub(crate) fn process(command: AdapterCommand, machine: MachineEnvironment) -> Open {
     Box::new(move || {
         let Spawned { process, reader, writer } =
-            child_process::spawn(&command.program, &command.args, &[], Stderr::Hubs)?;
+            child_process::spawn(&command.program, &command.args, &[], &machine, Stderr::Hubs)?;
         Ok(Opened { reader, writer, process: Some(process) })
     })
 }

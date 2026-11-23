@@ -2,18 +2,20 @@ use crate::error::HubError;
 use crate::hub::{Hub, HubDirs, LeftAtWork, UpdateFeed};
 use crate::listener;
 use crate::listener::Listener;
+use crate::machine_environment::{LoginShell, MachineEnvironment};
 use crate::provider_set::ProviderSet;
 use crate::store::{Move, RecordedInstance, Store, StoreError};
 use crate::terminate::Terminate;
 use crate::timers::Timers;
 use github::{Github, GithubConfig};
+use process::Environment;
 use protocol::Build;
 use protocol::client::HubStart;
 use protocol::model::{AgentDescription, WorkspaceId};
 use protocol::paths::Paths;
 use providers::Provider;
-use providers::local::{LocalConfig, LocalProvider, MachinePath};
-use std::path::PathBuf;
+use providers::local::{LocalConfig, LocalProvider};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::task::JoinSet;
 use tracing::{info, warn};
@@ -24,10 +26,13 @@ pub struct HubConfig {
     /// Where paired devices can reach this hub, once pairing is enabled.
     pub network_address: std::net::SocketAddr,
     pub paths: Paths,
-    /// The binary that runs a worker, which the local provider starts.
+    /// The binary that runs a worker, which the local provider starts, and which the login shell runs to print the
+    /// environment the profile gives, as [`process::PRINTS_ENVIRONMENT`] asks.
     pub worker_exe: PathBuf,
-    /// The user's shell, for finding the real `PATH`.
+    /// The user's login shell, which the hub asks for the environment their profile gives, or `None` for none to ask.
     pub shell: Option<String>,
+    /// The user's home, where the login shell starts.
+    pub home: Option<PathBuf>,
     /// This process's own `PATH`.
     pub path: Option<String>,
     /// What started this hub, which its status says, so a client knows whether it may restart it.
@@ -102,7 +107,7 @@ fn load_providers(
     build: Build,
     paths: &Paths,
     worker_exe: PathBuf,
-    path: MachinePath,
+    machine: &MachineEnvironment,
     store: &Store,
     timers: &Timers,
 ) -> Result<ProviderSet, HubError> {
@@ -111,10 +116,10 @@ fn load_providers(
         instances_dir: paths.instances_dir.clone(),
         workspaces_root: paths.workspaces_root.clone(),
         clones_dir: paths.clones_dir.clone(),
-        path,
     }));
     let hub_id = store.hub_id().map_err(HubError::OpenDatabase)?;
-    let providers = ProviderSet::load(local, &paths.providers, &hub_id, build, timers.adapter_hello_within);
+    let hello_within = timers.adapter_hello_within;
+    let providers = ProviderSet::load(local, &paths.providers, &hub_id, build, hello_within, machine);
     // Before any client reads the settings, so none is told of the providers an earlier run had.
     let (left, set_up) = (providers.left_to_machine(), providers.set_up_github());
     store.record_github_providers(&left, &set_up).map_err(HubError::OpenDatabase)?;
@@ -135,8 +140,9 @@ pub enum Ended {
 /// is using these paths.
 pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
     let update_feed = config.update_feed;
-    let HubConfig { network_address, build, paths, worker_exe, shell, path, start, agents, timers, github, .. } =
-        config;
+    let HubConfig {
+        network_address, build, paths, worker_exe, shell, home, path, start, agents, timers, github, ..
+    } = config;
     private_files::create_dir_all(&paths.data_dir)
         .map_err(|e| HubError::io(format!("creating {}", paths.data_dir.display()), e))?;
     let lock_file = take_lock(&paths)?;
@@ -147,8 +153,10 @@ pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
     let left_at_work = LeftAtWork::read(&store).map_err(HubError::Recover)?;
     let settings = store.hub_settings().map_err(HubError::OpenDatabase)?;
 
-    let machine = MachinePath::new(shell, path);
-    let providers = load_providers(build, &paths, worker_exe, machine.clone(), &store, &timers)?;
+    // Before anything the hub starts, a provider's adapter or a worker it carries on with, so none waits on a slow
+    // profile within its own time limit.
+    let machine = read_machine_environment(shell.as_deref(), home.as_deref(), &worker_exe, path.as_deref()).await;
+    let providers = load_providers(build, &paths, worker_exe, &machine, &store, &timers)?;
     let github = Github::new(github);
     let dirs = HubDirs { network_address, ..HubDirs::of(&paths) };
     let hub = Arc::new(Hub::new(build, store, dirs, providers, github, machine, agents, start, timers));
@@ -201,6 +209,20 @@ pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
     drop(lock);
     info!("hub stopped");
     Ok(ended)
+}
+
+/// What everything the hub starts on its machine is given, as `shell`, started in `home`, has it once it has read the
+/// profile, with `printer`, the daemon, printing it, over the hub's own environment, whose `PATH` is `path`.
+async fn read_machine_environment(
+    shell: Option<&str>,
+    home: Option<&Path>,
+    printer: &Path,
+    path: Option<&str>,
+) -> MachineEnvironment {
+    // Nothing beyond the hub's own environment, which the shell inherits.
+    let given = Environment::NONE;
+    let login = shell.map(|shell| LoginShell { shell, home, given: &given });
+    MachineEnvironment::read(login.as_ref(), printer, path).await
 }
 
 /// Leaves `hub`'s workers running for the next hub, if it was asked to restart and no signal asked it to go, and stops

@@ -113,7 +113,7 @@ fn hub_with(dir: &Path, fake: Fake) -> (Arc<Hub>, Arc<Fake>) {
         HubDirs::in_dir(dir),
         providers,
         github,
-        providers::local::MachinePath::only(None),
+        crate::machine_environment::MachineEnvironment::only(&[]),
         Vec::new(),
         HubStart::ByHand,
         Timers::DEFAULT,
