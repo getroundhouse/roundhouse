@@ -1,8 +1,9 @@
 //! The kinds a client keeps by revision.
 
-use protocol::model::{Level, Observation, ObservationKey, Record, RecordKey, Rev};
+use protocol::model::{Level, Observation, ObservationKey, Record, RecordKey, Rev, SessionId};
 
 use super::Revised;
+use crate::records::of_session::OfSession;
 
 impl Revised for Record {
     type Key = RecordKey;
@@ -15,9 +16,10 @@ impl Revised for Record {
         Record::rev(self)
     }
 
-    /// Every kind kept here is. Those listed by session are kept apart, as `HubRecords::apply_record` says.
-    fn in_every_list(_: &RecordKey) -> bool {
-        true
+    /// Every kind kept here is listed at the hub's level. Those listed by session are kept apart, as
+    /// `HubRecords::apply_record` says.
+    fn level(_: &RecordKey) -> Option<Level> {
+        Some(Level::Hub)
     }
 }
 
@@ -40,10 +42,27 @@ impl Revised for Observation {
         Observation::rev(self)
     }
 
-    /// Only those sent at the hub's level are in the list of everything, as [`ObservationKey::level`] says. A
-    /// workspace's are in its own list, as `HubRecords::apply_workspace_list` takes it, and an issue's or a pull
-    /// request's in its, as `HubRecords::apply_reference_list` does.
-    fn in_every_list(key: &ObservationKey) -> bool {
-        key.level() == Some(Level::Hub)
+    /// The level it's sent at, as [`ObservationKey::level`] says: those of the hub's level are in the list of
+    /// everything, a workspace's in its own list, and an issue's or a pull request's in its.
+    fn level(key: &ObservationKey) -> Option<Level> {
+        key.level()
+    }
+}
+
+/// A session's own records, kept for each session followed, by the session and which of its they are.
+impl<R: OfSession> Revised for R {
+    type Key = (SessionId, R::Id);
+
+    fn key(&self) -> Option<Self::Key> {
+        Some((self.session().clone(), self.id()))
+    }
+
+    fn rev(&self) -> Rev {
+        OfSession::rev(self)
+    }
+
+    /// Its session's, whose subscription lists them.
+    fn level((session, _): &Self::Key) -> Option<Level> {
+        Some(Level::Session { id: session.clone() })
     }
 }

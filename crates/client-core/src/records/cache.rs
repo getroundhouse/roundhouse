@@ -5,22 +5,18 @@ use crate::Agents;
 use protocol::client::listed::{ReferenceObservations, SessionRecords, WorkspaceObservations};
 use protocol::client::{HubNotice, ObservationNotice, RecordNotice};
 use protocol::model::{
-    Level, Observation, Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent, WorkspaceId,
+    Level, Observation, ObservationKey, Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent,
 };
 use std::cell::OnceCell;
-use std::collections::HashSet;
 use std::sync::Arc;
 
 #[derive(Debug, Default)]
 pub struct HubRecords {
     pub(super) records: ByRevision<Record>,
-    /// Those of every level the hub sent, kept by the same rule as records.
+    /// Those of every level the hub sent, kept by the same rule as records. Which workspaces' own levels have been
+    /// listed since they were last let go of says that what's held of them is what the hub keeps, rather than nothing
+    /// the hub sends.
     pub(super) observations: ByRevision<Observation>,
-    /// The newest list taken in. Everything up to it is already reflected.
-    pub(super) listed: Rev,
-    /// The workspaces whose own observations have been listed since they were last let go of, so what's held of them
-    /// is what the hub keeps, rather than nothing the hub sends.
-    pub(super) workspaces_listed: HashSet<WorkspaceId>,
     pub(super) subagents: BySession<Subagent>,
     pub(super) proposals: BySession<Proposal>,
     pub(super) replies_heard: BySession<ReplyHeard>,
@@ -61,14 +57,9 @@ impl HubRecords {
     /// changed.
     pub fn apply_list(&mut self, mut list: Records) -> bool {
         let at = list.rev;
-        // Older than one already taken in, so everything in it is too.
-        if at != Rev::default() && at < self.listed {
-            return false;
-        }
         let observations = std::mem::take(&mut list.observations);
-        let records = self.records.apply_list(at, list.into_records(), &mut self.taken);
-        let observed = self.observations.apply_list(at, observations, &mut self.taken);
-        self.listed = self.listed.max(at);
+        let records = self.records.apply_list(&Level::Hub, at, list.into_records(), &mut self.taken);
+        let observed = self.observations.apply_list(&Level::Hub, at, observations, &mut self.taken);
         if records {
             self.shown.take();
         }
@@ -87,12 +78,8 @@ impl HubRecords {
             Err(notice) => notice,
         };
         let observed = match ObservationNotice::try_from(notice) {
-            Ok(ObservationNotice::Copy(observation)) => {
-                self.observations.apply(observation, self.listed, &mut self.taken)
-            }
-            Ok(ObservationNotice::Removed { observation, rev }) => {
-                self.observations.remove(&observation, rev, self.listed)
-            }
+            Ok(ObservationNotice::Copy(observation)) => self.observations.apply(observation, &mut self.taken),
+            Ok(ObservationNotice::Removed { observation, rev }) => self.observations.remove(&observation, rev),
             Err(_) => false,
         };
         if observed {
@@ -129,19 +116,45 @@ impl HubRecords {
 
     /// Takes in one of the records a list of everything has.
     fn apply_listed(&mut self, record: Record) -> bool {
-        let changed = self.records.apply(record, self.listed, &mut self.taken);
+        let changed = self.records.apply(record, &mut self.taken);
         if changed {
             self.shown.take();
         }
         changed
     }
 
+    /// Takes in that the record `key` is gone as of `rev`. Returns whether it dropped a copy.
     pub(super) fn remove(&mut self, key: &RecordKey, rev: Rev) -> bool {
-        let changed = self.records.remove(key, rev, self.listed);
-        if changed {
-            self.shown.take();
+        match key {
+            RecordKey::Subagent { session_id, subagent } => self.subagents.remove(session_id, subagent.clone(), rev),
+            RecordKey::ReplyHeard { session_id, message } => {
+                self.replies_heard.remove(session_id, message.clone(), rev)
+            }
+            // It names no session, so no level's subscription is sent it, as `HubNotice::level` says.
+            RecordKey::Proposal { .. } => false,
+            listed @ (RecordKey::Repo { .. }
+            | RecordKey::Workspace { .. }
+            | RecordKey::Session { .. }
+            | RecordKey::Comment { .. }
+            | RecordKey::HubSettings
+            | RecordKey::NewWorkspaceDraft
+            | RecordKey::Account { .. }
+            | RecordKey::GithubAccount { .. }
+            | RecordKey::GithubSignIn { .. }
+            | RecordKey::FoundGithubLogin { .. }
+            | RecordKey::GithubApp { .. }
+            | RecordKey::GithubReach { .. }
+            | RecordKey::Terminal { .. }
+            | RecordKey::ModelList(_)
+            | RecordKey::HubUpdate
+            | RecordKey::Unknown) => {
+                let changed = self.records.remove(listed, rev);
+                if changed {
+                    self.shown.take();
+                }
+                changed
+            }
         }
-        changed
     }
 
     /// The records as they are now, for a view to read and keep. It's made once for each change, however many views
@@ -149,10 +162,18 @@ impl HubRecords {
     pub fn snapshot(&self) -> Snapshot {
         let records = self
             .shown
-            .get_or_init(|| Arc::new(Listed::of(self.records.held.values().map(|held| (&held.copy, held.taken)))));
+            .get_or_init(|| Arc::new(Listed::of(self.records.held.values().map(|held| (&*held.copy, held.taken)))));
         let observations = self.shown_observations.get_or_init(|| {
-            let held = self.observations.held.values().map(|held| (&held.copy, held.taken));
-            Arc::new(ObservationsListed::of(held, &self.workspaces_listed))
+            let held = self.observations.held.values().map(|held| (held.copy.clone(), held.taken));
+            let workspaces_listed = self.observations.levels_listed().filter_map(|level| match level {
+                Level::Workspace { id } => Some(id.clone()),
+                Level::Hub
+                | Level::Session { .. }
+                | Level::Terminal { .. }
+                | Level::Reference { .. }
+                | Level::Unknown => None,
+            });
+            Arc::new(ObservationsListed::of(held, workspaces_listed.collect()))
         });
         Snapshot::new(
             records.clone(),
@@ -192,8 +213,7 @@ impl HubRecords {
     /// whose pane has closed, since nothing tells it of them while it doesn't follow it. Returns whether anything
     /// changed.
     pub(crate) fn let_go_of(&mut self, level: &Level) -> bool {
-        let unlisted = if let Level::Workspace { id } = level { self.workspaces_listed.remove(id) } else { false };
-        let changed = self.observations.let_go(|key| key.level().as_ref() == Some(level)) || unlisted;
+        let changed = self.observations.let_go(level);
         if changed {
             self.shown_observations.take();
         }
@@ -201,15 +221,12 @@ impl HubRecords {
     }
 
     /// Takes in where a workspace's own level stands, as its subscription lists it first, and again after falling
-    /// behind. An observation of that workspace's level the list lacks is gone, unless the copy held is newer than the
-    /// list, and every other one stays. Returns whether anything changed, which the first list of a workspace always
-    /// does, since views then read that the hub sends its level.
+    /// behind, as [`ByRevision::apply_list`] says. Returns whether anything changed, which the first list of a workspace
+    /// always does, since views then read that the hub sends its level.
     pub(crate) fn apply_workspace_list(&mut self, listed: WorkspaceObservations) -> bool {
         let WorkspaceObservations { workspace_id, observations, rev } = listed;
-        let level = Some(Level::Workspace { id: workspace_id.clone() });
-        let covers = |key: &protocol::model::ObservationKey| key.level() == level;
-        let observed = self.observations.apply_list_of(rev, observations, covers, &mut self.taken);
-        let changed = self.workspaces_listed.insert(workspace_id) || observed;
+        let level = Level::Workspace { id: workspace_id };
+        let changed = self.observations.apply_list(&level, rev, observations, &mut self.taken);
         if changed {
             self.shown_observations.take();
         }
@@ -220,9 +237,8 @@ impl HubRecords {
     /// [`HubRecords::apply_workspace_list`] takes a workspace's. Returns whether anything changed.
     pub(crate) fn apply_reference_list(&mut self, listed: ReferenceObservations) -> bool {
         let ReferenceObservations { reference, observations, rev } = listed;
-        let level = Some(Level::Reference { reference });
-        let covers = |key: &protocol::model::ObservationKey| key.level() == level;
-        let changed = self.observations.apply_list_of(rev, observations, covers, &mut self.taken);
+        let level = Level::Reference { reference };
+        let changed = self.observations.apply_list(&level, rev, observations, &mut self.taken);
         if changed {
             self.shown_observations.take();
         }
@@ -231,8 +247,8 @@ impl HubRecords {
 
     /// Lets go of the observations `of` says, as of what GitHub says of one thing, which the hub now sends in the form
     /// from before observations. Returns whether that dropped any.
-    pub(crate) fn forget_observed(&mut self, of: impl Fn(&protocol::model::ObservationKey) -> bool) -> bool {
-        let changed = self.observations.let_go(of);
+    pub(crate) fn forget_observed(&mut self, of: impl Fn(&ObservationKey) -> bool) -> bool {
+        let changed = self.observations.forget(of);
         if changed {
             self.shown_observations.take();
         }
