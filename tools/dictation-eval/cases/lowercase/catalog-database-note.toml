@@ -1,0 +1,43 @@
+# A note on a database proposal, naming the databases and tools the proposal wrote in lowercase prose.
+field = "proposal_note"
+said = "Go with sqlite and litestream for now. We can move to postgres once there's a second server, and pgbouncer can wait until then too."
+terms = [
+  { written = "sqlite" },
+  { written = "litestream" },
+  { written = "postgres" },
+  { written = "pgbouncer" },
+]
+
+[workspace]
+name = "catalog-store"
+branch = "sefa/catalog-store"
+repo = "germline"
+
+[[chat]]
+person = "The seed catalogue keeps everything in one JSON file and it's getting slow. Propose a proper database."
+
+[[chat]]
+call = { kind = "read", path = "src/store/mod.rs" }
+
+[[chat]]
+call = { kind = "command", command = "du -h data/catalogue.json", description = "See how big the catalogue is" }
+
+[[chat]]
+agent = """
+The catalogue is 180 MB and every save rewrites all of it.
+
+With one server, sqlite is enough, and litestream can stream its changes to object storage so backups aren't a nightly copy any more. If you expect several servers soon, postgres is the safer start, with pgbouncer added once connections pile up. I've put both in a proposal."""
+
+[proposal]
+title = "Move the seed catalogue into a database"
+context = """
+`Store::save` serializes every accession on each change. The server runs on one machine today, and backups are a nightly copy of the file."""
+
+[[proposal.questions]]
+header = "Database"
+text = "Which database should hold the catalogue?"
+details = "Either way, `Store` keeps its interface, so the handlers don't change."
+options = [
+  { label = "Embedded", description = "sqlite in the server's data folder, backed up continuously with litestream to object storage.", body = "No server to run. Writes go through one connection." },
+  { label = "Server", description = "postgres on its own machine, with pgbouncer in front once there are several app servers.", body = "Handles many writers, but it's another machine to run and back up." },
+]

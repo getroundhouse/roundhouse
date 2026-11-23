@@ -1,0 +1,7 @@
+# A new workspace's prompt in everyday words, with only hyphenated repository names around it.
+field = "new_workspace"
+said = "Make the buttons on the main screen bigger. They're too hard to hit on the tablet in the signal box, especially with gloves on."
+
+[repos]
+chosen = "signal-box-ui"
+offered = ["interlock-core", "signal-box-ui", "timetable-feed", "ferry", "glassplate", "quire-api"]

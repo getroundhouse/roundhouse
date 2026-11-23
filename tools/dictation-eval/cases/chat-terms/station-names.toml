@@ -1,0 +1,36 @@
+# A signalling layout: the person names made-up stations, one seen only in a file path, and an enum the chat named.
+field = "composer"
+said = "Signal the Marrowdale up loop the same way as Thornwick, with SignalAspect::Flashing on the approach and a full stop at the loop exit."
+terms = [
+  { written = "Marrowdale" },
+  { written = "Thornwick" },
+  { written = "SignalAspect", also = ["signal aspect"] },
+]
+
+open_file = "layouts/thornwick.ron"
+
+[workspace]
+name = "marrowdale-loop"
+branch = "ines/marrowdale-loop"
+repo = "interlock-core"
+
+[[chat]]
+person = "Add the new passing loop at Marrowdale to the layout. The survey drawing is attached."
+
+[[chat]]
+call = { kind = "view_image", path = "docs/surveys/marrowdale-loop.png" }
+
+[[chat]]
+call = { kind = "read", path = "layouts/marrowdale.ron" }
+
+[[chat]]
+call = { kind = "read", path = "layouts/thornwick.ron" }
+
+[[chat]]
+call = { kind = "read", path = "src/aspect.rs" }
+
+[[chat]]
+agent = """
+The drawing shows a 410 m loop on the up side with two new signals, MD14 and MD16. The closest match is the loop in the other layout I read: it uses `SignalAspect::Flashing` for the approach so drivers know the points are set for the loop.
+
+Before I write the layout: should MD16 show `SignalAspect::Stop` or `SignalAspect::Caution` when the main line ahead is clear?"""

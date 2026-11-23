@@ -1,0 +1,32 @@
+# Flaky Rust tests: the person names a hyphenated cargo tool and crate from the chat, and a crate feature it never showed.
+field = "composer"
+typed = "Don't make the clock per-test, that's a bigger change than it's worth. "
+said = "Run them under cargo-nextest so each test gets its own process, and set up tracing-subscriber with the env-filter feature so I can turn the relay's logs up for one test."
+terms = [
+  { written = "cargo-nextest", also = ["cargo nextest"] },
+  { written = "tracing-subscriber", also = ["tracing subscriber"] },
+  { written = "env-filter", also = ["env filter"] },
+]
+
+[workspace]
+name = "flaky-reconnect"
+branch = "maren/flaky-reconnect"
+repo = "ferry"
+
+[[chat]]
+person = "reconnect_after_sleep fails about one run in ten on CI. Find out why."
+
+[[chat]]
+call = { kind = "read", path = "crates/relay/tests/reconnect.rs" }
+
+[[chat]]
+call = { kind = "command", command = "for i in $(seq 1 30); do cargo test -p relay --test reconnect -q 2>&1 | tail -1; done", description = "Run the reconnect tests 30 times" }
+
+[[chat]]
+call = { kind = "search", pattern = "set_global_default", path = "crates" }
+
+[[chat]]
+agent = """
+It failed 3 times in 30. Each time, `reconnect_after_sleep` and `reconnect_on_new_network` ran at once in the same process and both set the global clock override, so one saw the other's time jump.
+
+Two ways out: give each test its own process, which cargo-nextest does by default, or make the clock override per-test. There's also no logging in these tests: nothing installs a tracing-subscriber, so the relay's `debug!` lines go nowhere."""

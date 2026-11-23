@@ -1,0 +1,39 @@
+# A chess clock web app: the person names a React component and hook from the chat, and a prop name the chat never showed.
+field = "composer"
+said = "Move the flag check out of ClockFace and into useIncrement, so the server can run the same logic. And rename onFlag to onTimeout while you're there."
+terms = [
+  { written = "ClockFace", also = ["clock face"] },
+  { written = "useIncrement", also = ["use increment"] },
+  { written = "onFlag", also = ["on flag"] },
+  { written = "onTimeout", also = ["on timeout"] },
+]
+
+[workspace]
+name = "clock-increment"
+branch = "anselm/clock-increment"
+repo = "tempo"
+changed = ["web/src/clock/useIncrement.ts", "web/src/clock/ClockFace.tsx"]
+
+[[chat]]
+person = "Add increment to the clock: each player gets extra seconds after every move."
+
+[[chat]]
+call = { kind = "read", path = "web/src/clock/ClockFace.tsx" }
+
+[[chat]]
+call = { kind = "search", pattern = "remainingMs", path = "web/src" }
+
+[[chat]]
+call = { kind = "write", path = "web/src/clock/useIncrement.ts", content = "import { useCallback, useRef } from \"react\";\n\nexport function useIncrement(incrementMs: number) {\n  const remaining = useRef({ white: 0, black: 0 });\n  const press = useCallback((side: \"white\" | \"black\") => {\n    remaining.current[side] += incrementMs;\n  }, [incrementMs]);\n  return { remaining, press };\n}\n" }
+
+[[chat]]
+call = { kind = "edit", path = "web/src/clock/ClockFace.tsx", edits = [{ old = "  const [remainingMs, setRemainingMs] = useState(initialMs);", new = "  const { remaining, press } = useIncrement(incrementMs);" }] }
+
+[[chat]]
+call = { kind = "command", command = "pnpm --filter web test -- clock", description = "Run the clock tests" }
+
+[[chat]]
+agent = """
+Increment works: `useIncrement` adds `incrementMs` on each press, and `ClockFace` calls `press(side)` from its button handler. The clock tests pass.
+
+`ClockFace` still decides when a player has flagged, inside its `requestAnimationFrame` loop, and calls the `onFlag` prop."""

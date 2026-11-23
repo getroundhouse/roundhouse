@@ -4,6 +4,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use super::Hints;
+use super::words::written_forms;
 
 /// What starts a word in `SentencePiece` vocabularies.
 const WORD_START: char = '\u{2581}';
@@ -152,16 +153,9 @@ fn index_pieces(pieces: &[String]) -> HashMap<&str, usize> {
     map
 }
 
-/// Gives a lowercase hint its sentence-initial capitalized form as well, since models start sentences in upper case.
-fn cased_forms(phrase: &str) -> Vec<String> {
-    let prefixed = format!("{WORD_START}{}", phrase.replace(' ', &WORD_START.to_string()));
-    let mut forms = vec![prefixed];
-    let mut chars = phrase.chars();
-    if let Some(first) = chars.next().filter(char::is_ascii_lowercase) {
-        let capitalized = format!("{}{}", first.to_ascii_uppercase(), chars.as_str());
-        forms.push(format!("{WORD_START}{}", capitalized.replace(' ', &WORD_START.to_string())));
-    }
-    forms
+/// Each way `phrase` can be written, as the vocabulary's pieces spell it, with a word start before each word.
+fn cased_forms(phrase: &str) -> impl Iterator<Item = String> {
+    written_forms(phrase).map(|form| format!("{WORD_START}{}", form.replace(' ', &WORD_START.to_string())))
 }
 
 /// Tokenizes `text` into subword IDs by `SentencePiece` BPE merge rank (lowest token ID merges first, breaking ties

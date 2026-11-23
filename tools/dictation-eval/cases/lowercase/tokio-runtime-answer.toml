@@ -1,0 +1,42 @@
+# Answering which runtime to use, naming the libraries the chat wrote in lowercase prose.
+field = "answer"
+said = "Stay on tokio. We already pull it in through reqwest, and smol would be a second runtime in the same binary."
+terms = [
+  { written = "tokio" },
+  { written = "reqwest" },
+  { written = "smol" },
+]
+
+[workspace]
+name = "async-ingest"
+branch = "odile/async-ingest"
+repo = "tidewatch"
+
+[[chat]]
+person = "The buoy ingest blocks on every HTTP request. Make it async so one slow buoy doesn't hold up the others."
+
+[[chat]]
+call = { kind = "read", path = "src/ingest/buoy.rs" }
+
+[[chat]]
+call = { kind = "read", path = "Cargo.toml" }
+
+[[chat]]
+call = { kind = "search", pattern = "blocking::get", path = "src" }
+
+[[chat]]
+agent = """
+Each buoy is fetched in turn with a blocking client, so one buoy that takes 30 seconds to answer holds up the whole round.
+
+Making it async needs a runtime. The crate already depends on reqwest, which brings in tokio with it, but you could also go with smol if you'd rather keep the binary small. I'll ask which you want before I change `Cargo.toml`."""
+
+[[chat]]
+call = { kind = "questions" }
+
+[question]
+header = "Runtime"
+text = "Which async runtime should the ingest use?"
+options = [
+  { label = "tokio", description = "Already in the tree through reqwest; the largest ecosystem." },
+  { label = "smol", description = "Smaller and simpler, but a second runtime beside the one reqwest brings." },
+]

@@ -1,0 +1,31 @@
+# Config loading: the person names crates the agent wrote in lowercase prose, not in backticks.
+field = "composer"
+said = "Keep serde, but drop toml_edit. Nobody edits that file by hand, so we don't need to keep its comments. Plain toml is fine."
+terms = [
+  { written = "serde" },
+  { written = "toml_edit", also = ["toml edit"] },
+  { written = "toml" },
+]
+
+[workspace]
+name = "config-reload"
+branch = "maren/config-reload"
+repo = "ferry"
+
+[[chat]]
+person = "The relay should pick up config changes without a restart. Can you add reloading?"
+
+[[chat]]
+call = { kind = "read", path = "crates/config/src/lib.rs" }
+
+[[chat]]
+call = { kind = "read", path = "crates/config/Cargo.toml" }
+
+[[chat]]
+call = { kind = "search", pattern = "fn load", path = "crates/config/src" }
+
+[[chat]]
+agent = """
+Right now the config is parsed once at start. Reloading is mostly a file watcher plus swapping an `Arc<Config>`.
+
+One thing worth deciding first: loading goes through serde, but saving goes through toml_edit so that the comments in the file survive when the app writes its window size back. If I reload from disk while the app has unsaved changes, toml_edit's document and the parsed config can drift apart. Do you want to keep that, or go back to plain toml?"""

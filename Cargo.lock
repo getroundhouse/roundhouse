@@ -2057,6 +2057,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "dictation-eval"
+version = "0.1.0"
+dependencies = [
+ "client-core",
+ "dictation",
+ "protocol",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml 1.2.1+spec-1.1.0",
+]
+
+[[package]]
 name = "dictation-ui"
 version = "0.1.0"
 dependencies = [

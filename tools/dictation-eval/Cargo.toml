@@ -1,0 +1,23 @@
+[package]
+name = "dictation-eval"
+description = "Scores dictation's hint words against made-up cases: for each term a person says, whether the field they dictate into hints it, so a change shows what it gained and lost."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+# Which words each field hints, from what's around it.
+client-core.workspace = true
+# The hint words as the engine takes them, with their spoken forms and its limit, and which of them favours a
+# spelling, which only tests ask.
+dictation = { workspace = true, features = ["testing"] }
+# The records a case's workspace and chat are made of, from protocol's builders.
+protocol = { workspace = true, features = ["testing"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

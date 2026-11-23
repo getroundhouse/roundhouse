@@ -1,0 +1,13 @@
+# A new workspace's prompt naming two hyphenated repositories, one chosen and one only offered.
+field = "new_workspace"
+said = "In quire-web, make the spine calculator read paper weights from quire-api's stock endpoint instead of the table that's hard-coded in the page."
+terms = [
+  { written = "quire-web", also = ["quire web"] },
+  { written = "quire-api", also = ["quire api"] },
+]
+
+attached = ["spine-widths.csv"]
+
+[repos]
+chosen = "quire-web"
+offered = ["quire-web", "quire-api", "quireworks", "binding-press-firmware"]

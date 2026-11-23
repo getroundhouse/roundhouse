@@ -1,0 +1,37 @@
+# A note on a proposal about a photo library's thumbnail cache, in everyday words with no names.
+field = "proposal_note"
+said = "I like the second one, but I'm worried about what happens when someone's laptop is almost out of space. Can we make sure it cleans up after itself before it fills the disk?"
+
+[workspace]
+name = "thumb-cache"
+branch = "tobiah/thumb-cache"
+repo = "glassplate"
+
+[[chat]]
+person = "Scrolling a big album is slow because every thumbnail gets decoded again. Work out how we should cache them and propose it."
+
+[[chat]]
+call = { kind = "read", path = "crates/library/src/thumbs.rs" }
+
+[[chat]]
+call = { kind = "search", pattern = "decode_thumbnail", path = "crates" }
+
+[[chat]]
+call = { kind = "command", command = "cargo bench -p library --bench thumbs", description = "Time thumbnail decoding" }
+
+[[chat]]
+agent = "Decoding is 38 ms a thumbnail on the test album. I've written up two ways to cache them as a proposal."
+
+[proposal]
+title = "Cache decoded thumbnails"
+context = """
+`ThumbStore::get` decodes the JPEG from `originals/` every time. On a 4,000-photo album that's most of the scroll time."""
+
+[[proposal.questions]]
+header = "Where"
+text = "Where should decoded thumbnails live?"
+details = "Both key by the original's `content_hash`, so an edited photo gets a new thumbnail."
+options = [
+  { label = "In memory", description = "An `LruCache<ContentHash, RgbaImage>` capped at 256 MB.", body = "Fast, but lost on every launch." },
+  { label = "On disk", description = "WebP files in `cache/thumbs/`, read with `image::load`.", body = "Survives launches. Needs `THUMB_CACHE_MAX_BYTES` and an eviction pass." },
+]

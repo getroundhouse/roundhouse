@@ -1,0 +1,31 @@
+# A web app's npm packages: the person names a hyphenated package from package.json, and two the chat never showed.
+field = "composer"
+said = "Swap moment for date-fns while you're in there, and move the fetching into react-query so the loan list stops refetching on every render. Use dayjs if date-fns doesn't do the relative times."
+terms = [
+  { written = "date-fns", also = ["date fns"] },
+  { written = "react-query", also = ["react query"] },
+  { written = "dayjs" },
+]
+
+[workspace]
+name = "due-dates"
+branch = "sefa/due-dates"
+repo = "lendmark-web"
+
+[[chat]]
+person = "The due dates on the loans page are a day off for anyone west of UTC."
+
+[[chat]]
+call = { kind = "read", path = "src/loans/LoanList.tsx" }
+
+[[chat]]
+call = { kind = "read", path = "package.json" }
+
+[[chat]]
+call = { kind = "search", pattern = "moment\\(", path = "src" }
+
+[[chat]]
+agent = """
+`LoanList` formats `dueAt` with `moment(loan.dueAt).format("D MMM")`, which parses the date-only string `2026-11-30` as UTC midnight and then shows it in local time, so it lands on the 29th west of UTC.
+
+`package.json` has `"moment": "^2.29.4"` and `"date-fns": "^3.6.0"` both; only this page still uses moment. The list also fetches with a bare `useEffect`, so it refetches whenever the parent re-renders."""

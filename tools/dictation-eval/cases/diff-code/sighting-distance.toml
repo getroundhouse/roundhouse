@@ -1,0 +1,32 @@
+# A comment on a Go store's diff naming its type and a helper from the lines, and a Postgres extension the diff doesn't use.
+field = "diff_comment"
+said = "Have SightingStore work out the distance in the query instead of loading every row and calling haversineKm on it. PostGIS is already on that database."
+terms = [
+  { written = "SightingStore", also = ["sighting store"] },
+  { written = "haversineKm", also = ["haversine km"] },
+  { written = "PostGIS", also = ["post gis"] },
+]
+
+[workspace]
+name = "nearest-sightings"
+branch = "anselm/nearest-sightings"
+repo = "fieldlog"
+pull_request = "List the sightings nearest a point"
+changed = ["internal/store/sightings.go", "internal/api/nearest.go"]
+
+[comment]
+path = "internal/store/sightings.go"
+lines = [
+  "func (s *SightingStore) Nearest(ctx context.Context, lat, lon float64, limit int) ([]Sighting, error) {",
+  "\trows, err := s.db.QueryContext(ctx, `SELECT id, species, lat, lon, seen_at FROM sightings`)",
+  "\tif err != nil {",
+  "\t\treturn nil, fmt.Errorf(\"query sightings: %w\", err)",
+  "\t}",
+  "\tdefer rows.Close()",
+]
+added = [
+  "\t\tsightings = append(sightings, withDistance{sg, haversineKm(lat, lon, sg.Lat, sg.Lon)})",
+  "\tsort.Slice(sightings, func(i, j int) bool { return sightings[i].km < sightings[j].km })",
+  "func haversineKm(lat1, lon1, lat2, lon2 float64) float64 {",
+  "\tconst earthRadiusKm = 6371.0",
+]

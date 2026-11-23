@@ -1,0 +1,42 @@
+# Answering how a migration runs in CI, naming CLI flags without their dashes, one of them not on screen.
+field = "answer"
+said = "Run it with dry-run and fail-fast on every pull request, and only pass allow-destructive on the deploy job."
+terms = [
+  { written = "dry-run", also = ["dry run"] },
+  { written = "fail-fast", also = ["fail fast"] },
+  { written = "allow-destructive", also = ["allow destructive"] },
+]
+
+[workspace]
+name = "migrate-in-ci"
+branch = "anselm/migrate-in-ci"
+repo = "lendmark-api"
+
+[[chat]]
+person = "Run the database migrations in CI so a broken one fails the pull request instead of the deploy."
+
+[[chat]]
+call = { kind = "read", path = "xtask/src/migrate.rs" }
+
+[[chat]]
+call = { kind = "read", path = ".github/workflows/ci.yml" }
+
+[[chat]]
+call = { kind = "command", command = "cargo xtask migrate --help", description = "See the migrate command's options" }
+
+[[chat]]
+agent = """
+`cargo xtask migrate` takes `--dry-run`, which applies every migration inside a transaction and rolls it back, and `--fail-fast`, which stops at the first error instead of reporting them all. Migrations that drop a column refuse to run unless they're told to.
+
+I'll ask how you want CI to call it."""
+
+[[chat]]
+call = { kind = "questions" }
+
+[question]
+header = "CI migrations"
+text = "How should CI run the migrations?"
+options = [
+  { label = "Check only", description = "`--dry-run --fail-fast` on every pull request; the deploy job runs them for real." },
+  { label = "Against a scratch database", description = "Apply them for real to a throwaway Postgres in the job, then run the API's tests against it." },
+]
