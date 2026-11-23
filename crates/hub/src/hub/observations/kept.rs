@@ -298,12 +298,12 @@ impl Tables {
 }
 
 impl Observations {
-    /// The store kept in `file`, whose tables [`prepare`](super::prepare) made, with each observation it kept from
-    /// before as of when it was read, under one revision newer than any a client holds, since a client of the hub
-    /// before can hold any revision that hub gave. Where there's no revision to give, as when the database fails, it
-    /// starts with none of them, as the log says, and each is not known until it's read again. Those of a workspace
-    /// the database doesn't have are forgotten, as one a hub stopped before forgetting, or a file refused to, leaves,
-    /// so no client is listed them.
+    /// The store kept in `file`, opened with [`PART`](super::PART), with each observation it kept from before as of
+    /// when it was read, under one revision newer than any a client holds, since a client of the hub before can hold
+    /// any revision that hub gave. Where there's no revision to give, as when the database fails, it starts with none
+    /// of them, as the log says, and each is not known until it's read again. Those of a workspace the database
+    /// doesn't have are forgotten, as one a hub stopped before forgetting, or a file refused to, leaves, so no client
+    /// is listed them.
     pub(crate) fn open(file: Arc<CacheFile>, store: &Store) -> Self {
         let mut tables = Tables::default();
         match store.next_rev() {

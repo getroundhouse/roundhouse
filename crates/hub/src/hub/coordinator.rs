@@ -156,7 +156,7 @@ impl Hub {
         start: HubStart,
         timers: Timers,
     ) -> Self {
-        let cache_file = Arc::new(CacheFile::open(&dirs.cache_file, &[github_cache::prepare, observations::prepare]));
+        let cache_file = Arc::new(CacheFile::open(&dirs.cache_file, &[&github_cache::PART, &observations::PART]));
         Self {
             remote: crate::remote::Remote::new(crate::remote::RemoteConfig {
                 address: dirs.network_address,

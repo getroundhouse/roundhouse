@@ -1,11 +1,11 @@
 //! Each kind's table in the cache file, under a version of its own.
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use tracing::warn;
 
 use super::kept::Tables;
 use super::kinds::{Form, Kind};
-use crate::cache_file::CacheFile;
+use crate::cache_file::{CacheFile, Part, drop_named, prepared_or_emptied};
 use crate::store::columns::{ByColumn, Columns, OneValue, columns};
 
 /// What the file kept of one observation.
@@ -22,39 +22,65 @@ columns! {
     }
 }
 
-/// Makes each kind's table of the version this build keeps, emptying one of another, as [`CacheFile::open`] has each
-/// part do. A table of a kind this build doesn't know, as a newer one left it, is left as it is.
-pub(crate) fn prepare(conn: &Connection) -> rusqlite::Result<()> {
+/// The observations' part of the cache file, with a table and a version for each kind.
+pub(crate) static PART: Part = Part { name: "observations", prepare, empty };
+
+/// Makes each kind's table of the version this build keeps, emptying one of another. A table of a kind this build
+/// doesn't know, as a newer one left it, is left as it is.
+fn prepare(conn: &mut Connection) -> rusqlite::Result<()> {
     prepare_forms(conn, &Tables::forms())
 }
 
-/// Makes a table of each of `forms`, as [`prepare`] says.
-pub(super) fn prepare_forms(conn: &Connection, forms: &[Form]) -> rusqlite::Result<()> {
+/// Removes every kind's table, of this build's kinds and any other, and the version of each, so [`prepare`] makes
+/// them again, where the part's tables can't be made.
+fn empty(conn: &Connection) -> rusqlite::Result<()> {
+    let mut statement = conn.prepare(r"SELECT name FROM sqlite_schema WHERE name LIKE 'observed\_%' ESCAPE '\'")?;
+    let tables: Vec<String> = statement.query_map([], OneValue::read)?.collect::<rusqlite::Result<_>>()?;
+    drop_named(conn, tables.iter().map(String::as_str).chain(["observation_forms"]))
+}
+
+/// Makes a table of each of `forms`, as [`prepare`] says. One whose table can't be made, as where something of
+/// another form has its name, is emptied and made again, which leaves the others as they are.
+pub(super) fn prepare_forms(conn: &mut Connection, forms: &[Form]) -> rusqlite::Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS observation_forms (
              observed TEXT PRIMARY KEY,
              version INTEGER NOT NULL
          ) WITHOUT ROWID;",
     )?;
-    for Form { table, version } in forms {
-        let kept: Option<i64> = conn
-            .query_row("SELECT version FROM observation_forms WHERE observed = ?", [table], OneValue::read)
-            .optional()?;
-        if kept != Some(*version) {
-            conn.execute_batch(&format!(
-                "BEGIN;
-                 DROP TABLE IF EXISTS observed_{table};
-                 CREATE TABLE observed_{table} (
-                     of TEXT PRIMARY KEY,
-                     said TEXT NOT NULL,
-                     read_at_ms INTEGER NOT NULL
-                 ) WITHOUT ROWID;
-                 INSERT INTO observation_forms (observed, version) VALUES ('{table}', {version})
-                     ON CONFLICT (observed) DO UPDATE SET version = excluded.version;
-                 COMMIT;"
-            ))?;
-        }
+    for form in forms {
+        let what = format!("the observations of {}", form.table);
+        prepared_or_emptied(conn, &what, |conn| prepare_form(conn, form), |conn| empty_form(conn, form.table))?;
     }
+    Ok(())
+}
+
+/// Makes the table of `form`, emptying one of another version.
+fn prepare_form(conn: &mut Connection, Form { table, version }: &Form) -> rusqlite::Result<()> {
+    let kept: Option<i64> = conn
+        .query_row("SELECT version FROM observation_forms WHERE observed = ?", [table], OneValue::read)
+        .optional()?;
+    if kept != Some(*version) {
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        tx.execute_batch(&format!(
+            "DROP TABLE IF EXISTS observed_{table};
+             CREATE TABLE observed_{table} (
+                 of TEXT PRIMARY KEY,
+                 said TEXT NOT NULL,
+                 read_at_ms INTEGER NOT NULL
+             ) WITHOUT ROWID;
+             INSERT INTO observation_forms (observed, version) VALUES ('{table}', {version})
+                 ON CONFLICT (observed) DO UPDATE SET version = excluded.version;"
+        ))?;
+        tx.commit()?;
+    }
+    Ok(())
+}
+
+/// Removes the table of kind `table`, whatever its form, and its version, so [`prepare_form`] makes it again.
+fn empty_form(conn: &Connection, table: &str) -> rusqlite::Result<()> {
+    drop_named(conn, [format!("observed_{table}").as_str()])?;
+    conn.execute("DELETE FROM observation_forms WHERE observed = ?", [table])?;
     Ok(())
 }
 
@@ -62,7 +88,7 @@ pub(super) fn prepare_forms(conn: &Connection, forms: &[Form]) -> rusqlite::Resu
 /// this build's version, is left out.
 pub(super) fn load<K: Kind>(file: &CacheFile) -> rusqlite::Result<Vec<Row<K>>> {
     let table = K::FORM.table;
-    let rows = file.with(|conn| {
+    let rows = file.with(&PART, |conn| {
         let mut statement = conn.prepare(&format!("SELECT {} FROM observed_{table}", ObservedColumns::LIST))?;
         let c = ObservedColumns::at(0);
         let rows = statement.query_map([], |row| {
@@ -102,7 +128,7 @@ fn written<K: Kind>(file: &CacheFile, of: &K::Of, write: Write<K::Value>) -> Res
         Write::ReadAgain { read_at_ms } => Write::ReadAgain { read_at_ms },
         Write::Gone => Write::Gone,
     };
-    file.with(|conn| match write {
+    file.with(&PART, |conn| match write {
         Write::Says { value, read_at_ms } => conn.execute(
             &format!(
                 "INSERT INTO observed_{table} (of, said, read_at_ms) VALUES (?1, ?2, ?3)

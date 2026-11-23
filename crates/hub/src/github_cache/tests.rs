@@ -98,7 +98,7 @@ fn found(n: u64) -> ReferenceRead {
 
 /// The cache kept in the file at `path`, which has GitHub's part alone.
 fn open(path: &Path) -> GithubCache {
-    GithubCache::open(Arc::new(CacheFile::open(path, &[super::prepare])))
+    GithubCache::open(Arc::new(CacheFile::open(path, &[&super::PART])))
 }
 
 /// The version the file at `path` says it's of.

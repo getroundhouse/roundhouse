@@ -12,7 +12,7 @@ mod levels;
 mod tests;
 mod writer;
 
-pub(crate) use file::prepare;
+pub(crate) use file::PART;
 pub(crate) use kept::Observations;
 pub(crate) use kinds::Kind;
 pub(crate) use kinds::{

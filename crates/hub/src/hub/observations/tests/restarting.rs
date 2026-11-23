@@ -2,7 +2,7 @@ use protocol::model::{IssueNumber, Level, Observation, Observed, PullRequest, Re
 use rusqlite::Connection;
 
 use super::super::file::prepare_forms;
-use super::super::kinds::{Form, WorkspaceChanges, WorkspaceLines};
+use super::super::kinds::{Form, Kind, WorkspaceChanges, WorkspaceLines};
 use super::seen::{as_of, changes, lines, listed, of_w};
 use crate::github_cache::Item;
 use crate::hub::Hub;
@@ -54,7 +54,8 @@ async fn a_read_that_finds_the_same_writes_only_when_it_was_read() {
 }
 
 /// A hub that starts on a file whose version for one kind isn't its own, as a build that changed that kind's form
-/// left it, empties that kind alone, and keeps the others, GitHub's included, each under a version of its own.
+/// left it, empties that kind alone, and keeps the others, GitHub's included, each under a version of its own. One
+/// whose table of versions is of another form empties the observations, and keeps GitHub's.
 #[tokio::test]
 async fn a_kind_of_another_form_is_emptied_and_the_others_kept() {
     let dir = tempfile::tempdir().unwrap();
@@ -78,6 +79,20 @@ async fn a_kind_of_another_form_is_emptied_and_the_others_kept() {
     assert_eq!(once_more.github_cache.summary(&item), None, "GitHub's of another form");
     let [observation] = listed(&once_more).await.0.try_into().unwrap();
     assert_eq!(observation, of_w(as_of(lines(4, 0), 2_000), observation.rev()), "lines kept");
+    read_a_pull_request(&once_more);
+    drop(once_more);
+    file.execute_batch("DROP TABLE observation_forms; CREATE TABLE observation_forms (observed TEXT PRIMARY KEY)")
+        .unwrap();
+
+    let versions_of_another_form = hub_in_again(dir.path());
+
+    assert_eq!(listed(&versions_of_another_form).await.0, [], "the observations emptied");
+    let summary = versions_of_another_form.github_cache.summary(&item);
+    assert!(matches!(summary, Some(ReferenceRead::Found { .. })), "GitHub's kept");
+    let made: i64 = file
+        .query_row("SELECT version FROM observation_forms WHERE observed = 'workspace_lines'", [], OneValue::read)
+        .unwrap();
+    assert_eq!(made, WorkspaceLines::FORM.version, "made again");
 }
 
 /// Keeps a summary of a pull request in `hub`'s cache of GitHub, as a read of it does, and returns which it is.
@@ -89,26 +104,35 @@ fn read_a_pull_request(hub: &Hub) -> Item {
     item
 }
 
-/// Each kind's table is emptied only when its own version isn't this build's, and one of a kind this build doesn't
-/// know, as a newer build left it, is left as it is, for whichever kinds there are.
+/// Each kind's table is emptied only when its own version isn't this build's, or it can't be made, as where something
+/// else has its name, and one of a kind this build doesn't know, as a newer build left it, is left as it is, for
+/// whichever kinds there are.
 #[test]
-fn each_kind_s_table_is_emptied_only_when_its_own_version_changes() {
+fn each_kind_s_table_is_emptied_only_when_its_own_version_changes_or_it_can_t_be_made() {
     let dir = tempfile::tempdir().unwrap();
-    let conn = Connection::open(dir.path().join("cache.db")).unwrap();
+    let mut conn = Connection::open(dir.path().join("cache.db")).unwrap();
     let form = |table, version| Form { table, version };
-    prepare_forms(&conn, &[form("a", 1), form("b", 1), form("newer", 1)]).unwrap();
+    prepare_forms(&mut conn, &[form("a", 1), form("b", 1), form("newer", 1)]).unwrap();
     for table in ["a", "b", "newer"] {
         keep_one(&conn, table);
     }
 
-    prepare_forms(&conn, &[form("a", 2), form("b", 1)]).unwrap();
+    prepare_forms(&mut conn, &[form("a", 2), form("b", 1)]).unwrap();
 
     assert_eq!(rows(&conn, "a"), 0, "of another version");
     assert_eq!(rows(&conn, "b"), 1);
     assert_eq!(rows(&conn, "newer"), 1, "not this build's");
     keep_one(&conn, "a");
-    prepare_forms(&conn, &[form("a", 2), form("b", 1)]).unwrap();
+    prepare_forms(&mut conn, &[form("a", 2), form("b", 1)]).unwrap();
     assert_eq!((rows(&conn, "a"), rows(&conn, "b")), (1, 1), "each of this build's version");
+    conn.execute_batch(
+        "DROP TABLE observed_b; CREATE VIEW observed_b AS SELECT 1; DELETE FROM observation_forms WHERE observed = 'b'",
+    )
+    .unwrap();
+
+    prepare_forms(&mut conn, &[form("a", 2), form("b", 1)]).unwrap();
+
+    assert_eq!((rows(&conn, "a"), rows(&conn, "b")), (1, 0), "b made again in place of what had its name");
 }
 
 /// Keeps an observation in `table`.
