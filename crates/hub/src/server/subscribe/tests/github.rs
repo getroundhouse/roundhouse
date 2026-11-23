@@ -121,7 +121,8 @@ async fn the_feed_sends_no_observation_of_github() {
     let starts = vec![observing(1, Follow::Reference { reference: twelve() })];
     ok(&mut observing_client, 1, Subscribe { stop: Vec::new(), start: starts }).await;
     observing_client.until("the observation", |sent| sent.iter().any(|frame| said_of_twelve(frame).is_some())).await;
-    // Of the hub's level, after the observation, so once the feed's subscriber has it, it would have the observation.
+    // Of a session's level, which `FeedSubscribe` is sent too, as it is every notice but a workspace's level's. Sent
+    // after the observation, so once the feed's subscriber has it, it would have had the observation.
     hub.notify(HubNotice::Subagent(protocol::fixtures::subagent("c")));
 
     before

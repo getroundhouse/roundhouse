@@ -53,13 +53,18 @@ async fn a_start_sent_again_changes_nothing_and_one_under_a_taken_id_is_refused_
     assert!(given.hub.followed(&Followed::Workspace("w".into())));
 }
 
-/// What the hub doesn't know, or doesn't have, is refused for that start alone, and the rest are made.
+/// What the hub doesn't know, or doesn't have, is refused for that start alone, and the rest are made. So is an issue
+/// or a pull request past the most one connection may follow.
 #[tokio::test]
 async fn what_the_hub_doesnt_know_or_have_is_refused_and_the_rest_are_made() {
+    use protocol::client::github::MOST_REFERENCES_SHOWN;
+    use protocol::client::subscriptions::Subscription;
+    use protocol::model::{GithubRepositoryName, IssueNumber, ReferenceAsk};
+
     let dir = tempfile::tempdir().unwrap();
     let given = Given::new(dir.path()).await;
     let mut one = Connection::greeted(&given.hub, 4).await;
-    let starts = vec![
+    let mut starts = vec![
         start(1, Follow::Unknown),
         start(2, Follow::Session { id: "s".into(), from: Some(LogFrom::Unknown) }),
         start(3, Follow::Session { id: "nowhere".into(), from: None }),
@@ -67,6 +72,16 @@ async fn what_the_hub_doesnt_know_or_have_is_refused_and_the_rest_are_made() {
         start(5, Follow::Terminal { id: "nowhere".into() }),
         start(6, Follow::Terminal { id: "t".into() }),
     ];
+    let chip = |number: u64| {
+        let reference = ReferenceAsk {
+            repository: GithubRepositoryName::named("example/project"),
+            number: IssueNumber::try_from(number).unwrap(),
+        };
+        // Read as observations, which only lists them, rather than starting a read of GitHub's for each.
+        Subscription { github_observed: true, ..start(6 + number, Follow::Reference { reference }) }
+    };
+    let past_the_most = 6 + u64::try_from(MOST_REFERENCES_SHOWN).unwrap() + 1;
+    starts.extend((1..=past_the_most - 6).map(chip));
 
     let ClientResponse::Subscribed(Subscribed { refused }) =
         ok(&mut one, 1, Subscribe { stop: Vec::new(), start: starts }).await
@@ -77,7 +92,11 @@ async fn what_the_hub_doesnt_know_or_have_is_refused_and_the_rest_are_made() {
     let refused: Vec<_> =
         refused.iter().map(|Refused { subscription_id, error }| (*subscription_id, error.code)).collect();
     let (unsupported, not_found) = (ErrorCode::Unsupported, ErrorCode::NotFound);
-    assert_eq!(refused, [(1, unsupported), (2, unsupported), (3, not_found), (4, not_found), (5, not_found)]);
+    let invalid = ErrorCode::InvalidRequest;
+    assert_eq!(
+        refused,
+        [(1, unsupported), (2, unsupported), (3, not_found), (4, not_found), (5, not_found), (past_the_most, invalid)]
+    );
     assert!(given.hub.followed(&Followed::Terminal("t".into())));
 }
 
@@ -125,14 +144,16 @@ async fn a_subscribe_whose_start_waits_holds_back_no_other_kind_of_request() {
 }
 
 /// A session followed from a `seq`, or from the agent's own place, is sent only its events from there.
+/// A subagent's event comes before the agent's last, so the agent's places aren't its `seq`s.
 #[tokio::test]
 async fn a_session_followed_from_where_a_client_got_to_is_sent_its_events_from_there() {
     let dir = tempfile::tempdir().unwrap();
     let given = Given::new(dir.path()).await;
     let run = RunId::new(1);
-    for text in ["one", "two", "three"] {
+    for (text, subagent) in [("one", None), ("two", None), ("looked", Some("helper")), ("three", None)] {
         let blocks = vec![ContentBlock::Text { text: text.into(), images: Vec::new() }];
-        let body = EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None };
+        let subagent = subagent.map(Into::into);
+        let body = EventBody::Assistant { message_id: None, subagent, model: None, blocks, first_index: None };
         given
             .session
             .send_item(Item::Event { run, body: Box::new(body), raw: None, attachments: Vec::new(), seq: None })
@@ -142,7 +163,7 @@ async fn a_session_followed_from_where_a_client_got_to_is_sent_its_events_from_t
     let mut one = Connection::greeted(&given.hub, 4).await;
     let from = |subscription_id, from| start(subscription_id, Follow::Session { id: "s".into(), from: Some(from) });
     let starts = vec![
-        from(1, LogFrom::Seq { seq: Seq::new(2) }),
+        from(1, LogFrom::Seq { seq: Seq::new(3) }),
         from(2, LogFrom::Place { subagent: None, place: Place::new(3) }),
     ];
 
@@ -157,6 +178,7 @@ async fn a_session_followed_from_where_a_client_got_to_is_sent_its_events_from_t
         });
         events.collect::<Vec<_>>()
     };
-    assert_eq!((sent_on(1), sent_on(2)), (vec![2, 3], vec![3]));
+    assert_eq!(sent_on(1), [3, 4], "from the subagent's event, at seq 3");
+    assert_eq!(sent_on(2), [4], "the agent's third event, at seq 4");
     assert!(given.hub.followed(&Followed::Session("s".into())));
 }

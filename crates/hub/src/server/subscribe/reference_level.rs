@@ -16,9 +16,9 @@ use crate::server::Outgoing;
 use crate::server::github::pump;
 use crate::server::sends::Sends;
 
-/// What feeds a subscription that follows `reference`, in the forms of what GitHub says that `sends` has it sent: its observations, listed first and
-/// then each change, and `HubFrame::Github` of it once the hub has read it and as that changes. Refused only where the
-/// hub's revision can't be read, as its observations are listed.
+/// What feeds a subscription that follows `reference`, in the form of what GitHub says that `sends` has it sent: its
+/// observations, listed first and then each change, or `HubFrame::Github` of it once the hub has read it and as that
+/// changes. Refused only where the hub's revision can't be read, as its observations are listed.
 pub(super) async fn feeding(
     hub: &Arc<Hub>,
     reference: ReferenceAsk,
@@ -26,33 +26,24 @@ pub(super) async fn feeding(
     subscription_id: u64,
     frames: mpsc::Sender<Outgoing>,
 ) -> Result<Feeding, ApiError> {
+    if !sends.github_observed() {
+        let (shown, showing) = watch::channel(GithubShown { references: vec![reference], ..GithubShown::default() });
+        let hub = hub.clone();
+        return Ok(Box::pin(async move {
+            // What it shows is held for as long as it's fed, since its pump ends once nothing can change it.
+            let _shown = shown;
+            pump(hub, showing, subscription_id, frames).await;
+        }));
+    }
     // Before the list, so nothing that changes after it is missed.
     let feed = hub.subscribe_feed();
-    let forms = sends.forms();
-    let listed = if forms.observations { Some(hub.reference_listed(&reference).await?) } else { None };
+    let listed = hub.reference_listed(&reference).await?;
     let hub = hub.clone();
     Ok(Box::pin(async move {
-        let observed = async {
-            let Some(listed) = listed else { return std::future::pending().await };
-            if !send_listed(&frames, &sends, subscription_id, Listed::Reference(listed)).await {
-                return;
-            }
-            let list = || async { Ok(Listed::Reference(hub.reference_listed(&reference).await?)) };
-            forward(feed, &sends, subscription_id, &frames, list, |_| {}).await;
-        };
-        let updated = async {
-            if !forms.updates {
-                return std::future::pending().await;
-            }
-            let (_shown, showing) =
-                watch::channel(GithubShown { references: vec![reference.clone()], ..GithubShown::default() });
-            // What it shows is held for as long as it's fed, since its pump ends once nothing can change it.
-            pump(hub.clone(), showing, subscription_id, frames.clone()).await;
-        };
-        // Each ends only once the connection has gone, and with it the other.
-        tokio::select! {
-            () = observed => {}
-            () = updated => {}
+        if !send_listed(&frames, &sends, subscription_id, Listed::Reference(listed)).await {
+            return;
         }
+        let list = || async { Ok(Listed::Reference(hub.reference_listed(&reference).await?)) };
+        forward(feed, &sends, subscription_id, &frames, list, |_| {}).await;
     }))
 }

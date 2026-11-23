@@ -34,7 +34,7 @@ pub(super) async fn feeding(
             return;
         }
         let github = async {
-            if !sends.forms().updates {
+            if sends.github_observed() {
                 return std::future::pending().await;
             }
             pump(hub.clone(), showing, subscription_id, frames.clone()).await;

@@ -1,8 +1,8 @@
 //! What each subscription is sent of the feed's notices, decided in one place, [`Sends::notice`], for `FeedSubscribe`
 //! and for every level `Subscribe` follows: the notices of its level, in the form of what GitHub says it reads. Which
 //! form that is, `HubFrame::Github`, as clients from before observations read it, or GitHub's observations, as
-//! `docs/principles/observations.md` has them, one predicate decides, [`GithubForms::of`], whatever request started the
-//! subscription, so what decides which clients still read the old form changes in one place.
+//! `docs/principles/observations.md` has them, one field decides, [`Sends::github_observed`], whatever request started
+//! the subscription, so what decides which clients still read the old form changes in one place.
 
 use protocol::client::HubNotice;
 use protocol::client::listed::{Listed, ReferenceObservations, WorkspaceObservations};
@@ -12,7 +12,10 @@ use protocol::model::{Level, Observation, ObservationKey, Records};
 #[derive(Clone, Debug)]
 pub(super) struct Sends {
     of: Of,
-    forms: GithubForms,
+    /// Whether it's sent what GitHub says as GitHub's observations, in its level's list and notices, rather than as
+    /// `HubFrame::Github`, as its level sends it. Only a `Subscribe` start asks for them, and every level that sends
+    /// anything of GitHub's sends each kind of it as an observation.
+    github_observed: bool,
 }
 
 /// Whose notices a subscription is sent.
@@ -27,15 +30,15 @@ enum Of {
 }
 
 impl Sends {
-    /// What a subscription `Subscribe` started at `level`, as `started`, is sent.
-    pub(super) fn at(level: Level, started: Started) -> Self {
-        let forms = GithubForms::of(started, &level);
-        Self { of: Of::Level(level), forms }
+    /// What a subscription `Subscribe` started at `level` is sent, reading GitHub's observations if `github_observed`.
+    pub(super) fn at(level: Level, github_observed: bool) -> Self {
+        Self { of: Of::Level(level), github_observed }
     }
 
-    /// What a subscription `FeedSubscribe` started is sent.
+    /// What a subscription `FeedSubscribe` started is sent, and what `RecordsList` lists, which only a client of
+    /// version 3 sends, so in the form from before observations.
     pub(super) fn feed() -> Self {
-        Self { of: Of::Feed, forms: GithubForms::of(Started::Before, &Level::Hub) }
+        Self { of: Of::Feed, github_observed: false }
     }
 
     /// Whether it's sent `notice`: one of its level, and of a form of what GitHub says it reads.
@@ -44,7 +47,7 @@ impl Sends {
             Of::Level(level) => notice.level().as_ref() == Some(level),
             Of::Feed => !matches!(notice.level(), Some(Level::Workspace { .. })),
         };
-        of && self.forms.sends(notice)
+        of && self.sends(notice)
     }
 
     /// `listed`, a list of where a level stands, as it's sent: with only the observations of a form it reads.
@@ -69,53 +72,21 @@ impl Sends {
 
     /// Those of `observations` of a form it reads.
     fn kept(&self, observations: Vec<Observation>) -> Vec<Observation> {
-        observations.into_iter().filter(|observation| self.forms.keeps(&observation.key())).collect()
+        observations.into_iter().filter(|observation| self.keeps(&observation.key())).collect()
     }
 
-    /// The forms of what GitHub says it's sent, for what sends it more than the feed's notices.
-    pub(super) fn forms(&self) -> GithubForms {
-        self.forms
-    }
-}
-
-/// The forms of what GitHub says that one subscription is sent.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct GithubForms {
-    /// `HubFrame::Github`, as its level sends it, at a level that sends it.
-    pub(super) updates: bool,
-    /// GitHub's observations, in the level's list and notices.
-    pub(super) observations: bool,
-}
-
-/// How a subscription was started, which is all [`GithubForms::of`] goes by.
-#[derive(Clone, Copy, Debug)]
-pub(super) enum Started {
-    /// By `Subscribe`, with what the start says of the form it reads.
-    Subscribe { github_observed: bool },
-    /// By a request from before `Subscribe`, such as `FeedSubscribe`, which only a client of version 3 sends.
-    Before,
-}
-
-impl GithubForms {
-    /// The forms of what GitHub says that a subscription of `level`, started as `started`, is sent: GitHub's
-    /// observations where the start asks for them and the hub sends every kind of the level as one, and
-    /// `HubFrame::Github` otherwise. So each subscription is sent one form, and a client from before observations is
-    /// sent what it was.
-    pub(super) fn of(started: Started, level: &Level) -> Self {
-        let observed = match started {
-            Started::Subscribe { github_observed } => github_observed && observed_at(level),
-            Started::Before => false,
-        };
-        Self { updates: !observed, observations: observed }
+    /// Whether it's sent what GitHub says as GitHub's observations, rather than as `HubFrame::Github`.
+    pub(super) fn github_observed(&self) -> bool {
+        self.github_observed
     }
 
-    /// Whether a subscription sent these forms is sent `notice`: every notice but those of GitHub's observations,
-    /// unless it's sent them, as [`Sends::notice`] asks.
+    /// Whether it's sent `notice` in the form of what GitHub says it reads: every notice but those of GitHub's
+    /// observations, unless it reads them, as [`Sends::notice`] asks.
     #[expect(
         clippy::wildcard_enum_match_arm,
-        reason = "picks out the notices of an observation, and every other notice is sent whatever the forms"
+        reason = "picks out the notices of an observation, and every other notice is sent whatever the form"
     )]
-    fn sends(self, notice: &HubNotice) -> bool {
+    fn sends(&self, notice: &HubNotice) -> bool {
         let key = match notice {
             HubNotice::Observation(observation) => observation.key(),
             HubNotice::ObservationRemoved { observation, .. } => observation.clone(),
@@ -124,20 +95,9 @@ impl GithubForms {
         self.keeps(&key)
     }
 
-    /// Whether a subscription sent these forms is sent the observation `key`.
-    fn keeps(self, key: &ObservationKey) -> bool {
-        self.observations || !githubs(key)
-    }
-}
-
-/// Whether the hub sends every kind of what GitHub says at `level` as an observation, so a subscription there can be
-/// sent them in place of `HubFrame::Github`.
-fn observed_at(level: &Level) -> bool {
-    match level {
-        // The hub's level and a workspace's together, since `HubFrame::Github` sends a workspace's pull request at the
-        // hub's level with its checks, which observations send at the workspace's.
-        Level::Hub | Level::Workspace { .. } | Level::Reference { .. } => true,
-        Level::Session { .. } | Level::Terminal { .. } | Level::Unknown => false,
+    /// Whether it's sent the observation `key` in the form of what GitHub says it reads.
+    fn keeps(&self, key: &ObservationKey) -> bool {
+        self.github_observed || !githubs(key)
     }
 }
 

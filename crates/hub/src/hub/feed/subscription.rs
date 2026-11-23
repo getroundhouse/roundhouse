@@ -5,7 +5,11 @@ use std::collections::HashMap;
 use tokio::sync::broadcast;
 use tracing::trace;
 
-/// Status changes are rare, so a client only overflows this if it has stopped reading.
+/// How many notices the feed holds for a receiver that hasn't taken them yet. Every level's notices share them, so a
+/// receiver falls behind once this many of any level arrive while it waits, as a subscription does for room on a slow
+/// connection, and then recovers as it says, as a `Subscribe` subscription is sent its level's list again. It's more
+/// than a burst sends, such as GitHub's observer working out each workspace and chip in turn as the hub starts. The feed
+/// keeps the last this many, so a workspace's summary of its changed files can be held as many times over.
 const CAPACITY: usize = 256;
 
 pub(in super::super) struct Feed {
@@ -22,6 +26,12 @@ impl Feed {
 
     pub(in super::super) fn subscribe(&self) -> broadcast::Receiver<HubNotice> {
         self.sender.subscribe()
+    }
+
+    /// How many follow it.
+    #[cfg(test)]
+    pub(in super::super) fn receivers(&self) -> usize {
+        self.sender.receiver_count()
     }
 
     /// Tells every client following the feed of `notice`, unless it's a copy of a record no newer than one it has told

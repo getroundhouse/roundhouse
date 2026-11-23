@@ -344,3 +344,12 @@ pub(crate) fn forget_github_but_a_summary(hub: &Hub) {
     let kept = protocol::model::Reference::PullRequest(summary);
     hub.github_cache.keep(vec![(item, Ok(Some(kept)))], crate::store::now_ms());
 }
+
+/// A summary of a worktree whose one changed file, `a.rs`, adds `added` lines and removes `removed`.
+pub(crate) fn changes(added: u64, removed: u64) -> protocol::model::ChangeSummary {
+    use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, LineCounts};
+
+    let lines = Some(LineCounts { added, removed });
+    let file = ChangedFile { path: "a.rs".into(), from: None, status: ChangeStatus::Modified, lines, version: None };
+    ChangeSummary::new("base".into(), vec![file])
+}

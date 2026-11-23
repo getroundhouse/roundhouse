@@ -1,4 +1,4 @@
-use protocol::model::{ReferenceAsk, SessionId, TerminalId, WorkspaceId};
+use protocol::model::{Level, ReferenceAsk, SessionId, TerminalId, WorkspaceId};
 
 /// Which subscription of which connection follows something.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -24,4 +24,33 @@ pub(crate) enum Followed {
     Terminal(TerminalId),
     /// An issue or a pull request, as a chip shows it, which the hub reads again once it's stale.
     Reference(ReferenceAsk),
+}
+
+impl Followed {
+    /// The level it's followed at.
+    pub(crate) fn level(&self) -> Level {
+        match self {
+            Followed::Hub => Level::Hub,
+            Followed::Workspace(id) => Level::Workspace { id: id.clone() },
+            Followed::Session(id) => Level::Session { id: id.clone() },
+            Followed::Terminal(id) => Level::Terminal { id: id.clone() },
+            Followed::Reference(reference) => Level::Reference { reference: reference.clone() },
+        }
+    }
+}
+
+impl TryFrom<&Level> for Followed {
+    /// The level is from a newer client, so the hub doesn't know it.
+    type Error = ();
+
+    fn try_from(level: &Level) -> Result<Self, ()> {
+        Ok(match level {
+            Level::Hub => Followed::Hub,
+            Level::Workspace { id } => Followed::Workspace(id.clone()),
+            Level::Session { id } => Followed::Session(id.clone()),
+            Level::Terminal { id } => Followed::Terminal(id.clone()),
+            Level::Reference { reference } => Followed::Reference(reference.clone()),
+            Level::Unknown => return Err(()),
+        })
+    }
 }

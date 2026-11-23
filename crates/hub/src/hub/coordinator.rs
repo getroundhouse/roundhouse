@@ -296,6 +296,13 @@ impl Hub {
         self.feed.subscribe()
     }
 
+    /// How many follow the feed, each subscription and each of the hub's own tasks that reads it, for a test that waits
+    /// for one to start.
+    #[cfg(test)]
+    pub(crate) fn feed_receivers(&self) -> usize {
+        self.feed.receivers()
+    }
+
     /// Tells every client following the feed of `notice`, as [`Feed::send`] says.
     pub(crate) fn notify(&self, notice: HubNotice) {
         self.feed.send(notice);

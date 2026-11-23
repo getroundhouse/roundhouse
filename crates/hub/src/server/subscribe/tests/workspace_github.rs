@@ -171,11 +171,15 @@ async fn a_start_that_doesn_t_read_github_so_is_sent_github_s_updates_and_none_o
     before
         .until("both lists", |sent| sent.iter().filter(|frame| matches!(frame, HubFrame::Listed { .. })).count() == 2)
         .await;
+    // Sent the observations, so once it has the merge's, so has every subscription whatever it's sent of them.
+    let mut observing_client = following(&hub, vec![observing(1, Follow::Hub)]).await;
 
     pull_requests.set(7, PullRequestState::Merged);
     hub.workspace_pull_request("w".into()).await.unwrap();
     let github = |frame: &HubFrame| matches!(frame, HubFrame::Github { subscription_id: 1, .. });
     before.until("the pull request as an update", |sent| sent.iter().any(github)).await;
+    let merged = |sent: &[HubFrame]| sent.iter().filter_map(stands).any(|(state, _)| state == PrState::Merged);
+    observing_client.until("the pull request merged, as an observation", merged).await;
     after_the_rest(&hub);
     before.until("the notice after the rest", has_the_rest).await;
 

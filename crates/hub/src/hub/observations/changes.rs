@@ -112,8 +112,8 @@ impl Hub {
         Ok(())
     }
 
-    /// Tells clients of a change to an observation. The one place the hub sends an observation's notice, so what decides
-    /// which clients are sent it decides it here.
+    /// Tells clients of a change to an observation, the one place the hub sends an observation's notice. Which clients
+    /// are sent it is decided where every notice's is, in `crate::server::sends`.
     fn tell_of_observation(&self, notice: ObservationNotice) {
         self.notify(notice.into());
     }
