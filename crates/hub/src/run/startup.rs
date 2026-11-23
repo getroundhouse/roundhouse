@@ -206,15 +206,20 @@ pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
     hub.stop_checking_github_logins(watching_github_logins).await;
     let ended = end_workers(&hub, signalled).await;
     hub.shut_down_providers().await;
-    // Before the lock goes, so the next hub starts with every observation this one kept, those its workers' last
-    // reports changed included.
-    hub.observations_written().await;
     if let Some(awake) = awake {
         awake.abort();
     }
-    drop(lock);
+    let_go(&hub, lock).await;
     info!("hub stopped");
     Ok(ended)
+}
+
+/// Lets go of the hub's lock once every observation the hub changed is written to the cache file, so the next hub,
+/// which can take the lock at once, starts with every observation this one kept, those its workers' last reports
+/// changed included.
+pub(super) async fn let_go(hub: &Hub, lock: HubLock) {
+    hub.observations_written().await;
+    drop(lock);
 }
 
 /// What everything the hub starts on its machine is given, as `shell`, started in `home`, has it once it has read the

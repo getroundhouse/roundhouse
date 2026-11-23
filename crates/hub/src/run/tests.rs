@@ -1,8 +1,11 @@
 use std::time::Duration;
 
-use protocol::model::{WorkspaceId, WorkspaceStatus};
+use protocol::model::{LineCounts, Observation, Observed, WorkspaceId, WorkspaceStatus};
+use rusqlite::Connection;
 
 use super::*;
+use crate::hub::WorkspaceLines;
+use crate::hub::tests::{hub_in, hub_in_again};
 use crate::store::tests::store_with_session;
 use crate::store::{InstanceStage, Move};
 
@@ -114,4 +117,44 @@ fn letting_go_of_the_lock_stops_the_store_writing() {
     waiting::thread::until_ok(Duration::from_secs(5), || {
         std::fs::File::open(&path).unwrap().try_lock().map_err(|e| format!("the lock is still held: {e}"))
     });
+}
+
+/// A stopping hub lets go of its lock only once every observation it changed is written to the cache file, which
+/// another process can hold up for seconds, since the next hub can take the lock at once, and starts with what the file
+/// kept.
+#[tokio::test]
+async fn a_stopping_hub_lets_go_of_its_lock_once_its_observations_are_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let path = dir.path().join("hub.lock");
+    let file = std::fs::File::create(&path).unwrap();
+    file.try_lock().unwrap();
+    // A store of its own, which letting go stops writing, so the hub's own is there for the next.
+    let elsewhere = tempfile::tempdir().unwrap();
+    let lock = HubLock { store: Arc::new(store_with_session(elsewhere.path())), _lock: file };
+    let holder = Connection::open(dir.path().join("github-cache.db")).unwrap();
+    holder.execute_batch("BEGIN IMMEDIATE;").unwrap();
+    let lines = LineCounts { added: 3, removed: 1 };
+    hub.observation_read::<WorkspaceLines>("w".into(), lines, 1_000).await.unwrap();
+
+    let mut letting_go = tokio::spawn({
+        let hub = hub.clone();
+        async move { let_go(&hub, lock).await }
+    });
+
+    // Well inside the 5 s a write waits for the file, after which it's given up.
+    let held_for = Duration::from_millis(200);
+    assert!(tokio::time::timeout(held_for, &mut letting_go).await.is_err(), "it let go before the write");
+    assert!(std::fs::File::open(&path).unwrap().try_lock().is_err(), "the lock went before the write");
+    holder.execute_batch("ROLLBACK;").unwrap();
+    letting_go.await.unwrap();
+    // Once a process another test starts has run its program, since until then it has a copy of the lock's file.
+    let free = || std::fs::File::open(&path).unwrap().try_lock().is_ok();
+    waiting::task::until(Duration::from_secs(5), "the lock to be let go", free).await;
+    drop(hub);
+    let records = hub_in_again(dir.path()).records_list().await.unwrap();
+    let [Observation::WorkspaceLines { lines: kept, .. }] = records.observations.as_slice() else {
+        panic!("not the lines alone: {:?}", records.observations);
+    };
+    assert_eq!(*kept, Observed::AsOf { value: lines, as_of_ms: 1_000 }, "the next hub has the write");
 }
