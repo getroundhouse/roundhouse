@@ -180,10 +180,11 @@ pub fn open_main_window(
 pub fn run(build: protocol::Build, checkout: Option<Checkout>) {
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
-        // Only the app as it runs plays sounds and shows a badge on the Dock, so a test or a picture of the app is quiet
-        // and leaves the Dock alone.
+        // Only the app as it runs plays sounds, shows a badge on the Dock, and opens a file in another app, so a test
+        // or a picture of the app is quiet, leaves the Dock alone and keeps to itself.
         cx.set_global(sounds::Speaker);
         cx.set_global(dock::Tile);
+        cx.set_global(file_view::SystemOpens);
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         why_quit::say(checkout.as_ref(), cx);

@@ -288,7 +288,7 @@ impl WorkspacePane {
             diff.sidebar_tab.reconnected();
             diff.review.update(cx, |r, _| r.reconnect(client));
             diff.all_files.update(cx, |a, _| a.reconnect(client));
-            diff.viewer.update(cx, |v, _| v.reconnect(client));
+            diff.viewer.update(cx, |v, cx| v.reconnect(client, cx));
         }
         self.behind = true;
         self.bring_back_files(cx);

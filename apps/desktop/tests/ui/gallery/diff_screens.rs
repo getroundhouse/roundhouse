@@ -9,7 +9,7 @@ use super::frame::{CHANGES, FILE, Frame, Part, TABS};
 use super::image_files::{CHANGED, changed_images};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::worlds::{conversation, diff, own_hub};
+use super::worlds::{conversation, diff, own_hub, videos};
 use super::{patch, worktree};
 
 pub(crate) const DIFF_SCREENS: &[Screen] = &[
@@ -126,6 +126,36 @@ pub(crate) const DIFF_SCREENS: &[Screen] = &[
             Step::WaitFor("all-folder-.context/gallery"),
             Step::Click("all-folder-.context/gallery"),
             Step::ViewFile(worktree::PICTURE),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "video-opened",
+        spec: "files.md",
+        world: Some(videos),
+        frame: FILE,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::AllFiles,
+            Step::Click("all-folder-.context"),
+            Step::WaitFor("all-folder-.context/gallery"),
+            Step::Click("all-folder-.context/gallery"),
+            Step::ViewFile(worktree::RECORDING),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "video-for-the-system",
+        spec: "files.md",
+        world: Some(videos),
+        frame: FILE,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::AllFiles,
+            Step::Click("all-folder-.context"),
+            Step::WaitFor("all-folder-.context/gallery"),
+            Step::Click("all-folder-.context/gallery"),
+            Step::ViewFile(worktree::RECORDING_MP4),
             Step::MoveAway,
         ],
     },

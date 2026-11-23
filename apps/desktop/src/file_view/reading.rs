@@ -1,7 +1,7 @@
-//! Reading the file the view shows, and making what it shows of it ready off the main thread: its lines, plain and
-//! then in colour, or its image. A file read again that hasn't changed is left as it shows, colours and all. What a
-//! read gives, and why a file isn't shown, are the same for a side of a changed image, which reads its files the same
-//! way.
+//! Reading the file the view shows, and making what it shows of it ready off the main thread: its lines, plain and then
+//! in colour, its image, or its video's still or what it says of itself. A file read again that hasn't changed is left
+//! as it shows, colours and all. What a read gives, and why a file isn't shown, are the same for a side of a changed
+//! image, which reads its files the same way.
 
 use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 
@@ -10,9 +10,11 @@ use gpui_kit::{AppContext as _, AsyncApp, Context, SharedString, WeakEntity};
 use protocol::attachment::{MediaType, describe_size};
 use protocol::client::ErrorCode;
 use protocol::model::FileContents;
+use transcript::{VideoPlayer, VideoSource};
 
 use super::lines::Lines;
 use super::markdown::is_markdown;
+use super::video::FileVideo;
 use super::{Contents, FileView};
 use crate::file_image::FileImage;
 
@@ -25,6 +27,8 @@ pub(crate) const HIGHLIGHT_UP_TO: usize = 1024 * 1024;
 pub(crate) enum Read {
     Text(String),
     Image(MediaType, Vec<u8>),
+    /// A video of this many bytes, none of which are read until it's shown.
+    Video(MediaType, u64),
     /// A line shown in its place, saying why.
     Instead(Unshown),
     /// Lost with the connection, so what's shown stays, and the file is read again on the next one.
@@ -45,6 +49,8 @@ pub(crate) enum Unshown {
     Unreadable,
     /// It's text, where an image was expected.
     Text,
+    /// It's a video, where an image was expected.
+    Video,
 }
 
 impl Unshown {
@@ -58,6 +64,7 @@ impl Unshown {
             Unshown::Failed(message) => format!("Couldn't read the file: {message}"),
             Unshown::Unreadable => "This image couldn't be read".to_string(),
             Unshown::Text => "This file is text, not an image".to_string(),
+            Unshown::Video => "This file is a video, not an image".to_string(),
         }
     }
 }
@@ -68,14 +75,18 @@ impl FileView {
         self.reads += 1;
         let (read, client, id, shown) = (self.reads, self.client.clone(), self.workspace_id.clone(), self.shown);
         cx.spawn(async move |this, cx| {
-            let file = path.to_string();
-            let contents = cx.background_spawn(async move { client.workspace_file_read(&id, &file) }).await;
+            let (file, reading, workspace) = (path.to_string(), client.clone(), id.clone());
+            let contents = cx.background_spawn(async move { reading.workspace_file_read(&workspace, &file) }).await;
             match what_it_gives(contents) {
                 Read::Lost => {}
                 Read::Instead(why) => {
                     let _ = this.update(cx, |t, cx| t.set_contents(read, Contents::Instead(why), None, cx));
                 }
                 Read::Image(media_type, data) => show_image(&this, cx, read, shown, media_type, data).await,
+                Read::Video(media_type, bytes) => {
+                    let source = VideoSource::Worktree { client, workspace: id, path: path.to_string() };
+                    show_video(&this, cx, read, shown, media_type, bytes, source).await;
+                }
                 Read::Text(text) => show_text(&this, cx, read, shown, &path, text).await,
             }
         })
@@ -89,8 +100,8 @@ pub(crate) fn what_it_gives(contents: Result<FileContents, ClientError>) -> Read
         Ok(FileContents::Text { text }) if text.is_empty() => Read::Instead(Unshown::Empty),
         Ok(FileContents::Text { text }) => Read::Text(text),
         Ok(FileContents::Image { media_type, data }) => Read::Image(media_type, data.into_vec()),
-        // A video shows as a file that isn't text until the file tab plays one.
-        Ok(FileContents::Binary | FileContents::Video { .. } | FileContents::Unknown) => Read::Instead(Unshown::Binary),
+        Ok(FileContents::Video { media_type, bytes }) => Read::Video(media_type, bytes),
+        Ok(FileContents::Binary | FileContents::Unknown) => Read::Instead(Unshown::Binary),
         Ok(FileContents::TooBig { bytes }) => Read::Instead(Unshown::TooBig(bytes)),
         Err(e) if e.is_unsupported() => Read::Instead(Unshown::Unsupported),
         Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => Read::Instead(Unshown::Gone),
@@ -114,6 +125,38 @@ async fn show_image(
     let Some((hash, image)) = decoded.await else { return };
     let contents = image.map_or(Contents::Instead(Unshown::Unreadable), Contents::Image);
     let _ = this.update(cx, |t, cx| t.set_contents(read, contents, Some(hash), cx));
+}
+
+/// Reads a WebM's still, to play it in the tab, or what another video says of itself, off the main thread, unless it's
+/// the one shown, read again. Only its kind and its size are read until then, so a video read again whose kind and size
+/// are the same is taken to be the same, and keeps playing where it is.
+async fn show_video(
+    this: &WeakEntity<FileView>,
+    cx: &mut AsyncApp,
+    read: u64,
+    shown: Option<u64>,
+    media_type: MediaType,
+    bytes: u64,
+    source: VideoSource,
+) {
+    let hash = hash(format!("{media_type:?} {bytes}").as_bytes());
+    if shown == Some(hash) {
+        return;
+    }
+    let reading = source.clone();
+    let still =
+        cx.background_spawn(
+            async move { if media_type == MediaType::Webm { transcript::still(&reading) } else { None } },
+        );
+    let contents = if let Some(still) = still.await {
+        let player = cx.new(|cx| VideoPlayer::new(source, still, cx));
+        cx.update(|cx| FileVideo::playing(media_type, bytes, player, cx))
+    } else {
+        // An MP4 or a QuickTime file, or a WebM the app can't play, such as one in AV1, which the system's player may.
+        let about = cx.background_spawn(async move { source.about().unwrap_or_default() }).await;
+        FileVideo::elsewhere(media_type, bytes, about)
+    };
+    let _ = this.update(cx, |t, cx| t.set_contents(read, Contents::Video(contents), Some(hash), cx));
 }
 
 async fn show_text(

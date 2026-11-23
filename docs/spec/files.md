@@ -50,4 +50,16 @@ All files, the sidebar on the right's list of every file in a workspace's worktr
 
   ![An image opened from All files](screens/image-opened.png)
 
-- **A file that can't be shown says why, in its place:** it isn't text or an image, it's too big to send at once, it's empty, it's an image that can't be read, or it's gone since it was listed. *Unconfirmed.*
+- **A video plays in the tab if it's a WebM the app plays, as one in a reply does,** VP8 or VP9, from its first frame, as big as it is or smaller to fit the tab with its bar, never bigger, with what kind it is, how many pixels it has, how long it is and how big a file it is at the other end of its path, as `WebM · 800 × 500 · 0:02 · 14 KB`. It's read from the hub a part at a time as it plays, so a big one starts at once if it says at its start where what it holds is, as one ffmpeg writes does, and otherwise once it's been read through to find that. What it is goes by what the file starts with, as an image's does. *Unconfirmed.*
+
+  **A recording opened from All files.** *Unconfirmed.*
+
+  ![A video opened from All files](screens/video-opened.png)
+
+- **Another video, such as an MP4 or a QuickTime movie, or a WebM the app can't play, says what it is, as much as its file says, with Open in system player,** which opens it in the app the system plays it with, as the owner decided, since an agent's recordings are WebM, and the system's player plays what else the person has. It's opened where it is when the hub, and the workspace's worker, are on this machine, if its name says the kind it is, since the system picks the app by the name. Otherwise a copy is read from the hub first, as the owner decided for a hub on another machine, named for its kind, and kept in the system's temporary files until another is opened or the tab goes. *Unconfirmed:* what it says, opening it where it is only by a name of its kind, and the copy's home.
+
+  **An MP4 opened from All files.** *Unconfirmed.*
+
+  ![A video for the system's player opened from All files](screens/video-for-the-system.png)
+
+- **A file that can't be shown says why, in its place:** it isn't text, an image or a video, it's too big to send at once, it's empty, it's an image that can't be read, or it's gone since it was listed. *Unconfirmed.*

@@ -5,6 +5,7 @@
 use gpui_kit::component::{Icon, IconName};
 use gpui_kit::{AnyElement, Context, IntoElement as _, SharedString};
 use look::IconSizing as _;
+use std::path::PathBuf;
 
 use super::{Showing, WorkspacePane, tab};
 use crate::file_diff::FileDiff;
@@ -66,6 +67,8 @@ impl WorkspacePane {
     /// changes, so the tab's view and the sidebar's marked row always say the same file, and only one of the two views
     /// and one of the two lists has it.
     fn set_file_tab(&mut self, tab: Option<(Opened, SharedString)>, cx: &mut Context<Self>) {
+        let workspace = self.workspace();
+        let worktree_here = workspace.provider.is_local().then(|| workspace.path.clone().map(PathBuf::from)).flatten();
         let Some(diff) = &mut self.diff else { return };
         let in_front = diff.tab.as_ref().is_some_and(|tab| tab.in_front);
         diff.tab = tab.clone().map(|(opened, path)| FileTab { path, opened, in_front });
@@ -76,7 +79,10 @@ impl WorkspacePane {
         };
         diff.file.update(cx, |f, cx| f.show(diffed.clone(), cx));
         diff.changes.update(cx, |c, cx| c.set_showing(diffed, cx));
-        diff.viewer.update(cx, |v, cx| v.show(viewed.clone(), cx));
+        diff.viewer.update(cx, |v, cx| {
+            v.set_worktree_here(worktree_here);
+            v.show(viewed.clone(), cx);
+        });
         diff.all_files.update(cx, |a, cx| a.set_showing(viewed, cx));
     }
 

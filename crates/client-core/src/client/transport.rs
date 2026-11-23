@@ -38,6 +38,11 @@ impl Closer {
         Closer(Socket::Tcp(stream))
     }
 
+    /// Whether it's the socket of a hub on this machine.
+    pub(super) fn is_local(&self) -> bool {
+        matches!(self.0, Socket::Local(_))
+    }
+
     pub(super) fn close(&self) {
         let _ = match &self.0 {
             Socket::Local(stream) => stream.shutdown(Shutdown::Both),

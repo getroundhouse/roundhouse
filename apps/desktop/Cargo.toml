@@ -26,6 +26,8 @@ client-core.workspace = true
 local-hub.workspace = true
 transcript.workspace = true
 client-ui.workspace = true
+# What an MP4 or a QuickTime file says of its video, which the file tab shows, and the system's player plays.
+video.workspace = true
 terminal-view.workspace = true
 gpui-kit.workspace = true
 look.workspace = true
@@ -46,6 +48,8 @@ percent-encoding.workspace = true
 qrcode.workspace = true
 parking_lot.workspace = true
 ring.workspace = true
+# The copy of a video from another machine that the system's player opens, which goes once it's done with.
+tempfile.workspace = true
 # Turns a pasted image an agent can't be given, such as a TIFF, into a PNG, and decodes the images the file tab draws
 # and compares. GPUI already builds these.
 image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
@@ -93,9 +97,8 @@ worker = { workspace = true, features = ["testing"] }
 terminal-view = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }
 image = { workspace = true, features = ["png"] }
-tempfile.workspace = true
-tokio.workspace = true
 video = { workspace = true, features = ["testing"] }
+tokio.workspace = true
 proptest.workspace = true
 similar.workspace = true
 spec-screens.workspace = true
