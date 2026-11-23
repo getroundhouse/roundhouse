@@ -3,7 +3,6 @@ use super::own::{WaitsRead, WorkspaceRead};
 use super::recording::Found;
 use super::schedule;
 use super::token_limits::TokenLimits;
-use super::unseen::Unseens;
 use crate::jobs;
 use crate::store::now_ms;
 use github::{Leaving, Unread};
@@ -102,8 +101,6 @@ pub(in super::super) struct Reading {
     /// no worker, and so don't wait behind a workspace's read whose worker is slow to say how its worktree stands.
     pub(super) agent_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
     pub(super) remote_read_at: Mutex<HashMap<WorkspaceId, Instant>>,
-    /// What GitHub last said of each workspace's repository being unseen.
-    pub(super) unseen: Unseens,
 }
 
 impl Reading {
@@ -114,7 +111,6 @@ impl Reading {
             limits: TokenLimits::default(),
             agent_gates: Mutex::new(HashMap::new()),
             remote_read_at: Mutex::new(HashMap::new()),
-            unseen: Unseens::new(),
         }
     }
 
@@ -277,8 +273,8 @@ impl Hub {
             self.notify(HubNotice::Workspace(workspace));
         }
         // After the workspace, so whoever's told has it as it's recorded now.
-        self.keep_unseen(id, &read).await;
-        self.github_read_ended(id, read.is_err());
+        let heard = self.heard_of_repository(&read).await;
+        self.github_read_ended(id, read.is_err(), heard);
         let answer = match read {
             Ok(Found { read, .. }) => Answer::Read(read.pull_request),
             Err(unread) => Answer::Known(recorded.or(known), unread.error()),

@@ -27,8 +27,9 @@ impl Hub {
         let mut told = self.github_cache.changes();
         let mut followers = self.followers.changes();
         let mut feed = self.subscribe_feed();
-        let mut unseen = self.unseen_told();
-        let mut reads = self.github_reads_ended.subscribe();
+        let Some(mut reads) = self.github_reads_ended.take() else {
+            return warn!("a second task to work out GitHub's observations wasn't started, as one runs already");
+        };
         let mut observing = Observing::default();
         observing.all_again(&self).await;
         loop {
@@ -59,19 +60,12 @@ impl Hub {
                     Err(RecvError::Lagged(_)) => observing.all_again(&self).await,
                     Err(RecvError::Closed) => return,
                 },
-                id = unseen.recv() => match id {
-                    Ok(id) => observing.workspaces.unseen(&self, &id).await,
-                    Err(RecvError::Lagged(_)) => observing.all_again(&self).await,
-                    Err(RecvError::Closed) => return,
-                },
-                ended = reads.recv() => match ended {
-                    Ok(ended) => {
-                        observing.follow_now(&self).await;
-                        observing.workspaces.read_ended(&self, &ended.workspace, ended.failed).await;
-                    }
-                    Err(RecvError::Lagged(_)) => observing.all_again(&self).await,
-                    Err(RecvError::Closed) => return,
-                },
+                ended = reads.recv() => {
+                    // Ends only once the hub, which holds the queue, has gone.
+                    let Some(ended) = ended else { return };
+                    observing.follow_now(&self).await;
+                    observing.workspaces.read_ended(&self, ended).await;
+                }
             }
         }
     }
@@ -82,6 +76,19 @@ impl Hub {
     #[cfg(test)]
     pub(crate) async fn observe_github_once(&self) {
         Observing::default().all_again(self).await;
+    }
+
+    /// Takes in every read that has ended, as the task does as it hears of each, for a test of a hub with no task, so
+    /// it knows when each is kept.
+    #[cfg(test)]
+    pub(crate) async fn observe_reads_ended(&self) {
+        let Some(mut reads) = self.github_reads_ended.take() else { panic!("the task has the reads") };
+        let mut observing = Observing::default();
+        observing.follow_now(self).await;
+        while let Ok(ended) = reads.try_recv() {
+            observing.workspaces.read_ended(self, ended).await;
+        }
+        self.github_reads_ended.give_back(reads);
     }
 }
 

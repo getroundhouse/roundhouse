@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use protocol::client::github::{GithubShown, GithubUpdate};
 use protocol::client::{HubFrame, HubNotice};
-use protocol::model::{PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen, Workspace, WorkspaceId};
+use protocol::model::{
+    Observation, PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen, Workspace, WorkspaceId,
+};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{mpsc, watch};
 use tracing::warn;
@@ -25,7 +27,6 @@ pub(in crate::server) async fn pump(
     // Before anything's read to send, so nothing kept meanwhile is missed.
     let mut kept = hub.github_kept();
     let mut feed = hub.subscribe_feed();
-    let mut unseen = hub.unseen_told();
     let mut feeding = Feeding { hub, shown: GithubShown::default(), workspaces: HashMap::new(), sent: Sent::default() };
     let deliver = async |updates: Vec<GithubUpdate>| {
         for update in updates {
@@ -53,12 +54,11 @@ pub(in crate::server) async fn pump(
                 },
                 notice = feed.recv() => match notice.as_deref() {
                     Ok(HubNotice::Workspace(workspace)) => feeding.recorded(workspace),
+                    // Whether GitHub showed a workspace's repository, once the store keeps what was heard of it.
+                    Ok(HubNotice::Observation(Observation::WorkspaceRepositoryUnseen { workspace_id, .. })) => {
+                        feeding.told(workspace_id)
+                    }
                     Ok(_) => Vec::new(),
-                    Err(RecvError::Lagged(_)) => continue 'whole,
-                    Err(RecvError::Closed) => return,
-                },
-                told = unseen.recv() => match told {
-                    Ok(id) => feeding.told(&id),
                     Err(RecvError::Lagged(_)) => continue 'whole,
                     Err(RecvError::Closed) => return,
                 },

@@ -356,6 +356,11 @@ impl Observations {
         K::table(&mut self.tables.lock()).kept.contains_key(of)
     }
 
+    /// What the store keeps of the observation of kind `K` of `of`, however fresh it is.
+    pub(crate) fn value_of<K: Kind>(&self, of: &K::Of) -> Option<K::Value> {
+        K::table(&mut self.tables.lock()).kept.get(of).map(|kept| kept.said.value.clone())
+    }
+
     /// What each observation of kind `K` the store keeps is of.
     pub(crate) fn kept_of<K: Kind>(&self) -> Vec<K::Of> {
         K::table(&mut self.tables.lock()).kept.keys().cloned().collect()
