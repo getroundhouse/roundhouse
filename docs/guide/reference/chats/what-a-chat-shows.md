@@ -156,6 +156,17 @@ A diagram the agent writes in Mermaid, in a code block whose language is `mermai
 
 ![The board's screenshot, opened](../../../spec/screens/reply-image-opened.png)
 
+## Videos in a reply
+
+A video the agent's reply points to plays in the reply, if it's a WebM in the workspace, such as a recording of a change at work. Roundhouse tells the agent how to make one the app plays. The hub keeps it as it was when the reply came, as it keeps an image.
+
+![A reply that points to a recording in the workspace](../../../spec/screens/reply-video.png)
+
+- **Play starts it where it is,** and the bar under it pauses it, says where it is of how long it is, and goes elsewhere in it with a click along its track.
+- **Expand opens it over the window,** as big as fits, playing on from where it is. Escape closes it.
+- **It stops when you scroll it out of sight.**
+- **Another kind of video, such as an MP4, shows nothing** in a reply. Opened from All files, it opens in your system's player.
+
 ## Issues and pull requests in a reply
 
 A link to an issue or a pull request on GitHub in a reply shows as a chip, whatever the link's words: its state's mark in its state's colour, its number, and, the first time the reply links to it, its title. Roundhouse tells the agent to link to each one it mentions, and which repository on GitHub its workspace's is, so its links go to the right place. A number written alone, such as `#1021`, stays as it's written, since it could be another repository's, or the number of something else. A subagent's report where its call shows it, a plan and a proposal show chips too. In a prompt and a thought, a link stays a link.

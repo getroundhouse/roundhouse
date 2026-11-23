@@ -34,6 +34,7 @@ mod stops;
 mod task_lines;
 mod texts;
 mod transcript;
+mod videos;
 
 pub use attachments::{file_card, image_format};
 pub use client_core::calls::agent::shown_kind;
@@ -47,6 +48,7 @@ pub use rows::{
 pub use selection::{KEY_CONTEXT, Way};
 pub use step_keys::{SelectStepBack, SelectStepOn, StepBack, StepOn, Steps};
 pub use transcript::{Transcript, TranscriptEvent};
+pub use videos::{Still, VideoPlayer, VideoSource, still};
 
 /// What the app knows around a field dictated into here, such as its workspace, whose words the field favours after
 /// its own.

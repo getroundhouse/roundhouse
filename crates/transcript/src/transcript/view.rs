@@ -178,14 +178,14 @@ impl Transcript {
     }
 
     /// Carries on on a new connection to the hub, keeping what's shown and where.
-    pub fn reconnect(&mut self, client: &Client) {
+    pub fn reconnect(&mut self, client: &Client, cx: &mut App) {
         self.session.reconnect(client);
         self.client = client.clone();
         self.find_on_new_connection();
         // Asked for again the next time they're drawn, in case the connection was what failed. The session says it
         // changed once it has caught up on the new connection, or lost it, and the transcript is drawn again then.
         self.model.borrow_mut().pictures.retain(|_, picture| !matches!(picture, Picture::Unreadable));
-        self.linked.reconnect(client);
+        self.linked.reconnect(client, cx);
     }
 
     /// Reads which workspace a pull request the chat names is in, and what the hub says of those it draws, from

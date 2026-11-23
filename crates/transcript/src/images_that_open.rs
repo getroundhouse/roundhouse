@@ -67,7 +67,7 @@ fn open(image: ImageSource, covers: (u32, u32), window: &mut Window, cx: &mut Ap
 
 /// The room in the window for an opened image: all of it but the window's own frame, where it draws one, and as much
 /// around it as the strip along the top that the kit's dialogs leave to the window's buttons and to dragging it.
-fn room(window: &Window) -> Size<Pixels> {
+pub(crate) fn room(window: &Window) -> Size<Pixels> {
     let frame = window_paddings(window);
     let clear = TITLE_BAR_HEIGHT * 2.;
     let viewport = window.viewport_size();
@@ -75,7 +75,7 @@ fn room(window: &Window) -> Size<Pixels> {
 }
 
 /// How big an image `covers` pixels is drawn, inside its edge, to fit in `room`.
-fn fitted((width, height): (u32, u32), room: Size<Pixels>) -> Size<Pixels> {
+pub(crate) fn fitted((width, height): (u32, u32), room: Size<Pixels>) -> Size<Pixels> {
     let scale = fit((width, height), room);
     size(px(pixels(width) * scale), px(pixels(height) * scale))
 }

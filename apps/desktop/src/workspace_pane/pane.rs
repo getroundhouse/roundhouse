@@ -278,11 +278,11 @@ impl WorkspacePane {
         self.hub = composer::Hub::Here;
         self.showing_changed(cx);
         for transcript in self.every_transcript() {
-            transcript.update(cx, |t, _| t.reconnect(client));
+            transcript.update(cx, |t, cx| t.reconnect(client, cx));
         }
         self.reconnect_terminals(client, cx);
         if let Some(view) = self.proposals.view() {
-            view.update(cx, |v, _| v.reconnect(client));
+            view.update(cx, |v, cx| v.reconnect(client, cx));
         }
         if let Some(diff) = &mut self.diff {
             diff.sidebar_tab.reconnected();

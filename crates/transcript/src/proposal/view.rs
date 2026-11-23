@@ -105,9 +105,9 @@ impl ProposalView {
     }
 
     /// Carries on on a new connection to the hub, and asks again for what couldn't be read.
-    pub fn reconnect(&mut self, client: &Client) {
+    pub fn reconnect(&mut self, client: &Client, cx: &mut App) {
         self.client = client.clone();
-        self.linked.reconnect(client);
+        self.linked.reconnect(client, cx);
     }
 
     /// Reads which workspace a pull request the page names is in from `records` from now on.

@@ -71,6 +71,7 @@ mod tools;
 mod turn_card;
 mod unread;
 mod updating;
+mod videos;
 mod waits;
 mod window_buttons;
 mod window_place;

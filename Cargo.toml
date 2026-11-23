@@ -140,6 +140,7 @@ waiting = { path = "crates/waiting" }
 spec-screens = { path = "crates/spec-screens" }
 terminal-state = { path = "crates/terminal-state" }
 terminal-view = { path = "crates/terminal-view" }
+video = { path = "crates/video" }
 libvpx-build = { path = "crates/libvpx-build" }
 desktop = { path = "apps/desktop" }
 mobile-ios = { path = "apps/mobile-ios" }
