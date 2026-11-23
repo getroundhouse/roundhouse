@@ -43,7 +43,7 @@ fn a_chats_record_says_how_full_its_agents_context_is_and_follows_it() {
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     assert_eq!(session.context, None, "nothing has said yet");
-    let feed = client.feed_subscribe().unwrap();
+    let feed = client.follow(protocol::client::subscriptions::Follow::Hub).unwrap();
 
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);

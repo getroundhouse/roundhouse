@@ -1,25 +1,21 @@
-// Against a stand-in hub on a Unix socket, which sends what a hub sends of a terminal.
-#![cfg(unix)]
+//! What an open terminal does, on a stand-in hub.
 
 use std::fmt::Write as _;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use super::following::*;
-use super::given::Given;
-use super::window::{Pointer, SelectBy};
+use super::super::following::*;
+use super::super::given::Given;
+use super::super::window::{Pointer, SelectBy};
+use super::hub::{Watched, showing, showing_at, start_hub, stops, watches};
 use crate::client::{Client, SUBSCRIPTION_CAPACITY};
 use crate::drawn::{Frame, Rgb};
-use crate::stand_in_hub::{Does, listen};
+use protocol::client::ClientRequest;
 use protocol::client::terminals::{TerminalFit, TerminalTyped};
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
-use protocol::terminal::{
-    Key, KeyPress, Mods, PictureSending, TerminalExit, TerminalPicture, TerminalSize, TerminalUpdate, Typed,
-};
+use protocol::terminal::{Key, KeyPress, Mods, PictureSending, TerminalPicture, TerminalSize, Typed};
 use terminal_state::Mirror;
 
-const SIZE: TerminalSize = TerminalSize { cols: 80, rows: 24 };
+pub(super) const SIZE: TerminalSize = TerminalSize { cols: 80, rows: 24 };
 const WAIT: Duration = Duration::from_secs(10);
 const RED: Rgb = Rgb { r: 255, g: 0, b: 0 };
 const BLUE: Rgb = Rgb { r: 0, g: 0, b: 255 };
@@ -39,7 +35,7 @@ fn pictures(writes: &[&[u8]]) -> Vec<TerminalPicture> {
 }
 
 /// As [`pictures`], of a terminal of `size`.
-fn pictures_at(size: TerminalSize, writes: &[&[u8]]) -> Vec<TerminalPicture> {
+pub(super) fn pictures_at(size: TerminalSize, writes: &[&[u8]]) -> Vec<TerminalPicture> {
     let mut worker = Mirror::new(size).unwrap();
     let mut sending = PictureSending::default();
     let mut pictures = Vec::new();
@@ -52,60 +48,6 @@ fn pictures_at(size: TerminalSize, writes: &[&[u8]]) -> Vec<TerminalPicture> {
         }
     }
     pictures
-}
-
-/// What a hub sends of a terminal it's watched: pictures, and maybe the shell's end.
-struct Watched {
-    pictures: Vec<TerminalPicture>,
-    exited: bool,
-}
-
-/// A hub that answers each watch of a terminal by sending what `watched_for` gives for how many watches there have
-/// been, or that there's no such terminal for `None`, and says each other request it's sent, and each watch. It goes
-/// away once it's sent what's typed, if `hangs_up_on_typing`.
-fn start_hub(
-    socket: &Path,
-    hangs_up_on_typing: bool,
-    watched_for: impl Fn(usize) -> Option<Watched> + Send + 'static,
-) -> flume::Receiver<ClientRequest> {
-    let (asked, told) = flume::unbounded();
-    let mut watched_count = 0;
-    let ok = || Box::new(ReplyOutcome::Response(ClientResponse::Ok));
-    listen(socket, move |request| {
-        let ClientRequest::TerminalWatch(watch) = &request else {
-            let hangs_up = hangs_up_on_typing && matches!(request, ClientRequest::TerminalTyped(_));
-            let _ = asked.send(request);
-            return if hangs_up { Does::HangsUp } else { Does::Answers(ok()) };
-        };
-        watched_count += 1;
-        let Some(watched) = watched_for(watched_count) else {
-            let gone = ApiError::new(ErrorCode::NotFound, "no such terminal");
-            return Does::Answers(Box::new(ReplyOutcome::Error(gone)));
-        };
-        let subscription_id = watch.subscription_id;
-        let mut sent: Vec<HubFrame> = watched
-            .pictures
-            .into_iter()
-            .map(|picture| HubFrame::TerminalPicture { subscription_id, picture })
-            .collect();
-        if watched.exited {
-            let update = TerminalUpdate::Exited(TerminalExit { code: Some(0) });
-            sent.push(HubFrame::Terminal { subscription_id, update });
-        }
-        let _ = asked.send(request);
-        Does::AnswersThen(ok(), sent)
-    });
-    told
-}
-
-/// A terminal that wrote each of `writes`, with a picture after each, and hasn't ended.
-fn showing(writes: &[&[u8]]) -> Watched {
-    showing_at(SIZE, writes)
-}
-
-/// As [`showing`], of a terminal of `size`.
-fn showing_at(size: TerminalSize, writes: &[&[u8]]) -> Watched {
-    Watched { pictures: pictures_at(size, writes), exited: false }
 }
 
 fn text(frame: &Frame) -> Vec<String> {
@@ -154,7 +96,7 @@ fn an_open_terminal_keeps_what_it_shows_for_a_view_to_draw() {
 
     assert_eq!(text(&frame)[0], "$ ls");
     assert_eq!((frame.foreground, frame.background), (RED, BLUE));
-    assert!(matches!(asked.recv_timeout(WAIT).unwrap(), ClientRequest::TerminalWatch(_)));
+    assert!(watches(&asked.recv_timeout(WAIT).unwrap()));
     assert_eq!(asked.recv_timeout(WAIT).unwrap(), typed('x'));
     let ClientRequest::TerminalFit(TerminalFit { size, .. }) = asked.recv_timeout(WAIT).unwrap() else {
         panic!("the view's room wasn't asked for")
@@ -184,7 +126,7 @@ fn a_terminal_carries_on_on_a_new_connection() {
     frame_when(&open, "the second screen", |frame| text(frame)[0] == "after");
     open.key(key('x'));
 
-    assert!(matches!(second_asked.recv_timeout(WAIT).unwrap(), ClientRequest::TerminalWatch(_)));
+    assert!(watches(&second_asked.recv_timeout(WAIT).unwrap()));
     assert_eq!(second_asked.recv_timeout(WAIT).unwrap(), typed('x'), "not what was typed as it came");
     assert!(first_asked.try_iter().all(|asked| !matches!(asked, ClientRequest::TerminalTyped(_))));
 }
@@ -224,7 +166,7 @@ fn without_a_connection_the_held_history_scrolls_and_what_is_typed_is_dropped() 
     frame_when(&open, "the second screen", |frame| text(frame)[0] == "after");
     open.key(key('c'));
 
-    assert!(matches!(second_asked.recv_timeout(WAIT).unwrap(), ClientRequest::TerminalWatch(_)));
+    assert!(watches(&second_asked.recv_timeout(WAIT).unwrap()));
     assert_eq!(second_asked.recv_timeout(WAIT).unwrap(), typed('c'), "not what was typed while there was no hub");
 }
 
@@ -357,8 +299,8 @@ fn only_a_new_connection_asks_for_the_views_size_again() {
 
 /// How many of `requests` are watches, and how many stop a subscription.
 fn watches_and_stops(requests: &[ClientRequest]) -> (usize, usize) {
-    let watches = requests.iter().filter(|request| matches!(request, ClientRequest::TerminalWatch(_))).count();
-    let stops = requests.iter().filter(|request| matches!(request, ClientRequest::SessionUnsubscribe(_))).count();
+    let watches = requests.iter().filter(|request| watches(request)).count();
+    let stops = requests.iter().filter(|request| stops(request)).count();
     (watches, stops)
 }
 
@@ -380,7 +322,6 @@ fn a_terminal_not_shown_for_as_long_as_it_waits_is_let_go_until_it_shows_again()
         open.set_shown(false);
         let mut requests = Vec::new();
         if let_go {
-            let stops = |request: &ClientRequest| matches!(request, ClientRequest::SessionUnsubscribe(_));
             requests.extend(asked_until(&asked, "letting it go", stops));
         }
         open.fit(room);

@@ -11,7 +11,8 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
-use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HelloReply, HubFrame, ReplyOutcome};
+use protocol::client::subscriptions::{Follow, Subscribe, Subscribed};
+use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, HelloReply, HubFrame, ReplyOutcome};
 use protocol::frame;
 
 use crate::Client;
@@ -56,6 +57,11 @@ impl StandIn {
         Self { hello: ReplyOutcome::Response(hello), every_connection: false }
     }
 
+    /// One that refuses each hello with `refused`, as a hub that shares no version of the protocol with this build does.
+    pub fn refusing_hello(refused: ApiError) -> Self {
+        Self { hello: ReplyOutcome::Error(refused), every_connection: false }
+    }
+
     /// Serves each client that connects, rather than only the first, as a hub a client connects to again does. What
     /// it's told to do with a request is done for one connection at a time.
     #[must_use]
@@ -84,6 +90,13 @@ impl StandIn {
         });
         heard
     }
+}
+
+/// What a hub does with a `Subscribe`: starts each start it asks for, answering that it refused none, and then sends
+/// each the frames `then` makes from its subscription ID and what it follows, as a hub sends where each stands.
+pub fn subscribed(subscribe: &Subscribe, then: impl Fn(u64, &Follow) -> Vec<HubFrame>) -> Does {
+    let frames = subscribe.start.iter().flat_map(|start| then(start.subscription_id, &start.follow)).collect();
+    Does::AnswersThen(Box::new(ReplyOutcome::Response(ClientResponse::Subscribed(Subscribed::default()))), frames)
 }
 
 /// Stands in for a hub on `socket`, doing with each request what `does` says, and connects to it.

@@ -1,5 +1,5 @@
 use protocol::client::HubNotice;
-use protocol::model::{LineCounts, Observation, ObservationKey, Observed, Records, Rev};
+use protocol::model::{Level, LineCounts, Observation, ObservationKey, Observed, Records, Rev};
 
 use super::super::{HubRecords, Taken};
 use super::{ByRevision, Revised};
@@ -16,6 +16,8 @@ struct Made {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct MadeKey {
     in_every_list: bool,
+    /// Which one of its kind it is.
+    of: u8,
 }
 
 impl Revised for Made {
@@ -34,8 +36,8 @@ impl Revised for Made {
     }
 }
 
-const LISTED: MadeKey = MadeKey { in_every_list: true };
-const APART: MadeKey = MadeKey { in_every_list: false };
+const LISTED: MadeKey = MadeKey { in_every_list: true, of: 0 };
+const APART: MadeKey = MadeKey { in_every_list: false, of: 1 };
 
 fn made(key: MadeKey, value: u8, rev: u64) -> Made {
     Made { key, value, rev: Rev::new(rev) }
@@ -64,6 +66,37 @@ fn one_of_a_kind_no_list_has_outlasts_every_list_but_goes_when_removed() {
     );
 
     assert_eq!(value(&kept, &APART), None);
+}
+
+/// A client that stops following a level lets go of what it held of that level, copies and removals alike, since
+/// nothing tells it of them while it doesn't follow it, and what it holds of every other level stays.
+#[test]
+fn letting_go_of_a_level_drops_its_copies_and_removals_and_nothing_else() {
+    let (mut kept, mut taken) = (ByRevision::<Made>::default(), Taken::default());
+    let other = MadeKey { in_every_list: false, of: 2 };
+    kept.apply(made(APART, 1, 3), Rev::default(), &mut taken);
+    kept.apply(made(LISTED, 1, 3), Rev::default(), &mut taken);
+    kept.apply(made(other.clone(), 1, 3), Rev::default(), &mut taken);
+    kept.remove(&APART, Rev::new(6), Rev::default());
+    kept.apply(made(APART, 2, 7), Rev::default(), &mut taken);
+
+    assert!(kept.let_go(|key| *key == APART));
+
+    assert_eq!((value(&kept, &APART), value(&kept, &LISTED), value(&kept, &other)), (None, Some(1), Some(1)));
+    assert!(kept.apply(made(APART, 3, 4), Rev::default(), &mut taken), "its removal was let go of with it");
+    assert!(!kept.let_go(|key| key.of == 9), "nothing held of that");
+}
+
+/// Letting go of a workspace's level leaves what's sent at the hub's level, such as a workspace's lines added and
+/// removed, which every client that follows the hub is sent.
+#[test]
+fn letting_go_of_a_workspaces_level_leaves_its_observations_of_the_hubs_level() {
+    let mut held = HubRecords::default();
+    held.apply_list(list(vec![lines("w", 1, 2)], 3));
+
+    let changed = held.let_go_of(&Level::Workspace { id: "w".into() });
+
+    assert_eq!((changed, shown(&held, "w")), (false, current(1)));
 }
 
 fn lines(workspace: &str, added: u64, rev: u64) -> Observation {

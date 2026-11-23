@@ -1,8 +1,8 @@
 //! Stands in for a hub of another build, which a test can't otherwise get. As a client sees it across a real protocol
 //! break, it refuses every hello, and all that still works is seeing it and stopping it. With `--speaks-this-protocol`
-//! it takes a hello, as an older build would, and serves a hub with nothing in it, so the app can use it, refuses
-//! `agent_list` and `github_subscribe` as unsupported, as a build from before hubs described their agents or sent what
-//! GitHub says would, and refuses anything else. It
+//! it takes a hello, as an older build would, and serves a hub with nothing in it to a client that follows the hub, so
+//! the app can use it, refuses `agent_list` as unsupported, as a build from before hubs described their agents would,
+//! and refuses anything else. It
 //! holds the same lock as a real hub, and lets go of it before it exits, as a real hub does. A test can change how many
 //! agents it says are running, as if some had started or finished, by writing the number to [`RUNNING`] in its data
 //! directory, and how many requests it has under way besides the one asking, by writing to [`REQUESTS`]. Asked to stop
@@ -21,11 +21,12 @@ use std::time::Duration;
 
 use clap::Parser;
 use parking_lot::Mutex;
+use protocol::client::listed::Listed;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice, HubStatus,
     ReplyOutcome, subscriptions,
 };
-use protocol::model::{Records, Repo, RepoId, RepoOrigin, Rev};
+use protocol::model::{Repo, RepoId, RepoOrigin, Rev};
 use protocol::paths::Paths;
 
 #[derive(Parser)]
@@ -101,7 +102,7 @@ fn reply(writer: &Writer, id: u64, outcome: ReplyOutcome) {
     send(writer, &HubFrame::Reply { id, outcome });
 }
 
-/// Tells a client following its records that one has changed whenever a test changes how many agents are running from
+/// Tells a client following the hub that one of its records has changed whenever a test changes how many agents are running from
 /// `said`, as a real hub sends the session that started or finished. The record is a repository, which is simpler to
 /// make.
 #[expect(
@@ -129,6 +130,21 @@ fn notice_agents(writer: &Writer, subscription_id: u64, mut said: u32, args: &Ar
             return;
         }
     }
+}
+
+/// Which of the starts `subscribe` asks for follows the hub, which is all it serves, with nothing in it, and the rest,
+/// which it refuses as a hub with nothing of them would.
+fn followed(subscribe: subscriptions::Subscribe) -> (Option<u64>, Vec<subscriptions::Refused>) {
+    let (mut hub, mut refused) = (None, Vec::new());
+    for subscriptions::Subscription { subscription_id, follow } in subscribe.start {
+        if follow == subscriptions::Follow::Hub {
+            hub = Some(subscription_id);
+        } else {
+            let error = ApiError::new(ErrorCode::NotFound, "a stand-in hub has nothing of that");
+            refused.push(subscriptions::Refused { subscription_id, error });
+        }
+    }
+    (hub, refused)
 }
 
 fn status(args: &Args, paths: &Paths) -> HubStatus {
@@ -173,25 +189,25 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
                 });
                 reply(&writer, request.id, ReplyOutcome::Response(answer));
             }
-            ClientRequest::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id })
-                if args.speaks_this_protocol =>
-            {
-                // How many it says are running as the client subscribes, before it replies, as a real hub's feed goes
-                // on from its records then. Read by the thread that tells of changes, it would be read whenever that
+            ClientRequest::Subscribe(subscribe) if args.speaks_this_protocol => {
+                // How many it says are running as the client subscribes, before it replies, as a real hub's records go
+                // on from its list then. Read by the thread that tells of changes, it would be read whenever that
                 // thread started, which can be after the client has caught up and a test has changed it, and that
                 // change would never be told.
                 let said = written(paths, RUNNING, args.running);
-                reply(&writer, request.id, ReplyOutcome::Response(ClientResponse::Ok));
-                let (writer, args, paths) = (writer.clone(), args.clone(), paths.clone());
-                std::thread::spawn(move || notice_agents(&writer, subscription_id, said, &args, &paths));
+                let (hub, refused) = followed(subscribe);
+                let subscribed = ClientResponse::Subscribed(subscriptions::Subscribed { refused });
+                reply(&writer, request.id, ReplyOutcome::Response(subscribed));
+                if let Some(subscription_id) = hub {
+                    let listed = Listed::Hub(Box::default());
+                    send(&writer, &HubFrame::Listed { subscription_id, listed });
+                    let (writer, args, paths) = (writer.clone(), args.clone(), paths.clone());
+                    std::thread::spawn(move || notice_agents(&writer, subscription_id, said, &args, &paths));
+                }
             }
-            ClientRequest::RecordsList if args.speaks_this_protocol => {
-                let nothing = ClientResponse::Records(Records::default());
-                reply(&writer, request.id, ReplyOutcome::Response(nothing));
-            }
-            // As a hub from before hubs described their agents, or sent what GitHub says of what a client shows: one
-            // that speaks this protocol refuses a request it doesn't know and carries on.
-            ClientRequest::AgentList | ClientRequest::GithubSubscribe(_) if args.speaks_this_protocol => {
+            // As a hub from before hubs described their agents: one that speaks this protocol refuses a request it
+            // doesn't know and carries on.
+            ClientRequest::AgentList if args.speaks_this_protocol => {
                 let unknown = ApiError::new(ErrorCode::Unsupported, "this hub doesn't know that request");
                 reply(&writer, request.id, ReplyOutcome::Error(unknown));
             }

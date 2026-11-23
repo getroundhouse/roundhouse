@@ -5,8 +5,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use protocol::client::{
-    CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice, ReplyOutcome,
-    subscriptions,
+    ApiError, CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice,
+    ReplyOutcome, subscriptions,
 };
 use protocol::terminal::Typed;
 
@@ -44,15 +44,14 @@ fn a_reply_of_another_kind_than_its_request_names_fails_the_call() {
     client.session_cancel(&"s".into()).unwrap();
 }
 
-/// Answers a feed subscription, then sends more notices than a subscription holds before anyone reads them.
+/// Starts following the hub, then sends more notices than a subscription holds before anyone reads them.
 fn start_hub_that_floods_a_subscription(socket: &Path) -> flume::Receiver<ClientRequest> {
     stand_in_hub::listen(socket, |request| {
-        let ClientRequest::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id }) = request else {
-            return Does::Nothing;
-        };
-        let notice = HubFrame::Notice { subscription_id, notice: HubNotice::Resync };
-        let ok = Box::new(ReplyOutcome::Response(ClientResponse::Ok));
-        Does::AnswersThen(ok, vec![notice; SUBSCRIPTION_CAPACITY + 10])
+        let ClientRequest::Subscribe(subscribe) = request else { return Does::Nothing };
+        stand_in_hub::subscribed(&subscribe, |subscription_id, _| {
+            let notice = HubFrame::Notice { subscription_id, notice: HubNotice::Unknown };
+            vec![notice; SUBSCRIPTION_CAPACITY + 10]
+        })
     })
 }
 
@@ -62,17 +61,18 @@ fn a_subscription_whose_reader_falls_behind_ends_rather_than_queueing_without_li
     let socket = dir.path().join("hub.sock");
     let asked = start_hub_that_floods_a_subscription(&socket);
     let client = Client::connect(&socket, "test").unwrap();
-    let subscription = client.feed_subscribe().unwrap();
+    let subscription = client.follow(subscriptions::Follow::Hub).unwrap();
 
-    let next = std::iter::from_fn(|| asked.recv_timeout(Duration::from_secs(10)).ok())
-        .skip_while(|request| !matches!(request, ClientRequest::FeedSubscribe(_)))
-        .nth(1)
-        .expect("nothing was asked after subscribing");
+    let mut asked = std::iter::from_fn(|| asked.recv_timeout(Duration::from_secs(10)).ok());
+    let Some(ClientRequest::Subscribe(started)) = asked.find(|request| matches!(request, ClientRequest::Subscribe(_)))
+    else {
+        panic!("it never subscribed")
+    };
+    let next = asked.next().expect("nothing was asked after subscribing");
 
-    assert_eq!(
-        next,
-        ClientRequest::SessionUnsubscribe(subscriptions::SessionUnsubscribe { subscription_id: subscription.id })
-    );
+    // Its ID, which it may have fallen behind on before the reply came, as here, where everything comes before it.
+    let stopped = subscriptions::Subscribe { stop: vec![started.start[0].subscription_id], start: Vec::new() };
+    assert_eq!(next, ClientRequest::Subscribe(stopped));
     assert_eq!(subscription.items.drain().count(), SUBSCRIPTION_CAPACITY);
     assert!(subscription.items.recv().is_err(), "it ended");
     assert_eq!(subscription.ended(), Some(Ended::FellBehind));
@@ -93,6 +93,28 @@ fn a_hub_that_chose_another_version_is_refused() {
         "{:?}",
         connected.err()
     );
+}
+
+/// A hub from before clients followed only through `Subscribe`, which speaks only version 3 of the protocol, shares
+/// no version with this client, so it refuses the hello, as the hub does, and the client says the hub is across a
+/// protocol break from it, which only a person can do something about, by updating or replacing the hub. A desktop app
+/// replaces one that it started itself, as `docs/principles/protocol.md` says.
+#[test]
+fn a_hub_that_speaks_only_version_3_is_too_old() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("hub.sock");
+    let (hub, ours) =
+        (protocol::versions::Versions::only(3), protocol::versions::Versions::only(CLIENT_PROTOCOL_VERSION));
+    assert_eq!(hub.newest_shared(ours), None, "the two share no version");
+    let refused =
+        ApiError::new(ErrorCode::VersionMismatch, format!("this hub is on {hub}, and this client speaks {ours}"));
+    StandIn::refusing_hello(refused).listen(&socket, |_| Does::Nothing);
+
+    let connected = Client::connect(&socket, "test");
+
+    let refused = connected.err().expect("refused");
+    assert!(refused.is_version_mismatch() && refused.needs_a_person(), "{refused:?}");
+    assert!(refused.to_string().contains("protocol 3"), "{refused}");
 }
 
 /// A hub that takes the request to stop and goes before its reply gets out did what was asked, so stopping it is done,

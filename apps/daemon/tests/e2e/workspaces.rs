@@ -227,7 +227,7 @@ fn a_workspace_whose_name_git_has_takes_its_station_with_a_number_keeping_its_id
     let mut stack = Stack::start();
     stack.make_through_an_adapter();
     let client = stack.client();
-    let feed = client.feed_subscribe().unwrap();
+    let feed = client.follow(protocol::client::subscriptions::Follow::Hub).unwrap();
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     next_notice_of(&feed, "the repo", |notice| matches!(notice, HubNotice::Repo(_)));
     for name in hub::workspace_names() {

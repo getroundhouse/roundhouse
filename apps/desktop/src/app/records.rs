@@ -26,7 +26,7 @@ impl AppView {
         if let Some(voices) = crate::conversing::voices(cx).cloned() {
             self.conversations.update(cx, |conversations, _| conversations.follow(records.every_session(), &voices));
         }
-        self.drop_hidden_panes(&records, cx);
+        self.drop_hidden_panes(&records);
         for (id, pane) in &self.panes {
             let Some(shown) = records.in_workspace(id) else { continue };
             pane.update(cx, |p, cx| p.set_records(shown, cx));

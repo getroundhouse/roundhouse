@@ -91,7 +91,7 @@ fn open_terminal(client: &Client, workspace: &WorkspaceId) -> OpenTerminal {
 }
 
 fn terminals_open(client: &Client) -> usize {
-    client.records_list().unwrap().terminals.len()
+    client.records().unwrap().terminals.len()
 }
 
 #[test]

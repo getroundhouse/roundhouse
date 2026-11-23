@@ -13,6 +13,7 @@ use super::window::{Ask, Pointer, Replied, SelectBy, Window};
 use crate::client::follow::{Follow, Source};
 use crate::client::{Client, ClientError, FollowError, Result, Subscription, SubscriptionItem};
 use crate::drawn::{Frame, Rgb};
+use protocol::client::subscriptions::Follow as Followed;
 
 /// How long a terminal goes without being shown before it's let go, as #2099 says: long enough that going between a
 /// chat and its terminal costs nothing, and short enough that a terminal left behind a chat soon stops costing the
@@ -211,7 +212,7 @@ impl Source for TerminalSource {
     type Held = Held;
 
     fn resume(&mut self, client: &Client, held: &Mutex<Held>) -> Result<Subscription> {
-        let watched = client.terminal_watch(&self.id);
+        let watched = client.follow(Followed::Terminal { id: self.id.clone() });
         // Its record has gone with its shell, which may have ended while there was no connection to hear it. The
         // window keeps what it showed.
         if watched.as_ref().is_err_and(ClientError::is_not_found) {
@@ -237,6 +238,7 @@ impl Source for TerminalSource {
             | SubscriptionItem::Tail(_)
             | SubscriptionItem::Delta(_)
             | SubscriptionItem::Notice(_)
+            | SubscriptionItem::Listed(_)
             | SubscriptionItem::Github(_) => return Ok(false),
         };
         if ended {

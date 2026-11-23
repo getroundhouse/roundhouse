@@ -72,7 +72,7 @@ impl Source for LiveSource {
     type Held = Items;
 
     fn resume(&mut self, client: &Client, _: &Mutex<Items>) -> Result<Subscription> {
-        client.session_subscribe(&self.id, self.next)
+        client.follow_session(&self.id, self.next)
     }
 
     fn apply(&mut self, _: &Client, held: &Mutex<Items>, item: SubscriptionItem) -> Result<bool> {
@@ -87,7 +87,9 @@ impl Source for LiveSource {
                 LiveItem::Tail(Box::new(tail))
             }
             SubscriptionItem::Delta(delta) => LiveItem::Delta(Box::new(delta)),
-            SubscriptionItem::Notice(_)
+            // The session's own records, which an open session keeps, as `OpenSession` says.
+            SubscriptionItem::Listed(_)
+            | SubscriptionItem::Notice(_)
             | SubscriptionItem::Terminal(_)
             | SubscriptionItem::Github(_)
             | SubscriptionItem::TerminalPicture(_) => {

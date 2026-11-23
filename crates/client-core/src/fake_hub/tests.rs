@@ -3,17 +3,19 @@
 
 use std::time::Duration;
 
+use protocol::client::listed::{Listed, SessionRecords};
+use protocol::client::subscriptions::Follow;
 use protocol::client::{ErrorCode, ObservationNotice, log};
 use protocol::event::{ContentBlock, EventBody, ExitReason, TaskKind};
 use protocol::model::{
-    AgentKind, Ending, LineCounts, MessageId, Observation, ObservationKey, Observed, Place, ReplyHeard, ReplyPlace,
-    Rev, Seq, SessionStatus, SettledBy, SubagentId, SubagentStatus,
+    AgentKind, Ending, Level, LineCounts, MessageId, Observation, ObservationKey, Observed, Place, ReplyHeard,
+    ReplyPlace, Rev, Seq, SessionStatus, SettledBy, SubagentId, SubagentStatus,
 };
 use protocol::terminal::{Bounds, TerminalPoint, TerminalRow, TerminalSize};
 
 use super::events::{subagent_ended, subagent_started, taken, task, text, user_prompt, within};
-use super::{World, serve};
-use crate::{Client, ClientError, RecordsFeed, SubscriptionItem};
+use super::{Following, World, serve};
+use crate::{Client, ClientError, OpenSession, RecordsFeed, SubscriptionItem};
 
 /// A client of a fake hub serving `world`, and the directory its socket is in, which goes when the test ends.
 fn served(world: World) -> (tempfile::TempDir, Client) {
@@ -32,14 +34,14 @@ fn a_client_reads_what_the_world_holds_and_is_refused_a_change() {
     let chat = world.chat(&workspace, SessionStatus::Idle, Vec::new());
     let (_dir, client) = served(world);
 
-    let records = client.records_list().unwrap();
+    let records = client.records().unwrap();
     let added = client.repo_add("/src/birch");
 
     assert_eq!(records.repos.iter().map(|repo| repo.name.as_str()).collect::<Vec<_>>(), ["aspen"]);
     assert_eq!(records.workspaces.iter().map(|workspace| &workspace.id).collect::<Vec<_>>(), [&workspace]);
     assert_eq!(records.sessions.iter().map(|session| &session.id).collect::<Vec<_>>(), [&chat]);
     assert!(matches!(added, Err(ClientError::Api(refused)) if refused.code == ErrorCode::Unsupported));
-    assert_eq!(client.records_list().unwrap().repos.len(), 1, "and nothing was added");
+    assert_eq!(client.records().unwrap().repos.len(), 1, "and nothing was added");
 }
 
 /// As a hub lists them for a chat a view shows, though it's refused recording another, as any change is.
@@ -60,8 +62,8 @@ fn a_client_reads_how_a_chat_s_replies_were_heard_and_is_refused_saying_another(
     world.replies_heard.insert(chat.clone(), vec![heard.clone()]);
     let (_dir, client) = served(world);
 
-    let (replies, _) = client.session_replies_heard(&chat).unwrap();
-    let (none, _) = client.session_replies_heard(&other).unwrap();
+    let replies = session_records(&client, &chat).replies_heard;
+    let none = session_records(&client, &other).replies_heard;
     let said = client.session_reply_heard(&chat, MessageId::from("msg-2"), Ending::ToTheEnd);
 
     assert_eq!(replies, [heard]);
@@ -69,8 +71,9 @@ fn a_client_reads_how_a_chat_s_replies_were_heard_and_is_refused_saying_another(
     assert!(matches!(said, Err(ClientError::Api(refused)) if refused.code == ErrorCode::Unsupported));
 }
 
-/// As a hub's list and feed reach a client that connects: it holds what's listed, keeps the newer of two copies
-/// whichever arrives first, and drops one the feed says is gone.
+/// As the hub's level reaches a client that follows it through `Subscribe`, with the observations in `Listed::Hub` and
+/// then each notice: it holds what's listed, keeps the newer of two copies whichever arrives first, and drops one a
+/// notice says is gone.
 #[test]
 fn a_client_holds_the_observations_the_hub_lists_and_its_feed_tells_of() {
     let lines = |workspace: &str, added, rev| Observation::WorkspaceLines {
@@ -208,7 +211,7 @@ fn a_chat_s_subagents_go_by_the_id_their_agent_gives_or_by_their_call() {
     let chat = world.chat(&workspace, SessionStatus::Running, events);
     let (_dir, client) = served(world);
 
-    let (subagents, _) = client.session_subagents(&chat).unwrap();
+    let subagents = session_records(&client, &chat).subagents;
 
     let ids: Vec<_> = subagents.iter().map(|subagent| (subagent.id(), subagent.status)).collect();
     let working = SubagentStatus::Working;
@@ -231,7 +234,7 @@ fn what_a_subagent_has_done_lately_is_what_it_wrote_cut_short() {
     let chat = world.chat(&workspace, SessionStatus::Running, events);
     let (_dir, client) = served(world);
 
-    let (subagents, _) = client.session_subagents(&chat).unwrap();
+    let subagents = session_records(&client, &chat).subagents;
 
     let since = subagents[0].lately.as_ref().and_then(|work| work.since.as_ref()).unwrap();
     assert!(since.cut && since.text.chars().all(|c| c == 'a'), "only what it wrote, cut short: {since:?}");
@@ -288,7 +291,7 @@ fn a_terminal_is_watched_and_read_by_row_number_and_refuses_a_change() {
     let (_dir, client) = served(world);
     let text_of = |row: &TerminalRow| row.spans.iter().map(|span| span.text.as_str()).collect::<String>();
 
-    let watched = client.terminal_watch(&terminal).unwrap();
+    let watched = client.follow(Follow::Terminal { id: terminal.clone() }).unwrap();
     let picture = watched.items.recv_timeout(std::time::Duration::from_secs(10));
     let Ok(SubscriptionItem::TerminalPicture(picture)) = picture else { panic!("no picture came") };
     let (numbering, top) = (picture.numbering, picture.top);
@@ -305,4 +308,48 @@ fn a_terminal_is_watched_and_read_by_row_number_and_refuses_a_change() {
     assert_eq!(history, ["line 0", "line 1", "line 2", "line 3", "line 4", "line 5"]);
     assert_eq!(copied.text, "line");
     assert!(matches!(fit, Err(ClientError::Api(refused)) if refused.code == ErrorCode::Unsupported));
+}
+
+/// A session's own records reach a client only while it follows the session, as an open chat does, so once nothing it
+/// follows of the session is left, they're let go of, while a session still followed by another, such as a subagent's
+/// tab beside its chat, keeps them.
+#[test]
+fn a_client_that_stops_following_a_session_lets_go_of_its_records() {
+    let mut world = World::default();
+    let repo = world.repo("aspen");
+    let workspace = world.workspace(&repo, "elm");
+    let chat =
+        world.chat(&workspace, SessionStatus::Running, vec![subagent_started("toolu_1", "explore", "Look", "Look")]);
+    let session = world.sessions.iter().find(|session| session.id == chat).unwrap().clone();
+    let following = world.following.clone();
+    let (_dir, client) = served(world);
+    let feed = RecordsFeed::start(&client);
+    let held = |feed: &RecordsFeed| feed.snapshot().subagents(&chat).len();
+    let (chat_open, subagent_tab) = (OpenSession::start(&client, &session), OpenSession::start(&client, &session));
+    waiting::thread::until(Duration::from_secs(10), "the chat's subagent to be held", || held(&feed) == 1);
+
+    let followed = |following: &Following| following.count(|level| *level == Level::Session { id: chat.clone() });
+    waiting::thread::until(Duration::from_secs(10), "both to follow the session", || followed(&following) == 2);
+
+    drop(chat_open);
+    // A follower lets go of its source before its subscription, so by the time the hub hears the chat stop following,
+    // the chat has let go of the session's records.
+    waiting::thread::until(Duration::from_secs(10), "the chat to stop following", || followed(&following) == 1);
+    let while_the_tab_follows = held(&feed);
+    drop(subagent_tab);
+
+    waiting::thread::until(Duration::from_secs(10), "the subagent to be let go of", || held(&feed) == 0);
+    assert_eq!(while_the_tab_follows, 1);
+}
+
+/// The records of the session `id`, as following it lists them first.
+fn session_records(client: &Client, id: &protocol::model::SessionId) -> SessionRecords {
+    let followed = client.follow_session(id, protocol::model::Seq::new(1)).unwrap();
+    match followed.items.recv_timeout(std::time::Duration::from_secs(10)) {
+        Ok(SubscriptionItem::Listed(listed)) => {
+            let Listed::Session(records) = *listed else { panic!("not a session's records: {listed:?}") };
+            records
+        }
+        other => panic!("not where the session stands: {other:?}"),
+    }
 }

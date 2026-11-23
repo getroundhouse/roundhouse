@@ -115,7 +115,7 @@ fn cancelling_a_sign_in_has_the_hub_stop_waiting_and_puts_its_panel_away(cx: &mu
     ui.click("git-cancel");
 
     assert!(!ui.has("git-panel"));
-    let hubs = || stack.client().records_list().unwrap().github_sign_ins;
+    let hubs = || stack.client().records().unwrap().github_sign_ins;
     crate::support::wait_until("the hub to cancel it", || {
         hubs().first().is_some_and(|sign_in| sign_in.status == GithubSignInStatus::Cancelled)
     });

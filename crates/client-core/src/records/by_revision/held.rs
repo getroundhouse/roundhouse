@@ -100,6 +100,17 @@ impl<T: Revised> ByRevision<T> {
     }
 }
 
+impl<T: Revised> ByRevision<T> {
+    /// Lets go of every copy, and every removal, of what `of` says, as of a level a client no longer follows, so
+    /// nothing of it is held, and following it again takes in whatever comes. Returns whether it dropped a copy.
+    pub(in super::super) fn let_go(&mut self, of: impl Fn(&T::Key) -> bool) -> bool {
+        let before = self.held.len();
+        self.held.retain(|key, _| !of(key));
+        self.removed.retain(|key, _| !of(key));
+        self.held.len() != before
+    }
+}
+
 /// Whether the newest list taken in, at `listed`, already says what a copy or a removal of `key` at `rev` says.
 fn listed_already<T: Revised>(key: &T::Key, rev: Rev, listed: Rev) -> bool {
     T::in_every_list(key) && rev != Rev::default() && rev <= listed

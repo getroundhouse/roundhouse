@@ -1,12 +1,14 @@
 use super::feed::Folding;
 use super::frames::{end_connection, read_frames};
 use super::sent_call::SentCall;
+use super::subscribing::Channels;
 use super::transport::{Closer, Transport};
 use super::{commands, lines, queueing};
 use parking_lot::Mutex;
 use protocol::client::github::GithubUpdate;
+use protocol::client::listed::Listed;
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubNotice, Reply as _, Request, subscriptions,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubNotice, Reply as _, Request,
 };
 use protocol::event::SessionEvent;
 use protocol::frame;
@@ -89,11 +91,14 @@ pub enum SubscriptionItem {
     /// Replaces any streaming tail held so far.
     Tail(Tail),
     Delta(StreamDelta),
-    /// Only on a feed subscription.
+    /// A change to a record or an observation of what's followed.
     Notice(Box<HubNotice>),
+    /// Where what's followed stands, as a list of all of it at its level, as [`Listed`] says.
+    Listed(Box<Listed>),
     /// Only on a terminal's.
     Terminal(TerminalUpdate),
-    /// Only on one to what GitHub says of what's shown.
+    /// What GitHub says of an issue or a pull request followed, or of a workspace's own pull request, at the hub's
+    /// level.
     Github(Box<GithubUpdate>),
     /// Only on a terminal's that watches it.
     TerminalPicture(Box<TerminalPicture>),
@@ -112,43 +117,13 @@ pub enum Ended {
 /// and ends, so its reader can start again from where it got to rather than queue without limit.
 pub(super) const SUBSCRIPTION_CAPACITY: usize = 4096;
 
-/// Dropping it tells the hub to stop sending.
-pub struct Subscription {
-    pub id: u64,
-    pub items: flume::Receiver<SubscriptionItem>,
-    pub(super) connection: Arc<Inner>,
-}
-
-impl Subscription {
-    /// Why it ended, once its channel has closed. `None` while it's still going.
-    pub fn ended(&self) -> Option<Ended> {
-        if self.connection.lagged.lock().contains(&self.id) {
-            Some(Ended::FellBehind)
-        } else if *self.connection.disconnected.lock() {
-            Some(Ended::Disconnected)
-        } else {
-            None
-        }
-    }
-}
-
-impl Drop for Subscription {
-    fn drop(&mut self) {
-        // In this order, so a delivery under way can't mark it as fallen behind after it's gone.
-        self.connection.subscriptions.lock().remove(&self.id);
-        self.connection.lagged.lock().remove(&self.id);
-        // Not waiting for the reply: this can run on any thread, and the reply doesn't matter.
-        let _ = self.connection.unsubscribe(self.id);
-    }
-}
-
 type PendingReply = flume::Sender<std::result::Result<ClientResponse, ClientError>>;
 
 pub(super) struct Inner {
     pub(super) writer: Mutex<Box<dyn Write + Send>>,
     pub(super) pending: Mutex<HashMap<u64, PendingReply>>,
-    pub(super) subscriptions: Mutex<HashMap<u64, flume::Sender<SubscriptionItem>>>,
-    /// Subscriptions ended because their readers fell behind.
+    pub(super) subscriptions: Mutex<Channels>,
+    /// The channels of subscriptions ended because their readers fell behind.
     pub(super) lagged: Mutex<HashSet<u64>>,
     pub(super) next_id: AtomicU64,
     /// Set once the reader has finished, or a write has failed, so a later call can't wait forever.
@@ -170,11 +145,6 @@ pub(super) struct Inner {
 }
 
 impl Inner {
-    /// Asks the hub to stop following `subscription_id`, without waiting for its reply, which is dropped when it comes.
-    pub(super) fn unsubscribe(&self, subscription_id: u64) -> Result<()> {
-        self.send_only(subscriptions::SessionUnsubscribe { subscription_id }.into_request())
-    }
-
     /// Sends `request` without waiting for its reply, which the reader drops, since nothing waits for it.
     pub(super) fn send_only(&self, request: ClientRequest) -> Result<()> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
@@ -216,7 +186,7 @@ impl Client {
         let inner = Arc::new(Inner {
             writer: Mutex::new(writer),
             pending: Mutex::new(HashMap::new()),
-            subscriptions: Mutex::new(HashMap::new()),
+            subscriptions: Mutex::new(Channels::default()),
             lagged: Mutex::new(HashSet::new()),
             next_id: AtomicU64::new(1),
             disconnected: Mutex::new(false),

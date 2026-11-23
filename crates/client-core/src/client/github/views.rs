@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use protocol::client::github::GithubShown;
+use protocol::client::github::{GithubShown, GithubUpdate};
 use protocol::model::{PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen, Workspace};
 
 use super::held::GithubHeld;
@@ -11,8 +11,9 @@ use super::source::GithubSource;
 use crate::client::Client;
 use crate::client::follow::Follow;
 
-/// What one hub says of GitHub, of what every view made from this shows, kept current until every clone of this, and
-/// every view, has gone. It carries on from a new connection given to [`GithubFeed::reconnect`].
+/// What one hub says of GitHub, of every workspace's own pull request and of what every view made from this shows,
+/// kept current until every clone of this, and every view, has gone. It carries on from a new connection given to
+/// [`GithubFeed::reconnect`].
 #[derive(Clone)]
 pub struct GithubFeed {
     follow: Follow<GithubHeld>,
@@ -26,7 +27,7 @@ impl GithubFeed {
         GithubFeed { follow, next_view: Arc::new(AtomicU64::new(0)) }
     }
 
-    /// Carries on on a new connection, telling the hub again what's shown.
+    /// Carries on on a new connection, following again what's shown.
     pub fn reconnect(&self, client: &Client) {
         self.follow.reconnect(client);
     }
@@ -44,28 +45,28 @@ impl GithubFeed {
         self.follow.read(|held| held.reference(ask))
     }
 
-    /// `workspace`'s pull request, as the hub said while a view shows it. `None` until the hub has looked.
+    /// `workspace`'s pull request, as the hub said. `None` until the hub has looked.
     pub fn pull_request(&self, workspace: &Workspace) -> Option<PullRequestFound> {
         self.follow.read(|held| held.pull_request(&workspace.id))
     }
 
     /// The repository GitHub last showed the default none of, where `workspace`'s branch's pull requests are, as the hub
-    /// said while a view shows it, so what [`GithubFeed::pull_request`] says is only what was known before. `None` from
+    /// said, so what [`GithubFeed::pull_request`] says is only what was known before. `None` from
     /// a hub from before it said.
     pub fn unseen(&self, workspace: &Workspace) -> Option<RepositoryUnseen> {
         self.follow.read(|held| held.unseen(&workspace.id))
     }
 
-    /// Whether the hub has said what it knows of `workspace`'s pull request while a view shows it, even that it hasn't
-    /// looked, as it does once the cache it reads from has forgotten it. A hub too old to say never has, since what it
-    /// keeps on the workspace's record is in a form this build doesn't read.
+    /// Whether the hub has said what it knows of `workspace`'s pull request, even that it hasn't looked, as it does
+    /// once the cache it reads from has forgotten it.
     pub fn said_pull_request(&self, workspace: &Workspace) -> bool {
         self.follow.read(|held| held.said_pull_request(&workspace.id))
     }
 
-    /// Whether the hub is too old to say what GitHub says of what's shown, until a new connection.
-    pub fn unsupported(&self) -> bool {
-        self.follow.read(|held| held.unsupported)
+    /// Takes in what the hub said of a workspace's own pull request, at the hub's level, telling each view that shows
+    /// it.
+    pub(in crate::client) fn take(&self, update: GithubUpdate) {
+        self.follow.quietly(|held| held.apply(update));
     }
 }
 
@@ -85,8 +86,8 @@ impl GithubView {
         self.feed.follow.wake();
     }
 
-    /// Says that what the hub said of something this view shows changed, or that the hub turned out to be too old to
-    /// say. It holds one signal at a time, so changes nobody has looked at yet gather into one.
+    /// Says that what the hub said of something this view shows changed. It holds one signal at a time, so changes
+    /// nobody has looked at yet gather into one.
     pub fn changed(&self) -> &flume::Receiver<()> {
         &self.changed
     }

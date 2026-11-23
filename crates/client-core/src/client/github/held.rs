@@ -1,4 +1,5 @@
-//! What's held of GitHub: what each view shows, and what the hub has sent of all of it.
+//! What's held of GitHub: what each view shows, what the hub has sent of the issues and pull requests they show, and
+//! what it sends of every workspace's own pull request.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -11,9 +12,8 @@ pub(super) struct GithubHeld {
     /// By ID, which is in the order they were made, so all they show is said in the same order each time.
     views: BTreeMap<u64, Shown>,
     references: HashMap<ReferenceAsk, ReferenceRead>,
+    /// Of every workspace, which the hub's level sends.
     pull_requests: HashMap<WorkspaceId, Own>,
-    /// Whether the hub is too old to send what GitHub says, until a new connection.
-    pub(super) unsupported: bool,
 }
 
 /// What the hub said of a workspace's own pull request: what was found, `None` where it said it hasn't looked, and
@@ -60,11 +60,11 @@ impl GithubHeld {
         all
     }
 
-    /// Lets go of what the hub sent of what no view shows now, since the hub sends it again once one does.
+    /// Lets go of what the hub sent of the issues and pull requests no view shows now, since the hub sends it again once
+    /// one does. Every workspace's own pull request is kept, since the hub sends what changes of each.
     pub(super) fn forget_unshown(&mut self) {
         let shown = self.shown();
         self.references.retain(|ask, _| shown.references.contains(ask));
-        self.pull_requests.retain(|id, _| shown.workspaces.contains(id));
     }
 
     /// Takes in `update`, telling each view that shows what it's of. Returns whether it changed anything.
@@ -91,13 +91,6 @@ impl GithubHeld {
             let _ = view.changed.try_send(());
         }
         true
-    }
-
-    /// Tells every view something changed, as when the hub turns out to be too old to say what it shows.
-    pub(super) fn tell_all(&self) {
-        for view in self.views.values() {
-            let _ = view.changed.try_send(());
-        }
     }
 
     pub(super) fn reference(&self, ask: &ReferenceAsk) -> Option<ReferenceRead> {

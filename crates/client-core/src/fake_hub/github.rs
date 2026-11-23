@@ -1,10 +1,10 @@
 //! What a fake hub says to what it's asked of GitHub that isn't a change it refuses: who `gh` on its machine is,
-//! connecting that login, looking for an app's installations, writing an app's manifest, and what GitHub says of what
-//! a client shows.
+//! connecting that login, looking for an app's installations, writing an app's manifest, and what GitHub says of an
+//! issue or a pull request, and of every workspace's own pull request.
 
-use protocol::client::github::{GithubSubscribe, GithubUpdate};
+use protocol::client::github::GithubUpdate;
 use protocol::client::github_apps::{GithubAppManifest, GithubAppManifestWrite};
-use protocol::client::{ApiError, ClientResponse, ErrorCode, HubFrame};
+use protocol::client::{ApiError, ClientResponse, ErrorCode};
 use protocol::model::{PullRequestFound, ReferenceAsk, ReferenceRead};
 
 use super::serve::{Answer, Outcome, read_only};
@@ -49,23 +49,18 @@ pub(super) fn reference(world: &World, ask: &ReferenceAsk) -> ReferenceRead {
     found.map_or(ReferenceRead::Missing, |reference| ReferenceRead::Found { reference: Box::new(reference.clone()) })
 }
 
-/// What a hub sends at once of what `subscribe` shows, since nothing here changes after: each chip as the world has
-/// it, and each workspace's pull request as a read would find it, from the world's. One whose repository GitHub showed
-/// none of is what was known before, which is the world's pull request, if it has one, and otherwise not looked for.
-pub(super) fn shown(world: &World, subscribe: GithubSubscribe) -> Vec<HubFrame> {
-    let GithubSubscribe { subscription_id, shown } = subscribe;
-    world.github_shown.lock().push(shown.clone());
-    let references = (shown.references.iter())
-        .map(|ask| GithubUpdate::Reference { reference: ask.clone(), read: reference(world, ask) });
-    let pull_requests =
-        shown.workspaces.iter().filter(|id| world.workspaces.iter().any(|workspace| workspace.id == **id)).map(|id| {
-            let own = world.pull_requests.get(id).cloned();
-            let unseen = world.unseen.get(id).cloned();
-            let found = match &unseen {
-                Some(_) => own.map(|own| PullRequestFound { pull_request: Some(own) }),
-                None => Some(PullRequestFound { pull_request: own }),
-            };
-            GithubUpdate::PullRequest { workspace: id.clone(), found, unseen }
-        });
-    references.chain(pull_requests).map(|update| HubFrame::Github { subscription_id, update }).collect()
+/// What GitHub says of every workspace's own pull request, as a read would find it, from the world's, as a hub sends it
+/// at its level. One whose repository GitHub showed none of is what was known before, which is the world's pull
+/// request, if it has one, and otherwise not looked for.
+pub(super) fn own_pull_requests(world: &World) -> impl Iterator<Item = GithubUpdate> + '_ {
+    world.workspaces_listed(true).into_iter().map(|workspace| {
+        let id = workspace.id;
+        let own = world.pull_requests.get(&id).cloned();
+        let unseen = world.unseen.get(&id).cloned();
+        let found = match &unseen {
+            Some(_) => own.map(|own| PullRequestFound { pull_request: Some(own) }),
+            None => Some(PullRequestFound { pull_request: own }),
+        };
+        GithubUpdate::PullRequest { workspace: id, found, unseen }
+    })
 }

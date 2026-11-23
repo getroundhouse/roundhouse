@@ -22,7 +22,7 @@ fn a_wait_s_line_says_where_its_pull_request_stands_and_stop_calls_it_off(cx: &m
     ui.new_workspace();
     // Its worker reads the address, so the hub knows which repository on GitHub its pull requests are of.
     ui.wait("the repository's address", |_| {
-        stack.client().records_list().unwrap().repos.iter().any(|repo| repo.origin.url().is_some())
+        stack.client().records().unwrap().repos.iter().any(|repo| repo.origin.url().is_some())
     });
     let chat = ui.active_chat();
     ui.input(r#"mcp:wait_for_pull_requests {"pull_requests":[7],"until":"merged"}"#);

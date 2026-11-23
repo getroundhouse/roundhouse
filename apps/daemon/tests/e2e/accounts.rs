@@ -63,7 +63,7 @@ pub(crate) fn log_out(stack: &Stack) {
 
 /// The record of the account `id`.
 fn account(client: &Client, id: &AccountId) -> Option<Account> {
-    client.records_list().unwrap().accounts.into_iter().find(|account| &account.id == id)
+    client.records().unwrap().accounts.into_iter().find(|account| &account.id == id)
 }
 
 /// The record of the account the session names.
@@ -90,7 +90,7 @@ fn a_chat_names_the_account_its_agent_launched_under_and_the_feed_announces_what
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     assert_eq!(session.account, None, "no agent has launched yet");
-    let feed = client.feed_subscribe().unwrap();
+    let feed = client.follow(protocol::client::subscriptions::Follow::Hub).unwrap();
 
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);

@@ -185,7 +185,7 @@ fn whats_in_the_new_workspace_dialog_is_kept_with_its_files_across_a_restart_and
     stack.kill_hub();
     stack.start_hub();
     let client = stack.client();
-    assert_eq!(client.records_list().unwrap().new_workspace_draft, Some(kept));
+    assert_eq!(client.records().unwrap().new_workspace_draft, Some(kept));
     assert_eq!(client.new_workspace_draft_file_read(file).unwrap(), notes.data);
     client.new_workspace_draft_file_remove(file).unwrap();
     assert!(client.new_workspace_draft_file_read(file).is_ok(), "the hub keeps a file the draft names");

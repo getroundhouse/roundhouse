@@ -83,7 +83,7 @@ fn files_given_back_to_the_dialog_fit_as_many_as_a_prompt_carries_and_it_says_wh
     ui.wait("which of too many didn't fit", |ui| ui.view().error.clone().is_some_and(|e| e.contains(&last)));
     assert_eq!(ui.view().records().workspaces().len(), before, "too many: nothing was made");
     ui.wait("the hub to keep those that fit", |_| {
-        let kept = stack.client().records_list().unwrap().new_workspace_draft.unwrap();
+        let kept = stack.client().records().unwrap().new_workspace_draft.unwrap();
         kept.text.is_empty() && kept.files.len() == MAX_PER_PROMPT
     });
 

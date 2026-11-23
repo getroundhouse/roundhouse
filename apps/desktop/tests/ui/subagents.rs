@@ -222,11 +222,14 @@ fn a_long_title_gives_way_to_the_button_a_prompt_after_is_in_the_outline_at_its_
     assert!(ui.has(tick(row)), "its tick is at the row it's drawn in");
     let workspace = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.workspace().id.clone());
     assert_eq!(records_held(&ui, &chat), 1);
+    // This test's hold on the chat's transcript, which would keep it, and what it follows, past its pane.
+    drop(transcript);
 
     stack.client().workspace_archive(&workspace, false).unwrap();
 
     ui.wait("its pane to go", |ui| !ui.view().panes.contains_key(&workspace));
-    assert_eq!(records_held(&ui, &chat), 0, "an archived workspace's chats let go of their subagents' records");
+    // As each of its chats' transcripts goes, and with it what it followed of the chat's session.
+    ui.wait("an archived workspace's chats to let go of their subagents' records", |ui| records_held(ui, &chat) == 0);
 }
 
 /// A tab opened on the subagent a call started, by that call, as one opened as soon as its call shows can be, shows the

@@ -20,8 +20,6 @@ mod laws;
 mod of_session;
 mod snapshot;
 
-pub(crate) use of_session::{BySession, OfSession};
-
 pub use of_session::subagent_named;
 pub use snapshot::{Changes, InWorkspace, Snapshot};
 

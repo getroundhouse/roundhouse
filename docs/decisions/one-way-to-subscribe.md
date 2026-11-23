@@ -1,6 +1,6 @@
 # A client follows everything through one kind of subscription, at one of a few fixed levels
 
-**Status:** Decided, not built.
+**Status:** Decided, and built.
 **First recorded:** 2026-11-22, in #2407.
 
 A client tells the hub what it follows: the hub, a workspace, a session, a terminal, or an issue or a pull request. For each, the hub sends where it stands and then every change. What a client follows is also the hub's signal to keep it current. `docs/principles/serving.md` has the rules.

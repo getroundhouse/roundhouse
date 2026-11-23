@@ -10,7 +10,10 @@ use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, Reply
 use protocol::model::{PromptLine, Seq, Session};
 
 use super::super::{FollowError, OpenSession};
-use super::{answered_simply, refused, requests_until_unsubscribed, session, start_hub_answering, until};
+use super::{
+    answered_simply, follows_session, refused, refusing_every_start, requests_until_unsubscribed, session,
+    start_hub_answering, until,
+};
 use crate::{Client, ClientError};
 
 /// A session the hub has deleted, so it refuses to follow it.
@@ -25,13 +28,19 @@ fn start_hub(socket: &Path, lists: Vec<ReplyOutcome>) -> flume::Receiver<ClientR
             Some(lists.lock().pop_front().unwrap_or_else(|| {
                 ReplyOutcome::Error(ApiError::new(ErrorCode::Internal, "asked for more lists than the test expects"))
             }))
-        } else if matches!(request, ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe { id, .. }) if id.as_str() == GONE)
-        {
-            Some(refused(ErrorCode::NotFound, "no such session"))
+        } else if follows(request, GONE) {
+            Some(refusing_every_start(request, ErrorCode::NotFound, "no such session"))
         } else {
             answered_simply(request)
         }
     })
+}
+
+/// Whether `request` starts following the session `id`.
+fn follows(request: &ClientRequest, id: &str) -> bool {
+    let ClientRequest::Subscribe(subscribe) = request else { return false };
+    let follows = |start: &subscriptions::Subscription| matches!(&start.follow, subscriptions::Follow::Session { id: followed, .. } if followed.as_str() == id);
+    subscribe.start.iter().any(follows)
 }
 
 fn listed(lines: Vec<PromptLine>) -> ReplyOutcome {
@@ -64,7 +73,7 @@ fn a_hub_too_old_to_list_prompts_is_followed_without_them_and_not_asked_again() 
     assert!(connected);
     let requests = requests_until_unsubscribed(&heard, 1);
     assert_eq!(lists_asked(&requests), 1, "{requests:?}");
-    let subscribed = requests.iter().position(|r| matches!(r, ClientRequest::SessionSubscribe(_)));
+    let subscribed = requests.iter().position(|r| follows_session(r).is_some());
     let listed = requests.iter().position(|r| matches!(r, ClientRequest::SessionPromptList(_)));
     assert!(subscribed < listed, "it subscribes before it lists, so the list misses nothing: {requests:?}");
 }
@@ -117,7 +126,7 @@ fn a_session_thats_been_deleted_is_let_go_of_rather_than_reported() {
 
     open.follow.changed.recv_timeout(Duration::from_secs(10)).expect("never heard back");
     let mut requests = std::iter::from_fn(|| heard.recv_timeout(Duration::from_secs(10)).ok());
-    assert!(requests.any(|r| matches!(r, ClientRequest::SessionSubscribe(_))), "it never asked");
+    assert!(requests.any(|r| follows_session(&r).is_some()), "it never asked");
     let errors = open.take_errors();
     assert!(errors.is_empty(), "{errors:?}");
     assert!(!open.follow.connected());

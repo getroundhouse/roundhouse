@@ -2,14 +2,14 @@ use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use protocol::attachment::AttachmentBytes;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::log::ReadLimit;
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ObservationNotice,
-    ReplyOutcome, admin, attachments, comments, drafts, files, github_accounts, log, proposals, records, references,
-    sessions, subscriptions, workspaces,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome, admin,
+    attachments, comments, drafts, files, github_accounts, log, proposals, records, references, sessions, workspaces,
 };
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
@@ -18,7 +18,7 @@ use protocol::model::{CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, R
 
 use super::base_pages::{opened, paged};
 use super::github;
-use super::logs::{prompt_lines, read, subscribe, subscribe_places};
+use super::logs::{prompt_lines, read};
 use super::stand_in::{claude, fixed_pairing, status, version};
 use super::world::{LoginSupport, NOW_MS, World};
 
@@ -39,11 +39,20 @@ pub fn serve(socket: &Path, world: World) {
 /// Answers each request in turn, but for one left unanswered. A subscription's events follow its reply straight
 /// away, and nothing comes later, because nothing here changes.
 fn serve_connection(world: &World, stream: UnixStream) {
+    let connection = NEXT_CONNECTION.fetch_add(1, Ordering::Relaxed);
+    serve_requests(world, connection, stream);
+    world.following.ended(connection);
+}
+
+/// The number the next connection to a fake hub is given, for what it follows.
+static NEXT_CONNECTION: AtomicU64 = AtomicU64::new(0);
+
+fn serve_requests(world: &World, connection: u64, stream: UnixStream) {
     let mut writer = stream.try_clone().unwrap();
     for line in BufReader::new(stream).split(b'\n') {
         let Ok(line) = line else { return };
         let Ok(ClientFrame { id, request }) = frame::decode::<ClientFrame>(&line) else { return };
-        let (outcome, then) = match answer(world, request) {
+        let (outcome, then) = match answer(world, connection, request) {
             Ok(Outcome::Reply(response, then)) => (ReplyOutcome::Response(response), then),
             Ok(Outcome::Never) => continue,
             Err(error) => (ReplyOutcome::Error(error), Vec::new()),
@@ -67,7 +76,7 @@ pub(super) enum Outcome {
 }
 
 #[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
-fn answer(world: &World, request: ClientRequest) -> Answer {
+fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
     use ClientRequest as R;
     use ClientResponse as C;
     let reply = |response| Ok(Outcome::Reply(response, Vec::new()));
@@ -77,8 +86,8 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             hub_version: version(world).to_string(),
         })),
         R::HubStatus => reply(C::HubStatus(status(world))),
+        R::Subscribe(subscribe) => Ok(super::following::subscribe(world, connection, subscribe)),
         R::RepoList => reply(C::Repos(records::Repos { repos: world.repos_listed() })),
-        R::RecordsList => reply(C::Records(world.records())),
         R::ModelsFor(asked) => reply(C::ModelList(world.model_list_for(&asked)?)),
         // As the app's own hub describes its agent, even as an older hub, so a screen of one draws the agent as it
         // would, but for what makes a login, which a hub from before hubs kept them doesn't say.
@@ -102,7 +111,6 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             let references = references.iter().map(|ask| github::reference(world, ask)).collect();
             reply(C::References(references::References { references }))
         }
-        R::GithubSubscribe(subscribe) => Ok(Outcome::Reply(C::Ok, github::shown(world, subscribe))),
         R::CommentList(comments::CommentList { workspace_id }) => {
             reply(C::Comments(comments::Comments { comments: world.comments_listed(&workspace_id) }))
         }
@@ -174,10 +182,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             let through = theirs.last().map_or(Place::new(0), |event| event.place);
             reply(C::Found(Found { places: places.collect(), through }))
         }
-        R::SessionSubscribe(subscriptions::SessionSubscribe { id, from_seq, subscription_id }) => {
-            subscribe(world, &id, from_seq, subscription_id)
-        }
-        R::SessionReadPlaces(_) | R::SessionSubscribePlaces(_) if world.reads_every_event_together => {
+        R::SessionReadPlaces(_) if world.reads_every_event_together => {
             Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't read the agent's own events apart"))
         }
         R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, .. }) => {
@@ -188,27 +193,6 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             let events =
                 read(ReadLimit::asked(limit, max_bytes), world.placed_from(&id, subagent.as_ref(), from_place));
             reply(C::PlacedEvents(log::PlacedEvents { events, last_place }))
-        }
-        R::SessionSubscribePlaces(subscriptions::SessionSubscribePlaces {
-            id,
-            subagent,
-            from_place,
-            subscription_id,
-        }) => {
-            let subagent = world.subagent_named(&id, subagent.as_ref());
-            subscribe_places(world, &id, subagent.as_ref(), from_place, subscription_id)
-        }
-        R::SessionSubagents(records::SessionSubagents { id }) => {
-            world.session(&id)?;
-            reply(C::Subagents(records::Subagents { subagents: world.subagents_of(&id), rev: Rev::default() }))
-        }
-        R::SessionRepliesHeard(records::SessionRepliesHeard { id }) => {
-            reply(C::RepliesHeard(records::RepliesHeard { replies: world.replies_heard_of(&id)?, rev: Rev::default() }))
-        }
-        R::SessionProposals(records::SessionProposals { id }) => {
-            world.session(&id)?;
-            let proposals = world.proposals.get(&id).cloned().unwrap_or_default();
-            reply(C::Proposals(records::Proposals { proposals, rev: Rev::default() }))
         }
         // The world keeps only each proposal's newest revision, so it reads no earlier one.
         R::ProposalRevisionsRead(proposals::ProposalRevisionsRead { id, from, .. }) => {
@@ -223,12 +207,6 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             };
             reply(C::ProposalRevisions(proposals::ProposalRevisions { revisions, newest: current.number }))
         }
-        R::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id }) => {
-            let notice =
-                |notice: &ObservationNotice| HubFrame::Notice { subscription_id, notice: notice.clone().into() };
-            Ok(Outcome::Reply(C::Ok, world.feed.iter().map(notice).collect()))
-        }
-        R::SessionUnsubscribe(_) => reply(C::Ok),
         R::AttachmentRead(attachments::AttachmentRead { id, .. }) => {
             let data = world.attachments.get(&id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
             reply(C::AttachmentData(attachments::AttachmentData { data: AttachmentBytes::new(data.clone()) }))
@@ -335,10 +313,19 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::PairingWait(_)
         | R::DeviceList
         | R::DeviceRevoke(_)
-        // No client sends it until clients follow only through it.
-        | R::Subscribe(_)
+        // What only a client of version 3 sends, which follows through a request of its own for each of what it follows,
+        // and lists the records, as a client of this build doesn't.
+        | R::RecordsList
+        | R::FeedSubscribe(_)
+        | R::SessionSubscribe(_)
+        | R::SessionSubscribePlaces(_)
+        | R::SessionUnsubscribe(_)
+        | R::SessionSubagents(_)
+        | R::SessionProposals(_)
+        | R::SessionRepliesHeard(_)
+        | R::GithubSubscribe(_)
+        | R::TerminalWatch(_)
         | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't know that request")),
-        R::TerminalWatch(watch) => super::terminals::watch(world, &watch),
         R::TerminalRows(rows) => super::terminals::rows(world, &rows),
         R::TerminalBounds(bounds) => super::terminals::bounds(world, &bounds),
         R::TerminalText(text) => super::terminals::text(world, &text),

@@ -8,7 +8,7 @@ use crate::rename::Renaming;
 use crate::settings::PageId;
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
 use client_core::records::Snapshot;
-use gpui_kit::{App, AppContext as _, Context, PathPromptOptions, Window};
+use gpui_kit::{AppContext as _, Context, PathPromptOptions, Window};
 use in_view::InView;
 use protocol::model::{Repo, RepoId, WorkspaceId, WorkspaceStatus};
 use protocol::prompt::Prompt;
@@ -358,15 +358,9 @@ impl AppView {
         cx.notify();
     }
 
-    /// Lets go of the panes of workspaces that have gone or been archived. A pane's chats close with it, without
-    /// closing one by one, so it lets go of their subagents' and proposals' records itself.
-    pub(in super::super) fn drop_hidden_panes(&mut self, records: &Snapshot, cx: &App) {
-        self.panes.retain(|id, pane| {
-            let shown = records.workspace(id).is_some_and(|w| w.status != WorkspaceStatus::Archived);
-            if !shown {
-                pane.read(cx).let_go_of_session_records();
-            }
-            shown
-        });
+    /// Lets go of the panes of workspaces that have gone or been archived. A pane's chats close with it, and each lets
+    /// go of what it followed of its session as its transcript goes.
+    pub(in super::super) fn drop_hidden_panes(&mut self, records: &Snapshot) {
+        self.panes.retain(|id, _| records.workspace(id).is_some_and(|w| w.status != WorkspaceStatus::Archived));
     }
 }

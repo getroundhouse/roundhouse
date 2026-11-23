@@ -5,11 +5,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
+use protocol::client::subscriptions::{Follow as Followed, Subscribe};
 use protocol::client::{ClientRequest, ClientResponse, ReplyOutcome};
 
 use super::{Follow, Source};
 use crate::client::{Client, Result, Subscription, SubscriptionItem};
-use crate::stand_in_hub::{Does, listen};
+use crate::stand_in_hub::{Does, listen, subscribed};
 
 const WAIT: Duration = Duration::from_secs(10);
 
@@ -38,7 +39,7 @@ impl Source for Made {
 
     fn resume(&mut self, client: &Client, _: &Mutex<Wanted>) -> Result<Subscription> {
         self.seen.lock().push(Seen::Resumed);
-        client.terminal_watch(&"t".into())
+        client.follow(Followed::Terminal { id: "t".into() })
     }
 
     fn apply(&mut self, _: &Client, _: &Mutex<Wanted>, _: SubscriptionItem) -> Result<bool> {
@@ -63,10 +64,21 @@ impl Source for Made {
 fn start_hub(socket: &std::path::Path) -> flume::Receiver<ClientRequest> {
     let (asked, told) = flume::unbounded();
     listen(socket, move |request| {
+        let does = if let ClientRequest::Subscribe(subscribe) = &request {
+            subscribed(subscribe, |_, _| Vec::new())
+        } else {
+            Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Ok)))
+        };
         let _ = asked.send(request);
-        Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Ok)))
+        does
     });
     told
+}
+
+/// Whether `request` starts following the terminal, and stops nothing.
+fn starts(request: &ClientRequest) -> bool {
+    let ClientRequest::Subscribe(Subscribe { stop, start }) = request else { return false };
+    stop.is_empty() && matches!(start.as_slice(), [one] if one.follow == Followed::Terminal { id: "t".into() })
 }
 
 fn next(asked: &flume::Receiver<ClientRequest>, what: &str) -> ClientRequest {
@@ -88,7 +100,7 @@ fn a_source_not_wanted_is_let_go_until_it_is_wanted_again_on_the_connection_it_t
     let seen = Arc::new(Mutex::new(Vec::new()));
     let made = Made { seen: seen.clone() };
     let follow = Follow::start(&Client::connect(&first, "test").unwrap(), Wanted::default(), move || made);
-    assert!(matches!(next(&first_asked, "the first watch"), ClientRequest::TerminalWatch(_)));
+    assert!(starts(&next(&first_asked, "the first watch")));
 
     want_until(&follow, Some(Instant::now() + Duration::from_millis(50)));
     let let_go = next(&first_asked, "letting go once it wasn't wanted");
@@ -100,7 +112,9 @@ fn a_source_not_wanted_is_let_go_until_it_is_wanted_again_on_the_connection_it_t
     want_until(&follow, None);
     let watched_again = next(&second_asked, "the watch once it was wanted again");
 
-    assert!(matches!(let_go, ClientRequest::SessionUnsubscribe(_)), "{let_go:?}");
+    assert!(
+        matches!(&let_go, ClientRequest::Subscribe(Subscribe { stop, start }) if stop.len() == 1 && start.is_empty())
+    );
     assert_eq!(after_reconnecting.iter().filter(|seen| **seen == Seen::Resumed).count(), 1, "{after_reconnecting:?}");
-    assert!(matches!(watched_again, ClientRequest::TerminalWatch(_)), "{watched_again:?}");
+    assert!(starts(&watched_again), "{watched_again:?}");
 }

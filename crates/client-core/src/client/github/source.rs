@@ -1,38 +1,62 @@
-//! Following what the hub says of GitHub: one subscription, which says all that every view shows, again under the same
-//! ID each time that changes.
+//! Following what the hub says of GitHub, of what every view shows: a workspace at its own level while a view shows
+//! its pull request in full, which the hub then reads more often, and each issue or pull request a chip shows, all
+//! through one subscription, which changes what it follows in one request as what's shown changes. What the hub says of
+//! every workspace's own pull request comes from following the hub, as [`crate::RecordsFeed`] does.
 
 use parking_lot::Mutex;
-use protocol::client::github::{GithubShown, GithubSubscribe};
+use protocol::client::subscriptions::Follow;
+use protocol::model::{Level, WorkspaceId};
 
 use super::held::GithubHeld;
+use crate::client::feed::Reaches;
 use crate::client::follow::Source;
-use crate::client::{Client, ClientError, Result, Subscription, SubscriptionItem};
+use crate::client::subscribing::Changing;
+use crate::client::{Client, Result, Subscription, SubscriptionItem};
 
-/// The subscription on this connection, and what it last said is shown.
+/// What changes what the subscription on this connection follows, and where what's held through a workspace's level
+/// is let go of once it isn't followed.
 #[derive(Default)]
 pub(super) struct GithubSource {
-    subscription: Option<u64>,
-    said: Option<GithubShown>,
+    changing: Option<Changing>,
+    records: Option<Reaches>,
+    /// The workspaces followed at their own level.
+    workspaces: Vec<WorkspaceId>,
+}
+
+impl GithubSource {
+    /// Takes `wanted` to be what's followed now, letting go of what was held only through a workspace no longer in it.
+    /// A start the hub refused, such as of a workspace it no longer has, is left out until what's shown next changes,
+    /// or a new connection, and the views show it as not known.
+    fn followed_now(&mut self, wanted: &[Follow]) {
+        let now = (wanted.iter())
+            .filter_map(|follow| match follow.level() {
+                Level::Workspace { id } => Some(id),
+                Level::Hub
+                | Level::Session { .. }
+                | Level::Terminal { .. }
+                | Level::Reference { .. }
+                | Level::Unknown => None,
+            })
+            .collect::<Vec<_>>();
+        let gone = std::mem::replace(&mut self.workspaces, now).into_iter().filter(|id| !self.workspaces.contains(id));
+        if let Some(records) = &self.records {
+            for id in gone {
+                records.change(|records| records.let_go_of(&Level::Workspace { id: id.clone() }));
+            }
+        }
+    }
 }
 
 impl Source for GithubSource {
     type Held = GithubHeld;
 
     fn resume(&mut self, client: &Client, held: &Mutex<GithubHeld>) -> Result<Subscription> {
-        self.subscription = None;
-        let shown = held.lock().shown();
-        let subscribed = client.subscribe(|subscription_id| GithubSubscribe { subscription_id, shown: shown.clone() });
-        let unsupported = subscribed.as_ref().is_err_and(ClientError::is_unsupported);
-        {
-            let mut held = held.lock();
-            if held.unsupported != unsupported {
-                held.unsupported = unsupported;
-                held.tell_all();
-            }
-        }
-        let subscription = subscribed?;
-        self.subscription = Some(subscription.id);
-        self.said = Some(shown);
+        self.changing = None;
+        self.records = Some(client.inner.folding.reaches());
+        let wanted = followed(&held.lock());
+        let (subscription, _refused) = client.follow_all(wanted.clone())?;
+        self.followed_now(&wanted);
+        self.changing = Some(subscription.changing());
         Ok(subscription)
     }
 
@@ -41,28 +65,27 @@ impl Source for GithubSource {
         Ok(held.lock().apply(*update))
     }
 
-    /// Tells the hub what's shown, if it has changed since it last said, and lets go of what no view shows now.
+    /// Follows what's shown now, if that has changed, and lets go of what no view shows.
     fn asked(&mut self, connection: Option<&Client>, held: &Mutex<GithubHeld>, _: &dyn Fn()) -> Result<bool> {
-        let shown = {
+        let wanted = {
             let mut held = held.lock();
             held.forget_unshown();
-            held.shown()
+            followed(&held)
         };
-        let (Some(client), Some(subscription_id)) = (connection, self.subscription) else { return Ok(false) };
-        if self.said.as_ref() == Some(&shown) {
-            return Ok(false);
-        }
-        client.call(GithubSubscribe { subscription_id, shown: shown.clone() })?;
-        self.said = Some(shown);
+        let (Some(client), Some(changing)) = (connection, &self.changing) else { return Ok(false) };
+        changing.follow_only(client, wanted.clone())?;
+        self.followed_now(&wanted);
         Ok(false)
     }
 
     fn reconnected(&mut self) {
-        *self = Self::default();
+        self.changing = None;
     }
+}
 
-    /// A hub too old to say what GitHub says, which [`GithubHeld::unsupported`] says.
-    fn does_without(&self, error: &ClientError) -> bool {
-        error.is_unsupported()
-    }
+/// What to follow for all that the views show.
+fn followed(held: &GithubHeld) -> Vec<Follow> {
+    let shown = held.shown();
+    let workspaces = shown.closely.into_iter().map(|id| Follow::Workspace { id });
+    workspaces.chain(shown.references.into_iter().map(|reference| Follow::Reference { reference })).collect()
 }

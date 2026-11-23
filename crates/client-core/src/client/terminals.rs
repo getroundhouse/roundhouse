@@ -2,7 +2,7 @@
 
 use protocol::client::Request as _;
 use protocol::client::terminals::{
-    TerminalBounds, TerminalClose, TerminalFit, TerminalOpen, TerminalRows, TerminalText, TerminalTyped, TerminalWatch,
+    TerminalBounds, TerminalClose, TerminalFit, TerminalOpen, TerminalRows, TerminalText, TerminalTyped,
 };
 use protocol::model::{Terminal, TerminalId, WorkspaceId};
 use protocol::terminal::{
@@ -10,18 +10,12 @@ use protocol::terminal::{
     TerminalRowsReply, TerminalSize, TerminalTextReply, Typed,
 };
 
-use super::{Client, Result, Subscription};
+use super::{Client, Result};
 
 impl Client {
     /// Opens a terminal in the workspace, with an ID new to it, so opening it again opens it once.
     pub fn terminal_open(&self, workspace_id: &WorkspaceId, id: &TerminalId, size: TerminalSize) -> Result<Terminal> {
         self.call(TerminalOpen { workspace_id: workspace_id.clone(), id: id.clone(), size })
-    }
-
-    /// Watches the terminal: a picture of what it shows, then what it lacks of the newest picture whenever the last
-    /// has been written, as `SubscriptionItem::TerminalPicture`s, and its shell's end as a `SubscriptionItem::Terminal`.
-    pub fn terminal_watch(&self, id: &TerminalId) -> Result<Subscription> {
-        self.subscribe(|subscription_id| TerminalWatch { id: id.clone(), subscription_id })
     }
 
     /// Rows of the terminal's history from `from`, by their numbers in `numbering`, for a view scrolled back past the

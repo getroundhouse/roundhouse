@@ -107,6 +107,6 @@ pub(crate) fn push(client: &Client, workspace: &Workspace) {
 /// Once a repository's record has the address its worker read.
 pub(crate) fn wait_for_address(client: &Client) {
     wait_until("the repository's address", || {
-        client.records_list().unwrap().repos.iter().any(|repo| repo.origin.url().is_some())
+        client.records().unwrap().repos.iter().any(|repo| repo.origin.url().is_some())
     });
 }

@@ -83,12 +83,12 @@ impl ChatView {
         }
     }
 
-    /// Shows `session` in place of the chat shown, letting go of what that one followed and opened over it.
+    /// Shows `session` in place of the chat shown, letting go of what that one followed, as its transcript goes, and
+    /// what it opened over it.
     fn switch_to(&mut self, session: Session, cx: &mut Context<Self>) {
         if self.session() == Some(&session.id) {
             return;
         }
-        self.let_go();
         self.over = Over::default();
         self.error = None;
         self.show(session, cx);

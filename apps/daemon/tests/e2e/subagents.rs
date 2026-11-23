@@ -5,8 +5,9 @@
 #![cfg(test)]
 
 use client_core::session_log::{By, Row, SessionLog};
-use client_core::{Client, OpenSession, RecordsFeed, View};
+use client_core::{Client, OpenSession, RecordsFeed, Subscription, View};
 use protocol::capability::calls::Call;
+use protocol::client::subscriptions::{Follow, LogFrom};
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TaskOutcome};
 use protocol::model::{Place, SessionId, Subagent, SubagentId, SubagentStatus, ToolUseId};
 
@@ -59,6 +60,12 @@ fn reported(follower: &Follower) -> bool {
     })
 }
 
+/// Follows the agent's own events in session `id`, or the subagent `subagent`'s, from the first.
+fn follow_places(client: &Client, id: &SessionId, subagent: Option<&SubagentId>) -> Subscription {
+    let from = LogFrom::Place { subagent: subagent.cloned(), place: Place::new(1) };
+    client.follow(Follow::Session { id: id.clone(), from: Some(from) }).unwrap()
+}
+
 #[test]
 fn the_agents_own_events_and_a_subagents_are_read_and_followed_apart() {
     let stack = Stack::start();
@@ -67,9 +74,7 @@ fn the_agents_own_events_and_a_subagents_are_read_and_followed_apart() {
     let report = Gate::new(&stack, "report");
     client.session_prompt(&session.id, &format!("agent-until:{report}:Look around"), None).unwrap();
     let (call, id) = subagent(&client, &session.id);
-    let (own, subagent) = (client.session_subscribe_places(&session.id, None, Place::new(1)).unwrap(), {
-        client.session_subscribe_places(&session.id, Some(&id), Place::new(1)).unwrap()
-    });
+    let (own, subagent) = (follow_places(&client, &session.id, None), follow_places(&client, &session.id, Some(&id)));
     let (mut agent, mut work) = (Follower::default(), Follower::default());
 
     work.drain_until(&subagent, "the subagent to write", |work| work.tail_text().contains("There's"));
@@ -107,7 +112,7 @@ fn the_agents_own_events_and_a_subagents_are_read_and_followed_apart() {
     let by_its_call = Some(SubagentId::of_call(&call));
     let (named, _) = client.session_read_places(&session.id, by_its_call.as_ref(), Place::new(1), 1000).unwrap();
     assert_eq!(named, work.events, "read by its call");
-    let followed = client.session_subscribe_places(&session.id, by_its_call.as_ref(), Place::new(1)).unwrap();
+    let followed = follow_places(&client, &session.id, by_its_call.as_ref());
     let mut by_call = Follower::default();
     by_call.drain_until(&followed, "its events, by its call", |by_call| by_call.events.len() >= work.events.len());
     assert_eq!(by_call.events, work.events, "followed by its call");
@@ -141,19 +146,16 @@ fn a_view_holds_only_the_agents_own_events_or_one_subagents_and_the_feed_keeps_t
     wait_until("the subagent's", || work.read(held).is_some_and(|events| events == hub_has(Some(&id))));
     assert_eq!((own.read(SessionLog::by), work.read(SessionLog::by)), (By::Place, By::Place));
     assert!(own.read(held).unwrap().iter().all(|event| event.subagent.is_none()));
-    // Asked for only once the feed is following and the subagent has finished, so its record can come only from
-    // the list the feed makes when it's asked.
+    // The views follow the session, and its records with it, which the feed keeps, as each view's subscription lists
+    // them first, and then tells of each change.
     wait_until("the feed to follow", || feed.connected());
-    // One the hub doesn't have, which comes before every real one, can't keep the rest from being listed.
-    feed.follow_session_records(&"!missing".into());
-    feed.follow_session_records(&session.id);
     let finished = |feed: &RecordsFeed| {
         let record = feed.snapshot().subagent(&session.id, &id).map(|record| Subagent::clone(record));
         record.filter(|record| record.status == SubagentStatus::Finished)
     };
     wait_until("the feed to keep its record", || finished(&feed).is_some());
     assert_eq!(finished(&feed).unwrap().report.as_deref(), Some("There's a README here."));
-    // Nor stop the feed when every session is listed again on a new connection.
+    // Nor stop the feed on a new connection.
     feed.reconnect(&stack.client());
     wait_until("the feed to follow again", || feed.connected());
     assert!(feed.take_errors().is_empty(), "{:?}", feed.take_errors());

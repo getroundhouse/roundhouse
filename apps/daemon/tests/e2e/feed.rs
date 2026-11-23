@@ -68,7 +68,7 @@ impl Sidebar {
 fn the_feed_reports_what_a_sidebar_shows() {
     let stack = Stack::start();
     let client = stack.client();
-    let feed = client.feed_subscribe().unwrap();
+    let feed = client.follow(protocol::client::subscriptions::Follow::Hub).unwrap();
 
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     assert_eq!(next_notice_of(&feed, "the repo", shown), HubNotice::Repo(repo.clone()));
@@ -153,7 +153,7 @@ fn a_client_copy_of_the_records_keeps_up_with_the_hub() {
     };
     wait_until("the copy to match a list", || {
         let mut listed = HubRecords::default();
-        listed.apply_list(client.records_list().unwrap());
+        listed.apply_list(client.records().unwrap());
         shown(&feed.snapshot()) == shown(&listed.snapshot())
     });
     assert_eq!(feed.snapshot().comments(&workspace.id), [kept]);

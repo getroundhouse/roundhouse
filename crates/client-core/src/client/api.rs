@@ -1,22 +1,19 @@
 //! One typed call for each hub request.
 
-use std::sync::atomic::Ordering;
-
 use protocol::capability::approvals::Decision;
 use protocol::client::{
-    HubStatus, Request, admin, agent, comments, conversation, log, proposals, records, references, sessions,
-    subscriptions, waits, workspaces,
+    HubStatus, admin, agent, comments, conversation, log, proposals, records, references, sessions, waits, workspaces,
 };
 use protocol::event::SessionEvent;
 use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DeviceId, DiffComment, DiffSide,
-    Ending, GitDiff, GitStatus, HubSettings, HubSettingsChange, MessageId, OwnPullRequest, Proposal, Records,
-    ReferenceAsk, ReferenceRead, ReplyHeard, Repo, RepoId, Rev, Seq, Session, SessionId, SpokenThrough, Subagent,
-    SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
+    Ending, GitDiff, GitStatus, HubSettings, HubSettingsChange, MessageId, OwnPullRequest, Proposal, ReferenceAsk,
+    ReferenceRead, Repo, RepoId, Seq, Session, SessionId, SpokenThrough, SubagentId, TerminalId, WaitId, Workspace,
+    WorkspaceId,
 };
 
-use super::{Client, Result, Subscription, hub_is_missing, subscription_channel};
+use super::{Client, Result, hub_is_missing};
 
 impl Client {
     pub fn hub_status(&self) -> Result<HubStatus> {
@@ -49,12 +46,6 @@ impl Client {
 
     pub fn repo_add(&self, path: &str) -> Result<Repo> {
         self.call(records::RepoAdd { path: path.to_string() })
-    }
-
-    /// Every record as of one revision. Follow the feed first. A hub older than this refuses it, as
-    /// `is_unsupported` says.
-    pub fn records_list(&self) -> Result<Records> {
-        self.call(records::RecordsList)
     }
 
     pub fn repo_list(&self) -> Result<Vec<Repo>> {
@@ -194,39 +185,6 @@ impl Client {
         Ok(events.into_iter().find(|event| event.seq == waiting.seq))
     }
 
-    pub fn session_subscribe(&self, id: &SessionId, from_seq: Seq) -> Result<Subscription> {
-        self.subscribe(|subscription_id| subscriptions::SessionSubscribe { id: id.clone(), from_seq, subscription_id })
-    }
-
-    /// The session's subagents, oldest first, with the revision they're as of, which a [`HubNotice::Subagent`] newer
-    /// than it replaces. A hub from before subagents had records refuses it, which
-    /// [`super::ClientError::is_unsupported`] says.
-    ///
-    /// [`HubNotice::Subagent`]: protocol::client::HubNotice::Subagent
-    pub fn session_subagents(&self, id: &SessionId) -> Result<(Vec<Subagent>, Rev)> {
-        let records::Subagents { subagents, rev } = self.call(records::SessionSubagents { id: id.clone() })?;
-        Ok((subagents, rev))
-    }
-
-    /// The session's proposals, oldest first, with the revision they're as of, which a [`HubNotice::Proposal`] newer
-    /// than it replaces. A hub from before proposals refuses it, which [`super::ClientError::is_unsupported`] says.
-    ///
-    /// [`HubNotice::Proposal`]: protocol::client::HubNotice::Proposal
-    pub fn session_proposals(&self, id: &SessionId) -> Result<(Vec<Proposal>, Rev)> {
-        let records::Proposals { proposals, rev } = self.call(records::SessionProposals { id: id.clone() })?;
-        Ok((proposals, rev))
-    }
-
-    /// How each of the session's replies said out loud ended, with the revision they're as of, which a
-    /// [`HubNotice::ReplyHeard`] newer than it replaces. A hub from before these refuses it, which
-    /// [`super::ClientError::is_unsupported`] says.
-    ///
-    /// [`HubNotice::ReplyHeard`]: protocol::client::HubNotice::ReplyHeard
-    pub fn session_replies_heard(&self, id: &SessionId) -> Result<(Vec<ReplyHeard>, Rev)> {
-        let records::RepliesHeard { replies, rev } = self.call(records::SessionRepliesHeard { id: id.clone() })?;
-        Ok((replies, rev))
-    }
-
     /// Answers the revision `revision` of the proposal `id`, choosing `chosen`, one option for each decision, with
     /// `note`, and the hub tells its agent. Sending the same `client_request_id` again answers with the proposal as it
     /// was answered.
@@ -239,24 +197,6 @@ impl Client {
     /// proposal as it was answered.
     pub fn proposal_another_round(&self, round: proposals::ProposalAnotherRound) -> Result<Proposal> {
         self.call(round)
-    }
-
-    /// Follows changes to repositories, workspaces and sessions. See [`subscriptions::FeedSubscribe`].
-    pub fn feed_subscribe(&self) -> Result<Subscription> {
-        self.subscribe(|subscription_id| subscriptions::FeedSubscribe { subscription_id })
-    }
-
-    /// Sends the subscription `request` makes for an ID of its own.
-    pub(super) fn subscribe<R: Request<Reply = ()>>(&self, request: impl FnOnce(u64) -> R) -> Result<Subscription> {
-        // Registered before the request goes out, because items can arrive before the reply.
-        let subscription_id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
-        let (items_tx, items) = subscription_channel();
-        self.inner.subscriptions.lock().insert(subscription_id, items_tx);
-        if let Err(e) = self.call(request(subscription_id)) {
-            self.inner.subscriptions.lock().remove(&subscription_id);
-            return Err(e);
-        }
-        Ok(Subscription { id: subscription_id, items, connection: self.inner.clone() })
     }
 
     /// See [`agent::SessionDecide`]. A hub older than this refuses it, as `is_unsupported` says.

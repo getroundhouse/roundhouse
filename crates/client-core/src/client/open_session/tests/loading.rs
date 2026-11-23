@@ -1,4 +1,4 @@
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, log};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, log, subscriptions};
 use protocol::model::{Place, Seq, Session};
 use std::path::Path;
 use std::time::Duration;
@@ -26,21 +26,44 @@ pub(in crate::client) fn answers(outcome: Option<ReplyOutcome>) -> Does {
 }
 
 /// What the hub answers that a test doesn't say: a read with no events, of a session that goes to [`LAST_SEQ`] by
-/// `seq` and to [`LAST_PLACE`] by place, nothing for letting go of a subscription, which is sent without waiting for a
-/// reply, and Ok for anything else.
+/// `seq` and to [`LAST_PLACE`] by place, a start of following that it takes, sending nothing, nothing for letting go of
+/// a subscription, which is sent without waiting for a reply, and Ok for anything else.
 pub(in super::super) fn answered_simply(request: &ClientRequest) -> Option<ReplyOutcome> {
-    if matches!(request, ClientRequest::SessionRead(_)) {
+    if let ClientRequest::Subscribe(subscribe) = request {
+        let subscribed = ClientResponse::Subscribed(subscriptions::Subscribed::default());
+        (!subscribe.start.is_empty()).then_some(ReplyOutcome::Response(subscribed))
+    } else if matches!(request, ClientRequest::SessionRead(_)) {
         Some(ReplyOutcome::Response(ClientResponse::Events(log::Events { events: Vec::new(), last_seq: LAST_SEQ })))
     } else if matches!(request, ClientRequest::SessionReadPlaces(_)) {
         let placed = ClientResponse::PlacedEvents(log::PlacedEvents { events: Vec::new(), last_place: LAST_PLACE });
         Some(ReplyOutcome::Response(placed))
     } else if matches!(request, ClientRequest::SessionCompactionList(_)) {
         Some(ReplyOutcome::Response(ClientResponse::Compactions(log::Compactions { compactions: Vec::new() })))
-    } else if matches!(request, ClientRequest::SessionUnsubscribe(_)) {
-        None
     } else {
         Some(ReplyOutcome::Response(ClientResponse::Ok))
     }
+}
+
+/// Where in the session's log `request` starts following it, if it starts following a session, which is from its
+/// first `seq` when it doesn't say.
+pub(in crate::client) fn follows_session(request: &ClientRequest) -> Option<subscriptions::LogFrom> {
+    let ClientRequest::Subscribe(subscribe) = request else { return None };
+    subscribe.start.iter().find_map(|start| {
+        let subscriptions::Follow::Session { from, .. } = &start.follow else { return None };
+        Some(from.clone().unwrap_or(subscriptions::LogFrom::Seq { seq: Seq::FIRST }))
+    })
+}
+
+/// A hub's refusal of every start `request` asks for, with `code`, as a hub that doesn't have them refuses them.
+pub(in crate::client) fn refusing_every_start(request: &ClientRequest, code: ErrorCode, message: &str) -> ReplyOutcome {
+    let ClientRequest::Subscribe(subscribe) = request else { return refused(code, message) };
+    let refused = (subscribe.start.iter())
+        .map(|start| subscriptions::Refused {
+            subscription_id: start.subscription_id,
+            error: ApiError::new(code, message),
+        })
+        .collect();
+    ReplyOutcome::Response(ClientResponse::Subscribed(subscriptions::Subscribed { refused }))
 }
 
 pub(in super::super) fn session() -> Session {
@@ -55,6 +78,11 @@ pub(in super::super) fn until(what: &str, done: impl FnMut() -> bool) {
     waiting::thread::until(Duration::from_secs(10), format!("never {what}"), done);
 }
 
+/// Whether `request` stops following, and starts nothing.
+fn lets_go(request: &ClientRequest) -> bool {
+    matches!(request, ClientRequest::Subscribe(subscribe) if subscribe.start.is_empty() && !subscribe.stop.is_empty())
+}
+
 /// Every request the hub is sent until the follower's last subscription is let go, which is the last thing the
 /// follower sends once every handle on it has gone.
 pub(in super::super) fn requests_until_unsubscribed(
@@ -62,7 +90,7 @@ pub(in super::super) fn requests_until_unsubscribed(
     subscriptions: usize,
 ) -> Vec<ClientRequest> {
     let mut requests = Vec::new();
-    while requests.iter().filter(|r| matches!(r, ClientRequest::SessionUnsubscribe(_))).count() < subscriptions {
+    while requests.iter().filter(|r| lets_go(r)).count() < subscriptions {
         let Ok(request) = heard.recv_timeout(Duration::from_secs(10)) else {
             panic!("the follower never let go: {requests:?}");
         };

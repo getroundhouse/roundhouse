@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyElement, AnyWindowHandle, App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render,
     SharedString, Styled as _, Subscription, Task, Window, WindowOptions, div,
 };
-use protocol::model::{RepoId, SessionId, WorkspaceId};
+use protocol::model::{RepoId, WorkspaceId};
 use protocol::pairing::PairingLink;
 
 use super::Panel;
@@ -238,27 +238,15 @@ impl MobileApp {
     pub(super) fn open_chat(&mut self, chat: Entity<ChatView>, window: &mut Window, cx: &mut Context<Self>) {
         let events = cx.subscribe_in(&chat, window, |app, _, event: &ChatEvent, window, cx| match event {
             ChatEvent::Back => {
-                app.close_chat(None, cx);
+                app.open.chat = None;
                 cx.notify();
             }
             ChatEvent::GoToWorkspace(workspace) => app.open_workspace(workspace, window, cx),
         });
-        let opening = chat.read(cx).session().cloned();
-        self.close_chat(opening.as_ref(), cx);
+        // The chat that was open goes, and lets go of what it followed of its session as it does.
         self.open = Open { chat: Some(OpenChat { chat, _events: events }), panel: None };
         self.error = None;
         cx.notify();
-    }
-
-    /// Closes the open chat, and lets go of its records, unless `opening`, the chat that opens in its place, shows the
-    /// same one. Following a chat's records isn't counted, so letting go after the new chat follows them would stop
-    /// both.
-    fn close_chat(&mut self, opening: Option<&SessionId>, cx: &mut Context<Self>) {
-        let Some(open) = self.open.chat.take() else { return };
-        let closing = open.chat.read(cx);
-        if closing.session() != opening {
-            closing.let_go();
-        }
     }
 
     /// Opens a panel over the list, or closes the one that's open.

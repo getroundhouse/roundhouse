@@ -64,6 +64,7 @@ fn each_page_fetched_is_told_of_as_it_is_put_in_place() {
         last_seq: LAST_SEQ,
         placed: true,
         read_from: client.hub_version().to_string(),
+        records: None,
     };
     let mut log = SessionLog::new(LAST_SEQ);
     log.focus_on(300..301, Some(300));

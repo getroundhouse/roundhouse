@@ -204,7 +204,7 @@ pub(super) const KEEP_AWAKE: &str = "Keep computer awake while agents are workin
 
 /// What the hub's own settings say about keeping the computer awake, asked by a second client.
 fn hub_keeps_awake(stack: &Stack) -> bool {
-    stack.client().records_list().unwrap().hub_settings.unwrap().keep_awake
+    stack.client().records().unwrap().hub_settings.unwrap().keep_awake
 }
 
 /// What the switch for the hub allowing what Claude's safety checks ask about is called.
@@ -223,7 +223,7 @@ fn keep_awake_switch(ui: &mut Ui<'_>) -> (bool, bool) {
 
 /// What the hub's own settings say about allowing a tool's use itself, asked by a second client.
 fn hub_allows_what_full_access_asks(stack: &Stack) -> Option<bool> {
-    stack.client().records_list().unwrap().hub_settings.unwrap().allow_asked_in_full_access
+    stack.client().records().unwrap().hub_settings.unwrap().allow_asked_in_full_access
 }
 
 /// Each of the hub's own settings that General shows, as one walk through one window, since each switch is the same

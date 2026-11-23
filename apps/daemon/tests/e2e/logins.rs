@@ -14,7 +14,7 @@ use crate::carrying_on::restart;
 use crate::support::{Stack, assistant_text, wait_for_turn_end, wait_until};
 
 fn listed(client: &Client, id: &AccountId) -> Account {
-    client.records_list().unwrap().accounts.into_iter().find(|account| account.id == *id).unwrap()
+    client.records().unwrap().accounts.into_iter().find(|account| account.id == *id).unwrap()
 }
 
 /// Every file in the hub's logins directory, by what's in it.
@@ -79,7 +79,7 @@ fn an_agent_on_another_machine_runs_under_the_login_the_hub_holds_and_its_chat_n
     let as_older_clients_ask = client.session_account(&session.id).unwrap();
 
     assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=a-made-up-token"), "{text}");
-    assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
+    assert_eq!(client.records().unwrap().accounts.len(), 1, "no account but the login's");
     assert_eq!(as_older_clients_ask.account.logged_in_as(), Some(&connected.id));
     assert_eq!(as_older_clients_ask.limits, listed(&client, &connected.id).limits);
     assert!(!asked_under_a_token(&stack), "nothing asked the CLI whose the token is");
@@ -107,6 +107,6 @@ fn an_agent_left_running_under_a_held_login_is_still_filed_under_it_once_the_hub
     let launches = events.iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count();
     assert_eq!(launches, 1, "the agent the last hub launched carried on");
     assert_eq!(client.session_get(&session.id).unwrap().account, Some(connected.id));
-    assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
+    assert_eq!(client.records().unwrap().accounts.len(), 1, "no account but the login's");
     assert!(!asked_under_a_token(&stack), "nothing asked the CLI whose the token is");
 }

@@ -28,7 +28,7 @@ fn a_change_reaches_every_client_and_outlives_the_hub() {
     drop((client, other));
     stack.kill_hub();
     stack.start_hub();
-    assert_eq!(stack.client().records_list().unwrap().hub_settings, Some(off));
+    assert_eq!(stack.client().records().unwrap().hub_settings, Some(off));
 }
 
 #[test]

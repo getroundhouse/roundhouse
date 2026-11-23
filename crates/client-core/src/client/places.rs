@@ -1,10 +1,10 @@
 //! The calls for the agent's own events, or one subagent's, which are read and followed by place.
 
-use protocol::client::{log, subscriptions};
+use protocol::client::log;
 use protocol::event::SessionEvent;
 use protocol::model::{Place, SessionId, SubagentId};
 
-use super::{Client, Result, Subscription};
+use super::{Client, Result};
 
 impl Client {
     /// Returns the agent's own events, or those of the subagent `subagent`, from `from_place` on, and the place
@@ -27,21 +27,5 @@ impl Client {
         };
         let log::PlacedEvents { events, last_place } = self.call(read)?;
         Ok((events, last_place))
-    }
-
-    /// Follows the agent's own events, or one subagent's, by place. See [`subscriptions::SessionSubscribePlaces`].
-    pub fn session_subscribe_places(
-        &self,
-        id: &SessionId,
-        subagent: Option<&SubagentId>,
-        from_place: Place,
-    ) -> Result<Subscription> {
-        let subagent = subagent.cloned();
-        self.subscribe(|subscription_id| subscriptions::SessionSubscribePlaces {
-            id: id.clone(),
-            subagent,
-            from_place,
-            subscription_id,
-        })
     }
 }

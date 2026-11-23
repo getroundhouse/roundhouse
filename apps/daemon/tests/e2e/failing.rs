@@ -61,7 +61,7 @@ fn a_request_being_tried_again_is_in_the_tail_until_the_agent_answers() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
+    let subscription = client.follow_session(&session.id, Seq::new(1)).unwrap();
     let answer = Gate::new(&stack, "answer");
     client.session_prompt(&session.id, &format!("retry-until:{answer}; say:answered"), None).unwrap();
 
@@ -73,6 +73,7 @@ fn a_request_being_tried_again_is_in_the_tail_until_the_agent_answers() {
                 SubscriptionItem::Delta(delta) => tail.apply(&delta),
                 SubscriptionItem::Tail(snapshot) => *tail = snapshot,
                 SubscriptionItem::Notice(_)
+                | SubscriptionItem::Listed(_)
                 | SubscriptionItem::Terminal(_)
                 | SubscriptionItem::TerminalPicture(_)
                 | SubscriptionItem::Github(_) => {}
