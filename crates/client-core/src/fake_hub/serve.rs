@@ -106,6 +106,7 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         R::HubStatus => reply(C::HubStatus(status(world))),
         R::Subscribe(subscribe) => Ok(super::following::subscribe(world, connection, subscribe)),
         R::RepoList => reply(C::Repos(records::Repos { repos: world.repos_listed() })),
+        R::GithubRepositoryList(asked) => reply(C::GithubRepositories(github::repositories_seen(world, &asked.search))),
         R::ModelsFor(asked) => reply(C::ModelList(world.model_list_for(&asked)?)),
         // As the app's own hub describes its agent, even as an older hub, so a screen of one draws the agent as it
         // would, but for what makes a login, which a hub from before hubs kept them doesn't say.
@@ -274,7 +275,6 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         | R::HubConfigure(_)
         | R::RepoAdd(_)
         | R::RepoAddLinked(_)
-        | R::GithubRepositoryList(_)
         | R::WorkspaceArchive(_)
         | R::WorkspaceRestore(_)
         | R::WorkspaceRename(_)

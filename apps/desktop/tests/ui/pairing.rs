@@ -96,7 +96,7 @@ fn connecting_another_hub_previews_it_keeps_errors_inline_and_switches_with_this
     ui.input(&pairing.link.to_string());
     ui.press("enter");
     ui.wait("the app to switch to the remote hub", |ui| !ui.has_dialog() && ui.has("first-switch-local"));
-    assert!(ui.off("add-project"), "adding a repository is local to that hub's machine");
+    assert!(ui.on("add-project"), "a project can be added from what that hub's GitHub accounts can see");
 
     let devices = remote.client().device_list().unwrap();
     assert_eq!(devices.len(), 1);

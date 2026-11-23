@@ -120,7 +120,7 @@ impl AppView {
             "Add a project",
             body,
             look::button("first-add-project", look::ButtonKind::Main, look::ControlSize::Large, "Add project")
-                .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
+                .on_click(cx.listener(|t, _, window, cx| t.add_repository(window, cx))),
         )
     }
 

@@ -17,6 +17,20 @@ const DRAFT: &str = "Keep the badge at its own width";
 const SAMPLE_PAIR_LINK: &str = "roundhouse://pair?v=1&name=Mac%20Studio&fp=q3B0ZWxsZXJzLWZpbmdlcnByaW50LXNoYTI1Ni1oYXN&code=9f3k-7m2p&host=mac-studio.local:7867&host=100.64.0.7:7867";
 
 pub(crate) const SCREENS: &[Screen] = &[
+    // Add project's dialog on this computer's hub, with the repositories its GitHub accounts can see, one chosen.
+    Screen {
+        name: "add-project",
+        spec: "sidebar.md",
+        world: Some(with_github_repositories),
+        frame: Frame::Dialog,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Click("add-project"),
+            Step::WaitFor("github-repository-R_roundhouse"),
+            Step::Click("github-repository-R_roundhouse"),
+            Step::MoveAway,
+        ],
+    },
     Screen {
         name: "sidebar-on-home",
         spec: "sidebar.md",
@@ -113,6 +127,27 @@ pub(crate) const SCREENS: &[Screen] = &[
         ],
     },
 ];
+
+/// The repositories the hub's two GitHub accounts can see, one of them private and seen by one alone.
+fn with_github_repositories() -> World {
+    use protocol::client::github_repositories::GithubRepositorySeen;
+    use protocol::model::GithubRepositoryName;
+    let mut world = conversation();
+    let seen = |id: &str, repository: &'static str, private, seen_by: &[&str]| GithubRepositorySeen {
+        id: id.into(),
+        repository: GithubRepositoryName::named(repository),
+        private,
+        seen_by: seen_by.iter().map(|name| (*name).into()).collect(),
+    };
+    world.github_says.repositories = vec![
+        seen("R_badges", "ana-p/badges", false, &["ana-p"]),
+        seen("R_notes", "ana-p/notes", true, &["ana-p"]),
+        seen("R_roundhouse", "getroundhouse/roundhouse", false, &["ana-p", "roundhouse-bot"]),
+        seen("R_site", "getroundhouse/site", true, &["roundhouse-bot"]),
+        seen("R_signal", "signal-box/signal-box", false, &["ana-p"]),
+    ];
+    world
+}
 
 fn with_saved_hub() -> World {
     let mut world = conversation();

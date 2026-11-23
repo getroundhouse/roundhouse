@@ -20,8 +20,7 @@ const GROUP: &str = "workspaces-heading";
 /// Before it, the button that chooses the order, while the pointer is on the heading.
 pub(super) fn heading(app: &AppView, connected: bool, cx: &mut Context<AppView>) -> AnyElement {
     let faint = look::colors(cx).text_muted.opacity(0.7);
-    let remote = app.hub.remote.is_some();
-    let can_add = connected && !remote;
+    let can_add = connected;
     h_flex()
         .id(GROUP)
         .group(GROUP)
@@ -33,9 +32,8 @@ pub(super) fn heading(app: &AppView, connected: bool, cx: &mut Context<AppView>)
         .child(
             look::button("add-project", look::ButtonKind::Faint, look::ControlSize::Small, "Add project")
                 .icon(IconName::Plus)
-                .when(connected && remote, |b| b.tooltip("Add projects on that hub’s machine"))
                 .off(!can_add)
-                .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
+                .on_click(cx.listener(|t, _, window, cx| t.add_repository(window, cx))),
         )
         .test_support()
         .into_any_element()

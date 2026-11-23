@@ -199,7 +199,20 @@ impl AppView {
         });
     }
 
-    pub fn add_repository(&mut self, cx: &mut Context<Self>) {
+    /// Opens Add project's dialog, which on this computer's hub also offers a folder here.
+    pub fn add_repository(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(client) = self.client() else { return };
+        let this = cx.weak_entity();
+        let folder = self.hub.remote.is_none().then(|| -> crate::app::add_project::Folder {
+            Box::new(move |cx: &mut gpui_kit::App| {
+                let _ = this.update(cx, Self::add_folder);
+            })
+        });
+        crate::app::add_project::open(client, folder, window, cx);
+    }
+
+    /// Adds the project whose checkout on this computer the person picks, on this computer's hub.
+    pub fn add_folder(&mut self, cx: &mut Context<Self>) {
         let Some(client) = self.client().filter(|_| self.hub.remote.is_none()) else { return };
         let picked = cx.prompt_for_paths(PathPromptOptions {
             files: false,

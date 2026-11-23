@@ -28,7 +28,7 @@ impl AppView {
                 root.on_action(cx.listener(|t, _: &NewWorkspace, window, cx| t.new_workspace_here(window, cx)))
             })
             .when(connected && self.hub.remote.is_none(), |root| {
-                root.on_action(cx.listener(|t, _: &AddRepository, _, cx| t.add_repository(cx)))
+                root.on_action(cx.listener(|t, _: &AddRepository, window, cx| t.add_repository(window, cx)))
             })
             .when(self.can_go_through_history(Way::Back), |root| {
                 root.on_action(cx.listener(|t, _: &GoBack, _, cx| t.go_through_history(Way::Back, cx)))

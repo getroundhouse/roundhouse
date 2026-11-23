@@ -48,6 +48,21 @@ impl Client {
         self.call(records::RepoAdd { path: path.to_string() })
     }
 
+    /// Adds a project by its link alone, with no checkout on the hub's machine, as `RepoAddLinked` says.
+    pub fn repo_add_linked(&self, repository: records::RepoToAdd) -> Result<Repo> {
+        self.call(records::RepoAddLinked { repository })
+    }
+
+    /// The page of the repositories the hub's GitHub accounts can see whose owner and name have `search` in them,
+    /// starting at `after`, as `GithubRepositoryList` says.
+    pub fn github_repository_list(
+        &self,
+        search: &str,
+        after: Option<String>,
+    ) -> Result<protocol::client::github_repositories::GithubRepositories> {
+        self.call(protocol::client::github_repositories::GithubRepositoryList { search: search.to_owned(), after })
+    }
+
     pub fn repo_list(&self) -> Result<Vec<Repo>> {
         Ok(self.call(records::RepoList)?.repos)
     }

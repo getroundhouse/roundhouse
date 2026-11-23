@@ -319,7 +319,8 @@ fn a_rows_lines_show_once_the_hub_has_read_them_and_slide_aside_for_its_button(c
     assert!(alone.right() > button.left() && ui.bounds(lines(&read)).right() <= button.left(), "aside for the button");
 }
 
-/// Create, at the sidebar's top, is off until there's a project to make a workspace in.
+/// Create, at the sidebar's top, is off until there's a project to make a workspace in. The first is added from a
+/// folder here, which Add project's dialog offers on this computer's hub.
 #[gpui_kit::test]
 fn the_heading_adds_the_first_project_and_stays_to_add_another(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -328,6 +329,8 @@ fn the_heading_adds_the_first_project_and_stays_to_add_another(cx: &mut TestAppC
     assert!(ui.off("create"), "with no project to make a workspace in");
 
     ui.click("add-project");
+    ui.wait("the dialog", |ui| ui.has("add-project-folder"));
+    ui.click("add-project-folder");
     let folder = stack.repo();
     ui.cx.simulate_path_prompt_response(move |_| Some(vec![folder]));
 

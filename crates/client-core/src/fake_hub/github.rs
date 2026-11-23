@@ -1,12 +1,13 @@
 //! What a fake hub says to what it's asked of GitHub that isn't a change it refuses: who `gh` on its machine is,
 //! connecting that login, looking for an app's installations, writing an app's manifest, and what GitHub says of an
-//! issue or a pull request, and of every workspace's own pull request, from what its world's [`GithubSays`] holds, in
-//! the form it says.
+//! issue or a pull request, of every workspace's own pull request, and which repositories its accounts can see, from
+//! what its world's [`GithubSays`] holds, in the form it says.
 
 use std::collections::HashMap;
 
 use protocol::client::github::GithubUpdate;
 use protocol::client::github_apps::{GithubAppManifest, GithubAppManifestWrite};
+use protocol::client::github_repositories::{GithubRepositories, GithubRepositorySeen};
 use protocol::client::{ApiError, ClientResponse, ErrorCode};
 use protocol::model::{
     Level, Observation, Observed, OwnPullRequest, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary,
@@ -81,6 +82,8 @@ pub struct GithubSays {
     pub unseen: HashMap<WorkspaceId, RepositoryUnseen>,
     /// The issues and pull requests on GitHub that chats link to, as the hub would have looked them up.
     pub references: Vec<Reference>,
+    /// The repositories the hub's GitHub accounts can see, as it lists them to add a project from.
+    pub repositories: Vec<GithubRepositorySeen>,
     /// Which form the hub sends it in, to a start that reads it as observations, as a hub of this build does unless a
     /// test stands in for an older one.
     pub sends: GithubSends,
@@ -156,4 +159,18 @@ pub(super) fn reference_observed(world: &World, ask: &ReferenceAsk) -> Vec<Obser
 /// `value`, as kept up to date, as what a client follows is.
 fn current<T>(value: T) -> Observed<T> {
     Observed::Current { value }
+}
+
+/// The repositories the world's GitHub accounts can see whose owner and name have `search` in them, whatever its case,
+/// all on one page.
+pub(super) fn repositories_seen(world: &World, search: &str) -> GithubRepositories {
+    let search = search.trim().to_lowercase();
+    let repositories = world
+        .github_says
+        .repositories
+        .iter()
+        .filter(|seen| seen.repository.as_str().to_lowercase().contains(&search))
+        .cloned()
+        .collect();
+    GithubRepositories { repositories, after: None }
 }

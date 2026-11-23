@@ -1,6 +1,7 @@
 //! The window: the sidebar on the left and the selected workspace beside it. Shows the hub's records,
 //! which client-core keeps current, and how client-core's link to the hub stands, giving the link its way to connect.
 
+mod add_project;
 mod build_line;
 mod corner;
 pub(crate) mod device_name;
