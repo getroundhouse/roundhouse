@@ -13,6 +13,7 @@ use protocol::model::{
     ReferenceRead, RepositoryUnseen, WorkspaceId,
 };
 
+use super::as_read;
 use super::views::ShownOfGithub;
 
 /// The observation a key names, where the copy of the hub's records holds it.
@@ -167,7 +168,7 @@ impl GithubHeld {
         let key = ObservationKey::Reference { reference: ask.clone() };
         if let Some(Observation::Reference { said, .. }) = observed(&key) {
             let (said, read_at_ms) = fresh(said)?;
-            return said.read(read_at_ms);
+            return as_read::reference(said, read_at_ms);
         }
         self.references.get(ask).cloned()
     }
@@ -188,7 +189,9 @@ impl GithubHeld {
             }
             _ => None,
         };
-        Some(PullRequestFound { pull_request: own.as_ref().map(|own| own.own(detail, read_at_ms)) })
+        Some(PullRequestFound {
+            pull_request: own.as_ref().map(|own| as_read::own_pull_request(own, detail, read_at_ms)),
+        })
     }
 
     pub(super) fn unseen(&self, workspace: &WorkspaceId, observed: Observed<'_>) -> Option<RepositoryUnseen> {

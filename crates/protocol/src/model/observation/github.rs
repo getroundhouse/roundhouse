@@ -1,13 +1,13 @@
 //! What the hub's observations of GitHub say: an issue or a pull request, as one read of GitHub found it, and a
 //! workspace's own pull request. None holds a time of its own, since when each was read is
-//! [`Observed`](super::Observed)'s, so a read that finds the same says the same. Each is made from, and makes, the
-//! form a read of GitHub has, [`PullRequest`] and [`Reference`], which hold when each part was read.
+//! [`Observed`](super::Observed)'s, so a read that finds the same says the same. Each is made from the form a read of
+//! GitHub has, [`PullRequest`] and [`Reference`], which hold when each part was read.
 
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    Checks, CommitId, GithubRepositoryName, History, Issue, IssueNumber, IssueSummary, Local, OwnPullRequest,
-    PullRequest, PullRequestNumber, Read, Reference, ReferenceRead, Stack, Summary,
+    Checks, CommitId, GithubRepositoryName, History, IssueNumber, IssueSummary, Local, OwnPullRequest, PullRequest,
+    PullRequestNumber, Reference, Stack, Summary,
 };
 
 /// What GitHub says of an issue or a pull request a chip names.
@@ -102,22 +102,6 @@ impl ReferenceSaid {
             Some(Reference::Unknown) => return None,
         })
     }
-
-    /// It as a read of GitHub says it, as read at `read_at_ms`. `None` for one of a kind this build doesn't know.
-    pub fn read(&self, read_at_ms: i64) -> Option<ReferenceRead> {
-        let read = |summary| Read { said: summary, read_at_ms };
-        let reference = match self {
-            ReferenceSaid::Issue(IssueSaid { repository, number, summary }) => Reference::Issue(Issue {
-                repository: repository.clone(),
-                number: *number,
-                summary: read(summary.clone()),
-            }),
-            ReferenceSaid::PullRequest(said) => Reference::PullRequest(said.pull_request(read_at_ms)),
-            ReferenceSaid::Missing => return Some(ReferenceRead::Missing),
-            ReferenceSaid::Unknown => return None,
-        };
-        Some(ReferenceRead::Found { reference: Box::new(reference) })
-    }
 }
 
 impl PullRequestSaid {
@@ -129,41 +113,12 @@ impl PullRequestSaid {
             summary: pull_request.summary.said.clone(),
         }
     }
-
-    /// It as a pull request with its summary alone, read at `read_at_ms`.
-    pub fn pull_request(&self, read_at_ms: i64) -> PullRequest {
-        PullRequest {
-            repository: self.repository.clone(),
-            number: self.number,
-            summary: Read { said: self.summary.clone(), read_at_ms },
-            history: None,
-            stack: None,
-            checks: None,
-        }
-    }
 }
 
 impl OwnSummary {
     /// What `own`'s summary says, and how the worktree stands against it.
     pub fn of(own: &OwnPullRequest) -> Self {
         Self { pull_request: PullRequestSaid::of(&own.pull_request), local: own.local }
-    }
-
-    /// It as a workspace's own pull request, read at `read_at_ms`, with `detail`'s checks, history and stack where
-    /// they're of it at the head its summary is at, and otherwise with none of them, since they're of another.
-    pub fn own(&self, detail: Option<&PullRequestDetail>, read_at_ms: i64) -> OwnPullRequest {
-        let mut pull_request = self.pull_request.pull_request(read_at_ms);
-        let of_it = detail.filter(|detail| {
-            detail.repository == self.pull_request.repository
-                && detail.number == self.pull_request.number
-                && detail.head == self.pull_request.summary.head
-        });
-        if let Some(detail) = of_it {
-            pull_request.checks = detail.checks.clone().map(|said| Read { said, read_at_ms });
-            pull_request.history = detail.history.clone().map(|said| Read { said, read_at_ms });
-            pull_request.stack = detail.stack.clone().map(|said| Read { said, read_at_ms });
-        }
-        OwnPullRequest { pull_request, local: self.local }
     }
 }
 
