@@ -79,8 +79,10 @@ async fn outages_keep_the_last_snapshot_and_access_loss_ends_with_it() {
     assert_eq!(ended.watch.as_ref().unwrap().read_error.as_deref(), Some("access lost"));
 }
 
+/// A read that can't reach a pull request ends each wait that watches it, one that has read nothing yet included, and no
+/// other.
 #[tokio::test]
-async fn a_shared_reads_pr_access_failure_does_not_end_an_unrelated_wait() {
+async fn a_shared_reads_pr_access_failure_ends_each_wait_on_it_and_no_unrelated_one() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let a = pull_request_wait("a");
@@ -90,9 +92,13 @@ async fn a_shared_reads_pr_access_failure_does_not_end_an_unrelated_wait() {
     watch.requested =
         protocol::model::PullRequestSelection::try_from(vec![PullRequestNumber::try_from(9).unwrap()]).unwrap();
     watch.snapshot.pull_requests = vec![protocol::fixtures::pull_request(9)];
+    // On the same pull request as `a`, with none of what it read kept, as a wait from before facets has.
+    let mut c = pull_request_wait("c");
+    c.watch.as_mut().unwrap().snapshot.pull_requests.clear();
     let repository = a.watch.as_ref().unwrap().snapshot.repository.clone();
     hub.store.start_wait(&a).unwrap();
     hub.store.start_wait(&b).unwrap();
+    hub.store.start_wait(&c).unwrap();
     let change = crate::store::SessionChange {
         status: None,
         queue_held: Some(true),
@@ -125,6 +131,9 @@ async fn a_shared_reads_pr_access_failure_does_not_end_an_unrelated_wait() {
     .await;
 
     assert_eq!(hub.store.wait(&a.id).unwrap().ended.unwrap().how, WaitEnd::Unavailable);
+    let unread = hub.store.wait(&c.id).unwrap();
+    assert_eq!(unread.ended.unwrap().how, WaitEnd::Unavailable, "one that has read nothing yet ends too");
+    assert_eq!(unread.watch.unwrap().read_error.as_deref(), Some("PR inaccessible"));
     let untouched = hub.store.wait(&b.id).unwrap();
     assert_eq!(untouched.ended, None);
     assert_eq!(untouched.watch.unwrap().read_error, None);
