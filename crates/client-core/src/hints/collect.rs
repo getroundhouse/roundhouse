@@ -148,7 +148,7 @@ impl HintCollector {
         let workspace = shown.workspace();
         self.add_own_name(&workspace.name);
         self.add_branch(workspace.branch.as_str());
-        if let Some(branches) = &workspace.branches {
+        if let Some(branches) = shown.all().workspace_branches(workspace) {
             if let Some(checked_out) = branches.checked_out() {
                 self.add_branch(checked_out.name.as_str());
             }

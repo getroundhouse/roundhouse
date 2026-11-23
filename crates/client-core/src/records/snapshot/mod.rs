@@ -15,6 +15,7 @@ mod github;
 mod observed;
 mod of_accounts;
 mod of_chats;
+mod of_workspaces;
 pub(super) use by_session::SessionsListed;
 pub(super) use copies::Listed;
 pub use copies::{Changes, InWorkspace, Snapshot};

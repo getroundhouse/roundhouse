@@ -75,7 +75,7 @@ impl WorkersMoving {
 }
 
 fn on_other_builds(records: &Snapshot) -> usize {
-    records.workspaces().iter().filter(|workspace| workspace.worker_build.is_some()).count()
+    records.workspaces().iter().filter(|workspace| records.worker_build(workspace).is_some()).count()
 }
 
 #[cfg(test)]
