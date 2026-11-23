@@ -4,6 +4,7 @@ mod account;
 mod agent;
 mod branches;
 mod cache;
+mod changes;
 mod client_device;
 mod compaction_line;
 mod context;
@@ -41,6 +42,7 @@ pub use account::{
 pub use agent::{AgentDescription, LoginDescription, NotOffered, RunCapabilities};
 pub use branches::{Apart, Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
+pub use changes::{ChangeStatus, ChangeSummary, ChangedFile, FileVersion, LineCounts};
 pub use client_device::ClientDevice;
 pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy};
@@ -62,7 +64,7 @@ pub use hub_update::{HubUpdate, UpdateAttempt};
 pub use interaction::{Interaction, InteractionMode};
 pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
-pub use observation::{LineCounts, Observation, ObservationKey, Observed};
+pub use observation::{Observation, ObservationKey, Observed};
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
 pub use proposal::{
     AnswerProblem, Choice, ChosenOption, MAX_HEADER_CHARS, MAX_NOTE_BYTES, MAX_OPTIONS, MAX_PROPOSAL_BYTES,

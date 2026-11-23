@@ -6,6 +6,14 @@ Facts about git that took an experiment to find, or that more than one place in 
 
 - **Two git commands at once in one repository can fail while one of them is `git worktree add`.** `git worktree add` writes the new worktree's entry in `.git/worktrees/` one file at a time. A command that reads every worktree's entry fails if it finds an entry whose `commondir` file exists and isn't written yet, with `fatal: failed to read .git/worktrees/NAME/commondir`. `git worktree add` is such a command, because it looks for the branch in every other worktree, and `git fetch` is another. Seen on git 2.54. So a worker holds a lock around each of these commands, which `crates/worker/src/git/worktrees/` has.
 
+## Diffs
+
+A worker's change summary reads these, in `crates/worker/src/git/changes/listing.rs`. Seen on git 2.39.
+
+- **`git diff --raw --numstat -z` prints every file's raw entry, then every file's counts, in the same order.** A rename's raw entry ends with its status and score, such as `R100`, then the old path and the new one. Its counts have nothing after the second tab, then the two paths, each ended by a NUL.
+- **git counts no lines of a file larger than `core.bigFileThreshold`, 512 MiB unless set,** and prints `-` for each count, as it does for a binary file.
+- **A diff against a commit gives a file in conflict as `M`,** and not `U`.
+
 ## Config given in the environment
 
 - **git 2.31 is the first to read config from `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>`.** It reads them again on every run, as the command's own config, which wins over the repository's and the person's. So a file named there as `include.path` can be rewritten under a process that's running, and its next `git` reads the new one. A worker gives every process its git config this way (`Files::environment`, in `crates/worker/src/git_credential/files.rs`), and asks its git's version once (`reads_the_config`).

@@ -48,6 +48,30 @@ impl Reply for model::GitDiff {
     }
 }
 
+/// What the worktree at `path` changes against `base_ref`, file by file, as [`model::ChangeSummary`] says, with no
+/// patch. It's for the lines added and removed that the sidebar and Home show, which `docs/spec/sidebar.md` marks not
+/// built, so no hub asks for it yet. A worker from before it refuses it as `Unsupported`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SummarizeChanges {
+    pub path: String,
+    pub base_ref: Option<String>,
+}
+
+impl Request for SummarizeChanges {
+    type Reply = model::ChangeSummary;
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::SummarizeChanges(self)
+    }
+}
+
+impl Reply for model::ChangeSummary {
+    fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
+        let WorkerResponse::ChangeSummary(summary) = response else { return Err(response) };
+        Ok(summary)
+    }
+}
+
 /// Watches the branches of the worktree at `path`, and sends a [`super::WorkerFrame::Branches`] with what they are at
 /// once, and again each time they change, until the worker stops. A later watch replaces it. Replies once it's
 /// watching and has sent that first frame, or found it can't read them, so a hub that waits for the reply has the

@@ -20,6 +20,7 @@ mod agents;
 mod approvals;
 mod calls;
 mod capabilities;
+mod change_summaries;
 mod client_calls;
 mod comments;
 mod compactions;

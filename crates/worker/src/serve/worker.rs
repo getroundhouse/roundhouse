@@ -2,7 +2,7 @@ use super::{agent, connection, moves, outbox, scripts, worktrees};
 use crate::asks::Asks;
 use crate::branch_watch::Whose;
 use crate::deleting::Deleter;
-use crate::git::Clones;
+use crate::git::{ChangeSummaries, Clones};
 use crate::git_credential::{CredentialHelper, GitCredentials};
 use crate::terminals::Terminals;
 use crate::tools::Tools;
@@ -21,8 +21,8 @@ use protocol::paths::AGENTS_DIR;
 use protocol::prompt::Prompt;
 use protocol::worker::{
     AccountFor, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead,
-    GitDiff, GitStatus, ReadRepoUrl, Received, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TerminalStop,
-    TitleFor, ToolsServing, WorkerFrame, WorkerRequest, WorkerResponse,
+    GitDiff, GitStatus, ReadRepoUrl, Received, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply,
+    SummarizeChanges, TerminalStop, TitleFor, ToolsServing, WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 use std::collections::HashMap;
@@ -114,6 +114,8 @@ pub(super) struct State {
     /// The git credential its hub set, which every process it starts is given.
     pub(super) credentials: GitCredentials,
     pub(super) clones: Clones,
+    /// What the worker last read of each worktree's changed files, so a summary reads only those that changed since.
+    pub(super) changes: ChangeSummaries,
     pub(super) terminals: Terminals,
 }
 
@@ -161,6 +163,7 @@ impl Worker {
             outbox,
             tools: Arc::new(Tools::new(asks.clone(), config.build, config.timers.wait_poll)),
             clones: Clones::new(config.clones_dir.clone()),
+            changes: ChangeSummaries::default(),
             config,
             asks,
             credentials,
@@ -283,6 +286,10 @@ pub(super) async fn handle(
         }
         WorkerRequest::GitDiff(GitDiff { path, base_ref }) => {
             Ok(WorkerResponse::GitDiff(git::diff(&given, &path, base_ref.as_deref()).await?))
+        }
+        WorkerRequest::SummarizeChanges(SummarizeChanges { path, base_ref }) => {
+            let summary = state.changes.summarize(&given, Path::new(&path), base_ref.as_deref()).await?;
+            Ok(WorkerResponse::ChangeSummary(summary))
         }
         WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
         WorkerRequest::WatchChildBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Child).await,

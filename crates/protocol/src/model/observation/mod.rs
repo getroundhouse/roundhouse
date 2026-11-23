@@ -7,5 +7,5 @@ mod tests;
 
 mod kinds;
 mod observed;
-pub use kinds::{LineCounts, Observation, ObservationKey};
+pub use kinds::{Observation, ObservationKey};
 pub use observed::Observed;
