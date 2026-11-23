@@ -79,7 +79,7 @@ pub(super) fn long(times: usize) -> String {
 /// Presses in the newest text whose ID starts with `part`, and holds a drag below the area that scrolls it, which the
 /// area should follow to the text's end. `name` says which text it is if it doesn't.
 pub(super) fn held_past(ui: &mut Ui<'_>, name: &str, part: &str) {
-    let text = ui.shown(part).pop().unwrap_or_else(|| panic!("{name}: the text, drawn"));
+    let text = drawn(ui, name, part);
     let area = bounds(ui, ElementId::from((ElementId::from((text.clone(), "scroll")), "area")));
     let before = bounds(ui, text.clone());
     let start = point(area.left() + px(60.), area.top() + px(20.));
@@ -94,6 +94,18 @@ pub(super) fn held_past(ui: &mut Ui<'_>, name: &str, part: &str) {
 
     assert!(before.bottom() > area.bottom() + px(100.), "{name} starts far past its area: {before:?} in {area:?}");
     assert!((after.bottom() - area.bottom()).abs() < px(2.), "{name} ends at its end: {after:?} in {area:?}");
+}
+
+/// The newest element whose name starts with `part`, once a frame draws it, from that frame. Read from a frame without
+/// waiting, it can be missing, as when what came from the hub since the frame before moves it, or hasn't drawn it yet.
+/// A wait that times out says what the window shows, so whether `name` had come at all.
+pub(super) fn drawn(ui: &mut Ui<'_>, name: &str, part: &str) -> ElementId {
+    let mut drawn = None;
+    ui.wait(&format!("{name}, drawn"), |ui| {
+        drawn = ui.shown(part).pop();
+        drawn.is_some()
+    });
+    drawn.unwrap()
 }
 
 /// What an area that scrolls a text has moved out of sight, such as the end of a compaction's long summary, can't be

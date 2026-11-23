@@ -9,7 +9,7 @@ use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext, point, 
 use protocol::event::EventBody;
 
 use super::super::{A_FRAME, turns};
-use super::areas::{held_past, long};
+use super::areas::{drawn, held_past, long};
 use super::kinds::{ASKED, REPORT, SUBAGENT_LINE};
 use super::made_up::{open_on_chats_of, subagent};
 use super::{LAST, bounds, click, copy};
@@ -22,7 +22,7 @@ use crate::support::{FakeHub, Ui};
 fn what_the_subagent_tab_says_it_was_asked_and_reported_is_selected_with_the_rest(cx: &mut TestAppContext) {
     let (_fake, mut ui) = in_its_tab(cx, ASKED);
 
-    let asked = ui.shown("prompt/call/").remove(0);
+    let asked = drawn(&mut ui, "what it was asked", "prompt/call/");
     let asked = bounds(&mut ui, asked);
     click(&mut ui, point(asked.left() + px(20.), asked.top() + px(8.)), 1);
     ui.press("secondary-a");
