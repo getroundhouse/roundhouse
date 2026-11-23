@@ -2,14 +2,14 @@
 
 use std::collections::HashSet;
 
-use protocol::client::{ApiError, ObservationNotice};
+use protocol::client::{ApiError, HubNotice, ObservationNotice};
 use protocol::model::{GithubAccountId, WorkspaceId};
 use tracing::warn;
 
 use super::file::Write;
 use super::kept::{Change, Changed, Step, Table};
 use super::kinds::{Kind, Owner, SessionKey};
-use super::tables::Gone;
+use super::tables::{Forgotten, Gone};
 use crate::hub::Hub;
 use crate::store::Store;
 
@@ -237,8 +237,13 @@ impl Hub {
         }
         let rev = self.blocking(Store::next_rev).await?;
         let forgotten = observations.tables.lock().forget_of(gone, &observations.writer);
-        for observation in forgotten {
-            self.tell_of_observation(ObservationNotice::Removed { observation, rev });
+        for Forgotten { observation, old_record } in forgotten {
+            if let Some(observation) = observation {
+                self.tell_of_observation(ObservationNotice::Removed { observation, rev });
+            }
+            if let Some(record) = old_record {
+                self.notify_old_form(HubNotice::Removed { record, rev });
+            }
         }
         Ok(())
     }
@@ -329,9 +334,12 @@ impl Hub {
             Changed::Gone => Write::Gone,
         };
         observations.writer.write::<K>(of.clone(), write);
-        let notice = K::table(&mut observations.tables.lock()).change(&of, changed, rev);
+        let (notice, old_record) = K::table(&mut observations.tables.lock()).change(&of, changed, rev);
         if let Some(notice) = notice {
             self.tell_of_observation(notice);
+        }
+        if let Some(record) = old_record {
+            self.notify_old_form(record.into());
         }
         Ok(true)
     }

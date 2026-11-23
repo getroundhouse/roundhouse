@@ -40,3 +40,7 @@ pub(crate) const BEFORE_WAIT_READ_OBSERVED: usize = 97;
 /// How many migrations there were before what GitHub calls each GitHub account's user, and its profile, left the
 /// database, as observations.
 pub(crate) const BEFORE_GITHUB_USERS_OBSERVED: usize = 98;
+
+/// How many migrations there were before whether the default GitHub account can push to each repository left the
+/// database, as an observation.
+pub(crate) const BEFORE_REACH_OBSERVED: usize = 99;

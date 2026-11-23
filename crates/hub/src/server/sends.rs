@@ -81,9 +81,10 @@ impl Sends {
     }
 
     /// Every record, as `RecordsList` and the hub's level list them, as it's sent: with only the observations its client
-    /// reads as such.
+    /// reads as such, and with no record made from an observation for a client that reads the observation itself.
     pub(super) fn records(&self, records: Records) -> Records {
-        Records { observations: self.kept(records.observations), ..records }
+        let github_reach = if self.reads_every_observation() { Vec::new() } else { records.github_reach };
+        Records { observations: self.kept(records.observations), github_reach, ..records }
     }
 
     /// Those of `observations` its client reads as such.

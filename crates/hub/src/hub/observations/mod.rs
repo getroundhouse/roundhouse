@@ -8,6 +8,7 @@ mod changes;
 mod file;
 mod github_kinds;
 mod kept;
+mod kind;
 mod kinds;
 mod levels;
 mod old_form;
@@ -18,7 +19,7 @@ mod tests;
 mod writer;
 
 pub(crate) use file::PART;
-pub(crate) use github_kinds::{GithubProfile, GithubUsername};
+pub(crate) use github_kinds::{GithubProfile, GithubUsername, RepositoryReach};
 pub(crate) use kept::Observations;
 pub(crate) use kinds::Kind;
 pub(crate) use kinds::{

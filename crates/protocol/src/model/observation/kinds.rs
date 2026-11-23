@@ -8,8 +8,8 @@ use super::{
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
 use crate::model::{
-    AccountId, ChangeSummary, ContextUsage, GithubAccountId, GithubUsername, Level, LineCounts, ModelListKey,
-    ReferenceAsk, RepositoryUnseen, Rev, SessionId, UsageLimit, WaitId, WorkspaceId,
+    AccountId, ChangeSummary, ContextUsage, GithubAccountId, GithubUsername, Level, LineCounts, ModelListKey, Reach,
+    ReferenceAsk, RepoId, RepositoryUnseen, Rev, SessionId, UsageLimit, WaitId, WorkspaceId,
 };
 
 /// One observation, of any kind, with what it's of, its revision and what it says, as a list or the feed gives it. A
@@ -37,6 +37,11 @@ pub enum Observation {
     /// What GitHub says of an issue or a pull request, as a chip draws it. Sent at the level of that issue or pull
     /// request, by the ask as the client follows it, so two that name it in another case are two observations.
     Reference { reference: ReferenceAsk, said: Observed<ReferenceSaid>, rev: Rev },
+    /// Whether the default GitHub account can push to the repository on GitHub that a repository's address names, as
+    /// GitHub last answered, or what the hub says of it without asking. Sent at the hub's level, since every workspace
+    /// of the repository draws it. It's current while the hub checks every repository again each half hour. A client
+    /// of a version from before it reads it as the record `GithubReach`, as [`ReadFrom::EveryObservation`] says.
+    RepositoryReach { repo: RepoId, reach: Observed<Reach>, rev: Rev },
     /// What GitHub calls a GitHub account's user now, its username, as the hub last asked GitHub. Sent at the hub's
     /// level, since every view of the account names it. It's current while the hub asks again each day. The user's
     /// number stays on the account's record, as what links the two. A client of a version from before it reads it on
@@ -104,6 +109,9 @@ pub enum ObservationKey {
     Reference {
         reference: ReferenceAsk,
     },
+    RepositoryReach {
+        repo: RepoId,
+    },
     GithubUsername {
         account: GithubAccountId,
     },
@@ -153,6 +161,7 @@ impl Observation {
                 ObservationKey::WorkspaceRepositoryUnseen { workspace_id: workspace_id.clone() }
             }
             Observation::Reference { reference, .. } => ObservationKey::Reference { reference: reference.clone() },
+            Observation::RepositoryReach { repo, .. } => ObservationKey::RepositoryReach { repo: repo.clone() },
             Observation::GithubUsername { account, .. } => ObservationKey::GithubUsername { account: account.clone() },
             Observation::ModelCatalog { list, .. } => ObservationKey::ModelCatalog { list: list.clone() },
             Observation::AccountIdentity { account, .. } => {
@@ -185,6 +194,7 @@ impl Observation {
             | Observation::WorkspacePullRequestDetail { rev, .. }
             | Observation::WorkspaceRepositoryUnseen { rev, .. }
             | Observation::Reference { rev, .. }
+            | Observation::RepositoryReach { rev, .. }
             | Observation::GithubUsername { rev, .. }
             | Observation::ModelCatalog { rev, .. }
             | Observation::AccountIdentity { rev, .. }
@@ -209,6 +219,7 @@ impl ObservationKey {
         match self {
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspacePullRequest { .. }
+            | ObservationKey::RepositoryReach { .. }
             | ObservationKey::GithubUsername { .. }
             | ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
@@ -236,7 +247,8 @@ impl ObservationKey {
             | ObservationKey::WorkspacePullRequestDetail { .. }
             | ObservationKey::WorkspaceRepositoryUnseen { .. }
             | ObservationKey::Reference { .. } => Some(ReadFrom::GithubObserved),
-            ObservationKey::GithubUsername { .. }
+            ObservationKey::RepositoryReach { .. }
+            | ObservationKey::GithubUsername { .. }
             | ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
             | ObservationKey::AccountLimits { .. }

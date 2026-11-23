@@ -39,3 +39,10 @@ pub(super) const GITHUB_USERS_OBSERVED: &str = r"
     ALTER TABLE github_accounts DROP COLUMN username;
     DROP TABLE github_profiles;
 ";
+
+/// Whether the default GitHub account can push to each repository, which the hub keeps as an observation, in its cache
+/// file, and no longer here, with its revision's triggers. Nothing of it is carried there: the hub checks every
+/// repository again as it starts.
+pub(super) const REACH_OBSERVED: &str = r"
+    DROP TABLE github_reach;
+";

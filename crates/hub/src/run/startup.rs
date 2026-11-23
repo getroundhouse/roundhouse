@@ -69,7 +69,6 @@ pub(super) fn recover(store: &Store) -> Result<LeftHalfDone, StoreError> {
     store.fail_interrupted_setups()?;
     store.end_waiting_github_sign_ins()?;
     store.forget_worker_builds()?;
-    store.github_reach_left_by_the_last_run()?;
     let moves = store.moves_left()?;
     for workspace in store.take_unfinished_workspaces()? {
         warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");

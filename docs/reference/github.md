@@ -57,7 +57,7 @@ A branch's own rules, such as protection, apply only to the push itself. So GitH
 
 Any other answer says nothing about the push. The request sends nothing, so it changes nothing.
 
-`Github::push_reach`, in `crates/github/src/reach.rs`, makes this request to check whether the default GitHub account can push to a repository, and the hub records the answer as the repository's `GithubReach`.
+`Github::push_reach`, in `crates/github/src/reach.rs`, makes this request to check whether the default GitHub account can push to a repository, and the hub keeps the answer as the repository's observation, `RepositoryReach`, which a client of a version from before it reads as the record `GithubReach`.
 
 ## The username of an installation's token
 

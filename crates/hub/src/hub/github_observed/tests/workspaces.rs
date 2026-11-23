@@ -343,6 +343,7 @@ fn is_as_of(observation: &Observation) -> bool {
         Observation::WorkspaceLines { .. }
         | Observation::WorkspaceChanges { .. }
         | Observation::Reference { .. }
+        | Observation::RepositoryReach { .. }
         | Observation::GithubUsername { .. }
         | Observation::ModelCatalog { .. }
         | Observation::AccountIdentity { .. }

@@ -9,7 +9,6 @@ use super::accounts::accounts;
 use super::comments::{CommentColumns, comment_from_row};
 use super::github_accounts::github_accounts;
 use super::github_apps::github_apps;
-use super::github_reach::github_reach;
 use super::github_sign_ins::github_sign_ins;
 use super::hub_settings::hub_settings;
 use super::new_workspace_draft::new_workspace_draft;
@@ -55,7 +54,8 @@ impl Store {
             // A hub from before Settings' Providers found these, as `FoundGithubLogin` says. This one finds none.
             found_github_logins: Vec::new(),
             github_apps: github_apps(&tx)?,
-            github_reach: github_reach(&tx)?,
+            // Made from what the hub observes, as `crate::hub::observations::OldForm` says, so the hub adds them.
+            github_reach: Vec::new(),
             // Kept in memory rather than here, as `Terminal`, `ModelList` and `HubUpdate` say, so the hub adds them.
             terminals: Vec::new(),
             model_lists: Vec::new(),

@@ -1,11 +1,10 @@
-//! The rule's rows for what the hub keeps of GitHub: its accounts, the sign-ins to them, the apps of the person's
-//! own, and what each repository's account reaches.
+//! The rule's rows for what the hub keeps of GitHub: its accounts, the sign-ins to them, and the apps of the person's
+//! own.
 
 use protocol::client::github_apps::GithubManifestCode;
 use protocol::fixtures;
 use protocol::model::{
-    GithubAccountId, GithubAppId, GithubLoginKind, GithubRepositoryName, GithubSignInStatus, GithubUser, GithubUserId,
-    Reach, Rev,
+    GithubAccountId, GithubAppId, GithubLoginKind, GithubSignInStatus, GithubUser, GithubUserId, Rev,
 };
 
 use super::super::{GithubAppMaking, GithubConnecting, Store};
@@ -81,13 +80,4 @@ pub(super) fn made_app(store: &Store) {
 pub(super) fn bot(store: &Store) -> Said {
     let bot = GithubUser { id: GithubUserId::new(41), name: "ada-roundhouse[bot]".into() };
     Said::Changed(store.set_github_app_bot(APP, &bot).unwrap().is_some())
-}
-
-pub(super) fn reach_rev(store: &Store) -> Rev {
-    store.github_reach_of(&"r".into()).unwrap().unwrap().rev
-}
-
-pub(super) fn reach(store: &Store) -> Said {
-    let pushes = Reach::Pushes { repository: GithubRepositoryName::named("cli/cli"), username: "ada".into() };
-    Said::record(&store.record_github_reach(&"r".into(), &pushes, Some(5)).unwrap())
 }

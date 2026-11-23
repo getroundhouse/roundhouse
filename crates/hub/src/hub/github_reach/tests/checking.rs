@@ -12,6 +12,7 @@ use super::super::CHECKED_AGAIN_EVERY;
 use super::support::{CLI, account, checking, reads, reads_pushing, told, told_within};
 use crate::github_logins::DefaultCredential;
 use crate::hub::Hub;
+use crate::hub::RepositoryReach;
 use crate::hub::tests::hub_calling_github;
 use github::{Answer, Gate, Script, StandIn};
 
@@ -31,10 +32,14 @@ async fn says_cli(hub: &Arc<Hub>) {
     reads(hub, "https://github.com/cli/cli.git").await;
 }
 
-/// What the last run recorded, as the hub starts.
+/// What the last run kept, as the hub starts, from the cache file.
 fn left_by_the_last_run(hub: &Hub, reach: &Reach, answered_at_ms: i64) {
-    hub.store.record_github_reach(&"r".into(), reach, Some(answered_at_ms)).unwrap();
-    hub.store.github_reach_left_by_the_last_run().unwrap();
+    hub.observations.keep_as_read::<RepositoryReach>("r".into(), reach.clone(), answered_at_ms);
+}
+
+/// Whether `feed` tells of no reach within half a second, in which a check of a GitHub that can't be reached ends.
+async fn tells_no_reach(feed: &mut crate::hub::Notices) -> bool {
+    tokio::time::timeout(std::time::Duration::from_millis(500), told(feed)).await.is_err()
 }
 
 /// The repository's address is still to be read, as each is once a hub from before addresses is upgraded, so the last
@@ -59,8 +64,8 @@ async fn as_the_hub_starts_each_repository_the_last_run_recorded_is_checked_agai
     assert!(github.asked()[0].starts_with("get /cli/cli.git/info/refs?service=git-receive-pack "));
 }
 
-/// GitHub doesn't answer, so the last run's answer stays as it was, with when GitHub gave it, still stale. One of
-/// another login is no answer for this one, so not knowing replaces it.
+/// GitHub doesn't answer, so the last run's answer stays as it was, with when GitHub gave it, still stale, and nothing
+/// is told. One of another login is no answer for this one, so not knowing replaces it.
 #[tokio::test]
 async fn a_check_github_doesnt_answer_keeps_what_it_last_answered_for_the_login() {
     let dir = tempfile::tempdir().unwrap();
@@ -70,11 +75,14 @@ async fn a_check_github_doesnt_answer_keeps_what_it_last_answered_for_the_login(
     let (credential, following) = watch::channel(account("ada", "a-token"));
     let _checking = checking(&hub, following);
 
-    let kept = told(&mut feed).await;
+    let told_nothing = tells_no_reach(&mut feed).await;
+    let kept = hub.records_list().await.unwrap().github_reach;
     credential.send_replace(account("grace", "g-token"));
     let unknown = told(&mut feed).await;
 
-    assert_eq!((kept.reach, kept.answered_at_ms, kept.stale), (refused_as("ada"), Some(5), true));
+    assert!(told_nothing);
+    let [kept] = kept.as_slice() else { panic!("{kept:?}") };
+    assert_eq!((&kept.reach, kept.answered_at_ms, kept.stale), (&refused_as("ada"), Some(5), true));
     assert!(matches!(unknown.reach, Reach::CouldntTell { .. }), "{unknown:?}");
     assert_eq!((unknown.answered_at_ms, unknown.stale), (None, false));
 }
@@ -201,7 +209,7 @@ async fn every_half_hour_each_repository_is_checked_again() {
     let _checking = checking(&hub, following);
     says_cli(&hub).await;
     told(&mut feed).await;
-    hub.store.record_github_reach(&"r".into(), &Reach::NotOnGithub, None).unwrap();
+    hub.observations.keep_as_read::<RepositoryReach>("r".into(), Reach::NotOnGithub, 0);
 
     tokio::time::pause();
     let started = tokio::time::Instant::now();

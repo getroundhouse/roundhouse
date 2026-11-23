@@ -4,8 +4,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use protocol::client::{ApiError, ObservationNotice};
-use protocol::model::{AccountId, GithubAccountId, Level, Observation, Observed, Rev, SessionId, WaitId, WorkspaceId};
+use protocol::client::{ApiError, ObservationNotice, RecordNotice};
+use protocol::model::{
+    AccountId, GithubAccountId, Level, Observation, Observed, RepoId, Rev, SessionId, WaitId, WorkspaceId,
+};
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
@@ -216,17 +218,25 @@ impl<K: Kind> Table<K> {
     }
 
     /// Keeps what `changed` made of the observation of `of`, at `rev`, and returns what clients are to be told of it,
-    /// which is nothing for a kind sent nowhere.
-    pub(super) fn change(&mut self, of: &K::Of, changed: Changed<K::Value>, rev: Rev) -> Option<ObservationNotice> {
+    /// which is nothing for a kind sent nowhere, and of the record made from it for a client of a version from before
+    /// it, if any is, as [`Kind::old_record`] says.
+    pub(super) fn change(
+        &mut self,
+        of: &K::Of,
+        changed: Changed<K::Value>,
+        rev: Rev,
+    ) -> (Option<ObservationNotice>, Option<RecordNotice>) {
         match changed {
             Changed::Says(said) => {
                 let observation = K::observation(of, said.observed(), rev);
+                let old_record = K::old_record(of, said.observed(), said.read_at_ms, rev);
                 self.kept.insert(of.clone(), Kept { said, rev });
-                observation.map(ObservationNotice::Copy)
+                (observation.map(ObservationNotice::Copy), old_record.map(RecordNotice::Copy))
             }
             Changed::Gone => {
                 self.kept.remove(of);
-                K::key(of).map(|observation| ObservationNotice::Removed { observation, rev })
+                let removed = K::key(of).map(|observation| ObservationNotice::Removed { observation, rev });
+                (removed, K::old_record_key(of).map(|record| RecordNotice::Removed { record, rev }))
             }
         }
     }
@@ -237,8 +247,8 @@ impl Observations {
     /// when it was read, under one revision newer than any a client holds, since a client of the hub before can hold
     /// any revision that hub gave. Where there's no revision to give, as when the database fails, it starts with none
     /// of them, as the log says, and each is not known until it's read again. Those of a workspace, a session, an
-    /// agent's account, a GitHub account or an open wait the database doesn't have are forgotten, as one a hub
-    /// stopped before forgetting, or a file refused to, leaves, so no client is listed them.
+    /// agent's account, a repository, a GitHub account or an open wait the database doesn't have are forgotten, as one
+    /// a hub stopped before forgetting, or a file refused to, leaves, so no client is listed them.
     pub(crate) fn open(file: Arc<CacheFile>, store: &Store) -> Self {
         let mut tables = Tables::default();
         match store.next_rev() {
@@ -255,12 +265,13 @@ impl Observations {
         }
         let writer = Writer::new(file);
         match owners(store) {
-            Ok(Owners { workspaces, sessions, waits, accounts, github_accounts }) => {
+            Ok(Owners { workspaces, sessions, waits, accounts, repos, github_accounts }) => {
                 let gone = |owner: Owner<'_>| match owner {
                     Owner::Workspace(id) => !workspaces.contains(id),
                     Owner::Session(key) => !sessions.contains(&key.session_id),
                     Owner::Wait(key) => !waits.contains(&key.wait),
                     Owner::Account(id) => !accounts.contains(id),
+                    Owner::Repo(id) => !repos.contains(id),
                     Owner::GithubAccount(id) => !github_accounts.contains(id),
                     // Never gone: what it owns goes only as the hub lets go of it.
                     Owner::Hub => false,
@@ -351,6 +362,7 @@ struct Owners {
     sessions: HashSet<SessionId>,
     waits: HashSet<WaitId>,
     accounts: HashSet<AccountId>,
+    repos: HashSet<RepoId>,
     github_accounts: HashSet<GithubAccountId>,
 }
 
@@ -361,6 +373,7 @@ fn owners(store: &Store) -> Result<Owners, StoreError> {
         sessions: store.session_ids()?,
         waits: store.open_wait_ids()?,
         accounts: store.account_ids()?,
+        repos: store.list_repos()?.into_iter().map(|repo| repo.id).collect(),
         github_accounts: store.github_account_ids()?,
     })
 }

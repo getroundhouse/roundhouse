@@ -2,10 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::client::HubNotice;
 #[cfg(doc)]
 use protocol::model::RepoUrl;
-use protocol::model::{GithubReach, GithubRepositoryName, GithubUsername, Reach, RepoId};
+use protocol::model::{GithubRepositoryName, GithubUsername, Reach, RepoId};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::{Instant, MissedTickBehavior};
@@ -13,7 +12,8 @@ use tracing::{error, warn};
 
 use super::super::Hub;
 use crate::github_logins::DefaultCredential;
-use crate::store::{Store, StoreError, now_ms};
+use crate::hub::RepositoryReach;
+use crate::store::{Store, now_ms};
 
 /// How often every repository is checked again, though nothing the hub knows of has changed, since what an account can
 /// do changes on GitHub, as when an organization approves Roundhouse, or someone is given write access, and GitHub says
@@ -23,8 +23,9 @@ use crate::store::{Store, StoreError, now_ms};
 pub(super) const CHECKED_AGAIN_EVERY: Duration = Duration::from_mins(30);
 
 impl Hub {
-    /// Checks whether the default GitHub account can push to each repository's repository on GitHub, and records each
-    /// answer as the repository's `GithubReach`, announced as records are, until the hub stops: as it starts, as a
+    /// Checks whether the default GitHub account can push to each repository's repository on GitHub, and keeps each
+    /// answer as the repository's observation, `RepositoryReach`, which a client of a version from before it reads as
+    /// the record `GithubReach`, until the hub stops: as it starts, as a
     /// worker reads a repository's address, as `Hub::read_repo_urls` says, for one whose address then names another
     /// repository on GitHub, as what workers give their processes for github.com changes, which it does as the
     /// default, its login or its commit identity changes, and every [`CHECKED_AGAIN_EVERY`]. Once a repository and login, not a workspace, and each repository's checks side by
@@ -79,9 +80,18 @@ impl Checks {
         }
     }
 
-    /// Until what workers are given can't change, as once the logins are gone, with the hub.
+    /// Until what workers are given can't change, as once the logins are gone, with the hub, keeping every
+    /// repository's reach current meanwhile, since each is checked again each half hour.
     pub(super) async fn run(mut self) {
+        self.hub.observations_kept_current::<RepositoryReach>().await;
+        self.checking().await;
+        self.hub.observations_no_longer_read_again::<RepositoryReach>().await;
+    }
+
+    /// What [`Checks::run`] does while it runs.
+    async fn checking(&mut self) {
         self.pushes_to = self.recorded().await.unwrap_or_default();
+        self.read_addresses_left().await;
         let mut again = tokio::time::interval_at(Instant::now() + CHECKED_AGAIN_EVERY, CHECKED_AGAIN_EVERY);
         again.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
@@ -112,15 +122,14 @@ impl Checks {
 
     /// Which repository on GitHub each repository is, as its record's address names it, so the hub checks them as it
     /// starts and as a worker reads an address. One with no address whose address a worker is still to read, as each
-    /// is once the hub that added it is upgraded to keep addresses, is checked for the one its last check was of, if
-    /// any, so it isn't left unchecked until a worker on the hub's machine links. *Unconfirmed.* `None` if the store
-    /// can't say.
+    /// is once the hub that added it is upgraded to keep addresses, is checked for the one its last check was of, as
+    /// the hub holds it, if any, so it isn't left unchecked until a worker on the hub's machine links. *Unconfirmed.*
+    /// One whose last check the hub doesn't hold, or names no repository, isn't checked, since which repository it is
+    /// can't be told, and isn't taken to be on none, as [`Checks::read_addresses_left`] says. `None` if the store can't
+    /// say.
     async fn recorded(&self) -> Option<HashMap<RepoId, Option<GithubRepositoryName>>> {
-        let read = |store: &Store| {
-            let (repos, to_read) = (store.list_repos()?, store.repos_to_read()?);
-            Ok((repos, to_read, store.github_reaches()?))
-        };
-        let (repos, to_read, reaches) = match self.hub.blocking(read).await {
+        let read = |store: &Store| Ok((store.list_repos()?, store.repos_to_read()?));
+        let (repos, to_read) = match self.hub.blocking(read).await {
             Ok(recorded) => recorded,
             Err(e) => {
                 warn!("couldn't read which repositories to check the default can push to: {}", e.message);
@@ -128,8 +137,14 @@ impl Checks {
             }
         };
         let to_read: HashSet<_> = to_read.into_iter().map(|repo| repo.id).collect();
-        let mut checked: HashMap<_, _> =
-            reaches.into_iter().filter_map(|record| Some((record.repo, record.reach.repository()?.clone()))).collect();
+        let observations = &self.hub.observations;
+        let held = observations.kept_of::<RepositoryReach>().into_iter();
+        let mut checked: HashMap<_, _> = held
+            .filter_map(|repo| {
+                let repository = observations.value_of::<RepositoryReach>(&repo)?.repository()?.clone();
+                Some((repo, repository))
+            })
+            .collect();
         let named = repos.into_iter().filter_map(|repo| {
             let repository = match repo.origin.url() {
                 Some(url) => url.on_github(),
@@ -139,6 +154,20 @@ impl Checks {
             Some((repo.id, repository))
         });
         Some(named.collect())
+    }
+
+    /// Has a worker on the hub's machine read the address of each repository whose address is to be read, if one is
+    /// running, as the checks start, when any is one [`Checks::recorded`] can't tell which repository on GitHub it is,
+    /// as every one is on the first start after the hub stopped keeping reach in its database. So it's checked once
+    /// its address is read, as [`Checks::newly_read`] says, rather than once a worker next links.
+    async fn read_addresses_left(&self) {
+        let to_read = match self.hub.blocking(Store::repos_to_read).await {
+            Ok(to_read) => to_read,
+            Err(e) => return warn!("couldn't read which repositories' addresses are to be read: {}", e.message),
+        };
+        if to_read.iter().any(|repo| !self.pushes_to.contains_key(&repo.id)) {
+            self.hub.read_repo_urls_here().await;
+        }
     }
 
     /// The repositories whose records say their pushes go somewhere other than they were last checked for, as once a
@@ -179,33 +208,32 @@ impl Checks {
         }
     }
 
-    /// Records what `checked` found, and tells every client, unless a newer check of its repository has started since,
-    /// or what workers are given has changed, as when the default's login changes, since then it's of another login.
+    /// Keeps what `checked` found as its repository's reach, as GitHub answered it, or as the hub worked it out now
+    /// where it isn't GitHub's answer, and so tells every client, unless a newer check of its repository has started
+    /// since, or what workers are given has changed, as when the default's login changes, since then it's of another
+    /// login. Not when GitHub didn't answer and what the hub holds is GitHub's answer for the same repository and
+    /// account, which stays as it was, as of when GitHub gave it, since what GitHub says is a cache of GitHub's, and an
+    /// ask that failed says nothing of it, as when GitHub can't be reached. With none held, it's that the hub couldn't
+    /// tell, never that it can't push. *Unconfirmed.*
     async fn keep(&self, checked: Checked) {
         let changed = self.credential.has_changed().unwrap_or(true);
         if changed || self.newest.get(&checked.repo) != Some(&checked.number) {
             return;
         }
-        match self.hub.blocking(move |store| recorded(store, &checked)).await {
-            Ok(recorded) => self.hub.notify(HubNotice::GithubReach(recorded)),
-            Err(e) => warn!("couldn't record whether the default can push to a repository: {}", e.message),
+        let Checked { repo, reach, answered_at_ms, asked_as, .. } = checked;
+        if let Reach::CouldntTell { repository, .. } = &reach
+            && let Some(asked_as) = &asked_as
+            && let Some(kept) = self.hub.observations.value_of::<RepositoryReach>(&repo)
+            && kept.answered_for() == Some((repository, asked_as))
+        {
+            return;
+        }
+        let kept = match answered_at_ms {
+            Some(answered_at_ms) => self.hub.observation_read::<RepositoryReach>(repo, reach, answered_at_ms).await,
+            None => self.hub.observation_worked_out::<RepositoryReach>(repo, reach, now_ms()).await,
+        };
+        if let Err(e) = kept {
+            warn!("couldn't keep whether the default can push to a repository: {}", e.message);
         }
     }
-}
-
-/// Records what `checked` found as its repository's reach, as of this run, and returns the record, whose revision
-/// moves only when it changes, so every client drops a copy it has. Not when GitHub didn't answer and the record is
-/// GitHub's answer for the same repository and account, which stays as it was, with when GitHub gave it, and stale
-/// while it's the last run's, since what GitHub says is a cache of GitHub's, and an ask that failed says nothing of it,
-/// as when GitHub can't be reached. *Unconfirmed.*
-fn recorded(store: &Store, checked: &Checked) -> Result<GithubReach, StoreError> {
-    let Checked { repo, reach, answered_at_ms, asked_as, .. } = checked;
-    if let Reach::CouldntTell { repository, .. } = reach
-        && let Some(asked_as) = asked_as
-        && let Some(kept) = store.github_reach_of(repo)?
-        && kept.reach.answered_for() == Some((repository, asked_as))
-    {
-        return Ok(kept);
-    }
-    store.record_github_reach(repo, reach, *answered_at_ms)
 }
