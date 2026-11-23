@@ -330,21 +330,15 @@ fn commit_all(repo: &Path) -> CommitId {
     CommitId::from(run(repo, &["rev-parse", "HEAD"]))
 }
 
+/// The one example, of reading a file and a folder, of how a path is written, which `worktree_file` tests in full.
 #[test]
 fn a_path_no_list_would_give_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(dir.path().join("src")).unwrap();
     std::fs::write(dir.path().join("src/a.txt"), "a").unwrap();
-    let absolute = dir.path().join("src/a.txt");
 
-    for path in
-        [absolute.to_str().unwrap(), "./src/a.txt", "src/../src/a.txt", "src/./a.txt", "src//a.txt", "src/a.txt/", ""]
-    {
-        assert_eq!(read(dir.path(), path).unwrap_err().code, ErrorCode::InvalidRequest, "{path}");
-    }
-    for folder in [dir.path().join("src").to_str().unwrap(), ".", "./src", "src/", "src/.", ""] {
-        assert_eq!(read_folder(dir.path(), folder).unwrap_err().code, ErrorCode::InvalidRequest, "{folder}");
-    }
+    assert_eq!(read(dir.path(), "src/./a.txt").unwrap_err().code, ErrorCode::InvalidRequest);
+    assert_eq!(read_folder(dir.path(), "src/").unwrap_err().code, ErrorCode::InvalidRequest);
 }
 
 /// The one example of the worktree's own check, which `worktree_file` tests in full: a link that leads out of it.

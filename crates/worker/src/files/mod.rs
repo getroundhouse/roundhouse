@@ -11,8 +11,9 @@ mod tests;
 mod contents;
 mod range;
 
+use crate::worktree_file::relative;
 #[cfg(test)]
 use contents::{MAX_IMAGE_BYTES, bounded};
-use contents::{MAX_TEXT_BYTES, SNIFF_BYTES, relative};
+use contents::{MAX_TEXT_BYTES, SNIFF_BYTES};
 pub(crate) use contents::{list, read, read_at, read_folder};
 pub(crate) use range::read_range;

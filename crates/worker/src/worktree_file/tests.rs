@@ -2,7 +2,7 @@ use std::path::Path;
 
 use protocol::client::ErrorCode;
 
-use super::{find, find_folder};
+use super::{Last, find, find_folder, inside, relative};
 
 fn refused(worktree: &Path, path: &str) -> ErrorCode {
     find(worktree, path).expect_err(path).code
@@ -83,4 +83,43 @@ fn a_name_too_long_to_be_one_is_refused() {
     let dir = tempfile::tempdir().unwrap();
 
     assert_eq!(refused(dir.path(), &"a".repeat(300)), ErrorCode::InvalidRequest);
+}
+
+/// A path is taken only as a list writes one: names between single slashes, from the top, with no `.` or `..`.
+#[test]
+fn a_path_no_list_would_give_is_refused() {
+    let refused = ["/src/a.txt", "./src/a.txt", "src/../src/a.txt", "src/./a.txt", "src//a.txt", "src/a.txt/", ".", ""];
+
+    for path in refused {
+        assert_eq!(relative(path).map_err(|e| e.code), Err(ErrorCode::InvalidRequest), "{path}");
+    }
+    for path in ["a.txt", "src/a b.txt", "src/.hidden/..a"] {
+        assert_eq!(relative(path).map_err(|e| e.code), Ok(()), "{path}");
+    }
+}
+
+/// With its last name taken as itself, as git takes a link it tracks, a path is inside the worktree once the folders on
+/// the way are, followed: a link there that leads out, and a name with nothing there, are inside, and a link to a
+/// folder outside on the way isn't.
+#[cfg(unix)]
+#[test]
+fn a_path_whose_last_name_is_taken_as_itself_is_inside_once_its_folders_are() {
+    let dir = tempfile::tempdir().unwrap();
+    let worktree = dir.path().join("worktree");
+    std::fs::create_dir_all(worktree.join("src")).unwrap();
+    std::fs::write(dir.path().join("outside.txt"), "secret").unwrap();
+    std::os::unix::fs::symlink(dir.path().join("outside.txt"), worktree.join("link.txt")).unwrap();
+    std::os::unix::fs::symlink(dir.path(), worktree.join("up")).unwrap();
+    let root = worktree.canonicalize().unwrap();
+
+    let link = inside(&worktree, "link.txt", Last::AsItself);
+    let gone = inside(&worktree, "src/gone.txt", Last::AsItself);
+    let through_a_link = inside(&worktree, "up/outside.txt", Last::AsItself);
+    let in_a_folder_gone = inside(&worktree, "gone/a.txt", Last::AsItself);
+
+    assert_eq!(link.unwrap(), root.join("link.txt"));
+    assert_eq!(gone.unwrap(), root.join("src/gone.txt"));
+    assert_eq!(through_a_link.unwrap_err().code, ErrorCode::InvalidRequest);
+    assert_eq!(in_a_folder_gone.unwrap_err().code, ErrorCode::NotFound);
+    assert_eq!(inside(&worktree, "link.txt", Last::Followed).unwrap_err().code, ErrorCode::InvalidRequest);
 }
