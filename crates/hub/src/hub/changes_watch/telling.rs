@@ -22,7 +22,26 @@ impl Hub {
     /// left waiting on it would hold the workspace's turn to be told, and an archive of it, and keep the workspace from
     /// being idle, so its worker from being replaced.
     pub(crate) async fn changes_watching(self: &Arc<Self>, id: &WorkspaceId) {
-        let mut told = self.changes_watches.turn(id).await;
+        let told = self.changes_watches.turn(id).await;
+        self.tell_watching(id, told).await;
+    }
+
+    /// Tells the workspace's worker, as [`Hub::changes_watching`] does, on a task of its own, for where nothing waits
+    /// for it, such as a subscription that has gone, unless a telling is waiting for its turn already, as
+    /// [`Tellings`](crate::hub::tellings::Tellings) says.
+    pub(crate) fn changes_watching_soon(self: &Arc<Self>, id: &WorkspaceId) {
+        // Spawning panics outside a runtime, and nothing stops a following being dropped outside one.
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else { return };
+        let Some(asked) = self.changes_watches.asked(id) else { return };
+        let (hub, id) = (self.clone(), id.clone());
+        runtime.spawn(async move {
+            let told = hub.changes_watches.asked_turn(&id, asked).await;
+            hub.tell_watching(&id, told).await;
+        });
+    }
+
+    /// Tells the worker, as [`Hub::changes_watching`] says, in the workspace's turn `told`.
+    async fn tell_watching(self: &Arc<Self>, id: &WorkspaceId, mut told: Turn<'_>) {
         // Read in its turn, so what's told last is what's so.
         let followed = self.followers.follows(&Followed::Workspace(id.clone()));
         let ready = if followed { self.ready_workspace(id).await.ok() } else { None };
@@ -63,15 +82,6 @@ impl Hub {
                 self.changes_let_go(id).await;
             }
         }
-    }
-
-    /// Tells the workspace's worker, as [`Hub::changes_watching`] does, on a task of its own, for where nothing waits
-    /// for it, such as a subscription that has gone.
-    pub(crate) fn changes_watching_soon(self: &Arc<Self>, id: &WorkspaceId) {
-        let (hub, id) = (self.clone(), id.clone());
-        // Spawning panics outside a runtime, and nothing stops a following being dropped outside one.
-        let Ok(runtime) = tokio::runtime::Handle::try_current() else { return };
-        runtime.spawn(async move { hub.changes_watching(&id).await });
     }
 
     /// Takes in that `link`, the workspace's worker, has gone, so nothing watches its worktree.
