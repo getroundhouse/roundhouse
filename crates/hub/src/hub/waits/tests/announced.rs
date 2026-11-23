@@ -6,9 +6,9 @@ use super::*;
 use crate::store::StoreError;
 
 /// The wait each copy of chat `s` the feed has announced since this was last asked shows, by its ID.
-fn announced(feed: &mut Receiver<HubNotice>) -> Vec<Option<WaitId>> {
+fn announced(feed: &mut Receiver<std::sync::Arc<HubNotice>>) -> Vec<Option<WaitId>> {
     let mut copies = Vec::new();
-    while let Ok(notice) = feed.try_recv() {
+    while let Ok(notice) = feed.try_recv().map(std::sync::Arc::unwrap_or_clone) {
         if let HubNotice::Session(session) = notice
             && session.id.as_str() == "s"
         {

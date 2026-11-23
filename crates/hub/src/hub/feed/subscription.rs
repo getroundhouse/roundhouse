@@ -2,18 +2,19 @@ use parking_lot::Mutex;
 use protocol::client::{HubNotice, RecordNotice};
 use protocol::model::{RecordKey, Rev};
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::trace;
 
 /// How many notices the feed holds for a receiver that hasn't taken them yet. Every level's notices share them, so a
 /// receiver falls behind once this many of any level arrive while it waits, as a subscription does for room on a slow
 /// connection, and then recovers as it says, as a `Subscribe` subscription is sent its level's list again. It's more
-/// than a burst sends, such as GitHub's observer working out each workspace and chip in turn as the hub starts. The feed
-/// keeps the last this many, so a workspace's summary of its changed files can be held as many times over.
+/// than a burst sends, such as GitHub's observer working out each workspace and chip in turn as the hub starts. Each
+/// notice is shared, so the feed holds one copy of each of the last this many, and a receiver copies only what it sends.
 const CAPACITY: usize = 256;
 
 pub(in super::super) struct Feed {
-    pub(super) sender: broadcast::Sender<HubNotice>,
+    pub(super) sender: broadcast::Sender<Arc<HubNotice>>,
     /// The revision of the newest copy sent of each record, or of its removal. It keeps one for each record the feed
     /// has told of since the hub started, since a late copy of one removed long ago is still older.
     pub(super) sent: Mutex<HashMap<RecordKey, Rev>>,
@@ -24,7 +25,7 @@ impl Feed {
         Self { sender: broadcast::channel(CAPACITY).0, sent: Mutex::default() }
     }
 
-    pub(in super::super) fn subscribe(&self) -> broadcast::Receiver<HubNotice> {
+    pub(in super::super) fn subscribe(&self) -> broadcast::Receiver<Arc<HubNotice>> {
         self.sender.subscribe()
     }
 
@@ -58,6 +59,6 @@ impl Feed {
             Err(notice) => notice,
         };
         // An error only means nobody is listening.
-        let _ = self.sender.send(notice);
+        let _ = self.sender.send(Arc::new(notice));
     }
 }

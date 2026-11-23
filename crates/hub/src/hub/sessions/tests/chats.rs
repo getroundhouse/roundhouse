@@ -68,7 +68,7 @@ async fn a_question_answered_takes_what_was_typed_in_answer_and_the_feed_tells_o
 
     let told = tokio::time::timeout(TIMEOUT, async {
         loop {
-            if let Ok(HubNotice::Session(session)) = feed.recv().await {
+            if let Ok(HubNotice::Session(session)) = feed.recv().await.map(std::sync::Arc::unwrap_or_clone) {
                 return session;
             }
         }

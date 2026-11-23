@@ -13,10 +13,10 @@ use super::two_accounts::{Chats, TwoAccounts, announced_on};
 use crate::hub::stand_in_workers::{TIMEOUT, a_chat, titling};
 
 /// When the feed next announces the account `id` as used after `after_ms`.
-async fn used_after(feed: &mut broadcast::Receiver<HubNotice>, id: &AccountId, after_ms: i64) -> i64 {
+async fn used_after(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>, id: &AccountId, after_ms: i64) -> i64 {
     loop {
         let told = tokio::time::timeout(TIMEOUT, feed.recv()).await.expect("the account to be announced as used");
-        if let HubNotice::Account(told) = told.expect("the feed goes on")
+        if let HubNotice::Account(told) = std::sync::Arc::unwrap_or_clone(told.expect("the feed goes on"))
             && told.id == *id
             && let Some(used) = told.used_at_ms.filter(|used| *used > after_ms)
         {

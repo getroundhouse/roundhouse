@@ -39,7 +39,8 @@ async fn a_check_asks_github_who_an_account_is_and_clients_hear_of_its_new_usern
     hub.check_github_logins(now_ms()).await;
     hub.check_github_logins(now_ms()).await;
 
-    let told: Vec<HubNotice> = std::iter::from_fn(|| feed.try_recv().ok()).collect();
+    let told: Vec<HubNotice> =
+        std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect();
     let [HubNotice::GithubAccount(account)] = told.as_slice() else { panic!("{told:?}") };
     assert_eq!(account.user.name.as_str(), "ada-lovelace");
     let GithubCredential::Account(credential) = hub.git_credential().borrow().for_workers() else { panic!() };

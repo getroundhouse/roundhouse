@@ -43,10 +43,13 @@ pub(super) fn checking(hub: &Arc<Hub>, credential: watch::Receiver<DefaultCreden
 }
 
 /// The next reach the feed tells of, within `within`.
-pub(super) async fn told_within(feed: &mut broadcast::Receiver<HubNotice>, within: Duration) -> GithubReach {
+pub(super) async fn told_within(
+    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
+    within: Duration,
+) -> GithubReach {
     let reach = async {
         loop {
-            if let HubNotice::GithubReach(reach) = feed.recv().await.unwrap() {
+            if let HubNotice::GithubReach(reach) = std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()) {
                 return reach;
             }
         }
@@ -55,6 +58,6 @@ pub(super) async fn told_within(feed: &mut broadcast::Receiver<HubNotice>, withi
 }
 
 /// The next reach the feed tells of.
-pub(super) async fn told(feed: &mut broadcast::Receiver<HubNotice>) -> GithubReach {
+pub(super) async fn told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> GithubReach {
     told_within(feed, Duration::from_secs(5)).await
 }

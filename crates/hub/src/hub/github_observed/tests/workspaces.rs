@@ -26,10 +26,13 @@ async fn observing(dir: &std::path::Path) -> (Arc<Hub>, PullRequests, StandIn) {
 }
 
 /// The next notice the feed tells of an observation of `w` that `of` picks out.
-async fn next<T>(feed: &mut broadcast::Receiver<HubNotice>, of: impl Fn(ObservationNotice) -> Option<T>) -> T {
+async fn next<T>(
+    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
+    of: impl Fn(ObservationNotice) -> Option<T>,
+) -> T {
     let next = async {
         loop {
-            if let Ok(notice) = ObservationNotice::try_from(feed.recv().await.unwrap())
+            if let Ok(notice) = ObservationNotice::try_from(std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()))
                 && let Some(picked) = of(notice)
             {
                 return picked;
@@ -277,7 +280,7 @@ async fn a_hub_that_starts_again_has_each_as_of_its_read_and_its_first_pass_send
         assert!(is_as_of(observation), "{observation:?}");
     }
     assert!(kinds.len() >= 3);
-    let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok())
+    let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone))
         .filter_map(|notice| ObservationNotice::try_from(notice).ok())
         .collect();
     assert_eq!(told, [], "the first pass found what was kept");

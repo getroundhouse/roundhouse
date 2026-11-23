@@ -41,8 +41,8 @@ fn exited() -> TerminalUpdate {
     TerminalUpdate::Exited(TerminalExit { code: Some(0) })
 }
 
-async fn next(feed: &mut broadcast::Receiver<HubNotice>) -> HubNotice {
-    timeout(Duration::from_secs(10), feed.recv()).await.expect("a notice").unwrap()
+async fn next(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> HubNotice {
+    std::sync::Arc::unwrap_or_clone(timeout(Duration::from_secs(10), feed.recv()).await.expect("a notice").unwrap())
 }
 
 async fn listed(hub: &Hub) -> Records {

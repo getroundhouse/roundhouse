@@ -2,6 +2,7 @@
 //! whenever it has fallen behind.
 
 use std::future::Future;
+use std::sync::Arc;
 
 use protocol::client::listed::Listed;
 use protocol::client::{ApiError, HubFrame, HubNotice};
@@ -27,7 +28,7 @@ pub(super) async fn send_listed(
 /// of the notices it missed, as `sends` has it sent. A list that can't be read is said in the log, and the notices go on, so what changes after
 /// reaches the client, rather than ending a subscription the client can't tell has ended.
 pub(super) async fn forward<F: Future<Output = Result<Listed, ApiError>>>(
-    mut feed: broadcast::Receiver<HubNotice>,
+    mut feed: broadcast::Receiver<Arc<HubNotice>>,
     sends: &Sends,
     subscription_id: u64,
     frames: &mpsc::Sender<Outgoing>,
@@ -38,7 +39,7 @@ pub(super) async fn forward<F: Future<Output = Result<Listed, ApiError>>>(
         let frame = match feed.recv().await {
             Ok(notice) if sends.notice(&notice) => {
                 seen(&notice);
-                HubFrame::Notice { subscription_id, notice }
+                HubFrame::Notice { subscription_id, notice: Arc::unwrap_or_clone(notice) }
             }
             Ok(_) => continue,
             Err(broadcast::error::RecvError::Lagged(_)) => match list().await {

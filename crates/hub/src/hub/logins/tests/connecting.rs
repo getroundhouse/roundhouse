@@ -49,15 +49,15 @@ async fn every_client_is_told_of_what_changed_an_accounts_record_and_only_that()
     let mut feed = hub.subscribe_feed();
 
     let connected = hub.account_connect(asking("Work", "a-made-up-token")).await.unwrap();
-    let told = feed.try_recv();
-    let defaults = feed.try_recv();
+    let told = feed.try_recv().map(std::sync::Arc::unwrap_or_clone);
+    let defaults = feed.try_recv().map(std::sync::Arc::unwrap_or_clone);
     assert!(
         matches!(defaults, Ok(HubNotice::HubSettings(settings)) if settings.account_defaults.as_ref().unwrap()[0].account == connected.id)
     );
     hub.account_connect(asking("Work", "a-made-up-token")).await.unwrap();
-    let told_again = feed.try_recv();
+    let told_again = feed.try_recv().map(std::sync::Arc::unwrap_or_clone);
     let disconnected = hub.account_disconnect(connected.id.clone()).await.unwrap();
-    let told_last = feed.try_recv();
+    let told_last = feed.try_recv().map(std::sync::Arc::unwrap_or_clone);
 
     assert!(matches!(told, Ok(HubNotice::Account(record)) if record == connected));
     assert!(matches!(told_again, Err(TryRecvError::Empty)), "{told_again:?}");

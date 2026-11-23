@@ -48,8 +48,8 @@ async fn made(hub: &Hub) -> GithubApp {
 }
 
 /// Every notice in `feed` so far.
-fn told(feed: &mut broadcast::Receiver<HubNotice>) -> Vec<HubNotice> {
-    std::iter::from_fn(|| feed.try_recv().ok()).collect()
+fn told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Vec<HubNotice> {
+    std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect()
 }
 
 fn sent(hub: &Hub) -> GithubCredential {

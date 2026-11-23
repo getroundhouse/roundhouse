@@ -79,10 +79,11 @@ async fn read_again(hub: &Hub, asks: &[ReferenceAsk]) {
 }
 
 /// The next notice the feed tells of an observation.
-async fn next(feed: &mut broadcast::Receiver<HubNotice>) -> ObservationNotice {
+async fn next(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> ObservationNotice {
     let next = async {
         loop {
-            if let Ok(notice) = ObservationNotice::try_from(feed.recv().await.unwrap()) {
+            if let Ok(notice) = ObservationNotice::try_from(std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()))
+            {
                 return notice;
             }
         }
@@ -91,7 +92,10 @@ async fn next(feed: &mut broadcast::Receiver<HubNotice>) -> ObservationNotice {
 }
 
 /// The next copy the feed tells of `ask`'s observation, as it says it, with its revision.
-async fn next_of(feed: &mut broadcast::Receiver<HubNotice>, ask: &ReferenceAsk) -> (Observed<ReferenceSaid>, u64) {
+async fn next_of(
+    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
+    ask: &ReferenceAsk,
+) -> (Observed<ReferenceSaid>, u64) {
     let ObservationNotice::Copy(Observation::Reference { reference, said, rev }) = next(feed).await else {
         panic!("not a copy of a chip's")
     };

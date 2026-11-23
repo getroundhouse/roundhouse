@@ -39,7 +39,7 @@ async fn saving_the_comment_being_written_tells_the_feed_it_has_gone() {
 
     let told = tokio::time::timeout(TIMEOUT, async {
         loop {
-            if let Ok(HubNotice::Workspace(workspace)) = feed.recv().await {
+            if let Ok(HubNotice::Workspace(workspace)) = feed.recv().await.map(std::sync::Arc::unwrap_or_clone) {
                 return workspace;
             }
         }
@@ -85,7 +85,7 @@ async fn a_list_and_the_feed_agree_on_which_copy_is_newer() {
     let add = hub.comment_add(workspace.id.clone(), "a.txt".into(), DiffSide::New, 1, "Rename this".into(), None);
     let comment = add.await.unwrap();
     hub.comment_delete(comment.id.clone()).await.unwrap();
-    let notices: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok()).collect();
+    let notices: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect();
     let after = hub.records_list().await.unwrap();
 
     let newest_session = notices.iter().rev().find_map(|notice| {

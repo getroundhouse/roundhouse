@@ -67,7 +67,7 @@ async fn a_hub_tells_its_clients_the_release_it_would_update_to() {
 
     let told = tokio::time::timeout(TIMEOUT, async {
         loop {
-            if let Ok(HubNotice::HubUpdate(update)) = notices.recv().await {
+            if let Ok(HubNotice::HubUpdate(update)) = notices.recv().await.map(std::sync::Arc::unwrap_or_clone) {
                 return update;
             }
         }
@@ -168,10 +168,10 @@ async fn found_update(dir: &std::path::Path, archive: &[u8], served: Reply) -> (
 }
 
 /// What the hub tells of next that `wanted` takes.
-async fn told(notices: &mut Receiver<HubNotice>, wanted: impl Fn(&HubUpdate) -> bool) -> HubUpdate {
+async fn told(notices: &mut Receiver<std::sync::Arc<HubNotice>>, wanted: impl Fn(&HubUpdate) -> bool) -> HubUpdate {
     let told = tokio::time::timeout(TIMEOUT, async {
         loop {
-            if let Ok(HubNotice::HubUpdate(update)) = notices.recv().await
+            if let Ok(HubNotice::HubUpdate(update)) = notices.recv().await.map(std::sync::Arc::unwrap_or_clone)
                 && wanted(&update)
             {
                 return update;

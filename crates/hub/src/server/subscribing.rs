@@ -113,11 +113,15 @@ pub(super) fn taken(subscription_id: u64) -> ApiError {
 }
 
 /// Sends subscription `subscription_id` each notice of `feed` that `FeedSubscribe` is sent, as [`Sends::feed`] says.
-async fn pump_feed(mut feed: broadcast::Receiver<HubNotice>, subscription_id: u64, frames: mpsc::Sender<Outgoing>) {
+async fn pump_feed(
+    mut feed: broadcast::Receiver<Arc<HubNotice>>,
+    subscription_id: u64,
+    frames: mpsc::Sender<Outgoing>,
+) {
     let sends = Sends::feed();
     loop {
         let notice = match feed.recv().await {
-            Ok(notice) if sends.notice(&notice) => notice,
+            Ok(notice) if sends.notice(&notice) => Arc::unwrap_or_clone(notice),
             Ok(_) => continue,
             Err(broadcast::error::RecvError::Lagged(_)) => HubNotice::Resync,
             Err(broadcast::error::RecvError::Closed) => return,

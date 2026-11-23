@@ -69,7 +69,7 @@ async fn a_proposal_is_made_once_for_its_ask_and_the_feed_is_told() {
     assert_eq!((made.session_id.as_str(), made.current.call.as_ref().map(ToolUseId::as_str)), ("s", Some("toolu_1")));
     let told = tokio::time::timeout(TIMEOUT, async {
         loop {
-            if let Ok(HubNotice::Proposal(proposal)) = feed.recv().await {
+            if let Ok(HubNotice::Proposal(proposal)) = feed.recv().await.map(std::sync::Arc::unwrap_or_clone) {
                 return proposal;
             }
         }

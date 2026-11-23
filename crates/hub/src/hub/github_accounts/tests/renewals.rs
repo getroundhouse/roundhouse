@@ -33,8 +33,8 @@ pub(super) async fn renewing(answers: Vec<Answer>) -> StandIn {
 }
 
 /// Every notice in `feed` so far.
-fn told(feed: &mut broadcast::Receiver<HubNotice>) -> Vec<HubNotice> {
-    std::iter::from_fn(|| feed.try_recv().ok()).collect()
+fn told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Vec<HubNotice> {
+    std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect()
 }
 
 fn sent(hub: &Hub) -> GithubCredential {
@@ -130,7 +130,7 @@ async fn every_client_is_told_of_the_settings_as_what_workers_are_sent_changes_a
     hub.check_github_logins(now_ms() + 9 * HOUR_MS).await;
     let told = tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            if let HubNotice::HubSettings(settings) = feed.recv().await.unwrap() {
+            if let HubNotice::HubSettings(settings) = std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()) {
                 return settings;
             }
         }

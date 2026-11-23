@@ -60,7 +60,7 @@ async fn a_workspace_that_cant_be_made_is_announced_on_its_way_and_then_removed(
 
     let refused = hub.workspace_create("r".into(), Some("doomed".into()), None, None).await.map_err(|e| e.code);
 
-    let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok())
+    let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone))
         .filter(|notice| matches!(notice, HubNotice::Workspace(_) | HubNotice::Removed { .. }))
         .collect();
     let [HubNotice::Workspace(making), HubNotice::Removed { record, rev }] = told.as_slice() else {

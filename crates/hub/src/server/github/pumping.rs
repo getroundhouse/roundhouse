@@ -51,8 +51,8 @@ pub(in crate::server) async fn pump(
                     Err(RecvError::Lagged(_)) => continue 'whole,
                     Err(RecvError::Closed) => return,
                 },
-                notice = feed.recv() => match notice {
-                    Ok(HubNotice::Workspace(workspace)) => feeding.recorded(&workspace),
+                notice = feed.recv() => match notice.as_deref() {
+                    Ok(HubNotice::Workspace(workspace)) => feeding.recorded(workspace),
                     Ok(_) => Vec::new(),
                     Err(RecvError::Lagged(_)) => continue 'whole,
                     Err(RecvError::Closed) => return,

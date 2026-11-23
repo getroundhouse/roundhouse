@@ -292,7 +292,7 @@ impl Hub {
         self.blocking(move |store| store.get_workspace(&id)).await
     }
 
-    pub(crate) fn subscribe_feed(&self) -> broadcast::Receiver<HubNotice> {
+    pub(crate) fn subscribe_feed(&self) -> broadcast::Receiver<Arc<HubNotice>> {
         self.feed.subscribe()
     }
 

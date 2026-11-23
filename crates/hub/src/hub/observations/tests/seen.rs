@@ -29,12 +29,12 @@ pub(super) async fn listed(hub: &Hub) -> (Vec<Observation>, Rev) {
 }
 
 /// What the feed has told since it was last read.
-pub(super) fn told(feed: &mut broadcast::Receiver<HubNotice>) -> Vec<HubNotice> {
-    std::iter::from_fn(|| feed.try_recv().ok()).collect()
+pub(super) fn told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Vec<HubNotice> {
+    std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect()
 }
 
 /// The one notice the feed has told since it was last read, which is a copy of an observation.
-pub(super) fn told_copy(feed: &mut broadcast::Receiver<HubNotice>) -> Observation {
+pub(super) fn told_copy(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Observation {
     match told(feed).as_slice() {
         [HubNotice::Observation(observation)] => observation.clone(),
         told => panic!("not one copy of an observation: {told:?}"),
