@@ -125,6 +125,27 @@ impl Store {
         Ok(admitted.map(InstanceId::from))
     }
 
+    /// The instances the hub has admitted a worker to that dials it, which may still be running, and dial it again.
+    pub fn instances_with_dialing_workers(&self) -> Result<Vec<InstanceId>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn.prepare_cached("SELECT id FROM instances WHERE worker_key IS NOT NULL ORDER BY id")?;
+        let rows = statement.query_map([], OneValue::read)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?.into_iter().map(InstanceId::from).collect())
+    }
+
+    /// Once the hub has ended the instance's worker, so a hub that starts doesn't wait for it to dial again. The next
+    /// worker there is admitted by its ticket.
+    pub fn forget_dialing_worker(&self, id: &InstanceId) -> Result<(), StoreError> {
+        lock(&self.writer).execute("UPDATE instances SET worker_key = NULL WHERE id = ?", [id.as_str()])?;
+        Ok(())
+    }
+
+    /// Once the hub has stopped every worker, as it does when it stops without leaving them for the next hub.
+    pub fn forget_dialing_workers(&self) -> Result<(), StoreError> {
+        lock(&self.writer).execute("UPDATE instances SET worker_key = NULL", [])?;
+        Ok(())
+    }
+
     /// Whether any instance has a worker that dials the hub, or a ticket a worker could dial with.
     pub fn has_dialing_workers(&self) -> Result<bool, StoreError> {
         let conn = lock(&self.reader);

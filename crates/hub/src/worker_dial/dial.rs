@@ -58,10 +58,6 @@ impl WorkerDial {
     }
 
     /// The instance's worker, once it has dialed and been admitted, if it does within `within`.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the hub reaches a dialed worker through it in the next PR of #2478's stack")
-    )]
     pub(crate) async fn worker(&self, instance_id: &InstanceId, within: Duration) -> Option<Dialed> {
         self.arrivals.take(instance_id, within).await
     }

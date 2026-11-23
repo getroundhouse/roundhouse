@@ -265,7 +265,8 @@ fn a_workspace_whose_name_git_has_takes_its_station_with_a_number_keeping_its_id
     assert_eq!(made.name, format!("{}-2", first.name));
     assert_eq!(made.branch.as_str(), format!("{}/start", made.name));
     assert_eq!(stack.instances_made(), [made.instance_id.to_string()]);
-    assert_eq!(stack.workers_reached(), [made.instance_id.to_string()]);
+    let started_on: Vec<_> = stack.tickets_given().into_iter().map(|(instance, _)| instance).collect();
+    assert_eq!(started_on, [made.instance_id.to_string()]);
     stack.kill_hub();
     let paths = stack.paths();
     let store = hub::store::Store::open(&paths.database, &paths.backups_dir).unwrap();

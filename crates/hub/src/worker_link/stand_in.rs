@@ -85,7 +85,7 @@ impl WorkerLink {
             calls: Calls::new(Box::new(ours)),
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
-            process,
+            carrier: super::carrier::Carrier::Command(process),
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),

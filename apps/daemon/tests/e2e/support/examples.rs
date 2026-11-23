@@ -41,7 +41,7 @@ fn example(name: &str) -> PathBuf {
 
 impl Stack {
     /// Makes workspaces from now on through the local provider behind an adapter, as through another provider's, so
-    /// [`Stack::instances_made`] and [`Stack::workers_reached`] say what the adapter was asked. Starts the hub again, since it reads its
+    /// [`Stack::instances_made`] and [`Stack::tickets_given`] say what the adapter was asked. Starts the hub again, since it reads its
     /// providers as it starts.
     pub(crate) fn make_through_an_adapter(&mut self) {
         self.write_adapter("home/clones", &[], &serde_json::json!([]));
@@ -79,8 +79,8 @@ impl Stack {
             path(clones),
             "--made".into(),
             path("instances-made"),
-            "--connected".into(),
-            path("workers-reached"),
+            "--tickets".into(),
+            path("tickets-given"),
         ];
         args.extend(extra.iter().map(|flag| (*flag).to_string()));
         let adapter = serde_json::json!({"name": "recording", "program": recording_adapter(), "args": args});
@@ -94,10 +94,11 @@ impl Stack {
         self.lines_of("instances-made")
     }
 
-    /// The ID of each instance the adapter was asked how to reach a worker on, in turn, as for
+    /// The ID of each instance the adapter started a worker on, in turn, with the ticket it gave the worker, as for
     /// [`Stack::instances_made`].
-    pub(crate) fn workers_reached(&self) -> Vec<String> {
-        self.lines_of("workers-reached")
+    pub(crate) fn tickets_given(&self) -> Vec<(String, String)> {
+        let given = self.lines_of("tickets-given");
+        given.iter().map(|line| line.split_once(' ').unwrap()).map(|(id, t)| (id.into(), t.into())).collect()
     }
 
     /// The workers the adapter was given at each start, in turn, once [`Stack::make_through_an_adapter_given`] has been

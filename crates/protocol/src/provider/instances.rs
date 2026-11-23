@@ -29,9 +29,9 @@ impl Request for Create {
 
 /// Starts it, or does nothing to one that's running, whatever runs there. First puts in place the one of `workers`
 /// built for the instance's target, if the instance holds a different one, so a worker always runs its hub's build.
-/// A worker it starts is given `ticket`, which it dials the hub with, as [`crate::dialing`] says. A worker already
-/// running there dials with the ticket it was given, so this one goes unused. *Not built:* the hub reaching a worker
-/// through its ticket rather than through `Connect`.
+/// A worker it starts is given `ticket`, which it dials the hub with, as [`crate::dialing`] says, so the adapter is
+/// never in the worker's stream. A worker already running there dials with the ticket it was given, so this one goes
+/// unused.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Start {
     pub instance_id: InstanceId,
@@ -116,21 +116,6 @@ impl Reply for Instances {
     }
 }
 
-/// The command whose stdin and stdout are the worker's stream. The hub runs it, so the adapter is never in the
-/// stream's way. It can be asked again.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct Connect {
-    pub instance_id: InstanceId,
-}
-
-impl Request for Connect {
-    type Reply = WorkerCommand;
-
-    fn into_request(self) -> ProviderRequest {
-        ProviderRequest::Connect(self)
-    }
-}
-
 /// Turns a stopped instance into a base image, which other instances are made from and which can't start again, or
 /// does nothing if it's one already. Refused with `Unsupported` by a provider without
 /// [`Feature::BaseImages`](super::Feature::BaseImages).
@@ -169,11 +154,6 @@ pub struct Instance {
     pub state: InstanceState,
     #[serde(default)]
     pub base_image: bool,
-    /// Whether a worker serves it, which a hub that starts carries on with. Apart from its state, since an instance can
-    /// be awake with no worker on it, as every instance is once its worker has ended. One an adapter lists without
-    /// saying has none.
-    #[serde(default)]
-    pub worker_running: bool,
 }
 
 /// The instance's own state, such as whether its machine is on, whatever runs there.
@@ -197,9 +177,6 @@ pub struct Command {
     #[serde(default)]
     pub env: Vec<(String, String)>,
 }
-
-/// The command returned by an instance connection.
-pub type WorkerCommand = Command;
 
 impl Reply for Command {
     fn read(response: ProviderResponse) -> Result<Self, ProviderResponse> {

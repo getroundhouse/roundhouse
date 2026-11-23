@@ -233,17 +233,24 @@ impl Provider for LocalProvider {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(e) => return Err(ProviderError::io(format!("reading {}", dir.display()), e)),
         };
-        let mut instances = Vec::new();
-        for entry in entries.flatten() {
-            if !entry.path().is_dir() {
-                continue;
+        let instance_id = |entry: &std::fs::DirEntry| entry.file_name().to_string_lossy().into_owned().into();
+        // A directory is never asleep.
+        let instances = entries.flatten().filter(|entry| entry.path().is_dir()).map(|entry| Instance {
+            instance_id: instance_id(&entry),
+            state: InstanceState::Running,
+            base_image: false,
+        });
+        Ok(instances.collect())
+    }
+
+    async fn workers_running(&self) -> Result<Vec<InstanceId>, ProviderError> {
+        let mut running = Vec::new();
+        for instance in self.list().await? {
+            if running_worker(&self.instance_dir(&instance.instance_id)).await.is_some() {
+                running.push(instance.instance_id);
             }
-            let worker_running = running_worker(&entry.path()).await.is_some();
-            let instance_id = entry.file_name().to_string_lossy().into_owned().into();
-            // A directory is never asleep.
-            instances.push(Instance { instance_id, state: InstanceState::Running, base_image: false, worker_running });
         }
-        Ok(instances)
+        Ok(running)
     }
 
     async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError> {

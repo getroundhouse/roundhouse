@@ -9,14 +9,11 @@ use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::dialing::WorkerTicket;
 use protocol::model::{HubId, InstanceId};
 use protocol::provider::{
-    ANSWERED_WITHIN, Connect, Create, Destroy, EndWorker, Hello, HelloReply, KillWorker, List, MakeBaseImage,
-    ProviderCall, ProviderEvent, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse, Reply, Request,
-    Start,
+    ANSWERED_WITHIN, Create, Destroy, EndWorker, Hello, HelloReply, KillWorker, List, MakeBaseImage, ProviderCall,
+    ProviderEvent, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse, Reply, Request, Start,
 };
 use protocol::{Build, frame};
-use providers::{
-    Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand, WorkerEnvironment,
-};
+use providers::{Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerEnvironment};
 use std::io;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -352,10 +349,6 @@ impl Provider for AdapterProvider {
 
     async fn list(&self) -> Result<Vec<Instance>, ProviderError> {
         Ok(self.call(List).await?.instances)
-    }
-
-    async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError> {
-        self.call(Connect { instance_id: instance_id.clone() }).await
     }
 
     async fn open_preflight(

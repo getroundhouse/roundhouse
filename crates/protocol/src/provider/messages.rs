@@ -2,9 +2,9 @@ use super::{hello, instances};
 use crate::client::Outcome;
 use crate::model::InstanceId;
 use hello::{Hello, HelloReply};
-use instances::{Connect, Create, Destroy, EndWorker, Instances, KillWorker, MakeBaseImage, Start};
 #[cfg(test)]
-use instances::{List, WorkerCommand};
+use instances::{Command, List};
+use instances::{Create, Destroy, EndWorker, Instances, KillWorker, MakeBaseImage, Start};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -18,8 +18,8 @@ pub const HELLO_ANSWERED_WITHIN: Duration = Duration::from_secs(10);
 /// should take, even a cloud's VM starting, so an adapter that has lost a request can't keep the hub waiting forever.
 pub const ANSWERED_WITHIN: Duration = Duration::from_mins(10);
 /// How long a hub that's starting gives an adapter, before it serves, to answer `list`, its start and its hello
-/// included, and `connect` to a worker an earlier hub left there. The hub interrupts the sessions of a slower one, as if
-/// their workers had gone, so one slow provider doesn't keep every client waiting.
+/// included, and a worker an earlier hub left there to dial it again. The hub interrupts the sessions of a slower one,
+/// as if their workers had gone, so one slow provider doesn't keep every client waiting.
 pub const ANSWERED_AS_THE_HUB_STARTS_WITHIN: Duration = Duration::from_secs(5);
 
 /// A request to a provider's adapter, which names what the adapter answers it with.
@@ -64,7 +64,6 @@ pub enum ProviderRequest {
     Destroy(Destroy),
     /// See [`List`](super::List).
     List,
-    Connect(Connect),
     OpenPreflight(super::OpenPreflight),
     MakeBaseImage(MakeBaseImage),
     /// A request from a newer hub, which the adapter refuses with `Unsupported`.
@@ -134,6 +133,6 @@ mod tests {
 
         assert_eq!(<()>::read(ProviderResponse::Ok), Ok(()));
         assert_eq!(<()>::read(instances.clone()), Err(instances.clone()));
-        assert_eq!(WorkerCommand::read(instances.clone()), Err(instances));
+        assert_eq!(Command::read(instances.clone()), Err(instances));
     }
 }

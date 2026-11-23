@@ -8,7 +8,7 @@ use protocol::Build;
 use protocol::client::{ApiError, HubStart};
 use protocol::dialing::WorkerTicket;
 use protocol::model::{Workspace, WorkspaceId, WorkspaceStatus};
-use providers::{Capabilities, Instance, InstanceState, ProviderError, Size, WorkerBinary, WorkerCommand};
+use providers::{Capabilities, Instance, ProviderError, Size, WorkerBinary};
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
@@ -23,12 +23,9 @@ use crate::worker_link::WorkerLink;
 use github::Github;
 
 /// Makes and destroys nothing, and says it has unless it's told to refuse. One that holds its first start says so on
-/// `started`, and waits for `go_on` before refusing it. It lists what `listed` says, and keeps which instances it was
-/// asked how to reach a worker on, which it refuses.
+/// `started`, and waits for `go_on` before refusing it. It lists nothing, and starts no worker that dials.
 #[derive(Default)]
 struct Fake {
-    listed: Vec<Instance>,
-    connected: parking_lot::Mutex<Vec<InstanceId>>,
     refuses_to_create: bool,
     refuses_to_destroy: AtomicBool,
     holds_start: AtomicBool,
@@ -89,12 +86,7 @@ impl Provider for Fake {
     }
 
     async fn list(&self) -> Result<Vec<Instance>, ProviderError> {
-        Ok(self.listed.clone())
-    }
-
-    async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError> {
-        self.connected.lock().push(instance_id.clone());
-        Err(ProviderError::Unsupported("run a worker"))
+        Ok(Vec::new())
     }
 
     async fn make_base_image(&self, _: &InstanceId) -> Result<(), ProviderError> {
@@ -258,30 +250,30 @@ async fn a_start_that_fails_leaves_the_next_to_clear_the_instance() {
     assert!(!*hub.worker_gate(&id).lock().await, "what it started may be on the instance");
 }
 
-/// A starting hub carries on only where its provider says a worker serves the instance, and leaves one that's awake
-/// with nothing on it, which every instance of a provider that keeps them awake is once its worker has ended.
+/// A starting hub carries on only where a worker that dialed it before may dial again, and not on an instance whose
+/// worker it never admitted, or whose worker it has ended since.
 #[tokio::test]
-async fn a_starting_hub_carries_on_only_where_a_worker_serves_the_instance() {
+async fn a_starting_hub_carries_on_only_where_a_worker_dialed_it() {
     let dir = tempfile::tempdir().unwrap();
-    let listed = |id: &str, worker_running| Instance {
-        instance_id: id.into(),
-        state: InstanceState::Running,
-        base_image: false,
-        worker_running,
-    };
-    let fake = Fake { listed: vec![listed("birch-vm", true), listed("cedar-vm", false)], ..Fake::default() };
-    let (hub, fake) = hub_with(dir.path(), fake);
-    let mut birch: Workspace = hub.workspace(&"w".into()).await.unwrap();
-    for (id, instance_id) in [("birch", "birch-vm"), ("cedar", "cedar-vm")] {
-        (birch.id, birch.name, birch.instance_id, birch.provider) =
+    let (hub, _) = hub_with(dir.path(), Fake::default());
+    let mut workspace: Workspace = hub.workspace(&"w".into()).await.unwrap();
+    for (id, instance_id) in [("birch", "birch-vm"), ("cedar", "cedar-vm"), ("dogwood", "dogwood-vm")] {
+        (workspace.id, workspace.name, workspace.instance_id, workspace.provider) =
             (id.into(), id.into(), instance_id.into(), "fake".into());
-        birch.created_at_ms += 1;
-        let workspace = birch.clone();
+        workspace.created_at_ms += 1;
+        let added = workspace.clone();
         let placement = crate::store::WorkspacePlacement::local_checkout("/repo");
-        hub.blocking(move |store| store.insert_workspace(&workspace, &placement, None)).await.unwrap();
+        hub.blocking(move |store| store.insert_workspace(&added, &placement, None)).await.unwrap();
     }
+    for (instance_id, key) in [("birch-vm", "birch-worker"), ("dogwood-vm", "dogwood-worker")] {
+        let secret = protocol::dialing::TicketSecret::from(format!("{instance_id}-secret"));
+        hub.store.instance_ticket(&instance_id.into(), &secret).unwrap();
+        hub.store.admit_worker(&secret, key).unwrap();
+    }
+    hub.store.forget_dialing_worker(&"dogwood-vm".into()).unwrap();
 
-    hub.carry_on(crate::hub::LeftAtWork::read(&hub.store).unwrap()).await;
+    let workspaces = hub.blocking(|store| store.list_workspaces(false)).await.unwrap();
+    let running = hub.with_workers_running(&workspaces).await;
 
-    assert_eq!(*fake.connected.lock(), [InstanceId::from("birch-vm")]);
+    assert_eq!(running, [WorkspaceId::from("birch")]);
 }

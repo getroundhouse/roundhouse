@@ -5,10 +5,9 @@
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame;
 use protocol::provider::{
-    Capabilities, ClonePersistence, Connect, Create, Destroy, EndWorker, Feature, Hello, HelloReply, Instance,
+    Capabilities, ClonePersistence, Command, Create, Destroy, EndWorker, Feature, Hello, HelloReply, Instance,
     InstanceState, Instances, KillWorker, MakeBaseImage, OpenPreflight, ProviderCall, ProviderEvent, ProviderFrame,
-    ProviderOutcome, ProviderRequest, ProviderResponse, Size, Start, WorkerBinary, WorkerCommand, WorkerEnvironment,
-    WorkerFilesystem,
+    ProviderOutcome, ProviderRequest, ProviderResponse, Size, Start, WorkerBinary, WorkerEnvironment, WorkerFilesystem,
 };
 
 use super::keeps_its_form;
@@ -53,10 +52,6 @@ fn every_request_keeps_its_form() {
     );
     keeps_its_form(&call(ProviderRequest::List), r#"{"id":7,"request":{"method":"list"}}"#);
     keeps_its_form(
-        &call(ProviderRequest::Connect(Connect { instance_id: "i".into() })),
-        r#"{"id":7,"request":{"method":"connect","instance_id":"i"}}"#,
-    );
-    keeps_its_form(
         &call(ProviderRequest::OpenPreflight(OpenPreflight {
             project: protocol::model::RepoOrigin::Checkout { path: "/repo".into() },
             agent: protocol::model::AgentKind::Codex,
@@ -83,21 +78,11 @@ fn every_response_and_event_keeps_its_form() {
     keeps_its_form(
         &reply(ProviderResponse::Instances(Instances {
             instances: vec![
-                Instance {
-                    instance_id: "i".into(),
-                    state: InstanceState::Running,
-                    base_image: false,
-                    worker_running: true,
-                },
-                Instance {
-                    instance_id: "base".into(),
-                    state: InstanceState::Stopped,
-                    base_image: true,
-                    worker_running: false,
-                },
+                Instance { instance_id: "i".into(), state: InstanceState::Running, base_image: false },
+                Instance { instance_id: "base".into(), state: InstanceState::Stopped, base_image: true },
             ],
         })),
-        r#"{"frame":"reply","id":7,"response":{"result":"instances","instances":[{"instance_id":"i","state":"running","base_image":false,"worker_running":true},{"instance_id":"base","state":"stopped","base_image":true,"worker_running":false}]}}"#,
+        r#"{"frame":"reply","id":7,"response":{"result":"instances","instances":[{"instance_id":"i","state":"running","base_image":false},{"instance_id":"base","state":"stopped","base_image":true}]}}"#,
     );
     keeps_its_form(
         &ProviderFrame::Event {
@@ -211,15 +196,15 @@ fn a_list_reads_with_fields_it_doesnt_know() {
     assert_eq!(call, ProviderCall { id: 4, request: ProviderRequest::List });
 }
 
-/// What an adapter leaves out of its capabilities it can't do, and an instance it lists without saying whether a worker
-/// serves it has none, so a starting hub carries on with no worker there.
+/// What an adapter leaves out of its capabilities it can't do, and an instance it lists without saying it's a base
+/// image isn't one.
 #[test]
 fn what_an_adapter_leaves_out_it_doesnt_have() {
     let capabilities: Capabilities = frame::decode(b"{}").unwrap();
     let instance: Instance = frame::decode(br#"{"instance_id":"i","state":"running"}"#).unwrap();
 
     assert_eq!(capabilities, Capabilities::default());
-    assert!(!instance.worker_running);
+    assert!(!instance.base_image);
 }
 
 #[test]
@@ -262,7 +247,7 @@ fn a_create_leaves_out_what_it_doesnt_set() {
 }
 
 #[test]
-fn a_connect_answers_with_a_command_and_an_adapter_refuses_with_an_api_error() {
+fn a_preflight_answers_with_a_command_and_an_adapter_refuses_with_an_api_error() {
     let command: ProviderFrame = frame::decode(
         br#"{"frame":"reply","id":5,"response":{"result":"command","program":"incus","args":["exec","i"],"env":[["A","b"]]}}"#,
     )
@@ -270,11 +255,8 @@ fn a_connect_answers_with_a_command_and_an_adapter_refuses_with_an_api_error() {
     let refused: ProviderFrame =
         frame::decode(br#"{"frame":"reply","id":6,"error":{"code":"unsupported","message":"no"}}"#).unwrap();
 
-    let sent = WorkerCommand {
-        program: "incus".into(),
-        args: vec!["exec".into(), "i".into()],
-        env: vec![("A".into(), "b".into())],
-    };
+    let sent =
+        Command { program: "incus".into(), args: vec!["exec".into(), "i".into()], env: vec![("A".into(), "b".into())] };
     assert_eq!(
         command,
         ProviderFrame::Reply { id: 5, outcome: ProviderOutcome::Response(ProviderResponse::Command(sent)) }

@@ -1,8 +1,10 @@
 //! Stands in for the adapter of a provider other than the local one, which a test can't otherwise get. It serves the
-//! local provider over the provider protocol, as an adapter does, and writes the ID of each instance it makes to
-//! `--made`, and of each it's asked how to reach a worker on to `--connected`, one to a line, since the local provider
-//! has no tools of its own to show either in. An instance that's there already isn't made again, as with any provider,
-//! so asking for it again writes nothing. The workers it's given at each start go beside `--made`, as `.started`.
+//! local provider over the provider protocol, as an adapter does, but starts each worker with the ticket it's given,
+//! which dials the hub, as every provider's but the local one's does. It writes the ID of each instance it makes to
+//! `--made`, and of each it starts a worker on, with the worker's ticket, to `--tickets`, one to a line, since the
+//! local provider has no tools of its own to show either in. An instance that's there already isn't made again, as
+//! with any provider, so asking for it again writes nothing. The workers it's given at each start go beside `--made`,
+//! as `.started`.
 
 #![expect(clippy::unwrap_used, reason = "a test program, so failing loudly is what it should do")]
 
@@ -16,13 +18,13 @@ use protocol::dialing::WorkerTicket;
 use protocol::model::InstanceId;
 use providers::local::{LocalConfig, LocalProvider};
 use providers::{
-    Capabilities, ClonePersistence, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand,
-    WorkerEnvironment, WorkerFilesystem,
+    Capabilities, ClonePersistence, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerEnvironment,
+    WorkerFilesystem,
 };
 
 #[derive(Parser)]
 struct Args {
-    /// The binary that runs `worker --stdio`.
+    /// The binary that runs `worker --ticket`.
     #[arg(long)]
     worker: PathBuf,
     /// Where the local provider keeps its instances, apart from the hub's own local provider's.
@@ -37,9 +39,9 @@ struct Args {
     /// Where it writes the ID of each instance it makes.
     #[arg(long)]
     made: PathBuf,
-    /// Where it writes the ID of each instance it's asked how to reach a worker on.
+    /// Where it writes the ID of each instance it starts a worker on, and the worker's ticket.
     #[arg(long)]
-    connected: PathBuf,
+    tickets: PathBuf,
     /// Declare `WorkerFilesystem::Separate` instead of sharing the hub's filesystem.
     #[arg(long)]
     separate: bool,
@@ -50,8 +52,11 @@ struct Args {
 
 struct Recording {
     local: LocalProvider,
+    worker: PathBuf,
+    instances: PathBuf,
+    workspaces_root: PathBuf,
     made: PathBuf,
-    connected: PathBuf,
+    tickets: PathBuf,
     clones_dir: PathBuf,
     environment: WorkerEnvironment,
 }
@@ -96,7 +101,12 @@ impl Provider for Recording {
     ) -> Result<(), ProviderError> {
         let mut started = std::fs::OpenOptions::new().create(true).append(true).open(self.started()).unwrap();
         started.write_all(&protocol::frame::encode(&workers).unwrap()).unwrap();
-        self.local.start(instance_id, workers, ticket).await
+        self.local.start(instance_id, workers, ticket).await?;
+        let running = self.local.workers_running().await?;
+        if let Some(ticket) = ticket.filter(|_| !running.contains(instance_id)) {
+            self.start_worker(instance_id, ticket);
+        }
+        Ok(())
     }
 
     async fn end_worker(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
@@ -119,11 +129,6 @@ impl Provider for Recording {
         self.local.list().await
     }
 
-    async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError> {
-        note(&self.connected, instance_id);
-        self.local.connect(instance_id).await
-    }
-
     async fn open_preflight(
         &self,
         launch: &protocol::provider::OpenPreflight,
@@ -138,6 +143,30 @@ impl Provider for Recording {
 }
 
 impl Recording {
+    /// A worker that dials the hub with `ticket`, in a session of its own, as a provider's worker runs apart from its
+    /// adapter, and keeps its own log beside its instance's directory.
+    fn start_worker(&self, instance_id: &InstanceId, ticket: &WorkerTicket) {
+        let mut tickets = std::fs::OpenOptions::new().create(true).append(true).open(&self.tickets).unwrap();
+        writeln!(tickets, "{instance_id} {}", ticket.as_str()).unwrap();
+        let state_dir = self.instances.join(instance_id.as_str());
+        let mut command = std::process::Command::new(&self.worker);
+        command
+            .args(["worker", "--ticket", ticket.as_str(), "--log"])
+            .arg(state_dir.with_extension("log"))
+            .arg("--workspaces-root")
+            .arg(&self.workspaces_root)
+            .arg("--state-dir")
+            .arg(&state_dir)
+            .arg("--clones-dir")
+            .arg(&self.clones_dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        process::detach(&mut command);
+        let mut started = command.spawn().unwrap();
+        std::thread::spawn(move || started.wait());
+    }
+
     /// Where it writes the workers it's given at each start, as a line of JSON.
     fn started(&self) -> PathBuf {
         self.made.with_extension("started")
@@ -155,17 +184,25 @@ async fn main() {
     let args = Args::parse();
     let clones_dir = args.clones.clone();
     let local = LocalProvider::new(LocalConfig {
-        worker_exe: args.worker,
-        instances_dir: args.instances,
-        workspaces_root: args.workspaces_root,
+        worker_exe: args.worker.clone(),
+        instances_dir: args.instances.clone(),
+        workspaces_root: args.workspaces_root.clone(),
         clones_dir: args.clones,
     });
     let environment = WorkerEnvironment {
         filesystem: if args.separate { WorkerFilesystem::Separate } else { WorkerFilesystem::Hub },
         clones: if args.ephemeral { ClonePersistence::Ephemeral } else { ClonePersistence::Persistent },
     };
-    let provider: Arc<dyn Provider> =
-        Arc::new(Recording { local, made: args.made, connected: args.connected, clones_dir, environment });
+    let provider: Arc<dyn Provider> = Arc::new(Recording {
+        local,
+        worker: args.worker,
+        instances: args.instances,
+        workspaces_root: args.workspaces_root,
+        made: args.made,
+        tickets: args.tickets,
+        clones_dir,
+        environment,
+    });
     let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
     let build = protocol::this_build!().version();
     providers::serve::serve(Box::new(move |_| Ok(provider)), build, stdin, stdout).await.unwrap();

@@ -74,7 +74,7 @@ impl Hub {
         // agents of one that was killed. Or a stop that failed.
         if ended.is_some() || !*cleared {
             jobs::step("clearing the workspace's instance before starting its worker");
-            *cleared = clear_instance(provider.as_ref(), &workspace.instance_id).await;
+            *cleared = self.clear_instance(provider.as_ref(), &workspace.instance_id).await;
         }
         jobs::step("starting the workspace's worker");
         // Whichever provider runs it, what its worker writes to stderr is kept here.
@@ -193,7 +193,7 @@ impl Hub {
         let mut cleared = gate.lock().await;
         if !*cleared && self.workers.lock().get(&workspace.id).is_none() {
             jobs::step("clearing the workspace's instance");
-            *cleared = clear_instance(provider.as_ref(), &workspace.instance_id).await;
+            *cleared = self.clear_instance(provider.as_ref(), &workspace.instance_id).await;
         }
     }
 
@@ -230,7 +230,7 @@ impl Hub {
         link.stop(STOP_GRACE).await;
         jobs::step(format!("clearing the workspace's instance after stopping {link}"));
         *cleared = match self.provider(&workspace.provider) {
-            Ok(provider) => clear_instance(provider.as_ref(), &workspace.instance_id).await,
+            Ok(provider) => self.clear_instance(provider.as_ref(), &workspace.instance_id).await,
             Err(e) => {
                 warn!(
                     name: "instance.uncleared",
@@ -269,7 +269,7 @@ impl Hub {
         // Only the hub's current worker has the instance to give back. One stopped or replaced already doesn't, and
         // nor does one that never got that far, such as one refused because another worker serves the instance.
         if current {
-            *cleared = clear_instance(provider, instance_id).await;
+            *cleared = self.clear_instance(provider, instance_id).await;
         }
         // The instance is free, so a replacement can start or stop from here on. What's left waits on other workers,
         // such as a replacement told to watch, which mustn't keep the gate from the next.
@@ -321,6 +321,21 @@ impl Hub {
         }
     }
 
+    /// Ends whatever worker runs on the instance, so another can start there and claim it, and forgets the key of a
+    /// worker that dialed the hub there, so a hub that starts doesn't wait for it. Whether that worked, since until it
+    /// has, a new worker may find the instance taken.
+    async fn clear_instance(&self, provider: &dyn Provider, instance_id: &InstanceId) -> bool {
+        if let Err(e) = provider.end_worker(instance_id).await {
+            warn!(name: "worker.unended", %instance_id, error = error_chain(&e), "Couldn't end the worker on an instance");
+            return false;
+        }
+        let owned = instance_id.clone();
+        if let Err(e) = self.blocking(move |store| store.forget_dialing_worker(&owned)).await {
+            warn!(name: "dialed.unforgotten", %instance_id, error = e.message, "Couldn't forget the worker that dialed the hub");
+        }
+        true
+    }
+
     /// Ends a worker that didn't stop when asked, and has its provider end what it left running, such as its agents.
     /// Under the gate, so that can't end a worker started meanwhile.
     async fn end_stuck_worker(&self, workspace: &Workspace, link: &WorkerLink, provider: &dyn Provider) {
@@ -332,23 +347,6 @@ impl Hub {
         if !replaced && let Err(e) = provider.kill_worker(instance_id).await {
             warn!(name: "worker.stuck_unended", %instance_id, error = error_chain(&e), "Couldn't end a stuck worker");
             *cleared = false;
-        }
-    }
-}
-
-/// Ends whatever worker runs on the instance, so another can start there and claim it. Whether that worked, since until it
-/// has, a new worker may find the instance taken.
-async fn clear_instance(provider: &dyn Provider, instance_id: &InstanceId) -> bool {
-    match provider.end_worker(instance_id).await {
-        Ok(()) => true,
-        Err(e) => {
-            warn!(
-                name: "worker.unended",
-                %instance_id,
-                error = error_chain(&e),
-                "Couldn't end the worker on an instance"
-            );
-            false
         }
     }
 }
