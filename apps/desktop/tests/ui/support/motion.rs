@@ -16,7 +16,7 @@ use super::Ui;
 const SETTLES_WITHIN: usize = 500;
 
 /// How long a frame is, on a display that draws 60 a second.
-const A_FRAME: Duration = Duration::from_nanos(16_666_667);
+pub(super) const A_FRAME: Duration = Duration::from_nanos(16_666_667);
 
 impl Ui<'_> {
     /// Brings the window's next frame, as a display would. A test has no display, so what waits for the next frame

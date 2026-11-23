@@ -20,14 +20,18 @@ impl Ui<'_> {
         self.input(prompt);
         self.press("enter");
         self.wait("the agent to ask", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
-        self.next_open_approval();
+        let asked = self.next_open_approval();
         self.wait("what it asks to show", |ui| ui.has(id("question")));
+        // What's asked comes with the session's record, and its request can be fetched on its own, so it can show
+        // before the chat behind it has what came before it, which comes through the chat's own subscription.
+        self.wait("the chat behind it to have what it asked", |ui| ui.events().iter().any(|event| event.seq == asked));
     }
 
-    /// Lets the time pass after which what's just been asked takes keys.
+    /// Lets the time pass after which what's just been asked takes keys, and the chat behind it settle where it is.
     pub(crate) fn let_what_is_asked_settle(&mut self) {
         self.cx.executor().advance_clock(transcript::QUESTION_SETTLES);
         self.frame();
+        self.wait_for_the_chat_to_settle();
     }
 
     /// Allows the tool's use that's asked about in the composer's place, by choosing Allow and sending it.
