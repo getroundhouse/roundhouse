@@ -10,6 +10,8 @@ mod general;
 mod git;
 mod lists;
 mod notifications;
+mod permission_row;
+mod permissions;
 mod providers;
 mod redraw;
 mod rows;

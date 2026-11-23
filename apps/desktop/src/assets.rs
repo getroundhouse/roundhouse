@@ -27,6 +27,7 @@ gpui_kit::assets::icon_assets!(
         RotateCcwClock,
         ScrollText,
         Server,
+        ShieldCheck,
         SquareArrowRight,
         SquareDot,
         SquareMinus,

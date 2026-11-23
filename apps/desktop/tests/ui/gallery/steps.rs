@@ -105,6 +105,9 @@ pub(crate) enum Step {
     About,
     /// Opens Settings, as its menu item does.
     OpenSettings,
+    /// Has the system say each permission stands as given, and the app read them again, as it does when its window
+    /// comes in front, which a headless window can't be sent from.
+    Permissions(&'static [(desktop::Permission, desktop::Standing)]),
     /// Clicks the transcript's line with this label, such as a tool call, to open it, has the chat go back to its end,
     /// and moves the pointer away, so the picture shows what it opened to rather than the line hovered. The first, if
     /// there are several.

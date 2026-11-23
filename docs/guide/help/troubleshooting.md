@@ -88,7 +88,7 @@ On a Mac, an app run from where it was downloaded can't replace itself. Move it 
 
 ## No notifications
 
-- On a Mac, check that Roundhouse is allowed to show notifications, in System Settings.
+- On a Mac, check that Notifications is allowed under Permissions, in [Settings](../reference/settings.md#permissions).
 - Check `Notify when an agent needs you`, in [Settings](../reference/settings.md).
 - The chat you're looking at never notifies, and nothing is told of that happened while the app was closed.
 

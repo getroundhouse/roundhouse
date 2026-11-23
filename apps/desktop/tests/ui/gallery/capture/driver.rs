@@ -140,6 +140,7 @@ impl Driver {
                 let open = Box::new(desktop::OpenSettings);
                 self.cx.update_window(self.handle, |_, window, cx| window.dispatch_action(open, cx)).unwrap();
             }
+            Step::Permissions(standings) => self.permissions(standings),
             Step::Open(label) => self.open(label),
             Step::Find(query) => self.find_in_chat(query),
             Step::SelectInTerminal { from, to } => self.select_in_terminal(*from, *to),
@@ -264,6 +265,16 @@ impl Driver {
     /// Clicks the chat's line with this label, then moves away from it, so the picture shows it open rather than
     /// hovered. A line that's clicked stays where it is in the window, with what it opened to running on under it, so
     /// the chat then goes back to its end, where every screen's chat starts, and the picture shows what it opened to.
+    /// Has the system say each permission stands as given, and the app read them again.
+    fn permissions(&mut self, standings: &[(desktop::Permission, desktop::Standing)]) {
+        self.cx.update(|cx| {
+            for &(permission, standing) in standings {
+                desktop::set_permission(permission, standing, cx);
+            }
+            desktop::read_permissions(cx);
+        });
+    }
+
     pub(super) fn open(&mut self, label: &'static str) {
         let id = self.find(Target::Label(label));
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();

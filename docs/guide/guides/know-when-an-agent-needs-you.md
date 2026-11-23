@@ -41,7 +41,7 @@ When you're in another chat or another app, a notification says a chat has come 
 
 Both are on unless you turn them off, under Notifications in [Settings](../reference/settings.md), where you can also choose the sound.
 
-On a Mac, the app's icon in the Dock shows how many workspaces have a chat that finished, stopped short or is waiting on you, and has no badge once none do. A workspace with several such chats counts once.
+On a Mac, the app's icon in the Dock shows how many workspaces have a chat that finished, stopped short or is waiting on you, and has no badge once none do. A workspace with several such chats counts once. Once you've allowed notifications, Roundhouse asks your Mac for the badge too, without asking you.
 
 Only what happens while the app is open is told of. When you open the app, the sidebar already shows what was waiting.
 

@@ -34,6 +34,7 @@ mod names;
 pub mod new_workspace;
 mod notifications;
 pub mod patch;
+mod permissions;
 mod prompt_cache;
 pub mod pull_request;
 mod rename;
@@ -58,6 +59,8 @@ pub mod workspace_pane;
 
 pub use assets::Assets;
 pub use dictation_ui::{CancelDictation, HoldToDictate};
+/// The system permissions Settings shows, and how each can stand, for a test to have the system say.
+pub use permissions::{Permission, Standing};
 
 use checkout::Checkout;
 use gpui_kit::{AnyWindowHandle, App, AppContext, Entity, TitlebarOptions, WindowOptions, actions, point};
@@ -79,6 +82,15 @@ pub use sounds::played as sounds_played;
 /// How many workspaces the Dock's badge says, for a test to read.
 #[cfg(any(test, feature = "testing"))]
 pub use dock::says as dock_badge;
+
+/// Has the system say how a permission stands, and which the app has had it ask for, or opened in System Settings,
+/// for a test, and has the app read them again, as it does when its window comes in front, for a picture of the app,
+/// whose window can't be sent to the back.
+#[cfg(any(test, feature = "testing"))]
+pub use permissions::{
+    asked_for as permissions_asked_for, opened_for as permissions_opened, read_again as read_permissions,
+    set_standing as set_permission,
+};
 
 /// What a browser and GitHub do with the page the app serves while an app of your own is made, for a test to do.
 #[cfg(any(test, feature = "testing"))]

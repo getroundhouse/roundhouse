@@ -23,6 +23,10 @@ pub use controls::{CANCEL, STOP};
 pub use dictation::Hints;
 pub use field::{Event, Field};
 pub use holding::{SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER, SPACE_TALKS_AFTER};
+#[cfg(target_os = "macos")]
+pub use keyboard::monitoring::input_monitoring;
+#[cfg(all(target_os = "macos", not(any(test, feature = "testing"))))]
+pub use keyboard::system::ask_to_monitor_input;
 #[cfg(any(test, feature = "testing"))]
 pub use keyboard::{asked_to_see_the_keyboard, hide_the_keyboard, hold_space_down};
 pub use keys::{CancelDictation, HOLD_TO_DICTATE_KEY, HoldToDictate, bind_keys, window_activation_changed};

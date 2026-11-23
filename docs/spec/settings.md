@@ -5,7 +5,7 @@ The app's own settings, and where they're shown.
 - **Settings… in the app menu, `Cmd-,`, or the gear at the bottom of the sidebar, shows Settings in place of the sidebar and the workspace,** in the same window. `Back`, Escape or `Cmd-W` goes back to where you were, with what you were typing still focused, or to a workspace selected in its place meanwhile, such as when the one showing was archived from elsewhere, which then has the keys. While Settings shows, the workspace's keys do nothing, since what they'd act on is hidden, and a reply that comes in the chat it hides is read once you go back. *Unconfirmed:* the gear, the ways back, the workspace selected meanwhile, the keys doing nothing, and the reply waiting.
 - **A page for each part of the app is in a sidebar on the left, and the chosen page fills the rest.** The sidebar is as wide as the one it stands in for, with a muted `Back` at its top right, level with the window's buttons. *Unconfirmed.*
 - **Settings opens on its first page, but at the page what opens it is about,** as a workspace's `Open Settings` opens it at Git, as `workspaces.md` says. *Unconfirmed.*
-- **The app asks for a system permission whenever having it makes something work better, the first time that thing is used,** not before, so the person sees why it's asked: the microphone and leave to monitor input for dictating, as `chats.md` says, and notifications, as Notifications says. What works without it still does.
+- **The app asks for a system permission whenever having it makes something work better, the first time that thing is used,** not before, so the person sees why it's asked: the microphone and leave to monitor input for dictating, as `chats.md` says, and notifications, as Notifications says. What works without it still does. Permissions shows how each stands, and fixes one that isn't allowed, as it says below.
 
   **General, the first page.** *Unconfirmed.*
 
@@ -85,10 +85,25 @@ The app's own settings, and where they're shown.
 - **Play a sound plays the sound chosen at the same moments, whether or not a notification shows,** and at most once in two seconds, so several chats coming to need you together sound once. It's on unless turned off. The app plays it, so a Mac's Focus doesn't silence it. *Unconfirmed.*
 - **Sound is Chime, the app's own soft strike on a bar, unless another is chosen:** one of the computer's alert sounds, or one the person added to their `Library/Sounds`. Its list has Chime, a line, then the rest by name, with the one chosen ticked, and choosing one plays it. The list is read again each time Settings opens, so a sound added meanwhile shows. A sound that has gone since it was chosen plays Chime. *Unconfirmed.* *Not built:* a sound on Windows and Linux, which play nothing, and list only Chime.
 - **A Mac asks whether the app may show notifications the first time it shows one,** and only the app opened from its bundle can, so a build run from a checkout shows none. On Linux a notification takes a notification service, and stays until it's dismissed there. *Unconfirmed.*
+- **Once notifications are allowed, the app asks for the Dock's badge with them, which a Mac grants without asking the person,** since a Mac shows the badge only then, as `sidebar.md` says, and the first notification asks for alerts and sounds alone. It asks whenever there's a badge to show until a Mac shows them, one ask at a time, since the person may allow notifications at any moment, and shows the badge again once it's granted, since a Mac drops a badge it may not show. A badge the person turned off in System Settings stays off. *Unconfirmed.*
 
 **The Notifications page.** *Unconfirmed.*
 
 ![Notifications in Settings](screens/settings-notifications.png)
+
+## Permissions
+
+- **Permissions lists each system permission the app uses on this Mac, with what it makes work, how it stands, and the one button that fixes it,** as the owner chose on 2026-11-22: Notifications, Full Disk Access, Screen Recording, Microphone and Input Monitoring, in that order. A row says Allowed, with a tick, Not asked yet, faint, or Off, in amber with a warning sign, then its button: Allow…, where the system hasn't asked, which has it ask, or Open System Settings, where only System Settings changes it. One that's allowed has no button. It's only on a Mac, so elsewhere there's no Permissions page rather than an empty one.
+- **Where the system won't say how a permission stands, its row says Can't tell, faint, with no button,** as of notifications in a build run from a checkout, or of Full Disk Access on a Mac with none of the folders it's read by. *Unconfirmed.*
+- **The page never has the system ask by itself,** as the owner chose on 2026-11-22. Only its buttons do, and what needs a permission still asks the first time it's used. *Not built:* a step in onboarding that asks for them before any agent runs, so an agent opening a folder doesn't bring up a dialog for each.
+- **How each stands is read as the window opens and each time it comes in front,** since that's when the person may have changed one in System Settings, and again once the system has answered what a button asked. *Unconfirmed.*
+- **Full Disk Access lets agents open any folder without a dialog for each.** Without it, a Mac asks the first time an agent opens each of Desktop, Documents, Downloads and the other folders it guards. The app, its hub and every agent are one app to a Mac, so one grant covers them all. *Unconfirmed.*
+- **Full Disk Access and Screen Recording only say Allowed or Off, since a Mac only says whether they're allowed,** as the owner chose on 2026-11-22. Their button first tries what the permission guards, which lists the app there, switched off, then opens System Settings at it, where the person switches it on. For Screen Recording, the system also asks, the first time. *Unconfirmed:* that the app is listed under Full Disk Access once it's refused. One that isn't is added there with +.
+- **Full Disk Access is read by trying a folder only it opens, Safari's, or Mail's on a Mac without Safari's,** which a Mac refuses without a dialog. So from the window first opening, the app is listed under Full Disk Access, switched off, whether or not the page has been shown. *Unconfirmed.*
+
+  **The Permissions page, with Full Disk Access and Screen Recording off, and Input Monitoring not asked yet.** *Unconfirmed.*
+
+  ![Permissions in Settings](screens/settings-permissions.png)
 
 ## Agents
 

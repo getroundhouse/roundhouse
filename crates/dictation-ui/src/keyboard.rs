@@ -13,7 +13,7 @@ pub(crate) fn space_is_down(_: &App) -> Option<bool> {
 /// Has the system ask the person to let the app monitor input, unless it may already. A Mac asks only the first time.
 #[cfg(not(any(test, feature = "testing")))]
 pub(crate) fn ask_to_see_the_keyboard(_: &mut App) {
-    system::ask_to_see_the_keyboard();
+    system::ask_to_monitor_input();
 }
 
 /// Whether Space is down now, as the test has said with [`hold_space_down`] or [`hide_the_keyboard`]. It's up until the
@@ -65,8 +65,10 @@ pub fn asked_to_see_the_keyboard(cx: &App) -> bool {
     cx.try_global::<Keyboard>().is_some_and(|keyboard| keyboard.asked)
 }
 
+/// What a Mac says of the keyboard. Settings' Permissions page asks for leave to monitor input through it too, so the
+/// app has one way to.
 #[cfg(all(target_os = "macos", not(any(test, feature = "testing"))))]
-mod system {
+pub(crate) mod system {
     use objc2_core_graphics::{
         CGEventSource, CGEventSourceStateID, CGKeyCode, CGPreflightListenEventAccess, CGRequestListenEventAccess,
     };
@@ -80,10 +82,29 @@ mod system {
         CGPreflightListenEventAccess().then(|| CGEventSource::key_state(CGEventSourceStateID::HIDSystemState, SPACE))
     }
 
-    pub(super) fn ask_to_see_the_keyboard() {
+    /// Has the system ask the person to let the app monitor input, unless it may already. A Mac asks only the first
+    /// time, and lists the app in System Settings, switched off, for the person to switch on.
+    pub fn ask_to_monitor_input() {
         if !CGPreflightListenEventAccess() {
             // Whether it may comes later, from System Settings, so what this says now isn't needed.
             let _ = CGRequestListenEventAccess();
+        }
+    }
+}
+
+/// What a Mac says of the app monitoring input, which a test's build has too, since it only reads.
+#[cfg(target_os = "macos")]
+pub(crate) mod monitoring {
+    use objc2_io_kit::{IOHIDAccessType, IOHIDCheckAccess, IOHIDRequestType};
+    use sound::Permission;
+
+    /// What the person has said about the app monitoring input. `IOKit`, unlike Core Graphics, says whether they've
+    /// been asked at all.
+    pub fn input_monitoring() -> Permission {
+        match IOHIDCheckAccess(IOHIDRequestType::ListenEvent) {
+            IOHIDAccessType::Granted => Permission::Allowed,
+            IOHIDAccessType::Unknown => Permission::NotAsked,
+            _ => Permission::Denied,
         }
     }
 }
@@ -96,5 +117,5 @@ mod system {
         None
     }
 
-    pub(super) fn ask_to_see_the_keyboard() {}
+    pub(super) fn ask_to_monitor_input() {}
 }
