@@ -28,7 +28,7 @@ mod samples;
 pub use audio_in::AudioIn;
 pub use dictation::{Dictation, DictationError, Ending, Recording, Update};
 pub use engine::{Engine, EngineError, Heard, Listening};
-pub use hints::Hints;
+pub use hints::{Hint, Hints};
 pub use language::Language;
 pub use level::Level;
 pub use samples::{SAMPLE_RATE, Samples};

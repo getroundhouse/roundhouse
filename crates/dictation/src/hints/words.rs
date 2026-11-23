@@ -1,6 +1,7 @@
 //! Cleaning and bounding the hint words a caller supplies for a recording.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 /// The most hint phrases kept for one recording, in the order they were given, so the closest context stays sharp.
 const MAX_HINTS: usize = 160;
@@ -14,25 +15,63 @@ const MAX_HINT_BYTES: usize = 48;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Hints {
     phrases: Vec<String>,
+    /// The hyphenated phrases that are written as they're hinted, as [`Hint::spelled`] says, by how they're kept.
+    spelled: Vec<String>,
+}
+
+/// A word or phrase to favour, as a field gives it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Hint {
+    pub text: String,
+    /// Whether, if it's hyphenated, such as a package's name, it's written as it's hinted where the model writes its
+    /// words spaced or joined, as `spelling.rs` says. One a person also says as words, such as a branch's name, isn't.
+    pub spelled: bool,
+}
+
+impl From<&str> for Hint {
+    fn from(text: &str) -> Self {
+        Self { text: text.to_string(), spelled: true }
+    }
+}
+
+impl From<String> for Hint {
+    fn from(text: String) -> Self {
+        Self { text, spelled: true }
+    }
+}
+
+impl From<&String> for Hint {
+    fn from(text: &String) -> Self {
+        text.as_str().into()
+    }
 }
 
 impl Hints {
-    /// Cleans, deduplicates and bounds `words`, keeping the earliest spelling of each phrase.
-    pub fn new(words: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
-        let mut seen = HashSet::new();
-        let mut phrases = Vec::new();
-        for raw in words {
-            for candidate in expand(raw.as_ref()) {
-                if phrases.len() >= MAX_HINTS {
-                    return Self { phrases };
+    /// Cleans, deduplicates and bounds `words`, keeping the earliest spelling of each phrase, which is written as it's
+    /// hinted if any of the words it came from is.
+    pub fn new(words: impl IntoIterator<Item = impl Into<Hint>>) -> Self {
+        let mut kept = HashMap::new();
+        let mut hints = Self::default();
+        for hint in words {
+            let hint = hint.into();
+            for candidate in expand(&hint.text) {
+                if hints.phrases.len() >= MAX_HINTS {
+                    return hints;
                 }
-                let folded = candidate.to_lowercase();
-                if seen.insert(folded) {
-                    phrases.push(candidate);
+                let at = match kept.entry(candidate.to_lowercase()) {
+                    Entry::Occupied(entry) => *entry.get(),
+                    Entry::Vacant(entry) => {
+                        hints.phrases.push(candidate);
+                        *entry.insert(hints.phrases.len() - 1)
+                    }
+                };
+                let phrase = &hints.phrases[at];
+                if hint.spelled && phrase.contains('-') && !hints.spelled.contains(phrase) {
+                    hints.spelled.push(phrase.clone());
                 }
             }
         }
-        Self { phrases }
+        hints
     }
 
     pub fn is_empty(&self) -> bool {
@@ -41,6 +80,10 @@ impl Hints {
 
     pub fn words(&self) -> &[String] {
         &self.phrases
+    }
+
+    pub(super) fn spelled(&self) -> &[String] {
+        &self.spelled
     }
 
     /// Where among these hints is the first that favours writing `text` exactly, as it is or with a capital first
@@ -63,8 +106,10 @@ pub(super) fn written_forms(phrase: &str) -> impl Iterator<Item = String> {
     std::iter::once(phrase.to_string()).chain(capitalized)
 }
 
-/// Turns one raw hint into the spoken forms worth matching: trimmed, collapsed to single spaces, and with `snake_case`
-/// split into words since speech vocabularies carry spaces rather than underscores.
+/// Turns one raw hint into the spoken forms worth matching: trimmed, collapsed to single spaces, with `snake_case`
+/// split into words since speech vocabularies carry spaces rather than underscores, and a `CamelCase` or hyphenated
+/// name followed by its words with spaces between them, as the model often writes them. A hyphenated name heard that
+/// way is written as it's hinted, as `Hints::spell` says.
 fn expand(raw: &str) -> Vec<String> {
     let trimmed = raw.trim().trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | ',' | ';' | '(' | ')' | '[' | ']'));
     if trimmed.is_empty() || trimmed.len() > MAX_HINT_BYTES {
@@ -79,9 +124,9 @@ fn expand(raw: &str) -> Vec<String> {
     } else {
         let clean = collapse_spaces(trimmed);
         if worth_keeping(&clean) {
-            let camel = split_camel(&clean);
+            let spoken = split_camel(&clean).or_else(|| split_hyphens(&clean));
             out.push(clean);
-            if let Some(spaced) = camel.filter(|s| worth_keeping(s)) {
+            if let Some(spaced) = spoken.filter(|s| worth_keeping(s)) {
                 out.push(spaced);
             }
         }
@@ -115,6 +160,13 @@ fn split_camel(word: &str) -> Option<String> {
         parts.push(current.to_lowercase());
     }
     (parts.len() >= 2 && parts.iter().all(|part| part.len() >= 3)).then(|| parts.join(" "))
+}
+
+/// Splits `sqlite-vec` into `"sqlite vec"`, keeping each part's case, but not a path, whose hyphens are a file's.
+fn split_hyphens(phrase: &str) -> Option<String> {
+    let between_words =
+        phrase.split('-').all(|part| part.ends_with(char::is_alphanumeric) && part.starts_with(char::is_alphanumeric));
+    (phrase.contains('-') && between_words && !phrase.contains('/')).then(|| phrase.replace('-', " "))
 }
 
 /// Leaves out single characters, pure numbers, hex hashes, and two-letter lowercase fragments that match ordinary words.

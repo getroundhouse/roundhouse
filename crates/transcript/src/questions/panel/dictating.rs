@@ -49,7 +49,10 @@ impl QuestionPanel {
         let typed = typed.read(cx).text().to_string();
         let transcript = self.transcript.upgrade();
         let around = transcript.as_ref().map_or_else(Around::default, |t| t.read(cx).dictation_around(cx));
-        dictation_ui::Hints::new(Field::Answer { typed: &typed, question: &asked.question, around }.hint_words())
+        let words = Field::Answer { typed: &typed, question: &asked.question, around }.hint_words();
+        dictation_ui::Hints::new(
+            words.into_iter().map(|word| dictation_ui::Hint { text: word.text, spelled: word.spelled }),
+        )
     }
 
     pub(super) fn dictation_event(

@@ -1,12 +1,13 @@
 //! Extracting domain terms, file stems and code identifiers in order of how close they are to what the person is
 //! writing, budgeting conversation messages apart from tool calls so a tool-heavy turn doesn't push recent chat out.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use protocol::capability::asking::Question;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{Proposed, PullRequest};
 
+use super::HintWord;
 use super::english::{all_common_english, is_boilerplate};
 use crate::calls::{EditFile, ReadFile, Recorded, ToSubagents, ToolCall, WriteFile};
 use crate::records::InWorkspace;
@@ -19,17 +20,19 @@ const MAX_PATH_PARENTS: usize = 2;
 /// A proposal's Markdown can be long, so it gives at most this many, leaving room for the names around it.
 const MAX_PROPOSAL_MARKDOWN_HINTS: usize = 40;
 
-/// Accumulates candidate hint phrases, most immediate first, deduplicating case-insensitively on [`Self::finish`].
+/// Accumulates candidate hint phrases, most immediate first, deduplicating case-insensitively, each written as it's
+/// hinted unless only the workspace's own names gave it.
 pub(super) struct HintCollector {
-    seen: HashSet<String>,
-    out: Vec<String>,
+    /// Where each phrase is in `out`, by its lower case.
+    seen: HashMap<String, usize>,
+    out: Vec<HintWord>,
     /// How many it holds before it takes no more, which is [`MAX_HINTS`] but while one source is held to a budget.
     limit: usize,
 }
 
 impl Default for HintCollector {
     fn default() -> Self {
-        Self { seen: HashSet::new(), out: Vec::new(), limit: MAX_HINTS }
+        Self { seen: HashMap::new(), out: Vec::new(), limit: MAX_HINTS }
     }
 }
 
@@ -38,20 +41,25 @@ impl HintCollector {
         Self::default()
     }
 
-    /// Adds a pre-vetted name such as a repository name.
-    pub(super) fn add_name(&mut self, raw: &str) {
-        self.insert(raw, true);
+    /// Adds one of the workspace's own names, already vetted, such as a repository's.
+    pub(super) fn add_own_name(&mut self, raw: &str) {
+        self.insert(raw, true, Whose::Own);
     }
 
     pub(super) fn add_term(&mut self, raw: &str) {
-        self.insert(raw, false);
+        self.insert(raw, false, Whose::Named);
     }
 
     pub(super) fn add_proper_noun(&mut self, raw: &str) {
-        self.insert(raw, true);
+        self.insert(raw, true, Whose::Named);
     }
 
-    fn insert(&mut self, raw: &str, proper_noun: bool) {
+    /// Adds a word of one of the workspace's own names, such as a branch's or a file's.
+    fn add_own_term(&mut self, raw: &str) {
+        self.insert(raw, false, Whose::Own);
+    }
+
+    fn insert(&mut self, raw: &str, proper_noun: bool, whose: Whose) {
         if self.out.len() >= self.limit {
             return;
         }
@@ -61,8 +69,12 @@ impl HintCollector {
         if !worth_keeping(cleaned) || (!proper_noun && all_common_english(cleaned)) {
             return;
         }
-        if self.seen.insert(cleaned.to_lowercase()) {
-            self.out.push(cleaned.to_string());
+        let spelled = whose == Whose::Named;
+        if let Some(&at) = self.seen.get(&cleaned.to_lowercase()) {
+            self.out[at].spelled |= spelled;
+        } else {
+            self.seen.insert(cleaned.to_lowercase(), self.out.len());
+            self.out.push(HintWord { text: cleaned.to_string(), spelled });
         }
     }
 
@@ -116,7 +128,7 @@ impl HintCollector {
         if let Some(leaf) = segments.pop() {
             let stem = leaf.rsplit_once('.').map_or(leaf, |(stem, _)| stem);
             if !is_boilerplate(stem) {
-                self.add_term(stem);
+                self.add_own_term(stem);
             }
         }
         let mut added_parents = 0;
@@ -125,7 +137,7 @@ impl HintCollector {
                 break;
             }
             if !is_boilerplate(seg) {
-                self.add_term(seg);
+                self.add_own_term(seg);
                 added_parents += 1;
             }
         }
@@ -134,7 +146,7 @@ impl HintCollector {
     /// Adds the workspace's name, branches, repository name and commented diff paths.
     pub(super) fn add_workspace(&mut self, shown: &InWorkspace) {
         let workspace = shown.workspace();
-        self.add_proper_noun(&workspace.name);
+        self.add_own_name(&workspace.name);
         self.add_branch(workspace.branch.as_str());
         if let Some(branches) = &workspace.branches {
             if let Some(checked_out) = branches.checked_out() {
@@ -145,7 +157,7 @@ impl HintCollector {
             }
         }
         if let Some(repo) = shown.all().repo(&workspace.repo_id) {
-            self.add_proper_noun(&repo.name);
+            self.add_own_name(&repo.name);
         }
         for comment in shown.comments().iter().rev() {
             self.add_path(&comment.path);
@@ -171,7 +183,7 @@ impl HintCollector {
         }
     }
 
-    pub(super) fn finish(self) -> Vec<String> {
+    pub(super) fn finish(self) -> Vec<HintWord> {
         self.out
     }
 
@@ -185,7 +197,7 @@ impl HintCollector {
     fn add_branch(&mut self, branch: &str) {
         for seg in branch.split('/') {
             if !is_boilerplate(seg) {
-                self.add_term(seg);
+                self.add_own_term(seg);
             }
         }
     }
@@ -308,6 +320,14 @@ impl HintCollector {
             | ToolCall::Advisor => {}
         }
     }
+}
+
+/// Whose a hint is: the workspace's own, such as its branch's words or a file's, which a person also says as words,
+/// or another's, such as a package's.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Whose {
+    Own,
+    Named,
 }
 
 fn worth_keeping(cleaned: &str) -> bool {

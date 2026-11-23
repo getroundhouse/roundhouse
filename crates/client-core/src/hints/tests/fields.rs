@@ -4,7 +4,7 @@ use protocol::capability::asking::{Choose, Question, QuestionOption, TypedAnswer
 use protocol::fixtures;
 use protocol::model::{ProposalOption, ProposalQuestion, Proposed, PullRequest};
 
-use super::context::{sample_log, sample_workspace};
+use super::context::{sample_log, sample_workspace, texts};
 use crate::hints::{Around, Field, Workspace};
 use crate::records::InWorkspace;
 use crate::session_log::SessionLog;
@@ -67,7 +67,7 @@ fn the_composer_hints_what_s_typed_its_files_the_workspace_then_the_chat() {
     };
 
     assert_eq!(
-        field.hint_words(),
+        texts(field.hint_words()),
         [
             "Balquhidder",
             "Glenrothes",
@@ -99,7 +99,7 @@ fn an_answer_hints_what_s_typed_its_question_the_workspace_then_the_chat() {
     };
 
     assert_eq!(
-        field.hint_words(),
+        texts(field.hint_words()),
         [
             "Balquhidder",
             "Pooling",
@@ -132,7 +132,7 @@ fn a_proposal_note_hints_what_s_typed_its_proposal_the_workspace_then_the_chat()
     };
 
     assert_eq!(
-        field.hint_words(),
+        texts(field.hint_words()),
         [
             "Balquhidder",
             "Ardmore",
@@ -165,7 +165,7 @@ fn the_new_workspace_dialog_hints_what_s_typed_its_files_then_the_repositories_c
         repos: vec!["roundhouse", "signalbox"],
     };
 
-    assert_eq!(field.hint_words(), ["Balquhidder", "Glenrothes", "signalbox", "roundhouse"]);
+    assert_eq!(texts(field.hint_words()), ["Balquhidder", "Glenrothes", "signalbox", "roundhouse"]);
 }
 
 #[test]
@@ -176,5 +176,5 @@ fn a_diff_comment_hints_what_s_typed_its_file_then_the_changed_files() {
         changed: vec!["crates/relay/src/handshake.rs", CHANGED],
     };
 
-    assert_eq!(field.hint_words(), ["Balquhidder", "handshake", "relay", "tunnel"]);
+    assert_eq!(texts(field.hint_words()), ["Balquhidder", "handshake", "relay", "tunnel"]);
 }

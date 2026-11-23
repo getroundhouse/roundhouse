@@ -1,4 +1,4 @@
-//! A made-up workspace and chat that the hints tests share.
+//! A made-up workspace and chat that the hints tests share, and reading what's hinted.
 
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Read;
@@ -6,6 +6,7 @@ use protocol::event::{ContentBlock, EventBody};
 use protocol::fixtures;
 use protocol::model::{Records, Repo, Rev, Seq};
 
+use crate::hints::HintWord;
 use crate::records::{HubRecords, InWorkspace};
 use crate::session_log::SessionLog;
 
@@ -50,4 +51,9 @@ pub(super) fn sample_log() -> SessionLog {
         ));
     }
     log
+}
+
+/// What `words` say, in order, for a test of which words a field hints.
+pub(super) fn texts(words: Vec<HintWord>) -> Vec<String> {
+    words.into_iter().map(|word| word.text).collect()
 }

@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use dictation::Hints;
+use dictation::{Hint, Hints};
 use serde::{Deserialize, Serialize};
 
 use crate::built::Built;
@@ -28,7 +28,8 @@ impl Case {
     pub fn score(&self) -> Result<Score, Invalid> {
         self.check()?;
         let built = Built::new(self);
-        let hints = Hints::new(built.field()?.hint_words());
+        let words = built.field()?.hint_words();
+        let hints = Hints::new(words.into_iter().map(|word| Hint { text: word.text, spelled: word.spelled }));
         Ok(Score::of(&self.terms, &hints))
     }
 }

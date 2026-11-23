@@ -6,7 +6,7 @@ use protocol::fixtures;
 use protocol::model::{OptionPlace, ProposalOption, ProposalQuestion, Proposed, Recommendation, RevisionNumber, Seq};
 use protocol::prompt::{Prompt, PromptFrom};
 
-use super::context::{sample_log, sample_workspace};
+use super::context::{sample_log, sample_workspace, texts};
 use crate::hints::HintCollector;
 use crate::session_log::SessionLog;
 
@@ -33,7 +33,7 @@ fn collects_jargon_and_proper_nouns_across_tool_heavy_turns_while_skipping_commo
     collector.add_question(&question);
     collector.add_workspace(&in_ws);
     collector.add_session_log(&log);
-    let hints = collector.finish();
+    let hints = texts(collector.finish());
 
     for expected in [
         "Database",
@@ -58,6 +58,27 @@ fn collects_jargon_and_proper_nouns_across_tool_heavy_turns_while_skipping_commo
     }
 }
 
+/// A hyphenated name in the chat is written as it's hinted wherever its words are heard, but the workspace's own
+/// names aren't, since a person says their words in prose too, unless the chat names one as well.
+#[test]
+fn only_names_from_outside_the_workspace_s_own_are_spelled_as_hinted() {
+    let in_ws = sample_workspace();
+
+    let mut collector = HintCollector::new();
+    collector.add_workspace(&in_ws);
+    collector.add_path("crates/stale-reports/src/due-dates.rs");
+    collector.add_prose("Load `sqlite-vec` here, and keep `dictation-hints` apart.");
+    let hints = collector.finish();
+
+    let spelled = |text: &str| hints.iter().find(|hint| hint.text == text).map(|hint| hint.spelled);
+    for own in ["entrecampos", "roundhouse", "due-dates", "stale-reports"] {
+        assert_eq!(spelled(own), Some(false), "{own:?} in {hints:?}");
+    }
+    for named in ["sqlite-vec", "dictation-hints"] {
+        assert_eq!(spelled(named), Some(true), "{named:?} in {hints:?}");
+    }
+}
+
 /// What the person said hints at what they'll say, and what the hub wrote for them, such as an answer's proposal ID,
 /// doesn't.
 #[test]
@@ -72,7 +93,7 @@ fn a_prompt_the_hub_wrote_gives_no_hints() {
 
     let mut collector = HintCollector::new();
     collector.add_session_log(&log);
-    let hints = collector.finish();
+    let hints = texts(collector.finish());
 
     assert!(hints.iter().any(|h| h == "Wollstonecraft"), "the person's words: {hints:?}");
     assert!(!hints.iter().any(|h| h.contains("Kesslerbahn")), "not the hub's: {hints:?}");
@@ -104,7 +125,7 @@ fn a_proposal_gives_its_names_and_the_code_its_markdown_names() {
 
     let mut collector = HintCollector::new();
     collector.add_proposal(&proposed);
-    let hints = collector.finish();
+    let hints = texts(collector.finish());
 
     for expected in ["Dwell", "Kesslerbahn", "Wollstonecraft", "dwell_ms", "SignalBox", "signal_state", "hub_restart"] {
         assert!(hints.iter().any(|h| h == expected), "missing {expected:?} in {hints:?}");
@@ -132,8 +153,8 @@ fn a_long_proposal_leaves_room_for_what_comes_after_it() {
 
     let mut collector = HintCollector::new();
     collector.add_proposal(&proposed);
-    collector.add_name("Wollstonecraft");
-    let hints = collector.finish();
+    collector.add_proper_noun("Wollstonecraft");
+    let hints = texts(collector.finish());
 
     assert!(hints.iter().any(|h| h == "Wollstonecraft"), "room after it: {} hints", hints.len());
     assert!(hints.iter().filter(|h| h.starts_with("zeta_")).count() <= 40, "{hints:?}");
@@ -148,7 +169,7 @@ fn prose_hints_a_lowercase_word_english_rarely_uses() {
         "we'll keep tokio for now, and the long-running jobs don't need kustomize or ingress-nginx, \
          just a built-in timer and ntfy.sh",
     );
-    let hints = collector.finish();
+    let hints = texts(collector.finish());
 
     for expected in ["tokio", "kustomize", "ingress-nginx", "ntfy.sh"] {
         assert!(hints.iter().any(|h| h == expected), "missing {expected:?} in {hints:?}");
