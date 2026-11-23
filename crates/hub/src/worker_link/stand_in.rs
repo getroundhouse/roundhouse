@@ -12,8 +12,9 @@ use crate::frames::FrameReader;
 
 impl WorkerLink {
     /// A link to a stand-in for a worker, which answers each call with what `answer` says, in the order they come, or
-    /// leaves it unanswered when that's `None`. Once the link is closed, or `answer` panics, it goes as a worker that
-    /// exited would, so a test fails rather than waiting for ever.
+    /// leaves it unanswered when that's `None`. `answer` is given every call sent before the link went, even one it
+    /// reads after. Once the link is closed, or `answer` panics, it goes as a worker that exited would, so a test fails
+    /// rather than waiting for ever.
     pub(crate) fn answering(
         answer: impl Fn(WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
     ) -> Arc<WorkerLink> {
@@ -85,8 +86,12 @@ impl WorkerLink {
             let mut calls = FrameReader::new(theirs);
             while let Ok(Some(line)) = calls.next().await {
                 let Call { id, request } = frame::decode(line).expect("the hub sends calls");
-                let Some(link) = gone.0.upgrade() else { return };
-                match answer(request) {
+                // Every call the hub sent reaches what stands in for the worker, as everything written to a worker's
+                // stdin before it closed reaches the worker, though the link may have gone since, as the last call
+                // to a worker the hub has let go of, `Stop`, often finds it. Only the reply has nowhere to go then.
+                let answered = answer(request);
+                let Some(link) = gone.0.upgrade() else { continue };
+                match answered {
                     None => {}
                     Some(Answer::Now(outcome)) => link.calls.reply(id, outcome),
                     Some(Answer::Later(outcome)) => {
@@ -130,4 +135,24 @@ impl Drop for Gone {
             link.closed.send_replace(true);
         }
     }
+}
+
+/// Every call the hub sends a stand-in reaches it, even once the link has gone, as the `Stop` the hub sends a worker
+/// it has let go of does, with nothing waiting for its reply.
+#[tokio::test]
+async fn a_call_sent_before_its_link_goes_reaches_the_stand_in() {
+    let asked = Arc::new(parking_lot::Mutex::new(Vec::new()));
+    let kept = asked.clone();
+    let link = WorkerLink::answering(move |request| {
+        kept.lock().push(request);
+        Some(Ok(WorkerResponse::Ok))
+    });
+
+    link.close().await;
+    drop(link);
+
+    waiting::task::until(Duration::from_secs(10), "the stand-in to be asked to stop", || {
+        asked.lock().iter().any(|request| matches!(request, WorkerRequest::Stop))
+    })
+    .await;
 }
