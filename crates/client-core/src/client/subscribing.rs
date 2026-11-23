@@ -68,11 +68,6 @@ impl Subscription {
         }
     }
 
-    /// The IDs the hub sends what it follows under.
-    pub fn ids(&self) -> Vec<u64> {
-        self.changing.followed.lock().iter().map(|(id, _)| *id).collect()
-    }
-
     /// What changes what it follows, for a source that follows many things, while it lasts.
     pub(super) fn changing(&self) -> Changing {
         self.changing.clone()

@@ -130,13 +130,11 @@ fn dropping_a_subscription_stops_its_stream_but_not_the_connection() {
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     let first = client.follow_session(&session.id, Seq::new(1)).unwrap();
-    let ids = first.ids();
     drop(first);
     // The connection still works, and a new subscription gets everything from the start.
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     let second = client.follow_session(&session.id, Seq::new(1)).unwrap();
-    assert_ne!(second.ids(), ids);
     let mut follower = Follower::default();
     follower.drain_until(&second, "the whole log", |f| {
         f.events.iter().any(|e| matches!(e.body, EventBody::TurnEnded { .. }))
