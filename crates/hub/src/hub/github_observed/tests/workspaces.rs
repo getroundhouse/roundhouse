@@ -261,6 +261,8 @@ async fn a_hub_that_starts_again_has_each_as_of_its_read_and_its_first_pass_send
     let _ = hub.workspace_pull_request("w".into()).await;
     next(&mut feed, unseen).await;
     let before = hub.store.current_rev().unwrap();
+    // The task that works out GitHub's observations holds the hub, so dropping it here doesn't wait for its writes.
+    hub.observations_written().await;
     drop((hub, github));
 
     let again = crate::hub::tests::hub_in_again(dir.path());
