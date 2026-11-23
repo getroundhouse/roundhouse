@@ -16,6 +16,7 @@ mod base64_bytes;
 mod build;
 pub mod capability;
 pub mod client;
+pub mod dialing;
 pub mod event;
 pub mod find;
 #[cfg(any(test, feature = "testing"))]

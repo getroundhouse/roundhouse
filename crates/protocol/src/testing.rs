@@ -14,6 +14,16 @@ pub const ENV_TEST_PROCESS: &str = "ROUNDHOUSE_TEST_PROCESS";
 /// The build a test's daemon says it is, as one from before an update would.
 pub const ENV_TEST_BUILD: &str = "ROUNDHOUSE_TEST_BUILD";
 
+/// That a test's hub uses no relay for the endpoint its workers dial, and binds it only to loopback, which keeps the
+/// test off the internet.
+pub const ENV_TEST_NO_RELAYS: &str = "ROUNDHOUSE_TEST_NO_RELAYS";
+
 /// Each of them, none of which anything in a workspace gets.
-pub const ENV_TEST: [&str; 5] =
-    [ENV_TEST_HUB_TIMERS, ENV_TEST_WORKER_TIMERS, ENV_TEST_GITHUB_API, ENV_TEST_PROCESS, ENV_TEST_BUILD];
+pub const ENV_TEST: [&str; 6] = [
+    ENV_TEST_HUB_TIMERS,
+    ENV_TEST_WORKER_TIMERS,
+    ENV_TEST_GITHUB_API,
+    ENV_TEST_PROCESS,
+    ENV_TEST_BUILD,
+    ENV_TEST_NO_RELAYS,
+];

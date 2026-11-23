@@ -174,7 +174,9 @@ async fn answer(provider: &dyn Provider, request: ProviderRequest) -> Result<Pro
         ProviderRequest::Create(Create { instance_id, from, size }) => {
             provider.create(&instance_id, from.as_ref(), size).await?;
         }
-        ProviderRequest::Start(Start { instance_id, workers }) => provider.start(&instance_id, &workers).await?,
+        ProviderRequest::Start(Start { instance_id, workers, ticket }) => {
+            provider.start(&instance_id, &workers, Some(&ticket)).await?;
+        }
         ProviderRequest::EndWorker(EndWorker { instance_id }) => provider.end_worker(&instance_id).await?,
         ProviderRequest::KillWorker(KillWorker { instance_id }) => provider.kill_worker(&instance_id).await?,
         ProviderRequest::Destroy(Destroy { instance_id }) => provider.destroy(&instance_id).await?,

@@ -91,4 +91,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Rust(super::tasks::kinds_given),
     // The tool servers the hub has of its own, in `tool_servers`.
     Sql(super::tool_servers::TOOL_SERVERS),
+    // The ticket each instance's worker dials the hub with, and the key of the worker it admitted, in `instances`.
+    Sql(super::instances::WORKER_TICKETS),
 ];

@@ -6,6 +6,7 @@ members = [
     "crates/protocol",
     "crates/agents",
     "crates/providers",
+    "crates/dialing",
     "crates/worker",
     "crates/github",
     "crates/tool-sign-in",
@@ -66,6 +67,7 @@ default-members = [
     "crates/protocol",
     "crates/agents",
     "crates/providers",
+    "crates/dialing",
     "crates/worker",
     "crates/github",
     "crates/tool-sign-in",
@@ -133,6 +135,7 @@ private-files = { path = "crates/private-files" }
 protocol = { path = "crates/protocol" }
 agents = { path = "crates/agents" }
 providers = { path = "crates/providers" }
+dialing = { path = "crates/dialing" }
 worker = { path = "crates/worker" }
 github = { path = "crates/github" }
 tool-sign-in = { path = "crates/tool-sign-in" }
@@ -187,6 +190,9 @@ claxon = "0.4.3"
 cpal = "0.18.2"
 # Already under GPUI. Picks the names the hub gives workspaces at random.
 fastrand = "2.5.0"
+# The QUIC connections workers dial their hub over, which start through a relay and move to a direct path, as
+# docs/decisions/workers-dial-the-hub.md says. MIT or Apache-2.0. Without its metrics.
+iroh = { version = "1.5.0", default-features = false, features = ["tls-ring", "portmapper", "fast-apple-datapath"] }
 flume = "0.12.0"
 # Already under GPUI. Compresses what a test serves, as a web server would.
 flate2 = "1.1.11"

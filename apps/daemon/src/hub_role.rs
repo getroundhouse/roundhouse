@@ -40,6 +40,7 @@ pub(crate) fn run(start: HubStart, given: Config) -> anyhow::Result<ExitCode> {
     let update_feed = if start == HubStart::AsService { hub::UpdateFeed::published() } else { None };
     let config = hub::HubConfig {
         network_address,
+        relays: given.relays,
         build: given.build,
         paths,
         worker_exe,

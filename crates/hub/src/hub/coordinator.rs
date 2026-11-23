@@ -22,6 +22,7 @@ use crate::store::{MadeByRequest, Store, StoreError, now_ms};
 use crate::timers::Timers;
 use crate::tool_servers::ToolServers;
 use crate::versions;
+use crate::worker_dial::WorkerDial;
 use crate::worker_link::WorkerLink;
 use awake::Awake;
 use feed::Feed;
@@ -143,6 +144,8 @@ pub(crate) struct Hub {
     /// Asked to stop, which stops its workers and their agents, even once it was asked to restart.
     pub(super) stopping: AtomicBool,
     pub(crate) remote: crate::remote::Remote,
+    /// The endpoint workers dial, and the workers it has admitted.
+    pub(crate) dial: WorkerDial,
     pub(crate) clients: AtomicU32,
     pub(crate) requests: AtomicU32,
 }
@@ -166,11 +169,8 @@ impl Hub {
         let cache_file = Arc::new(CacheFile::open(&dirs.cache_file, &[&github_cache::PART, &observations::PART]));
         let observations = Arc::new(Observations::open(cache_file.clone(), &store));
         Self {
-            remote: crate::remote::Remote::new(crate::remote::RemoteConfig {
-                address: dirs.network_address,
-                certificate: dirs.data.join("hub-cert.der"),
-                certificate_key: dirs.data.join("hub-key.der"),
-            }),
+            remote: crate::remote::Remote::new(dirs.remote()),
+            dial: WorkerDial::new(dirs.data.join("worker-endpoint.json"), dirs.relays, store.clone()),
             build,
             logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
             github_logins: Arc::new(GithubLogins::new(store.clone(), Arc::clone(&observations), &dirs.data, now_ms())),

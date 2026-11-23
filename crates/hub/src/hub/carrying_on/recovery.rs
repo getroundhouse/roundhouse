@@ -43,6 +43,8 @@ impl Hub {
     /// it has one. Each workspace's worker is reached on its own, so a slow one holds up only its own sessions.
     pub(crate) async fn carry_on(self: &Arc<Self>, left: LeftAtWork) {
         let LeftAtWork { mut sessions, workspaces, untaken } = left;
+        // First, so a worker an earlier hub left, which dials again, is admitted.
+        self.listen_for_workers().await;
         let untaken: Untaken = Arc::new(Mutex::new(untaken));
         let mut carrying = JoinSet::new();
         // A worker can be running with no session at work, its agents idle, and the hub stops it as it stops, as it

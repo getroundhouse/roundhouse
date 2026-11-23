@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use clap::Parser;
+use protocol::dialing::WorkerTicket;
 use protocol::model::InstanceId;
 use providers::local::{LocalConfig, LocalProvider};
 use providers::{
@@ -87,10 +88,15 @@ impl Provider for Recording {
         Ok(())
     }
 
-    async fn start(&self, instance_id: &InstanceId, workers: &[WorkerBinary]) -> Result<(), ProviderError> {
+    async fn start(
+        &self,
+        instance_id: &InstanceId,
+        workers: &[WorkerBinary],
+        ticket: Option<&WorkerTicket>,
+    ) -> Result<(), ProviderError> {
         let mut started = std::fs::OpenOptions::new().create(true).append(true).open(self.started()).unwrap();
         started.write_all(&protocol::frame::encode(&workers).unwrap()).unwrap();
-        self.local.start(instance_id, workers).await
+        self.local.start(instance_id, workers, ticket).await
     }
 
     async fn end_worker(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {

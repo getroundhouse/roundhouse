@@ -7,6 +7,7 @@ mod conversations;
 mod drafts;
 mod event_kinds;
 mod github_accounts;
+mod instances;
 mod proposals;
 mod repos;
 mod session_accounts;

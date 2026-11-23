@@ -34,6 +34,7 @@ impl Running {
         let config = hub::HubConfig {
             build: protocol::Build::UNSTAMPED,
             network_address: ([127, 0, 0, 1], port).into(),
+            relays: hub::Relays::None,
             worker_exe: dir.path().join("unused-worker"),
             paths,
             shell: None,

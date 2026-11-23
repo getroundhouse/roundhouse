@@ -176,7 +176,7 @@ impl Stack {
 
 /// What every hub of a stack in `dir` runs in: what [`WholeEnvironment::for_a_test`] gives, with a home of its own, so
 /// a real ~/.conductor/settings.toml or `gh` login can't change what these tests do, a `gh` that's logged in to
-/// nothing, the fake agent, and the timers that only make a test wait shortened.
+/// nothing, the fake agent, the timers that only make a test wait shortened, and no relay for workers to dial through.
 fn hub_environment(dir: &Path) -> WholeEnvironment {
     let (timers, short) = Timers::FOR_TESTS.env();
     let (worker_timers, worker_short) = worker::Timers::FOR_TESTS.env();
@@ -196,7 +196,8 @@ fn hub_environment(dir: &Path) -> WholeEnvironment {
         .set("FAKE_CLAUDE_POLL_DEFAULT_MS", worker::Timers::FOR_TESTS.wait_poll.as_millis().to_string())
         // So a test waits out only the time limits it's about. The hub passes the workers' on to them.
         .set(timers, short)
-        .set(worker_timers, worker_short);
+        .set(worker_timers, worker_short)
+        .set(protocol::testing::ENV_TEST_NO_RELAYS, "1");
     environment
 }
 

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
+use protocol::dialing::WorkerTicket;
 use protocol::model::InstanceId;
 use protocol::provider::InstanceState;
 use serde_json::{Value, json};
@@ -36,7 +37,7 @@ impl Provider for Fake {
     async fn create(&self, _: &InstanceId, _: Option<&InstanceId>, _: Option<Size>) -> Result<(), ProviderError> {
         Ok(())
     }
-    async fn start(&self, _: &InstanceId, _: &[WorkerBinary]) -> Result<(), ProviderError> {
+    async fn start(&self, _: &InstanceId, _: &[WorkerBinary], _: Option<&WorkerTicket>) -> Result<(), ProviderError> {
         self.let_start_go.notified().await;
         Ok(())
     }
@@ -166,7 +167,7 @@ async fn a_slow_request_doesnt_hold_up_the_rest() {
     let provider = Arc::new(Fake::default());
     let mut hub = serving(provider.clone());
     hub.hello("h").await;
-    hub.send(json!({"id": 1, "request": {"method": "start", "instance_id": "i", "workers": []}})).await;
+    hub.send(json!({"id": 1, "request": {"method": "start", "instance_id": "i", "workers": [], "ticket": "t"}})).await;
     hub.send(json!({"id": 2, "request": {"method": "list"}})).await;
     let listed = hub.reply().await;
     assert_eq!(listed["id"], 2);
@@ -219,7 +220,7 @@ async fn a_request_the_provider_never_finishes_is_given_up_on_before_the_hub_wou
     hub.hello("h").await;
     let asked = tokio::time::Instant::now();
 
-    hub.send(json!({"id": 1, "request": {"method": "start", "instance_id": "i", "workers": []}})).await;
+    hub.send(json!({"id": 1, "request": {"method": "start", "instance_id": "i", "workers": [], "ticket": "t"}})).await;
     let reply = hub.reply_within(protocol::provider::ANSWERED_WITHIN).await;
 
     assert_eq!((&reply["id"], &reply["error"]["code"]), (&json!(1), &json!("worker")), "{reply}");

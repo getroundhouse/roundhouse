@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use async_trait::async_trait;
 use protocol::Build;
 use protocol::client::{ApiError, HubStart};
+use protocol::dialing::WorkerTicket;
 use protocol::model::{Workspace, WorkspaceId, WorkspaceStatus};
 use providers::{Capabilities, Instance, InstanceState, ProviderError, Size, WorkerBinary, WorkerCommand};
 use tokio::sync::Notify;
@@ -62,7 +63,7 @@ impl Provider for Fake {
         if self.refuses_to_create { Err(refused("creating")) } else { Ok(()) }
     }
 
-    async fn start(&self, _: &InstanceId, _: &[WorkerBinary]) -> Result<(), ProviderError> {
+    async fn start(&self, _: &InstanceId, _: &[WorkerBinary], _: Option<&WorkerTicket>) -> Result<(), ProviderError> {
         if !self.holds_start.swap(false, Ordering::Relaxed) {
             return Ok(());
         }

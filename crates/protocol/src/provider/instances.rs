@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ProviderRequest, ProviderResponse, Reply, Request};
+use crate::dialing::WorkerTicket;
 use crate::model::{InstanceId, WorkerTarget};
 
 /// Makes the instance, as a copy of the base image `from` or a plain one, or does nothing if it's there. Its ID is the
@@ -28,10 +29,14 @@ impl Request for Create {
 
 /// Starts it, or does nothing to one that's running, whatever runs there. First puts in place the one of `workers`
 /// built for the instance's target, if the instance holds a different one, so a worker always runs its hub's build.
+/// A worker it starts is given `ticket`, which it dials the hub with, as [`crate::dialing`] says. A worker already
+/// running there dials with the ticket it was given, so this one goes unused. *Not built:* the hub reaching a worker
+/// through its ticket rather than through `Connect`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Start {
     pub instance_id: InstanceId,
     pub workers: Vec<WorkerBinary>,
+    pub ticket: WorkerTicket,
 }
 
 impl Request for Start {

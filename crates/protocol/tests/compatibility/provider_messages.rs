@@ -35,8 +35,9 @@ fn every_request_keeps_its_form() {
                 path: "/opt/roundhouse/worker".into(),
                 sha256: "ab12".into(),
             }],
+            ticket: "eyJ0aWNrZXQiOiJpdCJ9".to_string().into(),
         })),
-        r#"{"id":7,"request":{"method":"start","instance_id":"i","workers":[{"target":"x86_64-unknown-linux-gnu","path":"/opt/roundhouse/worker","sha256":"ab12"}]}}"#,
+        r#"{"id":7,"request":{"method":"start","instance_id":"i","workers":[{"target":"x86_64-unknown-linux-gnu","path":"/opt/roundhouse/worker","sha256":"ab12"}],"ticket":"eyJ0aWNrZXQiOiJpdCJ9"}}"#,
     );
     keeps_its_form(
         &call(ProviderRequest::EndWorker(EndWorker { instance_id: "i".into() })),

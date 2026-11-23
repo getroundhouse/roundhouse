@@ -33,12 +33,14 @@ mod terminate;
 mod timers;
 mod tool_servers;
 mod versions;
+mod worker_dial;
 mod worker_link;
 
 pub use crate::error::HubError;
 pub use crate::hub::UpdateFeed;
 pub use crate::run::{Ended, HubConfig, run};
 pub use crate::timers::Timers;
+pub use dialing::Relays;
 pub use github::GithubConfig;
 #[cfg(any(test, feature = "testing"))]
 pub use github::{
