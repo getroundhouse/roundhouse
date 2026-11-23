@@ -1,9 +1,10 @@
 //! What a client draws of a workspace's lines added and removed against its base, from the hub's observation of them,
-//! so every client draws the same: nothing while they're not known, a count of a thousand or more shortened, and lines
-//! last read some time ago told apart from lines kept current. `docs/spec/sidebar.md` and `docs/spec/home.md` have the
-//! rules.
+//! so every client draws the same: nothing while they're not known, each count shortened, as
+//! `written_counts::shortened` writes it, and lines last read some time ago told apart from lines kept current.
+//! `docs/spec/sidebar.md` and `docs/spec/home.md` have the rules.
 
 use protocol::model::{LineCounts, Observed, WorkspaceStatus};
+use written_counts::whole;
 
 /// A workspace's lines added and removed, as a client draws them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,9 +22,9 @@ impl Drawn {
     pub fn said(&self) -> String {
         let lines = |count| if count == 1 { "line" } else { "lines" };
         let said = match (self.added, self.removed) {
-            (added, 0) => format!("{added} {} added", lines(added)),
-            (0, removed) => format!("{removed} {} removed", lines(removed)),
-            (added, removed) => format!("{added} {} added and {removed} removed", lines(added)),
+            (added, 0) => format!("{} {} added", whole(added), lines(added)),
+            (0, removed) => format!("{} {} removed", whole(removed), lines(removed)),
+            (added, removed) => format!("{} {} added and {} removed", whole(added), lines(added), whole(removed)),
         };
         if self.as_last_read { format!("{said}, as last read") } else { said }
     }
@@ -51,21 +52,6 @@ pub fn drawn(status: WorkspaceStatus, lines: &Observed<LineCounts>) -> Option<Dr
     (ready && (drawn.added > 0 || drawn.removed > 0)).then_some(drawn)
 }
 
-/// A count of lines where there's room only for a few figures, such as `37k`: whole below a thousand, then in
-/// thousands, and from a million in millions, with a tenth below ten of either, such as `1.2k`. Cut rather than
-/// rounded, so a count never reads as more than it is, and `999,999` reads as `999k` rather than `1000k`.
-pub fn shortened(count: usize) -> String {
-    for (unit, suffix) in [(1_000_000, "M"), (1_000, "k")] {
-        if count < unit {
-            continue;
-        }
-        let whole = count / unit;
-        let tenths = count / (unit / 10) % 10;
-        return if whole < 10 && tenths > 0 { format!("{whole}.{tenths}{suffix}") } else { format!("{whole}{suffix}") };
-    }
-    count.to_string()
-}
-
 /// A count the hub sends, of lines or of files, as a client counts them. `usize` is 64 bits on every platform a client
 /// runs on, so it never saturates.
 pub fn counted(count: u64) -> usize {
@@ -76,29 +62,7 @@ pub fn counted(count: u64) -> usize {
 mod tests {
     use protocol::model::{LineCounts, Observed, WorkspaceStatus};
 
-    use super::{Drawn, drawn, shortened};
-
-    #[test]
-    fn a_count_is_whole_below_a_thousand_and_cut_to_a_tenth_below_ten_of_a_unit() {
-        let cases = [
-            (0, "0"),
-            (999, "999"),
-            (1_000, "1k"),
-            (1_099, "1k"),
-            (1_250, "1.2k"),
-            (9_999, "9.9k"),
-            (10_000, "10k"),
-            (37_412, "37k"),
-            (999_999, "999k"),
-            (1_000_000, "1M"),
-            (1_480_000, "1.4M"),
-            (37_000_000, "37M"),
-            (4_000_000_000, "4000M"),
-        ];
-        for (count, written) in cases {
-            assert_eq!(shortened(count), written, "{count}");
-        }
-    }
+    use super::{Drawn, drawn};
 
     #[test]
     fn lines_say_what_they_are_in_words() {
@@ -108,7 +72,7 @@ mod tests {
         assert_eq!(said(1, 1, false), "1 line added and 1 removed");
         assert_eq!(said(40, 0, false), "40 lines added");
         assert_eq!(said(0, 1, false), "1 line removed");
-        assert_eq!(said(37_412, 0, true), "37412 lines added, as last read");
+        assert_eq!(said(37_412, 0, true), "37,412 lines added, as last read");
     }
 
     #[test]

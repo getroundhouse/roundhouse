@@ -1,0 +1,10 @@
+[package]
+name = "written-counts"
+description = "A count of things as a person reads it, whole or shortened, for every client and the design system. No UI and none of the workspace's other crates."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true

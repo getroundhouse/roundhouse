@@ -237,7 +237,7 @@ impl Render for Counts {
                     let lines = look::lines_changed(kind, added, removed).as_last_read(as_last_read);
                     let lines = match kind {
                         LinesKind::Plain => lines,
-                        LinesKind::Workspace => lines.written_as(client_core::workspace_lines::shortened),
+                        LinesKind::Workspace => lines.written_as(written_counts::shortened),
                     };
                     let lines = lines.placed(&line_text.code);
                     h_flex().gap(look::Space::Small).child(line_text.body.set(div().child(words))).child(lines)

@@ -208,7 +208,7 @@ fn icon_box(icon: impl IntoElement) -> gpui_kit::Div {
 /// code, which is smaller than the workspace's name, so they're set on the name's baseline.
 pub(crate) fn lines(id: String, drawn: workspace_lines::Drawn, code: &Placed) -> look::LinesChanged {
     look::lines_changed(look::LinesKind::Workspace, drawn.added, drawn.removed)
-        .written_as(workspace_lines::shortened)
+        .written_as(written_counts::shortened)
         .as_last_read(drawn.as_last_read)
         .said(ElementId::Name(id.into()), drawn.said())
         .placed(code)

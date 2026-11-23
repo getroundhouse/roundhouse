@@ -194,7 +194,7 @@ impl Render for Changes {
 /// does nothing. Its words are a status to assistive apps, since the kit tells them nothing of plain text.
 fn left_out(count: u64, cx: &App) -> AnyElement {
     let files = if count == 1 { "file" } else { "files" };
-    let says = SharedString::from(format!("{} more {files} not shown", look::thousands(count)));
+    let says = SharedString::from(format!("{} more {files} not shown", written_counts::whole(count)));
     let words = div()
         .id("changed-files-left-out-words")
         .role(Role::Status)

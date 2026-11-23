@@ -3,13 +3,14 @@ use gpui_kit::{
     App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
 };
+use written_counts::whole;
 
 use super::CountKind;
 use crate::baseline::Placed;
 use crate::colors::colors;
 use crate::typography::{Type, Typeset};
 
-/// A count of `kind` that says `how_many`, in a detail's text.
+/// A count of `kind` that says `how_many`, whole, in a detail's text.
 pub fn count(kind: CountKind, how_many: usize) -> Count {
     Count { kind, how_many, said: None, placed: None }
 }
@@ -39,6 +40,13 @@ impl Count {
     }
 }
 
+impl Count {
+    /// What it says, as it's written: whole, with a comma between each three figures.
+    pub(super) fn written(&self) -> String {
+        whole(self.how_many)
+    }
+}
+
 impl RenderOnce for Count {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let (color, stronger) = self.kind.drawn(colors(cx));
@@ -47,7 +55,7 @@ impl RenderOnce for Count {
             .typeset(Type::Detail)
             .when(stronger, Typeset::emphasis)
             .text_color(color)
-            .child(self.how_many.to_string());
+            .child(self.written());
         let drawn = match self.placed {
             Some(placed) => placed.set(drawn),
             None => drawn,

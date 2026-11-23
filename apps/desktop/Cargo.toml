@@ -31,6 +31,7 @@ video.workspace = true
 terminal-view.workspace = true
 gpui-kit.workspace = true
 look.workspace = true
+written-counts.workspace = true
 conversation.workspace = true
 dictation.workspace = true
 dictation-ui.workspace = true

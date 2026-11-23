@@ -4,6 +4,7 @@ use gpui_kit::{
     App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
 };
+use written_counts::whole;
 
 use super::LinesKind;
 use crate::baseline::Placed;
@@ -33,14 +34,9 @@ pub struct LinesChanged {
     placed: Option<Placed>,
 }
 
-/// A count as it is, every figure of it.
-fn whole(count: usize) -> String {
-    count.to_string()
-}
-
 impl LinesChanged {
-    /// Writes each count as `write` does, such as shortened to a few figures where there's room for no more. Every
-    /// figure of it otherwise.
+    /// Writes each count as `write` does, such as `written_counts::shortened`, where there's room for only a few
+    /// figures. Each is whole otherwise, as `written_counts::whole` writes it.
     pub fn written_as(mut self, write: fn(usize) -> String) -> Self {
         self.written = write;
         self

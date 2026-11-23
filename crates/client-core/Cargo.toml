@@ -24,6 +24,8 @@ serde_json.workspace = true
 terminal-state = { workspace = true, optional = true }
 thiserror.workspace = true
 uuid.workspace = true
+# Writes a count as every client writes it, such as the lines a workspace's row says it changed.
+written-counts.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

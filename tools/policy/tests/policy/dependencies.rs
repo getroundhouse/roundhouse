@@ -166,6 +166,7 @@ fn conversation_needs_none_of_our_other_crates_but_client_core_and_speaking_no_a
             "client-core",
             "protocol",
             "terminal-state",
+            "written-counts",
             "speaking",
             "phonon",
             "sound",

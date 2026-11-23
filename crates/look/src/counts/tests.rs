@@ -1,4 +1,6 @@
-use super::{CountKind, LinesKind, lines_changed};
+use written_counts::shortened;
+
+use super::{CountKind, LinesKind, count, lines_changed};
 use crate::spec_table;
 
 #[test]
@@ -28,12 +30,24 @@ fn lines_changed_leave_out_what_is_none() {
     }
 }
 
-/// Each count as it's asked to be written, after its sign.
+/// Whole, with a comma between each three figures from a thousand, whatever the kind, as `1,212` files.
 #[test]
-fn lines_changed_write_each_count_as_asked() {
-    let tens = |count: usize| format!("{}0s", count / 10);
+fn a_count_is_written_whole() {
+    for kind in CountKind::ALL.iter().copied() {
+        let written = [999, 1_000, 1_212].map(|how_many| count(kind, how_many).written());
 
-    let written = lines_changed(LinesKind::Workspace, 37_412, 12).written_as(tens).written();
+        assert_eq!(written, ["999", "1,000", "1,212"], "{kind:?}");
+    }
+}
 
-    assert_eq!(written, (Some("+37410s".into()), Some("\u{2212}10s".into())));
+/// Whole, as a count is, unless they're asked to be shortened, as a workspace's are, which stay as they were.
+#[test]
+fn lines_changed_are_written_whole_unless_shortened() {
+    for kind in LinesKind::ALL.iter().copied() {
+        let whole = lines_changed(kind, 48_221, 999).written();
+        let shortened = lines_changed(kind, 37_412, 1_000).written_as(shortened).written();
+
+        assert_eq!(whole, (Some("+48,221".into()), Some("\u{2212}999".into())), "{kind:?}");
+        assert_eq!(shortened, (Some("+37k".into()), Some("\u{2212}1k".into())), "{kind:?}");
+    }
 }

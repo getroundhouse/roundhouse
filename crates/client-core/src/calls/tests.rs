@@ -77,6 +77,7 @@ fn a_count_says_one_or_many() {
     assert_eq!(count(1, "line", "lines"), "1 line");
     assert_eq!(count(0, "line", "lines"), "0 lines");
     assert_eq!(count(12, "match", "matches"), "12 matches");
+    assert_eq!(count(1_204, "line", "lines"), "1,204 lines", "whole");
 }
 
 /// So a client needs no agent's name for a tool: the call is what its adapter typed.

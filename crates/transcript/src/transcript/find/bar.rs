@@ -15,7 +15,7 @@ use crate::transcript::Transcript;
 
 /// How long typing pauses before what's typed is looked for, so a word isn't looked for a letter at a time.
 const PAUSE: Duration = Duration::from_millis(150);
-/// Wide enough for a few words and "999 of 1000": a card's regular width, as what opens over the chat is.
+/// Wide enough for a few words and "999 of 1,000": a card's regular width, as what opens over the chat is.
 const WIDTH: Pixels = px(380.);
 /// In from the pane's right, clear of the outline's ticks, and down from the tabs as they are.
 const RIGHT: Pixels = px(32.);

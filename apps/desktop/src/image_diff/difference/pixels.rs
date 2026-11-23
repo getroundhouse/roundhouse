@@ -257,8 +257,10 @@ impl Difference {
         match (self.changed, self.places.len()) {
             (0, _) => "No pixels changed".to_string(),
             (1, _) => "1 pixel changed".to_string(),
-            (changed, 1) => format!("{} pixels in 1 place", look::thousands(changed)),
-            (changed, places) => format!("{} pixels in {places} places", look::thousands(changed)),
+            (changed, 1) => format!("{} pixels in 1 place", written_counts::whole(changed)),
+            (changed, places) => {
+                format!("{} pixels in {} places", written_counts::whole(changed), written_counts::whole(places))
+            }
         }
     }
 }
