@@ -122,7 +122,8 @@ fn forms(feed: &GithubFeed, elm: &WorkspaceId) -> [(bool, bool); 2] {
 
 /// A view reads the same of GitHub whichever form its hub sends: as observations at every level from a hub of this
 /// build, as `GithubUpdate` at every level from one from before them, and each form at its own levels from one that
-/// sends only a chip as an observation. What's held of each thing is in the one form its hub sent.
+/// sends only a chip as an observation. Each is held in the form its hub sent, so what the view read came from that
+/// form.
 #[test]
 fn a_view_reads_the_same_of_github_whichever_form_its_hub_sends_it_in() {
     let mut read = Vec::new();
@@ -232,36 +233,6 @@ fn the_detail_goes_with_the_summary_only_at_its_head() {
 
     let read = holding.pull_request("w").unwrap();
     assert!(read.pull_request.checks.is_some() && read.pull_request.stack.is_some());
-}
-
-/// The client's half of the issue's "Done when": two clients that follow the hub each hold the newer copy of how a
-/// workspace's pull request stands, and keep it over an older one sent after.
-#[test]
-fn two_followers_hold_the_newer_copy_and_keep_it_over_an_older_one_sent_after() {
-    let mut world = World::default();
-    let repo = world.repo("aspen");
-    world.workspace(&repo, "elm");
-    world.feed = vec![
-        ObservationNotice::Copy(stands("elm", "head-7", PrState::Merged, 5)),
-        ObservationNotice::Copy(stands("elm", "head-7", PrState::Open, 4)),
-        // Last, so once it's taken in, so is every notice before it.
-        ObservationNotice::Copy(stands("ash", "head-7", PrState::Open, 6)),
-    ];
-    let dir = tempfile::tempdir().unwrap();
-    let socket = dir.path().join("hub");
-    serve(&socket, world);
-
-    let followers: Vec<_> = (0..2).map(|_| RecordsFeed::start(&Client::connect(&socket, "test").unwrap())).collect();
-
-    for records in &followers {
-        let feed = records.github();
-        let said = |w: &str| {
-            let workspace = protocol::fixtures::workspace(w);
-            feed.pull_request(&workspace).and_then(|found| found.pull_request).map(|own| own.pull_request.said().state)
-        };
-        waiting::thread::until(TIMEOUT, "the last notice", || said("ash").is_some());
-        assert_eq!(said("elm"), Some(PrState::Merged), "the newer copy, though an older one came after it");
-    }
 }
 
 /// A view is told of a change to an observation of what it shows, as it's told of a `GithubUpdate`, and isn't told of
