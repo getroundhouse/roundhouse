@@ -469,6 +469,10 @@ The mark has three layers, and each is about one thing, so several facts can sho
 
 ![Every kind of banner](screens/banner-kinds.png)
 
+## Videos
+
+- **A video is its picture over a bar, inside a thin edge with a card's corners,** as a reply and the file tab show one. The bar is as tall as a small button, with 4px over and under it, on the raised colour: Play, or Pause while it plays, then where it is of how long it is, as `0:07 / 0:12`, in a detail's muted text, then the track, which fills the rest, and Expand, where it isn't over the window already. The track is 4px tall, in the faint text's colour, filled in the text's own as far as it's played, and a click on it goes that far along the video. Before it's played, a large main Play is over the middle of its first frame. A line over its picture in place of that says what's gone wrong, such as that it couldn't be played. It's never drawn less than 240px across, so its bar has room. `look::video` draws one. *Unconfirmed.*
+
 ## Empty states
 
 - **An empty pane shows the mark in copper, what's missing and why, and the one thing to do about it,** as a main button. The mark is 72px wide there, with five rows. What it says under its heading is muted, and wraps at 400px.

@@ -151,9 +151,9 @@ impl ChatView {
     pub(super) fn reconnect_over(&self, client: &Client, cx: &mut Context<Self>) {
         match self.over.screen() {
             Some(Screen::Subagent(screen)) => {
-                screen.transcript.update(cx, |transcript, _| transcript.reconnect(client));
+                screen.transcript.update(cx, |transcript, cx| transcript.reconnect(client, cx));
             }
-            Some(Screen::Proposal(screen)) => screen.view.update(cx, |view, _| view.reconnect(client)),
+            Some(Screen::Proposal(screen)) => screen.view.update(cx, |view, cx| view.reconnect(client, cx)),
             None => {}
         }
     }

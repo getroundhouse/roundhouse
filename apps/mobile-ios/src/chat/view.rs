@@ -118,7 +118,7 @@ impl ChatView {
     pub(crate) fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.client = client.clone();
         if let Some(shown) = &self.shown {
-            shown.transcript.update(cx, |transcript, _| transcript.reconnect(client));
+            shown.transcript.update(cx, |transcript, cx| transcript.reconnect(client, cx));
             self.reconnect_over(client, cx);
             // The new connection's hub may hold other lists.
             self.models.reset();

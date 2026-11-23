@@ -2,15 +2,17 @@ use super::super::LinkedImages;
 use super::super::loading::Waiter;
 use super::diagrams::DIAGRAM;
 use crate::images_that_open;
+use crate::videos::{VideoPlayer, expand};
+use gpui_kit::component::h_flex;
 use gpui_kit::component::text::markdown_ast::{Delete, Emphasis, Image, Link, LinkReference, Node, Strong};
 use gpui_kit::component::text::{
     InlineElement, InlineRenderContext, MarkdownExtensions, MarkdownNode, MarkdownParseContext, MarkdownPlugin,
 };
 use gpui_kit::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, RenderImage,
-    Styled as _, TestSupportExt as _, Window, div, px,
+    AnyElement, App, ClickEvent, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    RenderImage, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, px,
 };
-use look::pixels;
+use look::{Hand as _, pixels};
 use parking_lot::Mutex;
 use protocol::event::LinkedImage;
 use std::collections::HashSet;
@@ -177,20 +179,31 @@ struct Lookup<W> {
 }
 
 impl<W: Waiter> Lookup<W> {
-    /// The image that's all its paragraph holds, as wide as it is, up to the column's.
+    /// The image that's all its paragraph holds, as wide as it is, up to the column's, or the video, which plays
+    /// there.
     pub(super) fn alone(&self, node: &MarkdownNode, cx: &mut App) -> AnyElement {
         let drawn = node.data::<Pointed>().and_then(|image| {
             let (ready, covers) = self.ready(image, cx)?;
-            Some(images_that_open::whole(div().id(image.element()), ready, covers))
+            Some(match self.player(image) {
+                // In a row, as an image is, so it's no taller than its own shape.
+                Some(player) => h_flex().id(image.element()).w_full().child(player).test_support().into_any_element(),
+                None => images_that_open::whole(div().id(image.element()), ready, covers),
+            })
         });
         // Nothing while it loads, or if it can't be shown, as the kit draws one.
         drawn.unwrap_or_else(|| div().into_any_element())
     }
 
-    /// An image among words, `height` tall, or the room the kit leaves one while it loads or if it can't be shown.
+    /// An image among words, `height` tall, or the room the kit leaves one while it loads or if it can't be shown. A
+    /// video among words is its still, which a click opens over the window, to play there.
     pub(super) fn among_words(&self, image: &Pointed, height: Pixels, cx: &mut App) -> AnyElement {
         let Some((ready, covers)) = self.ready(image, cx) else { return div().size(height).into_any_element() };
-        images_that_open::opening(div().id(image.element()), ready.clone(), covers)
+        let frame = div().id(image.element());
+        let frame = match self.player(image) {
+            Some(player) => frame.hand().on_click(move |_: &ClickEvent, window, cx| expand(player.clone(), window, cx)),
+            None => images_that_open::opening(frame, ready.clone(), covers),
+        };
+        frame
             .w(height * (pixels(covers.0) / pixels(covers.1)))
             .h(height)
             .child(images_that_open::picture(ready).size_full())
@@ -198,8 +211,13 @@ impl<W: Waiter> Lookup<W> {
             .into_any_element()
     }
 
-    /// The image and how many pixels it covers, once it's here, which starts it loading the first time it's asked
-    /// for.
+    /// What plays the video at `image`'s address, once its still is here, if it's a video.
+    fn player(&self, image: &Pointed) -> Option<Entity<VideoPlayer>> {
+        self.linked.player(&image.address, &self.kept)
+    }
+
+    /// The image, or a video's still, and how many pixels it covers, once it's here, which starts it loading the first
+    /// time it's asked for.
     pub(super) fn ready(&self, image: &Pointed, cx: &mut App) -> Option<(Arc<RenderImage>, (u32, u32))> {
         self.linked.ready(&image.address, &self.kept, self.waiter, cx)
     }

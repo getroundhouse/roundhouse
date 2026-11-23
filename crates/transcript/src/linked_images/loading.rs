@@ -2,10 +2,12 @@ use super::{drawings, drawn};
 use crate::attachments::image_format;
 use crate::diagrams::{self, Palette};
 use crate::transcript::Transcript;
+use crate::videos::{Still, VideoPlayer, VideoSource, still};
 use client_core::Client;
 use gpui_kit::component::text::MarkdownExtensions;
 use gpui_kit::{
-    App, AppContext as _, Image, ImageCacheError, ImageFormat, ImageSource, RenderImage, SharedUri, WeakEntity, Window,
+    App, AppContext as _, Entity, Image, ImageCacheError, ImageFormat, ImageSource, RenderImage, SharedUri, WeakEntity,
+    Window,
 };
 use parking_lot::Mutex;
 use protocol::attachment::{AttachmentBytes, MediaType};
@@ -53,6 +55,9 @@ pub(super) enum Linked<W> {
     Loading(Vec<W>),
     /// With how many pixels it covers as it's drawn, as [`drawable`] and [`pixels`] say.
     Ready(Arc<RenderImage>, (u32, u32)),
+    /// A video, which plays where it's drawn alone, and whose still is drawn anywhere else, with how many pixels it
+    /// covers.
+    Video(Entity<VideoPlayer>, Drawn),
     /// The hub couldn't give it, or it isn't an image, so it's not asked for again on this connection.
     Unreadable,
 }
@@ -65,6 +70,8 @@ pub(super) type Drawn = (Arc<RenderImage>, (u32, u32));
 pub(super) enum Source {
     /// The copy the hub kept when the text came.
     Kept(AttachmentId),
+    /// The copy the hub kept of a video, which is read a part at a time as it plays, rather than whole.
+    Video(AttachmentId),
     /// Written into the text, by its whole address.
     Embedded(String),
     /// A diagram written into the text, by what it says, drawn in a palette, as `crate::diagrams` draws it.
@@ -97,13 +104,22 @@ impl<W: Waiter> LinkedImages<W> {
     }
 
     /// Carries on on a new connection, and asks again for what couldn't be read, in case the connection was why. A
-    /// diagram that couldn't be drawn isn't drawn again, since nothing it's drawn from has changed.
-    pub(crate) fn reconnect(&self, client: &Client) {
+    /// diagram that couldn't be drawn isn't drawn again, since nothing it's drawn from has changed. A video's player
+    /// carries on on the new connection too.
+    pub(crate) fn reconnect(&self, client: &Client, cx: &mut App) {
         *self.0.client.lock() = client.clone();
-        let read = |source: &Source, linked: &Linked<W>| {
-            !matches!(linked, Linked::Unreadable) || matches!(source, Source::Diagram(..))
-        };
-        self.0.images.lock().retain(|source, linked| read(source, linked));
+        let mut players = Vec::new();
+        self.0.images.lock().retain(|source, linked| match linked {
+            Linked::Video(player, _) => {
+                players.push(player.clone());
+                true
+            }
+            Linked::Unreadable => matches!(source, Source::Diagram(..)),
+            Linked::Ready(..) | Linked::Loading(_) => true,
+        });
+        for player in players {
+            player.update(cx, |player, cx| player.reconnect(client, cx));
+        }
     }
 
     /// How a text drawn from the kit's blocks, which names `kept`, for `waiter`, draws the images it points to, and
@@ -134,6 +150,16 @@ impl<W: Waiter> LinkedImages<W> {
         }
         match self.0.images.lock().get(source) {
             Some(Linked::Ready(image, covers)) => Some(Ok((image.clone(), *covers))),
+            Some(Linked::Video(_, drawn)) => Some(Ok(drawn.clone())),
+            _ => None,
+        }
+    }
+
+    /// What plays the video at `uri` in a text that names `kept`, once its still is here, or `None` while it loads,
+    /// if it can't be played, or if it isn't a video.
+    pub(super) fn player(&self, uri: &str, kept: &[LinkedImage]) -> Option<Entity<VideoPlayer>> {
+        match self.0.images.lock().get(&source(uri, kept)?) {
+            Some(Linked::Video(player, _)) => Some(player.clone()),
             _ => None,
         }
     }
@@ -164,7 +190,7 @@ impl<W: Waiter> LinkedImages<W> {
     ) -> Option<Result<Arc<RenderImage>, ImageCacheError>> {
         let mut images = self.0.images.lock();
         match images.get_mut(source) {
-            Some(Linked::Ready(image, _)) => return Some(Ok(image.clone())),
+            Some(Linked::Ready(image, _) | Linked::Video(_, (image, _))) => return Some(Ok(image.clone())),
             Some(Linked::Unreadable) => return Some(Err(ImageCacheError::Asset("it can't be shown".into()))),
             Some(Linked::Loading(waiting)) => {
                 if !waiting.contains(&waiter) {
@@ -186,21 +212,30 @@ impl<W: Waiter> LinkedImages<W> {
         let loading = cx.background_spawn(async move {
             let bytes = match reading {
                 Source::Kept(id) => client.attachment_read(&session, &id).ok(),
+                Source::Video(id) => {
+                    let video = VideoSource::Kept { client, session, id };
+                    return still(&video).map(|still| Read::Video(video, still));
+                }
                 Source::Embedded(uri) => embedded(&uri),
                 Source::Diagram(text, palette) => diagrams::svg(&text, &palette),
             };
-            bytes
-                .and_then(|bytes| {
-                    let format = image_format(MediaType::sniff(&bytes))?;
-                    let Drawable { bytes, says } = drawable(format, bytes)?;
-                    let image = Image::from_bytes(format, bytes).to_image_data(renderer).ok()?;
-                    let covers = says.or_else(|| pixels(&image))?;
-                    Some(Linked::Ready(image, covers))
-                })
-                .unwrap_or(Linked::Unreadable)
+            let bytes = bytes?;
+            let format = image_format(MediaType::sniff(&bytes))?;
+            let Drawable { bytes, says } = drawable(format, bytes)?;
+            let image = Image::from_bytes(format, bytes).to_image_data(renderer).ok()?;
+            let covers = says.or_else(|| pixels(&image))?;
+            Some(Read::Image(image, covers))
         });
         cx.spawn(async move |cx| {
-            let linked = loading.await;
+            let read = loading.await;
+            let linked = cx.update(|cx| match read {
+                Some(Read::Image(image, covers)) => Linked::Ready(image, covers),
+                Some(Read::Video(video, still)) => {
+                    let drawn = (still.image.clone(), still.covers);
+                    Linked::Video(cx.new(|cx| VideoPlayer::new(video, still, cx)), drawn)
+                }
+                None => Linked::Unreadable,
+            });
             let waiting = match images.0.images.lock().insert(source, linked) {
                 Some(Linked::Loading(waiting)) => waiting,
                 _ => Vec::new(),
@@ -209,6 +244,13 @@ impl<W: Waiter> LinkedImages<W> {
         })
         .detach();
     }
+}
+
+/// What's read off the main thread of what a text points to, for the main thread to keep: an image, with how many
+/// pixels it covers, or a video's still, with where the rest of it comes from.
+enum Read {
+    Image(Arc<RenderImage>, (u32, u32)),
+    Video(VideoSource, Still),
 }
 
 /// An image's bytes as they're safe to draw, and the size it says it is, if it's a drawing, since GPUI keeps that to
@@ -237,13 +279,16 @@ fn pixels(image: &RenderImage) -> Option<(u32, u32)> {
     Some((side(pixels.width.0)?, side(pixels.height.0)?))
 }
 
-/// Where the image at `uri` comes from, from a Markdown image's address and what its text's block names, or `None` if
-/// it isn't drawn: on the web, elsewhere on the machine, or in the workspace without a copy the hub kept.
+/// Where the image or the video at `uri` comes from, from a Markdown image's address and what its text's block names,
+/// or `None` if it isn't drawn: on the web, elsewhere on the machine, in the workspace without a copy the hub kept, or
+/// a copy of a kind this build doesn't know, which a newer hub may keep, and which isn't read to find out what it is.
 fn source(uri: &str, kept: &[LinkedImage]) -> Option<Source> {
     if uri.starts_with("data:") {
         return Some(Source::Embedded(uri.to_string()));
     }
-    kept.iter().find(|image| image.address == uri).map(|image| Source::Kept(image.attachment.id.clone()))
+    let image = kept.iter().find(|image| image.address == uri)?;
+    let (id, media_type) = (image.attachment.id.clone(), image.attachment.media_type);
+    if media_type.is_video() { Some(Source::Video(id)) } else { media_type.is_image().then_some(Source::Kept(id)) }
 }
 
 /// The bytes a `data:` URL holds, if it's written as base64, as an image has to be.
@@ -273,6 +318,21 @@ mod tests {
         assert_eq!(source("docs/a%20shot.png", &kept), Some(Source::Kept(AttachmentId::from("a1".to_string()))));
         assert_eq!(source("docs/a shot.png", &kept), None, "only by the address as the text gives it");
         assert_eq!(source("docs/other.png", &kept), None, "one with no copy isn't drawn");
+    }
+
+    /// A copy of a kind this build doesn't know isn't read, since a newer hub may keep something big, such as a video
+    /// it has a new kind for.
+    #[test]
+    fn a_copy_of_a_kind_this_build_doesn_t_know_isn_t_read() {
+        let attachment = Attachment {
+            id: AttachmentId::from("a1".to_string()),
+            name: "clip.mkv".into(),
+            media_type: MediaType::Unknown,
+            size_bytes: 3,
+        };
+        let kept = [LinkedImage { address: "clip.mkv".into(), attachment }];
+
+        assert_eq!(source("clip.mkv", &kept), None);
     }
 
     #[test]

@@ -125,7 +125,7 @@ fn an_answer_goes_on_the_connection_given_last(cx: &mut TestAppContext) {
     let (client, last) = stand_in(Hub::Refuses, cx);
 
     view.update(cx, |view, cx| {
-        view.reconnect(&client);
+        view.reconnect(&client, cx);
         view.choose(0, Some(OptionPlace(1)), cx);
         view.send(cx);
     });

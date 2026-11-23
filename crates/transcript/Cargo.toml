@@ -47,6 +47,10 @@ similar.workspace = true
 unicode-segmentation.workspace = true
 # Reads a drawing a text points to before GPUI draws it, so it shows no file it names by its path.
 usvg.workspace = true
+# Decodes a video the agent's text points to, or one opened from the worktree, on a thread of its own.
+video.workspace = true
+# Tells a video's player that its thread has decoded something, from that thread.
+flume.workspace = true
 
 [dev-dependencies]
 # What the `testing` feature turns on in these, which the tests have without it.

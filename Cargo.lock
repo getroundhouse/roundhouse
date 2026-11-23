@@ -2037,6 +2037,7 @@ dependencies = [
  "transcript",
  "update-feed",
  "velopack",
+ "video",
  "waiting",
  "windows-icon",
  "windows-sys 0.61.2",
@@ -9985,6 +9986,7 @@ version = "0.1.0"
 dependencies = [
  "client-core",
  "dictation-ui",
+ "flume",
  "gpui-kit",
  "image",
  "look",
@@ -9999,6 +10001,7 @@ dependencies = [
  "tempfile",
  "unicode-segmentation",
  "usvg 0.46.0",
+ "video",
  "waiting",
 ]
 

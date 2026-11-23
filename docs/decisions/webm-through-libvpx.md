@@ -1,6 +1,6 @@
 # The videos agents make are WebM, decoded by libvpx built from its source at a pinned commit
 
-**Status:** Decided. Not built: playing them, which #2341 plans.
+**Status:** Decided. Not built: playing them in the file tab, which #2341 plans.
 **First recorded:** 2026-11-21, in #2341.
 
 The app plays one kind of video, the kind agents are told to make: WebM, with VP8 or VP9 and no sound, which is what Playwright records. It decodes it with libvpx, the same way on macOS, iOS, Windows and Linux. The build fetches libvpx's source with git, at the commit `third_party/libvpx` pins, as it fetches Ghostty's, and compiles it with the configs kept there. Any other video, such as an MP4 or a MOV the person has, opens in the system's own player.

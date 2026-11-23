@@ -65,6 +65,7 @@ mod tooltips;
 mod top_bars;
 mod traits;
 mod typography;
+mod videos;
 mod word_changes;
 mod work;
 
@@ -133,5 +134,6 @@ pub use tooltips::{Tooltipped, tooltip_words};
 pub use top_bars::{TopBar, top_bar};
 pub use traits::{Input, Reach};
 pub use typography::{CodeLines, STRONG, Type, Typeset};
+pub use videos::{VIDEO_LEAST_WIDTH, Video, VideoShows, length, video, video_bar_height};
 pub use word_changes::{LineChange, word_changes};
 pub use work::{Sign, Work};
