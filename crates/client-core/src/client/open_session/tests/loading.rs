@@ -3,7 +3,7 @@ use protocol::model::{Place, Seq, Session};
 use std::path::Path;
 use std::time::Duration;
 
-use crate::stand_in_hub::{Does, StandIn};
+use crate::stand_in_hub::{Does, StandIn, stops};
 
 /// Far enough along that the subscription starts after the first page, so a prompt there comes only from the list.
 pub(in super::super) const LAST_SEQ: Seq = Seq::new(1800);
@@ -54,18 +54,6 @@ pub(in crate::client) fn follows_session(request: &ClientRequest) -> Option<subs
     })
 }
 
-/// A hub's refusal of every start `request` asks for, with `code`, as a hub that doesn't have them refuses them.
-pub(in crate::client) fn refusing_every_start(request: &ClientRequest, code: ErrorCode, message: &str) -> ReplyOutcome {
-    let ClientRequest::Subscribe(subscribe) = request else { return refused(code, message) };
-    let refused = (subscribe.start.iter())
-        .map(|start| subscriptions::Refused {
-            subscription_id: start.subscription_id,
-            error: ApiError::new(code, message),
-        })
-        .collect();
-    ReplyOutcome::Response(ClientResponse::Subscribed(subscriptions::Subscribed { refused }))
-}
-
 pub(in super::super) fn session() -> Session {
     Session { last_seq: LAST_SEQ, ..protocol::fixtures::session("s") }
 }
@@ -78,11 +66,6 @@ pub(in super::super) fn until(what: &str, done: impl FnMut() -> bool) {
     waiting::thread::until(Duration::from_secs(10), format!("never {what}"), done);
 }
 
-/// Whether `request` stops following, and starts nothing.
-fn lets_go(request: &ClientRequest) -> bool {
-    matches!(request, ClientRequest::Subscribe(subscribe) if subscribe.start.is_empty() && !subscribe.stop.is_empty())
-}
-
 /// Every request the hub is sent until the follower's last subscription is let go, which is the last thing the
 /// follower sends once every handle on it has gone.
 pub(in super::super) fn requests_until_unsubscribed(
@@ -90,7 +73,7 @@ pub(in super::super) fn requests_until_unsubscribed(
     subscriptions: usize,
 ) -> Vec<ClientRequest> {
     let mut requests = Vec::new();
-    while requests.iter().filter(|r| lets_go(r)).count() < subscriptions {
+    while requests.iter().filter(|r| stops(r)).count() < subscriptions {
         let Ok(request) = heard.recv_timeout(Duration::from_secs(10)) else {
             panic!("the follower never let go: {requests:?}");
         };

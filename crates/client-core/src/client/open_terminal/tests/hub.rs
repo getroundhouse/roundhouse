@@ -7,8 +7,7 @@ use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, Reply
 use protocol::terminal::{TerminalExit, TerminalPicture, TerminalSize, TerminalUpdate};
 
 use super::following::{SIZE, pictures_at};
-use crate::client::open_session::tests::refusing_every_start;
-use crate::stand_in_hub::{Does, listen, subscribed};
+use crate::stand_in_hub::{Does, listen, refusing_every_start, subscribed};
 
 /// What a hub sends of a terminal it's watched: pictures, and maybe the shell's end.
 pub(super) struct Watched {
@@ -65,11 +64,6 @@ pub(super) fn watch_of(request: &ClientRequest) -> Option<u64> {
     let ClientRequest::Subscribe(subscribe) = request else { return None };
     let watch = subscribe.start.iter().find(|start| matches!(start.follow, Follow::Terminal { .. }))?;
     Some(watch.subscription_id)
-}
-
-/// Whether `request` stops following, and starts nothing.
-pub(super) fn stops(request: &ClientRequest) -> bool {
-    matches!(request, ClientRequest::Subscribe(subscribe) if subscribe.start.is_empty() && !subscribe.stop.is_empty())
 }
 
 /// Whether `request` watches a terminal.

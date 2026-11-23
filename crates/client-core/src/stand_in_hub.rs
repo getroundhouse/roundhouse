@@ -11,8 +11,10 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
-use protocol::client::subscriptions::{Follow, Subscribe, Subscribed};
-use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, HelloReply, HubFrame, ReplyOutcome};
+use protocol::client::subscriptions::{Follow, Refused, Subscribe, Subscribed};
+use protocol::client::{
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome,
+};
 use protocol::frame;
 
 use crate::Client;
@@ -97,6 +99,23 @@ impl StandIn {
 pub fn subscribed(subscribe: &Subscribe, then: impl Fn(u64, &Follow) -> Vec<HubFrame>) -> Does {
     let frames = subscribe.start.iter().flat_map(|start| then(start.subscription_id, &start.follow)).collect();
     Does::AnswersThen(Box::new(ReplyOutcome::Response(ClientResponse::Subscribed(Subscribed::default()))), frames)
+}
+
+/// A hub's refusal of every start `request` asks for, with `code`, as a hub that doesn't have them refuses them, and of
+/// any other request.
+pub fn refusing_every_start(request: &ClientRequest, code: ErrorCode, message: &str) -> ReplyOutcome {
+    let ClientRequest::Subscribe(subscribe) = request else {
+        return ReplyOutcome::Error(ApiError::new(code, message));
+    };
+    let refused = (subscribe.start.iter())
+        .map(|start| Refused { subscription_id: start.subscription_id, error: ApiError::new(code, message) })
+        .collect();
+    ReplyOutcome::Response(ClientResponse::Subscribed(Subscribed { refused }))
+}
+
+/// Whether `request` stops following, and starts nothing.
+pub fn stops(request: &ClientRequest) -> bool {
+    matches!(request, ClientRequest::Subscribe(subscribe) if subscribe.start.is_empty() && !subscribe.stop.is_empty())
 }
 
 /// Stands in for a hub on `socket`, doing with each request what `does` says, and connects to it.
