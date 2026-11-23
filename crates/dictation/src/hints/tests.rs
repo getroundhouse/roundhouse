@@ -112,3 +112,17 @@ proptest! {
         }
     }
 }
+
+/// A hint favours writing it as it is, and a lowercase one with a capital first letter, as the graph matches them,
+/// but not any other casing, and a `snake_case` one only as the words it's said as.
+#[test]
+fn hints_favour_their_own_spellings_and_a_capital_first_letter() {
+    let hints = Hints::new(["tokio", "SQLite", "dwell_ms"]);
+
+    for (favoured, at) in [("tokio", 0), ("Tokio", 0), ("SQLite", 1), ("dwell ms", 2), ("Dwell ms", 2)] {
+        assert_eq!(hints.favouring(favoured), Some(at), "{favoured:?}");
+    }
+    for not in ["TOKIO", "sqlite", "Sqlite", "dwell_ms", "tok"] {
+        assert_eq!(hints.favouring(not), None, "{not:?}");
+    }
+}

@@ -1,0 +1,32 @@
+# A comment on a Python ledger's diff naming a function from the lines, a rounding constant from an added import, and an exception that isn't written yet.
+field = "diff_comment"
+said = "Use ROUND_HALF_EVEN here too, like the invoice totals do, and make reconcile_ledger raise LedgerMismatch instead of returning None when they don't add up."
+terms = [
+  { written = "ROUND_HALF_EVEN", also = ["round half even"] },
+  { written = "reconcile_ledger", also = ["reconcile ledger"] },
+  { written = "LedgerMismatch", also = ["ledger mismatch"] },
+]
+
+[workspace]
+name = "ledger-pennies"
+branch = "wren/ledger-pennies"
+repo = "quireworks"
+pull_request = "Reconcile the materials ledger against supplier invoices"
+changed = ["quireworks/ledger.py", "tests/test_ledger.py"]
+
+[comment]
+path = "quireworks/ledger.py"
+lines = [
+  "def reconcile_ledger(entries: list[LedgerEntry], invoice: Invoice) -> Decimal | None:",
+  "    total = sum((e.amount for e in entries), Decimal(0))",
+  "    total = total.quantize(Decimal(\"0.01\"), rounding=ROUND_HALF_UP)",
+  "    if total != invoice.total:",
+  "        return None",
+  "    return total",
+]
+added = [
+  "from decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Decimal",
+  "",
+  "from quireworks.invoices import Invoice",
+  "from quireworks.models import LedgerEntry",
+]

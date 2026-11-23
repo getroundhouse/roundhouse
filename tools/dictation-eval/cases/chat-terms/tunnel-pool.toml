@@ -1,0 +1,43 @@
+# A relay's idle tunnels: the person names the type and the constant the agent's reply named.
+field = "composer"
+said = "Okay, but don't have TunnelPool reap inside the send path. Give it its own timer task, and leave IDLE_TIMEOUT at ninety seconds."
+terms = [
+  { written = "TunnelPool", also = ["tunnel pool"] },
+  { written = "IDLE_TIMEOUT", also = ["idle timeout"] },
+]
+
+[workspace]
+name = "idle-tunnels"
+branch = "maren/idle-tunnels"
+repo = "ferry"
+changed = ["crates/relay/src/tunnel.rs"]
+
+[[chat]]
+person = "Tunnels that sit idle for a couple of minutes get dropped even when the phone is still connected. Can you find out why?"
+
+[[chat]]
+call = { kind = "search", pattern = "idle_ms", path = "crates/relay" }
+
+[[chat]]
+call = { kind = "read", path = "crates/relay/src/pool.rs" }
+
+[[chat]]
+call = { kind = "read", path = "crates/relay/src/tunnel.rs" }
+
+[[chat]]
+agent = """
+Found it. `TunnelPool::send` calls `reap()` before every send, and `reap()` drops any tunnel whose `last_seen` is older than `IDLE_TIMEOUT`. A tunnel only updates `last_seen` when it *receives* a frame, so one that only sends looks idle.
+
+I'll make `Tunnel::touch` run on sends too."""
+
+[[chat]]
+call = { kind = "edit", path = "crates/relay/src/tunnel.rs", edits = [{ old = "    pub fn send(&mut self, frame: Frame) -> Result<(), TunnelError> {\n        self.writer.push(frame)", new = "    pub fn send(&mut self, frame: Frame) -> Result<(), TunnelError> {\n        self.touch();\n        self.writer.push(frame)" }] }
+
+[[chat]]
+call = { kind = "command", command = "cargo test -p relay tunnel", description = "Run the relay's tunnel tests" }
+
+[[chat]]
+agent = """
+Sends now count as activity, and `cargo test -p relay tunnel` passes (14 tests).
+
+One thing I left alone: reaping still happens inline in `TunnelPool::send`, so a send can stall while it walks every tunnel. With a few thousand tunnels that's noticeable."""

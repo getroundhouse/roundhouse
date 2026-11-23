@@ -1,0 +1,33 @@
+# Kubernetes deployment: the person names tools the agent wrote in lowercase prose.
+field = "composer"
+said = "Use traefik for the ingress, let cert-manager issue the certificates, and keep a kustomize overlay for each environment rather than one big values file."
+terms = [
+  { written = "traefik" },
+  { written = "cert-manager", also = ["cert manager"] },
+  { written = "kustomize" },
+]
+
+attached = ["staging-ingress-sketch.png"]
+
+[workspace]
+name = "staging-cluster"
+branch = "wren/staging-cluster"
+repo = "glassplate"
+
+[[chat]]
+person = "Get the photo server running on the staging cluster. It only needs one replica for now."
+
+[[chat]]
+call = { kind = "find_files", pattern = "deploy/**/*.yaml" }
+
+[[chat]]
+call = { kind = "read", path = "deploy/base/deployment.yaml" }
+
+[[chat]]
+call = { kind = "command", command = "kubectl --context staging get ingressclass", description = "See which ingress controllers the cluster has" }
+
+[[chat]]
+agent = """
+The deployment and service are fine for one replica. What's missing is a way in from outside: the cluster has no ingress controller yet, so nothing answers on port 443.
+
+The usual choices are ingress-nginx or traefik. For certificates, cert-manager with a Let's Encrypt issuer is the least work. I can also lay the manifests out as kustomize overlays, one per environment, so staging and production share the base."""

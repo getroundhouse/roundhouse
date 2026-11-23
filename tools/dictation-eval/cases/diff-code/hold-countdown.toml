@@ -1,0 +1,34 @@
+# A comment on a React hook's diff naming the hook from the lines and a constant from the file's other added lines.
+field = "diff_comment"
+said = "useHoldCountdown re-renders every second even when the hold is days away. Tick once a minute until it's inside HOLD_GRACE_MS, then every second."
+terms = [
+  { written = "useHoldCountdown", also = ["use hold countdown"] },
+  { written = "HOLD_GRACE_MS", also = ["hold grace ms"] },
+]
+
+[workspace]
+name = "hold-expiry"
+branch = "sefa/hold-expiry"
+repo = "lendmark-web"
+pull_request = "Show how long a reader has left to collect a hold"
+changed = ["src/holds/useHoldCountdown.ts", "src/holds/HoldCard.tsx"]
+
+[comment]
+path = "src/holds/useHoldCountdown.ts"
+lines = [
+  "export function useHoldCountdown(expiresAt: Date): number {",
+  "  const [leftMs, setLeftMs] = useState(() => expiresAt.getTime() - Date.now());",
+  "  useEffect(() => {",
+  "    const id = setInterval(() => setLeftMs(expiresAt.getTime() - Date.now()), 1_000);",
+  "    return () => clearInterval(id);",
+  "  }, [expiresAt]);",
+]
+added = [
+  "import { useEffect, useState } from \"react\";",
+  "",
+  "/** How close to expiry a hold turns urgent, when the card shows seconds. */",
+  "export const HOLD_GRACE_MS = 2 * 60 * 60 * 1_000;",
+  "",
+  "  return Math.max(leftMs, 0);",
+  "}",
+]

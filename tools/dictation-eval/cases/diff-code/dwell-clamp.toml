@@ -1,0 +1,37 @@
+# A comment on a timetable diff naming a constant and a function from the lines it's on.
+field = "diff_comment"
+said = "MIN_DWELL_SECS should come from the station's config rather than being one number for the whole network. Have clamp_dwell take the station."
+terms = [
+  { written = "MIN_DWELL_SECS", also = ["min dwell secs"] },
+  { written = "clamp_dwell", also = ["clamp dwell"] },
+]
+
+open_file = "src/stops/dwell.rs"
+
+[workspace]
+name = "dwell-times"
+branch = "ines/dwell-times"
+repo = "timetable-feed"
+pull_request = "Clamp dwell times read from the operator's feed"
+changed = ["src/stops/dwell.rs", "src/stops/mod.rs"]
+
+[comment]
+path = "src/stops/dwell.rs"
+lines = [
+  "/// The shortest a train may stand at a platform, so a feed's zero doesn't stop it nowhere.",
+  "pub const MIN_DWELL_SECS: u32 = 20;",
+  "",
+  "pub fn clamp_dwell(dwell: Duration) -> Duration {",
+  "    dwell.max(Duration::from_secs(MIN_DWELL_SECS.into()))",
+  "}",
+]
+added = [
+  "use std::time::Duration;",
+  "use crate::stops::StopTime;",
+  "pub const MAX_DWELL_SECS: u32 = 1_800;",
+  "impl StopTime {",
+  "    pub fn dwell(&self) -> Duration {",
+  "        clamp_dwell(self.departs.saturating_sub(self.arrives))",
+  "    }",
+  "}",
+]

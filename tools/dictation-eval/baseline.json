@@ -1,0 +1,240 @@
+{
+  "chat-terms/binding-fixtures": {
+    "hinted": [
+      "BindingJob",
+      "conftest",
+      "signature_factory"
+    ],
+    "missed": [
+      "paper_stock"
+    ],
+    "hints": 11,
+    "unused": 7
+  },
+  "chat-terms/clock-hooks": {
+    "hinted": [
+      "ClockFace",
+      "onFlag",
+      "useIncrement"
+    ],
+    "missed": [
+      "onTimeout"
+    ],
+    "hints": 13,
+    "unused": 8
+  },
+  "chat-terms/exif-orientation": {
+    "hinted": [
+      "ExifReader",
+      "parse_orientation"
+    ],
+    "missed": [],
+    "hints": 11,
+    "unused": 8
+  },
+  "chat-terms/stale-reports": {
+    "hinted": [],
+    "missed": [
+      "ErrStaleReport",
+      "slog"
+    ],
+    "hints": 11,
+    "unused": 11
+  },
+  "chat-terms/station-names": {
+    "hinted": [
+      "Marrowdale",
+      "SignalAspect",
+      "Thornwick"
+    ],
+    "missed": [],
+    "hints": 14,
+    "unused": 10
+  },
+  "chat-terms/tunnel-pool": {
+    "hinted": [
+      "IDLE_TIMEOUT",
+      "TunnelPool"
+    ],
+    "missed": [],
+    "hints": 11,
+    "unused": 8
+  },
+  "diff-code/dwell-clamp": {
+    "hinted": [],
+    "missed": [
+      "MIN_DWELL_SECS",
+      "clamp_dwell"
+    ],
+    "hints": 2,
+    "unused": 2
+  },
+  "diff-code/hold-countdown": {
+    "hinted": [
+      "useHoldCountdown"
+    ],
+    "missed": [
+      "HOLD_GRACE_MS"
+    ],
+    "hints": 5,
+    "unused": 3
+  },
+  "diff-code/ledger-rounding": {
+    "hinted": [],
+    "missed": [
+      "LedgerMismatch",
+      "ROUND_HALF_EVEN",
+      "reconcile_ledger"
+    ],
+    "hints": 3,
+    "unused": 3
+  },
+  "diff-code/sighting-distance": {
+    "hinted": [],
+    "missed": [
+      "PostGIS",
+      "SightingStore",
+      "haversineKm"
+    ],
+    "hints": 4,
+    "unused": 4
+  },
+  "hyphenated/bindery-workspace": {
+    "hinted": [
+      "quire-api",
+      "quire-web"
+    ],
+    "missed": [],
+    "hints": 5,
+    "unused": 3
+  },
+  "hyphenated/date-packages": {
+    "hinted": [
+      "date-fns"
+    ],
+    "missed": [
+      "dayjs",
+      "react-query"
+    ],
+    "hints": 17,
+    "unused": 16
+  },
+  "hyphenated/migration-flags-answer": {
+    "hinted": [],
+    "missed": [
+      "allow-destructive",
+      "dry-run",
+      "fail-fast"
+    ],
+    "hints": 11,
+    "unused": 11
+  },
+  "hyphenated/signal-box-workspace": {
+    "hinted": [
+      "interlock-core"
+    ],
+    "missed": [
+      "route-setter"
+    ],
+    "hints": 4,
+    "unused": 3
+  },
+  "hyphenated/test-runner-crates": {
+    "hinted": [],
+    "missed": [
+      "cargo-nextest",
+      "env-filter",
+      "tracing-subscriber"
+    ],
+    "hints": 8,
+    "unused": 8
+  },
+  "long-chat/calibration-answer": {
+    "hinted": [],
+    "missed": [
+      "gravity_offset",
+      "hydrometer-sim"
+    ],
+    "hints": 25,
+    "unused": 25
+  },
+  "long-chat/newtype-review": {
+    "hinted": [],
+    "missed": [
+      "AccessionId",
+      "Halvard"
+    ],
+    "hints": 27,
+    "unused": 27
+  },
+  "long-chat/reminder-proposal-note": {
+    "hinted": [],
+    "missed": [
+      "HoldQueue",
+      "RENEWAL_LIMIT"
+    ],
+    "hints": 40,
+    "unused": 40
+  },
+  "lowercase/catalog-database-note": {
+    "hinted": [],
+    "missed": [
+      "litestream",
+      "pgbouncer",
+      "postgres",
+      "sqlite"
+    ],
+    "hints": 8,
+    "unused": 8
+  },
+  "lowercase/cluster-ingress": {
+    "hinted": [],
+    "missed": [
+      "cert-manager",
+      "kustomize",
+      "traefik"
+    ],
+    "hints": 8,
+    "unused": 8
+  },
+  "lowercase/config-crates": {
+    "hinted": [
+      "toml_edit"
+    ],
+    "missed": [
+      "serde",
+      "toml"
+    ],
+    "hints": 7,
+    "unused": 6
+  },
+  "lowercase/tokio-runtime-answer": {
+    "hinted": [
+      "smol",
+      "tokio"
+    ],
+    "missed": [
+      "reqwest"
+    ],
+    "hints": 11,
+    "unused": 9
+  },
+  "plain/bigger-buttons-workspace": {
+    "hinted": [],
+    "missed": [],
+    "hints": 6,
+    "unused": 6
+  },
+  "plain/leave-a-note": {
+    "hinted": [],
+    "missed": [],
+    "hints": 14,
+    "unused": 14
+  },
+  "plain/thumbnail-cache-note": {
+    "hinted": [],
+    "missed": [],
+    "hints": 21,
+    "unused": 21
+  }
+}

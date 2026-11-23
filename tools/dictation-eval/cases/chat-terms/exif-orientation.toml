@@ -1,0 +1,30 @@
+# A photo library's rotated imports: the person names a type and a function the agent read and quoted.
+field = "composer"
+said = "That's the right fix, but leave ExifReader alone and do it in parse_orientation. It should handle the mirrored values too, five through eight."
+terms = [
+  { written = "ExifReader", also = ["exif reader"] },
+  { written = "parse_orientation", also = ["parse orientation"] },
+]
+
+[workspace]
+name = "rotated-imports"
+branch = "tobiah/rotated-imports"
+repo = "glassplate"
+
+[[chat]]
+person = "Photos from my old camera import sideways. The originals look fine in the file browser."
+
+[[chat]]
+call = { kind = "find_files", pattern = "**/exif*.rs" }
+
+[[chat]]
+call = { kind = "read", path = "crates/import/src/exif.rs" }
+
+[[chat]]
+call = { kind = "search", pattern = "Orientation::", path = "crates" }
+
+[[chat]]
+agent = """
+The import reads the orientation tag, but `parse_orientation` only knows the values 1, 3, 6 and 8 and returns `Orientation::Normal` for anything else. Your camera writes the tag in the maker-note block too, and `ExifReader::tag` returns the first one it finds, which is the maker note's.
+
+I can either make `ExifReader::tag` prefer IFD0, or teach `parse_orientation` to fall back. Which do you want?"""

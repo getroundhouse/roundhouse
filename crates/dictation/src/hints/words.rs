@@ -42,6 +42,25 @@ impl Hints {
     pub fn words(&self) -> &[String] {
         &self.phrases
     }
+
+    /// Where among these hints is the first that favours writing `text` exactly, as it is or with a capital first
+    /// letter. The engine boosts it only if its vocabulary has every character in it. `tools/dictation-eval` asks it
+    /// of each term a person says.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn favouring(&self, text: &str) -> Option<usize> {
+        self.phrases.iter().position(|phrase| written_forms(phrase).any(|form| form == text))
+    }
+}
+
+/// How `phrase` can be written once it's heard: as it is, and with a capital first letter when it starts with a
+/// lowercase one, since models start sentences in upper case.
+pub(super) fn written_forms(phrase: &str) -> impl Iterator<Item = String> {
+    let mut chars = phrase.chars();
+    let capitalized = chars
+        .next()
+        .filter(char::is_ascii_lowercase)
+        .map(|first| format!("{}{}", first.to_ascii_uppercase(), chars.as_str()));
+    std::iter::once(phrase.to_string()).chain(capitalized)
 }
 
 /// Turns one raw hint into the spoken forms worth matching: trimmed, collapsed to single spaces, and with `snake_case`

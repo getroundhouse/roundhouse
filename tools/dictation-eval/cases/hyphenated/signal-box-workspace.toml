@@ -1,0 +1,11 @@
+# A new workspace's prompt naming a hyphenated repository and a hyphenated crate in it.
+field = "new_workspace"
+said = "In interlock-core, add a check that two routes can't both claim the same track circuit, and wire it into the route-setter crate."
+terms = [
+  { written = "interlock-core", also = ["interlock core"] },
+  { written = "route-setter", also = ["route setter"] },
+]
+
+[repos]
+chosen = "interlock-core"
+offered = ["interlock-core", "signal-box-ui", "timetable-feed", "ferry"]
