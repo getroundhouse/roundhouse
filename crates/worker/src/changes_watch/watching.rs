@@ -25,9 +25,9 @@ const SETTLING: Settling = Settling {
 };
 
 /// How the watch reads where the OS won't watch the worktree, as once a Linux user has used up their inotify watches:
-/// every ten seconds, which the hub still counts as keeping the summary current. That's the owner's choice to make,
-/// proposed and not yet confirmed. The other choices were the frame saying the summary isn't watched, which the hub
-/// sends as of its read, and refusing the watch, which leaves the summary as of each turn's end.
+/// every ten seconds, which the hub still counts as keeping the summary current. That's the owner's choice. The others
+/// were the frame saying the summary isn't watched, which the hub sends as of its read, and refusing the watch, which
+/// leaves the summary as of each turn's end.
 const WHERE_THE_OS_WONT_WATCH: Settling = Settling { at_least_every: Duration::from_secs(10), ..SETTLING };
 
 /// Whether the watch is started again each time it reads every few minutes, since on Windows notify ends a watch
@@ -81,8 +81,7 @@ pub(crate) async fn watch(
             Err(e) => debug!(worktree = %worktree.display(), "summing up the worktree's changes: {}", e.message),
         }
         let took = began.elapsed();
-        let settling = if os.is_some() { SETTLING } else { WHERE_THE_OS_WONT_WATCH };
-        match settling.wait(&heard.wake, &mut stopping).await {
+        match settling(os.as_deref()).wait(&heard.wake, &mut stopping).await {
             Woke::Stopping => return,
             Woke::Due if WATCH_AGAIN_WHEN_DUE => {
                 // Before the next, so the two don't hold the OS's watches at once.
@@ -95,6 +94,11 @@ pub(crate) async fn watch(
             return;
         }
     }
+}
+
+/// How the watch waits for what it hears, given the OS's watch of the worktree, if it has one.
+pub(super) fn settling(os: Option<&dyn Watching>) -> Settling {
+    if os.is_some() { SETTLING } else { WHERE_THE_OS_WONT_WATCH }
 }
 
 /// What the watch of the worktree at `worktree` shares with the OS's watcher, as git says it then: which folders and

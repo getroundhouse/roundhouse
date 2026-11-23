@@ -3,7 +3,7 @@
 
 use super::each_folder::EachFolder;
 use super::from_the_top::FromTheTop;
-use super::heard::Heard;
+use super::heard::{Heard, News};
 use super::system;
 use super::system::Watching;
 use super::watching::*;
@@ -15,8 +15,10 @@ use crate::testing::given;
 use protocol::model::ChangeStatus;
 use protocol::model::ChangeSummary;
 use protocol::worker::WorkerFrame;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::watch;
@@ -53,19 +55,56 @@ async fn worktree(dir: &Path) -> PathBuf {
     PathBuf::from(prepared.path)
 }
 
-/// What the watch of `worktree` shares with the OS, once anything it heard before has come and gone.
+/// What the watch of `worktree` shares with the OS.
 async fn heard(worktree: &Path) -> Arc<Heard> {
     heard_of(&given(), worktree).await
 }
 
-/// Drops whatever was heard so far, such as the writes that made the worktree, once it's gone quiet.
-async fn settled(heard: &Heard) {
-    while woke(heard, QUIET).await {}
-    heard.take();
+/// How many folders [`marked`] has made, so each has a name of its own.
+static MARKS: AtomicUsize = AtomicUsize::new(0);
+
+/// What was heard before a mark.
+struct UpToMark {
+    /// The paths that may change the summary, the marks' own left out.
+    paths: Vec<PathBuf>,
+    news: News,
 }
 
-async fn woke(heard: &Heard, within: Duration) -> bool {
-    tokio::time::timeout(within, heard.wake.notified()).await.is_ok()
+/// Makes a folder at the top of the worktree `heard` is of, which the OS tells of in one event, and waits for it to be
+/// heard, so whatever was heard before it has been heard too, and takes what was. The wake the mark brings is used up,
+/// so what's heard next is only of what comes after.
+///
+/// The OS tells of what it watches in the order it happened, but for Windows across the folders that each have a watch
+/// of their own, where nothing runs these. A file's close is one exception: it happens once every process holding the
+/// file has closed it, and one forked while it was open, as for git in a test beside this one, holds it until it starts
+/// git. So a file written before a mark can be told of again after it, and a test looks for what it wrote, rather than
+/// for nothing at all.
+async fn marked(heard: &Heard) -> UpToMark {
+    let mark = format!("{MARK}{}", MARKS.fetch_add(1, Ordering::Relaxed));
+    std::fs::create_dir(heard.root.join(&mark)).unwrap();
+    waiting::task::until(PATIENCE, format!("{mark} to be heard"), || {
+        heard.paths.lock().iter().any(|path| path.file_name() == Some(OsStr::new(&mark)))
+    })
+    .await;
+    let paths = std::mem::take(&mut *heard.paths.lock());
+    let marks = |path: &PathBuf| path.file_name().is_some_and(|name| name.to_string_lossy().starts_with(MARK));
+    let paths = paths.into_iter().filter(|path| !marks(path)).collect();
+    // What the mark woke, which nothing waits for.
+    let _ = tokio::time::timeout(Duration::ZERO, heard.wake.notified()).await;
+    UpToMark { paths, news: heard.take() }
+}
+
+/// How each folder [`marked`] makes is named.
+const MARK: &str = "zz-mark-";
+
+/// Whether any of `paths` is `wanted`, from the top of the worktree.
+fn named(paths: &[PathBuf], wanted: &str) -> bool {
+    paths.iter().any(|path| path.ends_with(wanted))
+}
+
+/// Those of `paths` in the folder `folder` of the worktree `heard` is of.
+fn in_folder<'a>(heard: &Heard, paths: &'a [PathBuf], folder: &str) -> Vec<&'a PathBuf> {
+    paths.iter().filter(|path| path.starts_with(heard.root.join(folder))).collect()
 }
 
 fn write(path: &Path, text: &str) {
@@ -83,16 +122,20 @@ async fn an_ignored_folder_wakes_no_summary() {
 
     for way in WAYS {
         let _watching = watching(&heard, way);
-        settled(&heard).await;
+        marked(&heard).await;
         for n in 0..200 {
             write(&worktree.join(format!("ignored/deep/{n}.o")), "built");
         }
-        let built = woke(&heard, QUIET).await;
+        let built = marked(&heard).await;
         write(&worktree.join("src/deep/b.rs"), &format!("fn b() {{ /* {way} */ }}\n"));
-        let edited = woke(&heard, PATIENCE).await;
+        let edited = marked(&heard).await;
 
-        assert!(!built, "{way}: a build into ignored/ woke it");
-        assert!(edited, "{way}: an edit to src/deep/b.rs didn't");
+        assert_eq!(
+            in_folder(&heard, &built.paths, "ignored"),
+            [] as [&PathBuf; 0],
+            "{way}: a build into ignored/ woke it"
+        );
+        assert!(named(&edited.paths, "src/deep/b.rs"), "{way}: an edit to src/deep/b.rs didn't");
     }
 }
 
@@ -104,15 +147,17 @@ async fn staging_a_file_wakes_a_summary() {
     let worktree = worktree(dir.path()).await;
     write(&worktree.join("new.rs"), "fn new() {}\n");
     let heard = heard(&worktree).await;
+    let git_dir = heard.git_dir.clone().expect("git said where its directory is");
 
     for way in WAYS {
         let _watching = watching(&heard, way);
-        settled(&heard).await;
+        marked(&heard).await;
         run(&worktree, &["add", "new.rs"]);
-        let staged = woke(&heard, PATIENCE).await;
+        let staged = marked(&heard).await;
         run(&worktree, &["reset", "-q", "new.rs"]);
+        marked(&heard).await;
 
-        assert!(staged, "{way}: staging didn't wake it");
+        assert!(staged.paths.contains(&git_dir.join("index")), "{way}: staging didn't wake it: {:?}", staged.paths);
     }
 }
 
@@ -126,34 +171,23 @@ async fn a_new_folder_is_watched_unless_git_ignores_it() {
 
     for way in WAYS {
         let mut os = Some(watching(&heard, way));
-        settled(&heard).await;
-        let made = worktree.join(format!("pkg-{}", way.replace(' ', "-")));
+        marked(&heard).await;
+        let top = format!("pkg-{}", way.replace(' ', "-"));
+        let made = worktree.join(&top);
         std::fs::create_dir_all(made.join("inner")).unwrap();
         std::fs::create_dir_all(made.join("build/out")).unwrap();
-        waiting::task::until(PATIENCE, format!("{way}: the new folder to be heard"), || {
-            !heard.news.lock().folders_made.is_empty()
-        })
-        .await;
-        settled_taking_in(&worktree, &heard, &mut os).await;
+        let news = marked(&heard).await.news;
+        take_in(&given(), &worktree, &heard, &mut os, news).await;
 
         write(&made.join("build/out/x.o"), "built");
-        let built = woke(&heard, QUIET).await;
+        let built = marked(&heard).await;
         write(&made.join("inner/c.rs"), "fn c() {}\n");
-        let edited = woke(&heard, PATIENCE).await;
+        let edited = marked(&heard).await;
 
         assert!(os.is_some(), "{way}: it gave up its watch");
-        assert!(!built, "{way}: a build into a new build/ woke it");
-        assert!(edited, "{way}: an edit in a new folder's folder didn't");
-    }
-}
-
-/// Takes in what was heard, as the loop does before each summary, until it's gone quiet.
-async fn settled_taking_in(worktree: &Path, heard: &Arc<Heard>, os: &mut Option<Box<dyn Watching>>) {
-    loop {
-        take_in(&given(), worktree, heard, os, heard.take()).await;
-        if !woke(heard, QUIET).await {
-            return;
-        }
+        let into_build = in_folder(&heard, &built.paths, &format!("{top}/build"));
+        assert_eq!(into_build, [] as [&PathBuf; 0], "{way}: a build into a new build/ woke it");
+        assert!(named(&edited.paths, "inner/c.rs"), "{way}: an edit in a new folder's folder didn't");
     }
 }
 
@@ -166,15 +200,22 @@ async fn a_gitignore_changed_changes_what_wakes_a_summary() {
     std::fs::create_dir_all(worktree.join("logs")).unwrap();
     let heard = heard(&worktree).await;
     let mut os = system::start(&heard);
-    settled(&heard).await;
+    marked(&heard).await;
 
     write(&worktree.join(".gitignore"), "ignored/\nbuild/\nlogs/\n");
-    waiting::task::until(PATIENCE, "the .gitignore to be heard", || heard.news.lock().ignores_changed).await;
-    settled_taking_in(&worktree, &heard, &mut os).await;
+    let changed = marked(&heard).await.news;
+    let ignores_changed = changed.ignores_changed;
+    take_in(&given(), &worktree, &heard, &mut os, changed).await;
+    marked(&heard).await;
     write(&worktree.join("logs/today.log"), "a line\n");
-    let logged = woke(&heard, QUIET).await;
+    let logged = marked(&heard).await;
 
-    assert!(!logged, "writing into logs/, ignored since, woke it");
+    assert!(ignores_changed, "the .gitignore wasn't heard to change");
+    assert_eq!(
+        in_folder(&heard, &logged.paths, "logs"),
+        [] as [&PathBuf; 0],
+        "writing into logs/, ignored since, woke it"
+    );
 }
 
 /// A folder git tracks that a link in the worktree also reaches is heard of by its own path, whichever way it's
@@ -191,22 +232,20 @@ async fn a_folder_reached_through_a_link_is_heard_by_its_own_path() {
 
     for way in WAYS {
         let _watching = watching(&heard, way);
-        settled(&heard).await;
-        heard.paths.lock().clear();
+        marked(&heard).await;
         write(&worktree.join("src/deep/b.rs"), &format!("fn b() {{ /* {way} */ }}\n"));
-        assert!(woke(&heard, PATIENCE).await, "{way}: the edit wasn't heard");
-        settled(&heard).await;
+        let named = marked(&heard).await.paths;
 
-        let named: Vec<PathBuf> = heard.paths.lock().clone();
+        assert!(!named.is_empty(), "{way}: the edit wasn't heard");
         assert!(named.iter().all(|path| path.ends_with("src/deep/b.rs")), "{way}: named {named:?}");
     }
 }
 
 /// A watch on each folder that would need more than it may hold holds none, and one that's asked to watch a folder
-/// past that says so, so the loop gives it up and reads on a timer, rather than taking the watches the person's editor
-/// and the other workers share.
+/// past that says so, so the loop lets go of the OS's watch, rather than taking the watches the person's editor and
+/// the other workers share, and reads every ten seconds instead of hearing.
 #[tokio::test]
-async fn a_watch_of_more_folders_than_it_may_hold_holds_none() {
+async fn a_watch_of_more_folders_than_it_may_hold_holds_none_and_reads_on_a_timer() {
     let dir = tempfile::tempdir().unwrap();
     let worktree = worktree(dir.path()).await;
     let heard = heard(&worktree).await;
@@ -214,12 +253,19 @@ async fn a_watch_of_more_folders_than_it_may_hold_holds_none() {
     let needs = 4;
 
     let too_few = EachFolder::start(&heard, needs - 1);
-    let mut just_enough = EachFolder::start(&heard, needs).expect("watching as many as it may");
+    let just_enough = EachFolder::start(&heard, needs).expect("watching as many as it may");
+    let mut os = Some(Box::new(just_enough) as Box<dyn Watching>);
+    let while_watched = settling(os.as_deref());
     std::fs::create_dir_all(worktree.join("more")).unwrap();
-    let past_it = just_enough.add(&[worktree.join("more")]);
+    let news = News { folders_made: vec![heard.root.join("more")], ..News::default() };
+    take_in(&given(), &worktree, &heard, &mut os, news).await;
 
     assert!(too_few.is_none());
-    assert!(past_it.is_err());
+    assert!(os.is_none(), "it kept a watch that can't hold every folder");
+    // The OS's watcher holds what it tells until it has let go.
+    waiting::task::until(PATIENCE, "the OS's watcher to let go", || Arc::strong_count(&heard) == 1).await;
+    assert_eq!(while_watched.at_least_every, Duration::from_mins(5));
+    assert_eq!(settling(os.as_deref()).at_least_every, Duration::from_secs(10));
 }
 
 /// What reached the hub through a watch's outbox.
@@ -277,26 +323,30 @@ async fn the_watch_sends_a_summary_at_once_and_again_only_when_it_differs() {
     assert_eq!(same, None, "the same summary was sent again");
 }
 
-/// Files written into a folder as soon as it's made are in the next summary, though the OS can't tell of what was
-/// written before the folder was watched, and what's written in it later is heard too.
+/// Files already in a folder as it appears, as in one moved into the worktree, or written into one as soon as it's
+/// made, are in the next summary, though the OS tells only of the folder, and what's written in the folders in it later
+/// is heard too.
 #[tokio::test]
 async fn a_file_in_a_new_folder_is_in_the_next_summary() {
     let dir = tempfile::tempdir().unwrap();
     let worktree = worktree(dir.path()).await;
     let mut watched = Watched::start(&worktree).await;
     watched.next(PATIENCE).await.expect("the first summary");
-
+    let made_elsewhere = dir.path().join("made-elsewhere");
     for n in 0..5 {
-        write(&worktree.join(format!("fresh/deeper/{n}.rs")), "fn f() {}\n");
+        write(&made_elsewhere.join(format!("deeper/{n}.rs")), "fn f() {}\n");
     }
-    let mut summary = watched.next(PATIENCE).await.expect("a summary after the folder");
-    while summary.files.len() < 5 {
-        summary = watched.next(PATIENCE).await.expect("the files written straight after");
-    }
+
+    std::fs::rename(&made_elsewhere, worktree.join("fresh")).unwrap();
+    let summary = watched.next(PATIENCE).await.expect("a summary after the folder");
     write(&worktree.join("fresh/deeper/late.rs"), "fn late() {}\n");
     let late = watched.next(PATIENCE).await.expect("a summary after a later file");
 
-    assert_eq!(status_of(&summary, "fresh/deeper/4.rs"), Some(ChangeStatus::Untracked));
+    let listed: Vec<&str> = summary.files.iter().map(|file| file.path.as_str()).collect();
+    let moved_in =
+        ["fresh/deeper/0.rs", "fresh/deeper/1.rs", "fresh/deeper/2.rs", "fresh/deeper/3.rs", "fresh/deeper/4.rs"];
+    assert_eq!(listed, moved_in);
+    assert!(summary.files.iter().all(|file| file.status == ChangeStatus::Untracked), "{:?}", summary.files);
     assert_eq!(status_of(&late, "fresh/deeper/late.rs"), Some(ChangeStatus::Untracked));
 }
 
