@@ -15,14 +15,14 @@ use crate::listener::Listener;
 use parking_lot::Mutex;
 use protocol::client::{ClientRequest, HubFrame, ReplyOutcome};
 use protocol::frame;
-use protocol::model::ClientDevice;
+
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{Notify, OwnedSemaphorePermit, mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tracing::{debug, warn};
 
-use admit::{Admit, Gate};
+use admit::{Admit, Gate, Greeting};
 
 use crate::hub::Hub;
 
@@ -208,7 +208,7 @@ where
                     Some(error) => Err(error),
                     None => Ok(handled),
                 };
-                answer(hub, connection, &subscribes, gate.client_device(), request.id, read).await;
+                answer(hub, connection, &subscribes, gate.greeting(), request.id, read).await;
                 continue;
             }
             Admit::Answer(outcome) => (outcome, false),
@@ -221,13 +221,13 @@ where
     }
 }
 
-/// Answers call `id`, which asked `read` from `device`: one taken in order before the next request is read, and any
-/// other on a task of its own.
+/// Answers call `id`, which asked `read` of a connection whose hello said `greeting`: one taken in order before the
+/// next request is read, and any other on a task of its own.
 async fn answer(
     hub: &Arc<Hub>,
     connection: &Arc<Connection>,
     subscribes: &Subscribes,
-    device: Option<ClientDevice>,
+    greeting: Greeting,
     id: u64,
     read: Result<ClientRequest, serde_json::Error>,
 ) {
@@ -236,7 +236,9 @@ async fn answer(
     // reading before the task starts, as it can while typing waits for room at its worker.
     let under_way = Counted::request(&hub);
     let answering = match read {
-        Ok(ClientRequest::Subscribe(asked)) => return subscribes.queue(&connection, id, asked, under_way).await,
+        Ok(ClientRequest::Subscribe(asked)) => {
+            return subscribes.queue(&connection, id, (asked, greeting.version), under_way).await;
+        }
         read => in_order(&hub, read).await,
     };
     // On a task of its own, which outlasts the connection, so a request the hub has read is carried out whether or not
@@ -244,7 +246,7 @@ async fn answer(
     tokio::spawn(async move {
         let answered = match answering {
             Answering::Queued(queued) => queued.await,
-            Answering::OnATask(Ok(request)) => dispatch::handle(&hub, &connection, device, request).await,
+            Answering::OnATask(Ok(request)) => dispatch::handle(&hub, &connection, greeting, request).await,
             Answering::OnATask(Err(error)) => Err(hub.unsupported(Some(&error))),
         };
         let outcome = match answered {

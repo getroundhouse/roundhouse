@@ -2,7 +2,7 @@
 
 use protocol::client::listed::{Listed, WorkspaceObservations};
 use protocol::client::subscriptions::{FeedSubscribe, Follow, Subscribe, Subscribed};
-use protocol::client::{ClientResponse, HubFrame, HubNotice};
+use protocol::client::{CLIENT_PROTOCOL_VERSION, ClientResponse, HubFrame, HubNotice};
 use protocol::model::{LineCounts, Observation, ObservationKey, Observed};
 
 use std::sync::Arc;
@@ -192,14 +192,14 @@ async fn a_workspace_s_list_is_queued_before_the_reply_and_only_for_a_start_that
 
     let taken = tokio::spawn({
         let (hub, connection) = (given.hub.clone(), connection.clone());
-        async move { subscribe(&hub, &connection, follows(WORKSPACE)).await }
+        async move { subscribe(&hub, &connection, follows(WORKSPACE), CLIENT_PROTOCOL_VERSION).await }
     });
     // It follows the feed once it has checked its ID, and then waits to list w's observations.
     waiting::task::until(WAIT, "the start to follow the feed", || given.hub.feed_receivers() > receivers).await;
     follow_feed(&given.hub, &connection, WORKSPACE).unwrap();
     drop(changing);
     let Subscribed { refused } = taken.await.unwrap();
-    let made = subscribe(&given.hub, &connection, follows(MADE)).await;
+    let made = subscribe(&given.hub, &connection, follows(MADE), CLIENT_PROTOCOL_VERSION).await;
 
     assert_eq!(refused.iter().map(|refused| refused.subscription_id).collect::<Vec<_>>(), [WORKSPACE]);
     assert_eq!(made, Subscribed::default());

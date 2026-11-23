@@ -7,6 +7,7 @@ use std::sync::Arc;
 use protocol::client::github::MOST_REFERENCES_SHOWN;
 use protocol::client::subscriptions::{Follow, Refused, Subscribe, Subscribed, Subscription};
 use protocol::client::{ApiError, ErrorCode};
+use protocol::model::Level;
 use tokio::sync::oneshot;
 
 use super::{hub_level, reference_level, session_level, workspace_level};
@@ -20,15 +21,22 @@ use crate::server::terminals::Watching;
 /// What feeds one subscription, until the connection goes.
 pub(super) type Feeding = Pin<Box<dyn Future<Output = ()> + Send>>;
 
-/// Stops each subscription `asked` stops, then starts each it starts, in order, and says which it couldn't start.
-pub(in crate::server) async fn subscribe(hub: &Arc<Hub>, connection: &Connection, asked: Subscribe) -> Subscribed {
+/// Stops each subscription `asked` stops, then starts each it starts, in order, and says which it couldn't start. Each
+/// is sent what its level sends, in the forms a client of `version` reads, as `crate::server::sends` says.
+pub(in crate::server) async fn subscribe(
+    hub: &Arc<Hub>,
+    connection: &Connection,
+    asked: Subscribe,
+    version: u32,
+) -> Subscribed {
     let Subscribe { stop, start } = asked;
     for subscription_id in stop {
         unsubscribe(connection, subscription_id);
     }
     let mut refused = Vec::new();
     for Subscription { subscription_id, follow, github_observed } in start {
-        if let Err(error) = start_one(hub, connection, subscription_id, follow, github_observed).await {
+        let sends = |level| Sends::at(level, github_observed, version);
+        if let Err(error) = start_one(hub, connection, subscription_id, follow, sends).await {
             refused.push(Refused { subscription_id, error });
         }
     }
@@ -41,7 +49,7 @@ async fn start_one(
     connection: &Connection,
     subscription_id: u64,
     follow: Follow,
-    github_observed: bool,
+    sends: impl FnOnce(Level) -> Sends,
 ) -> Result<(), ApiError> {
     // `None` for a level from a newer client, which is refused once it's known not to take a taken ID.
     let followed = Followed::try_from(&follow.level()).ok();
@@ -59,7 +67,7 @@ async fn start_one(
         }
     }
     let Some(followed) = followed else { return Err(unknown("a level")) };
-    let sends = Sends::at(followed.level(), github_observed);
+    let sends = sends(followed.level());
     let Fed { feeding, listed } = feeding(hub, connection, subscription_id, follow, sends).await?;
     {
         let mut subscriptions = connection.subscriptions.lock();

@@ -1,8 +1,8 @@
-use super::{Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
+use super::{Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReadFrom, ReferenceSaid};
 use crate::model::{ChangeSummary, GithubRepositoryName, IssueNumber, Level, LineCounts, ReferenceAsk, Rev};
 
-/// The level an observation is sent at, and whether it's of what GitHub says.
-type Sent = (Option<Level>, bool);
+/// The level an observation is sent at, and which subscriptions are sent it.
+type Sent = (Option<Level>, Option<ReadFrom>);
 
 /// An observation of each kind, with the key and revision it's of, and how it's sent.
 fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
@@ -15,13 +15,13 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             Observation::WorkspaceLines { workspace_id: "w".into(), lines, rev: Rev::new(4) },
             ObservationKey::WorkspaceLines { workspace_id: "w".into() },
             Rev::new(4),
-            (Some(Level::Hub), false),
+            (Some(Level::Hub), Some(ReadFrom::Every)),
         ),
         (
             Observation::WorkspaceChanges { workspace_id: "w".into(), changes, rev: Rev::new(5) },
             ObservationKey::WorkspaceChanges { workspace_id: "w".into() },
             Rev::new(5),
-            (Some(Level::Workspace { id: "w".into() }), false),
+            (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::Every)),
         ),
         (
             Observation::Reference {
@@ -31,7 +31,7 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             },
             ObservationKey::Reference { reference: reference.clone() },
             Rev::new(6),
-            (Some(Level::Reference { reference }), true),
+            (Some(Level::Reference { reference }), Some(ReadFrom::GithubObserved)),
         ),
         (
             Observation::WorkspacePullRequest {
@@ -41,7 +41,7 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             },
             ObservationKey::WorkspacePullRequest { workspace_id: "w".into() },
             Rev::new(7),
-            (Some(Level::Hub), true),
+            (Some(Level::Hub), Some(ReadFrom::GithubObserved)),
         ),
         (
             Observation::WorkspacePullRequestDetail {
@@ -51,7 +51,7 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             },
             ObservationKey::WorkspacePullRequestDetail { workspace_id: "w".into() },
             Rev::new(8),
-            (Some(Level::Workspace { id: "w".into() }), true),
+            (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::GithubObserved)),
         ),
         (
             Observation::WorkspaceRepositoryUnseen {
@@ -61,16 +61,16 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             },
             ObservationKey::WorkspaceRepositoryUnseen { workspace_id: "w".into() },
             Rev::new(9),
-            (Some(Level::Workspace { id: "w".into() }), true),
+            (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::GithubObserved)),
         ),
-        (Observation::Unknown, ObservationKey::Unknown, Rev::default(), (None, false)),
+        (Observation::Unknown, ObservationKey::Unknown, Rev::default(), (None, None)),
     ]
 }
 
 #[test]
-fn an_observation_says_which_it_is_its_revision_the_level_it_is_sent_at_and_whether_it_is_github_s() {
+fn an_observation_says_which_it_is_its_revision_the_level_it_is_sent_at_and_who_reads_it() {
     for (observation, key, rev, sent) in of_each_kind() {
         assert_eq!((observation.key(), observation.rev()), (key.clone(), rev), "{observation:?}");
-        assert_eq!((key.level(), key.is_github()), sent, "{key:?}");
+        assert_eq!((key.level(), key.read_from()), sent, "{key:?}");
     }
 }

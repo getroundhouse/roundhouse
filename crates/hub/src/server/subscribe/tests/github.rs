@@ -5,7 +5,7 @@ use std::sync::Arc;
 use github::References;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{FeedSubscribe, Follow, Subscribe, Subscription};
-use protocol::client::{HubFrame, HubNotice};
+use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
 use protocol::model::{
     About, GithubRepositoryName, Issue, IssueNumber, IssueState, IssueSummary, Observation, Observed, Read, Reference,
     ReferenceAsk, ReferenceSaid,
@@ -106,6 +106,22 @@ async fn a_chip_is_sent_as_an_observation_only_to_a_start_that_reads_github_so()
     };
     assert!(client.sent.iter().filter(|frame| github(frame)).all(|frame| to(frame) == Some(2)));
     assert!(client.sent.iter().filter(|frame| said_of_twelve(frame).is_some()).all(|frame| to(frame) == Some(1)));
+}
+
+/// A start on a connection of the version from which clients read every observation is sent what GitHub says of a chip
+/// as an observation, and never `HubFrame::Github`, though it doesn't say it reads GitHub so, since every client of that
+/// version does.
+#[tokio::test]
+async fn a_connection_that_reads_every_observation_is_sent_github_as_observations() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_an_issue(dir.path()).await;
+    let mut client = Connection::speaking(&hub, EVERY_OBSERVATION_FROM);
+
+    let starts = vec![start(1, Follow::Reference { reference: twelve() })];
+    ok(&mut client, 1, Subscribe { stop: Vec::new(), start: starts }).await;
+
+    client.until("the observation", |sent| sent.iter().any(|frame| said_of_twelve(frame).is_some())).await;
+    assert!(!client.sent.iter().any(github), "{:?}", client.sent);
 }
 
 /// A client of version 3, which follows the feed, is sent no observation of a chip that another client follows, since

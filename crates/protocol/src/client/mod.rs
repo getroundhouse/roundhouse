@@ -40,6 +40,6 @@ mod errors;
 mod messages;
 pub use errors::{ApiError, ErrorCode, error_chain};
 pub use messages::{
-    CLIENT_PROTOCOL_VERSION, ClientFrame, ClientResponse, HUB_SPEAKS, HubFrame, HubStart, HubStatus, Outcome, Reply,
-    ReplyOutcome, Request,
+    CLIENT_PROTOCOL_VERSION, ClientFrame, ClientResponse, EVERY_OBSERVATION_FROM, HUB_SPEAKS, HubFrame, HubStart,
+    HubStatus, Outcome, Reply, ReplyOutcome, Request,
 };
