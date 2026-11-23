@@ -232,8 +232,8 @@ impl Observations {
     /// The store kept in `file`, opened with [`PART`](super::PART), with each observation it kept from before as of
     /// when it was read, under one revision newer than any a client holds, since a client of the hub before can hold
     /// any revision that hub gave. Where there's no revision to give, as when the database fails, it starts with none
-    /// of them, as the log says, and each is not known until it's read again. Those of a workspace, a session or an
-    /// account the database doesn't have are forgotten, as one a hub stopped before forgetting, or a file refused to,
+    /// of them, as the log says, and each is not known until it's read again. Those of a workspace, a session, an
+    /// open wait or an account the database doesn't have are forgotten, as one a hub stopped before forgetting, or a file refused to,
     /// leaves, so no client is listed them.
     pub(crate) fn open(file: Arc<CacheFile>, store: &Store) -> Self {
         let mut tables = Tables::default();
@@ -250,12 +250,13 @@ impl Observations {
             }
         }
         let writer = Writer::new(file);
-        match (store.list_workspaces(true), store.session_ids(), store.account_ids()) {
-            (Ok(workspaces), Ok(sessions), Ok(accounts)) => {
+        match (store.list_workspaces(true), store.session_ids(), store.open_wait_ids(), store.account_ids()) {
+            (Ok(workspaces), Ok(sessions), Ok(waits), Ok(accounts)) => {
                 let workspaces: HashSet<WorkspaceId> = workspaces.into_iter().map(|workspace| workspace.id).collect();
                 let gone = |owner: Owner<'_>| match owner {
                     Owner::Workspace(id) => !workspaces.contains(id),
                     Owner::Session(key) => !sessions.contains(&key.session_id),
+                    Owner::Wait(key) => !waits.contains(&key.wait),
                     Owner::Account(id) => !accounts.contains(id),
                     // Never gone: what it owns goes only as the hub lets go of it.
                     Owner::Hub => false,
@@ -264,7 +265,7 @@ impl Observations {
             }
             // The task that works out GitHub's observations forgets those of workspaces, and their sessions', as it
             // starts.
-            (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => {
+            (Err(error), _, _, _) | (_, Err(error), _, _) | (_, _, Err(error), _) | (_, _, _, Err(error)) => {
                 warn!("keeping observations of what the database may not have: {error}");
             }
         }

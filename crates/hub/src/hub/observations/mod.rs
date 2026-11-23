@@ -21,5 +21,6 @@ pub(crate) use kept::Observations;
 pub(crate) use kinds::Kind;
 pub(crate) use kinds::{
     AccountIdentity, AccountLimits, ModelCatalog, Referenced, SessionCache, SessionContext, SessionKey, SessionTodos,
-    WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
+    WaitKey, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail,
+    WorkspaceRepositoryUnseen,
 };

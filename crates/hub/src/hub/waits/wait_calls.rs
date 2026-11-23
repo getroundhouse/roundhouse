@@ -36,8 +36,9 @@ impl Hub {
             match self.blocking(move |store| store.end_wait(&id, ended)).await? {
                 Some(cancelled) => {
                     info!(wait = %cancelled.id, "an agent cancelled its wait");
+                    self.wait_reads_settled().await;
                     self.announce_chat_of(&cancelled).await;
-                    wait = cancelled;
+                    wait = self.own_wait(session_id, cancelled.id).await?;
                 }
                 // A read ended it meanwhile.
                 None => wait = self.own_wait(session_id, wait.id).await?,
@@ -60,7 +61,9 @@ impl Hub {
     /// worktree that's about to go.
     pub(crate) async fn call_off_waits_of(&self, workspace_id: &WorkspaceId) -> Result<(), ApiError> {
         let (id, at_ms) = (workspace_id.clone(), now_ms());
-        for wait in self.blocking(move |store| store.call_off_workspace_waits(&id, at_ms)).await? {
+        let called_off = self.blocking(move |store| store.call_off_workspace_waits(&id, at_ms)).await?;
+        self.wait_reads_settled().await;
+        for wait in called_off {
             info!(wait = %wait.id, workspace = %workspace_id, "archiving its workspace called off a wait");
             self.announce_chat_of(&wait).await;
         }
@@ -103,6 +106,7 @@ impl Hub {
     /// `wait`, with the workspace's own pull request where it's a wait on that. A wait on pull requests it watches
     /// carries what it read of them in its watch, apart from any worktree, so it has none.
     pub(super) async fn with_pull_request(&self, wait: Wait) -> Result<WaitAnswer, ApiError> {
+        let wait = self.as_read(wait);
         let pull_request = match &wait.watch {
             Some(_) => None,
             None => self.known_of(&self.workspace(&wait.workspace_id).await?).and_then(|found| found.pull_request),

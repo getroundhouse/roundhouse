@@ -10,6 +10,7 @@ mod github;
 mod kinds;
 mod observed;
 mod session;
+mod wait;
 pub use account::AccountIdentity;
 pub use github::{
     IssueSaid, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReferenceSaid,
@@ -17,3 +18,4 @@ pub use github::{
 pub use kinds::{Observation, ObservationKey, ReadFrom};
 pub use observed::Observed;
 pub use session::ConversationCache;
+pub use wait::WaitRead;

@@ -25,6 +25,7 @@ impl LiveSession {
             let (id, at_ms) = (self.id.clone(), now_ms());
             if let Some(wait) = hub.blocking(move |store| store.call_off_session_wait(&id, &wait, at_ms)).await? {
                 info!(%wait, session = %self.id, "the person called off a wait");
+                hub.wait_reads_settled().await;
             }
             self.unlist_waits_holding(&starts).await?;
         }
