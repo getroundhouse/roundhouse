@@ -3,6 +3,7 @@
 //! account's week as its row will draw it with that reserved. What's chosen is the panel's until Save hands it to the
 //! hub, whose answer is the account's record, so the row draws the reserve only once the hub has it.
 
+use client_core::records::Snapshot;
 use client_core::refusals;
 use gpui_kit::base::ElementExt as _;
 use gpui_kit::component::{h_flex, v_flex};
@@ -105,7 +106,7 @@ pub(super) fn panel(drawing: &Drawing<'_>, account: &Account, cx: &App) -> Optio
     let kept = drawing.kept.read(cx);
     let reserving = kept.reserving.as_ref().filter(|open| open.account == account.id)?;
     let colors = look::colors(cx);
-    let name = crate::names::called(account);
+    let name = crate::names::called(drawing.records, account);
     let chosen = reserving.chosen;
     let switch = CHOICES.iter().fold(look::switch(look::SwitchKind::Tracked), |switch, (reserve, words)| {
         let (kept, reserve) = (drawing.kept.clone(), *reserve);
@@ -136,7 +137,7 @@ pub(super) fn panel(drawing: &Drawing<'_>, account: &Account, cx: &App) -> Optio
                 .child(h_flex().child(switch))
                 .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child(says(chosen))),
         )
-        .children(week(account, chosen, drawing.now_ms, cx))
+        .children(week(drawing.records, account, chosen, drawing.now_ms, cx))
         .children(refused)
         .child(buttons(drawing, reserving.saving.is_some() || !kept.can_ask()));
     let panel = div()
@@ -161,9 +162,9 @@ fn says(chosen: Option<Reserve>) -> &'static str {
 
 /// The account's week at `now_ms` as its row will draw it with `chosen` reserved, and how much is left of it, while
 /// an agent under it has heard of it.
-fn week(account: &Account, chosen: Option<Reserve>, now_ms: i64, cx: &App) -> Option<Div> {
+fn week(records: &Snapshot, account: &Account, chosen: Option<Reserve>, now_ms: i64, cx: &App) -> Option<Div> {
     let colors = look::colors(cx);
-    let week = account.week(now_ms)?;
+    let week = records.account_limits(account).week(now_ms)?;
     let left = week.left_percent();
     let resets = week.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx)).map(|when| format!("Resets {when}"));
     // All of it reserved says so under the switch, and splits nothing off the bar.

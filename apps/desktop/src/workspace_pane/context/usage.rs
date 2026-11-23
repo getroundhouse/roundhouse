@@ -2,6 +2,7 @@ use super::super::WorkspacePane;
 use super::super::composer::{Hub, Slot, middle};
 use super::moving::Moves;
 use super::{card, words};
+use client_core::records::Snapshot;
 use gpui_kit::base::plot::shape::{Arc, ArcData};
 use gpui_kit::{
     Anchor, App, Bounds, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
@@ -25,6 +26,8 @@ const LIMIT: Pixels = px(4.);
 #[derive(Clone)]
 pub(in super::super) struct Usage {
     pub(in super::super) account: Account,
+    /// The copy of the hub's records the account is from, which says who it is and what's left of its limits.
+    pub(in super::super) records: Snapshot,
     pub(super) limits: Vec<(SharedString, UsageLimit)>,
     /// What the menu that moves the chat to another account offers, if there's one to move it to.
     pub(in super::super) moves: Option<Moves>,
@@ -46,10 +49,11 @@ impl WorkspacePane {
     /// agent has launched, when the hub couldn't tell whose account it is, and from a hub that doesn't keep accounts.
     pub(in super::super) fn usage(&self, cx: &Context<Self>) -> Option<Usage> {
         let session = self.session()?;
-        let account = self.shown.all().account(session.account.as_ref()?)?.clone();
-        let limits = crate::limits::shown(&account.limits, look::now_ms(cx));
+        let records = self.shown.all().clone();
+        let account = records.account(session.account.as_ref()?)?.clone();
+        let limits = crate::limits::shown(records.account_limits(&account).0, look::now_ms(cx));
         let chosen = if session.placed_automatically { Chosen::Automatically } else { Chosen::Otherwise };
-        Some(Usage { account, limits, moves: self.moves(session, cx), chosen })
+        Some(Usage { account, records, limits, moves: self.moves(session, cx), chosen })
     }
 
     /// The ring for the chat showing, once its agent has said how full its context is. Until then there's nothing

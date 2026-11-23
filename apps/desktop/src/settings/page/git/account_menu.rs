@@ -12,19 +12,19 @@ use super::kept::Kept;
 use super::token::Renewing;
 use super::words;
 
-/// What an item does to the page's state, for `account`, the default when `default`.
-type Act = fn(&mut Kept, &GithubAccount, bool, &mut Window, &mut Context<Kept>);
+/// What an item does to the page's state, for `account`, whose user is called `name`, the default when `default`.
+type Act = fn(&mut Kept, &GithubAccount, &str, bool, &mut Window, &mut Context<Kept>);
 
 pub(super) fn menu(drawing: &Drawing<'_>, account: &GithubAccount, works: bool, cx: &App) -> AnyElement {
-    let name = account.user.name.to_string();
+    let name = drawing.records.github_username(account).to_string();
     let default = drawing.is_default(account);
     let (kept, account) = (drawing.kept.clone(), account.clone());
     let id = SharedString::from(format!("git-more-{}", account.id));
-    account_row::menu(id, &name, !drawing.can_ask(cx), move |menu: look::Menu, _, _| {
+    account_row::menu(id, &name.clone(), !drawing.can_ask(cx), move |menu: look::Menu, _, _| {
         let item = |label: &'static str, act: Act| {
-            let (kept, account) = (kept.clone(), account.clone());
+            let (kept, account, name) = (kept.clone(), account.clone(), name.clone());
             look::menu_row(label).on_choose(move |window, cx| {
-                kept.update(cx, |kept, cx| act(kept, &account, default, window, cx));
+                kept.update(cx, |kept, cx| act(kept, &account, &name, default, window, cx));
             })
         };
         let menu = if default { menu } else { menu.row(item("Make default", make_default).off(!works)) };
@@ -46,21 +46,28 @@ pub(super) fn menu(drawing: &Drawing<'_>, account: &GithubAccount, works: bool, 
     })
 }
 
-fn make_default(kept: &mut Kept, account: &GithubAccount, _: bool, _: &mut Window, cx: &mut Context<Kept>) {
+fn make_default(kept: &mut Kept, account: &GithubAccount, _: &str, _: bool, _: &mut Window, cx: &mut Context<Kept>) {
     kept.make_default(account.id.clone(), cx);
 }
 
 /// Opens the panel for a token in place of the account's login, under its row.
-fn renew(kept: &mut Kept, account: &GithubAccount, _: bool, window: &mut Window, cx: &mut Context<Kept>) {
-    kept.open_token(Some(Renewing::of(account)), window, cx);
+fn renew(kept: &mut Kept, account: &GithubAccount, name: &str, _: bool, window: &mut Window, cx: &mut Context<Kept>) {
+    kept.open_token(Some(Renewing::of(account, name)), window, cx);
 }
 
 /// Starts a sign-in, which renews the account's login once it's approved as the account's user.
-fn sign_in_again(kept: &mut Kept, account: &GithubAccount, _: bool, _: &mut Window, cx: &mut Context<Kept>) {
-    kept.sign_in(Some(account.user.name.to_string()), cx);
+fn sign_in_again(kept: &mut Kept, _: &GithubAccount, name: &str, _: bool, _: &mut Window, cx: &mut Context<Kept>) {
+    kept.sign_in(Some(name.to_string()), cx);
 }
 
-fn disconnect(kept: &mut Kept, account: &GithubAccount, default: bool, window: &mut Window, cx: &mut Context<Kept>) {
+fn disconnect(
+    kept: &mut Kept,
+    account: &GithubAccount,
+    name: &str,
+    default: bool,
+    window: &mut Window,
+    cx: &mut Context<Kept>,
+) {
     let says = words::disconnect_says(default);
-    kept.ask_to_disconnect(account.id.clone(), account.user.name.as_str(), says, window, cx);
+    kept.ask_to_disconnect(account.id.clone(), name, says, window, cx);
 }

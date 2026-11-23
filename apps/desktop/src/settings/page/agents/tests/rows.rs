@@ -10,7 +10,7 @@ use super::super::kept::Kept;
 use super::super::row::changes_at_ms;
 use super::super::words::{self, Says};
 use super::super::{Drawing, listed};
-use super::made_up::{DAY_MS, MINUTE_MS, NOW_MS, added, claude, limit};
+use super::made_up::{DAY_MS, MINUTE_MS, NOW_MS, added, claude, holding, limit};
 use client_core::Agents;
 
 /// What the row of `account` says after how its login was made, at [`NOW_MS`], with days in UTC.
@@ -18,8 +18,13 @@ fn says(cx: &mut TestAppContext, account: &Account) -> Says {
     cx.update(|cx| {
         look::hold_still(NOW_MS, cx);
         let standing = account.login_agent.map(|_| words::standing(account.held_login.as_ref(), NOW_MS, cx));
-        words::says(account, standing.as_ref(), NOW_MS)
+        words::says(&holding([account]), account, standing.as_ref(), NOW_MS)
     })
+}
+
+/// How `account`'s login was made, as its row says, by how the hub describes `agents`.
+fn how(account: &Account, agents: &Agents) -> Option<String> {
+    words::how(&holding([account]), account, agents)
 }
 
 /// A login the hub holds that lasts a year and ends at `ends_at_ms`.
@@ -40,12 +45,12 @@ fn how_a_login_was_made_is_its_kind_for_one_added_then_its_plan_and_how_its_logg
     let agents = Agents::new(vec![claude(None)]);
     let found = Account { plan: Some("Max".to_string()), login: Some("Claude account".to_string()), ..account("f") };
 
-    assert_eq!(words::how(&found, &agents).as_deref(), Some("Max · Claude account"));
-    assert_eq!(words::how(&added("a", "Work"), &agents).as_deref(), Some("Claude Code"));
+    assert_eq!(how(&found, &agents).as_deref(), Some("Max · Claude account"));
+    assert_eq!(how(&added("a", "Work"), &agents).as_deref(), Some("Claude Code"));
     let with_a_plan = Account { plan: Some("Max".to_string()), ..added("a", "Work") };
-    assert_eq!(words::how(&with_a_plan, &agents).as_deref(), Some("Claude Code · Max"));
-    assert_eq!(words::how(&account("f"), &agents), None, "a record that says nothing of it");
-    assert_eq!(words::how(&added("a", "Work"), &Agents::default()), None, "before the hub has described Claude");
+    assert_eq!(how(&with_a_plan, &agents).as_deref(), Some("Claude Code · Max"));
+    assert_eq!(how(&account("f"), &agents), None, "a record that says nothing of it");
+    assert_eq!(how(&added("a", "Work"), &Agents::default()), None, "before the hub has described Claude");
 }
 
 #[gpui_kit::test]
@@ -82,7 +87,15 @@ fn the_default_is_the_account_the_hubs_settings_name_for_its_kind(cx: &mut TestA
     let agents = Agents::new(vec![claude(None)]);
     let scroll = ScrollHandle::new();
     let chosen = [claude_default(&"a2".into())];
-    let drawing = |defaults| Drawing { kept: &kept, agents: &agents, scroll: &scroll, now_ms: NOW_MS, defaults };
+    let records = holding([]);
+    let drawing = |defaults| Drawing {
+        records: &records,
+        kept: &kept,
+        agents: &agents,
+        scroll: &scroll,
+        now_ms: NOW_MS,
+        defaults,
+    };
 
     assert!(drawing(Some(&chosen)).is_default(&added("a2", "Personal")));
     assert!(!drawing(Some(&chosen)).is_default(&added("a1", "Work")));
@@ -95,7 +108,8 @@ fn found_and_added_are_apart_each_by_what_its_row_calls_it_with_those_disconnect
     let gone = Account { held_login: None, ..added("a3", "Archive") };
     let accounts = [added("a1", "work"), found.clone(), gone, added("a2", "Contractor"), account("f2")];
 
-    let (found, added) = listed(accounts.iter());
+    let records = holding(&accounts);
+    let (found, added) = listed(&records);
 
     let ids = |list: Vec<&Account>| list.iter().map(|account| account.id.to_string()).collect::<Vec<_>>();
     assert_eq!(ids(found), ["f1", "f2"], "bea@example.com, then the one called by its ID");
@@ -117,7 +131,9 @@ fn disconnecting_with_no_hub_to_ask_says_so_under_that_accounts_row_alone(cx: &m
 #[test]
 fn the_rows_are_drawn_again_as_what_they_say_of_a_time_changes() {
     let midnight_ms = Some(NOW_MS + 9 * 60 * MINUTE_MS);
-    let changes = |accounts: &[&Account]| changes_at_ms(accounts.iter().copied(), NOW_MS, midnight_ms);
+    let changes = |accounts: &[&Account]| {
+        changes_at_ms(&holding(accounts.iter().copied()), accounts.iter().copied(), NOW_MS, midnight_ms)
+    };
     let held = |ends_at_ms| Account {
         held_login: Some(HeldLogin { connected_at_ms: 0, ends_at_ms: Some(ends_at_ms) }),
         ..added("b", "Work")

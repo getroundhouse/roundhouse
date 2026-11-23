@@ -3,6 +3,7 @@
 //! called, for all of them, the bar that empties as one is used, for the cards and Agents' rows, and a limit as both
 //! cards say it.
 
+use client_core::records::Snapshot;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement as _, ParentElement as _, Pixels, Role, SharedString,
@@ -69,8 +70,8 @@ pub(crate) fn bar(left_percent: u8, reserve: Option<Reserve>, tall: Pixels, cx: 
 
 /// How much of `account`'s week is left at `now_ms`, as a menu says it beside the account, such as `82% of 7d`, so
 /// choosing one account over another can go by it. `None` while no agent under it has heard of its week.
-pub(crate) fn week_left(account: &Account, now_ms: i64) -> Option<SharedString> {
-    account.week(now_ms).map(|week| format!("{}% of 7d", week.left_percent()).into())
+pub(crate) fn week_left(records: &Snapshot, account: &Account, now_ms: i64) -> Option<SharedString> {
+    records.account_limits(account).week(now_ms).map(|week| format!("{}% of 7d", week.left_percent()).into())
 }
 
 /// What `account` reserves of `limit`: only its week has a reserve.

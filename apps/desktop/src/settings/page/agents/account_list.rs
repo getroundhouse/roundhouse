@@ -32,6 +32,8 @@ struct AgentsPage {
 
 /// What every part of the page is drawn with.
 pub(super) struct Drawing<'a> {
+    /// The copy of the hub's records the accounts are from, which says who each is and what's left of its limits.
+    pub(super) records: &'a Snapshot,
     pub(super) kept: &'a Entity<Kept>,
     pub(super) agents: &'a Agents,
     /// The scroll of Settings' page, to bring a panel into sight as it opens.
@@ -54,14 +56,15 @@ impl RenderOnce for AgentsPage {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let kept = window.use_keyed_state("settings-agents", cx, |_, _| Kept::default());
         let now_ms = look::now_ms(cx);
-        let (found, added) = listed(self.records.accounts());
-        let changes_at_ms =
-            row::changes_at_ms(found.iter().chain(&added).copied(), now_ms, look::next_day_at_ms(now_ms, cx));
+        let records = &self.records;
+        let (found, added) = listed(records);
+        let accounts = found.iter().chain(&added).copied();
+        let changes_at_ms = row::changes_at_ms(records, accounts, now_ms, look::next_day_at_ms(now_ms, cx));
         let focus = self.within.focus.clone();
         kept.update(cx, |kept, cx| kept.drawn(self.asking, focus, changes_at_ms, cx));
-        let defaults = self.records.hub_settings().and_then(|settings| settings.account_defaults.as_deref());
-        let drawing =
-            Drawing { kept: &kept, agents: self.records.agents(), scroll: &self.within.scroll, now_ms, defaults };
+        let defaults = records.hub_settings().and_then(|settings| settings.account_defaults.as_deref());
+        let (agents, scroll) = (records.agents(), &self.within.scroll);
+        let drawing = Drawing { records, kept: &kept, agents, scroll, now_ms, defaults };
         v_flex()
             .w_full()
             .max_w(COLUMN_WIDTH)
@@ -73,15 +76,14 @@ impl RenderOnce for AgentsPage {
     }
 }
 
-/// The accounts in each list, Found then Added, each by what its row calls it, and in Added, the logins the hub holds
-/// before those that were disconnected, since they're the ones agents can run under.
-pub(super) fn listed<'a>(accounts: impl Iterator<Item = &'a Account>) -> (Vec<&'a Account>, Vec<&'a Account>) {
+/// The accounts of `records` in each list, Found then Added, each by what its row calls it, and in Added, the logins
+/// the hub holds before those that were disconnected, since they're the ones agents can run under.
+pub(super) fn listed(records: &Snapshot) -> (Vec<&Account>, Vec<&Account>) {
     let (mut added, mut found): (Vec<&Account>, Vec<&Account>) =
-        accounts.partition(|account| account.login_agent.is_some());
-    found.sort_by_cached_key(|account| (crate::names::called(account).to_lowercase(), account.id.clone()));
-    added.sort_by_cached_key(|account| {
-        (account.held_login.is_none(), crate::names::called(account).to_lowercase(), account.id.clone())
-    });
+        records.accounts().partition(|account| account.login_agent.is_some());
+    let called = |account: &Account| crate::names::called(records, account).to_lowercase();
+    found.sort_by_cached_key(|account| (called(account), account.id.clone()));
+    added.sort_by_cached_key(|account| (account.held_login.is_none(), called(account), account.id.clone()));
     (found, added)
 }
 

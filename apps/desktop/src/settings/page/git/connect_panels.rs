@@ -44,7 +44,7 @@ pub(super) fn choosing(drawing: &Drawing<'_>, panel: &Panel, choosing: &Choosing
     let app = button("git-make-app", "Make an app", false, off, move |window, cx| {
         making.update(cx, |kept, cx| kept.open_app(&name, window, cx));
     });
-    let gh = choosing.offered(drawing.records.github_accounts()).map(|username| {
+    let gh = choosing.offered(drawing.records).map(|username| {
         let using = drawing.kept.clone();
         let act =
             button("git-use-gh", words::use_gh(username), false, off || choosing.connecting(), move |window, cx| {

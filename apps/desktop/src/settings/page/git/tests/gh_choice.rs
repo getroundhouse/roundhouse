@@ -1,6 +1,7 @@
 //! When Connect account's panel offers `gh`'s login on the hub's machine, as the hub said who `gh` is.
 
-use protocol::model::{GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind};
+use client_core::records::HubRecords;
+use protocol::model::{GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, Records};
 
 use super::super::gh_choice::ChoosingPanel;
 use super::made_up::{held, named};
@@ -8,7 +9,9 @@ use super::made_up::{held, named};
 fn offered(gh: Option<GhLogin>, accounts: &[GithubAccount]) -> Option<String> {
     let mut panel = ChoosingPanel::default();
     panel.gh = gh;
-    panel.offered(accounts).map(ToString::to_string)
+    let mut held = HubRecords::default();
+    held.apply_list(Records { github_accounts: accounts.to_vec(), ..Records::default() });
+    panel.offered(&held.snapshot()).map(ToString::to_string)
 }
 
 fn logged_in(name: &str, works: GhLoginWorks) -> GhLogin {

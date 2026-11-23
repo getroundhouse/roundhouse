@@ -4,7 +4,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use super::{AccountId, AgentKind, Rev};
+use super::{AccountId, AgentKind, HeardLimits, Rev};
 
 /// The account an agent's CLI is logged in to on its worker's machine, as the worker reads it. Every part is `None`
 /// when the agent doesn't say, such as a plan for a login with an API key. Who it is, from `model_provider` on, is
@@ -163,30 +163,19 @@ impl HeldLogin {
 }
 
 impl Account {
-    /// What any agent under it last heard of its week, its [`LimitWindow::SevenDays`] limit, while that's so at
-    /// `now_ms`: `None` until one has heard it, and once the week has started again since, by the clock of whoever asks.
+    /// What any agent under it last heard of its week, as [`HeardLimits::week`] says.
     pub fn week(&self, now_ms: i64) -> Option<&UsageLimit> {
-        self.limits
-            .iter()
-            .find(|limit| limit.window == LimitWindow::SevenDays)
-            .filter(|week| week.resets_at_ms.is_none_or(|at_ms| at_ms > now_ms))
+        HeardLimits(&self.limits).week(now_ms)
     }
 
-    /// Its limits that are used up at `now_ms`, as an agent under it last heard them, and haven't started again since,
-    /// so nothing can run under it until each has. The one rule for it, which the hub places chats by and every client
-    /// says it by.
+    /// Its limits that are used up at `now_ms`, as [`HeardLimits::used_up`] says.
     pub fn used_up(&self, now_ms: i64) -> impl Iterator<Item = &UsageLimit> {
-        let current = move |limit: &&UsageLimit| limit.resets_at_ms.is_none_or(|at_ms| at_ms > now_ms);
-        self.limits.iter().filter(current).filter(|limit| limit.left_percent() == 0)
+        HeardLimits(&self.limits).used_up(now_ms)
     }
 
-    /// Whether what's left of its week at `now_ms` is down to what it reserves, so a chat on it is spending what the
-    /// person kept for themselves. Never, for an account that reserves none, or whose week nobody has heard.
+    /// Whether what's left of its week at `now_ms` is down to what it reserves, as [`HeardLimits::in_reserve`] says.
     pub fn in_reserve(&self, now_ms: i64) -> bool {
-        match (self.reserve, self.week(now_ms)) {
-            (Some(reserve), Some(week)) => reserve.reached_at(week.left_percent()),
-            _ => false,
-        }
+        HeardLimits(&self.limits).in_reserve(self.reserve, now_ms)
     }
 
     /// Whether it's a login added for `kind` that still works at `now_ms`, as [`HeldLogin::works_at`] says, so it can

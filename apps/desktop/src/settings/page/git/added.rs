@@ -101,7 +101,7 @@ fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyE
     let (picture, detail, menu) = match &account.installation {
         Some(installed) => app_rows::installation_parts(drawing, account, installed, &standing, tone, cx),
         None => (
-            Picture::of(account.user.name.as_str()),
+            Picture::of(drawing.records.github_username(account).as_str()),
             standing.said().map(|said| Detail::Said(said, tone)),
             Some(account_menu::menu(drawing, account, standing.works(), cx)),
         ),
@@ -109,7 +109,7 @@ fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyE
     let shown = Row {
         id: SharedString::from(format!("git-account-{}", account.id)),
         picture,
-        name: account.user.name.to_string(),
+        name: drawing.records.github_username(account).to_string(),
         dim: standing == Standing::Disconnected,
         default: drawing.is_default(account),
         how: account.held_login.map(|held| words::connected_by(held.how)),

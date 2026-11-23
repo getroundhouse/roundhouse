@@ -5,6 +5,7 @@
 //! button that puts the chat on it, for one with usage left, after which the person sends it again. One out of a limit
 //! says when it's back instead.
 
+use client_core::records::Snapshot;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
@@ -42,11 +43,12 @@ impl WorkspacePane {
     pub(super) fn account_wait(&self, cx: &Context<Self>) -> Option<AnyElement> {
         let session = self.session().filter(|session| session.needs_an_account)?;
         let now_ms = look::now_ms(cx);
-        let mut accounts: Vec<&Account> =
-            self.shown.all().accounts().filter(|account| account.works_for(session.agent, now_ms)).collect();
-        accounts.sort_by_cached_key(|account| (crate::names::called(account).to_lowercase(), account.id.clone()));
-        let standings: Vec<(&Account, Standing)> =
-            accounts.into_iter().map(|account| (account, standing(account, now_ms))).collect();
+        let records = self.shown.all();
+        let mut standings: Vec<(&Account, String, Standing)> = (records.accounts())
+            .filter(|account| account.works_for(session.agent, now_ms))
+            .map(|account| (account, crate::names::called(records, account), standing(records, account, now_ms)))
+            .collect();
+        standings.sort_by_cached_key(|(account, called, _)| (called.to_lowercase(), account.id.clone()));
         let starting = Starting { pane: cx.weak_entity(), session: session.id.clone(), off: self.hub == Hub::Away };
         let card = card(&standings, &starting, cx);
         Some(transcript::in_column(card).flex_none().pb(look::Space::Small).into_any_element())
@@ -54,9 +56,9 @@ impl WorkspacePane {
 }
 
 /// The card, with a row for each of `standings`.
-fn card(standings: &[(&Account, Standing)], starting: &Starting, cx: &App) -> AnyElement {
+fn card(standings: &[(&Account, String, Standing)], starting: &Starting, cx: &App) -> AnyElement {
     let colors = look::colors(cx);
-    let any_left = standings.iter().any(|(_, standing)| matches!(standing, Standing::Left { .. }));
+    let any_left = standings.iter().any(|(_, _, standing)| matches!(standing, Standing::Left { .. }));
     let (title, said) = if any_left {
         (
             "No account has usage to spare",
@@ -68,7 +70,7 @@ fn card(standings: &[(&Account, Standing)], starting: &Starting, cx: &App) -> An
         ("Every account is out of usage", out_until(standings, cx))
     };
     let heading = look::card_heading(title).mark(Lucide::CircleAlert);
-    let rows = standings.iter().map(|(account, standing)| row(account, standing, starting, cx));
+    let rows = standings.iter().map(|(account, called, standing)| row(account, called, standing, starting, cx));
     look::card(look::CardKind::NeedsYou, look::CardWidth::Fills)
         .region(Region::AccountWait)
         .heading(heading)
@@ -79,28 +81,27 @@ fn card(standings: &[(&Account, Standing)], starting: &Starting, cx: &App) -> An
 }
 
 /// What the card says when every account is out of a limit: which is back first, and when, if an agent heard.
-fn out_until(standings: &[(&Account, Standing)], cx: &App) -> String {
+fn out_until(standings: &[(&Account, String, Standing)], cx: &App) -> String {
     const OUT: &str = "Nothing can start this chat until a limit resets, so your message wasn't sent.";
     let soonest = standings
         .iter()
-        .filter_map(|(account, standing)| match standing {
-            Standing::Out { until: Some(at_ms) } => Some((*at_ms, *account)),
+        .filter_map(|(account, called, standing)| match standing {
+            Standing::Out { until: Some(at_ms) } => Some((*at_ms, *account, called)),
             _ => None,
         })
-        .min_by_key(|(at_ms, account)| (*at_ms, account.id.clone()));
-    let back =
-        soonest.and_then(|(at_ms, account)| Some((crate::names::called(account), look::day_and_time(at_ms, cx)?)));
+        .min_by_key(|(at_ms, account, _)| (*at_ms, account.id.clone()));
+    let back = soonest.and_then(|(at_ms, _, called)| Some((called.clone(), look::day_and_time(at_ms, cx)?)));
     match back {
         Some((account, when)) => format!("{OUT} {account} is back first, at {when}. Send it again then."),
         None => format!("{OUT} Send it again once one is back."),
     }
 }
 
-/// An account's row: its name, its week as a bar with what's reserved split off, and how much is left, then the
-/// button that puts the chat on it, while it has usage left, or when it's back.
-fn row(account: &Account, standing: &Standing, starting: &Starting, cx: &App) -> Div {
+/// An account's row: what it's `called`, its week as a bar with what's reserved split off, and how much is left, then
+/// the button that puts the chat on it, while it has usage left, or when it's back.
+fn row(account: &Account, called: &str, standing: &Standing, starting: &Starting, cx: &App) -> Div {
     let colors = look::colors(cx);
-    let called = crate::names::called(account);
+    let called = called.to_string();
     let name = div().flex_none().w(NAME).truncate();
     let line = h_flex().h(look::RowSize::Large.height()).items_center().gap(look::Space::Large);
     let tall = crate::limits::BAR_IN_A_CARD;
@@ -142,13 +143,14 @@ fn start_on(account: &Account, called: &str, starting: &Starting) -> AnyElement 
         .into_any_element()
 }
 
-/// How `account` stands at `now_ms`: out while any limit it has heard of is used up, and otherwise how much of its
-/// week is left, all of it if no agent has heard.
-fn standing(account: &Account, now_ms: i64) -> Standing {
-    if account.used_up(now_ms).next().is_some() {
+/// How `account` stands at `now_ms`, as `records`, the copy it's from, reads its limits: out while any limit it has
+/// heard of is used up, and otherwise how much of its week is left, all of it if no agent has heard.
+fn standing(records: &Snapshot, account: &Account, now_ms: i64) -> Standing {
+    let limits = records.account_limits(account);
+    if limits.used_up(now_ms).next().is_some() {
         // Back once the last of them has started again.
-        return Standing::Out { until: account.used_up(now_ms).filter_map(|limit| limit.resets_at_ms).max() };
+        return Standing::Out { until: limits.used_up(now_ms).filter_map(|limit| limit.resets_at_ms).max() };
     }
-    let left = account.week(now_ms).map_or(100, protocol::model::UsageLimit::left_percent);
+    let left = limits.week(now_ms).map_or(100, protocol::model::UsageLimit::left_percent);
     Standing::Left { left, reserve: account.reserve.filter(|reserve| *reserve != Reserve::ALL) }
 }

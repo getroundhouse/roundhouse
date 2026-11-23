@@ -9,6 +9,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
 };
 use look::{IconSizing as _, Typeset as _};
+use protocol::model::GithubAccount;
 
 use super::super::field::labelled;
 use super::Drawing;
@@ -33,13 +34,7 @@ pub(super) fn app(drawing: &Drawing<'_>, panel: &Panel, app: &AppPanel, cx: &App
     };
     let installed = made.and_then(|made| installation(drawing.records, made.id));
     let bot = made.and_then(|made| made.bot.as_ref()).map(|bot| bot.name.as_str());
-    let lead = match installed {
-        Some(account) => {
-            let on = account.installation.as_ref().map_or("GitHub", |installed| installed.on.name.as_str());
-            app_words::lead_installed(account.user.name.as_str(), on, drawing.is_default(account))
-        }
-        None => app_words::lead(bot),
-    };
+    let lead = lead(drawing, installed, bot);
     let [first, second] = match (&app.step, made) {
         (_, Some(made)) => app_words::made(made),
         (AppStep::OnGithub { chosen, .. }, None) => {
@@ -233,4 +228,12 @@ fn waiting_line(said: impl Into<SharedString>, cx: &App) -> Div {
         .text_color(look::colors(cx).text_muted)
         .child(Icon::new(Lucide::LoaderCircle).sized(look::IconSize::Regular).flex_none())
         .child(said.into())
+}
+
+/// What the panel says first: where the app's installation is, once there's one, and otherwise what making one does,
+/// with its bot's name, once it has one.
+fn lead(drawing: &Drawing<'_>, installed: Option<&GithubAccount>, bot: Option<&str>) -> String {
+    let Some(account) = installed else { return app_words::lead(bot) };
+    let on = account.installation.as_ref().map_or("GitHub", |installed| installed.on.name.as_str());
+    app_words::lead_installed(drawing.records.github_username(account).as_str(), on, drawing.is_default(account))
 }

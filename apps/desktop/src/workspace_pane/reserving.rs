@@ -11,11 +11,12 @@ use super::context::Usage;
 pub(super) fn reserve_line(usage: Option<&Usage>, cx: &App) -> Option<AnyElement> {
     let usage = usage?;
     let (account, now_ms) = (&usage.account, look::now_ms(cx));
-    if !account.in_reserve(now_ms) {
+    let limits = usage.records.account_limits(account);
+    if !limits.in_reserve(account.reserve, now_ms) {
         return None;
     }
-    let (week, reserve) = (account.week(now_ms)?, account.reserve?.percent());
-    let name = crate::names::called(account);
+    let (week, reserve) = (limits.week(now_ms)?, account.reserve?.percent());
+    let name = crate::names::called(&usage.records, account);
     let left = week.left_percent();
     let wrong = format!("{name} is using its reserve: {left}% of its week is left, and {reserve}% is reserved.");
     let then = format!("New chats go to other accounts. This one stays on {name} until you move it.");

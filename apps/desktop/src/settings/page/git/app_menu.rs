@@ -55,7 +55,7 @@ pub(super) fn installation_menu(
         items.push(Item { label: "Make default", off: !works, act });
     }
     if account.held_login.is_some() {
-        let (id, name) = (account.id.clone(), account.user.name.to_string());
+        let (id, name) = (account.id.clone(), drawing.records.github_username(account).to_string());
         let says = app_words::disconnect_says(default);
         let act: Act = Rc::new(move |kept, window, cx| kept.ask_to_disconnect(id.clone(), &name, says, window, cx));
         items.push(Item { label: "Disconnect", off: false, act });
@@ -65,7 +65,8 @@ pub(super) fn installation_menu(
     items.extend(app.map(|app| remove(app, default, at)));
     let id = SharedString::from(format!("git-more-{}", account.id));
     let off = !drawing.can_ask(cx);
-    (!items.is_empty()).then(|| menu_of(drawing.kept, id, account.user.name.as_str(), off, items))
+    let name = drawing.records.github_username(account).as_str();
+    (!items.is_empty()).then(|| menu_of(drawing.kept, id, name, off, items))
 }
 
 /// Install on GitHub, which opens GitHub's page for installing `app`, and the panel waiting for it.
