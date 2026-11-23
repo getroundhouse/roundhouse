@@ -6,6 +6,7 @@ use crate::machine_environment::{LoginShell, MachineEnvironment};
 use crate::provider_set::ProviderSet;
 use crate::store::{Move, RecordedInstance, Store, StoreError};
 use crate::terminate::Terminate;
+use crate::test_process::TestProcess;
 use crate::timers::Timers;
 use github::{Github, GithubConfig};
 use process::Environment;
@@ -47,6 +48,8 @@ pub struct HubConfig {
     /// Where the hub calls GitHub, and as which app it signs people in, as [`GithubConfig::from_env`] gives it. Given
     /// rather than known here, so a hub can be pointed at a stand-in, as the hub's own tests point theirs.
     pub github: GithubConfig,
+    /// The test this hub stops with once it has gone, which only a test's hub has, as [`TestProcess`] says.
+    pub stops_with: Option<TestProcess>,
 }
 
 /// What the last run left half done, for this one to finish once it's serving.
@@ -139,7 +142,7 @@ pub enum Ended {
 /// Runs until asked to stop or signalled, and says whether another hub is to start. Returns an error if another hub
 /// is using these paths.
 pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
-    let update_feed = config.update_feed;
+    let (update_feed, stops_with) = (config.update_feed, config.stops_with);
     let HubConfig {
         network_address, build, paths, worker_exe, shell, home, path, start, agents, timers, github, ..
     } = config;
@@ -193,7 +196,7 @@ pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
     watch_while_serving(&hub, &mut serving);
     let watching_github_logins = tokio::spawn(hub.clone().watch_github_logins());
     let mut terminate = Terminate::listen().map_err(|e| HubError::io("listening for a signal to stop", e))?;
-    let signalled = asked_to_go(&hub, &mut terminate).await;
+    let signalled = asked_to_go(&hub, &mut terminate, stops_with.as_ref()).await;
     accept.abort();
     hub.remote.stop_listening().await;
     serving.abort_all();
@@ -261,10 +264,10 @@ fn read_update_feed(hub: &Hub, update_feed: Option<UpdateFeed>, build: Build) {
     }
 }
 
-/// Waits until the hub is asked to go, and says whether a signal asked. Whoever sends one, such as systemd, can't say
-/// whether another hub is coming, so a signal stops the agents, even once the hub was asked to restart.
-/// *Unconfirmed:* that a signal stops them.
-async fn asked_to_go(hub: &Hub, terminate: &mut Terminate) -> bool {
+/// Waits until the hub is asked to go, and says whether a signal asked, or the test it's a hub of has gone, which no
+/// next hub follows. Whoever sends a signal, such as systemd, can't say whether another hub is coming, so a signal
+/// stops the agents, even once the hub was asked to restart. *Unconfirmed:* that a signal stops them.
+async fn asked_to_go(hub: &Hub, terminate: &mut Terminate, stops_with: Option<&TestProcess>) -> bool {
     tokio::select! {
         () = hub.shutdown.notified() => {
             info!("shutdown requested");
@@ -278,6 +281,18 @@ async fn asked_to_go(hub: &Hub, terminate: &mut Terminate) -> bool {
             info!("terminated");
             true
         }
+        () = test_gone(stops_with) => {
+            info!("the test this hub is for has gone");
+            true
+        }
+    }
+}
+
+/// Returns once `test` has gone, and never for a hub with none, as the product's is.
+async fn test_gone(test: Option<&TestProcess>) {
+    match test {
+        Some(test) => test.gone().await,
+        None => std::future::pending().await,
     }
 }
 

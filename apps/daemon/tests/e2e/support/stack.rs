@@ -57,8 +57,7 @@ impl Stack {
 
     /// Its directory, its environment and its repository, with no hub, nor anything of one's, yet.
     fn unstarted(env: Vec<(&'static str, String)>) -> Stack {
-        // Under /tmp because of the socket path limit, which the default temp directory can exceed.
-        let dir = tempfile::Builder::new().prefix("ah-").tempdir_in("/tmp").unwrap();
+        let dir = process::testing::tmp_dir("ah-");
         let mut hubs = hub_environment(dir.path());
         for (name, value) in env {
             hubs.set(name, value);

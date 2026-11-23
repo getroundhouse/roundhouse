@@ -236,3 +236,18 @@ fn whats_typed_while_the_hub_restarts_is_kept_and_waits_to_be_sent(cx: &mut Test
     ui.press("enter");
     ui.wait_idle_with("the reply", |text| text.contains("before"));
 }
+
+/// The app a test drives is still running as the test ends, and connects again as the test stops its hub, which would
+/// start a hub that nothing stops, in a directory the test removes. The stack's daemon refuses it.
+#[gpui_kit::test]
+fn a_test_that_ends_with_its_app_open_leaves_no_hub_running(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open(cx, &stack);
+    let (dir, socket) = (stack.dir.path().to_path_buf(), stack.hub.paths.socket.clone());
+
+    drop(stack);
+
+    ui.wait("the app to be refused a hub", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
+    assert!(client_core::Client::connect(&socket, "test").is_err(), "no hub is running there");
+    assert!(!dir.exists(), "nothing made its directory again");
+}

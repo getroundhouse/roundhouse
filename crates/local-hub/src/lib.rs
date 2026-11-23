@@ -28,8 +28,12 @@ use std::time::Duration;
 mod tests;
 
 mod daemon;
+#[cfg(any(test, feature = "testing"))]
+mod started;
 
 #[cfg(test)]
 use daemon::start_hub;
 use daemon::temporary_prefix;
 pub use daemon::{Daemon, connect_or_start};
+#[cfg(any(test, feature = "testing"))]
+pub use started::StartedHubs;

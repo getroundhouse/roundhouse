@@ -1,4 +1,6 @@
 use super::old_copies;
+#[cfg(any(test, feature = "testing"))]
+use crate::StartedHubs;
 use client_core::{Client, Introduction, Result, hub_is_missing};
 use protocol::paths::{DAEMON_NAME, Paths, daemon_file};
 use protocol::{Build, StampedBuild};
@@ -8,7 +10,7 @@ use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
@@ -65,6 +67,10 @@ pub struct Daemon {
     /// workspaces are. Only a test gives one, through [`Daemon::in_environment`], and a hub otherwise inherits this
     /// process's.
     pub(super) environment: Option<Vec<(OsString, OsString)>>,
+    /// Where each hub started from it is kept, for the test that gave it to stop, through [`Daemon::recording`]. Only
+    /// in a build for tests, unlike `environment`, since it has a type of its own, which the product needn't build.
+    #[cfg(any(test, feature = "testing"))]
+    pub(super) started: Option<StartedHubs>,
 }
 
 impl Daemon {
@@ -79,13 +85,19 @@ impl Daemon {
 
     /// One started where it is.
     pub fn in_place(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into(), build: None, environment: None }
+        Self {
+            path: path.into(),
+            build: None,
+            environment: None,
+            #[cfg(any(test, feature = "testing"))]
+            started: None,
+        }
     }
 
     /// The one that ships next to `exe`, which is `exe`'s build. Follows symlinks first, so a hub started through an
     /// install's `current` link stays on that version, whichever one the link names later.
     pub(super) fn beside(exe: &Path, build: Build) -> io::Result<Self> {
-        Ok(Self { path: exe.canonicalize()?.with_file_name(daemon_file()), build: build.stamped(), environment: None })
+        Ok(Self { build: build.stamped(), ..Self::in_place(exe.canonicalize()?.with_file_name(daemon_file())) })
     }
 
     /// The same, but every hub it starts runs in `vars` alone, as `process::testing::WholeEnvironment` gives them, so
@@ -95,6 +107,15 @@ impl Daemon {
     #[must_use]
     pub fn in_environment<'a>(mut self, vars: impl IntoIterator<Item = (&'a OsStr, &'a OsStr)>) -> Self {
         self.environment = Some(vars.into_iter().map(|(name, value)| (name.to_owned(), value.to_owned())).collect());
+        self
+    }
+
+    /// The same, but every hub it starts is kept in `started`, for the test to stop, and once that's closed it starts
+    /// none, as [`StartedHubs`] says. A clone of it records into the same.
+    #[cfg(any(test, feature = "testing"))]
+    #[must_use]
+    pub fn recording(mut self, started: &StartedHubs) -> Self {
+        self.started = Some(started.clone());
         self
     }
 
@@ -125,7 +146,23 @@ impl Daemon {
     }
 }
 
+/// Starts a hub, which outlives this client, so nothing waits for it.
+#[cfg(not(any(test, feature = "testing")))]
 pub(super) fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
+    spawn_hub(paths, daemon).map(drop)
+}
+
+/// Starts a hub, which a test's daemon keeps for the test to stop, and once that's closed starts none, making nothing,
+/// not even the hub's data directory, which the test may have removed.
+#[cfg(any(test, feature = "testing"))]
+pub(super) fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
+    match &daemon.started {
+        Some(started) => started.start(|| spawn_hub(paths, daemon)),
+        None => spawn_hub(paths, daemon).map(drop),
+    }
+}
+
+fn spawn_hub(paths: &Paths, daemon: &Daemon) -> io::Result<Child> {
     private_files::create_dir_all(&paths.data_dir)?;
     let log = private_files::file_options().create(true).append(true).open(&paths.log)?;
     // Whole paths, since the hub doesn't run where this client does. A bare name is looked up on `PATH` instead.
@@ -150,8 +187,7 @@ pub(super) fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
         .stderr(Stdio::from(log));
     process::detach(&mut command);
     process::run_once_not_busy(|| command.spawn())
-        .map_err(|e| io::Error::new(e.kind(), format!("starting {}: {e}", exe.display())))?;
-    Ok(())
+        .map_err(|e| io::Error::new(e.kind(), format!("starting {}: {e}", exe.display())))
 }
 
 /// The build's `copy` at [`Paths::fixed_hub`], to start the hub from there, or else the copy itself, which only costs

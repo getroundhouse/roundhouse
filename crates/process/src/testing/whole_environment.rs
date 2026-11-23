@@ -6,6 +6,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::Environment;
+use protocol::paths::ENV_TEST_PROCESS;
 
 /// What a process a test starts keeps of the test's own environment, by name: where to find the programs it runs,
 /// where to keep temporary files, and on Windows what any process there needs to start. Nothing else, so nothing of
@@ -32,10 +33,11 @@ pub struct WholeEnvironment {
 
 impl WholeEnvironment {
     /// Only what [`KEPT`] names of this process's environment, with `home` as the user's home, which needn't exist, so
-    /// none of the person's settings there are read, and a login shell that says nothing.
+    /// none of the person's settings there are read, a login shell that says nothing, and this process as the test, so
+    /// a hub started in it stops once the test has gone, even one that's killed before it can stop the hub.
     pub fn for_a_test(home: &Path) -> Self {
         let mut environment = Self::kept();
-        environment.set(HOME, home).set("SHELL", SAYS_NOTHING);
+        environment.set(HOME, home).set("SHELL", SAYS_NOTHING).set(ENV_TEST_PROCESS, std::process::id().to_string());
         environment
     }
 
@@ -101,17 +103,19 @@ mod tests {
 
     /// Cargo sets `CARGO_MANIFEST_DIR` for a test, and it's in none of the names kept.
     #[test]
-    fn a_test_s_environment_keeps_only_what_finds_programs_and_temporary_files() {
+    fn a_test_s_environment_keeps_only_what_finds_programs_and_temporary_files_and_names_the_test() {
         assert!(std::env::var_os("CARGO_MANIFEST_DIR").is_some(), "Cargo sets it for a test");
         let home = Path::new("nowhere");
 
         let environment = WholeEnvironment::for_a_test(home);
 
         let names: Vec<&OsStr> = environment.vars().map(|(name, _)| name).collect();
-        assert!(names.iter().all(|name| KEPT.iter().chain(&[HOME, "SHELL"]).any(|kept| name == kept)), "{names:?}");
+        let given = [HOME, "SHELL", ENV_TEST_PROCESS];
+        assert!(names.iter().all(|name| KEPT.iter().chain(&given).any(|kept| name == kept)), "{names:?}");
         assert_eq!(environment.get("PATH"), std::env::var_os("PATH").as_deref());
         assert_eq!(environment.get(HOME), Some(home.as_os_str()));
         assert_eq!(environment.get("SHELL"), Some(OsStr::new(SAYS_NOTHING)));
+        assert_eq!(environment.get(ENV_TEST_PROCESS), Some(OsStr::new(&std::process::id().to_string())));
     }
 
     #[test]

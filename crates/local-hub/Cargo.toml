@@ -7,16 +7,19 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-# Starting a hub in an environment a test gives it.
-testing = []
+# Starting a hub in an environment a test gives it, and keeping each hub started for the test to stop.
+testing = ["dep:parking_lot"]
 
 [dependencies]
 client-core.workspace = true
+parking_lot = { workspace = true, optional = true }
 private-files.workspace = true
 process.workspace = true
 protocol.workspace = true
 
 [dev-dependencies]
+# What the `testing` feature brings in, which the tests have without it.
+parking_lot.workspace = true
 client-core = { workspace = true, features = ["testing"] }
 libc.workspace = true
 protocol = { workspace = true, features = ["testing"] }

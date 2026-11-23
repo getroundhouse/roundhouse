@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use hub::Timers;
@@ -83,4 +84,25 @@ fn a_hub_stop_ends_the_agents_of_a_worker_that_doesnt_stop() {
     let mut hub = stack.hub.take().unwrap();
     waiting::thread::until(grace + TIMEOUT, "the hub didn't exit", || !matches!(hub.try_wait(), Ok(None)));
     wait_until("the agent to stop", || !is_alive(agent));
+}
+
+#[test]
+fn a_tests_hub_stops_once_the_test_has_gone() {
+    // Standing in for the test, which can be killed before it stops its hub. It runs until it's killed.
+    let mut test = Command::new("cat").stdin(Stdio::piped()).stdout(Stdio::null()).spawn().unwrap();
+    let mut stack = Stack::start_with(vec![(protocol::paths::ENV_TEST_PROCESS, test.id().to_string())]);
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    client.workspace_status(&workspace.id).unwrap();
+    assert_eq!(client.hub_status().unwrap().workers, 1);
+
+    test.kill().unwrap();
+    test.wait().unwrap();
+
+    let mut hub = stack.hub.take().unwrap();
+    wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
+    assert!(hub.try_wait().unwrap().unwrap().success(), "it stopped, rather than failing");
+    let log = std::fs::read_to_string(stack.hub_log()).unwrap();
+    assert!(log.contains("the test this hub is for has gone"), "{log}");
+    assert!(log.contains("hub stopped"), "{log}");
 }

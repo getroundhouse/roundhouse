@@ -11,7 +11,7 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, InputEvent as _, MouseMoveEvent, Pixels, ScrollDelta,
     ScrollEvent, SharedString, TestAppContext,
 };
-use local_hub::Daemon;
+use local_hub::{Daemon, StartedHubs};
 use process::testing::WholeEnvironment;
 pub(crate) use process::testing::git;
 use protocol::capability::approvals::ApprovalMode;
@@ -30,6 +30,8 @@ pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
 pub(crate) struct Stack {
     pub(crate) dir: TempDir,
     pub(crate) hub: HubSource,
+    /// Every hub the stack's daemon starts, whoever asks it to, which the stack stops as it goes.
+    pub(super) started: StartedHubs,
 }
 
 impl Stack {
@@ -39,8 +41,7 @@ impl Stack {
 
     /// With every hub the app starts in `environment`, which [`hub_environment`] gives with what a test adds.
     pub(crate) fn in_environment(environment: &WholeEnvironment) -> Self {
-        // Under /tmp because of the socket path limit.
-        let dir = tempfile::Builder::new().prefix("ahui-").tempdir_in("/tmp").unwrap();
+        let dir = process::testing::tmp_dir("ahui-");
         let root = dir.path();
         process::testing::repository_with_a_commit(&root.join("repo"));
         let paths = protocol::paths::resolve(|name| match name {
@@ -52,15 +53,17 @@ impl Stack {
         // So the first hub the app starts opens a store that has run every migration, rather than running them all on
         // nothing, which no test here is about. Its data directory is made as the app makes it to start one.
         hub::store::give_a_migrated_database(&paths);
+        let started = StartedHubs::default();
+        let daemon = Daemon::in_place(binaries().join("roundhoused")).in_environment(environment.vars());
         let hub = HubSource {
             remote: None,
             paths,
-            daemon: Daemon::in_place(binaries().join("roundhoused")).in_environment(environment.vars()),
+            daemon: daemon.recording(&started),
             build_number: None,
             // The daemon's, which was compiled with the same stamp as this test.
             build_version: protocol::this_build!().version(),
         };
-        Self { dir, hub }
+        Self { dir, hub, started }
     }
 
     pub(crate) fn repo(&self) -> PathBuf {
@@ -75,16 +78,6 @@ impl Stack {
     /// Where the app keeps its settings.
     pub(crate) fn settings_file(&self) -> PathBuf {
         self.hub.paths.data_dir.join("settings.json")
-    }
-}
-
-impl Drop for Stack {
-    /// Stops the hub, and waits for it to exit. One that's gone already, such as one of another build that a test
-    /// killed, is what was wanted.
-    fn drop(&mut self) {
-        let stopped = client_core::stop_hub(&self.hub.paths.socket);
-        // Not again in a test that failed, since a panic as it unwinds would end the run without saying why.
-        assert!(stopped.is_ok() || std::thread::panicking(), "the hub didn't stop: {stopped:?}");
     }
 }
 
@@ -363,8 +356,8 @@ impl<'a> Ui<'a> {
     }
 }
 
-/// Closes the window, so the app isn't there to start a new hub when the test stops this one. A real
-/// window does that on purpose, and in a test it would leave a hub running after the test has finished.
+/// Closes the window. The app it showed lives on until the test has ended, after the stack has stopped its hubs, and
+/// connects again meanwhile, which the stack's daemon refuses, as [`Stack`]'s `drop` says.
 impl Drop for Ui<'_> {
     fn drop(&mut self) {
         let _ = self.cx.update_window(self.handle, |_, window, _| window.remove_window());

@@ -117,6 +117,9 @@ jobs:
       - run: >-
           cargo nextest run --profile mac --workspace --locked --partition slice:${{ matrix.part }}/4
           -E 'not test(/^gallery::/)'
+      # Fails the job for each hub or worker the tests left running, as in ci.yml.
+      - if: ${{ !cancelled() }}
+        run: .github/hubs-left-running.sh
       # nextest skips doc tests, as in ci.yml.
       - if: matrix.part == 1
         run: cargo test --workspace --doc --locked
