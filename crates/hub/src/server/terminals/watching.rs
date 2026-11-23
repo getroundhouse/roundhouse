@@ -9,7 +9,7 @@ use protocol::client::{ApiError, ClientResponse, HubFrame};
 use protocol::terminal::{PictureSending, TerminalExit, TerminalPicture, TerminalUpdate};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 
-use crate::hub::{Hub, Watcher};
+use crate::hub::{Followed, Hub, Watcher};
 use crate::server::subscribing::add_subscription;
 use crate::server::{Connection, Outgoing};
 
@@ -21,7 +21,7 @@ pub(in crate::server) fn watch(
 ) -> Result<ClientResponse, ApiError> {
     let TerminalWatch { id, subscription_id } = watch;
     let watcher = hub.terminal_watch(&id)?;
-    add_subscription(connection, subscription_id, || {
+    add_subscription(hub, connection, subscription_id, Followed::Terminal(id), || {
         let watching = Watching { subscription_id, frames: connection.frames.clone() };
         tokio::spawn(watching.watch(watcher)).abort_handle()
     })?;

@@ -1,4 +1,5 @@
 use super::agents::ModelLists;
+use super::followers::Followers;
 use super::terminals::Terminals;
 use super::updates::Updates;
 use super::{awake, feed, github_reads, pull_requests, sessions, setup};
@@ -93,8 +94,8 @@ pub(crate) struct Hub {
     pub(super) pull_requests: pull_requests::Reading,
     /// What the hub last read from GitHub, for every part of it that reads GitHub, and every client.
     pub(super) github_cache: Arc<GithubCache>,
-    /// What clients show of GitHub, as their subscriptions say.
-    pub(super) github_shown: github_reads::Shown,
+    /// Who follows what, which is what the hub keeps current.
+    pub(super) followers: Followers,
     /// When the hub last tried to read each pull request of an archived workspace that the cache had forgotten.
     pub(super) github_forgotten: github_reads::Forgotten,
     /// The reads of workspaces' own pull requests nobody asked for that are running now, by whose token each reads
@@ -218,7 +219,7 @@ impl Hub {
             updates: Updates::new(dirs.service_builds),
             pull_requests: pull_requests::Reading::new(),
             github_cache: Arc::new(GithubCache::open(&dirs.github_cache)),
-            github_shown: github_reads::Shown::default(),
+            followers: Followers::default(),
             github_forgotten: github_reads::Forgotten::default(),
             own_reads: Jobs::new(),
             sign_ins: Jobs::new(),

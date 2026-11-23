@@ -95,14 +95,12 @@ struct Own {
 }
 
 impl Feeding {
-    /// Takes `now` to be what's shown, reads what's newly shown, with the pull requests of archived workspaces the cache
-    /// has forgotten, and gives what's to send of all of it, which is what wasn't sent last, so a client that shows
-    /// something again, or has missed some, is sent what it needs.
+    /// Takes `now` to be what's shown, reads the pull requests of archived workspaces shown that the cache has
+    /// forgotten, and gives what's to send of all of it, which is what wasn't sent last, so a client that shows
+    /// something again, or has missed some, is sent what it needs. What's newly shown otherwise is read as the client
+    /// begins to follow it, as `Hub::follow` says.
     async fn show(&mut self, now: GithubShown) -> Vec<GithubUpdate> {
-        let before = std::mem::replace(&mut self.shown, now);
-        let newly = (self.shown.references.iter()).filter(|ask| !before.references.contains(ask)).cloned().collect();
-        let closely = (self.shown.closely.iter()).filter(|id| !before.closely.contains(id)).cloned().collect();
-        self.hub.read_newly_shown(newly, closely);
+        self.shown = now;
         let shown = &self.shown;
         self.sent.references.retain(|ask, _| shown.references.contains(ask));
         self.sent.pull_requests.retain(|id, _| shown.workspaces.contains(id));

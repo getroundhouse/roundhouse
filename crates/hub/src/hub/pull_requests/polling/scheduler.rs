@@ -25,7 +25,7 @@ impl Hub {
     /// Reads what nobody asks for: workspaces' pull requests, and what clients show as chips, each as it's due. Runs
     /// until the hub stops.
     pub(crate) async fn watch_pull_requests(self: Arc<Self>) {
-        tokio::join!(self.clone().watch_own_pull_requests(), self.watch_shown_references());
+        tokio::join!(self.clone().watch_own_pull_requests(), self.watch_followed_references());
     }
 
     /// Starts reading workspaces' pull requests nobody asks for, as jobs, every one that's due as one token together,
@@ -53,7 +53,7 @@ impl Hub {
         }
         let Ok(mut workspaces) = self.workspace_list(false).await else { return Vec::new() };
         workspaces.retain(|workspace| seen || waited.contains(&workspace.id));
-        let shown = self.github_shown.closely();
+        let shown = self.followers.workspaces();
         // One whose pull request the cache has forgotten, as after it was emptied, is known as none until it's read.
         let listed: Vec<_> = workspaces
             .into_iter()
