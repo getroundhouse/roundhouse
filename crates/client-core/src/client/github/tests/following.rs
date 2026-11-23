@@ -101,6 +101,8 @@ fn what_views_show_is_followed_together_and_what_the_hub_sends_reaches_them() {
     waiting::thread::until(TIMEOUT, "what the hub sent", || feed.reference(&ask(2)).is_some());
     second.show(ShownOfGithub { workspaces: vec!["w".into()], ..chips(&[2, 3]) });
     waiting::thread::until(TIMEOUT, "the third", || feed.reference(&ask(3)).is_some());
+    // The hub's records are followed on a thread of their own, which starts after the one that follows what views show.
+    waiting::thread::until(TIMEOUT, "the hub's records to be followed", || asked.follows().contains(&Level::Hub));
     let both = asked.follows();
     drop(first);
     waiting::thread::until(TIMEOUT, "the first view to go", || !asked.follows().contains(&chip(1)));
