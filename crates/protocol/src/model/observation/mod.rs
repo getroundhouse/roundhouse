@@ -11,5 +11,5 @@ mod observed;
 pub use github::{
     IssueSaid, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReferenceSaid,
 };
-pub use kinds::{Observation, ObservationKey};
+pub use kinds::{Observation, ObservationKey, ReadFrom};
 pub use observed::Observed;

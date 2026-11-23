@@ -37,6 +37,12 @@ pub const HUB_SPEAKS: Versions = Versions { oldest: 3, newest: 4 };
 
 const _: () = assert!(HUB_SPEAKS.speaks(CLIENT_PROTOCOL_VERSION), "a hub speaks its own build's clients' version");
 
+/// The version of the client protocol from which a client reads every copy of what the hub only observes as an
+/// observation, and none in the form it replaced: GitHub's whatever its start says, and each kind that
+/// [`ObservationKey::read_from`](crate::model::ObservationKey::read_from) says is read from it. So no client of one
+/// version holds such a copy in two forms. A hub speaks it once it sends every such kind, and no client speaks it yet.
+pub const EVERY_OBSERVATION_FROM: u32 = 5;
+
 /// A request to a hub, which names what the hub answers it with.
 pub trait Request {
     type Reply: Reply;

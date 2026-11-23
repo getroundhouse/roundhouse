@@ -31,9 +31,20 @@ pub(super) struct Connection {
 
 impl Connection {
     pub(super) fn open(hub: &Arc<Hub>) -> Self {
+        Self::through(hub, Gate::local(hub))
+    }
+
+    /// One whose hello chose `version`, which the hub needn't speak yet, for a test of what it sends a client of the
+    /// next version, as it will once it speaks it.
+    pub(super) fn speaking(hub: &Arc<Hub>, version: u32) -> Self {
+        Self::through(hub, Gate::local_greeted_at(hub, version))
+    }
+
+    /// One `gate` admits.
+    fn through(hub: &Arc<Hub>, gate: Gate) -> Self {
         let (client, served) = tokio::io::duplex(1 << 16);
         let (read, write) = tokio::io::split(served);
-        tokio::spawn(serve_connection(hub.clone(), read, write, Gate::local(hub)));
+        tokio::spawn(serve_connection(hub.clone(), read, write, gate));
         let (replies, frames) = tokio::io::split(client);
         Self { replies: BufReader::new(replies).lines(), frames, sent: Vec::new() }
     }

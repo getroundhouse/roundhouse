@@ -38,6 +38,8 @@ pub(super) async fn in_order(hub: &Arc<Hub>, request: Result<ClientRequest, serd
 struct InTurn {
     id: u64,
     subscribe: Subscribe,
+    /// The version of the client protocol the connection's hello chose.
+    version: u32,
     under_way: Counted,
 }
 
@@ -56,8 +58,8 @@ impl Subscribes {
         let (queue, mut queued) = mpsc::unbounded_channel::<InTurn>();
         let (hub, connection) = (hub.clone(), connection.clone());
         tokio::spawn(async move {
-            while let Some(InTurn { id, subscribe: asked, under_way }) = queued.recv().await {
-                let subscribed = subscribe(&hub, &connection, asked).await;
+            while let Some(InTurn { id, subscribe: asked, version, under_way }) = queued.recv().await {
+                let subscribed = subscribe(&hub, &connection, asked, version).await;
                 drop(under_way);
                 let outcome = ReplyOutcome::Response(ClientResponse::Subscribed(subscribed));
                 // An error only means the connection has gone.
@@ -67,9 +69,16 @@ impl Subscribes {
         Self { queue }
     }
 
-    /// Queues `asked`, call `id`, after those read before it, counted among the requests under way by `under_way`.
-    pub(super) async fn queue(&self, connection: &Connection, id: u64, asked: Subscribe, under_way: Counted) {
-        if self.queue.send(InTurn { id, subscribe: asked, under_way }).is_err() {
+    /// Queues `asked`, call `id`, from a connection whose hello chose `version`, after those read before it, counted
+    /// among the requests under way by `under_way`.
+    pub(super) async fn queue(
+        &self,
+        connection: &Connection,
+        id: u64,
+        (asked, version): (Subscribe, u32),
+        under_way: Counted,
+    ) {
+        if self.queue.send(InTurn { id, subscribe: asked, version, under_way }).is_err() {
             let error = internal("the task that takes the connection's subscriptions has ended");
             let _ = connection.frames.send(HubFrame::Reply { id, outcome: ReplyOutcome::Error(error) }.into()).await;
         }

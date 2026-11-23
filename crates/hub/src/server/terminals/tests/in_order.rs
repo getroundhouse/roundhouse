@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::terminals as client;
-use protocol::client::{ClientRequest, ClientResponse, HubFrame, ReplyOutcome};
+use protocol::client::{CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, HubFrame, ReplyOutcome};
 use protocol::terminal::{Numbering, TerminalFitReply, TerminalSize, Typed};
 use protocol::worker::{TerminalTyped, WorkerRequest, WorkerResponse};
 use tokio::sync::{mpsc, watch};
@@ -16,6 +16,7 @@ use tokio::time::timeout;
 use super::stand_in::{Connected, WAIT};
 use crate::hub::Hub;
 use crate::hub::tests::{hub_with_worktree, serving, terminal_in_w};
+use crate::server::admit::Greeting;
 use crate::server::connection::Connection;
 use crate::server::dispatch;
 use crate::worker_link::WorkerLink;
@@ -58,8 +59,8 @@ async fn the_dispatch_sends_on_and_answers_whats_typed_and_a_new_size() {
     let (hub, reached) = open_terminal_t(dir.path()).await;
     let connection = unread_connection();
 
-    let typed = dispatch::handle(&hub, &connection, None, typed("a")).await;
-    let fit = dispatch::handle(&hub, &connection, None, fit(100)).await;
+    let typed = dispatch::handle(&hub, &connection, greeting(), typed("a")).await;
+    let fit = dispatch::handle(&hub, &connection, greeting(), fit(100)).await;
 
     assert_eq!(typed, Ok(ClientResponse::Ok));
     assert!(matches!(fit, Ok(ClientResponse::TerminalFit(_))), "{fit:?}");
@@ -113,4 +114,9 @@ fn unread_connection() -> Arc<Connection> {
         closed: Arc::new(watch::Sender::new(false)),
         closer: crate::server::Closer::default(),
     })
+}
+
+/// What a hello from a client of this build, on no device, says.
+fn greeting() -> Greeting {
+    Greeting { device: None, version: CLIENT_PROTOCOL_VERSION }
 }

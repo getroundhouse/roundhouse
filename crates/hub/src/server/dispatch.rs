@@ -1,4 +1,5 @@
 use super::Connection;
+use super::admit::Greeting;
 use super::pump::Following;
 use super::sends::Sends;
 use super::subscribing::{follow_feed, follow_log, unsubscribe};
@@ -12,17 +13,18 @@ use protocol::client::{
     drafts, files, github_accounts, github_apps, log, new_workspace, queue, records, references, sessions,
     subscriptions, waits, workspaces,
 };
-use protocol::model::{ByteRange, ClientDevice, Place, Seq};
+use protocol::model::{ByteRange, Place, Seq};
 use std::sync::Arc;
 #[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
 pub(super) async fn handle(
     hub: &Arc<Hub>,
     connection: &Arc<Connection>,
-    device: Option<ClientDevice>,
+    greeting: Greeting,
     request: ClientRequest,
 ) -> Result<ClientResponse, ApiError> {
     use ClientRequest as R;
     use ClientResponse as C;
+    let Greeting { device, version } = greeting;
     Ok(match request {
         R::Hello(_) => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
         R::Unknown => return Err(hub.unsupported(None)),
@@ -38,7 +40,7 @@ pub(super) async fn handle(
         R::TerminalFit(fit) => hub.terminal_fit(fit).await?.await?,
         R::TerminalClose(close) => C::Terminal(hub.terminal_close(close).await?),
         // Taken in order as the connection reads it too, by `in_order`, and answered here only as typing is.
-        R::Subscribe(asked) => C::Subscribed(super::subscribe::subscribe(hub, connection, asked).await),
+        R::Subscribe(asked) => C::Subscribed(super::subscribe::subscribe(hub, connection, asked, version).await),
 
         R::PairingStart => C::Pairing(hub.pairing_start().await?),
         R::PairingWait(protocol::client::devices::PairingWait { code }) => {

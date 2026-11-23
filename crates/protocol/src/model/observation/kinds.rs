@@ -120,18 +120,35 @@ impl ObservationKey {
         }
     }
 
+    /// Which subscriptions a hub sends it to: each whose client reads it as an observation, rather than in a form from
+    /// before it, so no client holds it in two forms. `None` for one of a kind this build doesn't know.
+    pub fn read_from(&self) -> Option<ReadFrom> {
+        match self {
+            ObservationKey::WorkspaceLines { .. } | ObservationKey::WorkspaceChanges { .. } => Some(ReadFrom::Every),
+            ObservationKey::WorkspacePullRequest { .. }
+            | ObservationKey::WorkspacePullRequestDetail { .. }
+            | ObservationKey::WorkspaceRepositoryUnseen { .. }
+            | ObservationKey::Reference { .. } => Some(ReadFrom::GithubObserved),
+            ObservationKey::Unknown => None,
+        }
+    }
+
     /// Whether it's of what GitHub says, which a hub sends as an observation only to a start that reads GitHub so, as
     /// [`Subscription::github_observed`](crate::client::subscriptions::Subscription::github_observed) says. `false` for
     /// one of a kind this build doesn't know.
     pub fn is_github(&self) -> bool {
-        match self {
-            ObservationKey::WorkspacePullRequest { .. }
-            | ObservationKey::WorkspacePullRequestDetail { .. }
-            | ObservationKey::WorkspaceRepositoryUnseen { .. }
-            | ObservationKey::Reference { .. } => true,
-            ObservationKey::WorkspaceLines { .. }
-            | ObservationKey::WorkspaceChanges { .. }
-            | ObservationKey::Unknown => false,
-        }
+        self.read_from() == Some(ReadFrom::GithubObserved)
     }
+}
+
+/// Which subscriptions a hub sends an observation of a kind to, as [`ObservationKey::read_from`] says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReadFrom {
+    /// Every subscription at its level, since no client reads what it says in another form.
+    Every,
+    /// A start that says it reads what GitHub says as observations, as
+    /// [`Subscription::github_observed`](crate::client::subscriptions::Subscription::github_observed) does, and one of
+    /// [`EVERY_OBSERVATION_FROM`](crate::client::EVERY_OBSERVATION_FROM) or newer whatever it says, since a client
+    /// from before reads it as `HubFrame::Github`.
+    GithubObserved,
 }

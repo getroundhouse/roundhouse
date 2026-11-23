@@ -1,21 +1,26 @@
 //! What each subscription is sent of the feed's notices, decided in one place, [`Sends::notice`], for `FeedSubscribe`
-//! and for every level `Subscribe` follows: the notices of its level, in the form of what GitHub says it reads. Which
-//! form that is, `HubFrame::Github`, as clients from before observations read it, or GitHub's observations, as
-//! `docs/principles/observations.md` has them, one field decides, [`Sends::github_observed`], whatever request started
-//! the subscription, so what decides which clients still read the old form changes in one place.
+//! and for every level `Subscribe` follows: the notices of its level, in the forms its client reads. Which those are, a
+//! copy's form from before observations or its observation, as `docs/principles/observations.md` has them, one
+//! function decides, [`Sends::keeps`], by what each kind's [`ObservationKey::read_from`] says, the version of the client
+//! protocol the subscription's connection chose, and whether its start reads GitHub as observations, whatever request
+//! started the subscription. So what decides which clients still read an old form changes in one place.
 
-use protocol::client::HubNotice;
 use protocol::client::listed::{Listed, ReferenceObservations, WorkspaceObservations};
-use protocol::model::{Level, Observation, ObservationKey, Records};
+use protocol::client::{EVERY_OBSERVATION_FROM, HubNotice};
+use protocol::model::{Level, Observation, ObservationKey, ReadFrom, Records};
+
+use crate::versions;
 
 /// What one subscription is sent of the feed.
 #[derive(Clone, Debug)]
 pub(super) struct Sends {
     of: Of,
-    /// Whether it's sent what GitHub says as GitHub's observations, in its level's list and notices, rather than as
-    /// `HubFrame::Github`, as its level sends it. Only a `Subscribe` start asks for them, and every level that sends
-    /// anything of GitHub's sends each kind of it as an observation.
+    /// Whether its start asked to be sent what GitHub says as GitHub's observations, in its level's list and notices,
+    /// rather than as `HubFrame::Github`, as its level sends it. Only a `Subscribe` start asks for them, and every
+    /// level that sends anything of GitHub's sends each kind of it as an observation.
     github_observed: bool,
+    /// The version of the client protocol its connection chose.
+    version: u32,
 }
 
 /// Whose notices a subscription is sent.
@@ -30,18 +35,19 @@ enum Of {
 }
 
 impl Sends {
-    /// What a subscription `Subscribe` started at `level` is sent, reading GitHub's observations if `github_observed`.
-    pub(super) fn at(level: Level, github_observed: bool) -> Self {
-        Self { of: Of::Level(level), github_observed }
+    /// What a subscription `Subscribe` started at `level` is sent, on a connection whose hello chose `version`, reading
+    /// GitHub's observations if `github_observed` or its version reads every observation.
+    pub(super) fn at(level: Level, github_observed: bool, version: u32) -> Self {
+        Self { of: Of::Level(level), github_observed, version }
     }
 
     /// What a subscription `FeedSubscribe` started is sent, and what `RecordsList` lists, which only a client of
-    /// version 3 sends, so in the form from before observations.
+    /// version 3 sends, so in the forms from before observations.
     pub(super) fn feed() -> Self {
-        Self { of: Of::Feed, github_observed: false }
+        Self { of: Of::Feed, github_observed: false, version: versions::CLIENTS.oldest }
     }
 
-    /// Whether it's sent `notice`: one of its level, and of a form of what GitHub says it reads.
+    /// Whether it's sent `notice`: one of its level, and in a form its client reads.
     pub(super) fn notice(&self, notice: &HubNotice) -> bool {
         let of = match &self.of {
             Of::Level(level) => notice.level().as_ref() == Some(level),
@@ -50,7 +56,7 @@ impl Sends {
         of && self.sends(notice)
     }
 
-    /// `listed`, a list of where a level stands, as it's sent: with only the observations of a form it reads.
+    /// `listed`, a list of where a level stands, as it's sent: with only the observations its client reads as such.
     pub(super) fn listed(&self, listed: Listed) -> Listed {
         match listed {
             Listed::Hub(records) => Listed::Hub(Box::new(self.records(*records))),
@@ -64,24 +70,25 @@ impl Sends {
         }
     }
 
-    /// Every record, as `RecordsList` and the hub's level list them, as it's sent: with only the observations of a
-    /// form it reads.
+    /// Every record, as `RecordsList` and the hub's level list them, as it's sent: with only the observations its client
+    /// reads as such.
     pub(super) fn records(&self, records: Records) -> Records {
         Records { observations: self.kept(records.observations), ..records }
     }
 
-    /// Those of `observations` of a form it reads.
+    /// Those of `observations` its client reads as such.
     fn kept(&self, observations: Vec<Observation>) -> Vec<Observation> {
         observations.into_iter().filter(|observation| self.keeps(&observation.key())).collect()
     }
 
-    /// Whether it's sent what GitHub says as GitHub's observations, rather than as `HubFrame::Github`.
+    /// Whether it's sent what GitHub says as GitHub's observations, rather than as `HubFrame::Github`: where its start
+    /// asked for them, and on a connection of a version that reads every observation.
     pub(super) fn github_observed(&self) -> bool {
-        self.github_observed
+        self.github_observed || self.version >= EVERY_OBSERVATION_FROM
     }
 
-    /// Whether it's sent `notice` in the form of what GitHub says it reads: every notice but those of GitHub's
-    /// observations, unless it reads them, as [`Sends::notice`] asks.
+    /// Whether it's sent `notice` in a form it reads: every notice but those of an observation its client reads in a
+    /// form from before it, as [`Sends::notice`] asks.
     #[expect(
         clippy::wildcard_enum_match_arm,
         reason = "picks out the notices of an observation, and every other notice is sent whatever the form"
@@ -95,8 +102,13 @@ impl Sends {
         self.keeps(&key)
     }
 
-    /// Whether it's sent the observation `key` in the form of what GitHub says it reads.
+    /// Whether it's sent the observation `key`: where its client reads that kind as an observation, rather than in a
+    /// form from before it, which it's sent instead, as [`ObservationKey::read_from`] says. One of a kind this build
+    /// doesn't know is sent, though the hub makes none.
     fn keeps(&self, key: &ObservationKey) -> bool {
-        self.github_observed || !key.is_github()
+        match key.read_from() {
+            Some(ReadFrom::Every) | None => true,
+            Some(ReadFrom::GithubObserved) => self.github_observed(),
+        }
     }
 }

@@ -46,7 +46,7 @@ async fn a_subscription_that_falls_behind_is_sent_where_its_level_stands_again()
 
     let level = Level::Session { id: "s".into() };
     drop(feed);
-    let sends = Sends::at(level, false);
+    let sends = Sends::at(level, false, 4);
     forward(behind, &sends, 7, &frames, &Closer::default(), list, |_| {}).await;
     drop(frames);
 
@@ -67,7 +67,8 @@ async fn the_hub_s_level_listed_again_shows_each_workspace_it_lists() {
     let hub = hub_in(dir.path());
     // Room for its first list alone, so it waits to send anything after, and falls behind the feed meanwhile.
     let (frames, mut sent) = mpsc::channel(1);
-    let feeding = hub_level::feeding(&hub, Sends::at(Level::Hub, false), 7, frames, Closer::default()).await.unwrap();
+    let feeding =
+        hub_level::feeding(&hub, Sends::at(Level::Hub, false, 4), 7, frames, Closer::default()).await.unwrap();
     let fed = tokio::spawn(feeding);
     let placement = WorkspacePlacement::local_checkout("/repo");
     store_of(&hub).insert_workspace(&protocol::fixtures::workspace("v"), &placement, None).unwrap();

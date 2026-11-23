@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, Hello, ReplyOutcome};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, Hello, HelloReply, ReplyOutcome};
 use protocol::frame;
 use protocol::model::ClientDevice;
 use protocol::pairing::device_name_from;
@@ -13,8 +13,10 @@ use tokio::time::Instant;
 use tracing::warn;
 
 use super::counted::Counted;
+use crate::error::internal;
 use crate::hub::Hub;
 use crate::remote::{DeviceLink, Revoke};
+use crate::versions;
 
 /// Where a connection comes from, which decides what it has to do first and what it may ask.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,8 +42,8 @@ enum Stage {
     /// Counted among the hub's clients, which only a client on the hub's machine, or a device that has
     /// authenticated, is, so a connection from anyone on the network can't make the count say more than who's using
     /// it. Saying hello doesn't change the stage, since moving the count to another would need a third stage to leave
-    /// behind meanwhile.
-    Admitted { greeted: bool, _counted: Counted },
+    /// behind meanwhile. `greeted` is the version of the client protocol its hello chose, once it has said one.
+    Admitted { greeted: Option<u32>, _counted: Counted },
 }
 
 pub(super) struct Gate {
@@ -53,6 +55,15 @@ pub(super) struct Gate {
     said: Option<ClientDevice>,
     /// Set if the device the connection authenticated as is revoked.
     revoke: Revoke,
+}
+
+/// What a connection's hello said, which a request it sends after can depend on.
+pub(super) struct Greeting {
+    /// The device its client is on, as [`Gate::client_device`] says.
+    pub(super) device: Option<ClientDevice>,
+    /// The version of the client protocol its hello chose, or the oldest the hub speaks before it said hello, as only
+    /// the requests that work without one are sent, which take no notice of it.
+    pub(super) version: u32,
 }
 
 /// What to do with a request.
@@ -70,11 +81,18 @@ impl Gate {
     pub(super) fn local(hub: &Arc<Hub>) -> Gate {
         Gate {
             origin: Origin::Local,
-            stage: Stage::Admitted { greeted: false, _counted: Counted::client(hub) },
+            stage: Stage::Admitted { greeted: None, _counted: Counted::client(hub) },
             device: None,
             said: None,
             revoke: Arc::new(watch::Sender::new(false)),
         }
+    }
+
+    /// A connection on the Unix socket that has said hello at `version`, which the hub needn't speak, for a test of what
+    /// the hub sends a client of a version it will speak, as a client of the next version does, once the hub speaks it.
+    #[cfg(test)]
+    pub(super) fn local_greeted_at(hub: &Arc<Hub>, version: u32) -> Gate {
+        Gate { stage: Stage::Admitted { greeted: Some(version), _counted: Counted::client(hub) }, ..Gate::local(hub) }
     }
 
     /// A connection from the network, accepted [`AUTHENTICATE_WITHIN`] before `deadline`, holding `unproven` until it
@@ -87,6 +105,15 @@ impl Gate {
             said: None,
             revoke: Arc::new(watch::Sender::new(false)),
         }
+    }
+
+    /// What the connection's hello said, as [`Greeting`] says.
+    pub(super) fn greeting(&self) -> Greeting {
+        let version = match self.stage {
+            Stage::Authenticating { .. } | Stage::Admitted { greeted: None, .. } => None,
+            Stage::Admitted { greeted, .. } => greeted,
+        };
+        Greeting { device: self.client_device(), version: version.unwrap_or(versions::CLIENTS.oldest) }
     }
 
     /// The device the connection's client is on: the one it authenticated as, from the network, and otherwise the one
@@ -122,25 +149,25 @@ impl Gate {
         let origin = self.origin;
         match &mut self.stage {
             Stage::Authenticating { .. } => self.authenticate(hub, &request).await,
-            Stage::Admitted { greeted: false, .. } if origin == Origin::Local && works_without_hello(&request) => {
+            Stage::Admitted { greeted: None, .. } if origin == Origin::Local && works_without_hello(&request) => {
                 Admit::Handle(request)
             }
-            Stage::Admitted { greeted: greeted @ false, .. } => match hello(hub, &request) {
-                Ok(response) => {
-                    *greeted = true;
+            Stage::Admitted { greeted: greeted @ None, .. } => match hello(hub, &request) {
+                Ok(reply) => {
+                    *greeted = Some(reply.protocol_version);
                     // Over the network, the device is the one the connection authenticated as, whatever it says.
                     if origin == Origin::Local {
                         self.said = said_device(&request);
                     }
-                    Admit::Answer(ReplyOutcome::Response(response))
+                    Admit::Answer(ReplyOutcome::Response(ClientResponse::Hello(reply)))
                 }
                 Err(error) => Admit::Refuse(ReplyOutcome::Error(error)),
             },
-            Stage::Admitted { greeted: true, .. } if origin == Origin::Network && local_only(&request) => {
+            Stage::Admitted { greeted: Some(_), .. } if origin == Origin::Network && local_only(&request) => {
                 let message = "only a client on the hub's own machine can ask that";
                 Admit::Answer(ReplyOutcome::Error(ApiError::new(ErrorCode::LocalOnly, message)))
             }
-            Stage::Admitted { greeted: true, .. } => Admit::Handle(request),
+            Stage::Admitted { greeted: Some(_), .. } => Admit::Handle(request),
         }
     }
 
@@ -166,7 +193,7 @@ impl Gate {
             Ok((response, link)) => {
                 self.device = Some(link);
                 // Gives up its place among those that haven't authenticated.
-                self.stage = Stage::Admitted { greeted: false, _counted: Counted::client(hub) };
+                self.stage = Stage::Admitted { greeted: None, _counted: Counted::client(hub) };
                 Admit::Answer(ReplyOutcome::Response(response))
             }
             Err(error) => Admit::Refuse(ReplyOutcome::Error(error)),
@@ -338,9 +365,10 @@ fn local_only(request: &ClientRequest) -> bool {
     }
 }
 
-fn hello(hub: &Hub, request: &ClientRequest) -> Result<ClientResponse, ApiError> {
+fn hello(hub: &Hub, request: &ClientRequest) -> Result<HelloReply, ApiError> {
     match super::hello::hello(hub.build(), Some(request)).0 {
-        ReplyOutcome::Response(reply) => Ok(reply),
+        ReplyOutcome::Response(ClientResponse::Hello(reply)) => Ok(reply),
+        ReplyOutcome::Response(other) => Err(internal(format!("a hello answered with {other:?}"))),
         ReplyOutcome::Error(error) => Err(error),
     }
 }
