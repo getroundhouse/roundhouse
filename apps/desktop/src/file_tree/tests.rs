@@ -122,3 +122,12 @@ fn a_row_of_folders_stands_for_each_of_them() {
     assert_eq!(chain("crates/hub/src", &names(&["hub", "src"])), ["crates/hub", "crates/hub/src"]);
     assert_eq!(chain("docs", &names(&["docs"])), ["docs"]);
 }
+
+/// A path given twice is two files, as a changed file taken out of git's index and left in the worktree is, each with
+/// a row, in the order they were given.
+#[test]
+fn a_path_given_twice_is_two_rows() {
+    let rows = Tree::new(["docs/a.md", "docs/a.md", "docs/b.md"]).rows(|_| true);
+
+    assert_eq!(rows, vec![folder("docs", &["docs"], 0, true), file(0, 1), file(1, 1), file(2, 1)]);
+}

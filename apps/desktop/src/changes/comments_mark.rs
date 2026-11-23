@@ -69,6 +69,7 @@ mod tests {
     fn a_closed_folder_counts_the_comments_on_the_changed_files_under_it() {
         let row = |path: &'static str| ChangedRow {
             path: path.into(),
+            untracked: false,
             status: crate::patch::FileStatus::Modified,
             added: 1,
             removed: 1,

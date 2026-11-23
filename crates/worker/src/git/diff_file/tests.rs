@@ -8,15 +8,28 @@ use crate::git::ChangeSummaries;
 use crate::git::tests::{new_repo, run};
 use crate::testing::given;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{FileDiff, FileDiffBody, MOST_PATCH_PAGE_BYTES};
+use protocol::model::{ChangedFile, ChangedFileAt, FileDiff, FileDiffBody, MOST_PATCH_PAGE_BYTES};
 use protocol::worker::DiffFile;
 use std::path::Path;
 
+/// The tracked entry at `file`, or the untracked one where git tracks nothing there, as a request names either that
+/// doesn't say which.
 async fn diff(worktree: &Path, file: &str, from: Option<&str>, first_line: u32) -> Result<FileDiff, ApiError> {
+    diff_of(worktree, (file, false), from, first_line).await
+}
+
+/// The entry at `file` that's untracked, or not, as `untracked` says.
+async fn diff_of(
+    worktree: &Path,
+    (file, untracked): (&str, bool),
+    from: Option<&str>,
+    first_line: u32,
+) -> Result<FileDiff, ApiError> {
     let asked = DiffFile {
         path: worktree.to_str().unwrap().into(),
         base_ref: None,
         file: file.into(),
+        untracked,
         from: from.map(str::to_string),
         first_line,
     };
@@ -35,16 +48,14 @@ fn write(worktree: &Path, file: &str, content: impl AsRef<[u8]>) {
     std::fs::write(worktree.join(file), content).unwrap();
 }
 
-/// Each kind of change a summary names, and what's been put back since, with the version the summary gives each and the
-/// base it's taken against. Not what git ignores.
-#[tokio::test]
-async fn diff_file_takes_each_kind_of_change_against_the_summary_s_base_with_its_version() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
+/// A repository in `dir` with each kind of change a summary names, and a change put back.
+fn changing_each_kind(dir: &Path) -> std::path::PathBuf {
+    let repo = new_repo(dir);
     for file in ["old.txt", "gone.txt"] {
         write(&repo, file, "one\ntwo\nthree\nfour\nfive\n");
     }
     write(&repo, "deleted.txt", "doomed\n");
+    write(&repo, "unindexed.txt", "kept on disk\n");
     write(&repo, "put_back.txt", "as it was\n");
     write(&repo, "big.txt", "a line of a file larger than git reads to compare\n".repeat(40));
     run(&repo, &["add", "."]);
@@ -59,37 +70,53 @@ async fn diff_file_takes_each_kind_of_change_against_the_summary_s_base_with_its
     run(&repo, &["mv", "gone.txt", "rewritten.txt"]);
     write(&repo, "rewritten.txt", "nothing like it\n");
     std::fs::remove_file(repo.join("deleted.txt")).unwrap();
+    run(&repo, &["rm", "-q", "--cached", "unindexed.txt"]);
     write(&repo, "put_back.txt", "other\n");
     write(&repo, "put_back.txt", "as it was\n");
     std::fs::create_dir(repo.join("ignored")).unwrap();
     write(&repo, "ignored/build.log", "ignored\n");
+    repo
+}
+
+/// Each kind of change a summary names, each entry asked for as the summary names it, and what's been put back since,
+/// with the version the summary gives each and the base it's taken against. Not what git ignores. A file taken out of
+/// git's index and left in the worktree is two entries, a deletion and an untracked file, and each is read apart. An
+/// untracked file asked for without saying so is read as a request from before `untracked` asks for it.
+#[tokio::test]
+async fn diff_file_takes_each_kind_of_change_against_the_summary_s_base_with_its_version() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = changing_each_kind(dir.path());
     let summary = ChangeSummaries::default().summarize(&given(), &repo, None).await.unwrap();
+    let patch = |holds, lacks| Expected::Patch { holds, lacks };
     let cases = [
-        ("a.txt", None, Expected::Patch { holds: &["-one\n", "+uno\n", "+two\n"], lacks: &[] }),
-        ("untracked.txt", None, Expected::Patch { holds: &["+new\n"], lacks: &[] }),
-        ("untracked.bin", None, Expected::Binary),
-        ("big.txt", None, Expected::Binary),
-        ("new.txt", Some("old.txt"), Expected::Patch { holds: &["rename from old.txt\n", "+six\n"], lacks: &[] }),
-        (
-            "rewritten.txt",
-            Some("gone.txt"),
-            Expected::Patch { holds: &["+nothing like it\n"], lacks: &["gone.txt", "-one\n"] },
-        ),
-        ("deleted.txt", None, Expected::Patch { holds: &["-doomed\n"], lacks: &[] }),
-        ("put_back.txt", None, Expected::Unchanged),
-        ("ignored/build.log", None, Expected::Unchanged),
-        ("never_there.txt", None, Expected::Unchanged),
+        (("a.txt", false), None, patch(&["-one\n", "+uno\n", "+two\n"], &[])),
+        (("untracked.txt", true), None, patch(&["+new\n"], &[])),
+        (("untracked.txt", false), None, patch(&["+new\n"], &[])),
+        (("untracked.bin", true), None, Expected::Binary),
+        (("big.txt", false), None, Expected::Binary),
+        (("new.txt", false), Some("old.txt"), patch(&["rename from old.txt\n", "+six\n"], &[])),
+        (("rewritten.txt", false), Some("gone.txt"), patch(&["+nothing like it\n"], &["gone.txt", "-one\n"])),
+        (("deleted.txt", false), None, patch(&["-doomed\n"], &[])),
+        (("unindexed.txt", false), None, patch(&["-kept on disk\n"], &["+kept on disk\n"])),
+        (("unindexed.txt", true), None, patch(&["+kept on disk\n"], &["-kept on disk\n"])),
+        (("put_back.txt", false), None, Expected::Unchanged),
+        (("ignored/build.log", true), None, Expected::Unchanged),
+        (("never_there.txt", false), None, Expected::Unchanged),
     ];
 
-    for (file, from, expected) in cases {
-        let diff = diff(&repo, file, from, 0).await.unwrap();
+    let pair = summary.files.iter().filter(|listed| listed.path == "unindexed.txt").map(ChangedFile::at);
+    assert_eq!(pair.map(|at| at.untracked).collect::<Vec<_>>(), [false, true], "listed twice");
+
+    for ((file, untracked), from, expected) in cases {
+        let diff = diff_of(&repo, (file, untracked), from, 0).await.unwrap();
 
         assert_eq!(diff.base_commit, summary.base_commit, "{file}");
-        let listed = summary.files.iter().find(|listed| listed.path == file);
-        let readable = !["deleted.txt", "never_there.txt"].contains(&file);
-        assert_eq!(diff.version.is_some(), readable, "{file}: {diff:?}");
-        if let Some(listed) = listed {
-            assert_eq!(diff.version, listed.version, "{file}: as the summary names it");
+        let deletion =
+            ["deleted.txt", "never_there.txt"].contains(&file) || (file, untracked) == ("unindexed.txt", false);
+        assert_eq!(diff.version.is_some(), !deletion, "{file}, untracked {untracked}: {diff:?}");
+        let at = ChangedFileAt { untracked, path: file.into() };
+        if let Some(listed) = summary.files.iter().find(|listed| listed.at() == at) {
+            assert_eq!(diff.version, listed.version, "{file}, untracked {untracked}: as the summary names it");
         }
         match (&expected, &diff.body) {
             (Expected::Patch { holds, lacks }, FileDiffBody::Patch { patch, next_line: None }) => {

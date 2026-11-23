@@ -137,8 +137,7 @@ impl FileDiff {
 
     /// The file it shows, as the diff last loaded has it. `None` once it no longer changes anything.
     pub fn file<'a>(&self, cx: &'a App) -> Option<&'a FilePatch> {
-        let path = self.path.as_ref()?;
-        self.review.read(cx).file(path)
+        self.path.as_ref().and(self.review.read(cx).file())
     }
 
     /// How far its code is scrolled sideways.
@@ -167,7 +166,7 @@ impl FileDiff {
     /// The file it draws the diff of, or what it says in place of one: while the file is read, or its sides are made,
     /// or once it changes nothing, or couldn't be read.
     fn drawn(&self, cx: &App) -> Result<FilePatch, &'static str> {
-        let diffed = self.path.as_deref().map_or(Diffed::Loading, |path| self.review.read(cx).diffed(path));
+        let diffed = self.path.as_ref().map_or(Diffed::Loading, |_| self.review.read(cx).diffed());
         match diffed {
             Diffed::Patch(file) if file.is_binary() || self.shown.is_some() => Ok(file.clone()),
             Diffed::Patch(_) | Diffed::Loading => Err("Loading…"),

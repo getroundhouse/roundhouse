@@ -6,4 +6,5 @@
 
 mod listed;
 mod one_file;
+mod one_path_twice;
 mod world;

@@ -24,7 +24,9 @@ pub(crate) struct Tree {
 #[derive(Debug, Default)]
 pub(super) struct Folder {
     pub(super) folders: BTreeMap<String, Folder>,
-    pub(super) files: BTreeMap<String, usize>,
+    /// Each file's place in the paths the tree was made from, by name, in order. A name can be more than one file, as
+    /// a changed file taken out of git's index and left in the worktree is, its deletion and its untracked copy.
+    pub(super) files: BTreeMap<String, Vec<usize>>,
     /// It's read only when it's opened, so it never shares a row with a folder inside it, which would make opening it
     /// look like renaming it.
     pub(super) own_row: bool,
@@ -47,7 +49,11 @@ impl Tree {
         }
         for (index, path) in paths.into_iter().enumerate() {
             let (folders, name) = path.rsplit_once('/').map_or((None, path), |(dir, name)| (Some(dir), name));
-            root.folder(folders.into_iter().flat_map(|dir| dir.split('/'))).files.insert(name.to_string(), index);
+            root.folder(folders.into_iter().flat_map(|dir| dir.split('/')))
+                .files
+                .entry(name.to_string())
+                .or_default()
+                .push(index);
         }
         Self { root }
     }
@@ -94,7 +100,7 @@ impl Folder {
                 inner.push_rows(&full, depth + 1, open, out);
             }
         }
-        out.extend(self.files.values().map(|index| Row::File { index: *index, depth }));
+        out.extend(self.files.values().flatten().map(|index| Row::File { index: *index, depth }));
     }
 
     /// The one folder inside this one, when it holds nothing else, and can share its row.

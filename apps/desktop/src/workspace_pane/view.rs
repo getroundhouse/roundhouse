@@ -233,7 +233,7 @@ impl Render for WorkspacePane {
         let tab =
             self.diff.as_ref().filter(|_| self.showing() == Showing::File).map(|diff| match self.file_tab_opened() {
                 Some(Opened::File) => diff.viewer.clone().into_any_element(),
-                Some(Opened::Diff) | None => diff.file.clone().into_any_element(),
+                Some(Opened::Diff { .. }) | None => diff.file.clone().into_any_element(),
             });
         let showing = match tab {
             Some(tab) => div().region(Region::OpenFile).flex_1().min_h_0().w_full().child(tab).into_any_element(),

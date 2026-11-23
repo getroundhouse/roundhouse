@@ -18,7 +18,7 @@ impl WorkspacePane {
                 let Some(diff) = &self.diff else { return };
                 match diff.tab.as_ref().map(|tab| tab.opened) {
                     Some(Opened::File) => window.focus(&diff.viewer.focus_handle(cx), cx),
-                    Some(Opened::Diff) | None => window.focus(&diff.file.focus_handle(cx), cx),
+                    Some(Opened::Diff { .. }) | None => window.focus(&diff.file.focus_handle(cx), cx),
                 }
             }
             Showing::Chat => self.focus_composer(window, cx),

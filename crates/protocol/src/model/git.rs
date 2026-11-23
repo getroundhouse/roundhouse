@@ -51,6 +51,8 @@ pub struct GitDiff {
     /// names it, since with no commit at HEAD there's no diff to take. `None` only from a worker older than this,
     /// which took a diff with no merge base from HEAD without naming its commit.
     pub base_commit: Option<CommitId>,
+    /// git's diff of what it tracks, then each untracked file's against nothing. So a file taken out of git's index and
+    /// left in the worktree is in it twice, its deletion first, then the untracked file.
     pub patch: String,
     /// True when untracked files were left out to keep the response bounded.
     pub truncated: bool,

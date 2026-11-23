@@ -9,8 +9,8 @@ use protocol::attachment::MediaType;
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentKind, ClientRequestId, DiffSide, FileContents, FileDiffBody, FileOpened, FilePage, PageLine, SessionStatus,
-    WorkspaceStatus,
+    AgentKind, ChangedFileAt, ClientRequestId, DiffSide, FileContents, FileDiffBody, FileOpened, FilePage, PageLine,
+    SessionStatus, WorkspaceStatus,
 };
 
 use crate::support::{
@@ -107,27 +107,34 @@ fn a_forced_archive_stops_a_running_agent() {
     assert_eq!(session.status, SessionStatus::Interrupted);
 }
 
+/// Taking `a.txt` out of git's index leaves it in the worktree, so it's two files at one path: its deletion, and the
+/// untracked file of its own. One file's diff of each is asked for by whether it's untracked.
 #[test]
 fn status_and_diff_come_from_the_worker() {
     let stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "tool:echo changed >> a.txt && echo new > new.txt", None).unwrap();
+    let script = "tool:echo changed >> a.txt && echo new > new.txt && git rm -q --cached a.txt";
+    client.session_prompt(&session.id, script, None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
 
     let status = client.workspace_status(&workspace.id).unwrap();
     assert_eq!(status.branch, Some(workspace.branch));
-    let file = |path: &str| status.files.iter().find(|f| f.path == path).unwrap().status.clone();
-    assert_eq!(file("a.txt"), ".M");
-    assert_eq!(file("new.txt"), "??");
+    let of = |path: &str| status.files.iter().filter(|f| f.path == path).map(|f| f.status.as_str()).collect::<Vec<_>>();
+    assert_eq!(of("a.txt"), ["D.", "??"]);
+    assert_eq!(of("new.txt"), ["??"]);
 
     let diff = client.workspace_diff(&workspace.id).unwrap();
     assert!(diff.patch.contains("+changed"), "{}", diff.patch);
     assert!(diff.patch.contains("+new"), "{}", diff.patch);
-    let one = client.workspace_file_diff(&workspace.id, "a.txt", None, 0).unwrap();
-    assert_eq!(Some(&one.base_commit), diff.base_commit.as_ref());
-    let FileDiffBody::Patch { patch, next_line: None } = one.body else { panic!("{one:?}") };
-    assert!(patch.contains("+changed") && !patch.contains("+new"), "{patch}");
+    for (untracked, holds, lacks) in [(false, "-one", "+changed"), (true, "+changed", "-one")] {
+        let at = ChangedFileAt { untracked, path: "a.txt".into() };
+        let one = client.workspace_file_diff(&workspace.id, &at, None, 0).unwrap();
+        assert_eq!(Some(&one.base_commit), diff.base_commit.as_ref());
+        assert_eq!(one.version.is_some(), untracked, "only the untracked file is in the worktree");
+        let FileDiffBody::Patch { patch, next_line: None } = one.body else { panic!("{one:?}") };
+        assert!(patch.contains(holds) && !patch.contains(lacks) && !patch.contains("+new"), "{untracked}: {patch}");
+    }
 }
 
 /// The worker lists and reads them, as they are and as the diff's base has them, whole or a page at a time, or a video

@@ -267,7 +267,7 @@ impl ImageDiff {
     pub(super) fn read(&mut self, cx: &mut Context<Self>) {
         let Some(path) = self.path.as_ref() else { return };
         let review = self.review.read(cx);
-        let Some(file) = review.file(path).filter(|file| file.is_binary()) else { return };
+        let Some(file) = review.file().filter(|file| file.is_binary() && file.path() == path) else { return };
         let (before, after) = (file.old_path().map(ToString::to_string), file.new_path().map(ToString::to_string));
         let ((client, id), base) = (review.source(), review.base_commit().cloned());
         let from = base.clone().zip(before.clone());

@@ -1,14 +1,14 @@
 use super::{comments_mark, rows};
 use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
 use crate::patch::FileStatus;
-use crate::review::{ChangedRow, Paging, Review};
+use crate::review::{ChangedEntry, ChangedRow, Paging, Review};
 use crate::shared_choice::{choose, chosen};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, Entity, EventEmitter, IntoElement, ParentElement, Render, SharedString, Styled,
-    Subscription, Window, div, uniform_list,
+    AnyElement, App, Context, Entity, EventEmitter, IntoElement, ParentElement, Render, Styled, Subscription, Window,
+    div, uniform_list,
 };
 use look::{IconSizing as _, LineText, Placed, Typeset as _};
 use rows::Layout;
@@ -18,7 +18,7 @@ use std::ops::Range;
 #[derive(Clone, Debug)]
 pub enum ChangesEvent {
     /// Show this file in the file tab.
-    Open(SharedString),
+    Open(ChangedEntry),
 }
 
 /// The layout chosen, which every workspace shares until the app quits.
@@ -37,7 +37,7 @@ fn toggle_layout(cx: &mut App) {
 pub struct Changes {
     pub(super) review: Entity<Review>,
     /// The file the file tab shows, as the pane says, which its row marks.
-    pub(super) showing: Option<SharedString>,
+    pub(super) showing: Option<ChangedEntry>,
     /// Folders closed in the tree, by path.
     pub(super) closed: HashSet<String>,
     /// The rows as last laid out, which the list draws from as it scrolls, and the layout they're in. They're laid out
@@ -60,8 +60,8 @@ impl Changes {
     }
 
     /// Marks the row of the file the file tab shows, or none.
-    pub fn set_showing(&mut self, path: Option<SharedString>, cx: &mut Context<Self>) {
-        self.showing = path;
+    pub fn set_showing(&mut self, entry: Option<ChangedEntry>, cx: &mut Context<Self>) {
+        self.showing = entry;
         cx.notify();
     }
 
@@ -94,10 +94,19 @@ impl Changes {
             let review = self.review.read(cx);
             let files = review.listing().map_or_default(|listing| &*listing.rows);
             let file = |row: &Row| match row {
-                Row::File { index, .. } => files.get(*index).cloned(),
+                Row::File { index, .. } => {
+                    // Listed in order of path, the tracked file before the untracked one.
+                    let at = |other: Option<usize>, file: &ChangedRow| {
+                        other.and_then(|other| files.get(other)).is_some_and(|other| other.path == file.path)
+                    };
+                    files.get(*index).map(|file| {
+                        let (before, after) = (at(index.checked_sub(1), file), at(index.checked_add(1), file));
+                        (file.clone(), Twins { second: before, shared: before || after })
+                    })
+                }
                 Row::Folder { .. } => None,
             };
-            let in_view: Vec<Option<ChangedRow>> = rows.iter().map(file).collect();
+            let in_view: Vec<Option<(ChangedRow, Twins)>> = rows.iter().map(file).collect();
             (in_view, comments_mark::commented(files, &review.comments))
         };
         rows.into_iter()
@@ -124,10 +133,11 @@ impl Changes {
                     .into_any_element(),
                 ),
                 Row::File { depth, .. } => {
-                    let file = file?;
-                    let showing = open.as_ref() == Some(&file.path);
+                    let (file, twins) = file?;
+                    let showing = open.as_ref().is_some_and(|open| open.is(&file.path, file.untracked, twins.shared));
                     let comments = commented.get(file.path.as_ref()).copied().unwrap_or_default();
-                    Some(file_row(&file, depth, layout, showing, comments, &line_text, cx))
+                    let id = row_id(&file.path, twins.second);
+                    Some(file_row(&file, id, (depth, layout), showing, comments, &line_text, cx))
                 }
             })
             .collect()
@@ -238,12 +248,26 @@ fn status_icon(status: FileStatus, cx: &App) -> Icon {
     Icon::new(icon).sized(look::IconSize::Small).text_color(color)
 }
 
-/// A changed file's row: where it is, then its name, and at the right end how many comments it has, if any, how many
-/// lines it adds and removes, on the name's baseline, and how it changed.
+/// Whether a changed file's row shares its path with another's, and is the second of them, as the untracked one is.
+#[derive(Clone, Copy)]
+struct Twins {
+    shared: bool,
+    second: bool,
+}
+
+/// The element ID of the row of the file at `path`: `file-` and its path, but for the untracked file at a path a
+/// tracked file is at too, as one taken out of git's index and left in the worktree is, whose row is the tracked one's
+/// `:untracked`, so each row is one element.
+fn row_id(path: &str, twinned: bool) -> String {
+    if twinned { format!("file-{path}:untracked") } else { format!("file-{path}") }
+}
+
+/// A changed file's row, as the element `id`: where it is, then its name, and at the right end how many comments it
+/// has, if any, how many lines it adds and removes, on the name's baseline, and how it changed.
 fn file_row(
     file: &ChangedRow,
-    depth: usize,
-    layout: Layout,
+    id: String,
+    (depth, layout): (usize, Layout),
     showing: bool,
     comments: usize,
     line_text: &LineText,
@@ -267,7 +291,8 @@ fn file_row(
         .child(div().flex_shrink_0().child(name));
     let status = status_icon(file.status, cx);
     let comments = comments_mark::mark(&path, comments, line_text, cx);
-    row_frame(format!("file-{path}"), List::Changes, depth, showing)
+    let entry = file.entry();
+    row_frame(id, List::Changes, depth, showing)
         .child(label)
         .child(
             h_flex()
@@ -277,7 +302,7 @@ fn file_row(
                 .child(look::lines_changed(look::LinesKind::Plain, file.added, file.removed).placed(&line_text.code))
                 .child(status),
         )
-        .on_click(cx.listener(move |_, _, _, cx| cx.emit(ChangesEvent::Open(path.clone()))))
+        .on_click(cx.listener(move |_, _, _, cx| cx.emit(ChangesEvent::Open(entry.clone()))))
         .into_any_element()
 }
 

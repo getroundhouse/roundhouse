@@ -172,7 +172,11 @@ fn a_file_clicked_in_all_files_shows_as_it_is_in_the_file_tab(cx: &mut TestAppCo
     ui.wait("the changes", |ui| ui.has("file-src/lib.rs"));
     ui.click("file-src/lib.rs");
 
-    assert_eq!(tab(&ui), (Showing::File, Some("src/lib.rs".to_string()), Some(Opened::Diff)), "the same tab");
+    assert_eq!(
+        tab(&ui),
+        (Showing::File, Some("src/lib.rs".to_string()), Some(Opened::Diff { untracked: false })),
+        "the same tab"
+    );
     assert_eq!(views(&ui), (Some("src/lib.rs".to_string()), None), "the diff in place of the file");
 }
 
@@ -183,7 +187,7 @@ fn a_file_clicked_in_all_files_takes_the_place_of_a_diff(cx: &mut TestAppContext
     ui.click("sidebar-tab-changes");
     ui.wait("the changes", |ui| ui.has("file-src/lib.rs"));
     ui.click("file-src/lib.rs");
-    assert_eq!(tab(&ui).2, Some(Opened::Diff));
+    assert_eq!(tab(&ui).2, Some(Opened::Diff { untracked: false }));
     show_all_files(&mut ui);
 
     open_lib(&mut ui);

@@ -8,21 +8,24 @@ use client_core::fake_hub::WorkerReads;
 use gpui_kit::{AppContext as _, TestAppContext};
 use parking_lot::Mutex;
 use protocol::model::{
-    ChangeStatus, ChangeSummary, ChangedFile, CommitId, FileDiff, FileDiffBody, FileVersion, Observation, Observed, Rev,
+    ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, CommitId, FileDiff, FileDiffBody, FileVersion,
+    Observation, Observed, Rev,
 };
 
 use desktop::patch::FilePatch;
 use desktop::review::Diffed;
 
 use super::world::{
-    BASE, VERSION, current, drawn_line, every_file, file, pages_of, patch_of, reading_everything, summarized, versioned,
+    BASE, VERSION, current, drawn_line, every_file, file, page_with, pages_of, patch_of, reading_everything,
+    summarized, tracked, versioned,
 };
 use crate::support::{Diff, Ui};
 
 /// While the summary is current, the file the file tab shows is read on its own, every page of it, and the moments
 /// that read the whole diff, such as Changes being chosen, don't. It's read again when the summary gives it another
 /// version, showing what was read until the new read comes, and not when it gives another file one. Once the summary
-/// stops being current, it stays listed, and another file clicked is read with the whole diff, which takes over.
+/// stops being current, it stays listed, and another file clicked is read with the whole diff, which takes over, and
+/// once a summary is current again, that file is read on its own as the summary names it.
 #[gpui_kit::test]
 fn the_file_shown_is_read_on_its_own_and_again_only_when_the_summary_moves_it(cx: &mut TestAppContext) {
     let reads = reading_everything();
@@ -33,8 +36,9 @@ fn the_file_shown_is_read_on_its_own_and_again_only_when_the_summary_moves_it(cx
         let changes = current(ChangeSummary::listing_at_most(CommitId::from(BASE), files, 2));
         Observation::WorkspaceChanges { workspace_id: workspace.clone(), changes, rev: Rev::new(rev) }
     };
-    let pages_read =
-        |read: &Arc<Mutex<Vec<(String, u32)>>>| -> Vec<u32> { read.lock().iter().map(|(_, line)| *line).collect() };
+    let pages_read = |read: &Arc<Mutex<Vec<(ChangedFileAt, u32)>>>| -> Vec<u32> {
+        read.lock().iter().map(|(_, line)| *line).collect()
+    };
     let whole = |ui: &Ui<'_>| ui.cx.read_entity(&diff.review, |r, _| r.whole_diff_reads());
 
     ui.open_diff_of(&diff, "a.txt");
@@ -70,6 +74,12 @@ fn the_file_shown_is_read_on_its_own_and_again_only_when_the_summary_moves_it(cx
     assert_eq!(whole(&ui), before + 1, "another file is read with the whole diff");
     assert_eq!(drawn_line(&ui, &diff, 3).as_deref(), Some("fn c() {}"));
     assert!(!ui.has("changed-files-left-out"), "which Changes lists now");
+    // Clicked from the whole diff, which can't say the file is untracked, it's asked for as the next summary names it.
+    ui.click("file-src/new.rs");
+    ui.view().feed().unwrap().take_observation(summary(versioned(every_file(), "814f4a4"), 6));
+    let asked = |read: &Arc<Mutex<Vec<(ChangedFileAt, u32)>>>| read.lock().last().map(|(at, _)| at.clone());
+    ui.wait("src/new.rs read on its own", |_| asked(&read).is_some_and(|at| at.path == "src/new.rs"));
+    assert_eq!(asked(&read).map(|at| at.untracked), Some(true), "as the summary names it");
 }
 
 /// Whether the app holds `path` at a version other than the first summary's, which [`VERSION`] gives only `a.txt`.
@@ -112,11 +122,6 @@ enum Shows {
     Image,
     /// What it says in place of a diff.
     Says(&'static str),
-}
-
-/// A page of one file's diff, against [`BASE`], of `version`, or of none, with `body`.
-fn page_with(body: FileDiffBody, version: Option<&str>) -> FileDiff {
-    FileDiff { base_commit: CommitId::from(BASE), version: version.map(|version| version.to_string().into()), body }
 }
 
 /// A file of [`the_file_tab_draws_what_one_file_s_diff_says_of_the_file`], which the summary names `v2` of.
@@ -188,7 +193,10 @@ fn see(ui: &mut Ui<'_>, diff: &Diff, path: &str, shows: Shows) {
             (file, view.says_instead(cx))
         })
     };
-    let read_now = |ui: &Ui<'_>| ui.cx.read_entity(&diff.review, |r, _| r.diffed(path) != Diffed::Loading);
+    let read_now = |ui: &Ui<'_>| {
+        let tab = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.file_tab());
+        tab.as_deref() == Some(path) && ui.cx.read_entity(&diff.review, |r, _| r.diffed() != Diffed::Loading)
+    };
     ui.wait(path, |ui| match shows {
         Shows::Adds(line) => drawn(ui) == (Some(false), None) && drawn_line(ui, diff, 2).as_deref() == Some(line),
         Shows::Image => drawn(ui) == (Some(true), None),
@@ -207,11 +215,11 @@ fn the_file_tab_draws_what_one_file_s_diff_says_of_the_file(cx: &mut TestAppCont
     let mut reads = WorkerReads::default();
     for Row { path, reads: pages, .. } in &rows {
         for (line, read) in pages {
-            reads.file_diffs.insert(((*path).to_string(), *line), read.clone());
+            reads.file_diffs.insert((tracked(path), *line), read.clone());
         }
     }
     let read = reads.diffs_read.clone();
-    let reads_of = |path: &str| read.lock().iter().filter(|(read, _)| read == path).count();
+    let reads_of = |path: &str| read.lock().iter().filter(|(read, _)| read.path == path).count();
     let listed =
         |path: &&str| ChangedFile { version: Some("v2".to_string().into()), ..file(path, ChangeStatus::Modified, 1) };
     let files: Vec<_> = rows.iter().map(|row| listed(&row.path)).collect();

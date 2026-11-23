@@ -4,17 +4,43 @@
 use std::sync::Arc;
 
 use gpui_kit::{AppContext as _, Context, SharedString};
-use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, CommitId, LineCounts, Observed};
+use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, CommitId, LineCounts, Observed};
 
 use super::listed::{Listed, Summary, SummaryFile};
 use super::{Review, ReviewEvent};
 use crate::patch::{FilePatch, FileStatus};
 use client_core::workspace_lines::counted;
 
+/// Which of the changed files one is: its path, and whether it's the untracked file there, since one path can be two
+/// changed files, as a file taken out of git's index and left in the worktree is, its deletion and the untracked file
+/// of its own, as the hub's summary lists them.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ChangedEntry {
+    pub path: SharedString,
+    pub untracked: bool,
+}
+
+impl ChangedEntry {
+    /// Whether it's the file `path` and `untracked` say, of a list where `shared` says whether another file is at
+    /// that path. A list where the path is once is of the one file there, whether it's tracked or not, since the whole
+    /// diff says which of its files git tracks only where a path is twice, as [`WholeDiff`](super::listed::WholeDiff)
+    /// says, so a file the summary lists as untracked is the whole diff's file at its path.
+    pub fn is(&self, path: &str, untracked: bool, shared: bool) -> bool {
+        self.path.as_ref() == path && (!shared || self.untracked == untracked)
+    }
+
+    /// It as a summary names it, and one file's diff asks for it.
+    pub(super) fn at(&self) -> ChangedFileAt {
+        ChangedFileAt { untracked: self.untracked, path: self.path.to_string() }
+    }
+}
+
 /// One changed file as Changes lists it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ChangedRow {
     pub path: SharedString,
+    /// It's the untracked file at its path, as [`ChangedEntry`] says.
+    pub untracked: bool,
     pub status: FileStatus,
     pub added: usize,
     pub removed: usize,
@@ -58,6 +84,13 @@ pub struct Listing {
     pub truncated: bool,
 }
 
+impl ChangedRow {
+    /// Which changed file it is.
+    pub fn entry(&self) -> ChangedEntry {
+        ChangedEntry { path: self.path.clone(), untracked: self.untracked }
+    }
+}
+
 impl Listing {
     /// How many files the workspace changes, those left out included.
     pub fn changed(&self) -> usize {
@@ -89,7 +122,7 @@ impl Review {
                 (listed.summarized.paging, listed.file, None)
             }
             Some(Listed::WholeDiff(whole)) => {
-                (Paging::Idle, SummaryFile::OneFile(None), self.diffed.as_ref().map(|path| whole.taken(path)))
+                (Paging::Idle, SummaryFile::OneFile(None), self.diffed.as_ref().map(|entry| whole.taken(entry)))
             }
             None => (Paging::Idle, SummaryFile::OneFile(None), None),
         };
@@ -179,7 +212,7 @@ impl Review {
                 truncated: false,
             },
             Listed::WholeDiff(whole) => Listing {
-                rows: by_path(whole.files.iter().map(patched_row).collect()),
+                rows: by_path(whole.entries().map(|(untracked, file)| patched_row(file, untracked)).collect()),
                 left_out: 0,
                 paging: None,
                 truncated: whole.truncated,
@@ -197,9 +230,10 @@ impl Summarized {
         }
     }
 
-    /// What the summary, or a page read past it, says of the file at `path`, if it lists it.
-    pub(super) fn file(&self, path: &str) -> Option<&ChangedFile> {
-        self.files.iter().find(|file| file.path == path)
+    /// What the summary, or a page read past it, says of `entry`, if it lists it, as [`ChangedEntry::is`] finds it.
+    pub(super) fn file(&self, entry: &ChangedEntry) -> Option<&ChangedFile> {
+        let shared = self.files.iter().filter(|file| file.path == entry.path.as_ref()).count() > 1;
+        self.files.iter().find(|file| entry.is(&file.path, file.at().untracked, shared))
     }
 }
 
@@ -214,9 +248,9 @@ pub(super) fn file_status(status: ChangeStatus) -> FileStatus {
     }
 }
 
-/// `rows` in order of their paths, as Changes lists them.
+/// `rows` in order of their paths, as Changes lists them, the tracked file at a path before the untracked one.
 fn by_path(mut rows: Vec<ChangedRow>) -> Arc<[ChangedRow]> {
-    rows.sort_by(|a, b| a.path.cmp(&b.path));
+    rows.sort_by(|a, b| (&a.path, a.untracked).cmp(&(&b.path, b.untracked)));
     rows.into()
 }
 
@@ -226,15 +260,17 @@ fn summarized_row(file: &ChangedFile) -> ChangedRow {
     let count = |lines: fn(LineCounts) -> u64| file.lines.map_or(0, |counts| counted(lines(counts)));
     ChangedRow {
         path: file.path.clone().into(),
+        untracked: file.at().untracked,
         status,
         added: count(|counts| counts.added),
         removed: count(|counts| counts.removed),
     }
 }
 
-/// A file as the whole diff has it.
-fn patched_row(file: &FilePatch) -> ChangedRow {
-    ChangedRow { path: file.path().clone(), status: file.status(), added: file.added(), removed: file.removed() }
+/// A file as the whole diff has it, the untracked one at its path where `untracked` says so.
+fn patched_row(file: &FilePatch, untracked: bool) -> ChangedRow {
+    let (path, status) = (file.path().clone(), file.status());
+    ChangedRow { path, untracked, status, added: file.added(), removed: file.removed() }
 }
 
 #[cfg(test)]

@@ -1,8 +1,8 @@
 use super::listed::{Listed, Summary, SummaryFile, WholeDiff};
-use super::listing::Listing;
+use super::listing::{ChangedEntry, Listing};
 use crate::patch;
 use client_core::Client;
-use gpui_kit::{AppContext as _, Context, EventEmitter, SharedString};
+use gpui_kit::{AppContext as _, Context, EventEmitter};
 use protocol::model::{CommentDraft, CommentId, DiffComment, WorkspaceId};
 use std::collections::HashSet;
 
@@ -35,7 +35,7 @@ pub struct Review {
     /// How many times a summary has been taken, so a page asked for before it changed isn't listed after it.
     pub(super) summaries_taken: u64,
     /// The file the file tab shows the diff of, which is read on its own while the summary is current.
-    pub(super) diffed: Option<SharedString>,
+    pub(super) diffed: Option<ChangedEntry>,
     /// How many times one file's diff has been asked for, so only the newest answer is taken.
     pub(super) one_file_asks: u64,
     /// What's shown: client-core's copy, less what's being deleted here.

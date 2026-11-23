@@ -9,12 +9,14 @@ use std::path::PathBuf;
 
 use super::{Showing, WorkspacePane, tab};
 use crate::file_diff::FileDiff;
+use crate::review::ChangedEntry;
 
 /// What the file tab shows of its file, which depends on where it was opened from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Opened {
-    /// Its diff, opened from Changes.
-    Diff,
+    /// Its diff, opened from Changes: of the untracked file at its path, or not, as `untracked` says, since one path can
+    /// be two changed files, as a file taken out of git's index and left in the worktree is.
+    Diff { untracked: bool },
     /// The file as it is in the worktree, opened from All files.
     File,
 }
@@ -39,8 +41,8 @@ impl WorkspacePane {
     }
 
     /// Shows a file's diff in the file tab, opening the tab if it isn't, and brings it to the front.
-    pub fn open_diff(&mut self, path: SharedString, cx: &mut Context<Self>) {
-        self.set_file_tab(Some((Opened::Diff, path)), cx);
+    pub fn open_diff(&mut self, entry: ChangedEntry, cx: &mut Context<Self>) {
+        self.set_file_tab(Some((Opened::Diff { untracked: entry.untracked }, entry.path)), cx);
         self.bring_to_front(Showing::File, cx);
     }
 
@@ -73,12 +75,12 @@ impl WorkspacePane {
         let in_front = diff.tab.as_ref().is_some_and(|tab| tab.in_front);
         diff.tab = tab.clone().map(|(opened, path)| FileTab { path, opened, in_front });
         let (diffed, viewed) = match tab {
-            Some((Opened::Diff, path)) => (Some(path), None),
+            Some((Opened::Diff { untracked }, path)) => (Some(ChangedEntry { path, untracked }), None),
             Some((Opened::File, path)) => (None, Some(path)),
             None => (None, None),
         };
         diff.review.update(cx, |r, cx| r.show_diff_of(diffed.clone(), cx));
-        diff.file.update(cx, |f, cx| f.show(diffed.clone(), cx));
+        diff.file.update(cx, |f, cx| f.show(diffed.as_ref().map(|entry| entry.path.clone()), cx));
         diff.changes.update(cx, |c, cx| c.set_showing(diffed, cx));
         diff.viewer.update(cx, |v, cx| {
             v.set_worktree_here(worktree_here);
@@ -111,7 +113,7 @@ impl WorkspacePane {
         let name = path.rsplit('/').next().unwrap_or_default().to_string();
         let selected = self.showing() == Showing::File;
         let label = match opened {
-            Opened::Diff => format!("Diff of {path}"),
+            Opened::Diff { .. } => format!("Diff of {path}"),
             Opened::File => path.to_string(),
         };
         let close = tab::close_button("close-file-tab", "Close file tab", cx, |t, _, cx| t.close_file_tab(cx));

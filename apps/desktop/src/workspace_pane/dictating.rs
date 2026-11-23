@@ -43,8 +43,9 @@ impl WorkspacePane {
             view.update(cx, |view, cx| view.set_in_sight(showing, cx));
         }
         if let Some(diff) = &self.diff {
-            let showing =
-                self.drawn() && self.showing() == Showing::File && self.file_tab_opened() == Some(super::Opened::Diff);
+            let showing = self.drawn()
+                && self.showing() == Showing::File
+                && matches!(self.file_tab_opened(), Some(super::Opened::Diff { .. }));
             diff.file.update(cx, |file, cx| file.set_dictation_enabled(showing, cx));
         }
         let drawn = self.active.clone().filter(|_| showing_chat && !question);

@@ -158,8 +158,9 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             let status = world.sign_in_answer.clone().ok_or_else(|| read_only("change anything"))?;
             reply(C::GithubSignIn(GithubSignIn { id, status, rev: world.after_listed() }))
         }
-        R::WorkspaceFileDiff(workspaces::WorkspaceFileDiff { id, path, first_line, .. }) => {
-            reply(C::FileDiff(reads_of(world, &id)?.file_diff(&path, first_line)?))
+        R::WorkspaceFileDiff(workspaces::WorkspaceFileDiff { id, path, untracked, first_line, .. }) => {
+            let at = protocol::model::ChangedFileAt { untracked, path };
+            reply(C::FileDiff(reads_of(world, &id)?.file_diff(at, first_line)?))
         }
         // As a hub too old to keep it, so a comment being written is what restarting would lose.
         R::WorkspaceCommentDraft(_) => {

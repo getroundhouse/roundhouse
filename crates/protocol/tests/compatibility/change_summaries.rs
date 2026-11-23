@@ -145,15 +145,19 @@ fn the_request_for_a_page_of_changed_files_and_its_reply_keep_their_form() {
     answered(WorkerResponse::ChangedFilesPage(page()), &format!(r#"{{"result":"changed_files_page",{PAGE}}}"#));
 }
 
+/// A request names the tracked file at its path, as a hub from before `untracked` asked for one, unless it says it's the
+/// untracked one, so a worker of this build reads that hub's as it did.
 #[test]
 fn the_request_for_one_file_s_diff_and_its_reply_keep_their_forms() {
     let asking = worker::DiffFile {
         path: "/w".into(),
         base_ref: Some("origin/main".into()),
         file: "b.rs".into(),
+        untracked: false,
         from: Some("a.rs".into()),
         first_line: 0,
     };
+    let untracked = worker::DiffFile { file: "a.rs".into(), untracked: true, from: None, ..asking.clone() };
     let diff = FileDiff {
         base_commit: "c1".into(),
         version: Some(FileVersion::from("0123abcd".to_string())),
@@ -163,6 +167,13 @@ fn the_request_for_one_file_s_diff_and_its_reply_keep_their_forms() {
     asked(
         WorkerRequest::DiffFile(asking),
         r#"{"method":"diff_file","path":"/w","base_ref":"origin/main","file":"b.rs","from":"a.rs","first_line":0}"#,
+    );
+    asked(
+        WorkerRequest::DiffFile(untracked),
+        concat!(
+            r#"{"method":"diff_file","path":"/w","base_ref":"origin/main","file":"a.rs","untracked":true,"from":null,"#,
+            r#""first_line":0}"#,
+        ),
     );
     answered(
         WorkerResponse::FileDiff(diff),
