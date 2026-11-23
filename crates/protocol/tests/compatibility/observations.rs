@@ -51,6 +51,7 @@ fn a_workspace_s_changed_files_keep_their_form_as_a_notice_and_a_removal() {
         status: ChangeStatus::Modified,
         lines: Some(LineCounts { added: 3, removed: 1 }),
         version: Some(FileVersion::from("0123abcd".to_string())),
+        name_not_utf8: false,
     };
     let summary = ChangeSummary { left_out: 2, ..ChangeSummary::new("c1".into(), vec![file]) };
     let changes = Observed::Current { value: summary };

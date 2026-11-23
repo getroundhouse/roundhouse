@@ -152,6 +152,7 @@ mod tests {
             status: ChangeStatus::Untracked,
             lines: None,
             version: None,
+            name_not_utf8: false,
         };
         ChangedFilesPage { base_commit: "c1".into(), files: vec![file], left_out: 0 }
     }

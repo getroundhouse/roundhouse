@@ -38,6 +38,7 @@ fn each_file_at_a_path_listed_twice_shows_its_own_diff(cx: &mut TestAppContext) 
         status,
         lines: Some(LineCounts { added: lines.0, removed: lines.1 }),
         version: version.map(|version| version.to_string().into()),
+        name_not_utf8: false,
     };
     let files = vec![listed(ChangeStatus::Deleted, (0, 1), None), listed(ChangeStatus::Untracked, (2, 0), Some("v2"))];
     let mut reads = WorkerReads::default();

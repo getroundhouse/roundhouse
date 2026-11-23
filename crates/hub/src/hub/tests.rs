@@ -350,6 +350,13 @@ pub(crate) fn changes(added: u64, removed: u64) -> protocol::model::ChangeSummar
     use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, LineCounts};
 
     let lines = Some(LineCounts { added, removed });
-    let file = ChangedFile { path: "a.rs".into(), from: None, status: ChangeStatus::Modified, lines, version: None };
+    let file = ChangedFile {
+        path: "a.rs".into(),
+        from: None,
+        status: ChangeStatus::Modified,
+        lines,
+        version: None,
+        name_not_utf8: false,
+    };
     ChangeSummary::new("base".into(), vec![file])
 }

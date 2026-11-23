@@ -12,7 +12,7 @@ use crate::RecordsFeed;
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 fn file(path: &str, status: ChangeStatus) -> ChangedFile {
-    ChangedFile { path: path.into(), from: None, status, lines: None, version: None }
+    ChangedFile { path: path.into(), from: None, status, lines: None, version: None, name_not_utf8: false }
 }
 
 fn changes(workspace: &WorkspaceId, files: Vec<ChangedFile>, rev: u64) -> Observation {

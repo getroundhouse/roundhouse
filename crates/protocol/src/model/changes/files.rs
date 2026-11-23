@@ -20,7 +20,7 @@ impl LineCounts {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ChangedFile {
     /// From the top of the worktree, with `/` between folders, as git names it. Bytes that aren't UTF-8 are replaced,
-    /// as a [`super::GitDiff`]'s patch replaces them.
+    /// as a [`super::GitDiff`]'s patch replaces them, and `name_not_utf8` says so.
     pub path: String,
     /// Where a renamed file was at the base commit. `None` for any other change.
     pub from: Option<String>,
@@ -33,6 +33,12 @@ pub struct ChangedFile {
     /// than git reads to compare, whose version changes with its modified time. `None` where the worktree holds nothing
     /// to read: for a deleted file, a folder, as a submodule is, and a file the worker couldn't read.
     pub version: Option<FileVersion>,
+    /// `path`, or `from`, had bytes that aren't UTF-8, which are replaced, so a request that names the file by them
+    /// finds nothing, and a client says its changes can't be shown rather than asking for them. Its lines and version
+    /// are still read, by the bytes of its name. A worker from before the field leaves it out, so such a file reads as
+    /// unmarked, as it did.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub name_not_utf8: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

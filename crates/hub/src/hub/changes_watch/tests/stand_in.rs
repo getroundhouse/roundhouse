@@ -24,7 +24,14 @@ pub(super) fn w() -> WorkspaceId {
 /// A summary of one changed file that adds `added` lines and removes `removed`.
 pub(super) fn summary(added: u64, removed: u64) -> ChangeSummary {
     let lines = Some(LineCounts { added, removed });
-    let file = ChangedFile { path: "a.rs".into(), from: None, status: ChangeStatus::Modified, lines, version: None };
+    let file = ChangedFile {
+        path: "a.rs".into(),
+        from: None,
+        status: ChangeStatus::Modified,
+        lines,
+        version: None,
+        name_not_utf8: false,
+    };
     ChangeSummary::new("base".into(), vec![file])
 }
 

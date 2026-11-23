@@ -3,7 +3,7 @@
 use super::*;
 
 fn file(path: &str, status: ChangeStatus, lines: Option<LineCounts>) -> ChangedFile {
-    ChangedFile { path: path.into(), from: None, status, lines, version: None }
+    ChangedFile { path: path.into(), from: None, status, lines, version: None, name_not_utf8: false }
 }
 
 #[test]

@@ -200,6 +200,7 @@ mod tests {
             status,
             lines: Some(LineCounts { added: 2, removed: 1 }),
             version: None,
+            name_not_utf8: false,
         };
         let cases = [
             (ChangeStatus::Added, FileStatus::Added),

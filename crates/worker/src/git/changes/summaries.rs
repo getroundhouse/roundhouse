@@ -110,12 +110,14 @@ fn versioned(worktree: &Path, files: Vec<Listed>, before: &Seen) -> (Vec<Changed
             } else {
                 file.lines
             };
+            let name_not_utf8 = !is_utf8(&file.path) || file.from.as_deref().is_some_and(|from| !is_utf8(from));
             ChangedFile {
                 path: lossy(file.path),
                 from: file.from.map(lossy),
                 status: file.status,
                 lines,
                 version: read.map(|read| read.version),
+                name_not_utf8,
             }
         })
         .collect();
@@ -126,7 +128,11 @@ fn new_lines(added: u64) -> LineCounts {
     LineCounts { added, removed: 0 }
 }
 
-/// As a [`protocol::model::GitDiff`]'s patch has a path that isn't UTF-8.
+/// As a [`protocol::model::GitDiff`]'s patch has a path that isn't UTF-8, which [`ChangedFile::name_not_utf8`] marks.
 fn lossy(path: Vec<u8>) -> String {
     String::from_utf8_lossy_owned(path)
+}
+
+fn is_utf8(path: &[u8]) -> bool {
+    std::str::from_utf8(path).is_ok()
 }
