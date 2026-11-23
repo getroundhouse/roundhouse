@@ -42,14 +42,24 @@ pub struct Review {
     pub(super) held: Vec<DiffComment>,
     /// Deleted here, and still in client-core's copy until the feed says they've gone.
     pub(super) deleting: HashSet<CommentId>,
+    /// Whether the worktree can be read, as the pane says. While it can't, as once the workspace is being archived,
+    /// which the hub refuses every read of, nothing is read, and what was read stays.
+    pub(super) worktree_readable: bool,
 }
 
 impl EventEmitter<ReviewEvent> for Review {}
 
 impl Review {
     /// With the comments client-core holds for the workspace now, and nothing read: [`Self::take_summary`] lists what
-    /// client-core holds of the changed files, and [`Self::refresh`] reads what that leaves to the whole diff.
-    pub fn new(client: Client, workspace_id: WorkspaceId, held: Vec<DiffComment>, cx: &mut Context<Self>) -> Self {
+    /// client-core holds of the changed files, and [`Self::refresh`] reads what that leaves to the whole diff, while
+    /// the worktree can be read, as `worktree_readable` says to start with.
+    pub fn new(
+        client: Client,
+        workspace_id: WorkspaceId,
+        held: Vec<DiffComment>,
+        worktree_readable: bool,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let mut this = Self {
             client,
             workspace_id,
@@ -61,6 +71,7 @@ impl Review {
             comments: Vec::new(),
             held: Vec::new(),
             deleting: HashSet::new(),
+            worktree_readable,
         };
         this.set_comments(held, cx);
         this
@@ -80,11 +91,15 @@ impl Review {
 
     /// Loads the diff again, keeping the old one until the new one is ready. Not while the hub keeps a summary of the
     /// changed files current, which Changes lists, and which says how many files the workspace changes as it is, and
-    /// when the file the file tab shows is to be read again: then only that file is read, if its last read failed.
+    /// when the file the file tab shows is to be read again: then only that file is read, if its last read failed. And
+    /// not while the worktree can't be read.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         if let Some(Listed::Summary(Summary { current: true, file: SummaryFile::OneFile(_), .. })) = &self.listed {
             self.say_what_changes(cx);
             self.read_the_file_again_if_it_moved(cx);
+            return;
+        }
+        if !self.worktree_readable {
             return;
         }
         self.asks += 1;
@@ -149,6 +164,15 @@ impl Review {
         };
         if let Some(changed) = says {
             cx.emit(ReviewEvent::Counted(changed));
+        }
+    }
+
+    /// Takes in whether the worktree can be read, which the pane knows from the workspace's status. Nothing is read
+    /// while it can't, so a file clicked then says it couldn't be read, rather than the hub refusing a read of it.
+    pub fn set_worktree_readable(&mut self, readable: bool, cx: &mut Context<Self>) {
+        if self.worktree_readable != readable {
+            self.worktree_readable = readable;
+            cx.notify();
         }
     }
 

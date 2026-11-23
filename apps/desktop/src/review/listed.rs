@@ -110,19 +110,21 @@ impl WholeDiff {
 impl Review {
     /// What the file tab has of the diff of the file it shows: from the whole diff, where Changes lists it or the hub
     /// refused one file's diff, otherwise as one file's diff read it, and nothing of a file the summary marks as named
-    /// in bytes that aren't UTF-8.
+    /// in bytes that aren't UTF-8. One that hasn't been read couldn't be while the worktree can't be read, since
+    /// nothing is.
     pub fn diffed(&self) -> Diffed<'_> {
+        let unread = if self.worktree_readable { Diffed::Loading } else { Diffed::Failed };
         let Some(entry) = &self.diffed else { return Diffed::Loading };
         if self.names_no_file(entry) {
             return Diffed::NameNotUtf8;
         }
         match &self.listed {
-            None => Diffed::Loading,
+            None => unread,
             Some(Listed::WholeDiff(whole)) => whole.diffed(entry),
             Some(Listed::Summary(summary)) => match &summary.file {
                 SummaryFile::WholeDiff(Some(whole)) => whole.diffed(entry),
                 SummaryFile::OneFile(Some(file)) if file.of(entry) => file.diffed(),
-                SummaryFile::WholeDiff(None) | SummaryFile::OneFile(_) => Diffed::Loading,
+                SummaryFile::WholeDiff(None) | SummaryFile::OneFile(_) => unread,
             },
         }
     }
