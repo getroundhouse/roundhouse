@@ -2,6 +2,7 @@ use super::{place, remove_leftovers};
 use process::RunningFrom;
 use protocol::paths::Paths;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use super::super::tests::{build, files_in, paths_in};
 
@@ -56,6 +57,9 @@ fn what_was_at_the_fixed_path_stays_its_builds_copy_whole() {
     drop(running);
 }
 
+/// A mark goes only once every process holding it lets go, and a child another test is starting holds what this
+/// process has open until it runs its program, so the link goes by a later look, as a later client's start would
+/// remove it.
 #[test]
 fn a_link_left_on_the_way_goes_once_nothing_runs_from_it() {
     let dir = tempfile::tempdir().unwrap();
@@ -71,11 +75,13 @@ fn a_link_left_on_the_way_goes_once_nothing_runs_from_it() {
     remove_leftovers(&paths);
     let while_running = linking(&paths);
     drop(running);
-    remove_leftovers(&paths);
+    waiting::thread::until(Duration::from_secs(10), "the link nothing runs from now to go", || {
+        remove_leftovers(&paths);
+        linking(&paths).is_empty()
+    });
 
     let used_name = used.file_name().unwrap().to_str().unwrap().to_owned();
     assert_eq!(while_running, vec![used_name]);
-    assert_eq!(linking(&paths), Vec::<String>::new());
     // Only the names go, and each build's copy stays.
     assert_eq!(std::fs::read_to_string(&first).unwrap(), "first");
     assert_eq!(std::fs::read_to_string(&second).unwrap(), "second");
