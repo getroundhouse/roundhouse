@@ -1,5 +1,5 @@
 use super::super::Client;
-use super::super::follow::{Follow, FollowError};
+use super::super::follow::{FollowError, Following};
 use super::search;
 use super::source::SessionSource;
 use crate::session_log::{By, Changes, RecordedApprovals, SessionLog};
@@ -36,7 +36,7 @@ impl View {
 /// versions, as [`OpenSession::version`] says.
 #[derive(Clone)]
 pub struct OpenSession {
-    pub(super) follow: Follow<Arc<SessionLog>>,
+    pub(super) follow: Following<Arc<SessionLog>>,
     pub(super) session_id: SessionId,
     /// The view asked for, which is what a search looks through.
     pub(super) view: View,
@@ -71,7 +71,7 @@ impl OpenSession {
             read_from: client.hub_version().to_string(),
             records: None,
         };
-        let follow = Follow::start(client, Arc::new(log), move || source);
+        let follow = Following::start(client, Arc::new(log), move || source);
         follow.wake();
         OpenSession { follow, session_id: session.id.clone(), view, searches: Arc::default() }
     }

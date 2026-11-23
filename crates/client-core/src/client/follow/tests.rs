@@ -5,10 +5,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
-use protocol::client::subscriptions::{Follow as Followed, Subscribe};
+use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{ClientRequest, ClientResponse, ReplyOutcome};
 
-use super::{Follow, Source};
+use super::{Following, Source};
 use crate::client::{Client, Result, Subscription, SubscriptionItem};
 use crate::stand_in_hub::{Does, listen, subscribed};
 
@@ -39,7 +39,7 @@ impl Source for Made {
 
     fn resume(&mut self, client: &Client, _: &Mutex<Wanted>) -> Result<Subscription> {
         self.seen.lock().push(Seen::Resumed);
-        client.follow(Followed::Terminal { id: "t".into() })
+        client.follow(Follow::Terminal { id: "t".into() })
     }
 
     fn apply(&mut self, _: &Client, _: &Mutex<Wanted>, _: SubscriptionItem) -> Result<bool> {
@@ -78,14 +78,14 @@ fn start_hub(socket: &std::path::Path) -> flume::Receiver<ClientRequest> {
 /// Whether `request` starts following the terminal, and stops nothing.
 fn starts(request: &ClientRequest) -> bool {
     let ClientRequest::Subscribe(Subscribe { stop, start }) = request else { return false };
-    stop.is_empty() && matches!(start.as_slice(), [one] if one.follow == Followed::Terminal { id: "t".into() })
+    stop.is_empty() && matches!(start.as_slice(), [one] if one.follow == Follow::Terminal { id: "t".into() })
 }
 
 fn next(asked: &flume::Receiver<ClientRequest>, what: &str) -> ClientRequest {
     asked.recv_timeout(WAIT).unwrap_or_else(|_| panic!("{what} never came"))
 }
 
-fn want_until(follow: &Follow<Wanted>, until: Option<Instant>) {
+fn want_until(follow: &Following<Wanted>, until: Option<Instant>) {
     follow.quietly(|wanted| wanted.0 = until);
     follow.wake();
 }
@@ -99,7 +99,7 @@ fn a_source_not_wanted_is_let_go_until_it_is_wanted_again_on_the_connection_it_t
     let (first_asked, second_asked) = (start_hub(&first), start_hub(&second));
     let seen = Arc::new(Mutex::new(Vec::new()));
     let made = Made { seen: seen.clone() };
-    let follow = Follow::start(&Client::connect(&first, "test").unwrap(), Wanted::default(), move || made);
+    let follow = Following::start(&Client::connect(&first, "test").unwrap(), Wanted::default(), move || made);
     assert!(starts(&next(&first_asked, "the first watch")));
 
     want_until(&follow, Some(Instant::now() + Duration::from_millis(50)));

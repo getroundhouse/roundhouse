@@ -10,10 +10,10 @@ use protocol::terminal::{KeyPress, TerminalSize, TerminalUpdate, Typed};
 use super::asking::{self, Waiting};
 use super::given::{Given, Queue};
 use super::window::{Ask, Pointer, Replied, SelectBy, Window};
-use crate::client::follow::{Follow, Source};
+use crate::client::follow::{Following, Source};
 use crate::client::{Client, ClientError, FollowError, Result, Subscription, SubscriptionItem};
 use crate::drawn::{Frame, Rgb};
-use protocol::client::subscriptions::Follow as Followed;
+use protocol::client::subscriptions::Follow;
 
 /// How long a terminal goes without being shown before it's let go, as #2099 says: long enough that going between a
 /// chat and its terminal costs nothing, and short enough that a terminal left behind a chat soon stops costing the
@@ -25,7 +25,7 @@ const LET_GO_AFTER: Duration = Duration::from_secs(30);
 #[derive(Clone)]
 pub struct OpenTerminal {
     id: TerminalId,
-    pub(super) follow: Follow<Held>,
+    pub(super) follow: Following<Held>,
 }
 
 #[derive(Default)]
@@ -55,7 +55,7 @@ impl OpenTerminal {
         let (waiting, replies) = flume::unbounded();
         let source =
             TerminalSource { id: id.clone(), window: Window::new(), waiting, copies: Vec::new(), let_go_after: after };
-        let follow = Follow::start(client, Held::default(), move || source);
+        let follow = Following::start(client, Held::default(), move || source);
         asking::start(id.clone(), replies, follow.giver());
         Self { id: id.clone(), follow }
     }
@@ -212,7 +212,7 @@ impl Source for TerminalSource {
     type Held = Held;
 
     fn resume(&mut self, client: &Client, held: &Mutex<Held>) -> Result<Subscription> {
-        let watched = client.follow(Followed::Terminal { id: self.id.clone() });
+        let watched = client.follow(Follow::Terminal { id: self.id.clone() });
         // Its record has gone with its shell, which may have ended while there was no connection to hear it. The
         // window keeps what it showed.
         if watched.as_ref().is_err_and(ClientError::is_not_found) {

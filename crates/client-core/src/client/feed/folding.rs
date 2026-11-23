@@ -5,7 +5,7 @@ use parking_lot::Mutex;
 use protocol::client::ClientResponse;
 use protocol::model::Record;
 
-use super::super::follow::{Follow, Reach};
+use super::super::follow::{Following, Reach};
 use crate::records::HubRecords;
 
 /// The copies of the hub's records that a connection's replies go into: those of each [`RecordsFeed`](super::RecordsFeed)
@@ -17,7 +17,7 @@ pub(in super::super) struct Folding {
 
 impl Folding {
     /// Takes every reply from here on into what `records` follows too, unless it already does.
-    pub(super) fn reach(&self, records: &Follow<HubRecords>) {
+    pub(super) fn reach(&self, records: &Following<HubRecords>) {
         let mut into = self.into.lock();
         if !into.iter().any(|reach| reach.reaches(records)) {
             into.push(records.reach());

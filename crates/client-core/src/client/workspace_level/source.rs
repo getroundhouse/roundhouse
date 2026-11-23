@@ -5,7 +5,7 @@ use std::cell::Cell;
 
 use parking_lot::Mutex;
 use protocol::client::listed::Listed;
-use protocol::client::subscriptions::Follow as Start;
+use protocol::client::subscriptions::Follow;
 use protocol::model::{Level, WorkspaceId};
 
 use super::followed::Wanted;
@@ -35,7 +35,7 @@ impl WorkspacesSource {
     /// Takes `wanted` to be what's followed now, letting go of what was held only through a workspace no longer in it.
     /// A start the hub refused, such as of a workspace it no longer has, is left out until a handle comes or goes, or a
     /// new connection, and what's read of it is as of a workspace nothing follows.
-    fn followed_now(&mut self, wanted: &[Start]) {
+    fn followed_now(&mut self, wanted: &[Follow]) {
         let now = (wanted.iter())
             .filter_map(|start| match start.level() {
                 Level::Workspace { id } => Some(id),

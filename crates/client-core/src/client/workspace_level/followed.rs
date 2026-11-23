@@ -2,11 +2,11 @@
 
 use std::collections::BTreeMap;
 
-use protocol::client::subscriptions::Follow as Start;
+use protocol::client::subscriptions::Follow;
 use protocol::model::WorkspaceId;
 
 use super::source::WorkspacesSource;
-use crate::client::follow::{Follow, Reach};
+use crate::client::follow::{Following, Reach};
 use crate::client::{Client, GithubFeed};
 use crate::records::HubRecords;
 
@@ -16,8 +16,8 @@ pub(in crate::client) struct Wanted(BTreeMap<WorkspaceId, usize>);
 
 impl Wanted {
     /// What to follow, which is each workspace once, however many handles are kept on it.
-    pub(super) fn follows(&self) -> Vec<Start> {
-        self.0.keys().map(|id| Start::Workspace { id: id.clone() }).collect()
+    pub(super) fn follows(&self) -> Vec<Follow> {
+        self.0.keys().map(|id| Follow::Workspace { id: id.clone() }).collect()
     }
 
     fn want(&mut self, id: WorkspaceId) {
@@ -38,14 +38,14 @@ impl Wanted {
 /// subscription, which changes what it follows in one request as handles come and go.
 #[derive(Clone)]
 pub(in crate::client) struct Workspaces {
-    follow: Follow<Wanted>,
+    follow: Following<Wanted>,
 }
 
 impl Workspaces {
     /// Starts following, on a thread of its own, with nothing followed until a handle is asked for. What's sent goes
     /// into `records`, and what GitHub says there into `github`, the GitHub feed of the same hub.
     pub(in crate::client) fn start(client: &Client, records: Reach<HubRecords>, github: GithubFeed) -> Self {
-        let follow = Follow::start(client, Wanted::default(), move || WorkspacesSource::new(records, github));
+        let follow = Following::start(client, Wanted::default(), move || WorkspacesSource::new(records, github));
         Workspaces { follow }
     }
 
@@ -68,7 +68,7 @@ impl Workspaces {
 /// them, and its pull request's checks, as [`crate::GithubFeed::pull_request`] reads them. The hub's worker watches
 /// its files, and the hub reads GitHub of it more often. Once nothing follows it, the copy holds none of that.
 pub struct FollowedWorkspace {
-    follow: Follow<Wanted>,
+    follow: Following<Wanted>,
     id: WorkspaceId,
 }
 
