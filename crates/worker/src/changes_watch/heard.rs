@@ -24,8 +24,8 @@ pub(super) struct Heard {
     pub(super) news: Mutex<News>,
     /// Holds one wake for the loop, however much was heard while it was reading.
     pub(super) wake: Notify,
-    /// Every path in the worktree it's heard of that may change the summary, which only a test keeps, to see which path
-    /// the OS names.
+    /// Every path it's heard of that may change the summary, which only a test keeps, to see which path the OS names,
+    /// and what it heard before a path the test waits for.
     #[cfg_attr(not(test), expect(dead_code, reason = "only a test keeps what it heard of"))]
     pub(super) paths: Mutex<Vec<PathBuf>>,
 }
@@ -81,9 +81,13 @@ impl Heard {
         for path in &event.paths {
             match self.place(path) {
                 Place::Elsewhere => {}
-                Place::GitState => matters = true,
+                Place::GitState => {
+                    matters = true;
+                    self.keep_for_a_test(path);
+                }
                 Place::Worktree(from_top) => {
                     matters = true;
+                    self.keep_for_a_test(path);
                     self.note(event.kind, path, &from_top);
                 }
             }
@@ -115,7 +119,6 @@ impl Heard {
 
     /// Notes what a change at `path`, which git doesn't ignore, says besides that something changed.
     fn note(&self, kind: EventKind, path: &Path, from_top: &Path) {
-        self.keep_for_a_test(path);
         let mut news = self.news.lock();
         if from_top.file_name() == Some(OsStr::new(".gitignore")) {
             news.ignores_changed = true;
