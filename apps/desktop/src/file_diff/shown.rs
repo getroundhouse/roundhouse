@@ -51,7 +51,7 @@ impl FileDiff {
     pub(super) fn show_file(&mut self, cx: &mut Context<Self>) {
         self.set_dictation_enabled(self.dictation_enabled, cx);
         let review = self.review.read(cx);
-        let found = self.path.as_ref().and_then(|path| review.file(path)).filter(|file| !file.is_binary()).cloned();
+        let found = self.path.as_ref().and(review.file()).filter(|file| !file.is_binary()).cloned();
         let Some(file) = found else {
             self.making = Making { count: self.making.count + 1, from: None };
             self.shown = None;

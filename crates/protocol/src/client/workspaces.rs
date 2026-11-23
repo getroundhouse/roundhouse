@@ -202,13 +202,20 @@ impl Reply for ChangedFilesPage {
 
 /// One page of the diff of one file the workspace changes, against the base its change summary is taken from, as
 /// [`FileDiff`] says. The hub reads it from the workspace's worker, starting the worker if need be, and keeps none of
-/// it. It's keyed by the file's path, and by where a rename moved it from, as the summary names them. The reply says
-/// which version of the file, and which base, it's of, so a client can tell whether it matches the summary it holds.
-/// A hub from before it refuses it as `Unsupported`, and so does a hub whose worker is from before it.
+/// it. It's keyed by the file's path and whether it's untracked, as a summary's [`ChangedFileAt`] names it, since one
+/// path can be two entries, as a file taken out of git's index and left in the worktree is, and by where a rename
+/// moved it from. The reply says which version of the file, and which base, it's of, so a client can tell whether it
+/// matches the summary it holds. A hub from before it refuses it as `Unsupported`, and so does a hub whose worker is
+/// from before it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspaceFileDiff {
     pub id: WorkspaceId,
     pub path: String,
+    /// Asks for the untracked entry at `path`. Otherwise it's the tracked one, or the untracked one where git tracks
+    /// nothing there, which is how a client from before this field asks for either, and how a hub or worker from before
+    /// it answers whatever's asked.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub untracked: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
     /// The patch's first line in this page: 0, or the `next_line` of the page before.

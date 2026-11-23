@@ -100,19 +100,21 @@ impl Client {
         self.call(workspaces::WorkspaceChangedFiles { id: id.clone(), after })
     }
 
-    /// See [`workspaces::WorkspaceFileDiff`]: the page of `path`'s diff from the patch's line `first_line`, which is 0
-    /// or the `next_line` of the page before. Nothing of it is kept. A hub older than this refuses it, and so does one
-    /// whose worker is, as `is_unsupported` says. `docs/principles/observations.md` plans the Changes tab's reads of
-    /// it.
+    /// See [`workspaces::WorkspaceFileDiff`]: the page of the diff of the entry `at` names, as a summary names it,
+    /// from the patch's line `first_line`, which is 0 or the `next_line` of the page before. `from` is where a rename
+    /// moved it from. Nothing of it is kept. A hub older than this refuses it, and so does one whose worker is, as
+    /// `is_unsupported` says, and a hub or worker from before `untracked` answers with the tracked entry at the path.
+    /// `docs/principles/observations.md` plans the Changes tab's reads of it.
     pub fn workspace_file_diff(
         &self,
         id: &WorkspaceId,
-        path: &str,
+        at: &ChangedFileAt,
         from: Option<&str>,
         first_line: u32,
     ) -> Result<FileDiff> {
-        let (path, from) = (path.to_string(), from.map(str::to_string));
-        self.call(workspaces::WorkspaceFileDiff { id: id.clone(), path, from, first_line })
+        let ChangedFileAt { untracked, path } = at.clone();
+        let from = from.map(str::to_string);
+        self.call(workspaces::WorkspaceFileDiff { id: id.clone(), path, untracked, from, first_line })
     }
 
     pub fn workspace_setup_log(&self, id: &WorkspaceId) -> Result<String> {

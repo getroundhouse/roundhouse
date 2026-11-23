@@ -1,14 +1,16 @@
 //! The file the file tab shows, and where its newest read is.
 
-use gpui_kit::SharedString;
-use protocol::model::{ChangeStatus, CommitId, FileVersion};
+use protocol::model::{ChangeStatus, ChangedFileAt, CommitId, FileVersion};
 
 use crate::patch::FilePatch;
+use crate::review::ChangedEntry;
 use crate::review::listed::Diffed;
 
 /// What the summary says of a file, which one file's diff of it is read again only when it changes.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Key {
+    /// Which file it is, as the summary names it, which the file's diff is asked for by.
+    pub(super) at: ChangedFileAt,
     pub(super) base: CommitId,
     pub(super) status: ChangeStatus,
     pub(super) from: Option<String>,
@@ -18,7 +20,7 @@ pub(super) struct Key {
 /// The file the file tab shows, as one file's diff reads it.
 #[derive(Debug)]
 pub(in crate::review) struct OneFile {
-    pub(super) path: SharedString,
+    pub(super) entry: ChangedEntry,
     /// What the summary said of it when it was last asked for, or `None` where it lists it nowhere.
     pub(super) key: Option<Key>,
     pub(super) read: Read,
@@ -50,8 +52,8 @@ pub(in crate::review) enum Taken {
 }
 
 impl OneFile {
-    pub(in crate::review) fn of(&self, path: &str) -> bool {
-        self.path.as_ref() == path
+    pub(in crate::review) fn of(&self, entry: &ChangedEntry) -> bool {
+        self.entry == *entry
     }
 
     /// What the file tab shows of it.

@@ -78,7 +78,8 @@ impl WorkspacePane {
                 None => cx.propagate(),
             },
             Showing::File => {
-                match self.diff.as_ref().filter(|_| matches!(self.file_tab_opened(), Some(Opened::Diff) | None)) {
+                match self.diff.as_ref().filter(|_| matches!(self.file_tab_opened(), Some(Opened::Diff { .. }) | None))
+                {
                     Some(diff) => diff.file.update(cx, |file, cx| file.copy(&Copy, window, cx)),
                     None => cx.propagate(),
                 }

@@ -2,7 +2,7 @@
 
 use super::super::changes::version_now;
 use super::super::{command, compared_base, off_thread};
-use super::finding::{Found, NOTHING, Patch, found};
+use super::finding::{Entry, Found, NOTHING, Patch, found};
 use super::pages::patch_page;
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
@@ -22,8 +22,8 @@ pub(crate) async fn diff_file(given: &Environment, asked: &DiffFile) -> Result<F
         inside(from)?;
     }
     let base = compared_base(given, worktree, asked.base_ref.as_deref()).await?;
-    let (version, body) = of_one_version(worktree, named, body(given, worktree, &base, asked)).await?;
-    Ok(FileDiff { base_commit: base, version, body })
+    let (version, (body, deleted)) = of_one_version(worktree, named, body(given, worktree, &base, asked)).await?;
+    Ok(FileDiff { base_commit: base, version: version.filter(|_| !deleted), body })
 }
 
 /// What `reading` gives, with the version of the file at `path` of the worktree at `worktree` while it ran, which is
@@ -39,16 +39,19 @@ pub(super) async fn of_one_version<T>(
     Ok((before.filter(|before| after.as_ref() == Some(before)), read))
 }
 
+/// The page of the entry `asked` names, and whether that entry is a deletion, which has no version.
 async fn body(
     given: &Environment,
     worktree: &Path,
     base: &CommitId,
     asked: &DiffFile,
-) -> Result<FileDiffBody, ApiError> {
-    let patch = match found(given, worktree, base, &asked.file, asked.from.as_deref()).await? {
+) -> Result<(FileDiffBody, bool), ApiError> {
+    let Entry { found, deleted } =
+        found(given, worktree, base, (&asked.file, asked.untracked), asked.from.as_deref()).await?;
+    let patch = match found {
         Found::Patch(patch) => patch,
-        Found::Binary => return Ok(FileDiffBody::Binary),
-        Found::Unchanged => return Ok(FileDiffBody::Unchanged),
+        Found::Binary => return Ok((FileDiffBody::Binary, deleted)),
+        Found::Unchanged => return Ok((FileDiffBody::Unchanged, deleted)),
     };
     let (args, compared) = match &patch {
         Patch::Tracked(paths) => {
@@ -58,7 +61,7 @@ async fn body(
         Patch::Untracked(file) => ([DIFF, &["--no-index", "--", NOTHING, file]].concat(), true),
     };
     let page = patch_page(command(given, worktree, &args), asked.first_line, MOST_PATCH_PAGE_BYTES, compared).await?;
-    Ok(FileDiffBody::Patch { patch: page.patch, next_line: page.next_line })
+    Ok((FileDiffBody::Patch { patch: page.patch, next_line: page.next_line }, deleted))
 }
 
 /// `path` as a path from the top of the worktree, which is how git and a summary name a file. Refused if it's empty,

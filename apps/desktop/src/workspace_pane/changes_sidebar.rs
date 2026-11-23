@@ -152,7 +152,7 @@ impl WorkspacePane {
             FileDiffEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
         });
         let changes_events = cx.subscribe(&changes, |this, _, event: &ChangesEvent, cx| match event {
-            ChangesEvent::Open(path) => this.open_diff(path.clone(), cx),
+            ChangesEvent::Open(entry) => this.open_diff(entry.clone(), cx),
         });
         let all_files_events = cx.subscribe(&all_files, |this, _, event: &AllFilesEvent, cx| match event {
             AllFilesEvent::Open(path) => this.open_file(path.clone(), cx),

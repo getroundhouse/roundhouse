@@ -15,6 +15,7 @@ A worker reads these in `crates/worker/src/git/changes/listing.rs`, for a change
 - **A diff against a commit gives a file in conflict as `M`,** and not `U`.
 - **A path after `--` is a pattern unless git is told `--literal-pathspecs`.** So `git diff HEAD -- 'a*.txt'` diffs `ab.txt` too.
 - **A rename is found only when both its paths are named.** `git diff --find-renames <base> -- new.txt` gives `new.txt` as added, and naming `old.txt` before it gives the rename.
+- **A file taken out of the index and left in the worktree, as `git rm --cached` leaves it, is two changes:** `git diff <base>` gives it as deleted, and `git ls-files --others` lists it as untracked, so a summary lists its path twice.
 - **`git diff --no-index` exits with 1 when the two files differ,** and reads `/dev/null` as no file. Its `--numstat` prints `-` for each count of a binary file, as a diff against a commit does.
 
 ## What git ignores

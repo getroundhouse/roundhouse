@@ -49,15 +49,19 @@ impl Reply for model::GitDiff {
 }
 
 /// The worker's side of [`WorkspaceFileDiff`](crate::client::workspaces::WorkspaceFileDiff): one page of the diff of
-/// `file`, from the top of the worktree at `path`, against `base_ref`, from the patch's line `first_line`. `from` is
-/// where a rename moved it from, as the change summary names it. It's taken against the same base as
-/// [`SummarizeChanges`], and names its version as the summary does. A worker from before it refuses it as
-/// `Unsupported`.
+/// `file`, from the top of the worktree at `path`, against `base_ref`, from the patch's line `first_line`. `untracked`
+/// and `from`, where a rename moved it from, name its entry as the change summary does. It's taken against the same
+/// base as [`SummarizeChanges`], and names the version of that entry as the summary does. A worker from before it
+/// refuses it as `Unsupported`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct DiffFile {
     pub path: String,
     pub base_ref: Option<String>,
     pub file: String,
+    /// As [`WorkspaceFileDiff::untracked`](crate::client::workspaces::WorkspaceFileDiff::untracked) says. A worker
+    /// from before it answers with the tracked entry, or the untracked one where git tracks nothing at `file`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub untracked: bool,
     pub from: Option<String>,
     pub first_line: u32,
 }

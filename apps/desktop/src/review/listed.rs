@@ -4,7 +4,7 @@
 use protocol::model::CommitId;
 
 use super::Review;
-use super::listing::Summarized;
+use super::listing::{ChangedEntry, Summarized};
 use super::one_file::{OneFile, Taken};
 use crate::patch::FilePatch;
 
@@ -43,6 +43,7 @@ pub(super) struct Summary {
 
 /// Where the file the file tab shows is read from while a summary is listed.
 #[derive(Debug)]
+#[expect(clippy::large_enum_variant, reason = "a workspace's pane holds one, so boxing the larger saves nothing")]
 pub(super) enum SummaryFile {
     /// On its own, with one file's diff. `None` while the tab shows no file.
     OneFile(Option<OneFile>),
@@ -77,38 +78,52 @@ impl Summary {
 }
 
 impl WholeDiff {
-    /// What it has of the file at `path`.
-    fn diffed(&self, path: &str) -> Diffed<'_> {
-        self.files.iter().find(|file| file.path().as_ref() == path).map_or(Diffed::Unchanged, Diffed::Patch)
+    /// Each file, and whether it's the untracked one at its path. The whole diff is git's diff of what it tracks, and
+    /// then each untracked file's, so of two at one path, which are in that order, the second is the untracked one.
+    pub(super) fn entries(&self) -> impl Iterator<Item = (bool, &FilePatch)> {
+        let before = std::iter::once(None).chain(self.files.iter().map(Some));
+        before.zip(&self.files).map(|(before, file)| (before.is_some_and(|before| before.path() == file.path()), file))
     }
 
-    /// The file at `path` as it found it, to show while that file is read on its own.
-    pub(super) fn taken(&self, path: &str) -> Taken {
-        let found = self.files.iter().find(|file| file.path().as_ref() == path);
+    /// The patch of `entry`, if it has one, as [`ChangedEntry::is`] finds it.
+    fn patch(&self, entry: &ChangedEntry) -> Option<&FilePatch> {
+        let shared = self.entries().filter(|(_, file)| *file.path() == entry.path).count() > 1;
+        let mut entries = self.entries();
+        entries.find(|(untracked, file)| entry.is(file.path(), *untracked, shared)).map(|(_, file)| file)
+    }
+
+    /// What it has of `entry`.
+    fn diffed(&self, entry: &ChangedEntry) -> Diffed<'_> {
+        self.patch(entry).map_or(Diffed::Unchanged, Diffed::Patch)
+    }
+
+    /// `entry` as it found it, to show while that file is read on its own.
+    pub(super) fn taken(&self, entry: &ChangedEntry) -> Taken {
         let base = self.base_commit.clone();
-        found.map_or(Taken::Unchanged, |patch| Taken::Patch { patch: patch.clone(), base })
+        self.patch(entry).map_or(Taken::Unchanged, |patch| Taken::Patch { patch: patch.clone(), base })
     }
 }
 
 impl Review {
-    /// What the file tab has of the diff of the file at `path`: from the whole diff, where Changes lists it or the hub
-    /// refused one file's diff, and otherwise as one file's diff read it, once it's the file the tab shows.
-    pub fn diffed(&self, path: &str) -> Diffed<'_> {
+    /// What the file tab has of the diff of the file it shows: from the whole diff, where Changes lists it or the hub
+    /// refused one file's diff, and otherwise as one file's diff read it.
+    pub fn diffed(&self) -> Diffed<'_> {
+        let Some(entry) = &self.diffed else { return Diffed::Loading };
         match &self.listed {
             None => Diffed::Loading,
-            Some(Listed::WholeDiff(whole)) => whole.diffed(path),
+            Some(Listed::WholeDiff(whole)) => whole.diffed(entry),
             Some(Listed::Summary(summary)) => match &summary.file {
-                SummaryFile::WholeDiff(Some(whole)) => whole.diffed(path),
-                SummaryFile::OneFile(Some(file)) if file.of(path) => file.diffed(),
+                SummaryFile::WholeDiff(Some(whole)) => whole.diffed(entry),
+                SummaryFile::OneFile(Some(file)) if file.of(entry) => file.diffed(),
                 SummaryFile::WholeDiff(None) | SummaryFile::OneFile(_) => Diffed::Loading,
             },
         }
     }
 
-    /// The patch of the file at `path`, as [`Self::diffed`] has it. `None` once it no longer changes anything, and
-    /// until it's read.
-    pub fn file(&self, path: &str) -> Option<&FilePatch> {
-        match self.diffed(path) {
+    /// The patch of the file the file tab shows, as [`Self::diffed`] has it. `None` once it no longer changes anything,
+    /// and until it's read.
+    pub fn file(&self) -> Option<&FilePatch> {
+        match self.diffed() {
             Diffed::Patch(found) => Some(found),
             Diffed::Loading | Diffed::Unchanged | Diffed::Failed => None,
         }

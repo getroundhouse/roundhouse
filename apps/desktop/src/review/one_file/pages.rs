@@ -2,7 +2,7 @@
 
 use client_core::{Client, ClientError};
 use gpui_kit::SharedString;
-use protocol::model::{ChangeStatus, FileDiff, FileDiffBody, FileVersion, WorkspaceId};
+use protocol::model::{ChangeStatus, ChangedFileAt, FileDiff, FileDiffBody, FileVersion, WorkspaceId};
 
 use super::file::Taken;
 use crate::patch::{self, FilePatch};
@@ -38,7 +38,7 @@ impl Unread {
     }
 }
 
-/// Every page of the diff of the file at `path`, renamed from `from`, as one, read from its start again when a later
+/// Every page of the diff of the file `at` names, renamed from `from`, as one, read from its start again when a later
 /// page isn't of the version of the file the first is, up to [`MOST_READS_AGAIN`] times. A later page is of it when it
 /// names the same version and is a patch, rather than binary or unchanged. Two pages that name no version are of one
 /// only where `listed`, the version the summary names, is none too, as for a deleted file, since otherwise naming none
@@ -46,16 +46,16 @@ impl Unread {
 pub(super) fn every_page(
     client: &Client,
     id: &WorkspaceId,
-    path: &str,
+    at: &ChangedFileAt,
     from: Option<&str>,
     listed: Option<&FileVersion>,
 ) -> Result<FileDiff, Unread> {
     'read: for _ in 0..=MOST_READS_AGAIN {
-        let first = client.workspace_file_diff(id, path, from, 0).map_err(Unread::Hub)?;
+        let first = client.workspace_file_diff(id, at, from, 0).map_err(Unread::Hub)?;
         let FileDiffBody::Patch { patch: mut whole, mut next_line } = first.body else { return Ok(first) };
         let known = first.version.is_some() || listed.is_none();
         while let Some(line) = next_line {
-            let page = client.workspace_file_diff(id, path, from, line).map_err(Unread::Hub)?;
+            let page = client.workspace_file_diff(id, at, from, line).map_err(Unread::Hub)?;
             let FileDiffBody::Patch { patch, next_line: next } = page.body else { continue 'read };
             if !known || page.version != first.version {
                 continue 'read;

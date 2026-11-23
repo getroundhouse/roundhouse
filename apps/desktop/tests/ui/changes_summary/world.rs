@@ -5,8 +5,8 @@
 use client_core::fake_hub::{WorkerReads, World};
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::model::{
-    ChangeStatus, ChangeSummary, ChangedFile, CommitId, FileDiff, FileDiffBody, FileVersion, GitDiff, LineCounts,
-    Observation, Observed, Rev,
+    ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, CommitId, FileDiff, FileDiffBody, FileVersion, GitDiff,
+    LineCounts, Observation, Observed, Rev,
 };
 
 use desktop::review::Listing;
@@ -67,15 +67,25 @@ pub(super) fn page(patch: &str, version: &str, next_line: Option<u32>) -> FileDi
     FileDiff { base_commit: CommitId::from(BASE), version: Some(FileVersion::from(version.to_string())), body }
 }
 
+/// A page of one file's diff, against [`BASE`], of `version`, or of none, with `body`.
+pub(super) fn page_with(body: FileDiffBody, version: Option<&str>) -> FileDiff {
+    FileDiff { base_commit: CommitId::from(BASE), version: version.map(|version| version.to_string().into()), body }
+}
+
 /// What a worker reads on request of [`every_file`]: the pages of those past the summary, and `a.txt`'s diff, in two
 /// pages, of [`VERSION`] and then of `814f4a4`, once it's written again, each with a line the whole diff lacks.
 pub(super) fn reading_everything() -> WorkerReads {
     let mut reads = WorkerReads { changed_files: Some((CommitId::from(BASE), every_file())), ..WorkerReads::default() };
     let [head, hunk] = pages_of("a.txt", &["read on its own"], VERSION);
     let [head_again, hunk_again] = pages_of("a.txt", &["read on its own", "and read again"], "814f4a4");
-    reads.file_diffs.insert(("a.txt".into(), 0), vec![head, head_again]);
-    reads.file_diffs.insert(("a.txt".into(), 4), vec![hunk, hunk_again]);
+    reads.file_diffs.insert((tracked("a.txt"), 0), vec![head, head_again]);
+    reads.file_diffs.insert((tracked("a.txt"), 4), vec![hunk, hunk_again]);
     reads
+}
+
+/// The tracked file at `path`, as a summary names it.
+pub(super) fn tracked(path: &str) -> ChangedFileAt {
+    ChangedFileAt { untracked: false, path: path.to_string() }
 }
 
 /// The commit the changes are against.
