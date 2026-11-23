@@ -71,6 +71,8 @@ pub(crate) struct Hub {
     /// Told each time the hub has looked for the links it lacks and read what GitHub says of each linked repository,
     /// for the check of reach to look again at which repository on GitHub each repository is.
     pub(super) links_read: Notify,
+    /// What was last read of the repositories the GitHub accounts can see, for a person picking one to add.
+    pub(super) repositories_seen: super::repo_links::SeenLately,
     pub(super) providers: ProviderSet,
     /// What each kind of agent the hub runs is called and offers, as `HubConfig` gave them.
     pub(super) agents: Vec<AgentDescription>,
@@ -175,6 +177,7 @@ impl Hub {
             machine,
             links_wanted: Notify::new(),
             links_read: Notify::new(),
+            repositories_seen: super::repo_links::SeenLately::default(),
             observations: Observations::open(cache_file.clone(), &store),
             github_cache: Arc::new(GithubCache::open(cache_file)),
             line_reads: workspace_lines::Reads::default(),

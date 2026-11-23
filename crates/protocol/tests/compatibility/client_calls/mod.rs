@@ -4,6 +4,7 @@
 mod devices;
 mod file_diffs;
 mod github_apps;
+mod linked_repos;
 mod pinned;
 mod pinned_replies;
 mod replies;

@@ -121,7 +121,7 @@ impl Hub {
     }
 
     /// Keeps what GitHub says of `found`, read at `read_at_ms`, as its observation.
-    async fn keep_said(&self, found: RepositoryFound, read_at_ms: i64) {
+    pub(super) async fn keep_said(&self, found: RepositoryFound, read_at_ms: i64) {
         let RepositoryFound { id, said } = found;
         if let Err(e) = self.observation_read::<GithubRepositories>(id, said, read_at_ms).await {
             warn!("keeping what GitHub says of a repository: {}", e.message);

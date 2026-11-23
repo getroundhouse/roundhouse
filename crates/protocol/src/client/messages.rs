@@ -82,6 +82,7 @@ pub enum ClientResponse {
     NewWorkspaceMade(Box<new_workspace::NewWorkspaceMade>),
     Repo(Repo),
     Repos(records::Repos),
+    GithubRepositories(super::github_repositories::GithubRepositories),
     Records(Records),
     Agents(admin::Agents),
     ModelList(crate::model::ModelList),

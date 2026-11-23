@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     Hello, accounts, admin, agent, attachments, comments, conversation, drafts, files, github, github_accounts,
-    github_apps, log, new_workspace, proposals, queue, records, references, sessions, subscriptions, terminals, waits,
-    workspaces,
+    github_apps, github_repositories, log, new_workspace, proposals, queue, records, references, sessions,
+    subscriptions, terminals, waits, workspaces,
 };
 
 /// Every request, each with a type of its own that names what it's answered with. One with no fields is a variant with
@@ -38,6 +38,8 @@ pub enum ClientRequest {
     HubConfigure(admin::HubConfigure),
 
     RepoAdd(records::RepoAdd),
+    RepoAddLinked(records::RepoAddLinked),
+    GithubRepositoryList(github_repositories::GithubRepositoryList),
     /// See [`records::RepoList`].
     RepoList,
     /// See [`records::RecordsList`].

@@ -226,6 +226,8 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::Hello(..)
         | R::HubConfigure(..)
         | R::RepoAdd(..)
+        | R::RepoAddLinked(..)
+        | R::GithubRepositoryList(..)
         | R::RepoList
         | R::RecordsList
         | R::ModelsFor(_)

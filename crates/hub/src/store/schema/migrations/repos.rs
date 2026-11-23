@@ -3,7 +3,7 @@
 use protocol::model::{RepoLink, RepoUrl};
 use rusqlite::{Transaction, params};
 
-use crate::store::{ByColumn, Columns, StoreError, columns};
+use crate::store::{ByColumn, Columns, OneValue, StoreError, columns};
 
 columns! {
     /// The columns [`links`] reads of each repository.
@@ -37,5 +37,29 @@ pub(super) fn links(tx: &Transaction<'_>) -> Result<(), StoreError> {
     for (id, url) in plain.filter(|(_, url)| url.on_github().is_none()) {
         write.execute(params![id, serde_json::to_string(&RepoLink::Plain { url })?])?;
     }
+    Ok(())
+}
+
+/// A repository's checkout may be none, for one added by its link alone, which a workspace on any machine clones, so
+/// such a row has an address. Checkouts are still each one repository's.
+///
+/// SQLite can't drop a `NOT NULL` with `ALTER TABLE`, and rebuilding the table under a transaction would leave every
+/// workspace's reference to it broken, since foreign keys are on. So this edits the table's definition in place, as
+/// SQLite's own procedure for dropping a `NOT NULL` does (<https://www.sqlite.org/lang_altertable.html#otheralter>),
+/// which leaves every row as it is, and raises the schema's version so every connection reads it again.
+pub(super) fn without_checkouts(tx: &Transaction<'_>) -> Result<(), StoreError> {
+    let version: i64 = tx.pragma_query_value(None, "schema_version", OneValue::read)?;
+    tx.pragma_update(None, "writable_schema", true)?;
+    let edited = tx.execute(
+        "UPDATE sqlite_schema SET sql = replace(sql, 'path TEXT NOT NULL UNIQUE', 'path TEXT UNIQUE')
+             WHERE type = 'table' AND name = 'repos' AND sql LIKE '%path TEXT NOT NULL UNIQUE%'",
+        [],
+    )?;
+    tx.pragma_update(None, "writable_schema", false)?;
+    if edited != 1 {
+        // Only a database changed by hand has another, which is left as it is.
+        return Err(rusqlite::Error::InvalidQuery.into());
+    }
+    tx.pragma_update(None, "schema_version", version + 1)?;
     Ok(())
 }

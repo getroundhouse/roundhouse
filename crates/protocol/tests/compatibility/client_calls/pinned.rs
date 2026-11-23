@@ -54,6 +54,7 @@ pinned! {
         NewWorkspaceCreate(_),
     ],
     "client_calls/file_diffs.rs" => [WorkspaceFileDiff(_)],
+    "client_calls/linked_repos.rs" => [RepoAddLinked(_), GithubRepositoryList(_)],
     "client_calls/github_apps.rs" => [
         GithubAppManifestWrite(_), GithubAppMake(_), GithubAppInstallationsConnect(_), GithubAppRemove(_),
     ],

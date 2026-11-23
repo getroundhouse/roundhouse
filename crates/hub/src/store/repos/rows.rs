@@ -9,16 +9,19 @@ columns! {
     pub(in super::super) struct RepoColumns { id, name, path, url, link, unlinked, created_at_ms, rev }
 }
 
-/// A row's record: its checkout, with the address a worker read from it, where one has, and its link. Every row has a
-/// checkout, since a repository is added by one.
+/// A row's record: its checkout, with the address a worker read from it, where one has, or the address it was added
+/// by, for one added by its link alone, and its link.
 pub(in super::super) fn repo_from_row(row: &Row) -> rusqlite::Result<Repo> {
     let c = RepoColumns::at(0);
-    let path = row.at(c.path)?;
+    let path = row.at::<Option<String>>(c.path)?;
     let url = row.at::<Option<String>>(c.url)?.map(|url| url_at(c.url, url)).transpose()?;
     let link = linking(url.as_ref(), json_at(row, c.link)?, json_at(row, c.unlinked)?);
-    let origin = match url {
-        Some(url) => RepoOrigin::Linked { path, url },
-        None => RepoOrigin::Checkout { path },
+    let origin = match (path, url) {
+        (Some(path), Some(url)) => RepoOrigin::Linked { path, url },
+        (Some(path), None) => RepoOrigin::Checkout { path },
+        (None, Some(url)) => RepoOrigin::Remote { url },
+        // Neither, which no build writes.
+        (None, None) => RepoOrigin::Unknown,
     };
     Ok(Repo {
         id: row.at::<String>(c.id)?.into(),

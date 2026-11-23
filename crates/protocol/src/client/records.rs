@@ -1,10 +1,10 @@
-//! The requests that add a repository, and read the hub's records: its repositories, a session's subagents,
+//! The requests that add a repository, by its checkout or by its link, and read the hub's records: its repositories, a session's subagents,
 //! proposals or how its replies were heard, or every record at once.
 
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{Proposal, Records, ReplyHeard, Repo, Rev, SessionId, Subagent};
+use crate::model::{GithubRepositoryId, Proposal, Records, ReplyHeard, Repo, RepoUrl, Rev, SessionId, Subagent};
 
 /// Adds the repository whose checkout on the hub's machine `path` is in, and has a worker there read the address its
 /// `origin` fetches from, which the feed then tells of, as the [`Repo`] has it. Adding the same repository again
@@ -19,6 +19,35 @@ impl Request for RepoAdd {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::RepoAdd(self)
+    }
+}
+
+/// Adds a project by its repository alone, with no checkout on the hub's machine, linked to it at once, as
+/// [`Linking`](crate::model::Linking) says: one of those [`GithubRepositoryList`] lists, by GitHub's ID for it, or the
+/// address a person typed, which is linked as a checkout's `origin` is. A workspace on any machine clones it. Adding
+/// the same repository again, by the same ID or the same address, returns the first record, so it's safe to send
+/// again. Refused with `NotFound` for a repository on github.com that no connected account can see, and with
+/// `Unavailable` while GitHub can't say. A hub older than this refuses it as unsupported.
+///
+/// [`GithubRepositoryList`]: super::github_repositories::GithubRepositoryList
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct RepoAddLinked {
+    pub repository: RepoToAdd,
+}
+
+/// Which repository [`RepoAddLinked`] adds.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "by", rename_all = "snake_case")]
+pub enum RepoToAdd {
+    Github { id: GithubRepositoryId },
+    Address { url: RepoUrl },
+}
+
+impl Request for RepoAddLinked {
+    type Reply = Repo;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::RepoAddLinked(self)
     }
 }
 

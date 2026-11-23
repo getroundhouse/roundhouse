@@ -76,6 +76,8 @@ pub(super) async fn handle(
         }
         R::HubConfigure(admin::HubConfigure { settings }) => C::HubSettings(hub.hub_configure(settings).await?),
         R::RepoAdd(records::RepoAdd { path }) => C::Repo(hub.repo_add(path).await?),
+        R::RepoAddLinked(records::RepoAddLinked { repository }) => C::Repo(hub.repo_add_linked(repository).await?),
+        R::GithubRepositoryList(asked) => C::GithubRepositories(hub.github_repository_list(asked).await?),
         R::RepoList => C::Repos(records::Repos { repos: hub.repo_list().await? }),
         // As the feed is sent them, since only a client from before `Subscribe` asks.
         R::RecordsList => C::Records(Sends::feed().records(hub.records_list().await?)),
