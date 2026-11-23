@@ -14,8 +14,6 @@ pub(super) enum Work {
     Wrote { subagent: bool },
     /// A turn has ended.
     TurnEnded,
-    /// The CLI said by itself what's left of its account's limits.
-    HeardLimits,
     /// Nothing that says the agent is working.
     Other,
 }
@@ -30,7 +28,6 @@ pub(super) fn work(body: &EventBody) -> Work {
         // A compaction empties most of the context, so it's news as much as something written.
         EventBody::AgentCompacted { .. } => Work::Wrote { subagent: false },
         EventBody::TurnEnded { .. } => Work::TurnEnded,
-        EventBody::AgentLimits { .. } => Work::HeardLimits,
         EventBody::UserPrompt { .. }
         | EventBody::CompactionAsked { .. }
         | EventBody::PromptTaken { .. }
@@ -54,6 +51,8 @@ pub(super) fn work(body: &EventBody) -> Work {
         | EventBody::AgentCompacting { .. }
         | EventBody::CacheExpired { .. }
         | EventBody::ConversationStarted { .. }
+        // Not sent by this adapter, which says the account's limits in a report.
+        | EventBody::AgentLimits { .. }
         | EventBody::Unknown => Work::Other,
     }
 }

@@ -4,13 +4,14 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use protocol::capability::Report;
+use protocol::capability::account::Limit;
 use protocol::client::ApiError;
-use protocol::event::EventBody;
 use protocol::model::{Account, AgentAccount, LimitWindow, SessionId, UsageLimit, WorkspaceId};
 use protocol::prompt::Prompt;
 
 use crate::hub::Hub;
-use crate::hub::stand_in_workers::{Asked, TIMEOUT, a_turn, logged_in, the_agent_says};
+use crate::hub::stand_in_workers::{Asked, TIMEOUT, a_turn, logged_in, the_agent_reports};
 
 /// Who a machine's worker says is logged in to Claude's CLI there, or why it can't say, which a test can change.
 pub(super) type Machine = Arc<Mutex<Result<AgentAccount, ApiError>>>;
@@ -44,7 +45,8 @@ pub(super) fn without_when(limits: &[UsageLimit]) -> Vec<UsageLimit> {
 pub(super) async fn a_turn_hearing(hub: &Arc<Hub>, asked: &Asked, chat: &SessionId, limits: Vec<UsageLimit>) {
     a_turn(hub, asked, chat, Prompt::new("go"), None).await;
     if !limits.is_empty() {
-        the_agent_says(hub, asked, chat, [EventBody::AgentLimits { limits }]).await;
+        let limits = limits.iter().map(Limit::of).collect();
+        the_agent_reports(hub, asked, chat, Report::Limits { limits, every_models_week: false }).await;
     }
 }
 

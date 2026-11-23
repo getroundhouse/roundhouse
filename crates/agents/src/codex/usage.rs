@@ -1,6 +1,7 @@
 //! How full a thread's context is, and how much of the account's limits is used, as Codex says while it works.
 
 use protocol::capability::Report;
+use protocol::capability::account::Limit;
 use protocol::event::EventBody;
 use protocol::model::{ContextUsage, LimitWindow, UsageLimit};
 use serde_json::Value;
@@ -26,17 +27,19 @@ pub(super) async fn tokens(shared: &Shared, params: &Value, scope: &Scope, raw: 
     shared.run.emit(AgentOutput::Report(Report::Context { context })).await;
 }
 
-/// `account/rateLimits/updated`: the account's limits, each window it names. An update can leave out what hasn't
+/// `account/rateLimits/updated`: the account's limits, each window it names, which go to the hub as a report, outside
+/// the log, since they're the account's and the hub keeps only the newest. An update can leave out what hasn't
 /// changed, which the hub keeps. One whose windows have no name here is kept as it came, like any line with no form of
 /// its own.
 pub(super) async fn limits(shared: &Shared, params: &Value, scope: &Scope, raw: String) {
     let limits = limits_of(&params["rateLimits"]);
-    let body = if limits.is_empty() {
-        EventBody::AgentOther { kind: "account/rateLimits/updated".into(), subagent: scope.parent.clone() }
-    } else {
-        EventBody::AgentLimits { limits }
-    };
-    shared.run.event(body, Some(raw)).await;
+    if limits.is_empty() {
+        let body = EventBody::AgentOther { kind: "account/rateLimits/updated".into(), subagent: scope.parent.clone() };
+        shared.run.event(body, Some(raw)).await;
+        return;
+    }
+    let limits = limits.iter().map(Limit::of).collect();
+    shared.run.emit(AgentOutput::Report(Report::Limits { limits, every_models_week: false })).await;
 }
 
 /// The windows of the account's limit on every model, `codex`, shortest first. Another ID is a model's own limit, which

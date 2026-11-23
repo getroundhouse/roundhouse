@@ -127,7 +127,12 @@ pub enum EventBody {
     /// in a task's end with it, and so does one whose reason the adapter can't tell as it starts.
     OwnTurn(crate::capability::turns::OwnTurn),
     /// How much of each limit on the account the agent runs under is used, as the agent just heard. A limit is the
-    /// account's rather than the session's, so the hub keeps the newest for every session under that account.
+    /// account's rather than the session's, so the hub keeps the newest for every session under that account. No
+    /// adapter of this build sends it, since each says what its agent hears of them in a [`Report::Limits`], outside
+    /// the log: a worker of protocol 6 from a build before sends it, which the hub takes in as that report and doesn't
+    /// record, and a log recorded before holds it, which nothing draws.
+    ///
+    /// [`Report::Limits`]: crate::capability::Report::Limits
     AgentLimits {
         limits: Vec<UsageLimit>,
     },

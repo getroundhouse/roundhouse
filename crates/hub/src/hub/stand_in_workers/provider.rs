@@ -162,9 +162,9 @@ pub(super) fn answer(request: WorkerRequest) -> WorkerResponse {
 }
 
 /// What a stand-in's agent claims as it starts: what Claude claims as the hub's tests describe it, as [`claimed`] says,
-/// cancelling a turn and taking a change of its model, mode and effort as it runs, and the prompt cache it marks, as
-/// Claude's CLI claims them, so a test can stop a turn, or change a chat's settings, as the person does, or have its
-/// agent ask its model.
+/// cancelling a turn and taking a change of its model, mode and effort as it runs, the prompt cache it marks, and its
+/// account's limits, as Claude's CLI claims them, so a test can stop a turn, or change a chat's settings, as the person
+/// does, or have its agent ask its model, or report what it heard of its limits.
 fn claims() -> protocol::capability::Capabilities {
     let mut claims = claimed();
     let ttls = vec![CacheTtl::FiveMinutes, CacheTtl::OneHour];
@@ -173,6 +173,7 @@ fn claims() -> protocol::capability::Capabilities {
     let (now, next_turn) = (Some(settings::Takes::Now), Some(settings::Takes::NextTurn));
     let live = settings::LiveChanges { model: next_turn, mode: now, effort: next_turn, ..Default::default() };
     claims.settings.live_changes = Some(live);
+    claims.account.limits = Some(protocol::capability::Claimed {});
     claims
 }
 

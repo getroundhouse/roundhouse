@@ -6,15 +6,15 @@ use serde_json::Value;
 
 use super::{Parsed, str_of};
 
-/// A line that says how much of some limit is used is the limits it names. One that doesn't, such as one with only
-/// the limit's status, is kept as it came, like any line with no form of its own.
+/// A line that says how much of some limit is used is the limits it names, which go to the hub as a report, outside
+/// the log, since they're the account's and the hub keeps only the newest. One that doesn't, such as one with only the
+/// limit's status, is kept as it came, like any line with no form of its own.
 pub(super) fn rate_limit_event(value: &Value) -> Parsed {
     let limits = limits(value.get("rate_limit_info").unwrap_or(&Value::Null));
-    Parsed::Event(if limits.is_empty() {
-        EventBody::AgentOther { kind: "rate_limit_event".to_string(), subagent: None }
-    } else {
-        EventBody::AgentLimits { limits }
-    })
+    if limits.is_empty() {
+        return Parsed::Event(EventBody::AgentOther { kind: "rate_limit_event".to_string(), subagent: None });
+    }
+    Parsed::Limits(limits)
 }
 
 /// Each window the line says how much is used of, shortest first. It names every window under `unifiedWindows`, and
@@ -123,6 +123,6 @@ mod tests {
         }});
 
         let limits = vec![limit(LimitWindow::SevenDays, 4, Some(1_794_891_600_000))];
-        assert_eq!(rate_limit_event(&line), Parsed::Event(EventBody::AgentLimits { limits }));
+        assert_eq!(rate_limit_event(&line), Parsed::Limits(limits));
     }
 }
