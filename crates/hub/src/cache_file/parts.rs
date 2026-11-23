@@ -19,8 +19,8 @@ pub(crate) struct Part {
 
 /// Runs `prepare` on `conn`, and where it fails because of what's in the file, as on a table of a form this build
 /// can't make its own over, runs `empty`, which removes what `prepare` makes, and then `prepare` again, so what can't
-/// be made loses only its own rows. A failure because the file is busy or broken, which emptying can't help, is
-/// returned as it is, with nothing emptied.
+/// be made loses only its own rows. A failure because the file is busy, broken or can't be used, which emptying can't
+/// help, is returned as it is, with nothing emptied.
 pub(crate) fn prepared_or_emptied(
     conn: &mut Connection,
     what: &str,
@@ -29,7 +29,7 @@ pub(crate) fn prepared_or_emptied(
 ) -> rusqlite::Result<()> {
     let Err(error) = prepare(conn) else { return Ok(()) };
     match Failure::of(&error) {
-        Failure::Busy | Failure::Broken => return Err(error),
+        Failure::Busy | Failure::Broken | Failure::Unusable => return Err(error),
         Failure::Other => warn!("emptying {what} in the cache file, since its tables couldn't be made: {error}"),
     }
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
