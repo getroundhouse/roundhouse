@@ -10,12 +10,12 @@ use protocol::model::{
     ChangeStatus, ChangeSummary, ChangedFile, GitFile, GitStatus, LineCounts, Observation, Observed,
 };
 use protocol::worker::{WatchChanges, WorkerFrame, WorkerRequest, WorkerResponse};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, oneshot};
 
 use crate::hub::Hub;
 use crate::hub::stand_in_workers::TIMEOUT;
 use crate::hub::tests::serving;
-use crate::worker_link::WorkerLink;
+use crate::worker_link::{Answer, WorkerLink};
 
 pub(super) fn w() -> WorkspaceId {
     "w".into()
@@ -43,21 +43,47 @@ pub(super) fn worker(hub: &Hub, watch: Watch) -> (Arc<WorkerLink>, Arc<Mutex<Vec
     let asked = Arc::new(Mutex::new(Vec::new()));
     let kept = asked.clone();
     let link = WorkerLink::answering(move |request| {
-        let answer = match (&request, watch) {
-            (WorkerRequest::WatchChanges(_), Watch::Refusing) => {
-                Some(Err(ApiError::new(ErrorCode::Unsupported, "unknown request")))
-            }
-            (WorkerRequest::WatchChanges(_), Watch::Stuck) => None,
-            (WorkerRequest::SummarizeChanges(_), _) => Some(Ok(WorkerResponse::ChangeSummary(summary(1, 0)))),
-            (WorkerRequest::GitStatus(_), _) => Some(Ok(WorkerResponse::GitStatus(uncommitted()))),
-            // A watch as `Watching` says, and everything else, is done.
-            _ => Some(Ok(WorkerResponse::Ok)),
-        };
+        let answer = answered(&request, watch);
         kept.lock().push(request);
         answer
     });
     serving(hub, &link);
     (link, asked)
+}
+
+/// A stand-in for `w`'s worker, as [`worker`] makes one that watches, whose answer to the first watch it's asked for
+/// waits for what the test sends on what this returns, as one that's slow for a while does.
+pub(super) fn late_worker(hub: &Hub) -> (Arc<WorkerLink>, Arc<Mutex<Vec<WorkerRequest>>>, Reply) {
+    let (reply, held) = oneshot::channel();
+    let held = Mutex::new(Some(held));
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let kept = asked.clone();
+    let link = WorkerLink::answering_in_time(move |request| {
+        let late = matches!(request, WorkerRequest::WatchChanges(_)).then(|| held.lock().take()).flatten();
+        let now = answered(&request, Watch::Watching);
+        kept.lock().push(request);
+        late.map(Answer::Later).or(now.map(Answer::Now))
+    });
+    serving(hub, &link);
+    (link, asked, reply)
+}
+
+/// Where a test sends a stand-in's answer it held back.
+pub(super) type Reply = oneshot::Sender<Result<WorkerResponse, ApiError>>;
+
+/// What a stand-in that answers a watch as `watch` says answers `request`: a summary with `summary(1, 0)`, and a status
+/// with a change that isn't committed.
+fn answered(request: &WorkerRequest, watch: Watch) -> Option<Result<WorkerResponse, ApiError>> {
+    match (request, watch) {
+        (WorkerRequest::WatchChanges(_), Watch::Refusing) => {
+            Some(Err(ApiError::new(ErrorCode::Unsupported, "unknown request")))
+        }
+        (WorkerRequest::WatchChanges(_), Watch::Stuck) => None,
+        (WorkerRequest::SummarizeChanges(_), _) => Some(Ok(WorkerResponse::ChangeSummary(summary(1, 0)))),
+        (WorkerRequest::GitStatus(_), _) => Some(Ok(WorkerResponse::GitStatus(uncommitted()))),
+        // A watch as `Watching` says, and everything else, is done.
+        _ => Some(Ok(WorkerResponse::Ok)),
+    }
 }
 
 /// A worktree's status with one change that isn't committed, which archiving would lose.

@@ -26,8 +26,19 @@ pub(super) struct Told {
     pub(super) link: WorkerLinkId,
     /// What it was told to watch against, so a workspace whose base changes is told again.
     pub(super) base_ref: Option<String>,
-    /// It refused, as a worker from before the request does, so it's asked no more.
-    pub(super) refused: bool,
+    pub(super) answer: Answer,
+}
+
+/// What a worker told to watch answered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Answer {
+    /// That it watches.
+    Watching,
+    /// That it can't, as a worker from before the request does, so it's asked no more.
+    Refused,
+    /// Nothing, in the time it's given. The request reached it all the same, so it can be watching, and is asked again
+    /// while the workspace is followed, and told to stop once it isn't.
+    Late,
 }
 
 impl Watches {

@@ -15,13 +15,14 @@ pub(crate) const ANSWERED_WITHIN: Duration = Duration::from_secs(10);
 
 /// That a worker hadn't answered within [`ANSWERED_WITHIN`]. The request has reached it all the same, so it can still
 /// do what was asked.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("the worker didn't answer within {ANSWERED_WITHIN:?}")]
 pub(crate) struct Late;
 
 impl From<Late> for ApiError {
     /// As a worker that can't do what was asked fails it.
-    fn from(Late: Late) -> Self {
-        ApiError::new(ErrorCode::Worker, format!("the worker didn't answer within {ANSWERED_WITHIN:?}"))
+    fn from(late: Late) -> Self {
+        ApiError::new(ErrorCode::Worker, late.to_string())
     }
 }
 

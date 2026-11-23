@@ -8,7 +8,7 @@ use protocol::model::WorkspaceId;
 use protocol::worker::{WatchChanges, WorkerFrame};
 use tracing::{debug, warn};
 
-use super::watches::{Told, Turn};
+use super::watches::{Answer, Told, Turn};
 use crate::hub::observations::{WorkspaceChanges, WorkspaceLines};
 use crate::hub::{Followed, Hub};
 use crate::store::now_ms;
@@ -32,28 +32,34 @@ impl Hub {
             return;
         };
         let base_ref = ready.workspace().base_ref.clone();
-        if let Some(was) = told.as_ref().filter(|was| was.link == link.id)
-            && (was.refused || was.base_ref == base_ref)
-        {
-            return;
+        if let Some(was) = told.as_ref().filter(|was| was.link == link.id) {
+            match was.answer {
+                Answer::Refused => return,
+                Answer::Watching if was.base_ref == base_ref => return,
+                Answer::Watching | Answer::Late => {}
+            }
         }
         // Before it's asked, so its first summary, which may come before the reply, is current.
         self.changes_kept_current(id).await;
         let asked = WatchChanges { path: ready.path().to_owned(), base_ref: base_ref.clone(), watching: true };
-        match link.call_at_once(asked).await.unwrap_or_else(|late| Err(late.into())) {
-            Ok(()) => *told = Some(Told { link: link.id, base_ref, refused: false }),
+        match link.call_at_once(asked).await {
+            Ok(Ok(())) => *told = Some(Told { link: link.id, base_ref, answer: Answer::Watching }),
             // A worker from before the request, which the hub replaces once nothing in its workspace is at work, and
             // whose summary is read once now instead, and as each turn ends.
-            Err(e) if e.code == ErrorCode::Unsupported => {
+            Ok(Err(e)) if e.code == ErrorCode::Unsupported => {
                 debug!(%id, "the worker can't watch its worktree: {}", e.message);
-                *told = Some(Told { link: link.id, base_ref, refused: true });
+                *told = Some(Told { link: link.id, base_ref, answer: Answer::Refused });
                 self.changes_let_go(id).await;
                 self.read_lines(id, &link);
             }
-            // Running out of time too.
-            Err(e) => {
+            Ok(Err(e)) => {
                 warn!(%id, "asking the worker to watch its worktree: {}", e.message);
                 *told = None;
+                self.changes_let_go(id).await;
+            }
+            Err(late) => {
+                warn!(%id, "asking the worker to watch its worktree: {late}");
+                *told = Some(Told { link: link.id, base_ref, answer: Answer::Late });
                 self.changes_let_go(id).await;
             }
         }
@@ -96,10 +102,11 @@ impl Hub {
         None
     }
 
-    /// Tells the worker that was told to watch to stop, if it's still the workspace's, and keeps that nothing watches.
-    /// A worker that refused is left as it was, so it isn't asked again once the workspace is followed again.
+    /// Tells the worker that was told to watch to stop, if it's still the workspace's, and keeps that nothing watches,
+    /// whether it answered that it watches or didn't answer in time. A worker that refused is left as it was, so it
+    /// isn't asked again once the workspace is followed again.
     async fn stop_watching(&self, id: &WorkspaceId, told: &mut Turn<'_>) {
-        let Some(was) = told.take_if(|was| !was.refused) else { return };
+        let Some(was) = told.take_if(|was| was.answer != Answer::Refused) else { return };
         self.changes_let_go(id).await;
         let Some(link) = self.running_worker(id).filter(|link| link.id == was.link) else { return };
         let Ok(ready) = self.workspace(id).await.map(|workspace| workspace.path) else { return };
