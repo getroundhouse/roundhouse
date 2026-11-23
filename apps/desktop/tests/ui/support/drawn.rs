@@ -9,9 +9,11 @@ use protocol::model::{Seq, SessionStatus};
 use super::Ui;
 
 impl Ui<'_> {
+    /// The events the open chat's transcript draws its rows from, which can be behind its session's log by what the
+    /// transcript hasn't caught up with yet.
     pub(crate) fn events(&self) -> Vec<SessionEvent> {
         let Some(transcript) = self.transcript() else { return Vec::new() };
-        self.cx.read_entity(&transcript, |t, _| (0..t.row_count()).filter_map(|row| t.event_at(row)).collect())
+        self.cx.read_entity(&transcript, |t, _| (0..t.row_count()).filter_map(|row| t.drawn_event_at(row)).collect())
     }
 
     /// The row the open chat's log has `event` in, whether it's loaded or not, as its position there says. It has to be
