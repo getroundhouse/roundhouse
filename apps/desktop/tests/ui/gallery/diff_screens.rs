@@ -9,7 +9,7 @@ use super::frame::{CHANGES, FILE, Frame, Part, TABS};
 use super::image_files::{CHANGED, changed_images};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::worlds::{conversation, diff, own_hub, videos};
+use super::worlds::{conversation, diff, own_hub, summarized, videos};
 use super::{patch, worktree};
 
 pub(crate) const DIFF_SCREENS: &[Screen] = &[
@@ -20,6 +20,13 @@ pub(crate) const DIFF_SCREENS: &[Screen] = &[
         world: Some(conversation),
         frame: Frame::Layout,
         steps: &[Step::Select(FOCUS), Step::Click("toggle-diff")],
+    },
+    Screen {
+        name: "changes-left-out",
+        spec: "diff.md",
+        world: Some(summarized),
+        frame: CHANGES,
+        steps: &[Step::Select(FOCUS)],
     },
     Screen {
         name: "changes-tree",

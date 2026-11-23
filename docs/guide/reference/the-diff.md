@@ -16,6 +16,7 @@ Two tabs switch what it lists:
 - **A workspace that changes nothing shows All files,** and switches to Changes when it first changes something. A tab you click stays.
 - **Changes shows as a list of paths, or in folders,** switched by the button at the sidebar's top right.
 - **Each changed file has an icon for how it changed:** added, modified, removed or renamed.
+- **A workspace that changes over 5,000 files lists 5,000,** the ones git tracks first, with a row at the end that says how many more there are. Click it to list the next 5,000.
 - **Dragging the sidebar's inner edge changes its width,** from 300px to 800px.
 
 ![The same changes in folders](../../spec/screens/changes-tree.png)

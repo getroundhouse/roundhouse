@@ -8,6 +8,7 @@ mod github_apps;
 mod github_gh;
 mod lines;
 mod providers;
+mod summarized;
 mod working;
 
 pub(super) use accounts::{
@@ -30,6 +31,7 @@ pub(super) use providers::{
     providers_gh_logged_out, providers_hub_is_a_bot, providers_key_differs, providers_managed, providers_no_gh,
     providers_no_key, providers_ssh,
 };
+pub(super) use summarized::summarized;
 pub(super) use working::{
     queue_held, queued, steered, steered_thinking, streaming, thinking_streaming, waiting_on_checks, waiting_on_stacks,
     working_background,

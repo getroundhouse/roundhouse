@@ -1,7 +1,7 @@
 use super::{comments_mark, rows};
 use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
-use crate::patch::{FilePatch, FileStatus};
-use crate::review::Review;
+use crate::patch::FileStatus;
+use crate::review::{ChangedRow, Paging, Review};
 use crate::shared_choice::{choose, chosen};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
@@ -92,12 +92,12 @@ impl Changes {
         // Only the files in view, rather than every file the branch changes.
         let (files, commented) = {
             let review = self.review.read(cx);
-            let files = review.files.as_deref().unwrap_or_default();
+            let files = review.listing().map_or_default(|listing| &*listing.rows);
             let file = |row: &Row| match row {
                 Row::File { index, .. } => files.get(*index).cloned(),
                 Row::Folder { .. } => None,
             };
-            let in_view: Vec<Option<FilePatch>> = rows.iter().map(file).collect();
+            let in_view: Vec<Option<ChangedRow>> = rows.iter().map(file).collect();
             (in_view, comments_mark::commented(files, &review.comments))
         };
         rows.into_iter()
@@ -125,8 +125,8 @@ impl Changes {
                 ),
                 Row::File { depth, .. } => {
                     let file = file?;
-                    let showing = open.as_ref() == Some(file.path());
-                    let comments = commented.get(file.path().as_ref()).copied().unwrap_or_default();
+                    let showing = open.as_ref() == Some(&file.path);
+                    let comments = commented.get(file.path.as_ref()).copied().unwrap_or_default();
                     Some(file_row(&file, depth, layout, showing, comments, &line_text, cx))
                 }
             })
@@ -138,13 +138,15 @@ impl Render for Changes {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let layout = layout(cx);
         let review = self.review.read(cx);
-        let truncated = review.truncated;
-        let changed = review.files.as_ref().map(|files| {
+        // Only the whole diff leaves untracked files out unsaid.
+        let truncated = review.truncated && review.listing().is_some_and(|listing| listing.paging.is_none());
+        let listing = review.listing().cloned();
+        let changed = listing.as_ref().map(|listing| {
             if self.laid_out != Some(layout) {
-                self.rows = rows(layout, files.iter().map(|file| file.path().as_ref()), &self.closed);
+                self.rows = rows(layout, listing.rows.iter().map(|file| file.path.as_ref()), &self.closed);
                 self.laid_out = Some(layout);
             }
-            files.len()
+            listing.changed()
         });
         let muted = look::colors(cx).text_muted;
         let body = match changed {
@@ -174,15 +176,31 @@ impl Render for Changes {
                 )
             })
             .child(body)
+            .children(listing.and_then(|listing| Some(left_out(listing.left_out, listing.paging?, cx))))
     }
+}
+
+/// The row under the list that says how many files it leaves out, which reads the next page of them when it's
+/// clicked, unless the hub is from before pages, or the page is being read.
+fn left_out(count: u64, paging: Paging, cx: &mut Context<Changes>) -> AnyElement {
+    let files = if count == 1 { "file" } else { "files" };
+    let says = match paging {
+        Paging::Idle | Paging::Refused => format!("{} more {files}", look::thousands(count)),
+        Paging::Reading => format!("Reading {} more {files}…", look::thousands(count)),
+    };
+    let row = look::list_row("changed-files-left-out", look::RowSize::Small)
+        .child(div().typeset(look::Type::Body).text_color(look::colors(cx).text_muted).child(says.clone()));
+    let row = match paging {
+        Paging::Idle => row.button(says).on_click(cx.listener(|t, _, _, cx| t.review.update(cx, Review::read_more))),
+        Paging::Reading | Paging::Refused => row,
+    };
+    div().flex_none().px(look::ROWS_INSET).pb(look::ROWS_INSET).child(row).into_any_element()
 }
 
 /// How many lines the files add and remove, and a way to change the layout, for the right end of the tabs above the
 /// sidebar while Changes shows.
 pub(crate) fn controls(changes: &Entity<Changes>, code: &Placed, cx: &App) -> AnyElement {
-    let files = changes.read(cx).review.read(cx).files.iter().flatten();
-    let (added, removed) =
-        files.fold((0, 0), |(added, removed), file| (added + file.added(), removed + file.removed()));
+    let (added, removed) = changes.read(cx).review.read(cx).totals();
     let tree = layout(cx) == Layout::Tree;
     let changes = changes.downgrade();
     h_flex()
@@ -224,7 +242,7 @@ fn status_icon(status: FileStatus, cx: &App) -> Icon {
 /// A changed file's row: where it is, then its name, and at the right end how many comments it has, if any, how many
 /// lines it adds and removes, on the name's baseline, and how it changed.
 fn file_row(
-    file: &FilePatch,
+    file: &ChangedRow,
     depth: usize,
     layout: Layout,
     showing: bool,
@@ -233,7 +251,7 @@ fn file_row(
     cx: &mut Context<Changes>,
 ) -> AnyElement {
     let muted = look::colors(cx).text_muted;
-    let path = file.path().clone();
+    let path = file.path.clone();
     let (folders, name) = split(&path);
     let (folders, name) = (folders.to_string(), name.to_string());
     let label = line_text
@@ -248,7 +266,7 @@ fn file_row(
             d.child(div().flex_shrink(1.).min_w_0().overflow_hidden().text_ellipsis().text_color(muted).child(folders))
         })
         .child(div().flex_shrink_0().child(name));
-    let status = status_icon(file.status(), cx);
+    let status = status_icon(file.status, cx);
     let comments = comments_mark::mark(&path, comments, line_text, cx);
     row_frame(format!("file-{path}"), List::Changes, depth, showing)
         .child(label)
@@ -257,9 +275,7 @@ fn file_row(
                 .flex_none()
                 .gap(look::Space::Small)
                 .children(comments)
-                .child(
-                    look::lines_changed(look::LinesKind::Plain, file.added(), file.removed()).placed(&line_text.code),
-                )
+                .child(look::lines_changed(look::LinesKind::Plain, file.added, file.removed).placed(&line_text.code))
                 .child(status),
         )
         .on_click(cx.listener(move |_, _, _, cx| cx.emit(ChangesEvent::Open(path.clone()))))

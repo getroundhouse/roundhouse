@@ -1,3 +1,4 @@
+use super::listing::{Listing, Summarized};
 use crate::patch;
 use crate::patch::FilePatch;
 use client_core::Client;
@@ -35,6 +36,12 @@ pub struct Review {
     pub(super) held: Vec<DiffComment>,
     /// Deleted here, and still in client-core's copy until the feed says they've gone.
     pub(super) deleting: HashSet<CommentId>,
+    /// What the hub's summary of the changed files lists, and the pages read past it, where the hub sends one.
+    pub(super) summarized: Option<Summarized>,
+    /// How many times the summary has been taken, so a page asked for before it changed isn't listed after it.
+    pub(super) pages_asked: u64,
+    /// What Changes lists, from the summary or the whole diff, laid out again only when either changes.
+    pub(super) listing: Option<Listing>,
 }
 
 impl EventEmitter<ReviewEvent> for Review {}
@@ -52,6 +59,9 @@ impl Review {
             comments: Vec::new(),
             held: Vec::new(),
             deleting: HashSet::new(),
+            summarized: None,
+            pages_asked: 0,
+            listing: None,
         };
         this.set_comments(held, cx);
         this.refresh(cx);
@@ -91,6 +101,7 @@ impl Review {
                         t.files = Some(files);
                         t.truncated = truncated;
                         t.base_commit = base;
+                        t.list_again(cx);
                         cx.emit(ReviewEvent::Loaded);
                     }
                     Err(message) => cx.emit(ReviewEvent::Error(message)),
@@ -106,9 +117,9 @@ impl Review {
         (self.client.clone(), self.workspace_id.clone())
     }
 
-    /// Whether the diff has loaded, with nothing changed.
+    /// Whether the changes have been read, and the workspace changes nothing.
     pub fn has_no_changes(&self) -> bool {
-        self.files.as_ref().is_some_and(Vec::is_empty)
+        self.listing.as_ref().is_some_and(|listing| listing.changed() == 0)
     }
 
     /// A file as the diff last loaded has it. `None` once it no longer changes anything.

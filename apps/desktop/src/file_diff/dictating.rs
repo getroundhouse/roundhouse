@@ -20,8 +20,9 @@ impl FileDiff {
         let path = position.path.clone();
         let hints = move |diff: &Self, cx: &App| {
             let typed = typed.read(cx).text().to_string();
-            let files = diff.review.read(cx).files.iter().flatten();
-            let changed = files.map(|patch| patch.path().as_ref()).collect();
+            let listing = diff.review.read(cx).listing();
+            let changed =
+                listing.into_iter().flat_map(|listing| listing.rows.iter()).map(|file| file.path.as_ref()).collect();
             dictation_ui::Hints::new(Field::DiffComment { typed: &typed, path: &path, changed }.hint_words())
         };
         let on_event =

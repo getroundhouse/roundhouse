@@ -10,6 +10,8 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
   ![The sidebar of changes as a list](screens/changes.png)
 
+- **While the hub keeps a workspace's changed files current, the list is the hub's summary of them, and past 5,000 files a row at its end says how many more there are.** The files git tracks come first, so an unignored folder of generated files doesn't crowd out the agent's edits. Clicking the row lists up to 5,000 more, read from the worktree as it is then, until none are left, and the row says it's reading them meanwhile. A hub too old to read them leaves the row saying how many. The list goes back to the summary's files whenever the summary changes. Where the hub's summary is only as of an earlier read, or the hub keeps none, the list is read from the whole diff, at the moments below, since an earlier read can be older than what switching to Changes reads. *Unconfirmed.*
+
 - **It's open from the start, so a workspace's changes, or its files, and its pull request are always in view.** The button at the right end of the header and `Cmd-Shift-B` hide and show it, as `Cmd-B` does the sidebar on the left, and the button's tooltip says the key, in every workspace at once, and the choice holds until the app quits, as the choice of list or folders does. It slides open and shut, and its left edge drags to change how wide it is, as `sidebar.md` says. *Unconfirmed.*
 
   **The sidebar hidden, with the pull request's number and its action in the header.** *Unconfirmed.*
