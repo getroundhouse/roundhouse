@@ -64,8 +64,7 @@ impl Hub {
             open.watch.copy.lock().exited(exit);
         }
         // On a task of its own, since this is called as the worker's frames are read, and taking the record away waits
-        // for `changing`, which carrying on with the worker's terminals holds while it waits for the worker's reply,
-        // which comes after this frame.
+        // for `changing`, which a list of the hub's records holds while it reads the database.
         let (hub, link) = (self.clone(), link.id);
         tokio::spawn(async move { hub.terminal_ended(&id, link).await });
     }
@@ -106,6 +105,21 @@ impl Hub {
     /// say which it runs, within the time one that answers at once is given, is taken to run none, as one that fails
     /// to say is, and nothing waits for it meanwhile.
     pub(crate) async fn carry_on_terminals(&self, workspace_id: &WorkspaceId, link: &WorkerLink) -> usize {
+        let (carried_on, unrecorded) = self.give_records(workspace_id, link).await;
+        // Told once `changing` is let go, as an open that can't give its terminal a record tells its worker, since a
+        // worker answers a stop only once the shell has ended. And not waited for, since the hub serves no client until
+        // it has carried on with every worker it found. The shell's end reaches the hub as any shell's does.
+        for terminal in unrecorded {
+            if let Err(e) = link.send(worker::TerminalStop { terminal: terminal.clone() }).await {
+                warn!(%terminal, "ending a shell given no record: {}", e.message);
+            }
+        }
+        carried_on
+    }
+
+    /// Gives a record to each terminal the worker on `link` says it runs, under `changing`, and says how many it gave
+    /// one, and which it couldn't, whose shells are to end.
+    async fn give_records(&self, workspace_id: &WorkspaceId, link: &WorkerLink) -> (usize, Vec<TerminalId>) {
         // Before it's asked, so the end of a shell the worker lists, which can reach the hub before the list does, is
         // kept for this to give no record. One that comes after the list waits for `changing`, and removes the record.
         self.terminals.asked_what_runs.lock().insert(link.id, HashSet::new());
@@ -115,13 +129,13 @@ impl Hub {
         let running = match answered {
             Ok(reply) => reply.terminals,
             // A worker from before terminals runs none.
-            Err(e) if e.code == ErrorCode::Unsupported => return 0,
+            Err(e) if e.code == ErrorCode::Unsupported => return (0, Vec::new()),
             Err(e) => {
                 warn!(%workspace_id, "asking the worker an earlier hub left for its terminals: {}", e.message);
-                return 0;
+                return (0, Vec::new());
             }
         };
-        let mut carried_on = 0;
+        let (mut carried_on, mut unrecorded) = (0, Vec::new());
         for RunningTerminal { terminal, opened_at_ms } in
             running.into_iter().filter(|running| !ended.contains(&running.terminal))
         {
@@ -129,8 +143,7 @@ impl Hub {
                 Ok(rev) => rev,
                 Err(e) => {
                     warn!(%terminal, "carrying on with a terminal, so it's ended: {}", e.message);
-                    // Its end waits for `changing` on a task of its own, so this can wait for the stop holding it.
-                    let _ = link.call(worker::TerminalStop { terminal }).await;
+                    unrecorded.push(terminal);
                     continue;
                 }
             };
@@ -140,7 +153,7 @@ impl Hub {
             self.notify(HubNotice::Terminal(record));
             carried_on += 1;
         }
-        carried_on
+        (carried_on, unrecorded)
     }
 
     /// The record of a terminal that's open, and the link to its worker, if that's still the workspace's worker.
