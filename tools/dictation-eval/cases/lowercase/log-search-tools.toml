@@ -1,0 +1,29 @@
+# Searching logs: the person names the command-line tools the agent wrote in lowercase prose.
+field = "composer"
+said = "Use ripgrep rather than grep, pipe the matches through awk to pull out the request IDs, and let fzf pick the one to open."
+terms = [
+  { written = "ripgrep" },
+  { written = "grep" },
+  { written = "awk" },
+  { written = "fzf" },
+]
+
+[workspace]
+name = "slow-requests"
+branch = "ines/slow-requests"
+repo = "harbourmaster"
+
+[[chat]]
+person = "Some requests take ten seconds and I can't tell which. Write me a script that finds them in the logs."
+
+[[chat]]
+call = { kind = "find_files", pattern = "logs/**/*.log" }
+
+[[chat]]
+call = { kind = "command", command = "ls -lh logs/", description = "See how big the logs are" }
+
+[[chat]]
+agent = """
+There are 40 GB of logs across 300 files, one line per request with its duration at the end.
+
+A script can walk them with grep, but ripgrep is several times faster over this much text, and it skips the compressed archives unless asked. Pulling out the request IDs is one awk field, and if you'd like to choose among the slow ones by hand, fzf can show them as a list to filter. Which parts do you want in the script?"""

@@ -138,3 +138,22 @@ fn a_long_proposal_leaves_room_for_what_comes_after_it() {
     assert!(hints.iter().any(|h| h == "Wollstonecraft"), "room after it: {} hints", hints.len());
     assert!(hints.iter().filter(|h| h.starts_with("zeta_")).count() <= 40, "{hints:?}");
 }
+
+/// A word typed in lower case is hinted when English rarely uses it, as a tool's name is, alone or as a part of one, and
+/// not when it's an everyday word, a contraction, or a compound of everyday words.
+#[test]
+fn prose_hints_a_lowercase_word_english_rarely_uses() {
+    let mut collector = HintCollector::new();
+    collector.add_prose(
+        "we'll keep tokio for now, and the long-running jobs don't need kustomize or ingress-nginx, \
+         just a built-in timer and ntfy.sh",
+    );
+    let hints = collector.finish();
+
+    for expected in ["tokio", "kustomize", "ingress-nginx", "ntfy.sh"] {
+        assert!(hints.iter().any(|h| h == expected), "missing {expected:?} in {hints:?}");
+    }
+    for unwanted in ["we'll", "keep", "jobs", "long-running", "don't", "built-in", "timer"] {
+        assert!(!hints.iter().any(|h| h == unwanted), "unexpected {unwanted:?} in {hints:?}");
+    }
+}

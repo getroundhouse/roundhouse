@@ -1,0 +1,40 @@
+# Answering which checks a Python project runs, naming the tools the question offered in lowercase.
+field = "answer"
+said = "Run ruff for linting and formatting, mypy in strict mode, and pytest with coverage. Drop the old flake8 config."
+terms = [
+  { written = "ruff" },
+  { written = "mypy" },
+  { written = "pytest" },
+  { written = "flake8" },
+]
+
+[workspace]
+name = "lint-setup"
+branch = "anselm/lint-setup"
+repo = "wortwatch"
+
+[[chat]]
+person = "Set up checks for the scraper so CI catches mistakes before they reach the server."
+
+[[chat]]
+call = { kind = "read", path = "pyproject.toml" }
+
+[[chat]]
+call = { kind = "read", path = "setup.cfg" }
+
+[[chat]]
+agent = """
+There's a flake8 section in the old setup file and no type checking at all.
+
+These days ruff covers what flake8 did, and formats too, so one tool can replace two. For types, mypy is the usual choice, and the tests already run under pytest, so coverage is a flag away. I'll ask which of these you want in CI."""
+
+[[chat]]
+call = { kind = "questions" }
+
+[question]
+header = "Checks"
+text = "Which checks should CI run on the scraper, and how strict should they be?"
+options = [
+  { label = "Lint and types", description = "ruff for linting and formatting, and mypy for types, beside the tests." },
+  { label = "Lint only", description = "ruff alone, in place of flake8, beside the tests." },
+]

@@ -8,8 +8,8 @@
     "missed": [
       "paper_stock"
     ],
-    "hints": 11,
-    "unused": 7
+    "hints": 14,
+    "unused": 10
   },
   "chat-terms/clock-hooks": {
     "hinted": [
@@ -20,8 +20,8 @@
     "missed": [
       "onTimeout"
     ],
-    "hints": 13,
-    "unused": 8
+    "hints": 19,
+    "unused": 14
   },
   "chat-terms/exif-orientation": {
     "hinted": [
@@ -29,8 +29,8 @@
       "parse_orientation"
     ],
     "missed": [],
-    "hints": 11,
-    "unused": 8
+    "hints": 13,
+    "unused": 10
   },
   "chat-terms/stale-reports": {
     "hinted": [],
@@ -38,8 +38,8 @@
       "ErrStaleReport",
       "slog"
     ],
-    "hints": 11,
-    "unused": 11
+    "hints": 15,
+    "unused": 15
   },
   "chat-terms/station-names": {
     "hinted": [
@@ -57,8 +57,8 @@
       "TunnelPool"
     ],
     "missed": [],
-    "hints": 11,
-    "unused": 8
+    "hints": 15,
+    "unused": 12
   },
   "diff-code/dwell-clamp": {
     "hinted": [],
@@ -116,8 +116,8 @@
       "dayjs",
       "react-query"
     ],
-    "hints": 17,
-    "unused": 16
+    "hints": 21,
+    "unused": 20
   },
   "hyphenated/migration-flags-answer": {
     "hinted": [],
@@ -126,8 +126,8 @@
       "dry-run",
       "fail-fast"
     ],
-    "hints": 11,
-    "unused": 11
+    "hints": 14,
+    "unused": 14
   },
   "hyphenated/signal-box-workspace": {
     "hinted": [
@@ -140,14 +140,15 @@
     "unused": 3
   },
   "hyphenated/test-runner-crates": {
-    "hinted": [],
-    "missed": [
+    "hinted": [
       "cargo-nextest",
-      "env-filter",
       "tracing-subscriber"
     ],
-    "hints": 8,
-    "unused": 8
+    "missed": [
+      "env-filter"
+    ],
+    "hints": 12,
+    "unused": 10
   },
   "long-chat/calibration-answer": {
     "hinted": [],
@@ -155,8 +156,8 @@
       "gravity_offset",
       "hydrometer-sim"
     ],
-    "hints": 25,
-    "unused": 25
+    "hints": 41,
+    "unused": 41
   },
   "long-chat/newtype-review": {
     "hinted": [],
@@ -164,8 +165,8 @@
       "AccessionId",
       "Halvard"
     ],
-    "hints": 27,
-    "unused": 27
+    "hints": 40,
+    "unused": 40
   },
   "long-chat/reminder-proposal-note": {
     "hinted": [],
@@ -173,51 +174,80 @@
       "HoldQueue",
       "RENEWAL_LIMIT"
     ],
-    "hints": 40,
-    "unused": 40
+    "hints": 55,
+    "unused": 55
   },
   "lowercase/catalog-database-note": {
-    "hinted": [],
-    "missed": [
+    "hinted": [
       "litestream",
       "pgbouncer",
       "postgres",
       "sqlite"
     ],
-    "hints": 8,
-    "unused": 8
+    "missed": [],
+    "hints": 19,
+    "unused": 15
   },
   "lowercase/cluster-ingress": {
-    "hinted": [],
-    "missed": [
+    "hinted": [
       "cert-manager",
       "kustomize",
       "traefik"
     ],
-    "hints": 8,
-    "unused": 8
+    "missed": [],
+    "hints": 19,
+    "unused": 16
   },
   "lowercase/config-crates": {
     "hinted": [
+      "serde",
+      "toml",
       "toml_edit"
     ],
-    "missed": [
-      "serde",
-      "toml"
+    "missed": [],
+    "hints": 17,
+    "unused": 14
+  },
+  "lowercase/log-search-tools": {
+    "hinted": [
+      "awk",
+      "fzf",
+      "grep",
+      "ripgrep"
     ],
-    "hints": 7,
+    "missed": [],
+    "hints": 10,
     "unused": 6
+  },
+  "lowercase/nightly-timers": {
+    "hinted": [
+      "journalctl",
+      "restic"
+    ],
+    "missed": [],
+    "hints": 17,
+    "unused": 15
+  },
+  "lowercase/python-checks-answer": {
+    "hinted": [
+      "flake8",
+      "mypy",
+      "pytest",
+      "ruff"
+    ],
+    "missed": [],
+    "hints": 15,
+    "unused": 11
   },
   "lowercase/tokio-runtime-answer": {
     "hinted": [
+      "reqwest",
       "smol",
       "tokio"
     ],
-    "missed": [
-      "reqwest"
-    ],
-    "hints": 11,
-    "unused": 9
+    "missed": [],
+    "hints": 16,
+    "unused": 13
   },
   "plain/bigger-buttons-workspace": {
     "hinted": [],
@@ -228,13 +258,13 @@
   "plain/leave-a-note": {
     "hinted": [],
     "missed": [],
-    "hints": 14,
-    "unused": 14
+    "hints": 16,
+    "unused": 16
   },
   "plain/thumbnail-cache-note": {
     "hinted": [],
     "missed": [],
-    "hints": 21,
-    "unused": 21
+    "hints": 25,
+    "unused": 25
   }
 }
