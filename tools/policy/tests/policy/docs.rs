@@ -20,12 +20,8 @@ const LIMITS: &[(&str, usize)] = &[
 /// Docs longer than that from before there was a limit, as (path, the most words it can have). A ceiling only comes
 /// down: it stays within [`SLACK`] of the doc as the doc is shortened, and the doc comes off this list once it's within
 /// its kind's limit, or gone.
-const OVER: &[(&str, usize)] = &[
-    ("docs/standards/components.md", 4_500),
-    ("docs/standards/gpui.md", 3_000),
-    ("docs/standards/reviews.md", 3_100),
-    ("docs/standards/testing.md", 2_100),
-];
+const OVER: &[(&str, usize)] =
+    &[("docs/standards/components.md", 4_500), ("docs/standards/gpui.md", 3_000), ("docs/standards/reviews.md", 3_100)];
 
 /// How far under its ceiling a doc on [`OVER`] can be before the ceiling has to come down to it.
 const SLACK: usize = 300;
