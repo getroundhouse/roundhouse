@@ -33,11 +33,13 @@ pub use pull_requests::{
 };
 mod reach;
 mod references;
+mod repositories;
 #[cfg(test)]
 use expiration::ends_at_ms;
 pub use reach::PushAnswer;
 pub use references::ReferencesRead;
+pub use repositories::{RepositoriesRead, RepositoryAsk, RepositoryFound, Seen, SeenPage};
 #[cfg(any(test, feature = "testing"))]
 mod stand_in;
 #[cfg(any(test, feature = "testing"))]
-pub use stand_in::{Answer, Gate, PullRequestState, PullRequests, References, Script, StandIn};
+pub use stand_in::{Answer, Gate, PullRequestState, PullRequests, References, Repositories, Script, StandIn};

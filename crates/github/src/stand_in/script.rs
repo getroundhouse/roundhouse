@@ -4,6 +4,7 @@ use super::Answer;
 use super::apps::{as_the_app, named};
 use super::pull_requests::PullRequests;
 use super::references::References;
+use super::repositories::Repositories;
 
 /// What the stand-in answers each call with. A call it has run out of answers for gets the last again.
 #[derive(Default)]
@@ -40,6 +41,9 @@ pub struct Script {
     /// `POST /graphql` asking after issues or pull requests by number, once `graphql` has none, answered from these
     /// as they are when it's asked, in place of `pull_requests`.
     pub references: Option<References>,
+    /// `POST /graphql` asking after repositories, once `graphql` has none, answered from these as they are when it's
+    /// asked. Without them, the repository `pull_requests` are of is answered for, as `R_project`.
+    pub repositories: Option<Repositories>,
 }
 
 /// What it answers with still, as it goes through the script.
@@ -56,6 +60,7 @@ pub(super) struct Answering {
     graphql: VecDeque<Answer>,
     pull_requests: Option<PullRequests>,
     references: Option<References>,
+    repositories: Option<Repositories>,
 }
 
 impl Answering {
@@ -74,6 +79,7 @@ impl Answering {
             graphql: script.graphql.into(),
             pull_requests: script.pull_requests,
             references: script.references,
+            repositories: script.repositories,
         }
     }
 
@@ -94,6 +100,16 @@ pub(super) fn chosen(answering: &mut Answering, head: &str, body: &str) -> Answe
                 && body.contains(": issueOrPullRequest(")
             {
                 return Some(references.answer(body));
+            }
+            if body.contains(" sshUrl ") {
+                let token = bearer(head);
+                if let Some(repositories) = &answering.repositories {
+                    return Some(repositories.answer(token, body));
+                }
+                // The repository its pull requests are of, so a hub links a project to it.
+                if let Some(pull_requests) = &answering.pull_requests {
+                    return Some(pull_requests.repositories().answer(token, body));
+                }
             }
             answering.pull_requests.as_ref().map(|pull_requests| pull_requests.answer(body))
         };
@@ -121,6 +137,10 @@ pub(super) fn chosen(answering: &mut Answering, head: &str, body: &str) -> Answe
         let answer = answering.pushes.get_mut(repository).and_then(Answering::next);
         return answer.unwrap_or_else(|| Answer::git_says(404, "Repository not found."));
     }
-    let token = head.lines().find_map(|line| line.strip_prefix("authorization: Bearer ")).unwrap_or_default();
-    answering.users.get(token).cloned().unwrap_or_else(|| Answer::status(401, Vec::new()))
+    answering.users.get(bearer(head)).cloned().unwrap_or_else(|| Answer::status(401, Vec::new()))
+}
+
+/// The token the request whose head is `head` was made with, if any.
+fn bearer(head: &str) -> &str {
+    head.lines().find_map(|line| line.strip_prefix("authorization: Bearer ")).unwrap_or_default()
 }
