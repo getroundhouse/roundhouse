@@ -214,7 +214,9 @@ fn files_the_hub_kept_go_with_the_prompt_unread_or_come_back_if_the_workspace_ca
 
     let failed = |ui: &Ui<'_>| ui.view().error.clone().is_some_and(|e| e.contains("Couldn't create the workspace"));
     ui.wait("the workspace that can't be made to fail", |ui| failed(ui) && ui.view().busy.is_free());
-    assert_eq!(ui.view().records().workspaces().len(), before + 1, "nothing more was made");
+    // The hub's record of the workspace it began goes once making it fails, which the feed tells the app of apart from
+    // the failure's reply.
+    ui.wait("nothing more made", |ui| ui.view().records().workspaces().len() == before + 1);
     assert_eq!(ui.dialog_text(), "say:with more notes");
     ui.wait("the file read back", |ui| ui.dialog_attached() == ["notes.txt"]);
     assert_eq!(kept(&stack).files.iter().map(|file| file.name.as_str()).collect::<Vec<_>>(), ["notes.txt"]);

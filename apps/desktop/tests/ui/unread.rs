@@ -48,8 +48,10 @@ fn open_with_a_workspace<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'
     (ui, workspace, chat)
 }
 
-/// Marks the chat showing unread from its tab's menu, and waits for its tab and its workspace's row to say so.
+/// Marks the chat showing unread from its tab's menu, and waits for its tab and its workspace's row to say so. The menu
+/// offers what the app has of the chat, so it's opened once the app has it read, which comes after the hub has it so.
 fn mark_unread_from_its_tab(ui: &mut Ui, workspace: &WorkspaceId, chat: &SessionId) {
+    ui.wait("the app to have it read", |ui| !tab_unread(ui, chat));
     ui.right_click(SharedString::from(format!("chat-{chat}")));
     ui.click(ElementId::Integer(0));
     ui.wait("its tab and row to say so", |ui| tab_unread(ui, chat) && row_unread(ui, workspace));
@@ -223,6 +225,8 @@ fn a_chat_marked_unread_and_shown_again_while_the_hub_restarts_is_read_once_its_
     ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &later));
 
     for shown in [ShownAgain::FromAnotherChat, ShownAgain::ByGoingAwayAndBack] {
+        // The menu offers what the app has of the chat, which comes after the hub has it read.
+        ui.wait(&format!("{shown:?}: the app to have it read"), |ui| !tab_unread(ui, &later));
         ui.right_click(SharedString::from(format!("chat-{later}")));
         ui.click(ElementId::Integer(0));
         let unread = |ui: &mut Ui| unread_at_the_hub(&stack, &later) && tab_unread(ui, &later);
@@ -277,7 +281,10 @@ fn the_sidebars_menu_marks_a_workspace_without_showing_it_as_it_offered_when_it_
     let session = stack.client().session_get(&chat).unwrap();
     assert!(session.unread() && session.reply_seq == second, "Mark as read: the second reply was read unseen");
 
-    // "Mark as read" again, with nothing coming, reads it all, and leaves the workspace where it is.
+    // "Mark as read" again, with nothing coming, reads it all, and leaves the workspace where it is. It reads what the app
+    // has, so once the app has the second reply.
+    let has_the_second = |ui: &mut Ui| ui.view().records().session(&chat).is_some_and(|s| s.reply_seq == second);
+    ui.wait("Mark as read again: the app to have the second reply", has_the_second);
     ui.right_click(menu.clone());
     ui.click(ElementId::Integer(0));
 
