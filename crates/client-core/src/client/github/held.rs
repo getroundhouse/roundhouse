@@ -130,7 +130,7 @@ impl GithubHeld {
     /// `changed` says changed what it holds: lets go of what `GithubUpdate` brought of each, and tells each view that
     /// shows one that changed.
     pub(super) fn observed(&mut self, keys: &[ObservationKey], changed: bool) {
-        for key in keys.iter().filter(|key| githubs(key)) {
+        for key in keys.iter().filter(|key| key.is_github()) {
             if key.level() == Some(Level::Hub) {
                 self.hub_observes = true;
             }
@@ -223,22 +223,9 @@ impl GithubHeld {
     }
 }
 
-/// Whether `key` is of what GitHub says.
-pub(super) fn githubs(key: &ObservationKey) -> bool {
-    match key {
-        ObservationKey::WorkspacePullRequest { .. }
-        | ObservationKey::WorkspacePullRequestDetail { .. }
-        | ObservationKey::WorkspaceRepositoryUnseen { .. }
-        | ObservationKey::Reference { .. } => true,
-        ObservationKey::WorkspaceLines { .. } | ObservationKey::WorkspaceChanges { .. } | ObservationKey::Unknown => {
-            false
-        }
-    }
-}
-
 /// The keys of the observations of GitHub among `observations`.
 pub(in crate::client) fn github_keys(observations: &[Observation]) -> Vec<ObservationKey> {
-    observations.iter().map(Observation::key).filter(githubs).collect()
+    observations.iter().map(Observation::key).filter(ObservationKey::is_github).collect()
 }
 
 /// The key of the observation of GitHub that `notice` tells of, if it tells of one.
@@ -247,7 +234,7 @@ pub(in crate::client) fn notice_key(notice: &HubNotice) -> Option<ObservationKey
         ObservationNotice::Copy(copy) => copy.key(),
         ObservationNotice::Removed { observation, .. } => observation,
     };
-    githubs(&key).then_some(key)
+    key.is_github().then_some(key)
 }
 
 /// Which observations a workspace's own pull request is sent as.

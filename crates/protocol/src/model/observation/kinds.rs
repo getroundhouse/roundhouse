@@ -118,4 +118,19 @@ impl ObservationKey {
             ObservationKey::Unknown => None,
         }
     }
+
+    /// Whether it's of what GitHub says, which a hub sends as an observation only to a start that reads GitHub so, as
+    /// [`Subscription::github_observed`](crate::client::subscriptions::Subscription::github_observed) says. `false` for
+    /// one of a kind this build doesn't know.
+    pub fn is_github(&self) -> bool {
+        match self {
+            ObservationKey::WorkspacePullRequest { .. }
+            | ObservationKey::WorkspacePullRequestDetail { .. }
+            | ObservationKey::WorkspaceRepositoryUnseen { .. }
+            | ObservationKey::Reference { .. } => true,
+            ObservationKey::WorkspaceLines { .. }
+            | ObservationKey::WorkspaceChanges { .. }
+            | ObservationKey::Unknown => false,
+        }
+    }
 }
