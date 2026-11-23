@@ -79,7 +79,7 @@ fn one_no_list_has_outlasts_every_list_but_goes_when_removed() {
     assert!(!kept.apply(made(LISTED, 2, 3), &mut taken), "older than the list, which has it");
     kept.apply_list(&Level::Hub, Rev::new(7), [], &mut taken);
     assert_eq!((value(&kept, &APART), value(&kept, &LISTED)), (Some(1), None), "a list without either");
-    assert!(kept.remove(&APART, Rev::new(6)), "a removal older than the list, which doesn't have it");
+    assert!(kept.remove(&APART, Rev::new(6), &mut taken), "a removal older than the list, which doesn't have it");
     kept.apply_list(&Level::Hub, Rev::new(8), [], &mut taken);
     assert!(!kept.apply(made(APART, 2, 5), &mut taken), "an older copy after a list, which kept the removal");
 
@@ -97,7 +97,7 @@ fn a_level_s_list_says_what_any_copy_or_list_of_it_no_newer_says() {
     assert!(kept.apply_list(&w(), Rev::new(5), [made(also_of_w.clone(), 1, 3)], &mut taken), "w's level listed");
 
     assert!(!kept.apply(made(OF_W, 1, 4), &mut taken), "w's, from before w's list, which lacks it");
-    assert!(!kept.remove(&OF_W, Rev::new(5)), "a removal w's list already says");
+    assert!(!kept.remove(&OF_W, Rev::new(5), &mut taken), "a removal w's list already says");
     assert!(kept.apply(made(OF_W, 2, 6), &mut taken), "w's, after its list, though the hub's list is newer");
     assert!(!kept.apply_list(&w(), Rev::new(4), [], &mut taken), "a list of w older than the one taken in");
     assert_eq!((value(&kept, &OF_W), value(&kept, &also_of_w)), (Some(2), Some(1)));
@@ -105,6 +105,31 @@ fn a_level_s_list_says_what_any_copy_or_list_of_it_no_newer_says() {
     assert!(kept.apply(made(OF_W, 3, 4), &mut taken), "w's list was let go of with what's held of it");
 
     assert_eq!((value(&kept, &OF_W), value(&kept, &LISTED)), (Some(3), Some(1)));
+}
+
+/// A connection can be to another hub, or to one whose revisions started again, as after its database is replaced from
+/// a copy, so the first list of a level on it replaces what earlier connections left of that level, whatever their
+/// revisions, and leaves every other level's. What comes on one connection goes by revision, a list after the first
+/// included.
+#[test]
+fn the_first_list_of_a_level_on_a_connection_replaces_what_earlier_ones_left_of_it() {
+    let (mut kept, mut taken) = (ByRevision::<Made>::default(), Taken::default());
+    let (also_of_w, gone_from_w) = (MadeKey { at: At::Workspace, of: 3 }, MadeKey { at: At::Workspace, of: 4 });
+    kept.apply_list(&Level::Hub, Rev::new(9), [made(LISTED, 1, 9)], &mut taken);
+    kept.apply_list(&w(), Rev::new(9), [made(OF_W, 1, 9), made(also_of_w.clone(), 1, 8)], &mut taken);
+    kept.remove(&gone_from_w, Rev::new(9), &mut taken);
+
+    kept.connected_again(&mut taken);
+    let on_this_one = MadeKey { at: At::Workspace, of: 5 };
+    assert!(kept.apply(made(on_this_one.clone(), 2, 10), &mut taken), "newer than any list of w");
+    assert!(kept.apply_list(&w(), Rev::new(3), [made(OF_W, 2, 2), made(gone_from_w.clone(), 2, 1)], &mut taken));
+    assert!(!kept.apply_list(&w(), Rev::new(2), [], &mut taken), "older than the one taken in on this connection");
+
+    let w_held = [&OF_W, &also_of_w, &gone_from_w, &on_this_one].map(|key| value(&kept, key));
+    assert_eq!(w_held, [Some(2), None, Some(2), Some(2)]);
+    assert_eq!(value(&kept, &LISTED), Some(1), "the hub's level, which hasn't been listed on this connection");
+    assert!(kept.apply_list(&Level::Hub, Rev::new(3), [made(LISTED, 2, 3)], &mut taken));
+    assert_eq!(value(&kept, &LISTED), Some(2));
 }
 
 /// A client that stops following a level lets go of what it held of that level, copies and removals alike, since
@@ -116,7 +141,7 @@ fn letting_go_of_a_level_drops_its_copies_and_removals_and_nothing_else() {
     kept.apply(made(OF_W, 1, 3), &mut taken);
     kept.apply(made(LISTED, 1, 3), &mut taken);
     kept.apply(made(APART, 1, 3), &mut taken);
-    kept.remove(&other, Rev::new(6));
+    kept.remove(&other, Rev::new(6), &mut taken);
 
     assert!(kept.let_go(&w()));
 

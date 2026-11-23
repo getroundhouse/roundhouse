@@ -56,4 +56,4 @@ These rules cover records: what one is, how one changes, and how a client keeps 
 
 ## Keeping a copy
 
-- **A change sends the whole record with its revision, and a client keeps whichever copy has the newer one.** The revision, `rev`, comes from one counter per hub, which moves in the same transaction as the change. A session's newest event moves none, since the log says how far a session has got. To recover, a client lists the records again, and keeps the copy with the newer revision, as `docs/principles/sync.md` says.
+- **A change sends the whole record with its revision, and a client keeps whichever copy has the newer one.** The revision, `rev`, comes from one counter per hub, which moves in the same transaction as the change. A session's newest event moves none, since the log says how far a session has got. To recover, a client lists the records again, and keeps the copy with the newer revision, as `docs/principles/sync.md` says. The first list of a level on a connection replaces what the client holds of that level, whatever the revisions, so a hub whose revisions started again, as after its database is replaced from a copy, is shown at once.

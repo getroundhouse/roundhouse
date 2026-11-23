@@ -57,7 +57,7 @@ impl<R: OfSession> BySession<R> {
         if !self.wanted.contains_key(session) {
             return false;
         }
-        self.changed(|held, _| held.remove(&(session.clone(), id), rev))
+        self.changed(|held, taken| held.remove(&(session.clone(), id), rev, taken))
     }
 
     /// Keeps the records of `session` while it's followed, once more than before.
@@ -75,6 +75,11 @@ impl<R: OfSession> BySession<R> {
         }
         self.wanted.remove(session);
         self.changed(|held, _| held.let_go(&Level::Session { id: session.clone() }))
+    }
+
+    /// Starts a new connection, as [`ByRevision::connected_again`] says.
+    pub(crate) fn connected_again(&mut self) {
+        self.held.connected_again(&mut self.taken);
     }
 
     /// What views read of them now.

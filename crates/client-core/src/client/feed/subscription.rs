@@ -66,8 +66,12 @@ impl RecordsFeed {
     }
 
     /// Carries on on a new connection, which takes in what replies on it carry, as [`RecordsFeed::start`] says, and so
-    /// does what the same hub says of GitHub, and following each workspace followed at its own level.
+    /// does what the same hub says of GitHub, and following each workspace followed at its own level. The connection
+    /// may be to another hub, or to one whose revisions started again, so the first list of each level on it replaces
+    /// what's held of that level, as [`HubRecords::connected_again`] says. Call it before anything that follows a session
+    /// carries on on `client`, since what that takes in goes into the same copy.
     pub fn reconnect(&self, client: &Client) {
+        self.follow.quietly(HubRecords::connected_again);
         client.inner.folding.reach(&self.follow);
         self.follow.reconnect(client);
         self.github.reconnect(client);
