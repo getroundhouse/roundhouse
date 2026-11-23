@@ -26,7 +26,7 @@ These rules cover observations, the hub's copies of what others own: what one is
 
 - **What a worker watches reaches the hub only from the workspace's current worker, and each report replaces the one before it whole.** A report from a worker that's been replaced is dropped, and nothing is merged. For example, a worker sends every branch of its worktree each time one moves. *Unconfirmed.*
 - **The cache is a file of its own, apart from the hub's database, which the hub empties rather than migrates.** It has a version of its own. When the version isn't the hub's, as after an update that changes the cache's form, the hub empties it and reads GitHub again, so the cache needs no migration and no copy before one.
-- **Every observation is kept in that cache, and in memory, each kind under a version of its own.** A hub that starts again has each as of when it was read, and a change to one kind's form empties only that kind. What the hub can't ask for again is then not known until its owner next says it, and for good if it never does, as with the email of an account whose login has gone from every machine. *Not built:* only what's read from GitHub is kept this way, under one version.
+- **Every observation is kept in that cache, and in memory, each kind under a version of its own.** A hub that starts again has each as of when it was read, and a change to one kind's form empties only that kind. What the hub can't ask for again is then not known until its owner next says it, and for good if it never does, as with the email of an account whose login has gone from every machine. *Not built:* no part of the hub reads an observation into it, so it keeps only what's read from GitHub, under a version of its own.
 
 ## Keeping a copy
 

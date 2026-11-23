@@ -75,6 +75,12 @@ pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<H
     hub_of(dir, agents, Github::new(GithubConfig::at(NO_GITHUB.to_string())))
 }
 
+/// The same, started again on the store and the files a hub left in `dir`, as a hub that restarts is.
+pub(crate) fn hub_in_again(dir: &Path) -> Arc<Hub> {
+    let github = Github::new(GithubConfig::at(NO_GITHUB.to_string()));
+    Arc::new(hub_on(open_in(dir), dir, local(dir), vec![described()], github, Timers::DEFAULT))
+}
+
 /// The same, which calls GitHub's API at `api`, such as a stand-in's, and asks after a sign-in's token as often as a
 /// test's hub does, as [`Timers::FOR_TESTS`] has it, since a test that calls a stand-in can't pause tokio's clock,
 /// which a request to the stand-in would race.
