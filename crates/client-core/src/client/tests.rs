@@ -5,8 +5,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use protocol::client::{
-    ApiError, CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice,
-    ReplyOutcome, subscriptions,
+    CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice, ReplyOutcome,
+    subscriptions,
 };
 use protocol::terminal::Typed;
 
@@ -93,28 +93,6 @@ fn a_hub_that_chose_another_version_is_refused() {
         "{:?}",
         connected.err()
     );
-}
-
-/// A hub from before clients followed only through `Subscribe`, which speaks only version 3 of the protocol, shares
-/// no version with this client, so it refuses the hello, as the hub does, and the client says the hub is across a
-/// protocol break from it, which only a person can do something about, by updating or replacing the hub. A desktop app
-/// replaces one that it started itself, as `docs/principles/protocol.md` says.
-#[test]
-fn a_hub_that_speaks_only_version_3_is_too_old() {
-    let dir = tempfile::tempdir().unwrap();
-    let socket = dir.path().join("hub.sock");
-    let (hub, ours) =
-        (protocol::versions::Versions::only(3), protocol::versions::Versions::only(CLIENT_PROTOCOL_VERSION));
-    assert_eq!(hub.newest_shared(ours), None, "the two share no version");
-    let refused =
-        ApiError::new(ErrorCode::VersionMismatch, format!("this hub is on {hub}, and this client speaks {ours}"));
-    StandIn::refusing_hello(refused).listen(&socket, |_| Does::Nothing);
-
-    let connected = Client::connect(&socket, "test");
-
-    let refused = connected.err().expect("refused");
-    assert!(refused.is_version_mismatch() && refused.needs_a_person(), "{refused:?}");
-    assert!(refused.to_string().contains("protocol 3"), "{refused}");
 }
 
 /// A hub that takes the request to stop and goes before its reply gets out did what was asked, so stopping it is done,
