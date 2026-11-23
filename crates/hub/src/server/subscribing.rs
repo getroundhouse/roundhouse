@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use protocol::client::github::GithubShown;
 use protocol::client::{ApiError, ErrorCode, HubFrame, HubNotice};
-use protocol::model::SessionId;
+use protocol::model::{Level, SessionId};
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::AbortHandle;
 
@@ -17,10 +17,14 @@ use crate::hub::{Followed, FollowerId, Hub};
 /// One subscription of a connection, which ends as it's dropped: its task stops, and its entries leave the hub's list of
 /// who follows what.
 pub(super) struct Subscription {
-    task: AbortHandle,
+    /// What sends what it follows. `None` for one that's sent nothing, such as a workspace's while nothing is sent at a
+    /// workspace's level, which only has what it follows kept current.
+    task: Option<AbortHandle>,
     pub(super) following: crate::hub::Following,
     /// For a subscription to what GitHub says of what the client shows, what it shows, which the client can change.
     pub(super) shown: Option<watch::Sender<GithubShown>>,
+    /// What it follows, for one that `Subscribe` started, so a start sent again can be told from one that takes its ID.
+    pub(super) level: Option<Level>,
 }
 
 impl Subscription {
@@ -30,10 +34,10 @@ impl Subscription {
         connection: &Connection,
         subscription_id: u64,
         followed: impl IntoIterator<Item = Followed>,
-        task: AbortHandle,
+        task: Option<AbortHandle>,
     ) -> Self {
         let following = hub.follow(FollowerId { connection: connection.id, subscription: subscription_id }, followed);
-        Self { task, following, shown: None }
+        Self { task, following, shown: None, level: None }
     }
 
     /// The same, for one to what GitHub says of what the client shows, which the client changes through `shown`.
@@ -41,11 +45,19 @@ impl Subscription {
         self.shown = Some(shown);
         self
     }
+
+    /// The same, for one that `Subscribe` started, which follows `level`.
+    pub(super) fn of_level(mut self, level: Level) -> Self {
+        self.level = Some(level);
+        self
+    }
 }
 
 impl Drop for Subscription {
     fn drop(&mut self) {
-        self.task.abort();
+        if let Some(task) = &self.task {
+            task.abort();
+        }
     }
 }
 
@@ -92,7 +104,7 @@ pub(super) fn add_subscription(
     if subscriptions.contains_key(&subscription_id) {
         return Err(taken(subscription_id));
     }
-    let subscription = Subscription::new(hub, connection, subscription_id, [followed], start());
+    let subscription = Subscription::new(hub, connection, subscription_id, [followed], Some(start()));
     subscriptions.insert(subscription_id, subscription);
     Ok(())
 }
@@ -120,7 +132,7 @@ mod tests {
     use protocol::client::github::{GithubShown, GithubSubscribe};
     use protocol::client::subscriptions::{FeedSubscribe, SessionSubscribe, SessionUnsubscribe};
     use protocol::client::terminals::TerminalWatch;
-    use protocol::client::{CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, Hello, Outcome, Request};
+    use protocol::client::{CLIENT_PROTOCOL_VERSION, ClientResponse, Outcome, Request};
     use protocol::model::{GithubRepositoryName, IssueNumber, ReferenceAsk, Seq};
 
     use super::super::tests::{Connection, WAIT};
@@ -141,14 +153,7 @@ mod tests {
         };
         let shown =
             GithubShown { workspaces: vec!["w".into()], closely: vec!["w".into()], references: vec![chip.clone()] };
-        let mut connection = Connection::open(&hub);
-        let hello = Hello {
-            protocol_version: CLIENT_PROTOCOL_VERSION,
-            client: "test".into(),
-            oldest_protocol_version: None,
-            device: None,
-        };
-        connection.reply(0, &ClientRequest::Hello(hello)).await;
+        let mut connection = Connection::greeted(&hub, CLIENT_PROTOCOL_VERSION).await;
         let followed = [
             Followed::Hub,
             Followed::Session("s".into()),

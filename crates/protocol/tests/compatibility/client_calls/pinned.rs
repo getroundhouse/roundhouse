@@ -60,6 +60,7 @@ pinned! {
     "proposals.rs" => [ProposalAnswer(_), ProposalAnotherRound(_), ProposalRevisionsRead(_)],
     "references.rs" => [ReferencesRead(_)],
     "github_shown.rs" => [GithubSubscribe(_)],
+    "subscribe.rs" => [Subscribe(_)],
     "terminals.rs" => [TerminalOpen(_), TerminalWatch(_), TerminalRows(_), TerminalClose(_)],
     "terminal_typed.rs" => [TerminalTyped(_)],
     "terminal_text.rs" => [TerminalBounds(_), TerminalText(_)],

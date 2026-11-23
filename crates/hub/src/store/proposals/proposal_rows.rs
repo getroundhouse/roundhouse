@@ -149,16 +149,7 @@ impl Store {
     pub fn list_proposals(&self, session_id: &SessionId) -> Result<(Vec<Proposal>, Rev), StoreError> {
         let mut conn = lock(&self.reader);
         let tx = conn.transaction()?;
-        let proposals = tx
-            .prepare_cached(&format!(
-                "SELECT {} FROM {PROPOSAL_WITH_NEWEST}
-                     WHERE p.session_id = ? ORDER BY p.created_at_ms, p.rowid",
-                proposal_columns()
-            ))?
-            .query_map([session_id.as_str()], proposal_from_row)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        let proposals =
-            proposals.into_iter().map(|proposal| with_summaries(&tx, proposal)).collect::<Result<_, _>>()?;
+        let proposals = proposals_of(&tx, session_id)?;
         let rev = current_rev(&tx)?;
         tx.commit()?;
         Ok((proposals, rev))
@@ -304,4 +295,17 @@ impl Store {
         tx.commit()?;
         Ok((revisions, newest))
     }
+}
+
+/// The session's proposals, oldest first, each with its newest revision, as `conn` reads them.
+pub(in crate::store) fn proposals_of(conn: &Connection, session_id: &SessionId) -> Result<Vec<Proposal>, StoreError> {
+    let proposals = conn
+        .prepare_cached(&format!(
+            "SELECT {} FROM {PROPOSAL_WITH_NEWEST}
+                 WHERE p.session_id = ? ORDER BY p.created_at_ms, p.rowid",
+            proposal_columns()
+        ))?
+        .query_map([session_id.as_str()], proposal_from_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    proposals.into_iter().map(|proposal| with_summaries(conn, proposal)).collect()
 }

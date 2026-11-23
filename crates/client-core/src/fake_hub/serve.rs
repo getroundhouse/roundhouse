@@ -335,6 +335,8 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::PairingWait(_)
         | R::DeviceList
         | R::DeviceRevoke(_)
+        // No client sends it until clients follow only through it.
+        | R::Subscribe(_)
         | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't know that request")),
         R::TerminalWatch(watch) => super::terminals::watch(world, &watch),
         R::TerminalRows(rows) => super::terminals::rows(world, &rows),

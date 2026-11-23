@@ -75,7 +75,8 @@ impl Client {
                 | HubFrame::Notice { .. }
                 | HubFrame::Github { .. }
                 | HubFrame::Terminal { .. }
-                | HubFrame::TerminalPicture { .. }) => self.keep(frame),
+                | HubFrame::TerminalPicture { .. }
+                | HubFrame::Listed { .. }) => self.keep(frame),
             }
         }
     }

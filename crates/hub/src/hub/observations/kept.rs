@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::ObservationNotice;
-use protocol::model::{Observation, Observed, Rev};
+use protocol::model::{Level, Observation, Observed, Rev};
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
@@ -227,6 +227,6 @@ impl Observations {
         let listed = list.await;
         let mut tables = self.tables.lock();
         let observations = tables.each().iter().flat_map(|table| table.listed()).collect::<Vec<_>>();
-        (listed, observations.into_iter().filter(|observation| observation.key().at_hub_level()).collect())
+        (listed, observations.into_iter().filter(|observation| observation.key().level() == Some(Level::Hub)).collect())
     }
 }

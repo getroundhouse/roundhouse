@@ -1,6 +1,6 @@
 //! The kinds a client keeps by revision.
 
-use protocol::model::{Observation, ObservationKey, Record, RecordKey, Rev};
+use protocol::model::{Level, Observation, ObservationKey, Record, RecordKey, Rev};
 
 use super::Revised;
 
@@ -35,8 +35,8 @@ impl Revised for Observation {
         Observation::rev(self)
     }
 
-    /// Only those sent at the hub's level are in the list, as [`ObservationKey::at_hub_level`] says.
+    /// Only those sent at the hub's level are in the list, as [`ObservationKey::level`] says.
     fn in_every_list(key: &ObservationKey) -> bool {
-        key.at_hub_level()
+        key.level() == Some(Level::Hub)
     }
 }

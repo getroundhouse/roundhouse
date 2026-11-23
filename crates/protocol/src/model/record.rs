@@ -215,10 +215,9 @@ pub struct Records {
     /// [`HubUpdate`] says. `None` from any other hub, and from one from before it read the feed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hub_update: Option<HubUpdate>,
-    /// The observations the hub sends at its own level, as
-    /// [`ObservationKey::at_hub_level`](super::ObservationKey::at_hub_level) says, under the list's own
-    /// `rev`, as its records are. One of another level isn't here, so the list doesn't say it's gone. Empty from a hub
-    /// from before observations.
+    /// The observations the hub sends at its own level, as [`ObservationKey::level`](super::ObservationKey::level)
+    /// says, under the list's own `rev`, as its records are. One of another level isn't here, so the list doesn't say
+    /// it's gone. Empty from a hub from before observations.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub observations: Vec<Observation>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless a client holds a

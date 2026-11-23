@@ -329,6 +329,7 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::TerminalTyped(..)
         | R::TerminalFit(..)
         | R::TerminalClose(..)
+        | R::Subscribe(..)
         | R::Unknown => false,
     }
 }

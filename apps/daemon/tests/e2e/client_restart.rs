@@ -266,7 +266,8 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
             | HubFrame::Notice { .. }
             | HubFrame::Terminal { .. }
             | HubFrame::TerminalPicture { .. }
-            | HubFrame::Github { .. } => {}
+            | HubFrame::Github { .. }
+            | HubFrame::Listed { .. } => {}
         }
     }
     assert!(ended, "the client should have read through the agent's exit");

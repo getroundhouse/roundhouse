@@ -4,3 +4,4 @@
 mod tests;
 
 mod reply_rows;
+pub(super) use reply_rows::replies_heard_of;

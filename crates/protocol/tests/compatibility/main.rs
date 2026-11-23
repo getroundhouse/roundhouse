@@ -48,6 +48,7 @@ mod repos;
 mod restarts;
 mod sessions;
 mod subagents;
+mod subscribe;
 mod terminal_fit;
 mod terminal_rows;
 mod terminal_text;

@@ -16,7 +16,7 @@ use crate::server::Outgoing;
 
 /// Feeds one subscription: what the hub knows of each of what's shown, then what changes of it, from the reads the
 /// cache keeps and the workspaces' records, until the subscription or its connection ends.
-pub(super) async fn pump(
+pub(in crate::server) async fn pump(
     hub: Arc<Hub>,
     mut shown: watch::Receiver<GithubShown>,
     subscription_id: u64,

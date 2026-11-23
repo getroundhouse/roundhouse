@@ -30,12 +30,14 @@ pub(super) async fn handle(
         R::TerminalRows(rows) => C::TerminalRows(hub.terminal_rows(rows).await?),
         R::TerminalBounds(asked) => C::TerminalBounds(hub.terminal_bounds(asked).await?),
         R::TerminalText(asked) => C::TerminalText(hub.terminal_text(asked).await?),
-        // Sent on as the connection reads them, by `terminals::in_order`, so they reach the worker in the order they were
+        // Sent on as the connection reads them, by `in_order`, so they reach the worker in the order they were
         // sent, and none comes here. One that did is still sent on and answered, out of order with the rest, rather than
         // left without a reply.
         R::TerminalTyped(typed) => hub.terminal_typed(typed).await?.await?,
         R::TerminalFit(fit) => hub.terminal_fit(fit).await?.await?,
         R::TerminalClose(close) => C::Terminal(hub.terminal_close(close).await?),
+        // Taken in order as the connection reads it too, by `in_order`, and answered here only as typing is.
+        R::Subscribe(asked) => C::Subscribed(super::subscribe::subscribe(hub, connection, asked).await),
 
         R::PairingStart => C::Pairing(hub.pairing_start().await?),
         R::PairingWait(protocol::client::devices::PairingWait { code }) => {

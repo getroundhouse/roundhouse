@@ -16,6 +16,7 @@ mod github_account;
 mod hub_settings;
 mod hub_update;
 mod interaction;
+mod level;
 mod model_list;
 mod model_name;
 mod observation;
@@ -62,6 +63,7 @@ pub use github_account::{
 pub use hub_settings::{AccountDefault, GithubSettings, HubSettings, HubSettingsChange};
 pub use hub_update::{HubUpdate, UpdateAttempt};
 pub use interaction::{Interaction, InteractionMode};
+pub use level::Level;
 pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
 pub use observation::{Observation, ObservationKey, Observed};

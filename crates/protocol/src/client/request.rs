@@ -84,6 +84,8 @@ pub enum ClientRequest {
     SessionUnsubscribe(subscriptions::SessionUnsubscribe),
     FeedSubscribe(subscriptions::FeedSubscribe),
     GithubSubscribe(github::GithubSubscribe),
+    /// See [`subscriptions::Subscribe`].
+    Subscribe(subscriptions::Subscribe),
     SessionPrompt(agent::SessionPrompt),
     AttachmentAdd(attachments::AttachmentAdd),
     AttachmentRead(attachments::AttachmentRead),

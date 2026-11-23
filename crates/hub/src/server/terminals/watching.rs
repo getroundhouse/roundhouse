@@ -29,9 +29,9 @@ pub(in crate::server) fn watch(
 }
 
 /// A client watching a terminal.
-pub(super) struct Watching {
-    pub(super) subscription_id: u64,
-    pub(super) frames: mpsc::Sender<Outgoing>,
+pub(in crate::server) struct Watching {
+    pub(in crate::server) subscription_id: u64,
+    pub(in crate::server) frames: mpsc::Sender<Outgoing>,
 }
 
 /// What a client is sent next.
@@ -43,7 +43,7 @@ enum Next {
 impl Watching {
     /// Sends what the client lacks of the hub's newest picture whenever its last frame has been written, until the
     /// shell ends or the client stops watching.
-    pub(super) async fn watch(self, mut watcher: Watcher) {
+    pub(in crate::server) async fn watch(self, mut watcher: Watcher) {
         let room = Arc::new(Semaphore::new(1));
         let mut sending = PictureSending::default();
         loop {

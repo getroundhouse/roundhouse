@@ -18,6 +18,7 @@ pub mod github;
 pub mod github_accounts;
 pub mod github_apps;
 mod hello;
+pub mod listed;
 pub mod log;
 pub mod new_workspace;
 pub mod proposals;
@@ -39,6 +40,6 @@ mod errors;
 mod messages;
 pub use errors::{ApiError, ErrorCode, error_chain};
 pub use messages::{
-    CLIENT_PROTOCOL_VERSION, ClientFrame, ClientResponse, HubFrame, HubStart, HubStatus, Outcome, Reply, ReplyOutcome,
-    Request,
+    CLIENT_PROTOCOL_VERSION, ClientFrame, ClientResponse, HUB_SPEAKS, HubFrame, HubStart, HubStatus, Outcome, Reply,
+    ReplyOutcome, Request,
 };

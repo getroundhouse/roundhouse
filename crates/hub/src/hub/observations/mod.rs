@@ -12,3 +12,5 @@ mod tests;
 
 pub(crate) use file::prepare;
 pub(crate) use kept::Observations;
+#[cfg(test)]
+pub(crate) use kinds::WorkspaceLines;

@@ -5,5 +5,5 @@ mod tests;
 
 mod proposal_reads;
 mod proposal_rows;
-pub(super) use proposal_rows::take_back_answer_on;
 pub use proposal_rows::{AnswerToKeep, Answering, NewRevision, Revising, Withdrawing};
+pub(super) use proposal_rows::{proposals_of, take_back_answer_on};

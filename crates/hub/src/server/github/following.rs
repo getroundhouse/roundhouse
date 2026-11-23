@@ -35,7 +35,7 @@ pub(in crate::server) fn follow(
     let followed = followed(&shown);
     let (sender, receiver) = watch::channel(shown);
     let task = tokio::spawn(pump(hub.clone(), receiver, subscription_id, connection.frames.clone())).abort_handle();
-    let subscription = Subscription::new(hub, connection, subscription_id, followed, task).showing(sender);
+    let subscription = Subscription::new(hub, connection, subscription_id, followed, Some(task)).showing(sender);
     subscriptions.insert(subscription_id, subscription);
     Ok(())
 }

@@ -4,6 +4,7 @@ use crate::session::{Command, LiveSession, ReadingOn};
 use crate::store::{Places, Reading, Store, StoreError};
 use protocol::capability::approvals::Decision;
 use protocol::capability::settings::Settings;
+use protocol::client::listed::SessionRecords;
 use protocol::client::log::ReadLimit;
 use protocol::client::{ApiError, ErrorCode, HubNotice, log, records};
 use protocol::event::SessionEvent;
@@ -170,6 +171,16 @@ impl Hub {
     }
 
     /// The session's subagents, oldest first, with the revision they're as of.
+    /// The session's subagents, proposals and how its replies were heard, read in one transaction, for a client that
+    /// begins to follow it, or has fallen behind.
+    pub(crate) async fn session_records(&self, id: SessionId) -> Result<SessionRecords, ApiError> {
+        self.blocking(move |store| {
+            store.get_session(&id)?;
+            store.list_session_records(&id)
+        })
+        .await
+    }
+
     pub(crate) async fn session_subagents(&self, id: SessionId) -> Result<records::Subagents, ApiError> {
         self.blocking(move |store| {
             store.get_session(&id)?;
