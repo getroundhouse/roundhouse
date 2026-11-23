@@ -4,7 +4,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::client::{CLIENT_PROTOCOL_VERSION, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome};
+use protocol::client::{
+    CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome,
+};
 use protocol::frame;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, ReadHalf, WriteHalf};
 use tokio::time::timeout;
@@ -15,16 +17,16 @@ use crate::hub::Hub;
 use crate::hub::tests::hub_in;
 
 /// Long enough for anything here on a busy machine.
-const WAIT: Duration = Duration::from_secs(10);
+pub(super) const WAIT: Duration = Duration::from_secs(10);
 
 /// A connection to `hub`, served as one on its socket is.
-struct Connection {
+pub(super) struct Connection {
     replies: Lines<BufReader<ReadHalf<DuplexStream>>>,
     frames: WriteHalf<DuplexStream>,
 }
 
 impl Connection {
-    fn open(hub: &Arc<Hub>) -> Self {
+    pub(super) fn open(hub: &Arc<Hub>) -> Self {
         let (client, served) = tokio::io::duplex(1 << 16);
         let (read, write) = tokio::io::split(served);
         tokio::spawn(serve_connection(hub.clone(), read, write, Gate::local(hub)));
@@ -40,6 +42,24 @@ impl Connection {
         let next =
             next.unwrap_or_else(|_| panic!("{case}: the hub neither replied nor closed the connection")).unwrap();
         next.map(|line| frame::decode(line.as_bytes()).unwrap())
+    }
+
+    /// Sends `request` as call `id`, and gives back its reply, passing over whatever else the hub sends first.
+    pub(super) async fn reply(&mut self, id: u64, request: &ClientRequest) -> ReplyOutcome {
+        let line = call(id, &serde_json::to_string(request).unwrap());
+        let mut next = self.send(&line, "a call").await;
+        loop {
+            match next {
+                Some(HubFrame::Reply { id: answered, outcome }) if answered == id => return outcome,
+                Some(_) => next = timeout(WAIT, self.next()).await.expect("a reply"),
+                None => panic!("the hub closed the connection"),
+            }
+        }
+    }
+
+    async fn next(&mut self) -> Option<HubFrame> {
+        let line = self.replies.next_line().await.unwrap();
+        line.map(|line| frame::decode(line.as_bytes()).unwrap())
     }
 }
 

@@ -110,7 +110,6 @@ fn unread_connection() -> Arc<Connection> {
         id: 0,
         frames: mpsc::channel(1).0,
         subscriptions: Mutex::new(HashMap::new()),
-        github: Mutex::new(HashMap::new()),
         closed: Arc::new(watch::Sender::new(false)),
     })
 }

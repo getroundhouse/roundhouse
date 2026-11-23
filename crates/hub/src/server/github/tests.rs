@@ -19,8 +19,8 @@ use protocol::model::{
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, ReadHalf, WriteHalf};
 use tokio::time::timeout;
 
-use crate::hub::Hub;
 use crate::hub::tests::{archived, forget_github, forget_github_but_a_summary, hub_on_github_with};
+use crate::hub::{Followed, Hub};
 use crate::server::admit::Gate;
 use crate::server::connection::serve_connection;
 
@@ -213,7 +213,11 @@ async fn what_a_subscription_shows_is_replaced_by_what_it_says_next() {
     assert_eq!(taken, Err(ErrorCode::InvalidRequest));
     let ended = client.call(SessionUnsubscribe { subscription_id: 1 }.into_request()).await;
     assert_eq!(ended, Ok(ClientResponse::Ok));
-    assert!(!hub.shows_github(), "nothing's shown once the subscription has ended");
+    let followed = [Followed::Reference(own(12)), Followed::Reference(own(13))];
+    assert!(
+        !followed.iter().any(|followed| hub.followed(followed)),
+        "nothing's followed once the subscription has ended"
+    );
 }
 
 /// What a client shows ends with its connection, so the hub stops reading it for a client that's gone.
@@ -225,11 +229,11 @@ async fn what_a_client_shows_ends_with_its_connection() {
     let (hub, _pull_requests, _github) = hub_on_github_with(dir.path(), &references).await;
     let mut client = Client::of(&hub).await;
     client.show(1, GithubShown { references: vec![own(12)], ..GithubShown::default() }).await;
-    assert!(hub.shows_github());
+    assert!(hub.followed(&Followed::Reference(own(12))));
 
     drop(client);
 
-    waiting::task::until(WAIT, "what the client showed to end", || !hub.shows_github()).await;
+    waiting::task::until(WAIT, "what the client showed to end", || !hub.followed(&Followed::Reference(own(12)))).await;
 }
 
 /// A workspace whose pull request the hub hasn't looked for is sent as that too, so a client that heard of one on a
@@ -296,7 +300,8 @@ async fn an_archived_workspaces_pull_request_the_cache_has_only_the_summary_of_i
         .await;
 }
 
-/// One whose first read fails, as while GitHub is down, is tried again while it's shown, until it's read.
+/// One whose first read fails, as while GitHub is down, is tried again while a client follows the hub, until it's
+/// read.
 #[tokio::test]
 async fn an_archived_workspaces_pull_request_that_couldnt_be_read_again_is_tried_again() {
     let dir = tempfile::tempdir().unwrap();
@@ -308,9 +313,10 @@ async fn an_archived_workspaces_pull_request_that_couldnt_be_read_again_is_tried
     pull_requests.set(7, PullRequestState::Merged);
     pull_requests.fail(true);
     let asked = github.asked().len();
-    tokio::spawn(hub.clone().watch_shown_references());
+    tokio::spawn(hub.clone().watch_followed_references());
     let mut client = Client::of(&hub).await;
 
+    let feed = client.call(FeedSubscribe { subscription_id: 2 }.into_request()).await;
     client.show(1, GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() }).await;
     waiting::task::until(WAIT, "a read that fails", || github.asked().len() > asked).await;
     pull_requests.fail(false);
@@ -320,6 +326,7 @@ async fn an_archived_workspaces_pull_request_that_couldnt_be_read_again_is_tried
             pull_request(sent, "w").is_some_and(|pr| pr.said().state == PrState::Merged)
         })
         .await;
+    assert_eq!(feed, Ok(ClientResponse::Ok));
     assert_eq!(linked_to(&hub).await, Some(7), "the record keeps its link");
 }
 

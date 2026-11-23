@@ -2,6 +2,7 @@
 //! and answers them alongside one another.
 
 use super::counted::Counted;
+use super::subscribing::Subscription;
 use super::terminals::{self, Answering};
 use super::{admit, dispatch};
 
@@ -16,7 +17,7 @@ use protocol::client::{HubFrame, ReplyOutcome};
 use protocol::frame;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{OwnedSemaphorePermit, mpsc, watch};
-use tokio::task::{AbortHandle, JoinHandle};
+use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tracing::{debug, warn};
 
@@ -55,20 +56,10 @@ pub(super) struct Connection {
     /// Which it is, of every connection this hub has served.
     pub(super) id: u64,
     pub(super) frames: mpsc::Sender<Outgoing>,
-    pub(super) subscriptions: Mutex<HashMap<u64, AbortHandle>>,
-    /// Of `subscriptions`, those to what GitHub says of what the client shows, which it can say it shows something
-    /// else, taken under `subscriptions`' lock.
-    pub(super) github: Mutex<HashMap<u64, super::github::Followed>>,
+    /// Each ended as it's dropped, which happens as the connection does.
+    pub(super) subscriptions: Mutex<HashMap<u64, Subscription>>,
     /// True once nothing more will be read, so a request that only waits, with nothing to carry on with, can stop.
     pub(super) closed: Arc<watch::Sender<bool>>,
-}
-
-impl Drop for Connection {
-    fn drop(&mut self) {
-        for (_, subscription) in self.subscriptions.lock().drain() {
-            subscription.abort();
-        }
-    }
 }
 
 /// A frame queued for a connection, and what it holds until it has been written, as a terminal's follower holds its
@@ -104,8 +95,7 @@ pub(super) async fn serve_connection(
     let closed = Arc::new(watch::Sender::new(false));
     let id = NEXT_CONNECTION.fetch_add(1, Ordering::Relaxed);
     let subscriptions = Mutex::new(HashMap::new());
-    let github = Mutex::new(HashMap::new());
-    let connection = Arc::new(Connection { id, frames, subscriptions, github, closed: closed.clone() });
+    let connection = Arc::new(Connection { id, frames, subscriptions, closed: closed.clone() });
     let revoked = gate.revoked();
     let mut revoking = revoked.clone();
 

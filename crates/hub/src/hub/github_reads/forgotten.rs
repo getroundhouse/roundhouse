@@ -1,6 +1,7 @@
-//! Reading again the pull requests of archived workspaces clients show, once the cache has forgotten them, as after it
-//! was emptied, since nothing reads an archived workspace's in turn. By the number each one's record links to, and into
-//! the cache alone, which tells what shows them, recording nothing, so the record keeps its link whatever's read.
+//! Reading again the pull requests of archived workspaces that clients show, once the cache has forgotten them, as
+//! after it was emptied, since nothing reads an archived workspace's in turn. By the number each one's record links to,
+//! and into the cache alone, which tells what shows them, recording nothing, so the record keeps its link whatever's
+//! read.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,7 +12,7 @@ use parking_lot::Mutex;
 use protocol::client::ApiError;
 use protocol::model::{PullRequestLink, PullRequestNumber, PullRequestSelection, Workspace, WorkspaceStatus};
 
-use super::super::Hub;
+use super::super::{Followed, Hub};
 use crate::github_cache::Item;
 
 /// When the hub last tried to read each of them, and how long it waits from then before it tries again, so one that
@@ -82,17 +83,15 @@ impl Hub {
         });
     }
 
-    /// Reads those of the archived workspaces clients show, as [`Hub::read_forgotten`] does.
-    pub(super) async fn read_forgotten_shown(self: &Arc<Self>) {
-        let shown = self.github_shown.workspaces();
-        if shown.is_empty() {
+    /// Reads those of every archived workspace, as [`Hub::read_forgotten`] does, while a client follows the hub. A
+    /// client that follows the hub draws each workspace it lists with its pull request, as the desktop app's sidebar
+    /// and Home do, and the hub's list of who follows what doesn't say which workspaces it lists.
+    pub(super) async fn read_forgotten_followed(self: &Arc<Self>) {
+        if !self.followers.follows(&Followed::Hub) {
             return;
         }
         let Ok(workspaces) = self.workspace_list(true).await else { return };
-        let links = (workspaces.iter())
-            .filter(|workspace| shown.contains(&workspace.id))
-            .filter_map(|workspace| self.forgotten_link(workspace))
-            .collect();
+        let links = workspaces.iter().filter_map(|workspace| self.forgotten_link(workspace)).collect();
         self.read_forgotten(links);
     }
 

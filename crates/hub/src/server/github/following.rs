@@ -7,15 +7,9 @@ use protocol::client::{ApiError, ErrorCode};
 use tokio::sync::watch;
 
 use super::pumping::pump;
-use crate::hub::Hub;
-use crate::hub::github_reads::{ShowingEnds, ShownBy};
+use crate::hub::{Followed, Hub};
 use crate::server::Connection;
-
-/// A subscription to what GitHub says of what a client shows, which a client can tell it shows something else.
-pub(in crate::server) struct Followed {
-    shown: watch::Sender<GithubShown>,
-    ends: ShowingEnds,
-}
+use crate::server::subscribing::{Subscription, taken};
 
 /// Starts feeding a subscription to what GitHub says of what `subscribe` shows, or, for one that's already fed, takes
 /// it to show that from now on.
@@ -30,22 +24,26 @@ pub(in crate::server) fn follow(
             format!("{} issues and pull requests shown at once, over {MOST_REFERENCES_SHOWN}", shown.references.len());
         return Err(ApiError::new(ErrorCode::InvalidRequest, message));
     }
-    let by = ShownBy { connection: connection.id, subscription: subscription_id };
     // Held throughout, as `add_subscription` holds it, so two requests can't both take one subscription ID.
     let mut subscriptions = connection.subscriptions.lock();
-    let mut followed = connection.github.lock();
-    if let Some(followed) = followed.get_mut(&subscription_id) {
-        followed.ends.show(shown.clone());
-        followed.shown.send_replace(shown);
+    if let Some(subscription) = subscriptions.get_mut(&subscription_id) {
+        let Some(showing) = &subscription.shown else { return Err(taken(subscription_id)) };
+        subscription.following.replace(followed(&shown));
+        showing.send_replace(shown);
         return Ok(());
     }
-    if subscriptions.contains_key(&subscription_id) {
-        return Err(ApiError::new(ErrorCode::InvalidRequest, format!("subscription {subscription_id} already exists")));
-    }
-    let ends = hub.show_github(by, shown.clone());
+    let followed = followed(&shown);
     let (sender, receiver) = watch::channel(shown);
-    let pumping = tokio::spawn(pump(hub.clone(), receiver, subscription_id, connection.frames.clone()));
-    subscriptions.insert(subscription_id, pumping.abort_handle());
-    followed.insert(subscription_id, Followed { shown: sender, ends });
+    let task = tokio::spawn(pump(hub.clone(), receiver, subscription_id, connection.frames.clone())).abort_handle();
+    let subscription = Subscription::new(hub, connection, subscription_id, followed, task).showing(sender);
+    subscriptions.insert(subscription_id, subscription);
     Ok(())
+}
+
+/// What a client that shows `shown` follows: each workspace whose pull request it shows in full, and each issue and
+/// pull request it shows as a chip. The workspaces whose pull requests it shows on their marks say only what it's sent,
+/// since a client that follows the hub has every workspace's pull request read again once the cache forgets it.
+fn followed(shown: &GithubShown) -> Vec<Followed> {
+    let closely = shown.closely.iter().cloned().map(Followed::Workspace);
+    closely.chain(shown.references.iter().cloned().map(Followed::Reference)).collect()
 }

@@ -1,6 +1,7 @@
 //! The hub's state, and what the rest of it shares: its workers, live sessions and feed.
 
 pub(crate) use carrying_on::LeftAtWork;
+pub(crate) use followers::{Followed, FollowerId, Following};
 pub(crate) use terminals::{Queued, Watcher};
 pub use updates::UpdateFeed;
 
@@ -15,6 +16,7 @@ mod carrying_on;
 mod children;
 mod comments;
 mod feed;
+mod followers;
 mod github_accounts;
 mod github_apps;
 mod github_reach;

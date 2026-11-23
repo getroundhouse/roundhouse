@@ -1,9 +1,8 @@
-//! Clients watching a terminal, and telling its worker whether any client is, so it sends the hub pictures only while
-//! one is, as `protocol::worker::TerminalWatch` says. The hub keeps a copy of what they show, which a client that
-//! begins to watch is sent at once.
+//! Clients watching a terminal, and telling its worker whether any client follows it, as the hub's list of who follows
+//! what says, so it sends the hub pictures only while one does, as `protocol::worker::TerminalWatch` says. The hub
+//! keeps a copy of what they show, which a client that begins to watch is sent at once.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
@@ -15,15 +14,13 @@ use tracing::warn;
 
 use super::copy::{Copy, Kept, Watched};
 use super::terminal_calls::not_open;
-use crate::hub::Hub;
+use crate::hub::{Followed, Hub};
 use crate::worker_link::WorkerLink;
 
 /// What the hub keeps of whether a terminal is watched.
 #[derive(Default)]
 pub(super) struct Watch {
     pub(super) copy: Mutex<Copy>,
-    /// How many clients watch it, each counted while its [`Watcher`] lasts.
-    watchers: AtomicUsize,
     /// What its worker was last told, under a lock, so what's told goes one at a time. `None` while that isn't known,
     /// since a telling didn't get its answer. A worker takes a terminal to be unwatched until it's told, as it does a
     /// new one, and every one a hub carries on with.
@@ -36,52 +33,32 @@ impl Watch {
     }
 }
 
-/// A client watching an open terminal, counted while this lasts. As it goes, the worker is told whether any client
-/// watches still.
+/// What a client watching an open terminal is sent from. Only its subscription's entry in the hub's list of who
+/// follows what counts it as watching.
 pub(crate) struct Watcher {
-    hub: Arc<Hub>,
-    id: TerminalId,
-    /// Not kept, so it goes with the terminal's record, and with it what `watched` is sent from.
-    watch: Weak<Watch>,
     /// The newest whole picture the hub has, until the terminal's record goes.
     pub(crate) watched: watch::Receiver<Watched>,
     /// The rows that have left the screen, which say whether the client's copies of them are right.
     pub(crate) kept: Arc<Mutex<Kept>>,
 }
 
-impl Drop for Watcher {
-    fn drop(&mut self) {
-        // Nothing is told of a terminal whose record has gone.
-        let Some(watch) = self.watch.upgrade() else { return };
-        // Taken off the count first, so the telling never counts it.
-        watch.watchers.fetch_sub(1, Ordering::SeqCst);
-        self.hub.terminal_watching_soon(&self.id);
-    }
-}
-
 impl Hub {
-    /// Watches an open terminal, for a client, counted while what this returns lasts. Its worker is told once it's the
-    /// first.
-    pub(crate) fn terminal_watch(self: &Arc<Self>, id: &TerminalId) -> Result<Watcher, ApiError> {
+    /// What a client watching an open terminal is sent from.
+    pub(crate) fn terminal_watch(&self, id: &TerminalId) -> Result<Watcher, ApiError> {
         self.open_terminal(id)?;
         let watch = self.terminals.open.lock().get(id).map(|open| open.watch.clone()).ok_or_else(|| not_open(id))?;
-        watch.watchers.fetch_add(1, Ordering::SeqCst);
-        let (watched, kept) = {
-            let copy = watch.copy.lock();
-            (copy.watched(), copy.kept())
-        };
-        self.terminal_watching_soon(id);
-        Ok(Watcher { hub: self.clone(), id: id.clone(), watch: Arc::downgrade(&watch), watched, kept })
+        let copy = watch.copy.lock();
+        Ok(Watcher { watched: copy.watched(), kept: copy.kept() })
     }
 
-    /// Tells the terminal's worker whether any client watches now. Ok once the worker knows, or can't be told, or the
+    /// Tells the terminal's worker whether any client follows it now. Ok once the worker knows, or can't be told, or the
     /// terminal has gone, and an error if the worker couldn't take it.
     pub(crate) async fn terminal_watching(&self, id: &TerminalId) -> Result<(), ApiError> {
         let Some(watch) = self.terminals.open.lock().get(id).map(|open| open.watch.clone()) else { return Ok(()) };
         let Ok((_, link)) = self.open_terminal(id) else { return Ok(()) };
         let mut told = watch.told.lock().await;
-        // Counted under the lock, so what's told last is what's so once clients stop coming and going.
-        let watching = watch.watchers.load(Ordering::SeqCst) > 0;
+        // Read under the lock, so what's told last is what's so once clients stop coming and going.
+        let watching = self.followers.follows(&Followed::Terminal(id.clone()));
         // Told again while it's watched and the hub wants a fresh picture, as after one it couldn't take in, since
         // a new watch begins with one.
         let resync = watching && watch.copy.lock().wants_fresh();
