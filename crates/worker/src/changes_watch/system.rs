@@ -5,6 +5,7 @@ use super::heard::Heard;
 use notify::{Config, RecommendedWatcher, Watcher as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tracing::warn;
 
 /// A worktree's watch by the OS, which tells `Heard` what it hears until it's dropped.
 pub(super) trait Watching: Send {
@@ -19,18 +20,30 @@ pub(super) trait Watching: Send {
 #[derive(Debug)]
 pub(super) struct TooMany;
 
-/// The OS's watch of the worktree `heard` is of, as this platform watches one: `None` where the OS won't watch it,
-/// as once a Linux user has used up their inotify watches or instances, which the loop does without.
+/// The OS's watch of the worktree `heard` is of, as this platform watches one, started off the async threads, since
+/// it reads the worktree's folders: `None` where the OS won't watch it, which the loop does without.
+pub(super) async fn start(heard: &Arc<Heard>) -> Option<Box<dyn Watching>> {
+    let heard = heard.clone();
+    match tokio::task::spawn_blocking(move || started(&heard)).await {
+        Ok(watching) => watching,
+        Err(e) => {
+            warn!("starting the OS's watch of a worktree stopped, so it's read on a timer: {e}");
+            None
+        }
+    }
+}
+
+/// The OS's watch of the worktree `heard` is of, as Linux watches one: `None` where the OS won't watch it, as once
+/// the user has used up their inotify watches or instances.
 #[cfg(target_os = "linux")]
-pub(super) fn start(heard: &Arc<Heard>) -> Option<Box<dyn Watching>> {
+fn started(heard: &Arc<Heard>) -> Option<Box<dyn Watching>> {
     let most = super::each_folder::most_watches();
     super::each_folder::EachFolder::start(heard, most).map(|watching| Box::new(watching) as Box<dyn Watching>)
 }
 
-/// The OS's watch of the worktree `heard` is of, as this platform watches one: `None` where the OS won't watch it,
-/// which the loop does without.
+/// The OS's watch of the worktree `heard` is of, as macOS and Windows watch one: `None` where the OS won't watch it.
 #[cfg(not(target_os = "linux"))]
-pub(super) fn start(heard: &Arc<Heard>) -> Option<Box<dyn Watching>> {
+fn started(heard: &Arc<Heard>) -> Option<Box<dyn Watching>> {
     super::from_the_top::FromTheTop::start(heard, super::from_the_top::WATCH_EACH_TOP_FOLDER)
         .map(|watching| Box::new(watching) as Box<dyn Watching>)
 }
@@ -51,6 +64,16 @@ pub(super) fn folders_in(folder: &Path) -> Vec<PathBuf> {
         .filter(|entry| is_folder(entry) && entry.file_name() != ".git")
         .map(|entry| entry.path())
         .collect()
+}
+
+/// The folders directly in each of `folders`, as [`folders_in`] finds them, read off the async threads. None if the
+/// reading stopped, which leaves the folders it would have found unwatched, as one made after a watch had to give up.
+pub(super) async fn folders_in_each(folders: Vec<PathBuf>) -> Vec<PathBuf> {
+    let reading = tokio::task::spawn_blocking(move || folders.iter().flat_map(|folder| folders_in(folder)).collect());
+    reading.await.unwrap_or_else(|e| {
+        warn!("reading the folders in a worktree's new folders stopped, so they aren't watched: {e}");
+        Vec::new()
+    })
 }
 
 /// Unwatches each of `folders` that `watcher` watches, as a folder that's gone is.

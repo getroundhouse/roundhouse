@@ -110,8 +110,9 @@ impl Reply for model::ChangeSummary {
 /// sent: once the worktree's files have stopped changing for 100 ms, or have gone on changing for a second, and every
 /// few minutes whatever it heard. A change git ignores, such as a build's output, wakes nothing. The watch ends when the
 /// hub that asked disconnects, since the next hub says again what it wants, and when the worker stops. A later watch of
-/// the same path replaces it, as one with another base ref does. Replies once it's watching, before the first frame. A
-/// worker from before it refuses it as `Unsupported`, and is asked for a summary instead.
+/// the same path replaces it, as one with another base ref does. Replies once the watch has started, before the first
+/// frame, and before the OS's watch has: the first frame's summary is read once that has, so it covers what changed
+/// before. A worker from before it refuses it as `Unsupported`, and is asked for a summary instead.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WatchChanges {
     pub path: String,

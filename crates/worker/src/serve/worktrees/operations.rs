@@ -9,7 +9,7 @@ use protocol::worker::{
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::sync::oneshot;
-use tokio::task::AbortHandle;
+use tokio::task::{AbortHandle, JoinHandle};
 
 /// What's watching the branches of each of the workspace's worktrees, and the changes of each the hub asked, so a later
 /// watch of one replaces it, and removing one stops its watches.
@@ -17,7 +17,24 @@ use tokio::task::AbortHandle;
 pub(in super::super) struct Watches {
     pub(super) own: Option<AbortHandle>,
     pub(super) children: HashMap<PathBuf, AbortHandle>,
-    pub(super) changes: HashMap<PathBuf, AbortHandle>,
+    pub(super) changes: HashMap<PathBuf, JoinHandle<()>>,
+}
+
+/// A watch of a worktree's changes that's been stopped, and has let go of what it holds, the OS's watch among it, once
+/// it's been waited for.
+pub(in super::super) struct Stopped(JoinHandle<()>);
+
+impl Stopped {
+    fn stopping(watch: JoinHandle<()>) -> Self {
+        watch.abort();
+        Self(watch)
+    }
+
+    /// Once the watch's task has ended, which drops all it held.
+    pub(super) async fn ended(self) {
+        // Its stopping is the error, and a panic in it has ended it too.
+        let _ = self.0.await;
+    }
 }
 
 impl Watches {
@@ -37,24 +54,26 @@ impl Watches {
         }
     }
 
-    /// Watches the changes of the worktree at `path` with `watch`, in place of any watch of them before.
-    pub(super) fn watch_changes(&mut self, path: PathBuf, watch: AbortHandle) {
-        if let Some(earlier) = self.changes.insert(path, watch) {
-            earlier.abort();
-        }
+    /// Watches the changes of the worktree at `path` with `watch`, in place of any watch of them before, which it stops.
+    pub(super) fn watch_changes(&mut self, path: PathBuf, watch: JoinHandle<()>) -> Option<Stopped> {
+        self.changes.insert(path, watch).map(Stopped::stopping)
     }
 
-    pub(super) fn stop_changes(&mut self, path: &Path) {
-        if let Some(watching) = self.changes.remove(path) {
-            watching.abort();
-        }
+    pub(super) fn stop_changes(&mut self, path: &Path) -> Option<Stopped> {
+        self.changes.remove(path).map(Stopped::stopping)
+    }
+
+    /// Stops watching the changes of every worktree, as for a hub that has gone, since each watch is for the hub that
+    /// asked, and the next says again what it wants.
+    pub(in super::super) fn stop_all_changes(&mut self) -> Vec<Stopped> {
+        self.changes.drain().map(|(_, watching)| Stopped::stopping(watching)).collect()
     }
 
     /// So they stop now, rather than once whatever they're reading is done.
     pub(in super::super) fn stop_all(&mut self) {
-        let changes = self.changes.drain().map(|(_, watching)| watching);
+        self.stop_all_changes();
         let children = self.children.drain().map(|(_, watching)| watching);
-        self.own.take().into_iter().chain(children).chain(changes).for_each(|w| w.abort());
+        self.own.take().into_iter().chain(children).for_each(|w| w.abort());
     }
 }
 
@@ -111,12 +130,17 @@ pub(in super::super) async fn restore(state: &State, asked: RestoreWorkspace) ->
 pub(in super::super) async fn remove(state: &State, asked: RemoveWorkspace) -> Result<WorkerResponse, ApiError> {
     let path = Path::new(&asked.path);
     let _alone = state.moves.alone(path).await;
-    // First, since on Windows a watch's open handle on a folder can keep it from being removed. The hub stops it
-    // before it asks, and a hub from before the watch never started one.
-    state.watches.lock().stop_changes(path);
+    // First, and waited for, since on Windows a watch's open handle on a folder can keep it from being removed. That
+    // drops the OS's watcher, whose own thread then closes its handles, as `docs/reference/file-watching.md` says. The
+    // hub stops it before it asks, and a hub from before the watch never started one.
+    let watching = state.watches.lock().stop_changes(path);
+    if let Some(stopped) = watching {
+        stopped.ended().await;
+    }
     let repo = state.clones.repository(&asked.source);
     git::remove_workspace(&state.credentials.given(), &repo, &asked, &state.config.deleter).await?;
     state.watches.lock().stop(path);
+    state.changes.forget(path);
     Ok(WorkerResponse::Ok)
 }
 
@@ -143,19 +167,24 @@ pub(in super::super) async fn add_child(state: &State, asked: AddChildWorktree) 
 }
 
 /// Watches the changes of the worktree the hub asks about, for the hub connected now, or stops, as [`WatchChanges`]
-/// says. Answers at once, so the summary comes after the reply.
+/// says. A watch of them before is stopped and waited for first, so the two don't hold the OS's watches at once. Answers
+/// once the watch has started, which is before the OS's watch does, so the summary comes after the reply.
 pub(in super::super) async fn watch_changes(state: &State, asked: WatchChanges) -> Result<WorkerResponse, ApiError> {
     let WatchChanges { path, base_ref, watching } = asked;
     let worktree = PathBuf::from(path);
-    let hub = state.outbox.connection().await.filter(|_| watching);
-    let Some(hub) = hub else {
-        state.watches.lock().stop_changes(&worktree);
-        return Ok(WorkerResponse::Ok);
-    };
+    let earlier = state.watches.lock().stop_changes(&worktree);
+    if let Some(earlier) = earlier {
+        earlier.ended().await;
+    }
+    let Some(hub) = state.outbox.connection().await.filter(|_| watching) else { return Ok(WorkerResponse::Ok) };
     let (given, outbox, stopping) = (state.credentials.watching(), state.outbox.clone(), state.stopping.subscribe());
     let watched = changes_watch::Watched { worktree: worktree.clone(), base_ref };
     let watch = changes_watch::watch(given, state.changes.clone(), watched, outbox, hub, stopping);
-    state.watches.lock().watch_changes(worktree, tokio::spawn(watch).abort_handle());
+    // One asked for at the same time, which this replaces in turn.
+    let raced = state.watches.lock().watch_changes(worktree, tokio::spawn(watch));
+    if let Some(raced) = raced {
+        raced.ended().await;
+    }
     Ok(WorkerResponse::Ok)
 }
 

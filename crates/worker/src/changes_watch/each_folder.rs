@@ -40,15 +40,13 @@ impl EachFolder {
     /// Watches every folder of the worktree `heard` is of that git doesn't ignore, and its git directory, unless that's
     /// more than `most` folders or the OS won't, when it holds none of them.
     pub(super) fn start(heard: &Arc<Heard>, most: usize) -> Option<Self> {
-        let folders = folders_of(heard);
-        if folders.len() > most {
+        let Some(folders) = folders_of(heard, most) else {
             warn!(
                 worktree = %heard.root.display(),
-                "the worktree has {} folders to watch, more than the {most} it may, so it's read on a timer",
-                folders.len()
+                "the worktree has more folders to watch than the {most} it may, so it's read on a timer"
             );
             return None;
-        }
+        };
         let mut watcher = match os_watcher(heard) {
             Ok(watcher) => watcher,
             Err(e) => {
@@ -99,18 +97,24 @@ impl Watching for EachFolder {
 }
 
 /// The worktree's folders that git doesn't ignore, as `heard` knows what it does, its top among them, without
-/// following a link, and its own git directory.
-fn folders_of(heard: &Heard) -> Vec<PathBuf> {
+/// following a link, and its own git directory. `None` once that's more than `most`, which it stops reading at, as a
+/// `node_modules` git doesn't ignore has it.
+fn folders_of(heard: &Heard, most: usize) -> Option<Vec<PathBuf>> {
     let mut folders = vec![heard.root.clone()];
+    folders.extend(heard.git_dir.iter().filter(|git_dir| !git_dir.starts_with(&heard.root)).cloned());
     let mut next = 0;
     let ignored = heard.ignored.read();
     while let Some(folder) = folders.get(next).cloned() {
         next += 1;
-        let kept = folders_in(&folder)
-            .into_iter()
-            .filter(|inner| inner.strip_prefix(&heard.root).is_ok_and(|from_top| !ignored.covers(from_top)));
-        folders.extend(kept);
+        if folder.starts_with(&heard.root) {
+            let kept = folders_in(&folder)
+                .into_iter()
+                .filter(|inner| inner.strip_prefix(&heard.root).is_ok_and(|from_top| !ignored.covers(from_top)));
+            folders.extend(kept);
+        }
+        if folders.len() > most {
+            return None;
+        }
     }
-    folders.extend(heard.git_dir.iter().filter(|git_dir| !git_dir.starts_with(&heard.root)).cloned());
-    folders
+    Some(folders)
 }
