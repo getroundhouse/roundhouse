@@ -9,7 +9,7 @@ use tokio::sync::broadcast;
 
 use super::super::Hub;
 use super::references::FRESH_FOR;
-use crate::github_cache::Item;
+use crate::github_cache::{Item, Told};
 
 impl Hub {
     /// Reads again the issues and pull requests clients follow, as chips show them, once what the cache has of each is
@@ -34,9 +34,9 @@ impl Hub {
         }
     }
 
-    /// Tells of each read the cache keeps from now on, by the issues and pull requests it was of, for a client's
-    /// subscription to send what changed.
-    pub(crate) fn github_kept(&self) -> broadcast::Receiver<Vec<Item>> {
+    /// Tells of each read the cache keeps from now on, by the issues and pull requests it was of, and of what it
+    /// forgets, for a client's subscription to send what changed.
+    pub(crate) fn github_kept(&self) -> broadcast::Receiver<Told> {
         self.github_cache.changes()
     }
 

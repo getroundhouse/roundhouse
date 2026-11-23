@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{Observation, Proposal, Records, ReplyHeard, Rev, SessionId, Subagent, WorkspaceId};
+use crate::model::{Observation, Proposal, Records, ReferenceAsk, ReplyHeard, Rev, SessionId, Subagent, WorkspaceId};
 
 /// Every record, and every observation, of one level, read at one moment, as `HubFrame::Listed` carries it. A
 /// subscription is sent one as it starts, and again whenever it has fallen behind. Each copy in it replaces the
@@ -20,6 +20,8 @@ pub enum Listed {
     /// started the subscription, so a client that has the reply with no `Listed::Workspace` before it knows the hub is
     /// from before workspaces had a level of their own.
     Workspace(WorkspaceObservations),
+    /// The observations of one issue or pull request, as a chip draws it.
+    Reference(ReferenceObservations),
     /// Of a level from a newer hub, which this client skips.
     #[serde(other)]
     Unknown,
@@ -46,6 +48,17 @@ pub struct SessionRecords {
 pub struct WorkspaceObservations {
     pub workspace_id: WorkspaceId,
     /// In no order.
+    pub observations: Vec<Observation>,
+    /// The hub's newest revision when they were read.
+    pub rev: Rev,
+}
+
+/// The observations of one issue or pull request, as a subscription that follows it is sent them: what GitHub says of
+/// it, once the hub has read it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ReferenceObservations {
+    pub reference: ReferenceAsk,
+    /// Empty until the hub has read it, which a client reads as not known.
     pub observations: Vec<Observation>,
     /// The hub's newest revision when they were read.
     pub rev: Rev,

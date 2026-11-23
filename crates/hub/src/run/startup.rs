@@ -237,11 +237,12 @@ async fn end_workers(hub: &Arc<Hub>, signalled: bool) -> Ended {
     }
 }
 
-/// What `hub` watches while it serves, each a task of `serving`: its waits' deadlines, its pull requests, its reach on
-/// GitHub, and the update feed, if it reads one.
+/// What `hub` watches while it serves, each a task of `serving`: its waits' deadlines, its pull requests, what's sent
+/// of GitHub as observations, its reach on GitHub, and the update feed, if it reads one.
 fn watch_while_serving(hub: &Arc<Hub>, serving: &mut JoinSet<()>) {
     serving.spawn(Arc::clone(hub).watch_wait_deadlines());
     serving.spawn(Arc::clone(hub).watch_pull_requests());
+    serving.spawn(Arc::clone(hub).observe_github());
     // What it would record is checked again as the next hub starts.
     serving.spawn(Arc::clone(hub).watch_github_reach());
     serving.spawn(Arc::clone(hub).look_for_updates());

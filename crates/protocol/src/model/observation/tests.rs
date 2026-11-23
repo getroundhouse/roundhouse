@@ -1,10 +1,12 @@
-use super::{Observation, ObservationKey, Observed};
-use crate::model::{ChangeSummary, Level, LineCounts, Rev};
+use super::{Observation, ObservationKey, Observed, ReferenceSaid};
+use crate::model::{ChangeSummary, GithubRepositoryName, IssueNumber, Level, LineCounts, ReferenceAsk, Rev};
 
 /// An observation of each kind, with the key and revision it's of, and the level it's sent at.
 fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Option<Level>)> {
     let lines = Observed::Current { value: LineCounts { added: 3, removed: 1 } };
     let changes = Observed::AsOf { value: ChangeSummary::new("c1".into(), Vec::new()), as_of_ms: 1_000 };
+    let reference =
+        ReferenceAsk { repository: GithubRepositoryName::named("o/r"), number: IssueNumber::try_from(41).unwrap() };
     vec![
         (
             Observation::WorkspaceLines { workspace_id: "w".into(), lines, rev: Rev::new(4) },
@@ -17,6 +19,16 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Option<Level>)> {
             ObservationKey::WorkspaceChanges { workspace_id: "w".into() },
             Rev::new(5),
             Some(Level::Workspace { id: "w".into() }),
+        ),
+        (
+            Observation::Reference {
+                reference: reference.clone(),
+                said: Observed::AsOf { value: ReferenceSaid::Missing, as_of_ms: 1_000 },
+                rev: Rev::new(6),
+            },
+            ObservationKey::Reference { reference: reference.clone() },
+            Rev::new(6),
+            Some(Level::Reference { reference }),
         ),
         (Observation::Unknown, ObservationKey::Unknown, Rev::default(), None),
     ]

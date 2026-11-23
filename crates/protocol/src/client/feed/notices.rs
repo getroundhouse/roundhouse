@@ -166,6 +166,10 @@ impl From<RecordNotice> for HubNotice {
 
 /// What a notice says of one observation, whatever its kind, as [`RecordNotice`] says of one record.
 #[derive(Clone, Debug, PartialEq)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "made from a notice and taken apart straight away, so its size costs nothing"
+)]
 pub enum ObservationNotice {
     /// A copy of the observation.
     Copy(Observation),

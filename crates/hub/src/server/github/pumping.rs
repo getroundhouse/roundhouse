@@ -47,7 +47,7 @@ pub(in crate::server) async fn pump(
                     continue 'whole;
                 }
                 items = kept.recv() => match items {
-                    Ok(items) => feeding.kept(&items),
+                    Ok(told) => feeding.kept(&told.kept),
                     Err(RecvError::Lagged(_)) => continue 'whole,
                     Err(RecvError::Closed) => return,
                 },

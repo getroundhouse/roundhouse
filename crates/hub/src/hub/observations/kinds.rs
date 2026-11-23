@@ -3,7 +3,9 @@
 
 use std::hash::Hash;
 
-use protocol::model::{ChangeSummary, LineCounts, Observation, ObservationKey, Observed, Rev, WorkspaceId};
+use protocol::model::{
+    ChangeSummary, LineCounts, Observation, ObservationKey, Observed, ReferenceAsk, ReferenceSaid, Rev, WorkspaceId,
+};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -78,5 +80,27 @@ impl Kind for WorkspaceChanges {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.workspace_changes
+    }
+}
+
+/// What GitHub says of an issue or a pull request a chip names, by the ask as the client follows it. Worked out from
+/// what GitHub's cache keeps of it, as `crate::hub::github_observed` says.
+pub(crate) struct Referenced;
+
+impl Kind for Referenced {
+    type Of = ReferenceAsk;
+    type Value = ReferenceSaid;
+    const FORM: Form = Form { table: "referenced", version: 1 };
+
+    fn observation(reference: &ReferenceAsk, said: Observed<ReferenceSaid>, rev: Rev) -> Observation {
+        Observation::Reference { reference: reference.clone(), said, rev }
+    }
+
+    fn key(reference: &ReferenceAsk) -> ObservationKey {
+        ObservationKey::Reference { reference: reference.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.referenced
     }
 }

@@ -22,17 +22,41 @@ impl Hub {
         self.change_observation::<K>(of, Change::Read { value, read_at_ms }).await
     }
 
-    /// Keeps that something keeps the observation of `of` up to date from now on, such as a worker watching a worktree,
-    /// so each read of it from now is current. What was read before isn't, so it stays as of when it was read until
+    /// Keeps that the observation of `of`, worked out now from what it's worked out from, says `value`, as of
+    /// `as_of_ms`, when what it's worked out from was read. It's current if something keeps it up to date, as
+    /// [`Hub::observation_kept_current`] says, and otherwise as of `as_of_ms`. Unlike [`Hub::observation_read`], it
+    /// drops nothing as a late read, since a value worked out from what's kept now is never older than one worked out
+    /// before, even where what it's worked out from was read earlier, as when a workspace's pull request becomes
+    /// another. So whatever works out a kind works each out in turn.
+    pub(crate) async fn observation_worked_out<K: Kind>(
+        &self,
+        of: K::Of,
+        value: K::Value,
+        as_of_ms: i64,
+    ) -> Result<(), ApiError> {
+        self.change_observation::<K>(of, Change::WorkedOut { value, as_of_ms }).await
+    }
+
+    /// Keeps that something keeps the observation of `of` up to date from now on, such as the hub reading again what a
+    /// client follows, so each read of it from now is current. What was read before isn't, so it stays as of when it was read until
     /// the next read.
     pub(crate) async fn observation_kept_current<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
         self.change_observation::<K>(of, Change::KeptCurrent).await
     }
 
-    /// Keeps that nothing keeps the observation of `of` up to date any more, since `as_of_ms`, by the hub's clock, so
-    /// one that was current is as of then, which clients are told.
+    /// Keeps that nothing watches the observation of `of` any more, since `as_of_ms`, by the hub's clock, so one that
+    /// was current is as of then, which clients are told: what watched it, such as a worker watching a worktree, would
+    /// have said of any change before. For what's kept up to date by reading it again, see
+    /// [`Hub::observation_no_longer_read_again`].
     pub(crate) async fn observation_let_go<K: Kind>(&self, of: K::Of, as_of_ms: i64) -> Result<(), ApiError> {
         self.change_observation::<K>(of, Change::LetGo { as_of_ms }).await
+    }
+
+    /// Keeps that the hub no longer reads the observation of `of` again to keep it up to date, as GitHub's are while a
+    /// client follows them, so one that was current is as of its last read, which clients are told. Unlike
+    /// [`Hub::observation_let_go`], nothing said of a change between the last read and now, so it's as of no later.
+    pub(crate) async fn observation_no_longer_read_again<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
+        self.change_observation::<K>(of, Change::NoLongerReadAgain).await
     }
 
     /// Whether something keeps the observation of `of` up to date now, as [`Hub::observation_kept_current`] said.

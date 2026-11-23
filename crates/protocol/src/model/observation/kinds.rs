@@ -2,8 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::Observed;
-use crate::model::{ChangeSummary, Level, LineCounts, Rev, WorkspaceId};
+use super::{Observed, ReferenceSaid};
+use crate::model::{ChangeSummary, Level, LineCounts, ReferenceAsk, Rev, WorkspaceId};
 
 /// One observation, of any kind, with what it's of, its revision and what it says, as a list or the feed gives it. A
 /// client keeps whichever copy has the newer revision, as it keeps a record, by [`Observation::key`]. A kind this build
@@ -18,6 +18,9 @@ pub enum Observation {
     /// up. Sent at the workspace's level, since only the workspace's own pane draws it. It's current while something
     /// keeps it up to date, and otherwise as of the last read, which the hub makes when the lines are read.
     WorkspaceChanges { workspace_id: WorkspaceId, changes: Observed<ChangeSummary>, rev: Rev },
+    /// What GitHub says of an issue or a pull request, as a chip draws it. Sent at the level of that issue or pull
+    /// request, by the ask as the client follows it, so two that name it in another case are two observations.
+    Reference { reference: ReferenceAsk, said: Observed<ReferenceSaid>, rev: Rev },
     #[serde(other)]
     Unknown,
 }
@@ -33,6 +36,9 @@ pub enum ObservationKey {
     WorkspaceChanges {
         workspace_id: WorkspaceId,
     },
+    Reference {
+        reference: ReferenceAsk,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -47,6 +53,7 @@ impl Observation {
             Observation::WorkspaceChanges { workspace_id, .. } => {
                 ObservationKey::WorkspaceChanges { workspace_id: workspace_id.clone() }
             }
+            Observation::Reference { reference, .. } => ObservationKey::Reference { reference: reference.clone() },
             Observation::Unknown => ObservationKey::Unknown,
         }
     }
@@ -55,7 +62,9 @@ impl Observation {
     /// this build doesn't know.
     pub fn rev(&self) -> Rev {
         match self {
-            Observation::WorkspaceLines { rev, .. } | Observation::WorkspaceChanges { rev, .. } => *rev,
+            Observation::WorkspaceLines { rev, .. }
+            | Observation::WorkspaceChanges { rev, .. }
+            | Observation::Reference { rev, .. } => *rev,
             Observation::Unknown => Rev::default(),
         }
     }
@@ -71,6 +80,7 @@ impl ObservationKey {
         match self {
             ObservationKey::WorkspaceLines { .. } => Some(Level::Hub),
             ObservationKey::WorkspaceChanges { workspace_id } => Some(Level::Workspace { id: workspace_id.clone() }),
+            ObservationKey::Reference { reference } => Some(Level::Reference { reference: reference.clone() }),
             ObservationKey::Unknown => None,
         }
     }

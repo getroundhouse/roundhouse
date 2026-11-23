@@ -109,7 +109,7 @@ impl Source for RecordsSource {
             SubscriptionItem::Listed(listed) => match *listed {
                 Listed::Hub(records) => held.lock().apply_list(*records),
                 // Of another level, which this doesn't follow.
-                Listed::Session(_) | Listed::Workspace(_) | Listed::Unknown => false,
+                Listed::Session(_) | Listed::Workspace(_) | Listed::Reference(_) | Listed::Unknown => false,
             },
             SubscriptionItem::Notice(notice) => held.lock().apply_notice(*notice),
             SubscriptionItem::Github(update) => {

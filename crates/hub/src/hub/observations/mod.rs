@@ -13,4 +13,4 @@ mod tests;
 
 pub(crate) use file::prepare;
 pub(crate) use kept::Observations;
-pub(crate) use kinds::{WorkspaceChanges, WorkspaceLines};
+pub(crate) use kinds::{Referenced, WorkspaceChanges, WorkspaceLines};
