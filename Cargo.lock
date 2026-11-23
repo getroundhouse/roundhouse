@@ -2014,9 +2014,11 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "objc2-av-foundation",
  "objc2-core-foundation",
+ "objc2-core-graphics",
  "objc2-core-media",
  "objc2-core-video",
  "objc2-foundation 0.3.2",
+ "objc2-user-notifications",
  "parking_lot",
  "percent-encoding",
  "process",
@@ -2085,6 +2087,7 @@ dependencies = [
  "gpui-kit",
  "look",
  "objc2-core-graphics",
+ "objc2-io-kit",
  "sound",
 ]
 
@@ -6471,6 +6474,15 @@ dependencies = [
  "block2 0.6.2",
  "libc",
  "objc2 0.6.5",
+ "objc2-core-foundation",
+]
+
+[[package]]
+name = "objc2-io-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33fafba39597d6dc1fb709123dfa8289d39406734be322956a69f0931c73bb15"
+dependencies = [
  "objc2-core-foundation",
 ]
 

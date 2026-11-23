@@ -1,4 +1,4 @@
-use super::{agents, general, git, notifications, providers, rows, sidebar, voice};
+use super::{agents, general, git, notifications, permissions, providers, rows, sidebar, voice};
 use crate::FindSetting;
 use crate::app::TOP_STRIP;
 use crate::status_box::StatusBox;
@@ -137,6 +137,8 @@ pub(super) enum Control {
     Switch { is_on: IsOn, set: Set },
     /// It's one of a list, from a button that says which and opens a menu of them. `id` is the button's.
     Choice { id: &'static str, chosen: Chosen, menu: Menu },
+    /// It's a system permission, which says how it stands and has the button that fixes it, as the system has it.
+    Permission(crate::permissions::Permission),
 }
 
 impl Control {
@@ -183,6 +185,7 @@ pub(crate) enum PageId {
     General,
     Voice,
     Notifications,
+    Permissions,
     Agents,
     Git,
     Providers,
@@ -195,6 +198,7 @@ impl PageId {
             PageId::General => "settings-page-general",
             PageId::Voice => "settings-page-voice",
             PageId::Notifications => "settings-page-notifications",
+            PageId::Permissions => "settings-page-permissions",
             PageId::Agents => "settings-page-agents",
             PageId::Git => "settings-page-git",
             PageId::Providers => "settings-page-providers",
@@ -252,7 +256,9 @@ pub(super) struct Section {
 pub(super) fn sections(hub: &OfHub) -> Vec<Section> {
     let mut pages = vec![general::page(hub)];
     pages.extend(voice::page());
-    pages.extend([notifications::page(), agents::page(hub), git::page(hub), providers::page(hub)]);
+    pages.push(notifications::page());
+    pages.extend(permissions::page());
+    pages.extend([agents::page(hub), git::page(hub), providers::page(hub)]);
     vec![Section { heading: "Personal", pages }]
 }
 

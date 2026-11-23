@@ -37,6 +37,7 @@ pub(super) fn row(setting: &Setting, cx: &App) -> AnyElement {
                 .menu(Anchor::TopRight, move |popup, window, cx| menu(popup, window, cx))
                 .into_any_element()
         }
+        Control::Permission(permission) => super::permission_row::control(*permission, cx),
     };
     let row = h_flex()
         .w_full()

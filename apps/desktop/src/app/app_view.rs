@@ -184,10 +184,15 @@ impl AppView {
     }
 
     fn observe_activation(window: &mut Window, cx: &mut Context<Self>) {
-        // Coming back from another app is when someone reads the chat showing. It's also when Reduce Motion may have
-        // changed in System Settings, which macOS doesn't tell the kit about, so it's read again.
+        // Coming back from another app is when someone reads the chat showing. It's also when Reduce Motion or a
+        // permission may have changed in System Settings, which macOS doesn't tell the app about, so they're read again.
+        // Permissions are read as the window opens too.
+        crate::permissions::read(cx);
         cx.observe_window_activation(window, |t, window, cx| {
             gpui_kit::base::apply_system_reduce_motion(cx);
+            if window.is_window_active() {
+                crate::permissions::read(cx);
+            }
             dictation_ui::window_activation_changed(window.window_handle(), window.is_window_active(), cx);
             t.read_on_screen(window.is_window_active(), cx);
         })

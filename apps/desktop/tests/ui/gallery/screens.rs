@@ -23,6 +23,16 @@ use spec_screens::{chats, question_chats};
 /// The workspace each screen is about, in the first repository, below the ones the sidebar always has.
 pub(super) const FOCUS: &str = "aspen";
 
+/// What the system says of each permission on the Permissions page's screen: one of each way a row can stand that has
+/// something to fix, beside those allowed.
+const PERMISSIONS: &[(desktop::Permission, desktop::Standing)] = &[
+    (desktop::Permission::Notifications, desktop::Standing::Allowed),
+    (desktop::Permission::FullDiskAccess, desktop::Standing::Off),
+    (desktop::Permission::ScreenRecording, desktop::Standing::Off),
+    (desktop::Permission::Microphone, desktop::Standing::Allowed),
+    (desktop::Permission::InputMonitoring, desktop::Standing::NotAsked),
+];
+
 /// A task described in the new-workspace dialog.
 const NEW_WORKSPACE_PROMPT: &str = "When the sidebar is narrow, the PR badge runs over the workspace's name. Let the name \
                                     shrink and end in an ellipsis, and keep the badge at its own width.";
@@ -365,6 +375,18 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(conversation),
         frame: Frame::Layout,
         steps: &[Step::Select(FOCUS), Step::OpenSettings, Step::Click("settings-page-notifications")],
+    },
+    Screen {
+        name: "settings-permissions",
+        spec: "settings.md",
+        world: Some(conversation),
+        frame: Frame::Layout,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Permissions(PERMISSIONS),
+            Step::OpenSettings,
+            Step::Click("settings-page-permissions"),
+        ],
     },
 ];
 

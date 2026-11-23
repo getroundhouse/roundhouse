@@ -150,7 +150,8 @@ anyhow = "1.0.104"
 async-trait = "0.1.92"
 # Already under ureq. Carries an attachment's bytes as text, the way JSON has to.
 base64 = "0.23.1"
-# Already under objc2's crates. The block a Mac calls with whether the app may use the microphone.
+# Already under objc2's crates. The blocks a Mac calls with whether the app may use the microphone, and with what it
+# allows of notifications.
 block2 = "0.6.2"
 # Already under the build scripts of several crates. Compiles libvpx, which the `video` crate's build script fetches.
 cc = { version = "1.11.2", features = ["parallel"] }
@@ -228,17 +229,21 @@ objc2-core-audio = { version = "0.3.2", default-features = false, features = ["s
 # Already under GPUI. Owns the frames of a clip, as the gallery hands them to the video it writes.
 objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std"] }
 # Already under GPUI. Asks a Mac whether Space is down, since letting go of it while another app is in front tells only
-# that app, and asks the person to let the app monitor input, which a Mac needs before it says.
-objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGEvent", "CGEventSource", "CGEventTypes", "CGRemoteOperation"] }
+# that app, and whether agents may record the screen, and has the system ask the person for either.
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGEvent", "CGEventSource", "CGEventTypes", "CGRemoteOperation", "CGWindow"] }
 # The times of a clip's frames, as the gallery writes them into a video.
 objc2-core-media = { version = "0.3.2", default-features = false, features = ["std", "CMTime"] }
 # Runs dictation's model on a Mac, on Core ML.
 objc2-core-ml = { version = "0.3.2", default-features = false, features = ["std", "block2", "MLDictionaryFeatureProvider", "MLFeatureProvider", "MLFeatureValue", "MLModel", "MLModelConfiguration", "MLMultiArray"] }
 # Already under GPUI. The frames of a clip, as the gallery hands them to the video it writes.
 objc2-core-video = { version = "0.3.2", default-features = false, features = ["std", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVReturn"] }
-# Already under GPUI. Hands the sound for a chat that needs a look to AppKit, by its bytes or its name, and finds the
-# folders the computer keeps alert sounds in.
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSData", "NSEnumerator", "NSPathUtilities", "NSString"] }
+# Already under GPUI. Hands the sound for a chat that needs a look to AppKit, by its bytes or its name, finds the
+# folders the computer keeps alert sounds in, and tells whether the app runs from its bundle, which notifications need.
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSBundle", "NSData", "NSEnumerator", "NSError", "NSPathUtilities", "NSString"] }
+# Asks a Mac whether the app may monitor input, which, unlike Core Graphics, also says whether it has been asked.
+objc2-io-kit = { version = "0.3.2", default-features = false, features = ["std", "hidsystem"] }
+# Already under GPUI. Asks a Mac what it allows of the app's notifications, and asks for the Dock's badge with them.
+objc2-user-notifications = { version = "0.3.2", default-features = false, features = ["std", "block2", "UNNotificationSettings", "UNUserNotificationCenter"] }
 # The hub's calls to GitHub's API, such as asking whose a token is. Only hyper's client, and rustls on ring with the
 # system's certificates, which the tree has already. Not its retries or its redirects, nor its timeouts, which the
 # hub's one time limit on each call covers, nor its tracing, which would turn on tracing's `log` wherever the hub is

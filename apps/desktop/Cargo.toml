@@ -58,9 +58,12 @@ image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "we
 libc.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
 objc2.workspace = true
 objc2-app-kit.workspace = true
+objc2-core-graphics.workspace = true
 objc2-foundation.workspace = true
+objc2-user-notifications.workspace = true
 
 # Whether the mouse's left button is down, which GPUI doesn't say of a move over the window's frame, a window
 # button's command, for a screen reader, which presses it without the pointer, and where a window Windows has snapped

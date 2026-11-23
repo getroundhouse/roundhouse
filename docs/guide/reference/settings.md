@@ -53,6 +53,22 @@ A chat needs you when it has a reply you haven't read, when it's waiting on you 
 
 On Windows and Linux no sound plays.
 
+## Permissions
+
+Only on a Mac. Each system permission Roundhouse uses, what it's for, and whether it's allowed, with the button that fixes it. The page never asks by itself: Allow… has your Mac ask, and Open System Settings opens the place there where you switch it on.
+
+| Permission | What it's for |
+|---|---|
+| Notifications | Telling you when an agent needs you, with a sound, and the count on the Dock's icon |
+| Full Disk Access | Letting agents open any folder without your Mac asking for each, such as Desktop, Documents and Downloads |
+| Screen Recording | Letting agents take screenshots |
+| Microphone | Hearing what you dictate |
+| Input Monitoring | Dictating on while you hold Space, even if another app comes in front for a moment |
+
+![The Permissions page](../../spec/screens/settings-permissions.png)
+
+Your Mac says only whether Full Disk Access and Screen Recording are allowed, so they show Off until they are. Their button lists Roundhouse in System Settings, switched off, and opens it there for you to switch on. The page reads them all again each time you come back to the app.
+
 ## Agents
 
 The accounts your agents run under: native logins found where agents ran, and Claude logins you've given the hub. Codex uses `codex login` and Antigravity uses `agy` on the worker's machine. Their credentials stay with their CLIs; this page doesn't add or move them.
