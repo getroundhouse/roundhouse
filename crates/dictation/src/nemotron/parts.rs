@@ -8,8 +8,11 @@ use crate::EngineError;
 
 /// One input to an encoder part.
 #[cfg_attr(
-    all(not(target_os = "macos"), not(test)),
-    expect(dead_code, reason = "only Core ML reads a part's inputs, and only on a Mac")
+    all(not(target_os = "macos"), not(test), not(feature = "testing")),
+    expect(
+        dead_code,
+        reason = "only Core ML reads a part's inputs, and only on a Mac, but for the speech eval's memory of them"
+    )
 )]
 pub(super) enum Input<'a> {
     Floats { name: &'static str, values: &'a [f32], shape: &'a [usize] },
@@ -17,6 +20,7 @@ pub(super) enum Input<'a> {
 }
 
 /// One output of an encoder part: its values, first dimension first, and its shape.
+#[derive(Clone)]
 pub(super) struct Tensor {
     pub(super) values: Vec<f32>,
     pub(super) shape: Vec<usize>,

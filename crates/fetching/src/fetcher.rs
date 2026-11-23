@@ -75,6 +75,26 @@ impl Fetcher {
         Ok(body)
     }
 
+    /// `length` bytes of the file at `url`, from `start`, as it's stored, from a server that answers ranges, such as
+    /// one recording from a dataset's archive of them. A server that sends the whole file, or less than was asked
+    /// for, is refused.
+    pub fn range(&self, url: &str, start: u64, length: u64) -> Result<Vec<u8>, FetchError> {
+        let Some(last) = length.checked_sub(1).map(|rest| start + rest) else { return Ok(Vec::new()) };
+        // As it's stored, since a range of a compressed answer isn't a range of the file.
+        let request =
+            self.get(url).header("Accept-Encoding", "identity").header("Range", format!("bytes={start}-{last}"));
+        let mut body = Vec::new();
+        let ControlFlow::Continue(got_bytes) =
+            read_at_most(url, answer(url, request, |status| status == 206)?, length, |chunk| {
+                body.extend_from_slice(chunk);
+                Ok(ControlFlow::<Infallible>::Continue(()))
+            })?;
+        if got_bytes < length {
+            return Err(FetchError::CutShort { url: url.to_string(), expected_bytes: length, got_bytes });
+        }
+        Ok(body)
+    }
+
     /// `url`'s body, once decompressed, written to `to`, which has to be exactly `size_bytes` long. What's written of a
     /// body that isn't is left for the caller to remove.
     pub fn to_file(&self, url: &str, to: &Path, size_bytes: u64) -> Result<(), FetchError> {

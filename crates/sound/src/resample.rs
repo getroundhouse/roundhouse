@@ -20,8 +20,9 @@ const PLACES: usize = 256;
 /// down to 16 kHz, with what's under 7 kHz passed whole and what's over 7.8 kHz stopped.
 const PASSED: f64 = 0.92;
 
-/// Converts audio as it comes, a buffer at a time, keeping what the next samples out still need.
-pub(crate) struct Resampler {
+/// Converts audio as it comes, a buffer at a time, keeping what the next samples out still need. The microphone's
+/// audio is converted with it, and so can a recording's, such as the speech eval's, to be heard as the microphone's is.
+pub struct Resampler {
     channels: u16,
     /// How many samples in each sample out moves on by.
     step: f64,
@@ -37,7 +38,7 @@ pub(crate) struct Resampler {
 
 impl Resampler {
     /// Converts audio in at `rate` in `channels`, to one channel at `to`.
-    pub(crate) fn new(rate: u32, channels: u16, to: u32) -> Self {
+    pub fn new(rate: u32, channels: u16, to: u32) -> Self {
         let step = f64::from(rate) / f64::from(to);
         // In cycles a sample in: half of the slower rate's, less the room to stop.
         let cutoff = 0.5 * PASSED * (1.0 / step).min(1.0);
@@ -54,7 +55,7 @@ impl Resampler {
     }
 
     /// Takes `interleaved` audio at the rate and channels this was made for, and gives what's ready at the rate out.
-    pub(crate) fn push(&mut self, interleaved: &[f32]) -> Vec<f32> {
+    pub fn push(&mut self, interleaved: &[f32]) -> Vec<f32> {
         let share = 1.0 / f32::from(self.channels);
         let mixed = interleaved.chunks(usize::from(self.channels)).map(|frame| frame.iter().sum::<f32>() * share);
         self.kept.extend(mixed);
@@ -72,7 +73,7 @@ impl Resampler {
 
     /// What's kept back of the audio pushed so far, which the samples out near its end need what follows it to make,
     /// as if silence followed. What's pushed after it follows that silence, a few milliseconds of it.
-    pub(crate) fn finish(&mut self) -> Vec<f32> {
+    pub fn finish(&mut self) -> Vec<f32> {
         self.push(&vec![0.0; (self.half + 1) * usize::from(self.channels)])
     }
 

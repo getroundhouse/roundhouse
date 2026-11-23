@@ -1223,6 +1223,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0921b3876b3a1df8a1c9f912e7f94342458022c2e84288015893d83c4d62a79"
 
 [[package]]
+name = "claxon"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bfbf56724aa9eca8afa4fcfadeb479e722935bb2a0900c2d37e0cc477af0688"
+
+[[package]]
 name = "cli"
 version = "0.1.0"
 dependencies = [
@@ -9018,6 +9024,27 @@ dependencies = [
  "image",
  "protocol",
  "serde_json",
+]
+
+[[package]]
+name = "speech-eval"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "claxon",
+ "dictation",
+ "fetching",
+ "flate2",
+ "flume",
+ "models",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "sound",
+ "tar",
+ "tempfile",
+ "toml 1.2.1+spec-1.1.0",
 ]
 
 [[package]]

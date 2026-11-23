@@ -16,6 +16,8 @@ mod linear;
 mod live;
 mod mel;
 mod parts;
+#[cfg(any(test, feature = "testing"))]
+mod remembering;
 #[cfg(test)]
 mod stand_in;
 mod transducer;
