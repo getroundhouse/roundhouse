@@ -9,4 +9,4 @@ mod tests;
 mod startup;
 pub use startup::{Ended, HubConfig, run};
 #[cfg(test)]
-use startup::{HubLock, recover};
+use startup::{HubLock, let_go, recover};
