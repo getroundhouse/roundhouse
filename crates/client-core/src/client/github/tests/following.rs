@@ -10,11 +10,11 @@ use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame, ReplyOutcome};
 use protocol::model::{
-    GithubLoginKind, GithubRepositoryName, IssueNumber, Level, PullRequestFound, ReferenceAsk, ReferenceRead,
-    RepositoryUnseen,
+    GithubLoginKind, GithubRepositoryName, IssueNumber, Level, ObservationKey, PullRequestFound, ReferenceAsk,
+    ReferenceRead, RepositoryUnseen,
 };
 
-use super::super::GithubFeed;
+use super::super::held::GithubHeld;
 use crate::RecordsFeed;
 use crate::stand_in_hub::{self, Does, subscribed};
 
@@ -43,12 +43,15 @@ impl Asked {
     }
 }
 
-/// A hub on `socket` that keeps what it's asked to follow, and answers each issue or pull request it's asked to follow
-/// with it missing, as a hub that has read them sends.
+/// A hub on `socket` that keeps what it's asked to follow, lists none of its records, and answers each issue or pull
+/// request it's asked to follow with it missing, as a hub that has read them sends.
 fn hub_that_says_missing(socket: &std::path::Path) -> (crate::Client, Asked) {
     let asked = Asked::default();
     let heard = asked.clone();
     let client = stand_in_hub::connect(socket, move |request| {
+        if request == ClientRequest::AgentList {
+            return Does::Answers(Box::new(ReplyOutcome::Error(agents_unknown())));
+        }
         let ClientRequest::Subscribe(subscribe) = request else { return Does::Nothing };
         let mut followed = heard.followed.lock();
         for id in &subscribe.stop {
@@ -59,12 +62,20 @@ fn hub_that_says_missing(socket: &std::path::Path) -> (crate::Client, Asked) {
         }
         heard.subscribes.lock().push(subscribe.clone());
         subscribed(&subscribe, |subscription_id, follow| {
+            if *follow == Follow::Hub {
+                return vec![HubFrame::Listed { subscription_id, listed: Listed::Hub(Box::default()) }];
+            }
             let Follow::Reference { reference } = follow else { return Vec::new() };
             let update = GithubUpdate::Reference { reference: reference.clone(), read: ReferenceRead::Missing };
             vec![HubFrame::Github { subscription_id, update }]
         })
     });
     (client, asked)
+}
+
+/// What a hub from before it described its agents answers when asked for them.
+fn agents_unknown() -> ApiError {
+    ApiError::new(ErrorCode::Unsupported, "a hub from before it described its agents")
 }
 
 fn chip(n: u64) -> Level {
@@ -78,7 +89,8 @@ fn chip(n: u64) -> Level {
 fn what_views_show_is_followed_together_and_what_the_hub_sends_reaches_them() {
     let dir = tempfile::tempdir().unwrap();
     let (client, asked) = hub_that_says_missing(&dir.path().join("hub.sock"));
-    let feed = GithubFeed::start(&client);
+    let records = RecordsFeed::start(&client);
+    let feed = records.github();
     let (first, second) = (feed.view(), feed.view());
 
     first.show(chips(&[1, 2]));
@@ -91,8 +103,8 @@ fn what_views_show_is_followed_together_and_what_the_hub_sends_reaches_them() {
     waiting::thread::until(TIMEOUT, "the first view to go", || !asked.follows().contains(&chip(1)));
 
     let workspace = Level::Workspace { id: "w".into() };
-    assert_eq!(both, [chip(1), chip(2), chip(3), workspace.clone()], "both views' together, each once");
-    assert_eq!(asked.follows(), [chip(2), chip(3), workspace]);
+    assert_eq!(both, [Level::Hub, chip(1), chip(2), chip(3), workspace.clone()], "both views' together, each once");
+    assert_eq!(asked.follows(), [Level::Hub, chip(2), chip(3), workspace]);
     let last = asked.subscribes.lock().last().cloned().unwrap();
     assert_eq!((last.stop.len(), last.start.len()), (1, 0), "one request stops what's no longer shown: {last:?}");
     assert_eq!(feed.reference(&ask(1)), None, "no view shows it now");
@@ -117,8 +129,7 @@ fn every_workspaces_pull_request_comes_from_following_the_hub_and_that_it_hasnt_
     let told = unseen.clone();
     let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
         if request == ClientRequest::AgentList {
-            let unknown = ApiError::new(ErrorCode::Unsupported, "a hub from before it described its agents");
-            return Does::Answers(Box::new(ReplyOutcome::Error(unknown)));
+            return Does::Answers(Box::new(ReplyOutcome::Error(agents_unknown())));
         }
         let ClientRequest::Subscribe(subscribe) = request else { return Does::Nothing };
         subscribed(&subscribe, |subscription_id, follow| {
@@ -135,8 +146,9 @@ fn every_workspaces_pull_request_comes_from_following_the_hub_and_that_it_hasnt_
         })
     });
     let workspace = protocol::fixtures::workspace("w");
-    let nothing_followed = GithubFeed::start(&client);
-    assert!(!nothing_followed.said_pull_request(&workspace), "nothing's said before the hub is followed");
+    let nothing_followed = GithubHeld::default();
+    let none = |_: &ObservationKey| None;
+    assert!(!nothing_followed.said_pull_request(&workspace.id, &none), "nothing's said before the hub is followed");
 
     let records = RecordsFeed::start(&client);
     let feed = records.github();
@@ -153,7 +165,7 @@ fn every_workspaces_pull_request_comes_from_following_the_hub_and_that_it_hasnt_
 /// be what's in front.
 #[test]
 fn past_the_most_chips_the_newest_views_are_kept() {
-    let mut held = super::super::held::GithubHeld::default();
+    let mut held = GithubHeld::default();
     let (changed, _) = flume::unbounded();
     held.add(1, changed.clone());
     held.add(2, changed);

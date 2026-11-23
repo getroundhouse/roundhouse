@@ -3,7 +3,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use parking_lot::Mutex;
 use protocol::client::github::{GithubShown, GithubUpdate};
 use protocol::model::{ObservationKey, PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen, Workspace};
 
@@ -20,27 +19,23 @@ use crate::records::{HubRecords, Snapshot};
 pub struct GithubFeed {
     follow: Follow<GithubHeld>,
     next_view: Arc<AtomicU64>,
-    /// The copy of the hub's records what the hub sends of GitHub as observations is held in, with every other
-    /// observation, once a [`crate::RecordsFeed`] has given it.
-    records: Arc<Mutex<Option<Reach<HubRecords>>>>,
+    /// The copy of the hub's records that what the hub sends of GitHub as observations is held in, with every other
+    /// observation.
+    records: Reach<HubRecords>,
 }
 
 impl GithubFeed {
-    /// Starts following, on a thread of its own, with nothing shown until a view says what it shows.
-    pub fn start(client: &Client) -> GithubFeed {
-        let follow = Follow::start(client, GithubHeld::default(), GithubSource::default);
-        GithubFeed { follow, next_view: Arc::new(AtomicU64::new(0)), records: Arc::default() }
-    }
-
-    /// Reads what the hub sends of GitHub as observations from `records` from now on.
-    pub(in crate::client) fn read_records_from(&self, records: Reach<HubRecords>) {
-        *self.records.lock() = Some(records);
+    /// Starts following, on a thread of its own, with nothing shown until a view says what it shows, reading and
+    /// writing what's sent as observations in `records`, the copy of the same hub's records.
+    pub(in crate::client) fn start(client: &Client, records: Reach<HubRecords>) -> GithubFeed {
+        let written = records.clone();
+        let follow = Follow::start(client, GithubHeld::default(), move || GithubSource::new(written));
+        GithubFeed { follow, next_view: Arc::new(AtomicU64::new(0)), records }
     }
 
     /// What `read` makes of what's held of GitHub, given what the copy of the hub's records holds of it.
     fn read<T>(&self, read: impl FnOnce(&GithubHeld, super::held::Observed<'_>) -> T) -> T {
-        let snapshot: Option<Snapshot> =
-            self.records.lock().as_ref().and_then(|records| records.read(HubRecords::snapshot));
+        let snapshot: Option<Snapshot> = self.records.read(HubRecords::snapshot);
         let observed = |key: &ObservationKey| snapshot.as_ref().and_then(|snapshot| snapshot.github_observation(key));
         self.follow.read(|held| read(held, &observed))
     }

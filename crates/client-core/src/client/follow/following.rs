@@ -1,13 +1,13 @@
-//! The handles on something followed, and the thread that follows it.
+//! The handles on something followed, and what its source does on the thread that follows it.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Instant;
 
 use parking_lot::Mutex;
-use protocol::client::ErrorCode;
 
-use crate::client::{Client, ClientError, Ended, Result, Subscription, SubscriptionItem};
+use super::thread::Follower;
+use crate::client::{Client, ClientError, Result, Subscription, SubscriptionItem};
 
 /// What's followed, and how. It's made on the thread that follows it, so it needn't be sent between threads.
 pub(in crate::client) trait Source: 'static {
@@ -56,10 +56,10 @@ pub enum FollowError {
 }
 
 pub(in crate::client) struct Shared<H> {
-    held: Mutex<H>,
+    pub(super) held: Mutex<H>,
     /// A new connection to carry on with.
-    reconnect: Mutex<Option<Client>>,
-    connected: AtomicBool,
+    pub(super) reconnect: Mutex<Option<Client>>,
+    pub(super) connected: AtomicBool,
     errors: Mutex<Vec<FollowError>>,
     /// Holds one signal at a time, so changes nobody has looked at yet gather into one.
     signal: flume::Sender<()>,
@@ -147,6 +147,12 @@ impl<H: Send + 'static> Follow<H> {
         held: H,
         source: impl FnOnce() -> S + Send + 'static,
     ) -> Self {
+        Follow::unstarted(held).start(client, source)
+    }
+
+    /// What's to be followed, holding `held`, before its thread starts, so what its source needs can be given a handle
+    /// on it first.
+    pub(in crate::client) fn unstarted(held: H) -> Unstarted<H> {
         let (signal, changed) = flume::bounded(1);
         let (wake, woken) = flume::bounded(1);
         let shared = Arc::new(Shared {
@@ -157,15 +163,7 @@ impl<H: Send + 'static> Follow<H> {
             errors: Mutex::new(Vec::new()),
             signal,
         });
-        let (client, thread_shared) = (client.clone(), shared.clone());
-        let follow = move || {
-            let source = source();
-            Follower { source, client, shared: thread_shared, woken, subscription: None, let_go: false }.run();
-        };
-        if let Err(e) = std::thread::Builder::new().name("follow hub".to_string()).spawn(follow) {
-            shared.failed(FollowError::Following(ClientError::Io(e)));
-        }
-        Self { shared, changed, wake }
+        Unstarted { follow: Follow { shared, changed, wake }, woken }
     }
 
     pub(in crate::client) fn read<T>(&self, read: impl FnOnce(&H) -> T) -> T {
@@ -222,12 +220,43 @@ impl<H: Send + 'static> Follow<H> {
     }
 }
 
+/// What's to be followed, before the thread that follows it has started.
+pub(in crate::client) struct Unstarted<H> {
+    follow: Follow<H>,
+    woken: flume::Receiver<()>,
+}
+
+impl<H: Send + 'static> Unstarted<H> {
+    /// A handle on what's held that doesn't keep it followed, as [`Follow::reach`] gives once it's started.
+    pub(in crate::client) fn reach(&self) -> Reach<H> {
+        self.follow.reach()
+    }
+
+    /// Starts following on a thread of its own, as [`Follow::start`] does.
+    pub(in crate::client) fn start<S: Source<Held = H>>(
+        self,
+        client: &Client,
+        source: impl FnOnce() -> S + Send + 'static,
+    ) -> Follow<H> {
+        let Unstarted { follow, woken } = self;
+        let (client, shared) = (client.clone(), follow.shared.clone());
+        let thread = move || {
+            let source = source();
+            Follower { source, client, shared, woken, subscription: None, let_go: false }.run();
+        };
+        if let Err(e) = std::thread::Builder::new().name("follow hub".to_string()).spawn(thread) {
+            follow.shared.failed(FollowError::Following(ClientError::Io(e)));
+        }
+        follow
+    }
+}
+
 impl<H> Shared<H> {
-    fn changed(&self) {
+    pub(super) fn changed(&self) {
         let _ = self.signal.try_send(());
     }
 
-    fn failed(&self, error: FollowError) {
+    pub(super) fn failed(&self, error: FollowError) {
         let (FollowError::Following(cause) | FollowError::Asked(cause)) = &error;
         if !matches!(cause, ClientError::Disconnected) {
             self.errors.lock().push(error);
@@ -235,145 +264,8 @@ impl<H> Shared<H> {
         self.changed();
     }
 
-    fn set_connected(&self, connected: bool) {
+    pub(super) fn set_connected(&self, connected: bool) {
         self.connected.store(connected, Ordering::SeqCst);
         self.changed();
-    }
-}
-
-/// Its fields drop in order, so its source, which lets go of what it took in through its subscription, as a session's
-/// does of the session's own records, goes before the subscription does.
-struct Follower<S: Source> {
-    source: S,
-    client: Client,
-    shared: Arc<Shared<S::Held>>,
-    woken: flume::Receiver<()>,
-    /// `None` while there's no connection to follow on, or while it's let go.
-    subscription: Option<Subscription>,
-    /// Not followed, since it isn't wanted, on a connection that hasn't gone as far as it knows.
-    let_go: bool,
-}
-
-enum Next {
-    Item(std::result::Result<SubscriptionItem, flume::RecvError>),
-    Woken(std::result::Result<(), flume::RecvError>),
-    /// When it was wanted until has come.
-    Due,
-}
-
-impl<S: Source> Follower<S> {
-    fn run(mut self) {
-        self.resume_if_wanted();
-        loop {
-            match self.next() {
-                Next::Item(Ok(item)) => match self.source.apply(&self.client, &self.shared.held, item) {
-                    Ok(changed) => {
-                        if changed {
-                            self.shared.changed();
-                        }
-                    }
-                    Err(e) => self.lost(Some(FollowError::Following(e))),
-                },
-                Next::Item(Err(_)) => match self.subscription.take().and_then(|ended| ended.ended()) {
-                    Some(Ended::FellBehind) => self.resume(),
-                    Some(Ended::Disconnected) | None => self.lost(None),
-                },
-                Next::Woken(Ok(())) => self.woken(),
-                // Every handle has gone.
-                Next::Woken(Err(_)) => return,
-                Next::Due => {}
-            }
-            self.let_go_or_resume();
-        }
-    }
-
-    /// Waits for an item, while there's a subscription, or to be woken, or for when it's wanted until.
-    fn next(&mut self) -> Next {
-        let selector = flume::Selector::new();
-        let selector = match &self.subscription {
-            Some(subscription) => selector.recv(&subscription.items, Next::Item),
-            None => selector,
-        };
-        let selector = selector.recv(&self.woken, Next::Woken);
-        let due = self.subscription.as_ref().and(self.source.wanted_until(&self.shared.held));
-        match due {
-            Some(due) => selector.wait_deadline(due).unwrap_or(Next::Due),
-            None => selector.wait(),
-        }
-    }
-
-    /// Whether it's wanted now.
-    fn wanted(&self) -> bool {
-        self.source.wanted_until(&self.shared.held).is_none_or(|until| Instant::now() < until)
-    }
-
-    /// Lets the subscription go once it isn't wanted, and follows again once it's wanted again.
-    fn let_go_or_resume(&mut self) {
-        if self.subscription.is_some() && !self.wanted() {
-            // Dropping it tells the hub to stop sending.
-            self.subscription = None;
-            self.let_go = true;
-        } else if self.let_go && self.wanted() {
-            self.resume();
-        }
-    }
-
-    /// Follows on the connection it has, unless it isn't wanted, when it's let go on it until it is.
-    fn resume_if_wanted(&mut self) {
-        if self.wanted() {
-            self.resume();
-        } else {
-            self.let_go = true;
-        }
-    }
-
-    fn woken(&mut self) {
-        let reconnect = self.shared.reconnect.lock().take();
-        if let Some(client) = reconnect {
-            // What was asked before the next connection came is done without one, whether or not this has heard the
-            // last go, so what that would send the hub, such as what was typed, isn't sent on the next, as typing over
-            // a connection that's going isn't. A source that fetches leaves what was asked for the next.
-            self.ask(false);
-            self.client = client;
-            self.subscription = None;
-            self.source.reconnected();
-            self.resume_if_wanted();
-        }
-        self.ask(self.subscription.is_some() || self.let_go);
-    }
-
-    /// Asks the source to do what was asked of it, on the connection if `connected`.
-    fn ask(&mut self, connected: bool) {
-        let connection = connected.then_some(&self.client);
-        match self.source.asked(connection, &self.shared.held, &|| self.shared.changed()) {
-            Ok(true) => self.shared.changed(),
-            Ok(false) => {}
-            Err(e) => self.shared.failed(FollowError::Asked(e)),
-        }
-    }
-
-    fn resume(&mut self) {
-        self.subscription = None;
-        self.let_go = false;
-        match self.source.resume(&self.client, &self.shared.held) {
-            Ok(subscription) => {
-                self.subscription = Some(subscription);
-                self.shared.set_connected(true);
-            }
-            // Deleted, which the records say too, so whoever reads it lets go of it rather than hearing it failed.
-            Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => self.lost(None),
-            Err(e) if self.source.does_without(&e) => self.lost(None),
-            Err(e) => self.lost(Some(FollowError::Following(e))),
-        }
-    }
-
-    fn lost(&mut self, error: Option<FollowError>) {
-        self.subscription = None;
-        self.let_go = false;
-        self.shared.connected.store(false, Ordering::SeqCst);
-        match error {
-            Some(error) => self.shared.failed(error),
-            None => self.shared.changed(),
-        }
     }
 }

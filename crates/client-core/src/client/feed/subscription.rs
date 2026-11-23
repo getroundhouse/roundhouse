@@ -26,10 +26,10 @@ impl RecordsFeed {
     /// on, and what's shown needn't wait for the hub to say the same. So are the records of each session a view follows,
     /// as its subscription sends them.
     pub fn start(client: &Client) -> RecordsFeed {
-        let github = GithubFeed::start(client);
+        let records = Follow::unstarted(HubRecords::default());
+        let github = GithubFeed::start(client, records.reach());
         let source = RecordsSource { github: github.clone() };
-        let follow = Follow::start(client, HubRecords::default(), move || source);
-        github.read_records_from(follow.reach());
+        let follow = records.start(client, move || source);
         let feed = RecordsFeed { follow, github };
         client.inner.folding.reach(&feed.follow);
         feed
