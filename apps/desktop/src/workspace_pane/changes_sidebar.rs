@@ -30,7 +30,8 @@ impl WorkspacePane {
     }
 
     /// Shows the workspace's changes or all its files in the sidebar of changes, reading again what it shows, as
-    /// opening the sidebar does.
+    /// opening the sidebar does. What that finds is what the tab clicked is told the workspace changes, which a
+    /// summary the hub keeps current says without a read.
     pub fn show_sidebar_tab(&mut self, tab: SidebarTab, cx: &mut Context<Self>) {
         let Some(diff) = &mut self.diff else { return };
         diff.sidebar_tab.click(tab);
@@ -127,8 +128,7 @@ impl WorkspacePane {
     fn make_diff(&mut self, cx: &mut Context<Self>) {
         let (client, id) = (self.client.clone(), self.workspace().id.clone());
         let comments = self.shown.comments().to_vec();
-        let changes = self.shown.all().workspace_changes(&id).cloned();
-        let review = cx.new(|cx| Review::new(client.clone(), id.clone(), comments, changes.as_ref(), cx));
+        let review = cx.new(|cx| Review::new(client.clone(), id.clone(), comments, cx));
         let file = cx.new(|cx| FileDiff::new(review.clone(), cx));
         let viewer = cx.new(|cx| FileView::new(client.clone(), id.clone(), cx));
         let changes = cx.new(|cx| Changes::new(review.clone(), cx));
@@ -138,14 +138,8 @@ impl WorkspacePane {
                 cx.emit(PaneEvent::Error(message.clone()));
                 this.tell_tab(TabShown::read_failed, cx);
             }
-            // What the whole diff found, whatever the list is from, so the read a tab's click makes is what finds the
-            // first change, as it was before the hub kept a summary.
-            ReviewEvent::Loaded => {
-                let files = this.diff.as_ref().and_then(|diff| diff.review.read(cx).whole_diff_changes());
-                if let Some(files) = files {
-                    this.tell_tab(|tab| tab.read(files), cx);
-                }
-            }
+            ReviewEvent::Counted(files) => this.tell_tab(|tab| tab.read(*files), cx),
+            ReviewEvent::Loaded => {}
             // A hub from before saving took the comment being written with it still has it, so it's told what's
             // here now.
             ReviewEvent::Saved => this.keep_writing(true, cx),
@@ -168,24 +162,22 @@ impl WorkspacePane {
         self.subscriptions.extend([review_events, file_events, changes_events, all_files_events]);
         let (tab, files_behind, sidebar_tab) = (None, false, TabShown::default());
         self.diff = Some(Diff { review, file, viewer, changes, all_files, sidebar_tab, tab, files_behind });
-        // From the hub's summary, where it sends one, rather than waiting for the whole diff.
+        // From the hub's summary, where it sends one, rather than waiting for the whole diff, which is read where
+        // there's none that's current.
         self.take_changed_files(cx);
+        if let Some(diff) = &self.diff {
+            diff.review.update(cx, Review::refresh);
+        }
         // The comment being written, as the hub kept it.
         self.take_writing(cx);
     }
 
     /// Takes what client-core holds of the workspace's changed files, which it holds while the pane follows the
-    /// workspace, and tells the tab shown how many files a current summary of them says the workspace changes, as
-    /// reading the whole diff does.
+    /// workspace.
     pub(super) fn take_changed_files(&mut self, cx: &mut Context<Self>) {
         let Some(diff) = &self.diff else { return };
         let summary = self.shown.all().workspace_changes(&self.workspace().id);
-        let current = matches!(summary, Some(protocol::model::Observed::Current { .. }));
         diff.review.update(cx, |r, cx| r.take_summary(summary, cx));
-        let files = self.diff.as_ref().and_then(|diff| diff.review.read(cx).listing().map(Listing::changed));
-        if let Some(files) = files.filter(|_| current) {
-            self.tell_tab(|tab| tab.read(files), cx);
-        }
     }
 
     /// Whether there's a sidebar of changes to draw beside the chat, shown or hidden.

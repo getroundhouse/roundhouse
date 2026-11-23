@@ -286,7 +286,7 @@ impl WorkspacePane {
         }
         if let Some(diff) = &mut self.diff {
             diff.sidebar_tab.reconnected();
-            diff.review.update(cx, |r, _| r.reconnect(client));
+            diff.review.update(cx, |r, cx| r.reconnect(client, cx));
             diff.all_files.update(cx, |a, _| a.reconnect(client));
             diff.viewer.update(cx, |v, cx| v.reconnect(client, cx));
         }

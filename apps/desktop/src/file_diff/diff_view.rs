@@ -3,7 +3,7 @@ use crate::file_header::file_header;
 use crate::file_view::LINE_HEIGHT;
 use crate::image_diff::ImageDiff;
 use crate::patch::FilePatch;
-use crate::review::{Review, ReviewEvent};
+use crate::review::{Diffed, Review, ReviewEvent};
 use crate::shared_choice::{Chosen, chosen, switch_of};
 use crate::{FlipImage, image_diff};
 use draft::Draft;
@@ -158,6 +158,24 @@ impl FileDiff {
         Some(line.text.clone())
     }
 
+    /// What it says in place of the file's diff, where it draws none, for a test to tell what's drawn.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn says_instead(&self, cx: &App) -> Option<&'static str> {
+        self.drawn(cx).err()
+    }
+
+    /// The file it draws the diff of, or what it says in place of one: while the file is read, or its sides are made,
+    /// or once it changes nothing, or couldn't be read.
+    fn drawn(&self, cx: &App) -> Result<FilePatch, &'static str> {
+        let diffed = self.path.as_deref().map_or(Diffed::Loading, |path| self.review.read(cx).diffed(path));
+        match diffed {
+            Diffed::Patch(file) if file.is_binary() || self.shown.is_some() => Ok(file.clone()),
+            Diffed::Patch(_) | Diffed::Loading => Err("Loading…"),
+            Diffed::Unchanged => Err("This file has no changes now"),
+            Diffed::Failed => Err("Couldn't read this file's changes"),
+        }
+    }
+
     /// How it shows a diff, as chosen last in any workspace.
     #[cfg(any(test, feature = "testing"))]
     pub fn shown_as(&self, cx: &App) -> DiffView {
@@ -172,7 +190,7 @@ impl FileDiff {
     /// Opens `lines` of the file that shows, by their numbers on the old side.
     pub(super) fn open(&mut self, lines: Range<u32>, cx: &mut Context<Self>) {
         let Some(path) = self.path.clone() else { return };
-        let commit = self.review.read(cx).base_commit.clone();
+        let commit = self.review.read(cx).base_commit().cloned();
         self.opened.entry(path).or_default().open(commit.as_ref(), lines);
         self.lay_out_again(cx);
     }
@@ -190,7 +208,7 @@ impl FileDiff {
             return self.rows.clone();
         }
         let Some(shown) = &self.shown else { return Rc::from([]) };
-        let (view, notes, commit) = (self.view(cx), self.notes(cx), self.review.read(cx).base_commit.clone());
+        let (view, notes, commit) = (self.view(cx), self.notes(cx), self.review.read(cx).base_commit().cloned());
         let none = Opened::default();
         let opened = self.path.as_ref().and_then(|path| self.opened.get(path)).unwrap_or(&none);
         let known = shown.sides.known().unwrap_or_default();
@@ -334,13 +352,12 @@ impl Render for FileDiff {
         {
             window.focus(&self.focus, cx);
         }
-        let loaded = self.review.read(cx).files.is_some();
-        let file = self.file(cx).cloned();
-        let binary = file.as_ref().is_some_and(FilePatch::is_binary);
-        let content = match file {
+        let shows = self.drawn(cx);
+        let binary = shows.as_ref().is_ok_and(FilePatch::is_binary);
+        let content = match shows {
             // The image's comparison has a bar of its own, with its choices on it.
-            Some(_) if binary => self.image.clone().into_any_element(),
-            Some(file) if self.shown.is_some() => {
+            Ok(_) if binary => self.image.clone().into_any_element(),
+            Ok(file) => {
                 let renamed = file.old_path().filter(|old| *old != file.path()).map(|old| format!("from {old}"));
                 let view = self.view(cx);
                 let choices = switch_of(DiffView::for_file(file.path()), view);
@@ -351,8 +368,7 @@ impl Render for FileDiff {
                     .child(div().flex_1().min_h_0().child(body))
                     .into_any_element()
             }
-            None if loaded => look::nothing_to_show("This file has no changes now").into_any_element(),
-            Some(_) | None => look::nothing_to_show("Loading…").into_any_element(),
+            Err(said) => look::nothing_to_show(said).into_any_element(),
         };
         // Space flips a changed image, while it's flipped between its two sides. Only for a file that isn't text,
         // which has no lines to comment on, since the binding would take Space from what a comment is typed in.

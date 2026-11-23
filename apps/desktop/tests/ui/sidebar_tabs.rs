@@ -29,19 +29,26 @@ fn changed(ui: &Ui<'_>) -> Option<usize> {
     ui.cx.read_entity(&review, |r, _| r.listing().map(Listing::changed))
 }
 
-/// A change made outside a turn is found within a moment, while the hub keeps the workspace's changes current, and
-/// the tab clicked after it is the one that shows.
+/// While the hub keeps the workspace's changes current, a tab clicked in a workspace that changes nothing gives way to
+/// Changes at the workspace's first change, made outside a turn, and one clicked after that stays through later
+/// changes.
 #[gpui_kit::test]
-fn a_tab_clicked_after_a_change_made_outside_a_turn_is_the_one_that_shows(cx: &mut TestAppContext) {
+fn a_tab_clicked_gives_way_to_the_first_change_and_one_clicked_after_it_stays(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, workspace) = in_a_new_workspace(cx, &stack);
-    std::fs::write(ui.worktree(&workspace).join("new.txt"), "new\n").unwrap();
-    ui.wait("the change counted", |ui| changed(ui) == Some(1));
-
+    let review = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.diff.as_ref().map(|d| d.review.clone())).unwrap();
+    ui.wait("the hub's summary", |ui| ui.cx.read_entity(&review, |r, _| r.lists_the_summary()));
     ui.click("sidebar-tab-all-files");
-
-    ui.wait("the new file", |ui| ui.has("all-file-new.txt"));
     assert_eq!(tab(&ui), Some(SidebarTab::AllFiles));
+
+    std::fs::write(ui.worktree(&workspace).join("new.txt"), "new\n").unwrap();
+
+    ui.wait("the first change", |ui| changed(ui) == Some(1));
+    assert_eq!(tab(&ui), Some(SidebarTab::Changes), "the first change shows Changes");
+    ui.click("sidebar-tab-all-files");
+    std::fs::write(ui.worktree(&workspace).join("newer.txt"), "newer\n").unwrap();
+    ui.wait("the later change", |ui| changed(ui) == Some(2));
+    assert_eq!(tab(&ui), Some(SidebarTab::AllFiles), "a later change leaves the tab clicked");
 }
 
 /// Each workspace shows the tab that suits it, so one that changes something isn't on All files because another was.

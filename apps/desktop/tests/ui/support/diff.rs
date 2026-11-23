@@ -8,7 +8,7 @@ use std::rc::Rc;
 use desktop::file_diff::{FileDiff, LineAt};
 use desktop::review::{Review, ReviewEvent};
 use desktop::workspace_pane::WorkspacePane;
-use gpui_kit::{App, AppContext as _, Entity, SharedString};
+use gpui_kit::{AppContext as _, Entity, SharedString};
 use protocol::model::DiffSide;
 
 use super::Ui;
@@ -62,8 +62,6 @@ impl Ui<'_> {
             Some(_) => self.wait("the diff to load again", |ui| loaded.get() || summarized(ui)),
             None => self.wait("the diff to load", |ui| ui.cx.read_entity(&diff.review, |r, _| r.listing().is_some())),
         }
-        // A summary of them follows a file written just before by as long as the worker waits for writes to stop.
-        self.wait("Changes to list every file the diff has", |ui| ui.cx.read_entity(&diff.review, lists_the_diff));
         diff
     }
 
@@ -96,10 +94,4 @@ impl Ui<'_> {
     pub(crate) fn comments(&self, diff: &Diff) -> Vec<protocol::model::DiffComment> {
         self.cx.read_entity(&diff.review, |r, _| r.comments.clone())
     }
-}
-
-/// Whether Changes lists every file the whole diff has, as it does once the summary has caught up with it.
-fn lists_the_diff(review: &Review, _: &App) -> bool {
-    let Some(listing) = review.listing() else { return false };
-    review.files.iter().flatten().all(|file| listing.rows.iter().any(|row| row.path == *file.path()))
 }

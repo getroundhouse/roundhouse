@@ -3,8 +3,10 @@
 //! with its comments.
 
 mod comments;
+mod listed;
 mod listing;
 mod one_file;
+pub use listed::Diffed;
 pub use listing::{ChangedRow, Listing, Paging};
 
 mod review_view;

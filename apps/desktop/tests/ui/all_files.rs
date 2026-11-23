@@ -59,6 +59,9 @@ fn browse<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     std::fs::create_dir_all(worktree.join("build/out")).unwrap();
     std::fs::write(worktree.join("build/out/app.txt"), "built\n").unwrap();
     std::fs::write(worktree.join(".gitignore"), "build/\n").unwrap();
+    // Found by the hub's summary of the changes, which a click on All files doesn't wait for, so only once they're
+    // found is All files the tab clicked after the workspace's first change.
+    ui.wait("the changes", |ui| ui.has("file-src/lib.rs"));
     show_all_files(&mut ui);
     ui
 }

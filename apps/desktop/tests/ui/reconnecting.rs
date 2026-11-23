@@ -149,7 +149,7 @@ fn open_empty_diff(ui: &mut Ui<'_>) -> Diff {
 }
 
 fn shows_changes(ui: &Ui<'_>, diff: &Diff) -> bool {
-    ui.cx.read_entity(&diff.review, |r, _| r.files.as_ref().is_some_and(|files| !files.is_empty()))
+    ui.cx.read_entity(&diff.review, |r, _| r.listing().is_some_and(|listing| listing.changed() > 0))
 }
 
 #[gpui_kit::test]
