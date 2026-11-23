@@ -29,6 +29,11 @@ pub(crate) fn path_for_git(path: &Path) -> Vec<u8> {
     written
 }
 
+/// Each path in what git listed with a NUL after each, as `-z` has it write them, such as `git ls-files -z`.
+pub(crate) fn nul_separated(listed: &[u8]) -> impl Iterator<Item = &[u8]> {
+    listed.split(|byte| *byte == 0).filter(|path| !path.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -41,5 +46,13 @@ mod tests {
 
         assert_eq!(written, b"src/deep/a b.rs");
         assert_eq!(path_from_git(&written), path);
+    }
+
+    #[test]
+    fn paths_git_lists_with_nuls_are_each_path_and_nothing_after_the_last() {
+        let listed: Vec<&[u8]> = nul_separated(b"a.rs\0src/b c.rs\0").collect();
+
+        assert_eq!(listed, [b"a.rs".as_slice(), b"src/b c.rs"]);
+        assert_eq!(nul_separated(b"").count(), 0);
     }
 }

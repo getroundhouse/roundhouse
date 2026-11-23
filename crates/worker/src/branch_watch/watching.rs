@@ -1,9 +1,8 @@
 use crate::git::branches;
 use crate::git::branches::{Places, Read};
 use crate::serve::Outbox;
-use crate::settling::{Settling, Woke};
-use notify::event::{AccessKind, AccessMode};
-use notify::{Event, EventKind, PollWatcher, RecursiveMode, Watcher};
+use crate::settling::{Settling, Told, Woke};
+use notify::{Event, PollWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use process::Environment;
 use protocol::model::Branches;
@@ -146,22 +145,16 @@ fn watching<W: Watcher>(mut watcher: W, places: &Places) -> notify::Result<W> {
     Ok(watcher)
 }
 
-/// Whether what the watcher heard may have changed the branches. One it lost track with, or an error, may have. A file
-/// opened, read or closed without being written to hasn't, which inotify tells of too, and every git command opens
-/// `HEAD` and the config, so counting those, the watcher's own reads would wake it again, and every other worker's on
-/// the same repository, for ever.
+/// Whether what the watcher heard may have changed the branches, as [`Told`] says, and by which files it's of.
 pub(super) fn mattered(wakes: &Wakes, event: &notify::Result<Event>) -> bool {
-    let Ok(event) = event else { return true };
-    if event.need_rescan() {
-        return true;
+    match Told::of(event) {
+        Told::LostTrack => true,
+        Told::NothingWritten => false,
+        Told::Changed(event) => {
+            let last = wakes.last.lock();
+            event.paths.iter().any(|file| branches::matters(&wakes.places, last.as_ref(), file))
+        }
     }
-    if let EventKind::Access(access) = event.kind
-        && access != AccessKind::Close(AccessMode::Write)
-    {
-        return false;
-    }
-    let last = wakes.last.lock();
-    event.paths.iter().any(|file| branches::matters(&wakes.places, last.as_ref(), file))
 }
 
 /// Reads the branches and sends them if they've changed.

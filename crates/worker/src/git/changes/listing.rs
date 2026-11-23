@@ -1,7 +1,7 @@
 //! Which files a worktree changes, as git lists them: those it tracks with their lines, from one diff against the base
 //! commit, and those it doesn't track or ignore.
 
-use super::super::{compared_base, git_error, git_ok_bytes};
+use super::super::{compared_base, git_error, git_ok_bytes, nul_separated};
 use process::Environment;
 use protocol::client::ApiError;
 use protocol::model::{ChangeStatus, CommitId, LineCounts};
@@ -72,8 +72,7 @@ pub(in crate::git) async fn untracked(
 ) -> Result<Vec<Listed>, ApiError> {
     let args = ["--literal-pathspecs", "ls-files", "--others", "--exclude-standard", "-z", "--"];
     let output = git_ok_bytes(given, worktree, &[&args[..], paths].concat()).await?;
-    let listed = output.split(|b| *b == 0).filter(|path| !path.is_empty());
-    Ok(listed
+    Ok(nul_separated(&output)
         .map(|path| Listed { path: path.to_vec(), from: None, status: ChangeStatus::Untracked, lines: None })
         .collect())
 }

@@ -2,7 +2,8 @@
 //! folders appeared or went, and whether the watch lost track.
 
 use super::ignored::Ignored;
-use notify::event::{AccessKind, AccessMode, ModifyKind, RemoveKind};
+use crate::settling::Told;
+use notify::event::{ModifyKind, RemoveKind};
 use notify::{Event, EventKind};
 use parking_lot::{Mutex, RwLock};
 use std::ffi::OsStr;
@@ -24,9 +25,9 @@ pub(super) struct Heard {
     pub(super) news: Mutex<News>,
     /// Holds one wake for the loop, however much was heard while it was reading.
     pub(super) wake: Notify,
-    /// Every path it's heard of that may change the summary, which only a test keeps, to see which path the OS names,
-    /// and what it heard before a path the test waits for.
-    #[cfg_attr(not(test), expect(dead_code, reason = "only a test keeps what it heard of"))]
+    /// Every path it's heard of that may change the summary, for a test, to see which path the OS names, and what it
+    /// heard before a path the test waits for.
+    #[cfg(test)]
     pub(super) paths: Mutex<Vec<PathBuf>>,
 }
 
@@ -51,6 +52,7 @@ impl Heard {
             ignored: RwLock::new(ignored),
             news: Mutex::new(News::default()),
             wake: Notify::new(),
+            #[cfg(test)]
             paths: Mutex::new(Vec::new()),
         }
     }
@@ -60,23 +62,18 @@ impl Heard {
         std::mem::take(&mut self.news.lock())
     }
 
-    /// Takes in what the OS said, waking the loop if it may change the summary. What git ignores wakes nothing, and nor
-    /// does a file opened, read or closed without being written to, which inotify tells of, so the worker's own reads
-    /// for the summary, and git's, don't wake it again.
-    pub(super) fn hear(&self, event: notify::Result<Event>) {
-        let event = match event {
-            Ok(event) if !event.need_rescan() => event,
-            Ok(_) | Err(_) => {
+    /// Takes in what the OS said, waking the loop if it may change the summary, as [`Told`] says. What git ignores
+    /// wakes nothing either, so a build writing into `target/` costs no summaries.
+    pub(super) fn hear(&self, event: &notify::Result<Event>) {
+        let event = match Told::of(event) {
+            Told::LostTrack => {
                 self.news.lock().lost_track = true;
                 self.wake.notify_one();
                 return;
             }
+            Told::NothingWritten => return,
+            Told::Changed(event) => event,
         };
-        if let EventKind::Access(access) = event.kind
-            && access != AccessKind::Close(AccessMode::Write)
-        {
-            return;
-        }
         let mut matters = false;
         for path in &event.paths {
             match self.place(path) {

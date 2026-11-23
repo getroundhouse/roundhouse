@@ -1,6 +1,6 @@
 //! What git ignores in a worktree, and where the worktree's own git state is, as a watch of its files needs them.
 
-use super::{command, git_error, git_ok, git_ok_bytes};
+use super::{command, git_error, git_ok, git_ok_bytes, nul_separated};
 use process::Environment;
 use protocol::client::ApiError;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use tokio::io::AsyncWriteExt as _;
 pub(crate) async fn ignored(given: &Environment, worktree: &Path) -> Result<Vec<Vec<u8>>, ApiError> {
     let args = ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"];
     let listed = git_ok_bytes(given, worktree, &args).await?;
-    Ok(listed.split(|b| *b == 0).filter(|path| !path.is_empty()).map(<[u8]>::to_vec).collect())
+    Ok(nul_separated(&listed).map(<[u8]>::to_vec).collect())
 }
 
 /// Which of `paths`, from the top of the worktree at `worktree`, git ignores, with one git for them all. A path inside a
@@ -42,7 +42,7 @@ pub(crate) async fn which_ignored(
     let output = output.map_err(|e| git_error(format!("git check-ignore didn't finish: {e}")))?;
     // 1 says none of them is ignored.
     match output.status.code() {
-        Some(0 | 1) => Ok(output.stdout.split(|b| *b == 0).filter(|p| !p.is_empty()).map(<[u8]>::to_vec).collect()),
+        Some(0 | 1) => Ok(nul_separated(&output.stdout).map(<[u8]>::to_vec).collect()),
         _ => Err(git_error(format!("git check-ignore failed: {}", String::from_utf8_lossy(&output.stderr).trim()))),
     }
 }

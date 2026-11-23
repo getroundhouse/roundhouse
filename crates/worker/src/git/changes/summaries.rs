@@ -1,5 +1,5 @@
-//! Summarizing a worktree's changes, for whoever asks: its hub, or a watch on the worktree as its files change, which
-//! isn't built. And a page of the files past those a summary lists, which a client asks for through its hub.
+//! Summarizing a worktree's changes, for whoever asks: its hub, or the watch on the worktree as its files change. And
+//! a page of the files past those a summary lists, which a client asks for through its hub.
 
 use super::listing::{Listed, listed};
 use super::seen::Seen;
