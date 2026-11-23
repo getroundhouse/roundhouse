@@ -64,8 +64,7 @@ async fn a_list_asked_for_while_a_change_is_made_has_the_new_copy() {
     };
     a_list_waits_for_a_change_made::<WorkspaceLines, _>([lines(3, 1), lines(4, 0)], of_the_hub).await;
     let of_w = |hub: Arc<Hub>| async move {
-        let listed = hub.workspace_observations(&"w".into()).await.unwrap();
-        (listed.observations, listed.rev)
+        hub.observations_at(&protocol::model::Level::Workspace { id: "w".into() }).await.unwrap()
     };
     a_list_waits_for_a_change_made::<WorkspaceChanges, _>([changes(3, 1), changes(4, 0)], of_w).await;
 }
@@ -160,11 +159,10 @@ async fn each_level_is_listed_only_its_own_observations() {
         |n| ReferenceAsk { repository: GithubRepositoryName::named("o/r"), number: IssueNumber::try_from(n).unwrap() };
     hub.observation_worked_out::<Referenced>(ask(1), ReferenceSaid::Missing, 1_000).await.unwrap();
     hub.observation_worked_out::<Referenced>(ask(2), ReferenceSaid::Missing, 2_000).await.unwrap();
-    let rev_now = async { Ok(hub.store.current_rev().unwrap()) };
 
     let of_the_hub = hub.records_list().await.unwrap().observations;
-    let of_w = hub.workspace_observations(&"w".into()).await.unwrap().observations;
-    let (of_one, rev) = hub.observations.listed_at(&Level::Reference { reference: ask(1) }, rev_now).await.unwrap();
+    let (of_w, _) = hub.observations_at(&Level::Workspace { id: "w".into() }).await.unwrap();
+    let (of_one, rev) = hub.observations_at(&Level::Reference { reference: ask(1) }).await.unwrap();
 
     let mut keys: Vec<_> = of_the_hub.iter().map(Observation::key).collect();
     keys.sort_by_key(|key| format!("{key:?}"));

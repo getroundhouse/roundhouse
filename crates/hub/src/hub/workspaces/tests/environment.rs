@@ -131,7 +131,7 @@ async fn creation_refuses_unusable_environments_before_recording_a_workspace_or_
 
         assert_eq!(err.code, ErrorCode::Unavailable, "{case}");
         assert_eq!(asked.instances_created(), 0, "{case}: must not ask provider to create an instance");
-        let notices: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok())
+        let notices: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone))
             .filter(|notice| matches!(notice, HubNotice::Workspace(_) | HubNotice::Removed { .. }))
             .collect();
         assert!(notices.is_empty(), "{case}: must not record or announce a workspace: {notices:?}");

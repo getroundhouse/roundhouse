@@ -151,7 +151,7 @@ async fn a_worker_of_another_build_is_replaced_once_two_looks_in_a_row_find_noth
     }
     // The next worker is the hub's own build, so its workspace says so, and every client hears it.
     loop {
-        match feed.try_recv() {
+        match feed.try_recv().map(std::sync::Arc::unwrap_or_clone) {
             Ok(HubNotice::Workspace(workspace)) if workspace.id == w() && workspace.worker_build.is_none() => break,
             Ok(_) | Err(TryRecvError::Lagged(_)) => {}
             Err(e) => assert!(Instant::now() < deadline, "no client heard the workspace move to the hub's build: {e}"),

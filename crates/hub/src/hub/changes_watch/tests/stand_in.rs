@@ -12,14 +12,10 @@ use protocol::model::{
 use protocol::worker::{WatchChanges, WorkerFrame, WorkerRequest, WorkerResponse};
 use tokio::sync::broadcast;
 
+use crate::hub::Hub;
 use crate::hub::stand_in_workers::TIMEOUT;
 use crate::hub::tests::serving;
-use crate::hub::{FollowerId, Hub};
 use crate::worker_link::WorkerLink;
-
-pub(super) fn by(subscription: u64) -> FollowerId {
-    FollowerId { connection: 1, subscription }
-}
 
 pub(super) fn w() -> WorkspaceId {
     "w".into()
@@ -89,11 +85,11 @@ pub(super) async fn until_watches(asked: &Mutex<Vec<WorkerRequest>>, count: usiz
 }
 
 /// The lines of `w` as the feed tells of them next.
-pub(super) async fn next_lines(feed: &mut broadcast::Receiver<HubNotice>) -> Observed<LineCounts> {
+pub(super) async fn next_lines(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Observed<LineCounts> {
     let next = async {
         loop {
             if let Ok(ObservationNotice::Copy(Observation::WorkspaceLines { lines, .. })) =
-                ObservationNotice::try_from(feed.recv().await.unwrap())
+                ObservationNotice::try_from(std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()))
             {
                 return lines;
             }
@@ -103,11 +99,11 @@ pub(super) async fn next_lines(feed: &mut broadcast::Receiver<HubNotice>) -> Obs
 }
 
 /// The changed files of `w` as the feed tells of them next.
-pub(super) async fn next_changes(feed: &mut broadcast::Receiver<HubNotice>) -> Observed<ChangeSummary> {
+pub(super) async fn next_changes(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Observed<ChangeSummary> {
     let next = async {
         loop {
             if let Ok(ObservationNotice::Copy(Observation::WorkspaceChanges { changes, .. })) =
-                ObservationNotice::try_from(feed.recv().await.unwrap())
+                ObservationNotice::try_from(std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()))
             {
                 return changes;
             }

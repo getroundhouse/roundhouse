@@ -13,7 +13,7 @@ use protocol::model::{
 use tokio::sync::broadcast;
 
 use crate::hub::tests::hub_on_github;
-use crate::hub::{Followed, FollowerId, Hub};
+use crate::hub::{Followed, Hub};
 
 /// Long enough for anything here on a busy machine.
 const WAIT: Duration = Duration::from_secs(10);
@@ -26,10 +26,13 @@ async fn observing(dir: &std::path::Path) -> (Arc<Hub>, PullRequests, StandIn) {
 }
 
 /// The next notice the feed tells of an observation of `w` that `of` picks out.
-async fn next<T>(feed: &mut broadcast::Receiver<HubNotice>, of: impl Fn(ObservationNotice) -> Option<T>) -> T {
+async fn next<T>(
+    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
+    of: impl Fn(ObservationNotice) -> Option<T>,
+) -> T {
     let next = async {
         loop {
-            if let Ok(notice) = ObservationNotice::try_from(feed.recv().await.unwrap())
+            if let Ok(notice) = ObservationNotice::try_from(std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()))
                 && let Some(picked) = of(notice)
             {
                 return picked;
@@ -113,7 +116,7 @@ async fn a_followed_workspace_s_pull_request_is_current_from_its_read_until_a_re
     pull_requests.set(7, PullRequestState::Open);
     let mut feed = hub.subscribe_feed();
 
-    let following = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Workspace("w".into())]);
+    let following = hub.follow([Followed::Workspace("w".into())]);
 
     let (first, first_rev) = next(&mut feed, summary).await;
     assert_eq!(state(&first), Some((PrState::Open, true)), "{first:?}");
@@ -258,12 +261,14 @@ async fn a_hub_that_starts_again_has_each_as_of_its_read_and_its_first_pass_send
     let _ = hub.workspace_pull_request("w".into()).await;
     next(&mut feed, unseen).await;
     let before = hub.store.current_rev().unwrap();
+    // The task that works out GitHub's observations holds the hub, so dropping it here doesn't wait for its writes.
+    hub.observations_written().await;
     drop((hub, github));
 
     let again = crate::hub::tests::hub_in_again(dir.path());
     let mut feed = again.subscribe_feed();
     let mut kept = again.records_list().await.unwrap().observations;
-    kept.extend(again.workspace_observations(&"w".into()).await.unwrap().observations);
+    kept.extend(again.observations_at(&protocol::model::Level::Workspace { id: "w".into() }).await.unwrap().0);
     again.observe_github_once().await;
 
     let kinds: Vec<_> = kept.iter().map(Observation::key).collect();
@@ -277,7 +282,7 @@ async fn a_hub_that_starts_again_has_each_as_of_its_read_and_its_first_pass_send
         assert!(is_as_of(observation), "{observation:?}");
     }
     assert!(kinds.len() >= 3);
-    let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok())
+    let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone))
         .filter_map(|notice| ObservationNotice::try_from(notice).ok())
         .collect();
     assert_eq!(told, [], "the first pass found what was kept");
@@ -312,14 +317,14 @@ async fn a_pull_request_that_s_both_a_workspace_s_and_a_chip_s_is_read_once_and_
     tokio::spawn(hub.clone().observe_github());
     pull_requests.set(7, PullRequestState::Open);
     let mut feed = hub.subscribe_feed();
-    let _workspace = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Workspace("w".into())]);
+    let _workspace = hub.follow([Followed::Workspace("w".into())]);
     let (stands, _) = next(&mut feed, summary).await;
     let Observed::Current { value: OwnPullRequestSaid { pull_request: Some(workspace_s) } } = stands else {
         panic!("{stands:?}")
     };
     let chip = ReferenceAsk { repository: own(), number: IssueNumber::try_from(7).unwrap() };
 
-    let _chip = hub.follow(FollowerId { connection: 1, subscription: 2 }, [Followed::Reference(chip.clone())]);
+    let _chip = hub.follow([Followed::Reference(chip.clone())]);
 
     let said = next(&mut feed, |notice| {
         let ObservationNotice::Copy(Observation::Reference { reference, said, .. }) = notice else { return None };

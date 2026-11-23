@@ -2,17 +2,15 @@
 //! with the records.
 
 use protocol::client::ApiError;
-use protocol::client::listed::WorkspaceObservations;
-use protocol::model::{Level, WorkspaceId};
+use protocol::model::{Level, Observation, Rev};
 
 use crate::hub::Hub;
 use crate::store::Store;
 
 impl Hub {
-    /// Every observation of the workspace `id`, with the revision they're as of, for a subscription that follows it.
-    pub(crate) async fn workspace_observations(&self, id: &WorkspaceId) -> Result<WorkspaceObservations, ApiError> {
-        let level = Level::Workspace { id: id.clone() };
-        let (observations, rev) = self.observations.listed_at(&level, self.blocking(Store::current_rev)).await?;
-        Ok(WorkspaceObservations { workspace_id: id.clone(), observations, rev })
+    /// Every observation of `level`, which isn't the hub's, such as a workspace's or a chip's, for a subscription that
+    /// follows it, with the hub's newest revision, which covers no change the list lacks.
+    pub(crate) async fn observations_at(&self, level: &Level) -> Result<(Vec<Observation>, Rev), ApiError> {
+        self.observations.listed_at(level, self.blocking(Store::current_rev)).await
     }
 }

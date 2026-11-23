@@ -1,11 +1,7 @@
 use protocol::model::{GithubRepositoryName, IssueNumber, ReferenceAsk, WorkspaceId};
 
-use super::{Followed, FollowerId};
+use super::Followed;
 use crate::hub::tests::hub_in;
-
-fn by(subscription: u64) -> FollowerId {
-    FollowerId { connection: 1, subscription }
-}
 
 fn chip(repository: &'static str, number: u64) -> Followed {
     let repository = GithubRepositoryName::named(repository);
@@ -19,8 +15,8 @@ async fn something_is_followed_until_the_last_subscription_that_follows_it_lets_
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     let (w, v) = (Followed::Workspace("w".into()), Followed::Workspace("v".into()));
-    let first = hub.follow(by(1), [Followed::Hub, w.clone()]);
-    let mut second = hub.follow(by(2), [w.clone()]);
+    let first = hub.follow([Followed::Hub, w.clone()]);
+    let mut second = hub.follow([w.clone()]);
 
     drop(first);
     let after_first = (hub.followed(&Followed::Hub), hub.followed(&w));
@@ -40,8 +36,8 @@ async fn an_issue_followed_twice_is_read_once() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
 
-    let _following = hub.follow(by(1), [chip("example/project", 12), chip("Example/Project", 12)]);
-    let _again = hub.follow(by(2), [chip("example/project", 12), chip("example/project", 13), Followed::Hub]);
+    let _following = hub.follow([chip("example/project", 12), chip("Example/Project", 12)]);
+    let _again = hub.follow([chip("example/project", 12), chip("example/project", 13), Followed::Hub]);
 
     let mut numbers: Vec<u64> = hub.followers.references().into_iter().map(|(_, number)| number.get()).collect();
     numbers.sort_unstable();

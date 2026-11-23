@@ -62,8 +62,8 @@ fn changes_asked(asked: &Asked, chat: &SessionId) -> Vec<Settings> {
 }
 
 /// The newest record of `chat` the feed has told of so far.
-fn last_told(feed: &mut broadcast::Receiver<HubNotice>, chat: &SessionId) -> Option<Session> {
-    std::iter::from_fn(|| feed.try_recv().ok())
+fn last_told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>, chat: &SessionId) -> Option<Session> {
+    std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone))
         .filter_map(|notice| {
             let HubNotice::Session(told) = notice else { return None };
             (told.id == *chat).then_some(told)

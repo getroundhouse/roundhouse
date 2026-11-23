@@ -3,9 +3,7 @@
 use protocol::model::{LineCounts, Observed};
 use protocol::worker::{WatchChanges, WorkerFrame};
 
-use super::stand_in::{
-    Watch, by, frame, next_changes, next_lines, summary, summed_up, until_watches, w, watches, worker,
-};
+use super::stand_in::{Watch, frame, next_changes, next_lines, summary, summed_up, until_watches, w, watches, worker};
 use crate::hub::Followed;
 use crate::hub::observations::WorkspaceLines;
 use crate::hub::stand_in_workers::hub_with_stand_in_workers;
@@ -23,8 +21,8 @@ async fn a_followed_workspace_s_worker_watches_its_worktree_until_nothing_follow
     let (link, asked) = worker(&hub, Watch::Watching);
     let mut feed = hub.subscribe_feed();
 
-    let following = hub.follow(by(1), [Followed::Workspace(w())]);
-    let again = hub.follow(by(2), [Followed::Workspace(w())]);
+    let following = hub.follow([Followed::Workspace(w())]);
+    let again = hub.follow([Followed::Workspace(w())]);
     until_watches(&asked, 1).await;
     hub.changes_frame(&w(), &link, frame(summary(3, 1))).await;
     let current = next_lines(&mut feed).await;
@@ -61,13 +59,13 @@ async fn a_worker_from_before_the_watch_has_the_summary_read_once_instead() {
     let (_link, asked) = worker(&hub, Watch::Refusing);
     let mut feed = hub.subscribe_feed();
 
-    let following = hub.follow(by(1), [Followed::Workspace(w())]);
+    let following = hub.follow([Followed::Workspace(w())]);
     let lines = next_lines(&mut feed).await;
-    let again = hub.follow(by(2), [Followed::Workspace(w())]);
+    let again = hub.follow([Followed::Workspace(w())]);
     hub.changes_watching(&w()).await;
     drop((following, again));
     hub.changes_watching(&w()).await;
-    let _following = hub.follow(by(3), [Followed::Workspace(w())]);
+    let _following = hub.follow([Followed::Workspace(w())]);
     hub.changes_watching(&w()).await;
     workspace_lines::tests::read(&hub, &w()).await;
 
@@ -82,7 +80,7 @@ async fn only_a_worker_something_else_started_is_told_and_each_taken_on_is() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, started) = hub_with_stand_in_workers(dir.path());
     hub.store.workspace_ready(&w(), "/w", &"alder".into(), "main", None).unwrap();
-    let _following = hub.follow(by(1), [Followed::Workspace(w())]);
+    let _following = hub.follow([Followed::Workspace(w())]);
 
     hub.changes_watching(&w()).await;
 
@@ -121,7 +119,7 @@ async fn a_watched_workspace_isn_t_read_at_a_turn_s_end() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let (link, asked) = worker(&hub, Watch::Watching);
-    let _following = hub.follow(by(1), [Followed::Workspace(w())]);
+    let _following = hub.follow([Followed::Workspace(w())]);
     until_watches(&asked, 1).await;
 
     hub.read_lines(&w(), &link);

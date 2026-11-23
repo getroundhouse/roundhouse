@@ -9,7 +9,7 @@ use tokio::sync::watch;
 use super::pumping::pump;
 use crate::hub::{Followed, Hub};
 use crate::server::Connection;
-use crate::server::subscribing::{Subscription, taken};
+use crate::server::subscribing::{Served, taken};
 
 /// Starts feeding a subscription to what GitHub says of what `subscribe` shows, or, for one that's already fed, takes
 /// it to show that from now on.
@@ -35,7 +35,7 @@ pub(in crate::server) fn follow(
     let followed = followed(&shown);
     let (sender, receiver) = watch::channel(shown);
     let task = tokio::spawn(pump(hub.clone(), receiver, subscription_id, connection.frames.clone())).abort_handle();
-    let subscription = Subscription::new(hub, connection, subscription_id, followed, task).showing(sender);
+    let subscription = Served::new(hub, followed, task).showing(sender);
     subscriptions.insert(subscription_id, subscription);
     Ok(())
 }

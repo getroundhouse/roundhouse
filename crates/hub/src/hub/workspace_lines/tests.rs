@@ -30,7 +30,7 @@ fn summary(added: u64, removed: u64) -> WorkerResponse {
 
 /// Every observation the hub holds at the workspace's own level.
 async fn of_its_own_level(hub: &Hub, id: &WorkspaceId) -> Vec<Observation> {
-    hub.workspace_observations(id).await.unwrap().observations
+    hub.observations_at(&protocol::model::Level::Workspace { id: id.clone() }).await.unwrap().0
 }
 
 /// What a stand-in answers when asked to sum up its worktree's changes, as [`answering_first`] has it.
@@ -41,10 +41,11 @@ fn summing_up(
 }
 
 /// The next notice the feed tells of an observation.
-async fn next_observation(feed: &mut broadcast::Receiver<HubNotice>) -> ObservationNotice {
+async fn next_observation(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> ObservationNotice {
     let next = async {
         loop {
-            if let Ok(notice) = ObservationNotice::try_from(feed.recv().await.unwrap()) {
+            if let Ok(notice) = ObservationNotice::try_from(std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()))
+            {
                 return notice;
             }
         }
@@ -53,8 +54,8 @@ async fn next_observation(feed: &mut broadcast::Receiver<HubNotice>) -> Observat
 }
 
 /// Each notice of an observation the feed has told since it was last read.
-fn observations_told(feed: &mut broadcast::Receiver<HubNotice>) -> Vec<ObservationNotice> {
-    let told = std::iter::from_fn(|| feed.try_recv().ok());
+fn observations_told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Vec<ObservationNotice> {
+    let told = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone));
     told.filter_map(|notice| ObservationNotice::try_from(notice).ok()).collect()
 }
 

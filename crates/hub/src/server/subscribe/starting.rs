@@ -68,7 +68,7 @@ async fn start_one(
             return Err(taken(subscription_id));
         }
         let task = tokio::spawn(feeding).abort_handle();
-        let subscription = subscribing::Subscription::new(hub, connection, subscription_id, [followed.clone()], task);
+        let subscription = subscribing::Served::new(hub, [followed.clone()], task);
         subscriptions.insert(subscription_id, subscription.of_subscribe(followed));
     }
     // Only an error once the subscription has stopped, as another kind of request can stop it, which leaves no list to
@@ -101,15 +101,15 @@ async fn feeding(
     follow: Follow,
     sends: Sends,
 ) -> Result<Fed, ApiError> {
-    let frames = connection.frames.clone();
+    let (frames, closer) = (connection.frames.clone(), connection.closer.clone());
     Ok(match follow {
-        Follow::Hub => hub_level::feeding(hub, sends, subscription_id, frames).await?.into(),
+        Follow::Hub => hub_level::feeding(hub, sends, subscription_id, frames, closer).await?.into(),
         Follow::Workspace { id } => {
-            let (feeding, listed) = workspace_level::feeding(hub, id, sends, subscription_id, frames).await?;
+            let (feeding, listed) = workspace_level::feeding(hub, id, sends, subscription_id, frames, closer).await?;
             Fed { feeding, listed: Some(listed) }
         }
         Follow::Session { id, from } => {
-            session_level::feeding(hub, id, from, sends, subscription_id, frames).await?.into()
+            session_level::feeding(hub, id, from, sends, subscription_id, frames, closer).await?.into()
         }
         Follow::Terminal { id } => {
             let watcher = hub.terminal_watch(&id)?;
@@ -117,7 +117,7 @@ async fn feeding(
             feeding.into()
         }
         Follow::Reference { reference } => {
-            reference_level::feeding(hub, reference, sends, subscription_id, frames).await?.into()
+            reference_level::feeding(hub, reference, sends, subscription_id, frames, closer).await?.into()
         }
         Follow::Unknown => return Err(unknown("a level")),
     })

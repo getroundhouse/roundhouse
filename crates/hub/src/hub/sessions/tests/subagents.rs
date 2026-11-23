@@ -63,7 +63,7 @@ async fn the_feed_tells_of_each_change_to_a_subagents_record_and_the_list_says_t
 
     the_agent_says(&hub, &asked, &chat.id, its_work()).await;
 
-    let notices: Vec<Subagent> = std::iter::from_fn(|| feed.try_recv().ok())
+    let notices: Vec<Subagent> = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone))
         .filter_map(|notice| if let HubNotice::Subagent(subagent) = notice { Some(subagent) } else { None })
         .collect();
     // Each copy's calls, whether its newest call had heard back, whether it had said anything since, how many tokens

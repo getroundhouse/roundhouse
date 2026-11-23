@@ -28,8 +28,8 @@ fn told(session: &Session) -> HubNotice {
 }
 
 /// Everything a client following the feed has heard so far.
-fn heard(client: &mut broadcast::Receiver<HubNotice>) -> Vec<HubNotice> {
-    std::iter::from_fn(|| client.try_recv().ok()).collect()
+fn heard(client: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Vec<HubNotice> {
+    std::iter::from_fn(|| client.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect()
 }
 
 proptest! {

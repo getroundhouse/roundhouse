@@ -3,7 +3,7 @@
 
 use super::counted::Counted;
 use super::in_order::{Answering, Subscribes, in_order};
-use super::subscribing::Subscription;
+use super::subscribing::Served;
 use super::{admit, dispatch};
 
 use std::collections::HashMap;
@@ -17,7 +17,7 @@ use protocol::client::{ClientRequest, HubFrame, ReplyOutcome};
 use protocol::frame;
 use protocol::model::ClientDevice;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::sync::{OwnedSemaphorePermit, mpsc, watch};
+use tokio::sync::{Notify, OwnedSemaphorePermit, mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tracing::{debug, warn};
@@ -58,9 +58,29 @@ pub(super) struct Connection {
     pub(super) id: u64,
     pub(super) frames: mpsc::Sender<Outgoing>,
     /// Each ended as it's dropped, which happens as the connection does.
-    pub(super) subscriptions: Mutex<HashMap<u64, Subscription>>,
+    pub(super) subscriptions: Mutex<HashMap<u64, Served>>,
     /// True once nothing more will be read, so a request that only waits, with nothing to carry on with, can stop.
     pub(super) closed: Arc<watch::Sender<bool>>,
+    /// Closes it, from what feeds one of its subscriptions.
+    pub(super) closer: Closer,
+}
+
+/// Closes a connection, as the hub does when it can't send one of its subscriptions what it needs, since no frame tells
+/// a client that one subscription has ended, and a client whose connection closes follows everything again. What feeds
+/// a subscription holds this rather than the connection, which would keep the connection's subscriptions alive. The
+/// connection stops reading, sends what's queued, and ends, and every subscription on it with it.
+#[derive(Clone, Default)]
+pub(super) struct Closer(Arc<Notify>);
+
+impl Closer {
+    pub(super) fn close(&self) {
+        self.0.notify_one();
+    }
+
+    /// Once [`Closer::close`] has been called, before or since.
+    async fn closing(&self) {
+        self.0.notified().await;
+    }
 }
 
 /// A frame queued for a connection, and what it holds until it has been written, as a terminal's follower holds its
@@ -79,7 +99,7 @@ impl From<HubFrame> for Outgoing {
 
 /// Why a connection stopped reading.
 enum Ending {
-    /// It closed, sent something unreadable, or was refused. What's queued for it is still sent.
+    /// It closed, sent something unreadable, or was refused, or the hub closed it. What's queued for it is still sent.
     Closed,
     /// Its device was revoked, so nothing more is sent.
     Revoked,
@@ -96,7 +116,8 @@ pub(super) async fn serve_connection(
     let closed = Arc::new(watch::Sender::new(false));
     let id = NEXT_CONNECTION.fetch_add(1, Ordering::Relaxed);
     let subscriptions = Mutex::new(HashMap::new());
-    let connection = Arc::new(Connection { id, frames, subscriptions, closed: closed.clone() });
+    let connection =
+        Arc::new(Connection { id, frames, subscriptions, closed: closed.clone(), closer: Closer::default() });
     let revoked = gate.revoked();
     let mut revoking = revoked.clone();
 
@@ -158,7 +179,10 @@ where
     let subscribes = Subscribes::start(hub, connection);
     loop {
         line.clear();
-        let read = read_line(&mut reader, &mut line, gate.max_frame_bytes(), gate.deadline()).await;
+        let read = tokio::select! {
+            read = read_line(&mut reader, &mut line, gate.max_frame_bytes(), gate.deadline()) => read,
+            () = connection.closer.closing() => return Ending::Closed,
+        };
         // As well as around the whole connection, so a revoked device can't slip in a request that had already
         // arrived.
         if *revoked.borrow() {

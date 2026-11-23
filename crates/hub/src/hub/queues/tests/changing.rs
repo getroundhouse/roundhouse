@@ -65,7 +65,7 @@ async fn a_queued_prompt_moves_its_workspace_as_its_queued_and_not_again_as_its_
     // Said by the time the queue answers, rather than with its pull request, which the hub reads once the turn the
     // prompt waits on ends.
     let told = loop {
-        match feed.try_recv() {
+        match feed.try_recv().map(std::sync::Arc::unwrap_or_clone) {
             Ok(HubNotice::Workspace(w)) if w.id == chat.workspace.id => break w,
             Ok(HubNotice::Session(s)) => assert_eq!(s.status, SessionStatus::Running, "the turn ended first: {s:?}"),
             Ok(_) => {}

@@ -13,7 +13,6 @@
 //! pull request once the cache forgets that pull request, or the record links to another.
 
 mod chips;
-mod listed;
 mod observing;
 mod reads;
 #[cfg(test)]

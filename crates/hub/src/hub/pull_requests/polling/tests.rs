@@ -10,7 +10,7 @@ use protocol::model::{WaitEnd, WaitId, WorkspaceId};
 use tokio::time::Instant;
 
 use crate::hub::tests::{hub_on_github, hub_reading_github, pushed};
-use crate::hub::{Followed, FollowerId, Hub};
+use crate::hub::{Followed, Hub};
 use crate::store::tests::idle_session;
 use github::{Answer, PullRequestState, PullRequests, Script, StandIn};
 
@@ -70,7 +70,7 @@ async fn workspaces_due_as_one_token_are_read_together_without_a_worker() {
     hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main", None).unwrap();
     hub.store.set_workspace_branches(&v(), &pushed("head-7", "head-7", (0, 0))).unwrap();
     // As while a client follows the hub, so every workspace's pull request is read in turn.
-    let _following = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Hub]);
+    let _following = hub.follow([Followed::Hub]);
     let number =
         |id: &WorkspaceId| hub.store.get_workspace(id).unwrap().pull_request_linked().map(|link| link.number.get());
 

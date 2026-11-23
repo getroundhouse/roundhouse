@@ -13,7 +13,7 @@ use protocol::model::{
 use tokio::sync::broadcast;
 
 use crate::hub::tests::hub_on_github_with;
-use crate::hub::{Followed, FollowerId, Hub};
+use crate::hub::{Followed, Hub};
 
 /// Long enough for anything here on a busy machine.
 const WAIT: Duration = Duration::from_secs(10);
@@ -79,10 +79,11 @@ async fn read_again(hub: &Hub, asks: &[ReferenceAsk]) {
 }
 
 /// The next notice the feed tells of an observation.
-async fn next(feed: &mut broadcast::Receiver<HubNotice>) -> ObservationNotice {
+async fn next(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> ObservationNotice {
     let next = async {
         loop {
-            if let Ok(notice) = ObservationNotice::try_from(feed.recv().await.unwrap()) {
+            if let Ok(notice) = ObservationNotice::try_from(std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()))
+            {
                 return notice;
             }
         }
@@ -91,7 +92,10 @@ async fn next(feed: &mut broadcast::Receiver<HubNotice>) -> ObservationNotice {
 }
 
 /// The next copy the feed tells of `ask`'s observation, as it says it, with its revision.
-async fn next_of(feed: &mut broadcast::Receiver<HubNotice>, ask: &ReferenceAsk) -> (Observed<ReferenceSaid>, u64) {
+async fn next_of(
+    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
+    ask: &ReferenceAsk,
+) -> (Observed<ReferenceSaid>, u64) {
     let ObservationNotice::Copy(Observation::Reference { reference, said, rev }) = next(feed).await else {
         panic!("not a copy of a chip's")
     };
@@ -114,7 +118,7 @@ async fn a_followed_chip_is_current_from_its_read_and_moves_only_as_github_says_
     let hub = observing(dir.path(), &references).await;
     let mut feed = hub.subscribe_feed();
 
-    let following = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Reference(own(12))]);
+    let following = hub.follow([Followed::Reference(own(12))]);
 
     let (first, first_rev) = next_of(&mut feed, &own(12)).await;
     assert_eq!(first, current(said(12, "Decide")));
@@ -156,7 +160,7 @@ async fn a_chip_read_before_it_was_followed_is_as_of_that_read_and_a_missing_one
     hub.references_read(&"w".into(), vec![own(12), own(13)]).await.unwrap();
     let mut feed = hub.subscribe_feed();
 
-    let _twelve = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Reference(own(12))]);
+    let _twelve = hub.follow([Followed::Reference(own(12))]);
 
     let (before, _) = next_of(&mut feed, &own(12)).await;
 
@@ -165,7 +169,7 @@ async fn a_chip_read_before_it_was_followed_is_as_of_that_read_and_a_missing_one
     let (now, _) = next_of(&mut feed, &own(12)).await;
     assert_eq!(now, current(said(12, "Decide")));
 
-    let _thirteen = hub.follow(FollowerId { connection: 1, subscription: 2 }, [Followed::Reference(own(13))]);
+    let _thirteen = hub.follow([Followed::Reference(own(13))]);
 
     let (missing, _) = next_of(&mut feed, &own(13)).await;
     assert!(
@@ -186,7 +190,7 @@ async fn a_chip_the_cache_forgets_is_gone() {
     references.set(issue(14, "Another"));
     let hub = observing(dir.path(), &references).await;
     let mut feed = hub.subscribe_feed();
-    let following = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Reference(own(12))]);
+    let following = hub.follow([Followed::Reference(own(12))]);
     next_of(&mut feed, &own(12)).await;
     drop(following);
     next_of(&mut feed, &own(12)).await;

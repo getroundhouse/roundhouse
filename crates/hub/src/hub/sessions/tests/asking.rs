@@ -29,13 +29,13 @@ async fn given(asked: &Asked, chat: &SessionId, seq: Seq) {
 
 /// The next copy of `chat`'s record the feed tells of that `wanted` says is the one.
 async fn told(
-    feed: &mut broadcast::Receiver<HubNotice>,
+    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
     chat: &SessionId,
     wanted: impl Fn(&Session) -> bool,
 ) -> Session {
     let next = async {
         loop {
-            if let Ok(HubNotice::Session(told)) = feed.recv().await
+            if let Ok(HubNotice::Session(told)) = feed.recv().await.map(std::sync::Arc::unwrap_or_clone)
                 && told.id == *chat
                 && wanted(&told)
             {
@@ -162,7 +162,7 @@ async fn closing_a_chat_nothing_was_sent_in_deletes_it() {
     let closed = hub.session_close(unused.id.clone()).await.unwrap();
 
     assert_eq!(closed.closed_at_ms, None, "the reply is the chat as it was");
-    let removed = std::iter::from_fn(|| feed.try_recv().ok()).find_map(|notice| {
+    let removed = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).find_map(|notice| {
         let HubNotice::Removed { record, rev } = notice else { return None };
         Some((record, rev))
     });

@@ -50,10 +50,12 @@ async fn soon<T>(what: &str, waited: impl Future<Output = T>) -> T {
 }
 
 /// The next notice of a sign-in, or its removal, passing over the rest.
-async fn next_sign_in(feed: &mut broadcast::Receiver<HubNotice>) -> HubNotice {
+async fn next_sign_in(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> HubNotice {
     soon("a notice of a sign-in", async {
         loop {
-            if let notice @ (HubNotice::GithubSignIn(_) | HubNotice::Removed { .. }) = feed.recv().await.unwrap() {
+            if let notice @ (HubNotice::GithubSignIn(_) | HubNotice::Removed { .. }) =
+                std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap())
+            {
                 return notice;
             }
         }
@@ -62,7 +64,7 @@ async fn next_sign_in(feed: &mut broadcast::Receiver<HubNotice>) -> HubNotice {
 }
 
 /// The next notice of a sign-in that has ended, passing over the rest.
-async fn next_ended(feed: &mut broadcast::Receiver<HubNotice>) -> protocol::model::GithubSignIn {
+async fn next_ended(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> protocol::model::GithubSignIn {
     loop {
         if let HubNotice::GithubSignIn(sign_in) = next_sign_in(feed).await
             && !sign_in.status.is_waiting()
@@ -87,7 +89,7 @@ async fn a_sign_in_waits_with_its_code_and_once_approved_every_client_hears_of_i
     let started = hub.github_sign_in_start(start("s")).await.unwrap();
     let mut heard = Vec::new();
     while !matches!(heard.last(), Some(HubNotice::GithubSignIn(sign_in)) if !sign_in.status.is_waiting()) {
-        heard.push(soon("a notice", feed.recv()).await.unwrap());
+        heard.push(std::sync::Arc::unwrap_or_clone(soon("a notice", feed.recv()).await.unwrap()));
     }
     let again = hub.github_sign_in_start(start("s")).await.unwrap();
 
@@ -133,7 +135,7 @@ async fn cancelling_a_sign_in_ends_its_job_tells_every_client_and_cancelling_aga
     assert_eq!(cancelled.status, GithubSignInStatus::Cancelled);
     assert_eq!(told, HubNotice::GithubSignIn(cancelled.clone()));
     assert_eq!(again, cancelled);
-    assert!(feed.try_recv().is_err(), "cancelling again told no one");
+    assert!(feed.try_recv().map(std::sync::Arc::unwrap_or_clone).is_err(), "cancelling again told no one");
     assert_eq!(nobodys.unwrap_err().code, ErrorCode::NotFound);
 }
 

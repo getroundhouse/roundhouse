@@ -25,13 +25,14 @@ async fn every_client_is_told_of_what_changed_a_github_accounts_record_and_the_d
     let mut feed = hub.subscribe_feed();
 
     let connected = hub.github_account_connect(asking("a-token")).await.unwrap();
-    let (told, made_default) = (feed.try_recv(), feed.try_recv());
+    let (told, made_default) =
+        (feed.try_recv().map(std::sync::Arc::unwrap_or_clone), feed.try_recv().map(std::sync::Arc::unwrap_or_clone));
     let again = hub.github_account_connect(asking(" a-token\n")).await.unwrap();
-    let told_again = feed.try_recv();
+    let told_again = feed.try_recv().map(std::sync::Arc::unwrap_or_clone);
     let machines_own = hub.github_account_set_default(GithubAccountSetDefault { account: None }).await.unwrap();
-    let told_of_settings = feed.try_recv();
+    let told_of_settings = feed.try_recv().map(std::sync::Arc::unwrap_or_clone);
     let disconnected = hub.github_account_disconnect(connected.id.clone()).await.unwrap();
-    let told_last = feed.try_recv();
+    let told_last = feed.try_recv().map(std::sync::Arc::unwrap_or_clone);
 
     assert_eq!(connected.user.name.as_str(), "ada");
     assert!(matches!(told, Ok(HubNotice::GithubAccount(record)) if record == connected));
@@ -47,7 +48,10 @@ async fn every_client_is_told_of_what_changed_a_github_accounts_record_and_the_d
     assert_eq!(disconnected, connected, "the reply is the record as it last was");
     let removed = RecordKey::GithubAccount { id: connected.id.clone() };
     assert!(matches!(&told_last, Ok(HubNotice::Removed { record, .. }) if *record == removed), "{told_last:?}");
-    assert!(matches!(feed.try_recv(), Err(TryRecvError::Empty)), "no default, so the settings didn't change");
+    assert!(
+        matches!(feed.try_recv().map(std::sync::Arc::unwrap_or_clone), Err(TryRecvError::Empty)),
+        "no default, so the settings didn't change"
+    );
 }
 
 #[tokio::test]
@@ -59,7 +63,8 @@ async fn disconnecting_the_default_tells_every_client_its_gone_and_then_that_the
     let mut feed = hub.subscribe_feed();
 
     hub.github_account_disconnect(connected.id.clone()).await.unwrap();
-    let (gone, settings) = (feed.try_recv(), feed.try_recv());
+    let (gone, settings) =
+        (feed.try_recv().map(std::sync::Arc::unwrap_or_clone), feed.try_recv().map(std::sync::Arc::unwrap_or_clone));
     let again = hub.github_account_disconnect(connected.id.clone()).await;
 
     let Ok(HubNotice::Removed { record, rev }) = gone else { panic!("{gone:?}") };
@@ -97,7 +102,7 @@ async fn a_token_github_refuses_keeps_nothing_and_tells_no_one() {
     let refused = hub.github_account_connect(asking("a-revoked-token")).await;
 
     assert_eq!(refused.unwrap_err().code, ErrorCode::InvalidRequest);
-    assert!(matches!(feed.try_recv(), Err(TryRecvError::Empty)));
+    assert!(matches!(feed.try_recv().map(std::sync::Arc::unwrap_or_clone), Err(TryRecvError::Empty)));
     assert_eq!(hub.records_list().await.unwrap().github_accounts, []);
     assert!(!dir.path().join("github-logins").exists(), "nothing was kept");
 }

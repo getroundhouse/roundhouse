@@ -42,10 +42,10 @@ fn worker_answering(answer: Answer) -> (Arc<WorkerLink>, Arc<Mutex<Vec<String>>>
 }
 
 /// The next repository the feed tells of.
-async fn told(feed: &mut broadcast::Receiver<HubNotice>) -> Repo {
+async fn told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Repo {
     let repo = async {
         loop {
-            if let HubNotice::Repo(repo) = feed.recv().await.unwrap() {
+            if let HubNotice::Repo(repo) = std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()) {
                 return repo;
             }
         }

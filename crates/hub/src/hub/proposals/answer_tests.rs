@@ -37,7 +37,7 @@ async fn an_answer_is_kept_once_and_the_feed_is_told() {
     assert_eq!(otherwise.code, ErrorCode::Conflict, "another answer is refused");
     let told = tokio::time::timeout(TIMEOUT, async {
         loop {
-            if let Ok(HubNotice::Proposal(proposal)) = feed.recv().await {
+            if let Ok(HubNotice::Proposal(proposal)) = feed.recv().await.map(std::sync::Arc::unwrap_or_clone) {
                 return proposal;
             }
         }

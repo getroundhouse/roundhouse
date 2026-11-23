@@ -148,7 +148,7 @@ async fn a_run_its_worker_finds_running_has_its_claims_put_back_on_the_record_an
         assert_eq!(on_record(&hub).await, Some(kept.clone()));
         assert_eq!(methods(&asked), ["agent_start"]);
         let mut told = Vec::new();
-        while let Ok(notice) = feed.try_recv() {
+        while let Ok(notice) = feed.try_recv().map(std::sync::Arc::unwrap_or_clone) {
             if let HubNotice::Session(session) = notice {
                 told.push(session.agent_capabilities);
             }
@@ -239,7 +239,7 @@ async fn a_runs_exit_that_takes_its_claims_off_the_record_is_announced_though_th
 
     assert_eq!(on_record(&hub).await, None);
     let mut told = Vec::new();
-    while let Ok(notice) = feed.try_recv() {
+    while let Ok(notice) = feed.try_recv().map(std::sync::Arc::unwrap_or_clone) {
         if let HubNotice::Session(session) = notice {
             told.push(session.agent_capabilities);
         }

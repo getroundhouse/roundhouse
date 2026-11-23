@@ -50,10 +50,10 @@ impl Hub {
                     Err(RecvError::Lagged(_)) => observing.all_again(&self).await,
                     Err(RecvError::Closed) => return,
                 },
-                notice = feed.recv() => match notice {
-                    Ok(HubNotice::Workspace(workspace)) => observing.workspaces.recorded(&self, &workspace).await,
+                notice = feed.recv() => match notice.as_deref() {
+                    Ok(HubNotice::Workspace(workspace)) => observing.workspaces.recorded(&self, workspace).await,
                     Ok(HubNotice::Removed { record: RecordKey::Workspace { id }, .. }) => {
-                        observing.workspaces.removed(&self, &id).await;
+                        observing.workspaces.removed(&self, id).await;
                     }
                     Ok(_) => {}
                     Err(RecvError::Lagged(_)) => observing.all_again(&self).await,

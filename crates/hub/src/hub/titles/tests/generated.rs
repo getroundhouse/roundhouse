@@ -64,7 +64,7 @@ async fn a_title_typed_while_one_is_generated_stays() {
         // Told of the other's generated title once both are saved.
         let told = async {
             loop {
-                let notice = feed.recv().await.unwrap();
+                let notice = std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap());
                 let generated = if renaming_the_workspace {
                     matches!(&notice, HubNotice::Session(s) if s.title_source == TitleSource::Generated)
                 } else {

@@ -1,4 +1,4 @@
-use protocol::model::{IssueNumber, Observation, Observed, PullRequest, Reference, ReferenceRead};
+use protocol::model::{IssueNumber, Level, Observation, Observed, PullRequest, Reference, ReferenceRead};
 use rusqlite::Connection;
 
 use super::super::file::prepare_forms;
@@ -47,7 +47,8 @@ async fn a_read_that_finds_the_same_writes_only_when_it_was_read() {
     drop(hub);
 
     let again = hub_in_again(dir.path());
-    let [kept] = again.workspace_observations(&"w".into()).await.unwrap().observations.try_into().unwrap();
+    let (observations, _) = again.observations_at(&Level::Workspace { id: "w".into() }).await.unwrap();
+    let [kept] = observations.try_into().unwrap();
     let read_then = Observed::AsOf { value: changes(9, 9), as_of_ms: 2_000 };
     assert_eq!(kept, Observation::WorkspaceChanges { workspace_id: "w".into(), changes: read_then, rev: kept.rev() });
 }

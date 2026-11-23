@@ -8,7 +8,7 @@ use protocol::model::{
 
 use super::references::FRESH_FOR;
 use crate::hub::tests::hub_reading_github;
-use crate::hub::{Followed, FollowerId, Hub};
+use crate::hub::{Followed, Hub};
 
 fn number(number: u64) -> IssueNumber {
     IssueNumber::try_from(number).unwrap()
@@ -248,7 +248,7 @@ async fn what_a_client_shows_is_read_again_once_its_stale() {
     references.set(issue("example/project", 12));
     let github = on_github(&references).await;
     let hub = hub_reading_github(dir.path(), github.api());
-    let showing = hub.follow(FollowerId { connection: 1, subscription: 1 }, [Followed::Reference(own(12))]);
+    let showing = hub.follow([Followed::Reference(own(12))]);
     let watching = tokio::spawn(hub.clone().watch_followed_references());
     let title = |hub: &Hub| match hub.reference_kept(&own(12)) {
         Some(ReferenceRead::Found { reference }) => reference.about().map(|about| about.title.clone()),

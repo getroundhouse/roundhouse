@@ -4,7 +4,7 @@ use protocol::client::ErrorCode;
 use protocol::model::{LineCounts, Observed};
 use protocol::worker::WorkerRequest;
 
-use super::stand_in::{Watch, by, frame, next_lines, summary, until_watches, w, watches, worker};
+use super::stand_in::{Watch, frame, next_lines, summary, until_watches, w, watches, worker};
 use crate::hub::Followed;
 use crate::hub::tests::hub_with_worktree;
 
@@ -16,7 +16,7 @@ async fn a_workspace_whose_archive_is_refused_is_watched_again() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let (link, asked) = worker(&hub, Watch::Watching);
-    let _following = hub.follow(by(1), [Followed::Workspace(w())]);
+    let _following = hub.follow([Followed::Workspace(w())]);
     until_watches(&asked, 1).await;
 
     let refused = hub.workspace_archive(w(), false).await;

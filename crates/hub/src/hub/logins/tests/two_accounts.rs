@@ -153,10 +153,13 @@ impl TwoAccounts {
 }
 
 /// The account the feed first announces `chat` as on.
-pub(super) async fn announced_on(feed: &mut broadcast::Receiver<HubNotice>, chat: &SessionId) -> AccountId {
+pub(super) async fn announced_on(
+    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
+    chat: &SessionId,
+) -> AccountId {
     loop {
         let told = tokio::time::timeout(TIMEOUT, feed.recv()).await.expect("the chat to be announced as on an account");
-        if let HubNotice::Session(told) = told.expect("the feed goes on")
+        if let HubNotice::Session(told) = std::sync::Arc::unwrap_or_clone(told.expect("the feed goes on"))
             && told.id == *chat
             && let Some(account) = told.hub_account()
         {

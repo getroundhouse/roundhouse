@@ -178,7 +178,14 @@ async fn a_workspace_s_list_is_queued_before_the_reply_and_only_for_a_start_that
     let given = Given::new(dir.path()).await;
     let (frames, mut queued) = tokio::sync::mpsc::channel(4);
     let closed = Arc::new(tokio::sync::watch::Sender::new(false));
-    let connection = Arc::new(crate::server::Connection { id: 0, frames, subscriptions: Mutex::default(), closed });
+    let subscriptions = Mutex::default();
+    let connection = Arc::new(crate::server::Connection {
+        id: 0,
+        frames,
+        subscriptions,
+        closed,
+        closer: crate::server::Closer::default(),
+    });
     let follows = |id| Subscribe { stop: Vec::new(), start: vec![start(id, Follow::Workspace { id: "w".into() })] };
     let changing = given.hub.holding_observations().await;
     let receivers = given.hub.feed_receivers();

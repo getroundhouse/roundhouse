@@ -181,7 +181,7 @@ async fn the_device_with_the_conversation_says_how_each_reply_ended_once() {
     for refused in [while_off, elsewhere, unnamed] {
         assert_eq!(refused.map_err(|e| e.code).err(), Some(ErrorCode::Conflict));
     }
-    let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok())
+    let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone))
         .filter_map(|notice| if let HubNotice::ReplyHeard(heard) = notice { Some(heard) } else { None })
         .collect();
     let listed = hub.session_replies_heard(chat.id.clone()).await.unwrap();
