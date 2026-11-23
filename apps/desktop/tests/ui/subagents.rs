@@ -101,7 +101,8 @@ fn a_finished_subagent_s_line_opens_its_tab_which_sits_after_the_file_tab_names_
         ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.subagent_tab().is_none())
     });
     assert_eq!(showing(&ui), Showing::Chat);
-    assert_eq!(records_held(&ui, &first), 0, "and its subagents' records go with it");
+    // The app lets go of them once it has stopped following the chat, which comes after its tabs close.
+    ui.wait("its subagents' records to go with it", |ui| records_held(ui, &first) == 0);
 }
 
 /// Has the agent start a subagent and finish its turn, and gives the ID of the button on its call's line that opens the
