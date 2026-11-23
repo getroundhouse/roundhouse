@@ -1,6 +1,7 @@
 use super::{Request, keeping};
 use crate::attached::{Attachments, joined};
 use crate::{attached, composing};
+use client_core::hints::Field;
 use client_core::{Agents, FileToSend, FilesFor};
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
@@ -103,19 +104,14 @@ impl NewWorkspaceDialog {
         self.dictation.update(cx, |field, cx| field.set_enabled(false, cx));
     }
 
+    /// The words to favour in the prompt: what's typed, its files, then the repository chosen and every one offered.
     fn dictation_hints(&self, cx: &App) -> dictation_ui::Hints {
-        let mut collector = client_core::hints::HintCollector::new();
-        collector.add_prose(&self.prompt.read(cx).text().to_string());
-        for name in self.attached.names() {
-            collector.add_path(&name);
-        }
-        if let Some((_, selected)) = self.offer.repos.iter().find(|(id, _)| id == &self.repo) {
-            collector.add_name(selected);
-        }
-        for (_, name) in &self.offer.repos {
-            collector.add_name(name);
-        }
-        dictation_ui::Hints::new(collector.finish())
+        let typed = self.prompt.read(cx).text().to_string();
+        let attached = self.attached.names();
+        let chosen_repo = self.offer.repos.iter().find(|(id, _)| id == &self.repo).map(|(_, name)| name.as_str());
+        let repos = self.offer.repos.iter().map(|(_, name)| name.as_str()).collect();
+        let field = Field::NewWorkspace { typed: &typed, attached: &attached, chosen_repo, repos };
+        dictation_ui::Hints::new(field.hint_words())
     }
 
     pub(crate) fn new(

@@ -4,7 +4,7 @@
 //! a newer revision is held back, as `held` says, since the note goes on to that one. The view outlives being out of
 //! sight, so going out of sight ends a recording, keeping what went in.
 
-use client_core::hints::HintCollector;
+use client_core::hints::{Around, Field};
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::{App, Context, Entity, Subscription, Window};
 
@@ -19,8 +19,9 @@ impl ProposalView {
         self.follow_dictation(cx);
     }
 
-    /// Gives the note's dictation the app's hint words, after the proposal's own.
-    pub fn set_dictation_hints(&mut self, hints: impl Fn(&mut HintCollector, &App) + 'static) {
+    /// Gives the note's dictation what the app knows around it, the workspace and the chat, whose hint words come
+    /// after the proposal's own.
+    pub fn set_dictation_hints(&mut self, hints: impl for<'a> Fn(&'a App) -> Around<'a> + 'static) {
         self.dictation_hints = Some(Box::new(hints));
     }
 
@@ -76,15 +77,10 @@ impl ProposalView {
 
     /// The words to favour in the note: what's typed in it, the proposal's, then what the app adds.
     fn hints(&self, cx: &App) -> dictation_ui::Hints {
-        let mut collector = HintCollector::new();
-        if let Some(note) = &self.answering.note {
-            collector.add_prose(&note.input.read(cx).text().to_string());
-        }
-        collector.add_proposal(&self.proposal.current.proposed);
-        if let Some(hints) = &self.dictation_hints {
-            hints(&mut collector, cx);
-        }
-        dictation_ui::Hints::new(collector.finish())
+        let typed = self.answering.note.as_ref().map(|note| note.input.read(cx).text().to_string());
+        let around = self.dictation_hints.as_ref().map_or_else(Around::default, |hints| hints(cx));
+        let proposal = &self.proposal.current.proposed;
+        dictation_ui::Hints::new(Field::ProposalNote { typed: typed.as_deref(), proposal, around }.hint_words())
     }
 
     /// Whether the note is being dictated into.

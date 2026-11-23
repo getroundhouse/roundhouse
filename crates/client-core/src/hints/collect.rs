@@ -20,7 +20,7 @@ const MAX_PATH_PARENTS: usize = 2;
 const MAX_PROPOSAL_MARKDOWN_HINTS: usize = 40;
 
 /// Accumulates candidate hint phrases, most immediate first, deduplicating case-insensitively on [`Self::finish`].
-pub struct HintCollector {
+pub(super) struct HintCollector {
     seen: HashSet<String>,
     out: Vec<String>,
     /// How many it holds before it takes no more, which is [`MAX_HINTS`] but while one source is held to a budget.
@@ -34,12 +34,12 @@ impl Default for HintCollector {
 }
 
 impl HintCollector {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self::default()
     }
 
     /// Adds a pre-vetted name such as a repository name.
-    pub fn add_name(&mut self, raw: &str) {
+    pub(super) fn add_name(&mut self, raw: &str) {
         self.insert(raw, true);
     }
 
@@ -67,14 +67,14 @@ impl HintCollector {
     }
 
     /// Adds a question's header, short option labels, and code spans or identifiers in its text and descriptions.
-    pub fn add_question(&mut self, question: &Question) {
+    pub(super) fn add_question(&mut self, question: &Question) {
         let options = question.options.iter().map(|option| (option.label.as_str(), option.description.as_deref()));
         self.add_asked(question.header.as_deref(), options, &question.text);
     }
 
     /// Adds a proposal's title, then each of its questions as [`Self::add_question`] does, then code spans or
     /// identifiers in its Markdown, which is longer and less likely said, up to [`MAX_PROPOSAL_MARKDOWN_HINTS`].
-    pub fn add_proposal(&mut self, proposed: &Proposed) {
+    pub(super) fn add_proposal(&mut self, proposed: &Proposed) {
         self.add_prose(&proposed.title);
         for question in &proposed.questions {
             let options =
@@ -110,7 +110,7 @@ impl HintCollector {
     }
 
     /// Adds the leaf file stem and up to [`MAX_PATH_PARENTS`] meaningful parent segments of `path`, leaf first.
-    pub fn add_path(&mut self, path: &str) {
+    pub(super) fn add_path(&mut self, path: &str) {
         let mut segments: Vec<&str> =
             path.split(['/', '\\']).map(str::trim).filter(|seg| !seg.is_empty() && !seg.starts_with('.')).collect();
         if let Some(leaf) = segments.pop() {
@@ -132,7 +132,7 @@ impl HintCollector {
     }
 
     /// Adds the workspace's name, branches, repository name and commented diff paths.
-    pub fn add_workspace(&mut self, shown: &InWorkspace) {
+    pub(super) fn add_workspace(&mut self, shown: &InWorkspace) {
         let workspace = shown.workspace();
         self.add_proper_noun(&workspace.name);
         self.add_branch(workspace.branch.as_str());
@@ -153,13 +153,13 @@ impl HintCollector {
     }
 
     /// The workspace's pull request, by its title.
-    pub fn add_pull_request(&mut self, pull_request: &PullRequest) {
+    pub(super) fn add_pull_request(&mut self, pull_request: &PullRequest) {
         self.add_prose(&pull_request.said().about.title);
     }
 
     /// Walks `log` newest-first with separate budgets for conversation messages and tool calls, so a turn with dozens
     /// of tool calls doesn't crowd out the names discussed a turn or two earlier.
-    pub fn add_session_log(&mut self, log: &SessionLog) {
+    pub(super) fn add_session_log(&mut self, log: &SessionLog) {
         let mut text_messages = 0;
         let mut tool_events = 0;
         for index in (0..log.row_count()).rev() {
@@ -171,7 +171,7 @@ impl HintCollector {
         }
     }
 
-    pub fn finish(self) -> Vec<String> {
+    pub(super) fn finish(self) -> Vec<String> {
         self.out
     }
 

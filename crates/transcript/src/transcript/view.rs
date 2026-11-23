@@ -9,7 +9,7 @@ use crate::questions::QuestionPanel;
 use crate::references::References;
 use crate::selection::{Asked, Selection};
 use crate::texts::{Of, Texts};
-use client_core::hints::HintCollector;
+use client_core::hints::Around;
 use client_core::session_log::{RecordedApprovals, SessionLog};
 use client_core::{Client, OpenSession, View};
 use events::TranscriptEvent;
@@ -157,15 +157,16 @@ impl Transcript {
         &self.log
     }
 
-    /// Gives question answers in this transcript the workspace's own hint words when dictating.
-    pub fn set_dictation_hints(&mut self, hints: impl Fn(&mut HintCollector, &App) + 'static) {
+    /// Gives question answers in this transcript what the app knows around them, such as the workspace, for their
+    /// hint words.
+    pub fn set_dictation_hints(&mut self, hints: impl for<'a> Fn(&'a App) -> Around<'a> + 'static) {
         self.dictation_hints = Some(Box::new(hints));
     }
 
-    pub(crate) fn add_dictation_hints(&self, collector: &mut HintCollector, cx: &App) {
-        if let Some(hints) = &self.dictation_hints {
-            hints(collector, cx);
-        }
+    /// What's around a question's answer as dictated into here: what the app says, and this chat.
+    pub(crate) fn dictation_around<'a>(&'a self, cx: &'a App) -> Around<'a> {
+        let around = self.dictation_hints.as_ref().map_or_else(Around::default, |hints| hints(cx));
+        Around { chat: Some(&self.log), ..around }
     }
 
     pub fn session_id(&self) -> &SessionId {

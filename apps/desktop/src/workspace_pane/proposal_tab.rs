@@ -13,6 +13,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use client_core::hints::Around;
 use client_core::records::Changes;
 use gpui_kit::component::{Icon, v_flex};
 use gpui_kit::{
@@ -105,10 +106,8 @@ impl WorkspacePane {
             let pane = cx.weak_entity();
             let chat = session.clone();
             view.update(cx, |view, _| {
-                view.set_dictation_hints(move |collector, cx| {
-                    if let Some(pane) = pane.upgrade() {
-                        pane.read(cx).collect_chat_hints(&chat, collector, cx);
-                    }
+                view.set_dictation_hints(move |cx| {
+                    pane.upgrade().map_or_else(Around::default, |pane| pane.read(cx).chat_around(&chat, cx))
                 });
             });
             view.read(cx).follow_records(self.records.clone());
