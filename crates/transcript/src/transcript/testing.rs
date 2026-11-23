@@ -9,12 +9,17 @@ use protocol::model::{PromptLine, Seq};
 use super::{Transcript, rows_and_loaded};
 
 impl Transcript {
-    /// The event at a row, if it's loaded.
+    /// The event at a row, if it's loaded in the session's log, which can be ahead of what the transcript draws until
+    /// it hears the log has changed, as [`Transcript::drawn_event_at`] says.
     pub fn event_at(&self, row: usize) -> Option<SessionEvent> {
-        self.session.read(|log| match log.row(row) {
-            Row::Event(event) => Some(event.clone()),
-            Row::Unloaded => None,
-        })
+        self.session.read(|log| event(log, row))
+    }
+
+    /// The event at a row, if it's loaded in the log the transcript draws its rows from: the session's log as it was
+    /// when the transcript last caught up with it, as it does each time the log says it has changed. So a test that
+    /// waits for a row to be drawn, and reads what's drawn, waits with this.
+    pub fn drawn_event_at(&self, row: usize) -> Option<SessionEvent> {
+        event(&self.log, row)
     }
 
     /// The row `event` is in, whether it's loaded or not, as its position in the log says, or `None` for one the
@@ -112,5 +117,12 @@ impl Transcript {
     /// Where each leaf of text drawn in the last frame was laid out, in the order they were drawn.
     pub fn drawn_leaf_bounds(&self) -> Vec<Bounds<Pixels>> {
         self.selection.drawn_leaf_bounds()
+    }
+}
+
+fn event(log: &SessionLog, row: usize) -> Option<SessionEvent> {
+    match log.row(row) {
+        Row::Event(event) => Some(event.clone()),
+        Row::Unloaded => None,
     }
 }

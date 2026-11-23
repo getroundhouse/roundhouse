@@ -277,7 +277,8 @@ pub(super) fn wait_for_the_tail(ui: &mut Ui<'_>, newest: &SessionEvent) -> usize
     last + 1
 }
 
-/// Waits for `row` to be loaded and for the list to settle with it. A page changes the session's height in three
+/// Waits for `row` to be loaded in the log the transcript draws from, which can be behind the session's log, and for
+/// the list to settle with it. A page changes the session's height in three
 /// goes: as its rows in the window are measured, over the frames after as the rest of them are, a few to a frame,
 /// and as each long text in it is parsed on another thread and its row measured again. So the list has settled once
 /// every long text is parsed and no frame is asked for. Nothing is drawn after that, since that could bring another
@@ -287,7 +288,7 @@ pub(super) fn wait_for_the_list_to_settle(ui: &mut Ui<'_>, row: usize) {
     let transcript = ui.transcript().unwrap();
     let settled = |ui: &mut Ui<'_>| {
         ui.settle(A_FRAME);
-        ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some() && t.long_texts_parsed())
+        ui.cx.read_entity(&transcript, |t, _| t.drawn_event_at(row).is_some() && t.long_texts_parsed())
     };
     let loading =
         |ui: &mut Ui<'_>| format!("waiting for row {row}: {}", ui.cx.read_entity(&transcript, |t, _| t.loading()));

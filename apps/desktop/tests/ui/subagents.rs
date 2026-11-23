@@ -16,6 +16,7 @@ use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Runs;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{Record, Rev, SessionId, SessionStatus, SettledAt, Subagent, SubagentId};
+use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 
 use crate::menus::items;
 use crate::support::{Gate, Stack, Ui, one_chat, open_on_the_chat};
@@ -328,6 +329,10 @@ fn a_working_subagent_s_line_opens_its_tab_and_its_call_opened_meanwhile_makes_r
 /// A tab opened on a subagent by the call that started it, before the hub's record of the subagent has come, is named
 /// by what the call says it's for, and once the record comes, as the record names it. The fake hub's chat has the call
 /// and no record, and the record is then handed to client-core as a reply would hand it, which the feed tells of.
+///
+/// The tab follows the session itself, and its subscription lists the session's records first, which with this hub
+/// lack the record, and take back one handed over before the list comes. So the record is handed over only once the
+/// tab draws what the subagent is writing, which the subscription sends after the list.
 #[gpui_kit::test]
 fn a_subagent_tab_opened_before_its_record_comes_is_named_as_the_record_names_it_once_it_does(cx: &mut TestAppContext) {
     let call = "toolu-agent";
@@ -339,12 +344,17 @@ fn a_subagent_tab_opened_before_its_record_comes_is_named_as_the_record_names_it
             finished_turn(4, 0.01),
         ],
     );
-    let (world, chat) = one_chat(SessionStatus::Idle, events);
+    let (mut world, chat) = one_chat(SessionStatus::Idle, events);
+    let by_call = SubagentId::of_call(&call.into());
+    world.tails.insert(chat.clone(), writing(&by_call, "Looking"));
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
     let pane = ui.pane().unwrap();
-    let by_call = SubagentId::of_call(&call.into());
     ui.cx.update_entity(&pane, |p, cx| p.open_subagent_tab(chat.clone(), by_call, AGENT_LINE.into(), cx));
     ui.wait("the tab, named by its call", |ui| !ui.labelled(&format!("Subagent: {AGENT_LINE}")).is_empty());
+    let tab = ui.cx.read_entity(&pane, |p, _| p.subagent_transcript()).unwrap();
+    ui.wait("what it's writing, after the session's records", |ui| {
+        ui.cx.read_entity(&tab, |t, _| t.streaming_text()) == "Looking"
+    });
     let id = SubagentId::from("agent-a1b2");
     let recorded = "Look around the crates";
     let record = Subagent {
@@ -361,4 +371,12 @@ fn a_subagent_tab_opened_before_its_record_comes_is_named_as_the_record_names_it
         ui.cx.read_entity(&pane, |p, _| p.subagent_tab() == Some(&id))
     });
     assert!(!ui.labelled(&format!("Subagent: {recorded}")).is_empty(), "called what the record says it's for");
+}
+
+/// A tail in which `subagent` is writing `text`.
+fn writing(subagent: &SubagentId, text: &str) -> Tail {
+    let block = TailBlock { index: 0, kind: BlockKind::Text, tool_name: None, text: text.into() };
+    let message =
+        TailMessage { run: None, message_id: "msg-2".into(), subagent: Some(subagent.clone()), blocks: vec![block] };
+    Tail { messages: vec![message], ..Tail::default() }
 }

@@ -15,6 +15,7 @@ use protocol::terminal::{Bounds, TerminalPoint, TerminalRow, TerminalSize};
 
 use super::events::{subagent_ended, subagent_started, taken, task, text, user_prompt, within};
 use super::{Following, World, serve};
+use crate::session_log::Row;
 use crate::{Client, ClientError, OpenSession, RecordsFeed, SubscriptionItem};
 
 /// A client of a fake hub serving `world`, and the directory its socket is in, which goes when the test ends.
@@ -327,9 +328,15 @@ fn a_client_that_stops_following_a_session_lets_go_of_its_records() {
     let held = |feed: &RecordsFeed| feed.snapshot().subagents(&chat).len();
     let (chat_open, subagent_tab) = (OpenSession::start(&client, &session), OpenSession::start(&client, &session));
     waiting::thread::until(Duration::from_secs(10), "the chat's subagent to be held", || held(&feed) == 1);
+    // Each says it keeps the session's records once the hub has answered its follow, which is after the hub counts it
+    // as following, and takes in what the subscription sends after that: the records, then the session's one event.
+    // So once each has the event, each keeps the records, and the chat letting go of them leaves the tab's.
+    let has_the_event = |open: &OpenSession| open.read(|log| matches!(log.row(0), Row::Event(_)));
+    waiting::thread::until(Duration::from_secs(10), "both to have taken in the session", || {
+        has_the_event(&chat_open) && has_the_event(&subagent_tab)
+    });
 
     let followed = |following: &Following| following.count(|level| *level == Level::Session { id: chat.clone() });
-    waiting::thread::until(Duration::from_secs(10), "both to follow the session", || followed(&following) == 2);
 
     drop(chat_open);
     // A follower lets go of its source before its subscription, so by the time the hub hears the chat stop following,
