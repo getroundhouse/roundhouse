@@ -8,6 +8,7 @@ mod file;
 mod kept;
 mod kinds;
 mod levels;
+mod tables;
 #[cfg(test)]
 mod tests;
 mod writer;

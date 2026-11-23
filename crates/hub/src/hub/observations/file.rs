@@ -3,8 +3,8 @@
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use tracing::warn;
 
-use super::kept::Tables;
 use super::kinds::{Form, Kind};
+use super::tables::Tables;
 use crate::cache_file::{CacheFile, Part, drop_named, prepared_or_emptied};
 use crate::store::columns::{ByColumn, Columns, OneValue, columns};
 
