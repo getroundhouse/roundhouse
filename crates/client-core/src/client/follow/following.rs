@@ -147,6 +147,12 @@ impl<H: Send + 'static> Follow<H> {
         held: H,
         source: impl FnOnce() -> S + Send + 'static,
     ) -> Self {
+        Follow::unstarted(held).start(client, source)
+    }
+
+    /// What's to be followed, holding `held`, before its thread starts, so what its source needs can be given a handle
+    /// on it first.
+    pub(in crate::client) fn unstarted(held: H) -> Unstarted<H> {
         let (signal, changed) = flume::bounded(1);
         let (wake, woken) = flume::bounded(1);
         let shared = Arc::new(Shared {
@@ -157,15 +163,7 @@ impl<H: Send + 'static> Follow<H> {
             errors: Mutex::new(Vec::new()),
             signal,
         });
-        let (client, thread_shared) = (client.clone(), shared.clone());
-        let follow = move || {
-            let source = source();
-            Follower { source, client, shared: thread_shared, woken, subscription: None, let_go: false }.run();
-        };
-        if let Err(e) = std::thread::Builder::new().name("follow hub".to_string()).spawn(follow) {
-            shared.failed(FollowError::Following(ClientError::Io(e)));
-        }
-        Self { shared, changed, wake }
+        Unstarted { follow: Follow { shared, changed, wake }, woken }
     }
 
     pub(in crate::client) fn read<T>(&self, read: impl FnOnce(&H) -> T) -> T {
@@ -219,6 +217,37 @@ impl<H: Send + 'static> Follow<H> {
 
     pub(in crate::client) fn take_errors(&self) -> Vec<FollowError> {
         std::mem::take(&mut self.shared.errors.lock())
+    }
+}
+
+/// What's to be followed, before the thread that follows it has started.
+pub(in crate::client) struct Unstarted<H> {
+    follow: Follow<H>,
+    woken: flume::Receiver<()>,
+}
+
+impl<H: Send + 'static> Unstarted<H> {
+    /// A handle on what's held that doesn't keep it followed, as [`Follow::reach`] gives once it's started.
+    pub(in crate::client) fn reach(&self) -> Reach<H> {
+        self.follow.reach()
+    }
+
+    /// Starts following on a thread of its own, as [`Follow::start`] does.
+    pub(in crate::client) fn start<S: Source<Held = H>>(
+        self,
+        client: &Client,
+        source: impl FnOnce() -> S + Send + 'static,
+    ) -> Follow<H> {
+        let Unstarted { follow, woken } = self;
+        let (client, shared) = (client.clone(), follow.shared.clone());
+        let thread = move || {
+            let source = source();
+            Follower { source, client, shared, woken, subscription: None, let_go: false }.run();
+        };
+        if let Err(e) = std::thread::Builder::new().name("follow hub".to_string()).spawn(thread) {
+            follow.shared.failed(FollowError::Following(ClientError::Io(e)));
+        }
+        follow
     }
 }
 
