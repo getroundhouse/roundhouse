@@ -16,6 +16,22 @@ impl Ui<'_> {
         self.cx.read_entity(&transcript, |t, _| (0..t.row_count()).filter_map(|row| t.drawn_event_at(row)).collect())
     }
 
+    /// Waits for the open chat's list to settle where it is: every row it has measured and every long text in it
+    /// parsed, with no frame asked for. A page changes the session's height in three goes: as its rows in the window
+    /// are measured, over the frames after as the rest of them are, a few to a frame, and as each long text in it is
+    /// parsed on another thread and its row measured again. So where the list is, read before then, isn't where it
+    /// stays.
+    #[track_caller]
+    pub(crate) fn wait_for_the_chat_to_settle(&mut self) {
+        let Some(transcript) = self.transcript() else { return };
+        let settled = |ui: &mut Self| {
+            ui.settle(super::motion::A_FRAME);
+            ui.cx.read_entity(&transcript, |t, _| t.list().rows_to_measure() == 0 && t.long_texts_parsed())
+        };
+        let loading = |ui: &mut Self| ui.cx.read_entity(&transcript, |t, _| t.loading());
+        self.wait_saying("the chat to settle", settled, loading);
+    }
+
     /// The row the open chat's log has `event` in, whether it's loaded or not, as its position there says. It has to be
     /// one of the events the chat follows, which by place are the agent's own.
     pub(crate) fn row_of(&self, event: &SessionEvent) -> usize {
