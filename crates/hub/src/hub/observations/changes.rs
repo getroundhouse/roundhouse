@@ -2,7 +2,7 @@
 
 use protocol::client::{ApiError, ObservationNotice};
 
-use super::file;
+use super::file::{self, Write};
 use super::kept::{Change, Changed, Step};
 use super::kinds::Kind;
 use crate::hub::Hub;
@@ -10,9 +10,9 @@ use crate::hub::Hub;
 impl Hub {
     /// Keeps that the observation of `of` was read at `read_at_ms`, by the hub's clock, and found `value`. It's current
     /// if something keeps it up to date, as [`Hub::observation_kept_current`] says, and otherwise as of `read_at_ms`. A
-    /// read that finds what's kept tells clients nothing and moves no revision, and the file keeps that it was read
-    /// then, so a hub that starts again has it as of this read. One that began before the read kept, and lands after
-    /// it, is dropped.
+    /// read that finds what's kept tells clients nothing and moves no revision, and the file keeps only that it was
+    /// read then, so a hub that starts again has it as of this read. One that began before the read kept, and lands
+    /// after it, is dropped.
     pub(crate) async fn observation_read<K: Kind>(
         &self,
         of: K::Of,
@@ -64,17 +64,19 @@ impl Hub {
         let observations = &self.observations;
         let _changing = observations.changing.lock().await;
         let step = K::table(&mut observations.tables.lock()).step(&of, change);
-        let (takes_rev, row) = match &step {
+        let (takes_rev, write) = match &step {
             Step::Same => return Ok(()),
-            Step::Reread(said) => (false, Some((said.value.clone(), said.read_at_ms))),
-            Step::Changed(Changed::Says(said)) => (true, Some((said.value.clone(), said.read_at_ms))),
-            Step::Changed(Changed::Gone) => (true, None),
+            Step::Reread(said) => (false, Write::ReadAgain { read_at_ms: said.read_at_ms }),
+            Step::Changed(Changed::Says(said)) => {
+                (true, Write::Says { value: said.value.clone(), read_at_ms: said.read_at_ms })
+            }
+            Step::Changed(Changed::Gone) => (true, Write::Gone),
         };
         let (cache, written) = (observations.file.clone(), of.clone());
         let rev = self
             .blocking(move |store| {
                 let rev = takes_rev.then(|| store.next_rev()).transpose()?;
-                file::write::<K>(&cache, &written, row.as_ref().map(|(value, read_at_ms)| (value, *read_at_ms)));
+                file::write::<K>(&cache, &written, write);
                 Ok(rev)
             })
             .await?;

@@ -140,6 +140,12 @@ impl Store {
         Ok(if deleted == 0 { None } else { Some(current_rev(&conn)?) })
     }
 
+    /// The newest revision any change has taken, record or observation, for a list of what the hub keeps only in
+    /// memory, such as a workspace's observations, read under the lock every change to them takes.
+    pub fn current_rev(&self) -> Result<Rev, StoreError> {
+        Ok(current_rev(&lock(&self.reader))?)
+    }
+
     /// A revision for a change to a record the hub keeps only in memory, such as a terminal's, from the counter every
     /// record's comes from, so clients order it among the rest.
     pub fn next_rev(&self) -> Result<Rev, StoreError> {

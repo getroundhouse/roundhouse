@@ -17,9 +17,8 @@ use crate::hub::{Followed, FollowerId, Hub};
 /// One subscription of a connection, which ends as it's dropped: its task stops, and its entries leave the hub's list of
 /// who follows what.
 pub(super) struct Subscription {
-    /// What sends what it follows. `None` for one that's sent nothing, such as a workspace's while nothing is sent at a
-    /// workspace's level, which only has what it follows kept current.
-    task: Option<AbortHandle>,
+    /// What sends what it follows.
+    task: AbortHandle,
     pub(super) following: crate::hub::Following,
     /// For a subscription to what GitHub says of what the client shows, what it shows, which the client can change.
     pub(super) shown: Option<watch::Sender<GithubShown>>,
@@ -34,7 +33,7 @@ impl Subscription {
         connection: &Connection,
         subscription_id: u64,
         followed: impl IntoIterator<Item = Followed>,
-        task: Option<AbortHandle>,
+        task: AbortHandle,
     ) -> Self {
         let following = hub.follow(FollowerId { connection: connection.id, subscription: subscription_id }, followed);
         Self { task, following, shown: None, level: None }
@@ -55,9 +54,7 @@ impl Subscription {
 
 impl Drop for Subscription {
     fn drop(&mut self) {
-        if let Some(task) = &self.task {
-            task.abort();
-        }
+        self.task.abort();
     }
 }
 
@@ -104,7 +101,7 @@ pub(super) fn add_subscription(
     if subscriptions.contains_key(&subscription_id) {
         return Err(taken(subscription_id));
     }
-    let subscription = Subscription::new(hub, connection, subscription_id, [followed], Some(start()));
+    let subscription = Subscription::new(hub, connection, subscription_id, [followed], start());
     subscriptions.insert(subscription_id, subscription);
     Ok(())
 }
@@ -114,9 +111,13 @@ pub(super) fn taken(subscription_id: u64) -> ApiError {
     ApiError::new(ErrorCode::InvalidRequest, format!("subscription {subscription_id} already exists"))
 }
 
+/// Sends subscription `subscription_id` every notice of `feed`, but those of a workspace's level, which only `Subscribe`
+/// follows, so no client of the version `FeedSubscribe` is kept for reads them, and the largest, such as a workspace's
+/// changed files, would be sent for every workspace.
 async fn pump_feed(mut feed: broadcast::Receiver<HubNotice>, subscription_id: u64, frames: mpsc::Sender<Outgoing>) {
     loop {
         let notice = match feed.recv().await {
+            Ok(notice) if matches!(notice.level(), Some(Level::Workspace { .. })) => continue,
             Ok(notice) => notice,
             Err(broadcast::error::RecvError::Lagged(_)) => HubNotice::Resync,
             Err(broadcast::error::RecvError::Closed) => return,

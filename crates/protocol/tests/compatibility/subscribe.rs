@@ -1,11 +1,14 @@
 //! The one request that follows everything, `subscribe`, its reply, and the list each level sends first, which every
 //! peer from now on reads as they were first written.
 
-use protocol::client::listed::{Listed, SessionRecords};
+use protocol::client::listed::{Listed, SessionRecords, WorkspaceObservations};
 use protocol::client::subscriptions::{Follow, LogFrom, Refused, Subscribe, Subscribed, Subscription};
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame};
 use protocol::frame;
-use protocol::model::{GithubRepositoryName, IssueNumber, Place, Records, ReferenceAsk, Rev, Seq};
+use protocol::model::{
+    GithubRepositoryName, IssueNumber, LineCounts, Observation, Observed, Place, Records, ReferenceAsk, Rev, Seq,
+};
+use serde::Deserialize;
 
 use super::keeps_its_form;
 
@@ -112,7 +115,41 @@ fn where_each_level_stands_keeps_its_form() {
             r#""proposals":[],"replies_heard":[],"rev":10}}"#
         ),
     );
+    keeps_its_form(
+        &HubFrame::Listed { subscription_id: 4, listed: Listed::Workspace(workspace_listed()) },
+        concat!(
+            r#"{"frame":"listed","subscription_id":4,"listed":{"level":"workspace","workspace_id":"w","#,
+            r#""observations":[{"kind":"workspace_lines","workspace_id":"w","lines":{"freshness":"not_known"},"#,
+            r#""rev":3}],"rev":11}}"#
+        ),
+    );
     let newer =
         frame::decode::<HubFrame>(br#"{"frame":"listed","subscription_id":4,"listed":{"level":"galaxy","rev":1}}"#);
     assert_eq!(newer.unwrap(), HubFrame::Listed { subscription_id: 4, listed: Listed::Unknown });
+}
+
+/// A workspace's observations, as a list of them.
+fn workspace_listed() -> WorkspaceObservations {
+    let lines = Observed::<LineCounts>::NotKnown;
+    let observation = Observation::WorkspaceLines { workspace_id: "w".into(), lines, rev: Rev::new(3) };
+    WorkspaceObservations { workspace_id: "w".into(), observations: vec![observation], rev: Rev::new(11) }
+}
+
+/// Where a level stands as a client from before workspaces had a level reads it.
+#[derive(Deserialize, Debug, PartialEq)]
+#[serde(tag = "level", rename_all = "snake_case")]
+enum ListedBefore {
+    Session {
+        session_id: String,
+    },
+    #[serde(other)]
+    Unknown,
+}
+
+/// A client from before workspaces had a level skips the list of one, as of a level it doesn't know.
+#[test]
+fn a_build_from_before_reads_a_workspace_s_list_as_unknown() {
+    let listed = serde_json::to_string(&Listed::Workspace(workspace_listed())).unwrap();
+
+    assert_eq!(serde_json::from_str::<ListedBefore>(&listed).unwrap(), ListedBefore::Unknown, "{listed}");
 }

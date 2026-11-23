@@ -10,7 +10,6 @@ use tracing::{debug, warn};
 
 use super::reads::Reading;
 use crate::hub::Hub;
-use crate::hub::observations::WorkspaceLines;
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
 
@@ -43,8 +42,9 @@ impl Hub {
         });
     }
 
-    /// Reads the lines of the workspace `reading` is of from `link`, if the workspace is ready, since one being made has
-    /// no worktree to read yet, and an archived one's is gone, and keeps what the worker says.
+    /// Reads the changes of the workspace `reading` is of from `link`, if the workspace is ready, since one being made
+    /// has no worktree to read yet, and an archived one's is gone, and keeps what the worker says, as
+    /// [`Hub::changes_read`] does.
     async fn read_lines_once(&self, reading: &Reading, link: &WorkerLink) {
         let id = reading.id();
         let Ok(ready) = self.ready_workspace(id).await else { return };
@@ -59,15 +59,6 @@ impl Hub {
             Ok(Err(e)) => return warn!(%id, "reading the lines the workspace adds and removes: {}", e.message),
             Err(_) => return warn!(%id, "the worker didn't sum up its changes within {READ_LIMIT:?}"),
         };
-        if let Err(e) = self.observation_read::<WorkspaceLines>(id.clone(), summary.lines, read_at_ms).await {
-            return warn!(%id, "keeping the lines the workspace adds and removes: {}", e.message);
-        }
-        // Removed while it was read, after its removal forgot what was kept, so what this kept goes too. One removed
-        // after this looks is forgotten by its removal, after this read kept it.
-        if self.workspace(id).await.is_err_and(|e| e.code == ErrorCode::NotFound)
-            && let Err(e) = self.observation_gone::<WorkspaceLines>(id.clone()).await
-        {
-            warn!(%id, "forgetting the lines of a workspace that's gone: {}", e.message);
-        }
+        self.changes_read(id, summary, read_at_ms).await;
     }
 }

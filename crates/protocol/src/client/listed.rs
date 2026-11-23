@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{Proposal, Records, ReplyHeard, Rev, SessionId, Subagent};
+use crate::model::{Observation, Proposal, Records, ReplyHeard, Rev, SessionId, Subagent, WorkspaceId};
 
 /// Every record, and every observation, of one level, read at one moment, as `HubFrame::Listed` carries it. A
 /// subscription is sent one as it starts, and again whenever it has fallen behind. Each copy in it replaces the
@@ -16,6 +16,10 @@ pub enum Listed {
     Hub(Box<Records>),
     /// The records of one session.
     Session(SessionRecords),
+    /// Every observation sent at one workspace's level. The hub queues it before its reply to the `Subscribe` that
+    /// started the subscription, so a client that has the reply with no `Listed::Workspace` before it knows the hub is
+    /// from before workspaces had a level of their own.
+    Workspace(WorkspaceObservations),
     /// Of a level from a newer hub, which this client skips.
     #[serde(other)]
     Unknown,
@@ -32,6 +36,17 @@ pub struct SessionRecords {
     pub proposals: Vec<Proposal>,
     /// In no order, since each is read by its reply.
     pub replies_heard: Vec<ReplyHeard>,
+    /// The hub's newest revision when they were read.
+    pub rev: Rev,
+}
+
+/// Every observation the hub holds at one workspace's level, read at one moment, of every kind. A kind it lacks is not
+/// known. One the client holds of this level that the list lacks, and that isn't newer than `rev`, is gone.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct WorkspaceObservations {
+    pub workspace_id: WorkspaceId,
+    /// In no order.
+    pub observations: Vec<Observation>,
     /// The hub's newest revision when they were read.
     pub rev: Rev,
 }

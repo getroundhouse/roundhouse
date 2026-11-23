@@ -1,17 +1,20 @@
 //! The hub's observations, as the store keeps them, sent to each subscription of the level they're sent at.
 
-use protocol::client::listed::Listed;
-use protocol::client::subscriptions::{Follow, Subscribe, Subscribed};
+use protocol::client::listed::{Listed, WorkspaceObservations};
+use protocol::client::subscriptions::{FeedSubscribe, Follow, Subscribe, Subscribed};
 use protocol::client::{ClientResponse, HubFrame, HubNotice};
-use protocol::model::{LineCounts, Observation, ObservationKey, Observed};
+use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, LineCounts, Observation, ObservationKey, Observed};
 
+use super::super::workspace_level;
 use super::given::{Given, ok, start};
-use crate::hub::WorkspaceLines;
+use crate::hub::{WorkspaceChanges, WorkspaceLines};
 use crate::server::tests::Connection;
 
-/// The subscriptions' IDs: one that follows the hub, and one that follows the session `s`.
+/// The subscriptions' IDs: one that follows the hub, one that follows the session `s`, and one that follows the
+/// workspace `w`.
 const HUB: u64 = 1;
 const SESSION: u64 = 2;
+const WORKSPACE: u64 = 3;
 
 /// A client that follows the hub is listed a workspace's lines the store keeps, under the list's revision, and is sent
 /// each change to them and their removal. One that follows only a session is sent none of it, since a workspace's lines
@@ -44,7 +47,7 @@ async fn a_workspace_s_lines_are_listed_and_sent_to_whoever_follows_the_hub_and_
     })
     .await;
     assert_eq!(subscribed, ClientResponse::Subscribed(Subscribed::default()));
-    let records = one.sent.iter().find_map(listed).unwrap();
+    let records = one.sent.iter().find_map(listed_hub).unwrap();
     let [kept] = records.observations.as_slice() else { panic!("{:?}", records.observations) };
     let as_of = |value, as_of_ms| Observed::AsOf { value, as_of_ms };
     assert_eq!(
@@ -66,8 +69,84 @@ async fn a_workspace_s_lines_are_listed_and_sent_to_whoever_follows_the_hub_and_
     assert_eq!(*observation, ObservationKey::WorkspaceLines { workspace_id: "w".into() });
 }
 
+/// A client that follows a workspace is listed the files it changes, as the store keeps them, before the reply to its
+/// `Subscribe`, and nothing of another workspace or of the hub's level, and is then sent each change to them and their
+/// removal. One that follows only the hub is sent none of it, and neither is one that follows through `FeedSubscribe`,
+/// which no client that reads a workspace's level uses.
+#[tokio::test]
+async fn a_workspace_s_files_are_listed_before_the_reply_and_sent_only_to_whoever_follows_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let given = Given::new(dir.path()).await;
+    let hub = &given.hub;
+    let lines = |added, removed| LineCounts { added, removed };
+    for workspace in ["w", "v"] {
+        hub.observation_read::<WorkspaceChanges>(workspace.into(), changes(3, 1), 1_000).await.unwrap();
+    }
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
+    let mut four = Connection::greeted(hub, 3).await;
+    ok(&mut four, 1, FeedSubscribe { subscription_id: HUB }).await;
+    let mut one = Connection::greeted(hub, 4).await;
+    let workspace = Follow::Workspace { id: "w".into() };
+    let follows = Subscribe { stop: Vec::new(), start: vec![start(HUB, Follow::Hub), start(WORKSPACE, workspace)] };
+
+    let subscribed = ok(&mut one, 1, follows).await;
+    let listed_first = one.sent.iter().find_map(workspace_listed).cloned();
+
+    hub.observation_read::<WorkspaceChanges>("v".into(), changes(5, 0), 2_000).await.unwrap();
+    hub.observation_read::<WorkspaceChanges>("w".into(), changes(4, 0), 2_000).await.unwrap();
+    hub.observation_gone::<WorkspaceChanges>("w".into()).await.unwrap();
+    // At the hub's level, after the rest, so once it's sent there, whatever that was sent before it was too.
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(4, 0), 2_000).await.unwrap();
+
+    let lines_told = |sent: &[HubFrame]| sent.iter().filter_map(observation_notice).any(is_of_lines);
+    one.until("the files' removal, and the lines after it", |sent| {
+        sent.iter().filter_map(observation_notice).any(is_removal) && lines_told(sent)
+    })
+    .await;
+    four.until("the lines", lines_told).await;
+    assert_eq!(subscribed, ClientResponse::Subscribed(Subscribed::default()));
+    let listed = listed_first.expect("listed before the reply");
+    let [kept] = listed.observations.as_slice() else { panic!("{listed:?}") };
+    let as_of = |value, as_of_ms| Observed::AsOf { value, as_of_ms };
+    let of_w = |said, rev| Observation::WorkspaceChanges { workspace_id: "w".into(), changes: said, rev };
+    assert_eq!((&listed.workspace_id, kept), (&"w".into(), &of_w(as_of(changes(3, 1), 1_000), kept.rev())));
+    assert!(listed.rev >= kept.rev());
+    let told: Vec<_> = one.sent.iter().filter_map(observation_notice).filter(|told| !is_of_lines(*told)).collect();
+    let [(WORKSPACE, HubNotice::Observation(changed)), (WORKSPACE, HubNotice::ObservationRemoved { observation, .. })] =
+        told.as_slice()
+    else {
+        panic!("{told:?}")
+    };
+    assert_eq!(*changed, of_w(as_of(changes(4, 0), 2_000), changed.rev()));
+    assert_eq!(*observation, ObservationKey::WorkspaceChanges { workspace_id: "w".into() });
+    let records = one.sent.iter().find_map(listed_hub).unwrap();
+    assert!(matches!(records.observations.as_slice(), [Observation::WorkspaceLines { .. }]), "{records:?}");
+    let by_four: Vec<_> = four.sent.iter().filter_map(observation_notice).collect();
+    assert!(by_four.iter().all(|told| is_of_lines(*told)), "{by_four:?}");
+}
+
+/// A summary of a worktree whose one changed file adds `added` lines and removes `removed`.
+fn changes(added: u64, removed: u64) -> ChangeSummary {
+    let lines = Some(LineCounts { added, removed });
+    let file = ChangedFile { path: "a.rs".into(), from: None, status: ChangeStatus::Modified, lines, version: None };
+    ChangeSummary::new("base".into(), vec![file])
+}
+
+/// The observations of `w`'s level, if `frame` lists them.
+fn workspace_listed(frame: &HubFrame) -> Option<&WorkspaceObservations> {
+    let HubFrame::Listed { subscription_id: WORKSPACE, listed: Listed::Workspace(observations) } = frame else {
+        return None;
+    };
+    Some(observations)
+}
+
+/// Whether a notice is of a workspace's lines.
+fn is_of_lines((_, notice): (u64, &HubNotice)) -> bool {
+    matches!(notice, HubNotice::Observation(Observation::WorkspaceLines { .. }))
+}
+
 /// The hub's records, if `frame` lists them.
-fn listed(frame: &HubFrame) -> Option<&protocol::model::Records> {
+fn listed_hub(frame: &HubFrame) -> Option<&protocol::model::Records> {
     let HubFrame::Listed { subscription_id: HUB, listed: Listed::Hub(records) } = frame else { return None };
     Some(records)
 }
@@ -81,4 +160,22 @@ fn observation_notice(frame: &HubFrame) -> Option<(u64, &HubNotice)> {
 
 fn is_removal((_, notice): (u64, &HubNotice)) -> bool {
     matches!(notice, HubNotice::ObservationRemoved { .. })
+}
+
+/// A workspace's list is queued by the time what feeds its subscription is made, so before the reply to the
+/// `Subscribe` that starts it, rather than by what feeds it, which runs only once it's spawned.
+#[tokio::test]
+async fn a_workspace_s_list_is_queued_before_what_feeds_its_subscription_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let given = Given::new(dir.path()).await;
+    let (frames, mut queued) = tokio::sync::mpsc::channel(4);
+
+    let feeding = workspace_level::feeding(&given.hub, "w".into(), WORKSPACE, frames).await.unwrap();
+
+    let first = queued.try_recv().map(|queued| queued.frame);
+    assert!(
+        matches!(first, Ok(HubFrame::Listed { subscription_id: WORKSPACE, listed: Listed::Workspace(_) })),
+        "{first:?}"
+    );
+    drop(feeding);
 }

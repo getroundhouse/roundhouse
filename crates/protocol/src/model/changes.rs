@@ -6,25 +6,49 @@ use serde::{Deserialize, Serialize};
 use super::CommitId;
 
 /// Every file a worktree changes against its base, committed, uncommitted or untracked, and the lines they add and
-/// remove in all. A file git ignores isn't in it.
+/// remove in all. A file git ignores isn't in it. A worker sends it to its hub, and the hub sends it to clients as
+/// [`Observation::WorkspaceChanges`](super::Observation::WorkspaceChanges), so the two protocols share one form.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ChangeSummary {
     /// The commit the summary is taken against: the merge base with the workspace's base ref, or HEAD's commit when
     /// there's no base ref or git finds no merge base with it, as a [`super::GitDiff`] is. A file's lines change when
     /// this does, though its content and its version don't.
     pub base_commit: CommitId,
-    /// The sums of the lines of `files`. A file with no lines counted adds none.
+    /// The sums of the lines of every file the worktree changes, including those `files` leaves out. A file with no
+    /// lines counted adds none.
     pub lines: LineCounts,
-    /// In order of their paths.
+    /// The files git tracks, in order of their paths, and then the untracked ones, in order of theirs: at most
+    /// [`MOST_FILES_LISTED`], the first of that order, so an unignored folder of 300,000 files doesn't crowd out the
+    /// agent's ten edits.
     pub files: Vec<ChangedFile>,
+    /// How many changed files `files` leaves out past [`MOST_FILES_LISTED`], which come after its last in the same
+    /// order. 0 from a worker from before the bound, which leaves none out.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub left_out: u64,
 }
 
+/// The most files a [`ChangeSummary`] lists. At about 150 bytes a file in JSON, the most a summary sends is about
+/// 750 KB, which every client that follows its workspace is sent whole on each change.
+pub const MOST_FILES_LISTED: usize = 5_000;
+
 impl ChangeSummary {
-    /// The summary of `files` against `base_commit`, with its totals the sums of theirs.
-    pub fn new(base_commit: CommitId, files: Vec<ChangedFile>) -> Self {
+    /// The summary of `files` against `base_commit`. Its totals are the sums of all of `files`, and it lists at most
+    /// [`MOST_FILES_LISTED`] of them, tracked files first, as [`ChangeSummary::files`] says.
+    pub fn new(base_commit: CommitId, mut files: Vec<ChangedFile>) -> Self {
         let lines = files.iter().filter_map(|file| file.lines).fold(LineCounts::default(), LineCounts::plus);
-        Self { base_commit, lines, files }
+        files.sort_by(|a, b| {
+            let untracked = |file: &ChangedFile| file.status == ChangeStatus::Untracked;
+            untracked(a).cmp(&untracked(b)).then_with(|| a.path.cmp(&b.path))
+        });
+        let left_out = files.split_off(files.len().min(MOST_FILES_LISTED)).len();
+        Self { base_commit, lines, files, left_out: u64::try_from(left_out).unwrap_or(u64::MAX) }
     }
+}
+
+/// Whether a count is 0, which [`ChangeSummary::left_out`] leaves out of its serde form.
+#[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's `skip_serializing_if` passes a reference")]
+fn is_zero(count: &u64) -> bool {
+    *count == 0
 }
 
 /// Lines added and removed, as git counts them: one changed file's, or a whole worktree's, as a summary totals them and
@@ -101,23 +125,48 @@ impl From<String> for FileVersion {
 mod tests {
     use super::*;
 
+    fn file(path: &str, status: ChangeStatus, lines: Option<LineCounts>) -> ChangedFile {
+        ChangedFile { path: path.into(), from: None, status, lines, version: None }
+    }
+
     #[test]
     fn a_summary_s_lines_are_the_sums_of_its_files_and_a_file_with_none_counted_adds_none() {
-        let file = |path: &str, lines| ChangedFile {
-            path: path.into(),
-            from: None,
-            status: ChangeStatus::Modified,
-            lines,
-            version: None,
-        };
         let files = vec![
-            file("a.rs", Some(LineCounts { added: 3, removed: 1 })),
-            file("b.png", None),
-            file("c.rs", Some(LineCounts { added: 0, removed: 4 })),
+            file("a.rs", ChangeStatus::Modified, Some(LineCounts { added: 3, removed: 1 })),
+            file("b.png", ChangeStatus::Modified, None),
+            file("c.rs", ChangeStatus::Modified, Some(LineCounts { added: 0, removed: 4 })),
         ];
 
         let summary = ChangeSummary::new("c1".into(), files);
 
         assert_eq!(summary.lines, LineCounts { added: 3, removed: 5 });
+        assert_eq!(summary.left_out, 0);
+    }
+
+    /// Past the bound, a summary lists tracked files before untracked ones, each in order of their paths, and leaves
+    /// out the rest, whose lines its totals still count.
+    #[test]
+    fn a_summary_lists_tracked_files_first_up_to_its_bound_and_sums_those_it_leaves_out() {
+        let one = Some(LineCounts { added: 1, removed: 0 });
+        let mut files =
+            Vec::from_fn(MOST_FILES_LISTED, |n| file(&format!("node_modules/{n:05}.js"), ChangeStatus::Untracked, one));
+        files.extend([
+            file("src/b.rs", ChangeStatus::Modified, Some(LineCounts { added: 2, removed: 3 })),
+            file("src/a.rs", ChangeStatus::Deleted, None),
+            file("a.txt", ChangeStatus::Untracked, one),
+        ]);
+
+        let summary = ChangeSummary::new("c1".into(), files);
+
+        let paths = summary.files.iter().map(|file| file.path.as_str());
+        assert_eq!(summary.files.len(), MOST_FILES_LISTED);
+        assert_eq!(
+            paths.clone().take(4).collect::<Vec<_>>(),
+            ["src/a.rs", "src/b.rs", "a.txt", "node_modules/00000.js"]
+        );
+        assert_eq!(summary.files.last().map(|file| file.path.as_str()), Some("node_modules/04996.js"));
+        assert_eq!(summary.left_out, 3);
+        let untracked = u64::try_from(MOST_FILES_LISTED).unwrap() + 1;
+        assert_eq!(summary.lines, LineCounts { added: untracked + 2, removed: 3 });
     }
 }

@@ -3,7 +3,7 @@
 
 use std::hash::Hash;
 
-use protocol::model::{LineCounts, Observation, ObservationKey, Observed, Rev, WorkspaceId};
+use protocol::model::{ChangeSummary, LineCounts, Observation, ObservationKey, Observed, Rev, WorkspaceId};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -56,5 +56,27 @@ impl Kind for WorkspaceLines {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.workspace_lines
+    }
+}
+
+/// Every file a workspace changes against its base, with each file's lines and version, as its worker summed them up,
+/// sent at the workspace's level.
+pub(crate) struct WorkspaceChanges;
+
+impl Kind for WorkspaceChanges {
+    type Of = WorkspaceId;
+    type Value = ChangeSummary;
+    const FORM: Form = Form { table: "workspace_changes", version: 1 };
+
+    fn observation(workspace_id: &WorkspaceId, changes: Observed<ChangeSummary>, rev: Rev) -> Observation {
+        Observation::WorkspaceChanges { workspace_id: workspace_id.clone(), changes, rev }
+    }
+
+    fn key(workspace_id: &WorkspaceId) -> ObservationKey {
+        ObservationKey::WorkspaceChanges { workspace_id: workspace_id.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.workspace_changes
     }
 }

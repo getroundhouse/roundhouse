@@ -1,9 +1,9 @@
-use protocol::model::{IssueNumber, PullRequest, Reference, ReferenceRead};
+use protocol::model::{IssueNumber, Observation, Observed, PullRequest, Reference, ReferenceRead};
 use rusqlite::Connection;
 
 use super::super::file::prepare_forms;
-use super::super::kinds::{Form, WorkspaceLines};
-use super::seen::{as_of, lines, listed, of_w};
+use super::super::kinds::{Form, WorkspaceChanges, WorkspaceLines};
+use super::seen::{as_of, changes, lines, listed, of_w};
 use crate::github_cache::Item;
 use crate::hub::Hub;
 use crate::hub::tests::{hub_in, hub_in_again};
@@ -28,6 +28,27 @@ async fn an_observation_is_kept_across_a_restart_as_of_its_last_read_under_a_new
     assert!(observation.rev() > before, "{observation:?} after a list at {before}");
     assert_eq!(observation, of_w(as_of(lines(3, 1), 2_000), observation.rev()));
     assert!(rev >= observation.rev());
+}
+
+/// A read that finds what the file keeps writes only when it was read, and not what it says again, which for a
+/// workspace's changed files can be large. What the file keeps is changed behind the store's back here, so a hub that
+/// starts again shows which was written.
+#[tokio::test]
+async fn a_read_that_finds_the_same_writes_only_when_it_was_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    hub.observation_read::<WorkspaceChanges>("w".into(), changes(3, 1), 1_000).await.unwrap();
+    let file = Connection::open(dir.path().join("github-cache.db")).unwrap();
+    let elsewhere = serde_json::to_string(&changes(9, 9)).unwrap();
+    file.execute("UPDATE observed_workspace_changes SET said = ?", [elsewhere]).unwrap();
+
+    hub.observation_read::<WorkspaceChanges>("w".into(), changes(3, 1), 2_000).await.unwrap();
+    drop(hub);
+
+    let again = hub_in_again(dir.path());
+    let [kept] = again.workspace_observations(&"w".into()).await.unwrap().observations.try_into().unwrap();
+    let read_then = Observed::AsOf { value: changes(9, 9), as_of_ms: 2_000 };
+    assert_eq!(kept, Observation::WorkspaceChanges { workspace_id: "w".into(), changes: read_then, rev: kept.rev() });
 }
 
 /// A hub that starts on a file whose version for one kind isn't its own, as a build that changed that kind's form

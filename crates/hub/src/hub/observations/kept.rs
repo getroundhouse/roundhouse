@@ -4,13 +4,13 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use protocol::client::ObservationNotice;
+use protocol::client::{ApiError, ObservationNotice};
 use protocol::model::{Level, Observation, Observed, Rev};
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
 use super::file::{self, Row};
-use super::kinds::{Form, Kind, WorkspaceLines};
+use super::kinds::{Form, Kind, WorkspaceChanges, WorkspaceLines};
 use crate::cache_file::CacheFile;
 use crate::store::Store;
 
@@ -28,6 +28,7 @@ pub(crate) struct Observations {
 #[derive(Default)]
 pub(crate) struct Tables {
     pub(super) workspace_lines: Table<WorkspaceLines>,
+    pub(super) workspace_changes: Table<WorkspaceChanges>,
 }
 
 /// What's kept of one kind of observation.
@@ -162,7 +163,8 @@ impl<K: Kind> Table<K> {
 /// What the store does with every kind's table alike.
 trait AnyTable {
     fn form(&self) -> Form;
-    fn listed(&self) -> Vec<Observation>;
+    /// Each observation it keeps that's sent at `level`.
+    fn listed(&self, level: &Level) -> Vec<Observation>;
     /// Keeps what the cache file kept, each as of when it was read, at `rev`.
     fn load(&mut self, file: &CacheFile, rev: Rev) -> rusqlite::Result<()>;
 }
@@ -172,8 +174,9 @@ impl<K: Kind> AnyTable for Table<K> {
         K::FORM
     }
 
-    fn listed(&self) -> Vec<Observation> {
-        self.kept.iter().map(|(of, kept)| K::observation(of, kept.said.observed(), kept.rev)).collect()
+    fn listed(&self, level: &Level) -> Vec<Observation> {
+        let at_level = self.kept.iter().filter(|(of, _)| K::key(of).level().as_ref() == Some(level));
+        at_level.map(|(of, kept)| K::observation(of, kept.said.observed(), kept.rev)).collect()
     }
 
     fn load(&mut self, file: &CacheFile, rev: Rev) -> rusqlite::Result<()> {
@@ -187,9 +190,14 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    fn each(&mut self) -> [&mut dyn AnyTable; 1] {
-        let Tables { workspace_lines } = self;
-        [workspace_lines]
+    fn each(&mut self) -> [&mut dyn AnyTable; 2] {
+        let Tables { workspace_lines, workspace_changes } = self;
+        [workspace_lines, workspace_changes]
+    }
+
+    /// Every observation sent at `level`, of every kind.
+    fn listed(&mut self, level: &Level) -> Vec<Observation> {
+        self.each().iter().flat_map(|table| table.listed(level)).collect()
     }
 
     /// The form of each kind's table in the cache file.
@@ -225,8 +233,19 @@ impl Observations {
     pub(crate) async fn listed_with<T>(&self, list: impl Future<Output = T>) -> (T, Vec<Observation>) {
         let _changing = self.changing.lock().await;
         let listed = list.await;
-        let mut tables = self.tables.lock();
-        let observations = tables.each().iter().flat_map(|table| table.listed()).collect::<Vec<_>>();
-        (listed, observations.into_iter().filter(|observation| observation.key().level() == Some(Level::Hub)).collect())
+        (listed, self.tables.lock().listed(&Level::Hub))
+    }
+
+    /// Every observation of `level`, which isn't the hub's, with the hub's newest revision, `rev_now`, read under the
+    /// lock every change takes, so the revision covers no change the list lacks. A record that changes meanwhile moves
+    /// the revision too, which costs nothing, since a client compares only this level's copies with the list.
+    pub(crate) async fn listed_at(
+        &self,
+        level: &Level,
+        rev_now: impl Future<Output = Result<Rev, ApiError>>,
+    ) -> Result<(Vec<Observation>, Rev), ApiError> {
+        let _changing = self.changing.lock().await;
+        let rev = rev_now.await?;
+        Ok((self.tables.lock().listed(level), rev))
     }
 }

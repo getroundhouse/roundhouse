@@ -2,7 +2,10 @@
 //! its removal, and in the list a client reads as it connects.
 
 use protocol::client::HubNotice;
-use protocol::model::{LineCounts, Observation, ObservationKey, Observed, RecordKey, Records, Rev};
+use protocol::model::{
+    ChangeStatus, ChangeSummary, ChangedFile, FileVersion, LineCounts, Observation, ObservationKey, Observed,
+    RecordKey, Records, Rev,
+};
 use serde::Deserialize;
 
 use crate::keeps_its_form;
@@ -33,6 +36,39 @@ fn an_observation_keeps_its_form_however_fresh_as_a_notice_and_a_removal() {
     keeps_its_form(
         &gone,
         r#"{"notice":"observation_removed","observation":{"kind":"workspace_lines","workspace_id":"w"},"rev":6}"#,
+    );
+}
+
+/// A workspace's changed files, which a hub sends at the workspace's level, as a notice and as their removal.
+#[test]
+fn a_workspace_s_changed_files_keep_their_form_as_a_notice_and_a_removal() {
+    let file = ChangedFile {
+        path: "a.rs".into(),
+        from: None,
+        status: ChangeStatus::Modified,
+        lines: Some(LineCounts { added: 3, removed: 1 }),
+        version: Some(FileVersion::from("0123abcd".to_string())),
+    };
+    let summary = ChangeSummary { left_out: 2, ..ChangeSummary::new("c1".into(), vec![file]) };
+    let changes = Observed::Current { value: summary };
+    let copy =
+        HubNotice::Observation(Observation::WorkspaceChanges { workspace_id: "w".into(), changes, rev: Rev::new(5) });
+    let gone = HubNotice::ObservationRemoved {
+        observation: ObservationKey::WorkspaceChanges { workspace_id: "w".into() },
+        rev: Rev::new(6),
+    };
+
+    keeps_its_form(
+        &copy,
+        concat!(
+            r#"{"notice":"observation","kind":"workspace_changes","workspace_id":"w","changes":{"freshness":"current","#,
+            r#""value":{"base_commit":"c1","lines":{"added":3,"removed":1},"files":[{"path":"a.rs","from":null,"#,
+            r#""status":"modified","lines":{"added":3,"removed":1},"version":"0123abcd"}],"left_out":2}},"rev":5}"#
+        ),
+    );
+    keeps_its_form(
+        &gone,
+        r#"{"notice":"observation_removed","observation":{"kind":"workspace_changes","workspace_id":"w"},"rev":6}"#,
     );
 }
 

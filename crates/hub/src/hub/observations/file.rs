@@ -76,29 +76,44 @@ pub(super) fn load<K: Kind>(file: &CacheFile) -> rusqlite::Result<Vec<Row<K>>> {
     Ok(rows.unwrap_or_default())
 }
 
-/// Keeps that the observation of `of` says `value`, as read at `read_at_ms`, in place of what the file kept of it, or,
-/// with no `value`, forgets it. A write the file refuses is only logged: what's in memory, which clients are told, goes
-/// on as it is, and a hub that starts again has what the file kept before.
-pub(super) fn write<K: Kind>(file: &CacheFile, of: &K::Of, said: Option<(&K::Value, i64)>) {
-    if let Err(error) = written::<K>(file, of, said) {
+/// What a change to one observation writes to the file.
+pub(super) enum Write<V> {
+    /// That it says `value`, as read at `read_at_ms`, in place of what the file kept of it.
+    Says { value: V, read_at_ms: i64 },
+    /// Only that it was read again at `read_at_ms`, since it says what the file keeps, which isn't written again.
+    ReadAgain { read_at_ms: i64 },
+    /// That it's forgotten.
+    Gone,
+}
+
+/// Writes `write` of the observation of `of`. A write the file refuses is only logged: what's in memory, which clients
+/// are told, goes on as it is, and a hub that starts again has what the file kept before.
+pub(super) fn write<K: Kind>(file: &CacheFile, of: &K::Of, write: Write<K::Value>) {
+    if let Err(error) = written::<K>(file, of, write) {
         warn!(table = K::FORM.table, "keeping an observation in the cache's file: {error}");
     }
 }
 
 /// What [`write`] does, or why it couldn't.
-fn written<K: Kind>(file: &CacheFile, of: &K::Of, said: Option<(&K::Value, i64)>) -> Result<(), WriteError> {
+fn written<K: Kind>(file: &CacheFile, of: &K::Of, write: Write<K::Value>) -> Result<(), WriteError> {
     let (table, of) = (K::FORM.table, serde_json::to_string(of)?);
-    let said = said.map(|(value, read_at_ms)| serde_json::to_string(value).map(|value| (value, read_at_ms)));
-    let said = said.transpose()?;
-    file.with(|conn| match said {
-        Some((value, read_at_ms)) => conn.execute(
+    let write = match write {
+        Write::Says { value, read_at_ms } => Write::Says { value: serde_json::to_string(&value)?, read_at_ms },
+        Write::ReadAgain { read_at_ms } => Write::ReadAgain { read_at_ms },
+        Write::Gone => Write::Gone,
+    };
+    file.with(|conn| match write {
+        Write::Says { value, read_at_ms } => conn.execute(
             &format!(
                 "INSERT INTO observed_{table} (of, said, read_at_ms) VALUES (?1, ?2, ?3)
                      ON CONFLICT (of) DO UPDATE SET said = excluded.said, read_at_ms = excluded.read_at_ms"
             ),
             params![of, value, read_at_ms],
         ),
-        None => conn.execute(&format!("DELETE FROM observed_{table} WHERE of = ?"), [of]),
+        Write::ReadAgain { read_at_ms } => {
+            conn.execute(&format!("UPDATE observed_{table} SET read_at_ms = ?2 WHERE of = ?1"), params![of, read_at_ms])
+        }
+        Write::Gone => conn.execute(&format!("DELETE FROM observed_{table} WHERE of = ?"), [of]),
     })?;
     Ok(())
 }

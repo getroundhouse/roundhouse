@@ -20,8 +20,9 @@ pub(crate) struct ChangeSummaries {
 }
 
 impl ChangeSummaries {
-    /// What the worktree at `worktree` changes against `base_ref`, as [`ChangeSummary`] says. What it keeps of the
-    /// worktree's files is only of those this summary names, so it holds no more than the worktree changes.
+    /// What the worktree at `worktree` changes against `base_ref`, as [`ChangeSummary`] says, with at most
+    /// [`protocol::model::MOST_FILES_LISTED`] files listed. What it keeps of the worktree's files is only of those the
+    /// worktree changes, including those the summary leaves out, whose lines its totals count.
     pub(crate) async fn summarize(
         &self,
         given: &Environment,
@@ -41,12 +42,12 @@ impl ChangeSummaries {
     }
 }
 
-/// Each file of `files` with its version, and an untracked one with its lines, from what the worktree holds of it, in
-/// order of their paths, and what was read of them.
+/// Each file of `files` with its version, and an untracked one with its lines, from what the worktree holds of it, and
+/// what was read of them.
 fn versioned(worktree: &Path, files: Vec<Listed>, before: &Seen) -> (Vec<ChangedFile>, Seen) {
     let at = SystemTime::now();
     let mut seen = Seen::default();
-    let mut changed: Vec<ChangedFile> = files
+    let changed = files
         .into_iter()
         .map(|file| {
             // One deleted from the index can be in the worktree still, untracked, as a file of its own here.
@@ -66,7 +67,6 @@ fn versioned(worktree: &Path, files: Vec<Listed>, before: &Seen) -> (Vec<Changed
             }
         })
         .collect();
-    changed.sort_by(|a, b| a.path.cmp(&b.path));
     (changed, seen)
 }
 

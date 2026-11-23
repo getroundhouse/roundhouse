@@ -59,7 +59,7 @@ pub(crate) use coordinator::Hub;
 use coordinator::{KEEPS_WORKERS, new_id, off_thread};
 pub(crate) use dirs::HubDirs;
 #[cfg(test)]
-pub(crate) use observations::WorkspaceLines;
+pub(crate) use observations::{WorkspaceChanges, WorkspaceLines};
 
 mod devices;
 mod dirs;

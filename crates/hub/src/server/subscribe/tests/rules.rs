@@ -1,5 +1,6 @@
 //! The rules of the request itself: what it refuses, what it does sent again, and its order.
 
+use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, LogFrom, Refused, Subscribe, Subscribed};
 use protocol::client::{ClientResponse, ErrorCode, HubFrame, Request};
 use protocol::event::{ContentBlock, EventBody};
@@ -37,17 +38,17 @@ async fn a_start_sent_again_changes_nothing_and_one_under_a_taken_id_is_refused_
         [(1, ErrorCode::InvalidRequest)]
     );
     assert_eq!(replaced, first);
-    let listed = |id: u64| {
-        one.sent
-            .iter()
-            .filter(|frame| matches!(frame, HubFrame::Listed { subscription_id, .. } if *subscription_id == id))
-            .count()
+    let listed = |id: u64, workspace: bool| {
+        let of = |listed: &Listed| matches!(listed, Listed::Workspace(_)) == workspace;
+        let listing = |frame: &&HubFrame| matches!(frame, HubFrame::Listed { subscription_id, listed } if *subscription_id == id && of(listed));
+        one.sent.iter().filter(listing).count()
     };
     assert_eq!(
-        (listed(1), listed(2)),
+        (listed(1, false), listed(2, false)),
         (1, 1),
         "the hub's records, listed once for each that started at the hub's level"
     );
+    assert_eq!((listed(1, true), listed(2, true)), (0, 1), "w's observations, for the one that started following it");
     assert!(given.hub.followed(&Followed::Workspace("w".into())));
 }
 

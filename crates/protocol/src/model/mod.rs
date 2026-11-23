@@ -43,7 +43,7 @@ pub use account::{
 pub use agent::{AgentDescription, LoginDescription, NotOffered, RunCapabilities};
 pub use branches::{Apart, Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
-pub use changes::{ChangeStatus, ChangeSummary, ChangedFile, FileVersion, LineCounts};
+pub use changes::{ChangeStatus, ChangeSummary, ChangedFile, FileVersion, LineCounts, MOST_FILES_LISTED};
 pub use client_device::ClientDevice;
 pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy};
