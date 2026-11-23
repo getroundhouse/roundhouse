@@ -2,6 +2,7 @@ use super::{Request, keeping};
 use crate::attached::{Attachments, joined};
 use crate::{attached, composing};
 use client_core::hints::Field;
+use client_core::records::Snapshot;
 use client_core::{Agents, FileToSend, FilesFor};
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
@@ -28,9 +29,22 @@ pub(crate) struct Offer {
     pub(crate) repos: Vec<(RepoId, String)>,
     pub(crate) can_create: bool,
     pub(crate) agents: Agents,
-    /// Every list of models the hub holds, in no order.
-    pub(crate) model_lists: Vec<protocol::model::ModelList>,
+    /// Every list of models the hub holds, and what each offers.
+    pub(crate) models: ModelsOffered,
 }
+
+/// The copy of the hub's records an [`Offer`] was made from, for the lists of models it holds and what each offers,
+/// which tells two offers apart by those alone.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ModelsOffered(pub(crate) Snapshot);
+
+impl PartialEq for ModelsOffered {
+    fn eq(&self, other: &Self) -> bool {
+        !self.0.changes_since(&other.0).model_lists()
+    }
+}
+
+impl Eq for ModelsOffered {}
 
 /// What the dialog asks of the app.
 #[derive(Clone, Debug, PartialEq, Eq)]

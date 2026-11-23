@@ -5,38 +5,32 @@ use client_ui::Picked;
 use gpui_kit::{AnyElement, Context};
 use protocol::capability::settings::Effort;
 use protocol::client::admin::ModelTarget;
-use protocol::model::{AgentDescription, AgentKind, ModelList, ModelName};
+use protocol::model::{AgentDescription, AgentKind, ModelName};
 
 impl NewWorkspaceDialog {
     /// What the hub says of the agent the first chat runs, with what it offers in the dialog's project for one that
     /// discovers its models. `None` from a hub that doesn't describe it, and until the agent has said what it offers.
     pub(super) fn agent(&self) -> Option<AgentDescription> {
-        self.model_lookup.description(self.base_agent()?, self.held_models())
-    }
-
-    /// What the hub holds of the list of models the dialog follows.
-    fn held_models(&self) -> Option<&ModelList> {
-        let key = self.model_lookup.key()?;
-        self.offer.model_lists.iter().find(|list| list.key == *key)
+        self.model_lookup.description(self.base_agent()?, &self.offer.models.0)
     }
 
     /// Follows the list of models of the first chat's agent in the dialog's project, as `Lookup::follow` says. For
     /// whenever what it's for changes, or the hub's lists do.
     pub(crate) fn follow_models(&mut self, again: bool, cx: &mut Context<Self>) {
         let Some(client) = self.keeping.client().cloned() else { return };
-        let (agent, held) = (self.base_agent().cloned(), self.held_models().cloned());
+        let (agent, records) = (self.base_agent().cloned(), self.offer.models.0.clone());
         let target = ModelTarget::Project(self.repo.clone());
-        self.model_lookup.follow(&client, agent.as_ref(), target, held.as_ref(), again, cx, |d| &mut d.model_lookup);
+        self.model_lookup.follow(&client, agent.as_ref(), target, &records, again, cx, |d| &mut d.model_lookup);
     }
 
     /// Whether there's nothing to pick from yet, since the agent hasn't said what it offers.
     pub(super) fn models_waiting(&self) -> bool {
-        self.model_lookup.waiting(self.held_models())
+        self.model_lookup.waiting(&self.offer.models.0)
     }
 
     /// "Loading models…", or what went wrong, with Retry.
     pub(super) fn models_status(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        self.model_lookup.status(self.held_models(), cx, |d, cx| d.follow_models(true, cx))
+        self.model_lookup.status(&self.offer.models.0, cx, |d, cx| d.follow_models(true, cx))
     }
 
     pub(super) fn base_agent(&self) -> Option<&AgentDescription> {

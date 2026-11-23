@@ -9,7 +9,7 @@ use protocol::model::{RepoId, WorkspaceId};
 
 use super::made::GivenBack;
 use crate::app::AppView;
-use crate::new_workspace::{self, DialogEvent, Keeping, NewWorkspaceDialog, Offer};
+use crate::new_workspace::{self, DialogEvent, Keeping, ModelsOffered, NewWorkspaceDialog, Offer};
 
 impl AppView {
     /// Opens the new-workspace dialog for `repo`, with whatever was left in it last time. Only one dialog shows at a
@@ -69,8 +69,8 @@ impl AppView {
     /// agents.
     fn offer(&self) -> Offer {
         let repos = self.records.repos().iter().map(|repo| (repo.id.clone(), repo.name.clone())).collect();
-        let model_lists = self.records.model_lists().cloned().collect();
-        Offer { repos, can_create: self.can_create(), agents: self.records.agents().clone(), model_lists }
+        let models = ModelsOffered(self.records.clone());
+        Offer { repos, can_create: self.can_create(), agents: self.records.agents().clone(), models }
     }
 
     /// Tells the dialog what the hub keeps of it, as the records change, and as the keeper catches up, which can let
