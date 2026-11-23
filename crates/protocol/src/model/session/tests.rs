@@ -53,16 +53,6 @@ fn a_session_from_a_hub_that_doesnt_keep_waits_has_none_and_one_that_does_has_it
     assert_eq!((wait.number, wait.call, wait.until, wait.ended), (7, None, WaitUntil::Checks, None));
 }
 
-#[test]
-fn a_cache_is_worth_telling_of_once_the_context_is_big_enough_and_the_agent_isnt_working() {
-    assert!(session("idle", CACHE_WORTH_TELLING_TOKENS).cache_worth_telling().is_some());
-    assert!(session("waiting_approval", 313_500).cache_worth_telling().is_some(), "it can expire while it waits");
-    assert!(session("idle", CACHE_WORTH_TELLING_TOKENS - 1).cache_worth_telling().is_none());
-    assert!(session("running", 313_500).cache_worth_telling().is_none(), "each request keeps it warm");
-    let closed = Session { closed_at_ms: Some(1), ..session("idle", 313_500) };
-    assert!(closed.cache_worth_telling().is_none(), "nobody will send a closed chat anything");
-}
-
 /// Each grouping, for every status. One from a newer peer is in none of them.
 #[test]
 fn each_status_is_in_the_groups_that_say_what_its_agent_is_doing() {
@@ -78,13 +68,6 @@ fn each_status_is_in_the_groups_that_say_what_its_agent_is_doing() {
     assert_eq!(groups(Interrupted), [false, false, false, false, true]);
     assert_eq!(groups(Background), [false, true, false, true, false]);
     assert_eq!(groups(Unknown), [false; 5]);
-}
-
-#[test]
-fn the_turns_card_says_what_the_cache_holds_whatever_the_size_but_not_while_the_agent_works() {
-    assert!(session("idle", 9_000).idle_cache().is_some());
-    assert!(session("running", 9_000).idle_cache().is_none());
-    assert!(session("thinking_hard", 9_000).idle_cache().is_none(), "a status from a newer hub might be working");
 }
 
 /// As the hub refuses one, so the button to ask is off when asking would be refused.

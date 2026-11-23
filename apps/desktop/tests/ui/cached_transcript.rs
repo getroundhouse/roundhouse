@@ -41,7 +41,8 @@ fn what_changes_how_its_rows_are_drawn_draws_the_transcript_again(cx: &mut TestA
     let claims = Capabilities::default();
     assert_ne!(session.agent_capabilities.as_ref().map(|run| &*run.claims), Some(&claims));
     session.agent_capabilities = Some(RunCapabilities::new(RunId::new(1), claims.clone()));
-    assert!(draws_rows(&mut ui, &transcript, |t, cx| t.set_session(&session, cx)), "the run's claims");
+    let records = ui.view().records().clone();
+    assert!(draws_rows(&mut ui, &transcript, |t, cx| t.set_session(&records, &session, cx)), "the run's claims");
 
     let mut agent = protocol::fixtures::claude();
     draws_rows(&mut ui, &transcript, |t, cx| t.set_agent(Some(&agent), cx));

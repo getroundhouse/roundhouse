@@ -13,6 +13,7 @@ mod by_session;
 mod copies;
 mod github;
 mod observed;
+mod of_chats;
 pub(super) use by_session::SessionsListed;
 pub(super) use copies::Listed;
 pub use copies::{Changes, InWorkspace, Snapshot};

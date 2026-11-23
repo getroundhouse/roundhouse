@@ -1,18 +1,21 @@
+use client_core::prompt_cache::cache_worth_telling;
+use client_core::records::Snapshot;
 use gpui_kit::{
     App, Div, ElementId, Hsla, InteractiveElement as _, ParentElement as _, Stateful, StatefulInteractiveElement as _,
     Styled as _, div,
 };
 use look::{CacheMark, Tooltipped as _};
-use protocol::model::{CacheState, Session, Workspace, WorkspaceStatus};
+use protocol::model::{CacheState, PromptCache, Session, Workspace, WorkspaceStatus};
 
 /// The longest the app waits to draw again what's said of a cache, however much later the next change is. A Mac's
 /// timers don't count the time it sleeps, so one set for later than this could leave a clock showing for as long
 /// after waking as the Mac slept.
 pub(super) const LONGEST_WAIT_MS: i64 = 5 * 60 * 1000;
 
-/// How long the chat's cache has left at `now_ms`, once it's about to expire.
-pub(crate) fn expiring_in_ms(session: &Session, now_ms: i64) -> Option<i64> {
-    match session.cache_worth_telling()?.state(now_ms)? {
+/// How long the chat's cache has left at `now_ms`, once it's about to expire, as `records`, the copy `session` is from,
+/// reads it.
+pub(crate) fn expiring_in_ms(records: &Snapshot, session: &Session, now_ms: i64) -> Option<i64> {
+    match worth_telling(records, session)?.state(now_ms)? {
         CacheState::Expiring { left_ms } => Some(left_ms),
         CacheState::Warm { .. } | CacheState::Expired { .. } => None,
     }
@@ -39,16 +42,20 @@ pub(crate) fn clock(id: impl Into<ElementId>, left_ms: i64, color: Hsla, cx: &Ap
 }
 
 /// How long the soonest to expire of `sessions`' caches has left at `now_ms`, of those about to.
-pub(crate) fn soonest_expiring<'a>(sessions: impl IntoIterator<Item = &'a Session>, now_ms: i64) -> Option<i64> {
-    sessions.into_iter().filter_map(|session| expiring_in_ms(session, now_ms)).min()
+pub(crate) fn soonest_expiring<'a>(
+    records: &Snapshot,
+    sessions: impl IntoIterator<Item = &'a Session>,
+    now_ms: i64,
+) -> Option<i64> {
+    sessions.into_iter().filter_map(|session| expiring_in_ms(records, session, now_ms)).min()
 }
 
 /// The line above the composer once the chat's cache has expired, with what the next prompt writes again, which is
 /// what the context holds.
-pub(crate) fn expired_line(session: &Session, now_ms: i64) -> Option<String> {
-    let cache = session.cache_worth_telling()?;
+pub(crate) fn expired_line(records: &Snapshot, session: &Session, now_ms: i64) -> Option<String> {
+    let cache = worth_telling(records, session)?;
     let CacheState::Expired { .. } = cache.state(now_ms)? else { return None };
-    let tokens = session.context.as_ref()?.used_tokens;
+    let tokens = records.context(session)?.used_tokens;
     Some(format!(
         "Cache expired {} · this prompt writes {} tokens again",
         look::ago(cache.expires_at_ms()?, now_ms),
@@ -58,18 +65,22 @@ pub(crate) fn expired_line(session: &Session, now_ms: i64) -> Option<String> {
 
 /// What pointing at another model in the picker says while the chat's cache is warm, since each model has a cache of
 /// its own. Once it has expired, switching costs no more than staying.
-pub(crate) fn switching_note(session: &Session, now_ms: i64) -> Option<String> {
-    let cache = session.cache_worth_telling()?;
+pub(crate) fn switching_note(records: &Snapshot, session: &Session, now_ms: i64) -> Option<String> {
+    let cache = worth_telling(records, session)?;
     let (CacheState::Warm { .. } | CacheState::Expiring { .. }) = cache.state(now_ms)? else { return None };
-    let tokens = session.context.as_ref()?.used_tokens;
+    let tokens = records.context(session)?.used_tokens;
     Some(format!("Switching writes this chat's {} tokens to the cache again", written_counts::shortened(tokens)))
 }
 
 /// How long until what the tabs, the sidebar and Home say of the caches of `sessions` changes, from `now_ms`, so the
 /// window can be drawn again then and not before: once one is about to expire, then as each minute goes, until it has.
-pub(crate) fn next_change_in_ms<'a>(sessions: impl IntoIterator<Item = &'a Session>, now_ms: i64) -> Option<i64> {
+pub(crate) fn next_change_in_ms<'a>(
+    records: &Snapshot,
+    sessions: impl IntoIterator<Item = &'a Session>,
+    now_ms: i64,
+) -> Option<i64> {
     let each = sessions.into_iter().filter_map(|session| {
-        let cache = session.cache_worth_telling()?;
+        let cache = worth_telling(records, session)?;
         match cache.state(now_ms)? {
             CacheState::Warm { .. } => Some(cache.warns_at_ms()? - now_ms),
             CacheState::Expiring { left_ms } => look::next_minute_in_ms(left_ms),
@@ -81,14 +92,19 @@ pub(crate) fn next_change_in_ms<'a>(sessions: impl IntoIterator<Item = &'a Sessi
 
 /// How long until the line above `session`'s composer changes, from `now_ms`: once its cache expires, and from then
 /// on, as what [`look::ago`] says of when it did changes.
-pub(crate) fn composer_line_changes_in_ms(session: &Session, now_ms: i64) -> Option<i64> {
-    let cache = session.cache_worth_telling()?;
+pub(crate) fn composer_line_changes_in_ms(records: &Snapshot, session: &Session, now_ms: i64) -> Option<i64> {
+    let cache = worth_telling(records, session)?;
     let expires_at_ms = cache.expires_at_ms()?;
     let wait_ms = match cache.state(now_ms)? {
         CacheState::Warm { left_ms } | CacheState::Expiring { left_ms } => left_ms,
         CacheState::Expired { .. } => look::changes_in_ms(expires_at_ms, now_ms),
     };
     Some(capped(wait_ms))
+}
+
+/// What `session`'s cache holds while it's worth telling of, as [`cache_worth_telling`] says.
+fn worth_telling<'a>(records: &'a Snapshot, session: &'a Session) -> Option<&'a PromptCache> {
+    cache_worth_telling(session, records.conversation_cache(session))
 }
 
 /// A wait of at least a millisecond, so a change due now is drawn once rather than over and over, and at most

@@ -24,6 +24,7 @@ pub mod hints;
 pub mod link;
 pub mod marking;
 pub mod moving;
+pub mod prompt_cache;
 pub mod records;
 pub mod refusals;
 pub mod session_log;

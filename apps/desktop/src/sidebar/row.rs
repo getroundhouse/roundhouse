@@ -51,7 +51,7 @@ pub(super) fn workspace_row(
             None => crate::workspace_pane::drafted(app.records().sessions(&workspace.id)),
         };
     let its_chats = app.records().sessions(&workspace.id).iter();
-    let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx));
+    let expiring = prompt_cache::soonest_expiring(app.records(), its_chats, look::now_ms(cx));
     let lines = workspace_lines::drawn(workspace.status, app.records().workspace_lines(&workspace.id));
     let end = End { lines, drafted, expiring, pointing, waiting };
     let end = right_end(app, workspace, end, line_text, window, cx);

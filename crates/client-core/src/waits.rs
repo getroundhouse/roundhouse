@@ -2,7 +2,8 @@
 //! command line say the same.
 
 use protocol::model::{
-    CheckState, PrState, PullRequest, PullRequestsSnapshot, Standing, Wait, WaitEnd, WaitUntil, Watching,
+    CheckState, PrState, PullRequest, PullRequestWatch, PullRequestsSnapshot, Standing, Wait, WaitEnd, WaitUntil,
+    Watching,
 };
 
 use crate::standing;
@@ -25,11 +26,12 @@ pub fn watched(watching: &Watching) -> String {
 /// the bar counts every check. A wait until a merge says where the pull request holding it stands, in the bar's words,
 /// as "Waiting on #9 to merge · Queued to merge", naming it when the wait watches several, as "Waiting on #6, #7 to
 /// merge · #6: Review required". A wait the singular tool started, which only an older hub can still have open, has no
-/// reading, so it says only what it waits on.
-pub fn waiting(wait: &Wait) -> String {
+/// reading, so it says only what it waits on. `read` is what the wait last read, as
+/// [`Snapshot::wait_read`](crate::records::Snapshot::wait_read) says.
+pub fn waiting(wait: &Wait, read: Option<&PullRequestWatch>) -> String {
     let watching = wait.watching();
     let what = watched(&watching);
-    let Some(watch) = &wait.watch else { return format!("Waiting on {what}") };
+    let Some(watch) = read else { return format!("Waiting on {what}") };
     if watch.read_error.is_some() {
         return format!("Waiting on {what} \u{b7} couldn't refresh GitHub");
     }
@@ -183,7 +185,7 @@ mod tests {
         let with = |until, change: fn(&mut PullRequest)| {
             let mut wait = Wait { until, ..wait.clone() };
             change(&mut wait.watch.as_mut().unwrap().snapshot.pull_requests[0]);
-            waiting(&wait)
+            waiting(&wait, wait.watch.as_deref())
         };
 
         assert_eq!(with(WaitUntil::RequiredChecks, |_| {}), "Waiting on #7 \u{b7} 1 required check running");
@@ -212,10 +214,14 @@ mod tests {
             vec![PullRequestNumber::try_from(6).unwrap()];
         snapshot.pull_requests.push(lower);
 
-        assert_eq!(waiting(&wait), "Waiting on #7, #6 to merge \u{b7} #6: Review required");
+        assert_eq!(waiting(&wait, wait.watch.as_deref()), "Waiting on #7, #6 to merge \u{b7} #6: Review required");
         let snapshot = &mut wait.watch.as_mut().unwrap().snapshot;
         snapshot.pull_requests[1].summary.said.state = PrState::Merged;
-        assert_eq!(waiting(&wait), "Waiting on #7, #6 to merge \u{b7} #7: 1 check running", "once #6 has merged");
+        assert_eq!(
+            waiting(&wait, wait.watch.as_deref()),
+            "Waiting on #7, #6 to merge \u{b7} #7: 1 check running",
+            "once #6 has merged"
+        );
     }
 
     /// A wait the singular tool started has no reading of its pull request, so its line says only what it waits on.
@@ -223,8 +229,8 @@ mod tests {
     fn a_wait_with_no_reading_says_only_what_it_waits_on() {
         let wait = Wait { watch: None, until: WaitUntil::Checks, ..pull_request_wait("w1") };
 
-        assert_eq!(waiting(&wait), "Waiting on #7's checks");
-        assert_eq!(waiting(&Wait { until: WaitUntil::Done, ..wait }), "Waiting on #7");
+        assert_eq!(waiting(&wait, wait.watch.as_deref()), "Waiting on #7's checks");
+        assert_eq!(waiting(&Wait { until: WaitUntil::Done, ..wait }, None), "Waiting on #7");
     }
 
     /// A wait an update emptied of what an older hub kept of its pull requests says which it was asked about, and
@@ -234,7 +240,7 @@ mod tests {
         let mut wait = pull_request_wait("w1");
         wait.watch.as_mut().unwrap().snapshot.pull_requests.clear();
 
-        assert_eq!(waiting(&wait), "Waiting on #7 for required checks");
+        assert_eq!(waiting(&wait, wait.watch.as_deref()), "Waiting on #7 for required checks");
     }
 
     /// GitHub couldn't be read, so there's no count, and the line says what it waits until after the numbers.
@@ -243,6 +249,9 @@ mod tests {
         let mut wait = pull_request_wait("w1");
         wait.watch.as_mut().unwrap().read_error = Some("offline".into());
 
-        assert_eq!(waiting(&wait), "Waiting on #7 for required checks \u{b7} couldn't refresh GitHub");
+        assert_eq!(
+            waiting(&wait, wait.watch.as_deref()),
+            "Waiting on #7 for required checks \u{b7} couldn't refresh GitHub"
+        );
     }
 }

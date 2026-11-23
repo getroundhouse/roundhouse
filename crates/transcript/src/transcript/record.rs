@@ -7,10 +7,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use client_core::prompt_cache::{cache_worth_telling, idle_cache};
 use client_core::records::{Snapshot, subagent_named};
 use gpui_kit::{Context, SharedString, Task};
 use protocol::event::AgentTask;
-use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, Wait};
+use protocol::model::{AgentDescription, PromptCache, PullRequestWatch, Seq, Session, Subagent, SubagentStatus, Wait};
 
 use super::{Transcript, TranscriptEvent};
 use crate::rows::Opens;
@@ -33,7 +34,7 @@ pub(crate) struct AtWork {
     pub(crate) background: Vec<AgentTask>,
     /// The wait it has open on the pull request, as the hub keeps it, which the CLI's list of tasks only has a copy of,
     /// which can still list one that has ended.
-    pub(crate) waits: Vec<Wait>,
+    pub(crate) waits: Vec<OpenWait>,
     /// The event that ended the newest turn, whose line and card say how long the cache has left. 0 until one has.
     pub(crate) reply_seq: Seq,
     /// Whether that turn failed and no turn has started since, so the agent is stopped short on it, and the request it
@@ -44,26 +45,38 @@ pub(crate) struct AtWork {
     pub(crate) cache: Option<IdleCache>,
 }
 
-/// What the cache holds of the conversation while it can expire, as [`Session::idle_cache`] says.
+/// What the cache holds of the conversation while it can expire, as [`client_core::prompt_cache::idle_cache`] says.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct IdleCache {
     pub(crate) cache: PromptCache,
-    /// Whether it's worth telling the person of beyond the turn's card, as [`Session::cache_worth_telling`] says.
+    /// Whether it's worth telling the person of beyond the turn's card, as
+    /// [`client_core::prompt_cache::cache_worth_telling`] says.
     pub(crate) worth_telling: bool,
 }
 
+/// A wait the agent has open, and what it last read of the pull requests it watches, as
+/// [`Snapshot::wait_read`] says.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OpenWait {
+    pub(crate) wait: Wait,
+    pub(crate) read: Option<PullRequestWatch>,
+}
+
 impl AtWork {
-    pub(crate) fn of(session: &Session) -> Self {
+    /// What `session`'s record says, as `records`, the copy it's from, reads it.
+    pub(crate) fn of(records: &Snapshot, session: &Session) -> Self {
+        let cache = records.conversation_cache(session);
+        let open = |wait: &Wait| OpenWait { wait: wait.clone(), read: records.wait_read(wait).cloned() };
         AtWork {
             working: session.status.is_working(),
             turn_started_at_ms: session.turn_started_at_ms,
             background: session.background_tasks.clone(),
-            waits: session.open_waits().to_vec(),
+            waits: session.open_waits().iter().map(open).collect(),
             reply_seq: session.reply_seq,
             failed: session.turn_failed(),
-            cache: session.idle_cache().filter(|_| !session.status.in_turn()).map(|cache| IdleCache {
-                cache: cache.clone(),
-                worth_telling: session.cache_worth_telling().is_some(),
+            cache: idle_cache(session, cache).filter(|_| !session.status.in_turn()).map(|held| IdleCache {
+                cache: held.clone(),
+                worth_telling: cache_worth_telling(session, cache).is_some(),
             }),
         }
     }
@@ -109,15 +122,15 @@ impl Transcript {
         if self.model.borrow().alone.is_none()
             && let Some(session) = records.session(&id)
         {
-            self.set_session(session, cx);
+            self.set_session(records, session, cx);
         }
         self.set_subagents(records.subagents(&id), cx);
         self.set_proposals(records.proposals(&id), cx);
         self.set_replies_heard(records.replies_heard(&id), cx);
     }
 
-    /// Follows the session's record.
-    pub fn set_session(&mut self, session: &Session, cx: &mut Context<Self>) {
+    /// Follows the session's record, as `records`, the copy it's from, reads it.
+    pub fn set_session(&mut self, records: &Snapshot, session: &Session, cx: &mut Context<Self>) {
         // What the run claims, which rows are drawn by, changes as a run starts.
         if self.model.borrow().claims != session.agent_capabilities {
             self.model.borrow_mut().claims.clone_from(&session.agent_capabilities);
@@ -126,7 +139,7 @@ impl Transcript {
         }
         self.follow_approvals(session, cx);
         self.follow_question(cx);
-        let at_work = AtWork::of(session);
+        let at_work = AtWork::of(records, session);
         let replies = {
             let mut m = self.model.borrow_mut();
             if m.at_work == at_work {

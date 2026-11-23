@@ -1,6 +1,6 @@
 use super::super::{
-    AccountId, AccountSource, ApprovalId, CACHE_WORTH_TELLING_TOKENS, ContextUsage, DecisionDraft, Draft, ModelName,
-    PromptCache, QueuedPrompt, Rev, Seq, SessionId, Title, TitleSource, Wait, WorkspaceId,
+    AccountId, AccountSource, ApprovalId, ContextUsage, DecisionDraft, Draft, ModelName, PromptCache, QueuedPrompt,
+    Rev, Seq, SessionId, Title, TitleSource, Wait, WorkspaceId,
 };
 use crate::capability::approvals::ApprovalMode;
 use crate::capability::output::TodoList;
@@ -340,27 +340,6 @@ impl Session {
     /// sent to a closed one until it's reopened.
     pub fn is_open(&self) -> bool {
         self.closed_at_ms.is_none()
-    }
-
-    /// What the cache holds of the conversation while it can expire: the agent isn't working, which keeps it warm,
-    /// though it can be waiting on the person. A status this build doesn't know might be working, and claims nothing,
-    /// as [`SessionStatus`] says, so this says nothing. The newest turn's card says how long it has left from this.
-    pub fn idle_cache(&self) -> Option<&PromptCache> {
-        let can_expire = match self.status {
-            SessionStatus::Idle
-            | SessionStatus::WaitingApproval
-            | SessionStatus::Interrupted
-            | SessionStatus::Background => true,
-            SessionStatus::Running | SessionStatus::Unknown => false,
-        };
-        self.prompt_cache.as_ref().filter(|_| can_expire)
-    }
-
-    /// The same, when it's worth telling the person anywhere else: the chat is open, and its context is big enough
-    /// that writing it again costs something. [`PromptCache::state`] says how warm it is at a moment.
-    pub fn cache_worth_telling(&self) -> Option<&PromptCache> {
-        let big = self.context.as_ref().is_some_and(|context| context.used_tokens >= CACHE_WORTH_TELLING_TOKENS);
-        self.idle_cache().filter(|_| big && self.is_open())
     }
 
     /// When the person last worked in this chat, by the hub's clock: when they made it, or last sent its agent

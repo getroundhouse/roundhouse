@@ -10,6 +10,7 @@ use crate::references::References;
 use crate::selection::{Asked, Selection};
 use crate::texts::{Of, Texts};
 use client_core::hints::Around;
+use client_core::records::Snapshot;
 use client_core::session_log::{RecordedApprovals, SessionLog};
 use client_core::{Client, OpenSession, View};
 use events::TranscriptEvent;
@@ -69,10 +70,11 @@ pub struct Transcript {
 impl EventEmitter<TranscriptEvent> for Transcript {}
 
 impl Transcript {
-    /// A chat: the agent's own events, with each subagent's call drawn from its record. From a hub that can't read
-    /// them apart, every event, with each subagent's work gathered into its call.
-    pub fn new(client: Client, session: &Session, cx: &mut Context<Self>) -> Self {
-        Self::start(client, session, View::Own, AtWork::of(session), cx)
+    /// A chat: the agent's own events, with each subagent's call drawn from its record, as `records`, the copy it's
+    /// from, reads it. From a hub that can't read them apart, every event, with each subagent's work gathered into its
+    /// call.
+    pub fn new(client: Client, records: &Snapshot, session: &Session, cx: &mut Context<Self>) -> Self {
+        Self::start(client, session, View::Own, AtWork::of(records, session), cx)
     }
 
     /// The work of `subagent`, alone, for the subagent tab. Whether it's at work is its record's to say, once
