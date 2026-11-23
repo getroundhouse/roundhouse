@@ -1,7 +1,7 @@
 //! What the one request is sent, beside what the four requests from before it send.
 
 use protocol::client::github::{GithubShown, GithubSubscribe};
-use protocol::client::listed::{Listed, SessionRecords};
+use protocol::client::listed::{Listed, SessionRecords, WorkspaceObservations};
 use protocol::client::records::{RecordsList, SessionProposals, SessionRepliesHeard, SessionSubagents};
 use protocol::client::subscriptions::{FeedSubscribe, Follow, SessionSubscribe, Subscribe, Subscribed};
 use protocol::client::terminals::TerminalWatch;
@@ -51,13 +51,17 @@ fn without_revisions(listed: Listed) -> Listed {
     match listed {
         Listed::Hub(records) => Listed::Hub(Box::new(Records { rev: Rev::default(), ..*records })),
         Listed::Session(records) => Listed::Session(SessionRecords { rev: Rev::default(), ..records }),
+        Listed::Workspace(observations) => {
+            Listed::Workspace(WorkspaceObservations { rev: Rev::default(), ..observations })
+        }
         Listed::Unknown => Listed::Unknown,
     }
 }
 
 /// A client that follows the hub, a session, a terminal and a workspace through one `Subscribe` is sent what the four
 /// requests send a client of version 3, with where the hub's records and the session's stand in place of their lists,
-/// and the session's own records on its subscription rather than the hub's.
+/// and the session's own records on its subscription rather than the hub's. The workspace's observations, of which `w`
+/// has none, are listed too, which the four don't send.
 #[tokio::test]
 async fn following_through_the_one_request_is_sent_what_the_four_requests_send() {
     let dir = tempfile::tempdir().unwrap();
@@ -79,7 +83,13 @@ async fn following_through_the_one_request_is_sent_what_the_four_requests_send()
     let (four, one_sent) = (ByKind::of(&four.sent), one.sent.clone());
     let mut one = ByKind::of(&one_sent);
     assert_eq!(subscribed, ClientResponse::Subscribed(Subscribed::default()));
-    assert_eq!(std::mem::take(&mut one.listed).into_iter().map(without_revisions).collect::<Vec<_>>(), listed);
+    let (workspace, levels): (Vec<_>, Vec<_>) = std::mem::take(&mut one.listed)
+        .into_iter()
+        .map(without_revisions)
+        .partition(|listed| matches!(listed, Listed::Workspace(_)));
+    assert_eq!(levels, listed);
+    let none = WorkspaceObservations { workspace_id: "w".into(), observations: Vec::new(), rev: Rev::default() };
+    assert_eq!(workspace, [Listed::Workspace(none)]);
     assert_eq!(one, four);
     let session_record_at_hub_level = one_sent
         .iter()

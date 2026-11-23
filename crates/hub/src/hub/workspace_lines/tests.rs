@@ -16,11 +16,21 @@ use crate::hub::tests::{archived, hub_with_worktree, serving};
 use crate::store::now_ms;
 use crate::worker_link::{Answer, WorkerLink};
 
-/// What a worker answers of a worktree whose one changed file adds `added` lines and removes `removed`.
-fn summary(added: u64, removed: u64) -> WorkerResponse {
+/// A summary of a worktree whose one changed file adds `added` lines and removes `removed`.
+fn changes(added: u64, removed: u64) -> ChangeSummary {
     let lines = Some(LineCounts { added, removed });
     let file = ChangedFile { path: "a.rs".into(), from: None, status: ChangeStatus::Modified, lines, version: None };
-    WorkerResponse::ChangeSummary(ChangeSummary::new("base".into(), vec![file]))
+    ChangeSummary::new("base".into(), vec![file])
+}
+
+/// What a worker answers of a worktree whose one changed file adds `added` lines and removes `removed`.
+fn summary(added: u64, removed: u64) -> WorkerResponse {
+    WorkerResponse::ChangeSummary(changes(added, removed))
+}
+
+/// Every observation the hub holds at the workspace's own level.
+async fn of_its_own_level(hub: &Hub, id: &WorkspaceId) -> Vec<Observation> {
+    hub.workspace_observations(id).await.unwrap().observations
 }
 
 /// What a stand-in answers when asked to sum up its worktree's changes, as [`answering_first`] has it.
@@ -65,9 +75,10 @@ fn summing_up_asked(request: &WorkerRequest) -> Option<SummarizeChanges> {
 }
 
 /// A turn that ends tells every client that follows the hub how many lines the workspace adds and removes, as of the
-/// read, though no client has the workspace open, and has it listed for one that connects after.
+/// read, though no client has the workspace open, and has it listed for one that connects after. The files it changes
+/// are kept from the same read at the workspace's own level, and listed only there.
 #[tokio::test]
-async fn a_turn_that_ends_has_every_client_sent_its_workspace_s_lines() {
+async fn a_turn_that_ends_keeps_its_workspace_s_lines_for_every_client_and_its_files_at_its_own_level() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (workspace, chat) = a_chat(&hub).await;
@@ -83,13 +94,41 @@ async fn a_turn_that_ends_has_every_client_sent_its_workspace_s_lines() {
     };
     assert_eq!((workspace_id, *value), (&workspace.id, LineCounts { added: 3, removed: 1 }));
     assert!((before..=now_ms()).contains(as_of_ms), "read at {as_of_ms}, after {before}");
+    let ObservationNotice::Copy(files) = next_observation(&mut feed).await else { panic!("not a copy") };
+    let read_then = Observed::AsOf { value: changes(3, 1), as_of_ms: *as_of_ms };
+    let kept =
+        Observation::WorkspaceChanges { workspace_id: workspace.id.clone(), changes: read_then, rev: files.rev() };
+    assert_eq!(files, kept, "as of the same read");
     assert_eq!(hub.records_list().await.unwrap().observations, [told]);
+    assert_eq!(of_its_own_level(&hub, &workspace.id).await, [files]);
     let path = workspace.path.clone().unwrap();
     let wanted = SummarizeChanges { path, base_ref: workspace.base_ref.clone() };
     assert_eq!(asked.requests(summing_up_asked), [wanted]);
 }
 
-/// A worker from before the request refuses it, which leaves the lines not known and tells clients nothing.
+/// Archiving a workspace forgets the files it changes, which no pane draws once its worktree is gone, and keeps its
+/// lines, which the sidebar draws, as does a read that lands once it's archived.
+#[tokio::test]
+async fn an_archived_workspace_keeps_its_lines_and_forgets_its_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, asked) = hub_with_stand_in_workers(dir.path());
+    let (workspace, chat) = a_chat(&hub).await;
+    answering_first(&hub, &workspace.id, &asked, summing_up(|| Ok(summary(3, 1))));
+    a_turn(&hub, &asked, &chat.id, Prompt::new("Change a.rs"), None).await;
+    waiting::task::until(TIMEOUT, "the worker to be asked", || !asked.requests(summing_up_asked).is_empty()).await;
+    read(&hub, &workspace.id).await;
+    let lines = hub.records_list().await.unwrap().observations;
+
+    hub.workspace_archive(workspace.id.clone(), true).await.unwrap();
+
+    assert_eq!(of_its_own_level(&hub, &workspace.id).await, []);
+    assert_eq!(hub.records_list().await.unwrap().observations, lines, "the lines kept");
+    hub.changes_read(&workspace.id, changes(4, 0), now_ms()).await;
+    assert_eq!(of_its_own_level(&hub, &workspace.id).await, [], "a read that lands after");
+    assert_eq!(hub.records_list().await.unwrap().observations.len(), 1);
+}
+
+/// A worker from before the request refuses it, which leaves the lines and files not known and tells clients nothing.
 #[tokio::test]
 async fn a_worker_from_before_the_request_leaves_the_lines_not_known() {
     let dir = tempfile::tempdir().unwrap();
@@ -105,28 +144,38 @@ async fn a_worker_from_before_the_request_leaves_the_lines_not_known() {
 
     assert_eq!(observations_told(&mut feed), []);
     assert_eq!(hub.records_list().await.unwrap().observations, []);
+    assert_eq!(of_its_own_level(&hub, &workspace.id).await, []);
 }
 
-/// Once a workspace is removed, as one that couldn't be made is, the feed says its lines are gone.
+/// Once a workspace is removed, as one that couldn't be made is, the feed says its lines and its files are gone.
 #[tokio::test]
-async fn a_workspace_removed_has_its_lines_gone() {
+async fn a_workspace_removed_has_its_lines_and_files_gone() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let workspace = hub.workspace_create("r".into(), None, None, None).await.unwrap();
     answering_first(&hub, &workspace.id, &asked, summing_up(|| Ok(summary(3, 1))));
     let mut feed = hub.subscribe_feed();
     hub.read_lines(&workspace.id, &hub.existing_worker(&workspace.id).unwrap());
-    let ObservationNotice::Copy(read) = next_observation(&mut feed).await else { panic!("not a copy") };
+    let _lines = next_observation(&mut feed).await;
+    let ObservationNotice::Copy(files) = next_observation(&mut feed).await else { panic!("not a copy") };
 
     let provider = hub.provider(&workspace.provider).unwrap();
     hub.discard_workspace(&workspace, provider.as_ref()).await;
 
-    let ObservationNotice::Removed { observation, rev } = next_observation(&mut feed).await else {
-        panic!("not a removal")
+    let removed = [next_observation(&mut feed).await, next_observation(&mut feed).await];
+    let [
+        ObservationNotice::Removed { observation: lines, rev },
+        ObservationNotice::Removed { observation: changes, .. },
+    ] = removed
+    else {
+        panic!("not two removals: {removed:?}")
     };
-    assert_eq!(observation, ObservationKey::WorkspaceLines { workspace_id: workspace.id });
-    assert!(rev > read.rev());
+    let id = workspace.id;
+    assert_eq!(lines, ObservationKey::WorkspaceLines { workspace_id: id.clone() });
+    assert_eq!(changes, ObservationKey::WorkspaceChanges { workspace_id: id.clone() });
+    assert!(rev > files.rev());
     assert_eq!(hub.records_list().await.unwrap().observations, []);
+    assert_eq!(of_its_own_level(&hub, &id).await, []);
 }
 
 /// What the worker says of its branches, which it says first as the hub takes it on, has the lines read, so a workspace
@@ -193,11 +242,12 @@ async fn what_says_the_lines_changed_during_a_read_has_them_read_once_more_after
     read(&hub, &id).await;
 
     assert_eq!(summed_up(&requests).len(), 2);
-    let told = observations_told(&mut feed);
-    let [.., ObservationNotice::Copy(Observation::WorkspaceLines { lines: Observed::AsOf { value, .. }, .. })] =
-        told.as_slice()
-    else {
-        panic!("not the lines: {told:?}")
-    };
-    assert_eq!(*value, LineCounts { added: 5, removed: 2 });
+    let lines = observations_told(&mut feed).into_iter().rev().find_map(|told| {
+        let ObservationNotice::Copy(Observation::WorkspaceLines { lines: Observed::AsOf { value, .. }, .. }) = told
+        else {
+            return None;
+        };
+        Some(value)
+    });
+    assert_eq!(lines, Some(LineCounts { added: 5, removed: 2 }));
 }

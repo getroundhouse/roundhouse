@@ -1,4 +1,3 @@
-use super::super::observations::WorkspaceLines;
 use super::super::ready::ReadyWorkspace;
 use super::super::{Hub, new_id};
 use super::naming;
@@ -209,9 +208,7 @@ impl Hub {
             Ok(None) => {}
             Err(e) => return error!(%id, "removing a failed workspace: {e}"),
         }
-        if let Err(e) = self.observation_gone::<WorkspaceLines>(id.clone()).await {
-            warn!(%id, "forgetting the lines of a failed workspace: {}", e.message);
-        }
+        self.workspace_observations_gone(id).await;
     }
 
     pub(crate) async fn repo_of(&self, workspace: &Workspace) -> Result<Repo, ApiError> {

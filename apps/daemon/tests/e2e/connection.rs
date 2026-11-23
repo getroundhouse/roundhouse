@@ -2,50 +2,17 @@
 
 #![cfg(test)]
 
-use std::io::{BufRead as _, BufReader, Write as _};
-use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Instant;
 
 use client_core::{Client, ClientError, Ended, HubAdmin};
-use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, Request};
+use protocol::client::{ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, Request};
 use protocol::event::EventBody;
 use protocol::model::Seq;
 
-use crate::support::{Follower, Stack, TIMEOUT, assert_gapless, terminate, wait_for_turn_end, wait_until};
-
-/// A connection that sends frames as written here, for what `Client` has no way to send.
-struct RawConnection {
-    socket: UnixStream,
-    replies: BufReader<UnixStream>,
-}
-
-impl RawConnection {
-    fn open(stack: &Stack) -> Self {
-        let socket = UnixStream::connect(stack.socket()).unwrap();
-        socket.set_read_timeout(Some(TIMEOUT)).unwrap();
-        let replies = BufReader::new(socket.try_clone().unwrap());
-        Self { socket, replies }
-    }
-
-    fn ask(&mut self, id: u64, request: &str) -> ReplyOutcome {
-        self.ask_unless_closed(id, request)
-            .unwrap_or_else(|| panic!("the hub closed the connection before replying to {id}"))
-    }
-
-    /// `None` if the hub closes the connection before it replies.
-    fn ask_unless_closed(&mut self, id: u64, request: &str) -> Option<ReplyOutcome> {
-        writeln!(self.socket, r#"{{"id":{id},"request":{request}}}"#).unwrap();
-        let mut line = String::new();
-        if self.replies.read_line(&mut line).unwrap() == 0 {
-            return None;
-        }
-        match protocol::frame::decode(line.as_bytes()).unwrap() {
-            HubFrame::Reply { id: answered, outcome } if answered == id => Some(outcome),
-            other => panic!("not the reply to {id}: {other:?}"),
-        }
-    }
-}
+use crate::support::{
+    Follower, RawConnection, Stack, TIMEOUT, assert_gapless, terminate, wait_for_turn_end, wait_until,
+};
 
 /// A request no hub knows, as from a client newer than it.
 struct FromANewerClient;

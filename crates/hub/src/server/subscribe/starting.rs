@@ -10,7 +10,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::Level;
 use tokio::sync::watch;
 
-use super::{hub_level, session_level};
+use super::{hub_level, session_level, workspace_level};
 use crate::hub::{Followed, Hub};
 use crate::server::Connection;
 use crate::server::subscribing::{self, taken, unsubscribe};
@@ -61,7 +61,7 @@ async fn start_one(
     if subscriptions.contains_key(&subscription_id) {
         return Err(taken(subscription_id));
     }
-    let task = feeding.map(|feeding| tokio::spawn(feeding).abort_handle());
+    let task = tokio::spawn(feeding).abort_handle();
     let subscription = subscribing::Subscription::new(hub, connection, subscription_id, [followed], task);
     subscriptions.insert(subscription_id, subscription.of_level(level));
     Ok(())
@@ -74,22 +74,22 @@ async fn feeding(
     connection: &Connection,
     subscription_id: u64,
     follow: Follow,
-) -> Result<(Followed, Option<Feeding>), ApiError> {
+) -> Result<(Followed, Feeding), ApiError> {
     let frames = connection.frames.clone();
     Ok(match follow {
-        Follow::Hub => (Followed::Hub, Some(hub_level::feeding(hub, subscription_id, frames).await?)),
+        Follow::Hub => (Followed::Hub, hub_level::feeding(hub, subscription_id, frames).await?),
         Follow::Workspace { id } => {
-            hub.workspace(&id).await?;
-            (Followed::Workspace(id), None)
+            let feeding = workspace_level::feeding(hub, id.clone(), subscription_id, frames).await?;
+            (Followed::Workspace(id), feeding)
         }
         Follow::Session { id, from } => {
             let feeding = session_level::feeding(hub, id.clone(), from, subscription_id, frames).await?;
-            (Followed::Session(id), Some(feeding))
+            (Followed::Session(id), feeding)
         }
         Follow::Terminal { id } => {
             let watcher = hub.terminal_watch(&id)?;
             let feeding = Watching { subscription_id, frames }.watch(watcher);
-            (Followed::Terminal(id), Some(Box::pin(feeding)))
+            (Followed::Terminal(id), Box::pin(feeding))
         }
         Follow::Reference { reference } => {
             let (shown, showing) =
@@ -100,7 +100,7 @@ async fn feeding(
                 let _shown = shown;
                 pump.await;
             };
-            (Followed::Reference(reference), Some(Box::pin(feeding)))
+            (Followed::Reference(reference), Box::pin(feeding))
         }
         Follow::Unknown => return Err(unknown("a level")),
     })

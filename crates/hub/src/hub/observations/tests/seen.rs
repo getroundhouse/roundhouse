@@ -1,7 +1,7 @@
 //! What the store's tests read observations as, and what they're told of them.
 
 use protocol::client::HubNotice;
-use protocol::model::{LineCounts, Observation, Observed, Rev};
+use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, LineCounts, Observation, Observed, Rev};
 use tokio::sync::broadcast;
 
 use crate::hub::Hub;
@@ -9,6 +9,13 @@ use crate::hub::Hub;
 /// Lines added and removed.
 pub(super) fn lines(added: u64, removed: u64) -> LineCounts {
     LineCounts { added, removed }
+}
+
+/// A summary of a worktree whose one changed file adds `added` lines and removes `removed`.
+pub(super) fn changes(added: u64, removed: u64) -> ChangeSummary {
+    let lines = Some(lines(added, removed));
+    let file = ChangedFile { path: "a.rs".into(), from: None, status: ChangeStatus::Modified, lines, version: None };
+    ChangeSummary::new("base".into(), vec![file])
 }
 
 /// The observation of `w`'s lines, saying `said`, at `rev`.

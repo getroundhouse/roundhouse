@@ -6,5 +6,6 @@ mod session_level;
 mod starting;
 #[cfg(test)]
 mod tests;
+mod workspace_level;
 
 pub(super) use starting::subscribe;

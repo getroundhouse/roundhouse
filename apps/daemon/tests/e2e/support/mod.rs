@@ -14,6 +14,8 @@ mod gate;
 pub(crate) mod gh;
 pub(crate) mod github;
 mod processes;
+mod raw;
+pub(crate) use raw::RawConnection;
 
 mod stack;
 pub(crate) use stack::{

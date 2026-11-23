@@ -27,7 +27,8 @@ impl Revised for Observation {
     fn key(&self) -> Option<ObservationKey> {
         match self {
             Observation::WorkspaceLines { .. } => Some(Observation::key(self)),
-            Observation::Unknown => None,
+            // Not drawn yet, so not kept.
+            Observation::WorkspaceChanges { .. } | Observation::Unknown => None,
         }
     }
 

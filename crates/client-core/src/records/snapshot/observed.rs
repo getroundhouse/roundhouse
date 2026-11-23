@@ -25,7 +25,7 @@ impl ObservationsListed {
                     listed.workspace_lines.insert(workspace_id.clone(), lines.clone());
                 }
                 // Never held, as `Revised` says.
-                Observation::Unknown => {}
+                Observation::WorkspaceChanges { .. } | Observation::Unknown => {}
             }
         }
         listed

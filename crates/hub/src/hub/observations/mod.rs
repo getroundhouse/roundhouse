@@ -7,9 +7,10 @@ mod changes;
 mod file;
 mod kept;
 mod kinds;
+mod levels;
 #[cfg(test)]
 mod tests;
 
 pub(crate) use file::prepare;
 pub(crate) use kept::Observations;
-pub(crate) use kinds::WorkspaceLines;
+pub(crate) use kinds::{WorkspaceChanges, WorkspaceLines};

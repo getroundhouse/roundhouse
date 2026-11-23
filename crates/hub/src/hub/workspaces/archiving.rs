@@ -44,7 +44,8 @@ impl Hub {
         self.record_archived(&id, branch).await
     }
 
-    /// Records that the workspace is archived, on `branch` if its worktree said which it was on, and announces it.
+    /// Records that the workspace is archived, on `branch` if its worktree said which it was on, announces it, and
+    /// forgets the files it changed, as [`Hub::changes_forgotten`] says.
     pub(super) async fn record_archived(
         &self,
         id: &WorkspaceId,
@@ -60,6 +61,7 @@ impl Hub {
             })
             .await?;
         self.notify(HubNotice::Workspace(workspace.clone()));
+        self.changes_forgotten(id).await;
         Ok(workspace)
     }
 
