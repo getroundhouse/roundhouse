@@ -34,7 +34,7 @@ pub(super) async fn feeding(
     Ok(Box::pin(async move {
         let observed = async {
             let Some(listed) = listed else { return std::future::pending().await };
-            if !send_listed(&frames, subscription_id, Listed::Reference(listed)).await {
+            if !send_listed(&frames, &sends, subscription_id, Listed::Reference(listed)).await {
                 return;
             }
             let list = || async { Ok(Listed::Reference(hub.reference_listed(&reference).await?)) };

@@ -278,6 +278,7 @@ impl Hub {
         }
         // After the workspace, so whoever's told has it as it's recorded now.
         self.keep_unseen(id, &read).await;
+        self.github_read_ended(id, read.is_err());
         let answer = match read {
             Ok(Found { read, .. }) => Answer::Read(read.pull_request),
             Err(unread) => Answer::Known(recorded.or(known), unread.error()),

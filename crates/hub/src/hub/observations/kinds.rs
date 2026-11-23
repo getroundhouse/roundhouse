@@ -4,7 +4,8 @@
 use std::hash::Hash;
 
 use protocol::model::{
-    ChangeSummary, LineCounts, Observation, ObservationKey, Observed, ReferenceAsk, ReferenceSaid, Rev, WorkspaceId,
+    ChangeSummary, LineCounts, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid,
+    ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, WorkspaceId,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -102,5 +103,71 @@ impl Kind for Referenced {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.referenced
+    }
+}
+
+/// How a workspace's pull request stands, with its summary and how the worktree stands against it, sent at the hub's
+/// level. Worked out from GitHub's cache and the workspace's record, as `crate::hub::github_observed` says.
+pub(crate) struct WorkspacePullRequest;
+
+impl Kind for WorkspacePullRequest {
+    type Of = WorkspaceId;
+    type Value = OwnPullRequestSaid;
+    const FORM: Form = Form { table: "workspace_pull_request", version: 1 };
+
+    fn observation(workspace_id: &WorkspaceId, pull_request: Observed<OwnPullRequestSaid>, rev: Rev) -> Observation {
+        Observation::WorkspacePullRequest { workspace_id: workspace_id.clone(), pull_request, rev }
+    }
+
+    fn key(workspace_id: &WorkspaceId) -> ObservationKey {
+        ObservationKey::WorkspacePullRequest { workspace_id: workspace_id.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.workspace_pull_request
+    }
+}
+
+/// A workspace's pull request's checks, history and stack, of the head they were read at, sent at the workspace's
+/// level. Worked out as [`WorkspacePullRequest`] is.
+pub(crate) struct WorkspacePullRequestDetail;
+
+impl Kind for WorkspacePullRequestDetail {
+    type Of = WorkspaceId;
+    type Value = OwnPullRequestDetail;
+    const FORM: Form = Form { table: "workspace_pull_request_detail", version: 1 };
+
+    fn observation(workspace_id: &WorkspaceId, detail: Observed<OwnPullRequestDetail>, rev: Rev) -> Observation {
+        Observation::WorkspacePullRequestDetail { workspace_id: workspace_id.clone(), detail, rev }
+    }
+
+    fn key(workspace_id: &WorkspaceId) -> ObservationKey {
+        ObservationKey::WorkspacePullRequestDetail { workspace_id: workspace_id.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.workspace_pull_request_detail
+    }
+}
+
+/// Whether GitHub showed the default GitHub account no repository where a workspace's branch's pull requests are, sent
+/// at the workspace's level. Worked out from what the hub last heard of it.
+pub(crate) struct WorkspaceRepositoryUnseen;
+
+impl Kind for WorkspaceRepositoryUnseen {
+    type Of = WorkspaceId;
+    type Value = Option<RepositoryUnseen>;
+    const FORM: Form = Form { table: "workspace_repository_unseen", version: 1 };
+
+    fn observation(workspace_id: &WorkspaceId, unseen: Observed<Option<RepositoryUnseen>>, rev: Rev) -> Observation {
+        Observation::WorkspaceRepositoryUnseen { workspace_id: workspace_id.clone(), unseen, rev }
+    }
+
+    fn key(workspace_id: &WorkspaceId) -> ObservationKey {
+        ObservationKey::WorkspaceRepositoryUnseen { workspace_id: workspace_id.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.workspace_repository_unseen
     }
 }

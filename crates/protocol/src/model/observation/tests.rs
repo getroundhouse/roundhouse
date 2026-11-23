@@ -1,4 +1,4 @@
-use super::{Observation, ObservationKey, Observed, ReferenceSaid};
+use super::{Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
 use crate::model::{ChangeSummary, GithubRepositoryName, IssueNumber, Level, LineCounts, ReferenceAsk, Rev};
 
 /// An observation of each kind, with the key and revision it's of, and the level it's sent at.
@@ -29,6 +29,36 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Option<Level>)> {
             ObservationKey::Reference { reference: reference.clone() },
             Rev::new(6),
             Some(Level::Reference { reference }),
+        ),
+        (
+            Observation::WorkspacePullRequest {
+                workspace_id: "w".into(),
+                pull_request: Observed::AsOf { value: OwnPullRequestSaid { pull_request: None }, as_of_ms: 1_000 },
+                rev: Rev::new(7),
+            },
+            ObservationKey::WorkspacePullRequest { workspace_id: "w".into() },
+            Rev::new(7),
+            Some(Level::Hub),
+        ),
+        (
+            Observation::WorkspacePullRequestDetail {
+                workspace_id: "w".into(),
+                detail: Observed::Current { value: OwnPullRequestDetail { pull_request: None } },
+                rev: Rev::new(8),
+            },
+            ObservationKey::WorkspacePullRequestDetail { workspace_id: "w".into() },
+            Rev::new(8),
+            Some(Level::Workspace { id: "w".into() }),
+        ),
+        (
+            Observation::WorkspaceRepositoryUnseen {
+                workspace_id: "w".into(),
+                unseen: Observed::Current { value: None },
+                rev: Rev::new(9),
+            },
+            ObservationKey::WorkspaceRepositoryUnseen { workspace_id: "w".into() },
+            Rev::new(9),
+            Some(Level::Workspace { id: "w".into() }),
         ),
         (Observation::Unknown, ObservationKey::Unknown, Rev::default(), None),
     ]

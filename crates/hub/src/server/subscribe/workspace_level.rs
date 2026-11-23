@@ -29,7 +29,7 @@ pub(super) async fn feeding(
     // Before the list, so nothing that changes after it is missed.
     let feed = hub.subscribe_feed();
     let listed = hub.workspace_observations(&id).await?;
-    let connected = send_listed(&frames, subscription_id, Listed::Workspace(listed)).await;
+    let connected = send_listed(&frames, &sends, subscription_id, Listed::Workspace(listed)).await;
     let hub = hub.clone();
     Ok(Box::pin(async move {
         if !connected {

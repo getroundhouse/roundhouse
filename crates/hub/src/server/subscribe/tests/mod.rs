@@ -7,3 +7,4 @@ mod github;
 mod given;
 mod observations;
 mod rules;
+mod workspace_github;

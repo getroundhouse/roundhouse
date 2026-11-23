@@ -10,7 +10,10 @@ use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
 use super::file::{self, Row};
-use super::kinds::{Form, Kind, Referenced, WorkspaceChanges, WorkspaceLines};
+use super::kinds::{
+    Form, Kind, Referenced, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail,
+    WorkspaceRepositoryUnseen,
+};
 use crate::cache_file::CacheFile;
 use crate::store::Store;
 
@@ -30,6 +33,9 @@ pub(crate) struct Tables {
     pub(super) workspace_lines: Table<WorkspaceLines>,
     pub(super) workspace_changes: Table<WorkspaceChanges>,
     pub(super) referenced: Table<Referenced>,
+    pub(super) workspace_pull_request: Table<WorkspacePullRequest>,
+    pub(super) workspace_pull_request_detail: Table<WorkspacePullRequestDetail>,
+    pub(super) workspace_repository_unseen: Table<WorkspaceRepositoryUnseen>,
 }
 
 /// What's kept of one kind of observation.
@@ -230,9 +236,23 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    fn each(&mut self) -> [&mut dyn AnyTable; 3] {
-        let Tables { workspace_lines, workspace_changes, referenced } = self;
-        [workspace_lines, workspace_changes, referenced]
+    fn each(&mut self) -> [&mut dyn AnyTable; 6] {
+        let Tables {
+            workspace_lines,
+            workspace_changes,
+            referenced,
+            workspace_pull_request,
+            workspace_pull_request_detail,
+            workspace_repository_unseen,
+        } = self;
+        [
+            workspace_lines,
+            workspace_changes,
+            referenced,
+            workspace_pull_request,
+            workspace_pull_request_detail,
+            workspace_repository_unseen,
+        ]
     }
 
     /// Every observation sent at `level`, of every kind.
@@ -287,6 +307,11 @@ impl Observations {
         let _changing = self.changing.lock().await;
         let rev = rev_now.await?;
         Ok((self.tables.lock().listed(level), rev))
+    }
+
+    /// Whether the store keeps an observation of kind `K` of `of`.
+    pub(crate) fn keeps<K: Kind>(&self, of: &K::Of) -> bool {
+        K::table(&mut self.tables.lock()).kept.contains_key(of)
     }
 
     /// What each observation of kind `K` the store keeps is of.

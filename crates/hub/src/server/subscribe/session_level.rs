@@ -42,7 +42,7 @@ pub(super) async fn feeding(
     let hub = hub.clone();
     Ok(Box::pin(async move {
         // First, so a chat has them before the events that draw them.
-        if !send_listed(&frames, subscription_id, Listed::Session(records)).await {
+        if !send_listed(&frames, &sends, subscription_id, Listed::Session(records)).await {
             return;
         }
         let list = || async { Ok(Listed::Session(hub.session_records(id.clone()).await?)) };

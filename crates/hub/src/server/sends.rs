@@ -5,7 +5,8 @@
 //! subscription, so what decides which clients still read the old form changes in one place.
 
 use protocol::client::HubNotice;
-use protocol::model::{Level, ObservationKey};
+use protocol::client::listed::{Listed, ReferenceObservations, WorkspaceObservations};
+use protocol::model::{Level, Observation, ObservationKey, Records};
 
 /// What one subscription is sent of the feed.
 #[derive(Clone, Debug)]
@@ -44,6 +45,31 @@ impl Sends {
             Of::Feed => !matches!(notice.level(), Some(Level::Workspace { .. })),
         };
         of && self.forms.sends(notice)
+    }
+
+    /// `listed`, a list of where a level stands, as it's sent: with only the observations of a form it reads.
+    pub(super) fn listed(&self, listed: Listed) -> Listed {
+        match listed {
+            Listed::Hub(records) => Listed::Hub(Box::new(self.records(*records))),
+            Listed::Workspace(WorkspaceObservations { workspace_id, observations, rev }) => {
+                Listed::Workspace(WorkspaceObservations { workspace_id, observations: self.kept(observations), rev })
+            }
+            Listed::Reference(ReferenceObservations { reference, observations, rev }) => {
+                Listed::Reference(ReferenceObservations { reference, observations: self.kept(observations), rev })
+            }
+            listed @ (Listed::Session(_) | Listed::Unknown) => listed,
+        }
+    }
+
+    /// Every record, as `RecordsList` and the hub's level list them, as it's sent: with only the observations of a
+    /// form it reads.
+    pub(super) fn records(&self, records: Records) -> Records {
+        Records { observations: self.kept(records.observations), ..records }
+    }
+
+    /// Those of `observations` of a form it reads.
+    fn kept(&self, observations: Vec<Observation>) -> Vec<Observation> {
+        observations.into_iter().filter(|observation| self.forms.keeps(&observation.key())).collect()
     }
 
     /// The forms of what GitHub says it's sent, for what sends it more than the feed's notices.
@@ -95,7 +121,12 @@ impl GithubForms {
             HubNotice::ObservationRemoved { observation, .. } => observation.clone(),
             _ => return true,
         };
-        self.observations || !githubs(&key)
+        self.keeps(&key)
+    }
+
+    /// Whether a subscription sent these forms is sent the observation `key`.
+    fn keeps(self, key: &ObservationKey) -> bool {
+        self.observations || !githubs(key)
     }
 }
 
@@ -103,16 +134,20 @@ impl GithubForms {
 /// sent them in place of `HubFrame::Github`.
 fn observed_at(level: &Level) -> bool {
     match level {
-        Level::Reference { .. } => true,
-        // The hub's level sends each workspace's pull request as `HubFrame::Github` alone, with its checks.
-        Level::Hub | Level::Workspace { .. } | Level::Session { .. } | Level::Terminal { .. } | Level::Unknown => false,
+        // The hub's level and a workspace's together, since `HubFrame::Github` sends a workspace's pull request at the
+        // hub's level with its checks, which observations send at the workspace's.
+        Level::Hub | Level::Workspace { .. } | Level::Reference { .. } => true,
+        Level::Session { .. } | Level::Terminal { .. } | Level::Unknown => false,
     }
 }
 
 /// Whether `key` is of what GitHub says, which a client from before observations is sent as `HubFrame::Github`.
 fn githubs(key: &ObservationKey) -> bool {
     match key {
-        ObservationKey::Reference { .. } => true,
+        ObservationKey::WorkspacePullRequest { .. }
+        | ObservationKey::WorkspacePullRequestDetail { .. }
+        | ObservationKey::WorkspaceRepositoryUnseen { .. }
+        | ObservationKey::Reference { .. } => true,
         ObservationKey::WorkspaceLines { .. } | ObservationKey::WorkspaceChanges { .. } | ObservationKey::Unknown => {
             false
         }

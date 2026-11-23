@@ -39,10 +39,13 @@ pub struct Subscription {
     pub subscription_id: u64,
     #[serde(flatten)]
     pub follow: Follow,
-    /// Whether the client reads what GitHub says as observations. At a level where the hub sends every kind of it as
-    /// one, which is an issue's or a pull request's, the hub sends them in place of `HubFrame::Github`. Where it's
-    /// false, as every client from before it sends, and at every other level, the hub sends `HubFrame::Github` as
-    /// [`Follow`] says, and none of GitHub's observations. A hub from before it ignores it.
+    /// Whether the client reads what GitHub says as observations: at the hub's level, how each workspace's pull request
+    /// stands, at a workspace's, its pull request's checks, history and stack and whether GitHub showed its repository,
+    /// and at an issue's or a pull request's, what a chip draws. The hub sends them in place of `HubFrame::Github`.
+    /// Where it's false, as every client from before it sends, the hub sends `HubFrame::Github` as [`Follow`] says, and
+    /// none of GitHub's observations in any list or notice. A hub from before it ignores it, and a hub from before it
+    /// sent a workspace's pull request as observations sends `HubFrame::Github` at the hub's level, and nothing of
+    /// GitHub's at a workspace's.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub github_observed: bool,
 }
@@ -59,12 +62,15 @@ impl Subscription {
 #[serde(tag = "level", rename_all = "snake_case")]
 pub enum Follow {
     /// Sends a [`Listed::Hub`](super::listed::Listed::Hub), then every notice the feed sends at the hub's level, as
-    /// [`HubNotice::level`](super::HubNotice::level) says. And, until what GitHub says is sent as observations, a
-    /// `HubFrame::Github` for each workspace's own pull request, then again as it changes, as a
-    /// [`GithubSubscribe`](super::github::GithubSubscribe) that showed every workspace would be sent.
+    /// [`HubNotice::level`](super::HubNotice::level) says, with how each workspace's own pull request stands among its
+    /// observations, to a start that reads GitHub so, as [`Subscription::github_observed`] says. To any other, every
+    /// one of those but GitHub's, and a `HubFrame::Github` for each workspace's own pull request, then again as it
+    /// changes, as a [`GithubSubscribe`](super::github::GithubSubscribe) that showed every workspace would be sent.
     Hub,
     /// Sends a [`Listed::Workspace`](super::listed::Listed::Workspace), queued before the reply to the `Subscribe`
-    /// that starts it, then every notice the feed sends at the workspace's level. And has the hub read the workspace's
+    /// that starts it, then every notice the feed sends at the workspace's level, its pull request's checks, history and
+    /// stack among them only to a start that reads GitHub so, as [`Subscription::github_observed`] says. And has the
+    /// hub read the workspace's
     /// pull request at once, and then as often as one shown in full is read, as a `GithubSubscribe` that shows it
     /// `closely` does.
     Workspace { id: WorkspaceId },
