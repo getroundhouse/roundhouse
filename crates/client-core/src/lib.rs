@@ -11,8 +11,8 @@
 //! own, so a view only reads them, and [`OpenTerminal`] keeps a copy of what a terminal shows the
 //! same way, for a view to draw. [`RecordsFeed`] also takes in the record a call's reply carries, before the call
 //! returns. [`Approval`] says what an approval asks, and how to answer it, however old its request, [`calls`] what each
-//! tool call in a session's history is, and [`refusals`] what the hub not doing what was asked means, each the same for
-//! every client.
+//! tool call in a session's history is, [`refusals`] what the hub not doing what was asked means, and [`workspace_order`]
+//! the orders workspaces can be listed in, each the same for every client.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
@@ -30,6 +30,7 @@ pub mod session_log;
 pub mod standing;
 pub mod waits;
 pub mod workspace_lines;
+pub mod workspace_order;
 
 mod agents;
 mod approval;

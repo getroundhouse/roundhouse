@@ -5,7 +5,7 @@ use protocol::model::RepoId;
 
 use super::{AppView, Connection};
 use crate::home::{ArchiveFilter, Home};
-use crate::workspace_order::Sort;
+use client_core::workspace_order::Sort;
 
 /// What shows beside the sidebar, while Settings doesn't fill the window.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]

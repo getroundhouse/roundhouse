@@ -6,7 +6,8 @@
 
 use gpui_kit::{ElementId, TestAppContext};
 use mobile::Vault as _;
-use protocol::model::WorkspaceStatus;
+use protocol::capability::settings::Settings;
+use protocol::model::{AgentKind, Workspace, WorkspaceStatus};
 
 use crate::support::{Phone, Stack};
 
@@ -77,6 +78,24 @@ fn starts_a_workspace_and_opens_its_chat(cx: &mut TestAppContext) {
     assert_eq!(stack.client().workspace_list(false).unwrap().len(), 1);
     phone.send("say:started from the phone");
     phone.wait("the agent's answer", |phone| phone.assistant_text().contains("started from the phone"));
+}
+
+/// A repository's workspaces are listed last active first, as the desktop's sidebar lists them unless told otherwise,
+/// so making a chat in the older one puts it on top.
+#[gpui_kit::test]
+fn lists_a_repositorys_workspaces_last_active_first(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (client, repo) = (stack.client(), stack.add_repo());
+    let older = client.workspace_create(&repo.id, None, None, None).unwrap();
+    let newer = client.workspace_create(&repo.id, None, None, None).unwrap();
+    let mut phone = Phone::paired(cx, &stack);
+    let row = |workspace: &Workspace| ElementId::Name(format!("workspace-{}", workspace.id).into());
+    phone.wait("both workspaces", |phone| phone.has(row(&older)) && phone.has(row(&newer)));
+
+    client.session_create(&older.id, AgentKind::Claude, Settings::default(), None).unwrap();
+
+    let top = |phone: &mut Phone, workspace| phone.bounds(row(workspace)).origin.y;
+    phone.wait("the older one on top", |phone| top(phone, &older) < top(phone, &newer));
 }
 
 /// A hub the phone couldn't forget would be followed again as the app next starts, so the phone stays with it until it

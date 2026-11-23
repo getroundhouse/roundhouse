@@ -4,7 +4,7 @@
 mod bar;
 
 #[cfg(test)]
-use crate::workspace_order::Sort;
+use client_core::workspace_order::Sort;
 
 #[cfg(test)]
 mod tests;

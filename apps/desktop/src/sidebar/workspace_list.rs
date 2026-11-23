@@ -3,7 +3,7 @@ use crate::app::TOP_STRIP;
 use crate::app::{AppView, Connection};
 use crate::reorder;
 use crate::settings::Settings;
-use crate::workspace_order::Sort;
+use client_core::workspace_order::Sort;
 use fold::{Drawn, Fold, Laid};
 use gpui_kit::component::{Icon, IconNamed, v_flex};
 use gpui_kit::{
