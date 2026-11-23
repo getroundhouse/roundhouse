@@ -1,47 +1,14 @@
-//! Linking a project to its repository on GitHub, against a stand-in for GitHub, and what the link gives the rest of
-//! the hub: which repository on GitHub it is, its pull requests, and what a machine of its own clones.
+//! Linking a project by its checkout's `origin`: which repository on GitHub it is, its pull requests, and what a
+//! machine of its own clones.
 
-use std::sync::Arc;
-
-use github::{PullRequestState, PullRequests, Repositories, Script, StandIn};
+use github::PullRequestState;
 use protocol::client::ErrorCode;
-use protocol::model::{
-    AddressForm, GithubRepositoryName, GithubRepositorySaid, Linking, ProviderName, Repo, RepoLink, RepoUrl, Unlinked,
-};
+use protocol::model::{AddressForm, GithubRepositorySaid, Linking, ProviderName, Repo, RepoLink, Unlinked};
 
-use super::using::github_clone;
+use super::super::using::github_clone;
+use super::{hub_reading, named, repo, url};
 use crate::hub::Hub;
-use crate::hub::tests::{hub_calling_github, pushed, reading_as_ada};
-
-fn url(url: &str) -> RepoUrl {
-    RepoUrl::try_from(url.to_owned()).unwrap()
-}
-
-fn named(repository: &str) -> GithubRepositoryName {
-    GithubRepositoryName::try_from(repository.to_owned()).unwrap()
-}
-
-/// A hub calling a stand-in for GitHub that has `repositories` and the pull requests of example/project, with `w` on
-/// `branch`, pushed to origin's `branch` at example/project, and the checkout of its repository, `r`, fetching from
-/// `address`, as a worker read it, with no link yet.
-async fn hub_reading(dir: &std::path::Path, address: &str) -> (Arc<Hub>, Repositories, PullRequests, StandIn) {
-    let (repositories, pull_requests) = (Repositories::default(), PullRequests::default());
-    let script = Script {
-        repositories: Some(repositories.clone()),
-        pull_requests: Some(pull_requests.clone()),
-        ..Script::default()
-    };
-    let github = StandIn::with(script).await;
-    let hub = hub_calling_github(dir, github.api());
-    hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
-    hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
-    hub.store.read_repo_url(&"r".into(), "/repo", Some(&url(address))).unwrap();
-    (hub, repositories, pull_requests, github)
-}
-
-fn repo(hub: &Hub) -> Repo {
-    hub.store.get_repo(&"r".into()).unwrap()
-}
+use crate::hub::tests::reading_as_ada;
 
 /// The link is GitHub's ID for the repository, so once it's renamed on GitHub, the project's pull requests are read by
 /// its new name, and a workspace on a machine of its own clones it there. The link itself doesn't change, and nor does

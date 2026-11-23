@@ -273,6 +273,8 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         | R::HubShutdownIfIdle
         | R::HubConfigure(_)
         | R::RepoAdd(_)
+        | R::RepoAddLinked(_)
+        | R::GithubRepositoryList(_)
         | R::WorkspaceArchive(_)
         | R::WorkspaceRestore(_)
         | R::WorkspaceRename(_)

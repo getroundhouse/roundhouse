@@ -54,4 +54,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Rust(super::waits::pull_requests_as_facets),
     // Each repository's link to its repository on a host, and why one isn't linked, in `repos`.
     Rust(super::repos::links),
+    // A repository's checkout may be none, for one added by its link alone, in `repos`.
+    Rust(super::repos::without_checkouts),
 ];

@@ -75,6 +75,46 @@ impl Store {
     }
 }
 
+impl Store {
+    /// Adds the repository `name`, with no checkout on the hub's machine, linked by `link`, found by `url`, the address
+    /// a person typed or GitHub's for one they picked, and returns its record. Adding one already linked the same way,
+    /// to the same repository on GitHub, or by the same address on another host, with no checkout, returns the first
+    /// record, unchanged.
+    pub fn add_linked_repo(
+        &self,
+        id: &RepoId,
+        name: &str,
+        url: &RepoUrl,
+        link: &RepoLink,
+        created_at_ms: i64,
+    ) -> Result<Repo, StoreError> {
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction()?;
+        let select = format!("SELECT {} FROM repos WHERE path IS NULL", RepoColumns::LIST);
+        let held = tx.prepare(&select)?.query_map([], repo_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?;
+        if let Some(held) = held.into_iter().find(|held| held.link.link().is_some_and(|held| same(held, link))) {
+            return Ok(held);
+        }
+        tx.execute(
+            "INSERT INTO repos (id, name, path, url, url_to_read, link, created_at_ms) VALUES (?, ?, NULL, ?, 0, ?, ?)",
+            params![id.as_str(), name, url.as_str(), serde_json::to_string(link)?, created_at_ms],
+        )?;
+        let select = format!("SELECT {} FROM repos WHERE id = ?", RepoColumns::LIST);
+        let repo = tx.query_row(&select, [id.as_str()], repo_from_row)?;
+        tx.commit()?;
+        Ok(repo)
+    }
+}
+
+/// Whether `held` and `link` link to the same repository, which for GitHub is its ID, however it was found.
+fn same(held: &RepoLink, link: &RepoLink) -> bool {
+    match (held, link) {
+        (RepoLink::Github { id: held, .. }, RepoLink::Github { id, .. }) => held == id,
+        (RepoLink::Plain { url: held }, RepoLink::Plain { url }) => held == url,
+        (RepoLink::Github { .. } | RepoLink::Plain { .. } | RepoLink::Unknown, _) => false,
+    }
+}
+
 /// The record of `id`, when `changed` rows say it changed.
 fn changed_repo(conn: &rusqlite::Connection, id: &RepoId, changed: usize) -> Result<Option<Repo>, StoreError> {
     if changed == 0 {

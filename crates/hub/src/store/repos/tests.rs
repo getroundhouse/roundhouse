@@ -126,3 +126,25 @@ fn a_repository_from_before_links_is_linked_by_an_address_elsewhere_and_left_to_
     let to_link: Vec<_> = store.repos_to_link().unwrap().into_iter().map(|repo| repo.id.to_string()).collect();
     assert_eq!(to_link, ["g"]);
 }
+
+/// Two repositories added by their links, with no checkout each, sit beside a checkout's, and adding one again by the
+/// same link, however it was found, returns it.
+#[test]
+fn repositories_with_no_checkout_are_added_once_for_each_link() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_in(dir.path());
+    added(&store);
+    let gitlab = RepoUrl::try_from("https://gitlab.com/ada/tools.git".to_owned()).unwrap();
+    let github = RepoLink::Github { id: "R_roundhouse".into(), by: AddressForm::Https };
+    let by_ssh = RepoLink::Github { id: "R_roundhouse".into(), by: AddressForm::Ssh };
+
+    let on_github = store.add_linked_repo(&"g".into(), "roundhouse", &roundhouse(), &github, 1).unwrap();
+    let plain = store.add_linked_repo(&"p".into(), "tools", &gitlab, &RepoLink::Plain { url: gitlab.clone() }, 2);
+    let again = store.add_linked_repo(&"g2".into(), "roundhouse", &gitlab, &by_ssh, 3).unwrap();
+
+    assert_eq!(on_github.origin, RepoOrigin::Remote { url: roundhouse() });
+    assert_eq!(plain.unwrap().origin, RepoOrigin::Remote { url: gitlab });
+    assert_eq!(again, on_github);
+    assert_eq!(store.list_repos().unwrap().len(), 3);
+    assert_eq!(to_read(&store), ["r"], "no address of theirs is to be read");
+}

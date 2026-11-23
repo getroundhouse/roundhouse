@@ -17,6 +17,7 @@ pub mod files;
 pub mod github;
 pub mod github_accounts;
 pub mod github_apps;
+pub mod github_repositories;
 mod hello;
 pub mod listed;
 pub mod log;

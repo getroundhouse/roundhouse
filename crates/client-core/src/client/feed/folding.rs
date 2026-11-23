@@ -84,6 +84,7 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         ClientResponse::Terminal(terminal) => vec![Record::Terminal(terminal.clone())],
         ClientResponse::Proposal(proposal) => vec![Record::Proposal(proposal.clone())],
         ClientResponse::Repos(_)
+        | ClientResponse::GithubRepositories(_)
         | ClientResponse::Records(_)
         | ClientResponse::Workspaces(_)
         | ClientResponse::Comments(_)
