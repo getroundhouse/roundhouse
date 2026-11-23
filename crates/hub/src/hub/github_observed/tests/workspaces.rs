@@ -22,14 +22,14 @@ use crate::hub::{Followed, Hub};
 const WAIT: Duration = Duration::from_secs(10);
 
 /// A hub on GitHub's stand-in, working out what's sent of GitHub as it serves, with what answers for pull requests.
-async fn observing(dir: &std::path::Path) -> (Arc<Hub>, PullRequests, StandIn) {
+pub(super) async fn observing(dir: &std::path::Path) -> (Arc<Hub>, PullRequests, StandIn) {
     let (hub, pull_requests, github) = hub_on_github(dir).await;
     tokio::spawn(hub.clone().observe_github());
     (hub, pull_requests, github)
 }
 
 /// The next notice the feed tells of an observation of `w` that `of` picks out.
-async fn next<T>(
+pub(super) async fn next<T>(
     feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
     of: impl Fn(ObservationNotice) -> Option<T>,
 ) -> T {
@@ -46,11 +46,17 @@ async fn next<T>(
 }
 
 /// A copy of how `w`'s pull request stands, as it says it, with its revision.
-fn summary(notice: ObservationNotice) -> Option<(Observed<OwnPullRequestSaid>, u64)> {
+pub(super) fn summary(notice: ObservationNotice) -> Option<(Observed<OwnPullRequestSaid>, u64)> {
     let ObservationNotice::Copy(Observation::WorkspacePullRequest { workspace_id, pull_request, rev }) = notice else {
         return None;
     };
     (workspace_id.as_str() == "w").then(|| (pull_request, rev.get()))
+}
+
+/// The same, once it's current, as it is only once the task hears that a read ended, which can be after what the read
+/// kept is worked out as of it.
+pub(super) fn current_summary(notice: ObservationNotice) -> Option<(Observed<OwnPullRequestSaid>, u64)> {
+    summary(notice).filter(|(said, _)| matches!(said, Observed::Current { .. }))
 }
 
 /// A copy of `w`'s pull request's detail, as it says it.
@@ -76,7 +82,7 @@ fn removed(notice: ObservationNotice) -> Option<ObservationKey> {
 }
 
 /// Where what's said of a pull request says it stands, and whether it's current.
-fn state(said: &Observed<OwnPullRequestSaid>) -> Option<(PrState, bool)> {
+pub(super) fn state(said: &Observed<OwnPullRequestSaid>) -> Option<(PrState, bool)> {
     let (value, current) = match said {
         Observed::Current { value } => (value, true),
         Observed::AsOf { value, .. } => (value, false),
@@ -109,9 +115,9 @@ async fn a_read_works_out_how_a_workspace_s_pull_request_stands_and_its_detail()
     assert_eq!(checks.checks.iter().map(|check| check.name.as_str()).collect::<Vec<_>>(), ["checks"]);
 }
 
-/// A workspace that something follows has its pull request read, and is current from that read, under a new revision
-/// each time GitHub says something else of it, and none when it says the same. A read that fails makes it as of the
-/// read before, until the next that doesn't, and once nothing follows it, it's as of its last read.
+/// A workspace that something follows has its pull request read, and is current once that read ends, under a new
+/// revision each time GitHub says something else of it, and none when it says the same. A read that fails makes it as
+/// of the read before, until the next that doesn't, and once nothing follows it, it's as of its last read.
 #[tokio::test]
 async fn a_followed_workspace_s_pull_request_is_current_from_its_read_until_a_read_fails_or_nothing_follows_it() {
     let dir = tempfile::tempdir().unwrap();
@@ -121,9 +127,9 @@ async fn a_followed_workspace_s_pull_request_is_current_from_its_read_until_a_re
 
     let following = hub.follow([Followed::Workspace("w".into())]);
 
-    let (first, first_rev) = next(&mut feed, summary).await;
+    let (first, first_rev) = next(&mut feed, current_summary).await;
     assert_eq!(state(&first), Some((PrState::Open, true)), "{first:?}");
-    assert!(matches!(next(&mut feed, detail).await, Observed::Current { .. }));
+    next(&mut feed, |notice| detail(notice).filter(|detail| matches!(detail, Observed::Current { .. }))).await;
 
     hub.workspace_pull_request("w".into()).await.unwrap();
     pull_requests.set(7, PullRequestState::Merged);
@@ -363,7 +369,7 @@ async fn a_pull_request_that_s_both_a_workspace_s_and_a_chip_s_is_read_once_and_
     pull_requests.set(7, PullRequestState::Open);
     let mut feed = hub.subscribe_feed();
     let _workspace = hub.follow([Followed::Workspace("w".into())]);
-    let (stands, _) = next(&mut feed, summary).await;
+    let (stands, _) = next(&mut feed, current_summary).await;
     let Observed::Current { value: OwnPullRequestSaid { pull_request: Some(workspace_s) } } = stands else {
         panic!("{stands:?}")
     };

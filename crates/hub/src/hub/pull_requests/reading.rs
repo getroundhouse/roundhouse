@@ -3,6 +3,7 @@ use super::own::{WaitsRead, WorkspaceRead};
 use super::recording::Found;
 use super::schedule;
 use super::token_limits::TokenLimits;
+use crate::hub::github_observed::{Heard, ReadWent};
 use crate::jobs;
 use crate::store::now_ms;
 use github::{Leaving, Unread};
@@ -213,6 +214,7 @@ impl Hub {
             Err(e) => asking.failed(&super::polling::no_login(&e)),
             Ok(reads_as) => {
                 if self.pull_requests.limits.allows(&reads_as, asked, now_ms()).is_err() {
+                    self.github_read_ended(id, ReadWent::HeldBack, Heard::Nothing);
                     return Ok(Answer::Known(known, limit_used_up()));
                 }
                 match self.token_of(&reads_as) {
@@ -274,7 +276,7 @@ impl Hub {
         }
         // After the workspace, so whoever's told has it as it's recorded now.
         let heard = self.heard_of_repository(&read).await;
-        self.github_read_ended(id, read.is_err(), heard);
+        self.github_read_ended(id, if read.is_err() { ReadWent::Failed } else { ReadWent::Read }, heard);
         let answer = match read {
             Ok(Found { read, .. }) => Answer::Read(read.pull_request),
             Err(unread) => Answer::Known(recorded.or(known), unread.error()),

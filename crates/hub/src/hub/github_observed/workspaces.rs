@@ -9,10 +9,11 @@ use protocol::model::{
 };
 
 use super::observing::logged;
-use super::reads::{Heard, ReadEnded};
+use super::reads::{Heard, ReadEnded, ReadWent};
 use crate::github_cache::{Item, Told};
 use crate::hub::Hub;
 use crate::hub::observations::{Kind, WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen};
+use crate::hub::pull_requests::read_in_turn;
 use crate::store::now_ms;
 
 /// What the task knows of the workspaces it works these out for.
@@ -20,22 +21,25 @@ use crate::store::now_ms;
 pub(super) struct Workspaces {
     /// Those clients followed, as the task last saw.
     followed: HashSet<WorkspaceId>,
-    /// Those whose last read failed, so what's kept of them is as of the read before, though they're followed.
-    failed: HashSet<WorkspaceId>,
+    /// Those followed whose last read since they were followed was made and answered, so what's worked out of them is
+    /// current, until a read fails or is held back, nothing follows them, or the hub stops reading them in turn, as
+    /// when they're archived. Only what reads them says so, as its end, and nothing the task guesses.
+    read: HashSet<WorkspaceId>,
     /// The pull request each one's record linked to as it was last worked out, as the cache keeps it, so a read the
     /// cache keeps of it works it out again.
     linked: HashMap<WorkspaceId, Item>,
 }
 
 impl Hub {
-    /// Works out what GitHub says of workspace `id`'s pull request from its record as it is now, and keeps it current
-    /// from now if `current`, and otherwise as of the read it's worked out from. Returns the pull request its record
-    /// links to, as the cache keeps it, if it links to one. Works out nothing of a workspace that's gone.
-    async fn work_out_workspace(&self, id: &WorkspaceId, current: bool) -> Option<Item> {
-        let workspace = self.workspace(id).await.ok()?;
+    /// Works out what GitHub says of `workspace`'s pull request from its record as it is now, and keeps each of its
+    /// three kinds current from now if `current`, and otherwise as of the read it's worked out from. Returns the pull
+    /// request its record links to, as the cache keeps it, if it links to one.
+    async fn work_out_workspace(&self, workspace: &Workspace, current: bool) -> Option<Item> {
+        let id = &workspace.id;
         self.keep_current_or_not::<WorkspacePullRequest>(id, current).await;
         self.keep_current_or_not::<WorkspacePullRequestDetail>(id, current).await;
-        if let Some(found) = self.known_of(&workspace) {
+        self.keep_current_or_not::<WorkspaceRepositoryUnseen>(id, current).await;
+        if let Some(found) = self.known_of(workspace) {
             let ((said, said_at), (detail, detail_at)) = split(found);
             logged(self.observation_worked_out::<WorkspacePullRequest>(id.clone(), said, said_at).await);
             logged(self.observation_worked_out::<WorkspacePullRequestDetail>(id.clone(), detail, detail_at).await);
@@ -44,15 +48,15 @@ impl Hub {
             logged(self.observation_gone::<WorkspacePullRequest>(id.clone()).await);
             logged(self.observation_gone::<WorkspacePullRequestDetail>(id.clone()).await);
         }
-        linked(&workspace)
+        linked(workspace)
     }
 
     /// Keeps what a read of workspace `id`'s pull request that ended at `read_at_ms` heard of whether GitHub showed its
-    /// repository, current from now if `current`. One it always showed, as most are, is kept of no workspace, which a
-    /// client reads as showing it. A read that heard nothing of it, as one that failed otherwise does, leaves what's
-    /// kept, so a hub that starts again, which has it as of the read that heard it, keeps it through such a read.
-    async fn keep_unseen(&self, id: &WorkspaceId, heard: Heard, read_at_ms: i64, current: bool) {
-        self.keep_current_or_not::<WorkspaceRepositoryUnseen>(id, current).await;
+    /// repository, current if it's kept current, as [`Hub::work_out_workspace`] says. One it always showed, as most
+    /// are, is kept of no workspace, which a client reads as showing it. A read that heard nothing of it, as one that
+    /// failed otherwise does, leaves what's kept, so a hub that starts again, which has it as of the read that heard it,
+    /// keeps it through such a read.
+    async fn keep_unseen(&self, id: &WorkspaceId, heard: Heard, read_at_ms: i64) {
         let unseen = match heard {
             Heard::Unseen(unseen) => Some(unseen),
             Heard::Seen if self.observations.keeps::<WorkspaceRepositoryUnseen>(id) => None,
@@ -73,39 +77,51 @@ impl Hub {
 }
 
 impl Workspaces {
-    /// Whether what's worked out of `id` is current: something follows it, and its last read didn't fail.
+    /// Whether what's worked out of `id` is current, as [`Workspaces::read`] says.
     fn current(&self, id: &WorkspaceId) -> bool {
-        self.followed.contains(id) && !self.failed.contains(id)
+        self.read.contains(id)
     }
 
-    /// Works out `id` again, current as [`Workspaces::current`] says.
+    /// Works out `id` again, current as [`Workspaces::current`] says, but for one the hub doesn't read in turn, which
+    /// nothing keeps up to date, so it's current again only from a read after it's read in turn again. Works out
+    /// nothing of a workspace that's gone.
     async fn again(&mut self, hub: &Hub, id: &WorkspaceId) {
-        match hub.work_out_workspace(id, self.current(id)).await {
+        let Ok(workspace) = hub.workspace(id).await else {
+            self.linked.remove(id);
+            return;
+        };
+        if !read_in_turn(&workspace) {
+            self.read.remove(id);
+        }
+        match hub.work_out_workspace(&workspace, self.current(id)).await {
             Some(item) => self.linked.insert(id.clone(), item),
             None => self.linked.remove(id),
         };
     }
 
-    /// Takes in what clients follow now. A workspace newly followed is worked out at once, as of the reads it's
-    /// worked out from, and is current from the read following it starts. One no longer followed is as of its last
-    /// read.
-    pub(super) async fn follow_now(&mut self, hub: &Hub) {
-        let now = hub.followers.workspaces();
-        for id in now.difference(&self.followed) {
-            self.failed.remove(id);
-            if let Some(item) = hub.work_out_workspace(id, false).await {
-                self.linked.insert(id.clone(), item);
-            }
-            hub.keep_current_or_not::<WorkspacePullRequest>(id, true).await;
-            hub.keep_current_or_not::<WorkspacePullRequestDetail>(id, true).await;
-            hub.keep_current_or_not::<WorkspaceRepositoryUnseen>(id, true).await;
-        }
-        for id in self.followed.difference(&now) {
+    /// Has what's worked out of `id` as of its last read, if it was current, as once nothing has read it since.
+    async fn as_of_last_read(&mut self, hub: &Hub, id: &WorkspaceId) {
+        if self.read.remove(id) {
             hub.keep_current_or_not::<WorkspacePullRequest>(id, false).await;
             hub.keep_current_or_not::<WorkspacePullRequestDetail>(id, false).await;
             hub.keep_current_or_not::<WorkspaceRepositoryUnseen>(id, false).await;
         }
+    }
+
+    /// Takes in what clients follow now. A workspace newly followed is worked out at once, as of the reads it's
+    /// worked out from, and is current from the first read after that's made and answered. One no longer followed is as
+    /// of its last read.
+    pub(super) async fn follow_now(&mut self, hub: &Hub) {
+        let now = hub.followers.workspaces();
+        let newly: Vec<_> = now.difference(&self.followed).cloned().collect();
+        let no_longer: Vec<_> = self.followed.difference(&now).cloned().collect();
         self.followed = now;
+        for id in newly {
+            self.again(hub, &id).await;
+        }
+        for id in no_longer {
+            self.as_of_last_read(hub, &id).await;
+        }
     }
 
     /// Takes in what the cache kept and forgot: each workspace whose pull request it was is worked out again.
@@ -125,20 +141,26 @@ impl Workspaces {
     /// Takes in that the workspace `id` is gone.
     pub(super) async fn removed(&mut self, hub: &Hub, id: &WorkspaceId) {
         self.linked.remove(id);
-        self.failed.remove(id);
+        self.read.remove(id);
         // Again, since a read kept as it went may have worked it out after it was forgotten.
         hub.workspace_observations_gone(id).await;
     }
 
-    /// Takes in that a read of a workspace's pull request ended, failed or not, and what it heard of the repository.
-    pub(super) async fn read_ended(&mut self, hub: &Hub, ReadEnded { workspace: id, failed, heard, at_ms }: ReadEnded) {
-        if failed {
-            self.failed.insert(id.clone());
-        } else {
-            self.failed.remove(&id);
+    /// Takes in how a read of a workspace's pull request went, and what it heard of the repository: one made and
+    /// answered makes what's worked out of a workspace that's followed current, and any other has it as of its last
+    /// read. One held back read nothing, so nothing is worked out again.
+    pub(super) async fn read_ended(&mut self, hub: &Hub, ReadEnded { workspace: id, went, heard, at_ms }: ReadEnded) {
+        match went {
+            ReadWent::Read if self.followed.contains(&id) => {
+                self.read.insert(id.clone());
+            }
+            ReadWent::Read | ReadWent::Failed => {
+                self.read.remove(&id);
+            }
+            ReadWent::HeldBack => return self.as_of_last_read(hub, &id).await,
         }
         self.again(hub, &id).await;
-        hub.keep_unseen(&id, heard, at_ms, self.current(&id)).await;
+        hub.keep_unseen(&id, heard, at_ms).await;
     }
 
     /// Works out every workspace again, as as the hub starts, or after missing some of what it's told, once every
