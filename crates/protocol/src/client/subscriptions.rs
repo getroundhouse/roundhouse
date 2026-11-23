@@ -68,11 +68,10 @@ pub enum Follow {
     /// changes, as a [`GithubSubscribe`](super::github::GithubSubscribe) that showed every workspace would be sent.
     Hub,
     /// Sends a [`Listed::Workspace`](super::listed::Listed::Workspace), queued before the reply to the `Subscribe`
-    /// that starts it, then every notice the feed sends at the workspace's level, its pull request's checks, history and
-    /// stack among them only to a start that reads GitHub so, as [`Subscription::github_observed`] says. And has the
-    /// hub read the workspace's
-    /// pull request at once, and then as often as one shown in full is read, as a `GithubSubscribe` that shows it
-    /// `closely` does.
+    /// that starts it, then every notice the feed sends at the workspace's level, its pull request's checks, history
+    /// and stack among them only to a start that reads GitHub so, as [`Subscription::github_observed`] says. And has
+    /// the hub read the workspace's pull request at once, and then as often as one shown in full is read, as a
+    /// `GithubSubscribe` that shows it `closely` does.
     Workspace { id: WorkspaceId },
     /// Sends a [`Listed::Session`](super::listed::Listed::Session), then the events from `from`, then the tail, and then
     /// every event and delta, as [`SessionSubscribe`] and [`SessionSubscribePlaces`] do, with every notice the feed

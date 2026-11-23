@@ -24,8 +24,8 @@ pub enum Observation {
     /// What GitHub says of a workspace's own pull request past its summary: its checks, history and stack. Sent at the
     /// workspace's level, since only its pane's bar draws them.
     WorkspacePullRequestDetail { workspace_id: WorkspaceId, detail: Observed<OwnPullRequestDetail>, rev: Rev },
-    /// The repository GitHub showed the default GitHub account none of, where the workspace's branch's pull requests are,
-    /// as the hub last read them, or `None` where it showed it. Sent at the workspace's level, beside the detail.
+    /// The repository GitHub showed the default GitHub account none of, where the workspace's branch's pull requests
+    /// are, as the hub last read them, or `None` where it showed it. Sent at the workspace's level, beside the detail.
     WorkspaceRepositoryUnseen { workspace_id: WorkspaceId, unseen: Observed<Option<RepositoryUnseen>>, rev: Rev },
     /// What GitHub says of an issue or a pull request, as a chip draws it. Sent at the level of that issue or pull
     /// request, by the ask as the client follows it, so two that name it in another case are two observations.
@@ -85,8 +85,8 @@ impl Observation {
         }
     }
 
-    /// The revision of this copy, which says whether it replaces another, as [`Rev::supersedes`] does. None for a kind
-    /// this build doesn't know.
+    /// The revision of this copy, which says whether it replaces another, as [`Rev::supersedes`] does.
+    /// `Rev::default()` for a kind this build doesn't know.
     pub fn rev(&self) -> Rev {
         match self {
             Observation::WorkspaceLines { rev, .. }
@@ -104,8 +104,9 @@ impl ObservationKey {
     /// The level the hub sends it at, and so whose subscriptions it reaches. One at the hub's level is listed in
     /// [`Records`](crate::model::Records), which a client reads as it connects. One of another level, such as a
     /// workspace's or a session's, reaches a client only while it follows that, so the hub's list that lacks it doesn't
-    /// say it's gone, and only that level's own list does. A kind sent at a workspace's level has a key that names the workspace, so this can say which
-    /// workspace's. `None` for one of a kind this build doesn't know, which is of no level it can follow.
+    /// say it's gone, and only that level's own list does. A kind sent at a workspace's level has a key that names the
+    /// workspace, so this can say which workspace's. `None` for one of a kind this build doesn't know, which is of no
+    /// level it can follow.
     pub fn level(&self) -> Option<Level> {
         match self {
             ObservationKey::WorkspaceLines { .. } | ObservationKey::WorkspacePullRequest { .. } => Some(Level::Hub),

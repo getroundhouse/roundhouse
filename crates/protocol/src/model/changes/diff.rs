@@ -11,9 +11,10 @@ use crate::model::CommitId;
 pub struct FileDiff {
     /// The commit it's taken against, as [`ChangeSummary::base_commit`](super::ChangeSummary::base_commit) is.
     pub base_commit: CommitId,
-    /// The version of what the worktree held at the file's path while it was diffed, as [`ChangedFile::version`](super::ChangedFile::version) names
-    /// versions. `None` where the worktree holds nothing to read, as for a deleted file, and where the file changed
-    /// while it was diffed, so the patch may be of neither version.
+    /// The version of what the worktree held at the file's path while it was diffed, as
+    /// [`ChangedFile::version`](super::ChangedFile::version) names versions. `None` where the worktree holds nothing to
+    /// read, as for a deleted file, and where the file changed while it was diffed, so the patch may be of neither
+    /// version.
     pub version: Option<FileVersion>,
     pub body: FileDiffBody,
 }
