@@ -21,6 +21,13 @@ static TWO: Part = Part { name: "two", prepare: |conn| made(conn, "two"), empty:
 static NEVER: Part =
     Part { name: "never", prepare: |conn| conn.execute_batch("SELECT x FROM nowhere"), empty: |_| Ok(()) };
 
+/// A part that can't write its tables, as on a full disk.
+static FULL: Part = Part {
+    name: "full",
+    prepare: |_| Err(rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_FULL), None)),
+    empty: |_| Ok(()),
+};
+
 /// Makes `table`, failing where it's of another form, which hasn't the column `x`.
 fn made(conn: &mut Connection, table: &str) -> rusqlite::Result<()> {
     conn.execute_batch(&format!("CREATE TABLE IF NOT EXISTS {table} (x INTEGER NOT NULL)"))?;
@@ -83,4 +90,41 @@ fn a_part_whose_tables_can_t_be_made_is_emptied_alone() {
     assert_eq!(rows(&file, &ONE), Some(1), "one kept");
     assert_eq!(rows(&file, &TWO), Some(0), "two emptied and made again");
     assert_eq!(rows(&file, &NEVER), None);
+}
+
+/// Only a file SQLite says isn't a database, or is damaged, is made again. One the hub can't open for another reason,
+/// which says nothing of what's in it, as one it can't write, is left as it is, neither read nor written, so a hub that
+/// starts again once it can has what it kept.
+#[test]
+fn only_a_file_sqlite_can_t_read_is_made_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cache.db");
+    kept_in_both(&path);
+    let writable = std::fs::metadata(&path).unwrap().permissions();
+    let mut read_only = writable.clone();
+    read_only.set_readonly(true);
+    std::fs::set_permissions(&path, read_only).unwrap();
+    let can_write = std::fs::OpenOptions::new().append(true).open(&path).is_ok();
+    assert!(!can_write, "a file made read-only can be written, as by root, so the test can't make one the hub can't");
+
+    let unwritable = CacheFile::open_waiting(&path, &[&ONE, &TWO], BUSY_TIMEOUT);
+
+    assert_eq!((rows(&unwritable, &ONE), rows(&unwritable, &TWO)), (None, None), "neither read nor written");
+    drop(unwritable);
+    std::fs::set_permissions(&path, writable).unwrap();
+    let writable_again = CacheFile::open_waiting(&path, &[&ONE, &TWO], BUSY_TIMEOUT);
+    assert_eq!((rows(&writable_again, &ONE), rows(&writable_again, &TWO)), (Some(1), Some(1)), "kept");
+    drop(writable_again);
+
+    let full = CacheFile::open_waiting(&path, &[&ONE, &FULL, &TWO], BUSY_TIMEOUT);
+    assert_eq!((rows(&full, &ONE), rows(&full, &TWO)), (None, None), "a part can't be written, so neither is read");
+    drop(full);
+    let kept = CacheFile::open_waiting(&path, &[&ONE, &TWO], BUSY_TIMEOUT);
+    assert_eq!((rows(&kept, &ONE), rows(&kept, &TWO)), (Some(1), Some(1)), "kept on a full disk");
+    drop(kept);
+    std::fs::write(&path, "not a database").unwrap();
+
+    let not_a_database = CacheFile::open_waiting(&path, &[&ONE, &TWO], BUSY_TIMEOUT);
+
+    assert_eq!((rows(&not_a_database, &ONE), rows(&not_a_database, &TWO)), (Some(0), Some(0)), "made again");
 }

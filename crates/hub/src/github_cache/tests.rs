@@ -134,10 +134,10 @@ fn what_was_read_is_kept_across_a_restart() {
     assert_eq!(again.fresh_pull_request(&item(7), fresh, fresh), Some(given(&seven)));
 }
 
-/// A file a build with another form left, older or newer, is emptied rather than read or migrated, and a damaged one
-/// is made again, so either way the hub starts, and reads GitHub again.
+/// A file a build with another form left, older or newer, is emptied rather than read or migrated, so the hub reads
+/// GitHub again, and keeps what it reads.
 #[test]
-fn a_file_of_another_form_or_damaged_is_started_again_empty() {
+fn a_file_of_another_form_is_started_again_empty() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("github-cache.db");
     open(&path).keep(vec![(item(1), Ok(Some(issue(1))))], now_ms());
@@ -149,16 +149,9 @@ fn a_file_of_another_form_or_damaged_is_started_again_empty() {
 
     assert_eq!(of_another_form.summary(&item(1)), None);
     assert_eq!(version_of(&path), VERSION);
-    of_another_form.keep(vec![(item(1), Ok(Some(issue(1))))], now_ms());
+    of_another_form.keep(vec![(item(2), Ok(Some(issue(2))))], now_ms());
     drop(of_another_form);
-    std::fs::write(&path, "not a database").unwrap();
-
-    let damaged = open(&path);
-
-    assert_eq!(damaged.summary(&item(1)), None);
-    damaged.keep(vec![(item(2), Ok(Some(issue(2))))], now_ms());
-    drop(damaged);
-    assert_eq!(open(&path).summary(&item(2)), Some(found(2)), "kept in the file made again");
+    assert_eq!(open(&path).summary(&item(2)), Some(found(2)), "kept in the file of this form");
 }
 
 /// What nothing has asked about for as long as the cache keeps things is forgotten, in memory and in the file, as the
