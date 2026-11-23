@@ -203,6 +203,9 @@ pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
     hub.stop_checking_github_logins(watching_github_logins).await;
     let ended = end_workers(&hub, signalled).await;
     hub.shut_down_providers().await;
+    // Before the lock goes, so the next hub starts with every observation this one kept, those its workers' last
+    // reports changed included.
+    hub.observations_written().await;
     if let Some(awake) = awake {
         awake.abort();
     }

@@ -14,6 +14,7 @@ use super::kinds::{
     Form, Kind, Referenced, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail,
     WorkspaceRepositoryUnseen,
 };
+use super::writer::Writer;
 use crate::cache_file::CacheFile;
 use crate::store::Store;
 
@@ -21,10 +22,11 @@ use crate::store::Store;
 pub(crate) struct Observations {
     /// Held while an observation changes, from before it takes its revision until its notice is sent, and while every
     /// record is listed, so a list has every observation whose revision it takes in. An observation and a record are
-    /// in different files, so a change can't take its revision in a record's transaction.
+    /// in different files, so a change can't take its revision in a record's transaction. A change queues its write
+    /// to the file under it, and the write is made after, so no list waits on the file.
     pub(super) changing: AsyncMutex<()>,
     pub(super) tables: Mutex<Tables>,
-    pub(super) file: Arc<CacheFile>,
+    pub(super) writer: Writer,
 }
 
 /// Each kind's table, in memory.
@@ -285,7 +287,7 @@ impl Observations {
                 warn!("leaving the observations in the cache's file unread, with no revision for them: {error}");
             }
         }
-        Self { changing: AsyncMutex::new(()), tables: Mutex::new(tables), file }
+        Self { changing: AsyncMutex::new(()), tables: Mutex::new(tables), writer: Writer::new(file) }
     }
 
     /// Lists the records along with `list`, and every observation the hub sends at its own level, under the lock a

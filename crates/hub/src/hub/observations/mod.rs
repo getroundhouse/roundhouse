@@ -10,6 +10,7 @@ mod kinds;
 mod levels;
 #[cfg(test)]
 mod tests;
+mod writer;
 
 pub(crate) use file::prepare;
 pub(crate) use kept::Observations;
