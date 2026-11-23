@@ -1,8 +1,13 @@
 //! What a hub asks its worker of what a worktree changes, and the summary the worker sends back, spelled out, since a
-//! worker can outlive the hub that started it, and the next hub can be of another build.
+//! worker can outlive the hub that started it, and the next hub can be of another build. And a client's read of a page
+//! of the files a summary leaves out, which the hub passes on to the worker.
 
+use protocol::client::workspaces::WorkspaceChangedFiles;
+use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HubFrame, ReplyOutcome};
 use protocol::frame;
-use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, FileVersion, LineCounts};
+use protocol::model::{
+    ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, ChangedFilesPage, FileVersion, LineCounts,
+};
 use protocol::worker::{self, WorkerFrame, WorkerRequest, WorkerResponse};
 
 use super::keeps_its_form;
@@ -89,4 +94,52 @@ fn a_changed_file_from_a_newer_worker_reads_with_what_this_build_knows() {
 
     assert_eq!(file.status, ChangeStatus::Unknown);
     assert_eq!((file.from, file.lines, file.version), (None, None, None), "fields it left out");
+}
+
+/// Where a page starts: after the file a summary or the page before ended with.
+fn after() -> ChangedFileAt {
+    ChangedFileAt { untracked: true, path: "node_modules/a.js".into() }
+}
+
+/// A page of one file, which is the last.
+fn page() -> ChangedFilesPage {
+    let file = ChangedFile {
+        path: "node_modules/b.js".into(),
+        from: None,
+        status: ChangeStatus::Untracked,
+        lines: None,
+        version: None,
+    };
+    ChangedFilesPage { base_commit: "c1".into(), files: vec![file], left_out: 0 }
+}
+
+const AFTER: &str = r#""after":{"untracked":true,"path":"node_modules/a.js"}"#;
+const PAGE: &str = concat!(
+    r#""base_commit":"c1","files":[{"path":"node_modules/b.js","from":null,"status":"untracked","lines":null,"#,
+    r#""version":null}],"left_out":0"#
+);
+
+#[test]
+fn a_client_s_read_of_a_page_of_changed_files_and_its_reply_keep_their_form() {
+    let asking = ClientRequest::WorkspaceChangedFiles(WorkspaceChangedFiles { id: "w".into(), after: after() });
+
+    keeps_its_form(
+        &ClientFrame { id: 7, request: asking },
+        &format!(r#"{{"id":7,"request":{{"method":"workspace_changed_files","id":"w",{AFTER}}}}}"#),
+    );
+    keeps_its_form(
+        &HubFrame::Reply { id: 7, outcome: ReplyOutcome::Response(ClientResponse::ChangedFilesPage(page())) },
+        &format!(r#"{{"frame":"reply","id":7,"response":{{"result":"changed_files_page",{PAGE}}}}}"#),
+    );
+}
+
+#[test]
+fn the_request_for_a_page_of_changed_files_and_its_reply_keep_their_form() {
+    let asking = worker::ListChangedFiles { path: "/w".into(), base_ref: Some("origin/main".into()), after: after() };
+
+    asked(
+        WorkerRequest::ListChangedFiles(asking),
+        &format!(r#"{{"method":"list_changed_files","path":"/w","base_ref":"origin/main",{AFTER}}}"#),
+    );
+    answered(WorkerResponse::ChangedFilesPage(page()), &format!(r#"{{"result":"changed_files_page",{PAGE}}}"#));
 }

@@ -21,8 +21,9 @@ use protocol::paths::AGENTS_DIR;
 use protocol::prompt::Prompt;
 use protocol::worker::{
     AccountFor, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt,
-    FileReadRange, FolderRead, GitDiff, GitStatus, ReadRepoUrl, Received, RunningAgentsReply, ServeTools, SetupLog,
-    SetupLogReply, SummarizeChanges, TerminalStop, TitleFor, ToolsServing, WorkerFrame, WorkerRequest, WorkerResponse,
+    FileReadRange, FolderRead, GitDiff, GitStatus, ListChangedFiles, ReadRepoUrl, Received, RunningAgentsReply,
+    ServeTools, SetupLog, SetupLogReply, SummarizeChanges, TerminalStop, TitleFor, ToolsServing, WorkerFrame,
+    WorkerRequest, WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 use std::collections::HashMap;
@@ -290,6 +291,10 @@ pub(super) async fn handle(
         WorkerRequest::SummarizeChanges(SummarizeChanges { path, base_ref }) => {
             let summary = state.changes.summarize(&given, Path::new(&path), base_ref.as_deref()).await?;
             Ok(WorkerResponse::ChangeSummary(summary))
+        }
+        WorkerRequest::ListChangedFiles(ListChangedFiles { path, base_ref, after }) => {
+            let page = state.changes.page_after(&given, Path::new(&path), base_ref.as_deref(), &after).await?;
+            Ok(WorkerResponse::ChangedFilesPage(page))
         }
         WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
         WorkerRequest::WatchChanges(asked) => worktrees::watch_changes(state, asked).await,

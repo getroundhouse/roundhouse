@@ -94,6 +94,33 @@ impl Request for WatchChanges {
     }
 }
 
+/// The page of the files the worktree at `path` changes against `base_ref` that follows the file `after` names, as
+/// [`model::ChangedFilesPage`] says, for a client's
+/// [`WorkspaceChangedFiles`](crate::client::workspaces::WorkspaceChangedFiles). The worker works out every file the
+/// worktree changes as it does for a summary, and answers with the page. A worker from before it refuses it as
+/// `Unsupported`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ListChangedFiles {
+    pub path: String,
+    pub base_ref: Option<String>,
+    pub after: model::ChangedFileAt,
+}
+
+impl Request for ListChangedFiles {
+    type Reply = model::ChangedFilesPage;
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::ListChangedFiles(self)
+    }
+}
+
+impl Reply for model::ChangedFilesPage {
+    fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
+        let WorkerResponse::ChangedFilesPage(page) = response else { return Err(response) };
+        Ok(page)
+    }
+}
+
 /// Watches the branches of the worktree at `path`, and sends a [`super::WorkerFrame::Branches`] with what they are at
 /// once, and again each time they change, until the worker stops. A later watch replaces it. Replies once it's
 /// watching and has sent that first frame, or found it can't read them, so a hub that waits for the reply has the

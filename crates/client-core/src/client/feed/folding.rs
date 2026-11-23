@@ -109,6 +109,7 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::Agents(_)
         | ClientResponse::GitStatus(_)
         | ClientResponse::GitDiff(_)
+        | ClientResponse::ChangedFilesPage(_)
         | ClientResponse::SetupLog(_)
         | ClientResponse::PullRequest(_)
         | ClientResponse::References(_)

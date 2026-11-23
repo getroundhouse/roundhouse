@@ -52,7 +52,7 @@ pub use workspaces::{
 };
 pub use worktree::{
     AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FileReadRange, FolderRead,
-    GitDiff, GitStatus, ListFiles, SummarizeChanges, WatchBranches, WatchChanges,
+    GitDiff, GitStatus, ListChangedFiles, ListFiles, SummarizeChanges, WatchBranches, WatchChanges,
 };
 
 mod messages;

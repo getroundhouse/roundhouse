@@ -55,6 +55,7 @@ pub enum ClientRequest {
     WorkspaceRegenerateTitle(workspaces::WorkspaceRegenerateTitle),
     WorkspaceStatus(workspaces::WorkspaceStatus),
     WorkspaceDiff(workspaces::WorkspaceDiff),
+    WorkspaceChangedFiles(workspaces::WorkspaceChangedFiles),
     WorkspaceSetupLog(workspaces::WorkspaceSetupLog),
     WorkspaceRerunSetup(workspaces::WorkspaceRerunSetup),
     WorkspacePullRequest(workspaces::WorkspacePullRequest),

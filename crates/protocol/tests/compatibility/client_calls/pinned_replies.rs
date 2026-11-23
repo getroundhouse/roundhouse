@@ -37,6 +37,7 @@ pinned! {
     "replies_heard.rs" => [RepliesHeard(_)],
     "proposals.rs" => [Proposal(_), ProposalRevisions(_)],
     "references.rs" => [References(_)],
+    "change_summaries.rs" => [ChangedFilesPage(_)],
     "terminals.rs" => [Terminal(_), TerminalRows(_)],
     "terminal_text.rs" => [TerminalBounds(_), TerminalText(_)],
     "terminal_fit.rs" => [TerminalFit(_)],

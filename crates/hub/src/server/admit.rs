@@ -238,6 +238,7 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::WorkspaceRegenerateTitle(..)
         | R::WorkspaceStatus(..)
         | R::WorkspaceDiff(..)
+        | R::WorkspaceChangedFiles(..)
         | R::WorkspaceSetupLog(..)
         | R::WorkspaceRerunSetup(..)
         | R::WorkspacePullRequest(..)
