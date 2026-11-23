@@ -143,7 +143,7 @@ fn on_github(world: &mut World) {
 fn named() -> World {
     let mut world = chat_world(SessionStatus::Idle, chats::answered(ASK, REPLY));
     on_github(&mut world);
-    world.references = references();
+    world.github_says.references = references();
     let birch = world.workspaces.iter().find(|workspace| workspace.name == "birch").unwrap().id.clone();
     let url = "https://github.com/example/roundhouse/pull/1162".to_string();
     let mut pull_request = pull_requests::open();
@@ -151,7 +151,7 @@ fn named() -> World {
     // Which pull request it's on is what ties a chip to it, as the hub keeps it.
     let (repository, number) = (repository("roundhouse"), IssueNumber::try_from(1162).unwrap());
     let link = PullRequestLink { repository, number, url, uncommitted: 0 };
-    world.pull_requests.insert(birch.clone(), pull_request);
+    world.github_says.pull_requests.insert(birch.clone(), pull_request);
     world.workspace_mut(&birch).pull_request_link = Some(PullRequestLinked { link: Some(link) });
     world
 }
@@ -167,7 +167,7 @@ fn proposal_naming() -> World {
              [#1162](https://github.com/example/roundhouse/pull/1162) has to merge first.",
         );
     }
-    world.references = references();
+    world.github_says.references = references();
     world
 }
 

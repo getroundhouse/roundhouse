@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use protocol::model::{ChangeSummary, LineCounts, Observation, Observed, WorkspaceId};
+use protocol::model::{ChangeSummary, LineCounts, Observation, ObservationKey, Observed, WorkspaceId};
 
 use super::super::Taken;
 use super::{Changes, Snapshot};
@@ -16,6 +16,8 @@ pub(in super::super) struct ObservationsListed {
     workspace_changes: HashMap<WorkspaceId, (Observed<ChangeSummary>, Taken)>,
     /// The workspaces whose own level the hub has listed since they were followed.
     workspaces_listed: HashSet<WorkspaceId>,
+    /// What GitHub says, of every level, which what the client holds of GitHub reads, as `client::github` says.
+    github: HashMap<ObservationKey, Observation>,
 }
 
 /// What a view reads of an observation the client doesn't hold.
@@ -39,12 +41,14 @@ impl ObservationsListed {
                 Observation::WorkspaceChanges { workspace_id, changes, .. } => {
                     listed.workspace_changes.insert(workspace_id.clone(), (changes.clone(), taken));
                 }
-                // Never held, as `Revised` says.
                 Observation::WorkspacePullRequest { .. }
                 | Observation::WorkspacePullRequestDetail { .. }
                 | Observation::WorkspaceRepositoryUnseen { .. }
-                | Observation::Reference { .. }
-                | Observation::Unknown => {}
+                | Observation::Reference { .. } => {
+                    listed.github.insert(observation.key(), observation.clone());
+                }
+                // Never held, as `Revised` says.
+                Observation::Unknown => {}
             }
         }
         listed
@@ -67,6 +71,13 @@ impl Snapshot {
             .workspaces_listed
             .contains(workspace)
             .then(|| listed.workspace_changes.get(workspace).map_or(&CHANGES_NOT_KNOWN, |(changes, _)| changes))
+    }
+}
+
+impl Snapshot {
+    /// The observation of GitHub `key` names, if the hub has sent it, for what the client holds of GitHub to read.
+    pub(crate) fn github_observation(&self, key: &ObservationKey) -> Option<&Observation> {
+        self.observations.github.get(key)
     }
 }
 

@@ -31,7 +31,7 @@ fn in_a_workspace(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
     world.chat(&workspace, SessionStatus::Idle, Vec::new());
     let pull_request = protocol::fixtures::checked(protocol::fixtures::pull_request(7), 0, 1, 0);
     let check_failed = OwnPullRequest { pull_request, local: Local::default() };
-    world.pull_requests.insert(workspace, check_failed);
+    world.github_says.pull_requests.insert(workspace, check_failed);
     let (fake, mut ui) = open_on_the_world(cx, world);
     ui.wait("the workspace", |ui| ui.pane().is_some());
     (fake, ui)

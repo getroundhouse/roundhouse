@@ -28,7 +28,7 @@ fn a_reference_is_shown_while_it_is_in_view_and_not_once_it_is_out_of_it(cx: &mu
     }
     events.push(replied("Done.", 9, 0.04));
     let (mut world, chat) = one_chat(SessionStatus::Idle, events);
-    world.references = vec![issue()];
+    world.github_says.references = vec![issue()];
     let following = world.following.clone();
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
     let transcript = ui.transcript().unwrap();
@@ -58,7 +58,7 @@ fn a_chat_behind_another_shows_none_of_its_chips(cx: &mut TestAppContext) {
     let (mut world, chat) = one_chat(SessionStatus::Idle, vec![user_prompt("Where's it kept?"), text("msg-1", reply)]);
     let workspace = world.sessions[0].workspace_id.clone();
     let other = world.chat(&workspace, SessionStatus::Idle, vec![user_prompt("Anything else?")]);
-    world.references = vec![issue()];
+    world.github_says.references = vec![issue()];
     let following = world.following.clone();
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
     let shows_it =
@@ -80,7 +80,7 @@ fn a_click_on_a_chip_opens_its_link(cx: &mut TestAppContext) {
     let reply = format!("It's on the client for now, as [the issue]({link}) says.");
     let events = vec![user_prompt("Where's the signal's state kept?"), text("msg-1", &reply)];
     let (mut world, chat) = one_chat(SessionStatus::Idle, events);
-    world.references = vec![issue()];
+    world.github_says.references = vec![issue()];
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
     let chip = "reference/example/signals#1";
 

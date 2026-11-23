@@ -8,4 +8,5 @@ mod source;
 mod tests;
 mod views;
 
+pub(in crate::client) use held::{github_keys, notice_key, own_keys};
 pub use views::{GithubFeed, GithubView};

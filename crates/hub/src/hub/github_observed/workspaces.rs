@@ -5,8 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use protocol::model::{
-    OwnPullRequest, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestFound,
-    PullRequestSaid, Workspace, WorkspaceId,
+    OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestFound, Workspace, WorkspaceId,
 };
 
 use super::observing::logged;
@@ -170,10 +169,11 @@ fn linked(workspace: &Workspace) -> Option<Item> {
 /// What the hub knows of a workspace's pull request, as each level is sent it, each with when what it's worked out
 /// from was read. For a branch with none, that's now, since what's kept of it says none, and not when.
 fn split(found: PullRequestFound) -> ((OwnPullRequestSaid, i64), (OwnPullRequestDetail, i64)) {
-    let Some(OwnPullRequest { pull_request, local }) = found.pull_request else {
+    let Some(own) = found.pull_request else {
         let now = now_ms();
         return ((OwnPullRequestSaid { pull_request: None }, now), (OwnPullRequestDetail { pull_request: None }, now));
     };
+    let pull_request = &own.pull_request;
     let summary_read_at = pull_request.summary.read_at_ms;
     let facets_read_at = [
         pull_request.history.as_ref().map(|read| read.read_at_ms),
@@ -181,21 +181,8 @@ fn split(found: PullRequestFound) -> ((OwnPullRequestSaid, i64), (OwnPullRequest
         pull_request.checks.as_ref().map(|read| read.read_at_ms),
     ];
     let detail_read_at = facets_read_at.into_iter().flatten().min().unwrap_or(summary_read_at);
-    let detail = PullRequestDetail {
-        repository: pull_request.repository.clone(),
-        number: pull_request.number,
-        head: pull_request.summary.said.head.clone(),
-        checks: pull_request.checks.map(|read| read.said),
-        history: pull_request.history.map(|read| read.said),
-        stack: pull_request.stack.map(|read| read.said),
-    };
-    let summary = PullRequestSaid {
-        repository: pull_request.repository,
-        number: pull_request.number,
-        summary: pull_request.summary.said,
-    };
     (
-        (OwnPullRequestSaid { pull_request: Some(OwnSummary { pull_request: summary, local }) }, summary_read_at),
-        (OwnPullRequestDetail { pull_request: Some(detail) }, detail_read_at),
+        (OwnPullRequestSaid { pull_request: Some(OwnSummary::of(&own)) }, summary_read_at),
+        (OwnPullRequestDetail { pull_request: Some(PullRequestDetail::of(pull_request)) }, detail_read_at),
     )
 }

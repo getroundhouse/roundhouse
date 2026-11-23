@@ -126,7 +126,7 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             reply(C::SetupLog(workspaces::SetupLog { text: world.setup_logs.get(&id).cloned().unwrap_or_default() }))
         }
         R::WorkspacePullRequest(workspaces::WorkspacePullRequest { id }) => {
-            reply(C::PullRequest(workspaces::PullRequestReply { pull_request: world.pull_requests.get(&id).cloned() }))
+            reply(C::PullRequest(workspaces::PullRequestReply { pull_request: world.github_says.pull_requests.get(&id).cloned() }))
         }
         R::ReferencesRead(references::ReferencesRead { references, .. }) => {
             let references = references.iter().map(|ask| github::reference(world, ask)).collect();

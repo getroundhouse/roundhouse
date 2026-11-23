@@ -172,7 +172,7 @@ pub(in super::super) fn converse(world: &mut World, focus: &WorkspaceId) {
     let about = &mut open.pull_request.summary.said.about;
     about.url = "https://example.com/pull/182".to_string();
     about.title = "Show PR state in the sidebar".to_string();
-    world.pull_requests.insert(focus.clone(), open);
+    world.github_says.pull_requests.insert(focus.clone(), open);
 }
 
 /// Replies nobody has read: in a workspace that isn't showing, and in the chat that isn't showing in this one. The chat
