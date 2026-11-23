@@ -7,9 +7,9 @@ use protocol::attachment::AttachmentBytes;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::log::ReadLimit;
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome, admin,
-    attachments, comments, drafts, files, github_accounts, log, proposals, records, references, sessions,
-    subscriptions, workspaces,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ObservationNotice,
+    ReplyOutcome, admin, attachments, comments, drafts, files, github_accounts, log, proposals, records, references,
+    sessions, subscriptions, workspaces,
 };
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
@@ -223,7 +223,12 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             };
             reply(C::ProposalRevisions(proposals::ProposalRevisions { revisions, newest: current.number }))
         }
-        R::FeedSubscribe(_) | R::SessionUnsubscribe(_) => reply(C::Ok),
+        R::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id }) => {
+            let notice =
+                |notice: &ObservationNotice| HubFrame::Notice { subscription_id, notice: notice.clone().into() };
+            Ok(Outcome::Reply(C::Ok, world.feed.iter().map(notice).collect()))
+        }
+        R::SessionUnsubscribe(_) => reply(C::Ok),
         R::AttachmentRead(attachments::AttachmentRead { id, .. }) => {
             let data = world.attachments.get(&id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
             reply(C::AttachmentData(attachments::AttachmentData { data: AttachmentBytes::new(data.clone()) }))

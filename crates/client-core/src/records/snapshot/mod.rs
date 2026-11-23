@@ -4,7 +4,7 @@
 //!
 //! It's made the first time it's asked for after a change, so changes that come between two looks are made into one,
 //! and made again only for the side that changed: the records, or the subagents, the proposals or the replies heard of
-//! the sessions views show.
+//! the sessions views show, or the observations.
 
 #[cfg(test)]
 mod tests;
@@ -12,6 +12,8 @@ mod tests;
 mod by_session;
 mod copies;
 mod github;
+mod observed;
 pub(super) use by_session::SessionsListed;
 pub(super) use copies::Listed;
 pub use copies::{Changes, InWorkspace, Snapshot};
+pub(super) use observed::ObservationsListed;

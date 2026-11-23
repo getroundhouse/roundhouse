@@ -3,7 +3,9 @@
 
 use std::cmp::Ordering;
 
-use protocol::model::{DiffComment, HubSettings, Records, Repo, Rev, Session, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{
+    DiffComment, HubSettings, Observation, Records, Repo, Rev, Session, Workspace, WorkspaceId, WorkspaceStatus,
+};
 
 use super::world::{LoginSupport, World};
 
@@ -35,9 +37,9 @@ impl World {
             terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),
             model_lists: self.model_lists.clone(),
             hub_update: self.hub_update.clone(),
-            // As from a hub from before observations.
-            observations: Vec::new(),
-            rev: Rev::default(),
+            observations: self.observations.clone(),
+            // The world's records have none, so the newest is its observations', as a hub's list is at its newest.
+            rev: self.observations.iter().map(Observation::rev).max().unwrap_or_default(),
         }
     }
 

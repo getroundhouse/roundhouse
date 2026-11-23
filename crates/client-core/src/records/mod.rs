@@ -1,5 +1,6 @@
 //! What a client holds of one hub's records: its repositories, workspaces, sessions and comments, its settings, the
-//! accounts its agents run under, and the subagents and proposals of the sessions a view is showing. Beside them, what
+//! accounts its agents run under, and the subagents and proposals of the sessions a view is showing. And the hub's
+//! observations, kept by the same rule as its records. Beside them, what
 //! each kind of agent the hub runs is called and offers, which isn't a record, since it doesn't change while the hub
 //! runs. Views read them all through a [`Snapshot`].
 //!
@@ -13,6 +14,7 @@ use protocol::client::HubNotice;
 #[cfg(test)]
 use protocol::model::{RecordKey, Records, Rev};
 
+mod by_revision;
 #[cfg(test)]
 mod laws;
 mod of_session;

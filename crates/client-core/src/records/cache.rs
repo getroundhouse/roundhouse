@@ -1,18 +1,17 @@
+use super::by_revision::ByRevision;
 use super::of_session::BySession;
-use super::snapshot::{Listed, Snapshot};
+use super::snapshot::{Listed, ObservationsListed, Snapshot};
 use crate::Agents;
-use protocol::client::{HubNotice, RecordNotice};
-use protocol::model::{Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent};
+use protocol::client::{HubNotice, ObservationNotice, RecordNotice};
+use protocol::model::{Observation, Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent};
 use std::cell::OnceCell;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Debug, Default)]
 pub struct HubRecords {
-    pub(super) held: HashMap<RecordKey, Kept<Record>>,
-    /// Records removed since the newest list, and when, so an older copy that arrives late can't bring
-    /// one back.
-    pub(super) removed: HashMap<RecordKey, Rev>,
+    pub(super) records: ByRevision<Record>,
+    /// Those of every level the hub sent, kept by the same rule as records.
+    pub(super) observations: ByRevision<Observation>,
     /// The newest list taken in. Everything up to it is already reflected.
     pub(super) listed: Rev,
     pub(super) subagents: BySession<Subagent>,
@@ -22,6 +21,8 @@ pub struct HubRecords {
     pub(super) taken: Taken,
     /// What views read of the records, made when they next look after a change.
     pub(super) shown: OnceCell<Arc<Listed>>,
+    /// And of the observations.
+    pub(super) shown_observations: OnceCell<Arc<ObservationsListed>>,
     /// As the hub said on the newest connection, shared with every snapshot made since.
     pub(super) agents: Arc<Agents>,
 }
@@ -29,7 +30,7 @@ pub struct HubRecords {
 /// A copy held, and when it was taken in.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Kept<T> {
-    pub(super) record: T,
+    pub(super) copy: T,
     pub(super) taken: Taken,
 }
 
@@ -48,57 +49,49 @@ impl Taken {
 }
 
 impl HubRecords {
-    /// Takes in a list of every record. A record missing from it is gone, unless the copy held is
-    /// newer than the list. Returns whether anything changed.
-    pub fn apply_list(&mut self, list: Records) -> bool {
+    /// Takes in a list of every record, and of the observations sent at the hub's level. A record or an observation of
+    /// that level missing from it is gone, unless the copy held is newer than the list. Returns whether anything
+    /// changed.
+    pub fn apply_list(&mut self, mut list: Records) -> bool {
         let at = list.rev;
         // Older than one already taken in, so everything in it is too.
         if at != Rev::default() && at < self.listed {
             return false;
         }
-        let mut next: HashMap<RecordKey, Kept<Record>> = HashMap::new();
-        for record in list.into_records() {
-            let key = record.key();
-            if self.removed.get(&key).is_some_and(|&gone| at != Rev::default() && gone > record.rev()) {
-                continue;
-            }
-            // The copy held, when it's the same, so a view doesn't take it for another.
-            let taken = match self.held.get(&key) {
-                Some(held) if held.record == record => held.taken,
-                _ => self.taken.next(),
-            };
-            next.insert(key, Kept { record, taken });
-        }
-        for (key, held) in &self.held {
-            let newer_than_list = at != Rev::default() && held.record.rev() > at;
-            let newer_than_listed =
-                next.get(key).is_none_or(|listed| !listed.record.rev().supersedes(held.record.rev()));
-            if newer_than_list && newer_than_listed {
-                next.insert(key.clone(), held.clone());
-            }
-        }
-        self.removed.retain(|_, gone| at != Rev::default() && *gone > at);
+        let observations = std::mem::take(&mut list.observations);
+        let records = self.records.apply_list(at, list.into_records(), &mut self.taken);
+        let observed = self.observations.apply_list(at, observations, &mut self.taken);
         self.listed = self.listed.max(at);
-        let changed = next != self.held;
-        self.held = next;
-        if changed {
+        if records {
             self.shown.take();
         }
-        changed
+        if observed {
+            self.shown_observations.take();
+        }
+        records || observed
     }
 
     /// Takes in what the feed said. Returns whether anything changed. `Resync` changes nothing here:
     /// it asks for a new list.
     pub fn apply_notice(&mut self, notice: HubNotice) -> bool {
-        match RecordNotice::try_from(notice) {
-            Ok(RecordNotice::Copy(record)) => self.apply_record(record),
-            Ok(RecordNotice::Removed { record, rev }) => self.remove(&record, rev),
+        let notice = match RecordNotice::try_from(notice) {
+            Ok(RecordNotice::Copy(record)) => return self.apply_record(record),
+            Ok(RecordNotice::Removed { record, rev }) => return self.remove(&record, rev),
+            Err(notice) => notice,
+        };
+        let observed = match ObservationNotice::try_from(notice) {
+            Ok(ObservationNotice::Copy(observation)) => {
+                self.observations.apply(observation, self.listed, &mut self.taken)
+            }
+            Ok(ObservationNotice::Removed { observation, rev }) => {
+                self.observations.remove(&observation, rev, self.listed)
+            }
             Err(_) => false,
+        };
+        if observed {
+            self.shown_observations.take();
         }
-    }
-
-    pub(super) fn already_listed(&self, rev: Rev) -> bool {
-        rev != Rev::default() && rev <= self.listed
+        observed
     }
 
     /// Takes in one record, from a notice or a reply. Returns whether it changed anything.
@@ -129,40 +122,33 @@ impl HubRecords {
 
     /// Takes in one of the records a list of everything has.
     fn apply_listed(&mut self, record: Record) -> bool {
-        let (key, rev) = (record.key(), record.rev());
-        let removed_since = self.removed.get(&key).is_some_and(|&gone| !rev.supersedes(gone));
-        let held = self.held.get(&key).map(|held| &held.record);
-        let held_is_newer = held.is_some_and(|held| !rev.supersedes(held.rev()));
-        if self.already_listed(rev) || removed_since || held_is_newer || held == Some(&record) {
-            return false;
+        let changed = self.records.apply(record, self.listed, &mut self.taken);
+        if changed {
+            self.shown.take();
         }
-        let taken = self.taken.next();
-        self.held.insert(key, Kept { record, taken });
-        self.shown.take();
-        true
+        changed
     }
 
     pub(super) fn remove(&mut self, key: &RecordKey, rev: Rev) -> bool {
-        if self.already_listed(rev) {
-            return false;
-        }
-        let gone = self.removed.entry(key.clone()).or_default();
-        *gone = (*gone).max(rev);
-        if self.held.get(key).is_some_and(|held| rev.supersedes(held.record.rev())) {
-            self.held.remove(key);
+        let changed = self.records.remove(key, rev, self.listed);
+        if changed {
             self.shown.take();
-            return true;
         }
-        false
+        changed
     }
 
     /// The records as they are now, for a view to read and keep. It's made once for each change, however many views
     /// ask for it.
     pub fn snapshot(&self) -> Snapshot {
-        let records =
-            self.shown.get_or_init(|| Arc::new(Listed::of(self.held.values().map(|held| (&held.record, held.taken)))));
+        let records = self
+            .shown
+            .get_or_init(|| Arc::new(Listed::of(self.records.held.values().map(|held| (&held.copy, held.taken)))));
+        let observations = self
+            .shown_observations
+            .get_or_init(|| Arc::new(ObservationsListed::of(self.observations.held.values().map(|held| &held.copy))));
         Snapshot::new(
             records.clone(),
+            observations.clone(),
             self.subagents.listed(),
             self.proposals.listed(),
             self.replies_heard.listed(),
