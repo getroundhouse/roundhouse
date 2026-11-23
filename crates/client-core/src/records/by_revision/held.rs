@@ -34,13 +34,25 @@ impl<T: Revised> Default for ByRevision<T> {
 }
 
 impl<T: Revised> ByRevision<T> {
-    /// Takes in what a list read at `at` has of this kind, when no list taken in before is newer. One held that the
-    /// list lacks is gone, if its kind is in every list, unless the copy held is newer than the list. Returns whether
-    /// anything changed.
+    /// Takes in what a list of everything read at `at` has of this kind, when no list taken in before is newer. One
+    /// held that the list lacks is gone, if its kind is in every list, unless the copy held is newer than the list.
+    /// Returns whether anything changed.
     pub(in super::super) fn apply_list(
         &mut self,
         at: Rev,
         list: impl IntoIterator<Item = T>,
+        taken: &mut Taken,
+    ) -> bool {
+        self.apply_list_of(at, list, T::in_every_list, taken)
+    }
+
+    /// The same, for a list that has every one there is of what `covers` says, such as a workspace's own observations,
+    /// so one held of that which the list lacks is gone, and one of anything else stays.
+    pub(in super::super) fn apply_list_of(
+        &mut self,
+        at: Rev,
+        list: impl IntoIterator<Item = T>,
+        covers: impl Fn(&T::Key) -> bool,
         taken: &mut Taken,
     ) -> bool {
         let mut next: HashMap<T::Key, Kept<T>> = HashMap::new();
@@ -57,13 +69,13 @@ impl<T: Revised> ByRevision<T> {
             next.insert(key, Kept { copy, taken });
         }
         for (key, held) in &self.held {
-            let outlasts_list = !T::in_every_list(key) || (at != Rev::default() && held.copy.rev() > at);
+            let outlasts_list = !covers(key) || (at != Rev::default() && held.copy.rev() > at);
             let newer_than_listed = next.get(key).is_none_or(|listed| !listed.copy.rev().supersedes(held.copy.rev()));
             if outlasts_list && newer_than_listed {
                 next.insert(key.clone(), held.clone());
             }
         }
-        self.removed.retain(|key, gone| !T::in_every_list(key) || (at != Rev::default() && *gone > at));
+        self.removed.retain(|key, gone| !covers(key) || (at != Rev::default() && *gone > at));
         let changed = next != self.held;
         self.held = next;
         changed

@@ -1,16 +1,16 @@
 //! What a fake hub sends a client that follows through `Subscribe`, from what the world holds, as a hub sends it at
-//! each level: where it stands first, and nothing after, since nothing here changes. And what clients follow now, for a
-//! test to read.
+//! each level: where it stands first, then what the world's feed tells of that level, and nothing after, since nothing
+//! here changes. And what clients follow now, for a test to read.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::github::GithubUpdate;
-use protocol::client::listed::{Listed, SessionRecords};
+use protocol::client::listed::{Listed, SessionRecords, WorkspaceObservations};
 use protocol::client::subscriptions::{Follow, LogFrom, Refused, Subscribe, Subscribed, Subscription};
-use protocol::client::{ApiError, ClientResponse, ErrorCode, HubFrame, ObservationNotice};
-use protocol::model::{Level, Place, Rev, Seq};
+use protocol::client::{ApiError, ClientResponse, ErrorCode, HubFrame, HubNotice, ObservationNotice};
+use protocol::model::{Level, Observation, Place, Rev, Seq, WorkspaceId};
 
 use super::github;
 use super::logs::{log_from, places_from};
@@ -41,24 +41,32 @@ impl Following {
 }
 
 /// Stops each subscription `subscribe` stops, then starts each it starts, with where each stands, all after the reply,
-/// as a hub can send them, refusing what the world doesn't have, as a hub does.
+/// as a hub can send them, but for a workspace's list, which a hub queues before its reply, refusing what the world
+/// doesn't have, as a hub does.
 pub(super) fn subscribe(world: &World, connection: u64, subscribe: Subscribe) -> Outcome {
     let Subscribe { stop, start } = subscribe;
     let mut following = world.following.0.lock();
     for subscription_id in stop {
         following.remove(&(connection, subscription_id));
     }
-    let (mut refused, mut frames) = (Vec::new(), Vec::new());
+    let (mut refused, mut first, mut then) = (Vec::new(), Vec::new(), Vec::new());
     for Subscription { subscription_id, follow, .. } in start {
         match stands(world, subscription_id, &follow) {
             Ok(sent) => {
                 following.insert((connection, subscription_id), follow.level());
-                frames.extend(sent);
+                let (before, after): (Vec<_>, Vec<_>) = sent.into_iter().partition(is_workspace_list);
+                first.extend(before);
+                then.extend(after);
             }
             Err(error) => refused.push(Refused { subscription_id, error }),
         }
     }
-    Outcome::Reply(ClientResponse::Subscribed(Subscribed { refused }), frames)
+    Outcome::Reply { first, response: ClientResponse::Subscribed(Subscribed { refused }), then }
+}
+
+/// Whether `frame` is a workspace's list, which a hub queues before its reply to `Subscribe`.
+fn is_workspace_list(frame: &HubFrame) -> bool {
+    matches!(frame, HubFrame::Listed { listed: Listed::Workspace(_), .. })
 }
 
 /// Where what `follow` follows stands, as the frames a hub sends first.
@@ -67,7 +75,7 @@ fn stands(world: &World, subscription_id: u64, follow: &Follow) -> Result<Vec<Hu
         Follow::Hub => Ok(hub(world, subscription_id)),
         Follow::Workspace { id } => {
             world.workspaces.iter().find(|workspace| workspace.id == *id).ok_or_else(|| not_found("workspace"))?;
-            Ok(Vec::new())
+            Ok(workspace(world, id, subscription_id))
         }
         Follow::Session { id, from } => {
             world.session(id)?;
@@ -103,15 +111,30 @@ fn stands(world: &World, subscription_id: u64, follow: &Follow) -> Result<Vec<Hu
     }
 }
 
-/// Every record and the hub's observations, then what the feed says of the world's observations, and what GitHub says
-/// of every workspace's own pull request, as a hub sends them at its level.
+/// Every record and the hub's observations, then what the feed says of the hub's level, and what GitHub says of every
+/// workspace's own pull request, as a hub sends them at its level.
 fn hub(world: &World, subscription_id: u64) -> Vec<HubFrame> {
     let listed = HubFrame::Listed { subscription_id, listed: Listed::Hub(Box::new(world.records())) };
-    let notice = |notice: &ObservationNotice| HubFrame::Notice { subscription_id, notice: notice.clone().into() };
     let pull_requests = github::own_pull_requests(world).map(|update| HubFrame::Github { subscription_id, update });
-    std::iter::once(listed).chain(world.feed.iter().map(notice)).chain(pull_requests).collect()
+    std::iter::once(listed).chain(told(world, &Level::Hub, subscription_id)).chain(pull_requests).collect()
 }
 
-fn not_found(what: &str) -> ApiError {
+/// The workspace `id`'s own observations, then what the feed says of its level, as a hub sends them at its level.
+fn workspace(world: &World, id: &WorkspaceId, subscription_id: u64) -> Vec<HubFrame> {
+    let level = Level::Workspace { id: id.clone() };
+    let observations = world.observations_at(&level);
+    let rev = observations.iter().map(Observation::rev).max().unwrap_or_default();
+    let listed = Listed::Workspace(WorkspaceObservations { workspace_id: id.clone(), observations, rev });
+    std::iter::once(HubFrame::Listed { subscription_id, listed }).chain(told(world, &level, subscription_id)).collect()
+}
+
+/// What the world's feed tells of `level`, as notices on subscription `subscription_id`.
+fn told(world: &World, level: &Level, subscription_id: u64) -> impl Iterator<Item = HubFrame> {
+    let of_level =
+        (world.feed.iter()).filter(move |notice| HubNotice::from((*notice).clone()).level().as_ref() == Some(level));
+    of_level.map(move |notice: &ObservationNotice| HubFrame::Notice { subscription_id, notice: notice.clone().into() })
+}
+
+pub(super) fn not_found(what: &str) -> ApiError {
     ApiError::new(ErrorCode::NotFound, format!("a fake hub has no such {what}"))
 }

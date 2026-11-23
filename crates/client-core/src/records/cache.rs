@@ -2,10 +2,13 @@ use super::by_revision::ByRevision;
 use super::of_session::BySession;
 use super::snapshot::{Listed, ObservationsListed, Snapshot};
 use crate::Agents;
-use protocol::client::listed::SessionRecords;
+use protocol::client::listed::{SessionRecords, WorkspaceObservations};
 use protocol::client::{HubNotice, ObservationNotice, RecordNotice};
-use protocol::model::{Level, Observation, Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent};
+use protocol::model::{
+    Level, Observation, Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent, WorkspaceId,
+};
 use std::cell::OnceCell;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 #[derive(Debug, Default)]
@@ -15,6 +18,9 @@ pub struct HubRecords {
     pub(super) observations: ByRevision<Observation>,
     /// The newest list taken in. Everything up to it is already reflected.
     pub(super) listed: Rev,
+    /// The workspaces whose own observations have been listed since they were last let go of, so what's held of them
+    /// is what the hub keeps, rather than nothing the hub sends.
+    pub(super) workspaces_listed: HashSet<WorkspaceId>,
     pub(super) subagents: BySession<Subagent>,
     pub(super) proposals: BySession<Proposal>,
     pub(super) replies_heard: BySession<ReplyHeard>,
@@ -144,9 +150,10 @@ impl HubRecords {
         let records = self
             .shown
             .get_or_init(|| Arc::new(Listed::of(self.records.held.values().map(|held| (&held.copy, held.taken)))));
-        let observations = self
-            .shown_observations
-            .get_or_init(|| Arc::new(ObservationsListed::of(self.observations.held.values().map(|held| &held.copy))));
+        let observations = self.shown_observations.get_or_init(|| {
+            let held = self.observations.held.values().map(|held| (&held.copy, held.taken));
+            Arc::new(ObservationsListed::of(held, &self.workspaces_listed))
+        });
         Snapshot::new(
             records.clone(),
             observations.clone(),
@@ -185,7 +192,24 @@ impl HubRecords {
     /// whose pane has closed, since nothing tells it of them while it doesn't follow it. Returns whether anything
     /// changed.
     pub(crate) fn let_go_of(&mut self, level: &Level) -> bool {
-        let changed = self.observations.let_go(|key| key.level().as_ref() == Some(level));
+        let unlisted = if let Level::Workspace { id } = level { self.workspaces_listed.remove(id) } else { false };
+        let changed = self.observations.let_go(|key| key.level().as_ref() == Some(level)) || unlisted;
+        if changed {
+            self.shown_observations.take();
+        }
+        changed
+    }
+
+    /// Takes in where a workspace's own level stands, as its subscription lists it first, and again after falling
+    /// behind. An observation of that workspace's level the list lacks is gone, unless the copy held is newer than the
+    /// list, and every other one stays. Returns whether anything changed, which the first list of a workspace always
+    /// does, since views then read that the hub sends its level.
+    pub(crate) fn apply_workspace_list(&mut self, listed: WorkspaceObservations) -> bool {
+        let WorkspaceObservations { workspace_id, observations, rev } = listed;
+        let level = Some(Level::Workspace { id: workspace_id.clone() });
+        let covers = |key: &protocol::model::ObservationKey| key.level() == level;
+        let observed = self.observations.apply_list_of(rev, observations, covers, &mut self.taken);
+        let changed = self.workspaces_listed.insert(workspace_id) || observed;
         if changed {
             self.shown_observations.take();
         }

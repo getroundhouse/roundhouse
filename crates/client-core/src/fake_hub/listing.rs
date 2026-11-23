@@ -4,7 +4,7 @@
 use std::cmp::Ordering;
 
 use protocol::model::{
-    DiffComment, HubSettings, Observation, Records, Repo, Rev, Session, Workspace, WorkspaceId, WorkspaceStatus,
+    DiffComment, HubSettings, Level, Observation, Records, Repo, Rev, Session, Workspace, WorkspaceId, WorkspaceStatus,
 };
 
 use super::world::{LoginSupport, World};
@@ -37,10 +37,16 @@ impl World {
             terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),
             model_lists: self.model_lists.clone(),
             hub_update: self.hub_update.clone(),
-            observations: self.observations.clone(),
+            observations: self.observations_at(&Level::Hub),
             // The world's records have none, so the newest is its observations', as a hub's list is at its newest.
             rev: self.observations.iter().map(Observation::rev).max().unwrap_or_default(),
         }
+    }
+
+    /// The world's observations sent at `level`.
+    pub(super) fn observations_at(&self, level: &Level) -> Vec<Observation> {
+        let at_level = self.observations.iter().filter(|observation| observation.key().level().as_ref() == Some(level));
+        at_level.cloned().collect()
     }
 
     pub(super) fn repos_listed(&self) -> Vec<Repo> {

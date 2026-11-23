@@ -28,17 +28,17 @@ pub(super) fn pictures(world: &World, id: &TerminalId, subscription_id: u64) -> 
 
 pub(super) fn rows(world: &World, rows: &TerminalRows) -> Answer {
     let reply = mirror(world, &rows.id)?.history_rows(rows.numbering, rows.from, rows.count).map_err(|e| failed(&e))?;
-    Ok(Outcome::Reply(ClientResponse::TerminalRows(reply), Vec::new()))
+    Ok(Outcome::reply(ClientResponse::TerminalRows(reply)))
 }
 
 pub(super) fn bounds(world: &World, bounds: &TerminalBounds) -> Answer {
     let reply = mirror(world, &bounds.id)?.bounds(bounds.numbering, bounds.at, bounds.of).map_err(|e| failed(&e))?;
-    Ok(Outcome::Reply(ClientResponse::TerminalBounds(reply), Vec::new()))
+    Ok(Outcome::reply(ClientResponse::TerminalBounds(reply)))
 }
 
 pub(super) fn text(world: &World, text: &TerminalText) -> Answer {
     let reply = mirror(world, &text.id)?.text(text.numbering, text.range, text.rectangle).map_err(|e| failed(&e))?;
-    Ok(Outcome::Reply(ClientResponse::TerminalText(reply), Vec::new()))
+    Ok(Outcome::reply(ClientResponse::TerminalText(reply)))
 }
 
 fn screen<'w>(world: &'w World, id: &TerminalId) -> Result<&'w TerminalShows, ApiError> {

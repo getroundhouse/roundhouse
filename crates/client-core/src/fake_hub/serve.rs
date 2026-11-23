@@ -14,9 +14,12 @@ use protocol::client::{
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
-use protocol::model::{CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, Rev, Seq, Session};
+use protocol::model::{
+    ChangedFilesPage, CompactionLine, GitDiff, GitStatus, GithubSignIn, MOST_FILES_LISTED, Place, Rev, Seq, Session,
+};
 
 use super::base_pages::{opened, paged};
+use super::following::not_found;
 use super::github;
 use super::logs::{prompt_lines, read};
 use super::parts::{part, worktree_video};
@@ -53,12 +56,12 @@ fn serve_requests(world: &World, connection: u64, stream: UnixStream) {
     for line in BufReader::new(stream).split(b'\n') {
         let Ok(line) = line else { return };
         let Ok(ClientFrame { id, request }) = frame::decode::<ClientFrame>(&line) else { return };
-        let (outcome, then) = match answer(world, connection, request) {
-            Ok(Outcome::Reply(response, then)) => (ReplyOutcome::Response(response), then),
+        let (first, outcome, then) = match answer(world, connection, request) {
+            Ok(Outcome::Reply { first, response, then }) => (first, ReplyOutcome::Response(response), then),
             Ok(Outcome::Never) => continue,
-            Err(error) => (ReplyOutcome::Error(error), Vec::new()),
+            Err(error) => (Vec::new(), ReplyOutcome::Error(error), Vec::new()),
         };
-        for frame in std::iter::once(HubFrame::Reply { id, outcome }).chain(then) {
+        for frame in first.into_iter().chain(std::iter::once(HubFrame::Reply { id, outcome })).chain(then) {
             if writer.write_all(&frame::encode(&frame).unwrap()).is_err() {
                 return;
             }
@@ -68,10 +71,18 @@ fn serve_requests(world: &World, connection: u64, stream: UnixStream) {
 
 pub(super) type Answer = Result<Outcome, ApiError>;
 
+impl Outcome {
+    /// The reply alone.
+    pub(super) fn reply(response: ClientResponse) -> Self {
+        Outcome::Reply { first: Vec::new(), response, then: Vec::new() }
+    }
+}
+
 #[expect(clippy::large_enum_variant, reason = "one is made for each request and sent straight away, never kept")]
 pub(super) enum Outcome {
-    /// The reply, and any frames that go after it.
-    Reply(ClientResponse, Vec<HubFrame>),
+    /// The reply, any frames a hub queues before it, as a workspace's list before the reply to `Subscribe`, and any
+    /// that go after it.
+    Reply { first: Vec<HubFrame>, response: ClientResponse, then: Vec<HubFrame> },
     /// Left unanswered, so the app stays waiting, as for a screen that shows something under way.
     Never,
 }
@@ -80,7 +91,7 @@ pub(super) enum Outcome {
 fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
     use ClientRequest as R;
     use ClientResponse as C;
-    let reply = |response| Ok(Outcome::Reply(response, Vec::new()));
+    let reply = |response| Ok(Outcome::reply(response));
     match request {
         R::Hello(_) => reply(C::Hello(HelloReply {
             protocol_version: CLIENT_PROTOCOL_VERSION,
@@ -102,9 +113,13 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => {
             reply(C::GitDiff(world.diffs.get(&id).cloned().unwrap_or_else(GitDiff::default)))
         }
-        // As a hub from before it, since a fake hub sends no summary of a workspace's changes to page on from.
-        R::WorkspaceChangedFiles(_) => {
-            Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't page through a workspace's changed files"))
+        R::WorkspaceChangedFiles(workspaces::WorkspaceChangedFiles { id, after }) => {
+            world.workspaces.iter().find(|workspace| workspace.id == id).ok_or_else(|| not_found("workspace"))?;
+            // As a hub whose worker is too old to read them.
+            let Some((base, files)) = world.changed_files.get(&id) else {
+                return Err(ApiError::new(ErrorCode::Unsupported, "the workspace's worker can't page through its files"));
+            };
+            reply(C::ChangedFilesPage(ChangedFilesPage::after(base.clone(), files.clone(), &after, MOST_FILES_LISTED)))
         }
         R::WorkspaceSetupLog(workspaces::WorkspaceSetupLog { id }) => {
             reply(C::SetupLog(workspaces::SetupLog { text: world.setup_logs.get(&id).cloned().unwrap_or_default() }))
