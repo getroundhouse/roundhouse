@@ -1,9 +1,9 @@
 use crate::model::{
-    DiffComment, DiffSide, FoundGithubLogin, GithubAccount, GithubReach, GithubSignIn, HubSettings, NewWorkspaceDraft,
-    Record, RecordKey, Repo, Rev, Subagent, Terminal,
+    DiffComment, DiffSide, FoundGithubLogin, GithubAccount, GithubReach, GithubSignIn, HubSettings, LineCounts,
+    NewWorkspaceDraft, Observation, ObservationKey, Observed, Record, RecordKey, Repo, Rev, Subagent, Terminal,
 };
 
-use super::{HubNotice, RecordNotice};
+use super::{HubNotice, ObservationNotice, RecordNotice};
 
 fn subagent(rev: u64) -> Subagent {
     Subagent { rev: Rev::new(rev), ..crate::fixtures::subagent("c") }
@@ -90,9 +90,39 @@ fn a_copy_is_the_record_it_carries() {
     assert_eq!(of, RecordNotice::Copy(Record::Subagent(subagent(6))));
 }
 
+/// A notice of an observation and of its removal, with the key and revision each is of.
+fn of_an_observation() -> Vec<(HubNotice, ObservationKey, Rev)> {
+    let key = ObservationKey::WorkspaceLines { workspace_id: "w".into() };
+    let lines = Observed::Current { value: LineCounts { added: 3, removed: 1 } };
+    let copy = Observation::WorkspaceLines { workspace_id: "w".into(), lines, rev: Rev::new(4) };
+    vec![
+        (HubNotice::Observation(copy), key.clone(), Rev::new(4)),
+        (HubNotice::ObservationRemoved { observation: key.clone(), rev: Rev::new(5) }, key, Rev::new(5)),
+    ]
+}
+
+#[test]
+fn a_notice_of_an_observation_says_which_and_its_revision_and_goes_back_as_it_came() {
+    for (notice, key, rev) in of_an_observation() {
+        let of = ObservationNotice::try_from(notice.clone()).unwrap();
+
+        assert_eq!((of.key(), of.rev()), (key, rev), "{notice:?}");
+        assert_eq!(HubNotice::from(of), notice);
+    }
+}
+
 #[test]
 fn a_notice_that_is_not_of_one_record_is_handed_back() {
-    for notice in [HubNotice::Resync, HubNotice::Unknown] {
+    let observations = of_an_observation().into_iter().map(|(notice, _, _)| notice);
+    for notice in [HubNotice::Resync, HubNotice::Unknown].into_iter().chain(observations) {
         assert_eq!(RecordNotice::try_from(notice.clone()), Err(notice));
+    }
+}
+
+#[test]
+fn a_notice_that_is_not_of_one_observation_is_handed_back() {
+    let removed = HubNotice::Removed { record: RecordKey::Session { id: "s".into() }, rev: Rev::new(7) };
+    for notice in [HubNotice::Subagent(subagent(6)), removed, HubNotice::Resync, HubNotice::Unknown] {
+        assert_eq!(ObservationNotice::try_from(notice.clone()), Err(notice));
     }
 }

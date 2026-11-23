@@ -1,17 +1,19 @@
 //! That a client reads from the fake hub what its world holds, and is refused what would change it, and that where the
 //! fake hub works something out of its world, it does so by the rule the hub follows, as `protocol` states it.
 
-use protocol::client::{ErrorCode, log};
+use std::time::Duration;
+
+use protocol::client::{ErrorCode, ObservationNotice, log};
 use protocol::event::{ContentBlock, EventBody, ExitReason, TaskKind};
 use protocol::model::{
-    AgentKind, Ending, MessageId, Place, ReplyHeard, ReplyPlace, Rev, Seq, SessionStatus, SettledBy, SubagentId,
-    SubagentStatus,
+    AgentKind, Ending, LineCounts, MessageId, Observation, ObservationKey, Observed, Place, ReplyHeard, ReplyPlace,
+    Rev, Seq, SessionStatus, SettledBy, SubagentId, SubagentStatus,
 };
 use protocol::terminal::{Bounds, TerminalPoint, TerminalRow, TerminalSize};
 
 use super::events::{subagent_ended, subagent_started, taken, task, text, user_prompt, within};
 use super::{World, serve};
-use crate::{Client, ClientError, SubscriptionItem};
+use crate::{Client, ClientError, RecordsFeed, SubscriptionItem};
 
 /// A client of a fake hub serving `world`, and the directory its socket is in, which goes when the test ends.
 fn served(world: World) -> (tempfile::TempDir, Client) {
@@ -65,6 +67,39 @@ fn a_client_reads_how_a_chat_s_replies_were_heard_and_is_refused_saying_another(
     assert_eq!(replies, [heard]);
     assert_eq!(none, []);
     assert!(matches!(said, Err(ClientError::Api(refused)) if refused.code == ErrorCode::Unsupported));
+}
+
+/// As a hub's list and feed reach a client that connects: it holds what's listed, keeps the newer of two copies
+/// whichever arrives first, and drops one the feed says is gone.
+#[test]
+fn a_client_holds_the_observations_the_hub_lists_and_its_feed_tells_of() {
+    let lines = |workspace: &str, added, rev| Observation::WorkspaceLines {
+        workspace_id: workspace.into(),
+        lines: Observed::Current { value: LineCounts { added, removed: 0 } },
+        rev: Rev::new(rev),
+    };
+    let current = |added| Observed::Current { value: LineCounts { added, removed: 0 } };
+    let mut world = World::default();
+    world.observations = vec![lines("elm", 1, 2), lines("oak", 1, 2), lines("ash", 1, 2)];
+    world.feed = vec![
+        ObservationNotice::Copy(lines("elm", 3, 5)),
+        ObservationNotice::Copy(lines("elm", 2, 4)),
+        ObservationNotice::Copy(lines("oak", 7, 1)),
+        // Last, so once it's taken in, so is every notice before it.
+        ObservationNotice::Removed {
+            observation: ObservationKey::WorkspaceLines { workspace_id: "ash".into() },
+            rev: Rev::new(6),
+        },
+    ];
+    let (_dir, client) = served(world);
+
+    let feed = RecordsFeed::start(&client);
+    let gone = || feed.connected() && *feed.snapshot().workspace_lines(&"ash".into()) == Observed::NotKnown;
+    waiting::thread::until(Duration::from_secs(10), "the feed's removal never arrived", gone);
+
+    let shown = feed.snapshot();
+    assert_eq!(*shown.workspace_lines(&"elm".into()), current(3), "the newer copy, though an older one came after it");
+    assert_eq!(*shown.workspace_lines(&"oak".into()), current(1), "the list's, which is newer than the feed's");
 }
 
 /// As `SessionStatus::counts_as_running` says: in a turn, or in the background on anything but waits.

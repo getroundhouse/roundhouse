@@ -1,6 +1,7 @@
 use super::super::Taken;
 use super::by_session::SessionsListed;
 use super::github::GithubListed;
+use super::observed::ObservationsListed;
 use crate::Agents;
 use protocol::model::{
     Account, AccountId, DiffComment, HubSettings, HubUpdate, MessageId, ModelList, ModelListKey, NewWorkspaceDraft,
@@ -13,6 +14,7 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Default)]
 pub struct Snapshot {
     pub(super) records: Arc<Listed>,
+    pub(super) observations: Arc<ObservationsListed>,
     pub(super) subagents: Arc<SessionsListed<Subagent>>,
     pub(super) proposals: Arc<SessionsListed<Proposal>>,
     pub(super) replies_heard: Arc<SessionsListed<ReplyHeard>>,
@@ -135,12 +137,13 @@ impl Listed {
 impl Snapshot {
     pub(in super::super) fn new(
         records: Arc<Listed>,
+        observations: Arc<ObservationsListed>,
         subagents: Arc<SessionsListed<Subagent>>,
         proposals: Arc<SessionsListed<Proposal>>,
         replies_heard: Arc<SessionsListed<ReplyHeard>>,
         agents: Arc<Agents>,
     ) -> Self {
-        Snapshot { records, subagents, proposals, replies_heard, agents }
+        Snapshot { records, observations, subagents, proposals, replies_heard, agents }
     }
 
     /// What each kind of agent the hub runs is called and offers. None until the hub has said, and for good from a hub
@@ -281,6 +284,7 @@ impl Changes<'_> {
     /// Whether anything changed at all.
     pub fn any(&self) -> bool {
         !Arc::ptr_eq(&self.now.records, &self.then.records)
+            || !Arc::ptr_eq(&self.now.observations, &self.then.observations)
             || !Arc::ptr_eq(&self.now.subagents, &self.then.subagents)
             || !Arc::ptr_eq(&self.now.proposals, &self.then.proposals)
             || !Arc::ptr_eq(&self.now.replies_heard, &self.then.replies_heard)

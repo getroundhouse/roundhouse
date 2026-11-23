@@ -6,15 +6,15 @@ These rules cover observations, the hub's copies of what others own: what one is
 
 - **An observation is the hub's copy of state someone else owns, as the hub last observed it.** Git, GitHub and an agent each own state the hub only observes: by watching it, by asking for it, or by being told as it changes. Where the hub can ask again, it does, to keep its copy current. Where it can't, as with what only a running agent says, its copy is as of when that was last said. What an agent says in an event is the log's, so what the hub works out from it is a record, such as a session's status and what its running agent claims. *Not built:* such a copy is a record or a field of one, as are a workspace's branches, whether the default GitHub account can push to a repository, an agent's list of models, an account's usage limits, how full an agent's context is, an agent's todos, and how many files a workspace has uncommitted. Or it's in GitHub's cache, which reaches a client with no revision. Or it isn't kept, as a workspace's diff is read whole on each request.
 - **What the hub reads from an outside system is a cache, and what Roundhouse decides about it is the hub's own record, which keeps only the link.** Which pull request is a workspace's, and which account a project uses, are Roundhouse's decisions, so they're records and the truth. A workspace's record keeps its pull request's address, and what GitHub says of the pull request is in the cache. What's read from GitHub can be read again, so losing it loses nothing. A record can't always be rebuilt: once a workspace's branch is deleted, or its name is used again, GitHub alone can't say which pull request the workspace had.
-- **An observation says how fresh it is: not known, current, or as of a time.** It's current while something keeps it up to date, and otherwise as it was last read, with when. So no client shows an old reading as current, or takes "not known" for "none". Each read replaces it whole, and its revision moves only when what it says changes, so reading the same again sends clients nothing. *Not built.*
+- **An observation says how fresh it is: not known, current, or as of a time.** It's current while something keeps it up to date, and otherwise as it was last read, with when. So no client shows an old reading as current, or takes "not known" for "none". Each read replaces it whole, and its revision moves only when what it says changes, so reading the same again sends clients nothing. *Not built:* no hub reads or sends one.
 
   ```rust
-  // Not built. A sketch of what the protocol would hold.
+  // crates/protocol/src/model/observation/observed.rs, abridged
   pub enum Observed<T> {
       /// Never read, or emptied since.
       NotKnown,
       /// Kept up to date now, as what a client follows is.
-      Current(T),
+      Current { value: T },
       /// As it was last read, at `as_of_ms`, since nothing keeps it up to date now.
       AsOf { value: T, as_of_ms: i64 },
   }
@@ -30,4 +30,4 @@ These rules cover observations, the hub's copies of what others own: what one is
 
 ## Keeping a copy
 
-- **A client keeps an observation as it keeps a record: by revision, whichever level sent it.** So `client-core` holds records and observations one way, as `docs/principles/records.md` says of a record. *Not built.*
+- **A client keeps an observation as it keeps a record: by revision, whichever level sent it.** So `client-core` holds records and observations one way, as `docs/principles/records.md` says of a record.

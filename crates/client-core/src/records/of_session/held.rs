@@ -45,12 +45,12 @@ impl<R: OfSession> BySession<R> {
         let session = self.held.entry(record.session().clone()).or_default();
         // As for every record. A hub that keeps these records keeps revisions, so a copy without one only comes from a
         // hub that doesn't, which has none to send.
-        let held = session.get(&record.id()).map(|held| &held.record);
+        let held = session.get(&record.id()).map(|held| &held.copy);
         if held.is_some_and(|held| !record.rev().supersedes(held.rev()) || **held == record) {
             return false;
         }
         let taken = self.taken.next();
-        session.insert(record.id(), Kept { record: Arc::new(record), taken });
+        session.insert(record.id(), Kept { copy: Arc::new(record), taken });
         self.shown.take();
         true
     }
@@ -120,7 +120,7 @@ impl<R: OfSession> BySession<R> {
             let sessions = self
                 .held
                 .iter()
-                .map(|(session, its)| (session, its.values().map(|held| (held.record.clone(), held.taken)).collect()));
+                .map(|(session, its)| (session, its.values().map(|held| (held.copy.clone(), held.taken)).collect()));
             Arc::new(SessionsListed::of(sessions))
         });
         listed.clone()

@@ -240,7 +240,7 @@ fn kinds() -> [Kind; 6] {
 }
 
 fn kept(held: &HubRecords, key: &RecordKey) -> Option<Record> {
-    held.held.get(key).map(|kept| kept.record.clone())
+    held.records.held.get(key).map(|kept| kept.copy.clone())
 }
 
 /// A list at `rev` of these records.

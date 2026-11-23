@@ -10,7 +10,7 @@ These rules say what a hub serves, how a client gets it, and what the hub keeps 
   |---|---|---|---|---|
   | Event | Something that happened in a session, such as a prompt, a tool call or a turn ending. It never changes once recorded | The database | Appends it, in order, by `seq` | `docs/principles/events.md` |
   | Record | Current state the hub owns, such as a workspace, a session's status or a comment | The database, or memory for one that lasts only as long as a process | Replaces it with a newer copy, by revision | `docs/principles/records.md` |
-  | Observation | The hub's copy of state someone else owns, as the hub last observed it, such as a workspace's lines added and removed, what GitHub says of a pull request, or how full an agent's context is. Not built | Memory, and a cache file | As a record | `docs/principles/observations.md` |
+  | Observation | The hub's copy of state someone else owns, as the hub last observed it, such as a workspace's lines added and removed, what GitHub says of a pull request, or how full an agent's context is. Not built in the hub | Memory, and a cache file | As a record | `docs/principles/observations.md` |
   | Live snapshot | What something running shows now: a reply as its agent writes it, or a terminal's screen | Not stored | Takes it whole, then each change | `docs/principles/live-snapshots.md` |
 
 ## How a client gets it
