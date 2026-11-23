@@ -884,7 +884,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![A compaction asked for with what to keep](screens/compacted-keeping.png)
 
-- **While the agent compacts, the working line says so after the time,** `Compacting the conversation`, and how much of the summary it has written when the agent says, such as `16k characters written`, since that's the only sign a compaction is getting on. It says so from when the compaction is asked for, since an agent that has to start first can take most of a minute to say anything. The hub's tail holds it, so every client says the same, and one that opens the chat partway says it too.
+- **While the agent compacts, the working line says so after the time,** `Compacting the conversation`, and how much of the summary it has written when the agent says, such as `16k characters written`, since that's the only sign a compaction is getting on. It says so from when the compaction is asked for, since an agent that has to start first can take most of a minute to say anything. The hub's tail holds it, so every client says the same, and one that opens the chat partway says it too. *Unconfirmed:* the characters shortened as a count of tokens is.
 
   **The agent compacting, three minutes into a turn.**
 
