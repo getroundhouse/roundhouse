@@ -57,6 +57,7 @@ mod terminals;
 mod waits;
 mod worker;
 mod worker_calls;
+mod workspace_pull_requests;
 mod workspaces;
 mod worktrees;
 

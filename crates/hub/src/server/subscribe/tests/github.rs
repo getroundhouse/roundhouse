@@ -134,16 +134,3 @@ async fn the_feed_sends_no_observation_of_github() {
         HubFrame::Notice { notice: HubNotice::Observation(_) | HubNotice::ObservationRemoved { .. }, .. }
     )));
 }
-
-/// A start at the hub's level that reads GitHub as observations is still sent each workspace's pull request as
-/// `HubFrame::Github`, since the hub sends none of it as an observation yet.
-#[tokio::test]
-async fn the_hub_s_level_still_sends_github_s_updates() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_an_issue(dir.path()).await;
-    let mut client = Connection::greeted(&hub, 4).await;
-
-    ok(&mut client, 1, Subscribe { stop: Vec::new(), start: vec![observing(1, Follow::Hub)] }).await;
-
-    client.until("the workspace's pull request", |sent| sent.iter().any(github)).await;
-}

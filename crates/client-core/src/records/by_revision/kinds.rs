@@ -28,7 +28,12 @@ impl Revised for Observation {
         match self {
             Observation::WorkspaceLines { .. } => Some(Observation::key(self)),
             // Not drawn yet, so not kept.
-            Observation::WorkspaceChanges { .. } | Observation::Reference { .. } | Observation::Unknown => None,
+            Observation::WorkspaceChanges { .. }
+            | Observation::WorkspacePullRequest { .. }
+            | Observation::WorkspacePullRequestDetail { .. }
+            | Observation::WorkspaceRepositoryUnseen { .. }
+            | Observation::Reference { .. }
+            | Observation::Unknown => None,
         }
     }
 

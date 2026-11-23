@@ -4,7 +4,9 @@ use super::followers::Followers;
 use super::observations::{self, Observations};
 use super::terminals::Terminals;
 use super::updates::Updates;
-use super::{awake, changes_watch, feed, github_reads, pull_requests, sessions, setup, workspace_lines};
+use super::{
+    awake, changes_watch, feed, github_observed, github_reads, pull_requests, sessions, setup, workspace_lines,
+};
 use crate::attachment_files::AttachmentFiles;
 use crate::cache_file::CacheFile;
 use crate::error::internal;
@@ -106,6 +108,8 @@ pub(crate) struct Hub {
     pub(super) changes_watches: changes_watch::Watches,
     /// Who follows what, which is what the hub keeps current.
     pub(super) followers: Followers,
+    /// Tells of each read of a workspace's pull request that ends, for what's sent of it as observations.
+    pub(super) github_reads_ended: github_observed::ReadsEnded,
     /// When the hub last tried to read each pull request of an archived workspace that the cache had forgotten.
     pub(super) github_forgotten: github_reads::Forgotten,
     /// The reads of workspaces' own pull requests nobody asked for that are running now, by whose token each reads
@@ -191,6 +195,7 @@ impl Hub {
             updates: Updates::new(dirs.service_builds),
             pull_requests: pull_requests::Reading::new(),
             followers: Followers::default(),
+            github_reads_ended: github_observed::ReadsEnded::default(),
             github_forgotten: github_reads::Forgotten::default(),
             own_reads: Jobs::new(),
             sign_ins: Jobs::new(),

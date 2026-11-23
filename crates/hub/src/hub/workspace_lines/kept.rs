@@ -34,6 +34,7 @@ impl Hub {
             warn!(%id, "forgetting the lines of a workspace that's gone: {}", e.message);
         }
         self.changes_forgotten(id).await;
+        self.github_observations_gone(id).await;
     }
 
     /// Forgets the files the workspace changes, as when it's archived, since no pane draws an archived workspace's

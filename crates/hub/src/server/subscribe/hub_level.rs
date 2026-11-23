@@ -1,6 +1,6 @@
 //! A subscription at the hub's level: where every record but a session's own stands, then each notice of the hub's
-//! level, and what GitHub says of each workspace's own pull request, as a `GithubSubscribe` that shows every workspace
-//! is sent it.
+//! level, and what GitHub says of each workspace's own pull request: as an observation to one that reads GitHub so, and
+//! otherwise as a `GithubSubscribe` that shows every workspace is sent it.
 
 use std::sync::Arc;
 
@@ -30,10 +30,15 @@ pub(super) async fn feeding(
     let hub = hub.clone();
     Ok(Box::pin(async move {
         let (shown, showing) = watch::channel(every_workspace(&listed));
-        if !send_listed(&frames, subscription_id, Listed::Hub(Box::new(listed))).await {
+        if !send_listed(&frames, &sends, subscription_id, Listed::Hub(Box::new(listed))).await {
             return;
         }
-        let github = pump(hub.clone(), showing, subscription_id, frames.clone());
+        let github = async {
+            if !sends.forms().updates {
+                return std::future::pending().await;
+            }
+            pump(hub.clone(), showing, subscription_id, frames.clone()).await;
+        };
         let list = || async {
             let listed = hub.records_list().await?;
             shown.send_replace(every_workspace(&listed));

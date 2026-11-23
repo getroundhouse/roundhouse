@@ -1,5 +1,6 @@
 use super::Connection;
 use super::pump::Following;
+use super::sends::Sends;
 use super::subscribing::{follow_feed, follow_log, unsubscribe};
 use super::terminals;
 use crate::attachment_files::FileFor;
@@ -76,7 +77,8 @@ pub(super) async fn handle(
         R::HubConfigure(admin::HubConfigure { settings }) => C::HubSettings(hub.hub_configure(settings).await?),
         R::RepoAdd(records::RepoAdd { path }) => C::Repo(hub.repo_add(path).await?),
         R::RepoList => C::Repos(records::Repos { repos: hub.repo_list().await? }),
-        R::RecordsList => C::Records(hub.records_list().await?),
+        // As the feed is sent them, since only a client from before `Subscribe` asks.
+        R::RecordsList => C::Records(Sends::feed().records(hub.records_list().await?)),
         R::ModelsFor(asked) => C::ModelList(hub.models_for(asked).await?),
         R::AgentList => C::Agents(admin::Agents { agents: hub.agent_list() }),
         R::WorkspaceCreate(workspaces::WorkspaceCreate { repo_id, name, base_ref, client_request_id }) => {

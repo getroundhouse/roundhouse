@@ -8,6 +8,8 @@ mod tests;
 mod github;
 mod kinds;
 mod observed;
-pub use github::{IssueSaid, PullRequestSaid, ReferenceSaid};
+pub use github::{
+    IssueSaid, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReferenceSaid,
+};
 pub use kinds::{Observation, ObservationKey};
 pub use observed::Observed;
