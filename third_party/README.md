@@ -1,6 +1,6 @@
 # Code from other projects
 
-Other projects' code that the apps build from a copy kept here, on a release of the project's own, with our changes on top: gpui-kit, in `gpui-kit/`, and three crates of GPUI's and Zed's, in `gpui-pre-apple/`, `gpui-pre-ios/` and `zed-font-kit/`.
+Other projects' code that the apps build from a copy kept here, on a release of the project's own, with our changes on top: gpui-kit, in `gpui-kit/`, and three crates of GPUI's and Zed's, in `gpui-pre-apple/`, `gpui-pre-ios/` and `zed-font-kit/`. And what the build needs beside libvpx's source, which it fetches, in `libvpx/`.
 
 Renovate reads nothing in this folder, as `ignorePaths` in `.github/renovate.json5` has it. Each copy keeps upstream's manifests and workflows, so the versions in them are upstream's, and change only when the copy is brought to a new release. `Cargo.lock` still takes the newest crate each of those versions allows, in Renovate's pull request for the whole lockfile.
 
@@ -115,3 +115,18 @@ They're copied whole and changed in place, rather than patched as the kit is, si
 | An input that reports neither its editable range nor its length still says how much of an unbounded range it holds | `gpui-pre-ios` | `src/ios/text_input.rs` | gpui-kit's input reports neither, and with no document range iOS never shows the keyboard | Not offered yet |
 | `core-text` 22 and the `core-graphics` 0.25 it takes, rather than 21 and 0.24 | `gpui-pre-apple`, `zed-font-kit` | `Cargo.toml` | CoreText gives a font's trait that's zero as a boolean on iOS, as macOS Ventura does for some fonts, and 21 panics reading it. 22 reads it as 0 or 1 | Zed's Renovate update to 22 waits for approval |
 | A trait CoreText gives as a boolean counts as read | `gpui-pre-apple` | `src/text_system.rs` | The text system skipped any face whose traits weren't all numbers, to avoid 21's panic. Every face of Menlo has one on iOS, so none loaded, and with no font found GPUI stopped the app | Not offered yet |
+
+## libvpx
+
+The `video` crate builds libvpx, the WebM project's VP8 and VP9 codecs, which decode the videos agents make, as `docs/decisions/webm-through-libvpx.md` says. Its build script fetches libvpx's source with git, at the commit `libvpx/COMMIT` names, into its `OUT_DIR`, as libghostty-vt's fetches Ghostty's, and compiles its decoders from there. `libvpx/` holds the rest, for the release `tools/libvpx-sync.sh` pins, and only that script writes it:
+
+- `COMMIT`: the commit the release's tag points at. Git names every file by its hash, so the build gets the same source wherever it runs.
+- `config/`: what libvpx's `configure` writes for each target the app is built for, in a folder named for it, which `libvpx-build` picks: the config's headers, its assembly's, the tables that pick each function's fastest version for the CPU it runs on, and `sources.txt`, which lists what the target compiles. And `vpx_version.h`, which every target shares.
+- `LICENSE`, `PATENTS` and `AUTHORS`: libvpx's license, its grant of patent rights and its authors, which ship with the app. And `LICENSE-X86INC`, the license of x264's `x86inc`, which libvpx's x86 assembly includes.
+- `SHA256SUMS`: each file's checksum, which the policy test checks the folder against.
+
+The script writes every target's config on one Linux machine, as Chromium's copy of libvpx is made, and builds nothing. From a Mac, it runs in Rust's image, as `docs/reference/commands.md` says. The build script compiles the source with `cc`, and assembles x86's assembly with nasm, which has to be on the PATH.
+
+### Taking a new release
+
+Renovate's pull request for a new release changes only `LIBVPX_VERSION` in the script, and says what's left. Set `LIBVPX_COMMIT` to the commit the release's tag points at, run the script, read what changed in libvpx's decoders since the last release, in its own repository, and run `cargo test -p video`, whose fixtures have to decode to the frames ffmpeg does. CI builds it for Windows and x86 Linux too. A release that fixes a decoder's security bug is taken at once, since the decoders read files an agent wrote.

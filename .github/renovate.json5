@@ -304,6 +304,30 @@
       ],
     },
     {
+      description: [
+        "third_party/libvpx is made for libvpx's release by tools/libvpx-sync.sh, which pins the commit the tag was and",
+        "writes each target's config, so a new release takes a person to run it and check the build.",
+      ],
+      matchDepNames: [
+        'webmproject/libvpx',
+      ],
+      allowedVersions: '!/-rc/',
+      prBodyNotes: [
+        "> [!WARNING]\n> This changes only `LIBVPX_VERSION`. Set `LIBVPX_COMMIT` in `tools/libvpx-sync.sh` to the commit the new tag points at, run it, as `third_party/README.md` says, then `cargo test -p video` on a Mac, and let CI build it for Windows and x86 Linux, before merging. The policy test fails until `third_party/libvpx` is for the release the script pins.",
+      ],
+    },
+    {
+      description: "nasm for Windows x64 runners is pinned by checksum too, which Renovate can't work out. Its tags are `nasm-<version>`.",
+      matchDepNames: [
+        'netwide-assembler/nasm',
+      ],
+      extractVersion: '^nasm-(?<version>\\d+\\.\\d+(?:\\.\\d+)?)$',
+      dependencyDashboardApproval: true,
+      prBodyNotes: [
+        "> [!WARNING]\n> Renovate can't update the checksum in `.github/actions/nasm/action.yml`. Replace `NASM_SHA256` with the SHA-256 of the new release's `https://www.nasm.us/pub/nasm/releasebuilds/{{{newVersion}}}/win64/nasm-{{{newVersion}}}-win64.zip` before merging.",
+      ],
+    },
+    {
       description: "The file icons are made from Catppuccin's release by a script, which checks it against a pinned checksum.",
       matchDepNames: [
         'catppuccin/vscode-icons',

@@ -2,6 +2,8 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-dbg-in-tests = true
 too-many-lines-threshold = 60
+# Words written as they are in docs, as well as Clippy's own list, which `..` keeps.
+doc-valid-idents = ["WebM", "QuickTime", ".."]
 disallowed-types = [
     { path = "std::sync::Mutex", reason = "use parking_lot::Mutex; see docs/standards/rust.md" },
     { path = "std::sync::RwLock", reason = "use parking_lot::RwLock; see docs/standards/rust.md" },

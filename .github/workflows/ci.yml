@@ -29,12 +29,14 @@ env:
   # renovate: datasource=crate depName=cargo-nextest
   NEXTEST_VERSION: 0.9.152
   # What GPUI's Linux crates build against. Verified on 2026-11-08 in Docker, not minimized. Then ALSA, which `cpal`
-  # plays the speakers through, and lld, which .cargo/config.toml links with on ARM64.
+  # plays the speakers through, lld, which .cargo/config.toml links with on ARM64, and nasm, which assembles libvpx's
+  # x86 assembly for the video crate.
   LINUX_PACKAGES: >-
     pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
     libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
     libasound2-dev
     lld
+    nasm
 
 # The ruleset requires only `checks`. `changes` does the skipping, since a required check whose workflow never runs
 # stays pending. Actions are pinned to full commits.
@@ -312,9 +314,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: cargo run --locked -p update-steps
 
+  # libvpx as x86 builds it, with nasm's assembly, which the tests on ARM64 don't reach: decoding the video crate's
+  # fixtures to the frames ffmpeg does. windows.yml does the same with MSVC.
+  x86:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: .github/install-linux-packages.sh
+        env:
+          LINUX_PACKAGES: nasm
+      - run: cargo test --locked -p video -p libvpx-build
+
   # The one required check. It fails if any job failed or was cancelled, and passes if the rest passed or were skipped.
   checks:
-    needs: [changes, lint, test, publish, guide, kit, steps]
+    needs: [changes, lint, test, publish, guide, kit, steps, x86]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -325,7 +341,7 @@ jobs:
       - id: passed
         if: >-
           github.event_name == 'pull_request' && needs.lint.result == 'success' && needs.test.result == 'success' &&
-          needs.publish.result == 'success'
+          needs.publish.result == 'success' && needs.x86.result == 'success'
         run: echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > "$RUNNER_TEMP/passed"
       # Losing it only costs the queue a recheck.
       - if: steps.passed.outcome == 'success'

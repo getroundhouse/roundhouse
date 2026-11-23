@@ -151,7 +151,7 @@ What's left is on GitHub: [issues](https://github.com/getroundhouse/roundhouse/i
 
 ## Working on Roundhouse
 
-It needs Rust, through [rustup](https://rustup.rs), which installs the version `rust-toolchain.toml` pins, and [Zig](https://ziglang.org/download/) 0.17 on the PATH, which builds Ghostty's terminal core. On a Mac, `brew install zig` has it.
+It needs Rust, through [rustup](https://rustup.rs), which installs the version `rust-toolchain.toml` pins, and [Zig](https://ziglang.org/download/) 0.17 on the PATH, which builds Ghostty's terminal core. Building for x86 needs [nasm](https://www.nasm.us) on the PATH too, which assembles the video decoder's fast paths. On a Mac, `brew install zig nasm` has both.
 
 ```sh
 cargo run -p desktop --bin roundhouse-desktop -- --note "What to try"   # The app, with your changes

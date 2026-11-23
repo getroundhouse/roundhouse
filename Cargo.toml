@@ -33,6 +33,8 @@ members = [
     "crates/waiting",
     "crates/spec-screens",
     "crates/terminal-view",
+    "crates/video",
+    "crates/libvpx-build",
     "tools/policy",
     "tools/guide",
     "tools/kit-sync",
@@ -75,6 +77,8 @@ default-members = [
     "crates/update-feed",
     "crates/windows-icon",
     "crates/waiting",
+    "crates/video",
+    "crates/libvpx-build",
     "tools/policy",
     "tools/guide",
     "tools/kit-sync",
@@ -136,6 +140,7 @@ waiting = { path = "crates/waiting" }
 spec-screens = { path = "crates/spec-screens" }
 terminal-state = { path = "crates/terminal-state" }
 terminal-view = { path = "crates/terminal-view" }
+libvpx-build = { path = "crates/libvpx-build" }
 desktop = { path = "apps/desktop" }
 mobile-ios = { path = "apps/mobile-ios" }
 kit-sync = { path = "tools/kit-sync" }
@@ -146,6 +151,8 @@ async-trait = "0.1.92"
 base64 = "0.23.1"
 # Already under objc2's crates. The block a Mac calls with whether the app may use the microphone.
 block2 = "0.6.2"
+# Already under the build scripts of several crates. Compiles libvpx, which the `video` crate's build script fetches.
+cc = { version = "1.11.2", features = ["parallel"] }
 clap = { version = "4.6.8", features = ["derive"] }
 # Decodes the speech eval's recordings, which are FLAC.
 claxon = "0.4.3"
@@ -195,6 +202,8 @@ usvg = { version = "0.46.0", default-features = false, features = ["text"] }
 # text view doesn't. 1.0.0 is its latest release, of April 2025, and nothing has been pushed to it since, so the guards
 # stay until a release fixes the panic.
 markdown = "1.0.0"
+# Reads the WebM a video an agent made is in, frame by frame, for libvpx to decode.
+matroska-demuxer = "0.8.1"
 # Writes the spec's page as HTML, escaping what it puts in.
 maud = "0.27.0"
 # Draws the Mermaid diagrams the agent writes, as SVG, in Rust, with no browser or JavaScript. Only the kinds of diagram
@@ -349,6 +358,11 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 opt-level = 2
 debug = false
+
+# Turning a frame into the pixels GPUI draws is arithmetic over every pixel, 60 times a second, which takes 3.5 ms for a
+# 2880 × 1800 frame optimized, and 211 ms not, so a video plays in a debug build of the app as it does in a release.
+[profile.dev.package.video]
+opt-level = 3
 
 # Our copies of Zed's iOS backend, GPUI's Apple text system and Zed's font-kit, with the changes `third_party/README.md`
 # lists, in place of the ones on crates.io.

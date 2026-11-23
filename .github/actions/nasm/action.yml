@@ -1,0 +1,20 @@
+# nasm, on a Windows x64 runner, which hasn't got it, for the `video` crate's build script, which assembles libvpx's x86
+# assembly with it and fails without it, as docs/reference/commands.md says. Ubuntu's runners take it from apt instead.
+name: nasm
+description: Installs nasm on Windows x64, from nasm's release, checked against its checksum
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        # renovate: datasource=github-tags depName=netwide-assembler/nasm
+        NASM_VERSION: "3.02"
+        # Of nasm-$NASM_VERSION-win64.zip, which Renovate can't work out, as .github/renovate.json5 says.
+        NASM_SHA256: 161d0bfaff53c2f9e9f3e69fd0672323ebabafd1268976a5cec11be92a19aee7
+      run: |
+        zip="$RUNNER_TEMP/nasm.zip"
+        curl -sSfL -o "$zip" "https://www.nasm.us/pub/nasm/releasebuilds/$NASM_VERSION/win64/nasm-$NASM_VERSION-win64.zip"
+        echo "$NASM_SHA256  $zip" | sha256sum -c -
+        unzip -q "$zip" -d "$RUNNER_TEMP"
+        cygpath -w "$RUNNER_TEMP/nasm-$NASM_VERSION" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/nasm-$NASM_VERSION/nasm.exe" -v

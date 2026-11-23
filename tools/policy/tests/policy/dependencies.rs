@@ -1,9 +1,12 @@
 //! What each crate may depend on, from `docs/principles/layers.md`, and the pins that have to agree: the tool that
-//! packages the app and the crate that reads its packages, and the copy of gpui-kit, its tool's pin and the GPUI the
-//! app draws with.
+//! packages the app and the crate that reads its packages, the copy of gpui-kit, its tool's pin and the GPUI the app
+//! draws with, and what's kept of libvpx and its script's pin.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::fmt::Write as _;
 use std::path::Path;
+
+use ring::digest::{SHA256, digest};
 
 use kit_sync::{Git, Pin};
 use serde_json::Value;
@@ -210,6 +213,13 @@ fn now_playing_needs_none_of_our_other_crates_no_async_runtime_and_no_ui() {
     needs_none_of_ours_no_async_runtime_and_no_ui("now-playing", &[]);
 }
 
+/// Decoding video knows nothing of where a video is shown, with threads rather than a runtime and no UI, so any client
+/// on any device can play with it. What its build script compiles is `libvpx-build`'s, which only builds it.
+#[test]
+fn video_needs_none_of_our_other_crates_no_async_runtime_and_no_ui() {
+    needs_none_of_ours_no_async_runtime_and_no_ui("video", &[]);
+}
+
 #[test]
 fn the_hub_and_the_worker_stay_apart() {
     let metadata = metadata();
@@ -306,5 +316,55 @@ fn the_kit_s_copy_is_on_the_release_its_tool_pins() {
 
     if let Err(error) = kit_sync::verify(&git, root, &Pin::ours()) {
         panic!("{error}");
+    }
+}
+
+/// `third_party/libvpx` is for the release and commit `tools/libvpx-sync.sh` pins, file for file as the script wrote
+/// it, by the SHA-256 it wrote of each, so neither a release half taken nor a change the script didn't make can merge.
+/// The `video` crate's build script fetches the source at the commit it names.
+#[test]
+fn libvpx_s_folder_is_what_its_script_wrote_for_the_release_it_pins() {
+    let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+    let folder = root.join("third_party/libvpx");
+    let script = std::fs::read_to_string(root.join("tools/libvpx-sync.sh")).unwrap();
+    let pin = |name: &str| script.lines().find_map(|line| line.strip_prefix(&format!("{name}="))).unwrap().to_string();
+    let version = std::fs::read_to_string(folder.join("config/vpx_version.h")).unwrap();
+    let commit = std::fs::read_to_string(folder.join("COMMIT")).unwrap();
+    let sums = std::fs::read_to_string(folder.join("SHA256SUMS")).unwrap();
+
+    let listed: BTreeMap<String, String> = sums
+        .lines()
+        .map(|line| line.split_once("  ").unwrap())
+        .map(|(sum, path)| (path.to_string(), sum.to_string()))
+        .collect();
+    let mut found = BTreeMap::new();
+    sums_under(&folder, &folder, &mut found);
+    found.remove("SHA256SUMS");
+    let (release, pinned) = (pin("LIBVPX_VERSION"), pin("LIBVPX_COMMIT"));
+    let named = format!("#define VERSION_STRING_NOSP \"{release}\"");
+    assert!(version.contains(&named), "third_party/libvpx isn't {release}, which tools/libvpx-sync.sh pins. Run it");
+    assert_eq!(commit.trim(), pinned, "third_party/libvpx isn't the commit tools/libvpx-sync.sh pins. Run it");
+    assert!(
+        found == listed,
+        "third_party/libvpx isn't what tools/libvpx-sync.sh wrote. It changes only by running the script, as \
+         third_party/README.md says"
+    );
+}
+
+/// The SHA-256 of each file under `dir`, by its path from `folder`, as `sha256sum` writes them.
+fn sums_under(folder: &Path, dir: &Path, found: &mut BTreeMap<String, String>) {
+    for entry in std::fs::read_dir(dir).unwrap().map(Result::unwrap) {
+        let path = entry.path();
+        if entry.file_type().unwrap().is_dir() {
+            sums_under(folder, &path, found);
+        } else {
+            let sum = digest(&SHA256, &std::fs::read(&path).unwrap());
+            let hex = sum.as_ref().iter().fold(String::new(), |mut hex, byte| {
+                write!(hex, "{byte:02x}").unwrap();
+                hex
+            });
+            let relative = path.strip_prefix(folder).unwrap().to_string_lossy().replace('\\', "/");
+            found.insert(relative, hex);
+        }
     }
 }

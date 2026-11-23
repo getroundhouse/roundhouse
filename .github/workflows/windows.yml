@@ -12,6 +12,9 @@ on:
       - .cargo/**
       - .github/workflows/windows.yml
       - .github/actions/zig/**
+      - .github/actions/nasm/**
+      # libvpx's pinned commit and configs, which MSVC compiles with nasm's assembly only here.
+      - third_party/libvpx/**
   # Only main saves caches, so PRs start warm.
   push:
     branches: [main]
@@ -49,6 +52,8 @@ jobs:
         uses: ./.github/actions/zig
         with:
           cache-name: test-windows-amd64-windows-2025-vs2026
+      # What assembles libvpx's x86 assembly, which the video crate builds.
+      - uses: ./.github/actions/nasm
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -62,9 +67,9 @@ jobs:
           restore-keys: test-windows-amd64-windows-2025-vs2026-
       # Not --all-targets, since most tests only build on Unix.
       - run: cargo clippy --workspace --locked -- -D warnings
-      # Tests of what Windows does differently below the hub, and of Ghostty's terminal core, built by Zig for MSVC,
-      # which only a Windows machine can build.
-      - run: cargo test --locked -p process -p private-files -p protocol -p terminal-state
+      # Tests of what Windows does differently below the hub, of Ghostty's terminal core, built by Zig for MSVC, which
+      # only a Windows machine can build, and of libvpx, built by MSVC with nasm's assembly.
+      - run: cargo test --locked -p process -p private-files -p protocol -p terminal-state -p video -p libvpx-build
       - run: cargo build --locked -p daemon -p cli --bins
       # Short, since a hub a failed step left running could hold it open.
       - name: Run the CLI and a hub it starts
