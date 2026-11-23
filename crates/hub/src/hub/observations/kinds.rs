@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use super::kept::Table;
-pub(crate) use super::subjects::{Owner, SessionKey, Subject};
+pub(crate) use super::subjects::{Owner, SessionKey, Subject, WaitKey};
 use super::tables::Tables;
 
 /// A kind of observation. A new kind is added to [`Observation`] and [`ObservationKey`] in `protocol`, gets a type
@@ -347,6 +347,33 @@ impl Kind for SessionCache {
     }
 
     fn old_form_on(of: &SessionKey) -> Option<RecordKey> {
+        Some(RecordKey::Session { id: of.session_id.clone() })
+    }
+}
+
+/// What an open wait last read of the pull requests it watches, worked out from GitHub's part of the cache as each read
+/// of them ends, sent at its session's level, as `crate::hub::waits` says. A client of a version from before it reads it
+/// in the wait's watch, on the session's record.
+pub(crate) struct WaitRead;
+
+impl Kind for WaitRead {
+    type Of = WaitKey;
+    type Value = protocol::model::WaitRead;
+    const FORM: Form = Form { table: "wait_read", version: 1 };
+
+    fn observation(of: &WaitKey, read: Observed<Self::Value>, rev: Rev) -> Observation {
+        Observation::WaitRead { session_id: of.session_id.clone(), wait: of.wait.clone(), read, rev }
+    }
+
+    fn key(of: &WaitKey) -> ObservationKey {
+        ObservationKey::WaitRead { session_id: of.session_id.clone(), wait: of.wait.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.wait_read
+    }
+
+    fn old_form_on(of: &WaitKey) -> Option<RecordKey> {
         Some(RecordKey::Session { id: of.session_id.clone() })
     }
 }

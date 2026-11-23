@@ -64,6 +64,7 @@ impl View {
             | ObservationKey::SessionContext { .. }
             | ObservationKey::SessionTodos { .. }
             | ObservationKey::SessionCache { .. }
+            | ObservationKey::WaitRead { .. }
             | ObservationKey::Unknown => false,
         }
     }
@@ -158,6 +159,7 @@ impl GithubHeld {
                 | ObservationKey::SessionContext { .. }
                 | ObservationKey::SessionTodos { .. }
                 | ObservationKey::SessionCache { .. }
+                | ObservationKey::WaitRead { .. }
                 | ObservationKey::Unknown => {}
             }
         }
@@ -239,6 +241,7 @@ impl GithubHeld {
             | ObservationKey::SessionContext { .. }
             | ObservationKey::SessionTodos { .. }
             | ObservationKey::SessionCache { .. }
+            | ObservationKey::WaitRead { .. }
             | ObservationKey::Unknown => false,
         }
     }

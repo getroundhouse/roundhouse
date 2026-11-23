@@ -61,4 +61,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::sessions::CONTEXT_OBSERVED),
     // What the API's cache holds of each session's conversation, which the hub keeps as an observation, in `sessions`.
     Sql(super::sessions::CACHE_OBSERVED),
+    // What each open wait last read, which the hub keeps as an observation, in `waits`.
+    Rust(super::waits::reads_observed),
 ];

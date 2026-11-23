@@ -1,7 +1,7 @@
 //! Each agent's waits on the pull requests it names, in a table of their own, from when it asks until they end, and
 //! after. Closing a chat or archiving a workspace ends its waits, by the triggers in their migration.
 
-use super::{Store, StoreError, lock, text_of};
+use super::{OneValue, Store, StoreError, lock, text_of};
 #[cfg(test)]
 use protocol::model::{Wait, WaitEnd, WaitEnded, WaitId};
 #[cfg(test)]

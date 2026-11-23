@@ -6,8 +6,8 @@ use super::file::{self, Row, Write};
 use super::kept::Table;
 use super::kinds::{
     AccountIdentity, AccountLimits, Form, Kind, ModelCatalog, Owner, Referenced, SessionCache, SessionContext,
-    SessionTodos, Subject, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail,
-    WorkspaceRepositoryUnseen,
+    SessionTodos, Subject, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
+    WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
 use super::writer::Writer;
 use crate::cache_file::CacheFile;
@@ -27,6 +27,7 @@ pub(crate) struct Tables {
     pub(super) session_context: Table<SessionContext>,
     pub(super) session_todos: Table<SessionTodos>,
     pub(super) session_cache: Table<SessionCache>,
+    pub(super) wait_read: Table<WaitRead>,
 }
 
 /// Which owners' observations are to be forgotten, since they're gone.
@@ -80,7 +81,7 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 12] {
+    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 13] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -94,6 +95,7 @@ impl Tables {
             session_context,
             session_todos,
             session_cache,
+            wait_read,
         } = self;
         [
             workspace_lines,
@@ -108,6 +110,7 @@ impl Tables {
             session_context,
             session_todos,
             session_cache,
+            wait_read,
         ]
     }
 

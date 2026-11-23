@@ -76,7 +76,7 @@ pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
 pub use observation::{
     AccountIdentity, ConversationCache, IssueSaid, Observation, ObservationKey, Observed, OwnPullRequestDetail,
-    OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReadFrom, ReferenceSaid,
+    OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReadFrom, ReferenceSaid, WaitRead,
 };
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
 pub use proposal::{

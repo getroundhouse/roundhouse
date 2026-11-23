@@ -33,3 +33,6 @@ pub(crate) const BEFORE_SESSION_CONTEXT_OBSERVED: usize = 95;
 /// How many migrations there were before what the API's cache holds of each session's conversation left the database,
 /// as an observation.
 pub(crate) const BEFORE_SESSION_CACHE_OBSERVED: usize = 96;
+
+/// How many migrations there were before what each open wait last read left the database, as an observation.
+pub(crate) const BEFORE_WAIT_READ_OBSERVED: usize = 97;
