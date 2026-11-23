@@ -43,7 +43,7 @@ fn idle(idle_ms: u64) -> String {
 }
 
 fn written(tokens: u64) -> String {
-    format!("{} tokens written again", look::tokens(tokens))
+    format!("{} tokens written again", written_counts::shortened(tokens))
 }
 
 #[cfg(test)]
@@ -59,6 +59,6 @@ mod tests {
 
     #[test]
     fn what_was_written_again_is_counted_as_the_cards_count_it() {
-        assert_eq!(written(313_500), "313.5k tokens written again");
+        assert_eq!(written(313_500), "313k tokens written again");
     }
 }

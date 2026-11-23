@@ -18,15 +18,20 @@ fn a_whole_count_has_a_comma_between_each_three_figures_from_a_thousand() {
     }
 }
 
-/// A count of any width is written the same, so a `usize` of files reads as a `u64` the hub sent does.
+/// A count of any width is written the same, so a `usize` of lines reads as a `u64` of tokens the hub sent does.
 #[test]
-fn a_whole_count_is_written_the_same_whatever_its_width() {
+fn a_count_is_written_the_same_whatever_its_width() {
     assert_eq!([whole(1_212_u16), whole(1_212_u32), whole(1_212_usize), whole(1_212_u128)], ["1,212"; 4]);
+    assert_eq!(
+        [shortened(1_212_u16), shortened(1_212_u32), shortened(1_212_usize), shortened(1_212_u128)],
+        ["1.2k"; 4]
+    );
+    assert_eq!(shortened(u128::MAX), format!("{}M", u128::MAX / 1_000_000), "the widest, in millions");
 }
 
 #[test]
 fn a_shortened_count_is_whole_below_a_thousand_and_cut_to_a_tenth_below_ten_of_a_unit() {
-    let cases = [
+    let cases: [(u64, &str); 15] = [
         (0, "0"),
         (999, "999"),
         (1_000, "1k"),
@@ -35,6 +40,8 @@ fn a_shortened_count_is_whole_below_a_thousand_and_cut_to_a_tenth_below_ten_of_a
         (9_999, "9.9k"),
         (10_000, "10k"),
         (37_412, "37k"),
+        (199_960, "199k"),
+        (313_500, "313k"),
         (999_999, "999k"),
         (1_000_000, "1M"),
         (1_480_000, "1.4M"),

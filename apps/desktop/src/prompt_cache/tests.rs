@@ -58,7 +58,7 @@ fn once_it_has_expired_the_composer_says_when_and_what_the_next_prompt_writes_ag
     assert_eq!(expired_line(&big, after(59)), None);
     assert_eq!(
         expired_line(&big, after(72)).as_deref(),
-        Some("Cache expired 12m ago · this prompt writes 313.5k tokens again")
+        Some("Cache expired 12m ago · this prompt writes 313k tokens again")
     );
 }
 
@@ -68,7 +68,7 @@ fn the_picker_says_what_switching_costs_only_while_the_cache_is_warm() {
 
     assert_eq!(
         switching_note(&big, after(10)).as_deref(),
-        Some("Switching writes this chat's 313.5k tokens to the cache again")
+        Some("Switching writes this chat's 313k tokens to the cache again")
     );
     assert!(switching_note(&big, after(51)).is_some(), "about to expire, but still warm");
     assert_eq!(switching_note(&big, after(61)), None);

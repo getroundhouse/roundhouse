@@ -52,7 +52,7 @@ pub(crate) fn expired_line(session: &Session, now_ms: i64) -> Option<String> {
     Some(format!(
         "Cache expired {} · this prompt writes {} tokens again",
         look::ago(cache.expires_at_ms()?, now_ms),
-        look::tokens(tokens)
+        written_counts::shortened(tokens)
     ))
 }
 
@@ -62,7 +62,7 @@ pub(crate) fn switching_note(session: &Session, now_ms: i64) -> Option<String> {
     let cache = session.cache_worth_telling()?;
     let (CacheState::Warm { .. } | CacheState::Expiring { .. }) = cache.state(now_ms)? else { return None };
     let tokens = session.context.as_ref()?.used_tokens;
-    Some(format!("Switching writes this chat's {} tokens to the cache again", look::tokens(tokens)))
+    Some(format!("Switching writes this chat's {} tokens to the cache again", written_counts::shortened(tokens)))
 }
 
 /// How long until what the tabs, the sidebar and Home say of the caches of `sessions` changes, from `now_ms`, so the

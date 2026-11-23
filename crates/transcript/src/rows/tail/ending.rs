@@ -199,7 +199,7 @@ fn doing(tail: &Tail) -> Option<String> {
     tail.compacting.as_ref().map(|compacting| {
         // Counted as tokens are, since it's said beside them.
         let written = compacting.written_chars.filter(|chars| *chars > 0);
-        let written = written.map(|chars| format!(" · {} characters written", look::tokens(chars)));
+        let written = written.map(|chars| format!(" · {} characters written", written_counts::shortened(chars)));
         format!("Compacting the conversation{}", written.unwrap_or_default())
     })
 }

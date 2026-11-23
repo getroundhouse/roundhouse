@@ -4,8 +4,8 @@
 //! text of different sizes on one baseline, the status mark, the ring for a background task and the robot for a
 //! subagent at work there, how an image is fitted to the room there is, the app icon, plan mode's texture, which is
 //! made from the mark, the pointing hand, the button that copies, the parts of the window tests find by where they're
-//! drawn, how long things take to move, a hover card that waits like a tooltip, a chat's cache, how a count of tokens
-//! reads, and the time text on screen reads, which pictures hold still with everything that moves.
+//! drawn, how long things take to move, a hover card that waits like a tooltip, a chat's cache, and the time text on
+//! screen reads, which pictures hold still with everything that moves.
 //! `docs/spec/look.md` has the rules these follow, and `docs/spec/components.md` the status mark's and the app icon's.
 //! It's its own crate because the apps and `transcript` both draw with it, and `transcript` can't depend on an app.
 
@@ -60,7 +60,6 @@ mod tabs;
 mod task_ring;
 mod theme;
 mod toggles;
-mod tokens;
 mod tooltips;
 mod top_bars;
 mod traits;
@@ -127,7 +126,6 @@ pub use tabs::{Tab, TabWidth, tab};
 pub use task_ring::{TaskRing, task_ring};
 pub use theme::{apply, hex};
 pub use toggles::{Toggle, toggle};
-pub use tokens::tokens;
 #[cfg(any(test, feature = "testing"))]
 pub use tooltips::shown_tooltip;
 pub use tooltips::{Tooltipped, tooltip_words};

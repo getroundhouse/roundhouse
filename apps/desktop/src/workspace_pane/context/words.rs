@@ -15,11 +15,11 @@ pub(super) fn whole_percent(share: f32) -> String {
 /// How much more a context can take. An agent that keeps room back shrinks the conversation once the rest is full,
 /// so for one that `compacts` it's how much until then.
 pub(super) fn room_left(tokens: u64, compacts: bool) -> String {
-    let left = look::tokens(tokens);
+    let left = written_counts::shortened(tokens);
     if compacts { format!("{left} until it compacts") } else { format!("{left} left") }
 }
 
-/// What made a context smaller than its model's, when something did, such as `Capped at 500.0k of 1.0M by your
+/// What made a context smaller than its model's, when something did, such as `Capped at 500k of 1M by your
 /// settings`. It names what did only when the agent said. Nothing, when the agent says its model set the size, since
 /// then the model holding more says something else, such as more than the account may use.
 pub(super) fn capped(context: &ContextUsage) -> Option<String> {
@@ -30,7 +30,11 @@ pub(super) fn capped(context: &ContextUsage) -> Option<String> {
         Some(MaxSetBy::Environment) => " by an environment variable",
         Some(MaxSetBy::Unknown) | None => "",
     };
-    Some(format!("Capped at {} of {}{by}", look::tokens(context.max_tokens), look::tokens(model)))
+    Some(format!(
+        "Capped at {} of {}{by}",
+        written_counts::shortened(context.max_tokens),
+        written_counts::shortened(model)
+    ))
 }
 
 /// The heading over an account's limits, which are on the use of its agent: what the agent's description says, or
@@ -59,8 +63,8 @@ mod tests {
 
     #[test]
     fn room_left_is_until_compacting_only_for_an_agent_that_keeps_room_back() {
-        assert_eq!(room_left(153_500, true), "153.5k until it compacts");
-        assert_eq!(room_left(186_500, false), "186.5k left");
+        assert_eq!(room_left(153_500, true), "153k until it compacts");
+        assert_eq!(room_left(186_500, false), "186k left");
     }
 
     #[test]
@@ -74,13 +78,10 @@ mod tests {
         };
         let capped_by = |by| capped(&context(Some(1_000_000), by));
 
-        assert_eq!(capped_by(Some(MaxSetBy::Settings)).unwrap(), "Capped at 500.0k of 1.0M by your settings");
-        assert_eq!(
-            capped_by(Some(MaxSetBy::Environment)).unwrap(),
-            "Capped at 500.0k of 1.0M by an environment variable"
-        );
-        assert_eq!(capped_by(Some(MaxSetBy::Unknown)).unwrap(), "Capped at 500.0k of 1.0M");
-        assert_eq!(capped_by(None).unwrap(), "Capped at 500.0k of 1.0M");
+        assert_eq!(capped_by(Some(MaxSetBy::Settings)).unwrap(), "Capped at 500k of 1M by your settings");
+        assert_eq!(capped_by(Some(MaxSetBy::Environment)).unwrap(), "Capped at 500k of 1M by an environment variable");
+        assert_eq!(capped_by(Some(MaxSetBy::Unknown)).unwrap(), "Capped at 500k of 1M");
+        assert_eq!(capped_by(None).unwrap(), "Capped at 500k of 1M");
         assert_eq!(capped_by(Some(MaxSetBy::Model)), None, "the agent says nothing made it smaller");
         assert_eq!(
             capped(&context(Some(500_000), Some(MaxSetBy::Settings))),

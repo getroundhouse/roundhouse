@@ -11,13 +11,13 @@ A ring beside Send shows how full the agent's context is, filled clockwise from 
 Rest the pointer on it for its card:
 
 - **How much is used,** as a share and a bar, such as `63% used`.
-- **How much more it can take,** such as `153.5k until it compacts`, and what's used of how much, such as `313.5k/500.0k`.
+- **How much more it can take,** such as `153k until it compacts`, and what's used of how much, such as `313k/500k`.
 - **What's in the context,** in the agent's own words, largest first, in tokens.
 - **`Compact now`.**
 
 ![The context's card, open above its ring](../../../spec/screens/context.png)
 
-When something has made the context smaller than its model holds, the card says so, such as `Capped at 500.0k of 1.0M by your settings`.
+When something has made the context smaller than its model holds, the card says so, such as `Capped at 500k of 1M by your settings`.
 
 ## Compacting
 
@@ -27,7 +27,7 @@ Compacting swaps what the agent holds for a summary, and the agent carries on fr
 - **`Compact now`** on the ring's card compacts straight away.
 - **`/compact`** typed in the composer does the same, with what follows it as what to keep, for an agent that reads it, as Claude does. Codex and Antigravity compact without it.
 
-A compaction is a rule across the chat: `Compacted`, or `Compacted automatically`, then how many tokens the context went from and to, such as `226.9k → 9.0k tokens`, and how long it took. Click it for the summary the agent carries on from.
+A compaction is a rule across the chat: `Compacted`, or `Compacted automatically`, then how many tokens the context went from and to, such as `226k → 9k tokens`, and how long it took. Click it for the summary the agent carries on from.
 
 ![A compaction opened to its summary](../../../spec/screens/compacted-summary.png)
 
@@ -69,8 +69,8 @@ The model provider keeps what an agent's requests read and write for a while, so
 | About to expire | The chat's tab, and its workspace's row in the sidebar | A clock, which says `Cache expires in 9 min` when pointed at |
 | About to expire | Its workspace's row on Home | `Cache expires in 9 min` |
 | About to expire | The line under the newest reply | A small wedge for what's left |
-| Expired | Above the composer | `Cache expired 12m ago · this prompt writes 313.5k tokens again` |
-| After a prompt that wrote it again | A rule in the chat | `Cache expired · 1h 20m idle · 313.5k tokens written again` |
+| Expired | Above the composer | `Cache expired 12m ago · this prompt writes 313k tokens again` |
+| After a prompt that wrote it again | A rule in the chat | `Cache expired · 1h 20m idle · 313k tokens written again` |
 
 ![A chat whose cache has expired](../../../spec/screens/cache-expired.png)
 
@@ -80,4 +80,4 @@ The model provider keeps what an agent's requests read and write for a while, so
 
 ### Switching models
 
-While the cache is warm, pointing at another model in the picker says what switching costs, such as `Switching writes this chat's 313.5k tokens to the cache again`. Once it has expired, switching costs no more than staying, so the picker says nothing.
+While the cache is warm, pointing at another model in the picker says what switching costs, such as `Switching writes this chat's 313k tokens to the cache again`. Once it has expired, switching costs no more than staying, so the picker says nothing.
