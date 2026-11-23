@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use protocol::frame;
 use protocol::provider::{HelloReply, PROVIDER_PROTOCOL_VERSION, ProviderFrame, ProviderOutcome, ProviderResponse};
 use providers::local::{LocalConfig, LocalProvider};
-use providers::{Capabilities, ProviderError};
+use providers::{Capabilities, ProviderError, WorkerBinary};
 
 use super::*;
 use crate::Timers;
@@ -119,4 +119,27 @@ async fn a_default_that_isnt_set_up_leaves_no_provider_for_new_workspaces() {
     let dir = tempfile::tempdir().unwrap();
     let set = loaded(dir.path(), Some(r#"{"default": "vms"}"#.into()));
     assert_eq!(default_name(&set).unwrap_err().code, ErrorCode::Unavailable);
+}
+
+/// So an adapter can tell whether an instance holds the worker already. One the hub can't read is left out, so an
+/// adapter that needs it says the hub has none for its machine.
+#[tokio::test]
+async fn the_file_names_the_worker_builds_for_other_machines_with_their_checksums() {
+    let dir = tempfile::tempdir().unwrap();
+    let worker = dir.path().join("linux-roundhoused");
+    std::fs::write(&worker, "a linux worker").unwrap();
+    let file = serde_json::json!({"workers": [
+        {"target": "aarch64-unknown-linux-gnu", "path": worker},
+        {"target": "x86_64-unknown-linux-gnu", "path": dir.path().join("missing")},
+    ]});
+
+    let set = loaded(dir.path(), Some(file.to_string()));
+
+    let expected = WorkerBinary {
+        target: "aarch64-unknown-linux-gnu".into(),
+        path: worker.to_string_lossy().into_owned(),
+        sha256: "d9b8a662b18f6103eb2f4eae615868208ea5b44b00ab571fc8ad6582480597e2".into(),
+    };
+    assert_eq!(set.workers(), [expected]);
+    assert!(loaded(tempfile::tempdir().unwrap().path(), None).workers().is_empty(), "without a file");
 }
