@@ -5130,6 +5130,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "libvpx-build"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "linebender_resource_handle"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5408,6 +5415,12 @@ checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
 dependencies = [
  "regex-automata",
 ]
+
+[[package]]
+name = "matroska-demuxer"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cbf36668475a45a46bf8710e927e7458b7c387e7c46ddb5457ae0c71cf5e817"
 
 [[package]]
 name = "maud"
@@ -7179,6 +7192,7 @@ dependencies = [
  "kit-sync",
  "proc-macro2",
  "process",
+ "ring",
  "serde_json",
  "toml 1.2.1+spec-1.1.0",
 ]
@@ -10387,6 +10401,17 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "video"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "libvpx-build",
+ "matroska-demuxer",
+ "proptest",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "vswhom"

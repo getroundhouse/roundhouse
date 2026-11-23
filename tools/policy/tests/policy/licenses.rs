@@ -53,6 +53,20 @@ const VENDORED: &[(&str, &str, &str, &[&str])] = &[
     ("third_party/gpui-pre-ios", "LICENSE-APACHE", "Apache-2.0", APACHE),
     ("third_party/zed-font-kit", "LICENSE-APACHE", "MIT OR Apache-2.0", APACHE),
     ("third_party/zed-font-kit", "LICENSE-MIT", "MIT OR Apache-2.0", &["Permission is hereby granted, free of charge"]),
+    // The licenses of libvpx's decoders, which the `video` crate's build script fetches, and of x264's x86inc, which
+    // their assembly includes, which `tools/libvpx-sync.sh` keeps.
+    (
+        "third_party/libvpx",
+        "LICENSE",
+        "BSD-3-Clause",
+        &["Redistribution and use in source and binary forms, with or without"],
+    ),
+    (
+        "third_party/libvpx",
+        "LICENSE-X86INC",
+        "ISC",
+        &["Permission to use, copy, modify, and/or distribute this software for any"],
+    ),
     // The icons the kit draws, which are Lucide's, but those Lucide took from Feather, which are under MIT.
     ("third_party/gpui-kit/vendor/crates/assets", "LICENSE-LUCIDE", "ISC AND MIT", &["ISC License", "The MIT License"]),
 ];

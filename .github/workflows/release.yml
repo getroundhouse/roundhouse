@@ -334,6 +334,9 @@ jobs:
       # The Zig that builds Ghostty's terminal core for the worker, which its build script runs, as in ci.yml. Without
       # Zig's own cache, since the cache below holds Ghostty's source and build, in target/.
       - uses: ./.github/actions/zig
+      # What assembles libvpx's x86 assembly, which the video crate builds. ARM64's is all C.
+      - if: matrix.arch == 'amd64'
+        uses: ./.github/actions/nasm
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -552,6 +555,7 @@ jobs:
         libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
         libasound2-dev
         lld
+        nasm
         build-essential ca-certificates curl git jq
         zstd xz-utils
       # rustup's installer, pinned by version and checksum.

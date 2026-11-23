@@ -1,0 +1,28 @@
+[package]
+name = "video"
+description = "Decodes the WebM videos agents make, VP8 or VP9, with libvpx built from its source at the commit third_party/libvpx pins, frame by frame, and reads what an MP4 or a QuickTime file says of its video. No UI and no async runtime."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+build = "build/main.rs"
+# The static library it builds, which only this crate may name.
+links = "vpx"
+
+[features]
+# Videos for other crates' tests to play.
+testing = []
+
+[dependencies]
+matroska-demuxer.workspace = true
+thiserror.workspace = true
+
+[build-dependencies]
+cc.workspace = true
+libvpx-build.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

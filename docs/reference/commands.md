@@ -2,7 +2,7 @@
 
 Every command for building, testing, running and packaging Roundhouse from a checkout. `AGENTS.md` has the few every session uses, and `docs/standards/merging.md` says which checks a pull request needs.
 
-Building needs Zig 0.17 on the PATH, which builds Ghostty's terminal core: `brew install zig` on a Mac.
+Building needs Zig 0.17 on the PATH, which builds Ghostty's terminal core: `brew install zig` on a Mac. Building for x86, on an Intel or AMD machine or with `cargo xwin` below, needs nasm on the PATH too, which assembles libvpx's fast paths for the `video` crate, and the build fails without it: `brew install nasm` on a Mac, `apt install nasm` on Ubuntu, and on Windows the `win64` zip from nasm's releases at nasm.us, as `.github/actions/nasm` installs it.
 
 ```sh
 cargo test                        # The backend, with a fake agent. Needs no GPUI, so it runs on Linux too
@@ -23,6 +23,7 @@ tools/package/package-linux.sh --prebuilt DIR     # Packages Linux binaries, bui
 python3 -m unittest discover -s tools/package   # The scripts that publish releases, against a directory for the bucket, and the one that makes the Windows icon
 cargo run -p iphone -- install    # Builds the iPhone app, signs it for development, and installs and opens it on a phone. `-- upload` uploads it to TestFlight and waits for Apple to process it, as `apps/mobile-ios/README.md` says
 cargo run -p kit-sync             # Brings third_party/gpui-kit/vendor and its patches in third_party/gpui-kit/patches to the release it pins. `-- patch <name>` records a change, and `-- drop <name>` takes one out, as `third_party/README.md` says
+docker run --rm -v "$PWD":/src -w /src rust:1.100.0 tools/libvpx-sync.sh   # Makes third_party/libvpx again for the libvpx release it pins: the commit the build fetches, each target's config and the licenses, as third_party/README.md says
 tools/smoke/real-claude.sh        # The backend against the real CLI. About $0.42, mostly a plan and one reply on Sonnet, so run it by hand
 tools/smoke/capture_claude_fixture.py   # After a CLI upgrade: re-capture its output, then run `cargo test -p agents`
 cargo run -p agents --example conformance   # The conformance scenarios, through the adapter, on the CLI the hub would find, against a scripted model, on a Mac. `--paid` adds the real one, under a cent a scenario on Haiku, so run it by hand. `--save` keeps the fixtures, as docs/reference/conformance.md says
@@ -35,7 +36,7 @@ cargo run -p phonon --release --example say -- DIR "SENTENCE"   # Says it throug
 cargo run -p speaking --release --example read -- DIR "TEXT" [--stop-after SECONDS]   # Reads it out a phrase at a time through the speakers, and prints how far it had been heard as each phrase played, and where a stop cut it. CI never runs it
 cargo run -p conversation --release --example voice -- DIR "TEXT"   # Fetches Phonon's files into DIR if they aren't there, as conversation mode does the first time, then reads the text out through the join client-core reads with, and prints each update. CI never runs it
 cargo xwin clippy --workspace --locked --target x86_64-pc-windows-msvc -- -D warnings   # Windows, from a Mac: lints the product's code as built for it, and runs nothing. Needs cargo-xwin, LLVM and the rustup target
-docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.100.0 sh -c 'v=0.17.1; z=zig-$(uname -m)-linux-$v; curl -sSfL https://ziglang.org/download/$v/$z.tar.xz | tar -xJ -C /opt && export PATH=/opt/$z:$PATH; apt-get update -qq && apt-get install -y -qq lld; git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux, with the Zig that builds Ghostty's terminal core, and the lld that links on ARM64
+docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.100.0 sh -c 'v=0.17.1; z=zig-$(uname -m)-linux-$v; curl -sSfL https://ziglang.org/download/$v/$z.tar.xz | tar -xJ -C /opt && export PATH=/opt/$z:$PATH; apt-get update -qq && apt-get install -y -qq lld nasm; git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux, with the Zig that builds Ghostty's terminal core, the lld that links on ARM64, and the nasm x86 builds need
 ```
 
 ## A checkout's own data

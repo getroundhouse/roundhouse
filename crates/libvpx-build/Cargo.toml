@@ -1,0 +1,13 @@
+[package]
+name = "libvpx-build"
+description = "What the video crate's build script compiles of libvpx for a target: which of the configs in third_party/libvpx, which flags each C file takes, and how its assembly is assembled. Kept apart from the build script so its tests run."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true

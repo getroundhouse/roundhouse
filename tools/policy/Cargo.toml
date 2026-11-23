@@ -14,6 +14,7 @@ kit-sync.workspace = true
 # To read the dependency graph once for every test of a run.
 process = { workspace = true, features = ["testing"] }
 proc-macro2.workspace = true
+ring.workspace = true
 serde_json.workspace = true
 toml.workspace = true
 

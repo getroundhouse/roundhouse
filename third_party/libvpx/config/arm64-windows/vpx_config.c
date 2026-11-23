@@ -1,0 +1,10 @@
+/* Copyright (c) 2011 The WebM project authors. All Rights Reserved. */
+/*  */
+/* Use of this source code is governed by a BSD-style license */
+/* that can be found in the LICENSE file in the root of the source */
+/* tree. An additional intellectual property rights grant can be found */
+/* in the file PATENTS.  All contributing project authors may */
+/* be found in the AUTHORS file in the root of the source tree. */
+#include "vpx/vpx_codec.h"
+static const char* const cfg = "--target=arm64-win64-vs17 --disable-sve --disable-sve2 --enable-external-build --disable-vp8-encoder --disable-vp9-encoder --disable-examples --disable-tools --disable-docs --disable-unit-tests --disable-install-docs --disable-install-bins --disable-libyuv --disable-webm-io --disable-postproc --disable-vp9-postproc --disable-temporal-denoising --disable-vp9-highbitdepth --enable-pic --size-limit=16384x16384";
+const char *vpx_codec_build_config(void) {return cfg;}
