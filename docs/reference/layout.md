@@ -110,7 +110,7 @@ third_party/       Copies of other projects' code, as `third_party/README.md` sa
 
 Everything a hub holds or serves, which of the four kinds in `docs/principles/serving.md` it is, where it's kept and how a client gets it. Something new takes its kind by the same test: the hub owns it, so it's a record, or the hub only observes it, so it's an observation. What an agent says in an event is the log's, so what the hub works out from it is a record, and what an agent says outside the log is an observation. For example, a session's status is worked out from its events, so it's a record, and how full its agent's context is comes in a report that isn't an event, so it's an observation.
 
-A table named here is in the hub's database, except `facets`, which is in the cache file `github-cache.db`. `FeedSubscribe` sends each change to a record, and `RecordsList` lists them. `Subscribe` sends each of these too: what `FeedSubscribe` and `RecordsList` send at the hub's level, what `SessionSubscribe` and the session's lists send at a session's, what `TerminalWatch` sends at a terminal's, and what `GithubSubscribe` sends of a workspace's own pull request at the hub's level and of a chip at an issue's or pull request's.
+A table named here is in the hub's database, except `facets` and `observed_workspace_lines`, which are in the cache file `github-cache.db`. `FeedSubscribe` sends each change to a record, and `RecordsList` lists them. `Subscribe` sends each of these too: what `FeedSubscribe` and `RecordsList` send at the hub's level, what `SessionSubscribe` and the session's lists send at a session's, what `TerminalWatch` sends at a terminal's, and what `GithubSubscribe` sends of a workspace's own pull request at the hub's level and of a chip at an issue's or pull request's.
 
 ### Events and live snapshots
 
@@ -154,11 +154,12 @@ A hub of this build lists no `FoundGithubLogin`, which `client-core` reads only 
 
 ### Observations
 
-*Not built:* observations, so each of these is kept as its row says: as a record or a field of one, in GitHub's cache, which reaches a client with no revision, or not at all.
+*Not built:* any observation but a workspace's lines added and removed, so each of the others is kept as its row says: as a record or a field of one, in GitHub's cache, which reaches a client with no revision, or not at all.
 
 | What | Whose | Kept in | Sent by |
 |---|---|---|---|
-| A workspace's lines added and removed, and its changed files | Git's | Not kept. `WorkspaceDiff` reads the whole diff from the worker | `WorkspaceDiff` |
+| A workspace's lines added and removed | Git's | The hub's memory and `observed_workspace_lines`, each with when it was read. The hub reads them from the worker as a turn ends in the workspace and as its branches move | `FeedSubscribe` and `RecordsList`, as an observation |
+| A workspace's changed files | Git's | Not kept. `WorkspaceDiff` reads the whole diff from the worker | `WorkspaceDiff` |
 | How many files a workspace has uncommitted | Git's | `workspaces.pull_request_link`, as of the hub's last read of the workspace's pull request | `FeedSubscribe` |
 | A workspace's branches, and each of its other worktrees' | Git's | `workspaces.branches` and `child_worktrees.branches` | `FeedSubscribe`, for a workspace's own. Another worktree's reaches no client |
 | Which build a workspace's worker is | The worker's | `workspaces.worker_build` | `FeedSubscribe` |

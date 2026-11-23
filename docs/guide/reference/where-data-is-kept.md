@@ -18,7 +18,7 @@ In it:
 |---|---|
 | `hub.db` | Every project, workspace and chat, each chat's history, and which pull request is each workspace's |
 | `backups/` | Copies of the database from before each migration |
-| `github-cache.db` | What the hub last read from GitHub, such as each workspace's pull request and the issues and pull requests chats link to, so it has them as it starts. Nothing in it is yours alone, so the hub empties it whenever an update changes its form, and deleting it while the hub isn't running loses nothing |
+| `github-cache.db` | What the hub last read from GitHub, such as each workspace's pull request and the issues and pull requests chats link to, and how many lines each workspace has added and removed, as git last said, so it has them as it starts. Nothing in it is yours alone, so the hub empties each part of it whose form an update changes, and deleting it while the hub isn't running loses nothing |
 | `attachments/` | The files prompts carried |
 | `bundles/` | Unpushed commits saved when archiving workspaces whose provider destroys clones on archive, removed once restored |
 | `logins/` | The tokens of the logins you've added in [Settings](settings.md#agents), a file each, which only you can open. Disconnecting one removes its file |

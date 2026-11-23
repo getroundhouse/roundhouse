@@ -10,7 +10,7 @@ These rules say what a hub serves, how a client gets it, and what the hub keeps 
   |---|---|---|---|---|
   | Event | Something that happened in a session, such as a prompt, a tool call or a turn ending. It never changes once recorded | The database | Appends it, in order, by `seq` | `docs/principles/events.md` |
   | Record | Current state the hub owns, such as a workspace, a session's status or a comment | The database, or memory for one that lasts only as long as a process | Replaces it with a newer copy, by revision | `docs/principles/records.md` |
-  | Observation | The hub's copy of state someone else owns, as the hub last observed it, such as a workspace's lines added and removed, what GitHub says of a pull request, or how full an agent's context is. Not built in the hub | Memory, and a cache file | As a record | `docs/principles/observations.md` |
+  | Observation | The hub's copy of state someone else owns, as the hub last observed it, such as a workspace's lines added and removed, what GitHub says of a pull request, or how full an agent's context is. *Not built:* in the hub, any but a workspace's lines added and removed | Memory, and a cache file | As a record | `docs/principles/observations.md` |
   | Live snapshot | What something running shows now: a reply as its agent writes it, or a terminal's screen | Not stored | Takes it whole, then each change | `docs/principles/live-snapshots.md` |
 
 ## How a client gets it
@@ -32,4 +32,4 @@ These rules say what a hub serves, how a client gets it, and what the hub keeps 
 ## What the hub keeps current
 
 - **What a client follows is the hub's signal to keep it current, for every client.** Keeping an observation or a live snapshot current costs work: a worker watches a worktree or sends a terminal's screen, or the hub asks GitHub again. So the hub does that work for what at least one client follows, and stops when the last one stops following or its connection ends. For example, a worker sends a terminal's screen only while a client watches the terminal. And while the desktop app follows a workspace, a phone that follows only the hub is sent that workspace's lines added and removed as they change. So no client asks again on a timer. *Not built:* a worker watching its worktree while a client follows its workspace.
-- **What no client follows is read again when something says it may have changed, and is otherwise as of its last read.** For example, a workspace's lines added and removed are read when a turn ends in it, and a pull request nobody shows is read less often the longer it comes back the same. *Not built:* reading the lines added and removed.
+- **What no client follows is read again when something says it may have changed, and is otherwise as of its last read.** For example, a workspace's lines added and removed are read when a turn ends in it, and a pull request nobody shows is read less often the longer it comes back the same.
