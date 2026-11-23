@@ -1,5 +1,6 @@
 //! What the hub does with a terminal as a client asks: types into it, resizes it and closes it.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use protocol::client::terminals::{TerminalClose, TerminalFit, TerminalTyped};
@@ -12,9 +13,8 @@ use tracing::warn;
 
 use crate::hub::Hub;
 use crate::store::Store;
-use crate::worker_link::{WorkerLink, WorkerLinkId};
+use crate::worker_link::{WorkerLink, WorkerLinkId, answered_at_once};
 
-use super::reading::within_a_read;
 use super::{Open, Queued, Stage};
 
 impl Hub {
@@ -34,12 +34,13 @@ impl Hub {
     }
 
     /// A new size, sent on to the terminal's worker in order with what's pressed, answered with where the cells the
-    /// client named went, once the worker says, which it's given as long as a read of the terminal.
+    /// client named went, once the worker says, which it's given as long as a read of the terminal, as one it answers
+    /// at once.
     pub(crate) async fn terminal_fit(&self, fit: TerminalFit) -> Result<Queued, ApiError> {
         let TerminalFit { id, size, numbering, keep } = fit;
         let (_, link) = self.open_terminal(&id)?;
         let replied = link.send(worker::TerminalFit { terminal: id.clone(), size, numbering, keep }).await?;
-        Ok(Box::pin(async move { within_a_read(&id, replied).await.map(ClientResponse::TerminalFit) }))
+        Ok(Box::pin(async move { answered_at_once(replied).await?.map(ClientResponse::TerminalFit) }))
     }
 
     /// Sends `request` to the worker of open terminal `id`, after what was sent before it, and answers once the worker
@@ -70,7 +71,8 @@ impl Hub {
     }
 
     /// Removes the record of a terminal whose shell has ended, run by the worker on link `link`, and announces that.
-    /// One still being opened is marked, for the open to refuse.
+    /// One still being opened is marked, for the open to refuse, and so is one the hub is carrying on with, for it to
+    /// give no record.
     pub(crate) async fn terminal_ended(&self, id: &TerminalId, link: WorkerLinkId) {
         let changing = self.terminals.changing.lock().await;
         {
@@ -81,7 +83,12 @@ impl Hub {
                     return;
                 }
                 Some(Stage::Open(_)) => {}
-                None => return,
+                None => {
+                    if let Some(ended) = self.terminals.asked_what_runs.lock().get_mut(&link) {
+                        ended.insert(id.clone());
+                    }
+                    return;
+                }
             }
         }
         self.forget_terminals(&changing, |terminal_id, _| terminal_id == id).await;
@@ -95,12 +102,17 @@ impl Hub {
     }
 
     /// Takes on the terminals that a worker an earlier hub left is running, announcing a record for each, and says how
-    /// many it took on. One it can't give a record ends, so no shell runs that no client can see.
+    /// many it took on. One it can't give a record ends, so no shell runs that no client can see. A worker that doesn't
+    /// say which it runs, within the time one that answers at once is given, is taken to run none, as one that fails
+    /// to say is, and nothing waits for it meanwhile.
     pub(crate) async fn carry_on_terminals(&self, workspace_id: &WorkspaceId, link: &WorkerLink) -> usize {
-        // Across the call, so the end of a shell the worker lists, which can reach the hub before the list does, or
-        // just after it, waits to remove the record this makes.
+        // Before it's asked, so the end of a shell the worker lists, which can reach the hub before the list does, is
+        // kept for this to give no record. One that comes after the list waits for `changing`, and removes the record.
+        self.terminals.asked_what_runs.lock().insert(link.id, HashSet::new());
+        let answered = link.call_at_once(worker::RunningTerminals).await.unwrap_or_else(|late| Err(late.into()));
         let _changing = self.terminals.changing.lock().await;
-        let running = match link.call(worker::RunningTerminals).await {
+        let ended = self.terminals.asked_what_runs.lock().remove(&link.id).unwrap_or_default();
+        let running = match answered {
             Ok(reply) => reply.terminals,
             // A worker from before terminals runs none.
             Err(e) if e.code == ErrorCode::Unsupported => return 0,
@@ -110,7 +122,9 @@ impl Hub {
             }
         };
         let mut carried_on = 0;
-        for RunningTerminal { terminal, opened_at_ms } in running {
+        for RunningTerminal { terminal, opened_at_ms } in
+            running.into_iter().filter(|running| !ended.contains(&running.terminal))
+        {
             let rev = match self.blocking(Store::next_rev).await {
                 Ok(rev) => rev,
                 Err(e) => {

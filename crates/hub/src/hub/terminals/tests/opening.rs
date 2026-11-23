@@ -292,9 +292,10 @@ async fn a_hub_carries_on_with_the_terminals_a_worker_it_finds_runs() {
     assert!(hub.open_terminal(&"t".into()).is_ok(), "it isn't the worker's");
 }
 
-/// The worker lists a shell, which then ends, and its end can reach the hub before the list does, or just after it.
+/// The worker lists a shell, which then ends, and its end reaches the hub before the list does, so it's given no
+/// record. One that comes after the list removes the record, as any shell's end does.
 #[tokio::test]
-async fn a_shell_that_ends_as_a_hub_carries_on_with_it_takes_its_record_with_it() {
+async fn a_shell_that_ends_as_a_hub_carries_on_with_it_is_given_no_record() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let reaching = Reaching::default();
@@ -309,11 +310,10 @@ async fn a_shell_that_ends_as_a_hub_carries_on_with_it_takes_its_record_with_it(
     serving(&hub, &link);
     let mut feed = hub.subscribe_feed();
 
-    hub.carry_on_terminals(&"w".into(), &link).await;
+    let carried_on = hub.carry_on_terminals(&"w".into(), &link).await;
 
-    assert!(matches!(next(&mut feed).await, HubNotice::Terminal(_)));
-    let HubNotice::Removed { record, .. } = next(&mut feed).await else { panic!("the terminal wasn't removed") };
-    assert_eq!(record, RecordKey::Terminal { id: "t".into() });
+    assert_eq!(carried_on, 0, "its end came first");
+    assert!(feed.try_recv().is_err(), "no record was announced");
     assert!(!hub.terminals.open_in(&"w".into()));
 }
 

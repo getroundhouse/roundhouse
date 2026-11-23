@@ -3,6 +3,7 @@
 //! keeps a copy of what they show, which a client that begins to watch is sent at once.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
@@ -25,6 +26,10 @@ pub(super) struct Watch {
     /// since a telling didn't get its answer. A worker takes a terminal to be unwatched until it's told, as it does a
     /// new one, and every one a hub carries on with.
     told: AsyncMutex<Option<bool>>,
+    /// Whether a telling is waiting for its turn, which reads who follows the terminal once it has it, so it tells
+    /// what any asked for meanwhile would, and they needn't wait too. A worker that's slow to answer then keeps one
+    /// telling waiting, rather than one for each client that came or went meanwhile.
+    waiting: AtomicBool,
 }
 
 impl Watch {
@@ -52,11 +57,13 @@ impl Hub {
     }
 
     /// Tells the terminal's worker whether any client follows it now. Ok once the worker knows, or can't be told, or the
-    /// terminal has gone, and an error if the worker couldn't take it.
-    pub(crate) async fn terminal_watching(&self, id: &TerminalId) -> Result<(), ApiError> {
+    /// terminal has gone, and an error if the worker couldn't take it, or didn't answer in the time one that answers at
+    /// once is given, which leaves the next telling to tell it again.
+    async fn terminal_watching(&self, id: &TerminalId) -> Result<(), ApiError> {
         let Some(watch) = self.terminals.open.lock().get(id).map(|open| open.watch.clone()) else { return Ok(()) };
-        let Ok((_, link)) = self.open_terminal(id) else { return Ok(()) };
         let mut told = watch.told.lock().await;
+        watch.waiting.store(false, Ordering::Release);
+        let Ok((_, link)) = self.open_terminal(id) else { return Ok(()) };
         // Read under the lock, so what's told last is what's so once clients stop coming and going.
         let watching = self.followers.follows(&Followed::Terminal(id.clone()));
         // Told again while it's watched and the hub wants a fresh picture, as after one it couldn't take in, since
@@ -70,7 +77,7 @@ impl Hub {
         }
         // Until it answers, since a telling cut short, as one for a client that goes is, may have reached it.
         *told = None;
-        match link.call(worker::TerminalWatch { terminal: id.clone(), watching }).await {
+        match link.call_at_once(worker::TerminalWatch { terminal: id.clone(), watching }).await? {
             Ok(()) => *told = Some(watching),
             Err(e) if e.code == ErrorCode::NotFound => {}
             Err(e) => return Err(e),
@@ -82,11 +89,15 @@ impl Hub {
     }
 
     /// Tells the terminal's worker, as [`Hub::terminal_watching`] does, on a task of its own, for where nothing waits
-    /// for it, such as a client that has gone.
+    /// for it, such as a client that has gone, unless a telling is waiting for its turn already, as [`Watch`] says.
     pub(crate) fn terminal_watching_soon(self: &Arc<Self>, id: &TerminalId) {
-        let (hub, id) = (self.clone(), id.clone());
         // Spawning panics outside a runtime, and nothing stops a watcher being dropped outside one.
         let Ok(runtime) = tokio::runtime::Handle::try_current() else { return };
+        let Some(watch) = self.terminals.open.lock().get(id).map(|open| open.watch.clone()) else { return };
+        if watch.waiting.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let (hub, id) = (self.clone(), id.clone());
         runtime.spawn(async move {
             if let Err(e) = hub.terminal_watching(&id).await {
                 warn!(terminal = %id, "telling a worker whether a client watches: {}", e.message);

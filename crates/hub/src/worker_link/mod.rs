@@ -30,11 +30,15 @@ use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, watch};
 
 mod acks;
+mod at_once;
 mod credential;
 mod greeting;
 mod reaching;
 mod reading;
 
+#[cfg(test)]
+pub(crate) use at_once::ANSWERED_WITHIN;
+pub(crate) use at_once::answered_at_once;
 pub(crate) use reaching::Opening;
 
 #[cfg(test)]

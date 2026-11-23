@@ -1,20 +1,15 @@
 //! What a client reads of a terminal's copy, which only its worker has: rows of its history, the ends of a word or a
-//! line, and the text of cells. The hub keeps none of them, so it asks the worker, and waits only so long.
+//! line, and the text of cells. The hub keeps none of them, so it asks the worker, and waits only so long as one that
+//! answers at once is given, since its terminal's thread answers between reads of what the program writes, each a
+//! fraction of a millisecond, and the client can ask again.
 
-use std::time::Duration;
-
+use protocol::client::ApiError;
 use protocol::client::terminals::{TerminalBounds, TerminalRows, TerminalText};
-use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
 use protocol::terminal::{TerminalBoundsReply, TerminalRowsReply, TerminalTextReply};
 use protocol::worker::{self, Request};
 
 use crate::hub::Hub;
-
-/// How long the hub waits for a worker to answer what's read of a terminal. Its terminal's thread answers between
-/// reads of what the program writes, each a fraction of a millisecond, so a worker that takes this long is stuck, and
-/// the client is better told so than left waiting, since it can ask again.
-const READ_WITHIN: Duration = Duration::from_secs(10);
 
 impl Hub {
     /// Rows of an open terminal's history.
@@ -37,16 +32,6 @@ impl Hub {
 
     async fn read_terminal<R: Request>(&self, id: &TerminalId, request: R) -> Result<R::Reply, ApiError> {
         let (_, link) = self.open_terminal(id)?;
-        within_a_read(id, link.call(request)).await
+        link.call_at_once(request).await?
     }
-}
-
-/// The worker's answer about terminal `id`, or an error once it has taken longer than [`READ_WITHIN`].
-pub(super) async fn within_a_read<T>(
-    id: &TerminalId,
-    answer: impl Future<Output = Result<T, ApiError>>,
-) -> Result<T, ApiError> {
-    tokio::time::timeout(READ_WITHIN, answer).await.unwrap_or_else(|_| {
-        Err(ApiError::new(ErrorCode::Worker, format!("terminal {id}'s worker didn't answer in {READ_WITHIN:?}")))
-    })
 }
