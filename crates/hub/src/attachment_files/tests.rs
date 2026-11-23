@@ -1,4 +1,6 @@
+use protocol::attachment::AttachmentBytes;
 use protocol::client::ErrorCode;
+use protocol::model::{ByteRange, FileRange};
 
 use super::*;
 
@@ -12,11 +14,15 @@ async fn bytes_come_back_until_theyre_removed() {
     let files = AttachmentFiles::new(dir.path().to_path_buf());
     let (session, id) = ids("s-1", "a1");
 
+    let part = async |start| files.read_range(&session, &id, ByteRange::new(start, 4).unwrap()).await.unwrap();
     files.write(&session, &id, b"one".to_vec()).await.unwrap();
     assert_eq!(files.read(&session, &id).await.unwrap().as_deref(), Some(&b"one"[..]));
+    let ne = FileRange { start: 1, data: AttachmentBytes::new(b"ne".to_vec()), file_bytes: 3 };
+    assert_eq!(part(1).await, Some(ne), "up to the end of what it has");
     files.remove(&session, &id).await.unwrap();
 
     assert_eq!(files.read(&session, &id).await.unwrap(), None);
+    assert_eq!(part(0).await, None);
     files.remove(&session, &id).await.unwrap();
     assert_eq!(std::fs::read_dir(dir.path().join("s-1")).unwrap().count(), 0, "no partial file is left behind");
 }

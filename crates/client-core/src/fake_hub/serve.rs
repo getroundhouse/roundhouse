@@ -19,6 +19,7 @@ use protocol::model::{CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, R
 use super::base_pages::{opened, paged};
 use super::github;
 use super::logs::{prompt_lines, read};
+use super::parts::{part, worktree_video};
 use super::stand_in::{claude, fixed_pairing, status, version};
 use super::world::{LoginSupport, NOW_MS, World};
 
@@ -211,6 +212,9 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             let data = world.attachments.get(&id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
             reply(C::AttachmentData(attachments::AttachmentData { data: AttachmentBytes::new(data.clone()) }))
         }
+        R::AttachmentReadRange(attachments::AttachmentReadRange { id, start, length, .. }) => {
+            reply(C::FileRange(part(world.attachments.get(&id), start, length)?))
+        }
         // An older hub's build is from before files were listed, too.
         R::WorkspaceFiles(_) if world.hub.is_some() => {
             Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't list files"))
@@ -236,6 +240,9 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         R::WorkspaceFileOpenAt(files::WorkspaceFileOpenAt { path, .. }) => reply(C::FileOpened(opened(world, &path)?)),
         R::WorkspaceFilePages(files::WorkspaceFilePages { path, page_lines, pages, .. }) => {
             reply(C::FilePages(paged(world, &path, page_lines, &pages)?))
+        }
+        R::WorkspaceFileReadRange(files::WorkspaceFileReadRange { path, start, length, .. }) => {
+            reply(C::FileRange(part(worktree_video(world, &path), start, length)?))
         }
         R::HubShutdown
         | R::HubRestart

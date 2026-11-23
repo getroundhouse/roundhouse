@@ -12,10 +12,10 @@ use protocol::event::{CompactedBy, SessionEvent};
 use protocol::find::Found;
 use protocol::fixtures;
 use protocol::model::{
-    Account, CompactionLine, DiffComment, DiffSide, FileContents, FileOpened, FilePages, GhLogin, GhLoginWorks,
-    GitDiff, GitStatus, GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, GithubUser, GithubUserId,
-    HeldGithubLogin, HubSettings, MachineLogins, NewWorkspaceDraft, Place, PromptLine, Records, Repo, Reserve, Rev,
-    Seq, SessionAccount, SshLogin, WorktreeFiles,
+    Account, CompactionLine, DiffComment, DiffSide, FileContents, FileOpened, FilePages, FileRange, GhLogin,
+    GhLoginWorks, GitDiff, GitStatus, GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, GithubUser,
+    GithubUserId, HeldGithubLogin, HubSettings, MachineLogins, NewWorkspaceDraft, Place, PromptLine, Records, Repo,
+    Reserve, Rev, Seq, SessionAccount, SshLogin, WorktreeFiles,
 };
 
 use super::answered;
@@ -277,6 +277,16 @@ fn every_reply_about_a_workspace_keeps_its_form() {
     let text = FileContents::Text { text: "one".into() };
     answered(ClientResponse::FileContents(text), r#"{"result":"file_contents","kind":"text","text":"one"}"#);
     answered(ClientResponse::FileOpened(FileOpened::NotText), r#"{"result":"file_opened","kind":"not_text"}"#);
+    let video = FileContents::Video { media_type: MediaType::Webm, bytes: 2048 };
+    answered(
+        ClientResponse::FileContents(video),
+        r#"{"result":"file_contents","kind":"video","media_type":"video/webm","bytes":2048}"#,
+    );
+    let range = FileRange { start: 4096, data: AttachmentBytes::new(b"webm".to_vec()), file_bytes: 8192 };
+    answered(
+        ClientResponse::FileRange(range),
+        r#"{"result":"file_range","start":4096,"data":"d2VibQ==","file_bytes":8192}"#,
+    );
 }
 
 #[test]

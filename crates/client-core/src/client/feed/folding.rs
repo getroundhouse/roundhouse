@@ -126,6 +126,7 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::FileContents(_)
         | ClientResponse::FileOpened(_)
         | ClientResponse::FilePages(_)
+        | ClientResponse::FileRange(_)
         // A proposal's revisions, but for its newest, which only the proposal carries.
         | ClientResponse::ProposalRevisions(_) => Vec::new(),
     }

@@ -31,7 +31,7 @@ pinned! {
         Comment(_), Comments(_), Session(_), Sessions(_), Events(_), Subagents(_), Proposals(_), PlacedEvents(_),
         Prompts(_), Compactions(_), Found(_), PromptRecorded(_), Attachment(_), AttachmentData(_), SessionAccount(_),
         Account(_), GithubAccount(_), GithubSignIn(_), GhLogin(_), MachineLogins(_), WorktreeFiles(_), FileContents(_),
-        FileOpened(_), FilePages(_),
+        FileOpened(_), FilePages(_), FileRange(_),
     ],
     "client_calls/github_apps.rs" => [GithubApp(_), GithubAppManifest(_)],
     "replies_heard.rs" => [RepliesHeard(_)],

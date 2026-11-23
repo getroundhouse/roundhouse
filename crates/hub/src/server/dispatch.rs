@@ -11,7 +11,7 @@ use protocol::client::{
     drafts, files, github_accounts, github_apps, log, new_workspace, queue, records, references, sessions,
     subscriptions, waits, workspaces,
 };
-use protocol::model::{ClientDevice, Place, Seq};
+use protocol::model::{ByteRange, ClientDevice, Place, Seq};
 use std::sync::Arc;
 #[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
 pub(super) async fn handle(
@@ -114,6 +114,9 @@ pub(super) async fn handle(
             C::FileOpened(hub.workspace_file_open_at(id, commit, path).await?)
         }
         R::WorkspaceFilePages(asked) => C::FilePages(hub.workspace_file_pages(asked).await?),
+        R::WorkspaceFileReadRange(files::WorkspaceFileReadRange { id, path, start, length }) => {
+            C::FileRange(hub.workspace_file_read_range(id, path, ByteRange::new(start, length)?).await?)
+        }
         R::WorkspaceSetupLog(workspaces::WorkspaceSetupLog { id }) => {
             C::SetupLog(workspaces::SetupLog { text: hub.workspace_setup_log(id).await? })
         }
@@ -205,6 +208,10 @@ pub(super) async fn handle(
             C::AttachmentData(attachments::AttachmentData {
                 data: hub.file_read(FileFor::Session(session_id), id).await?,
             })
+        }
+        R::AttachmentReadRange(attachments::AttachmentReadRange { session_id, id, start, length }) => {
+            let range = ByteRange::new(start, length)?;
+            C::FileRange(hub.file_read_range(FileFor::Session(session_id), id, range).await?)
         }
         R::AttachmentRemove(attachments::AttachmentRemove { session_id, id }) => {
             hub.file_remove(FileFor::Session(session_id), id).await?;

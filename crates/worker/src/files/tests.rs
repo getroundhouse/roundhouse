@@ -3,9 +3,9 @@ use std::path::Path;
 
 use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::client::ErrorCode;
-use protocol::model::{CommitId, FileContents};
+use protocol::model::{ByteRange, CommitId, FileContents, FileRange};
 
-use super::{MAX_IMAGE_BYTES, MAX_TEXT_BYTES, bounded, list, read, read_at, read_folder};
+use super::{MAX_IMAGE_BYTES, MAX_TEXT_BYTES, bounded, list, read, read_at, read_folder, read_range};
 use crate::git::tests::{new_repo, run};
 
 #[tokio::test]
@@ -207,6 +207,26 @@ fn an_image_is_sent_whole_by_what_it_starts_with() {
     assert_eq!(read(dir.path(), "shot").unwrap(), image(shot));
     assert_eq!(read(dir.path(), "not.png").unwrap(), FileContents::Text { text: "text\n".to_string() });
     assert_eq!(read(dir.path(), "huge.png").unwrap(), FileContents::TooBig { bytes: MAX_IMAGE_BYTES + 1 });
+}
+
+/// A video is said to be one, whatever its size, and read a part at a time, each part what the file has of it.
+#[test]
+fn a_video_is_read_in_parts() {
+    let dir = tempfile::tempdir().unwrap();
+    let webm = protocol::fixtures::webm(1000);
+    std::fs::write(dir.path().join("board.webm"), &webm).unwrap();
+    let bytes = u64::try_from(webm.len()).unwrap();
+    let part = |start, length| read_range(dir.path(), "board.webm", ByteRange::new(start, length).unwrap()).unwrap();
+
+    assert_eq!(read(dir.path(), "board.webm").unwrap(), FileContents::Video { media_type: MediaType::Webm, bytes });
+    assert_eq!(part(4, 8), FileRange { start: 4, data: AttachmentBytes::new(webm[4..12].to_vec()), file_bytes: bytes });
+    assert_eq!(part(bytes - 2, 8).data.as_slice(), &webm[webm.len() - 2..], "up to the end");
+    assert!(part(bytes + 1, 8).data.is_empty(), "past the end");
+    assert_eq!(
+        read_range(dir.path(), "../board.webm", ByteRange::new(0, 8).unwrap()).unwrap_err().code,
+        ErrorCode::InvalidRequest,
+        "a path no list would give, as a whole read refuses it"
+    );
 }
 
 /// The side a diff was taken from, after the worktree has changed it, which is what the diff shows it replaced.

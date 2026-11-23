@@ -44,7 +44,13 @@ impl FileImage {
             MediaType::Gif => image::ImageFormat::Gif,
             MediaType::Webp => image::ImageFormat::WebP,
             // The file tab shows a drawing as its text, which the worker sends it as.
-            MediaType::Svg | MediaType::Text | MediaType::Other | MediaType::Unknown => return None,
+            MediaType::Svg
+            | MediaType::Text
+            | MediaType::Webm
+            | MediaType::Mp4
+            | MediaType::Mov
+            | MediaType::Other
+            | MediaType::Unknown => return None,
         };
         let mut decoder = ImageReader::with_format(Cursor::new(data), format).into_decoder().ok()?;
         let orientation = decoder.orientation().ok()?;
@@ -99,7 +105,12 @@ impl FileImage {
             MediaType::Gif => "GIF",
             MediaType::Webp => "WebP",
             MediaType::Svg => "SVG",
-            MediaType::Text | MediaType::Other | MediaType::Unknown => "Image",
+            MediaType::Text
+            | MediaType::Webm
+            | MediaType::Mp4
+            | MediaType::Mov
+            | MediaType::Other
+            | MediaType::Unknown => "Image",
         }
     }
 

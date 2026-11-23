@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{CommitId, FileContents, FileOpened, FilePages, WorkspaceId, WorktreeFiles};
+use crate::model::{CommitId, FileContents, FileOpened, FilePages, FileRange, WorkspaceId, WorktreeFiles};
 
 /// The files in the workspace's worktree, for browsing them: tracked, new and ignored, apart from what's in a
 /// folder git ignores whole, or that's a repository of its own, which is listed as a folder for
@@ -83,6 +83,32 @@ impl Request for WorkspaceFileReadAt {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::WorkspaceFileReadAt(self)
+    }
+}
+
+/// Part of the file at `path` in the workspace's worktree, as it is now: `length` bytes from `start`, for playing a
+/// video that `WorkspaceFileRead` says is one. Refused as `WorkspaceFileRead` is, and with `InvalidRequest` when
+/// `length` is 0 or more than [`crate::model::MAX_RANGE_BYTES`]. A hub older than this refuses it as unsupported.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct WorkspaceFileReadRange {
+    pub id: WorkspaceId,
+    pub path: String,
+    pub start: u64,
+    pub length: u32,
+}
+
+impl Request for WorkspaceFileReadRange {
+    type Reply = FileRange;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::WorkspaceFileReadRange(self)
+    }
+}
+
+impl Reply for FileRange {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::FileRange(range) = response else { return Err(response) };
+        Ok(range)
     }
 }
 

@@ -4,6 +4,7 @@ use proptest::test_runner::{Config, RngSeed};
 use super::*;
 
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+const WEBM: &[u8] = crate::fixtures::WEBM_START;
 
 proptest! {
     #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
@@ -19,6 +20,14 @@ proptest! {
         prop_assert!(name.len() <= 200);
         prop_assert!(!name.contains('"'));
     }
+
+    /// Whatever a file starts with, reading which kind it is ends, as one cut short or made up does.
+    #[test]
+    fn any_bytes_are_some_kind(start in proptest::collection::vec(any::<u8>(), 0..64), cut in 0..WEBM.len()) {
+        MediaType::sniff(&start);
+        MediaType::sniff(&[WEBM, &start].concat());
+        MediaType::sniff(&WEBM[..cut]);
+    }
 }
 
 #[test]
@@ -31,6 +40,25 @@ fn a_file_is_known_by_what_it_starts_with() {
     assert_eq!(MediaType::sniff(b"text with a \0 in it"), MediaType::Other, "NUL means it isn't text");
     assert_eq!(MediaType::sniff(&[0xc3, 0x28]), MediaType::Other, "not UTF-8");
     assert_eq!(MediaType::sniff(b"RIFF\x10\0\0\0WAVEfmt "), MediaType::Other, "a RIFF that isn't WebP");
+}
+
+/// A video is known by its container: WebM by the doc type its header names, and MP4 or QuickTime by the brand its
+/// `ftyp` box starts with. The same containers hold images and other kinds of video, which aren't these.
+#[test]
+fn a_video_is_known_by_its_container() {
+    let matroska = [&WEBM[..23], b"\x88matroska"].concat();
+    let ftyp = |brand: &[u8; 4]| [b"\0\0\0\x18ftyp".as_slice(), brand, b"\0\0\x02\0"].concat();
+
+    assert_eq!(MediaType::sniff(WEBM), MediaType::Webm);
+    assert_eq!(MediaType::sniff(&ftyp(b"isom")), MediaType::Mp4);
+    assert_eq!(MediaType::sniff(&ftyp(b"mp42")), MediaType::Mp4);
+    assert_eq!(MediaType::sniff(&ftyp(b"qt  ")), MediaType::Mov);
+    assert_eq!(MediaType::sniff(&matroska), MediaType::Other, "Matroska that isn't WebM");
+    assert_eq!(MediaType::sniff(&ftyp(b"heic")), MediaType::Other, "a HEIF image");
+    assert_eq!(MediaType::sniff(&ftyp(b"avif")), MediaType::Other, "an AVIF image");
+    assert_eq!(MediaType::sniff(&WEBM[..12]), MediaType::Other, "cut short before its doc type");
+    assert!(MediaType::Webm.is_shown_in_transcript() && MediaType::Png.is_shown_in_transcript());
+    assert!(!MediaType::Mp4.is_shown_in_transcript() && MediaType::Mp4.is_video() && !MediaType::Png.is_video());
 }
 
 /// A drawing is text whose first element is `<svg`, whatever comes before it that isn't an element, so text that only
@@ -110,6 +138,8 @@ fn a_media_type_travels_as_its_mime_type_and_a_new_one_reads_as_unknown() {
     assert_eq!(crate::frame::encode(&MediaType::Jpeg).unwrap(), b"\"image/jpeg\"\n");
     assert_eq!(crate::frame::encode(&MediaType::Other).unwrap(), b"\"application/octet-stream\"\n");
     assert_eq!(crate::frame::encode(&MediaType::Svg).unwrap(), b"\"image/svg+xml\"\n");
+    assert_eq!(crate::frame::encode(&MediaType::Webm).unwrap(), b"\"video/webm\"\n");
+    assert_eq!(crate::frame::encode(&MediaType::Mov).unwrap(), b"\"video/quicktime\"\n");
     assert_eq!(crate::frame::decode::<MediaType>(b"\"application/pdf\"").unwrap(), MediaType::Unknown);
 }
 

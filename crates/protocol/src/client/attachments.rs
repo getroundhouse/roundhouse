@@ -37,7 +37,8 @@ impl Reply for Attachment {
 
 /// A file's bytes, for drawing an image, or for putting a draft's file back in the composer. Only the session it was
 /// added to has it, and once its prompt has gone, the hub keeps only images made of pixels, so any other file, a
-/// drawing such as an SVG included, is not found.
+/// drawing such as an SVG included, is not found. A video an agent's text points to is refused with `InvalidRequest`,
+/// since it's read a part at a time, with [`AttachmentReadRange`], as it plays.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AttachmentRead {
     pub session_id: SessionId,
@@ -61,6 +62,26 @@ impl Reply for AttachmentData {
     fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
         let ClientResponse::AttachmentData(data) = response else { return Err(response) };
         Ok(data)
+    }
+}
+
+/// Part of a file the hub keeps, `length` bytes from `start`, for playing a video an agent's text points to, which
+/// the hub keeps as an attachment. Not found as `AttachmentRead`'s file is, and refused with `InvalidRequest` when
+/// `length` is 0 or more than [`crate::model::MAX_RANGE_BYTES`]. A hub older than this refuses it as unsupported. It
+/// answers with a [`crate::model::FileRange`].
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct AttachmentReadRange {
+    pub session_id: SessionId,
+    pub id: AttachmentId,
+    pub start: u64,
+    pub length: u32,
+}
+
+impl Request for AttachmentReadRange {
+    type Reply = crate::model::FileRange;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::AttachmentReadRange(self)
     }
 }
 

@@ -9,11 +9,13 @@
 //! An image a tool sends back, such as a screenshot the agent reads, is an attachment of the session too. The worker
 //! sends its bytes beside the event, as a [`NewAttachment`], and the event's result names it, so it's kept and read the
 //! same way as a prompt's, and the log stays as light. So is an image in the worktree that the agent's text points to,
-//! which the worker reads as the text comes, and the text's block names by the address the text gives it.
+//! which the worker reads as the text comes, and the text's block names by the address the text gives it, and a video
+//! it points to the same way, which a client reads a part at a time with `AttachmentReadRange`, as it plays.
 
 #[cfg(test)]
 mod tests;
 
+mod containers;
 mod file;
 pub use file::{
     Attachment, AttachmentBytes, AttachmentFile, AttachmentProblem, MAX_FILE_BYTES, MAX_PER_PROMPT, MediaType,

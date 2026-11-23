@@ -65,7 +65,9 @@ pub fn image_format(media_type: MediaType) -> Option<ImageFormat> {
         MediaType::Gif => Some(ImageFormat::Gif),
         MediaType::Webp => Some(ImageFormat::Webp),
         MediaType::Svg => Some(ImageFormat::Svg),
-        MediaType::Text | MediaType::Other | MediaType::Unknown => None,
+        MediaType::Text | MediaType::Webm | MediaType::Mp4 | MediaType::Mov | MediaType::Other | MediaType::Unknown => {
+            None
+        }
     }
 }
 

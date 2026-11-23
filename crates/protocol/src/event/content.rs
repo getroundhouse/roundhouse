@@ -11,9 +11,11 @@ pub enum ContentBlock {
     Text {
         text: String,
         /// The images the text points to in the worktree, as they were when it came, each by the address the text
-        /// gives it. The worker reads each, and the hub keeps it as an attachment of the session, so a client reads
-        /// its bytes with `AttachmentRead`, as it does a prompt's. One that wasn't there, or wasn't an image inside the
-        /// worktree, isn't named, and neither is any in a text recorded before the hub kept them.
+        /// gives it, and the videos it points to as Markdown points to an image. The worker reads each, and the hub
+        /// keeps it as an attachment of the session, so a client reads an image's bytes with `AttachmentRead`, as it
+        /// does a prompt's, and a video's a part at a time with `AttachmentReadRange`. One that wasn't there, or wasn't
+        /// an image or a video the transcript shows inside the worktree, isn't named, and neither is any in a text
+        /// recorded before the hub kept them.
         ///
         /// This is the only record of which images the worker read, since the agent's raw line doesn't say. So
         /// anything that builds the event again from its raw line has to carry these over from the event it replaces.
@@ -66,10 +68,11 @@ pub struct Denied {
     pub said: Option<String>,
 }
 
-/// An image a text points to, and the attachment that keeps it.
+/// An image a text points to, or a video it points to as Markdown points to an image, and the attachment that keeps
+/// it, whose kind says which.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct LinkedImage {
-    /// Where the text says the image is, as its Markdown gives it, before any decoding.
+    /// Where the text says it is, as its Markdown gives it, before any decoding.
     pub address: String,
     pub attachment: Attachment,
 }

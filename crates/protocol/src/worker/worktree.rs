@@ -195,6 +195,31 @@ impl Request for FileRead {
     }
 }
 
+/// Part of the file at `file`, relative to the worktree at `path`, as it is now: `length` bytes from `start`. Refused
+/// as [`FileRead`] is, and when `length` is 0 or more than [`model::MAX_RANGE_BYTES`].
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct FileReadRange {
+    pub path: String,
+    pub file: String,
+    pub start: u64,
+    pub length: u32,
+}
+
+impl Request for FileReadRange {
+    type Reply = model::FileRange;
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::FileReadRange(self)
+    }
+}
+
+impl Reply for model::FileRange {
+    fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
+        let WorkerResponse::FileRange(range) = response else { return Err(response) };
+        Ok(range)
+    }
+}
+
 /// What the file at `file` held in `commit`, relative to the worktree at `path`, from the worktree's repository.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FileReadAt {
