@@ -2,6 +2,7 @@
 //! what it answers.
 
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use protocol::capability::Report;
@@ -80,16 +81,21 @@ impl UsageWatch {
     }
 }
 
-/// Notes the CLI's own word of its limits, and asks after anything else that's a reason to, when it's due. The
-/// answer comes through the loop that calls this, so the ask runs on a task of its own.
+/// What the CLI said by itself of its account's limits, in a line of its own, as the hub is sent it: a report, outside
+/// the log. Noted, so it isn't asked again until that's due, once its launch stands.
+pub(super) fn said(shared: &Shared, limits: &[UsageLimit]) -> AgentOutput {
+    if shared.confirmed.load(Ordering::SeqCst) {
+        shared.usage.lock().heard(Instant::now());
+    }
+    let limits = limits.iter().map(Limit::of).collect();
+    AgentOutput::Report(Report::Limits { limits, every_models_week: false })
+}
+
+/// Asks after anything that's a reason to, when it's due. The answer comes through the loop that calls this, so the ask
+/// runs on a task of its own.
 pub(super) fn after(shared: &Arc<Shared>, body: &EventBody, output: &mpsc::Sender<AgentOutput>) {
     let now = Instant::now();
-    let work = work(body);
-    if work == Work::HeardLimits {
-        shared.usage.lock().heard(now);
-        return;
-    }
-    let Some(turn_ended) = asks_after(work) else { return };
+    let Some(turn_ended) = asks_after(work(body)) else { return };
     if !shared.usage.lock().begin(turn_ended, now) {
         return;
     }
@@ -108,7 +114,7 @@ fn asks_after(work: Work) -> Option<bool> {
     match work {
         Work::TurnEnded => Some(true),
         Work::Wrote { .. } => Some(false),
-        Work::Started | Work::HeardLimits | Work::Other => None,
+        Work::Started | Work::Other => None,
     }
 }
 

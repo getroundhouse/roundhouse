@@ -10,6 +10,7 @@ mod chats;
 mod provider;
 
 pub(super) use chats::{
-    TIMEOUT, a_chat, a_turn, answering_first, answering_first_in_time, logged_in, logged_in_as, the_agent_says, titling,
+    TIMEOUT, a_chat, a_turn, answering_first, answering_first_in_time, logged_in, logged_in_as, the_agent_reports,
+    the_agent_says, titling,
 };
 pub(super) use provider::{Asked, hub_whose_stand_ins_answer_first, hub_with_environment, hub_with_stand_in_workers};

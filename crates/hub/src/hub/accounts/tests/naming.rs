@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
+use protocol::model::Seq;
 
 use super::on_a_machine::{a_turn_hearing, named, on_a_machine, the_week, without_when};
 use crate::hub::stand_in_workers::{a_chat, hub_with_stand_in_workers, logged_in, logged_in_as, the_agent_says};
@@ -86,4 +87,21 @@ async fn a_launchs_account_is_asked_again_when_the_worker_couldnt_say_and_what_i
     assert_eq!(without_when(&account.limits), [the_week()]);
     assert_eq!(calls.load(Ordering::SeqCst), 3, "asked again until it could say");
     assert_eq!(hub.store.get_session(&chat.id).unwrap().session.account, ada.id);
+}
+
+/// A worker of a build from before its agents said their account's limits in a report says them in the log, which the
+/// hub takes in as that report and doesn't keep, since the log no longer holds them.
+#[tokio::test]
+async fn limits_an_older_worker_says_in_the_log_are_kept_by_the_account_and_left_out_of_the_log() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, asked) = hub_with_stand_in_workers(dir.path());
+    let (workspace, chat) = a_chat(&hub).await;
+    on_a_machine(&hub, &workspace.id, &asked, logged_in_as("ada@example.com", "Max"));
+    a_turn_hearing(&hub, &asked, &chat.id, Vec::new()).await;
+
+    the_agent_says(&hub, &asked, &chat.id, [EventBody::AgentLimits { limits: vec![the_week()] }]).await;
+
+    named(&hub, &chat.id, |account| without_when(&account.limits) == [the_week()]).await;
+    let log = hub.store.read_events(&chat.id, Seq::default(), u32::MAX, u64::MAX, false).unwrap();
+    assert!(!log.iter().any(|event| matches!(event.body, EventBody::AgentLimits { .. })), "{log:?}");
 }

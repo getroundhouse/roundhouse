@@ -47,6 +47,7 @@ pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output:
             }
             Parsed::Prompt { uuid, progress } => answering.took(prompt_progress(&shared, &uuid, progress), line),
             Parsed::Request(request) => AgentOutput::Report(Report::Cache { request: answering.name(request) }),
+            Parsed::Limits(limits) => usage::said(&shared, &limits),
             Parsed::UnsupportedControl { request_id, subtype } => {
                 refuse_control(&shared, &request_id, &subtype).await;
                 let kind = format!("control_request/{subtype}");

@@ -21,6 +21,7 @@ These rules cover a session's events: what one is, how the hub records it, and h
   ```
 - **A session's log has one writer, its hub.** So its events get a plain sequence number, `seq`, and the log needs no merge logic.
 - **A log's events don't change once recorded, except in a migration.** A migration can rewrite events stored in an older form, and a rewritten event keeps its `seq` and place. So a client that reaches a hub of another build reads the log again. A hub migrates before it replies to a hello, so no client reads a log part way through a migration.
+- **An event of a kind this build's adapters no longer send stays in the logs that hold it, and one a worker of an older build sends is taken as this build's adapters say it.** For example, an agent says its account's limits in a report now: those a log recorded before stay there, where nothing draws them, and those a worker of protocol 6 from before says in the log are taken in as that report, and not recorded. *Unconfirmed.*
 - **A value where only the newest reading matters goes on a record, in an observation or in a live snapshot, and isn't an event.** Nothing that reads the log would use the older readings. For example, how full an agent's context is is an observation, and an agent's retry of a failed model request is in the tail. *Not built:* how full a context is is on the session's record.
 
 ## Recording one

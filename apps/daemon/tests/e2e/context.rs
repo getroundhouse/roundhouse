@@ -7,7 +7,7 @@ use protocol::client::HubNotice;
 use protocol::event::EventBody;
 use protocol::model::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy, Seq, SessionId};
 
-use crate::accounts::the_week;
+use crate::accounts::wait_for_adas_week;
 use crate::support::{Stack, TIMEOUT, wait_for_turn_end, wait_until};
 
 /// What the fake agent says its context holds once a conversation has seen this many prompts, and a turn has ended
@@ -66,7 +66,7 @@ fn a_chats_record_says_how_full_its_agents_context_is_and_follows_it() {
 }
 
 #[test]
-fn how_full_the_context_is_stays_out_of_the_log_and_the_accounts_limits_go_in() {
+fn how_full_the_context_is_and_the_accounts_limits_stay_out_of_the_log_and_the_limits_reach_the_account() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
@@ -74,16 +74,15 @@ fn how_full_the_context_is_stays_out_of_the_log_and_the_accounts_limits_go_in() 
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     wait_for_context(&client, &session.id, &after_prompts(1));
+    // What the agent heard of its account's limits is the account's, which a client reads on its record.
+    wait_for_adas_week(&client, &session.id);
 
     // The record says how full the context is, and the log has nothing of it: it answers the worker's own question,
     // and the answer also lists the user's skills by path.
     let (events, _) = client.session_read(&session.id, Seq::new(1), 500, true).unwrap();
     assert!(events.iter().all(|e| !e.raw.as_deref().unwrap_or_default().contains("get_context_usage")));
     assert!(events.iter().all(|e| !e.raw.as_deref().unwrap_or_default().contains("skillFrontmatter")));
-    // What the agent heard of its account's limits is something it was told as it worked, so it's an event, with the
-    // line it came in.
-    let heard: Vec<_> = events.iter().filter(|e| matches!(e.body, EventBody::AgentLimits { .. })).collect();
-    assert_eq!(heard.len(), 1, "{heard:?}");
-    assert_eq!(heard[0].body, EventBody::AgentLimits { limits: vec![the_week()] });
-    assert!(heard[0].raw.as_deref().is_some_and(|raw| raw.contains("rate_limit_event")));
+    // Nor of the limits, which the agent says in a report, outside the log, though its CLI said them in a line.
+    assert!(events.iter().all(|e| !matches!(e.body, EventBody::AgentLimits { .. })), "{events:?}");
+    assert!(events.iter().all(|e| !e.raw.as_deref().unwrap_or_default().contains("rate_limit_event")));
 }

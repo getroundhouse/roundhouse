@@ -104,7 +104,7 @@ pub(super) fn after(shared: &Arc<Shared>, body: &EventBody, output: &mpsc::Sende
         Work::TurnEnded => true,
         Work::Started | Work::Wrote { subagent: false } => false,
         // A subagent's work is in a context of its own.
-        Work::Wrote { subagent: true } | Work::HeardLimits | Work::Other => return,
+        Work::Wrote { subagent: true } | Work::Other => return,
     };
     if !shared.context.lock().begin(turn_ended, Instant::now()) {
         return;

@@ -12,7 +12,7 @@ use protocol::attachment::NewAttachment;
 use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::approvals::Asks;
 use protocol::event::{AgentRunState, EventBody, TurnOutcome};
-use protocol::model::{CacheRequest, MessageId, SubagentId, ToolUseId};
+use protocol::model::{CacheRequest, MessageId, SubagentId, ToolUseId, UsageLimit};
 use protocol::tail::{BlockKind, DeltaChange, Retrying, StreamDelta};
 use said::FailedRequests;
 use serde_json::Value;
@@ -58,6 +58,8 @@ pub enum Parsed {
     Prompt { uuid: String, progress: PromptProgress },
     /// One of the agent's own requests to its model, as the model started to answer it.
     Request(CacheRequest),
+    /// How much of the account's limits is used, as the CLI said by itself, each window it named.
+    Limits(Vec<UsageLimit>),
 }
 
 /// Parses lines in the order they came, and remembers which block of each message is streaming. Claude

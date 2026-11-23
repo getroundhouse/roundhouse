@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use agents::claude::spawn_at;
 use agents::{AgentError, AgentOptions, AgentOutput};
+use protocol::capability::Report;
 use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::{Effort, Settings};
 use protocol::event::{AgentRunState, CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
@@ -336,4 +337,27 @@ printf '{"type":"result","subtype":"success","num_turns":0,"result":""}\n'
     let CompactionOutcome::Compacted { by, summary, .. } = outcome else { panic!("{outcome:?}") };
     assert_eq!((by, summary.as_deref()), (CompactedBy::Asked, Some("1. What was asked")));
     assert!(only, "{seen:?}");
+}
+
+/// What the CLI says by itself of its account's limits goes to the hub as a report, outside the log, since the hub keeps
+/// only the newest of each, by the account.
+#[tokio::test]
+async fn the_limits_the_cli_says_by_itself_are_a_report_and_not_an_event() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, mut rx) = mpsc::channel(16);
+    let line = r#"{"type":"rate_limit_event","rate_limit_info":{"unifiedWindows":{"seven_day":{"utilization":0.25,"resetsAt":4102444800}}}}"#;
+    let body = format!("printf '%s\\n' '{line}'");
+    spawn_at(script(dir.path(), &body), spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
+
+    let seen = until_exit(&mut rx).await;
+
+    let reported = seen.iter().find_map(|item| {
+        let AgentOutput::Report(Report::Limits { limits, every_models_week }) = item else { return None };
+        Some((
+            limits.iter().map(|limit| (limit.window_minutes, limit.used_percent)).collect::<Vec<_>>(),
+            *every_models_week,
+        ))
+    });
+    assert_eq!(reported, Some((vec![(Some(7 * 24 * 60), 25)], false)), "{seen:?}");
+    assert!(!seen.iter().any(|item| matches!(item, AgentOutput::Event { body: EventBody::AgentLimits { .. }, .. })));
 }

@@ -1,5 +1,7 @@
 //! How full Codex's context is, and its account's limits, as it says while it works.
 
+use protocol::capability::Report;
+use protocol::capability::account::Limit;
 use protocol::event::EventBody;
 use protocol::model::{ContextUsage, LimitWindow, UsageLimit};
 use serde_json::json;
@@ -9,7 +11,7 @@ use crate::AgentOutput;
 use crate::codex::usage::limits_of;
 
 #[tokio::test]
-async fn the_newest_request_says_how_full_the_context_is_and_the_limits_are_an_event() {
+async fn the_newest_request_says_how_full_the_context_is_and_the_limits_are_a_report() {
     let tokens = |total: u64| {
         json!({"method":"thread/tokenUsage/updated","params":{"threadId":"thread","turnId":"root-turn",
             "tokenUsage":{"last":{"totalTokens":total,"inputTokens":total - 10,"cachedInputTokens":0,
@@ -49,7 +51,12 @@ async fn the_newest_request_says_how_full_the_context_is_and_the_limits_are_an_e
         resets_at_ms: Some(1_795_406_516_000),
         heard_at_ms: None,
     };
-    assert!(bodies(&output).contains(&&EventBody::AgentLimits { limits: vec![week] }));
+    let limits = output.iter().filter_map(|out| {
+        let AgentOutput::Report(Report::Limits { limits, every_models_week }) = out else { return None };
+        Some((limits.clone(), *every_models_week))
+    });
+    assert_eq!(limits.collect::<Vec<_>>(), [(vec![Limit::of(&week)], false)], "outside the log");
+    assert!(!bodies(&output).iter().any(|body| matches!(body, EventBody::AgentLimits { .. })));
     assert!(
         !bodies(&output)
             .iter()

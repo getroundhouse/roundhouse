@@ -5,7 +5,7 @@ use std::sync::Arc;
 use protocol::attachment::NewAttachment;
 use protocol::capability::approvals::{ApprovalMode, Asks, Decision, Remember, Request};
 use protocol::capability::settings::Settings;
-use protocol::event::{CompactionOutcome, EventBody, ExitReason, SessionEvent};
+use protocol::event::{CompactionOutcome, EventBody, ExitReason};
 use protocol::model::{ApprovalId, RunId};
 use protocol::tail::{Retrying, StreamDelta, Tail};
 use tokio::sync::mpsc;
@@ -44,6 +44,14 @@ async fn ingest_event(
     attachments: Vec<NewAttachment>,
     numbered: Option<u64>,
 ) {
+    // Said in the log only by a worker of a build from before its adapters said the account's limits in a report, and
+    // taken in as that report is, since the log no longer keeps them. A worker of protocol 6 sends it until the hub
+    // stops speaking that version.
+    if let EventBody::AgentLimits { limits } = body {
+        // Heard as the hub takes it in, as a report is.
+        session.heard_limits(run, limits, false, crate::store::now_ms());
+        return;
+    }
     if !attachments.is_empty()
         && let Ok(hub) = session.hub()
     {
@@ -64,14 +72,8 @@ async fn ingest_event(
     } else {
         None
     };
-    match session.record(origin, body, raw).await {
-        // Heard when the hub recorded it, by the hub's clock, as everything else in the log is timed.
-        Ok((SessionEvent { body: EventBody::AgentLimits { limits }, ts_ms, .. }, _)) => {
-            // What the agent hears by itself says nothing of the limits it leaves out.
-            session.heard_limits(run, limits, false, ts_ms);
-        }
-        Ok(_) => {}
-        Err(e) => error!(session = %session.id, "could not record agent output: {e}"),
+    if let Err(e) = session.record(origin, body, raw).await {
+        error!(session = %session.id, "could not record agent output: {e}");
     }
     if let Some(approval_id) = stale_approval {
         session.record_or_log(Origin::Hub, cancelled_approval(approval_id)).await;

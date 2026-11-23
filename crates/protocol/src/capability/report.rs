@@ -132,8 +132,8 @@ pub enum Report {
         servers: Vec<ToolServerState>,
     },
     Hook(HookRun),
-    /// What the adapter's own asking found of the account's limits. What the agent hears of them in its conversation
-    /// is an event, which the log keeps.
+    /// What's left of the account's limits, as the agent said by itself or the adapter's own asking found, which the
+    /// hub keeps by the account, outside the log.
     Limits {
         limits: Vec<Limit>,
         /// Whether `limits` holds every model's own week the account has, as an answer that lists them all does, so

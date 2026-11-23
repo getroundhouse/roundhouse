@@ -199,11 +199,15 @@ pub(in super::super) fn logged_in_as(email: &str, plan: &str) -> AgentAccount {
     }
 }
 
-/// One of the requests the agent of the chat `session` makes of its model, as its worker passes it on, from the run
-/// its stand-in last started for the chat, once the chat has taken it in, as [`the_agent_says`] has the agent speak.
+/// One of the requests the agent of the chat `session` makes of its model, as [`the_agent_reports`] says.
 async fn the_agent_asks_its_model(hub: &Arc<Hub>, asked: &Asked, session: &SessionId, request: CacheRequest) {
-    let run = last_started(asked, session).expect("only an agent that was started asks its model anything");
-    let report = Report::Cache { request };
+    the_agent_reports(hub, asked, session, Report::Cache { request }).await;
+}
+
+/// What the agent of the chat `session` says outside the log, as its worker passes it on, from the run its stand-in
+/// last started for the chat, once the chat has taken it in, as [`the_agent_says`] has the agent speak.
+pub(in super::super) async fn the_agent_reports(hub: &Arc<Hub>, asked: &Asked, session: &SessionId, report: Report) {
+    let run = last_started(asked, session).expect("only an agent that was started reports anything");
     hub.route(session, Item::Report { run, report, seq: None }).await;
     flushed(&hub.live_session(session).await.expect("a chat that's there")).await;
 }
