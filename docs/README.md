@@ -54,7 +54,7 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/principles/agents.md` | How the hub and clients deal with each kind of agent through its adapter, and how an agent uses Roundhouse's tools |
 | `docs/decisions/` | One record a file, listed in its `README.md` |
 | `docs/reference/terms.md` | What the project's words mean, and which to write |
-| `docs/reference/layout.md` | A map of the parts and what connects them, what each crate is, and who owns each piece of state |
+| `docs/reference/layout.md` | A map of the parts and what connects them, what each crate is, who owns each piece of state, and which kind each thing a hub holds is |
 | `docs/reference/commands.md` | Every command for building, testing, running and packaging from a checkout |
 | `docs/reference/claude-cli.md` | How the Claude CLI behaves, and how the worker drives it |
 | `docs/reference/codex-cli.md` | How Codex's app-server behaves on the wire, and how to probe it |
