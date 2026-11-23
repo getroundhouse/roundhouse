@@ -1,10 +1,14 @@
 //! Fetches and follows the hub's history for the view an open session requests.
 
+use super::super::feed::Reaches;
 use super::super::follow::Source;
 use super::super::{Client, Result, Subscription, SubscriptionItem};
 use super::View;
+use crate::records::HubRecords;
 use crate::session_log::{By, Position, SessionLog};
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
+use protocol::client::listed::Listed;
+use protocol::client::subscriptions::{Follow, LogFrom};
 use protocol::event::SessionEvent;
 use protocol::model::{Place, Seq, SessionId, SubagentId};
 use std::sync::Arc;
@@ -22,9 +26,26 @@ pub(super) struct SessionSource {
     pub(super) placed: bool,
     /// The build of the hub its events were read from, as the hub's hello said.
     pub(super) read_from: String,
+    /// The copies of the hub's records that the session's own records go into, from when it first followed the
+    /// session until it ends.
+    pub(super) records: Option<Reaches>,
 }
 
 impl SessionSource {
+    /// Keeps the session's own records in the copies of the hub's records that replies on `client` go into, from the
+    /// first time it follows the session, as the session's subscription sends them.
+    fn keep_records(&mut self, client: &Client) {
+        if self.records.is_some() {
+            return;
+        }
+        let records = client.inner.folding.reaches();
+        records.change(|records| {
+            records.want_session(&self.session_id);
+            false
+        });
+        self.records = Some(records);
+    }
+
     pub(super) fn subagent(&self) -> Option<&SubagentId> {
         self.view.subagent()
     }
@@ -88,19 +109,36 @@ impl Source for SessionSource {
         // Events arrive in order with no gaps, so carrying on from one past the last misses nothing, whatever
         // was fetched meanwhile.
         let from = held.lock().received().next();
-        let subscription = match &self.view {
-            View::Whole => client.session_subscribe(&self.session_id, from.seq())?,
-            View::Own | View::Subagent(_) => {
-                client.session_subscribe_places(&self.session_id, self.subagent(), from.place())?
-            }
+        let from = match &self.view {
+            View::Whole => LogFrom::Seq { seq: from.seq() },
+            View::Own | View::Subagent(_) => LogFrom::Place { subagent: self.subagent().cloned(), place: from.place() },
         };
+        let subscription = client.follow(Follow::Session { id: self.session_id.clone(), from: Some(from) })?;
+        self.keep_records(client);
         change(held).retry_failed();
         Ok(subscription)
     }
 
+    /// Takes in what the session's subscription sends: its log, into what's held, and its own records, into the copies
+    /// of the hub's records.
     fn apply(&mut self, _: &Client, held: &Mutex<Arc<SessionLog>>, item: SubscriptionItem) -> Result<bool> {
+        let records = |change: &dyn Fn(&mut HubRecords) -> bool| {
+            if let Some(records) = &self.records {
+                records.change(change);
+            }
+        };
         let mut log = change(held);
         Ok(match item {
+            SubscriptionItem::Listed(listed) => {
+                if let Listed::Session(listed) = *listed {
+                    records(&|records| records.apply_session_list(listed.clone()));
+                }
+                false
+            }
+            SubscriptionItem::Notice(notice) => {
+                records(&|records| records.apply_notice((*notice).clone()));
+                false
+            }
             SubscriptionItem::Event(event) => {
                 log.apply_event(*event);
                 true
@@ -113,10 +151,7 @@ impl Source for SessionSource {
                 log.apply_delta(&delta);
                 true
             }
-            SubscriptionItem::Notice(_)
-            | SubscriptionItem::Terminal(_)
-            | SubscriptionItem::TerminalPicture(_)
-            | SubscriptionItem::Github(_) => false,
+            SubscriptionItem::Terminal(_) | SubscriptionItem::TerminalPicture(_) | SubscriptionItem::Github(_) => false,
         })
     }
 
@@ -242,4 +277,14 @@ pub(super) fn read_range(
         from = last.next();
     }
     Ok(events)
+}
+
+/// Lets go of the session's own records once nothing it follows of the session is left, as a view that closes its chat
+/// does, since they reach a client only while it follows the session.
+impl Drop for SessionSource {
+    fn drop(&mut self) {
+        if let Some(records) = &self.records {
+            records.change(|records| records.forget_session(&self.session_id));
+        }
+    }
 }

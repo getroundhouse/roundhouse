@@ -41,12 +41,12 @@ pub(super) fn default(ui: &Ui<'_>) -> Option<GithubAccountId> {
 
 /// The default GitHub account, as the hub says when asked, rather than as the app shows it.
 fn the_hubs_default(stack: &Stack) -> Option<GithubAccountId> {
-    stack.client().records_list().unwrap().hub_settings.unwrap().github.unwrap().account
+    stack.client().records().unwrap().hub_settings.unwrap().github.unwrap().account
 }
 
 /// Every GitHub account the hub has, as it says when asked.
 fn the_hubs(stack: &Stack) -> Vec<GithubAccount> {
-    stack.client().records_list().unwrap().github_accounts
+    stack.client().records().unwrap().github_accounts
 }
 
 /// An account whose token the hub was given from elsewhere.

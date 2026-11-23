@@ -3,6 +3,7 @@
 
 use std::time::Duration;
 
+use protocol::client::subscriptions::{Follow, Subscribed};
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, conversation};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::fixtures::{event, session, turn_ended};
@@ -64,6 +65,18 @@ enum Told {
     End,
 }
 
+/// The subscription ID `request` starts following a session under, if it does.
+fn session_start(request: &ClientRequest) -> Option<u64> {
+    let ClientRequest::Subscribe(subscribe) = request else { return None };
+    let start = subscribe.start.iter().find(|start| matches!(start.follow, Follow::Session { .. }))?;
+    Some(start.subscription_id)
+}
+
+/// That every start was made.
+fn started() -> Box<ReplyOutcome> {
+    Box::new(ReplyOutcome::Response(ClientResponse::Subscribed(Subscribed::default())))
+}
+
 /// A hub whose chat had `m0` begun before the subscription, `m1` streaming when its tail came, and after it the rest
 /// of `m0`, `m1` recorded and `m2` said, then the turn's end.
 fn hub(socket: &std::path::Path) -> (crate::Client, flume::Receiver<Told>) {
@@ -71,11 +84,10 @@ fn hub(socket: &std::path::Path) -> (crate::Client, flume::Receiver<Told>) {
     let client = stand_in_hub::connect(socket, move |request| {
         let frame = |subscription_id, event| HubFrame::Event { subscription_id, event };
         let ok = || Box::new(ReplyOutcome::Response(ClientResponse::Ok));
-        if let ClientRequest::SessionSubscribe(subscribe) = request {
-            let id = subscribe.subscription_id;
+        if let Some(id) = session_start(&request) {
             let ended = event(Seq::new(5), turn_ended(TurnOutcome::Success));
             return Does::AnswersThen(
-                ok(),
+                started(),
                 vec![
                     frame(id, said_in_block(1, "m0", Some(0), "Before.")),
                     HubFrame::Tail { subscription_id: id, tail: streaming("m1", "Half") },
@@ -174,13 +186,11 @@ fn leaving_tells_the_hub_how_the_reply_ended_before_the_mode_ends() {
 fn how_a_reply_ended_is_told_again_on_a_new_connection() {
     let dir = tempfile::tempdir().unwrap();
     let first = stand_in_hub::connect(&dir.path().join("first.sock"), |request| {
-        if let ClientRequest::SessionSubscribe(subscribe) = request {
-            let id = subscribe.subscription_id;
-            let ok = Box::new(ReplyOutcome::Response(ClientResponse::Ok));
+        if let Some(id) = session_start(&request) {
             let ended = event(Seq::new(3), turn_ended(TurnOutcome::Success));
             let ended = SessionEvent { interaction: InteractionMode::Conversation, ..ended };
             return Does::AnswersThen(
-                ok,
+                started(),
                 vec![
                     HubFrame::Tail { subscription_id: id, tail: Tail::default() },
                     HubFrame::Event { subscription_id: id, event: said(2, "m1", "Yes.") },

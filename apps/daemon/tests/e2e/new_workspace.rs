@@ -63,7 +63,7 @@ fn a_workspace_made_from_the_dialog_has_what_it_said_and_the_dialog_is_emptied()
         files.iter().map(|file| (&file.id, file.name.as_str())).collect::<Vec<_>>(),
         [(&made_of.files[0], "notes.txt")]
     );
-    let kept = client.records_list().unwrap().new_workspace_draft.unwrap();
+    let kept = client.records().unwrap().new_workspace_draft.unwrap();
     assert_eq!((kept.text.as_str(), kept.files.as_slice(), kept.mode), ("", [].as_slice(), None));
     assert_eq!(
         (kept.repo_id, kept.model, kept.effort),

@@ -93,6 +93,12 @@ impl<H> Clone for Follow<H> {
 /// as from a connection that takes in what its replies carry.
 pub(in crate::client) struct Reach<H>(Weak<Shared<H>>);
 
+impl<H> Clone for Reach<H> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
 impl<H> Reach<H> {
     /// Changes what's held, telling readers when `change` says it changed it. Returns false, changing nothing, once
     /// every handle on it and its thread have gone.
@@ -229,6 +235,8 @@ impl<H> Shared<H> {
     }
 }
 
+/// Its fields drop in order, so its source, which lets go of what it took in through its subscription, as a session's
+/// does of the session's own records, goes before the subscription does.
 struct Follower<S: Source> {
     source: S,
     client: Client,

@@ -38,12 +38,11 @@ fn shown(subagents: &Subagents, session: &str, call: &str) -> Option<Subagent> {
 }
 
 #[test]
-fn only_the_subagents_of_a_session_a_view_asked_for_are_kept() {
+fn only_the_subagents_of_a_session_followed_are_kept() {
     let mut subagents = Subagents::default();
 
-    assert!(!subagents.apply(subagent("s", "a", 1, 5)), "nobody asked");
-    assert!(subagents.want("s".into()));
-    assert!(!subagents.want("s".into()), "asked already");
+    assert!(!subagents.apply(subagent("s", "a", 1, 5)), "nobody follows it");
+    subagents.want("s".into());
     assert!(subagents.apply(subagent("s", "a", 1, 6)));
     assert!(!subagents.apply(subagent("t", "b", 1, 7)), "another session");
 
@@ -59,7 +58,8 @@ fn a_list_and_the_feed_keep_whichever_copy_is_newer_whatever_order_they_come_in(
     finished.status = SubagentStatus::Finished;
 
     assert!(subagents.apply(finished.clone()));
-    assert!(subagents.apply_list(&"s".into(), vec![subagent("s", "a", 1, 4), subagent("s", "b", 0, 5)]), "b is new");
+    let list = vec![subagent("s", "a", 1, 4), subagent("s", "b", 0, 5)];
+    assert!(subagents.apply_list(&"s".into(), list, Rev::new(5)), "b is new");
     assert!(!subagents.apply(subagent("s", "a", 1, 8)), "older than the one held");
 
     assert_eq!(shown(&subagents, "s", "a"), Some(finished));
@@ -80,51 +80,37 @@ fn a_copy_with_no_revision_replaces_the_one_held_as_any_records_does() {
     assert_eq!(shown(&subagents, "s", "a"), Some(finished));
 }
 
+/// A session's list says which of its subagents there are, so one held that it lacks is gone, unless the copy held is
+/// newer than the list, as for any list.
 #[test]
-fn a_wanted_session_is_listed_once_a_connection_and_again_on_the_next() {
-    let mut subagents = Subagents::default();
-    subagents.want("s".into());
-    assert_eq!(subagents.to_list(), ["s".into()]);
-
-    subagents.apply_list(&"s".into(), Vec::new());
-    assert!(subagents.to_list().is_empty());
-    subagents.relist();
-    assert_eq!(subagents.to_list(), ["s".into()]);
-
-    subagents.skip("s".into());
-    assert!(subagents.to_list().is_empty(), "the hub refused it, so it waits for the next connection");
-
-    subagents.relist();
-    subagents.unkept();
-    assert!(subagents.to_list().is_empty() && !subagents.kept(), "a hub that keeps none has none to list");
-    subagents.relist();
-    assert!(subagents.kept() && subagents.to_list() == ["s".into()], "the next hub may keep them");
-}
-
-#[test]
-fn a_session_no_view_shows_any_more_is_let_go_of() {
+fn a_sessions_list_drops_what_it_lacks_unless_whats_held_is_newer() {
     let mut subagents = Subagents::default();
     subagents.want("s".into());
     subagents.apply(subagent("s", "a", 1, 5));
+    subagents.apply(subagent("s", "c", 3, 8));
 
-    subagents.forget(&"s".into());
+    assert!(subagents.apply_list(&"s".into(), vec![subagent("s", "b", 2, 6)], Rev::new(7)));
 
-    assert!(calls(&subagents, "s").is_empty() && subagents.to_list().is_empty());
-    assert!(!subagents.apply(subagent("s", "a", 1, 6)), "nobody wants it now");
+    assert_eq!(calls(&subagents, "s"), ["b", "c"], "a is gone, and c came after the list");
 }
 
+/// A session is followed once for each subscription that follows it, so its subagents are kept until the last lets go,
+/// and nothing is kept of it after.
 #[test]
-fn a_session_let_go_of_while_it_was_being_listed_and_wanted_again_is_listed_again() {
+fn a_session_is_let_go_of_once_nothing_follows_it() {
     let mut subagents = Subagents::default();
     subagents.want("s".into());
-    assert_eq!(subagents.to_list(), ["s".into()]);
-
-    subagents.forget(&"s".into());
-    assert!(!subagents.apply_list(&"s".into(), vec![subagent("s", "a", 1, 5)]), "nobody wants it as the list comes");
     subagents.want("s".into());
+    subagents.apply(subagent("s", "a", 1, 5));
 
-    assert_eq!(subagents.to_list(), ["s".into()], "so the list it took in is no longer good");
+    let first = subagents.forget(&"s".into());
+    let while_one_follows = calls(&subagents, "s");
+    let last = subagents.forget(&"s".into());
+
+    assert_eq!((first, while_one_follows, last), (false, vec!["a".to_string()], true));
     assert!(calls(&subagents, "s").is_empty());
+    assert!(!subagents.apply(subagent("s", "a", 1, 6)), "nobody follows it now");
+    assert!(!subagents.apply_list(&"s".into(), vec![subagent("s", "a", 1, 7)], Rev::new(7)), "nor its list");
 }
 
 /// A subagent is found by its ID, or else by the call that started it, as a tab opened before its record came names it,
@@ -154,7 +140,8 @@ fn a_sessions_proposals_are_kept_as_its_subagents_are_in_the_order_they_were_mad
     retitled.current.proposed.title = "Search, again".into();
 
     assert!(proposals.apply(retitled.clone()));
-    assert!(proposals.apply_list(&"s".into(), vec![proposal("s", "p", 2, 4), proposal("s", "q", 1, 5)]), "q is new");
+    let list = vec![proposal("s", "p", 2, 4), proposal("s", "q", 1, 5)];
+    assert!(proposals.apply_list(&"s".into(), list, Rev::new(5)), "q is new");
     assert!(!proposals.apply(proposal("t", "r", 1, 6)), "another session");
 
     let shown = Snapshot::new(
@@ -183,7 +170,7 @@ fn how_a_sessions_replies_were_heard_is_kept_as_its_proposals_are_and_found_by_r
     let mut kept = BySession::<ReplyHeard>::default();
     kept.want("s".into());
 
-    assert!(kept.apply_list(&"s".into(), vec![heard("s", "m1", Ending::NotReadOut, 4)]));
+    assert!(kept.apply_list(&"s".into(), vec![heard("s", "m1", Ending::NotReadOut, 4)], Rev::new(4)));
     assert!(kept.apply(heard("s", "m2", Ending::ToTheEnd, 5)));
     assert!(!kept.apply(heard("t", "m3", Ending::ToTheEnd, 6)), "another session");
 

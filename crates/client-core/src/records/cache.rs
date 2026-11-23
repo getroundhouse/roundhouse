@@ -2,8 +2,9 @@ use super::by_revision::ByRevision;
 use super::of_session::BySession;
 use super::snapshot::{Listed, ObservationsListed, Snapshot};
 use crate::Agents;
+use protocol::client::listed::SessionRecords;
 use protocol::client::{HubNotice, ObservationNotice, RecordNotice};
-use protocol::model::{Observation, Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent};
+use protocol::model::{Level, Observation, Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent};
 use std::cell::OnceCell;
 use std::sync::Arc;
 
@@ -156,38 +157,39 @@ impl HubRecords {
         )
     }
 
-    pub(crate) fn subagents_mut(&mut self) -> &mut BySession<Subagent> {
-        &mut self.subagents
+    /// Keeps the records of `session` that are listed by session, of every kind, while it's followed, once more than
+    /// before, as a session's subscription does.
+    pub(crate) fn want_session(&mut self, session: &SessionId) {
+        self.subagents.want(session.clone());
+        self.proposals.want(session.clone());
+        self.replies_heard.want(session.clone());
     }
 
-    pub(crate) fn proposals_mut(&mut self) -> &mut BySession<Proposal> {
-        &mut self.proposals
+    /// Follows `session` once less, letting go of its records of every kind once nothing follows it, since they reach a
+    /// client only while it follows the session. Returns whether it let go of any.
+    pub(crate) fn forget_session(&mut self, session: &SessionId) -> bool {
+        let subagents = self.subagents.forget(session);
+        let proposals = self.proposals.forget(session);
+        self.replies_heard.forget(session) || subagents || proposals
     }
 
-    pub(crate) fn replies_heard_mut(&mut self) -> &mut BySession<ReplyHeard> {
-        &mut self.replies_heard
+    /// Takes in where a session's own records stand, as its subscription lists them. Returns whether anything changed.
+    pub(crate) fn apply_session_list(&mut self, listed: SessionRecords) -> bool {
+        let SessionRecords { session_id, subagents, proposals, replies_heard, rev } = listed;
+        let subagents = self.subagents.apply_list(&session_id, subagents, rev);
+        let proposals = self.proposals.apply_list(&session_id, proposals, rev);
+        self.replies_heard.apply_list(&session_id, replies_heard, rev) || subagents || proposals
     }
 
-    /// Keeps the records of `session` that are listed by session from now on, of every kind. Returns whether any
-    /// weren't kept already.
-    pub(crate) fn want_session(&mut self, session: &SessionId) -> bool {
-        let subagents = self.subagents.want(session.clone());
-        let proposals = self.proposals.want(session.clone());
-        self.replies_heard.want(session.clone()) || subagents || proposals
-    }
-
-    /// Lets go of the records of `session` that are listed by session, of every kind.
-    pub(crate) fn forget_session(&mut self, session: &SessionId) {
-        self.subagents.forget(session);
-        self.proposals.forget(session);
-        self.replies_heard.forget(session);
-    }
-
-    /// Lists every wanted session's records of every kind again, as [`BySession::relist`] says.
-    pub(crate) fn relist_sessions(&mut self) {
-        self.subagents.relist();
-        self.proposals.relist();
-        self.replies_heard.relist();
+    /// Lets go of the observations held only through `level`, which a client stops following, as of a workspace
+    /// whose pane has closed, since nothing tells it of them while it doesn't follow it. Returns whether anything
+    /// changed.
+    pub(crate) fn let_go_of(&mut self, level: &Level) -> bool {
+        let changed = self.observations.let_go(|key| key.level().as_ref() == Some(level));
+        if changed {
+            self.shown_observations.take();
+        }
+        changed
     }
 
     /// Takes in what the hub said of its agents. Returns whether that changed anything.

@@ -10,6 +10,7 @@ use process::testing::WholeEnvironment;
 pub(crate) use process::testing::git;
 use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::Settings;
+use protocol::client::listed::{Listed, SessionRecords};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{AgentKind, Seq, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
 use protocol::paths::Paths;
@@ -324,6 +325,7 @@ impl Follower {
             SubscriptionItem::Tail(tail) => self.tail = tail,
             SubscriptionItem::Delta(delta) => self.tail.apply(&delta),
             SubscriptionItem::Notice(_)
+            | SubscriptionItem::Listed(_)
             | SubscriptionItem::Terminal(_)
             | SubscriptionItem::TerminalPicture(_)
             | SubscriptionItem::Github(_) => {}
@@ -381,4 +383,16 @@ pub(crate) fn install_executable(source: &Path, target: &Path) {
     let _ = std::fs::remove_file(target);
     let status = Command::new("install").args(["-m", "755"]).arg(source).arg(target).status().unwrap();
     assert!(status.success());
+}
+
+/// The records of the session `id`, its subagents, proposals and replies heard, as following it lists them first.
+pub(crate) fn session_records(client: &Client, id: &SessionId) -> SessionRecords {
+    let followed = client.follow_session(id, Seq::new(1)).unwrap();
+    match followed.items.recv_timeout(super::TIMEOUT) {
+        Ok(SubscriptionItem::Listed(listed)) => match *listed {
+            Listed::Session(records) => records,
+            listed => panic!("not a session's records: {listed:?}"),
+        },
+        other => panic!("not where the session stands: {other:?}"),
+    }
 }

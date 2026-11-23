@@ -2,7 +2,7 @@
 //! can't change. It's made from the bytes the world gives, the same way on every call, so a picture's numbering and
 //! the rows asked for in it agree.
 
-use protocol::client::terminals::{TerminalBounds, TerminalRows, TerminalText, TerminalWatch};
+use protocol::client::terminals::{TerminalBounds, TerminalRows, TerminalText};
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubFrame};
 use protocol::model::TerminalId;
 use protocol::terminal::PictureSending;
@@ -11,18 +11,19 @@ use terminal_state::{Mirror, MirrorError};
 use super::serve::{Answer, Outcome};
 use super::world::{TerminalShows, World};
 
-/// A whole picture of what the world's terminal shows, in as many frames as it takes, after the reply.
-pub(super) fn watch(world: &World, watch: &TerminalWatch) -> Answer {
-    let mut mirror = mirror(world, &watch.id)?;
+/// A whole picture of what the world's terminal `id` shows, in as many frames as it takes, as a subscription that
+/// follows it is sent.
+pub(super) fn pictures(world: &World, id: &TerminalId, subscription_id: u64) -> Result<Vec<HubFrame>, ApiError> {
+    let mut mirror = mirror(world, id)?;
     let shown = mirror.shown().map_err(|e| failed(&e))?;
     let mut sending = PictureSending::default();
     let mut next = sending.next(shown, |number| mirror.history_row(number));
     let mut frames = Vec::new();
     while let Some(picture) = next {
-        frames.push(HubFrame::TerminalPicture { subscription_id: watch.subscription_id, picture });
+        frames.push(HubFrame::TerminalPicture { subscription_id, picture });
         next = sending.rest();
     }
-    Ok(Outcome::Reply(ClientResponse::Ok, frames))
+    Ok(frames)
 }
 
 pub(super) fn rows(world: &World, rows: &TerminalRows) -> Answer {

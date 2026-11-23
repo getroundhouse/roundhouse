@@ -68,7 +68,7 @@ fn a_saved_device_and_server_key_survive_a_hub_restart() {
 
     let again = Running::start_in(directory, address.port());
     let client = Client::connect_remote(&remote, "reopened desktop").unwrap();
-    assert!(client.records_list().is_ok());
+    assert!(client.records().is_ok());
     assert_eq!(again.local.device_list().unwrap()[0].id, remote.device_id);
     again.stop();
 }
@@ -102,7 +102,7 @@ fn paired_clients_read_records_but_cannot_administer_and_revocation_closes_them(
 
     running.local.device_revoke(&hub.device_id).unwrap();
     let deadline = Instant::now() + Duration::from_secs(3);
-    while remote.records_list().is_ok() {
+    while remote.records().is_ok() {
         assert!(Instant::now() < deadline, "revoked connection stayed open");
     }
     assert!(Client::connect_remote(&hub, "revoked").is_err());
@@ -115,7 +115,7 @@ fn an_unpaired_connection_and_a_different_server_key_are_refused() {
     let running = Running::start();
     let pairing = running.local.pairing_start().unwrap();
     let unpaired = Client::open_remote(&pairing.link.hosts, &pairing.link.fingerprint).unwrap();
-    assert_eq!(code(unpaired.records_list().unwrap_err()), ErrorCode::Unauthorized);
+    assert_eq!(code(unpaired.records().unwrap_err()), ErrorCode::Unauthorized);
 
     let wrong = Fingerprint::of_sha256([0; 32]);
     let result = Client::open_remote(&pairing.link.hosts, &wrong);
@@ -135,7 +135,7 @@ fn pending_drafts_resume_after_the_same_hub_is_paired_again() {
     let client = Client::connect_remote(&first, "test").unwrap();
     let drafts = Drafts::start(&client);
     running.local.device_revoke(&first.device_id).unwrap();
-    assert!(client.records_list().is_err());
+    assert!(client.records().is_err());
     drafts.set(DraftChange::NewWorkspace(NewWorkspaceDraftToKeep {
         text: "Kept across re-pairing".into(),
         ..Default::default()
@@ -150,6 +150,6 @@ fn pending_drafts_resume_after_the_same_hub_is_paired_again() {
     drafts.reconnect(&Client::connect_remote(&second, "test").unwrap());
     drafts.flushed().recv_timeout(Duration::from_secs(3)).unwrap();
     assert!(!drafts.unkept(&DraftKey::NewWorkspace));
-    assert_eq!(running.local.records_list().unwrap().new_workspace_draft.unwrap().text, "Kept across re-pairing");
+    assert_eq!(running.local.records().unwrap().new_workspace_draft.unwrap().text, "Kept across re-pairing");
     running.stop();
 }

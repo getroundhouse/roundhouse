@@ -41,7 +41,7 @@ fn called(ui: &Ui<'_>, name: &str) -> Option<Account> {
 
 /// Every account the hub has, as it says when asked, rather than as the app shows them.
 pub(super) fn the_hubs(stack: &Stack) -> Vec<Account> {
-    stack.client().records_list().unwrap().accounts
+    stack.client().records().unwrap().accounts
 }
 
 /// A login the hub was given from elsewhere, called `name`.
@@ -85,7 +85,7 @@ fn choosing_a_default_updates_the_hub_and_other_clients_and_the_badge_moves_with
     ui.click_menu_item("Personal");
 
     ui.wait("the new default", |ui| selected(ui) == personal);
-    let hub = stack.client().records_list().unwrap().hub_settings.unwrap();
+    let hub = stack.client().records().unwrap().hub_settings.unwrap();
     assert_eq!(hub.account_defaults.unwrap()[0].account, personal);
     ui.wait("the badge to move", |ui| ui.has(badge(&personal)) && !ui.has(badge(&work)));
 }
@@ -103,7 +103,7 @@ fn choosing_automatic_takes_the_badge_away_until_an_account_is_chosen_again(cx: 
     ui.click_menu_item("Automatic, Most to spare");
 
     ui.wait("Automatic", |ui| automatic(ui));
-    assert!(stack.client().records_list().unwrap().hub_settings.unwrap().account_defaults.unwrap()[0].automatic);
+    assert!(stack.client().records().unwrap().hub_settings.unwrap().account_defaults.unwrap()[0].automatic);
     ui.wait("the badge to go", |ui| !ui.has(badge.clone()));
 
     ui.click("account-default-claude");

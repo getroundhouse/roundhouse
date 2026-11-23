@@ -20,7 +20,7 @@ fn made(stack: &Stack) -> GithubApp {
 
 /// The app's installation's account, as the hub has it.
 fn installation(stack: &Stack) -> GithubAccountId {
-    let accounts = stack.client().records_list().unwrap().github_accounts;
+    let accounts = stack.client().records().unwrap().github_accounts;
     accounts.into_iter().find(|account| account.installation.is_some()).unwrap().id
 }
 
@@ -38,7 +38,7 @@ fn open_menu(ui: &mut Ui<'_>, button: impl Into<SharedString>) {
 
 /// Whether the hub still holds a login for the installation `id`.
 fn held(stack: &Stack, id: &GithubAccountId) -> bool {
-    let accounts = stack.client().records_list().unwrap().github_accounts;
+    let accounts = stack.client().records().unwrap().github_accounts;
     accounts.iter().any(|account| &account.id == id && account.held_login.is_some())
 }
 
@@ -86,7 +86,7 @@ fn removing_an_app_asks_first_and_the_hub_forgets_it_leaving_its_installation_th
     ui.wait("the question", |ui| ui.asked().is_some());
     ui.click("remove-github-app-keep");
     ui.wait_for_every_call();
-    assert_eq!(stack.client().records_list().unwrap().github_apps.len(), 1, "nothing is removed without asking");
+    assert_eq!(stack.client().records().unwrap().github_apps.len(), 1, "nothing is removed without asking");
 
     open_menu(&mut ui, format!("git-more-{bot}"));
     ui.click_menu_item("Remove app");
@@ -94,7 +94,7 @@ fn removing_an_app_asks_first_and_the_hub_forgets_it_leaving_its_installation_th
     ui.click("remove-github-app-act");
 
     ui.wait("the app gone", |ui| ui.view().records().github_apps().is_empty() && ui.has("git-blocked"));
-    assert!(stack.client().records_list().unwrap().github_apps.is_empty());
+    assert!(stack.client().records().unwrap().github_apps.is_empty());
     assert!(!held(&stack, &bot), "its installation's login went with it");
     assert_eq!(default(&ui), Some(bot), "and stays the default");
 }

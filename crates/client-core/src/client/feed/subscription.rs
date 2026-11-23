@@ -1,30 +1,33 @@
 use super::super::follow::{Follow, FollowError, Source};
 use super::super::{Client, ClientError, GithubFeed, Result, Subscription, SubscriptionItem};
 use crate::Agents;
-use crate::records::{BySession, HubRecords, OfSession, Snapshot};
+use crate::records::{HubRecords, Snapshot};
 use parking_lot::Mutex;
-use protocol::client::HubNotice;
-use protocol::model::{Records, SessionId};
-use std::sync::Arc;
+use protocol::client::listed::Listed;
+use protocol::client::subscriptions::Follow as Level;
 
-/// One hub's records, kept current until every clone of this has gone. It carries on from a new connection
-/// given to [`RecordsFeed::reconnect`].
+/// One hub's records, and what GitHub says of each workspace's own pull request, kept current by following the hub, at
+/// its level, until every clone of this has gone. It carries on from a new connection given to
+/// [`RecordsFeed::reconnect`].
 #[derive(Clone)]
 pub struct RecordsFeed {
     pub(super) follow: Follow<HubRecords>,
-    /// What the hub says of GitHub, once something asks, and the newest connection, to start it on.
-    github: Arc<Mutex<(Client, Option<GithubFeed>)>>,
+    /// What the same hub says of GitHub, which the hub's level sends of every workspace's own pull request.
+    github: GithubFeed,
 }
 
 impl RecordsFeed {
-    /// Starts following, on a thread of its own: subscribes, then lists, so nothing can change in between
-    /// unseen.
+    /// Starts following, on a thread of its own: follows the hub, and is caught up once the hub has said where its
+    /// records stand.
     ///
     /// Every record a reply on `client` carries is taken in too, as it comes, so whoever made the call needn't hand it
-    /// on, and what's shown needn't wait for the feed to say the same.
+    /// on, and what's shown needn't wait for the hub to say the same. So are the records of each session a view follows,
+    /// as its subscription sends them.
     pub fn start(client: &Client) -> RecordsFeed {
-        let follow = Follow::start(client, HubRecords::default(), || RecordsSource);
-        let feed = RecordsFeed { follow, github: Arc::new(Mutex::new((client.clone(), None))) };
+        let github = GithubFeed::start(client);
+        let source = RecordsSource { github: github.clone() };
+        let follow = Follow::start(client, HubRecords::default(), move || source);
+        let feed = RecordsFeed { follow, github };
         client.inner.folding.reach(&feed.follow);
         feed
     }
@@ -42,44 +45,23 @@ impl RecordsFeed {
         self.follow.read(HubRecords::snapshot)
     }
 
-    /// Keeps the records of `session` that are listed by session, its subagents and its proposals, from now on,
-    /// listing them first. Asking again does nothing. Readers hear of them once they're listed, not when they're asked
-    /// for, so a reader can ask each time it reads.
-    pub fn follow_session_records(&self, session: &SessionId) {
-        if self.follow.quietly(|records| records.want_session(session)) {
-            self.follow.wake();
-        }
-    }
-
-    /// Lets go of the subagents and proposals of `session`, once no view shows it, such as when its chat closes.
-    pub fn unfollow_session_records(&self, session: &SessionId) {
-        self.follow.update(|records| records.forget_session(session));
-    }
-
     /// Takes in `record` as though the hub had told of it, for a test whose fake hub holds what never changes.
     #[cfg(any(test, feature = "testing"))]
     pub fn take_record(&self, record: protocol::model::Record) {
         self.follow.update(|records| records.apply_record(record));
     }
 
-    /// Carries on on a new connection, listing again to catch up, and taking in what replies on it carry, as
-    /// [`RecordsFeed::start`] says.
+    /// Carries on on a new connection, which takes in what replies on it carry, as [`RecordsFeed::start`] says, and so
+    /// does what the same hub says of GitHub.
     pub fn reconnect(&self, client: &Client) {
         client.inner.folding.reach(&self.follow);
         self.follow.reconnect(client);
-        let mut github = self.github.lock();
-        github.0 = client.clone();
-        if let Some(feed) = &github.1 {
-            feed.reconnect(client);
-        }
+        self.github.reconnect(client);
     }
 
-    /// What the same hub says of GitHub, of what views show, which is followed from the first time it's asked for,
-    /// and carries on on each new connection this does.
+    /// What the same hub says of GitHub, of every workspace's own pull request and of what views show.
     pub fn github(&self) -> GithubFeed {
-        let mut github = self.github.lock();
-        let (client, feed) = &mut *github;
-        feed.get_or_insert_with(|| GithubFeed::start(client)).clone()
+        self.github.clone()
     }
 
     /// True once it has caught up on a connection, and false from when that connection goes, or following
@@ -93,113 +75,57 @@ impl RecordsFeed {
     }
 }
 
-struct RecordsSource;
+struct RecordsSource {
+    /// Where what the hub says of each workspace's own pull request goes.
+    github: GithubFeed,
+}
 
 impl Source for RecordsSource {
     type Held = HubRecords;
 
+    /// Follows the hub, and takes in where its records stand, which the hub sends first, before it returns, so it's
+    /// caught up once it has.
     fn resume(&mut self, client: &Client, held: &Mutex<HubRecords>) -> Result<Subscription> {
-        let subscription = client.feed_subscribe()?;
+        let subscription = client.follow(Level::Hub)?;
         // Asked for on each connection, since it may be to another hub, and taken in with the records, so a view that
         // has a chat's record has what its agent offers.
         let agents = Agents::read(client)?;
-        // Listed before the lock is taken, so nobody reading the records waits on the hub.
-        let list = list_records(client)?;
-        {
-            let mut held = held.lock();
-            held.set_agents(agents);
-            held.apply_list(list);
+        held.lock().set_agents(agents);
+        for item in &subscription.items {
+            if let SubscriptionItem::Listed(listed) = &item
+                && let Listed::Hub(_) = **listed
+            {
+                self.apply(client, held, item)?;
+                return Ok(subscription);
+            }
+            self.apply(client, held, item)?;
         }
-        held.lock().relist_sessions();
-        list_by_session(client, held)?;
-        Ok(subscription)
+        // Its channel closed before the list came, as when the connection goes.
+        Err(ClientError::Disconnected)
     }
 
-    fn apply(&mut self, client: &Client, held: &Mutex<HubRecords>, item: SubscriptionItem) -> Result<bool> {
+    fn apply(&mut self, _: &Client, held: &Mutex<HubRecords>, item: SubscriptionItem) -> Result<bool> {
         Ok(match item {
-            // The hub found that some notices went missing. A new list makes up for them.
-            SubscriptionItem::Notice(notice) if matches!(*notice, HubNotice::Resync) => {
-                let list = list_records(client)?;
-                let changed = held.lock().apply_list(list);
-                held.lock().relist_sessions();
-                list_by_session(client, held)? || changed
-            }
+            SubscriptionItem::Listed(listed) => match *listed {
+                Listed::Hub(records) => held.lock().apply_list(*records),
+                // Of another level, which this doesn't follow.
+                Listed::Session(_) | Listed::Unknown => false,
+            },
             SubscriptionItem::Notice(notice) => held.lock().apply_notice(*notice),
+            SubscriptionItem::Github(update) => {
+                self.github.take(*update);
+                false
+            }
             SubscriptionItem::Event(_)
             | SubscriptionItem::Tail(_)
             | SubscriptionItem::Delta(_)
             | SubscriptionItem::Terminal(_)
-            | SubscriptionItem::TerminalPicture(_)
-            | SubscriptionItem::Github(_) => false,
+            | SubscriptionItem::TerminalPicture(_) => false,
         })
     }
 
-    /// Lists the subagents and proposals of a session a view has just asked for, once there's a connection to list them
-    /// on.
-    fn asked(&mut self, connection: Option<&Client>, held: &Mutex<HubRecords>, _: &dyn Fn()) -> Result<bool> {
-        let Some(client) = connection else { return Ok(false) };
-        list_by_session(client, held)
+    /// Everything it holds comes from the hub's level, which needs nothing asked.
+    fn asked(&mut self, _: Option<&Client>, _: &Mutex<HubRecords>, _: &dyn Fn()) -> Result<bool> {
+        Ok(false)
     }
-}
-
-/// Every record at once. A hub from before that request is asked for each kind instead, which gives no
-/// revisions, and then the order of one connection keeps the records right.
-fn list_records(client: &Client) -> Result<Records> {
-    match client.records_list() {
-        Err(e) if e.is_unsupported() => {
-            let workspaces = client.workspace_list(true)?;
-            let (mut sessions, mut comments) = (Vec::new(), Vec::new());
-            for workspace in &workspaces {
-                sessions.extend(client.session_list(&workspace.id)?);
-                comments.extend(client.comment_list(&workspace.id)?);
-            }
-            let repos = client.repo_list()?;
-            // It kept nothing else.
-            Ok(Records { repos, workspaces, sessions, comments, ..Records::default() })
-        }
-        listed => listed,
-    }
-}
-
-/// Lists the subagents, the proposals and how the replies were heard of each session a view asked for that haven't
-/// been listed on this connection. Returns whether that changed anything.
-fn list_by_session(client: &Client, held: &Mutex<HubRecords>) -> Result<bool> {
-    let subagents = list_each(client, held, HubRecords::subagents_mut, |client, session| {
-        client.session_subagents(session).map(|(list, _)| list)
-    })?;
-    let proposals = list_each(client, held, HubRecords::proposals_mut, |client, session| {
-        client.session_proposals(session).map(|(list, _)| list)
-    })?;
-    let heard = list_each(client, held, HubRecords::replies_heard_mut, |client, session| {
-        client.session_replies_heard(session).map(|(list, _)| list)
-    })?;
-    Ok(subagents || proposals || heard)
-}
-
-/// Lists one kind of record, which `kept` says where the records keep, for each session that needs it, with `list`.
-/// The hub refusing one session, such as one it doesn't have, leaves only that one unlisted until the next
-/// connection, so it can't stop the feed. A hub from before the kind had records has none to list. Only losing the
-/// connection fails.
-fn list_each<R: OfSession>(
-    client: &Client,
-    held: &Mutex<HubRecords>,
-    kept: fn(&mut HubRecords) -> &mut BySession<R>,
-    list: fn(&Client, &SessionId) -> Result<Vec<R>>,
-) -> Result<bool> {
-    let mut changed = false;
-    // Bound first, so the lock is let go before the loop takes it again.
-    let to_list = kept(&mut held.lock()).to_list();
-    for session in to_list {
-        // Listed before the lock is taken, as every list is.
-        match list(client, &session) {
-            Ok(listed) => changed |= kept(&mut held.lock()).apply_list(&session, listed),
-            Err(e) if e.is_unsupported() => {
-                kept(&mut held.lock()).unkept();
-                return Ok(true);
-            }
-            Err(ClientError::Api(_)) => kept(&mut held.lock()).skip(session),
-            Err(e) => return Err(e),
-        }
-    }
-    Ok(changed)
 }

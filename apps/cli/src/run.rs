@@ -212,7 +212,7 @@ fn admin_command(paths: &Paths, command: Admin) -> anyhow::Result<()> {
                 );
             } else if status.start() == HubStart::AsService {
                 // The hub is running, so this connects to it rather than starting one.
-                let records = connect(paths)?.records_list()?;
+                let records = connect(paths)?.records()?;
                 println!("{}", updates_line(records.hub_update.as_ref()));
             }
         }
@@ -245,7 +245,7 @@ fn update_hub(paths: &Paths, status: &HubStatus) -> anyhow::Result<()> {
     }
     // The hub is running, so this connects to it rather than starting one.
     let client = connect(paths)?;
-    let found = client.records_list()?.hub_update;
+    let found = client.records()?.hub_update;
     let Some(version) = found.as_ref().and_then(|update| update.version.clone()) else {
         println!("{}", updates_line(found.as_ref()));
         return Ok(());

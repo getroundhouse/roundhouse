@@ -5,7 +5,7 @@
 
 use client_core::fake_hub::events::{first_turn, replied, text, user_prompt};
 use gpui_kit::{AppContext as _, TestAppContext};
-use protocol::model::{Reference, SessionStatus};
+use protocol::model::{Level, Reference, SessionStatus};
 
 use crate::support::{one_chat, open_on_the_chat};
 
@@ -29,11 +29,11 @@ fn a_reference_is_shown_while_it_is_in_view_and_not_once_it_is_out_of_it(cx: &mu
     events.push(replied("Done.", 9, 0.04));
     let (mut world, chat) = one_chat(SessionStatus::Idle, events);
     world.references = vec![issue()];
-    let shown = world.github_shown.clone();
+    let following = world.following.clone();
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
     let transcript = ui.transcript().unwrap();
     let shows_it =
-        move || shown.lock().last().is_some_and(|shown| shown.references.iter().any(|ask| ask.number.get() == 1));
+        move || following.any(|level| matches!(level, Level::Reference { reference } if reference.number.get() == 1));
 
     ui.cx.update_entity(&transcript, |t, cx| {
         t.list().go_to_row(0);
@@ -59,10 +59,10 @@ fn a_chat_behind_another_shows_none_of_its_chips(cx: &mut TestAppContext) {
     let workspace = world.sessions[0].workspace_id.clone();
     let other = world.chat(&workspace, SessionStatus::Idle, vec![user_prompt("Anything else?")]);
     world.references = vec![issue()];
-    let shown = world.github_shown.clone();
+    let following = world.following.clone();
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
     let shows_it =
-        move || shown.lock().last().is_some_and(|shown| shown.references.iter().any(|ask| ask.number.get() == 1));
+        move || following.any(|level| matches!(level, Level::Reference { reference } if reference.number.get() == 1));
     ui.wait("#1 to be shown", |_| shows_it());
 
     ui.activate_chat(&other);

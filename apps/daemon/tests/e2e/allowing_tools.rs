@@ -90,7 +90,7 @@ fn a_hub_set_to_allow_it_allows_what_an_agent_with_full_access_asks_and_nobody_i
     let worktree = PathBuf::from(workspace.path.unwrap());
     client.hub_configure(allow_asked(true)).unwrap();
     let removed = to_remove(&worktree, "first");
-    let feed = client.feed_subscribe().unwrap();
+    let feed = client.follow(protocol::client::subscriptions::Follow::Hub).unwrap();
 
     client.session_prompt(&session.id, &format!("tool:{UNCHECKED_REMOVAL}"), None).unwrap();
     let told = told_until_the_turn_ends(&feed, &session.id);

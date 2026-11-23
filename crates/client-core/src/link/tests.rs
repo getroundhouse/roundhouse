@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
-use protocol::model::Records;
+use protocol::client::listed::Listed;
+use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame, ReplyOutcome};
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
@@ -60,12 +60,12 @@ impl Connect for Tries {
 /// asks for to lose the connection.
 fn hub(socket: &Path) -> Client {
     stand_in_hub::connect(socket, |request| {
-        let answer = if matches!(request, ClientRequest::FeedSubscribe(_)) {
-            ReplyOutcome::Response(ClientResponse::Ok)
+        let answer = if let ClientRequest::Subscribe(subscribe) = &request {
+            return stand_in_hub::subscribed(subscribe, |subscription_id, _| {
+                vec![HubFrame::Listed { subscription_id, listed: Listed::Hub(Box::default()) }]
+            });
         } else if request == ClientRequest::AgentList {
             ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "an older hub"))
-        } else if request == ClientRequest::RecordsList {
-            ReplyOutcome::Response(ClientResponse::Records(Records::default()))
         } else if request == ClientRequest::RepoList {
             return Does::HangsUp;
         } else {
@@ -75,14 +75,12 @@ fn hub(socket: &Path) -> Client {
     })
 }
 
-/// A stand-in hub on `socket` that goes as it's asked for its records, before the link has caught up on them.
+/// A stand-in hub on `socket` that takes a client following it, and goes as it's next asked something, before it has
+/// said where its records stand, so before the link has caught up on them.
 fn hub_that_goes_as_it_lists(socket: &Path) -> Client {
     stand_in_hub::connect(socket, |request| {
-        if matches!(request, ClientRequest::FeedSubscribe(_)) {
-            Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Ok)))
-        } else {
-            Does::HangsUp
-        }
+        let ClientRequest::Subscribe(subscribe) = &request else { return Does::HangsUp };
+        stand_in_hub::subscribed(subscribe, |_, _| Vec::new())
     })
 }
 

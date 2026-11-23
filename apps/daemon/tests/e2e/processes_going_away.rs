@@ -256,7 +256,7 @@ fn an_exit_reported_late_cannot_be_mistaken_for_the_agent_that_replaced_it() {
 
     // A prompt in that window goes to a new agent, rather than failing on the dead one's pipe. The new
     // agent leaves text streaming, which the old one's exit mustn't clear.
-    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
+    let subscription = client.follow_session(&session.id, Seq::new(1)).unwrap();
     let mut follower = Follower::default();
     client.session_prompt(&session.id, "partial:still writing; hang", None).unwrap();
     follower.drain_until(&subscription, "the new agent's text", |f| f.tail_text().contains("still writing"));
@@ -282,7 +282,7 @@ fn an_exit_reported_late_cannot_be_mistaken_for_the_agent_that_replaced_it() {
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Running);
     assert!(is_alive(second));
     assert_eq!(follower.tail_text(), "still writing");
-    let joining = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
+    let joining = client.follow_session(&session.id, Seq::new(1)).unwrap();
     let snapshot = loop {
         if let SubscriptionItem::Tail(tail) = joining.items.recv_timeout(Duration::from_secs(30)).unwrap() {
             break tail;

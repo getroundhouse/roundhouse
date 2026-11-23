@@ -8,6 +8,7 @@
 
 mod base_pages;
 pub mod events;
+mod following;
 mod github;
 mod listing;
 mod logs;
@@ -19,6 +20,7 @@ mod terminals;
 mod tests;
 mod world;
 
+pub use following::Following;
 pub use serve::serve;
 pub use stand_in::{BUILD, BUILD_NUMBER};
 pub use world::{HOUR_MS, HubBuild, LoginSupport, NOW_MS, PairingWorld, TerminalShows, World};

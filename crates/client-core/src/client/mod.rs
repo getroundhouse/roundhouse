@@ -47,11 +47,12 @@ mod tests;
 
 mod connection;
 mod frames;
+mod subscribing;
 #[cfg(test)]
 use connection::SUBSCRIPTION_CAPACITY;
 pub use connection::hub_is_missing;
-use connection::subscription_channel;
-pub use connection::{Client, ClientError, Ended, Result, Subscription, SubscriptionItem};
+pub use connection::{Client, ClientError, Ended, Result, SubscriptionItem};
+pub use subscribing::Subscription;
 
 mod transport;
 

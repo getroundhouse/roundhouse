@@ -152,9 +152,6 @@ impl WorkspacePane {
             transcript
         });
         Self::attach_transcript_hints(&view, cx);
-        // Its subagents' and proposals' calls are drawn from their records, which client-core keeps once a chat asks
-        // for them.
-        self.records.follow_session_records(&session.id);
         let chat = session.id.clone();
         let events = cx.subscribe(&view, move |this, transcript, event: &TranscriptEvent, cx| match event {
             TranscriptEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
@@ -291,14 +288,6 @@ impl WorkspacePane {
         });
     }
 
-    /// Lets go of every chat's subagents' and proposals' records, as the pane goes, such as when its workspace is
-    /// archived.
-    pub(crate) fn let_go_of_session_records(&self) {
-        for (id, _) in self.chats.iter().filter(|(_, chat)| chat.transcript.is_some()) {
-            self.records.unfollow_session_records(id);
-        }
-    }
-
     /// Moves off a chat that's been closed or deleted, here or anywhere else, to its neighbor among the chats that
     /// were open, and starts one if none are left.
     fn keep_active_valid(&mut self, was_open: &[SessionId], cx: &mut Context<Self>) {
@@ -308,9 +297,6 @@ impl WorkspacePane {
         // going to the chat that shows instead.
         let gone: Vec<(SessionId, Chat)> = self.chats.extract_if(|id, _| !open.contains(id)).collect();
         for (id, chat) in gone {
-            if chat.transcript.is_some() {
-                self.records.unfollow_session_records(&id);
-            }
             if let Some(draft) = chat.draft {
                 self.let_go_of_files(&id, &draft.files);
             }

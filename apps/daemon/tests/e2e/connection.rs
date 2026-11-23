@@ -148,7 +148,7 @@ fn dropping_a_client_really_disconnects_it() {
     let (_, session) = stack.workspace(&watcher);
 
     let other = stack.client();
-    let _subscription = other.session_subscribe(&session.id, Seq::new(1)).unwrap();
+    let _subscription = other.follow_session(&session.id, Seq::new(1)).unwrap();
     let clone = other.clone();
     assert_eq!(count(), 2);
     drop(other);
@@ -162,14 +162,14 @@ fn dropping_a_subscription_stops_its_stream_but_not_the_connection() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let first = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
-    let id = first.id;
+    let first = client.follow_session(&session.id, Seq::new(1)).unwrap();
+    let ids = first.ids();
     drop(first);
     // The connection still works, and a new subscription gets everything from the start.
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    let second = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
-    assert_ne!(second.id, id);
+    let second = client.follow_session(&session.id, Seq::new(1)).unwrap();
+    assert_ne!(second.ids(), ids);
     let mut follower = Follower::default();
     follower.drain_until(&second, "the whole log", |f| {
         f.events.iter().any(|e| matches!(e.body, EventBody::TurnEnded { .. }))
@@ -191,7 +191,7 @@ fn losing_the_hub_ends_a_subscription_with_a_clear_signal() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
+    let subscription = client.follow_session(&session.id, Seq::new(1)).unwrap();
     stack.kill_hub();
     let deadline = Instant::now() + TIMEOUT;
     while subscription.items.recv_timeout(deadline.saturating_duration_since(Instant::now())).is_ok() {}

@@ -10,7 +10,9 @@ use protocol::event::CompactedBy;
 use protocol::model::{CompactionLine, Place, Seq};
 
 use super::super::{FollowError, OpenSession};
-use super::{answered_simply, refused, requests_until_unsubscribed, session, start_hub_answering, until};
+use super::{
+    answered_simply, follows_session, refused, requests_until_unsubscribed, session, start_hub_answering, until,
+};
 use crate::{Client, ClientError};
 
 /// A hub that lists the session's prompts, and answers each ask for the list of compactions with the next of `lists`,
@@ -67,7 +69,7 @@ fn the_hubs_compactions_are_listed_once_its_subscription_has_started() {
     assert!(errors.is_empty(), "{errors:?}");
     let requests = requests_until_unsubscribed(&heard, 1);
     assert_eq!(lists_asked(&requests), 1, "{requests:?}");
-    let subscribed = requests.iter().position(|r| matches!(r, ClientRequest::SessionSubscribe(_)));
+    let subscribed = requests.iter().position(|r| follows_session(r).is_some());
     let listed = requests.iter().position(|r| matches!(r, ClientRequest::SessionCompactionList(_)));
     assert!(subscribed < listed, "it subscribes before it lists, so the list misses nothing: {requests:?}");
 }

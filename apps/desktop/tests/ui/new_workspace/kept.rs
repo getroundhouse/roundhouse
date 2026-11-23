@@ -15,7 +15,7 @@ use crate::support::{CLAUDE_STARTS_WITH, Frozen, Held, Stack, Ui, wait_until};
 
 /// What the hub keeps of the dialog.
 fn kept(stack: &Stack) -> NewWorkspaceDraft {
-    stack.client().records_list().unwrap().new_workspace_draft.unwrap()
+    stack.client().records().unwrap().new_workspace_draft.unwrap()
 }
 
 /// What another client would keep for the dialog with `text` typed in it.

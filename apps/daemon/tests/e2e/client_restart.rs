@@ -28,7 +28,7 @@ fn work_continues_with_no_client_and_a_new_client_catches_up_with_no_gaps() {
         let (_, session) = stack.workspace(&client);
         let script = format!("slow-until:{}:chunk; say:after the client left", done.display());
         client.session_prompt(&session.id, &script, None).unwrap();
-        let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
+        let subscription = client.follow_session(&session.id, Seq::new(1)).unwrap();
         let mut follower = Follower::default();
         follower.drain_until(&subscription, "streaming text", |f| f.tail_text().contains("chunk3"));
         let agent_pid = follower
@@ -54,7 +54,7 @@ fn work_continues_with_no_client_and_a_new_client_catches_up_with_no_gaps() {
     assert!(assistant_text(&events).contains("after the client left"), "the agent went on with nobody attached");
 
     // Subscribing from the last seq seen delivers exactly the rest.
-    let subscription = client.session_subscribe(&session_id, Seq::new(seen + 1)).unwrap();
+    let subscription = client.follow_session(&session_id, Seq::new(seen + 1)).unwrap();
     let mut follower = Follower::default();
     let total = events.len();
     follower.drain_until(&subscription, "the rest of the log", |f| f.events.len() as u64 + seen >= total as u64);
@@ -78,12 +78,12 @@ fn a_client_attaching_mid_message_sees_the_partial_text_at_once() {
     // The reply goes on until this exists, so it's still streaming as the second client attaches.
     let done = stack.path("done");
     first.session_prompt(&session.id, &format!("slow-until:{}:part", done.display()), None).unwrap();
-    let live = first.session_subscribe(&session.id, Seq::new(1)).unwrap();
+    let live = first.follow_session(&session.id, Seq::new(1)).unwrap();
     let mut watcher = Follower::default();
     watcher.drain_until(&live, "some streaming", |f| f.tail_text().contains("part5"));
 
     let second = stack.client();
-    let subscription = second.session_subscribe(&session.id, Seq::new(1)).unwrap();
+    let subscription = second.follow_session(&session.id, Seq::new(1)).unwrap();
     let mut late = Follower::default();
     // Its first tail should already hold what was streamed, without waiting for more.
     late.drain_until(&subscription, "the tail snapshot", |f| f.tail_text().contains("part5"));
@@ -110,7 +110,7 @@ fn every_chunk_reaches_the_tail_exactly_once_while_streaming() {
     let (_, session) = stack.workspace(&client);
     let streaming = Gate::new(&stack, "streaming");
     client.session_prompt(&session.id, &format!("slow-until:{streaming}:x"), None).unwrap();
-    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
+    let subscription = client.follow_session(&session.id, Seq::new(1)).unwrap();
     let mut follower = Follower::default();
     follower.drain_until(&subscription, "a chunk after the first", |f| f.tail_text().contains("x1 "));
     streaming.open();
@@ -158,7 +158,7 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
                 let mut attaches = 0u32;
                 while !done.load(Ordering::Relaxed) {
                     let client = stack.client();
-                    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
+                    let subscription = client.follow_session(&session.id, Seq::new(1)).unwrap();
                     attaches += 1;
                     let mut tail = Tail::default();
                     for _ in 0..50 {
@@ -175,6 +175,7 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
                             }
                             SubscriptionItem::Event(event) => tail.on_event(event.seq, event.run, &event.body),
                             SubscriptionItem::Notice(_)
+                            | SubscriptionItem::Listed(_)
                             | SubscriptionItem::Terminal(_)
                             | SubscriptionItem::TerminalPicture(_)
                             | SubscriptionItem::Github(_) => {}
@@ -281,7 +282,7 @@ fn status_is_already_current_when_an_event_is_delivered() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
+    let subscription = client.follow_session(&session.id, Seq::new(1)).unwrap();
     let mut idles = 0;
     client.session_prompt(&session.id, "say:0", None).unwrap();
     let deadline = Instant::now() + TIMEOUT;

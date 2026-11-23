@@ -110,45 +110,45 @@ third_party/       Copies of other projects' code, as `third_party/README.md` sa
 
 Everything a hub holds or serves, which of the four kinds in `docs/principles/serving.md` it is, where it's kept and how a client gets it. Something new takes its kind by the same test: the hub owns it, so it's a record, or the hub only observes it, so it's an observation. What an agent says in an event is the log's, so what the hub works out from it is a record, and what an agent says outside the log is an observation. For example, a session's status is worked out from its events, so it's a record, and how full its agent's context is comes in a report that isn't an event, so it's an observation.
 
-A table named here is in the hub's database, except `facets` and `observed_workspace_lines`, which are in the cache file `github-cache.db`. `FeedSubscribe` sends each change to a record, and `RecordsList` lists them. `Subscribe` sends each of these too: what `FeedSubscribe` and `RecordsList` send at the hub's level, what `SessionSubscribe` and the session's lists send at a session's, what `TerminalWatch` sends at a terminal's, and what `GithubSubscribe` sends of a workspace's own pull request at the hub's level and of a chip at an issue's or pull request's.
+A table named here is in the hub's database, except `facets` and `observed_workspace_lines`, which are in the cache file `github-cache.db`. Each is sent at the level its row names, to a client that follows that level through `Subscribe`: where a level that holds records stands first, as a list, and then each change. A client of version 3 follows each through a request of its own for its level: `FeedSubscribe` and `RecordsList` for the hub's, `SessionSubscribe` and the lists by session for a session's, `TerminalWatch` for a terminal's, and `GithubSubscribe` for what GitHub says of a workspace's own pull request and of a chip.
 
 ### Events and live snapshots
 
 | What | Kind | Kept in | Sent by |
 |---|---|---|---|
-| A session's events, and the files and images they carry | Event | `events` and `attachments`, and the attachment files | `SessionSubscribe`, and the requests that read a log, such as `SessionRead` |
-| A session's tail: what its agent and subagents are writing, its compacting, its retry of a failed request, what's said for it in conversation mode, and how far a device has read a reply out loud | Live snapshot | The hub's memory | `SessionSubscribe`, whole and then each change |
-| What a terminal shows | Live snapshot | The worker, with the newest picture in the hub's memory | `TerminalWatch` |
+| A session's events, and the files and images they carry | Event | `events` and `attachments`, and the attachment files | A session's level, and the requests that read a log, such as `SessionRead` |
+| A session's tail: what its agent and subagents are writing, its compacting, its retry of a failed request, what's said for it in conversation mode, and how far a device has read a reply out loud | Live snapshot | The hub's memory | A session's level, whole and then each change |
+| What a terminal shows | Live snapshot | The worker, with the newest picture in the hub's memory | A terminal's level |
 
 ### Records
 
 | What | Why it's the hub's | Kept in | Sent by |
 |---|---|---|---|
-| Repositories: name, checkout and when added | Roundhouse added each | `repos` | `FeedSubscribe` |
-| Which repository a project is, kept as the address a worker read once from its checkout's `origin` | Roundhouse's link | `repos.url` | `FeedSubscribe`, in the repository's `origin` |
-| Workspaces: name, base, worktree's path, status, provider, instance, setup, ports, title, when made and archived | Roundhouse made each, and decides each | `workspaces` | `FeedSubscribe` |
-| The branch a workspace started on, and the branch an archived one had checked out | Roundhouse chose the first, and recorded the second as the worktree went | `workspaces.branch` | `FeedSubscribe` |
-| Which pull request is a workspace's, and the branch it was found on | Roundhouse's decision, from the workspace's branches and what GitHub says | `workspaces.pull_request_link` and `pull_request_branch` | `FeedSubscribe` |
+| Repositories: name, checkout and when added | Roundhouse added each | `repos` | The hub's level |
+| Which repository a project is, kept as the address a worker read once from its checkout's `origin` | Roundhouse's link | `repos.url` | The hub's level, in the repository's `origin` |
+| Workspaces: name, base, worktree's path, status, provider, instance, setup, ports, title, when made and archived | Roundhouse made each, and decides each | `workspaces` | The hub's level |
+| The branch a workspace started on, and the branch an archived one had checked out | Roundhouse chose the first, and recorded the second as the worktree went | `workspaces.branch` | The hub's level |
+| Which pull request is a workspace's, and the branch it was found on | Roundhouse's decision, from the workspace's branches and what GitHub says | `workspaces.pull_request_link` and `pull_request_branch` | The hub's level |
 | A workspace's other worktrees, which its agents make: path, the branch it was made on, the session and agent that made it, status, when made | Roundhouse made each, as an agent asked | `child_worktrees` | No client. The agents' tools return them |
-| A session's agent, model, mode, effort, title and queue, its account and how it was put on it | Chosen by a person, or by the hub. For an agent on its machine's own login, the account is whose the worker says that login is | `sessions` | `FeedSubscribe` |
-| A session's status, its newest reply and how it ended, when its turn started, its open approvals, background tasks, prompts not taken, whether its queue is held, and whether its agent opened | Worked out from its log, in the same transaction as the event | `sessions` | `FeedSubscribe` |
-| What the run that's going claims it can do | Worked out from its log too: said in the event that starts the run, and taken off with the one that ends it | `sessions.agent_capabilities` | `FeedSubscribe` |
-| A session's subagents | Worked out from its log, in the same transaction as the event | `subagents` | `SessionSubagents`, and each change on the feed |
-| A session's waits on pull requests: what each waits for, what it saw as it started, its deadline and how it ended | Asked for by an agent, through its tools | `waits` | `FeedSubscribe`, on the session's record |
-| Proposals, each revision, and the answers to them | What agents and people entered through Roundhouse | `proposals` and `proposal_revisions` | `SessionProposals` and `ProposalRevisionsRead`, and each change on the feed |
-| Drafts: a session's composer and its answer to an approval, a comment on a workspace's diff, and the new workspace with its files | What a person typed | `sessions.draft`, `sessions.decision_draft`, `workspaces.comment_draft`, `new_workspace_draft`, `new_workspace_draft_files` and the files | `FeedSubscribe` |
-| Comments on a workspace's diff | What a person entered | `diff_comments` | `FeedSubscribe` |
-| How far each chat is read, and when it and its workspace were last worked in | One person's, kept for them | `sessions.read_seq`, and the `user_active_at_ms` of `sessions` and `workspaces` | `FeedSubscribe` |
-| In conversation mode, which device has each chat's conversation, and how each reply read out ended | One person's, kept for them | `sessions.conversation` and `replies_heard` | `FeedSubscribe`, and `SessionRepliesHeard` for the replies |
-| Hub settings, each agent kind's default account, and whether Automatic puts its chats on accounts | Chosen by a person | `hub_settings` and `account_defaults` | `FeedSubscribe`, on the settings' record |
-| The default GitHub account, what the hub sends workers for it, and the providers it sets GitHub up on or leaves it to | Chosen by a person, or worked out by the hub from its logins and its providers file | `hub_settings` | `FeedSubscribe`, on the settings' record |
-| Agents' accounts: the name a person gave one, its held login, its reserve and when it was last used | Roundhouse's, and what it holds | `accounts`, and the login files | `FeedSubscribe` |
-| GitHub accounts: the GitHub user each is, by its ID, its held login, and the app installation it is | Roundhouse's, and what it holds | `github_accounts`, and the login files | `FeedSubscribe` |
-| Apps of your own, by their ID, with their keys | Roundhouse made each, through GitHub | `github_apps`, and the key files | `FeedSubscribe` |
-| Sign-ins with GitHub | Roundhouse's, so every client shows the same code | `github_sign_ins` | `FeedSubscribe` |
+| A session's agent, model, mode, effort, title and queue, its account and how it was put on it | Chosen by a person, or by the hub. For an agent on its machine's own login, the account is whose the worker says that login is | `sessions` | The hub's level |
+| A session's status, its newest reply and how it ended, when its turn started, its open approvals, background tasks, prompts not taken, whether its queue is held, and whether its agent opened | Worked out from its log, in the same transaction as the event | `sessions` | The hub's level |
+| What the run that's going claims it can do | Worked out from its log too: said in the event that starts the run, and taken off with the one that ends it | `sessions.agent_capabilities` | The hub's level |
+| A session's subagents | Worked out from its log, in the same transaction as the event | `subagents` | A session's level, listed and then each change |
+| A session's waits on pull requests: what each waits for, what it saw as it started, its deadline and how it ended | Asked for by an agent, through its tools | `waits` | The hub's level, on the session's record |
+| Proposals, each revision, and the answers to them | What agents and people entered through Roundhouse | `proposals` and `proposal_revisions` | A session's level, listed and then each change, and `ProposalRevisionsRead` |
+| Drafts: a session's composer and its answer to an approval, a comment on a workspace's diff, and the new workspace with its files | What a person typed | `sessions.draft`, `sessions.decision_draft`, `workspaces.comment_draft`, `new_workspace_draft`, `new_workspace_draft_files` and the files | The hub's level |
+| Comments on a workspace's diff | What a person entered | `diff_comments` | The hub's level |
+| How far each chat is read, and when it and its workspace were last worked in | One person's, kept for them | `sessions.read_seq`, and the `user_active_at_ms` of `sessions` and `workspaces` | The hub's level |
+| In conversation mode, which device has each chat's conversation, and how each reply read out ended | One person's, kept for them | `sessions.conversation` and `replies_heard` | The hub's level, and a session's for the replies |
+| Hub settings, each agent kind's default account, and whether Automatic puts its chats on accounts | Chosen by a person | `hub_settings` and `account_defaults` | The hub's level, on the settings' record |
+| The default GitHub account, what the hub sends workers for it, and the providers it sets GitHub up on or leaves it to | Chosen by a person, or worked out by the hub from its logins and its providers file | `hub_settings` | The hub's level, on the settings' record |
+| Agents' accounts: the name a person gave one, its held login, its reserve and when it was last used | Roundhouse's, and what it holds | `accounts`, and the login files | The hub's level |
+| GitHub accounts: the GitHub user each is, by its ID, its held login, and the app installation it is | Roundhouse's, and what it holds | `github_accounts`, and the login files | The hub's level |
+| Apps of your own, by their ID, with their keys | Roundhouse made each, through GitHub | `github_apps`, and the key files | The hub's level |
+| Sign-ins with GitHub | Roundhouse's, so every client shows the same code | `github_sign_ins` | The hub's level |
 | Paired devices: name, when paired and when last seen | Roundhouse's, and what it holds | `devices` | `DeviceList` |
-| A workspace's open terminals | A person opened each. Kept while its shell runs | The hub's memory | `FeedSubscribe` |
-| How an update a person asked for is going, on a hub installed as a service | The hub's own work, which lasts only as long as the hub | The hub's memory, on its `HubUpdate` record | `FeedSubscribe` |
+| A workspace's open terminals | A person opened each. Kept while its shell runs | The hub's memory | The hub's level |
+| How an update a person asked for is going, on a hub installed as a service | The hub's own work, which lasts only as long as the hub | The hub's memory, on its `HubUpdate` record | The hub's level |
 
 A hub of this build lists no `FoundGithubLogin`, which `client-core` reads only from an older hub.
 
@@ -158,24 +158,24 @@ A hub of this build lists no `FoundGithubLogin`, which `client-core` reads only 
 
 | What | Whose | Kept in | Sent by |
 |---|---|---|---|
-| A workspace's lines added and removed | Git's | The hub's memory and `observed_workspace_lines`, each with when it was read. The hub reads them from the worker as a turn ends in the workspace and as its branches move | `FeedSubscribe` and `RecordsList`, as an observation |
+| A workspace's lines added and removed | Git's | The hub's memory and `observed_workspace_lines`, each with when it was read. The hub reads them from the worker as a turn ends in the workspace and as its branches move | The hub's level, as an observation, listed and then each change |
 | A workspace's changed files | Git's | Not kept. `WorkspaceDiff` reads the whole diff from the worker | `WorkspaceDiff` |
-| How many files a workspace has uncommitted | Git's | `workspaces.pull_request_link`, as of the hub's last read of the workspace's pull request | `FeedSubscribe` |
-| A workspace's branches, and each of its other worktrees' | Git's | `workspaces.branches` and `child_worktrees.branches` | `FeedSubscribe`, for a workspace's own. Another worktree's reaches no client |
-| Which build a workspace's worker is | The worker's | `workspaces.worker_build` | `FeedSubscribe` |
-| What GitHub says of an issue or a pull request: its summary, checks, stack, when a review last asked for changes and when it last left the merge queue, and its branch's rules for checks | GitHub's | The hub's memory and `facets`, each facet with when it was read, under one version | `GithubSubscribe`, with no revision, and `ReferencesRead` and `WorkspacePullRequest`. The rules only say which checks are required |
-| How a workspace's pull request stands: the pull request, and how far its worktree is ahead and behind | Worked out from git's and GitHub's | Not kept. Worked out from the workspace's record and GitHub's cache each time it's sent | `GithubSubscribe`, as `own_pull_request` |
-| That GitHub showed the default GitHub account no repository where a workspace's pull request would be | GitHub's | The hub's memory | `GithubSubscribe`, in `own_pull_request` |
-| The pull requests each wait watches, as last read | GitHub's | `waits.watch` | `FeedSubscribe`, on the session's record |
-| Whether the default GitHub account can push to a repository | GitHub's | `github_reach`, a record | `FeedSubscribe` |
-| A GitHub account's username, name and email | GitHub's | `github_accounts.username`, and `github_profiles` for the name and email | `FeedSubscribe`, for the username. The name and email reach no client, and go to workers as git's author for commits |
-| What GitHub calls an app of your own, its owner and its bot, and the user or organization an installation is on | GitHub's | `github_apps`, and `github_accounts.installed_on` | `FeedSubscribe` |
-| An agent's list of models | The agent's CLI | The hub's memory, as a record | `FeedSubscribe`, and `ModelsFor` |
-| Who an agent's account is: its email, plan, model provider and how it's logged in | The provider's, read from the agent's login by a worker at each launch | `accounts` | `FeedSubscribe` |
-| An account's usage limits | The provider's, said by an agent | `account_limits` | `FeedSubscribe`, on the account's record |
-| How full an agent's context is, and its todos | The agent's | `sessions.context` and `sessions.todos` | `FeedSubscribe`, on the session's record |
-| What the API's cache holds of a conversation | The provider's, said by an agent of each of its requests | `sessions.prompt_cache` | `FeedSubscribe`, on the session's record |
-| The release a hub installed as a service would update to | The update feed's | The hub's memory, on its `HubUpdate` record | `FeedSubscribe` |
+| How many files a workspace has uncommitted | Git's | `workspaces.pull_request_link`, as of the hub's last read of the workspace's pull request | The hub's level |
+| A workspace's branches, and each of its other worktrees' | Git's | `workspaces.branches` and `child_worktrees.branches` | The hub's level, for a workspace's own. Another worktree's reaches no client |
+| Which build a workspace's worker is | The worker's | `workspaces.worker_build` | The hub's level |
+| What GitHub says of an issue or a pull request: its summary, checks, stack, when a review last asked for changes and when it last left the merge queue, and its branch's rules for checks | GitHub's | The hub's memory and `facets`, each facet with when it was read, under one version | An issue's or pull request's level, and the hub's for a workspace's own, with no revision, and `ReferencesRead` and `WorkspacePullRequest`. The rules only say which checks are required |
+| How a workspace's pull request stands: the pull request, and how far its worktree is ahead and behind | Worked out from git's and GitHub's | Not kept. Worked out from the workspace's record and GitHub's cache each time it's sent | The hub's level, as `own_pull_request` |
+| That GitHub showed the default GitHub account no repository where a workspace's pull request would be | GitHub's | The hub's memory | The hub's level, in `own_pull_request` |
+| The pull requests each wait watches, as last read | GitHub's | `waits.watch` | The hub's level, on the session's record |
+| Whether the default GitHub account can push to a repository | GitHub's | `github_reach`, a record | The hub's level |
+| A GitHub account's username, name and email | GitHub's | `github_accounts.username`, and `github_profiles` for the name and email | The hub's level, for the username. The name and email reach no client, and go to workers as git's author for commits |
+| What GitHub calls an app of your own, its owner and its bot, and the user or organization an installation is on | GitHub's | `github_apps`, and `github_accounts.installed_on` | The hub's level |
+| An agent's list of models | The agent's CLI | The hub's memory, as a record | The hub's level, and `ModelsFor` |
+| Who an agent's account is: its email, plan, model provider and how it's logged in | The provider's, read from the agent's login by a worker at each launch | `accounts` | The hub's level |
+| An account's usage limits | The provider's, said by an agent | `account_limits` | The hub's level, on the account's record |
+| How full an agent's context is, and its todos | The agent's | `sessions.context` and `sessions.todos` | The hub's level, on the session's record |
+| What the API's cache holds of a conversation | The provider's, said by an agent of each of its requests | `sessions.prompt_cache` | The hub's level, on the session's record |
+| The release a hub installed as a service would update to | The update feed's | The hub's memory, on its `HubUpdate` record | The hub's level |
 | GitHub's limit on each token | GitHub's | The hub's memory | No client |
 
 ### Read on request, and not kept

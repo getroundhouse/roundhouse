@@ -164,7 +164,7 @@ fn a_hub_says_who_gh_and_the_ssh_key_on_its_machine_are_as_a_client_asks() {
 
     let gh = GhLogin::LoggedIn { username: LOGGED_IN_AS.into(), works: GhLoginWorks::Yes };
     assert_eq!(said, MachineLogins { gh: Some(gh), ssh: SshLogin::Key { username: LOGGED_IN_AS.into() } });
-    assert!(client.records_list().unwrap().found_github_logins.is_empty(), "nothing's kept of them");
+    assert!(client.records().unwrap().found_github_logins.is_empty(), "nothing's kept of them");
 }
 
 /// Through the real worker of the local provider, which reads the address of its repository's `origin`, checked with
@@ -188,7 +188,7 @@ fn a_hub_records_whether_the_default_can_push_to_a_workspaces_repository_on_gith
     git(&repo, &["remote", "add", "origin", "git@github.com:cli/cli.git"]);
     let client = stack.client();
     client.call(GithubAccountConnect { token: GithubToken::new(TOKEN), id: None }).unwrap();
-    let listed = |stack: &Stack| stack.client().records_list().unwrap().github_reach;
+    let listed = |stack: &Stack| stack.client().records().unwrap().github_reach;
 
     stack.workspace(&client);
     wait_until("the repository's reach", || !listed(&stack).is_empty());

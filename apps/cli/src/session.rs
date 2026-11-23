@@ -146,7 +146,7 @@ pub(crate) fn follow(
         Ok(following.has_all(session.last_seq) && session.status.is_done())
     };
     loop {
-        let subscription = client.session_subscribe(session_id, following.next())?;
+        let subscription = client.follow_session(session_id, following.next())?;
         for item in &subscription.items {
             let check = match item {
                 SubscriptionItem::Event(event) => {
@@ -174,7 +174,9 @@ pub(crate) fn follow(
                     }
                     true
                 }
-                SubscriptionItem::Notice(_)
+                // The session's own records, which this doesn't print.
+                SubscriptionItem::Listed(_)
+                | SubscriptionItem::Notice(_)
                 | SubscriptionItem::Terminal(_)
                 | SubscriptionItem::TerminalPicture(_)
                 | SubscriptionItem::Github(_) => false,

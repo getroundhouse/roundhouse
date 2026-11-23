@@ -167,8 +167,8 @@ fn calls(requests: Vec<(&str, Then)>) -> Vec<Step> {
 /// followed by a request for the hub's status, which goes unanswered.
 fn cases() -> Vec<(&'static str, Vec<Step>)> {
     let (ours, newest) = (CLIENT_PROTOCOL_VERSION, HUB_SPEAKS.newest);
-    let (hello_ours, hello_newest, newer_range) =
-        (hello(ours, None), hello(newest, None), hello(newest + 1, Some(ours)));
+    let (hello_ours, hello_oldest, newer_range) =
+        (hello(ours, None), hello(HUB_SPEAKS.oldest, None), hello(newest + 1, Some(ours)));
     let (past_range, unspoken, unreadable) =
         (hello(newest + 2, Some(newest + 1)), hello(9999, None), hello(r#""3""#, None));
     let mismatch = |says: &str| Then::Refuses(ErrorCode::VersionMismatch, says.to_string());
@@ -180,8 +180,8 @@ fn cases() -> Vec<(&'static str, Vec<Step>)> {
     vec![
         ("a hello at this version", calls(vec![(&hello_ours, Then::Greets(ours)), (STATUS, Then::ShowsStatus)])),
         (
-            "a hello at the newest version this hub speaks",
-            calls(vec![(&hello_newest, Then::Greets(newest)), (STATUS, Then::ShowsStatus)]),
+            "a hello at the oldest version this hub speaks",
+            calls(vec![(&hello_oldest, Then::Greets(HUB_SPEAKS.oldest)), (STATUS, Then::ShowsStatus)]),
         ),
         (
             "a hello naming a range that reaches past the newest version this hub speaks",

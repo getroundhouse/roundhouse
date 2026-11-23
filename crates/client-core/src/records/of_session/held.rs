@@ -1,22 +1,19 @@
 use super::super::snapshot::SessionsListed;
 use super::super::{Kept, Taken};
 use super::OfSession;
+use protocol::model::Rev;
 use protocol::model::SessionId;
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
-/// The records of one kind that the sessions a view asked for have.
+/// The records of one kind that the sessions a client follows have.
 #[derive(Debug)]
 pub(crate) struct BySession<R: OfSession> {
     /// By session, then by record. Each is shared with what views read.
     held: HashMap<SessionId, BTreeMap<R::Id, Kept<Arc<R>>>>,
-    /// The sessions a view asked for, whose records of this kind are kept.
-    wanted: BTreeSet<SessionId>,
-    /// Of those, the ones listed on this connection.
-    listed: BTreeSet<SessionId>,
-    /// The hub is from before this kind had records, so there's nothing to list.
-    unkept: bool,
+    /// The sessions followed, each with how many subscriptions follow it, whose records of this kind are kept.
+    wanted: HashMap<SessionId, usize>,
     /// The newest copy taken in.
     taken: Taken,
     /// What views read of them, made when they next look after a change.
@@ -25,21 +22,14 @@ pub(crate) struct BySession<R: OfSession> {
 
 impl<R: OfSession> Default for BySession<R> {
     fn default() -> Self {
-        BySession {
-            held: HashMap::new(),
-            wanted: BTreeSet::new(),
-            listed: BTreeSet::new(),
-            unkept: false,
-            taken: Taken::default(),
-            shown: OnceCell::new(),
-        }
+        BySession { held: HashMap::new(), wanted: HashMap::new(), taken: Taken::default(), shown: OnceCell::new() }
     }
 }
 
 impl<R: OfSession> BySession<R> {
-    /// Takes in one record, if its session is one a view asked for. Returns whether it changed anything.
+    /// Takes in one record, if its session is one followed. Returns whether it changed anything.
     pub(crate) fn apply(&mut self, record: R) -> bool {
-        if !self.wanted.contains(record.session()) {
+        if !self.wanted.contains_key(record.session()) {
             return false;
         }
         let session = self.held.entry(record.session().clone()).or_default();
@@ -55,63 +45,46 @@ impl<R: OfSession> BySession<R> {
         true
     }
 
-    /// Takes in a list of a session's records, if a view still wants them. One let go of while it was being listed,
-    /// and wanted again since, is listed again. Returns whether it changed anything.
-    pub(crate) fn apply_list(&mut self, session: &SessionId, list: Vec<R>) -> bool {
-        if !self.wanted.contains(session) {
+    /// Takes in where a session's records stand, as its subscription lists them at `at`, if it's still followed. One
+    /// held that the list lacks is gone, unless the copy held is newer than the list. Returns whether it changed
+    /// anything.
+    pub(crate) fn apply_list(&mut self, session: &SessionId, list: Vec<R>, at: Rev) -> bool {
+        if !self.wanted.contains_key(session) {
             return false;
         }
-        self.listed.insert(session.clone());
-        let mut changed = false;
+        let listed = list.iter().filter(|record| record.session() == session).map(R::id).collect::<BTreeSet<_>>();
+        let held = self.held.entry(session.clone()).or_default();
+        let before = held.len();
+        held.retain(|id, held| listed.contains(id) || (at != Rev::default() && held.copy.rev() > at));
+        let mut changed = held.len() != before;
+        if changed {
+            self.shown.take();
+        }
         for record in list.into_iter().filter(|record| record.session() == session) {
             changed |= self.apply(record);
         }
         changed
     }
 
-    /// Keeps the records of `session` from now on. Returns whether they weren't kept already.
-    pub(crate) fn want(&mut self, session: SessionId) -> bool {
-        self.wanted.insert(session)
+    /// Keeps the records of `session` while it's followed, once more than before.
+    pub(crate) fn want(&mut self, session: SessionId) {
+        *self.wanted.entry(session).or_default() += 1;
     }
 
-    /// Lets go of the records of `session`, which no view shows any more.
-    pub(crate) fn forget(&mut self, session: &SessionId) {
+    /// Follows `session` once less, and lets go of its records once nothing follows it. Returns whether it let go of
+    /// any.
+    pub(crate) fn forget(&mut self, session: &SessionId) -> bool {
+        let Some(wanted) = self.wanted.get_mut(session) else { return false };
+        *wanted -= 1;
+        if *wanted > 0 {
+            return false;
+        }
         self.wanted.remove(session);
-        self.listed.remove(session);
-        if self.held.remove(session).is_some() {
+        let held = self.held.remove(session).is_some();
+        if held {
             self.shown.take();
         }
-    }
-
-    /// `session` needs no list on this connection, such as when the hub has no such session.
-    pub(crate) fn skip(&mut self, session: SessionId) {
-        self.listed.insert(session);
-    }
-
-    /// The sessions whose records are wanted and haven't been listed on this connection.
-    pub(crate) fn to_list(&self) -> Vec<SessionId> {
-        if self.unkept {
-            return Vec::new();
-        }
-        self.wanted.difference(&self.listed).cloned().collect()
-    }
-
-    /// Lists every wanted session's records again, since notices may have gone missing, such as on a new connection.
-    /// That may be to another hub, such as a newer one after a restart, so whether it keeps them is asked again too.
-    pub(crate) fn relist(&mut self) {
-        self.listed.clear();
-        self.unkept = false;
-    }
-
-    /// The hub doesn't keep this kind of record.
-    pub(crate) fn unkept(&mut self) {
-        self.unkept = true;
-    }
-
-    /// Whether the hub keeps this kind of record. Until it's been asked, it's taken to.
-    #[cfg(test)]
-    pub(super) fn kept(&self) -> bool {
-        !self.unkept
+        held
     }
 
     /// What views read of them now.

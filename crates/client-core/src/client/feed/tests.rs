@@ -4,9 +4,10 @@
 use std::path::Path;
 use std::time::Duration;
 
+use protocol::client::listed::Listed;
 use protocol::client::new_workspace::NewWorkspaceMade;
 use protocol::client::sessions::Sessions;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, admin};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, admin};
 use protocol::model::{AgentDescription, AgentKind, NewWorkspaceDraftToKeep, Rev, Session, Title, Workspace};
 
 use super::*;
@@ -27,17 +28,14 @@ fn stand_in(
     mut answers: impl FnMut(&ClientRequest) -> Option<ReplyOutcome> + Send + 'static,
 ) -> Client {
     stand_in_hub::connect(socket, move |request| {
-        let answer = if matches!(request, ClientRequest::FeedSubscribe(_)) {
-            ReplyOutcome::Response(ClientResponse::Ok)
+        let answer = if let ClientRequest::Subscribe(subscribe) = &request {
+            return stand_in_hub::subscribed(subscribe, |subscription_id, _| {
+                let workspaces = vec![protocol::fixtures::workspace("w")];
+                let records = Records { workspaces, rev: Rev::new(1), ..Records::default() };
+                vec![HubFrame::Listed { subscription_id, listed: Listed::Hub(Box::new(records)) }]
+            });
         } else if request == ClientRequest::AgentList {
             agents.clone()
-        } else if request == ClientRequest::RecordsList {
-            let workspaces = vec![protocol::fixtures::workspace("w")];
-            ReplyOutcome::Response(ClientResponse::Records(Records {
-                workspaces,
-                rev: Rev::new(1),
-                ..Records::default()
-            }))
         } else if let Some(answer) = answers(&request) {
             answer
         } else {

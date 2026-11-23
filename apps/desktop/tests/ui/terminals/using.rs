@@ -124,7 +124,7 @@ fn its_shell_ending(ui: &mut Ui<'_>, stack: &Stack) {
 
     ui.wait("exit: the chat in front, with no terminal", |ui| showing(ui) == Showing::Chat && ui.pane().is_some());
     crate::support::wait_until("exit: the terminal's record to go", || {
-        stack.client().records_list().unwrap().terminals.is_empty()
+        stack.client().records().unwrap().terminals.is_empty()
     });
     ui.wait("exit: the reply to be read", |_| !stack.client().session_get(&chat).unwrap().unread());
     assert!(!ui.has(terminal_view::SHOWN_ID), "exit: the terminal is gone");
@@ -136,7 +136,7 @@ fn closing_one_opened_with_its_key(ui: &mut Ui<'_>, stack: &Stack) {
     ui.press("secondary-shift-t");
     wait_for_the_prompt(ui);
     type_echo_hi(ui);
-    assert_eq!(stack.client().records_list().unwrap().terminals.len(), 1);
+    assert_eq!(stack.client().records().unwrap().terminals.len(), 1);
     let file = crate::menus::items(ui, "File");
     assert!(file.iter().any(|item| item == "Close Terminal"), "it closes the terminal, not the chat behind it");
     let view = view(ui);
@@ -145,7 +145,7 @@ fn closing_one_opened_with_its_key(ui: &mut Ui<'_>, stack: &Stack) {
 
     ui.wait("closing: the chat in front", |ui| showing(ui) == Showing::Chat);
     crate::support::wait_until("closing: the terminal to close", || {
-        stack.client().records_list().unwrap().terminals.is_empty()
+        stack.client().records().unwrap().terminals.is_empty()
     });
     the_composer_has_the_keys(ui, "closing");
     ui.wait("closing: the view to be let go", |_| view.upgrade().is_none());
@@ -157,7 +157,7 @@ fn ending_in_a_workspace_behind(ui: &mut Ui<'_>, stack: &Stack) {
     ui.wait("behind: the terminal to show", |ui| ui.has(terminal_view::SHOWN_ID));
     ui.new_workspace();
     let pane = ui.view().panes.get(&behind).cloned().unwrap();
-    let terminal = stack.client().records_list().unwrap().terminals[0].id.clone();
+    let terminal = stack.client().records().unwrap().terminals[0].id.clone();
 
     stack.client().terminal_close(&terminal).unwrap();
 
@@ -178,7 +178,7 @@ fn a_terminal_carries_on_as_the_hub_restarts_and_a_tab_brought_in_front_of_it_ta
     let pid = stack.crash_hub();
 
     ui.wait_for_new_hub(&stack, pid);
-    ui.wait("the terminal to be open on the new hub", |_| stack.client().records_list().unwrap().terminals.len() == 1);
+    ui.wait("the terminal to be open on the new hub", |_| stack.client().records().unwrap().terminals.len() == 1);
     assert_eq!(showing(&ui), Showing::Terminal);
     assert!(self::view(&ui) == view, "the same view, taken up again");
     // What's typed before the view's copy follows the terminal on the new hub is dropped, as over a lost connection.

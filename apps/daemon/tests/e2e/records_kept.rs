@@ -31,14 +31,14 @@ fn a_chats_record_its_accounts_and_every_other_are_as_they_were_once_the_hub_has
     client.session_mark_read(&session.id, replied.reply_seq).unwrap();
     let before = client.session_mark_unread(&session.id).unwrap();
     let account = named_account(&client, &session.id).expect("the chat names its account");
-    let all_before = client.records_list().unwrap();
+    let all_before = client.records().unwrap();
 
     stack.kill_hub();
     stack.start_hub();
     let client = stack.client();
     let after = client.session_get(&session.id).unwrap();
     let account_after = named_account(&client, &session.id);
-    let all_after = client.records_list().unwrap();
+    let all_after = client.records().unwrap();
     client.session_prompt(&session.id, "cold", None).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 2);
 

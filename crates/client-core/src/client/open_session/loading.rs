@@ -69,6 +69,7 @@ impl OpenSession {
             last_seq: session.last_seq,
             placed: false,
             read_from: client.hub_version().to_string(),
+            records: None,
         };
         let follow = Follow::start(client, Arc::new(log), move || source);
         follow.wake();

@@ -41,7 +41,7 @@ fn a_fresh_hub_discovers_the_model_and_effort_it_sends_on_the_first_turn() {
     client.new_workspace_draft_keep(&obsolete).unwrap();
     assert!(client.new_workspace_create(&obsolete, "obsolete".into()).is_err());
     assert!(client.workspace_list(true).unwrap().is_empty());
-    assert_eq!(client.records_list().unwrap().new_workspace_draft.unwrap().text, obsolete.text);
+    assert_eq!(client.records().unwrap().new_workspace_draft.unwrap().text, obsolete.text);
     let made = client.new_workspace_create(&draft, "discovery".into()).unwrap();
     assert_eq!(made.workspace.provider.as_str(), "recording");
     assert_eq!(made.unchosen, None);
@@ -85,7 +85,7 @@ fn answered(stack: &Stack, key: &ModelListKey, times: usize) -> protocol::capabi
     let client = stack.client();
     let mut catalog = None;
     wait_until("the agent's answer", || {
-        let lists = client.records_list().unwrap().model_lists;
+        let lists = client.records().unwrap().model_lists;
         let list = lists.into_iter().find(|list| list.key == *key && list.lookup == ModelLookup::Answered);
         catalog = list.and_then(|list| list.catalog);
         catalog.is_some() && lists_asked(stack) == times

@@ -3,16 +3,16 @@
 use std::path::Path;
 use std::time::Duration;
 
-use protocol::client::{
-    ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, log, subscriptions,
-};
+use protocol::client::subscriptions::{Follow, LogFrom};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, log};
 use protocol::event::{EventBody, NoticeLevel, SessionEvent};
 use protocol::model::{Place, Seq, Session, SubagentId};
 
 use super::super::{OpenSession, View};
+use super::follows_session;
 use crate::Client;
 use crate::session_log::{By, Row, SessionLog};
-use crate::stand_in_hub::{Does, StandIn};
+use crate::stand_in_hub::{Does, StandIn, subscribed};
 
 /// When a scripted hub is from: before it could read the agent's own events apart, or now.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -52,19 +52,23 @@ fn start_hub(socket: &Path, era: Era, build: &'static str, last: u64) -> flume::
         (events.into_iter().filter(|event| event.place >= from).collect::<Vec<_>>(), last)
     };
     let answers = |response| Does::Answers(Box::new(ReplyOutcome::Response(response)));
-    let follows = |subscription_id, events: Vec<SessionEvent>| {
-        let sent = events.into_iter().map(|event| HubFrame::Event { subscription_id, event }).collect();
-        Does::AnswersThen(Box::new(ReplyOutcome::Response(ClientResponse::Ok)), sent)
+    let follows = move |subscription_id, from: Option<&LogFrom>| {
+        let events = match from {
+            None => events_from(Seq::FIRST).collect(),
+            Some(LogFrom::Seq { seq }) => events_from(*seq).collect(),
+            Some(LogFrom::Place { subagent, place }) => placed_from(subagent, *place).0,
+            Some(LogFrom::Unknown) => Vec::new(),
+        };
+        events.into_iter().map(|event| HubFrame::Event { subscription_id, event }).collect()
     };
     StandIn::of_build(build).listen(socket, move |request| {
         #[expect(clippy::wildcard_enum_match_arm, reason = "a hub refuses every request it doesn't know")]
         match request {
-            ClientRequest::SessionSubscribe(follow) => {
-                follows(follow.subscription_id, events_from(follow.from_seq).collect())
-            }
-            ClientRequest::SessionSubscribePlaces(follow) if era == Era::Now => {
-                follows(follow.subscription_id, placed_from(&follow.subagent, follow.from_place).0)
-            }
+            ClientRequest::Subscribe(subscribe) if subscribe.start.is_empty() => Does::Nothing,
+            ClientRequest::Subscribe(subscribe) => subscribed(&subscribe, |subscription_id, follow| match follow {
+                Follow::Session { from, .. } => follows(subscription_id, from.as_ref()),
+                _ => Vec::new(),
+            }),
             ClientRequest::SessionRead(log::SessionRead { from_seq, .. }) => {
                 let events = events_from(from_seq).collect();
                 answers(ClientResponse::Events(log::Events { events, last_seq: Seq::new(last) }))
@@ -123,13 +127,11 @@ fn wait_for(open: &OpenSession, seqs: &[u64]) {
 
 /// Where a request to follow events starts, by `seq` or by place, or `None` for any other request.
 fn subscribed_from(request: &ClientRequest) -> Option<u64> {
-    if let ClientRequest::SessionSubscribe(follow) = request {
-        return Some(follow.from_seq.get());
+    match follows_session(request)? {
+        LogFrom::Seq { seq } => Some(seq.get()),
+        LogFrom::Place { place, .. } => Some(place.get()),
+        LogFrom::Unknown => None,
     }
-    if let ClientRequest::SessionSubscribePlaces(follow) = request {
-        return Some(follow.from_place.get());
-    }
-    None
 }
 
 /// The first request among `requests` that `pick` takes.
@@ -159,9 +161,7 @@ fn the_agents_own_events_from_a_hub_that_cant_read_them_apart_are_every_event_by
     assert_eq!(open.read(SessionLog::by), By::Seq);
     let requests: Vec<ClientRequest> = asked.drain().collect();
     let by_place = requests.iter().position(|r| matches!(r, ClientRequest::SessionReadPlaces(_)));
-    let by_seq = requests.iter().position(|r| {
-        matches!(r, ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe { from_seq, .. }) if *from_seq == Seq::FIRST)
-    });
+    let by_seq = requests.iter().position(|r| follows_session(r) == Some(LogFrom::Seq { seq: Seq::FIRST }));
     assert!(by_place.zip(by_seq).is_some_and(|(place, seq)| place < seq), "by place first, then by seq: {requests:?}");
 }
 
@@ -179,7 +179,8 @@ fn an_open_view_reads_by_place_again_once_it_reaches_a_hub_that_can() {
     wait_for(&open, &OWN);
     assert_eq!(open.read(SessionLog::by), By::Place);
     let requests: Vec<ClientRequest> = asked.drain().collect();
-    assert!(requests.iter().any(|r| matches!(r, ClientRequest::SessionSubscribePlaces(_))), "{requests:?}");
+    let by_place = |r: &ClientRequest| matches!(follows_session(r), Some(LogFrom::Place { .. }));
+    assert!(requests.iter().any(by_place), "{requests:?}");
 }
 
 #[test]
@@ -195,11 +196,8 @@ fn an_open_view_carries_on_by_seq_from_one_hub_that_cant_read_by_place_to_anothe
     open.reconnect(&Client::connect(&second_hub, "test").unwrap());
 
     let from = first(&asked, |r| {
-        if let ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe { from_seq, .. }) = r {
-            Some(*from_seq)
-        } else {
-            None
-        }
+        let LogFrom::Seq { seq } = follows_session(r)? else { return None };
+        Some(seq)
     });
     assert_eq!(from, Seq::new(LAST_SEQ).next(), "it carries on from the last event it has");
     assert_eq!(open.read(SessionLog::events_added), added, "and starts nothing again");

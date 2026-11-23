@@ -8,6 +8,7 @@ use protocol::client::{HubFrame, ReplyOutcome};
 use protocol::frame;
 
 use super::connection::{ClientError, Inner, SubscriptionItem};
+use super::subscribing::fell_behind;
 
 /// Reads `stream`, the connection's, until it ends, then ends the connection.
 pub(super) fn read_frames(inner: &Arc<Inner>, stream: impl std::io::Read) {
@@ -54,9 +55,9 @@ pub(super) fn read_frames(inner: &Arc<Inner>, stream: impl std::io::Read) {
             HubFrame::TerminalPicture { subscription_id, picture } => {
                 deliver(inner, subscription_id, SubscriptionItem::TerminalPicture(Box::new(picture)));
             }
-            // Sent only on a subscription that `Subscribe` started, which this client doesn't send, and skipped as a
-            // frame it can't read would be.
-            HubFrame::Listed { .. } => {}
+            HubFrame::Listed { subscription_id, listed } => {
+                deliver(inner, subscription_id, SubscriptionItem::Listed(Box::new(listed)));
+            }
         }
     }
     end_connection(inner);
@@ -82,14 +83,13 @@ fn fail_unreadable_reply(inner: &Inner, line: &[u8], error: &serde_json::Error) 
 }
 
 fn deliver(inner: &Inner, subscription_id: u64, item: SubscriptionItem) {
-    let mut subscriptions = inner.subscriptions.lock();
-    let Some(subscription) = subscriptions.get(&subscription_id) else { return };
-    if let Err(flume::TrySendError::Full(_)) = subscription.try_send(item) {
-        // Its reader has fallen behind. Marked first, so its reader never sees the channel close
-        // without knowing why. Ending it closes the channel once what's in it has been read.
-        inner.lagged.lock().insert(subscription_id);
-        subscriptions.remove(&subscription_id);
-        drop(subscriptions);
-        let _ = inner.unsubscribe(subscription_id);
+    let full = {
+        let channels = inner.subscriptions.lock();
+        let Some((channel, sender)) = channels.sender(subscription_id) else { return };
+        matches!(sender.try_send(item), Err(flume::TrySendError::Full(_))).then_some(channel)
+    };
+    // Its reader has fallen behind.
+    if let Some(channel) = full {
+        fell_behind(inner, channel);
     }
 }

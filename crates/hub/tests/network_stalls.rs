@@ -134,7 +134,7 @@ fn pairing_cannot_wait_forever_after_tls_succeeds() {
 fn a_peer_that_stops_reading_disconnects_all_pending_calls() {
     finishes(Peer::silent(false), |hub| {
         let client = Client::open_remote_with_timeout(&hub.hosts, &hub.fingerprint, OPERATION_TIMEOUT).unwrap();
-        let waiting = client.start(Client::records_list);
+        let waiting = client.start(Client::records);
         // About three times what the connection holds while the peer reads no application data. No more, since the
         // deadline counts encoding it, which a test build does slowly: on a Mac runner busy with other tests, 16 MB
         // took 4.8 s, and on an idle Mac 0.2 s.
@@ -144,6 +144,6 @@ fn a_peer_that_stops_reading_disconnects_all_pending_calls() {
         assert!(matches!(error, ClientError::Disconnected), "{error}");
         assert!(client.is_disconnected());
         assert!(tokio::runtime::Runtime::new().unwrap().block_on(waiting.recv()).is_err());
-        assert!(client.records_list().is_err());
+        assert!(client.records().is_err());
     });
 }

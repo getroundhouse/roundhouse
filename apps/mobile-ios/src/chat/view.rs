@@ -157,13 +157,6 @@ impl ChatView {
         self.shown.as_ref().map(|shown| &shown.session.id)
     }
 
-    /// Stops following the shown chat's subagents and proposals, once the chat has closed.
-    pub(crate) fn let_go(&self) {
-        if let Some(session) = self.session() {
-            self.feed.unfollow_session_records(session);
-        }
-    }
-
     /// What the hub says of its agents, which changes only with a new connection.
     fn set_agents(&mut self, agents: &Agents, cx: &mut Context<Self>) {
         if self.agents == *agents {
@@ -223,9 +216,6 @@ impl ChatView {
         if !keep_typed {
             self.take_draft(&session);
         }
-        // Its subagents' and proposals' calls are drawn from their records, which client-core keeps once a chat asks
-        // for them, and the transcript takes as they come.
-        self.feed.follow_session_records(&session.id);
         let (client, records, feed) = (self.client.clone(), self.feed.snapshot(), self.feed.clone());
         let agent = self.agents.of(session.agent);
         let transcript = cx.new(|cx| {

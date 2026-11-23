@@ -233,8 +233,8 @@ impl Snapshot {
         self.records.new_workspace_draft.as_ref()
     }
 
-    /// The session's subagents, in the order they started, or last started again, once a view has asked for them with
-    /// [`crate::RecordsFeed::follow_session_records`] and they've been listed.
+    /// The session's subagents, in the order they started, or last started again, while the client follows the session,
+    /// as an [`crate::OpenSession`] does, once its subscription has listed them.
     pub fn subagents(&self, session: &SessionId) -> &[Arc<Subagent>] {
         self.subagents.of_session(session)
     }
@@ -244,8 +244,8 @@ impl Snapshot {
         self.subagents.find(session, subagent)
     }
 
-    /// The session's proposals, in the order they were made, once a view has asked for them with
-    /// [`crate::RecordsFeed::follow_session_records`] and they've been listed.
+    /// The session's proposals, in the order they were made, while the client follows the session, once its
+    /// subscription has listed them.
     pub fn proposals(&self, session: &SessionId) -> &[Arc<Proposal>] {
         self.proposals.of_session(session)
     }
@@ -255,9 +255,8 @@ impl Snapshot {
         self.proposals.find(session, proposal)
     }
 
-    /// How the reply `message`, in `session`, ended for the person hearing it, once a view has asked for the session's
-    /// records with [`crate::RecordsFeed::follow_session_records`] and they've been listed. `None` for a reply that
-    /// wasn't read out, or hasn't ended.
+    /// How the reply `message`, in `session`, ended for the person hearing it, while the client follows the session,
+    /// once its subscription has listed the session's records. `None` for a reply that wasn't read out, or hasn't ended.
     pub fn reply_heard(&self, session: &SessionId, message: &MessageId) -> Option<&Arc<ReplyHeard>> {
         self.replies_heard.find(session, message)
     }

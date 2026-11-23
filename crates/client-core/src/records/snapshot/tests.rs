@@ -1,4 +1,5 @@
 use protocol::client::HubNotice;
+use protocol::client::listed::SessionRecords;
 use protocol::fixtures::{github_account, github_app, github_sign_in};
 use protocol::model::{
     DiffComment, DiffSide, GithubAccount, GithubApp, GithubAppId, GithubReach, GithubRepositoryName, GithubSettings,
@@ -178,7 +179,15 @@ fn a_change_from_a_hub_without_revisions_is_still_told_of() {
 fn a_sessions_subagents_are_listed_as_they_started_and_found_by_their_call() {
     let mut held = HubRecords::default();
     held.want_session(&"s".into());
-    held.subagents_mut().apply_list(&"s".into(), vec![subagent("s", "b", 2, 5), subagent("s", "a", 1, 4)]);
+    let subagents = vec![subagent("s", "b", 2, 5), subagent("s", "a", 1, 4)];
+    let listed = SessionRecords {
+        session_id: "s".into(),
+        subagents,
+        proposals: Vec::new(),
+        replies_heard: Vec::new(),
+        rev: Rev::new(5),
+    };
+    held.apply_session_list(listed);
     let before = held.snapshot();
 
     held.apply_notice(HubNotice::Subagent(subagent("s", "a", 1, 6)));
@@ -277,8 +286,8 @@ fn a_workspace_on_a_provider_left_to_its_machine_says_nothing_of_its_repositorys
 fn a_sessions_proposals_are_followed_with_its_subagents_and_their_changes_told_apart() {
     let mut held = HubRecords::default();
     let proposal = |rev: u64| Proposal { rev: Rev::new(rev), ..protocol::fixtures::proposal("p") };
-    assert!(!held.apply_notice(HubNotice::Proposal(proposal(1))), "nobody asked");
-    assert!(held.want_session(&"s".into()));
+    assert!(!held.apply_notice(HubNotice::Proposal(proposal(1))), "nobody follows the session");
+    held.want_session(&"s".into());
     let before = held.snapshot();
 
     held.apply_notice(HubNotice::Proposal(proposal(2)));
@@ -287,7 +296,7 @@ fn a_sessions_proposals_are_followed_with_its_subagents_and_their_changes_told_a
     let changes = now.changes_since(&before);
     assert!(changes.any() && changes.proposals(&"s".into()) && !changes.subagents(&"s".into()));
     assert_eq!(now.proposal(&"s".into(), &"p".into()).map(|p| p.rev), Some(Rev::new(2)));
-    held.forget_session(&"s".into());
+    assert!(held.forget_session(&"s".into()));
     assert!(held.snapshot().proposals(&"s".into()).is_empty());
-    assert!(held.want_session(&"s".into()), "let go of, so it's wanted anew");
+    assert!(!held.apply_notice(HubNotice::Proposal(proposal(3))), "let go of, so nothing of it is kept");
 }
