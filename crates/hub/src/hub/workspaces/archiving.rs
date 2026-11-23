@@ -46,23 +46,18 @@ impl Hub {
         self.record_archived(&id, branch).await
     }
 
-    /// Records that the workspace is archived, on `branch` if its worktree said which it was on, announces it, and
-    /// forgets the files it changed, as [`Hub::changes_forgotten`] says.
+    /// Records that the workspace is archived, on `branch` if its worktree said which it was on, as
+    /// [`Hub::end_move`] does, and forgets the files it changed, as [`Hub::changes_forgotten`] says.
     pub(super) async fn record_archived(
-        &self,
+        self: &Arc<Self>,
         id: &WorkspaceId,
         branch: Option<BranchName>,
     ) -> Result<Workspace, ApiError> {
-        let archived = id.clone();
-        let workspace = self
-            .blocking(move |store| {
-                if let Some(branch) = branch {
-                    store.set_workspace_branch(&archived, &branch)?;
-                }
-                store.end_move(&archived, Move::Archive, Ended::Done)
-            })
-            .await?;
-        self.notify(HubNotice::Workspace(workspace.clone()));
+        if let Some(branch) = branch {
+            let archived = id.clone();
+            self.blocking(move |store| store.set_workspace_branch(&archived, &branch)).await?;
+        }
+        let workspace = self.end_move(id, Move::Archive, Ended::Done, async |archived| Ok(archived)).await?;
         self.changes_forgotten(id).await;
         Ok(workspace)
     }
@@ -182,24 +177,25 @@ impl Hub {
         }
     }
 
-    /// Records that the workspace is ready again, now its worktree is back, announces it and starts its setup. Returns
-    /// it as recorded.
+    /// Records that the workspace is ready again, now its worktree is back, as [`Hub::end_move`] does, and starts its
+    /// setup. Returns it as recorded.
     pub(super) async fn record_restored(
         self: &Arc<Self>,
         id: &WorkspaceId,
         link: &Arc<WorkerLink>,
     ) -> Result<Workspace, ApiError> {
-        let ready = id.clone();
-        let restored = self.blocking(move |store| store.end_move(&ready, Move::Restore, Ended::Done)).await?;
-        // Once `Ready` is durable in SQLite, any saved archive bundle is no longer needed.
-        self.remove_archived_git(id).await;
-        let restored = ReadyWorkspace::new(restored)?;
-        // The worktree has only the branch it's restored on now, which its record says before it's announced.
-        self.watch_branches_from_now(&restored, link).await;
-        let restored = self.ready_workspace(restored.id()).await?;
-        self.notify(HubNotice::Workspace(restored.workspace().clone()));
+        let restored = self
+            .end_move(id, Move::Restore, Ended::Done, async |restored| {
+                // Once `Ready` is durable in SQLite, any saved archive bundle is no longer needed.
+                self.remove_archived_git(id).await;
+                let restored = ReadyWorkspace::new(restored)?;
+                // The worktree has only the branch it's restored on now, which its record says before it's announced.
+                self.watch_branches_from_now(&restored, link).await;
+                Ok(self.ready_workspace(restored.id()).await?.into_workspace())
+            })
+            .await?;
         // A restored worktree has lost what setup made, since none of it is committed.
-        self.start_setup(restored).await
+        self.start_setup(ReadyWorkspace::new(restored)?).await
     }
 
     /// Has the workspace's worker make its worktree again from its branch. Returns the worker.
@@ -234,21 +230,45 @@ impl Hub {
         })
     }
 
-    /// Puts the workspace back as it was before it was being archived or restored, and announces it.
-    pub(super) async fn end_move_put_back(&self, id: &WorkspaceId, moving: Move) -> Result<Workspace, ApiError> {
-        let owned = id.clone();
-        let workspace = self.blocking(move |store| store.end_move(&owned, moving, Ended::PutBack)).await?;
-        self.notify(HubNotice::Workspace(workspace.clone()));
-        Ok(workspace)
+    /// Puts the workspace back as it was before it was being archived or restored, as [`Hub::end_move`] does.
+    pub(super) async fn end_move_put_back(
+        self: &Arc<Self>,
+        id: &WorkspaceId,
+        moving: Move,
+    ) -> Result<Workspace, ApiError> {
+        self.end_move(id, moving, Ended::PutBack, async |put_back| Ok(put_back)).await
     }
 
     /// Puts the workspace back as it was before it was being archived or restored, which was refused or failed for
-    /// `why`, and announces it. Returns `why`.
-    async fn put_back(&self, id: &WorkspaceId, moving: Move, why: ApiError) -> ApiError {
+    /// `why`, as [`Hub::end_move_put_back`] does. Returns `why`.
+    async fn put_back(self: &Arc<Self>, id: &WorkspaceId, moving: Move, why: ApiError) -> ApiError {
         if let Err(e) = self.end_move_put_back(id, moving).await {
             error!(%id, ?moving, "putting back a workspace: {}", e.message);
         }
         why
+    }
+
+    /// Ends the workspace's move as `ended`, the one place every move ends: records it, gives the workspace as recorded
+    /// to `before_announcing`, announces the workspace that gives back, and tells the workspace's worker again whether
+    /// to watch its worktree. Its worker watches only while the workspace is ready, and only a move changes that once
+    /// the workspace is made, so a move that ended anywhere else could leave a workspace a client shows unwatched.
+    /// Returns the workspace as announced.
+    async fn end_move(
+        self: &Arc<Self>,
+        id: &WorkspaceId,
+        moving: Move,
+        ended: Ended,
+        before_announcing: impl AsyncFnOnce(Workspace) -> Result<Workspace, ApiError>,
+    ) -> Result<Workspace, ApiError> {
+        let owned = id.clone();
+        let recorded = self.blocking(move |store| store.end_move(&owned, moving, ended)).await?;
+        let announced = before_announcing(recorded).await;
+        if let Ok(workspace) = &announced {
+            self.notify(HubNotice::Workspace(workspace.clone()));
+        }
+        // Announced or not, it's recorded, and awaited, so whoever asked for the move is answered once it's told.
+        self.changes_watching(id).await;
+        announced
     }
 
     /// Settles each workspace an earlier hub left part way through being archived or restored, once this one is
