@@ -2,9 +2,8 @@
 //! it sends.
 
 use std::sync::Arc;
-use std::time::Duration;
 
-use protocol::client::{ApiError, ErrorCode};
+use protocol::client::ErrorCode;
 use protocol::model::WorkspaceId;
 use protocol::worker::{WatchChanges, WorkerFrame};
 use tracing::{debug, warn};
@@ -15,16 +14,13 @@ use crate::hub::{Followed, Hub};
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
 
-/// How long a worker has to answer that it watches its worktree, or has stopped. It answers at once, and sends what it
-/// sees after, so one that takes this long is stuck. A call left waiting on it would hold the workspace's turn to be
-/// told, and an archive of it, and keep the workspace from being idle, so its worker from being replaced.
-pub(in crate::hub) const WATCH_LIMIT: Duration = Duration::from_secs(10);
-
 impl Hub {
     /// Tells the workspace's worker whether to watch its worktree: it watches while a subscription follows the
     /// workspace and the workspace is ready, and only a worker running already is told, as the module says. Each change
     /// to whether it watches is kept, so its lines and changed files are current while it does, and as of when it stopped
-    /// once it does.
+    /// once it does. The worker answers at once, and sends what it sees after, so it's given only so long, since a call
+    /// left waiting on it would hold the workspace's turn to be told, and an archive of it, and keep the workspace from
+    /// being idle, so its worker from being replaced.
     pub(crate) async fn changes_watching(self: &Arc<Self>, id: &WorkspaceId) {
         let mut told = self.changes_watches.turn(id).await;
         // Read in its turn, so what's told last is what's so.
@@ -44,7 +40,7 @@ impl Hub {
         // Before it's asked, so its first summary, which may come before the reply, is current.
         self.changes_kept_current(id).await;
         let asked = WatchChanges { path: ready.path().to_owned(), base_ref: base_ref.clone(), watching: true };
-        match within_limit(&link, asked).await {
+        match link.call_at_once(asked).await.unwrap_or_else(|late| Err(late.into())) {
             Ok(()) => *told = Some(Told { link: link.id, base_ref, refused: false }),
             // A worker from before the request, which the hub replaces once nothing in its workspace is at work, and
             // whose summary is read once now instead, and as each turn ends.
@@ -108,7 +104,8 @@ impl Hub {
         let Some(link) = self.running_worker(id).filter(|link| link.id == was.link) else { return };
         let Ok(ready) = self.workspace(id).await.map(|workspace| workspace.path) else { return };
         let Some(path) = ready else { return };
-        match within_limit(&link, WatchChanges { path, base_ref: was.base_ref, watching: false }).await {
+        let stop = WatchChanges { path, base_ref: was.base_ref, watching: false };
+        match link.call_at_once(stop).await.unwrap_or_else(|late| Err(late.into())) {
             Ok(()) => {}
             Err(e) if e.code == ErrorCode::NotFound => {}
             Err(e) => debug!(%id, "telling the worker to stop watching its worktree: {}", e.message),
@@ -138,11 +135,4 @@ impl Hub {
             warn!(%id, "keeping that the workspace's changed files are no longer watched: {}", e.message);
         }
     }
-}
-
-/// Tells `link` to watch, or stop, as `asked` says, failing as a worker that can't do it does if it hasn't answered
-/// within [`WATCH_LIMIT`].
-async fn within_limit(link: &WorkerLink, asked: WatchChanges) -> Result<(), ApiError> {
-    let late = || ApiError::new(ErrorCode::Worker, format!("the worker didn't answer within {WATCH_LIMIT:?}"));
-    tokio::time::timeout(WATCH_LIMIT, link.call(asked)).await.unwrap_or_else(|_| Err(late()))
 }

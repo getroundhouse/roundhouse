@@ -1,6 +1,6 @@
 //! What the hub keeps of each terminal open, or being opened, in memory.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -22,6 +22,10 @@ pub(crate) struct Terminals {
     /// one kept in memory has no transaction.
     pub(super) changing: AsyncMutex<()>,
     pub(super) open: Mutex<HashMap<TerminalId, Open>>,
+    /// Each link to a worker an earlier hub left that's being asked which terminals it runs, with the terminals whose
+    /// shells it said had ended meanwhile, which have no record to remove yet, so carrying on gives them none. Changed
+    /// under `changing`, but for a link being added, which nothing else has heard of yet.
+    pub(super) asked_what_runs: Mutex<HashMap<WorkerLinkId, HashSet<TerminalId>>>,
 }
 
 /// A terminal being opened, or one open.

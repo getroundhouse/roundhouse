@@ -6,13 +6,12 @@ use protocol::model::{LineCounts, Observed};
 use protocol::worker::WorkerResponse;
 
 use super::stand_in::{Watch, frame, next_changes, next_lines, summary, until_watches, w, worker};
-use crate::hub::changes_watch::telling::WATCH_LIMIT;
 use crate::hub::observations::{WorkspaceChanges, WorkspaceLines};
 use crate::hub::stand_in_workers::TIMEOUT;
 use crate::hub::tests::hub_with_worktree;
 use crate::hub::{Followed, Hub};
 use crate::store::now_ms;
-use crate::worker_link::WorkerLink;
+use crate::worker_link::{ANSWERED_WITHIN, WorkerLink};
 
 /// Has the hub take in that `link`, a worker of `w`, has gone, as it does once the worker's stream ends.
 async fn gone(hub: &Hub, link: &Arc<WorkerLink>) {
@@ -61,9 +60,9 @@ async fn a_worker_that_never_answers_a_watch_holds_its_telling_only_until_the_li
         async move { gone(&hub, &before).await }
     });
     // The paused clock moves only once every task waits, so the worker before waits for its turn to be told by then.
-    tokio::time::sleep(WATCH_LIMIT / 2).await;
+    tokio::time::sleep(ANSWERED_WITHIN / 2).await;
     let gate_free = hub.worker_gate(&w()).try_lock().is_ok();
-    tokio::time::timeout(WATCH_LIMIT, going).await.expect("the worker before went").unwrap();
+    tokio::time::timeout(ANSWERED_WITHIN, going).await.expect("the worker before went").unwrap();
 
     let current = || {
         hub.observation_is_kept_current::<WorkspaceLines>(&w())

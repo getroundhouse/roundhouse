@@ -3,3 +3,4 @@
 mod copy;
 mod opening;
 mod reading;
+mod stuck;

@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// Which of this hub's connections to a worker a [`WorkerLink`](super::WorkerLink) is, so what ran on an earlier one to
 /// the same workspace, such as an agent or a terminal's shell, isn't taken for what runs on the current one. In memory
 /// only, from 1 as the hub starts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct WorkerLinkId(u64);
 
 impl WorkerLinkId {
