@@ -265,12 +265,12 @@ pub(super) fn settle_at_the_end(ui: &mut Ui<'_>, stack: &Stack, session: &Sessio
     wait_for_the_list_to_settle(ui, last);
 }
 
-/// Waits for `newest`, the newest of the agent's own events as the hub recorded it, to load, which it does live as the
-/// chat opens at its end, and says how many rows the chat has, as its log says.
+/// Waits for `newest`, the newest of the agent's own events as the hub recorded it, to load in the log the transcript
+/// draws from, which it does live as the chat opens at its end, and says how many rows the chat has, as its log says.
 #[track_caller]
 pub(super) fn wait_for_the_tail(ui: &mut Ui<'_>, newest: &SessionEvent) -> usize {
     let (transcript, last) = (ui.transcript().unwrap(), ui.row_of(newest));
-    let loaded = |ui: &mut Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.event_at(last).is_some());
+    let loaded = |ui: &mut Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.drawn_event_at(last).is_some());
     let loading =
         |ui: &mut Ui<'_>| format!("row {last} isn't loaded: {}", ui.cx.read_entity(&transcript, |t, _| t.loading()));
     ui.wait_saying("the tail to load", loaded, loading);
@@ -278,11 +278,10 @@ pub(super) fn wait_for_the_tail(ui: &mut Ui<'_>, newest: &SessionEvent) -> usize
 }
 
 /// Waits for `row` to be loaded in the log the transcript draws from, which can be behind the session's log, and for
-/// the list to settle with it. A page changes the session's height in three
-/// goes: as its rows in the window are measured, over the frames after as the rest of them are, a few to a frame,
-/// and as each long text in it is parsed on another thread and its row measured again. So the list has settled once
-/// every long text is parsed and no frame is asked for. Nothing is drawn after that, since that could bring another
-/// page.
+/// the list to settle with it. A page changes the session's height in three goes: as its rows in the window are
+/// measured, over the frames after as the rest of them are, a few to a frame, and as each long text in it is parsed on
+/// another thread and its row measured again. So the list has settled once every long text is parsed and no frame is
+/// asked for. Nothing is drawn after that, since that could bring another page.
 #[track_caller]
 pub(super) fn wait_for_the_list_to_settle(ui: &mut Ui<'_>, row: usize) {
     let transcript = ui.transcript().unwrap();

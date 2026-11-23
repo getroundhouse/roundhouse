@@ -18,7 +18,7 @@ use protocol::capability::calls::call::Runs;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{Seq, SessionStatus, SettledAt};
 
-use crate::support::{FakeHub, Ui};
+use crate::support::{FakeHub, Ui, open_on_the_chat};
 
 /// Longer than the bar waits for typing to pause.
 const PAUSE: Duration = Duration::from_secs(1);
@@ -58,10 +58,8 @@ fn chat_of(events: Vec<EventBody>, loaded: usize) -> (World, Vec<SessionEvent>) 
 
 /// The window on a fake hub holding `world`, showing its chat. The hub goes with the test, so it's returned to be kept.
 fn open(cx: &mut TestAppContext, world: World) -> (FakeHub, Ui<'_>) {
-    let fake = FakeHub::holding(world);
-    let mut ui = Ui::open_on(cx, &fake);
-    ui.wait("the chat", |ui| ui.transcript().is_some());
-    (fake, ui)
+    let chat = world.sessions[0].id.clone();
+    open_on_the_chat(cx, world, &chat)
 }
 
 /// Opens the bar and types `query` into it, then lets the pause the bar waits for go by.

@@ -234,7 +234,9 @@ fn a_workspace_that_cant_be_made_gives_the_prompt_back_to_the_dialog_and_the_hub
 
     ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free());
     assert!(ui.view().error.clone().unwrap().contains("Couldn't create the workspace"));
-    assert!(ui.view().records().workspaces().is_empty());
+    // The hub's record of the workspace it began goes once making it fails, which the feed tells the app of apart from
+    // the failure's reply.
+    ui.wait("no workspace", |ui| ui.view().records().workspaces().is_empty());
     assert!(ui.has_dialog(), "the dialog opens again to show where the prompt went");
     assert_eq!(ui.dialog_text(), "say:never sent");
     assert!(ui.dialog_planning(), "plan mode comes back with the prompt");

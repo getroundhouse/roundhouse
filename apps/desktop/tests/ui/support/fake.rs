@@ -8,10 +8,11 @@ use std::path::{Path, PathBuf};
 use client_core::fake_hub::{self, World};
 use desktop::app::HubSource;
 use desktop::checkout::Checkout;
+use gpui_kit::AppContext as _;
 use gpui_kit::TestAppContext;
 use local_hub::Daemon;
-use protocol::event::EventBody;
-use protocol::model::{SessionId, SessionStatus};
+use protocol::event::{EventBody, SessionEvent};
+use protocol::model::{Seq, SessionId, SessionStatus};
 use tempfile::TempDir;
 
 use super::Ui;
@@ -90,9 +91,19 @@ pub(crate) fn one_chat(status: SessionStatus, events: Vec<EventBody>) -> (World,
 
 /// The window on a fake hub holding `world`, showing `chat`. The hub goes with the test, so it's returned to be kept.
 pub(crate) fn open_on_the_chat<'a>(cx: &'a mut TestAppContext, world: World, chat: &SessionId) -> (FakeHub, Ui<'a>) {
+    let events: Vec<SessionEvent> = world.events_from(chat, Seq::default()).cloned().collect();
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
     ui.wait("the chat", |ui| ui.transcript().is_some());
     ui.activate_chat(chat);
+    // Its events reach the transcript's log first, and the rows it draws once it catches up with them, so a test that
+    // reads or moves what it draws waits for the newest it follows.
+    let transcript = ui.transcript().unwrap();
+    let newest = ui.cx.read_entity(&transcript, |t, _| events.iter().rev().find_map(|event| t.event_row(event)));
+    if let Some(row) = newest {
+        ui.wait("the chat's newest event, drawn", |ui| {
+            ui.cx.read_entity(&transcript, |t, _| t.drawn_event_at(row).is_some())
+        });
+    }
     (fake, ui)
 }

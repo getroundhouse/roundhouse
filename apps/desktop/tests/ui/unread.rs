@@ -113,7 +113,8 @@ fn a_reply_in_the_chat_showing_is_read_as_it_comes(cx: &mut TestAppContext) {
 
     ui.wait_idle_with("the reply", |text| text.contains("right here"));
     ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
-    assert!(!row_unread(&ui, &workspace) && !tab_unread(&ui, &chat));
+    // The feed tells the app of the chat's record read after the hub has it so.
+    ui.wait("the app to have it read", |ui| !row_unread(ui, &workspace) && !tab_unread(ui, &chat));
 }
 
 /// Wherever the person has gone from the chat, its tab and its workspace's row say it has a reply nobody has read
@@ -302,6 +303,8 @@ fn the_key_marks_the_workspace_showing_unread_and_read_again(cx: &mut TestAppCon
     ui.press("enter");
     ui.wait_idle_with("the reply", |text| text.contains("already read"));
     ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
+    // The key marks what the app has as read unread, and the feed tells the app it's read after the hub has it so.
+    ui.wait("the app to have it read", |ui| !row_unread(ui, &workspace));
 
     ui.press("secondary-shift-u");
 
