@@ -50,14 +50,17 @@ impl Feed {
     /// Tells every client following the feed of `notice`, which moves what `moves` says, unless it's a copy of a record
     /// no newer than one it has told of that a client sent it is sent too, or than that record's removal, so each copy
     /// of a record that a client hears is newer than the last. A copy that moves anything is compared with only those
-    /// that do, so a client that isn't sent those that move an old form alone hears each copy that moves anything:
-    /// one that is sent them all can hear such a copy after a newer one, which it drops, as [`Rev::supersedes`] says.
+    /// that do, so a client that isn't sent those that move an old form alone hears each copy that moves anything. One
+    /// no newer than a copy that moves an old form alone is marked as told in it, so a client sent those isn't sent it,
+    /// and hears each copy newer than the last too, as `crate::hub::observations::OldForm` makes two such copies when
+    /// an announcement reads a record between an observation's change and the move of its record's revision.
     /// Several tasks can announce one record, each with a copy read at or after its own change, so two can carry the
     /// same copy, or finish in the other order, and a change made while another's copy was read is told of only by the
     /// newer copy. The check and the sending happen under one lock, so the order they're checked in is the order
     /// clients hear them.
     pub(in super::super) fn send(&self, notice: HubNotice, moves: Moves) {
         let mut sent = self.sent.lock();
+        let mut told_in_old_form = false;
         let notice = match RecordNotice::try_from(notice) {
             Ok(of) => {
                 let (sent, rev) = (sent.entry(of.key()).or_default(), of.rev());
@@ -71,6 +74,7 @@ impl Feed {
                     trace!(rev = rev.get(), newest = newest.get(), "left out a copy no newer than one told of");
                     return;
                 }
+                told_in_old_form = !rev.supersedes(sent.newest);
                 sent.newest = rev.max(sent.newest);
                 if moves == Moves::Anything {
                     sent.moving_anything = rev.max(sent.moving_anything);
@@ -81,6 +85,6 @@ impl Feed {
             Err(notice) => notice,
         };
         // An error only means nobody is listening.
-        let _ = self.sender.send(Fed { notice: Arc::new(notice), moves });
+        let _ = self.sender.send(Fed { notice: Arc::new(notice), moves, told_in_old_form });
     }
 }

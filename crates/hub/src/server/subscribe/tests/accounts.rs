@@ -7,7 +7,7 @@ use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
 use protocol::model::{Account, AgentAccount, DiffComment, DiffSide, Observation, Observed, Rev};
 
 use super::given::{ok, start};
-use crate::hub::tests::hub_in_again;
+use crate::hub::tests::{hub_in_again, store_of};
 use crate::server::tests::Connection;
 use crate::store::BEFORE_ACCOUNT_IDENTITY_OBSERVED;
 use crate::store::older::store_from_before;
@@ -60,7 +60,8 @@ fn told_who_it_is(sent: &[HubFrame], plan: &str) -> bool {
 /// A hub on a database from before who an account is left it lists the account to a client of version 4 with the
 /// four fields empty, and to one of the version that reads every observation with no observation of it. The worker's
 /// next read fills it: the first client is sent the record again, filled, under a newer revision, and so again as the
-/// plan changes, and the second is sent the observation, and no copy of the record that moves only those fields.
+/// plan changes, and the second is sent the observation, and no copy of the record that moves only those fields. A
+/// copy of the record told again at the revision the last of those took reaches only the second.
 #[tokio::test]
 async fn who_an_account_is_reaches_each_client_in_the_form_its_version_reads() {
     let dir = tempfile::tempdir().unwrap();
@@ -83,6 +84,9 @@ async fn who_an_account_is_reaches_each_client_in_the_form_its_version_reads() {
 
     hub.launched_under(&"s".into(), ada("Max"), 1_000).await.unwrap();
     hub.launched_under(&"s".into(), ada("Team"), 2_000).await.unwrap();
+    // As a task that read the record after the change announces it, at the revision its old form's copy took.
+    let again = store_of(&hub).account(&"claude-ada".into()).unwrap().unwrap();
+    hub.notify(HubNotice::Account(again));
 
     let marker = HubNotice::Comment(DiffComment {
         id: "c".into(),
@@ -107,9 +111,13 @@ async fn who_an_account_is_reaches_each_client_in_the_form_its_version_reads() {
     let plans: Vec<Option<&str>> = copies.iter().map(|account| account.plan.as_deref()).collect();
     assert!(plans.ends_with(&[Some("Max"), Some("Team")]), "{plans:?}");
     let revs: Vec<Rev> = copies.iter().map(|account| account.rev).collect();
-    assert!(revs.is_sorted() && revs.iter().all(|rev| *rev > listed.rev), "{revs:?} after {:?}", listed.rev);
+    let newer = revs.windows(2).all(|pair| pair[0] < pair[1]);
+    assert!(newer && revs.iter().all(|rev| *rev > listed.rev), "{revs:?} after {:?}", listed.rev);
     assert!(!told_who_it_is(&before.sent, "Team"), "no observation to a client of version 4");
     assert!(told_who_it_is(&observing.sent, "Max") && told_who_it_is(&observing.sent, "Team"));
-    let filled = accounts_sent(&observing).into_iter().filter(|account| account.plan.is_some());
-    assert_eq!(filled.count(), 0, "no copy that moves only who it is");
+    let filled: Vec<Option<String>> = accounts_sent(&observing)
+        .into_iter()
+        .filter_map(|account| account.plan.is_some().then_some(account.plan))
+        .collect();
+    assert_eq!(filled, [Some("Team".to_string())], "no copy that moves only who it is, but the one told again");
 }

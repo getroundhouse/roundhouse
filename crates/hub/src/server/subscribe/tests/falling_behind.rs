@@ -40,7 +40,8 @@ async fn a_subscription_that_falls_behind_is_sent_where_its_level_stands_again()
     };
     // The feed holds 2, so it's left with 5 and 6 when it first reads.
     for rev in 1..=6 {
-        feed.send(Fed { notice: std::sync::Arc::new(notice(rev)), moves: Moves::Anything }).unwrap();
+        feed.send(Fed { notice: std::sync::Arc::new(notice(rev)), moves: Moves::Anything, told_in_old_form: false })
+            .unwrap();
     }
     let listed = Listed::Session(records);
     let list = || std::future::ready(Ok(listed.clone()));
