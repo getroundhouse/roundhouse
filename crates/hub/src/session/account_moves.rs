@@ -46,12 +46,9 @@ impl LiveSession {
         }
         let (id, kept) = (self.id.clone(), account.clone());
         let moved = hub.blocking(move |store| store.move_session(&id, &kept)).await?;
-        {
-            let mut state = self.state.lock();
-            state.login = SessionLogin::Hub(account);
-            if moved.forgot_cache {
-                state.prompt_cache = None;
-            }
+        self.state.lock().login = SessionLogin::Hub(account);
+        if moved.forgot_cache {
+            self.forget_cache().await;
         }
         if let Some(record) = moved.account {
             hub.notify(HubNotice::Account(record));

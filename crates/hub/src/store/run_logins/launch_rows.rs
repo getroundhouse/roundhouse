@@ -1,5 +1,5 @@
 use super::super::accounts::name_account;
-use super::super::sessions::{forget_cache_unless_under, on_the_hubs, session_login_of};
+use super::super::sessions::{forgets_cache, on_the_hubs, session_login_of};
 use super::super::{OneValue, SessionLogin, Store, StoreError, lock};
 use protocol::model::{Account, AccountId, RunId, SessionId};
 use rusqlite::{Connection, OptionalExtension as _, params};
@@ -30,8 +30,7 @@ pub(crate) struct Recorded {
     pub(crate) on: SessionLogin,
     /// Whether that changed the session's record, which is then for every client to hear.
     pub(crate) session_changed: bool,
-    /// Whether putting it on the account forgot what was cached of its conversation, as
-    /// [`forget_cache_unless_under`] says.
+    /// Whether putting it on the account forgets what was cached of its conversation, as [`forgets_cache`] says.
     pub(crate) forgot_cache: bool,
     /// The account's record, when the session's came to name it and that brought when it was last used up to the
     /// session's, which is a change to the account's record to announce.
@@ -72,8 +71,8 @@ impl Store {
                         params![session.as_str(), placed == Placed::Automatically],
                     )? > 0;
                     let named = name_account(tx, session, Some(account))?;
-                    let forgot_cache = forget_cache_unless_under(tx, session, named.before.as_ref(), account)?;
-                    (put || automatically || named.session || forgot_cache, forgot_cache, named.account)
+                    let forgot_cache = forgets_cache(named.before.as_ref(), account);
+                    (put || automatically || named.session, forgot_cache, named.account)
                 } else {
                     (false, false, None)
                 };

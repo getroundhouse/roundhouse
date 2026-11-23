@@ -11,7 +11,9 @@ use protocol::model::{Account, ModelList, Record, RecordKey, Records, Session, U
 use tracing::warn;
 
 use super::kept::Observations;
-use super::kinds::{AccountIdentity, AccountLimits, Kind, ModelCatalog, SessionContext, SessionKey, SessionTodos};
+use super::kinds::{
+    AccountIdentity, AccountLimits, Kind, ModelCatalog, SessionCache, SessionContext, SessionKey, SessionTodos,
+};
 use super::tables::Tables;
 use crate::hub::Hub;
 
@@ -39,12 +41,14 @@ impl OldForm for ModelList {
     }
 }
 
-/// How full its agent's context is, and its to-do list, on a session's record, each `None` while it isn't known.
+/// How full its agent's context is, its to-do list, and what the API's cache holds of its conversation, on a session's
+/// record, each `None` while it isn't known.
 impl OldForm for Session {
     fn fill(&mut self, tables: &mut Tables) {
         let of = SessionKey { workspace_id: self.workspace_id.clone(), session_id: self.id.clone() };
         self.context = SessionContext::table(tables).value(&of).cloned();
         self.todos = SessionTodos::table(tables).value(&of).cloned();
+        self.prompt_cache = SessionCache::table(tables).value(&of).and_then(|cache| cache.held.clone());
     }
 }
 

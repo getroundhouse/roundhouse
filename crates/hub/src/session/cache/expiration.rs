@@ -1,7 +1,6 @@
 use super::super::{LiveSession, Origin};
 use protocol::event::EventBody;
 use protocol::model::{CacheRequest, PromptCache, RunId};
-use tracing::error;
 
 /// The longest a request is taken to have waited for its model to start answering, so a wrong number can't put when it
 /// was sent far back, and with it how long the chat was idle before the next.
@@ -10,14 +9,15 @@ const LONGEST_WAIT_MS: u64 = 10 * 60 * 1000;
 impl LiveSession {
     /// One of the agent's own requests was sent `request.sent_ms_ago` before `now_ms`, by the hub's clock. Only the
     /// current run speaks for the session. If the request found the cache expired, that's recorded, as
-    /// [`found_expired`] says.
+    /// [`found_expired`] says, which can't be told where what the cache held before isn't known, as after a hub's first
+    /// start on a database from before the hub kept it as an observation.
     pub(in super::super) async fn note_cache(&self, run: RunId, request: CacheRequest, now_ms: i64) {
         let previous = {
             let state = self.state.lock();
             if state.agent.is_none_or(|agent| agent.run != run) {
                 return;
             }
-            state.prompt_cache.clone()
+            state.prompt_cache.cache().cloned()
         };
         let waited_ms = i64::try_from(request.sent_ms_ago.min(LONGEST_WAIT_MS)).unwrap_or(0);
         let sent_at_ms = now_ms.saturating_sub(waited_ms);
@@ -25,32 +25,7 @@ impl LiveSession {
             self.record_or_log(Origin::Hub, expired).await;
         }
         let Some(cache) = after(previous.as_ref(), &request, sent_at_ms) else { return };
-        self.announce_cache(Some(cache)).await;
-    }
-
-    /// Keeps `cache`, as [`LiveSession::keep_cache`] does, and announces it unless the agent is working, since it makes
-    /// a request every few seconds as it works, and the end of the turn announces what the last one left.
-    pub(in super::super) async fn announce_cache(&self, cache: Option<PromptCache>) {
-        if !self.keep_cache(cache).await || self.status().is_working() {
-            return;
-        }
-        let Ok(hub) = self.hub() else { return };
-        if let Err(e) = self.announce(&hub).await {
-            error!(session = %self.id, "could not announce what the cache holds of the conversation: {e}");
-        }
-    }
-
-    /// The cache holds `cache` of the conversation from here on, or none of it. It isn't announced, so what changed it
-    /// can announce it with the rest. False if it couldn't be kept.
-    pub(in super::super) async fn keep_cache(&self, cache: Option<PromptCache>) -> bool {
-        let Ok(hub) = self.hub() else { return false };
-        let (id, kept) = (self.id.clone(), cache.clone());
-        if let Err(e) = hub.blocking(move |store| store.set_session_cache(&id, kept.as_ref())).await {
-            error!(session = %self.id, "could not record what the cache holds of the conversation: {e}");
-            return false;
-        }
-        self.state.lock().prompt_cache = cache;
-        true
+        self.cache_holds(Some(cache)).await;
     }
 }
 

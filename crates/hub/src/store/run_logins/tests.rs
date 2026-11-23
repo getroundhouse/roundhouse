@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use protocol::model::{AccountSource, AgentAccount, AgentKind, CacheTtl, PromptCache};
+use protocol::model::{AccountSource, AgentAccount, AgentKind};
 
 use super::launch_rows::Recorded;
 use super::*;
@@ -155,7 +155,8 @@ fn a_chats_first_launch_under_a_held_login_puts_it_on_the_hubs_for_that_account_
 
     let on_given = SessionLogin::Hub("given".into());
     assert_eq!((before.account_source, before.account), (None, None));
-    assert_eq!((&first.on, first.session_changed, first.forgot_cache), (&on_given, true, false));
+    // A record that named no account can't say whose any cache was, as the next test has it.
+    assert_eq!((&first.on, first.session_changed, first.forgot_cache), (&on_given, true, true));
     assert_eq!((after.account_source, after.account), (Some(AccountSource::Hub), Some("given".into())));
     assert!(after.rev > before.rev);
     let left = Recorded { on: on_given, session_changed: false, forgot_cache: false, account_changed: None };
@@ -163,12 +164,12 @@ fn a_chats_first_launch_under_a_held_login_puts_it_on_the_hubs_for_that_account_
     assert_eq!(store.get_session(&s).unwrap().session.rev, after.rev, "nothing about it changed");
 }
 
-/// A chat's first launch under a held login forgets what was cached when its record named another account, or none, as
-/// a move does, so neither a retry after that launch failed nor a later launch takes the first request under the
-/// account for one that found the cache expired. One whose record named the account already keeps what was cached.
+/// A chat's first launch under a held login says to forget what was cached when its record named another account, or
+/// none, as a move does, so neither a retry after that launch failed nor a later launch takes the first request under
+/// the account for one that found the cache expired. One whose record named the account already keeps what was cached.
+/// The hub keeps what the cache holds, so the record doesn't change for it.
 #[test]
 fn a_chats_first_launch_under_a_held_login_forgets_another_accounts_cache_as_a_move_does() {
-    let cache = PromptCache { used_at_ms: 5, ttl: CacheTtl::OneHour, model: None, tokens: 9 };
     let launched = |named: Option<&str>| {
         let dir = tempfile::tempdir().unwrap();
         let store = store_with_a_login(dir.path());
@@ -176,14 +177,12 @@ fn a_chats_first_launch_under_a_held_login_forgets_another_accounts_cache_as_a_m
         store.connect_login(&connecting(&"other".into(), "Personal", &file)).unwrap();
         let s = SessionId::from("s");
         lock(&store.writer).execute("UPDATE sessions SET account_id = ? WHERE id = 's'", [named]).unwrap();
-        store.set_session_cache(&s, Some(&cache)).unwrap();
-        let recorded = store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::ByDefault).unwrap();
-        (recorded.forgot_cache, store.get_session(&s).unwrap().session.prompt_cache)
+        store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::ByDefault).unwrap().forgot_cache
     };
 
-    assert_eq!(launched(Some("other")), (true, None), "another account's cache may not hold the conversation");
-    assert_eq!(launched(None), (true, None), "a record that named no account can't say whose cache it was");
-    assert_eq!(launched(Some("given")), (false, Some(cache.clone())));
+    assert!(launched(Some("other")), "another account's cache may not hold the conversation");
+    assert!(launched(None), "a record that named no account can't say whose cache it was");
+    assert!(!launched(Some("given")));
 }
 
 /// What a run under another login than the one a chat on the hub's is on says it's under leaves the chat on its
@@ -270,21 +269,18 @@ fn a_chat_whose_record_says_the_hubs_but_names_no_account_is_put_on_its_next_lau
     assert_eq!(SessionLogin::of_record(&other.get_session(&s).unwrap().session), SessionLogin::NoneYet);
 }
 
-/// Moving a chat puts it on the account, has its record name it, and forgets what was cached when the record named
-/// another account, or none, since that account's cache may not hold the conversation. A move to where it is changes
-/// nothing.
+/// Moving a chat puts it on the account, has its record name it, and says to forget what was cached when the record
+/// named another account, or none, since that account's cache may not hold the conversation. A move to where it is
+/// changes nothing.
 #[test]
 fn a_moved_chat_is_on_its_account_and_names_it_and_forgets_another_accounts_cache() {
     let (dir, fresh_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let (store, fresh) = (store_with_a_login(dir.path()), store_with_a_login(fresh_dir.path()));
     let file = LoginFile::new();
     store.connect_login(&connecting(&"other".into(), "Personal", &file)).unwrap();
-    let (s, cache) =
-        (SessionId::from("s"), PromptCache { used_at_ms: 5, ttl: CacheTtl::OneHour, model: None, tokens: 9 });
+    let s = SessionId::from("s");
     store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::ByDefault).unwrap();
     store.file_run_login(&s, RunId::new(1)).unwrap();
-    store.set_session_cache(&s, Some(&cache)).unwrap();
-    fresh.set_session_cache(&s, Some(&cache)).unwrap();
     let before = store.get_session(&s).unwrap().session;
 
     let in_place = store.move_session(&s, &"given".into()).unwrap();
@@ -294,10 +290,10 @@ fn a_moved_chat_is_on_its_account_and_names_it_and_forgets_another_accounts_cach
     let fresh_moved = fresh.move_session(&s, &"given".into()).unwrap();
 
     assert!(!in_place.forgot_cache);
-    assert_eq!((kept.rev, kept.prompt_cache), (before.rev, Some(cache)), "nothing about it changed");
+    assert_eq!(kept.rev, before.rev, "nothing about it changed");
     assert!(moved.forgot_cache);
     let other = Some(AccountId::from("other"));
-    assert_eq!((after.account_source, after.account, after.prompt_cache), (Some(AccountSource::Hub), other, None));
+    assert_eq!((after.account_source, after.account), (Some(AccountSource::Hub), other));
     assert!(fresh_moved.forgot_cache, "a record that named no account can't say whose cache it was");
 }
 

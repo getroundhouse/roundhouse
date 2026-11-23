@@ -1,7 +1,7 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::capability::settings::Effort;
 use protocol::capability::settings::Settings;
-use protocol::model::{AttachmentId, CacheTtl, ModelName, PromptCache};
+use protocol::model::{AttachmentId, ModelName};
 use protocol::prompt::Prompt;
 
 use super::super::tests::{notice, store_with_session};
@@ -89,25 +89,6 @@ fn a_level_a_newer_hub_wrote_keeps_its_id() {
     lock(&store.writer).execute("UPDATE sessions SET effort = 'future' WHERE id = 's'", []).unwrap();
 
     assert_eq!(effort(&store), Effort::parse("future").unwrap(), "the session retains the chosen ID");
-}
-
-#[test]
-fn what_the_cache_holds_is_kept_until_the_hub_says_otherwise_and_moves_the_revision() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = store_with_session(dir.path());
-    let before = store.get_session(&"s".into()).unwrap().session;
-    assert_eq!(before.prompt_cache, None, "a new session's agent hasn't asked anything");
-    let cache = PromptCache { used_at_ms: 5, ttl: CacheTtl::OneHour, model: None, tokens: 252_800 };
-
-    store.set_session_cache(&"s".into(), Some(&cache)).unwrap();
-
-    let after = store.get_session(&"s".into()).unwrap().session;
-    assert_eq!(after.prompt_cache, Some(cache));
-    assert!(after.rev > before.rev, "two copies of a record at one revision have to be the same");
-    store.set_session_cache(&"s".into(), None).unwrap();
-    let cleared = store.get_session(&"s".into()).unwrap().session;
-    assert_eq!(cleared.prompt_cache, None);
-    assert!(cleared.rev > after.rev);
 }
 
 #[test]

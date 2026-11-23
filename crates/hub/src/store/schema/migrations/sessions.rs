@@ -19,3 +19,21 @@ pub(super) const CONTEXT_OBSERVED: &str = r"
     ALTER TABLE sessions DROP COLUMN context;
     ALTER TABLE sessions DROP COLUMN todos;
 ";
+
+/// What the API's cache holds of each session's conversation, which the hub keeps as an observation, in its cache file,
+/// and no longer here. Nothing of it is carried there: the hub hears it again at the chat's next request, which can't
+/// be told to have found the cache expired. The trigger that moves a session's revision on a change to its columns is
+/// made again without `prompt_cache`, as [`CONTEXT_OBSERVED`] makes it without `context`.
+pub(super) const CACHE_OBSERVED: &str = r"
+    DROP TRIGGER sessions_rev_on_update;
+    CREATE TRIGGER sessions_rev_on_update
+        AFTER UPDATE OF workspace_id, agent, model, mode, status, title, closed_at_ms, reply_seq, read_seq,
+            background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, account_id,
+            user_active_at_ms, draft, decision_draft, untaken, agent_opened, open_approvals, reply_outcome
+        ON sessions
+        WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    ALTER TABLE sessions DROP COLUMN prompt_cache;
+";

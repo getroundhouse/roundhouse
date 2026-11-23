@@ -9,9 +9,11 @@ mod account;
 mod github;
 mod kinds;
 mod observed;
+mod session;
 pub use account::AccountIdentity;
 pub use github::{
     IssueSaid, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReferenceSaid,
 };
 pub use kinds::{Observation, ObservationKey, ReadFrom};
 pub use observed::Observed;
+pub use session::ConversationCache;

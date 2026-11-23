@@ -41,6 +41,7 @@ impl Revised for Observation {
             | Observation::AccountLimits { .. }
             | Observation::SessionContext { .. }
             | Observation::SessionTodos { .. }
+            | Observation::SessionCache { .. }
             | Observation::Unknown => None,
         }
     }

@@ -94,6 +94,12 @@ impl Hub {
         self.change_observation::<K>(of, |_| Change::NoLongerReadAgain).await
     }
 
+    /// What the observation of `of` says, however fresh it is, for what the hub decides from it. `None` where it isn't
+    /// known, which is never taken for "none".
+    pub(crate) fn observation_value<K: Kind>(&self, of: &K::Of) -> Option<K::Value> {
+        self.observations.value_of::<K>(of)
+    }
+
     /// Whether something keeps the observation of `of` up to date now, as [`Hub::observation_kept_current`] said.
     pub(crate) fn observation_is_kept_current<K: Kind>(&self, of: &K::Of) -> bool {
         K::table(&mut self.observations.tables.lock()).kept_current(of)

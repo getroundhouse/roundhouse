@@ -9,9 +9,9 @@ use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::Settings;
 use protocol::model::{
     Account, AccountId, AccountSource, AgentKind, AttachmentId, ClientRequestId, Draft, Interaction, ModelName,
-    PromptCache, QueuedPrompt, Rev, RunId, Session, SessionId, SessionStatus, Title, Wait, WorkspaceId,
+    QueuedPrompt, Rev, RunId, Session, SessionId, SessionStatus, Title, Wait, WorkspaceId,
 };
-use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
+use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 
 /// What moving a session to another account changed besides it, as [`Store::move_session`] says.
 #[derive(Debug, PartialEq, Eq)]
@@ -19,7 +19,7 @@ pub(crate) struct Moved {
     /// The record of the account it names now, when naming it brought when the account was last used up to the
     /// session's last send, which is a change to the account's record to announce.
     pub(crate) account: Option<Account>,
-    /// Whether it forgot what was cached of the conversation.
+    /// Whether what the cache holds of the conversation is to be forgotten, as [`forgets_cache`] says.
     pub(crate) forgot_cache: bool,
 }
 
@@ -30,9 +30,8 @@ columns! {
     pub(in super::super) struct SessionColumns {
         id, workspace_id, agent, model, mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id,
         agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held,
-        turn_started_at_ms, effort, account_id, user_active_at_ms, prompt_cache, draft, decision_draft, untaken,
-        open_approvals, reply_outcome, agent_capabilities, account_source, placed_automatically, needs_an_account,
-        conversation,
+        turn_started_at_ms, effort, account_id, user_active_at_ms, draft, decision_draft, untaken, open_approvals,
+        reply_outcome, agent_capabilities, account_source, placed_automatically, needs_an_account, conversation,
     } then {
         waits = "(SELECT json_group_array(json_object('id', id, 'session_id', session_id, 'workspace_id', workspace_id,
             'number', number, 'call', call, 'until', until, 'started_at_ms', started_at_ms, 'watching', json(watch)))
@@ -88,8 +87,8 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             account: row.at::<Option<String>>(c.account_id)?.map(AccountId::from),
             account_source: maybe_text_at::<AccountSource>(row, c.account_source)?,
             user_active_at_ms: row.at(c.user_active_at_ms)?,
-            // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next asks.
-            prompt_cache: json_at(row, c.prompt_cache)?,
+            // An observation, as `context` is.
+            prompt_cache: None,
             // The same.
             todos: None,
             // Written only by this hub, as JSON. One it can't read is as good as nothing typed.
@@ -149,7 +148,6 @@ impl Store {
             effort: &text_of(&session.effort),
             account_id: &session.account.as_ref().map(AccountId::as_str),
             user_active_at_ms: &session.user_active_at_ms,
-            prompt_cache: &session.prompt_cache.as_ref().map(serde_json::to_string).transpose()?,
             draft: &draft_column(&session.draft)?,
             decision_draft: &session.decision_draft.as_ref().map(serde_json::to_string).transpose()?,
             untaken: &serde_json::to_string(session.untaken.as_deref().unwrap_or_default())?,
@@ -230,18 +228,9 @@ impl Store {
         Ok(())
     }
 
-    /// What the API's cache holds of the session's conversation from here on, or `None` once it holds none of it.
-    pub fn set_session_cache(&self, id: &SessionId, cache: Option<&PromptCache>) -> Result<(), StoreError> {
-        lock(&self.writer).execute(
-            "UPDATE sessions SET prompt_cache = ? WHERE id = ?",
-            params![cache.map(serde_json::to_string).transpose()?, id.as_str()],
-        )?;
-        Ok(())
-    }
-
     /// Moves the session to `account`: puts it on the hub's login for it, which its record names, since no agent under
     /// another is left and its next launch runs under it, so the limits shown, and what the person sends from here, are
-    /// that account's, and forgets another account's cache, as [`forget_cache_unless_under`] says. One transaction, so
+    /// that account's, and says whether another account's cache is to be forgotten, as [`forgets_cache`] says. One transaction, so
     /// a hub that stops partway leaves the session as it was.
     pub(crate) fn move_session(&self, id: &SessionId, account: &AccountId) -> Result<Moved, StoreError> {
         let mut conn = lock(&self.writer);
@@ -258,7 +247,7 @@ impl Store {
             [id.as_str()],
         )?;
         let named = name_account(&tx, id, Some(account))?;
-        let forgot_cache = forget_cache_unless_under(&tx, id, named.before.as_ref(), account)?;
+        let forgot_cache = forgets_cache(named.before.as_ref(), account);
         tx.commit()?;
         Ok(Moved { account: named.account, forgot_cache })
     }
@@ -331,20 +320,11 @@ impl Store {
     }
 }
 
-/// Forgets what the API's cache holds of `session`'s conversation, which goes on under `account` from here, where its
-/// record named `before`. Another account's cache may not hold it, as one in another organization doesn't, so after
-/// one, or after a record that named none, which can't say whose the cache was, nothing is cached, and the first
-/// request under `account` isn't taken for one that found the cache expired. Whether it forgot any. Not announced,
-/// since what put the conversation on `account` changed the record, and announces it.
-pub(in super::super) fn forget_cache_unless_under(
-    conn: &Connection,
-    session: &SessionId,
-    before: Option<&AccountId>,
-    account: &AccountId,
-) -> rusqlite::Result<bool> {
-    Ok(before != Some(account)
-        && conn.execute(
-            "UPDATE sessions SET prompt_cache = NULL WHERE id = ? AND prompt_cache IS NOT NULL",
-            [session.as_str()],
-        )? > 0)
+/// Whether what the API's cache holds of `session`'s conversation, which goes on under `account` from here, where its
+/// record named `before`, is to be forgotten. Another account's cache may not hold it, as one in another organization
+/// doesn't, so after one, or after a record that named none, which can't say whose the cache was, nothing is cached,
+/// and the first request under `account` isn't taken for one that found the cache expired. The hub keeps what the
+/// cache holds, as an observation, so it forgets it, and the record doesn't change.
+pub(in super::super) fn forgets_cache(before: Option<&AccountId>, account: &AccountId) -> bool {
+    before != Some(account)
 }

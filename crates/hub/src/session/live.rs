@@ -16,7 +16,7 @@ use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentKind, AgentSessionId, PromptCache, RunId, Seq, Session, SessionId, SessionStatus, SubagentId, WorkspaceId,
+    AgentKind, AgentSessionId, RunId, Seq, Session, SessionId, SessionStatus, SubagentId, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::Delivery;
@@ -82,8 +82,8 @@ pub(super) struct LiveState {
     pub(super) progress: Progress,
     pub(super) tail: Tail,
     pub(super) version: u64,
-    /// What the API's cache holds of the conversation, as the session's record says.
-    pub(super) prompt_cache: Option<PromptCache>,
+    /// What the API's cache holds of the conversation, as the session last heard, which starts as the hub last told it.
+    pub(super) prompt_cache: super::cache::CacheHeld,
     /// Which account a launch of the agent runs under, learnt as it launches, for filing what it hears.
     pub(super) hearing: Option<(RunId, limits::Hearing)>,
     /// The agent running, or being started. Events from any other run are leftovers from one that has
@@ -190,7 +190,7 @@ impl LiveSession {
                 progress,
                 tail: Tail::default(),
                 version: 0,
-                prompt_cache: stored.session.prompt_cache.clone(),
+                prompt_cache: super::cache::CacheHeld::told_of(hub, &stored.session),
                 hearing: None,
                 agent,
                 recorded,
@@ -332,7 +332,7 @@ impl LiveSession {
         }
         // Another model's cache doesn't hold the conversation, so the next request finds nothing cached.
         if change.model.is_some_and(|model| model != was.model) {
-            self.keep_cache(None).await;
+            self.forget_cache().await;
         }
         self.announce(&hub).await
     }

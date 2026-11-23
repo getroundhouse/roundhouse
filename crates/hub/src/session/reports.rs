@@ -22,6 +22,7 @@ impl LiveSession {
         match report {
             Report::Context { context } => {
                 self.agent_said::<SessionContext>(run, context, "how full the agent's context is").await;
+                self.tell_cache_worth_telling().await;
             }
             Report::Todos(todos) => self.agent_said::<SessionTodos>(run, todos, "the agent's to-do list").await,
             // Sent when the hub took it, by the hub's clock, less how long the model took to start answering.

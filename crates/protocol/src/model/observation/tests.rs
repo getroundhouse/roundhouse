@@ -1,6 +1,6 @@
 use super::{
-    AccountIdentity, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReadFrom,
-    ReferenceSaid,
+    AccountIdentity, ConversationCache, Observation, ObservationKey, Observed, OwnPullRequestDetail,
+    OwnPullRequestSaid, ReadFrom, ReferenceSaid,
 };
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
@@ -128,7 +128,7 @@ fn of_an_account() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
 
 /// Of each kind of what an agent says of its chat.
 fn of_a_session() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
-    vec![session_context(), session_todos()]
+    vec![session_context(), session_todos(), session_cache()]
 }
 
 /// How full a session's context is, with its key and revision, and how it's sent.
@@ -158,6 +158,21 @@ fn session_todos() -> (Observation, ObservationKey, Rev, Sent) {
         ObservationKey::SessionTodos { session_id: "s".into() },
         Rev::new(12),
         (Some(Level::Session { id: "s".into() }), Some(ReadFrom::EveryObservation)),
+    )
+}
+
+/// What the API's cache holds of a session's conversation, with its key and revision, and how it's sent.
+fn session_cache() -> (Observation, ObservationKey, Rev, Sent) {
+    let cache = ConversationCache { held: None, worth_telling: true };
+    (
+        Observation::SessionCache {
+            session_id: "s".into(),
+            cache: Observed::AsOf { value: cache, as_of_ms: 1_000 },
+            rev: Rev::new(13),
+        },
+        ObservationKey::SessionCache { session_id: "s".into() },
+        Rev::new(13),
+        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
     )
 }
 
