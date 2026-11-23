@@ -71,7 +71,7 @@ async fn a_prompt_sent_during_setup_is_recorded_at_once_and_given_once_setup_has
 
 /// Commands run one at a time, so once its prompt is dropped, the chat has dealt with it. Nothing is asked of a worker
 /// for it: the file the prompt carries doesn't go in the worktree, which only an agent would read, and a workspace whose
-/// worker went while setup ran doesn't have one started for it.
+/// worker went while setup ran doesn't have one started for it. Its title, which every first prompt has asked for, is.
 #[tokio::test(flavor = "multi_thread")]
 async fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() {
     let mut failed = Vec::new();
@@ -87,6 +87,11 @@ async fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() 
         let file = added.await.unwrap();
         let prompt = Prompt::carrying("go", vec![file.id]);
         let (seq, _) = hub.session_prompt(chat.id.clone(), None, prompt, None).await.unwrap();
+        // A chat's first prompt has the hub ask the workspace's worker for a title, on a task of its own, which starts
+        // a worker if the workspace has none, as it would for any title, so it's asked before the worker goes.
+        let titled =
+            || !asked.requests(|request| matches!(request, WorkerRequest::TitleFor(_)).then_some(())).is_empty();
+        waiting::task::until(TIMEOUT, "the title to be asked for", titled).await;
 
         tokio::time::timeout(TIMEOUT, hub.session_close(chat.id.clone())).await.expect("closing waited").unwrap();
         if worker_went {

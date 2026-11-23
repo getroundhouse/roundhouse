@@ -26,6 +26,10 @@ async fn a_worktree_whose_status_cant_be_read_is_archived_only_when_forced() {
         waiting::task::until(TIMEOUT, "the first setup to finish", || hub.setup_gates.lock().is_empty()).await;
         a_turn(&hub, &asked, &chat.id, Prompt::new("go"), None).await;
         workspace_lines::tests::read(&hub, &workspace.id).await;
+        // Once the settling of the workspace's other worktrees, which taking on its worker starts on a task of its own,
+        // has finished, so it doesn't find the one added next and ask after it while the archive is counted. It takes
+        // this gate first, which it has by now, since the test's single thread has run it at an await since.
+        drop(hub.child_gate(&workspace.id).write_owned().await);
         let other = ChildWorktree {
             workspace_id: workspace.id.clone(),
             session_id: chat.id.clone(),
