@@ -5,9 +5,11 @@
 #[cfg(test)]
 mod tests;
 
+mod account;
 mod github;
 mod kinds;
 mod observed;
+pub use account::AccountIdentity;
 pub use github::{
     IssueSaid, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReferenceSaid,
 };

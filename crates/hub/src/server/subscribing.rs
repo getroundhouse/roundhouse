@@ -12,6 +12,7 @@ use tokio::task::AbortHandle;
 
 use super::pump::{Following, pump};
 use super::{Connection, Outgoing};
+use crate::hub::Fed;
 use crate::hub::{Followed, Hub};
 use crate::server::sends::Sends;
 
@@ -72,7 +73,7 @@ pub(super) async fn follow_log(
 /// Starts feeding a subscription to the hub's feed.
 pub(super) fn follow_feed(hub: &Arc<Hub>, connection: &Connection, subscription_id: u64) -> Result<(), ApiError> {
     add_subscription(hub, connection, subscription_id, Followed::Hub, || {
-        tokio::spawn(pump_feed(hub.subscribe_feed(), subscription_id, connection.frames.clone())).abort_handle()
+        tokio::spawn(pump_feed(hub.subscribe_fed(), subscription_id, connection.frames.clone())).abort_handle()
     })
 }
 
@@ -107,15 +108,11 @@ pub(super) fn taken(subscription_id: u64) -> ApiError {
 }
 
 /// Sends subscription `subscription_id` each notice of `feed` that `FeedSubscribe` is sent, as [`Sends::feed`] says.
-async fn pump_feed(
-    mut feed: broadcast::Receiver<Arc<HubNotice>>,
-    subscription_id: u64,
-    frames: mpsc::Sender<Outgoing>,
-) {
+async fn pump_feed(mut feed: broadcast::Receiver<Fed>, subscription_id: u64, frames: mpsc::Sender<Outgoing>) {
     let sends = Sends::feed();
     loop {
         let notice = match feed.recv().await {
-            Ok(notice) if sends.notice(&notice) => Arc::unwrap_or_clone(notice),
+            Ok(told) if sends.notice(&told) => Arc::unwrap_or_clone(told.notice),
             Ok(_) => continue,
             Err(broadcast::error::RecvError::Lagged(_)) => HubNotice::Resync,
             Err(broadcast::error::RecvError::Closed) => return,

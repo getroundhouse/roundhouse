@@ -3,12 +3,13 @@ use super::super::sessions::on_the_hubs;
 use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock, rev_of, text_at, text_of};
 use protocol::model::{Account, AccountId, AgentAccount, LimitWindow, ModelLabel, Reserve, Rev, SessionId, UsageLimit};
 use rusqlite::{Connection, OptionalExtension as _, params};
+use std::collections::HashSet;
 
 /// What filing a launch's account changed, so the hub announces only what did.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Launched {
-    /// The account's record, when it's new or says someone else now, or when the session's record came to name it and
-    /// that brought when it was last used up to the session's.
+    /// The account's record, when it's new, or when the session's record came to name it and that brought when it was
+    /// last used up to the session's.
     pub account: Option<Account>,
     /// The session's record changed: it names another account than it did, or it's on the ambient login now.
     pub session: bool,
@@ -29,10 +30,11 @@ pub(in super::super) fn accounts(conn: &Connection) -> rusqlite::Result<Vec<Acco
 
 columns! {
     /// What an account's record reads of its row, before its [`LoginColumns`].
-    struct AccountColumns { id, model_provider, plan, login, email, rev, name, used_at_ms, reserve_percent }
+    struct AccountColumns { id, rev, name, used_at_ms, reserve_percent }
 }
 
-/// The record of `id`, with what's left of its limits. `None` for an account with none.
+/// The record of `id`, with what's left of its limits, and none of who it is, which is an observation that
+/// `crate::hub::observations::OldForm` fills it with as it leaves the hub. `None` for an account with none.
 pub(in super::super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::Result<Option<Account>> {
     let Some(mut account) = conn
         .query_row(
@@ -49,10 +51,10 @@ pub(in super::super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::
                 let (id_from, held) = login_at(row, LoginColumns::at(AccountColumns::COUNT))?;
                 Ok(Account {
                     id: row.at::<String>(c.id)?.into(),
-                    model_provider: row.at(c.model_provider)?,
-                    plan: row.at(c.plan)?,
-                    login: row.at(c.login)?,
-                    email: row.at(c.email)?,
+                    model_provider: None,
+                    plan: None,
+                    login: None,
+                    email: None,
                     name: row.at(c.name)?,
                     login_agent: match id_from {
                         IdFrom::Hub(agent) => Some(agent),
@@ -169,8 +171,8 @@ impl Store {
         Ok((before != Some(record.rev)).then_some(record))
     }
 
-    /// Files that `session`'s agent launched under `under`, as its worker read it: who the account is, and that the
-    /// session's agent runs under it. A login that can't be told from another, or nobody logged in, leaves the session
+    /// Files that `session`'s agent launched under `under`, as its worker read it: that the account is there, and that
+    /// the session's agent runs under it. Who the account is, the hub keeps as an observation. A login that can't be told from another, or nobody logged in, leaves the session
     /// naming none, since there's no record to name. A session on the hub's login goes on naming the account it's on,
     /// as `on_the_hubs` says, whatever an agent under another login says.
     ///
@@ -188,27 +190,34 @@ impl Store {
         Ok(limits_of(&lock(&self.reader), account)?)
     }
 
+    /// Every account's ID.
+    pub(crate) fn account_ids(&self) -> Result<HashSet<AccountId>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn.prepare("SELECT id FROM accounts")?;
+        let ids = statement.query_map([], OneValue::read::<String>)?;
+        Ok(ids.map(|id| id.map(AccountId::from)).collect::<rusqlite::Result<_>>()?)
+    }
+
     /// The record of `id`. `None` for an account with none.
     pub fn account(&self, id: &AccountId) -> Result<Option<Account>, StoreError> {
         Ok(account(&lock(&self.reader), id)?)
+    }
+
+    /// Moves the revision of `id`'s record, since who the account is changed, which the record holds the old form of,
+    /// and returns the record. `None` for an account with none.
+    pub(in super::super) fn account_moved(&self, id: &AccountId) -> Result<Option<Account>, StoreError> {
+        let conn = lock(&self.writer);
+        // Moves the revision, as `accounts_rev_on_update` does for any update that doesn't.
+        conn.execute("UPDATE accounts SET id = id WHERE id = ?", [id.as_str()])?;
+        Ok(account(&conn, id)?)
     }
 }
 
 /// What [`Store::launched_under`] does, in its transaction.
 fn launched_under(tx: &Connection, session: &SessionId, under: &AgentAccount) -> rusqlite::Result<Launched> {
     let id = under.logged_in_as();
-    let who_changed = match id {
-        Some(id) => {
-            tx.execute(
-                "INSERT INTO accounts (id, model_provider, plan, login, email) VALUES (?1, ?2, ?3, ?4, ?5)
-                     ON CONFLICT (id) DO UPDATE
-                     SET model_provider = excluded.model_provider, plan = excluded.plan, login = excluded.login,
-                         email = excluded.email
-                     WHERE model_provider IS NOT excluded.model_provider OR plan IS NOT excluded.plan
-                         OR login IS NOT excluded.login OR email IS NOT excluded.email",
-                params![id.as_str(), under.model_provider, under.plan, under.login, under.email],
-            )? > 0
-        }
+    let made = match id {
+        Some(id) => tx.execute("INSERT INTO accounts (id) VALUES (?) ON CONFLICT (id) DO NOTHING", [id.as_str()])? > 0,
         None => false,
     };
     let on_the_hubs = on_the_hubs(tx, session)?;
@@ -222,7 +231,7 @@ fn launched_under(tx: &Connection, session: &SessionId, under: &AgentAccount) ->
         )? > 0;
     let account = match (named, id) {
         (Some(record), _) => Some(record),
-        (None, Some(id)) if who_changed => Some(account_or_missing(tx, id)?),
+        (None, Some(id)) if made => Some(account_or_missing(tx, id)?),
         (None, _) => None,
     };
     Ok(Launched { account, session: named_another || ambient, ambient })

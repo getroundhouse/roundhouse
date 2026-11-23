@@ -5,12 +5,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use github::References;
-use protocol::client::{HubNotice, ObservationNotice};
+use protocol::client::ObservationNotice;
 use protocol::model::{
     About, GithubRepositoryName, Issue, IssueNumber, IssueSaid, IssueState, IssueSummary, Observation, ObservationKey,
     Observed, Read, Reference, ReferenceAsk, ReferenceSaid,
 };
-use tokio::sync::broadcast;
 
 use crate::hub::tests::hub_on_github_with;
 use crate::hub::{Followed, Hub};
@@ -79,7 +78,7 @@ async fn read_again(hub: &Hub, asks: &[ReferenceAsk]) {
 }
 
 /// The next notice the feed tells of an observation.
-async fn next(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> ObservationNotice {
+async fn next(feed: &mut crate::hub::Notices) -> ObservationNotice {
     let next = async {
         loop {
             if let Ok(notice) = ObservationNotice::try_from(std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()))
@@ -92,10 +91,7 @@ async fn next(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Obse
 }
 
 /// The next copy the feed tells of `ask`'s observation, as it says it, with its revision.
-async fn next_of(
-    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
-    ask: &ReferenceAsk,
-) -> (Observed<ReferenceSaid>, u64) {
+async fn next_of(feed: &mut crate::hub::Notices, ask: &ReferenceAsk) -> (Observed<ReferenceSaid>, u64) {
     let ObservationNotice::Copy(Observation::Reference { reference, said, rev }) = next(feed).await else {
         panic!("not a copy of a chip's")
     };

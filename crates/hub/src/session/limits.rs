@@ -110,7 +110,7 @@ impl LiveSession {
         let mut retries = RETRIES.iter();
         let account = loop {
             let e = match hub.account_of(&self.workspace_id, self.agent).await {
-                Ok(account) => break account,
+                Ok(account) => break (account, crate::store::now_ms()),
                 Err(e) => e,
             };
             debug!(session = %self.id, "could not learn which account the agent runs under: {e}");
@@ -123,6 +123,7 @@ impl LiveSession {
                 return;
             }
         };
+        let (account, read_at_ms) = account;
         let id = account.logged_in_as().cloned();
         let waiting = {
             // Held as events are recorded, from making sure this is still the launch going until the session's record
@@ -130,7 +131,7 @@ impl LiveSession {
             // be overwritten, and the feed hears each copy of the record in the order they were made.
             let _in_order = self.recording.lock().await;
             let Some(waiting) = self.known(run, id.clone()) else { return };
-            self.file_account(&hub, account).await;
+            self.file_account(&hub, account, read_at_ms).await;
             waiting
         };
         if let (Some(id), Some(heard)) = (id, waiting) {
@@ -195,11 +196,11 @@ impl LiveSession {
         }
     }
 
-    /// Files that the agent going launched under `account`, on the account's record and the session's, and announces
-    /// the session's if that changed it. The session's copy follows the record onto the ambient login, as the store
+    /// Files that the agent going launched under `account`, as its worker read it at `read_at_ms`, on the account's
+    /// record and the session's, and announces the session's if that changed it. The session's copy follows the record onto the ambient login, as the store
     /// puts a session on none there once the worker says whose login it is.
-    async fn file_account(&self, hub: &Hub, account: AgentAccount) {
-        match hub.launched_under(&self.id, account).await {
+    async fn file_account(&self, hub: &Hub, account: AgentAccount, read_at_ms: i64) {
+        match hub.launched_under(&self.id, account, read_at_ms).await {
             Ok(launched) => {
                 if launched.ambient {
                     self.state.lock().login = SessionLogin::Ambient;

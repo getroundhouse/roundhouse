@@ -2,8 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
-use crate::model::{ChangeSummary, Level, LineCounts, ReferenceAsk, RepositoryUnseen, Rev, WorkspaceId};
+use super::{AccountIdentity, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
+use crate::model::{AccountId, ChangeSummary, Level, LineCounts, ReferenceAsk, RepositoryUnseen, Rev, WorkspaceId};
 
 /// One observation, of any kind, with what it's of, its revision and what it says, as a list or the feed gives it. A
 /// client keeps whichever copy has the newer revision, as it keeps a record, by [`Observation::key`]. A kind this build
@@ -30,6 +30,11 @@ pub enum Observation {
     /// What GitHub says of an issue or a pull request, as a chip draws it. Sent at the level of that issue or pull
     /// request, by the ask as the client follows it, so two that name it in another case are two observations.
     Reference { reference: ReferenceAsk, said: Observed<ReferenceSaid>, rev: Rev },
+    /// Who an agent's account is, as a worker last read it from the agent's login, which it does after a launch on a
+    /// login on the worker's machine. Sent at the hub's level, since every view of an account names it. Never current,
+    /// since nothing tells the hub when it changes. A client of a version from before it reads it on the account's
+    /// record, as [`ReadFrom::EveryObservation`] says.
+    AccountIdentity { account: AccountId, identity: Observed<AccountIdentity>, rev: Rev },
     #[serde(other)]
     Unknown,
 }
@@ -57,6 +62,9 @@ pub enum ObservationKey {
     Reference {
         reference: ReferenceAsk,
     },
+    AccountIdentity {
+        account: AccountId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -81,6 +89,9 @@ impl Observation {
                 ObservationKey::WorkspaceRepositoryUnseen { workspace_id: workspace_id.clone() }
             }
             Observation::Reference { reference, .. } => ObservationKey::Reference { reference: reference.clone() },
+            Observation::AccountIdentity { account, .. } => {
+                ObservationKey::AccountIdentity { account: account.clone() }
+            }
             Observation::Unknown => ObservationKey::Unknown,
         }
     }
@@ -94,7 +105,8 @@ impl Observation {
             | Observation::WorkspacePullRequest { rev, .. }
             | Observation::WorkspacePullRequestDetail { rev, .. }
             | Observation::WorkspaceRepositoryUnseen { rev, .. }
-            | Observation::Reference { rev, .. } => *rev,
+            | Observation::Reference { rev, .. }
+            | Observation::AccountIdentity { rev, .. } => *rev,
             Observation::Unknown => Rev::default(),
         }
     }
@@ -109,7 +121,9 @@ impl ObservationKey {
     /// level it can follow.
     pub fn level(&self) -> Option<Level> {
         match self {
-            ObservationKey::WorkspaceLines { .. } | ObservationKey::WorkspacePullRequest { .. } => Some(Level::Hub),
+            ObservationKey::WorkspaceLines { .. }
+            | ObservationKey::WorkspacePullRequest { .. }
+            | ObservationKey::AccountIdentity { .. } => Some(Level::Hub),
             ObservationKey::WorkspaceChanges { workspace_id }
             | ObservationKey::WorkspacePullRequestDetail { workspace_id }
             | ObservationKey::WorkspaceRepositoryUnseen { workspace_id } => {
@@ -129,6 +143,7 @@ impl ObservationKey {
             | ObservationKey::WorkspacePullRequestDetail { .. }
             | ObservationKey::WorkspaceRepositoryUnseen { .. }
             | ObservationKey::Reference { .. } => Some(ReadFrom::GithubObserved),
+            ObservationKey::AccountIdentity { .. } => Some(ReadFrom::EveryObservation),
             ObservationKey::Unknown => None,
         }
     }
@@ -151,4 +166,7 @@ pub enum ReadFrom {
     /// [`EVERY_OBSERVATION_FROM`](crate::client::EVERY_OBSERVATION_FROM) or newer whatever it says, since a client
     /// from before reads it as `HubFrame::Github`.
     GithubObserved,
+    /// A subscription of [`EVERY_OBSERVATION_FROM`](crate::client::EVERY_OBSERVATION_FROM) or newer, since a client
+    /// from before reads it in the form it replaced, as a field of a record that the hub fills from it.
+    EveryObservation,
 }

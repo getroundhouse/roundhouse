@@ -33,6 +33,7 @@ mod made;
 #[cfg(any(test, feature = "testing"))]
 mod migrated;
 mod new_workspace_draft;
+mod old_forms;
 #[cfg(test)]
 pub(crate) mod older;
 mod prompts;
@@ -46,6 +47,8 @@ mod run_logins;
 #[cfg(test)]
 mod same_again;
 mod schema;
+#[cfg(test)]
+pub(crate) use schema::BEFORE_ACCOUNT_IDENTITY_OBSERVED;
 mod sent;
 mod sessions;
 mod subagents;

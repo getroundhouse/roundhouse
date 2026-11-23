@@ -26,7 +26,7 @@ pub(super) async fn feeding(
     closer: Closer,
 ) -> Result<Feeding, ApiError> {
     // Before the list, so nothing that changes after it is missed.
-    let feed = hub.subscribe_feed();
+    let feed = hub.subscribe_fed();
     let listed = hub.records_list().await?;
     let hub = hub.clone();
     Ok(Box::pin(async move {

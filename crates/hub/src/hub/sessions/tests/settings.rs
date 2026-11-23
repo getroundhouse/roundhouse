@@ -13,7 +13,6 @@ use protocol::event::{EventBody, ExitReason};
 use protocol::model::{AgentKind, ModelName, Seq, Session, SessionId, SetupStatus};
 use protocol::prompt::Prompt;
 use protocol::worker::{SetupDone, WorkerRequest, WorkerResponse};
-use tokio::sync::broadcast;
 
 use crate::hub::Hub;
 use crate::hub::stand_in_workers::{
@@ -62,7 +61,7 @@ fn changes_asked(asked: &Asked, chat: &SessionId) -> Vec<Settings> {
 }
 
 /// The newest record of `chat` the feed has told of so far.
-fn last_told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>, chat: &SessionId) -> Option<Session> {
+fn last_told(feed: &mut crate::hub::Notices, chat: &SessionId) -> Option<Session> {
     std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone))
         .filter_map(|notice| {
             let HubNotice::Session(told) = notice else { return None };

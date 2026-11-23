@@ -2,7 +2,6 @@
 
 use protocol::client::HubNotice;
 use protocol::model::{LineCounts, Observation, Observed, Rev};
-use tokio::sync::broadcast;
 
 use crate::hub::Hub;
 pub(super) use crate::hub::tests::changes;
@@ -29,12 +28,12 @@ pub(super) async fn listed(hub: &Hub) -> (Vec<Observation>, Rev) {
 }
 
 /// What the feed has told since it was last read.
-pub(super) fn told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Vec<HubNotice> {
+pub(super) fn told(feed: &mut crate::hub::Notices) -> Vec<HubNotice> {
     std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect()
 }
 
 /// The one notice the feed has told since it was last read, which is a copy of an observation.
-pub(super) fn told_copy(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Observation {
+pub(super) fn told_copy(feed: &mut crate::hub::Notices) -> Observation {
     match told(feed).as_slice() {
         [HubNotice::Observation(observation)] => observation.clone(),
         told => panic!("not one copy of an observation: {told:?}"),

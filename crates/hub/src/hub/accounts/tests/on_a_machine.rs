@@ -52,7 +52,10 @@ pub(super) async fn a_turn_hearing(hub: &Arc<Hub>, asked: &Asked, chat: &Session
 pub(super) async fn named(hub: &Hub, chat: &SessionId, holds: impl Fn(&Account) -> bool) -> Account {
     let named = || {
         let named = hub.store.get_session(chat).unwrap().session.account;
-        let account = named.as_ref().and_then(|id| hub.store.account(id).unwrap());
+        let mut account = named.as_ref().and_then(|id| hub.store.account(id).unwrap());
+        if let Some(account) = &mut account {
+            hub.fill_old_forms(account);
+        }
         account.filter(&holds).ok_or_else(|| format!("the chat names {named:?}"))
     };
     waiting::task::until_ok(TIMEOUT, named).await

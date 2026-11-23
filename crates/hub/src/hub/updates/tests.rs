@@ -10,8 +10,6 @@ use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, KeyPair as _};
 use update_feed::UpdateFeedKey;
 
-use tokio::sync::broadcast::Receiver;
-
 use super::UpdateFeed;
 use super::looking::Source;
 use crate::hub::stand_in_workers::TIMEOUT;
@@ -168,7 +166,7 @@ async fn found_update(dir: &std::path::Path, archive: &[u8], served: Reply) -> (
 }
 
 /// What the hub tells of next that `wanted` takes.
-async fn told(notices: &mut Receiver<std::sync::Arc<HubNotice>>, wanted: impl Fn(&HubUpdate) -> bool) -> HubUpdate {
+async fn told(notices: &mut crate::hub::Notices, wanted: impl Fn(&HubUpdate) -> bool) -> HubUpdate {
     let told = tokio::time::timeout(TIMEOUT, async {
         loop {
             if let Ok(HubNotice::HubUpdate(update)) = notices.recv().await.map(std::sync::Arc::unwrap_or_clone)

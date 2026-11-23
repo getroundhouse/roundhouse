@@ -29,7 +29,7 @@ pub(super) async fn feeding(
 ) -> Result<(Feeding, oneshot::Receiver<()>), ApiError> {
     hub.workspace(&id).await?;
     // Before the list, so nothing that changes after it is missed.
-    let feed = hub.subscribe_feed();
+    let feed = hub.subscribe_fed();
     let first = listed(hub, &id).await?;
     let (queued, is_queued) = oneshot::channel();
     let hub = hub.clone();

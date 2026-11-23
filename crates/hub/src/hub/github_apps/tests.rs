@@ -10,7 +10,6 @@ use protocol::client::github_apps::GithubManifestCode;
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::model::{GithubApp, GithubAppId, GithubToken, RecordKey};
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
-use tokio::sync::broadcast;
 
 use crate::hub::Hub;
 use crate::hub::tests::hub_calling_github;
@@ -48,7 +47,7 @@ async fn made(hub: &Hub) -> GithubApp {
 }
 
 /// Every notice in `feed` so far.
-fn told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Vec<HubNotice> {
+fn told(feed: &mut crate::hub::Notices) -> Vec<HubNotice> {
     std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect()
 }
 

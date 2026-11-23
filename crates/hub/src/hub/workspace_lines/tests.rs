@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use protocol::client::{ApiError, ErrorCode, HubNotice, ObservationNotice};
+use protocol::client::{ApiError, ErrorCode, ObservationNotice};
 use protocol::model::{
     Branches, ChangeStatus, ChangeSummary, ChangedFile, Head, LineCounts, Observation, ObservationKey, Observed,
     WorkspaceId,
 };
 use protocol::prompt::Prompt;
 use protocol::worker::{SummarizeChanges, WorkerFrame, WorkerRequest, WorkerResponse};
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::oneshot;
 
 use crate::hub::Hub;
 use crate::hub::stand_in_workers::{TIMEOUT, a_chat, a_turn, answering_first, hub_with_stand_in_workers};
@@ -41,7 +41,7 @@ fn summing_up(
 }
 
 /// The next notice the feed tells of an observation.
-async fn next_observation(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> ObservationNotice {
+async fn next_observation(feed: &mut crate::hub::Notices) -> ObservationNotice {
     let next = async {
         loop {
             if let Ok(notice) = ObservationNotice::try_from(std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()))
@@ -54,7 +54,7 @@ async fn next_observation(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotic
 }
 
 /// Each notice of an observation the feed has told since it was last read.
-fn observations_told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Vec<ObservationNotice> {
+fn observations_told(feed: &mut crate::hub::Notices) -> Vec<ObservationNotice> {
     let told = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone));
     told.filter_map(|notice| ObservationNotice::try_from(notice).ok()).collect()
 }

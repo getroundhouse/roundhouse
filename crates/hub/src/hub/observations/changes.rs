@@ -8,7 +8,8 @@ use tracing::warn;
 
 use super::file::Write;
 use super::kept::{Change, Changed, Step};
-use super::kinds::Kind;
+use super::kinds::{Kind, Owner};
+use super::tables::Gone;
 use crate::hub::Hub;
 use crate::store::Store;
 
@@ -87,7 +88,7 @@ impl Hub {
     /// has, is only logged, and [`Hub::observations_of_no_workspace_gone`] forgets what's left.
     pub(crate) async fn workspace_observations_gone(&self, id: &WorkspaceId) {
         let _changing = self.observations.changing.lock().await;
-        if let Err(e) = self.forget_observations_of(&|of| of == id).await {
+        if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::Workspace(id)).await {
             warn!(%id, "forgetting the observations of a workspace that's gone: {}", e.message);
         }
     }
@@ -102,15 +103,16 @@ impl Hub {
             Err(e) => return warn!("listing workspaces to forget the observations of those gone: {}", e.message),
         };
         let have: HashSet<WorkspaceId> = workspaces.into_iter().map(|workspace| workspace.id).collect();
-        if let Err(e) = self.forget_observations_of(&|id| !have.contains(id)).await {
+        let gone = |owner: Owner<'_>| matches!(owner, Owner::Workspace(id) if !have.contains(id));
+        if let Err(e) = self.forget_observations_of(&gone).await {
             warn!("forgetting the observations of workspaces that are gone: {}", e.message);
         }
     }
 
-    /// Forgets every observation of a workspace that `gone` picks out, under one revision, since a client compares a
+    /// Forgets every observation of an owner that `gone` picks out, under one revision, since a client compares a
     /// removal's revision only with what it holds of that observation and with its level's list. The caller holds the
     /// lock every change takes. Changes nothing where there's no revision to give.
-    async fn forget_observations_of(&self, gone: &(dyn Fn(&WorkspaceId) -> bool + Sync)) -> Result<(), ApiError> {
+    async fn forget_observations_of(&self, gone: Gone<'_>) -> Result<(), ApiError> {
         let observations = &self.observations;
         if !observations.tables.lock().keep_of(gone) {
             return Ok(());
@@ -133,17 +135,30 @@ impl Hub {
     /// until clients are told, so a list of records has every change its revision takes in. Its write to the file is
     /// queued under the lock too, so the file is written in the order the changes are made, and made after, so no list
     /// waits on the file. Fails only where the database gives no revision, and then changes nothing but whether
-    /// something keeps it current.
+    /// something keeps it current. Then, outside the lock, moves the revision of the record that holds its old form, if
+    /// any, as [`Hub::old_form_moved`] says, so that record's newest copy holds what it says now.
     async fn change_observation<K: Kind>(&self, of: K::Of, change: Change<K::Value>) -> Result<(), ApiError> {
+        let old_form_on = K::old_form_on(&of);
+        if self.changed_observation::<K>(of, change).await?
+            && let Some(record) = old_form_on
+        {
+            self.old_form_moved(record).await;
+        }
+        Ok(())
+    }
+
+    /// What [`Hub::change_observation`] does under the lock every change takes. Whether it changed what clients are
+    /// told.
+    async fn changed_observation<K: Kind>(&self, of: K::Of, change: Change<K::Value>) -> Result<bool, ApiError> {
         let observations = &self.observations;
         let _changing = observations.changing.lock().await;
         let step = K::table(&mut observations.tables.lock()).step(&of, change);
         let changed = match step {
-            Step::Same => return Ok(()),
+            Step::Same => return Ok(false),
             Step::Reread(said) => {
                 observations.writer.write::<K>(of.clone(), Write::ReadAgain { read_at_ms: said.read_at_ms });
                 K::table(&mut observations.tables.lock()).reread(&of, said);
-                return Ok(());
+                return Ok(false);
             }
             Step::Changed(changed) => changed,
         };
@@ -155,7 +170,7 @@ impl Hub {
         observations.writer.write::<K>(of.clone(), write);
         let notice = K::table(&mut observations.tables.lock()).change(&of, changed, rev);
         self.tell_of_observation(notice);
-        Ok(())
+        Ok(true)
     }
 
     /// Tells clients of a change to an observation, the one place the hub sends an observation's notice. Which clients

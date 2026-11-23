@@ -4,7 +4,7 @@ use std::time::Duration;
 use protocol::client::HubNotice;
 use protocol::model::{GithubReach, GithubRepositoryName, GithubToken, RepoUrl};
 use protocol::worker::{GitCredential, PushRoute, RepoUrlReply, WorkerRequest, WorkerResponse};
-use tokio::sync::{broadcast, watch};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
 use super::super::Checks;
@@ -43,10 +43,7 @@ pub(super) fn checking(hub: &Arc<Hub>, credential: watch::Receiver<DefaultCreden
 }
 
 /// The next reach the feed tells of, within `within`.
-pub(super) async fn told_within(
-    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
-    within: Duration,
-) -> GithubReach {
+pub(super) async fn told_within(feed: &mut crate::hub::Notices, within: Duration) -> GithubReach {
     let reach = async {
         loop {
             if let HubNotice::GithubReach(reach) = std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()) {
@@ -58,6 +55,6 @@ pub(super) async fn told_within(
 }
 
 /// The next reach the feed tells of.
-pub(super) async fn told(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> GithubReach {
+pub(super) async fn told(feed: &mut crate::hub::Notices) -> GithubReach {
     told_within(feed, Duration::from_secs(5)).await
 }

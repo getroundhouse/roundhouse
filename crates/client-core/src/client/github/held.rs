@@ -58,6 +58,7 @@ impl View {
             ObservationKey::Reference { reference } => self.shown.references.contains(reference),
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspaceChanges { .. }
+            | ObservationKey::AccountIdentity { .. }
             | ObservationKey::Unknown => false,
         }
     }
@@ -146,6 +147,7 @@ impl GithubHeld {
                 }
                 ObservationKey::WorkspaceLines { .. }
                 | ObservationKey::WorkspaceChanges { .. }
+                | ObservationKey::AccountIdentity { .. }
                 | ObservationKey::Unknown => {}
             }
         }
@@ -221,6 +223,7 @@ impl GithubHeld {
             ObservationKey::Reference { reference } => self.references.contains_key(reference),
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspaceChanges { .. }
+            | ObservationKey::AccountIdentity { .. }
             | ObservationKey::Unknown => false,
         }
     }

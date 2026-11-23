@@ -12,6 +12,7 @@ use super::super::notices::forward;
 use super::given::{ok, start};
 use crate::hub::Followed;
 use crate::hub::tests::{hub_in, store_of};
+use crate::hub::{Fed, Moves};
 use crate::server::Closer;
 use crate::server::sends::Sends;
 use crate::server::tests::{Connection, WAIT};
@@ -39,7 +40,7 @@ async fn a_subscription_that_falls_behind_is_sent_where_its_level_stands_again()
     };
     // The feed holds 2, so it's left with 5 and 6 when it first reads.
     for rev in 1..=6 {
-        feed.send(std::sync::Arc::new(notice(rev))).unwrap();
+        feed.send(Fed { notice: std::sync::Arc::new(notice(rev)), moves: Moves::Anything }).unwrap();
     }
     let listed = Listed::Session(records);
     let list = || std::future::ready(Ok(listed.clone()));

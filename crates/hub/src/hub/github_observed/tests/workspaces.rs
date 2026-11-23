@@ -11,7 +11,6 @@ use protocol::model::{
     OwnPullRequestSaid, PrState, PullRequest, PullRequestLink, PullRequestLinked, RecordKey, Reference, ReferenceAsk,
     RepositoryUnseen,
 };
-use tokio::sync::broadcast;
 
 use crate::github_logins::DefaultCredential;
 use crate::hub::observations::WorkspacePullRequest;
@@ -29,10 +28,7 @@ pub(super) async fn observing(dir: &std::path::Path) -> (Arc<Hub>, PullRequests,
 }
 
 /// The next notice the feed tells of an observation of `w` that `of` picks out.
-pub(super) async fn next<T>(
-    feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>,
-    of: impl Fn(ObservationNotice) -> Option<T>,
-) -> T {
+pub(super) async fn next<T>(feed: &mut crate::hub::Notices, of: impl Fn(ObservationNotice) -> Option<T>) -> T {
     let next = async {
         loop {
             if let Ok(notice) = ObservationNotice::try_from(std::sync::Arc::unwrap_or_clone(feed.recv().await.unwrap()))
@@ -348,6 +344,7 @@ fn is_as_of(observation: &Observation) -> bool {
         Observation::WorkspaceLines { .. }
         | Observation::WorkspaceChanges { .. }
         | Observation::Reference { .. }
+        | Observation::AccountIdentity { .. }
         | Observation::Unknown => false,
     }
 }

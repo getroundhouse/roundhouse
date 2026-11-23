@@ -9,7 +9,6 @@ use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{RecordKey, Records};
 use protocol::terminal::{TerminalExit, TerminalUpdate};
 use protocol::worker::{self, RunningTerminal, TerminalStart, WorkerRequest, WorkerResponse};
-use tokio::sync::broadcast;
 use tokio::time::timeout;
 
 use crate::hub::Hub;
@@ -41,7 +40,7 @@ fn exited() -> TerminalUpdate {
     TerminalUpdate::Exited(TerminalExit { code: Some(0) })
 }
 
-async fn next(feed: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> HubNotice {
+async fn next(feed: &mut crate::hub::Notices) -> HubNotice {
     std::sync::Arc::unwrap_or_clone(timeout(Duration::from_secs(10), feed.recv()).await.expect("a notice").unwrap())
 }
 

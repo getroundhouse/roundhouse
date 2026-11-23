@@ -4,8 +4,8 @@
 use std::hash::Hash;
 
 use protocol::model::{
-    ChangeSummary, LineCounts, Observation, ObservationKey, Observed, OwnPullRequestDetail, OwnPullRequestSaid,
-    ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, WorkspaceId,
+    AccountId, ChangeSummary, LineCounts, Observation, ObservationKey, Observed, OwnPullRequestDetail,
+    OwnPullRequestSaid, RecordKey, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, WorkspaceId,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -33,24 +33,46 @@ pub(crate) trait Kind: Sized + 'static {
 
     /// Its table among the store's.
     fn table(tables: &mut Tables) -> &mut Table<Self>;
-}
 
-/// What an observation can be of, which says the workspace it's of, if any, so the store forgets it with that workspace
-/// whatever its kind, and a new kind of what's of a workspace needs nothing more to be forgotten with it.
-pub(crate) trait Subject: Clone + Eq + Hash + Serialize + DeserializeOwned + Send + Sync {
-    fn workspace(&self) -> Option<&WorkspaceId>;
-}
-
-impl Subject for WorkspaceId {
-    fn workspace(&self) -> Option<&WorkspaceId> {
-        Some(self)
+    /// The record whose field a client of a version from before this kind reads it in, as
+    /// [`OldForm`](super::old_form::OldForm) fills it, whose revision moves as the observation of `of` changes, so such a client
+    /// is sent the record again. `None` for a kind no record holds, as one every client reads as an observation, or
+    /// as a frame of its own.
+    fn old_form_on(_of: &Self::Of) -> Option<RecordKey> {
+        None
     }
 }
 
-/// A chip's issue or pull request, which is of no workspace, since chips in any chat can name it.
+/// What an observation can be of, which says what owns it, if anything, so the store forgets it with what owns it
+/// whatever its kind, and a new kind of what's of a workspace or an account needs nothing more to be forgotten with it.
+pub(crate) trait Subject: Clone + Eq + Hash + Serialize + DeserializeOwned + Send + Sync {
+    fn owner(&self) -> Option<Owner<'_>>;
+}
+
+/// What owns an observation, so it's forgotten once that's gone: as a workspace is removed, and as the hub starts on a
+/// database that lacks it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Owner<'a> {
+    Workspace(&'a WorkspaceId),
+    Account(&'a AccountId),
+}
+
+impl Subject for WorkspaceId {
+    fn owner(&self) -> Option<Owner<'_>> {
+        Some(Owner::Workspace(self))
+    }
+}
+
+/// A chip's issue or pull request, which nothing owns, since chips in any chat can name it.
 impl Subject for ReferenceAsk {
-    fn workspace(&self) -> Option<&WorkspaceId> {
+    fn owner(&self) -> Option<Owner<'_>> {
         None
+    }
+}
+
+impl Subject for AccountId {
+    fn owner(&self) -> Option<Owner<'_>> {
+        Some(Owner::Account(self))
     }
 }
 
@@ -189,5 +211,31 @@ impl Kind for WorkspaceRepositoryUnseen {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.workspace_repository_unseen
+    }
+}
+
+/// Who an agent's account is, as a worker last read it from the agent's login, sent at the hub's level. A client of a
+/// version from before it reads it on the account's record.
+pub(crate) struct AccountIdentity;
+
+impl Kind for AccountIdentity {
+    type Of = AccountId;
+    type Value = protocol::model::AccountIdentity;
+    const FORM: Form = Form { table: "account_identity", version: 1 };
+
+    fn observation(account: &AccountId, identity: Observed<Self::Value>, rev: Rev) -> Observation {
+        Observation::AccountIdentity { account: account.clone(), identity, rev }
+    }
+
+    fn key(account: &AccountId) -> ObservationKey {
+        ObservationKey::AccountIdentity { account: account.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.account_identity
+    }
+
+    fn old_form_on(account: &AccountId) -> Option<RecordKey> {
+        Some(RecordKey::Account { id: account.clone() })
     }
 }

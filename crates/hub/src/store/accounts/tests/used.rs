@@ -81,5 +81,5 @@ fn a_launch_filed_after_another_chat_used_its_account_leaves_that_later_use() {
     let launched = store.launched_under(&"s".into(), &logged_in("ada@example.com", "Max")).unwrap();
 
     assert_eq!(used_at(&store, "claude-ada@example.com"), Some(i64::MAX));
-    assert_eq!(launched.account.map(|account| account.used_at_ms), Some(Some(i64::MAX)), "who it is changed");
+    assert_eq!(launched.account, None, "nothing of its record changed");
 }
