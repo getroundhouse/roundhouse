@@ -1,8 +1,39 @@
-//! Waiting for what a watch heard to settle, which every watch of a worktree shares: the OS says a file changed, and
-//! the watch reads only once the writes have stopped, or once it's waited long enough to read anyway.
+//! What every watch of a worktree shares of what the OS says: whether it can have changed anything, and waiting for
+//! what it heard to settle, since the OS says a file changed, and the watch reads only once the writes have stopped,
+//! or once it's waited long enough to read anyway.
 
+use notify::event::{AccessKind, AccessMode};
+use notify::{Event, EventKind};
 use std::time::Duration;
 use tokio::sync::{Notify, watch};
+
+/// What the OS told a watch, before the watch looks at which paths it's of.
+#[derive(Debug)]
+pub(crate) enum Told<'a> {
+    /// The OS dropped what it had to say, as when its queue fills, or the watcher failed, so anything may have changed.
+    LostTrack,
+    /// A file was opened, read or closed without being written to, which inotify tells of too, and which changes
+    /// nothing. Every git command opens `HEAD` and the config, and a watch reads what it watches, so counting these,
+    /// a watch's own reads would wake it again, and every other worker's on the same files, for ever.
+    NothingWritten,
+    /// Something may have changed at the event's paths.
+    Changed(&'a Event),
+}
+
+impl<'a> Told<'a> {
+    pub(crate) fn of(event: &'a notify::Result<Event>) -> Self {
+        let Ok(event) = event else { return Self::LostTrack };
+        if event.need_rescan() {
+            return Self::LostTrack;
+        }
+        if let EventKind::Access(access) = event.kind
+            && access != AccessKind::Close(AccessMode::Write)
+        {
+            return Self::NothingWritten;
+        }
+        Self::Changed(event)
+    }
+}
 
 /// How a watch waits before it reads again.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,7 +94,33 @@ impl Settling {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use notify::event::{CreateKind, DataChange, Flag, ModifyKind};
     use std::sync::Arc;
+
+    /// A write, a file's close after one, and a file made can each have changed something, a read or a close after one
+    /// can't, and the OS losing track or failing may have changed anything.
+    #[test]
+    fn only_what_writes_or_loses_track_is_told_as_a_change() {
+        let event = |kind| Ok(Event::new(kind).add_path("/w/a.rs".into()));
+        let cases = [
+            (event(EventKind::Modify(ModifyKind::Data(DataChange::Any))), "changed"),
+            (event(EventKind::Access(AccessKind::Close(AccessMode::Write))), "changed"),
+            (event(EventKind::Create(CreateKind::File)), "changed"),
+            (event(EventKind::Access(AccessKind::Open(AccessMode::Read))), "nothing written"),
+            (event(EventKind::Access(AccessKind::Close(AccessMode::Read))), "nothing written"),
+            (Ok(Event::new(EventKind::Other).set_flag(Flag::Rescan)), "lost track"),
+            (Err(notify::Error::generic("the watcher failed")), "lost track"),
+        ];
+
+        for (event, said) in &cases {
+            let told = match Told::of(event) {
+                Told::LostTrack => "lost track",
+                Told::NothingWritten => "nothing written",
+                Told::Changed(_) => "changed",
+            };
+            assert_eq!(told, *said, "{event:?}");
+        }
+    }
 
     const SETTLING: Settling = Settling {
         quiet: Duration::from_millis(100),

@@ -27,7 +27,7 @@ pub use making::prepare_workspace;
 use making::{made_there, make_on_branch, make_on_new_branch};
 pub use names::names_git_has;
 use names::no_branch_in_the_way;
-pub(crate) use paths::{path_for_git, path_from_git};
+pub(crate) use paths::{nul_separated, path_for_git, path_from_git};
 pub use removal::remove_workspace;
 pub use repo_url::repo_url;
 pub(crate) use repository_variables::in_no_repository;

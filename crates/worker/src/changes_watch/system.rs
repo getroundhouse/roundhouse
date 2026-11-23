@@ -52,7 +52,7 @@ fn started(heard: &Arc<Heard>) -> Option<Box<dyn Watching>> {
 /// for each folder, so a folder watched under a link's name too is told of under one of the two.
 pub(super) fn os_watcher(heard: &Arc<Heard>) -> notify::Result<RecommendedWatcher> {
     let heard = heard.clone();
-    RecommendedWatcher::new(move |event| heard.hear(event), Config::default().with_follow_symlinks(false))
+    RecommendedWatcher::new(move |event| heard.hear(&event), Config::default().with_follow_symlinks(false))
 }
 
 /// The folders directly in `folder` that a watch can hold: real folders, not links to one, and not git's own.

@@ -1,4 +1,4 @@
-use super::Worktrees;
+use super::{Worktrees, nul_separated};
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{BranchName, CommitId, GitDiff, GitFile, GitStatus};
@@ -106,8 +106,8 @@ pub(crate) async fn list_nul_separated(
     args: &[String],
 ) -> Result<Vec<String>, ApiError> {
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    let output = git_ok(given, repo, &args).await?;
-    Ok(output.split('\0').filter(|f| !f.is_empty()).map(str::to_string).collect())
+    let output = git_ok_bytes(given, repo, &args).await?;
+    Ok(nul_separated(&output).map(|path| String::from_utf8_lossy(path).into_owned()).collect())
 }
 
 /// The commit `name` is in the worktree at `cwd`: a branch, a tag, a commit or `HEAD`. `None` if it's none there, as
@@ -259,18 +259,19 @@ pub async fn diff(given: &Environment, worktree_path: &str, base_ref: Option<&st
     };
     // Beside the diff of what git tracks, since neither changes anything. Its failure is taken first, whichever
     // finishes first.
-    let untracked = git_ok(given, worktree, &["ls-files", "--others", "--exclude-standard", "-z"]);
+    let untracked = git_ok_bytes(given, worktree, &["ls-files", "--others", "--exclude-standard", "-z"]);
     let (tracked, untracked) = tokio::join!(tracked, untracked);
     let (base, mut patch) = tracked?;
     let untracked = untracked?;
 
     let mut truncated = false;
-    for (i, file) in untracked.split('\0').filter(|f| !f.is_empty()).enumerate() {
+    for (i, file) in nul_separated(&untracked).enumerate() {
         if i >= MAX_UNTRACKED_FILES || patch.len() > MAX_UNTRACKED_BYTES {
             truncated = true;
             break;
         }
-        let args = ["diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", file];
+        let file = String::from_utf8_lossy(file);
+        let args = ["diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", &*file];
         patch.push_str(&git(given, worktree, &args).await?.compared()?);
     }
     Ok(GitDiff { base_commit: base, patch, truncated })
