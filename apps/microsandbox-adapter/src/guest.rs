@@ -69,14 +69,12 @@ pub(crate) fn worker_env() -> Vec<(String, String)> {
     env.into_iter().map(|(key, value)| (key.to_owned(), value.to_owned())).collect()
 }
 
-/// The arguments that end the worker and what it left, such as its agents, as the worker itself finds them, at once
-/// if `now`.
-pub(crate) fn end_worker_args(now: bool) -> Vec<String> {
-    let mut args = vec!["end-worker".to_owned(), "--state-dir".to_owned(), STATE_DIR.to_owned()];
-    if now {
-        args.push("--now".to_owned());
-    }
-    args
+/// The script that ends the worker and what it left, such as its agents, as the worker itself finds them, at once if
+/// `now`. A sandbox the hub gave no worker yet, as one just made, has none to end, so that's done at once: the hub
+/// clears an instance before it starts the first worker there.
+pub(crate) fn end_worker_script(now: bool) -> String {
+    let now = if now { " --now" } else { "" };
+    format!("test -e {WORKER} || exit 0; exec {WORKER} end-worker --state-dir {STATE_DIR}{now}")
 }
 
 /// The SHA-256 of the worker in place, as `sha256sum` writes it, or nothing if there's none.
@@ -100,6 +98,18 @@ mod tests {
         assert_eq!(after("--advertise"), Some("127.0.0.1:51234"));
         assert_eq!(after("--log"), Some(WORKER_LOG));
         assert!(args.iter().any(|arg| arg == "--detach"), "{args:?}");
-        assert_eq!(end_worker_args(true), ["end-worker", "--state-dir", STATE_DIR, "--now"]);
+    }
+
+    /// So ending the worker of a sandbox that has none in place yet, as the hub does before it starts the first, is done
+    /// rather than failing. No machine that runs this test has the sandbox's worker, so it's that case.
+    #[test]
+    fn ending_the_worker_where_there_is_none_yet_succeeds() {
+        assert!(!std::path::Path::new(WORKER).exists(), "this test needs a machine without {WORKER}");
+
+        for now in [false, true] {
+            let ended = std::process::Command::new("/bin/sh").args(["-c", &end_worker_script(now)]).status().unwrap();
+            assert!(ended.success(), "{ended:?}");
+        }
+        assert!(end_worker_script(true).ends_with(&format!("end-worker --state-dir {STATE_DIR} --now")));
     }
 }

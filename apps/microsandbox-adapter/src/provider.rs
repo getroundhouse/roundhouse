@@ -85,14 +85,15 @@ impl Microsandbox {
         Ok(())
     }
 
-    /// Ends the worker and what it left, if the sandbox is running, as the worker finds them.
+    /// Ends the worker and what it left, if the sandbox is running, as the worker finds them. One that has no worker in
+    /// place yet has nothing to end.
     async fn end(&self, instance_id: &InstanceId, now: bool) -> Result<(), ProviderError> {
         let Some(handle) = self.handle(instance_id).await? else { return Ok(()) };
         if handle.status_snapshot() != SandboxStatus::Running {
             return Ok(());
         }
         let sandbox = handle.connect().await.map_err(|e| failed("connecting to the sandbox", &e))?;
-        let ended = run_worker(&sandbox, "ending the worker", guest::end_worker_args(now), false).await;
+        let ended = run(&sandbox, "ending the worker", &guest::end_worker_script(now), None).await;
         sandbox.detach().await;
         ended.map(drop)
     }
