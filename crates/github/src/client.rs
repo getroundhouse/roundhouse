@@ -90,12 +90,16 @@ impl Github {
     /// [`ASK_WITHIN`], for an account whose own login can't be asked with, as one whose token has ended. GitHub answers
     /// it for a person and for an app's bot alike. With no login, GitHub takes 60 such calls an hour from one address,
     /// which other programs there count against too, so a caller asks it sparingly, and stops asking for a while once
-    /// it's [`NotRead::Limited`].
+    /// it's [`NotRead::Limited`]. GitHub having no such user, as once it's deleted, is [`NotRead::NoSuchUser`], an
+    /// answer rather than a failure.
     pub async fn user_numbered(&self, id: GithubUserId) -> Result<TokenOwner, NotRead> {
         let path = format!("/user/{}", id.get());
         let answered = within(self.ask(http::Method::GET, &path, None, None)).await.map_err(NotRead::Failed)?;
         if answered.limited {
             return Err(NotRead::Limited);
+        }
+        if answered.status == 404 {
+            return Err(NotRead::NoSuchUser);
         }
         owner(answered).map_err(NotRead::Failed)
     }
@@ -197,6 +201,8 @@ pub(super) async fn within<T>(call: impl Future<Output = Result<T, ApiError>>) -
 pub enum NotRead {
     /// GitHub is limiting how often it's asked with no login, from this address.
     Limited,
+    /// GitHub has no user by that number, as it answers once the user is deleted.
+    NoSuchUser,
     /// Anything else, as GitHub not being reached, or answering with anything but the user.
     Failed(ApiError),
 }

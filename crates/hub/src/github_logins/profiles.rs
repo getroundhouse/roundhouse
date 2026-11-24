@@ -60,7 +60,8 @@ impl GithubLogins {
     /// now as it gives the next. An app's installation is read from what the hub holds of its app's bot, while it holds it.
     /// Any other, whose own login can't be asked with, as one whose token has ended, or that GitHub has refused since it
     /// was connected, or an installation whose app has been removed, is asked of GitHub with no login, by its user's
-    /// number, as far as [`NobodyAsks`](super::nobody::NobodyAsks) lets it.
+    /// number, as far as [`NobodyAsks`](super::nobody::NobodyAsks) lets it, unless GitHub has said that it has no such
+    /// user since `now_ms` less [`PROFILE_READ_EVERY`].
     pub(super) fn profiles_due(
         &self,
         files: &Locked<'_, GithubLogin>,
@@ -87,7 +88,8 @@ impl GithubLogins {
                 due.push(ProfileDue { account: id, user, from: ReadFrom::Github(token) });
                 continue;
             }
-            if self.nobody.lock().may_ask(now_ms) {
+            let mut nobody = self.nobody.lock();
+            if !nobody.no_such_user_since(&id, read_by) && nobody.may_ask(now_ms) {
                 due.push(ProfileDue { account: id, user, from: ReadFrom::Nobody });
             }
         }

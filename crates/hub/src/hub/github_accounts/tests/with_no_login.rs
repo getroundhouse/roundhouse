@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use protocol::model::{GithubToken, GithubUser, GithubUserId, GithubUsername};
+use protocol::model::{GithubAccountId, GithubToken, GithubUser, GithubUserId, GithubUsername};
 
 use super::*;
 use crate::github_logins::Connect;
@@ -18,10 +18,17 @@ const HOUR_MS: i64 = 60 * 60 * 1000;
 /// who she is on GitHub, as on the first start after the hub stopped keeping it in its database.
 fn hub_with_ada(dir: &std::path::Path, github: &StandIn, ends_at_ms: Option<i64>) -> Arc<Hub> {
     let hub = hub_calling_github(dir, github.api());
-    let connect = Connect::new(GithubAccountConnect { token: GithubToken::new("a-token"), id: None }, 1000).unwrap();
-    let user = GithubUser { id: GithubUserId::new(7), name: "ada".into() };
-    hub.github_logins.connect(&connect, &TokenOwner { user, profile: GithubProfile::default(), ends_at_ms }).unwrap();
+    connect(&hub, "a-token", 7, "ada", ends_at_ms);
     hub
+}
+
+/// Connects `token`, of the GitHub user `name`, numbered `user`, at 1000, ending at `ends_at_ms`, keeping nothing of
+/// who the user is, and returns its account.
+fn connect(hub: &Hub, token: &str, user: u64, name: &str, ends_at_ms: Option<i64>) -> GithubAccountId {
+    let connect = Connect::new(GithubAccountConnect { token: GithubToken::new(token), id: None }, 1000).unwrap();
+    let user = GithubUser { id: GithubUserId::new(user), name: name.into() };
+    let owner = TokenOwner { user, profile: GithubProfile::default(), ends_at_ms };
+    hub.github_logins.connect(&connect, &owner).unwrap().account.id
 }
 
 /// What the hub calls ada's account's user, if it knows.
@@ -32,7 +39,12 @@ fn named(hub: &Hub) -> Option<GithubUsername> {
 
 /// How many times GitHub was asked for user 7 by number.
 fn asked_by_number(github: &StandIn) -> usize {
-    github.asked().iter().filter(|asked| asked.starts_with("get /user/7 ")).count()
+    asked_for(github, 7)
+}
+
+/// How many times GitHub was asked for the user numbered `user`.
+fn asked_for(github: &StandIn, user: u64) -> usize {
+    github.asked().iter().filter(|asked| asked.starts_with(&format!("get /user/{user} "))).count()
 }
 
 /// Ada's token ended long before the hub started, so it can't be asked with: the first check asks GitHub with no
@@ -69,6 +81,28 @@ async fn a_limited_ask_with_no_login_leaves_the_account_not_known_and_is_asked_a
     assert_eq!(after_the_limit, None, "not known");
     assert_eq!(asked_within_the_hour, 1, "nothing asked while GitHub limits it");
     assert_eq!(named(&hub).as_ref().map(GithubUsername::as_str), Some("ada"));
+}
+
+/// GitHub answers that it has no user 7, as once ada's user is deleted, so the next check, a minute on, doesn't ask
+/// again, and a check a day on does. Grace's ask fails, so that next check asks again, and names her.
+#[tokio::test]
+async fn an_account_github_has_no_user_for_is_asked_again_a_day_on_and_one_whose_ask_failed_at_the_next_check() {
+    let grace = vec![Answer::status(502, Vec::new()), Answer::user(8, "grace", None)];
+    let github = StandIn::with(Script { numbered: vec![(8, grace)], ..Script::default() }).await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_ada(dir.path(), &github, Some(2000));
+    let grace = connect(&hub, "b-token", 8, "grace", Some(2000));
+
+    hub.check_github_logins(1_000_000).await;
+    hub.check_github_logins(1_000_000 + 60_000).await;
+    let in_the_day = (asked_for(&github, 7), asked_for(&github, 8));
+    hub.check_github_logins(1_000_000 + 24 * HOUR_MS).await;
+
+    assert_eq!(in_the_day, (1, 2), "ada asked once, and grace again at the next check");
+    let grace = hub.observation_value::<crate::hub::GithubUsername>(&grace);
+    assert_eq!(grace.as_ref().map(GithubUsername::as_str), Some("grace"));
+    assert_eq!(asked_by_number(&github), 2, "asked again a day on");
+    assert_eq!(named(&hub), None, "ada still not known");
 }
 
 /// Ada's token works, so the check asks with it, and never with no login.
