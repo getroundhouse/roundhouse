@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     AccountIdentity, ConversationCache, GithubAppSaid, Observed, OtherBuild, OwnPullRequestDetail, OwnPullRequestSaid,
-    ReferenceSaid, WaitRead,
+    ReferenceSaid, ReleaseOffer, WaitRead,
 };
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
@@ -107,6 +107,13 @@ pub enum Observation {
     /// the wait ends, when its record takes the last read. Never current. A client of a version from before it reads
     /// it in the wait's `watching`, on the session's record.
     WaitRead { session_id: SessionId, wait: WaitId, read: Observed<WaitRead>, rev: Rev },
+    /// The release the update feed offers a hub installed as a service, as the hub last read the feed. Sent at the
+    /// hub's level, since the sidebar's build line draws it. Current while the hub's reads of the feed work, and as of
+    /// the last that did otherwise. A hub has at most one, and one that doesn't read the feed has none. How an update
+    /// a person asked for is going, and why the hub's last read failed, are the record
+    /// [`HubUpdate`](crate::model::HubUpdate)'s. A client of a version from before it reads it on that record, as
+    /// [`ReadFrom::EveryObservation`] says.
+    ReleaseOffered { offered: Observed<ReleaseOffer>, rev: Rev },
     #[serde(other)]
     Unknown,
 }
@@ -177,6 +184,7 @@ pub enum ObservationKey {
         session_id: SessionId,
         wait: WaitId,
     },
+    ReleaseOffered,
     #[serde(other)]
     Unknown,
 }
@@ -229,6 +237,7 @@ impl Observation {
             Observation::WaitRead { session_id, wait, .. } => {
                 ObservationKey::WaitRead { session_id: session_id.clone(), wait: wait.clone() }
             }
+            Observation::ReleaseOffered { .. } => ObservationKey::ReleaseOffered,
             Observation::Unknown => ObservationKey::Unknown,
         }
     }
@@ -256,7 +265,8 @@ impl Observation {
             | Observation::SessionContext { rev, .. }
             | Observation::SessionTodos { rev, .. }
             | Observation::SessionCache { rev, .. }
-            | Observation::WaitRead { rev, .. } => *rev,
+            | Observation::WaitRead { rev, .. }
+            | Observation::ReleaseOffered { rev, .. } => *rev,
             Observation::Unknown => Rev::default(),
         }
     }
@@ -282,7 +292,8 @@ impl ObservationKey {
             | ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
             | ObservationKey::AccountLimits { .. }
-            | ObservationKey::SessionCache { .. } => Some(Level::Hub),
+            | ObservationKey::SessionCache { .. }
+            | ObservationKey::ReleaseOffered => Some(Level::Hub),
             ObservationKey::WorkspaceChanges { workspace_id }
             | ObservationKey::WorkspacePullRequestDetail { workspace_id }
             | ObservationKey::WorkspaceRepositoryUnseen { workspace_id }
@@ -317,7 +328,8 @@ impl ObservationKey {
             | ObservationKey::SessionContext { .. }
             | ObservationKey::SessionTodos { .. }
             | ObservationKey::SessionCache { .. }
-            | ObservationKey::WaitRead { .. } => Some(ReadFrom::EveryObservation),
+            | ObservationKey::WaitRead { .. }
+            | ObservationKey::ReleaseOffered => Some(ReadFrom::EveryObservation),
             ObservationKey::Unknown => None,
         }
     }

@@ -1,6 +1,6 @@
 use super::{
     AccountIdentity, ConversationCache, GithubAppSaid, Observation, ObservationKey, Observed, OtherBuild,
-    OwnPullRequestDetail, OwnPullRequestSaid, ReadFrom, ReferenceSaid, WaitRead,
+    OwnPullRequestDetail, OwnPullRequestSaid, ReadFrom, ReferenceSaid, ReleaseOffer, WaitRead,
 };
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
@@ -25,6 +25,7 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
         of_an_agent(),
         of_an_account(),
         of_a_session(),
+        of_the_hub(),
         vec![unknown],
     ]
     .concat()
@@ -307,6 +308,17 @@ fn a_watch_is_its_record_and_its_read() {
     assert_eq!((recorded.snapshot.pull_requests.len(), &recorded.read_error, recorded.affected.len()), (0, &None, 0));
     assert_eq!((&recorded.requested, &recorded.snapshot.repository), (&watch.requested, &watch.snapshot.repository));
     assert_eq!(recorded.with_read(watch.read()), watch);
+}
+
+/// Of each kind of what the hub observes of no record but itself.
+fn of_the_hub() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
+    let offered = Observed::Current { value: ReleaseOffer { version: Some("0.2.0".into()) } };
+    vec![(
+        Observation::ReleaseOffered { offered, rev: Rev::new(16) },
+        ObservationKey::ReleaseOffered,
+        Rev::new(16),
+        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+    )]
 }
 
 #[test]

@@ -12,6 +12,7 @@ use super::looking::{Source, Starting};
 use super::placing::place;
 use super::reading::fetch_archive;
 use crate::hub::Hub;
+use crate::hub::observations::ReleaseOffered;
 
 impl Hub {
     /// Starts updating to `version`, as [`HubUpdateTo`] says, and answers once it has: the update itself goes on after,
@@ -24,7 +25,9 @@ impl Hub {
                 installed as a service is";
             return Err(ApiError::new(ErrorCode::InvalidRequest, why));
         };
-        let Starting::Starts { version, archive } = self.change_update(|found| found.start_updating(&version)).await?
+        let offered = self.observations.value_of::<ReleaseOffered>(&());
+        let Starting::Starts { version, archive } =
+            self.change_update(|found| found.start_updating(&version, offered.as_ref())).await?
         else {
             return Ok(());
         };

@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use fetching::serving::{Reply, serve};
 use protocol::client::{ErrorCode, HubNotice};
-use protocol::model::{HubUpdate, Rev, UpdateAttempt};
+use protocol::model::{HubUpdate, Observation, Observed, ReleaseOffer, Rev, UpdateAttempt};
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, KeyPair as _};
 use update_feed::UpdateFeedKey;
@@ -13,7 +13,7 @@ use update_feed::UpdateFeedKey;
 use super::UpdateFeed;
 use super::looking::Source;
 use crate::hub::stand_in_workers::TIMEOUT;
-use crate::hub::tests::hub_in;
+use crate::hub::tests::{hub_in, hub_in_again};
 use crate::versions::WORKERS;
 
 /// A full package, with the archive of its hub if `archive`, whose hub speaks the workers this build's hub starts.
@@ -53,6 +53,20 @@ async fn listed(hub: &crate::hub::Hub) -> Option<HubUpdate> {
     hub.records_list().await.unwrap().hub_update
 }
 
+/// The release the hub lists as offered, as a client of the version that reads every observation reads it.
+async fn offered(hub: &crate::hub::Hub) -> Option<Observed<ReleaseOffer>> {
+    let listed = hub.records_list().await.unwrap().observations;
+    listed.into_iter().find_map(|observation| {
+        let Observation::ReleaseOffered { offered, .. } = observation else { return None };
+        Some(offered)
+    })
+}
+
+/// What `version`, or none, offered says.
+fn offer(version: Option<&str>) -> ReleaseOffer {
+    ReleaseOffer { version: version.map(str::to_string) }
+}
+
 /// So every client can show the hub's update, the hub's own included, one connecting later too.
 #[tokio::test]
 async fn a_hub_tells_its_clients_the_release_it_would_update_to() {
@@ -74,6 +88,7 @@ async fn a_hub_tells_its_clients_the_release_it_would_update_to() {
     assert_eq!(told.version.as_deref(), Some("0.1.9"), "the newest with an archive");
     assert_eq!(told.problem, None);
     assert_eq!(listed(&hub).await, Some(told), "a client connecting later");
+    assert_eq!(offered(&hub).await, Some(Observed::Current { value: offer(Some("0.1.9")) }), "as an observation");
 }
 
 #[tokio::test]
@@ -96,6 +111,7 @@ async fn a_feed_signed_with_another_key_changes_nothing_but_says_why() {
     let hub = hub_in(dir.path());
     hub.look_for_update(&on(served(&[release("0.1.9", true)], None), "0.1.8"), Duration::ZERO).await;
     let before = listed(&hub).await.unwrap();
+    let read_at_ms = crate::store::now_ms();
     let another = served(&[release("0.1.9", true)], None).key;
 
     let planted = served(&[release("0.1.9", true), release("0.1.20", true)], Some(another));
@@ -105,15 +121,26 @@ async fn a_feed_signed_with_another_key_changes_nothing_but_says_why() {
     assert_eq!(after.version.as_deref(), Some("0.1.9"), "as the read before found it");
     assert!(after.problem.as_deref().is_some_and(|problem| problem.contains("signature")), "{after:?}");
     assert!(after.rev.supersedes(before.rev), "a newer copy, so every client takes it");
+    let Some(Observed::AsOf { value, as_of_ms }) = offered(&hub).await else { panic!("not as of the read before") };
+    assert_eq!(value, offer(Some("0.1.9")));
+    assert!(as_of_ms <= read_at_ms, "as of the read that worked");
 }
 
-/// As a hub a client started, which doesn't read the feed, so a client can tell "not known" from "nothing newer".
+/// As a hub a client started, which doesn't read the feed, so a client can tell "not known" from "nothing newer". And
+/// as a hub that starts again, before it reads the feed, since it keeps what it found in memory alone.
 #[tokio::test]
 async fn a_hub_that_hasnt_read_the_feed_lists_no_update() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
+    let never = (listed(&hub).await, offered(&hub).await);
+    hub.look_for_update(&on(served(&[release("0.1.9", true)], None), "0.1.8"), Duration::ZERO).await;
+    hub.observations_written().await;
+    drop(hub);
 
-    assert_eq!(listed(&hub).await, None);
+    let again = hub_in_again(dir.path());
+
+    assert_eq!(never, (None, None));
+    assert_eq!((listed(&again).await, offered(&again).await), (None, None), "not known after a restart");
 }
 
 /// The name the feed gives `version`'s archive.

@@ -1,8 +1,8 @@
 //! What a hub installed as a service found in the update feed, spelled out, since a client and its hub can each be a
-//! different build.
+//! different build: as its record, and as the observation of the release offered.
 
 use protocol::client::HubNotice;
-use protocol::model::{HubUpdate, Records, Rev, UpdateAttempt};
+use protocol::model::{HubUpdate, Observation, ObservationKey, Observed, Records, ReleaseOffer, Rev, UpdateAttempt};
 
 use crate::keeps_its_form;
 
@@ -55,4 +55,25 @@ fn a_list_reads_without_it_and_a_client_from_before_skips_its_notice() {
     assert_eq!(before.hub_update, None);
     assert!(!serde_json::to_string(&before).unwrap().contains("hub_update"));
     assert_eq!(unknown, HubNotice::Unknown);
+}
+
+/// The release the update feed offers, which a hub sends at its own level to a client of a version that reads it so,
+/// as a notice, of one offered and of none, and as its removal.
+#[test]
+fn the_release_offered_keeps_its_form_as_a_notice_and_a_removal() {
+    let offered = |version: Option<&str>| {
+        let offered = Observed::Current { value: ReleaseOffer { version: version.map(str::to_string) } };
+        HubNotice::Observation(Observation::ReleaseOffered { offered, rev: Rev::new(5) })
+    };
+    let gone = HubNotice::ObservationRemoved { observation: ObservationKey::ReleaseOffered, rev: Rev::new(6) };
+
+    keeps_its_form(
+        &offered(Some("0.1.9")),
+        r#"{"notice":"observation","kind":"release_offered","offered":{"freshness":"current","value":{"version":"0.1.9"}},"rev":5}"#,
+    );
+    keeps_its_form(
+        &offered(None),
+        r#"{"notice":"observation","kind":"release_offered","offered":{"freshness":"current","value":{}},"rev":5}"#,
+    );
+    keeps_its_form(&gone, r#"{"notice":"observation_removed","observation":{"kind":"release_offered"},"rev":6}"#);
 }

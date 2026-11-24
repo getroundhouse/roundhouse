@@ -8,11 +8,13 @@
 
 use protocol::client::ClientResponse;
 use protocol::model::{
-    Account, GithubAccount, GithubApp, ModelList, Record, RecordKey, Records, Session, UsageLimit, Wait, Workspace,
+    Account, GithubAccount, GithubApp, HubUpdate, ModelList, Record, RecordKey, Records, Session, UsageLimit, Wait,
+    Workspace,
 };
 use tracing::warn;
 
 use super::github_kinds::{GithubAppBot, GithubAppSaid, GithubUsername, InstalledOn, RepositoryReach};
+use super::hub_kinds::ReleaseOffered;
 use super::kept::Observations;
 use super::kinds::{
     AccountIdentity, AccountLimits, Kind, ModelCatalog, SessionCache, SessionContext, SessionKey, SessionTodos,
@@ -42,6 +44,14 @@ impl OldForm for Workspace {
             let of_the_link = own.filter(|own| own.pull_request.summary.about.url == link.url);
             link.uncommitted = of_the_link.map_or(0, |own| own.local.uncommitted);
         }
+    }
+}
+
+/// The release the update feed offers, on the record of how an update is going, `None` while it isn't known, as while
+/// no read of the feed has worked since the hub started, which the record's problem says, as it did.
+impl OldForm for HubUpdate {
+    fn fill(&mut self, tables: &mut Tables) {
+        self.version = ReleaseOffered::table(tables).value(&()).and_then(|offered| offered.version.clone());
     }
 }
 
@@ -135,6 +145,7 @@ impl OldForm for Record {
             Record::Session(session) => session.fill(tables),
             Record::GithubAccount(account) => account.fill(tables),
             Record::GithubApp(app) => app.fill(tables),
+            Record::HubUpdate(update) => update.fill(tables),
             // Hold no observation's old form.
             Record::Repo(_)
             | Record::Comment(_)
@@ -145,7 +156,6 @@ impl OldForm for Record {
             | Record::FoundGithubLogin(_)
             | Record::GithubReach(_)
             | Record::Terminal(_)
-            | Record::HubUpdate(_)
             | Record::Proposal(_)
             | Record::ReplyHeard(_) => {}
         }
@@ -173,6 +183,9 @@ impl OldForm for Records {
         }
         for app in &mut self.github_apps {
             app.fill(tables);
+        }
+        if let Some(update) = &mut self.hub_update {
+            update.fill(tables);
         }
         let reaches = made_from::<RepositoryReach>(tables).into_iter().filter_map(|record| {
             let Record::GithubReach(reach) = record else { return None };
