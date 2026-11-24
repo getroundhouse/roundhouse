@@ -91,6 +91,16 @@ fn read_errors_observed(client: &Connection) -> Vec<Option<String>> {
     told.collect()
 }
 
+/// Whether `sent` has a read of `s`'s wait that failed, as a notice.
+fn failed_read_told(sent: &[HubFrame]) -> bool {
+    sent.iter().any(|frame| {
+        let HubFrame::Notice { notice: HubNotice::Observation(Observation::WaitRead { read, .. }), .. } = frame else {
+            return false;
+        };
+        matches!(read, Observed::AsOf { value, .. } if value.read_error.is_some())
+    })
+}
+
 /// A hub whose session's context isn't known lists the session to a client of version 4 with none, and to one of the
 /// version that reads every observation with no observation of it at the session's level. Two reports from the
 /// session's agent, which the store keeps as `crate::session` does, then send the first the record twice, filled,
@@ -145,6 +155,9 @@ async fn a_sessions_context_cache_and_waits_reach_each_client_in_the_form_its_ve
         };
         client.until("the marker", at_the_marker).await;
     }
+    // The marker is at the hub's level, and each subscription is sent its notices by itself. So what's told at the
+    // session's level can come after it, and its last, the wait's read, is waited for too.
+    observing.until("the wait's read, at the session's level", failed_read_told).await;
     let copies = sessions_sent(&before);
     let told: Vec<Option<u64>> =
         copies.iter().map(|session| session.context.as_ref().map(|context| context.used_tokens)).collect();
