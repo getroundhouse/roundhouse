@@ -12,8 +12,7 @@ use crate::model::RepoUrl;
 /// can say is elsewhere. Without the credential it can hold, as [`RepoUrl::without_credential`] cuts it out, so the
 /// hub is never sent one. Answered with none when the checkout has no
 /// `origin`, and refused with [`ErrorCode::Worker`](crate::client::ErrorCode::Worker) when `path` isn't a git
-/// repository or git fails. It changes nothing, so asking again only asks again. A worker from before this refuses it
-/// as unsupported.
+/// repository or git fails. It changes nothing, so asking again only asks again.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ReadRepoUrl {
     pub path: String,
@@ -30,10 +29,6 @@ impl Request for ReadRepoUrl {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RepoUrlReply {
     pub url: Option<RepoUrl>,
-    /// Where a push from the checkout goes, as a worker from before this build said, and never this build's, since no
-    /// hub of this build reads it. None for a checkout with no `origin`, and from a worker from before it said.
-    #[serde(default)]
-    pub push: Option<PushRoute>,
 }
 
 impl Reply for RepoUrlReply {
@@ -41,25 +36,4 @@ impl Reply for RepoUrlReply {
         let WorkerResponse::RepoUrl(read) = response else { return Err(response) };
         Ok(read)
     }
-}
-
-/// What a worker from before this build said of whether a push from a checkout goes through the git credential the
-/// worker hands every process, which is the default GitHub account's while there's one, or round it, as the machine's
-/// own login. Of every address `origin`
-/// pushes to, as `git remote get-url --push --all origin` gives them with the git config the worker gives every
-/// process while there's a credential: the person's, with its `insteadOf` and `pushInsteadOf`, and the worker's
-/// rewriting of GitHub's SSH addresses, of which git takes one rewrite of each address, the longest that fits. Never an
-/// address, which can hold a token.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum PushRoute {
-    /// Every one is `https://github.com/`, where the worker's git config sends git to its credential helper.
-    Credential,
-    /// One goes round it: over SSH, as a person's `url."git@github.com:".insteadOf "https://github.com/"` has an
-    /// `https://` address go, or as `ssh://github.com/…` does, which the worker's rewriting doesn't take, with the
-    /// machine's key, or to another host, or with a password of its own in it, which git pushes with instead.
-    Around,
-    /// From a newer worker.
-    #[serde(other)]
-    Unknown,
 }

@@ -264,18 +264,6 @@ async fn a_worker_is_set_the_hubs_git_credential_right_behind_its_hello_before_a
     link.kill();
 }
 
-#[tokio::test]
-async fn a_worker_from_before_git_credentials_is_used_all_the_same() {
-    let dir = tempfile::tempdir().unwrap();
-    let unknown = ApiError::new(ErrorCode::Unsupported, "a request this worker doesn't know");
-
-    let (link, _) = greeted_link(dir.path(), WorkerOutcome::Error(unknown)).await;
-    let cancelled = link.call(CancelSetup).await;
-
-    assert_eq!(cancelled, Ok(()));
-    link.kill();
-}
-
 /// A link to a worker that answers the hub's set of its git credential with `set_answer`, and the call after it, which
 /// it keeps in `next` in `dir`, as done, and what the hub had to set as it opened.
 async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>, GithubCredential) {

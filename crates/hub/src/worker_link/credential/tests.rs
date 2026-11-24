@@ -156,28 +156,23 @@ async fn a_worker_that_never_answers_holds_up_no_other_link_nor_a_change_and_is_
     assert!(answering.is_open());
 }
 
-/// A worker from before sets is said once a link, one that can't apply a set each time, with why, and both are used on.
-/// Nothing logs a token, neither as what workers are sent changes, nor as a link takes an answer.
+/// A worker that can't apply a set is said each time, with why, and used on. Nothing logs a token, neither as what
+/// workers are sent changes, nor as a link takes an answer.
 #[tokio::test(start_paused = true)]
 async fn a_worker_that_doesnt_apply_a_set_is_said_and_used_on_and_no_token_is_logged() {
     let logs = Logs::capture();
     let dir = tempfile::tempdir().unwrap();
     let logins = logins_in(dir.path());
-    let older = || Some(Err(ApiError::new(ErrorCode::Unsupported, "a request this worker doesn't know")));
-    let (from_before, mut from_before_sets) = following(Some(logins.git_credential()), older);
     let old_git = || Some(Err(ApiError::new(ErrorCode::Unavailable, "its git is older than 2.31")));
     let (cant, mut cant_sets) = following(Some(logins.git_credential()), old_git);
 
     let id = connect(&logins, "github_pat_a_secret", None);
-    until_set(&mut from_before_sets, 1).await;
     until_set(&mut cant_sets, 1).await;
     connect(&logins, "github_pat_another_secret", Some(&id));
-    until_set(&mut from_before_sets, 2).await;
     until_set(&mut cant_sets, 2).await;
 
     let logged = logs.text();
-    assert!(from_before.is_open() && cant.is_open());
-    assert_eq!(logged.matches("doesn't take a git credential").count(), 1, "{logged}");
+    assert!(cant.is_open());
     assert_eq!(logged.matches("couldn't apply its git credential").count(), 2, "{logged}");
     assert!(logged.contains("its git is older than 2.31"), "{logged}");
     assert!(logged.contains("what workers give their processes for github.com from now on"), "{logged}");

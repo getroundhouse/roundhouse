@@ -113,7 +113,7 @@ async fn as_the_checks_start_a_repository_whose_reach_and_address_arent_known_ha
     let address = RepoUrl::try_from("https://github.com/cli/cli.git".to_string()).unwrap();
     let here = WorkerLink::answering(move |request| {
         assert!(matches!(request, WorkerRequest::ReadRepoUrl(_)), "{request:?}");
-        Some(Ok(WorkerResponse::RepoUrl(RepoUrlReply { url: Some(address.clone()), push: None })))
+        Some(Ok(WorkerResponse::RepoUrl(RepoUrlReply { url: Some(address.clone()) })))
     });
     serving(&hub, &here);
     let mut feed = hub.subscribe_feed();

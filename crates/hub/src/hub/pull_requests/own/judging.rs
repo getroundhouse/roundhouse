@@ -25,8 +25,8 @@ pub(in crate::hub) enum Wanted {
 /// What reading a workspace's pull request asks of GitHub, by the branch it has checked out and where that's pushed,
 /// as `branches`, its worktree's, say, in the repository at `repository`, the workspace's repository's own address. Its pull requests
 /// are in that repository, the one its work merges into, and their head is the upstream's branch, of the repository
-/// the upstream's remote names, which is a fork's when it's pushed to one. A remote whose address isn't known, as from
-/// a worker from before it said, is taken for the repository's own. An upstream of another name than the branch's
+/// the upstream's remote names, which is a fork's when it's pushed to one. A remote whose address isn't known, as one
+/// git has no address for, is taken for the repository's own. An upstream of another name than the branch's
 /// is where the branch was taken from, as `git switch -c next origin/main` leaves it, not where it's pushed, since git
 /// pushes a branch to the branch of its own name unless it's told otherwise each time, so it's pushed nowhere yet,
 /// rather than having the pull requests of `main`. *Unconfirmed.*

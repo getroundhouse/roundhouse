@@ -40,7 +40,7 @@ pub use frames::WorkerFrame;
 pub use git_credential::{GitCredential, GitCredentialSet, GitIdentity, GithubCredential};
 pub use one_off::{AccountFor, TitleFor, TitleReply};
 pub use repo_source::RepoSource;
-pub use repo_url::{PushRoute, ReadRepoUrl, RepoUrlReply};
+pub use repo_url::{ReadRepoUrl, RepoUrlReply};
 pub use terminals::{
     RunningTerminal, RunningTerminals, RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalRows, TerminalStart,
     TerminalStop, TerminalText, TerminalTyped, TerminalWatch,

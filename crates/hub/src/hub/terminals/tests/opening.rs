@@ -144,27 +144,6 @@ async fn opening_a_terminal_again_as_it_opens_waits_for_how_that_ends() {
     assert_eq!(listed(&hub).await.terminals, vec![opened]);
 }
 
-/// Its worker refuses it, as a build from before terminals does, until the hub replaces it once nothing is at work in
-/// the workspace, so a client shouldn't take terminals for something its hub doesn't have.
-#[tokio::test]
-async fn a_worker_from_before_terminals_makes_them_unavailable() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let link = WorkerLink::answering(|request| {
-        let refused = matches!(request, WorkerRequest::TerminalStart(_));
-        Some(if refused {
-            Err(ApiError::new(ErrorCode::Unsupported, "unknown request"))
-        } else {
-            Ok(WorkerResponse::Ok)
-        })
-    });
-    serving(&hub, &link);
-
-    let refused = hub.terminal_open(open("t")).await;
-
-    assert_eq!(refused.map_err(|e| e.code), Err(ErrorCode::Unavailable));
-}
-
 /// The shell's end, however it comes, closes the terminal, which a client then drops.
 #[tokio::test]
 async fn a_terminal_whose_shell_ends_is_removed() {

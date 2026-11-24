@@ -42,7 +42,7 @@ async fn a_checkout_says_where_origin_fetches_from_and_none_without_one() {
     run(&repo, &["remote", "add", "origin", "gh:octo/hello"]);
     let rewritten = read(&repo).await;
 
-    assert_eq!(without, RepoUrlReply { url: None, push: None }, "another remote isn't origin");
+    assert_eq!(without, RepoUrlReply { url: None }, "another remote isn't origin");
     assert_eq!(
         with.url.map(String::from).as_deref(),
         Some("ssh://git@example.com/ada/roundhouse.git"),

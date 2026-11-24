@@ -1,5 +1,5 @@
 //! What a hub asks a worker about the terminals it runs: a shell each, in a PTY, in the worktree, whose output the
-//! worker keeps what the terminal shows from. A worker older than terminals refuses each as unsupported.
+//! worker keeps what the terminal shows from. A worker from before one of these refuses it as unsupported.
 
 use serde::{Deserialize, Serialize};
 

@@ -69,7 +69,7 @@ impl Reply for AgentStarted {
     }
 }
 
-/// One capability-checked request. Older workers refuse this envelope as `Unsupported`, before acting on it.
+/// One capability-checked request. A worker refuses one its run doesn't offer as `Unsupported`, before acting on it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AgentControl {
     pub session_id: SessionId,

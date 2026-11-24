@@ -14,8 +14,7 @@ pub struct TitleFor {
     pub agent: AgentKind,
     pub prompt: String,
     /// The prompt's images, read with its words, since a prompt such as "how do we fix this?" can be about a
-    /// screenshot. Any that isn't an image, such as a kind from a newer hub, is left out. A worker from before images
-    /// ignores them, and titles from the words alone.
+    /// screenshot. Any that isn't an image, such as a kind from a newer hub, is left out.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<NewAttachment>,
     /// The login to make the call under, as [`AgentSpec::login`](super::AgentSpec::login) says of an agent.
