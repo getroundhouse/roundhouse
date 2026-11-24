@@ -1,17 +1,26 @@
-//! What a view reads of an agent's list of models: what the agent's CLI last listed, rather than whether the hub is
-//! asking it, which the hub decides. It's read here alone, from the list's record, so that where the hub sends it apart
-//! from the record, as an observation, only this changes.
+//! What a view reads of an agent's list of models: what the agent's CLI last listed, beside whether the hub is asking
+//! it, which the hub decides. Both are read here alone, from the list's record, so that where the hub sends what the
+//! CLI listed apart from the record, as an observation, only this changes.
 
 use protocol::capability::settings::ModelCatalog;
-use protocol::model::ModelList;
+use protocol::model::{ModelListKey, ModelLookup};
 
 use super::{Changes, Snapshot};
 
+/// One of the hub's lists of models, as a view reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ListOfModels<'a> {
+    /// What the agent offers, as its CLI last listed it. `None` until it has.
+    pub catalog: Option<&'a ModelCatalog>,
+    /// Whether the hub is asking the agent, and how it went the last time.
+    pub lookup: &'a ModelLookup,
+}
+
 impl Snapshot {
-    /// What `list`'s agent offers, as its CLI last listed it: the catalog of the list followed, whether this copy holds
-    /// that list's record or a reply carried it. `None` until the CLI has listed it.
-    pub fn model_catalog<'a>(&'a self, list: &'a ModelList) -> Option<&'a ModelCatalog> {
-        list.catalog.as_ref()
+    /// The list of models `key` names. `None` until the hub has sent it, and once the hub has let go of it.
+    pub fn list_of_models(&self, key: &ModelListKey) -> Option<ListOfModels<'_>> {
+        let list = self.records.model_lists.get(key)?;
+        Some(ListOfModels { catalog: list.catalog.as_ref(), lookup: &list.lookup })
     }
 }
 

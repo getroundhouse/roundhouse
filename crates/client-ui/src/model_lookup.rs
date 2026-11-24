@@ -3,18 +3,19 @@
 //! when it's for somewhere else, when the hub has let go of it, or on Retry.
 
 use client_core::Client;
-use client_core::records::Snapshot;
+use client_core::records::{ListOfModels, Snapshot};
 use gpui_kit::{AnyElement, Context, IntoElement as _};
 use protocol::client::admin::{ModelTarget, ModelsFor};
-use protocol::model::{AgentDescription, ModelList, ModelListKey, ModelLookup, Session};
+use protocol::model::{AgentDescription, ModelListKey, ModelLookup, Session};
 
 /// The hub's list of models that a dialog or a chat's picker follows, and what it last asked for one.
 #[derive(Default)]
 pub struct FollowedModels {
     /// What was asked last, so the same isn't asked again while the hub holds its list.
     asked: Option<ModelsFor>,
-    /// The list the hub said applies, as its reply had it, or what it said instead.
-    answer: Option<Result<ModelList, String>>,
+    /// Which list the hub said applies, or what it said instead. The list itself is read from the records, which take
+    /// in the reply's copy before the reply comes back.
+    answer: Option<Result<ModelListKey, String>>,
     /// The records have held the list since it was answered, so its going is the hub letting go of it.
     seen: bool,
     /// Counts what's asked, so an answer to what was asked before isn't taken.
@@ -60,7 +61,7 @@ impl FollowedModels {
         self.asked = Some(request.clone());
         let reading = client.start(move |client| client.models_for(ModelsFor { again, ..request }));
         cx.spawn(async move |this, cx| {
-            let answer = reading.recv().await.map_err(|e| e.to_string());
+            let answer = reading.recv().await.map(|list| list.key).map_err(|e| e.to_string());
             let _ = this.update(cx, |owner, cx| {
                 let state = lookup(owner);
                 if state.generation == generation {
@@ -98,20 +99,14 @@ impl FollowedModels {
         self.description(records.agents().of(session.agent)?, records)
     }
 
-    /// What `records` hold of the list followed.
-    fn held<'a>(&self, records: &'a Snapshot) -> Option<&'a ModelList> {
-        self.key().and_then(|key| records.model_list(key))
+    /// What `records` hold of the list followed, the one place it's read.
+    fn held<'a>(&self, records: &'a Snapshot) -> Option<ListOfModels<'a>> {
+        records.list_of_models(self.key()?)
     }
 
     /// Which list is followed, once the hub has said.
     pub fn key(&self) -> Option<&ModelListKey> {
-        Some(&self.answer.as_ref()?.as_ref().ok()?.key)
-    }
-
-    /// The newest of what `records` hold of the list followed and what the reply had.
-    fn list<'a>(&'a self, records: &'a Snapshot) -> Option<&'a ModelList> {
-        let answered = self.answer.as_ref()?.as_ref().ok()?;
-        Some(self.held(records).filter(|held| held.rev >= answered.rev).unwrap_or(answered))
+        self.answer.as_ref()?.as_ref().ok()
     }
 
     /// What `base` offers where the list followed applies: `base` itself for an agent that doesn't discover its models,
@@ -120,13 +115,13 @@ impl FollowedModels {
         if !base.discovers_models() {
             return Some(base.clone());
         }
-        let catalog = records.model_catalog(self.list(records)?).filter(|catalog| !catalog.offered.is_empty())?;
+        let catalog = self.held(records)?.catalog.filter(|catalog| !catalog.offered.is_empty())?;
         Some(base.clone().with_catalog(catalog.clone()))
     }
 
     /// Whether the agent hasn't said yet what it offers, and hasn't failed to, so there's nothing to pick from.
     pub fn waiting(&self, records: &Snapshot) -> bool {
-        let unlisted = self.list(records).is_none_or(|list| records.model_catalog(list).is_none());
+        let unlisted = self.held(records).is_none_or(|list| list.catalog.is_none());
         self.asked.is_some() && self.failed(records).is_none() && unlisted
     }
 
@@ -134,9 +129,9 @@ impl FollowedModels {
     fn failed<'a>(&'a self, records: &'a Snapshot) -> Option<&'a str> {
         let list = match self.answer.as_ref()? {
             Err(refused) => return Some(refused),
-            Ok(_) => self.list(records)?,
+            Ok(_) => self.held(records)?,
         };
-        match (records.model_catalog(list), &list.lookup) {
+        match (list.catalog, list.lookup) {
             (Some(catalog), _) if !catalog.offered.is_empty() => None,
             (_, ModelLookup::Failed { message }) => Some(message),
             (Some(_), _) => Some("This login offers no models"),
@@ -172,7 +167,7 @@ mod tests {
     use super::*;
     use client_core::records::HubRecords;
     use protocol::capability::settings::ModelCatalog;
-    use protocol::model::{Record, Rev};
+    use protocol::model::{ModelList, Record, Rev};
 
     /// A client's copy of the hub's records holding `lists`.
     fn holding(lists: &[&ModelList]) -> Snapshot {
@@ -194,24 +189,22 @@ mod tests {
         ModelList { key, catalog, lookup, rev: Rev::new(rev) }
     }
 
-    /// The reply can come before the feed's copy, and the feed's is newer once it does.
+    /// The reply names the list, and what it says is read from the records alone, which take the reply's copy in
+    /// before the reply comes back.
     #[test]
-    fn the_newer_of_the_reply_and_the_records_copy_is_followed() {
+    fn the_list_answered_is_read_from_the_records() {
         let asked = ModelsFor {
             agent: protocol::model::AgentKind::Codex,
             target: ModelTarget::Project("r".into()),
             again: false,
         };
-        let answer = Some(Ok(list(2, ModelLookup::Asking, None)));
+        let answer = Some(Ok(list(1, ModelLookup::Asking, None).key));
         let lookup = FollowedModels { asked: Some(asked), answer, ..FollowedModels::default() };
-        let older = list(1, ModelLookup::Answered, Some(ModelCatalog::default()));
-        let newer = list(3, ModelLookup::Failed { message: "logged out".into() }, None);
+        let asking = list(2, ModelLookup::Asking, None);
+        let failed = list(3, ModelLookup::Failed { message: "logged out".into() }, None);
 
-        assert!(
-            lookup.waiting(&holding(&[])) && lookup.waiting(&holding(&[&older])),
-            "the reply is newer than what's held"
-        );
-        assert_eq!(lookup.failed(&holding(&[&newer])), Some("logged out"));
-        assert!(!lookup.waiting(&holding(&[&newer])));
+        assert!(lookup.waiting(&holding(&[])) && lookup.waiting(&holding(&[&asking])), "nothing is listed yet");
+        assert_eq!(lookup.failed(&holding(&[&failed])), Some("logged out"));
+        assert!(!lookup.waiting(&holding(&[&failed])));
     }
 }
