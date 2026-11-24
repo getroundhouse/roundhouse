@@ -108,12 +108,13 @@ fn what_views_show_is_followed_together_and_what_the_hub_sends_reaches_them() {
     let both = asked.follows();
     drop(first);
     waiting::thread::until(TIMEOUT, "the first view to go", || !asked.follows().contains(&chip(1)));
+    // The copy lets go of it once the hub has answered, which is after the hub heard.
+    waiting::thread::until(TIMEOUT, "what no view shows now to be let go of", || feed.reference(&ask(1)).is_none());
 
     assert_eq!(both, [Level::Hub, chip(1), chip(2), chip(3)], "both views' together, each once");
     assert_eq!(asked.follows(), [Level::Hub, chip(2), chip(3)]);
     let last = asked.subscribes.lock().last().cloned().unwrap();
     assert_eq!((last.stop.len(), last.start.len()), (1, 0), "one request stops what's no longer shown: {last:?}");
-    assert_eq!(feed.reference(&ask(1)), None, "no view shows it now");
     assert_eq!(feed.reference(&ask(2)), Some(ReferenceRead::Missing));
 }
 
