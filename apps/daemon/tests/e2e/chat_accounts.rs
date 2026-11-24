@@ -114,7 +114,7 @@ fn a_chat_only_waiting_on_a_pull_request_moves_without_asking_and_waits_on_under
     let under = token_in_turn(&client, &chat.session, 4, "say:still here");
 
     assert_eq!(moved.status, SessionStatus::Background, "it was moved without asking");
-    assert_eq!((waiting.status, waiting.wait.map(|wait| wait.number)), (SessionStatus::Background, Some(7)));
+    assert_eq!((waiting.status, waiting.waits.first().map(|wait| wait.number)), (SessionStatus::Background, Some(7)));
     assert!(woken.contains("every watched PR has merged"), "{woken}");
     assert_eq!(under, "personal-token");
     assert_eq!(launches(&read_all(&client, &chat.session)), [false, true], "started again once, at the move");

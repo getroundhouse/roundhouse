@@ -6,7 +6,7 @@ use super::RepoUrl;
 /// nothing can take a checkout for granted. The address is the record's, and the truth, what a worker with no checkout
 /// of its own is to clone and fetch from. A linked checkout's is read from its `origin` by a worker on the hub's
 /// machine, since the hub runs no git.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RepoOrigin {
     /// A checkout on the hub's machine, with no address: no worker there has said one yet, or its `origin` has none.
@@ -16,7 +16,8 @@ pub enum RepoOrigin {
     Remote { url: RepoUrl },
     /// A checkout on the hub's machine, and the address its `origin` fetched from when a worker there last read it.
     Linked { path: String, url: RepoUrl },
-    /// From a newer peer.
+    /// From a newer peer, or one that didn't say.
+    #[default]
     #[serde(other)]
     Unknown,
 }

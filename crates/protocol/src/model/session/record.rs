@@ -185,13 +185,9 @@ pub struct Session {
     /// takes that work with it.
     #[serde(default)]
     pub background_tasks: Vec<AgentTask>,
-    /// Oldest open wait, for clients predating `waits`. New clients use `open_waits`, which distinguishes an omitted
-    /// collection from an authoritative empty one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub wait: Option<Wait>,
-    /// All open waits. None means an older hub; an empty list means this hub has none.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub waits: Option<Vec<Wait>>,
+    /// Its open waits, oldest first.
+    #[serde(default)]
+    pub waits: Vec<Wait>,
     /// The account the chat's agent runs under, and the record of it says who that is and what's left of its limits.
     /// For a chat on a login the hub holds, as `account_source` says, it's the account the chat is on, which every
     /// launch runs under, from the launch that put it there or the move to it, so a moved chat names it before its
@@ -345,11 +341,6 @@ impl Session {
     /// `account_source` says. `None` for a chat on the ambient login, or on none yet.
     pub fn hub_account(&self) -> Option<&AccountId> {
         self.account.as_ref().filter(|_| self.account_source == Some(AccountSource::Hub))
-    }
-
-    /// The hub's complete list, falling back only when an older hub omitted it.
-    pub fn open_waits(&self) -> &[Wait] {
-        self.waits.as_deref().unwrap_or(self.wait.as_slice())
     }
 
     /// The order a hub lists chats in, and a client shows a workspace's: oldest first, by when each was made, then by

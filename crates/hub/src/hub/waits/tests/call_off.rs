@@ -66,7 +66,7 @@ async fn calling_off_a_wait_that_isnt_open_leaves_the_one_that_is() {
     let called_off = hub.session_call_off_wait("s".into(), "an older one".into()).await.unwrap();
 
     assert_eq!(at_rest(&called_off), (SessionStatus::Background, 1));
-    assert_eq!(called_off.wait.map(|wait| wait.id), Some("a".into()));
+    assert_eq!(called_off.waits.first().map(|wait| wait.id.clone()), Some("a".into()));
 }
 
 /// A read ends the wait of a chat held for the person, so its agent isn't started to hear until they prompt it, and

@@ -80,10 +80,6 @@ pub enum RecordKey {
 
 /// One record of any kind, as a list or the feed gives it.
 #[derive(Clone, Debug, PartialEq)]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "a record is moved into the map of its kind as it's read, and a chat's, the largest, is the commonest"
-)]
 pub enum Record {
     Repo(Repo),
     Workspace(Workspace),

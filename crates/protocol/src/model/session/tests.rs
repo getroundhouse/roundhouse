@@ -32,20 +32,20 @@ fn session(status: &str) -> Session {
     }
 }
 
-/// A hub that doesn't keep waits sends none. One that does sends the open one in this form, which its store's query
-/// writes, with a `call` the CLI didn't say as null.
+/// A hub sends a chat's open waits in this form, which its store's query writes, with a `call` the CLI didn't say as
+/// null.
 #[test]
-fn a_session_from_a_hub_that_doesnt_keep_waits_has_none_and_one_that_does_has_its_open_wait() {
+fn a_session_has_its_open_waits() {
     let mut said = serde_json::to_value(session("background")).unwrap();
-    said["wait"] = json!({
+    said["waits"] = json!([{
         "id": "a", "session_id": "s", "workspace_id": "w", "number": 7, "call": null, "until": "checks",
         "started_at_ms": 1,
-    });
+    }]);
 
     let waiting: Session = serde_json::from_value(said).unwrap();
 
-    assert_eq!(session("idle").wait, None);
-    let wait = waiting.wait.unwrap();
+    assert_eq!(session("idle").waits, []);
+    let [wait] = waiting.waits.try_into().unwrap();
     assert_eq!((wait.number, wait.call, wait.until, wait.ended), (7, None, WaitUntil::Checks, None));
 }
 

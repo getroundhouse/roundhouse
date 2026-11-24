@@ -1,6 +1,5 @@
-//! Where each repository is, spelled out: its record, as the feed and a list carry it, with its checkout beside it for
-//! a client from before addresses, which reads only that, and the request that reads a checkout's address and its
-//! reply, since a worker can outlive the hub that started it.
+//! Where each repository is, spelled out: its record, as the feed and a list carry it, and the request that reads a
+//! checkout's address and its reply, since a worker can outlive the hub that started it.
 
 use protocol::client::HubNotice;
 use protocol::frame;
@@ -19,41 +18,31 @@ fn repo(origin: RepoOrigin) -> HubNotice {
 }
 
 #[test]
-fn a_repository_keeps_its_form_wherever_it_is_with_its_checkout_beside_it() {
+fn a_repository_keeps_its_form_wherever_it_is() {
     let url = r#""url":"https://github.com/ada/roundhouse.git""#;
 
     keeps_its_form(
         &repo(RepoOrigin::Checkout { path: "/repo".into() }),
-        r#"{"notice":"repo","id":"r","name":"repo","path":"/repo","origin":{"kind":"checkout","path":"/repo"},"created_at_ms":1,"rev":2}"#,
+        r#"{"notice":"repo","id":"r","name":"repo","origin":{"kind":"checkout","path":"/repo"},"created_at_ms":1,"rev":2}"#,
     );
     keeps_its_form(
         &repo(RepoOrigin::Linked { path: "/repo".into(), url: roundhouse() }),
         &format!(
-            r#"{{"notice":"repo","id":"r","name":"repo","path":"/repo","origin":{{"kind":"linked","path":"/repo",{url}}},"created_at_ms":1,"rev":2}}"#
+            r#"{{"notice":"repo","id":"r","name":"repo","origin":{{"kind":"linked","path":"/repo",{url}}},"created_at_ms":1,"rev":2}}"#
         ),
     );
-    // With no checkout, a client from before addresses still reads it, with a checkout it can't use.
     keeps_its_form(
         &repo(RepoOrigin::Remote { url: roundhouse() }),
         &format!(
-            r#"{{"notice":"repo","id":"r","name":"repo","path":"","origin":{{"kind":"remote",{url}}},"created_at_ms":1,"rev":2}}"#
+            r#"{{"notice":"repo","id":"r","name":"repo","origin":{{"kind":"remote",{url}}},"created_at_ms":1,"rev":2}}"#
         ),
     );
-}
-
-#[test]
-fn a_repository_from_a_hub_from_before_addresses_is_its_checkout() {
-    let older = br#"{"notice":"repo","id":"r","name":"repo","path":"/repo","created_at_ms":1,"rev":2}"#;
-
-    let notice: HubNotice = frame::decode(older).unwrap();
-
-    assert_eq!(notice, repo(RepoOrigin::Checkout { path: "/repo".into() }));
 }
 
 /// From a newer hub, which may have somewhere this build has no word for.
 #[test]
 fn a_repository_somewhere_this_build_does_not_know_still_reads() {
-    let newer = br#"{"notice":"repo","id":"r","name":"repo","path":"","origin":{"kind":"mirrored","from":"x"},"created_at_ms":1,"rev":2}"#;
+    let newer = br#"{"notice":"repo","id":"r","name":"repo","origin":{"kind":"mirrored","from":"x"},"created_at_ms":1,"rev":2}"#;
 
     let notice: HubNotice = frame::decode(newer).unwrap();
 

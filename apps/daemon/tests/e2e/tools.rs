@@ -153,7 +153,7 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
     let waiting = client.session_get(&chat.id).unwrap();
     let listed: Vec<_> = waiting.background_tasks.into_iter().map(|t| (t.description, t.kind)).collect();
     assert_eq!(listed, [(Some("roundhouse/wait_for_pull_requests".to_string()), TaskKind::Wait)]);
-    assert_eq!(waiting.wait.map(|wait| wait.number), Some(7), "the chat's record has the hub's wait");
+    assert_eq!(waiting.waits.first().map(|wait| wait.number), Some(7), "the chat's record has the hub's wait");
     // The next hub keeps the wait, so it doesn't keep the hub from stopping to update it.
     assert_eq!(client.hub_status().unwrap().running_sessions, 0);
     github.say(7, Merged);
@@ -162,7 +162,7 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
     let events = wait_for_turn_end(&client, &chat.id, 3);
     let said = assistant_text(&events);
     assert!(said.contains("every watched PR has merged"), "{said}");
-    assert_eq!(client.session_get(&chat.id).unwrap().wait, None, "and none once it has ended");
+    assert_eq!(client.session_get(&chat.id).unwrap().waits, [], "and none once it has ended");
 }
 
 /// The person calls the wait off while the agent's CLI runs. It hears as it next asks after its task, takes the task
@@ -176,13 +176,14 @@ fn an_agent_whose_wait_the_person_calls_off_hears_and_the_chat_goes_idle() {
     let (_, chat) = workspace_on_github(&stack, &client);
     client.session_prompt(&chat.id, WAIT, None).unwrap();
     wait_for_status(&client, &chat.id, SessionStatus::Background);
-    let wait = client.session_get(&chat.id).unwrap().wait.unwrap();
+    let [wait] = client.session_get(&chat.id).unwrap().waits.try_into().unwrap();
 
     let called_off = client.session_call_off_wait(&chat.id, &wait.id).unwrap();
     let events = wait_for_turn_end(&client, &chat.id, 2);
 
     assert_eq!(
-        called_off.wait, None,
+        called_off.waits,
+        [],
         "the hub's is over at once, and the CLI takes its copy off the list once it hears"
     );
     let said = assistant_text(&events);
