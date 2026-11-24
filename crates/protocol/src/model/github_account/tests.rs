@@ -134,14 +134,15 @@ fn a_sign_in_in_a_state_from_a_newer_hub_reads_as_unknown_and_isnt_waiting() {
     assert!(!sign_in.status.is_waiting());
 }
 
-/// As a newer worker might say it, through a hub that passes it on, and with no revision, as from a hub that keeps none.
+/// As a newer hub might say who `gh` and the SSH key on its machine are.
 #[test]
-fn a_found_login_in_a_state_from_a_newer_peer_reads_as_unknown() {
-    let newer = json!({"provider": "local", "login": {"state": "logged_in_twice", "usernames": ["ada", "grace"]}});
+fn a_machines_logins_in_states_from_a_newer_hub_read_as_unknown() {
+    let newer =
+        json!({"gh": {"state": "logged_in_twice", "usernames": ["ada", "grace"]}, "ssh": {"state": "two_keys"}});
 
-    let found: FoundGithubLogin = serde_json::from_value(newer).unwrap();
+    let logins: MachineLogins = serde_json::from_value(newer).unwrap();
 
-    assert_eq!((found.login, found.rev), (GhLogin::Unknown, Rev::default()));
+    assert_eq!(logins, MachineLogins { gh: Some(GhLogin::Unknown), ssh: SshLogin::Unknown });
 }
 
 /// As GitHub writes its addresses, and nothing an address could be moved by, or that has no owner or no name.
@@ -194,7 +195,7 @@ fn what_a_newer_hub_sends_workers_or_why_it_blocks_reads_as_unknown() {
 
 /// As a copy of the settings read between the default changing and what's sent for it being worked out has it.
 #[test]
-fn whats_sent_is_for_the_default_it_names_and_no_account_or_an_older_hubs_machine_own_for_none() {
+fn whats_sent_is_for_the_default_it_names_and_no_account_for_none() {
     let (ada, grace) = (GithubAccountId::from("g1"), GithubAccountId::from("g2"));
     let blocked = SentCredential::Blocked { account: ada.clone(), why: UnusableLogin::Ended, reason: "Ended.".into() };
     let settings = |account: Option<&GithubAccountId>| GithubSettings {
@@ -204,7 +205,6 @@ fn whats_sent_is_for_the_default_it_names_and_no_account_or_an_older_hubs_machin
         set_up: Vec::new(),
     };
 
-    assert!(SentCredential::MachineOwn.is_for(None) && !SentCredential::MachineOwn.is_for(Some(&ada)));
     let none = SentCredential::NoAccount { reason: "Connect one.".into() };
     assert!(none.is_for(None) && !none.is_for(Some(&ada)));
     assert!(SentCredential::Account { account: ada.clone() }.is_for(Some(&ada)));

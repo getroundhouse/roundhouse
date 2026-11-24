@@ -73,8 +73,6 @@ fn each_reach_keeps_its_form() {
             Reach::CouldntTell { repository: CLI, why: "offline".into() },
             r#""couldnt_tell","repository":"cli/cli","why":"offline""#,
         ),
-        (Reach::MachineOwn { repository: CLI }, r#""machine_own","repository":"cli/cli""#),
-        (Reach::PushesAsMachineOwn { repository: CLI }, r#""pushes_as_machine_own","repository":"cli/cli""#),
         (
             Reach::Blocked { repository: CLI, reason: "ended".into() },
             r#""blocked","repository":"cli/cli","reason":"ended""#,

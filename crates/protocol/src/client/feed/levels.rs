@@ -30,7 +30,6 @@ impl HubNotice {
                 | RecordKey::Account { .. }
                 | RecordKey::GithubAccount { .. }
                 | RecordKey::GithubSignIn { .. }
-                | RecordKey::FoundGithubLogin { .. }
                 | RecordKey::GithubApp { .. }
                 | RecordKey::Terminal { .. }
                 | RecordKey::ModelList(_)
@@ -47,7 +46,6 @@ impl HubNotice {
             | HubNotice::NewWorkspaceDraft(_)
             | HubNotice::GithubAccount(_)
             | HubNotice::GithubSignIn(_)
-            | HubNotice::FoundGithubLogin(_)
             | HubNotice::GithubApp(_)
             | HubNotice::Terminal(_)
             | HubNotice::ModelList(_)

@@ -54,8 +54,6 @@ fn a_workspace_says_why_agents_cant_push_to_its_repository_and_nothing_while_the
     for quiet in [
         Reach::Pushes { repository: repository.clone(), username: ada() },
         Reach::CouldntTell { repository: repository.clone(), why: "GitHub answered 502".into() },
-        Reach::MachineOwn { repository: repository.clone() },
-        Reach::PushesAsMachineOwn { repository },
         Reach::NotOnGithub,
         Reach::Unknown,
     ] {

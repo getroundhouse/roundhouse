@@ -5,10 +5,7 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
-use protocol::model::{
-    Account, FoundGithubLogin, GhLogin, GhLoginWorks, HubSettings, HubUpdate, NewWorkspaceDraft, Record, Session,
-    SessionId, Title,
-};
+use protocol::model::{Account, HubSettings, HubUpdate, NewWorkspaceDraft, Record, Session, SessionId, Title};
 
 use super::*;
 
@@ -161,7 +158,7 @@ struct Kind {
     shown: fn(&HubRecords, &RecordKey) -> Option<Record>,
 }
 
-fn kinds() -> [Kind; 5] {
+fn kinds() -> [Kind; 4] {
     [
         Kind {
             name: "what a hub found in the update feed",
@@ -194,21 +191,7 @@ fn kinds() -> [Kind; 5] {
                 held.snapshot().account(id).cloned().map(Record::Account)
             },
         },
-        // Held, from a hub from before Settings' Providers, though no view draws one.
-        Kind {
-            name: "a found GitHub login",
-            copy: |version, rev| {
-                let login = GhLogin::LoggedIn { username: format!("user {version}").into(), works: GhLoginWorks::Yes };
-                Record::FoundGithubLogin(found("local", login, rev))
-            },
-            other: Some(|rev| Record::FoundGithubLogin(found("incus", GhLogin::NotInstalled, rev))),
-            shown: kept,
-        },
     ]
-}
-
-fn kept(held: &HubRecords, key: &RecordKey) -> Option<Record> {
-    held.records.held.get(key).map(|kept| Record::clone(&kept.copy))
 }
 
 /// A list at `rev` of these records.
@@ -226,7 +209,6 @@ fn listed(records: impl IntoIterator<Item = Record>, rev: u64) -> Records {
             Record::NewWorkspaceDraft(draft) => list.new_workspace_draft = Some(draft),
             Record::GithubAccount(account) => list.github_accounts.push(account),
             Record::GithubSignIn(sign_in) => list.github_sign_ins.push(sign_in),
-            Record::FoundGithubLogin(found) => list.found_github_logins.push(found),
             Record::GithubApp(app) => list.github_apps.push(app),
             Record::Terminal(terminal) => list.terminals.push(terminal),
             Record::ModelList(model_list) => list.model_lists.push(model_list),
@@ -287,8 +269,4 @@ fn dialog(text: &str, rev: u64) -> NewWorkspaceDraft {
 
 fn account(id: &str, used_at_ms: u8, rev: u64) -> Account {
     Account { used_at_ms: Some(i64::from(used_at_ms)), rev: Rev::new(rev), ..protocol::fixtures::account(id) }
-}
-
-fn found(provider: &str, login: GhLogin, rev: u64) -> FoundGithubLogin {
-    FoundGithubLogin { provider: provider.into(), login, rev: Rev::new(rev) }
 }

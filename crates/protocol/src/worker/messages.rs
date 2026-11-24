@@ -1,6 +1,6 @@
 use super::{
-    agents, archived, children, connection, found_login, git_credential, one_off, previous, repo_url, terminals, tools,
-    workspaces, worktree,
+    agents, archived, children, connection, git_credential, one_off, previous, repo_url, terminals, tools, workspaces,
+    worktree,
 };
 use crate::client::Outcome;
 use crate::model;
@@ -15,9 +15,6 @@ use children::{AddChildWorktree, ChildWorktreeAdded, WatchChildBranches};
 use connection::{Hello, HelloReply, Received, RunningAgentsReply};
 #[cfg(test)]
 use connection::{RunningAgents, Stop};
-#[cfg(test)]
-use found_login::FindGithubLogin;
-use found_login::GithubLoginReply;
 use git_credential::GitCredentialSet;
 use one_off::{AccountFor, TitleFor, TitleReply};
 use repo_url::{ReadRepoUrl, RepoUrlReply};
@@ -128,8 +125,6 @@ pub enum WorkerRequest {
     AccountFor(AccountFor),
     ServeTools(ServeTools),
     GitCredentialSet(GitCredentialSet),
-    /// See [`FindGithubLogin`](super::FindGithubLogin).
-    FindGithubLogin,
     ReadRepoUrl(ReadRepoUrl),
     TerminalStart(TerminalStart),
     TerminalTyped(TerminalTyped),
@@ -180,7 +175,6 @@ pub enum WorkerResponse {
     Title(TitleReply),
     Account(AgentAccount),
     ToolsServing(ToolsServing),
-    GithubLogin(GithubLoginReply),
     RepoUrl(RepoUrlReply),
     TerminalRows(TerminalRowsReply),
     TerminalBounds(TerminalBoundsReply),
@@ -203,7 +197,6 @@ mod tests {
         assert_eq!(sent(Stop.into_request()), r#"{"method":"stop"}"#);
         assert_eq!(sent(RunningAgents.into_request()), r#"{"method":"running_agents"}"#);
         assert_eq!(sent(CancelSetup.into_request()), r#"{"method":"cancel_setup"}"#);
-        assert_eq!(sent(FindGithubLogin.into_request()), r#"{"method":"find_github_login"}"#);
         assert_eq!(sent(RunningTerminals.into_request()), r#"{"method":"running_terminals"}"#);
     }
 

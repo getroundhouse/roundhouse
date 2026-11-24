@@ -300,10 +300,6 @@ pub(super) async fn handle(
         WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
         WorkerRequest::WatchChanges(asked) => worktrees::watch_changes(state, asked).await,
         WorkerRequest::WatchChildBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Child).await,
-        // Only a hub from before Settings' Providers asks, as `FindGithubLogin` says, so it reads with none.
-        WorkerRequest::FindGithubLogin => {
-            Err(ApiError::new(ErrorCode::Unsupported, "this worker doesn't find the machine's gh login"))
-        }
         // The machine's own too, since the git credential's rewriting of GitHub's addresses is the worker's, not the
         // checkout's.
         WorkerRequest::ReadRepoUrl(ReadRepoUrl { path }) => {

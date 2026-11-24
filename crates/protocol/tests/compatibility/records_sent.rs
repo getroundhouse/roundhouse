@@ -1,7 +1,8 @@
-//! What a hub sends of each kind of record that once held a field an observation replaced, spelled out as the build
-//! before this one wrote it out, which these types write to the byte, since a client of version 5 reads each such field
-//! from its observation, and reads these from a hub that leaves the fields out. And what the hub of that build sends of
-//! each, with the fields filled, which these types read. Every kind of record that held such a field is here.
+//! What a hub sends of each kind of record that once held a field a client of version 5 reads elsewhere or not at all,
+//! spelled out as these types write it, to the byte, since that client reads each from a hub that leaves the fields
+//! out: a field an observation replaced, which it reads from its observation, and the list of every record's
+//! `found_github_logins`, which it reads as empty. And what the hub of the build before this one sends of each, with
+//! the fields there, which these types read. Every kind of record that held such a field is here.
 
 use protocol::fixtures;
 use protocol::model::{
@@ -66,14 +67,14 @@ const MODEL_LIST: &str = concat!(
 /// What a hub found in the update feed, with none of the release offered.
 const HUB_UPDATE: &str = r#"{"looked_at_ms":1795230000000,"problem":null,"rev":9}"#;
 
-/// A list of every record, with the workspace above, and no `github_reach`.
+/// A list of every record, with the workspace above, and no `github_reach` or `found_github_logins`.
 const RECORDS: &str = concat!(
     r#"{"repos":[],"workspaces":[{"id":"w","repo_id":"r","name":"w","branch":"w","base_ref":null,"path":null,"#,
     r#""status":"ready","provider":"local","instance_id":"w","created_at_ms":0,"archived_at_ms":null,"#,
     r#""user_active_at_ms":null,"setup":{"state":"succeeded"},"port_base":55000,"rev":3,"title":null,"#,
     r#""title_source":"first_line","pull_request_link":{"repository":"o/r","number":7,"url":"https://github.com/o/r/pull/7"}}],"#,
     r#""sessions":[],"comments":[],"hub_settings":null,"accounts":[],"new_workspace_draft":null,"github_accounts":[],"#,
-    r#""github_sign_ins":[],"found_github_logins":[],"github_apps":[],"rev":10}"#,
+    r#""github_sign_ins":[],"github_apps":[],"rev":10}"#,
 );
 
 // As the hub of the build before sends each, with every such field filled from its observation for a client of
@@ -234,7 +235,7 @@ fn records() -> Records {
     Records { workspaces: vec![workspace()], rev: Rev::new(10), ..Records::default() }
 }
 
-/// Each is written as the build before this one wrote it out, to the byte, and reads as it was.
+/// Each is written to the byte as a client of version 5 reads it, and reads as it was.
 #[test]
 fn a_record_keeps_the_form_a_client_of_version_5_reads() {
     keeps_its_form(&workspace(), WORKSPACE);

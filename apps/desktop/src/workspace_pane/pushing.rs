@@ -54,12 +54,7 @@ pub(super) fn said(reach: &Reach) -> Option<Said> {
             let wrong = format!("Agents can't push to {repository}.");
             return Some(Said { wrong, then: sentence(reason), install_at: None });
         }
-        Reach::Pushes { .. }
-        | Reach::CouldntTell { .. }
-        | Reach::MachineOwn { .. }
-        | Reach::PushesAsMachineOwn { .. }
-        | Reach::NotOnGithub
-        | Reach::Unknown => return None,
+        Reach::Pushes { .. } | Reach::CouldntTell { .. } | Reach::NotOnGithub | Reach::Unknown => return None,
     };
     let wrong = format!("Agents can't push to {repository} as {username}, the default GitHub account.");
     Some(Said { wrong, then, install_at })

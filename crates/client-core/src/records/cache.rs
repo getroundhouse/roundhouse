@@ -106,7 +106,6 @@ impl HubRecords {
             | Record::NewWorkspaceDraft(_)
             | Record::GithubAccount(_)
             | Record::GithubSignIn(_)
-            | Record::FoundGithubLogin(_)
             | Record::GithubApp(_)
             | Record::Terminal(_)
             | Record::ModelList(_)) => self.apply_listed(listed),
@@ -140,7 +139,6 @@ impl HubRecords {
             | RecordKey::Account { .. }
             | RecordKey::GithubAccount { .. }
             | RecordKey::GithubSignIn { .. }
-            | RecordKey::FoundGithubLogin { .. }
             | RecordKey::GithubApp { .. }
             | RecordKey::Terminal { .. }
             | RecordKey::ModelList(_)

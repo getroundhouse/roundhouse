@@ -154,8 +154,6 @@ A table named here is in the hub's database, except `facets`, `observed_workspac
 | Whether the hub is asking an agent which models it offers, and how that went | The hub's own work, which lasts only as long as the hub | The hub's memory, on the list of models' `ModelList` record | The hub's level, and `ModelsFor` |
 | How an update a person asked for is going, on a hub installed as a service, and when the hub last read the update feed and why that failed | The hub's own work, which lasts only as long as the hub | The hub's memory, on its `HubUpdate` record | The hub's level |
 
-A hub of this build lists no `FoundGithubLogin`, which `client-core` reads only from an older hub.
-
 ### Observations
 
 *Not built:* any observation but a workspace's lines added and removed, its changed files, its branches, which build its worker is, the release a hub would update to, what GitHub says of a chip's issue or pull request and of a workspace's own, whether the default GitHub account can push to a repository, what GitHub calls a GitHub account's user, what GitHub says of an app of your own and where each of its installations is, what an agent offers, who an agent's account is, an account's usage limits, how full an agent's context is and its todos, what the API's cache holds of a conversation, and what each open wait last read, so each of the others is kept as its row says: as a record or a field of one, in GitHub's cache, which reaches a client with no revision, or not at all.

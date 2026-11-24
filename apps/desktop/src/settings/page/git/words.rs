@@ -97,7 +97,7 @@ impl Standing {
                 return Standing::Works { ends: held.and_then(|held| ends(held, cx)) };
             }
             SentCredential::Blocked { why, .. } => why,
-            SentCredential::MachineOwn | SentCredential::NoAccount { .. } | SentCredential::Unknown => {
+            SentCredential::NoAccount { .. } | SentCredential::Unknown => {
                 return Standing::CantBeUsed;
             }
         };

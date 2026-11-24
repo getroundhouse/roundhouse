@@ -1,5 +1,6 @@
 //! Whether the default can push to a repository, which the hub keeps as an observation: across a restart, from a
-//! database from before, as the checks start with nothing known, and forgotten with the repository.
+//! database from before, in a form from before in the cache file, as the checks start with nothing known, and
+//! forgotten with the repository.
 
 use protocol::model::{Observation, Observed, Reach, RepoUrl};
 use protocol::worker::{RepoUrlReply, WorkerRequest, WorkerResponse};
@@ -140,4 +141,29 @@ async fn a_reach_is_forgotten_with_its_repository() {
 
     assert!(listed(&again, "r").await.is_some());
     assert!(!again.observations.keeps::<RepositoryReach>(&"gone".into()));
+}
+
+/// A reach that says each machine's own login is the default, or that pushes went round the default, as hubs from before
+/// Settings' Providers said, reads as one from a newer hub, which says nothing, where the cache file holds it, until the
+/// next check.
+#[tokio::test]
+async fn a_reach_of_the_machines_own_login_from_a_cache_file_reads_as_unknown() {
+    for said in [
+        r#"{"state":"machine_own","repository":"cli/cli"}"#,
+        r#"{"state":"pushes_as_machine_own","repository":"cli/cli"}"#,
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let hub = hub_calling_github(dir.path(), crate::hub::tests::NO_GITHUB.to_string());
+        let pushes = Reach::Pushes { repository: CLI, username: "ada".into() };
+        hub.observation_read::<RepositoryReach>("r".into(), pushes, 1_000).await.unwrap();
+        hub.observations_written().await;
+        drop(hub);
+        let file = Connection::open(dir.path().join("github-cache.db")).unwrap();
+        file.execute("UPDATE observed_repository_reach SET said = ?", [said]).unwrap();
+
+        let again = hub_calling_github_again(dir.path(), crate::hub::tests::NO_GITHUB.to_string());
+
+        let unknown = Observed::AsOf { value: Reach::Unknown, as_of_ms: 1_000 };
+        assert_eq!(listed(&again, "r").await, Some(unknown), "{said}");
+    }
 }

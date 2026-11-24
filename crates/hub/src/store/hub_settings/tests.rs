@@ -83,7 +83,7 @@ fn the_providers_left_to_their_machines_and_set_up_are_on_the_settings_once_reco
 }
 
 /// A hub from before Settings' Providers kept the `gh` login it found on each provider's machines, which the hub that
-/// starts forgets, table and all, and says none of. And it hadn't said which providers GitHub is set up on.
+/// starts forgets, table and all. And it hadn't said which providers GitHub is set up on.
 #[test]
 fn the_gh_logins_an_older_hub_found_are_forgotten() {
     let dir = tempfile::tempdir().unwrap();
@@ -91,7 +91,6 @@ fn the_gh_logins_an_older_hub_found_are_forgotten() {
 
     let store = older::store_from_before(dir.path(), schema::BEFORE_GITHUB_SET_UP, found);
 
-    assert_eq!(store.list_records().unwrap().found_github_logins, []);
     assert_eq!(store.hub_settings().unwrap().github.unwrap().set_up, Vec::<protocol::model::ProviderName>::new());
     let tables: i64 = lock(&store.reader)
         .query_row("SELECT COUNT(*) FROM sqlite_master WHERE name = 'found_github_logins'", [], OneValue::read)
