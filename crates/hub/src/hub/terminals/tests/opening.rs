@@ -243,18 +243,25 @@ async fn a_shell_that_ends_as_its_terminal_opens_leaves_no_record() {
     .await;
 }
 
+/// The close is answered once the worker is told, and the record goes once the shell's end reaches the hub, as any
+/// shell's does.
 #[tokio::test]
-async fn closing_a_terminal_ends_its_shell_and_removes_it() {
+async fn closing_a_terminal_ends_its_shell_which_removes_it() {
     let dir = tempfile::tempdir().unwrap();
-    let (hub, _link, asked) = with_worker(dir.path());
+    let (hub, link, asked) = with_worker(dir.path());
     let opened = hub.terminal_open(open("t")).await.unwrap();
+    let mut feed = hub.subscribe_feed();
 
     let closed = hub.terminal_close(TerminalClose { id: "t".into() }).await.unwrap();
+    let meanwhile = listed(&hub).await.terminals;
+    hub.terminal_update(&link, "t".into(), &exited());
 
     assert_eq!(closed, opened);
     let stop = WorkerRequest::TerminalStop(worker::TerminalStop { terminal: "t".into() });
     assert!(asked.lock().contains(&stop), "the shell wasn't ended");
-    assert_eq!(listed(&hub).await.terminals, Vec::new());
+    assert_eq!(meanwhile, vec![opened], "listed until its shell has ended");
+    let HubNotice::Removed { record, .. } = next(&mut feed).await else { panic!("the terminal wasn't removed") };
+    assert_eq!(record, RecordKey::Terminal { id: "t".into() });
     let again = hub.terminal_close(TerminalClose { id: "t".into() }).await;
     assert_eq!(again.map_err(|e| e.code), Err(ErrorCode::NotFound));
 }

@@ -113,7 +113,8 @@ fn a_terminal_runs_a_shell_in_its_worktree_until_it_is_closed() {
     client.terminal_close(open.id()).unwrap();
     wait_until("the terminal to end", || open.ended());
     wait_until("its shell to end", || !is_alive(pid));
-    assert_eq!(terminals_open(&client), 0);
+    // Once the shell's end has reached the hub, which the close doesn't wait for.
+    wait_until("its record to go", || terminals_open(&client) == 0);
 }
 
 /// As quitting the app does, and restarting the hub for an update, so neither ends what's running in it.

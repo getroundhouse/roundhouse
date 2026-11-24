@@ -182,9 +182,9 @@ impl Reply for TerminalFitReply {
     }
 }
 
-/// Ends the terminal's shell, and the job it runs in front, and closes the terminal. Answers with its record as it last
-/// was, and the feed says it's removed. Closing one that's gone is refused with `NotFound`, which a client takes as its
-/// being gone.
+/// Ends the terminal's shell, and the job it runs in front, which closes the terminal. Answers with its record as it last
+/// was once its worker has been told, without waiting for the shell to end, and the feed says it's removed once the
+/// shell has ended. Closing one that's gone is refused with `NotFound`, which a client takes as its being gone.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TerminalClose {
     pub id: TerminalId,

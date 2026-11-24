@@ -10,7 +10,9 @@ use protocol::paths;
 use protocol::terminal::TerminalSize;
 use protocol::worker;
 use tokio::sync::watch;
+use tracing::warn;
 
+use super::terminal_calls::end_shell;
 use super::{Open, Outcome, Stage};
 use crate::hub::Hub;
 use crate::store::{Store, now_ms};
@@ -117,7 +119,7 @@ impl Hub {
             (Ok(()), None) => {
                 drop(changing);
                 // If its worker has gone, so has the shell, and this fails with nothing to stop.
-                let _ = link.call(worker::TerminalStop { terminal: id.clone() }).await;
+                let _ = end_shell(link, id).await;
                 return Err(stopped_as_it_opened());
             }
         }
@@ -125,7 +127,9 @@ impl Hub {
             Ok(rev) => rev,
             Err(e) => {
                 drop(changing);
-                let _ = link.call(worker::TerminalStop { terminal: id.clone() }).await;
+                if let Err(stop) = end_shell(link, id).await {
+                    warn!(terminal = %id, "ending a shell given no record: {}", stop.message);
+                }
                 return Err(e);
             }
         };

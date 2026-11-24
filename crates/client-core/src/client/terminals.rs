@@ -74,7 +74,8 @@ impl Client {
         self.call(TerminalText { id: id.clone(), numbering, range, rectangle })
     }
 
-    /// Ends the terminal's shell and closes the terminal, answering with its record as it last was.
+    /// Ends the terminal's shell, which closes the terminal, answering with its record as it last was without waiting for
+    /// the shell to end, as [`TerminalClose`] says.
     pub fn terminal_close(&self, id: &TerminalId) -> Result<Terminal> {
         self.call(TerminalClose { id: id.clone() })
     }

@@ -5,12 +5,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
+use protocol::client::ErrorCode;
+use protocol::client::terminals::TerminalClose;
 use protocol::model::TerminalId;
 use protocol::worker::{RunningTerminal, RunningTerminalsReply, WorkerRequest, WorkerResponse};
 use tokio::time::{Instant, timeout};
 
 use crate::hub::Followed;
-use crate::hub::tests::{hub_with_worktree, serving, terminal_in_w};
+use crate::hub::tests::{hub_with_worktree, serving, store_of, terminal_in_w};
 use crate::worker_link::{ANSWERED_WITHIN, WorkerLink};
 
 /// A worker an earlier hub left that never says which terminals it runs leaves every list of the hub's records to be
@@ -74,6 +76,48 @@ async fn a_worker_that_never_ends_a_shell_given_no_record_holds_up_nothing() {
     let carried_on = timeout(Duration::from_secs(1), carrying_on).await.expect("it waited for the shell to end");
     assert_eq!(carried_on.unwrap(), 0, "it had no record to give");
     assert_eq!(*stopped.lock(), [TerminalId::from("t")]);
+}
+
+/// A worker that never ends a shell it's told to holds up neither a client that closes its terminal nor one whose
+/// terminal can't be given a record as it opens, as where the database gives no revision once the shell has started.
+/// The closed terminal is listed until its shell's end reaches the hub.
+#[tokio::test]
+async fn a_worker_that_never_ends_a_shell_holds_up_neither_a_close_nor_an_open() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_worktree(dir.path());
+    let stopped = Arc::new(Mutex::new(Vec::<TerminalId>::new()));
+    let store = Arc::downgrade(store_of(&hub));
+    let link = WorkerLink::answering({
+        let stopped = stopped.clone();
+        move |request| {
+            if let WorkerRequest::TerminalStop(stop) = request {
+                stopped.lock().push(stop.terminal);
+                return None;
+            }
+            // Once its shell has started, so only giving it a record fails.
+            if let WorkerRequest::TerminalStart(start) = request
+                && start.terminal.as_str() == "u"
+            {
+                let refuse = "CREATE TRIGGER no_rev BEFORE UPDATE ON counters WHEN OLD.name = 'rev'
+                    BEGIN SELECT RAISE(ABORT, 'no'); END";
+                store.upgrade().unwrap().holding_writes().execute_batch(refuse).unwrap();
+            }
+            Some(Ok(WorkerResponse::Ok))
+        }
+    });
+    serving(&hub, &link);
+    let opened = hub.terminal_open(terminal_in_w("t")).await.unwrap();
+
+    let closed = timeout(Duration::from_secs(5), hub.terminal_close(TerminalClose { id: "t".into() })).await;
+    let refused = timeout(Duration::from_secs(5), hub.terminal_open(terminal_in_w("u"))).await;
+    // The stand-in takes what's sent on a task of its own.
+    waiting::task::until(Duration::from_secs(5), "both shells to be told to end", || stopped.lock().len() == 2).await;
+
+    assert_eq!(closed.expect("the close waited for the shell to end"), Ok(opened.clone()));
+    let refused = refused.expect("the open waited for the shell to end");
+    assert_eq!(refused.map_err(|e| e.code), Err(ErrorCode::Internal), "it had no record to give");
+    assert_eq!(*stopped.lock(), [TerminalId::from("t"), TerminalId::from("u")]);
+    assert_eq!(hub.records_list().await.unwrap().terminals, [opened], "the closed one's shell hasn't ended");
 }
 
 /// A worker that never answers whether a client watches its terminal holds each telling only until the limit, and
