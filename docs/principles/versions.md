@@ -20,14 +20,14 @@ The table follows from the rules above and those in `docs/principles/protocol.md
 
 | Pairing | After a change that needs no new version | After a break |
 |---|---|---|
-| Older client, newer hub | Works, but for terminals, as below. The client ignores what it doesn't know | Works. The hub speaks the client's version until the hub's next break |
-| Newer client, older hub | Works, but for terminals, as below. The client hides each feature whose request the hub rejects | Doesn't work. The client reports that the hub is too old. The desktop app replaces a local hub that it started, using `hub_status` and `hub_shutdown` |
+| Older client, newer hub | Works. The client ignores what it doesn't know | Works. The hub speaks the client's version until the hub's next break |
+| Newer client, older hub | Works. The client hides each feature whose request the hub rejects | Doesn't work. The client reports that the hub is too old. The desktop app replaces a local hub that it started, using `hub_status` and `hub_shutdown` |
 | Newer hub, older worker | Works, but for terminals, as below. The hub does without what the worker rejects | Works. The hub speaks the worker's version |
-| Older hub, newer worker, after a rollback | Works, but for terminals, as below | Doesn't work. The hub stops the worker and its agents |
+| Older hub, newer worker, after a rollback | Works | Doesn't work. The hub stops the worker and its agents |
 
 Wherever a hub works with a worker of another build, it replaces that worker with one of its own build once the worker's workspace is idle. So updating a hub never stops an agent, as long as the update crosses one break at a time.
 
 ## Terminals, the one exception
 
-- **A terminal shows only where its hub, worker and client all send it as rows.** The requests that sent a terminal's bytes into a copy of Ghostty in each client were removed without a new version, so a build from before is refused with `Unsupported`, and shows no terminal with a newer peer. Everything else in such a pairing works as the table says. Keeping them a version longer would have kept Ghostty in every client.
+- **A terminal shows only where its hub and its worker both send it as rows.** The requests that sent a terminal's bytes into a copy of Ghostty in each client were removed without a new version. Every client and hub a build meets came after, so only a worker of version 5 from before rows is left: it shows no terminal with this hub, until the hub replaces it. Everything else in that pairing works as the table says. Keeping them a version longer would have kept Ghostty in every client.
 - **No other request is removed without a break.**

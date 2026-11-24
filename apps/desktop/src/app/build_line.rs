@@ -147,7 +147,7 @@ fn hub_update(hub: &str, records: &Snapshot, asked: Option<&HubUpdateAsk>) -> Op
     let (asking, refused) = match asked {
         // A failure the hub recorded before the app asked is of the update before.
         Some(HubUpdateAsk::Asked { next: asked, rev }) if *asked == next => {
-            (failed.is_none() || !found.rev.supersedes(*rev), None)
+            (failed.is_none() || found.rev <= *rev, None)
         }
         Some(HubUpdateAsk::Refused { next: asked, why }) if *asked == next => (false, Some(why.clone())),
         Some(_) | None => (false, None),

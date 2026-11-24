@@ -125,7 +125,7 @@ impl Record {
         }
     }
 
-    /// The revision of this copy, which says whether it replaces another, as [`Rev::supersedes`] does.
+    /// The revision of this copy, which says whether it replaces another: one at a higher revision does.
     pub fn rev(&self) -> Rev {
         match self {
             Record::Repo(repo) => repo.rev,

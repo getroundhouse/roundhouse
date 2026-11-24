@@ -39,13 +39,11 @@ impl Feed {
         let notice = match RecordNotice::try_from(notice) {
             Ok(of) => {
                 let (newest, rev) = (sent.entry(of.key()).or_default(), of.rev());
-                // A copy without a revision is always sent, as `Rev::supersedes` says, though the hub makes none:
-                // every row and every record it keeps in memory takes its revision from the counter.
-                if !rev.supersedes(*newest) {
+                if rev <= *newest {
                     trace!(rev = rev.get(), newest = newest.get(), "left out a copy no newer than one told of");
                     return;
                 }
-                *newest = rev.max(*newest);
+                *newest = rev;
                 HubNotice::from(of)
             }
             // Not of one record, such as `Resync`.

@@ -5,9 +5,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-/// How long a build is kept once made, even with nothing marking it as run from. A process of a build from before
-/// processes marked the file they run from marks nothing, and a worker outlives as many hubs as its workspace stays at
-/// work through, over an hour of updates being usual. A day of them is a few builds.
+/// How long a build is kept once made, even with nothing marking it as run from: one that's placed and not yet run
+/// from, as a client's copy is until the hub it starts marks it, and one run from by a process that couldn't mark it as
+/// it started, which goes on unmarked. Placing a build and starting from it take seconds.
 const KEEP_FOR: Duration = Duration::from_hours(24);
 
 /// How long a temporary file can go unchanged before it's taken for one whoever was making it was killed while doing

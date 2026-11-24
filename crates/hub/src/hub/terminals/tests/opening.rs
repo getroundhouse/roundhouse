@@ -156,7 +156,7 @@ async fn a_terminal_whose_shell_ends_is_removed() {
 
     let HubNotice::Removed { record, rev } = next(&mut feed).await else { panic!("the terminal wasn't removed") };
     assert_eq!(record, RecordKey::Terminal { id: "t".into() });
-    assert!(rev.supersedes(opened.rev));
+    assert!(rev > opened.rev);
     assert_eq!(listed(&hub).await.terminals, Vec::new());
     assert!(!hub.terminals.open_in(&"w".into()));
 }

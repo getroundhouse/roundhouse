@@ -139,8 +139,6 @@ A chat stays on the account it's put on until you [move it](../guides/watch-cont
 
 If an account expires or is disconnected, agents in the chats on it cannot start until you renew or reconnect it. If it's your default, new chats can't start either until you do, or choose another default, which the chats already on it don't follow, so [move them](../guides/watch-context-and-limits.md#move-a-chat-to-another-account) to another account. It stays selected and does not fall back to another account or machine credentials.
 
-An older worker that cannot enforce the selected account also refuses new launches until it is updated.
-
 ## Git
 
 The GitHub accounts Roundhouse reads GitHub as, and agents push and open pull requests as on the machines it sets up. [Who agents are on GitHub](../concepts/who-agents-are-on-github.md) says which to choose.

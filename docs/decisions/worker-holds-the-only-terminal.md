@@ -17,4 +17,4 @@ Each terminal's worker keeps the only copy of what it shows, in Ghostty's termin
 - A double or a triple click's highlight, scrolling past the rows a client holds, copying, and resizing while scrolled back each wait a round trip.
 - With no connection, the wheel reaches only the rows a client holds, and nothing can be copied.
 - The worker does the work for every client, and the hub holds a screen for each watched terminal.
-- The requests that sent a terminal's bytes were removed without a new version, so a client, hub or worker from before can't show a terminal with a newer peer, as `docs/principles/versions.md` says.
+- The requests that sent a terminal's bytes were removed without a new version, so a worker of version 5 from before rows can't show a terminal with a newer hub, until the hub replaces it, as `docs/principles/versions.md` says.

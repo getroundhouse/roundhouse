@@ -23,13 +23,9 @@ These rules cover records: what one is, how one changes, and how a client keeps 
   }
 
   // crates/protocol/src/model/counters.rs, abridged
-  impl Rev {
-      /// Whether a copy at this revision replaces one at `held`: it's newer, or it has none, and then copies replace each
-      /// other in the order they arrive.
-      pub fn supersedes(self, held: Rev) -> bool {
-          self == Rev::default() || self > held
-      }
-  }
+  /// When a record last changed, from one counter per hub, so a client can tell which of two copies is newer: a copy
+  /// at a higher one replaces one at a lower.
+  pub struct Rev(u64);
 
   // crates/protocol/src/client/feed/notices.rs, abridged
   /// A record changed. Carries the whole record and its revision, so a client only ever replaces its

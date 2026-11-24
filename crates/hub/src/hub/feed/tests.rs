@@ -40,9 +40,10 @@ proptest! {
     })]
 
     /// However the tasks announcing records interleave, a client hears each copy that's newer than every earlier copy
-    /// of its record, in the order they were sent, and nothing else.
+    /// of its record, in the order they were sent, and nothing else. A copy at 0, which is no record's revision, is
+    /// newer than none.
     #[test]
-    fn a_client_hears_each_copy_newer_than_the_last_of_its_record(sent in vec((0..IDS.len(), 1..8u64), 0..40)) {
+    fn a_client_hears_each_copy_newer_than_the_last_of_its_record(sent in vec((0..IDS.len(), 0..8u64), 0..40)) {
         let feed = Feed::new();
         let mut client = feed.subscribe();
 
@@ -88,21 +89,6 @@ fn each_subagents_copies_are_in_order_apart_from_any_others() {
 
     let subagents = copies.into_iter().map(HubNotice::Subagent);
     assert_eq!(heard(&mut client), std::iter::once(told(&session("s", 2))).chain(subagents).collect::<Vec<_>>());
-}
-
-/// A copy without a revision supersedes any, as `Rev::supersedes` says, so the feed can't leave one out, though the
-/// hub makes none.
-#[test]
-fn a_copy_without_a_revision_is_always_told_of() {
-    let feed = Feed::new();
-    let mut client = feed.subscribe();
-
-    feed.send(told(&session("s", 2)));
-    feed.send(told(&session("s", 0)));
-    feed.send(told(&session("s", 0)));
-    feed.send(told(&session("s", 1)));
-
-    assert_eq!(heard(&mut client), [told(&session("s", 2)), told(&session("s", 0)), told(&session("s", 0))]);
 }
 
 /// What's in the new-workspace dialog is one record, with no ID, and its copies are told of the same way.

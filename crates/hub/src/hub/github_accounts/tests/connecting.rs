@@ -76,7 +76,7 @@ async fn disconnecting_the_default_tells_every_client_its_gone_and_then_that_the
 
     let Ok(HubNotice::Removed { record, rev }) = gone else { panic!("{gone:?}") };
     assert_eq!(record, RecordKey::GithubAccount { id: connected.id.clone() });
-    assert!(rev.supersedes(connected.rev));
+    assert!(rev > connected.rev);
     let Ok(HubNotice::HubSettings(settings)) = settings else { panic!("{settings:?}") };
     assert_eq!(settings.github.map(|github| github.account), Some(None));
     assert_eq!(again.unwrap_err().code, ErrorCode::NotFound);
