@@ -18,12 +18,12 @@ use crate::worker_link::{WorkerLink, WorkerLinkId, answered_at_once};
 use super::{Open, Queued, Stage};
 
 impl Hub {
-    /// Ends the terminal's shell, and the job it runs, and removes its record. Answers with the record as it last was.
+    /// Tells the terminal's worker to end its shell, and the job it runs, as [`end_shell`] does, and answers with its
+    /// record as it last was, without waiting for the shell to end. The record goes once the shell's end reaches the
+    /// hub, as any shell's does.
     pub(crate) async fn terminal_close(&self, close: TerminalClose) -> Result<Terminal, ApiError> {
         let (record, link) = self.open_terminal(&close.id)?;
-        link.call(worker::TerminalStop { terminal: close.id.clone() }).await?;
-        // The worker said it ended, on its way to here, but nothing waits for that to be taken in.
-        self.terminal_ended(&close.id, link.id).await;
+        end_shell(&link, &close.id).await?;
         Ok(record)
     }
 
@@ -106,11 +106,9 @@ impl Hub {
     /// to say is, and nothing waits for it meanwhile.
     pub(crate) async fn carry_on_terminals(&self, workspace_id: &WorkspaceId, link: &WorkerLink) -> usize {
         let (carried_on, unrecorded) = self.give_records(workspace_id, link).await;
-        // Told once `changing` is let go, as an open that can't give its terminal a record tells its worker, since a
-        // worker answers a stop only once the shell has ended. And not waited for, since the hub serves no client until
-        // it has carried on with every worker it found. The shell's end reaches the hub as any shell's does.
+        // Told once `changing` is let go, as an open that can't give its terminal a record tells its worker.
         for terminal in unrecorded {
-            if let Err(e) = link.send(worker::TerminalStop { terminal: terminal.clone() }).await {
+            if let Err(e) = end_shell(link, &terminal).await {
                 warn!(%terminal, "ending a shell given no record: {}", e.message);
             }
         }
@@ -182,6 +180,16 @@ impl Hub {
             }
         }
     }
+}
+
+/// Tells the worker on `link` to end the shell of `terminal`, and the job it runs, without waiting for it to end, which is
+/// how the hub ends every shell. A worker answers only once the shell has ended, after its grace period, so one that has
+/// stopped answering, but stays connected, would hold whatever waited for good. The shell's end reaches the hub as any
+/// shell's does, which [`Hub::terminal_update`] takes in. Fails only if the stop can't be sent, as when the link has
+/// ended.
+pub(super) async fn end_shell(link: &WorkerLink, terminal: &TerminalId) -> Result<(), ApiError> {
+    // Dropping the reply forgets the call, and the worker carries on with it.
+    link.send(worker::TerminalStop { terminal: terminal.clone() }).await.map(drop)
 }
 
 pub(super) fn not_open(id: &TerminalId) -> ApiError {
