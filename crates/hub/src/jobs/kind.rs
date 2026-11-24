@@ -59,8 +59,10 @@ impl JobKind {
             // twice.
             Self::WaitForGithubSignIn => AskedAgain::Refused,
             // A list says it's asking while its lookup runs, so nothing asks for another meanwhile, and whatever waits
-            // for the list is told by the one running.
-            Self::LookUpModels => AskedAgain::Refused,
+            // for the list is told by the one running. But a lookup has said what it found before its job ends, so a
+            // person can ask again in between, as Retry does, as can one whose list was let go of while its lookup was
+            // called off, and the agent is asked again once that job has ended.
+            Self::LookUpModels => AskedAgain::RunsOnceMore,
             // The read under way may have begun before what said the changes may have changed, so it can't stand for
             // the one asked for meanwhile, which reads them from the worker the last one asked named.
             Self::ReadWorkspaceChanges => AskedAgain::RunsOnceMore,

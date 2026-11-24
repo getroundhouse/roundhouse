@@ -116,7 +116,7 @@ async fn an_answer_that_lands_as_its_list_is_let_go_of_is_dropped() {
     let under_way = hub.holding_observations().await;
     let answer = tokio::spawn({
         let (hub, key) = (Arc::clone(&hub), installed.clone());
-        async move { hub.model_list_settled(&key, asked, offered()).await }
+        async move { hub.model_list_settled(&key, asked, Ok(offered())).await }
     });
     // It runs up to the lock it waits for, on the test's one thread.
     tokio::task::yield_now().await;
@@ -149,11 +149,33 @@ async fn an_answer_the_hub_couldnt_keep_leaves_its_list_failed() {
         "CREATE TRIGGER no_rev BEFORE UPDATE ON counters WHEN OLD.name = 'rev' BEGIN SELECT RAISE(ABORT, 'no'); END";
     store_of(&hub).holding_writes().execute_batch(refuse).unwrap();
 
-    hub.model_list_settled(&installed, asked, offered()).await;
+    hub.model_list_settled(&installed, asked, Ok(offered())).await;
 
     let list = hub.model_list_held(&installed).expect("the list asked for");
     let ModelLookup::Failed { message } = &list.lookup else { panic!("not failed: {:?}", list.lookup) };
     assert!(message.contains("couldn't keep"), "{message}");
     store_of(&hub).holding_writes().execute_batch("DROP TRIGGER no_rev").unwrap();
     assert_eq!(listed(&hub, &installed).await.0, None, "nothing kept of what it offered");
+}
+
+/// A lookup has said what it found a moment before its job ends, so a person can ask again in between, as Retry does
+/// once a list has failed. The agent is asked again once that job has ended, rather than the list failing as though the
+/// hub were asking about as many places as it can.
+#[tokio::test]
+async fn a_list_asked_again_as_its_failed_lookup_ends_is_asked_for_once_it_has() {
+    let dir = tempfile::tempdir().unwrap();
+    let installed = key(Some("0.170.0"));
+    let hub = hub_in(dir.path());
+    let asked = hub.model_list_asking(&installed).await;
+    let ending = hub.model_lookup_ending(&installed);
+    hub.model_list_settled(&installed, asked, Err("logged out")).await;
+
+    let again = hub.ensure_model_list(lookup(&installed), true).await.unwrap();
+    drop(ending);
+
+    assert_eq!(again.lookup, ModelLookup::Asking);
+    waiting::task::until(Duration::from_secs(5), "the agent asked again", || {
+        hub.model_list_held(&installed).is_some_and(|list| list.rev > again.rev)
+    })
+    .await;
 }
