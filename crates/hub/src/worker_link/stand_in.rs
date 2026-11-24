@@ -74,7 +74,6 @@ impl WorkerLink {
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
             process,
-            tools_unserved: AtomicBool::new(false),
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),

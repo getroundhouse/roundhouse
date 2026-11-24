@@ -135,7 +135,7 @@ impl LiveSession {
         let settings = self.launched_with(hub, kept)?;
         let asked = hub.blocking(Store::next_run).await?;
         self.record_login(hub, asked, login.as_ref()).await?;
-        let tools_token = hub.tools_for(&self.workspace_id, &self.id, link).await;
+        let tools_token = Some(hub.tools_for(&self.workspace_id, &self.id, link).await?);
         // Before the launch, so the new agent's first events aren't recorded ahead of its start.
         let build = link.said_build().map(str::to_string);
         let previous_build = self.previous_build(hub, build.as_deref()).await;

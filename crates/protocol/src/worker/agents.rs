@@ -26,7 +26,9 @@ pub struct AgentSpec {
     /// Set in the agent's environment, along with the worker's own.
     pub env: Vec<(String, String)>,
     /// What the agent's calls to the worker's tools carry, which tells the worker whose they are. The hub keeps one for
-    /// each session, so every launch of its agent has the same. `None` when the worker isn't serving its tools.
+    /// each session, so every launch of its agent has the same. A hub of this build sends one with every launch, since
+    /// its agents never start without the tools, and a hub of an earlier build sends none when the worker didn't serve
+    /// them, whose agent then starts without them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools_token: Option<ToolsToken>,
     /// The login the hub holds for the account the agent runs under, which the agent's adapter gives its CLI, and the
