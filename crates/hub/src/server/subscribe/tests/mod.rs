@@ -3,6 +3,7 @@
 
 mod accounts;
 mod as_the_four;
+mod every_kind;
 mod falling_behind;
 mod github;
 mod github_accounts;

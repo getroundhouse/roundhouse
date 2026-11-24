@@ -114,7 +114,7 @@ async fn a_sessions_context_cache_and_waits_reach_each_client_in_the_form_its_ve
     let wait = Wait { call: None, ..protocol::fixtures::pull_request_wait("a") };
     hub.start_wait(wait.clone()).await.unwrap();
     let mut before = Connection::greeted(&hub, 4).await;
-    let mut observing = Connection::speaking(&hub, EVERY_OBSERVATION_FROM);
+    let mut observing = Connection::greeted(&hub, EVERY_OBSERVATION_FROM).await;
     let follow_s = || start(2, Follow::Session { id: "s".into(), from: None });
     ok(&mut before, 1, Subscribe { stop: Vec::new(), start: vec![start(1, Follow::Hub), follow_s()] }).await;
     ok(&mut observing, 1, Subscribe { stop: Vec::new(), start: vec![start(1, Follow::Hub), follow_s()] }).await;

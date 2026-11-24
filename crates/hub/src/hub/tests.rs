@@ -346,6 +346,12 @@ pub(crate) fn forget_github_but_a_summary(hub: &Hub) {
     hub.github_cache.keep(vec![(item, Ok(Some(kept)))], crate::store::now_ms());
 }
 
+/// Has the hub's cache keep `reference`, which a chip asks for as `ask`, as read now, as a read of it would.
+pub(crate) fn github_kept(hub: &Hub, ask: &protocol::model::ReferenceAsk, reference: protocol::model::Reference) {
+    let item = crate::github_cache::Item::new(&ask.repository, ask.number);
+    hub.github_cache.keep(vec![(item, Ok(Some(reference)))], crate::store::now_ms());
+}
+
 /// A summary of a worktree whose one changed file, `a.rs`, adds `added` lines and removes `removed`.
 pub(crate) fn changes(added: u64, removed: u64) -> protocol::model::ChangeSummary {
     use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, LineCounts};

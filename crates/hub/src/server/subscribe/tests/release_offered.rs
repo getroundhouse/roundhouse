@@ -35,7 +35,7 @@ async fn the_release_offered_reaches_each_client_in_the_form_its_version_reads()
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     let mut before = Connection::greeted(&hub, 4).await;
-    let mut observing = Connection::speaking(&hub, EVERY_OBSERVATION_FROM);
+    let mut observing = Connection::greeted(&hub, EVERY_OBSERVATION_FROM).await;
     for client in [&mut before, &mut observing] {
         ok(client, 1, Subscribe { stop: Vec::new(), start: vec![start(1, Follow::Hub)] }).await;
         client.until("the list", |sent| sent.iter().any(|frame| matches!(frame, HubFrame::Listed { .. }))).await;
