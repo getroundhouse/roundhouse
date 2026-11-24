@@ -62,7 +62,7 @@ async fn a_workspace_s_branches_reach_each_client_in_the_form_its_version_reads(
     // What a read of its pull request with either branch finds, as following it has one read, so that changes nothing.
     store_of(&hub).set_workspace_pull_request(&"w".into(), Some(&PullRequestLinked { link: None }), None).unwrap();
     let mut before = Connection::greeted(&hub, 4).await;
-    let mut observing = Connection::speaking(&hub, EVERY_OBSERVATION_FROM);
+    let mut observing = Connection::greeted(&hub, EVERY_OBSERVATION_FROM).await;
     let follows = vec![start(1, Follow::Hub), start(2, Follow::Workspace { id: "w".into() })];
     for client in [&mut before, &mut observing] {
         ok(client, 1, Subscribe { stop: Vec::new(), start: follows.clone() }).await;

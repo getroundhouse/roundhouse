@@ -126,7 +126,7 @@ async fn a_chip_is_sent_as_an_observation_only_to_a_start_that_reads_github_so()
 async fn a_connection_that_reads_every_observation_is_sent_github_as_observations() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_an_issue(dir.path()).await;
-    let mut client = Connection::speaking(&hub, EVERY_OBSERVATION_FROM);
+    let mut client = Connection::greeted(&hub, EVERY_OBSERVATION_FROM).await;
 
     let starts = vec![start(1, Follow::Reference { reference: twelve() })];
     ok(&mut client, 1, Subscribe { stop: Vec::new(), start: starts }).await;

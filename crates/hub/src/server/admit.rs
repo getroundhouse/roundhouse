@@ -88,13 +88,6 @@ impl Gate {
         }
     }
 
-    /// A connection on the Unix socket that has said hello at `version`, which the hub needn't speak, for a test of what
-    /// the hub sends a client of a version it will speak, as a client of the next version does, once the hub speaks it.
-    #[cfg(test)]
-    pub(super) fn local_greeted_at(hub: &Arc<Hub>, version: u32) -> Gate {
-        Gate { stage: Stage::Admitted { greeted: Some(version), _counted: Counted::client(hub) }, ..Gate::local(hub) }
-    }
-
     /// A connection from the network, accepted [`AUTHENTICATE_WITHIN`] before `deadline`, holding `unproven` until it
     /// authenticates.
     pub(super) fn network(deadline: Instant, unproven: OwnedSemaphorePermit) -> Gate {

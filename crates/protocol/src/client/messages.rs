@@ -25,22 +25,24 @@ use serde::{Deserialize, Serialize};
 /// everything through [`Subscribe`](super::subscriptions::Subscribe) alone in.
 pub const CLIENT_PROTOCOL_VERSION: u32 = 4;
 
-/// The versions of the client protocol a hub of this build speaks: its own, and the one before it, for a client of an
-/// older build, as `docs/principles/versions.md` says. Version 3 is the one a client follows through a request of its
-/// own for each of the hub's records, a session, a terminal and what it shows of GitHub. Nothing a hub sends a client
-/// of version 3 differs from what it sent it before version 4.
+/// The versions of the client protocol a hub of this build speaks: its own, the one before it, for a client of an
+/// older build, as `docs/principles/versions.md` says, and the next, [`EVERY_OBSERVATION_FROM`], which no client speaks
+/// yet. Version 3 is the one a client follows through a request of its own for each of the hub's records, a session, a
+/// terminal and what it shows of GitHub. Nothing a hub sends a client of version 3 differs from what it sent it before
+/// version 4.
 ///
-/// Both are written out, rather than taken from [`CLIENT_PROTOCOL_VERSION`], since at a break the hub speaks the new
+/// Each is written out, rather than taken from [`CLIENT_PROTOCOL_VERSION`], since at a break the hub speaks the new
 /// version a merge before clients do, so a client of the build that first speaks it can talk to the hub of the build
 /// before. A hub has to speak its own build's clients' version, which the assertion below holds.
-pub const HUB_SPEAKS: Versions = Versions { oldest: 3, newest: 4 };
+pub const HUB_SPEAKS: Versions = Versions { oldest: 3, newest: 5 };
 
 const _: () = assert!(HUB_SPEAKS.speaks(CLIENT_PROTOCOL_VERSION), "a hub speaks its own build's clients' version");
 
 /// The version of the client protocol from which a client reads every copy of what the hub only observes as an
 /// observation, and none in the form it replaced: GitHub's whatever its start says, and each kind that
 /// [`ObservationKey::read_from`](crate::model::ObservationKey::read_from) says is read from it. So no client of one
-/// version holds such a copy in two forms. A hub speaks it once it sends every such kind, and no client speaks it yet.
+/// version holds such a copy in two forms. A hub speaks it only once it sends every such kind, as one of this build
+/// does, and no client speaks it yet.
 pub const EVERY_OBSERVATION_FROM: u32 = 5;
 
 /// A request to a hub, which names what the hub answers it with.
