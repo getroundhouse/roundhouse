@@ -50,11 +50,12 @@ proptest! {
         }
     }
 
-    /// Reading a title back tidies nothing more, so a stored title reads as it was saved.
+    /// Tidying a title, however it was made, changes nothing, so the hub stores one as it's made and reads it back as
+    /// it's stored. Some of the texts are one long line, which a first line is cut from.
     #[test]
-    fn a_tidied_title_reads_back_the_same(text in text()) {
-        if let Some(title) = Title::tidied(&text) {
-            prop_assert_eq!(Title::tidied(&title), Some(title.clone()));
+    fn every_title_is_already_tidy(text in prop_oneof![text(), "[a-zé ]{40,90}"]) {
+        for title in [Title::tidied(&text), Title::from_first_line(&text), Title::typed(&text).ok()].iter().flatten() {
+            prop_assert_eq!(Title::tidied(title), Some(title.clone()));
         }
     }
 }

@@ -79,8 +79,7 @@ impl Store {
     ) -> Result<Retitled<T>, StoreError> {
         let Table { name, kind, columns } = table;
         let conn = lock(&self.writer);
-        // Read on the writer, which stays locked until the update is done, so no title is set in between. Compared
-        // tidied, as a record reads its title, so one stored before titles were tidied still counts as itself.
+        // Read on the writer, which stays locked until the update is done, so no title is set in between.
         let still_there = match how {
             Retitle::Regenerated { over, set } => {
                 columns! {
@@ -92,9 +91,8 @@ impl Store {
                     Ok((row.at::<Option<String>>(c.title)?, text_at::<TitleSource>(row, c.title_source)?))
                 });
                 // One that's missing is found missing below.
-                now.optional()?.is_none_or(|(title, source)| {
-                    title.as_deref().and_then(Title::tidied).as_ref() == over && source == set
-                })
+                now.optional()?
+                    .is_none_or(|(title, source)| title.as_deref() == over.map(Title::as_str) && source == set)
             }
             Retitle::FirstLine | Retitle::Generated | Retitle::ByHand => true,
         };
