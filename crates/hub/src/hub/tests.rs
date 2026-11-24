@@ -237,7 +237,7 @@ pub(crate) fn writing(run: RunId, text: &str) -> Tail {
 /// go through a stand-in for its worker.
 pub(crate) fn hub_with_worktree(dir: &Path) -> Arc<Hub> {
     let hub = hub_in(dir);
-    hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
+    hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main").unwrap();
     hub
 }
 
@@ -259,7 +259,7 @@ pub(crate) fn hub_reading_github_timed(dir: &Path, api: String, timers: Timers) 
 /// The same, with no GitHub account, so it reads nothing of GitHub.
 pub(crate) fn hub_without_account(dir: &Path, api: String, timers: Timers) -> Arc<Hub> {
     let hub = hub_timed(dir, vec![described()], Github::new(GithubConfig::at(api)), timers);
-    hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
+    hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main").unwrap();
     let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
     hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
     hub
@@ -302,7 +302,7 @@ async fn hub_on_github_answering(
     let github =
         StandIn::with(Script { pull_requests: Some(pull_requests.clone()), references, ..Script::default() }).await;
     let hub = hub_reading_github_timed(dir, github.api(), timers);
-    hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
+    hub.branches_known(&"w".into(), pushed("head-7", "head-7", (0, 0))).await;
     (hub, pull_requests, github)
 }
 

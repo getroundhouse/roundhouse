@@ -1,8 +1,13 @@
-//! A workspace's status, which a hub keeps in its database in the form it sends.
+//! A workspace's status, which a hub keeps in its database in the form it sends, and its branches, which a hub sends
+//! as an observation.
 
 use protocol::client::HubNotice;
 use protocol::frame;
-use protocol::model::WorkspaceStatus;
+use protocol::model::{
+    Branch, BranchName, Branches, CommitId, Head, Observation, ObservationKey, Observed, Rev, WorkspaceStatus,
+};
+
+use crate::keeps_its_form;
 
 /// A hub stores a workspace's status as the text it sends, so a workspace being archived or restored, which a hub that
 /// stopped part way leaves stored, has to read the same way to the next.
@@ -23,4 +28,28 @@ fn a_workspace_on_its_way_out_or_back_keeps_its_form() {
     assert_eq!(read("restoring"), WorkspaceStatus::Restoring);
     assert_eq!(serde_json::to_string(&WorkspaceStatus::Archiving).unwrap(), r#""archiving""#);
     assert_eq!(serde_json::to_string(&WorkspaceStatus::Restoring).unwrap(), r#""restoring""#);
+}
+
+/// A workspace's branches, which a hub sends at the workspace's level to a client of a version that reads them so, as a
+/// notice and as their removal.
+#[test]
+fn a_workspaces_branches_keep_their_form_as_a_notice_and_a_removal() {
+    let branch = Branch { name: BranchName::from("aspen"), tip: CommitId::from("c1"), upstream: None };
+    let branches = Branches { head: Head::Branch { name: BranchName::from("aspen") }, had: vec![branch] };
+    let branches = Observed::Current { value: branches };
+    let copy =
+        HubNotice::Observation(Observation::WorkspaceBranches { workspace_id: "w".into(), branches, rev: Rev::new(5) });
+    let gone = HubNotice::ObservationRemoved {
+        observation: ObservationKey::WorkspaceBranches { workspace_id: "w".into() },
+        rev: Rev::new(6),
+    };
+
+    keeps_its_form(
+        &copy,
+        r#"{"notice":"observation","kind":"workspace_branches","workspace_id":"w","branches":{"freshness":"current","value":{"head":{"kind":"branch","name":"aspen"},"had":[{"name":"aspen","tip":"c1"}]}},"rev":5}"#,
+    );
+    keeps_its_form(
+        &gone,
+        r#"{"notice":"observation_removed","observation":{"kind":"workspace_branches","workspace_id":"w"},"rev":6}"#,
+    );
 }

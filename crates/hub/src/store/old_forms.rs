@@ -10,12 +10,12 @@ impl Store {
     /// the record. `None` for one that's gone, and for one of a kind that holds no observation's old form.
     pub(crate) fn old_form_moved(&self, key: &RecordKey) -> Result<Option<Record>, StoreError> {
         match key {
+            RecordKey::Workspace { id } => Ok(self.workspace_moved(id)?.map(Record::Workspace)),
             RecordKey::Account { id } => Ok(self.account_moved(id)?.map(Record::Account)),
             RecordKey::Session { id } => Ok(self.session_moved(id)?.map(Record::Session)),
             RecordKey::GithubApp { id } => Ok(self.github_app_moved(*id)?.map(Record::GithubApp)),
             RecordKey::GithubAccount { id } => Ok(self.github_account_moved(id)?.map(Record::GithubAccount)),
             RecordKey::Repo { .. }
-            | RecordKey::Workspace { .. }
             | RecordKey::Comment { .. }
             | RecordKey::HubSettings
             | RecordKey::NewWorkspaceDraft

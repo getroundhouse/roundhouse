@@ -1,9 +1,7 @@
 //! The rule's rows for a repository, a workspace, the comments on its diff, and its child worktrees.
 
 use protocol::fixtures;
-use protocol::model::{
-    BranchName, Branches, ChildStatus, ChildWorktree, DiffComment, DiffSide, RepoUrl, Rev, SetupStatus,
-};
+use protocol::model::{BranchName, ChildStatus, ChildWorktree, DiffComment, DiffSide, RepoUrl, Rev, SetupStatus};
 
 use super::super::Store;
 use super::rule::Said;
@@ -79,7 +77,7 @@ pub(super) fn made_child(store: &Store) {
     store.insert_child(&child, &"k1".into()).unwrap();
 }
 
-pub(super) fn branches(store: &Store) -> Said {
-    let on = Branches { head: protocol::model::Head::Branch { name: BranchName::from("alder/x") }, had: vec![] };
-    Said::Changed(store.set_child_branches(&"w".into(), "/c/x", &on).unwrap().is_some())
+/// As its worker answers that it's made, which a worker asked again answers again.
+pub(super) fn ready(store: &Store) -> Said {
+    Said::Changed(store.child_ready(&"a".into()).unwrap().is_some())
 }

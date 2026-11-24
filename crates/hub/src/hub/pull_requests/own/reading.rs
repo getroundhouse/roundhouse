@@ -37,6 +37,11 @@ pub(in crate::hub::pull_requests) struct OwnRead {
 /// One workspace's read, once GitHub has said which pull request is its own.
 struct Reading {
     workspace: Workspace,
+    /// The branch its worktree has checked out, as its branches said as the read was planned.
+    checked_out: Option<Branch>,
+    /// How many files were uncommitted as its pull request was last read, and that pull request's address, for one
+    /// whose worker doesn't say now.
+    known_uncommitted: Option<(String, u32)>,
     /// What its own comes to, when that's known without reading it, as for a branch with none.
     settled: Option<Result<Found, OwnUnread>>,
     /// The repository its own merges into, and the branch it was found on, when it's read.
@@ -64,7 +69,15 @@ impl Hub {
             let read = self.github.read_heads(token, &heads, asked.leaving()).await;
             (rate_limit, headed) = (read.rate_limit, read.answers.into_iter());
         }
-        let mut readings: Vec<Reading> = plans.into_iter().map(|plan| reading(plan, &mut headed)).collect();
+        let mut readings: Vec<Reading> = plans
+            .into_iter()
+            .map(|plan| {
+                let known = plan.workspace.pull_request_linked().and_then(|link| {
+                    self.uncommitted_known(&plan.workspace.id, &link.url).map(|files| (link.url.clone(), files))
+                });
+                reading(plan, known, &mut headed)
+            })
+            .collect();
         let asks: Vec<PullRequestsAsk> =
             readings.iter().flat_map(|reading| reading.scopes.iter().map(|scope| scope.ask.clone())).collect();
         let answers = if asks.is_empty() {
@@ -112,17 +125,23 @@ impl Hub {
 fn heads_of(plan: &Plan) -> Option<&HeadsAsk> {
     match &plan.own {
         Wanted::Heads { ask, .. } => Some(ask),
-        Wanted::Nothing { .. } | Wanted::Unreadable { .. } => None,
+        Wanted::Nothing { .. } | Wanted::NotKnown | Wanted::Unreadable { .. } => None,
     }
 }
 
 /// What reading `plan` asks of GitHub once `headed`, the answers to every plan's branch in turn, has said which pull
 /// request is its own: that one, read where it merges into, which for a clone of a fork is the repository it was
-/// forked from, together with what its waits watch.
-fn reading(plan: Plan, headed: &mut impl Iterator<Item = Result<Vec<Headed>, HeadsUnread>>) -> Reading {
-    let Plan { workspace, own, waited } = plan;
+/// forked from, together with what its waits watch. `known_uncommitted` is how many files were uncommitted as the
+/// pull request the workspace had was last read, and its address.
+fn reading(
+    plan: Plan,
+    known_uncommitted: Option<(String, u32)>,
+    headed: &mut impl Iterator<Item = Result<Vec<Headed>, HeadsUnread>>,
+) -> Reading {
+    let Plan { workspace, checked_out, own, waited } = plan;
     let (settled, own) = match own {
         Wanted::Nothing { on } => (Some(Ok(Found::nothing(on))), None),
+        Wanted::NotKnown => (Some(Err(OwnUnread::NotKnown)), None),
         Wanted::Unreadable { error, .. } => (Some(Err(error.into())), None),
         Wanted::Heads { ask, on } => {
             let answer =
@@ -135,9 +154,7 @@ fn reading(plan: Plan, headed: &mut impl Iterator<Item = Result<Vec<Headed>, Hea
             let known = (workspace.pull_request_linked())
                 .filter(|_| workspace.pull_request_branch.as_ref() == Some(&on))
                 .map(|link| link.url.as_str());
-            match answer
-                .map(|headed| checked_out(&workspace).and_then(|branch| chosen(&headed, known, branch)).cloned())
-            {
+            match answer.map(|headed| checked_out.as_ref().and_then(|branch| chosen(&headed, known, branch)).cloned()) {
                 Err(error) => (Some(Err(error)), None),
                 Ok(None) => (Some(Ok(Found::nothing(Some(on)))), None),
                 Ok(Some(Headed { into, number, .. })) => (None, Some((into, number, on))),
@@ -145,7 +162,8 @@ fn reading(plan: Plan, headed: &mut impl Iterator<Item = Result<Vec<Headed>, Hea
         }
     };
     let (scopes, waits) = scopes(own.as_ref().map(|(into, number, _)| (into.clone(), *number)), waited);
-    Reading { workspace, settled, own: own.map(|(into, _, on)| (into, on)), scopes, waits }
+    let own = own.map(|(into, _, on)| (into, on));
+    Reading { workspace, checked_out, known_uncommitted, settled, own, scopes, waits }
 }
 
 impl Reading {
@@ -183,18 +201,13 @@ impl Reading {
         let snapshot = answer.as_ref().map_err(|unread| unread.error.clone())?;
         let pull_request =
             snapshot.get(number).ok_or_else(|| ApiError::new(ErrorCode::Worker, "GitHub left it out"))?.clone();
-        let workspace = &self.workspace;
-        let known = workspace.pull_request_linked().filter(|known| known.url == pull_request.said().about.url);
-        let files = uncommitted.get(&workspace.id).copied().or(known.map(|known| known.uncommitted));
-        let local = match checked_out(workspace) {
+        let url = &pull_request.said().about.url;
+        let known = self.known_uncommitted.as_ref().filter(|(known, _)| known == url).map(|(_, files)| *files);
+        let files = uncommitted.get(&self.workspace.id).copied().or(known);
+        let local = match &self.checked_out {
             Some(branch) => local(&pull_request.said().head, branch, files.unwrap_or_default()),
             None => Local::default(),
         };
         Ok(Found::of(OwnPullRequest { pull_request, local }, into, Some(on)))
     }
-}
-
-/// The branch the workspace has checked out, as its record says.
-pub(super) fn checked_out(workspace: &Workspace) -> Option<&Branch> {
-    workspace.branches.as_ref().and_then(|branches| branches.checked_out())
 }

@@ -80,7 +80,7 @@ const ROWS: &[Row] = &[
     row("replies_heard", "how a reply ended, said again", nothing, sessions::reply_heard, sessions::reply_heard_rev),
     row("subagents", "what it holds", sessions::started, sessions::holds, sessions::subagent),
     row("new_workspace_draft", "a draft", nothing, hub::new_draft, hub::new_draft_rev),
-    row("child_worktrees", "its branches", workspaces::made_child, workspaces::branches, workspaces::child),
+    row("child_worktrees", "made ready", workspaces::made_child, workspaces::ready, workspaces::child),
     row("github_accounts", "its login cleared", github::by_token, github::clear, github::account),
     row("github_accounts", "signing in again", github::signed_in, github::needs, github::account),
     row("github_sign_ins", "where it's got to", github::waiting, github::refused, github::sign_in),

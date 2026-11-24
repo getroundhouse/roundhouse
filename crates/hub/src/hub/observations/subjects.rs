@@ -3,7 +3,8 @@
 use std::hash::Hash;
 
 use protocol::model::{
-    AccountId, GithubAccountId, GithubAppId, ModelListKey, ReferenceAsk, RepoId, SessionId, WaitId, WorkspaceId,
+    AccountId, ChildWorktreeId, GithubAccountId, GithubAppId, ModelListKey, ReferenceAsk, RepoId, SessionId, WaitId,
+    WorkspaceId,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -20,6 +21,8 @@ pub(crate) trait Subject: Clone + Eq + Hash + Serialize + DeserializeOwned + Sen
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Owner<'a> {
     Workspace(&'a WorkspaceId),
+    /// Another worktree made for a workspace's work, which goes with its workspace too.
+    ChildWorktree(&'a ChildWorktreeKey),
     /// A session, which goes with its workspace too.
     Session(&'a SessionKey),
     /// A wait, which goes with its session and its workspace too, and as it ends.
@@ -38,6 +41,7 @@ impl<'a> Owner<'a> {
     pub(crate) fn workspace(self) -> Option<&'a WorkspaceId> {
         match self {
             Owner::Workspace(workspace) => Some(workspace),
+            Owner::ChildWorktree(worktree) => Some(&worktree.workspace_id),
             Owner::Session(session) => Some(&session.workspace_id),
             Owner::Wait(wait) => Some(&wait.workspace_id),
             Owner::Account(_) | Owner::Repo(_) | Owner::GithubAccount(_) | Owner::App(_) | Owner::Hub => None,
@@ -63,6 +67,20 @@ impl Subject for ReferenceAsk {
 impl Subject for ModelListKey {
     fn owner(&self) -> Option<Owner<'_>> {
         Some(Owner::Hub)
+    }
+}
+
+/// Another worktree made for a workspace's work, as what's observed of it is kept by: with its workspace, so it's
+/// forgotten with it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub(crate) struct ChildWorktreeKey {
+    pub(crate) workspace_id: WorkspaceId,
+    pub(crate) id: ChildWorktreeId,
+}
+
+impl Subject for ChildWorktreeKey {
+    fn owner(&self) -> Option<Owner<'_>> {
+        Some(Owner::ChildWorktree(self))
     }
 }
 

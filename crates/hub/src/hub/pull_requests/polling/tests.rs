@@ -31,7 +31,7 @@ fn waiting_in_w(dir: &std::path::Path, api: String) -> (Arc<Hub>, WaitId) {
     hub.store
         .insert_workspace(&workspace("v"), &crate::store::WorkspacePlacement::local_checkout("/repo"), None)
         .unwrap();
-    hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main", None).unwrap();
+    hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main").unwrap();
     let wait = hub.store.start_wait(&pull_request_wait("a")).unwrap().id;
     (hub, wait)
 }
@@ -68,8 +68,8 @@ async fn workspaces_due_as_one_token_are_read_together_without_a_worker() {
     hub.store
         .insert_workspace(&workspace("v"), &crate::store::WorkspacePlacement::local_checkout("/repo"), None)
         .unwrap();
-    hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main", None).unwrap();
-    hub.store.set_workspace_branches(&v(), &pushed("head-7", "head-7", (0, 0))).unwrap();
+    hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main").unwrap();
+    hub.branches_known(&v(), pushed("head-7", "head-7", (0, 0))).await;
     // As while a client follows the hub, so every workspace's pull request is read in turn.
     let _following = hub.follow([Followed::Hub]);
     let number =
@@ -125,7 +125,7 @@ async fn more_groups_of_waits_than_a_burst_of_reads_are_read_together_all_the_sa
         hub.store
             .insert_workspace(&workspace(id.as_str()), &crate::store::WorkspacePlacement::local_checkout("/repo"), None)
             .unwrap();
-        hub.store.workspace_ready(&id, &format!("/x{n}"), &format!("x{n}").into(), "main", None).unwrap();
+        hub.store.workspace_ready(&id, &format!("/x{n}"), &format!("x{n}").into(), "main").unwrap();
         waits.push(waiting_by(&hub, id, &format!("c{n}")));
     }
 

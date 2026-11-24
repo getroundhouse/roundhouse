@@ -2,6 +2,7 @@
 //! across restarts, so what's known of it outlasts what the cache keeps.
 
 use super::super::Hub;
+use super::reading::Counted;
 use super::unseen::OwnUnread;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
@@ -11,7 +12,8 @@ use protocol::model::{
 
 impl Hub {
     /// Records which pull request a read found, with the branch it found it on, and where it can't be read at all and
-    /// none was found before, that there's none. GitHub showing no repository to look in says nothing of whether
+    /// none was found before, that there's none. How many files the read found uncommitted is kept in memory, as
+    /// [`Hub::uncommitted_known`] reads it, for what's worked out of it once the read has ended. GitHub showing no repository to look in says nothing of whether
     /// there's one, so then a pull request found before is kept, and none found before is no longer known, as before
     /// the hub first looked, so no app offers to create one there. Returns what it found, or that there's none where it
     /// recorded that, and the workspace if that changed it.
@@ -37,9 +39,15 @@ impl Hub {
                 let changed = self.blocking(move |store| store.set_workspace_pull_request(&id, None, None)).await?;
                 return Ok((None, changed));
             }
-            Err(OwnUnread::Failed(_) | OwnUnread::Unseen { .. }) => return Ok((None, None)),
+            // Nothing was read where which is the workspace's can't be told, so nothing is recorded, as nothing new was
+            // found.
+            Err(OwnUnread::Failed(_) | OwnUnread::Unseen { .. } | OwnUnread::NotKnown) => return Ok((None, None)),
         };
         let Some(linked) = found.linked() else { return Ok((None, None)) };
+        if let Some(own) = &found.read.pull_request {
+            let counted = Counted { url: own.pull_request.said().about.url.clone(), files: own.local.uncommitted };
+            self.pull_requests.counted.lock().insert(workspace.id.clone(), counted);
+        }
         let (id, on) = (workspace.id.clone(), found.on);
         let changed =
             self.blocking(move |store| store.set_workspace_pull_request(&id, Some(&linked), on.as_ref())).await?;
@@ -75,7 +83,8 @@ impl Found {
             repository: self.into.clone()?,
             number: IssueNumber::try_from(own.pull_request.number.get()).ok()?,
             url: own.pull_request.said().about.url.clone(),
-            uncommitted: own.local.uncommitted,
+            // Kept apart, as `Hub::record` says.
+            uncommitted: 0,
         };
         Some(PullRequestLinked { link: Some(link) })
     }

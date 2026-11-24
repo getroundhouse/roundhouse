@@ -4,20 +4,13 @@ use super::super::{
     ByColumn, Columns, OneValue, Store, StoreError, columns, json_at, lock, now_ms, rev_of, text_at, text_of,
 };
 use protocol::model::{
-    BranchName, Branches, ClientRequestId, PORTS_PER_WORKSPACE, PullRequestLinked, RepoId, Rev, SetupStatus, Title,
-    Workspace, WorkspaceId, WorkspaceStatus,
+    BranchName, ClientRequestId, GithubRepositoryName, IssueNumber, PORTS_PER_WORKSPACE, PullRequestLinked, RepoId,
+    Rev, SetupStatus, Title, Workspace, WorkspaceId, WorkspaceStatus,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use serde::Serialize;
 
 const FIRST_PORT_BASE: u16 = 55_000;
-
-/// What recording a workspace's branches did.
-pub struct BranchesSet {
-    /// As they were recorded before, if they were.
-    pub before: Option<Branches>,
-    /// The workspace, if they changed it.
-    pub workspace: Option<Workspace>,
-}
 
 /// Archiving or restoring a workspace, which its record says from when it's asked until it's done, or until it's put
 /// back as it was, when it can't be done.
@@ -65,8 +58,8 @@ columns! {
     /// What a workspace's row holds, as it's written, then its revision.
     pub(in super::super) struct WorkspaceColumns {
         id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup,
-        port_base, title, title_source, pull_request_link, user_active_at_ms, comment_draft, branches,
-        pull_request_branch, worker_build,
+        port_base, title, title_source, pull_request_link, user_active_at_ms, comment_draft, pull_request_branch,
+        worker_build,
     } then {
         rev,
     }
@@ -108,17 +101,34 @@ pub(in super::super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Worksp
         // Written only by this hub, as JSON. One it can't read is as good as none.
         comment_draft: json_at(row, c.comment_draft)?,
         user_active_at_ms: row.at(c.user_active_at_ms)?,
-        // Read again by the next worker, so one that no longer reads is only missing until then.
-        branches: json_at(row, c.branches)?,
+        // Kept apart, as the observation `WorkspaceBranches`, which fills it as the record leaves the hub.
+        branches: None,
         pull_request_branch: row.at::<Option<String>>(c.pull_request_branch)?.map(BranchName::from),
         worker_build: row.at(c.worker_build)?,
         rev: rev_of(row, c.rev)?,
     })
 }
 
-/// Which pull request the hub found, as the column holds it: `None` until it has looked, which is SQL's NULL.
+/// Which pull request the hub found, as the column holds it: `None` until it has looked, which is SQL's NULL. Without
+/// how many files were uncommitted, which the hub keeps in the observation `WorkspacePullRequest`.
 fn linked_text(linked: Option<&PullRequestLinked>) -> Result<Option<String>, StoreError> {
-    Ok(linked.map(serde_json::to_string).transpose()?)
+    let stored = |linked: &PullRequestLinked| {
+        let link = linked.link.as_ref().map(|link| StoredLink {
+            repository: &link.repository,
+            number: link.number,
+            url: &link.url,
+        });
+        serde_json::to_string(&link)
+    };
+    Ok(linked.map(stored).transpose()?)
+}
+
+/// A pull request's link, as the column holds it, which reads back as [`PullRequestLink`](protocol::model::PullRequestLink).
+#[derive(Serialize)]
+struct StoredLink<'a> {
+    repository: &'a GithubRepositoryName,
+    number: IssueNumber,
+    url: &'a str,
 }
 
 impl Store {
@@ -154,7 +164,6 @@ impl Store {
             pull_request_link: &linked_text(workspace.pull_request_link.as_ref())?,
             user_active_at_ms: &workspace.user_active_at_ms,
             comment_draft: &workspace.comment_draft.as_ref().map(serde_json::to_string).transpose()?,
-            branches: &workspace.branches.as_ref().map(serde_json::to_string).transpose()?,
             pull_request_branch: &workspace.pull_request_branch.as_ref().map(BranchName::as_str),
             worker_build: &workspace.worker_build,
             client_request_id: &client_request_id.map(ClientRequestId::as_str),
@@ -180,25 +189,16 @@ impl Store {
         self.delete("workspaces", id.as_str())
     }
 
-    /// With its branches as its worktree was made, so a ready workspace says which it's on from the start.
     pub fn workspace_ready(
         &self,
         id: &WorkspaceId,
         path: &str,
         branch: &BranchName,
         base_ref: &str,
-        branches: Option<&Branches>,
     ) -> Result<Workspace, StoreError> {
         lock(&self.writer).execute(
-            "UPDATE workspaces SET path = ?, branch = ?, base_ref = ?, status = ?, branches = ? WHERE id = ?",
-            params![
-                path,
-                branch.as_str(),
-                base_ref,
-                text_of(&WorkspaceStatus::Ready),
-                branches.map(serde_json::to_string).transpose()?,
-                id.as_str()
-            ],
+            "UPDATE workspaces SET path = ?, branch = ?, base_ref = ?, status = ? WHERE id = ?",
+            params![path, branch.as_str(), base_ref, text_of(&WorkspaceStatus::Ready), id.as_str()],
         )?;
         self.get_workspace(id)
     }
@@ -296,20 +296,17 @@ impl Store {
         self.get_workspace(id).map(Some)
     }
 
-    /// Records what the workspace's worker read of its branches. Says what they were before, and returns the workspace
-    /// only when that changed it, as [`Store::set_workspace_pull_request`] does.
-    pub fn set_workspace_branches(&self, id: &WorkspaceId, branches: &Branches) -> Result<BranchesSet, StoreError> {
-        let text = serde_json::to_string(branches)?;
-        // Both under the writer's lock, so nothing records others in between.
-        let (before, changed) = {
-            let conn = lock(&self.writer);
-            let select = "SELECT branches FROM workspaces WHERE id = ?";
-            // Ones that no longer read are as good as none recorded before.
-            let before = conn.query_row(select, [id.as_str()], |row| json_at(row, OneValue))?;
-            let update = "UPDATE workspaces SET branches = ?1 WHERE id = ?2 AND branches IS NOT ?1";
-            (before, conn.execute(update, params![text, id.as_str()])? > 0)
-        };
-        Ok(BranchesSet { before, workspace: if changed { Some(self.get_workspace(id)?) } else { None } })
+    /// Moves the revision of the workspace `id`, which holds the old form of an observation, and returns it, or `None`
+    /// once it's gone.
+    pub(in super::super) fn workspace_moved(&self, id: &WorkspaceId) -> Result<Option<Workspace>, StoreError> {
+        let conn = lock(&self.writer);
+        // Moves the revision, as `workspaces_rev_on_update` does for an update of any column it names.
+        conn.execute("UPDATE workspaces SET name = name WHERE id = ?", [id.as_str()])?;
+        match workspace_on(&conn, id) {
+            Ok(workspace) => Ok(Some(workspace)),
+            Err(StoreError::NotFound { .. }) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 
     /// Records where the workspace's setup has got to, and returns the workspace, as it was if its setup had got there

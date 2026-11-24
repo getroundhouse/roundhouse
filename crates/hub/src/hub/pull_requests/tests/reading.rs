@@ -162,7 +162,7 @@ async fn a_clone_of_a_forks_pull_request_is_read_where_it_merges_into() {
     hub.store.read_repo_url(&"r".into(), "/repo", Some(&fork)).unwrap();
     let mut branches = pushed("head-7", "head-7", (0, 0));
     branches.had[0].upstream.as_mut().unwrap().address = Some(fork);
-    hub.store.set_workspace_branches(&"w".into(), &branches).unwrap();
+    hub.branches_known(&"w".into(), branches).await;
     pull_requests.set(7, PullRequestState::Open);
 
     let found = hub.workspace_pull_request("w".into()).await.unwrap();
@@ -188,7 +188,7 @@ async fn with_no_account_to_read_as_a_workspace_with_nothing_known_has_none() {
     let script = github::Script { pull_requests: Some(pull_requests.clone()), ..github::Script::default() };
     let github = github::StandIn::with(script).await;
     let hub = hub_without_account(dir.path(), github.api(), Timers::FOR_TESTS);
-    hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
+    hub.branches_known(&"w".into(), pushed("head-7", "head-7", (0, 0))).await;
     pull_requests.set(7, PullRequestState::Open);
 
     let found = hub.workspace_pull_request("w".into()).await;
@@ -215,9 +215,9 @@ async fn a_pull_request_read_says_how_the_worktree_stands_against_it() {
     hub.workers.lock().insert("w".into(), link);
 
     let pushed_here = hub.workspace_pull_request("w".into()).await.unwrap().unwrap().local;
-    hub.store.set_workspace_branches(&"w".into(), &pushed("local", "head-7", (2, 0))).unwrap();
+    hub.branches_known(&"w".into(), pushed("local", "head-7", (2, 0))).await;
     let ahead = hub.workspace_pull_request("w".into()).await.unwrap().unwrap().local;
-    hub.store.set_workspace_branches(&"w".into(), &pushed("local", "older", (0, 0))).unwrap();
+    hub.branches_known(&"w".into(), pushed("local", "older", (0, 0))).await;
     let unfetched = hub.workspace_pull_request("w".into()).await.unwrap().unwrap().local;
 
     assert_eq!(pushed_here, Local { uncommitted: 2, ahead: 0, behind: 0 });
@@ -232,7 +232,7 @@ async fn a_detached_head_has_no_pull_request_and_asks_github_nothing() {
     let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
     pull_requests.set(7, PullRequestState::Open);
     let detached = Branches { head: Head::Detached { commit: "head-7".into() }, had: Vec::new() };
-    hub.store.set_workspace_branches(&"w".into(), &detached).unwrap();
+    hub.branches_known(&"w".into(), detached).await;
 
     let read = hub.workspace_pull_request("w".into()).await.unwrap();
 

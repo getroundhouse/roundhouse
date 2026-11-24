@@ -1,11 +1,12 @@
 use protocol::client::ErrorCode;
 use protocol::fixtures::workspace;
 use protocol::model::{
-    Apart, Branch, BranchName, Branches, CommitId, GitHubRepository, GithubRepositoryName, Head, Local, PrState,
-    PullRequestNumber, PullRequestSelection, RemoteName, RepoUrl, Upstream, Workspace,
+    Apart, Branch, BranchName, Branches, CommitId, GitHubRepository, GithubRepositoryName, Head, IssueNumber, Local,
+    PrState, PullRequestLink, PullRequestLinked, PullRequestNumber, PullRequestSelection, RemoteName, RepoUrl,
+    Upstream, Workspace,
 };
 
-use super::judging::{Wanted, chosen, local, wanted};
+use super::judging::{Wanted, chosen, found_on_another_branch, local, wanted};
 use super::scopes::scopes;
 use crate::hub::pull_requests::remote::Waited;
 use github::{Headed, HeadsAsk};
@@ -30,10 +31,9 @@ fn birch(tip: &str, upstream: Option<(&str, Option<&str>, &str)>) -> Branch {
     Branch { name: BranchName::from("birch"), tip: CommitId::from(tip), upstream }
 }
 
-/// A workspace with `birch` checked out, as `branch` says it is.
-fn on(branch: Branch) -> Workspace {
-    let branches = Branches { head: Head::Branch { name: branch.name.clone() }, had: vec![branch] };
-    Workspace { branches: Some(branches), ..workspace("w") }
+/// A worktree's branches with `birch` checked out, as `branch` says it is.
+fn on(branch: Branch) -> Branches {
+    Branches { head: Head::Branch { name: branch.name.clone() }, had: vec![branch] }
 }
 
 fn project() -> RepoUrl {
@@ -44,26 +44,25 @@ fn project() -> RepoUrl {
 fn a_branch_pushed_to_github_is_asked_after_in_the_repository_its_work_merges_into() {
     let birch_on = || Some(BranchName::from("birch"));
 
-    let unpushed = wanted(&on(birch("a", None)), Some(&project()));
-    let to_itself = wanted(&on(birch("a", Some((".", None, "b")))), Some(&project()));
-    let detached = Workspace {
-        branches: Some(Branches { head: Head::Detached { commit: CommitId::from("a") }, had: Vec::new() }),
-        ..workspace("w")
-    };
-    let origin =
-        wanted(&on(birch("a", Some(("origin", Some("git@github.com:example/project.git"), "b")))), Some(&project()));
+    let unpushed = wanted(Some(&on(birch("a", None))), Some(&project()));
+    let to_itself = wanted(Some(&on(birch("a", Some((".", None, "b"))))), Some(&project()));
+    let detached = Branches { head: Head::Detached { commit: CommitId::from("a") }, had: Vec::new() };
+    let origin = wanted(
+        Some(&on(birch("a", Some(("origin", Some("git@github.com:example/project.git"), "b"))))),
+        Some(&project()),
+    );
     let fork =
-        wanted(&on(birch("a", Some(("ada", Some("https://github.com/ada/project.git"), "b")))), Some(&project()));
-    let unsaid = wanted(&on(birch("a", Some(("origin", None, "b")))), Some(&project()));
+        wanted(Some(&on(birch("a", Some(("ada", Some("https://github.com/ada/project.git"), "b"))))), Some(&project()));
+    let unsaid = wanted(Some(&on(birch("a", Some(("origin", None, "b"))))), Some(&project()));
     // As `git switch -c birch origin/main` leaves it.
     let mut tracking = birch("a", Some(("origin", Some("https://github.com/example/project.git"), "b")));
     tracking.upstream.as_mut().unwrap().name = BranchName::from("main");
-    let tracking = wanted(&on(tracking), Some(&project()));
+    let tracking = wanted(Some(&on(tracking)), Some(&project()));
 
     assert_eq!(unpushed, Wanted::Nothing { on: birch_on() });
     assert_eq!(to_itself, Wanted::Nothing { on: birch_on() });
     assert_eq!(tracking, Wanted::Nothing { on: birch_on() }, "taken from main, and pushed nowhere yet");
-    assert_eq!(wanted(&detached, Some(&project())), Wanted::Nothing { on: None });
+    assert_eq!(wanted(Some(&detached), Some(&project())), Wanted::Nothing { on: None });
     let heads = |from: &str| HeadsAsk {
         repository: name("example/project"),
         from: name(from),
@@ -83,14 +82,40 @@ fn a_repository_or_a_remote_elsewhere_than_github_has_none_to_read() {
     let pushed = on(birch("a", Some(("origin", None, "b"))));
     let to_gitlab = on(birch("a", Some(("lab", Some("https://gitlab.com/ada/project.git"), "b"))));
 
-    let elsewhere = wanted(&pushed, Some(&url("https://gitlab.com/example/project.git")));
-    let unknown = wanted(&pushed, None);
-    let pushed_elsewhere = wanted(&to_gitlab, Some(&project()));
+    let elsewhere = wanted(Some(&pushed), Some(&url("https://gitlab.com/example/project.git")));
+    let unknown = wanted(Some(&pushed), None);
+    let pushed_elsewhere = wanted(Some(&to_gitlab), Some(&project()));
 
     for wanted in [elsewhere, unknown, pushed_elsewhere] {
         let Wanted::Unreadable { on, error } = wanted else { panic!("{wanted:?}") };
         assert_eq!((on.as_str(), error.code), ("birch", ErrorCode::Unavailable));
     }
+}
+
+/// One found on a branch other than the one checked out isn't the workspace's now, but none found on no branch, as
+/// where `gh` can't work at all, says nothing of any branch, and nor do branches that aren't known.
+#[test]
+fn only_what_was_found_on_a_branch_can_be_another_branchs() {
+    let link = PullRequestLink {
+        repository: name("o/r"),
+        number: IssueNumber::try_from(7).unwrap(),
+        url: "https://github.com/o/r/pull/7".into(),
+        uncommitted: 0,
+    };
+    let next = Branches { head: Head::Branch { name: BranchName::from("next") }, had: Vec::new() };
+    let found = |link: Option<PullRequestLink>, branch: Option<&str>| Workspace {
+        pull_request_branch: branch.map(BranchName::from),
+        pull_request_link: Some(PullRequestLinked { link }),
+        ..workspace("w")
+    };
+    let elsewhere = |link, branch| found_on_another_branch(&found(link, branch), Some(&next));
+
+    assert!(elsewhere(Some(link.clone()), Some("aspen")));
+    assert!(elsewhere(None, Some("aspen")), "the branch on now may have one");
+    assert!(elsewhere(Some(link.clone()), None), "found before branches were kept");
+    assert!(!elsewhere(Some(link.clone()), Some("next")));
+    assert!(!elsewhere(None, None), "as where gh can't work");
+    assert!(!found_on_another_branch(&found(Some(link), Some("aspen")), None), "nothing known is checked out");
 }
 
 fn headed(number: u64, state: PrState, head: &str) -> Headed {

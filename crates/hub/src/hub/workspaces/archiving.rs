@@ -57,7 +57,12 @@ impl Hub {
             let archived = id.clone();
             self.blocking(move |store| store.set_workspace_branch(&archived, &branch)).await?;
         }
-        let workspace = self.end_move(id, Move::Archive, Ended::Done, async |archived| Ok(archived)).await?;
+        let forgetting = async |_| {
+            // Before it's announced, so the copy announced, read again after, is the newest, and says no branches.
+            self.branches_forgotten(id).await;
+            self.workspace(id).await
+        };
+        let workspace = self.end_move(id, Move::Archive, Ended::Done, forgetting).await?;
         self.changes_forgotten(id).await;
         Ok(workspace)
     }
@@ -339,13 +344,18 @@ impl Hub {
             (Move::Archive, true) | (Move::Restore, false) => self.end_move_put_back(id, moving).await,
             (Move::Archive, false) => {
                 // The worktree can't say which branch it was on any more. What its worker last read of it can.
-                self.record_archived(id, checked_out_branch(&workspace)).await
+                self.record_archived(id, self.checked_out_branch(id)).await
             }
             (Move::Restore, true) => self.record_restored(id, &link).await,
         }
     }
 }
 
-pub(super) fn checked_out_branch(workspace: &Workspace) -> Option<BranchName> {
-    workspace.branches.as_ref().and_then(|branches| branches.checked_out()).map(|branch| branch.name.clone())
+impl Hub {
+    /// The branch the workspace's worktree had checked out, as its worker last read it, for a worktree that can't say
+    /// any more. `None` where it isn't known, as before its worker has said its branches since the hub's cache was
+    /// emptied, or HEAD was detached, which leaves the branch its record has.
+    pub(super) fn checked_out_branch(&self, id: &WorkspaceId) -> Option<BranchName> {
+        self.branches_of(id).and_then(|branches| branches.checked_out().map(|branch| branch.name.clone()))
+    }
 }

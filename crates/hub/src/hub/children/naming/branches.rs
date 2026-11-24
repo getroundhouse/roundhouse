@@ -21,16 +21,31 @@ struct Starts {
     pub(super) any: Vec<String>,
 }
 
+/// Which branches the workspace's worktrees have had, as its worker last read them, each `None` while it isn't known,
+/// as before the worker has said them since the hub's cache was emptied.
+pub(in super::super) struct Had<'a> {
+    /// The workspace's own worktree's.
+    pub(in super::super) own: Option<&'a Branches>,
+    /// Each other worktree it has had, those removed too, with its.
+    pub(in super::super) others: &'a [(ChildWorktree, Option<Branches>)],
+}
+
+/// That which branches are the workspace's can't be told, since what its worktrees have had isn't known.
+#[derive(Debug, PartialEq, Eq)]
+pub(in super::super) struct NotKnown;
+
 impl Starts {
-    pub(super) fn of(workspace: &Workspace) -> Self {
+    /// What `workspace`'s branches start with, by whether its own worktree has had the branch of its name, as `own`
+    /// says. [`NotKnown`] where that's needed and isn't known.
+    pub(super) fn of(workspace: &Workspace, own: Option<&Branches>) -> Result<Self, NotKnown> {
         let name = &workspace.name;
-        let own = BranchName::from(name.as_str());
-        let beside = workspace.branch == own || had(workspace.branches.as_ref(), &own);
+        let named = BranchName::from(name.as_str());
+        let beside = workspace.branch == named || had(own.ok_or(NotKnown)?, &named);
         let (folder, flat) = (format!("{name}/"), format!("{name}--"));
         if beside {
-            Self { new: flat.clone(), any: vec![folder, flat] }
+            Ok(Self { new: flat.clone(), any: vec![folder, flat] })
         } else {
-            Self { new: folder.clone(), any: vec![folder] }
+            Ok(Self { new: folder.clone(), any: vec![folder] })
         }
     }
 }
@@ -52,39 +67,61 @@ fn numbered(work: &str, place: impl Fn(&str) -> Try) -> Vec<Try> {
     (1..=TRIES).map(|n| if n == 1 { place(work) } else { place(&format!("{work}-{n}")) }).collect()
 }
 
-/// The new branches to try for `name`, and where each one's worktree goes, for the workspace whose own is at `own`.
-pub(in super::super) fn new_branches(workspace: &Workspace, own: &str, name: &WorkName) -> Vec<Try> {
-    let start = Starts::of(workspace).new;
-    numbered(name.as_str(), |work| Try {
+/// The new branches to try for `name`, and where each one's worktree goes, for the workspace whose own is at `own`, and
+/// has had `branches`.
+pub(in super::super) fn new_branches(
+    workspace: &Workspace,
+    branches: Option<&Branches>,
+    own: &str,
+    name: &WorkName,
+) -> Result<Vec<Try>, NotKnown> {
+    let start = Starts::of(workspace, branches)?.new;
+    Ok(numbered(name.as_str(), |work| Try {
         branch: BranchName::from(format!("{start}{work}")),
         path: child_path(own, &workspace.name, work),
-    })
+    }))
 }
 
 /// Where a worktree of `branch` goes, and the numbered places after it, or `None` if it isn't one of the workspace's:
-/// one in its folder, one its own worktree has had, or one another of its worktrees, in `others`, was made on or has
-/// had.
+/// one in its folder, the one its record says, one another of its worktrees was made on, or one any of them has had,
+/// as `branches` says. [`NotKnown`] where it isn't the workspace's by what's known, and what a worktree has had isn't.
 pub(in super::super) fn places_of_its(
     workspace: &Workspace,
+    branches: &Had<'_>,
     own: &str,
     branch: &BranchName,
-    others: &[ChildWorktree],
-) -> Option<Vec<Try>> {
-    let starts = Starts::of(workspace).any;
+) -> Result<Option<Vec<Try>>, NotKnown> {
+    // Its folder is its whatever its own worktree has had, which says only whether those beside its name are too.
+    let folder = || vec![format!("{}/", workspace.name)];
+    let starts = Starts::of(workspace, branches.own).map_or_else(|NotKnown| folder(), |starts| starts.any);
     let after = starts.iter().find_map(|start| branch.as_str().strip_prefix(start.as_str()));
-    let theirs = after.is_some()
-        || workspace.branch == *branch
-        || had(workspace.branches.as_ref(), branch)
-        || others.iter().any(|other| other.branch == *branch || had(other.branches.as_ref(), branch));
-    if !theirs {
-        return None;
+    let recorded = workspace.branch == *branch || branches.others.iter().any(|(other, _)| other.branch == *branch);
+    let worktrees = std::iter::once(branches.own).chain(branches.others.iter().map(|(_, had)| had.as_ref()));
+    if after.is_none() && !recorded && !had_by_any(worktrees, branch)? {
+        return Ok(None);
     }
     // One name, so a worktree is never made inside another, as `euston/x/y`'s would be inside `euston/x`'s.
     let work = after.unwrap_or(branch.as_str()).replace('/', "-");
-    Some(numbered(&work, |work| Try { branch: branch.clone(), path: child_path(own, &workspace.name, work) }))
+    Ok(Some(numbered(&work, |work| Try { branch: branch.clone(), path: child_path(own, &workspace.name, work) })))
+}
+
+/// Whether any of `each`, a worktree's branches each, says it has had `branch` checked out. [`NotKnown`] where none
+/// known does, and one isn't known.
+fn had_by_any<'a>(each: impl Iterator<Item = Option<&'a Branches>>, branch: &BranchName) -> Result<bool, NotKnown> {
+    let mut all_known = true;
+    for branches in each {
+        let Some(branches) = branches else {
+            all_known = false;
+            continue;
+        };
+        if had(branches, branch) {
+            return Ok(true);
+        }
+    }
+    if all_known { Ok(false) } else { Err(NotKnown) }
 }
 
 /// Whether `branches` say their worktree has had `branch` checked out.
-fn had(branches: Option<&Branches>, branch: &BranchName) -> bool {
-    branches.is_some_and(|branches| branches.had.iter().any(|had| had.name == *branch))
+fn had(branches: &Branches, branch: &BranchName) -> bool {
+    branches.had.iter().any(|had| had.name == *branch)
 }

@@ -133,8 +133,8 @@ async fn a_move_cut_short_is_settled_by_whether_its_worker_says_the_worktree_is_
         let id = WorkspaceId::from("w");
         let worktree = dir.path().join("ws/alder");
         std::fs::create_dir_all(&worktree).unwrap();
-        hub.store.workspace_ready(&id, worktree.to_str().unwrap(), &made_on.into(), "main", None).unwrap();
-        hub.store.set_workspace_branches(&id, &last_seen).unwrap();
+        hub.store.workspace_ready(&id, worktree.to_str().unwrap(), &made_on.into(), "main").unwrap();
+        hub.branches_known(&id, last_seen.clone()).await;
         hub.store.start_move(&id, Move::Archive).unwrap();
         if moving == Move::Restore {
             hub.store.end_move(&id, Move::Archive, Ended::Done).unwrap();

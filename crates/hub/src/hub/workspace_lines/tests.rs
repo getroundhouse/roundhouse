@@ -114,10 +114,10 @@ async fn a_turn_that_ends_keeps_its_workspace_s_lines_for_every_client_and_its_f
     assert_eq!(asked.requests(summing_up_asked), [wanted]);
 }
 
-/// Archiving a workspace forgets its lines and the files it changes, which no client draws once its worktree is gone,
-/// as does a read that lands once it's archived.
+/// Archiving a workspace forgets its lines, the files it changes and its branches, which no client draws once its
+/// worktree is gone, as does a read that lands once it's archived.
 #[tokio::test]
-async fn an_archived_workspace_forgets_its_lines_and_its_files() {
+async fn an_archived_workspace_forgets_its_lines_its_files_and_its_branches() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (workspace, chat) = a_chat(&hub).await;
@@ -126,6 +126,8 @@ async fn an_archived_workspace_forgets_its_lines_and_its_files() {
     waiting::task::until(TIMEOUT, "the worker to be asked", || !asked.requests(summing_up_asked).is_empty()).await;
     read(&hub, &workspace.id).await;
     assert_eq!(hub.records_list().await.unwrap().observations.len(), 1, "its lines");
+    let branches = Branches { head: Head::Detached { commit: "c1".into() }, had: Vec::new() };
+    hub.branches_known(&workspace.id, branches).await;
 
     hub.workspace_archive(workspace.id.clone(), true).await.unwrap();
 
@@ -208,6 +210,9 @@ async fn the_worker_s_word_of_its_branches_has_the_lines_read_while_the_workspac
 
     hub.branches_frame(&id, &link, frame()).await;
 
+    let ObservationNotice::Copy(Observation::WorkspaceBranches { .. }) = next_observation(&mut feed).await else {
+        panic!("not a copy of the branches, which are told first")
+    };
     let ObservationNotice::Copy(Observation::WorkspaceLines { lines: Observed::AsOf { value, .. }, .. }) =
         next_observation(&mut feed).await
     else {

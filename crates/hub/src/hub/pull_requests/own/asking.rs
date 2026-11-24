@@ -2,7 +2,7 @@
 //! when it can't be had.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{Workspace, WorkspaceId};
+use protocol::model::{Branch, Branches, Workspace, WorkspaceId};
 use tracing::warn;
 
 use super::judging::{Wanted, wanted};
@@ -31,6 +31,8 @@ impl WorkspaceRead {
 /// and what its waits watch.
 pub(in crate::hub::pull_requests) struct Plan {
     pub(in crate::hub::pull_requests) workspace: Workspace,
+    /// The branch its worktree has checked out, as its branches said as `own` was worked out from them.
+    pub(in crate::hub::pull_requests) checked_out: Option<Branch>,
     pub(in crate::hub::pull_requests) own: Wanted,
     pub(in crate::hub::pull_requests) waited: Vec<Waited>,
 }
@@ -65,9 +67,10 @@ impl Asking {
     /// back, and the default can change, where only GitHub losing a pull request ends a wait on it.
     pub(in crate::hub::pull_requests) fn failed(self, error: &ApiError) -> Vec<(WorkspaceId, WorkspaceRead)> {
         let for_waits = ApiError::new(ErrorCode::Worker, error.message.clone());
-        let read = |Plan { workspace, own, waited }: Plan| {
+        let read = |Plan { workspace, own, waited, .. }: Plan| {
             let own = match own {
                 Wanted::Nothing { on } => Ok(Found::nothing(on)),
+                Wanted::NotKnown => Err(OwnUnread::NotKnown),
                 Wanted::Unreadable { error, .. } => Err(error.into()),
                 Wanted::Heads { .. } => Err(error.clone().into()),
             };
@@ -80,8 +83,8 @@ impl Asking {
 }
 
 impl Hub {
-    /// What reading the pull requests of each of `workspaces` needs of GitHub: its own, as [`wanted`] says, and those
-    /// its waits watch.
+    /// What reading the pull requests of each of `workspaces` needs of GitHub: its own, as [`wanted`] says of its
+    /// branches as the hub knows them, and those its waits watch.
     pub(in crate::hub::pull_requests) async fn asking(&self, workspaces: Vec<Workspace>) -> Asking {
         let waits = self.blocking(Store::remote_waits).await.unwrap_or_else(|e| {
             warn!("reading which waits to read the pull requests of: {}", e.message);
@@ -92,8 +95,11 @@ impl Hub {
         let mut plans = Vec::new();
         for workspace in workspaces {
             let address = self.repo_of(&workspace).await.ok().and_then(|repo| repo.origin.url().cloned());
-            let own = wanted(&workspace, address.as_ref());
-            plans.push(Plan { waited: waited.remove(&workspace.id).unwrap_or_default(), own, workspace });
+            let branches = self.branches_of(&workspace.id);
+            let own = wanted(branches.as_ref(), address.as_ref());
+            let checked_out = branches.as_ref().and_then(Branches::checked_out).cloned();
+            let waited = waited.remove(&workspace.id).unwrap_or_default();
+            plans.push(Plan { workspace, checked_out, own, waited });
         }
         Asking(plans)
     }

@@ -48,3 +48,7 @@ pub(crate) const BEFORE_REACH_OBSERVED: usize = 99;
 /// How many migrations there were before what GitHub says of each app of your own, and where each installation is,
 /// left the database, as observations.
 pub(crate) const BEFORE_APPS_OBSERVED: usize = 100;
+
+/// How many migrations there were before each workspace's branches, and each of its other worktrees', left the
+/// database, as observations.
+pub(crate) const BEFORE_BRANCHES_OBSERVED: usize = 101;

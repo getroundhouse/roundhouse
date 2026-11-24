@@ -164,10 +164,11 @@ impl Hub {
         forgot
     }
 
-    /// Forgets every observation of workspace `id`, and of its sessions, of every kind, since the workspace is gone,
-    /// and tells clients. One operation, so no kind is left out. Called where a workspace is discarded, and again by
-    /// whatever may have kept one of it as it went, as a read that lands after can. A failure, which only a database
-    /// that gives no revision has, is only logged, and [`Hub::observations_of_no_workspace_gone`] forgets what's left.
+    /// Forgets every observation of workspace `id`, and of its other worktrees and its sessions, of every kind, since the
+    /// workspace is gone, and tells clients. One operation, so no kind is left out. Called where a workspace is
+    /// discarded, and again by whatever may have kept one of it as it went, as a read that lands after can. A failure,
+    /// which only a database that gives no revision has, is only logged, and
+    /// [`Hub::observations_of_no_workspace_gone`] forgets what's left.
     pub(crate) async fn workspace_observations_gone(&self, id: &WorkspaceId) {
         let _changing = self.observations.changing.lock().await;
         if let Err(e) = self.forget_observations_of(&|owner| owner.workspace() == Some(id)).await {

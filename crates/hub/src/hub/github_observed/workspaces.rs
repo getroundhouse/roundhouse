@@ -1,5 +1,5 @@
 //! What GitHub says of each workspace's own pull request, worked out from the workspace's record, which says which pull
-//! request is its own and what branches it has, and from what the cache keeps of that pull request: how it stands, at
+//! request is its own, from what the hub knows of its branches, and from what the cache keeps of that pull request: how it stands, at
 //! the hub's level, its checks, history and stack, at the workspace's, and whether GitHub showed its repository at all.
 
 use std::collections::{HashMap, HashSet};
@@ -133,9 +133,10 @@ impl Workspaces {
         }
     }
 
-    /// Takes in that `workspace`'s record changed, as its link or its branches do.
-    pub(super) async fn recorded(&mut self, hub: &Hub, workspace: &Workspace) {
-        self.again(hub, &workspace.id).await;
+    /// Takes in that `workspace`'s record changed, as its link does, or that its branches did, which the hub keeps as
+    /// an observation.
+    pub(super) async fn recorded(&mut self, hub: &Hub, id: &WorkspaceId) {
+        self.again(hub, id).await;
     }
 
     /// Takes in that the workspace `id` is gone.
@@ -158,6 +159,7 @@ impl Workspaces {
                 self.read.remove(&id);
             }
             ReadWent::HeldBack => return self.as_of_last_read(hub, &id).await,
+            ReadWent::Recounted => {}
         }
         self.again(hub, &id).await;
         hub.keep_unseen(&id, heard, at_ms).await;

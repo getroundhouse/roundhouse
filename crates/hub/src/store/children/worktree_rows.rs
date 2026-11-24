@@ -1,12 +1,13 @@
 use super::super::made::Made;
 use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, json_at, lock, now_ms, rev_of};
-use protocol::model::{AskKey, Branches, ChildStatus, ChildWorktree, ChildWorktreeId, MadeBy, SessionId, WorkspaceId};
+use protocol::model::{AskKey, ChildStatus, ChildWorktree, ChildWorktreeId, MadeBy, SessionId, WorkspaceId};
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use std::collections::HashSet;
 
 columns! {
     /// The columns every read of a child worktree's row takes, as [`child_from_row`] reads them.
     struct ChildColumns {
-        id, workspace_id, path, branch, session_id, made_by, created_at_ms, state, removed_at_ms, branches, rev,
+        id, workspace_id, path, branch, session_id, made_by, created_at_ms, state, removed_at_ms, rev,
     }
 }
 
@@ -33,7 +34,8 @@ fn child_from_row(row: &Row<'_>) -> rusqlite::Result<ChildWorktree> {
         made_by: json_at(row, c.made_by)?.unwrap_or(MadeBy::Unknown),
         created_at_ms: row.at(c.created_at_ms)?,
         status,
-        branches: json_at(row, c.branches)?,
+        // Kept apart, as the observation `ChildWorktreeBranches`, and sent nowhere.
+        branches: None,
         rev: rev_of(row, c.rev)?,
     })
 }
@@ -89,19 +91,12 @@ impl Store {
         Ok(lock(&self.reader).query_row(&select, asked, child_from_row).optional()?)
     }
 
-    /// Records one being made as there, with its branches then. `None` if it isn't being made, as when it was removed
-    /// meanwhile, which then stays removed.
-    pub fn child_ready(
-        &self,
-        id: &ChildWorktreeId,
-        branches: Option<&Branches>,
-    ) -> Result<Option<ChildWorktree>, StoreError> {
+    /// Records one being made as there. `None` if it isn't being made, as when it was removed meanwhile, which then
+    /// stays removed.
+    pub fn child_ready(&self, id: &ChildWorktreeId) -> Result<Option<ChildWorktree>, StoreError> {
         let conn = lock(&self.writer);
-        let branches = branches.map(serde_json::to_string).transpose()?;
-        let made = conn.execute(
-            "UPDATE child_worktrees SET state = 'ready', branches = ? WHERE id = ? AND state = 'creating'",
-            params![branches, id.as_str()],
-        )?;
+        let made = conn
+            .execute("UPDATE child_worktrees SET state = 'ready' WHERE id = ? AND state = 'creating'", [id.as_str()])?;
         (made > 0).then(|| child_on(&conn, id)).transpose()
     }
 
@@ -157,23 +152,12 @@ impl Store {
         Ok(conn.query_row(&select, params![workspace_id.as_str(), path], child_from_row).optional()?)
     }
 
-    /// Records what the worker read of the branches of the one at `path`. Returns it only when that changed it, so
-    /// reading the same again moves no revision.
-    pub fn set_child_branches(
-        &self,
-        workspace_id: &WorkspaceId,
-        path: &str,
-        branches: &Branches,
-    ) -> Result<Option<ChildWorktree>, StoreError> {
-        let conn = lock(&self.writer);
-        let update = format!(
-            "UPDATE child_worktrees SET branches = ?1
-                 WHERE workspace_id = ?2 AND path = ?3 AND {THERE} AND branches IS NOT ?1
-                 RETURNING id"
-        );
-        let text = serde_json::to_string(branches)?;
-        let changed: Option<String> =
-            conn.query_row(&update, params![text, workspace_id.as_str(), path], OneValue::read).optional()?;
-        changed.map(|id| child_on(&conn, &id.into())).transpose()
+    /// Every one of every workspace's, those removed too, as the observations kept of them are forgotten once the
+    /// database lacks theirs.
+    pub(crate) fn child_worktree_ids(&self) -> Result<HashSet<ChildWorktreeId>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn.prepare_cached("SELECT id FROM child_worktrees")?;
+        let ids = statement.query_map([], OneValue::read::<String>)?;
+        ids.map(|id| Ok(ChildWorktreeId::from(id?))).collect()
     }
 }

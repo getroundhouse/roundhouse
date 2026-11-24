@@ -85,3 +85,25 @@ fn link_of(found: &str) -> Option<String> {
     let uncommitted = found.pointer("/local/uncommitted").and_then(Value::as_u64).unwrap_or_default();
     serde_json::to_string(&Link { repository: repository.as_str(), number, url, uncommitted }).ok()
 }
+
+/// Each workspace's branches, and each of its other worktrees', which the hub keeps as observations, in its cache file,
+/// and no longer here, and how many files each workspace had uncommitted as its pull request was read, which the hub
+/// keeps in the observation of that pull request. Nothing of either is carried there: a workspace's branches are known
+/// again once its worker next says them. The workspaces' trigger names the columns left, and moves no revision for
+/// what this takes out of each link.
+pub(super) const BRANCHES_OBSERVED: &str = r"
+    DROP TRIGGER workspaces_rev_on_update;
+    ALTER TABLE workspaces DROP COLUMN branches;
+    ALTER TABLE child_worktrees DROP COLUMN branches;
+    UPDATE workspaces SET pull_request_link = json_remove(pull_request_link, '$.uncommitted')
+        WHERE json_type(pull_request_link) = 'object';
+    CREATE TRIGGER workspaces_rev_on_update
+        AFTER UPDATE OF repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms,
+            archived_at_ms, setup, port_base, title, title_source, pull_request_link, user_active_at_ms, comment_draft,
+            pull_request_branch, worker_build
+        ON workspaces
+        WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE workspaces SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+";

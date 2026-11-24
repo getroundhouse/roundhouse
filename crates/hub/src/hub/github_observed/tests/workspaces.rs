@@ -211,9 +211,10 @@ async fn what_s_worked_out_of_a_pull_request_goes_with_its_link_and_its_workspac
         rev: hub.store.next_rev().unwrap(),
     });
 
-    let gone = [next(&mut feed, removed).await, next(&mut feed, removed).await];
+    let gone = [next(&mut feed, removed).await, next(&mut feed, removed).await, next(&mut feed, removed).await];
     assert!(gone.contains(&ObservationKey::WorkspacePullRequest { workspace_id: "w".into() }), "{gone:?}");
     assert!(gone.contains(&ObservationKey::WorkspacePullRequestDetail { workspace_id: "w".into() }), "{gone:?}");
+    assert!(gone.contains(&ObservationKey::WorkspaceBranches { workspace_id: "w".into() }), "{gone:?}");
 
     let worked_out = OwnPullRequestSaid { pull_request: None };
     hub.observation_worked_out::<WorkspacePullRequest>("gone".into(), worked_out, 1_000).await.unwrap();
@@ -343,6 +344,7 @@ fn is_as_of(observation: &Observation) -> bool {
         Observation::WorkspaceLines { .. }
         | Observation::WorkspaceChanges { .. }
         | Observation::Reference { .. }
+        | Observation::WorkspaceBranches { .. }
         | Observation::RepositoryReach { .. }
         | Observation::GithubUsername { .. }
         | Observation::GithubAppSaid { .. }

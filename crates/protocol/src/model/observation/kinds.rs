@@ -9,7 +9,7 @@ use super::{
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
 use crate::model::{
-    AccountId, ChangeSummary, ContextUsage, GithubAccountId, GithubAppId, GithubUser, GithubUsername, Level,
+    AccountId, Branches, ChangeSummary, ContextUsage, GithubAccountId, GithubAppId, GithubUser, GithubUsername, Level,
     LineCounts, ModelListKey, Reach, ReferenceAsk, RepoId, RepositoryUnseen, Rev, SessionId, UsageLimit, WaitId,
     WorkspaceId,
 };
@@ -39,6 +39,12 @@ pub enum Observation {
     /// What GitHub says of an issue or a pull request, as a chip draws it. Sent at the level of that issue or pull
     /// request, by the ask as the client follows it, so two that name it in another case are two observations.
     Reference { reference: ReferenceAsk, said: Observed<ReferenceSaid>, rev: Rev },
+    /// A workspace's branches: what its worktree has checked out, and each branch it has had that still exists, as its
+    /// worker last read them. Sent at the workspace's level, since only its pane draws them. It's current while its
+    /// worker watches them, and otherwise as of when the watch ended. The hub works out from it which pull request is
+    /// the workspace's, which stays on its record. A client of a version from before it reads it on the workspace's
+    /// record, as [`ReadFrom::EveryObservation`] says.
+    WorkspaceBranches { workspace_id: WorkspaceId, branches: Observed<Branches>, rev: Rev },
     /// Whether the default GitHub account can push to the repository on GitHub that a repository's address names, as
     /// GitHub last answered, or what the hub says of it without asking. Sent at the hub's level, since every workspace
     /// of the repository draws it. It's current while the hub checks every repository again each half hour. A client
@@ -123,6 +129,9 @@ pub enum ObservationKey {
     Reference {
         reference: ReferenceAsk,
     },
+    WorkspaceBranches {
+        workspace_id: WorkspaceId,
+    },
     RepositoryReach {
         repo: RepoId,
     },
@@ -184,6 +193,9 @@ impl Observation {
                 ObservationKey::WorkspaceRepositoryUnseen { workspace_id: workspace_id.clone() }
             }
             Observation::Reference { reference, .. } => ObservationKey::Reference { reference: reference.clone() },
+            Observation::WorkspaceBranches { workspace_id, .. } => {
+                ObservationKey::WorkspaceBranches { workspace_id: workspace_id.clone() }
+            }
             Observation::RepositoryReach { repo, .. } => ObservationKey::RepositoryReach { repo: repo.clone() },
             Observation::GithubUsername { account, .. } => ObservationKey::GithubUsername { account: account.clone() },
             Observation::GithubAppSaid { app, .. } => ObservationKey::GithubAppSaid { app: *app },
@@ -220,6 +232,7 @@ impl Observation {
             | Observation::WorkspacePullRequestDetail { rev, .. }
             | Observation::WorkspaceRepositoryUnseen { rev, .. }
             | Observation::Reference { rev, .. }
+            | Observation::WorkspaceBranches { rev, .. }
             | Observation::RepositoryReach { rev, .. }
             | Observation::GithubUsername { rev, .. }
             | Observation::GithubAppSaid { rev, .. }
@@ -259,9 +272,8 @@ impl ObservationKey {
             | ObservationKey::SessionCache { .. } => Some(Level::Hub),
             ObservationKey::WorkspaceChanges { workspace_id }
             | ObservationKey::WorkspacePullRequestDetail { workspace_id }
-            | ObservationKey::WorkspaceRepositoryUnseen { workspace_id } => {
-                Some(Level::Workspace { id: workspace_id.clone() })
-            }
+            | ObservationKey::WorkspaceRepositoryUnseen { workspace_id }
+            | ObservationKey::WorkspaceBranches { workspace_id } => Some(Level::Workspace { id: workspace_id.clone() }),
             ObservationKey::Reference { reference } => Some(Level::Reference { reference: reference.clone() }),
             ObservationKey::SessionContext { session_id }
             | ObservationKey::SessionTodos { session_id }
@@ -279,7 +291,8 @@ impl ObservationKey {
             | ObservationKey::WorkspacePullRequestDetail { .. }
             | ObservationKey::WorkspaceRepositoryUnseen { .. }
             | ObservationKey::Reference { .. } => Some(ReadFrom::GithubObserved),
-            ObservationKey::RepositoryReach { .. }
+            ObservationKey::WorkspaceBranches { .. }
+            | ObservationKey::RepositoryReach { .. }
             | ObservationKey::GithubUsername { .. }
             | ObservationKey::GithubAppSaid { .. }
             | ObservationKey::GithubAppBot { .. }

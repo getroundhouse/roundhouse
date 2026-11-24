@@ -1,6 +1,6 @@
 use protocol::model::{
-    BranchName, Branches, DiffComment, DiffSide, GithubRepositoryName, Head, IssueNumber, PullRequestLink,
-    PullRequestLinked, Repo, Rev, Session, Workspace, WorkspaceId, WorkspaceStatus,
+    BranchName, DiffComment, DiffSide, GithubRepositoryName, IssueNumber, PullRequestLink, PullRequestLinked, Repo,
+    Rev, Session, Workspace, WorkspaceId, WorkspaceStatus,
 };
 
 use super::super::tests::{idle_session, store_with_session, workspace_w};
@@ -41,7 +41,8 @@ fn finding_the_same_pull_request_again_changes_nothing() {
     assert_eq!(store.get_workspace(&id).unwrap().rev, found.rev);
 }
 
-/// So a hub that starts again, after an update, still has every workspace's pull request to show.
+/// So a hub that starts again, after an update, still has every workspace's pull request to show. How many files were
+/// uncommitted as it was read is the observation `WorkspacePullRequest`'s, and isn't kept here.
 #[test]
 fn a_pull_request_found_is_kept_through_reopening() {
     let dir = tempfile::tempdir().unwrap();
@@ -52,7 +53,7 @@ fn a_pull_request_found_is_kept_through_reopening() {
     let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
 
     let listed = store.list_records().unwrap().workspaces;
-    assert_eq!(listed[0].pull_request_link, Some(link(2)));
+    assert_eq!(listed[0].pull_request_link, Some(link(0)));
 }
 
 /// What an older hub kept of each workspace's pull request comes to its link: none where it found none, the pull
@@ -76,7 +77,7 @@ fn a_workspace_from_before_records_kept_only_the_link_keeps_the_link_to_what_it_
     let store = older::store_from_before(dir.path(), schema::BEFORE_PULL_REQUEST_LINKS, &rows);
 
     let linked = |id: &str| store.get_workspace(&id.into()).unwrap().pull_request_link;
-    assert_eq!(linked("w"), Some(link(2)));
+    assert_eq!(linked("w"), Some(link(0)), "how many files were uncommitted leaves the database later");
     assert_eq!(store.get_workspace(&"w".into()).unwrap().pull_request_branch, Some(BranchName::from("alder")));
     assert_eq!(linked("none"), Some(PullRequestLinked { link: None }));
     assert_eq!(linked("unlooked"), None);
@@ -147,23 +148,20 @@ fn finding_the_same_pull_request_on_another_branch_records_that_branch() {
     assert_eq!(elsewhere.unwrap().pull_request_branch, Some(header));
 }
 
-/// The worker sends them whenever git's files change, and only a change to them is news.
+/// As an observation whose old form it holds changes, so a client of a version from before it is sent it again.
 #[test]
-fn reading_the_same_branches_again_changes_nothing_and_says_what_they_were() {
+fn moving_a_workspace_for_its_old_forms_moves_its_revision_and_finds_none_that_is_gone() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let id = WorkspaceId::from("w");
-    let on = |name: &str| Branches { head: Head::Branch { name: BranchName::from(name) }, had: Vec::new() };
+    let before = store.get_workspace(&id).unwrap();
 
-    let first = store.set_workspace_branches(&id, &on("aspen")).unwrap();
-    let again = store.set_workspace_branches(&id, &on("aspen")).unwrap();
-    let switched = store.set_workspace_branches(&id, &on("header")).unwrap();
+    let moved = store.workspace_moved(&id).unwrap().unwrap();
+    let gone = store.workspace_moved(&"gone".into()).unwrap();
 
-    let read_first = first.workspace.expect("the first read is a change");
-    assert_eq!((first.before, read_first.branches), (None, Some(on("aspen"))));
-    assert_eq!((again.before, again.workspace), (Some(on("aspen")), None));
-    assert_eq!(switched.before, Some(on("aspen")));
-    assert!(switched.workspace.unwrap().rev > read_first.rev);
+    assert!(moved.rev > before.rev);
+    assert_eq!(Workspace { rev: before.rev, ..moved }, before, "nothing else moves");
+    assert_eq!(gone, None);
 }
 
 /// Starting is what keeps a second request from archiving or restoring it too, and putting it back leaves it as it was,

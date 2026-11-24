@@ -63,7 +63,8 @@ impl Hub {
                     .known_of(&workspace)
                     .and_then(|found| found.pull_request)
                     .map(|own| own.pull_request.said().state);
-                (workspace, state)
+                let branches = self.branches_of(&workspace.id);
+                (workspace, state, branches)
             })
             .collect();
         let due = schedule::due(&listed, &self.pull_requests.schedules.lock(), &waited, &shown, Instant::now());

@@ -148,7 +148,7 @@ impl Hub {
                 self.capture_and_save_archive(workspace, &link, &placement.source, false).await?;
             }
             self.destroy_ephemeral_instance(workspace, &link, provider.as_ref()).await;
-            return self.record_archived(id, super::archiving::checked_out_branch(workspace)).await;
+            return self.record_archived(id, self.checked_out_branch(id)).await;
         }
         if recorded.is_some() {
             if let Some(link) = self.existing_worker(id) {
@@ -157,7 +157,7 @@ impl Hub {
             self.destroy_instance_best_effort(provider.as_ref(), &workspace.instance_id).await;
         }
         if self.has_archived_git(id).await {
-            return self.record_archived(id, super::archiving::checked_out_branch(workspace)).await;
+            return self.record_archived(id, self.checked_out_branch(id)).await;
         }
         Err(internal("an ephemeral workspace being archived lost its instance without a saved bundle"))
     }

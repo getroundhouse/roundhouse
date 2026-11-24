@@ -10,6 +10,7 @@ use super::kinds::{
     SessionTodos, Subject, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
     WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
+use super::workspace_kinds::{ChildWorktreeBranches, WorkspaceBranches};
 use super::writer::Writer;
 use crate::cache_file::CacheFile;
 
@@ -22,6 +23,7 @@ pub(crate) struct Tables {
     pub(super) workspace_pull_request: Table<WorkspacePullRequest>,
     pub(super) workspace_pull_request_detail: Table<WorkspacePullRequestDetail>,
     pub(super) workspace_repository_unseen: Table<WorkspaceRepositoryUnseen>,
+    pub(super) workspace_branches: Table<WorkspaceBranches>,
     pub(super) repository_reach: Table<RepositoryReach>,
     pub(super) github_username: Table<GithubUsername>,
     pub(super) github_app_said: Table<GithubAppSaid>,
@@ -34,6 +36,7 @@ pub(crate) struct Tables {
     pub(super) session_todos: Table<SessionTodos>,
     pub(super) session_cache: Table<SessionCache>,
     pub(super) wait_read: Table<WaitRead>,
+    pub(super) child_worktree_branches: Table<ChildWorktreeBranches>,
     pub(super) github_profile: Table<GithubProfile>,
 }
 
@@ -97,7 +100,7 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 19] {
+    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 21] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -105,6 +108,7 @@ impl Tables {
             workspace_pull_request,
             workspace_pull_request_detail,
             workspace_repository_unseen,
+            workspace_branches,
             repository_reach,
             github_username,
             github_app_said,
@@ -117,6 +121,7 @@ impl Tables {
             session_todos,
             session_cache,
             wait_read,
+            child_worktree_branches,
             github_profile,
         } = self;
         [
@@ -126,6 +131,7 @@ impl Tables {
             workspace_pull_request,
             workspace_pull_request_detail,
             workspace_repository_unseen,
+            workspace_branches,
             repository_reach,
             github_username,
             github_app_said,
@@ -138,6 +144,7 @@ impl Tables {
             session_todos,
             session_cache,
             wait_read,
+            child_worktree_branches,
             github_profile,
         ]
     }

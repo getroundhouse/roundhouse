@@ -42,8 +42,11 @@ pub(crate) enum ReadWent {
     /// It was made and failed, as while GitHub can't be reached, or GitHub showed no repository to read it in.
     Failed,
     /// It was due, and wasn't made, as when GitHub's limit for its token holds it back, or there's no login to read it
-    /// as, so nothing was read, and nothing needs working out again.
+    /// as, or the workspace's branches aren't known, so nothing was read, and nothing needs working out again.
     HeldBack,
+    /// It wasn't made, since a read just before found what it asked, and only how many files the worktree has
+    /// uncommitted was counted again, which what's worked out of it says from now, as fresh as it was.
+    Recounted,
 }
 
 /// What a read of a workspace's pull request heard of whether GitHub showed the default the repository where the

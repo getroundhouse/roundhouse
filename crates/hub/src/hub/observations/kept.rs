@@ -6,7 +6,8 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ObservationNotice, RecordNotice};
 use protocol::model::{
-    AccountId, GithubAccountId, GithubAppId, Level, Observation, Observed, RepoId, Rev, SessionId, WaitId, WorkspaceId,
+    AccountId, ChildWorktreeId, GithubAccountId, GithubAppId, Level, Observation, Observed, RepoId, Rev, SessionId,
+    WaitId, WorkspaceId,
 };
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
@@ -246,7 +247,7 @@ impl Observations {
     /// The store kept in `file`, opened with [`PART`](super::PART), with each observation it kept from before as of
     /// when it was read, under one revision newer than any a client holds, since a client of the hub before can hold
     /// any revision that hub gave. Where there's no revision to give, as when the database fails, it starts with none
-    /// of them, as the log says, and each is not known until it's read again. Those of a workspace, a session, an
+    /// of them, as the log says, and each is not known until it's read again. Those of a workspace, another worktree, a session, an
     /// agent's account, a repository, a GitHub account, an app of your own or an open wait the database doesn't have are forgotten, as one
     /// a hub stopped before forgetting, or a file refused to, leaves, so no client is listed them.
     pub(crate) fn open(file: Arc<CacheFile>, store: &Store) -> Self {
@@ -265,9 +266,10 @@ impl Observations {
         }
         let writer = Writer::new(file);
         match owners(store) {
-            Ok(Owners { workspaces, sessions, waits, accounts, repos, github_accounts, apps }) => {
+            Ok(Owners { workspaces, child_worktrees, sessions, waits, accounts, repos, github_accounts, apps }) => {
                 let gone = |owner: Owner<'_>| match owner {
                     Owner::Workspace(id) => !workspaces.contains(id),
+                    Owner::ChildWorktree(key) => !child_worktrees.contains(&key.id),
                     Owner::Session(key) => !sessions.contains(&key.session_id),
                     Owner::Wait(key) => !waits.contains(&key.wait),
                     Owner::Account(id) => !accounts.contains(id),
@@ -360,6 +362,8 @@ impl Observations {
 /// Each owner the database has, of each kind an observation can be of but the hub.
 struct Owners {
     workspaces: HashSet<WorkspaceId>,
+    /// Those removed too, whose branches are kept with their workspace.
+    child_worktrees: HashSet<ChildWorktreeId>,
     sessions: HashSet<SessionId>,
     waits: HashSet<WaitId>,
     accounts: HashSet<AccountId>,
@@ -372,6 +376,7 @@ struct Owners {
 fn owners(store: &Store) -> Result<Owners, StoreError> {
     Ok(Owners {
         workspaces: store.list_workspaces(true)?.into_iter().map(|workspace| workspace.id).collect(),
+        child_worktrees: store.child_worktree_ids()?,
         sessions: store.session_ids()?,
         waits: store.open_wait_ids()?,
         accounts: store.account_ids()?,
