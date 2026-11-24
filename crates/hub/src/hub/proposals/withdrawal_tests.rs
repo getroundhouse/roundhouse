@@ -55,7 +55,7 @@ async fn a_withdrawn_proposal_takes_no_answer_or_revision() {
         (ErrorCode::Conflict, AnswerProblem::Withdrawn.to_string().as_str())
     );
     assert_eq!(revised.code, ErrorCode::Conflict);
-    assert_eq!(hub.session_proposals("s".into()).await.unwrap().proposals, [withdrawn], "and it's read back so");
+    assert_eq!(hub.session_records("s".into()).await.unwrap().proposals, [withdrawn], "and it's read back so");
 }
 
 /// The agent says why, which the person reads, withdraws only what it proposed in its chat, and can't withdraw one the
@@ -79,5 +79,5 @@ async fn a_withdrawal_without_why_of_another_chats_or_once_chosen_is_refused() {
         (unsaid.code, elsewhere.code, chosen.code),
         (ErrorCode::InvalidRequest, ErrorCode::NotFound, ErrorCode::Conflict)
     );
-    assert_eq!(hub.session_proposals("s".into()).await.unwrap().proposals[0].withdrawn, None, "nothing withdrawn");
+    assert_eq!(hub.session_records("s".into()).await.unwrap().proposals[0].withdrawn, None, "nothing withdrawn");
 }

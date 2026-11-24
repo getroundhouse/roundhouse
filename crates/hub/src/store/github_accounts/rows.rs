@@ -5,7 +5,7 @@ use super::super::{
 use crate::login_files::LoginFile;
 use protocol::model::{
     GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
-    GithubUserId, HeldGithubLogin, HubSettings, Rev,
+    GithubUserId, GithubUserNumber, HeldGithubLogin, HubSettings, Rev,
 };
 use rusqlite::{Connection, OptionalExtension as _, Row, Transaction, params};
 use std::collections::HashSet;
@@ -42,8 +42,7 @@ pub(crate) struct GithubConnected {
 /// A row's record, and the file of the login it holds. It holds one only when the file is one the hub names, and it
 /// says how and when it was connected, so every read takes the same to be held. One that names another file is cleared
 /// as the hub starts. What GitHub calls its user isn't kept here, since the hub only observes it, as
-/// `crate::hub::observations::GithubUsername` says, so the record names the user by its number, as `#<number>`, which
-/// the hub fills with the username it holds as the record leaves it, as `crate::hub::observations::OldForm` says.
+/// `crate::hub::observations::GithubUsername` says, so the record names the user by its number.
 pub(super) fn account_at(row: &Row<'_>) -> rusqlite::Result<(GithubAccount, Option<LoginFile>)> {
     let c = GithubAccountColumns::at(0);
     let file = row.at::<Option<String>>(c.login_file)?.as_deref().and_then(LoginFile::parse);
@@ -61,18 +60,12 @@ pub(super) fn account_at(row: &Row<'_>) -> rusqlite::Result<(GithubAccount, Opti
     };
     let account = GithubAccount {
         id: row.at::<String>(c.id)?.into(),
-        user: unnamed(GithubUserId::new(row.at(c.user_id)?)),
+        user: GithubUserNumber { id: GithubUserId::new(row.at(c.user_id)?) },
         held_login: held.as_ref().map(|(_, held)| *held),
         installation: installation_at(row)?,
         rev: rev_of(row, c.rev)?,
     };
     Ok((account, held.map(|(file, _)| file)))
-}
-
-/// The GitHub user `id`, named by its number, `#<number>`, as a record names it while what GitHub calls it isn't known.
-/// *Unconfirmed:* a client of a version from before the username was an observation is sent that.
-fn unnamed(id: GithubUserId) -> GithubUser {
-    GithubUser { id, name: format!("#{id}").into() }
 }
 
 /// Where a row's account is installed, when it's an app's installation, as all three of its columns say: its app, the
@@ -86,7 +79,7 @@ fn installation_at(row: &Row<'_>) -> rusqlite::Result<Option<GithubInstallation>
     Ok(Some(GithubInstallation {
         app: GithubAppId::new(app),
         id: GithubInstallationId::new(id),
-        on: unnamed(GithubUserId::new(on_id)),
+        on: GithubUserNumber { id: GithubUserId::new(on_id) },
     }))
 }
 
@@ -214,18 +207,6 @@ impl Store {
         if changed == 0 {
             return Ok(None);
         }
-        Ok(row_of(&conn, id)?.map(|(account, _)| account))
-    }
-
-    /// Moves the revision of `id`'s record, since what GitHub calls its user changed, which the record holds the old
-    /// form of, and returns the record. `None` for an account with none.
-    pub(in super::super) fn github_account_moved(
-        &self,
-        id: &GithubAccountId,
-    ) -> Result<Option<GithubAccount>, StoreError> {
-        let conn = lock(&self.writer);
-        // Moves the revision, as `github_accounts_rev_on_update` does for any update that doesn't.
-        conn.execute("UPDATE github_accounts SET id = id WHERE id = ?", [id.as_str()])?;
         Ok(row_of(&conn, id)?.map(|(account, _)| account))
     }
 

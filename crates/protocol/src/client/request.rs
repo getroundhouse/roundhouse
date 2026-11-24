@@ -39,8 +39,6 @@ pub enum ClientRequest {
     RepoAdd(records::RepoAdd),
     /// See [`records::RepoList`].
     RepoList,
-    /// See [`records::RecordsList`].
-    RecordsList,
     /// See [`admin::AgentList`].
     AgentList,
     /// See [`admin::ModelsFor`].
@@ -72,9 +70,6 @@ pub enum ClientRequest {
     SessionPromptList(log::SessionPromptList),
     SessionCompactionList(log::SessionCompactionList),
     SessionFind(log::SessionFind),
-    SessionSubagents(records::SessionSubagents),
-    SessionProposals(records::SessionProposals),
-    SessionRepliesHeard(records::SessionRepliesHeard),
     ProposalAnswer(proposals::ProposalAnswer),
     ProposalAnotherRound(proposals::ProposalAnotherRound),
     ProposalRevisionsRead(proposals::ProposalRevisionsRead),
@@ -86,7 +81,6 @@ pub enum ClientRequest {
     AttachmentRead(attachments::AttachmentRead),
     AttachmentReadRange(attachments::AttachmentReadRange),
     AttachmentRemove(attachments::AttachmentRemove),
-    SessionAccount(sessions::SessionAccount),
     SessionAssignAccount(sessions::SessionAssignAccount),
     AccountConnect(accounts::AccountConnect),
     AccountSetDefault(accounts::AccountSetDefault),

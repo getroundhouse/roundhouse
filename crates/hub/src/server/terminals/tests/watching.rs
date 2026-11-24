@@ -269,7 +269,6 @@ async fn a_reply_to_a_slow_client_waits_behind_little_of_a_watched_terminal() {
             | HubFrame::Tail { .. }
             | HubFrame::Delta { .. }
             | HubFrame::Notice { .. }
-            | HubFrame::Github { .. }
             | HubFrame::Listed { .. } => {}
         }
     }

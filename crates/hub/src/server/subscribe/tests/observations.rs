@@ -2,7 +2,7 @@
 
 use protocol::client::listed::{Listed, WorkspaceObservations};
 use protocol::client::subscriptions::{Follow, Subscribe, Subscribed};
-use protocol::client::{ClientResponse, HubFrame, HubNotice};
+use protocol::client::{CLIENT_PROTOCOL_VERSION, ClientResponse, HubFrame, HubNotice};
 use protocol::model::{LineCounts, Observation, ObservationKey, Observed};
 
 use super::given::{Given, ok, start};
@@ -26,7 +26,7 @@ async fn a_workspace_s_lines_are_listed_and_sent_to_whoever_follows_the_hub_and_
     let hub = &given.hub;
     let lines = |added, removed| LineCounts { added, removed };
     hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
-    let mut one = Connection::greeted(hub, 4).await;
+    let mut one = Connection::greeted(hub, CLIENT_PROTOCOL_VERSION).await;
     let session = Follow::Session { id: "s".into(), from: None };
     let follows = Subscribe { stop: Vec::new(), start: vec![start(HUB, Follow::Hub), start(SESSION, session)] };
     let subscribed = ok(&mut one, 1, follows).await;
@@ -83,7 +83,7 @@ async fn a_workspace_s_files_are_listed_before_the_reply_and_sent_only_to_whoeve
         hub.observation_read::<WorkspaceChanges>(workspace.into(), changes(3, 1), 1_000).await.unwrap();
     }
     hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
-    let mut one = Connection::greeted(hub, 4).await;
+    let mut one = Connection::greeted(hub, CLIENT_PROTOCOL_VERSION).await;
     let workspace = Follow::Workspace { id: "w".into() };
     let follows = Subscribe { stop: Vec::new(), start: vec![start(HUB, Follow::Hub), start(WORKSPACE, workspace)] };
 

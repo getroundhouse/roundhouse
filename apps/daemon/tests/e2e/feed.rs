@@ -139,8 +139,7 @@ fn a_client_copy_of_the_records_keeps_up_with_the_hub() {
     client.comment_delete(&removed.id).unwrap();
 
     // Everything the feed announces. A session's newest event moves without a notice, so it's left out, and so is each
-    // record's revision, which moves too as an observation whose old form the record holds changes, and a client of
-    // this version is sent no copy that moves only that.
+    // record's revision, so the copy is compared by what it says.
     let shown = |records: &Snapshot| {
         let mut workspaces = records.workspaces().to_vec();
         let mut sessions: Vec<_> = workspaces.iter().map(|w| records.sessions(&w.id).to_vec()).collect();

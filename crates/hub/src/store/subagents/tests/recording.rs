@@ -4,6 +4,7 @@ use crate::store::tests::store_with_session;
 use crate::store::{ByColumn, Columns, columns, lock};
 use protocol::capability::calls::call::Read;
 use protocol::capability::calls::{Call, CallOutput};
+use protocol::client::listed::SessionRecords;
 use protocol::event::{ExitReason, TaskOutcome};
 use protocol::fixtures;
 use protocol::model::SubagentStatus::{Finished, Stopped, Working};
@@ -131,7 +132,7 @@ fn a_subagent_that_starts_again_after_it_ended_works_again_under_the_call_that_f
     assert_eq!(again.prompt, finished.prompt, "as it first started");
     assert_eq!(again.started_at_ms, restart.ts_ms, "at it from when it started again");
     assert!(again.rev > finished.rev);
-    let (subagents, _) = store.list_subagents(&"s".into()).unwrap();
+    let subagents = store.list_session_records(&"s".into()).unwrap().subagents;
     let listed: Vec<SubagentId> = subagents.iter().map(Subagent::id).collect();
     assert_eq!(
         listed,
@@ -173,7 +174,7 @@ fn a_subagent_named_by_its_agent_is_kept_by_that_name_and_found_by_its_call_too(
     assert_eq!((named("thread-1"), named("toolu_9")), ("thread-1".into(), "thread-1".into()));
     assert_eq!(named("unknown"), "unknown".into(), "one it doesn't know is taken as it is");
     record(&store, &start("toolu_10", "toolu_9"));
-    let (listed, _) = store.list_subagents(&"s".into()).unwrap();
+    let listed = store.list_session_records(&"s".into()).unwrap().subagents;
     for name in ["thread-1", "toolu_9", "toolu_10", "unknown"] {
         let recorded = store.recorded_subagent(&"s".into(), &name.into()).unwrap();
         assert_eq!(recorded, Subagent::named(&listed, &name.into()).map(Subagent::id), "named {name}");
@@ -367,12 +368,12 @@ fn a_sessions_subagents_are_listed_oldest_first_as_of_a_revision() {
     record(&store, &started("a"));
     store.append(&"t".into(), None, &started("c"), None, None, None).unwrap();
 
-    let (subagents, rev) = store.list_subagents(&"s".into()).unwrap();
+    let SessionRecords { subagents, rev, .. } = store.list_session_records(&"s".into()).unwrap();
 
     let calls: Vec<&str> = subagents.iter().map(|subagent| subagent.call.as_str()).collect();
     assert_eq!(calls, ["b", "a"], "in the order they started, not by name");
     assert!(subagents.iter().all(|subagent| subagent.rev <= rev));
-    assert_eq!(store.list_subagents(&"t".into()).unwrap().0.len(), 1);
+    assert_eq!(store.list_session_records(&"t".into()).unwrap().subagents.len(), 1);
 
     record(&store, &ended("a", TaskOutcome::Finished, None));
     assert!(subagent(&store, "a").rev > rev, "a change since is newer than the list");

@@ -65,13 +65,13 @@ fn calls(requests: Vec<(&str, Then)>) -> Vec<Step> {
     (1..).zip(requests).map(|(id, (request, then))| (call(id, request), id, then)).collect()
 }
 
-/// Hellos at versions spelled out, whatever this hub speaks next, each from a client that says only its own: 3, which
-/// it stopped speaking, 6, which reads everything as 5 does and which it speaks ahead of its clients, and 7, which it
-/// doesn't speak.
+/// Hellos at versions spelled out, whatever this hub speaks next, each from a client that says only its own: 3 and 4,
+/// which it stopped speaking, 6, which its clients speak, and 7, which it doesn't speak.
 fn spelled_out() -> Vec<(&'static str, Vec<Step>)> {
     let refused = || Then::Refuses(ErrorCode::VersionMismatch, String::new());
     vec![
         ("a hello at version 3", calls(vec![(&hello(3, None), refused()), (STATUS, Then::Closes)])),
+        ("a hello at version 4", calls(vec![(&hello(4, None), refused()), (STATUS, Then::Closes)])),
         ("a hello at version 6", calls(vec![(&hello(6, None), Then::Greets(6)), (STATUS, Then::ShowsStatus)])),
         ("a hello at version 7", calls(vec![(&hello(7, None), refused()), (STATUS, Then::Closes)])),
     ]
@@ -186,10 +186,11 @@ async fn a_request_that_needs_a_device_takes_the_one_its_hello_said() {
     }
 }
 
-/// The requests only a client of version 3 sent, which followed a session's log, the hub's records, a terminal and what
-/// it showed of GitHub, and the read of a page of a workspace's changed files, are refused as unsupported at every
-/// version this hub speaks, as a request it doesn't know is, and the connection carries on. Spelled out, as a client of
-/// an earlier build sends them.
+/// The requests only a client of version 3 or 4 sent, which followed a session's log, the hub's records, a terminal and
+/// what it showed of GitHub, listed every record, a session's subagents, proposals and how its replies were heard, or
+/// asked whose account a session's agent runs under, and the read of a page of a workspace's changed files, are
+/// refused as unsupported at every version this hub speaks, as a request it doesn't know is, and the connection
+/// carries on. Spelled out, as a client of an earlier build sends them.
 #[tokio::test]
 async fn a_request_this_hub_no_longer_answers_is_refused_as_unsupported() {
     let dir = tempfile::tempdir().unwrap();
@@ -201,6 +202,11 @@ async fn a_request_this_hub_no_longer_answers_is_refused_as_unsupported() {
         r#"{"method":"session_unsubscribe","subscription_id":3}"#,
         r#"{"method":"github_subscribe","subscription_id":3,"shown":{"workspaces":["w"],"references":[]}}"#,
         r#"{"method":"terminal_watch","id":"t","subscription_id":4}"#,
+        r#"{"method":"records_list"}"#,
+        r#"{"method":"session_subagents","id":"s"}"#,
+        r#"{"method":"session_proposals","id":"s"}"#,
+        r#"{"method":"session_replies_heard","id":"s"}"#,
+        r#"{"method":"session_account","id":"s"}"#,
         r#"{"method":"workspace_changed_files","id":"w","after":{"untracked":true,"path":"a.js"}}"#,
     ];
 

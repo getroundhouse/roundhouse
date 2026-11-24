@@ -34,9 +34,7 @@ impl Hub {
         let logins = Arc::clone(&self.github_logins);
         match off_thread(move || logins.disconnect(&id, now_ms())).await? {
             Disconnected::Kept(change) => Ok(self.announce_github_account(change)),
-            Disconnected::Removed(GithubRemoved { mut account, rev, settings }) => {
-                // Named as it last was, before what GitHub calls its user is forgotten with it.
-                self.fill_old_forms(&mut account);
+            Disconnected::Removed(GithubRemoved { account, rev, settings }) => {
                 self.notify(HubNotice::Removed { record: RecordKey::GithubAccount { id: account.id.clone() }, rev });
                 if let Some(settings) = settings {
                     self.notify(HubNotice::HubSettings(settings));
@@ -77,10 +75,9 @@ impl Hub {
     }
 
     /// Tells every client what changed of a GitHub account's record, and of the settings when it changed the default,
-    /// and returns the record, named as the hub last heard GitHub call its user.
+    /// and returns the record.
     pub(in super::super) fn announce_github_account(&self, change: GithubAccountChange) -> GithubAccount {
-        let GithubAccountChange { mut account, changed, settings } = change;
-        self.fill_old_forms(&mut account);
+        let GithubAccountChange { account, changed, settings } = change;
         if changed {
             self.notify(HubNotice::GithubAccount(account.clone()));
         }

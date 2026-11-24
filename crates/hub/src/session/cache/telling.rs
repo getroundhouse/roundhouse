@@ -70,9 +70,8 @@ impl LiveSession {
 
     /// Tells clients what the cache holds, as the session last heard, and whether the context is big enough to tell
     /// of, as its observation says now. Nothing, while nothing is known of what the cache holds. The caller holds the
-    /// lock events are recorded under, from reading both until the session's revision has moved for the old form, so
-    /// what's told last is worked out from what's newest of both, since the session is the only one to tell of its
-    /// cache, and no copy of its record is announced between the change and that move.
+    /// lock events are recorded under, from reading both until what it works out is kept, so what's told last is worked
+    /// out from what's newest of both, since the session is the only one to tell of its cache.
     pub(in super::super) async fn tell_cache(&self) {
         let Ok(hub) = self.hub() else { return };
         let CacheHeld::Known(held) = self.state.lock().prompt_cache.clone() else { return };

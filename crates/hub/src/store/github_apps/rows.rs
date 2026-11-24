@@ -1,5 +1,5 @@
 use protocol::client::github_apps::GithubManifestCode;
-use protocol::model::{GithubApp, GithubAppId, GithubUser, GithubUserId, Rev};
+use protocol::model::{GithubApp, GithubAppId, Rev};
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
 use std::collections::HashSet;
 
@@ -23,20 +23,11 @@ pub(crate) struct GithubAppMaking<'a> {
 }
 
 /// A row's record, and the file of its key, `None` for a row that names a file the hub doesn't make. What GitHub says
-/// of the app isn't kept here, since the hub only observes it, so the record names the app by its number, as `#<number>`,
-/// for its slug and its name, with an owner of no number, `#0`, and no bot, which the hub fills with what it holds as
-/// the record leaves it, as `crate::hub::observations::OldForm` says. *Unconfirmed:* the stand-ins.
+/// of the app isn't kept here, since the hub only observes it.
 fn app_at(row: &Row<'_>) -> rusqlite::Result<(GithubApp, Option<LoginFile>)> {
     let c = AppColumns::at(0);
     let id = GithubAppId::new(row.at(c.id)?);
-    let app = GithubApp {
-        id,
-        slug: format!("#{id}").into(),
-        name: format!("#{id}"),
-        owner: GithubUser { id: GithubUserId::new(0), name: "#0".into() },
-        bot: None,
-        rev: rev_of(row, c.rev)?,
-    };
+    let app = GithubApp { id, rev: rev_of(row, c.rev)? };
     Ok((app, LoginFile::parse(&row.at::<String>(c.key_file)?)))
 }
 /// Every app, oldest first, for a list of every record.
@@ -98,15 +89,6 @@ impl Store {
         let mut statement = conn.prepare("SELECT id FROM github_apps")?;
         let ids = statement.query_map([], OneValue::read::<u64>)?;
         Ok(ids.map(|id| id.map(GithubAppId::new)).collect::<rusqlite::Result<_>>()?)
-    }
-
-    /// Moves the revision of the app `id`'s record, since what GitHub says of it changed, which the record holds the
-    /// old form of, and returns the record. `None` for an app with none.
-    pub(in super::super) fn github_app_moved(&self, id: GithubAppId) -> Result<Option<GithubApp>, StoreError> {
-        let conn = lock(&self.writer);
-        // Moves the revision, as `github_apps_rev_on_update` does for any update that doesn't.
-        conn.execute("UPDATE github_apps SET id = id WHERE id = ?", [id.get()])?;
-        Ok(row_of(&conn, id)?.map(|(app, _)| app))
     }
 
     /// Removes the app `id`'s record, whose key the hub has let go of, and answers with the revision of its removal, or

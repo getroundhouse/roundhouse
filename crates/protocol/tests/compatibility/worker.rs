@@ -1,6 +1,6 @@
 //! What has to stay readable between a hub and its workers.
 
-use super::github_shown::{EVERY_FACET, every_facet};
+use super::every_facet::{EVERY_FACET, every_facet};
 use protocol::frame;
 use protocol::model::{Local, OwnPullRequest};
 use protocol::model::{Wait, WaitEnd, WaitEnded, WaitUntil};

@@ -290,11 +290,7 @@ impl Hub {
         let listing = self.updates.listed_with(self.terminals.listed_with(listing));
         let ((((listed, model_lists), terminals), hub_update), observations) =
             self.observations.listed_with(&Level::Hub, listing).await;
-        let mut records = Records { terminals, model_lists, hub_update, observations, ..listed? };
-        // After the list, with what's kept then, which is never older than what the list's revision takes in. Newer is
-        // only of a change whose record's revision moves after, so a client is sent the record again.
-        self.observations.fill(&mut records);
-        Ok(records)
+        Ok(Records { terminals, model_lists, hub_update, observations, ..listed? })
     }
 
     pub(crate) async fn workspace(&self, id: &WorkspaceId) -> Result<Workspace, ApiError> {

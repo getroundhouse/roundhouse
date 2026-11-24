@@ -103,7 +103,7 @@ impl GithubLogins {
                 return Ok(None);
             }
             let new_id = GithubAccountId::from(uuid::Uuid::new_v4().to_string());
-            let installed = GithubInstallation { app, id: installation.id, on: installation.on.clone() };
+            let installed = GithubInstallation { app, id: installation.id, on: installation.on.number() };
             let (account, settings) = files.connect(&GithubLogin::Installation(token), |file| {
                 let how = GithubLoginKind::App;
                 let connecting = GithubConnecting {

@@ -3,7 +3,6 @@
 
 use std::path::{Path, PathBuf};
 
-use protocol::model::{GithubAccount, GithubAppId, GithubInstallation, GithubInstallationId, Rev};
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 
 use super::super::blocks::{Unusable, lost};
@@ -221,18 +220,6 @@ fn a_default_whose_file_only_a_newer_build_reads_blocks_saying_so() {
 /// says where it's read, as "this workspace" or "there" for the hub's machine would.
 #[test]
 fn every_block_says_once_what_roundhouse_cant_do_and_never_where_its_read() {
-    let user = |id, name: &str| GithubUser { id: GithubUserId::new(id), name: name.into() };
-    let account = GithubAccount {
-        id: "g".into(),
-        user: user(7, "ada"),
-        held_login: None,
-        installation: None,
-        rev: Rev::default(),
-    };
-    let installation =
-        GithubInstallation { app: GithubAppId::new(1), id: GithubInstallationId::new(1), on: user(8, "adalabs") };
-    let bot =
-        GithubAccount { user: user(9, "ada-roundhouse[bot]"), installation: Some(installation), ..account.clone() };
     let every = || {
         [
             Unusable::Disconnected,
@@ -250,8 +237,9 @@ fn every_block_says_once_what_roundhouse_cant_do_and_never_where_its_read() {
         ]
     };
 
-    for of in [&account, &bot] {
-        for said in every().iter().map(|unusable| lost(of, unusable)) {
+    let (ada, bot, adalabs) = ("ada".into(), "ada-roundhouse[bot]".into(), "adalabs".into());
+    for (name, on) in [(&ada, None), (&bot, Some(&adalabs))] {
+        for said in every().iter().map(|unusable| lost(name, on, unusable)) {
             assert_eq!(said.matches("Roundhouse can't read pull requests").count(), 1, "{said}");
             assert!(!said.contains("workspace") && !said.contains(" there") && !said.contains("this Mac"), "{said}");
         }

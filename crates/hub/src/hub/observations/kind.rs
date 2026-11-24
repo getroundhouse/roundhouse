@@ -1,7 +1,7 @@
 //! What a kind of observation says of itself, which the store keeps every kind by, as `super::kinds` and
 //! `super::github_kinds` have each say it.
 
-use protocol::model::{Observation, ObservationKey, Observed, Record, RecordKey, Rev};
+use protocol::model::{Observation, ObservationKey, Observed, Rev};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -40,26 +40,6 @@ pub(crate) trait Kind: Sized + 'static {
     /// limits was heard, which memory and the file keep all the same.
     fn says_the_same(held: &Self::Value, read: &Self::Value) -> bool {
         held == read
-    }
-
-    /// The record whose field a client of a version from before this kind reads it in, as
-    /// [`OldForm`](super::old_form::OldForm) fills it, whose revision moves as the observation of `of` changes, so such a client
-    /// is sent the record again. `None` for a kind no record holds, as one every client reads as an observation, or
-    /// as a frame of its own.
-    fn old_form_on(_of: &Self::Of) -> Option<RecordKey> {
-        None
-    }
-
-    /// The whole record a client of a version from before this kind reads it as, made from what it says, `said`, as
-    /// last read at `read_at_ms`, under its own revision, `rev`, which is told as the observation is, and listed with
-    /// the records, as [`OldForm`](super::old_form::OldForm) lists it. `None` for a kind no record is made from.
-    fn old_record(_of: &Self::Of, _said: Observed<Self::Value>, _read_at_ms: i64, _rev: Rev) -> Option<Record> {
-        None
-    }
-
-    /// Which record [`Kind::old_record`] makes of the observation of `of`, as its removal names it.
-    fn old_record_key(_of: &Self::Of) -> Option<RecordKey> {
-        None
     }
 }
 

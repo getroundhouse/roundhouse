@@ -100,11 +100,7 @@ pub(in super::super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Worksp
         // Written only by this hub, as JSON. One it can't read is as good as none.
         comment_draft: json_at(row, c.comment_draft)?,
         user_active_at_ms: row.at(c.user_active_at_ms)?,
-        // Kept apart, as the observation `WorkspaceBranches`, which fills it as the record leaves the hub.
-        branches: None,
         pull_request_branch: row.at::<Option<String>>(c.pull_request_branch)?.map(BranchName::from),
-        // Kept apart, as the observation `WorkspaceWorkerBuild`, which fills it as the record leaves the hub.
-        worker_build: None,
         rev: rev_of(row, c.rev)?,
     })
 }
@@ -293,19 +289,6 @@ impl Store {
             return Ok(None);
         }
         self.get_workspace(id).map(Some)
-    }
-
-    /// Moves the revision of the workspace `id`, which holds the old form of an observation, and returns it, or `None`
-    /// once it's gone.
-    pub(in super::super) fn workspace_moved(&self, id: &WorkspaceId) -> Result<Option<Workspace>, StoreError> {
-        let conn = lock(&self.writer);
-        // Moves the revision, as `workspaces_rev_on_update` does for an update of any column it names.
-        conn.execute("UPDATE workspaces SET name = name WHERE id = ?", [id.as_str()])?;
-        match workspace_on(&conn, id) {
-            Ok(workspace) => Ok(Some(workspace)),
-            Err(StoreError::NotFound { .. }) => Ok(None),
-            Err(e) => Err(e),
-        }
     }
 
     /// Records where the workspace's setup has got to, and returns the workspace, as it was if its setup had got there

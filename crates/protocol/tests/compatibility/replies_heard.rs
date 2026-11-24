@@ -2,8 +2,7 @@
 //! session's, and the notice that says one changed, which every peer from now on reads as they were first written.
 
 use protocol::client::conversation::{SessionReplyHeard, SessionSpeaking};
-use protocol::client::records::{RepliesHeard, SessionRepliesHeard};
-use protocol::client::{ClientRequest, ClientResponse, HubNotice};
+use protocol::client::{ClientRequest, HubNotice};
 use protocol::model::{Ending, RecordKey, ReplyHeard, ReplyPlace, Rev, SettledBy, SpokenThrough};
 use protocol::tail::Tail;
 
@@ -40,14 +39,6 @@ fn what_a_device_says_of_a_reply_and_the_list_of_a_sessions_keep_their_form() {
     keeps_its_form(
         &ClientRequest::SessionReplyHeard(said),
         r#"{"method":"session_reply_heard","id":"s","message":"msg_1","ending":{"how":"stopped","through":{"block":2,"through":140}}}"#,
-    );
-    keeps_its_form(
-        &ClientRequest::SessionRepliesHeard(SessionRepliesHeard { id: "s".into() }),
-        r#"{"method":"session_replies_heard","id":"s"}"#,
-    );
-    keeps_its_form(
-        &ClientResponse::RepliesHeard(RepliesHeard { replies: vec![heard(Ending::ToTheEnd)], rev: Rev::new(9) }),
-        r#"{"result":"replies_heard","replies":[{"session_id":"s","message":"msg_1","ending":{"how":"to_the_end"},"rev":7}],"rev":9}"#,
     );
 }
 

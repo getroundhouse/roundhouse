@@ -212,7 +212,7 @@ mod tests {
 
     /// What a hub found, as [`Found`] says, as the app is connected to it.
     fn found(version: Option<&str>, attempt: Option<UpdateAttempt>, rev: u64) -> Found {
-        let update = HubUpdate { version: None, looked_at_ms: 1, problem: None, attempt, rev: Rev::new(rev) };
+        let update = HubUpdate { looked_at_ms: 1, problem: None, attempt, rev: Rev::new(rev) };
         (update, observed::release_offered(version))
     }
 

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::capability::settings::Settings;
-use crate::model::{self, AccountId, AgentKind, ClientRequestId, Seq, Session, SessionId, WorkspaceId};
+use crate::model::{AccountId, AgentKind, ClientRequestId, Seq, Session, SessionId, WorkspaceId};
 
 /// Sending the same `client_request_id` again returns the session it made. It's refused for a kind of agent the hub
 /// doesn't run, and for an effort or an approval mode the agent isn't offered, as
@@ -224,32 +224,5 @@ impl Request for SessionAssignAccount {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::SessionAssignAccount(self)
-    }
-}
-
-/// Whose account the session's agent runs under, and what the hub has heard of that account's limits. For a login the
-/// hub gave the agent, that's the hub's record of it. Otherwise it's read from the session's worker when asked, which,
-/// like any read from a worker, starts the workspace's worker if none is running, and is refused unless the workspace is
-/// ready. It records nothing, so asking again only reads again. A hub older than this refuses it as unsupported.
-///
-/// Kept for clients from before accounts were records. A client now reads the session's `account` and that account's
-/// record, which the feed announces.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct SessionAccount {
-    pub id: SessionId,
-}
-
-impl Request for SessionAccount {
-    type Reply = model::SessionAccount;
-
-    fn into_request(self) -> ClientRequest {
-        ClientRequest::SessionAccount(self)
-    }
-}
-
-impl Reply for model::SessionAccount {
-    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
-        let ClientResponse::SessionAccount(account) = response else { return Err(response) };
-        Ok(account)
     }
 }

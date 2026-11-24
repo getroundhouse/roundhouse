@@ -7,18 +7,12 @@ use protocol::model::{HubUpdate, Observation, ObservationKey, Observed, Records,
 use crate::keeps_its_form;
 
 fn found() -> HubUpdate {
-    HubUpdate {
-        version: Some("0.1.9".into()),
-        looked_at_ms: 1_795_230_000_000,
-        problem: None,
-        attempt: None,
-        rev: Rev::new(5),
-    }
+    HubUpdate { looked_at_ms: 1_795_230_000_000, problem: None, attempt: None, rev: Rev::new(5) }
 }
 
 #[test]
 fn what_a_hub_found_keeps_its_form_as_a_notice_and_in_a_list() {
-    let record = r#""version":"0.1.9","looked_at_ms":1795230000000,"problem":null,"rev":5"#;
+    let record = r#""looked_at_ms":1795230000000,"problem":null,"rev":5"#;
 
     keeps_its_form(&HubNotice::HubUpdate(found()), &format!(r#"{{"notice":"hub_update",{record}}}"#));
     let listed = Records { hub_update: Some(found()), ..Records::default() };

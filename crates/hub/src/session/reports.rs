@@ -79,10 +79,6 @@ impl LiveSession {
         if !speaks_for_the_session(self.state.lock().agent.map(|agent| agent.run), run) {
             return;
         }
-        // Held from the change until the session's revision has moved for its old form, so no copy of the session's
-        // record that events announce is read between the two and filled with what the agent said, which would tell a
-        // client of version 4 the same twice.
-        let _in_order = self.recording.lock().await;
         if let Err(e) = hub.observation_read::<K>(self.observed_as(), said, crate::store::now_ms()).await {
             error!(session = %self.id, "could not keep {what}: {}", e.message);
         }

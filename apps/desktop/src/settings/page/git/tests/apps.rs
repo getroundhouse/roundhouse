@@ -5,8 +5,8 @@ use client_core::ClientError;
 use gpui_kit::TestAppContext;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
-    GithubUserId, Observation, Records, SentCredential, UnusableLogin,
+    GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind,
+    Observation, Records, SentCredential, UnusableLogin,
 };
 
 use super::super::app_words;
@@ -15,7 +15,7 @@ use super::made_up::{NOW_MS, held, listed, named};
 
 /// `name`'s account, `id`, as an installation of the app 9 on GitHub's user 2, and what GitHub calls its user.
 pub(super) fn installed(id: &str, name: &str) -> (GithubAccount, Observation) {
-    let on = GithubUser { id: GithubUserId::new(2), name: "".into() };
+    let on = protocol::fixtures::github_user(2);
     let installation = GithubInstallation { app: GithubAppId::new(9), id: GithubInstallationId::new(70), on };
     let (account, username) = named(id, name, false);
     let held_login = Some(held(GithubLoginKind::App, None, false));

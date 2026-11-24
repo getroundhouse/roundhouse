@@ -4,8 +4,8 @@
 use protocol::capability::output::TodoList;
 use protocol::model::{
     AccountId, ChangeSummary, ContextUsage, ConversationCache, LineCounts, ModelListKey, Observation, ObservationKey,
-    Observed, OwnPullRequestDetail, OwnPullRequestSaid, RecordKey, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev,
-    UsageLimit, WorkspaceId,
+    Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, UsageLimit,
+    WorkspaceId,
 };
 
 use super::kept::Table;
@@ -156,8 +156,7 @@ impl Kind for WorkspaceRepositoryUnseen {
     }
 }
 
-/// What an agent offers where a chat would launch, as its CLI last listed it, sent at the hub's level. A client of a
-/// version from before it reads it on the list's record, which the hub keeps in memory, and moves as its lookup does.
+/// What an agent offers where a chat would launch, as its CLI last listed it, sent at the hub's level.
 pub(crate) struct ModelCatalog;
 
 impl Kind for ModelCatalog {
@@ -178,8 +177,7 @@ impl Kind for ModelCatalog {
     }
 }
 
-/// Who an agent's account is, as a worker last read it from the agent's login, sent at the hub's level. A client of a
-/// version from before it reads it on the account's record.
+/// Who an agent's account is, as a worker last read it from the agent's login, sent at the hub's level.
 pub(crate) struct AccountIdentity;
 
 impl Kind for AccountIdentity {
@@ -198,15 +196,11 @@ impl Kind for AccountIdentity {
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.account_identity
     }
-
-    fn old_form_on(account: &AccountId) -> Option<RecordKey> {
-        Some(RecordKey::Account { id: account.clone() })
-    }
 }
 
 /// What's left of an account's usage limits, as its agents last said them, each with when it was heard, sent at the
-/// hub's level. A client of a version from before it reads it on the account's record. An agent says only some at a
-/// time, so each hearing is merged with what's kept, as `crate::hub::accounts` merges it.
+/// hub's level. An agent says only some at a time, so each hearing is merged with what's kept, as
+/// `crate::hub::accounts` merges it.
 pub(crate) struct AccountLimits;
 
 impl Kind for AccountLimits {
@@ -234,14 +228,9 @@ impl Kind for AccountLimits {
         };
         without_when(held) == without_when(read)
     }
-
-    fn old_form_on(account: &AccountId) -> Option<RecordKey> {
-        Some(RecordKey::Account { id: account.clone() })
-    }
 }
 
-/// How full a session's agent's context is, as the agent of its current run last said, sent at the session's level. A
-/// client of a version from before it reads it on the session's record.
+/// How full a session's agent's context is, as the agent of its current run last said, sent at the session's level.
 pub(crate) struct SessionContext;
 
 impl Kind for SessionContext {
@@ -259,10 +248,6 @@ impl Kind for SessionContext {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.session_context
-    }
-
-    fn old_form_on(of: &SessionKey) -> Option<RecordKey> {
-        Some(RecordKey::Session { id: of.session_id.clone() })
     }
 }
 
@@ -285,15 +270,10 @@ impl Kind for SessionTodos {
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.session_todos
     }
-
-    fn old_form_on(of: &SessionKey) -> Option<RecordKey> {
-        Some(RecordKey::Session { id: of.session_id.clone() })
-    }
 }
 
 /// What the API's cache holds of a session's conversation, and whether its context is big enough to tell of, sent at
-/// the hub's level, as the session worked it out from its agent's requests and its [`SessionContext`]. A client of a
-/// version from before it reads what the cache holds on the session's record.
+/// the hub's level, as the session worked it out from its agent's requests and its [`SessionContext`].
 pub(crate) struct SessionCache;
 
 impl Kind for SessionCache {
@@ -312,15 +292,10 @@ impl Kind for SessionCache {
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.session_cache
     }
-
-    fn old_form_on(of: &SessionKey) -> Option<RecordKey> {
-        Some(RecordKey::Session { id: of.session_id.clone() })
-    }
 }
 
 /// What an open wait last read of the pull requests it watches, worked out from GitHub's part of the cache as each read
-/// of them ends, sent at its session's level, as `crate::hub::waits` says. A client of a version from before it reads it
-/// in the wait's watch, on the session's record.
+/// of them ends, sent at its session's level, as `crate::hub::waits` says.
 pub(crate) struct WaitRead;
 
 impl Kind for WaitRead {
@@ -338,9 +313,5 @@ impl Kind for WaitRead {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.wait_read
-    }
-
-    fn old_form_on(of: &WaitKey) -> Option<RecordKey> {
-        Some(RecordKey::Session { id: of.session_id.clone() })
     }
 }

@@ -116,10 +116,7 @@ impl Hub {
             title_source: TitleSource::FirstLine,
             pull_request_link: None,
             comment_draft: None,
-            // Kept apart, as the observation `WorkspaceBranches`.
-            branches: None,
             pull_request_branch: None,
-            worker_build: None,
         };
         let mut taken = None;
         while let Some(name) = names.next(self, &repo.id).await? {
@@ -183,8 +180,7 @@ impl Hub {
         self.nothing_to_read_yet(&id);
         let ready = self.blocking(move |store| store.workspace_ready(&id, &path, &branch, &base_ref)).await?;
         let ready = ReadyWorkspace::new(ready)?;
-        // Before it's announced, so a client is told which branch it's on as it's ready. A client of version 4 hears it
-        // as the ready record, filled, which its revision moves for, so the announcement below reaches only the others.
+        // Before it's announced, so a client is told which branch it's on as it's ready.
         if let Some(branches) = branches {
             self.branches_known(ready.id(), branches).await;
         }

@@ -7,8 +7,8 @@ use parking_lot::Mutex;
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    GithubAccount, GithubAccountId, GithubAppId, GithubLoginKind, GithubToken, GithubUser, GithubUsername, HubSettings,
-    UnusableLogin,
+    GithubAccount, GithubAccountId, GithubAppId, GithubAppSlug, GithubInstallation, GithubLoginKind, GithubToken,
+    GithubUser, GithubUserId, GithubUsername, HubSettings, UnusableLogin,
 };
 use tokio::sync::watch;
 
@@ -17,7 +17,7 @@ use super::gh_login::GhKept;
 use super::nobody::NobodyAsks;
 use super::{DefaultCredential, GithubLogin};
 use crate::error::internal;
-use crate::hub::{GithubUsername as Username, Observations};
+use crate::hub::{GithubAppSaid as AppSaid, GithubUsername as Username, InstalledOn, Observations};
 use crate::login_files::{Locked, LoginFiles};
 use crate::pasted_token::pasted_token;
 use crate::store::{GithubConnected, GithubConnecting, GithubRemoved, Store, StoreError};
@@ -348,6 +348,24 @@ impl GithubLogins {
     /// What GitHub calls `account`'s user, as the hub last heard it, or its number, as `#<number>`, while that isn't
     /// known, for what the logins say of it to a person.
     pub(super) fn named(&self, account: &GithubAccount) -> GithubUsername {
-        self.observations.value_of::<Username>(&account.id).unwrap_or_else(|| account.user.name.clone())
+        self.observations.value_of::<Username>(&account.id).unwrap_or_else(|| by_number(account.user.id))
     }
+
+    /// What GitHub calls the user or organization `installation`, `account`'s, is on, as the hub last heard it, or its
+    /// number while that isn't known, as [`GithubLogins::named`] says.
+    pub(super) fn installed_on(&self, account: &GithubAccount, installation: &GithubInstallation) -> GithubUsername {
+        self.observations.value_of::<InstalledOn>(&account.id).unwrap_or_else(|| by_number(installation.on.id))
+    }
+
+    /// What GitHub calls the app of your own `app` in addresses, as the hub last heard it, or its number while that
+    /// isn't known, as [`GithubLogins::named`] says.
+    pub(super) fn slug_of(&self, app: GithubAppId) -> GithubAppSlug {
+        let said = self.observations.value_of::<AppSaid>(&app);
+        said.map_or_else(|| GithubAppSlug::from(format!("#{app}").as_str()), |said| said.slug)
+    }
+}
+
+/// A user or organization named by its number, as `#<number>`, while what GitHub calls it isn't known.
+fn by_number(id: GithubUserId) -> GithubUsername {
+    GithubUsername::from(format!("#{id}").as_str())
 }

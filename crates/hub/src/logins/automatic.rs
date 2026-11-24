@@ -4,18 +4,12 @@
 
 use std::collections::HashMap;
 
-use protocol::model::{Account, AccountId, AgentKind, Reserve, UsageLimit};
+use protocol::model::{Account, AccountId, AgentKind, HeardLimits, Reserve, UsageLimit};
 
 /// What's been heard of each account's limits, as the hub keeps it, which Automatic decides by, each with when it was
 /// heard. An account with none here is one no agent under it has said any of since the hub last knew, as after the
 /// hub's cache file was emptied, which Automatic takes to have all of its week, as a new one.
 pub(crate) type Heard = HashMap<AccountId, Vec<UsageLimit>>;
-
-/// `account`'s record, with what's been `heard` of its limits, which its record from the store says nothing of.
-pub(crate) fn with_heard(account: Account, heard: &Heard) -> Account {
-    let limits = heard.get(&account.id).cloned().unwrap_or_default();
-    Account { limits, ..account }
-}
 
 /// The week, in hours, which an account whose week no agent has heard is taken to have all of.
 const WEEK_HOURS: f64 = 7. * 24.;
@@ -26,10 +20,12 @@ const FEWEST_HOURS: f64 = 1.;
 
 const HOUR_MS: f64 = 60. * 60. * 1000.;
 
-/// An account Automatic could put a chat on, and how much of its week it has to spare.
+/// An account Automatic could put a chat on, what's been heard of its limits, and how many chats are at work on it.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Candidate<'a> {
     pub(crate) account: &'a Account,
+    /// What's been heard of its limits, as [`Heard`] keeps them, none for an account with none there.
+    pub(crate) limits: &'a [UsageLimit],
     /// The chats of the hub at work on it now.
     pub(crate) working: usize,
 }
@@ -52,11 +48,11 @@ pub(crate) fn choose<'a>(agent: AgentKind, candidates: &[Candidate<'a>], now_ms:
 /// its week is down to what it reserves. A limit that has started again since an agent heard it is all there, and a
 /// week no agent has heard is taken to be all there, with all of it to go.
 fn spare(agent: AgentKind, candidate: &Candidate<'_>, now_ms: i64) -> Option<f64> {
-    let account = candidate.account;
-    if !account.works_for(agent, now_ms) || account.used_up(now_ms).next().is_some() {
+    let (account, limits) = (candidate.account, HeardLimits(candidate.limits));
+    if !account.works_for(agent, now_ms) || limits.used_up(now_ms).next().is_some() {
         return None;
     }
-    let week = account.week(now_ms);
+    let week = limits.week(now_ms);
     let left = week.map_or(100, protocol::model::UsageLimit::left_percent);
     // All of it reserved is reached at any amount left.
     if account.reserve.is_some_and(|reserve| reserve.reached_at(left)) {

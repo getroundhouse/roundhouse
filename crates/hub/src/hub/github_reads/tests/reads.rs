@@ -1,3 +1,5 @@
+//! What the hub reads of GitHub for what clients ask for and follow, with a stand-in for GitHub.
+
 use std::time::Duration;
 
 use github::{References, Script, StandIn};
@@ -6,7 +8,8 @@ use protocol::model::{
     ReferenceAsk, ReferenceRead,
 };
 
-use super::references::FRESH_FOR;
+use super::super::references::FRESH_FOR;
+use crate::github_cache::Item;
 use crate::hub::tests::hub_reading_github;
 use crate::hub::{Followed, Hub};
 
@@ -234,7 +237,7 @@ async fn a_branchs_rules_are_read_again_only_once_theyre_stale() {
     assert_eq!(rules_read(), 1);
     let checks = again.pull_request.checks_said().unwrap().counts();
     assert_eq!(checks.pending, 1, "the check main's rules require, as they were read");
-    hub.github_cache.age(super::reading::RULES_FRESH_FOR);
+    hub.github_cache.age(super::super::reading::RULES_FRESH_FOR);
     hub.workspace_pull_request("w".into()).await.unwrap();
     assert_eq!(rules_read(), 2);
 }
@@ -250,7 +253,8 @@ async fn what_a_client_shows_is_read_again_once_its_stale() {
     let hub = hub_reading_github(dir.path(), github.api());
     let showing = hub.follow([Followed::Reference(own(12))]);
     let watching = tokio::spawn(hub.clone().watch_followed_references());
-    let title = |hub: &Hub| match hub.reference_kept(&own(12)) {
+    let item = Item::new(&own(12).repository, own(12).number);
+    let title = |hub: &Hub| match hub.github_cache.summary(&item) {
         Some(ReferenceRead::Found { reference }) => reference.about().map(|about| about.title.clone()),
         _ => None,
     };
@@ -266,35 +270,4 @@ async fn what_a_client_shows_is_read_again_once_its_stale() {
     watching.abort();
     drop(showing);
     assert_eq!(hub.followers.references(), [], "no longer followed, so not read");
-}
-
-/// A pull request the cache forgot is tried again only once the wait since it was last tried has passed, however many
-/// ask, while another is tried at once, and the wait is twice as long after each try, up to the longest.
-#[test]
-fn a_forgotten_pull_request_is_tried_again_only_once_its_due_and_less_often_each_time() {
-    let link = |n: u64| protocol::model::PullRequestLink {
-        repository: GithubRepositoryName::named("o/r"),
-        number: number(n),
-        url: format!("https://github.com/o/r/pull/{n}"),
-        uncommitted: 0,
-    };
-    let forgotten = super::Forgotten::default();
-    let (again, start) = (Duration::from_secs(60), std::time::Instant::now());
-    let due = |after: u64, numbers: &[u64]| {
-        let links = numbers.iter().map(|n| link(*n)).collect();
-        let due = forgotten.due(links, again, start + Duration::from_secs(after));
-        due.iter().map(|link| link.number.get()).collect::<Vec<_>>()
-    };
-
-    assert_eq!(due(0, &[7, 7]), [7], "once, however many ask");
-    assert_eq!(due(59, &[7, 8]), [8], "not 7 again yet");
-    assert_eq!(due(60, &[7, 8]), [7], "7 is due, and 8 isn't yet");
-    assert_eq!(due(60 + 119, &[7]), Vec::<u64>::new(), "twice as long after the second try");
-    assert_eq!(due(60 + 120, &[7]), [7]);
-    let mut at = 180;
-    for wait in [240, 480, 960, 1800, 1800] {
-        assert_eq!(due(at + wait - 1, &[7]), Vec::<u64>::new(), "not before {wait}s");
-        assert_eq!(due(at + wait, &[7]), [7], "after {wait}s, half an hour at the longest");
-        at += wait;
-    }
 }

@@ -1,6 +1,6 @@
 //! What the store does with every kind's table alike, and the one list of every kind it keeps.
 
-use protocol::model::{Level, Observation, ObservationKey, RecordKey, Rev};
+use protocol::model::{Level, Observation, ObservationKey, Rev};
 
 use super::file::{self, Row, Write};
 use super::github_kinds::{GithubAppBot, GithubAppSaid, GithubProfile, GithubUsername, InstalledOn, RepositoryReach};
@@ -43,13 +43,6 @@ pub(crate) struct Tables {
     pub(super) github_profile: Table<GithubProfile>,
 }
 
-/// What's told of an observation that's forgotten: its removal, unless it's of a kind sent nowhere, and the removal of
-/// the record made from it for a client of a version from before it, if any is, as [`Kind::old_record`] says.
-pub(super) struct Forgotten {
-    pub(super) observation: Option<ObservationKey>,
-    pub(super) old_record: Option<RecordKey>,
-}
-
 /// Which owners' observations are to be forgotten, since they're gone.
 pub(super) type Gone<'a> = &'a (dyn Fn(Owner<'_>) -> bool + Sync);
 
@@ -66,7 +59,7 @@ pub(super) trait AnyTable {
     fn keeps_of(&self, gone: Gone<'_>) -> bool;
     /// Forgets each observation of an owner that `gone` picks out, and that anything keeps it current, and queues its
     /// removal from the file on `writer`. Returns which it forgot, as clients are told of each.
-    fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<Forgotten>;
+    fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey>;
 }
 
 impl<K: Kind> AnyTable for Table<K> {
@@ -94,15 +87,14 @@ impl<K: Kind> AnyTable for Table<K> {
         self.kept.keys().any(|of| of.owner().is_some_and(gone))
     }
 
-    fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<Forgotten> {
+    fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey> {
         self.kept_current.retain(|of| !of.owner().is_some_and(gone));
         let forgotten: Vec<K::Of> = self.kept.keys().filter(|of| of.owner().is_some_and(gone)).cloned().collect();
         for of in &forgotten {
             self.kept.remove(of);
             writer.write::<K>(of.clone(), Write::Gone);
         }
-        let told = |of: &K::Of| Forgotten { observation: K::key(of), old_record: K::old_record_key(of) };
-        forgotten.iter().map(told).collect()
+        forgotten.iter().filter_map(K::key).collect()
     }
 }
 
@@ -172,7 +164,7 @@ impl Tables {
     }
 
     /// Forgets every observation of an owner that `gone` picks out, of every kind, as [`AnyTable::forget_of`] does.
-    pub(super) fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<Forgotten> {
+    pub(super) fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey> {
         self.each().into_iter().flat_map(|table| table.forget_of(gone, writer)).collect()
     }
 

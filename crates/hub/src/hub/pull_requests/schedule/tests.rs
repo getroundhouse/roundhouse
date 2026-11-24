@@ -24,7 +24,6 @@ fn workspace(
         repository: GithubRepositoryName::named("o/r"),
         number: IssueNumber::try_from(7).unwrap(),
         url: "https://github.com/o/r/pull/7".to_string(),
-        uncommitted: 0,
     });
     (
         Workspace { status, pull_request_link: Some(PullRequestLinked { link }), ..protocol::fixtures::workspace(id) },

@@ -20,7 +20,8 @@ fn key() -> ModelListKey {
     }
 }
 
-fn list() -> ModelList {
+/// What Codex offers, as one model.
+fn catalog() -> ModelCatalog {
     let offer = ModelOffer {
         model: ModelName::named("orchard"),
         label: "Orchard".into(),
@@ -37,8 +38,11 @@ fn list() -> ModelList {
         price: None,
         stage: Stage::Current,
     };
-    let catalog = ModelCatalog { offered: vec![offer], default_model: Some(ModelName::named("orchard")) };
-    ModelList { key: key(), catalog: Some(catalog), lookup: ModelLookup::Answered, rev: Rev::new(9) }
+    ModelCatalog { offered: vec![offer], default_model: Some(ModelName::named("orchard")) }
+}
+
+fn list() -> ModelList {
+    ModelList { key: key(), lookup: ModelLookup::Answered, rev: Rev::new(9) }
 }
 
 const KEY: &str = r#""agent":"codex","repo":"r","provider":"local","account":null"#;
@@ -46,25 +50,25 @@ const CATALOG: &str = r#""catalog":{"offered":[{"model":"orchard","label":"Orcha
 
 #[test]
 fn a_list_keeps_its_form_as_a_reply_a_notice_and_a_removal() {
-    let record = format!(r#"{KEY},{CATALOG},"lookup":{{"state":"answered"}},"rev":9"#);
+    let record = format!(r#"{KEY},"lookup":{{"state":"answered"}},"rev":9"#);
+    let filled = format!(r#"{{"notice":"model_list",{KEY},{CATALOG},"lookup":{{"state":"answered"}},"rev":9}}"#);
 
     let reply = HubFrame::Reply { id: 7, outcome: ReplyOutcome::Response(ClientResponse::ModelList(list())) };
     keeps_its_form(&reply, &format!(r#"{{"frame":"reply","id":7,"response":{{"result":"model_list",{record}}}}}"#));
     keeps_its_form(&HubNotice::ModelList(list()), &format!(r#"{{"notice":"model_list",{record}}}"#));
     let removed = HubNotice::Removed { record: RecordKey::ModelList(key()), rev: Rev::new(10) };
     keeps_its_form(&removed, &format!(r#"{{"notice":"removed","record":{{"kind":"model_list",{KEY}}},"rev":10}}"#));
-    let failed = ModelList { catalog: None, lookup: ModelLookup::Failed { message: "logged out".into() }, ..list() };
-    keeps_its_form(
-        &failed,
-        &format!(r#"{{{KEY},"catalog":null,"lookup":{{"state":"failed","message":"logged out"}},"rev":9}}"#),
-    );
+    let failed = ModelList { lookup: ModelLookup::Failed { message: "logged out".into() }, ..list() };
+    keeps_its_form(&failed, &format!(r#"{{{KEY},"lookup":{{"state":"failed","message":"logged out"}},"rev":9}}"#));
+    // As the hub of the build before sends it, with what the agent offered on it for a client of version 4.
+    assert_eq!(serde_json::from_str::<HubNotice>(&filled).unwrap(), HubNotice::ModelList(list()));
 }
 
 /// What an agent offers, which a hub sends at its own level to a client of a version that reads it so, as a notice and
 /// as its removal, keyed as its list is.
 #[test]
 fn a_catalog_keeps_its_form_as_an_observation_and_its_removal() {
-    let catalog = Observed::AsOf { value: list().catalog.unwrap(), as_of_ms: 1_795_230_000_000 };
+    let catalog = Observed::AsOf { value: catalog(), as_of_ms: 1_795_230_000_000 };
     let copy = HubNotice::Observation(Observation::ModelCatalog { list: key(), catalog, rev: Rev::new(5) });
     let gone =
         HubNotice::ObservationRemoved { observation: ObservationKey::ModelCatalog { list: key() }, rev: Rev::new(6) };

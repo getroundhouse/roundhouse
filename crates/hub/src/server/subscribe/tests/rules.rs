@@ -3,7 +3,7 @@
 use protocol::client::admin::HubStatus;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, LogFrom, Refused, Subscribe, Subscribed};
-use protocol::client::{ClientResponse, ErrorCode, HubFrame, ReplyOutcome, Request};
+use protocol::client::{CLIENT_PROTOCOL_VERSION, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, Request};
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{Place, RunId, Seq};
 
@@ -19,7 +19,7 @@ use crate::session::Item;
 async fn a_start_sent_again_changes_nothing_and_one_under_a_taken_id_is_refused_alone() {
     let dir = tempfile::tempdir().unwrap();
     let given = Given::new(dir.path()).await;
-    let mut one = Connection::greeted(&given.hub, 4).await;
+    let mut one = Connection::greeted(&given.hub, CLIENT_PROTOCOL_VERSION).await;
     let hub = || Subscribe { stop: Vec::new(), start: vec![start(1, Follow::Hub)] };
     let taken = Subscribe {
         stop: Vec::new(),
@@ -63,7 +63,7 @@ async fn what_the_hub_doesnt_know_or_have_is_refused_and_the_rest_are_made() {
 
     let dir = tempfile::tempdir().unwrap();
     let given = Given::new(dir.path()).await;
-    let mut one = Connection::greeted(&given.hub, 4).await;
+    let mut one = Connection::greeted(&given.hub, CLIENT_PROTOCOL_VERSION).await;
     let mut starts = vec![
         start(1, Follow::Unknown),
         start(2, Follow::Session { id: "s".into(), from: Some(LogFrom::Unknown) }),
@@ -78,7 +78,7 @@ async fn what_the_hub_doesnt_know_or_have_is_refused_and_the_rest_are_made() {
             number: IssueNumber::try_from(number).unwrap(),
         };
         // Read as observations, which only lists them, rather than starting a read of GitHub's for each.
-        Subscription { github_observed: true, ..start(6 + number, Follow::Reference { reference }) }
+        Subscription { ..start(6 + number, Follow::Reference { reference }) }
     };
     let past_the_most = 6 + u64::try_from(MOST_REFERENCES_SHOWN).unwrap() + 1;
     starts.extend((1..=past_the_most - 6).map(chip));
@@ -106,7 +106,7 @@ async fn what_the_hub_doesnt_know_or_have_is_refused_and_the_rest_are_made() {
 async fn a_stop_sent_straight_after_its_start_leaves_nothing_followed() {
     let dir = tempfile::tempdir().unwrap();
     let given = Given::new(dir.path()).await;
-    let mut one = Connection::greeted(&given.hub, 4).await;
+    let mut one = Connection::greeted(&given.hub, CLIENT_PROTOCOL_VERSION).await;
     let started = Subscribe { stop: Vec::new(), start: vec![start(1, Follow::Workspace { id: "w".into() })] };
 
     for _ in 0..20 {
@@ -125,7 +125,7 @@ async fn a_stop_sent_straight_after_its_start_leaves_nothing_followed() {
 async fn a_subscribe_whose_start_waits_holds_back_no_other_kind_of_request() {
     let dir = tempfile::tempdir().unwrap();
     let given = Given::new(dir.path()).await;
-    let mut one = Connection::greeted(&given.hub, 4).await;
+    let mut one = Connection::greeted(&given.hub, CLIENT_PROTOCOL_VERSION).await;
     // Every list of observations waits for it, a workspace's too.
     let changing = given.hub.holding_observations().await;
     let w = start(1, Follow::Workspace { id: "w".into() });
@@ -160,7 +160,7 @@ async fn a_session_followed_from_where_a_client_got_to_is_sent_its_events_from_t
             .await;
     }
     flushed(&given.session).await;
-    let mut one = Connection::greeted(&given.hub, 4).await;
+    let mut one = Connection::greeted(&given.hub, CLIENT_PROTOCOL_VERSION).await;
     let from = |subscription_id, from| start(subscription_id, Follow::Session { id: "s".into(), from: Some(from) });
     let starts = vec![
         from(1, LogFrom::Seq { seq: Seq::new(3) }),

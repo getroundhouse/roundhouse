@@ -29,7 +29,7 @@ pinned! {
     "client_calls/requests.rs" => [
         Hello(_), HubStatus, HubShutdown, HubShutdownIfIdle, HubRestart, HubUpdateTo(_), HubConfigure(_), RepoAdd(_),
         RepoList,
-        RecordsList, AgentList, ModelsFor(_), SessionSubagents(_), SessionProposals(_), AccountConnect(_),
+        AgentList, ModelsFor(_), AccountConnect(_),
         AccountSetDefault(_), AccountSetAutomatic(_), AccountDisconnect(_), AccountSetReserve(_),
         GithubAccountConnect(_), GithubAccountDisconnect(_),
         GithubAccountSetDefault(_), GithubSignInStart(_), GithubSignInCancel(_), HubGhLogin, HubMachineLogins,
@@ -44,7 +44,7 @@ pinned! {
     "client_calls/session_requests.rs" => [
         SessionCreate(_), SessionEnsure(_), SessionList(_), SessionGet(_), SessionConfigure(_), SessionClose(_),
         SessionReopen(_), SessionMarkRead(_), SessionMarkUnread(_), SessionConversationStart(_),
-        SessionConversationEnd(_), SessionRename(_), SessionAccount(_),
+        SessionConversationEnd(_), SessionRename(_),
         SessionCallOffWait(_), SessionAssignAccount(_), SessionRead(_), SessionPromptList(_), SessionCompactionList(_),
         SessionFind(_), SessionReadPlaces(_), SessionPrompt(_), SessionQueue(_), SessionChangeQueued(_), SessionUnqueue(_),
         SessionSendQueued(_), SessionDecide(_), SessionCancel(_), SessionCompact(_), AttachmentAdd(_),
@@ -56,7 +56,7 @@ pinned! {
     "client_calls/github_apps.rs" => [
         GithubAppManifestWrite(_), GithubAppMake(_), GithubAppInstallationsConnect(_), GithubAppRemove(_),
     ],
-    "replies_heard.rs" => [SessionReplyHeard(_), SessionRepliesHeard(_), SessionSpeaking(_)],
+    "replies_heard.rs" => [SessionReplyHeard(_), SessionSpeaking(_)],
     "proposals.rs" => [ProposalAnswer(_), ProposalAnotherRound(_), ProposalRevisionsRead(_)],
     "references.rs" => [ReferencesRead(_)],
     "subscribe.rs" => [Subscribe(_)],

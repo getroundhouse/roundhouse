@@ -73,10 +73,6 @@ fn every_request_about_a_session_keeps_its_form() {
         ClientRequest::SessionRename(sessions::SessionRename { id: "s".into(), title: "Login".into() }),
         r#"{"method":"session_rename","id":"s","title":"Login"}"#,
     );
-    asked(
-        ClientRequest::SessionAccount(sessions::SessionAccount { id: "s".into() }),
-        r#"{"method":"session_account","id":"s"}"#,
-    );
     let call_off = waits::SessionCallOffWait { id: "s".into(), wait: "w1".into() };
     asked(ClientRequest::SessionCallOffWait(call_off), r#"{"method":"session_call_off_wait","id":"s","wait":"w1"}"#);
 }

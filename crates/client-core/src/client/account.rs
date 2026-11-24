@@ -1,11 +1,7 @@
 //! The calls about the accounts agents run under: connecting a login the hub holds for one, disconnecting it, choosing
-//! a kind's default, reserving part of one's week, and moving a chat to another. Asking whose account a session's
-//! agent runs under, as clients did before accounts were records, is left only to tests, to show a hub still answers
-//! it, so only the `testing` feature builds that one.
+//! a kind's default, reserving part of one's week, and moving a chat to another.
 
 use protocol::client::{accounts, sessions};
-#[cfg(any(test, feature = "testing"))]
-use protocol::model::SessionAccount;
 use protocol::model::{Account, AccountId, AgentKind, HubSettings, LoginToken, Reserve, Session, SessionId};
 
 use super::{Client, Result};
@@ -53,11 +49,5 @@ impl Client {
     /// A hub older than this refuses it, as `is_unsupported` says.
     pub fn session_assign_account(&self, id: &SessionId, account: &AccountId, force: bool) -> Result<Session> {
         self.call(sessions::SessionAssignAccount { id: id.clone(), account: account.clone(), force })
-    }
-
-    /// See [`sessions::SessionAccount`]. A hub older than this refuses it, as `is_unsupported` says.
-    #[cfg(any(test, feature = "testing"))]
-    pub fn session_account(&self, id: &SessionId) -> Result<SessionAccount> {
-        self.call(sessions::SessionAccount { id: id.clone() })
     }
 }

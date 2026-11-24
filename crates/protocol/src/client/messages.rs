@@ -7,8 +7,8 @@ use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
     Account, DiffComment, FileContents, FileDiff, FileOpened, FilePages, FileRange, GhLogin, GitDiff, GitStatus,
-    GithubAccount, GithubApp, GithubSignIn, HubSettings, MachineLogins, NewWorkspaceDraft, Proposal, Records, Repo,
-    Session, SessionAccount, Terminal, Workspace, WorktreeFiles,
+    GithubAccount, GithubApp, GithubSignIn, HubSettings, MachineLogins, NewWorkspaceDraft, Proposal, Repo, Session,
+    Terminal, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 use crate::terminal::{
@@ -21,29 +21,19 @@ use request::ClientRequest;
 use serde::{Deserialize, Serialize};
 
 /// The client protocol's version, apart from the worker protocol's, so a break in one doesn't break the other. It
-/// changes only for a real break, as `docs/principles/versions.md` says. Version 4 is the one a client follows
-/// everything through [`Subscribe`](super::subscriptions::Subscribe) alone in, and version 5 the one it reads every copy
-/// of what the hub only observes in as an observation, from [`EVERY_OBSERVATION_FROM`].
-pub const CLIENT_PROTOCOL_VERSION: u32 = 5;
+/// changes only for a real break, as `docs/principles/versions.md` says. Version 6 reads everything as 5 does, and is a
+/// break so that a hub that speaks it can stop speaking 4, and with it every form only 4 read.
+pub const CLIENT_PROTOCOL_VERSION: u32 = 6;
 
-/// The versions of the client protocol a hub of this build speaks: its own, the one before it, for a client of an
-/// older build, as `docs/principles/versions.md` says, and the next, 6, which no client speaks yet. A client of version
-/// 4 reads each copy that became an observation in the form from before it, which the hub fills from the observation.
-/// Version 6 reads everything as 5 does, and is a break only so that the hub of the build that clients speak it in can
-/// stop speaking 4, and with it every form only 4 reads.
+/// The versions of the client protocol a hub of this build speaks: its own, and the one before it, for a client of an
+/// older build, as `docs/principles/versions.md` says. A hub sends a connection at either the same.
 ///
 /// Each is written out, rather than taken from [`CLIENT_PROTOCOL_VERSION`], since at a break the hub speaks the new
 /// version a merge before clients do, so a client of the build that first speaks it can talk to the hub of the build
 /// before. A hub has to speak its own build's clients' version, which the assertion below holds.
-pub const HUB_SPEAKS: Versions = Versions { oldest: 4, newest: 6 };
+pub const HUB_SPEAKS: Versions = Versions { oldest: 5, newest: 6 };
 
 const _: () = assert!(HUB_SPEAKS.speaks(CLIENT_PROTOCOL_VERSION), "a hub speaks its own build's clients' version");
-
-/// The version of the client protocol from which a client reads every copy of what the hub only observes as an
-/// observation, and none in the form it replaced: GitHub's whatever its start says, and each kind that
-/// [`ObservationKey::read_from`](crate::model::ObservationKey::read_from) says is read from it. So no client of one
-/// version holds such a copy in two forms.
-pub const EVERY_OBSERVATION_FROM: u32 = 5;
 
 /// A request to a hub, which names what the hub answers it with.
 pub trait Request {
@@ -96,7 +86,6 @@ pub enum ClientResponse {
     NewWorkspaceMade(Box<new_workspace::NewWorkspaceMade>),
     Repo(Repo),
     Repos(records::Repos),
-    Records(Records),
     Agents(admin::Agents),
     ModelList(crate::model::ModelList),
     Workspace(Workspace),
@@ -111,9 +100,6 @@ pub enum ClientResponse {
     Session(Session),
     Sessions(sessions::Sessions),
     Events(log::Events),
-    Subagents(records::Subagents),
-    Proposals(records::Proposals),
-    RepliesHeard(records::RepliesHeard),
     References(super::references::References),
     Proposal(Proposal),
     ProposalRevisions(proposals::ProposalRevisions),
@@ -124,7 +110,6 @@ pub enum ClientResponse {
     PromptRecorded(agent::PromptRecorded),
     Attachment(Attachment),
     AttachmentData(attachments::AttachmentData),
-    SessionAccount(SessionAccount),
     Account(Account),
     GithubAccount(GithubAccount),
     GithubSignIn(GithubSignIn),
@@ -255,12 +240,6 @@ pub enum HubFrame {
         subscription_id: u64,
         notice: HubNotice,
     },
-    /// What the hub knows now of a workspace's own pull request, or of an issue or a pull request a chip shows, to a
-    /// client of version 4 whose start doesn't read GitHub as observations.
-    Github {
-        subscription_id: u64,
-        update: super::github::GithubUpdate,
-    },
     /// That the shell of the terminal a subscription follows ended, after which nothing more comes.
     Terminal {
         subscription_id: u64,
@@ -324,7 +303,6 @@ mod tests {
         assert_eq!(sent(admin::HubRestart.into_request()), r#"{"method":"hub_restart"}"#);
         assert_eq!(sent(admin::AgentList.into_request()), r#"{"method":"agent_list"}"#);
         assert_eq!(sent(records::RepoList.into_request()), r#"{"method":"repo_list"}"#);
-        assert_eq!(sent(records::RecordsList.into_request()), r#"{"method":"records_list"}"#);
     }
 
     /// The rest each read the variant that holds them, which the compiler checks.

@@ -27,7 +27,6 @@ pub(in super::super) fn hub_update_found() -> World {
     let mut world = older_hub(false);
     world.observe(protocol::fixtures::observed::release_offered(Some(client_core::fake_hub::BUILD)));
     world.hub_update = Some(protocol::model::HubUpdate {
-        version: None,
         looked_at_ms: NOW_MS - HOUR_MS / 2,
         problem: None,
         attempt: None,

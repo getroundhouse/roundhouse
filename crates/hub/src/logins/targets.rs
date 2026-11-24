@@ -177,7 +177,7 @@ impl Logins {
     fn automatic(&self, agent: AgentKind, heard: &Heard, now_ms: i64) -> Result<Option<AccountId>, ApiError> {
         let mut accounts = Vec::new();
         for held in self.store.held_logins(agent)? {
-            accounts.extend(self.store.account(&held.account)?.map(|account| automatic::with_heard(account, heard)));
+            accounts.extend(self.store.account(&held.account)?);
         }
         if !accounts.iter().any(|account| account.works_for(agent, now_ms)) {
             return Err(ApiError::new(ErrorCode::Conflict, NO_LOGIN_WORKS));
@@ -185,7 +185,11 @@ impl Logins {
         let at_work = self.store.at_work_on_accounts()?;
         let candidates: Vec<Candidate<'_>> = accounts
             .iter()
-            .map(|account| Candidate { account, working: at_work.get(&account.id).copied().unwrap_or_default() })
+            .map(|account| Candidate {
+                account,
+                limits: heard.get(&account.id).map_or(&[], Vec::as_slice),
+                working: at_work.get(&account.id).copied().unwrap_or_default(),
+            })
             .collect();
         Ok(automatic::choose(agent, &candidates, now_ms).cloned())
     }

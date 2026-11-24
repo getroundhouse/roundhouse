@@ -1,6 +1,5 @@
 //! The feed never tells of a copy of a record that's no newer than one it has told of, as two tasks that each announce
-//! a record after their own change can finish in either order, and a client that isn't sent copies that move an old
-//! form alone hears each that moves anything.
+//! a record after their own change can finish in either order.
 
 use proptest::collection::vec;
 use proptest::prelude::*;
@@ -9,7 +8,7 @@ use protocol::client::HubNotice;
 use protocol::model::{NewWorkspaceDraft, RecordKey, Rev, Session, Subagent};
 use tokio::sync::broadcast;
 
-use super::{Fed, Feed, Moves};
+use super::Feed;
 
 /// The IDs of the sessions the law sends copies of.
 const IDS: [&str; 3] = ["s", "t", "u"];
@@ -29,28 +28,8 @@ fn told(session: &Session) -> HubNotice {
 }
 
 /// Everything a client following the feed has heard so far.
-fn heard(client: &mut broadcast::Receiver<Fed>) -> Vec<HubNotice> {
-    heard_as_fed(client).into_iter().map(|(notice, _)| notice).collect()
-}
-
-/// The same, with what each moves.
-fn heard_as_fed(client: &mut broadcast::Receiver<Fed>) -> Vec<(HubNotice, Moves)> {
-    heard_fed(client).into_iter().map(|fed| (std::sync::Arc::unwrap_or_clone(fed.notice), fed.moves)).collect()
-}
-
-/// Every notice a client following the feed has heard so far, as the feed told it.
-fn heard_fed(client: &mut broadcast::Receiver<Fed>) -> Vec<Fed> {
-    std::iter::from_fn(|| client.try_recv().ok()).collect()
-}
-
-/// The revisions of each copy of a session's record in `fed` that a client sent `kept` hears, by session.
-fn revs_heard(fed: &[Fed], kept: impl Fn(&Fed) -> bool) -> std::collections::HashMap<String, Vec<u64>> {
-    let mut heard = std::collections::HashMap::<String, Vec<u64>>::new();
-    for fed in fed.iter().filter(|fed| kept(fed)) {
-        let HubNotice::Session(session) = &*fed.notice else { continue };
-        heard.entry(session.id.to_string()).or_default().push(session.rev.get());
-    }
-    heard
+fn heard(client: &mut broadcast::Receiver<std::sync::Arc<HubNotice>>) -> Vec<HubNotice> {
+    std::iter::from_fn(|| client.try_recv().ok()).map(std::sync::Arc::unwrap_or_clone).collect()
 }
 
 proptest! {
@@ -68,7 +47,7 @@ proptest! {
         let mut client = feed.subscribe();
 
         for &(record, rev) in &sent {
-            feed.send(told(&session(IDS[record], rev)), Moves::Anything);
+            feed.send(told(&session(IDS[record], rev)));
         }
 
         let mut newest = [0; IDS.len()];
@@ -80,59 +59,6 @@ proptest! {
         let expected: Vec<HubNotice> = newer.map(|&(record, rev)| told(&session(IDS[record], rev))).collect();
         prop_assert_eq!(heard(&mut client), expected);
     }
-
-    /// However copies that move an old form alone and copies that move anything interleave, a client hears each copy
-    /// newer than every earlier one of its record, and each that moves anything newer than every earlier one that
-    /// does, so one sent only those hears each, and nothing else.
-    #[test]
-    fn a_client_hears_each_copy_that_moves_anything_newer_than_the_last_that_did(
-        sent in vec((0..IDS.len(), 1..8u64, any::<bool>()), 0..40),
-    ) {
-        let feed = Feed::new();
-        let mut client = feed.subscribe();
-        let moves = |old_form_only| if old_form_only { Moves::OldFormOnly } else { Moves::Anything };
-
-        for &(record, rev, old_form_only) in &sent {
-            feed.send(told(&session(IDS[record], rev)), moves(old_form_only));
-        }
-
-        let (mut newest, mut moving_anything) = ([0; IDS.len()], [0; IDS.len()]);
-        let heard_of = sent.iter().filter(|&&(record, rev, old_form_only)| {
-            let heard = rev > if old_form_only { newest[record] } else { moving_anything[record] };
-            if heard {
-                newest[record] = newest[record].max(rev);
-                if !old_form_only {
-                    moving_anything[record] = moving_anything[record].max(rev);
-                }
-            }
-            heard
-        });
-        let expected: Vec<(HubNotice, Moves)> = heard_of
-            .map(|&(record, rev, old_form_only)| (told(&session(IDS[record], rev)), moves(old_form_only)))
-            .collect();
-        prop_assert_eq!(heard_as_fed(&mut client), expected);
-    }
-
-    /// However they interleave, a client sent copies that move an old form alone, and so not those marked as told in
-    /// one, hears each copy of a record newer than the last, as one that isn't sent them does.
-    #[test]
-    fn a_client_of_either_form_hears_each_copy_newer_than_the_last(
-        sent in vec((0..IDS.len(), 1..8u64, any::<bool>()), 0..40),
-    ) {
-        let feed = Feed::new();
-        let mut client = feed.subscribe();
-        for &(record, rev, old_form_only) in &sent {
-            let moves = if old_form_only { Moves::OldFormOnly } else { Moves::Anything };
-            feed.send(told(&session(IDS[record], rev)), moves);
-        }
-
-        let fed = heard_fed(&mut client);
-        let old_forms = revs_heard(&fed, |fed| fed.moves == Moves::OldFormOnly || !fed.told_in_old_form);
-        let observations = revs_heard(&fed, |fed| fed.moves == Moves::Anything);
-        for revs in old_forms.values().chain(observations.values()) {
-            prop_assert!(revs.windows(2).all(|pair| pair[0] < pair[1]), "{:?}", revs);
-        }
-    }
 }
 
 #[test]
@@ -141,8 +67,8 @@ fn a_copy_older_than_its_records_removal_isnt_told_of() {
     let mut client = feed.subscribe();
     let removed = HubNotice::Removed { record: RecordKey::Session { id: "s".into() }, rev: Rev::new(3) };
 
-    feed.send(removed.clone(), Moves::Anything);
-    feed.send(told(&session("s", 2)), Moves::Anything);
+    feed.send(removed.clone());
+    feed.send(told(&session("s", 2)));
 
     assert_eq!(heard(&mut client), [removed]);
 }
@@ -154,11 +80,11 @@ fn each_subagents_copies_are_in_order_apart_from_any_others() {
     let mut client = feed.subscribe();
     let copies = [subagent("s", "call-1", 2), subagent("t", "call-1", 2), subagent("s", "call-2", 2)];
 
-    feed.send(told(&session("s", 2)), Moves::Anything);
+    feed.send(told(&session("s", 2)));
     for copy in &copies {
-        feed.send(HubNotice::Subagent(copy.clone()), Moves::Anything);
+        feed.send(HubNotice::Subagent(copy.clone()));
     }
-    feed.send(HubNotice::Subagent(subagent("s", "call-1", 1)), Moves::Anything);
+    feed.send(HubNotice::Subagent(subagent("s", "call-1", 1)));
 
     let subagents = copies.into_iter().map(HubNotice::Subagent);
     assert_eq!(heard(&mut client), std::iter::once(told(&session("s", 2))).chain(subagents).collect::<Vec<_>>());
@@ -171,10 +97,10 @@ fn a_copy_without_a_revision_is_always_told_of() {
     let feed = Feed::new();
     let mut client = feed.subscribe();
 
-    feed.send(told(&session("s", 2)), Moves::Anything);
-    feed.send(told(&session("s", 0)), Moves::Anything);
-    feed.send(told(&session("s", 0)), Moves::Anything);
-    feed.send(told(&session("s", 1)), Moves::Anything);
+    feed.send(told(&session("s", 2)));
+    feed.send(told(&session("s", 0)));
+    feed.send(told(&session("s", 0)));
+    feed.send(told(&session("s", 1)));
 
     assert_eq!(heard(&mut client), [told(&session("s", 2)), told(&session("s", 0)), told(&session("s", 0))]);
 }
@@ -187,10 +113,10 @@ fn the_new_workspace_dialogs_copies_are_in_order() {
     let dialog =
         |rev| HubNotice::NewWorkspaceDraft(NewWorkspaceDraft { rev: Rev::new(rev), ..NewWorkspaceDraft::default() });
 
-    feed.send(dialog(2), Moves::Anything);
-    feed.send(dialog(1), Moves::Anything);
-    feed.send(dialog(2), Moves::Anything);
-    feed.send(dialog(3), Moves::Anything);
+    feed.send(dialog(2));
+    feed.send(dialog(1));
+    feed.send(dialog(2));
+    feed.send(dialog(3));
 
     assert_eq!(heard(&mut client), [dialog(2), dialog(3)]);
 }

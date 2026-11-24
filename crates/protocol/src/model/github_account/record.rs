@@ -12,9 +12,9 @@ use super::{GithubInstallation, GithubUserId};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubAccount {
     pub id: GithubAccountId,
-    /// Who it is, as GitHub said when the hub last asked: as the account was connected, or its login renewed, and for a
-    /// token's or a sign-in's, as the hub asks again once a day, for its commit identity.
-    pub user: GithubUser,
+    /// Who it is, by GitHub's number for its user, as GitHub said as the account was connected. What GitHub calls the
+    /// user now is the observation `GithubUsername`.
+    pub user: GithubUserNumber,
     /// `None` for an app's installation that was disconnected or uninstalled there, and from a hub from before
     /// Disconnect removed an account, for one that was disconnected.
     #[serde(default)]
@@ -33,22 +33,22 @@ pub struct GithubAccount {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubUser {
     pub id: GithubUserId,
-    /// Empty where it's left out, as a record may leave it once no version a hub speaks reads the name there, since an
-    /// observation says it.
-    #[serde(default = "no_name")]
     pub name: GithubUsername,
 }
 
 impl GithubUser {
-    /// Nobody: the number no user has, and no name, which is what a record that leaves a user out whole reads as.
-    pub fn nobody() -> Self {
-        Self { id: GithubUserId::new(0), name: no_name() }
+    /// It, by its number alone, as a record names it.
+    pub fn number(&self) -> GithubUserNumber {
+        GithubUserNumber { id: self.id }
     }
 }
 
-/// The name of a [`GithubUser`] read with none.
-fn no_name() -> GithubUsername {
-    GithubUsername::from("")
+/// A GitHub user, or an organization, by its number alone, which never changes, as a record names one, since what
+/// GitHub calls it is an observation. Written as `{"id":7}`, as a [`GithubUser`] is without its name, which a client
+/// from before read as an object.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct GithubUserNumber {
+    pub id: GithubUserId,
 }
 
 /// What a [`GithubAccount`]'s record says of the login the hub holds for it, as

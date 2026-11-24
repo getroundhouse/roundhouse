@@ -1,4 +1,3 @@
-use super::blanking::blanked;
 use super::by_revision::ByRevision;
 use super::of_session::BySession;
 use super::snapshot::{Listed, ObservationsListed, Snapshot};
@@ -57,7 +56,7 @@ impl HubRecords {
     pub fn apply_list(&mut self, mut list: Records) -> bool {
         let at = list.rev;
         let observations = std::mem::take(&mut list.observations);
-        let records = self.records.apply_list(&Level::Hub, at, list.into_records().map(blanked), &mut self.taken);
+        let records = self.records.apply_list(&Level::Hub, at, list.into_records(), &mut self.taken);
         let observed = self.observations.apply_list(&Level::Hub, at, observations, &mut self.taken);
         if records {
             self.shown.take();
@@ -91,7 +90,7 @@ impl HubRecords {
 
     /// Takes in one record, from a notice or a reply. Returns whether it changed anything.
     pub fn apply_record(&mut self, record: Record) -> bool {
-        match blanked(record) {
+        match record {
             // Kept apart, since only the subagents and proposals of the sessions a view shows are kept, each session's
             // listed on its own rather than with everything, so a list of everything says nothing of them.
             Record::Subagent(subagent) => self.subagents.apply(subagent),
@@ -109,7 +108,6 @@ impl HubRecords {
             | Record::GithubSignIn(_)
             | Record::FoundGithubLogin(_)
             | Record::GithubApp(_)
-            | Record::GithubReach(_)
             | Record::Terminal(_)
             | Record::ModelList(_)) => self.apply_listed(listed),
         }
@@ -144,7 +142,6 @@ impl HubRecords {
             | RecordKey::GithubSignIn { .. }
             | RecordKey::FoundGithubLogin { .. }
             | RecordKey::GithubApp { .. }
-            | RecordKey::GithubReach { .. }
             | RecordKey::Terminal { .. }
             | RecordKey::ModelList(_)
             | RecordKey::HubUpdate

@@ -19,7 +19,7 @@ pub use github::{
     IssueSaid, OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReferenceSaid,
 };
 pub use github_app::GithubAppSaid;
-pub use kinds::{Observation, ObservationKey, ReadFrom};
+pub use kinds::{Observation, ObservationKey};
 pub use observed::Observed;
 pub use release::ReleaseOffer;
 pub use session::ConversationCache;

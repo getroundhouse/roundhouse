@@ -55,15 +55,6 @@ fn every_request_of_the_hub_itself_or_for_its_records_keeps_its_form() {
     );
     asked(ClientRequest::RepoAdd(records::RepoAdd { path: "/r".into() }), r#"{"method":"repo_add","path":"/r"}"#);
     asked(ClientRequest::RepoList, r#"{"method":"repo_list"}"#);
-    asked(ClientRequest::RecordsList, r#"{"method":"records_list"}"#);
-    asked(
-        ClientRequest::SessionSubagents(records::SessionSubagents { id: "s".into() }),
-        r#"{"method":"session_subagents","id":"s"}"#,
-    );
-    asked(
-        ClientRequest::SessionProposals(records::SessionProposals { id: "s".into() }),
-        r#"{"method":"session_proposals","id":"s"}"#,
-    );
 }
 
 #[test]
@@ -284,7 +275,6 @@ fn a_request_with_no_fields_reads_with_fields_it_doesnt_know() {
     assert_eq!(read(r#"{"method":"hub_restart","newer":1}"#), ClientRequest::HubRestart);
     assert_eq!(read(r#"{"method":"agent_list","newer":1}"#), ClientRequest::AgentList);
     assert_eq!(read(r#"{"method":"repo_list","newer":1}"#), ClientRequest::RepoList);
-    assert_eq!(read(r#"{"method":"records_list","newer":1}"#), ClientRequest::RecordsList);
     assert_eq!(read(r#"{"method":"pairing_start","newer":1}"#), ClientRequest::PairingStart);
     assert_eq!(read(r#"{"method":"device_list","newer":1}"#), ClientRequest::DeviceList);
 }

@@ -7,7 +7,7 @@ use protocol::capability::approvals::Decision;
 use protocol::capability::settings::Settings;
 use protocol::client::listed::SessionRecords;
 use protocol::client::log::ReadLimit;
-use protocol::client::{ApiError, ErrorCode, HubNotice, log, records};
+use protocol::client::{ApiError, ErrorCode, HubNotice, log};
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::model::{
@@ -172,8 +172,6 @@ impl Hub {
     }
 
     /// The session's subagents, oldest first, with the revision they're as of.
-    /// The session's subagents, proposals and how its replies were heard, read in one transaction, for a client that
-    /// begins to follow it, or has fallen behind.
     /// The records of session `id`, with every observation of its level, read under the lock a change to one takes, so
     /// the list's revision takes in none it lacks.
     pub(crate) async fn session_records(&self, id: SessionId) -> Result<SessionRecords, ApiError> {
@@ -184,15 +182,6 @@ impl Hub {
         });
         let (records, observations) = self.observations.listed_with(&level, list).await;
         Ok(SessionRecords { observations, ..records? })
-    }
-
-    pub(crate) async fn session_subagents(&self, id: SessionId) -> Result<records::Subagents, ApiError> {
-        self.blocking(move |store| {
-            store.get_session(&id)?;
-            let (subagents, rev) = store.list_subagents(&id)?;
-            Ok(records::Subagents { subagents, rev })
-        })
-        .await
     }
 
     pub(crate) async fn session_prompt(
@@ -291,15 +280,6 @@ impl Hub {
         through: SpokenThrough,
     ) -> Result<(), ApiError> {
         self.live_session(&id).await?.speaking(device, on, through).await
-    }
-
-    pub(crate) async fn session_replies_heard(&self, id: SessionId) -> Result<records::RepliesHeard, ApiError> {
-        self.blocking(move |store| {
-            store.get_session(&id)?;
-            let (replies, rev) = store.list_replies_heard(&id)?;
-            Ok(records::RepliesHeard { replies, rev })
-        })
-        .await
     }
 
     pub(crate) async fn session_mark_read(&self, id: SessionId, through_seq: Seq) -> Result<Session, ApiError> {

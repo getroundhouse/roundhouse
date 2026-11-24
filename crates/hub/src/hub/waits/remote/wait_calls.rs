@@ -128,9 +128,8 @@ impl Hub {
         self.announce_remote_changes(changed).await;
     }
 
-    /// Tells clients of each of `waits` that ended, since its chat's record shows only open waits, and wakes its agent. What
-    /// one that goes on read changed its chat's record only for a client of a version from before the observation,
-    /// which the observation's change told.
+    /// Tells clients of each of `waits` that ended, since its chat's record shows only open waits, and wakes its agent.
+    /// What a wait that goes on last read isn't on its chat's record, and the observation's change told clients of it.
     async fn announce_remote_changes(self: &Arc<Self>, waits: Vec<Wait>) {
         let mut announced = HashSet::new();
         let mut woken = HashSet::new();

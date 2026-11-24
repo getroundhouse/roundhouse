@@ -133,7 +133,7 @@ impl Source for SessionSource {
                 log.apply_delta(&delta);
                 true
             }
-            SubscriptionItem::Terminal(_) | SubscriptionItem::TerminalPicture(_) | SubscriptionItem::Github(_) => false,
+            SubscriptionItem::Terminal(_) | SubscriptionItem::TerminalPicture(_) => false,
         })
     }
 

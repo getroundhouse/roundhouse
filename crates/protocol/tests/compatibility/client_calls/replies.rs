@@ -13,9 +13,8 @@ use protocol::find::Found;
 use protocol::fixtures;
 use protocol::model::{
     Account, CompactionLine, DiffComment, DiffSide, FileContents, FileOpened, FilePages, FileRange, GhLogin,
-    GhLoginWorks, GitDiff, GitStatus, GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, GithubUser,
-    GithubUserId, HeldGithubLogin, HubSettings, MachineLogins, NewWorkspaceDraft, Place, PromptLine, Records, Repo,
-    Reserve, Rev, Seq, SessionAccount, SshLogin, WorktreeFiles,
+    GhLoginWorks, GitDiff, GitStatus, GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, HeldGithubLogin,
+    HubSettings, MachineLogins, NewWorkspaceDraft, Place, PromptLine, Repo, Reserve, Rev, Seq, SshLogin, WorktreeFiles,
 };
 
 use super::answered;
@@ -78,23 +77,23 @@ fn a_github_accounts_record_keeps_its_form_held_or_disconnected() {
         HeldGithubLogin { how: GithubLoginKind::Token, connected_at_ms: 1, ends_at_ms: Some(9), needs_sign_in: false };
     let account = |held_login| GithubAccount {
         id: "g".into(),
-        user: GithubUser { id: GithubUserId::new(7), name: "ada".into() },
+        user: protocol::fixtures::github_user(7),
         held_login,
         installation: None,
         rev: Rev::new(2),
     };
     answered(
         ClientResponse::GithubAccount(account(Some(held))),
-        r#"{"result":"github_account","id":"g","user":{"id":7,"name":"ada"},"held_login":{"how":"token","connected_at_ms":1,"ends_at_ms":9,"needs_sign_in":false},"rev":2}"#,
+        r#"{"result":"github_account","id":"g","user":{"id":7},"held_login":{"how":"token","connected_at_ms":1,"ends_at_ms":9,"needs_sign_in":false},"rev":2}"#,
     );
     answered(
         ClientResponse::GithubAccount(account(None)),
-        r#"{"result":"github_account","id":"g","user":{"id":7,"name":"ada"},"held_login":null,"rev":2}"#,
+        r#"{"result":"github_account","id":"g","user":{"id":7},"held_login":null,"rev":2}"#,
     );
     let gh = HeldGithubLogin { how: GithubLoginKind::Gh, ends_at_ms: None, ..held };
     answered(
         ClientResponse::GithubAccount(account(Some(gh))),
-        r#"{"result":"github_account","id":"g","user":{"id":7,"name":"ada"},"held_login":{"how":"gh","connected_at_ms":1,"ends_at_ms":null,"needs_sign_in":false},"rev":2}"#,
+        r#"{"result":"github_account","id":"g","user":{"id":7},"held_login":{"how":"gh","connected_at_ms":1,"ends_at_ms":null,"needs_sign_in":false},"rev":2}"#,
     );
 }
 
@@ -142,13 +141,8 @@ fn every_reply_of_the_hub_itself_or_listing_its_records_keeps_its_form() {
     answered(ClientResponse::Agents(admin::Agents { agents: vec![] }), r#"{"result":"agents","agents":[]}"#);
     let account = Account {
         id: "claude-1".into(),
-        model_provider: None,
-        plan: None,
-        login: None,
-        email: None,
         name: Some("Work".into()),
         login_agent: None,
-        limits: vec![],
         held_login: None,
         used_at_ms: Some(5),
         reserve: Reserve::new(30),
@@ -156,7 +150,7 @@ fn every_reply_of_the_hub_itself_or_listing_its_records_keeps_its_form() {
     };
     answered(
         ClientResponse::Account(account),
-        r#"{"result":"account","id":"claude-1","model_provider":null,"plan":null,"login":null,"email":null,"name":"Work","login_agent":null,"limits":[],"held_login":null,"used_at_ms":5,"reserve":30,"rev":2}"#,
+        r#"{"result":"account","id":"claude-1","name":"Work","login_agent":null,"held_login":null,"used_at_ms":5,"reserve":30,"rev":2}"#,
     );
     let repo = Repo { created_at_ms: 1, rev: Rev::new(2), ..fixtures::repo("r") };
     answered(
@@ -170,19 +164,6 @@ fn every_reply_of_the_hub_itself_or_listing_its_records_keeps_its_form() {
     answered(
         ClientResponse::Sessions(sessions::Sessions { sessions: vec![] }),
         r#"{"result":"sessions","sessions":[]}"#,
-    );
-}
-
-/// A chat's subagents and proposals, which are listed by chat, apart from every other record.
-#[test]
-fn every_list_of_a_chats_own_records_keeps_its_form() {
-    answered(
-        ClientResponse::Subagents(records::Subagents { subagents: vec![], rev: Rev::new(9) }),
-        r#"{"result":"subagents","subagents":[],"rev":9}"#,
-    );
-    answered(
-        ClientResponse::Proposals(records::Proposals { proposals: vec![], rev: Rev::new(9) }),
-        r#"{"result":"proposals","proposals":[],"rev":9}"#,
     );
 }
 
@@ -355,8 +336,6 @@ fn every_reply_that_holds_a_model_type_keeps_its_result() {
             r#""result":"hub_settings""#,
         ),
         (ClientResponse::NewWorkspaceDraft(NewWorkspaceDraft::default()), r#""result":"new_workspace_draft""#),
-        (ClientResponse::Records(Records::default()), r#""result":"records""#),
-        (ClientResponse::SessionAccount(SessionAccount::default()), r#""result":"session_account""#),
         (ClientResponse::FilePages(FilePages::default()), r#""result":"file_pages""#),
     ];
 

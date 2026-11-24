@@ -1,4 +1,4 @@
-//! A notice as the feed tells it, and what it moves of its record, which says which subscriptions are sent it.
+//! What the feed tells, as a reader of it takes it.
 
 use std::sync::Arc;
 
@@ -8,42 +8,26 @@ use tokio::sync::broadcast::error::RecvError;
 #[cfg(test)]
 use tokio::sync::broadcast::error::TryRecvError;
 
-/// A notice as the feed tells it: what it says, and what it moves.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Fed {
-    pub(crate) notice: Arc<HubNotice>,
-    pub(crate) moves: Moves,
-    /// A copy of its record that moves an old form alone, as new as it or newer, was told already, so a client that's
-    /// sent those has heard what this says, and isn't sent it, as `crate::server::sends` decides. Such a copy is read
-    /// from the database after this one's change, and filled with what the observations say then.
-    pub(crate) told_in_old_form: bool,
-}
-
-/// What a notice moves of what a client holds.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Moves {
-    /// What every client that follows its level reads, as every notice but one of the next does.
-    Anything,
-    /// Only the fields of a record that a client of a version from before an observation reads in its place, which the
-    /// hub fills from the observation, as a copy of an account's record whose revision moved only since who the account
-    /// is changed. So a subscription whose client reads the observation itself isn't sent it, as
-    /// `crate::server::sends` decides.
-    OldFormOnly,
-}
-
-/// What the feed tells, as one of the hub's own tasks, or a test, reads it: each notice, whatever it moves, since what
-/// each subscription is sent is decided where it's sent it, in `crate::server::sends`.
-pub(crate) struct Notices(pub(super) broadcast::Receiver<Fed>);
+/// What the feed tells, as a subscription, one of the hub's own tasks, or a test, reads it: each notice, of every
+/// level, since what each subscription is sent is decided where it's sent it, by its level.
+pub(crate) struct Notices(pub(super) broadcast::Receiver<Arc<HubNotice>>);
 
 impl Notices {
     /// The next notice, as [`broadcast::Receiver::recv`] gives it.
     pub(crate) async fn recv(&mut self) -> Result<Arc<HubNotice>, RecvError> {
-        self.0.recv().await.map(|fed| fed.notice)
+        self.0.recv().await
     }
 
     /// The next notice told already, as [`broadcast::Receiver::try_recv`] gives it.
     #[cfg(test)]
     pub(crate) fn try_recv(&mut self) -> Result<Arc<HubNotice>, TryRecvError> {
-        self.0.try_recv().map(|fed| fed.notice)
+        self.0.try_recv()
+    }
+}
+
+#[cfg(test)]
+impl From<broadcast::Receiver<Arc<HubNotice>>> for Notices {
+    fn from(receiver: broadcast::Receiver<Arc<HubNotice>>) -> Self {
+        Self(receiver)
     }
 }

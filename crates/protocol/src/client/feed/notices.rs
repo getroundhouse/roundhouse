@@ -1,7 +1,7 @@
 use crate::model::{
-    Account, DiffComment, FoundGithubLogin, GithubAccount, GithubApp, GithubReach, GithubSignIn, HubSettings,
-    HubUpdate, ModelList, NewWorkspaceDraft, Observation, ObservationKey, Proposal, Record, RecordKey, ReplyHeard,
-    Repo, Rev, Session, Subagent, Terminal, Workspace,
+    Account, DiffComment, FoundGithubLogin, GithubAccount, GithubApp, GithubSignIn, HubSettings, HubUpdate, ModelList,
+    NewWorkspaceDraft, Observation, ObservationKey, Proposal, Record, RecordKey, ReplyHeard, Repo, Rev, Session,
+    Subagent, Terminal, Workspace,
 };
 use serde::{Deserialize, Serialize};
 
@@ -22,25 +22,24 @@ pub enum HubNotice {
     HubSettings(HubSettings),
     Account(Account),
     NewWorkspaceDraft(NewWorkspaceDraft),
-    /// A subagent's record changed. A client keeps those of the sessions it's showing, which it lists with
-    /// `SessionSubagents`.
+    /// A subagent's record changed. A client keeps those of the sessions it's showing, which each session's level
+    /// lists.
     Subagent(Subagent),
     GithubAccount(GithubAccount),
     GithubSignIn(GithubSignIn),
     FoundGithubLogin(FoundGithubLogin),
     GithubApp(GithubApp),
-    GithubReach(GithubReach),
     /// A terminal was opened, and a hub that kept its workers learned of it again as it started. One that ended or
     /// was closed is `Removed`.
     Terminal(Terminal),
     /// What an agent offers in one place changed, or the hub began or finished asking it. One the hub let go of is
     /// `Removed`.
     ModelList(ModelList),
-    /// A proposal changed, or was made. A client keeps those of the sessions it's showing, which it lists with
-    /// `SessionProposals`.
+    /// A proposal changed, or was made. A client keeps those of the sessions it's showing, which each session's
+    /// level lists.
     Proposal(Proposal),
     /// How one of a session's replies said out loud ended changed, or was recorded. A client keeps those of the
-    /// sessions it's showing, which it lists with `SessionRepliesHeard`.
+    /// sessions it's showing, which each session's level lists.
     ReplyHeard(ReplyHeard),
     /// What a hub installed as a service found in the update feed, each time it reads it.
     HubUpdate(HubUpdate),
@@ -49,11 +48,9 @@ pub enum HubNotice {
         record: RecordKey,
         rev: Rev,
     },
-    /// An observation changed: a copy of it, whole, with its revision, as a record's notice carries the record. A
-    /// client from before observations reads it as `Unknown`.
+    /// An observation changed: a copy of it, whole, with its revision, as a record's notice carries the record.
     Observation(Observation),
-    /// The observation is gone, as of `rev`, as `Removed` says of a record, such as once what it's of is gone. A client
-    /// from before observations reads it as `Unknown`.
+    /// The observation is gone, as of `rev`, as `Removed` says of a record, such as once what it's of is gone.
     ObservationRemoved {
         observation: ObservationKey,
         rev: Rev,
@@ -114,7 +111,6 @@ impl TryFrom<HubNotice> for RecordNotice {
             HubNotice::GithubSignIn(sign_in) => Record::GithubSignIn(sign_in),
             HubNotice::FoundGithubLogin(found) => Record::FoundGithubLogin(found),
             HubNotice::GithubApp(app) => Record::GithubApp(app),
-            HubNotice::GithubReach(reach) => Record::GithubReach(reach),
             HubNotice::Terminal(terminal) => Record::Terminal(terminal),
             HubNotice::ModelList(list) => Record::ModelList(list),
             HubNotice::Proposal(proposal) => Record::Proposal(proposal),
@@ -145,7 +141,6 @@ impl From<Record> for HubNotice {
             Record::GithubSignIn(sign_in) => HubNotice::GithubSignIn(sign_in),
             Record::FoundGithubLogin(found) => HubNotice::FoundGithubLogin(found),
             Record::GithubApp(app) => HubNotice::GithubApp(app),
-            Record::GithubReach(reach) => HubNotice::GithubReach(reach),
             Record::Terminal(terminal) => HubNotice::Terminal(terminal),
             Record::ModelList(list) => HubNotice::ModelList(list),
             Record::Proposal(proposal) => HubNotice::Proposal(proposal),

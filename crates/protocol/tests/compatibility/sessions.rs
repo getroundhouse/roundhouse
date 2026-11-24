@@ -4,7 +4,7 @@
 use protocol::client::HubNotice;
 use protocol::event::TurnOutcome;
 use protocol::frame;
-use protocol::model::{AccountSource, MaxSetBy, OpenApproval, PromptLine, Seq, Session, SessionStatus, Settlement};
+use protocol::model::{AccountSource, OpenApproval, PromptLine, Seq, Session, SessionStatus, Settlement};
 
 fn session(more: &str) -> Session {
     let notice = format!(
@@ -90,18 +90,15 @@ fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
     assert_eq!(session.turn_started_at_ms, None);
 }
 
+/// As the hub of the build before sent it, with how full the agent's context is on it for a client of version 4, and
+/// as a hub's stored rows from before held it.
 #[test]
-fn a_session_from_a_hub_that_doesnt_keep_how_full_the_context_is_has_none_and_its_form_stays_readable() {
-    let older = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
-    let HubNotice::Session(session) = frame::decode::<HubNotice>(older).unwrap() else { panic!() };
-    assert_eq!(session.context, None);
-
-    // Spelled out, since a hub's stored rows hold this form too.
+fn a_session_that_says_how_full_the_context_is_still_reads() {
     let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"context":{"used_tokens":5,"max_tokens":10,"model_tokens":20,"max_set_by":"settings","parts":[{"name":"Messages","tokens":5}]}}"#;
+
     let HubNotice::Session(session) = frame::decode::<HubNotice>(said).unwrap() else { panic!() };
-    let context = session.context.unwrap();
-    assert_eq!((context.used_tokens, context.max_tokens, context.parts.len()), (5, 10, 1));
-    assert_eq!((context.model_tokens, context.max_set_by), (Some(20), Some(MaxSetBy::Settings)));
+
+    assert_eq!((session.id.as_str(), session.last_seq), ("s", Seq::new(9)));
 }
 
 /// A hub that doesn't keep how the newest turn ended says nothing of it, so no chat of its turns red for a turn that

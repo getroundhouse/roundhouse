@@ -11,8 +11,7 @@ use crate::model::{Level, Place, ReferenceAsk, Seq, SessionId, SubagentId, Termi
 /// [`Follow`] says, until it's stopped or the connection ends. Stops go first, then starts, in order. A hub takes one
 /// connection's `Subscribe` requests in the order they were sent, so a client needn't wait for one's reply before it
 /// sends the next. Safe to send twice: starting an ID that already follows the same level and thing changes nothing,
-/// and sends nothing again, and stopping one that isn't there does nothing. Answered with [`Subscribed`]. A hub from
-/// before this refuses it as unsupported, and every hub that speaks version 4 of the client protocol has it.
+/// and sends nothing again, and stopping one that isn't there does nothing. Answered with [`Subscribed`].
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Subscribe {
     /// Stops a subscription.
@@ -37,20 +36,12 @@ pub struct Subscription {
     pub subscription_id: u64,
     #[serde(flatten)]
     pub follow: Follow,
-    /// Whether a client of version 4 reads what GitHub says as observations: at the hub's level, how each workspace's
-    /// pull request stands, at a workspace's, its pull request's checks, history and stack and whether GitHub showed its
-    /// repository, and at an issue's or a pull request's, what a chip draws. The hub sends them in place of
-    /// `HubFrame::Github`. Where it's false, the hub sends that client `HubFrame::Github` as [`Follow`] says, and none of
-    /// GitHub's observations in any list or notice. A client of version 5 reads GitHub as observations whatever it says,
-    /// as [`EVERY_OBSERVATION_FROM`](super::EVERY_OBSERVATION_FROM) has it, so it sends none.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub github_observed: bool,
 }
 
 impl Subscription {
-    /// A start of `follow` under `subscription_id`, reading what GitHub says as `HubFrame::Github`.
+    /// A start of `follow` under `subscription_id`.
     pub fn new(subscription_id: u64, follow: Follow) -> Self {
-        Self { subscription_id, follow, github_observed: false }
+        Self { subscription_id, follow }
     }
 }
 
@@ -60,14 +51,12 @@ impl Subscription {
 pub enum Follow {
     /// Sends a [`Listed::Hub`](super::listed::Listed::Hub), then every notice the feed sends at the hub's level, as
     /// [`HubNotice::level`](super::HubNotice::level) says, with how each workspace's own pull request stands among its
-    /// observations, to a start that reads GitHub so, as [`Subscription::github_observed`] says. To any other, every
-    /// one of those but GitHub's, and a `HubFrame::Github` for each workspace's own pull request, then again as it
-    /// changes.
+    /// observations.
     Hub,
     /// Sends a [`Listed::Workspace`](super::listed::Listed::Workspace), queued before the reply to the `Subscribe`
     /// that starts it, then every notice the feed sends at the workspace's level, its pull request's checks, history
-    /// and stack among them only to a start that reads GitHub so, as [`Subscription::github_observed`] says. And has
-    /// the hub read the workspace's pull request at once, and then as often as one the pull request's bar shows.
+    /// and stack among them. And has the hub read the workspace's pull request at once, and then as often as one the
+    /// pull request's bar shows.
     Workspace { id: WorkspaceId },
     /// Sends a [`Listed::Session`](super::listed::Listed::Session), then the events from `from`, then the tail, and then
     /// every event and delta, with every notice the feed sends at the session's level.
@@ -84,11 +73,8 @@ pub enum Follow {
     /// terminal shows rather than all that came between. Its shell's end comes as a `HubFrame::Terminal` with
     /// [`TerminalUpdate::Exited`](crate::terminal::TerminalUpdate::Exited), after which nothing more does.
     Terminal { id: TerminalId },
-    /// Has the hub read the issue or pull request again once it's stale, as it does what a chip shows. To a start that
-    /// reads GitHub as observations, as [`Subscription::github_observed`] says, sends a
-    /// [`Listed::Reference`](super::listed::Listed::Reference), then each change to the observations it lists. To
-    /// any other, sends a `HubFrame::Github` of what GitHub says of it once the hub has read it, and again as that
-    /// changes.
+    /// Has the hub read the issue or pull request again once it's stale, as it does what a chip shows, and sends a
+    /// [`Listed::Reference`](super::listed::Listed::Reference), then each change to the observations it lists.
     Reference { reference: ReferenceAsk },
     /// From a newer client. Refused as unsupported.
     #[serde(other)]

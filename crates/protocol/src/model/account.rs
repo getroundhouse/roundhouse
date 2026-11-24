@@ -4,11 +4,12 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use super::{AccountId, AgentKind, HeardLimits, Rev};
+use super::{AccountId, AgentKind, Rev};
 
 /// The account an agent's CLI is logged in to on its worker's machine, as the worker reads it. Every part is `None`
 /// when the agent doesn't say, such as a plan for a login with an API key. Who it is, from `model_provider` on, is
-/// what an [`Account`]'s record says of it too, so a part added here is added there.
+/// what the observation [`AccountIdentity`](super::AccountIdentity) says of an [`Account`], so a part added here is
+/// added there.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct AgentAccount {
     /// Which account it is. Agents under the same account share its limits, and an agent under another, even with
@@ -42,26 +43,15 @@ impl AgentAccount {
 }
 
 /// An account agents run under, as a record the hub keeps, so every client shows the same of it and it's there once
-/// the agents have gone. Who it is comes from the worker, read each time an agent under it launches, or for a login
-/// the hub holds, from the hub's record of that login alone, since a token doesn't say whose it is. What's left of its
-/// limits is what any agent under it last heard, in whichever workspace, since a limit is the account's rather than a
-/// session's. An adapter's account has a record only for a login that can be told from another, and the hub's has one
-/// for each login it was given, which stays once the login is disconnected. Who it is, from `model_provider` to
-/// `email`, is what [`AgentAccount`] says.
+/// the agents have gone. Who it is, as the worker reads it each time an agent under it launches, is the observation
+/// `AccountIdentity`, and what's left of its limits, as any agent under it last heard, in whichever workspace, since a
+/// limit is the account's rather than a session's, is the observation `AccountLimits`. A login the hub holds says only
+/// the name the person gave it here, since a token doesn't say whose it is. An adapter's account has a record only for
+/// a login that can be told from another, and the hub's has one for each login it was given, which stays once the
+/// login is disconnected.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Account {
     pub id: AccountId,
-    /// Who serves the model, for a person to read, as [`AgentAccount`] says.
-    #[serde(default)]
-    pub model_provider: Option<String>,
-    /// The subscription, for a person to read.
-    #[serde(default)]
-    pub plan: Option<String>,
-    /// How it's logged in, for a person to read.
-    #[serde(default)]
-    pub login: Option<String>,
-    #[serde(default)]
-    pub email: Option<String>,
     /// What the person called the account as they connected a login to it, since a token doesn't say whose it is. It
     /// stays once the login is disconnected, since the sessions that ran under it still name the account.
     #[serde(default)]
@@ -71,10 +61,6 @@ pub struct Account {
     /// is disconnected, as the name does. A client renewing the login reads which kind's command makes a token here.
     #[serde(default)]
     pub login_agent: Option<AgentKind>,
-    /// Shortest window first. Empty until an agent under the account has heard of one, and for an account with none.
-    /// None says when it was heard, since hearing the same again isn't a change to the record.
-    #[serde(default)]
-    pub limits: Vec<UsageLimit>,
     /// The login the hub holds for the account and hands to workers whose machine has none of its own, if it holds one.
     /// `None` for an account that agents run under through the login on their worker's machine, and for one whose
     /// login was disconnected.
@@ -163,21 +149,6 @@ impl HeldLogin {
 }
 
 impl Account {
-    /// What any agent under it last heard of its week, as [`HeardLimits::week`] says.
-    pub fn week(&self, now_ms: i64) -> Option<&UsageLimit> {
-        HeardLimits(&self.limits).week(now_ms)
-    }
-
-    /// Its limits that are used up at `now_ms`, as [`HeardLimits::used_up`] says.
-    pub fn used_up(&self, now_ms: i64) -> impl Iterator<Item = &UsageLimit> {
-        HeardLimits(&self.limits).used_up(now_ms)
-    }
-
-    /// Whether what's left of its week at `now_ms` is down to what it reserves, as [`HeardLimits::in_reserve`] says.
-    pub fn in_reserve(&self, now_ms: i64) -> bool {
-        HeardLimits(&self.limits).in_reserve(self.reserve, now_ms)
-    }
-
     /// Whether it's a login added for `kind` that still works at `now_ms`, as [`HeldLogin::works_at`] says, so it can
     /// be chosen as that kind's default, or a chat of that kind moved to it. The hub also needs the login's token,
     /// which a client can't see, so it can still refuse one.
@@ -220,17 +191,6 @@ crate::tokens!(
     /// the hub hands to the agent's CLI.
     LoginToken,
 );
-
-/// What a session's agent runs under: the account, and what the hub has heard of that account's limits, from any
-/// agent under it. Kept for clients from before accounts were records, which ask for it. A client now reads
-/// [`Session::account`](super::Session::account) and that account's record.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
-pub struct SessionAccount {
-    pub account: AgentAccount,
-    /// Shortest window first. Empty until an agent under the account has heard of one, and for an account with none.
-    #[serde(default)]
-    pub limits: Vec<UsageLimit>,
-}
 
 /// How much of one limit on an account's use is used up.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -299,6 +259,7 @@ impl fmt::Display for ModelLabel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::HeardLimits;
 
     #[test]
     fn whats_left_of_a_limit_is_the_rest_of_it() {
@@ -324,24 +285,23 @@ mod tests {
             resets_at_ms,
             heard_at_ms: None,
         };
-        let reserving = |reserve, limits| Account { limits, reserve, ..crate::fixtures::account("a") };
 
         assert_eq!([0, 1, 100, 101].map(Reserve::new), [None, Reserve::new(1), Some(Reserve::ALL), None]);
         assert!(serde_json::from_str::<Reserve>("0").is_err());
         assert!(serde_json::from_str::<Reserve>("101").is_err());
         assert_eq!(serde_json::to_string(&Reserve::new(25)).unwrap(), "25");
-        let in_reserve = |reserve, limits| reserving(Reserve::new(reserve), limits).in_reserve(1_000);
+        let in_reserve =
+            |reserve, limits: Vec<UsageLimit>| HeardLimits(&limits).in_reserve(Reserve::new(reserve), 1_000);
         assert!(!in_reserve(25, vec![week(74, Some(2_000))]), "26% left of a quarter reserved");
         assert!(in_reserve(25, vec![week(75, Some(2_000))]), "down to it");
         assert!(!in_reserve(25, vec![week(90, Some(1_000))]), "a week that has started again since");
         assert!(!in_reserve(25, Vec::new()), "a week nobody has heard");
-        assert!(!reserving(None, vec![week(100, None)]).in_reserve(1_000), "none reserved");
+        assert!(!HeardLimits(&[week(100, None)]).in_reserve(None, 1_000), "none reserved");
     }
 
     #[test]
     fn an_account_that_says_nothing_still_reads_and_a_newer_window_is_unknown() {
         assert_eq!(serde_json::from_str::<AgentAccount>("{}").unwrap(), AgentAccount::default());
-        assert_eq!(serde_json::from_str::<SessionAccount>(r#"{"account":{}}"#).unwrap(), SessionAccount::default());
         let newer: UsageLimit = serde_json::from_str(r#"{"window":"thirty_days","used_percent":3}"#).unwrap();
 
         assert_eq!(newer.window, LimitWindow::Unknown);
@@ -371,8 +331,8 @@ mod tests {
         let account: Account = serde_json::from_str(r#"{"id":"claude-1"}"#).unwrap();
 
         assert_eq!(account.id, AccountId::from("claude-1"));
-        assert_eq!((account.email, account.limits, account.rev), (None, Vec::new(), Rev::default()));
         assert_eq!((account.name, account.login_agent, account.held_login), (None, None, None));
+        assert_eq!((account.used_at_ms, account.reserve, account.rev), (None, None, Rev::default()));
     }
 
     #[test]

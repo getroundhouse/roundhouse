@@ -4,10 +4,10 @@ use crate::capability::settings::Effort;
 use crate::event::{EventBody, FailureKind, RequestFailure, SessionEvent, TurnOutcome};
 use crate::model::{
     Account, AccountDefault, AccountId, AgentKind, ApprovalId, BranchName, ChildStatus, ChildWorktree, Draft,
-    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubReach,
-    GithubRepositoryName, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, Interaction,
-    InteractionMode, MadeBy, ModelName, Place, Reach, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent,
-    SubagentId, SubagentStatus, TitleSource, ToolUseId, Workspace, WorkspaceStatus,
+    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubSignIn,
+    GithubSignInStatus, GithubUserId, GithubUserNumber, HeldGithubLogin, Interaction, InteractionMode, MadeBy,
+    ModelName, Place, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus, TitleSource,
+    ToolUseId, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -37,9 +37,6 @@ pub fn session(id: &str) -> Session {
         background_tasks: Vec::new(),
         wait: None,
         waits: None,
-        context: None,
-        prompt_cache: None,
-        todos: None,
         account: None,
         account_source: None,
         queued: Vec::new(),
@@ -80,9 +77,7 @@ pub fn workspace(id: &str) -> Workspace {
         title_source: TitleSource::default(),
         pull_request_link: None,
         comment_draft: None,
-        branches: None,
         pull_request_branch: None,
-        worker_build: None,
     }
 }
 
@@ -103,18 +98,12 @@ pub fn child_worktree(id: &str) -> ChildWorktree {
     }
 }
 
-/// The account `id`, as the hub found it on a worker's machine before its agent said anything of it: no model
-/// provider, plan, login or email, no limits heard of, and never used. Its login isn't one the hub holds.
+/// The account `id`, as the hub found it on a worker's machine, never used. Its login isn't one the hub holds.
 pub fn account(id: &str) -> Account {
     Account {
         id: id.into(),
-        model_provider: None,
-        plan: None,
-        login: None,
-        email: None,
         name: None,
         login_agent: None,
-        limits: Vec::new(),
         held_login: None,
         used_at_ms: None,
         reserve: None,
@@ -127,10 +116,9 @@ pub fn claude_default(account: &AccountId) -> AccountDefault {
     AccountDefault { agent: AgentKind::Claude, account: account.clone(), automatic: false }
 }
 
-/// GitHub's user `number`, as a GitHub account's record names it: by its number, as `#<number>`, since what GitHub
-/// calls it is an observation.
-pub fn github_user(number: u64) -> GithubUser {
-    GithubUser { id: GithubUserId::new(number), name: format!("#{number}").as_str().into() }
+/// GitHub's user `number`, as a GitHub account's record names it.
+pub fn github_user(number: u64) -> GithubUserNumber {
+    GithubUserNumber { id: GithubUserId::new(number) }
 }
 
 /// The GitHub account `id` of GitHub's user 1, holding a token connected at 0 that doesn't end.
@@ -149,16 +137,9 @@ pub fn github_account(id: &str) -> GithubAccount {
     }
 }
 
-/// The app of your own `id`, `ada-roundhouse`, made by ada, whose bot GitHub has numbered.
+/// The app of your own `id`.
 pub fn github_app(id: u64) -> GithubApp {
-    GithubApp {
-        id: GithubAppId::new(id),
-        slug: "ada-roundhouse".into(),
-        name: "Ada's Roundhouse".to_string(),
-        owner: GithubUser { id: GithubUserId::new(1), name: "ada".into() },
-        bot: Some(GithubUser { id: GithubUserId::new(41), name: "ada-roundhouse[bot]".into() }),
-        rev: Rev::default(),
-    }
+    GithubApp { id: GithubAppId::new(id), rev: Rev::default() }
 }
 
 /// The sign-in with GitHub `id`, waiting for the person to type `WDJB-MJHT` at GitHub's address for it, until 900 s.
@@ -177,19 +158,6 @@ pub fn found_github_login(provider: &str) -> FoundGithubLogin {
     FoundGithubLogin {
         provider: provider.into(),
         login: GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes },
-        rev: Rev::default(),
-    }
-}
-
-/// Whether the default can push to the repository `repo`'s, which is `example/project` on GitHub: it can, as `ada`,
-/// as GitHub answered in this run of the hub, at the Unix epoch.
-pub fn github_reach(repo: &str) -> GithubReach {
-    let repository = GithubRepositoryName::named("example/project");
-    GithubReach {
-        repo: repo.into(),
-        reach: Reach::Pushes { repository, username: "ada".into() },
-        answered_at_ms: Some(0),
-        stale: false,
         rev: Rev::default(),
     }
 }

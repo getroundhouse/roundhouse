@@ -1,9 +1,7 @@
 //! What an open wait last read, which the hub keeps as an observation apart from the wait's record, and fills the wait's
-//! watch with for a client of a version from before it and for the agent, and which the wait's record keeps, frozen,
-//! once it has ended.
+//! watch with for the agent, and which the wait's record keeps, frozen, once it has ended.
 
-use protocol::client::ClientResponse;
-use protocol::model::{Observation, Observed, PullRequestWatch, Session};
+use protocol::model::{Observation, Observed, PullRequestWatch};
 use rusqlite::Connection;
 
 use super::super::*;
@@ -20,22 +18,13 @@ async fn reads_listed(hub: &Hub) -> Vec<Observation> {
     listed.into_iter().filter(|observation| matches!(observation, Observation::WaitRead { .. })).collect()
 }
 
-/// `s`'s record as a reply carries it.
-async fn session_replied(hub: &Hub) -> Session {
-    let session = hub.blocking(|store| store.get_session(&"s".into())).await.unwrap().session;
-    let mut reply = ClientResponse::Session(session);
-    hub.fill_old_forms(&mut reply);
-    let ClientResponse::Session(session) = reply else { unreachable!() };
-    session
-}
-
 /// The watch of the wait `a` as its record keeps it.
 fn recorded(hub: &Hub) -> PullRequestWatch {
     *hub.store.wait(&"a".into()).unwrap().watch.unwrap()
 }
 
-/// A hub that starts again has what an open wait read as of its read, at the wait's session's level, and fills the
-/// wait's watch with it on the session's record, while the record keeps none of it.
+/// A hub that starts again has what an open wait read as of its read, at the wait's session's level, and decides by it,
+/// while the record keeps none of it.
 #[tokio::test]
 async fn what_an_open_wait_read_is_kept_across_a_restart_as_of_its_read() {
     let dir = tempfile::tempdir().unwrap();
@@ -53,8 +42,8 @@ async fn what_an_open_wait_read_is_kept_across_a_restart_as_of_its_read() {
     let read = wait().watch.unwrap().read();
     assert_eq!((id.as_str(), value, *as_of_ms), ("a", &read, read.observed_at_ms));
     assert_eq!(recorded(&again).snapshot.pull_requests, [], "the record keeps none of it");
-    let filled = session_replied(&again).await.open_waits()[0].watch.clone();
-    assert_eq!(filled, wait().watch, "the record's old form filled");
+    let as_read = again.as_read(again.store.wait(&"a".into()).unwrap()).watch;
+    assert_eq!(as_read, wait().watch, "what the hub decides by");
 }
 
 /// A wait that ends otherwise than by a judging, as the agent cancelling it, keeps in its record what it last read, and

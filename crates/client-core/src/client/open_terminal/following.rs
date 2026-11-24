@@ -238,8 +238,7 @@ impl Source for TerminalSource {
             | SubscriptionItem::Tail(_)
             | SubscriptionItem::Delta(_)
             | SubscriptionItem::Notice(_)
-            | SubscriptionItem::Listed(_)
-            | SubscriptionItem::Github(_) => return Ok(false),
+            | SubscriptionItem::Listed(_) => return Ok(false),
         };
         if ended {
             held.lock().ended = true;

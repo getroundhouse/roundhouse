@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     Account, AccountId, CommentId, DiffComment, FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp,
-    GithubAppId, GithubReach, GithubSignIn, GithubSignInId, HubSettings, HubUpdate, MessageId, ModelList, ModelListKey,
+    GithubAppId, GithubSignIn, GithubSignInId, HubSettings, HubUpdate, MessageId, ModelList, ModelListKey,
     NewWorkspaceDraft, Observation, Proposal, ProposalId, ProviderName, ReplyHeard, Repo, RepoId, Rev, Session,
     SessionId, Subagent, SubagentId, Terminal, TerminalId, Workspace, WorkspaceId,
 };
@@ -60,11 +60,6 @@ pub enum RecordKey {
     GithubApp {
         id: GithubAppId,
     },
-    /// A repository has at most one, and keeps it, as repositories aren't removed, so this isn't sent, as
-    /// [`GithubReach`] says.
-    GithubReach {
-        repo: RepoId,
-    },
     Terminal {
         id: TerminalId,
     },
@@ -108,7 +103,6 @@ pub enum Record {
     GithubSignIn(GithubSignIn),
     FoundGithubLogin(FoundGithubLogin),
     GithubApp(GithubApp),
-    GithubReach(GithubReach),
     Terminal(Terminal),
     ModelList(ModelList),
     HubUpdate(HubUpdate),
@@ -135,7 +129,6 @@ impl Record {
             Record::GithubSignIn(sign_in) => RecordKey::GithubSignIn { id: sign_in.id.clone() },
             Record::FoundGithubLogin(found) => RecordKey::FoundGithubLogin { provider: found.provider.clone() },
             Record::GithubApp(app) => RecordKey::GithubApp { id: app.id },
-            Record::GithubReach(reach) => RecordKey::GithubReach { repo: reach.repo.clone() },
             Record::Terminal(terminal) => RecordKey::Terminal { id: terminal.id.clone() },
             Record::ModelList(list) => RecordKey::ModelList(list.key.clone()),
             Record::HubUpdate(_) => RecordKey::HubUpdate,
@@ -161,7 +154,6 @@ impl Record {
             Record::GithubSignIn(sign_in) => sign_in.rev,
             Record::FoundGithubLogin(found) => found.rev,
             Record::GithubApp(app) => app.rev,
-            Record::GithubReach(reach) => reach.rev,
             Record::Terminal(terminal) => terminal.rev,
             Record::ModelList(list) => list.rev,
             Record::HubUpdate(update) => update.rev,
@@ -200,10 +192,6 @@ pub struct Records {
     /// Empty from a hub from before apps of your own.
     #[serde(default)]
     pub github_apps: Vec<GithubApp>,
-    /// Empty from a hub that doesn't check them, and none for a repository whose address no worker has read, and that
-    /// the hub hasn't checked before.
-    #[serde(default)]
-    pub github_reach: Vec<GithubReach>,
     /// The terminals open in every workspace. Empty from a hub from before terminals.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub terminals: Vec<Terminal>,
@@ -217,7 +205,7 @@ pub struct Records {
     pub hub_update: Option<HubUpdate>,
     /// The observations the hub sends at its own level, as [`ObservationKey::level`](super::ObservationKey::level)
     /// says, under the list's own `rev`, as its records are. One of another level isn't here, so the list doesn't say
-    /// it's gone. Empty from a hub from before observations.
+    /// it's gone.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub observations: Vec<Observation>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless a client holds a
@@ -241,7 +229,6 @@ impl Records {
             github_sign_ins,
             found_github_logins,
             github_apps,
-            github_reach,
             terminals,
             model_lists,
             hub_update,
@@ -259,7 +246,6 @@ impl Records {
         let records = records.chain(github_sign_ins.into_iter().map(Record::GithubSignIn));
         let records = records.chain(found_github_logins.into_iter().map(Record::FoundGithubLogin));
         let records = records.chain(github_apps.into_iter().map(Record::GithubApp));
-        let records = records.chain(github_reach.into_iter().map(Record::GithubReach));
         let records = records.chain(terminals.into_iter().map(Record::Terminal));
         let records = records.chain(model_lists.into_iter().map(Record::ModelList));
         records.chain(hub_update.into_iter().map(Record::HubUpdate))
@@ -272,13 +258,12 @@ mod tests {
     use crate::fixtures;
 
     #[test]
-    fn a_list_gives_its_github_accounts_sign_ins_found_logins_apps_and_reach_as_records() {
+    fn a_list_gives_its_github_accounts_sign_ins_found_logins_and_apps_as_records() {
         let list = Records {
             github_accounts: vec![fixtures::github_account("g")],
             github_sign_ins: vec![fixtures::github_sign_in("s")],
             found_github_logins: vec![fixtures::found_github_login("local")],
             github_apps: vec![fixtures::github_app(9)],
-            github_reach: vec![fixtures::github_reach("r")],
             ..Records::default()
         };
 
@@ -287,7 +272,6 @@ mod tests {
         let found = RecordKey::FoundGithubLogin { provider: "local".into() };
         let signing_in = RecordKey::GithubSignIn { id: "s".into() };
         let app = RecordKey::GithubApp { id: GithubAppId::new(9) };
-        let reach = RecordKey::GithubReach { repo: "r".into() };
-        assert_eq!(keys, [RecordKey::GithubAccount { id: "g".into() }, signing_in, found, app, reach]);
+        assert_eq!(keys, [RecordKey::GithubAccount { id: "g".into() }, signing_in, found, app]);
     }
 }

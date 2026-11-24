@@ -21,9 +21,4 @@ pub struct PullRequestLink {
     pub repository: GithubRepositoryName,
     pub number: IssueNumber,
     pub url: String,
-    /// How many files the worktree had changed and not committed when the hub last read the pull request. A hub keeps
-    /// it in the observation `WorkspacePullRequest`, and fills this from it for a client of a version from before it,
-    /// 0 where it holds none.
-    #[serde(default)]
-    pub uncommitted: u32,
 }

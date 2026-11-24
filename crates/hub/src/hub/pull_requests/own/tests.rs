@@ -100,7 +100,6 @@ fn only_what_was_found_on_a_branch_can_be_another_branchs() {
         repository: name("o/r"),
         number: IssueNumber::try_from(7).unwrap(),
         url: "https://github.com/o/r/pull/7".into(),
-        uncommitted: 0,
     };
     let next = Branches { head: Head::Branch { name: BranchName::from("next") }, had: Vec::new() };
     let found = |link: Option<PullRequestLink>, branch: Option<&str>| Workspace {

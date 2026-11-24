@@ -28,7 +28,7 @@ fn follows() -> Subscribe {
         Follow::Terminal { id: "t".into() },
         Follow::Reference { reference },
     ];
-    let starts = (1..).zip(follows).map(|(id, follow)| Subscription { github_observed: true, ..start(id, follow) });
+    let starts = (1..).zip(follows).map(|(id, follow)| Subscription { ..start(id, follow) });
     Subscribe { stop: Vec::new(), start: starts.collect() }
 }
 
@@ -38,7 +38,6 @@ fn asked() -> Vec<ClientRequest> {
     let settings = HubSettingsChange { keep_awake: Some(false), ..HubSettingsChange::default() };
     let draft = NewWorkspaceDraftToKeep { text: "Next".into(), ..NewWorkspaceDraftToKeep::default() };
     vec![
-        records::RecordsList.into_request(),
         records::RepoList.into_request(),
         workspaces::WorkspaceList { include_archived: true }.into_request(),
         workspaces::WorkspaceRename { id: "w".into(), title: "Renamed".into() }.into_request(),
@@ -46,9 +45,6 @@ fn asked() -> Vec<ClientRequest> {
         sessions::SessionGet { id: "s".into() }.into_request(),
         sessions::SessionList { workspace_id: "w".into() }.into_request(),
         sessions::SessionRename { id: "s".into(), title: "Named".into() }.into_request(),
-        records::SessionSubagents { id: "s".into() }.into_request(),
-        records::SessionProposals { id: "s".into() }.into_request(),
-        records::SessionRepliesHeard { id: "s".into() }.into_request(),
         admin::HubConfigure { settings }.into_request(),
         drafts::NewWorkspaceDraftKeep { draft }.into_request(),
         terminal_in_w("t2").into_request(),
@@ -94,7 +90,6 @@ async fn every_record_a_reply_or_a_frame_carries_has_a_revision() {
 
     let carrying = [
         "Comment",
-        "Records",
         "Repos",
         "Workspaces",
         "Workspace",
@@ -102,9 +97,6 @@ async fn every_record_a_reply_or_a_frame_carries_has_a_revision() {
         "Session",
         "Sessions",
         "Session",
-        "Subagents",
-        "Proposals",
-        "RepliesHeard",
         "HubSettings",
         "NewWorkspaceDraft",
         "Terminal",

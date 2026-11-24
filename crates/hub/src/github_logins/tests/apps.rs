@@ -109,11 +109,11 @@ fn an_installation_is_its_apps_bot_on_its_user_and_as_the_default_workers_commit
     let (logins, store) = logins_in(dir.path());
     kept(&logins);
 
-    let mut account = installed(&logins, &on_adalabs(70), "ghs_first", ENDS_AT_MS);
-    logins.observations.fill(&mut account);
+    let account = installed(&logins, &on_adalabs(70), "ghs_first", ENDS_AT_MS);
 
-    let installation = GithubInstallation { app: APP, id: GithubInstallationId::new(70), on: user(2, "adalabs") };
-    assert_eq!((account.user.id, account.installation.clone()), (bot().id, Some(installation)));
+    let installation =
+        GithubInstallation { app: APP, id: GithubInstallationId::new(70), on: user(2, "adalabs").number() };
+    assert_eq!((account.user, account.installation.clone()), (bot().number(), Some(installation)));
     assert_eq!(logins.named(&account), bot().name, "its username is its bot's");
     let held = account.held_login.unwrap();
     assert_eq!((held.how, held.ends_at_ms), (GithubLoginKind::App, None), "its record changes for no new token");

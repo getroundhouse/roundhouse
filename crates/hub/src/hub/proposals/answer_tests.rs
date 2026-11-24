@@ -43,7 +43,7 @@ async fn an_answer_is_kept_once_and_the_feed_is_told() {
         }
     });
     assert_eq!(told.await.unwrap(), answered);
-    assert_eq!(hub.session_proposals("s".into()).await.unwrap().proposals, [answered]);
+    assert_eq!(hub.session_records("s".into()).await.unwrap().proposals, [answered]);
 }
 
 #[tokio::test]
@@ -56,7 +56,7 @@ async fn an_answer_that_doesnt_choose_one_of_the_options_is_refused_and_nothing_
 
     assert_eq!(refused.code, ErrorCode::InvalidRequest);
     assert!(refused.message.contains("has no such option"), "{}", refused.message);
-    assert_eq!(hub.session_proposals("s".into()).await.unwrap().proposals[0].current.response, None);
+    assert_eq!(hub.session_records("s".into()).await.unwrap().proposals[0].current.response, None);
 }
 
 /// The agent is told what was chosen, and reads the note with its tool, so a long note isn't in its prompt.

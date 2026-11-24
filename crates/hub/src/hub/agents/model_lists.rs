@@ -139,13 +139,13 @@ impl Hub {
         let rev = self.blocking(Store::next_rev).await?;
         let key = lookup.key.clone();
         if let Due::Known = due {
-            let list = ModelList { key, catalog: None, lookup: ModelLookup::Answered, rev };
+            let list = ModelList { key, lookup: ModelLookup::Answered, rev };
             lists.set(list.clone(), false);
             self.notify(HubNotice::ModelList(list.clone()));
             return Ok(list);
         }
         // Held before the lookup starts, so its answer, however soon it lands, finds the list it's for.
-        let asking = ModelList { key: key.clone(), catalog: None, lookup: ModelLookup::Asking, rev };
+        let asking = ModelList { key: key.clone(), lookup: ModelLookup::Asking, rev };
         lists.set(asking.clone(), false);
         let list = match self.start_lookup(lookup, rev) {
             Ok(()) => asking,
@@ -156,8 +156,7 @@ impl Hub {
                     }
                     NotStarted::Stopped => "the hub is stopping",
                 };
-                let failed =
-                    ModelList { key, catalog: None, lookup: ModelLookup::Failed { message: message.into() }, rev };
+                let failed = ModelList { key, lookup: ModelLookup::Failed { message: message.into() }, rev };
                 lists.set(failed.clone(), false);
                 failed
             }
@@ -253,7 +252,7 @@ impl Hub {
     /// Records what the agent answered, or that it failed, keeping the last catalog it gave, on the list the lookup
     /// began asking for under revision `asked`, unless the hub has let go of that list meanwhile, as when which login a
     /// launch is handed changes, where the answer is another login's. What it answered is kept as an observation
-    /// first, so the list's record, which holds it for a client of a version from before it, says it as it's told.
+    /// first, so a client told the list answered has what it offers.
     /// That's before the lock a list's change takes, since listing every record takes that lock under the one an
     /// observation's change takes. So whether the list is still held is asked under the observation's lock, under
     /// which [`Hub::forget_model_lists`] picks out what it lets go of. An answer the hub couldn't keep, as when its
@@ -309,7 +308,7 @@ impl Hub {
     /// Holds the list at `key` as asking, as a lookup begins, under the revision this returns.
     pub(crate) async fn model_list_asking(&self, key: &ModelListKey) -> Rev {
         let rev = self.blocking(Store::next_rev).await.unwrap();
-        self.model_lists.set(ModelList { key: key.clone(), catalog: None, lookup: ModelLookup::Asking, rev }, false);
+        self.model_lists.set(ModelList { key: key.clone(), lookup: ModelLookup::Asking, rev }, false);
         rev
     }
 
@@ -346,8 +345,7 @@ mod tests {
     }
 
     fn held(lists: &ModelLists, key: &ModelListKey, lookup: ModelLookup, answered: bool) {
-        let catalog = answered.then(ModelCatalog::default);
-        lists.set(ModelList { key: key.clone(), catalog, lookup, rev: Rev::new(1) }, answered);
+        lists.set(ModelList { key: key.clone(), lookup, rev: Rev::new(1) }, answered);
     }
 
     /// The machine's own CLI can be updated at any time, so its list is asked for again once it's old, and a failure

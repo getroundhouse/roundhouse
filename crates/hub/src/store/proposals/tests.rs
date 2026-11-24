@@ -1,3 +1,4 @@
+use protocol::client::listed::SessionRecords;
 use protocol::fixtures;
 use protocol::model::{AnswerProblem, Choice, ClientRequestId, OptionPlace, Proposal, Response, RevisionNumber};
 use protocol::prompt::{Prompt, PromptFrom};
@@ -40,7 +41,7 @@ fn a_proposal_is_kept_once_for_its_ask_and_listed_by_its_chat_oldest_first() {
     assert!(new && !again_new, "the same ask makes it once");
     assert_eq!(again, kept);
     assert!(kept.rev > protocol::model::Rev::default(), "it has a revision of its own");
-    let (listed, rev) = store.list_proposals(&"s".into()).unwrap();
+    let SessionRecords { proposals: listed, rev, .. } = store.list_session_records(&"s".into()).unwrap();
     let ids: Vec<_> = listed.iter().map(|p| p.id.as_str()).collect();
     assert_eq!(ids, ["p1", "p2"]);
     assert!(rev >= listed[1].rev);
@@ -138,7 +139,7 @@ fn only_a_proposals_newest_revision_is_listed_and_the_rest_are_read_a_page_at_a_
 
     revise_to(&store, 5);
 
-    let (listed, _) = store.list_proposals(&"s".into()).unwrap();
+    let listed = store.list_session_records(&"s".into()).unwrap().proposals;
     let newest = &listed[0];
     assert_eq!((newest.current.number, newest.current.proposed.title.as_str()), (RevisionNumber(5), "Revision 5"));
     assert!(newest.rev > first.rev, "the feed's copy is newer");

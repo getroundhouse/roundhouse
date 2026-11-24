@@ -107,6 +107,6 @@ pub(super) fn reply_heard(store: &Store) -> Said {
 }
 
 pub(super) fn reply_heard_rev(store: &Store) -> Rev {
-    let (heard, _) = store.list_replies_heard(&"s".into()).unwrap();
+    let heard = store.list_session_records(&"s".into()).unwrap().replies_heard;
     heard.first().expect("one reply heard").rev
 }
