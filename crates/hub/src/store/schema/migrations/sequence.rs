@@ -76,4 +76,10 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(workspaces::BRANCHES_OBSERVED),
     // Which build each workspace's worker is, which the hub keeps as an observation in memory alone, in `workspaces`.
     Sql(workspaces::WORKER_BUILD_OBSERVED),
+    // Whether a push from each checkout went round the git credential workers are given, which nothing used, in
+    // `repos`.
+    Sql(super::repos::PUSH_AROUND_DROPPED),
+    // When each wait's pull request last left the merge queue, and last had changes asked for, which nothing used, in
+    // `waits`.
+    Sql(super::waits::SEEN_DROPPED),
 ];
