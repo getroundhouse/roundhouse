@@ -29,7 +29,7 @@ fn event() -> SessionEvent {
 }
 
 #[test]
-fn a_hubs_settings_keep_their_form_and_one_from_a_hub_from_before_says_nothing_of_allowing_tools_or_github() {
+fn a_hubs_settings_keep_their_form_and_ones_that_say_nothing_of_allowing_tools_or_github_leave_each_not_known() {
     let settings = |github| HubSettings {
         account_defaults: None,
         keep_awake: false,
@@ -60,8 +60,9 @@ fn a_hubs_settings_keep_their_form_and_one_from_a_hub_from_before_says_nothing_o
         }))),
         r#"{"result":"hub_settings","keep_awake":false,"allow_asked_in_full_access":true,"github":{"account":null},"rev":3}"#,
     );
-    // From a hub from before it could allow a tool's use itself, which says nothing of it, nor of GitHub.
-    let older: ClientResponse = serde_json::from_str(r#"{"result":"hub_settings","keep_awake":true,"rev":3}"#).unwrap();
+    // Settings that say nothing of allowing a tool's use, nor of GitHub, which leave each not known.
+    let unsaid: ClientResponse =
+        serde_json::from_str(r#"{"result":"hub_settings","keep_awake":true,"rev":3}"#).unwrap();
     let settings = HubSettings {
         account_defaults: None,
         keep_awake: true,
@@ -69,7 +70,7 @@ fn a_hubs_settings_keep_their_form_and_one_from_a_hub_from_before_says_nothing_o
         github: None,
         rev: Rev::new(3),
     };
-    assert_eq!(older, ClientResponse::HubSettings(settings));
+    assert_eq!(unsaid, ClientResponse::HubSettings(settings));
 }
 
 #[test]

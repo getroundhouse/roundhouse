@@ -66,7 +66,7 @@ pub enum MergeState {
     /// GitHub hasn't worked it out yet, which it does a moment after anything changes. GitHub calls it `UNKNOWN`.
     #[serde(rename = "UNKNOWN")]
     Computing,
-    /// A word this version doesn't know, or none at all, from a hub that doesn't say. Named apart from GitHub's
+    /// A word this version doesn't know, or none at all. Named apart from GitHub's
     /// `UNKNOWN`, so it reads back as itself.
     #[default]
     #[serde(rename = "UNRECOGNISED", other)]

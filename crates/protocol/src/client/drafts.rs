@@ -21,8 +21,8 @@ pub struct SessionDraft {
     pub draft: DraftToKeep,
     /// When the change was typed, in milliseconds since the Unix epoch by the device's clock, so one typed while the
     /// hub couldn't be reached keeps its time. The hub takes one later than its own clock as typed now, so a device
-    /// whose clock runs ahead can't keep every other client's change out. A change without it, from a client older
-    /// than this, counts as typed when it arrives, and is never refused.
+    /// whose clock runs ahead can't keep every other client's change out. A change without it counts as typed when it
+    /// arrives, and is never refused.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub typed_at_ms: Option<i64>,
 }

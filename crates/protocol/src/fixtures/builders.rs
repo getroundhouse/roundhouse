@@ -12,9 +12,9 @@ use crate::model::{
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
-/// access at extra-high effort, as a chat that names none of them does. Like a record from a hub that doesn't keep
-/// them, it says nothing of a wait, of the approvals and prompts its agent has open, or of whether the agent has opened
-/// its conversation.
+/// access at extra-high effort, as a chat that names none of them does. It has no wait and no approval open, and says
+/// nothing of the prompts its agent has yet to take or of whether the agent has opened its conversation, which leaves
+/// those to the hub.
 pub fn session(id: &str) -> Session {
     Session {
         id: id.into(),

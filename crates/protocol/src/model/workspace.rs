@@ -84,7 +84,8 @@ impl Workspace {
     }
 
     /// When the person last worked in it, by the hub's clock, as `user_active_at_ms` says. Only what they did counts,
-    /// so it doesn't move as its agents work or reply. A hub too old to keep that says only when it was made.
+    /// so it doesn't move as its agents work or reply. One whose row doesn't say, as one stored before the hub kept it
+    /// may not, goes by when it was made.
     pub fn last_active_at_ms(&self) -> i64 {
         self.user_active_at_ms.map_or(self.created_at_ms, |at| at.max(self.created_at_ms))
     }

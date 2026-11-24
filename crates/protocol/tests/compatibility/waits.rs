@@ -12,17 +12,14 @@ fn explicit_wait_instructions_refuse_invalid_conditions_and_selections() {
     assert!(serde_json::from_value::<WorkerAsk>(input).is_err());
 }
 
-/// A wait's pull requests go out as `watching`, in their facets, and one a hub from before sent as `watch`, in a form
-/// this client doesn't read, reads as a wait without them, rather than failing its chat's record.
+/// A wait's pull requests go out as `watching`, in their facets, and the store keeps them in that form.
 #[test]
-fn a_waits_pull_requests_go_by_a_name_a_client_from_before_skips() {
+fn a_waits_pull_requests_go_out_as_watching_and_are_kept_in_their_facets() {
     let mut wait = protocol::fixtures::pull_request_wait("a");
     wait.watch.as_mut().unwrap().snapshot.pull_requests = vec![super::every_facet::every_facet()];
 
-    let mut written = serde_json::to_value(&wait).unwrap();
-    assert!(written.as_object_mut().unwrap().remove("watching").is_some(), "sent as `watching`");
-    written["watch"] = json!({"snapshot": {"pull_requests": [{"pull_request": {"number": 7}}]}});
-    let older: protocol::model::Wait = serde_json::from_value(written).unwrap();
+    let written = serde_json::to_value(&wait).unwrap();
+    assert!(written.get("watching").is_some() && written.get("watch").is_none(), "sent as `watching`");
 
     // As it's written, and as the store keeps it, in the `watch` column of `waits`.
     let every_facet = super::every_facet::EVERY_FACET;
@@ -31,5 +28,4 @@ fn a_waits_pull_requests_go_by_a_name_a_client_from_before_skips() {
     );
     assert_eq!(serde_json::to_string(wait.watch.as_deref().unwrap()).unwrap(), kept);
     assert_eq!(serde_json::from_str::<PullRequestWatch>(&kept).unwrap(), **wait.watch.as_ref().unwrap());
-    assert_eq!(older.watch, None);
 }

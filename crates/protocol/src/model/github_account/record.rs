@@ -66,7 +66,7 @@ pub struct HeldGithubLogin {
     pub ends_at_ms: Option<i64>,
     /// Whether it can't be renewed, so the person has to sign in again, as when a sign-in's refresh token has ended or
     /// GitHub has refused it, or the hub couldn't keep what renewing it gave. Signing in again, or connecting a token,
-    /// clears it. False from a hub from before it said. *Unconfirmed.*
+    /// clears it. Left out, it can be renewed, as nearly every one can. *Unconfirmed.*
     #[serde(default)]
     pub needs_sign_in: bool,
 }

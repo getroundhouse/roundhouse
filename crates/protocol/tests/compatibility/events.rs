@@ -1,4 +1,4 @@
-//! Events a hub kept in its log in the form an older hub wrote them, which every later hub and client has to read.
+//! Events a hub kept in its log in the form an earlier build wrote them, which every later hub and client has to read.
 
 use protocol::capability::turns::OwnTurn;
 use protocol::event::{Again, EventBody, FailureKind, RequestFailure, TaskChange, TaskKind, TaskOutcome};

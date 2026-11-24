@@ -129,7 +129,7 @@ fn a_recorded_prompt_keeps_its_form() {
     };
     keeps_its_json_form(&answering, &body);
 
-    // As a hub from before `client_msg_id` recorded it.
+    // As the log keeps one recorded before prompts carried `client_msg_id`.
     let oldest: EventBody = frame::decode(br#"{"type":"user_prompt","text":"hi"}"#).unwrap();
     assert_eq!(
         oldest,

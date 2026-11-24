@@ -125,8 +125,9 @@ fn a_known_request_with_a_new_field_still_decodes() {
     assert_eq!(frame.request, ClientRequest::RepoAdd(records::RepoAdd { path: "a".to_string() }));
 }
 
+/// What the hub records itself names no run, and nor does a delta as its worker sends it, before the hub sets it.
 #[test]
-fn an_event_or_delta_from_a_hub_without_runs_has_none() {
+fn an_event_or_delta_that_names_no_run_has_none() {
     let event: SessionEvent =
         frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"place":1,"body":{"type":"turn_ended","outcome":"success","result":null,"duration_ms":null,"cost_usd":null,"num_turns":null}}"#)
             .unwrap();
@@ -177,8 +178,10 @@ fn a_models_own_week_keeps_its_form_with_the_models_label() {
     assert_eq!(said, [(LimitWindow::ModelSevenDays, Some(ModelLabel::new("Fable")), 88, Some(9))]);
 }
 
+/// As the agent's worker sends it, before the hub adds when the turn started, and as an agent that doesn't say its
+/// models or tokens ends one.
 #[test]
-fn a_turns_end_from_a_hub_that_doesnt_add_its_start_or_keep_its_models_and_tokens_has_none() {
+fn a_turns_end_that_doesnt_say_its_start_models_or_tokens_has_none() {
     let event: SessionEvent =
         frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"place":1,"body":{"type":"turn_ended","outcome":"success","result":null,"duration_ms":9,"cost_usd":null,"num_turns":null}}"#)
             .unwrap();
@@ -203,10 +206,10 @@ fn a_turns_end_keeps_the_form_of_its_models_and_tokens() {
     assert_eq!(serde_json::to_vec(&event).unwrap(), stored, "and it's written the way it's read");
 }
 
-/// So a client sorting by when each workspace was last worked in puts one from a hub that doesn't keep it by when it was
-/// made.
+/// So a client sorting by when each workspace was last worked in puts one whose record doesn't say, as one stored
+/// before the hub kept it may not, by when it was made.
 #[test]
-fn a_workspace_from_a_hub_that_doesnt_keep_when_it_was_last_worked_in_goes_by_when_it_was_made() {
+fn a_workspace_that_doesnt_say_when_it_was_last_worked_in_goes_by_when_it_was_made() {
     let line = br#"{"notice":"workspace","id":"w","repo_id":"r","name":"n","branch":"n","base_ref":null,"path":null,"status":"ready","provider":"local","instance_id":"w","created_at_ms":7,"archived_at_ms":null,"setup":{"state":"succeeded"},"port_base":55000,"rev":2}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();
@@ -228,10 +231,10 @@ fn a_dropped_call_keeps_the_form_and_the_kind_it_s_stored_under() {
     assert_eq!(serde_json::to_value(&event.body).unwrap()["type"], "tool_call_dropped");
 }
 
-/// A list the hub stored before it kept kinds, or sent by a hub that doesn't, has none. Everything left running was
-/// drawn alike then, and a command is the kind that claims least.
+/// A list the hub stored before it kept kinds has none, which the hub reads as its record's list and sends filled in.
+/// Everything left running was drawn alike then, and a command is the kind that claims least.
 #[test]
-fn a_background_task_from_a_hub_that_doesnt_keep_kinds_is_a_command() {
+fn a_background_task_stored_before_kinds_were_kept_is_a_command() {
     let task: AgentTask = serde_json::from_str(r#"{"id":"t1","description":"Run the tests"}"#).unwrap();
 
     assert_eq!(task.kind, TaskKind::Command);
@@ -255,15 +258,15 @@ fn a_background_task_of_a_kind_this_build_doesnt_know_is_a_command() {
     assert_eq!(serde_json::to_string(&monitor).unwrap(), r#"{"id":"t1","description":null,"kind":"monitor"}"#);
 }
 
-/// A list the hub stored before it kept which call started each task, or sent by a hub that doesn't, names none, so
-/// a subagent's line has no button to its tab. One that names a call keeps it.
+/// A list the hub stored before it kept which call started each task names none, as does a task whose agent doesn't
+/// say, so a subagent's line has no button to its tab. One that names a call keeps it.
 #[test]
-fn a_background_task_from_a_hub_that_doesnt_keep_its_call_has_none() {
-    let older: AgentTask = serde_json::from_str(r#"{"id":"t1","description":null,"kind":"subagent"}"#).unwrap();
+fn a_background_task_that_names_no_call_has_none() {
+    let unnamed: AgentTask = serde_json::from_str(r#"{"id":"t1","description":null,"kind":"subagent"}"#).unwrap();
     let newer = r#"{"id":"t1","description":null,"kind":"subagent","call":"toolu_1"}"#;
     let task: AgentTask = serde_json::from_str(newer).unwrap();
 
-    assert_eq!((older.call, task.call.clone()), (None, Some("toolu_1".into())));
+    assert_eq!((unnamed.call, task.call.clone()), (None, Some("toolu_1".into())));
     assert_eq!(serde_json::to_string(&task).unwrap(), newer);
 }
 
@@ -280,11 +283,12 @@ fn an_event_without_its_place_doesnt_read_and_one_that_names_no_subagent_is_the_
     assert!(frame::decode::<SessionEvent>(line.replace(r#""place":1,"#, "").as_bytes()).is_err());
 }
 
+/// A tail with no subagent in the background leaves the list out, as the hub writes it.
 #[test]
-fn a_tail_from_a_hub_that_doesnt_say_which_subagents_are_in_the_background_has_none_and_keeps_its_form() {
-    let older = br#"{"messages":[{"message_id":"m","parent_tool_use_id":"toolu_1","blocks":[]}]}"#;
-    let tail: Tail = frame::decode(older).unwrap();
+fn a_tail_with_no_subagent_in_the_background_says_none_and_keeps_its_form() {
+    let none = br#"{"messages":[{"message_id":"m","parent_tool_use_id":"toolu_1","blocks":[]}]}"#;
+    let tail: Tail = frame::decode(none).unwrap();
 
     assert!(tail.in_background.is_empty());
-    assert_eq!(frame::encode(&tail).unwrap(), [older.as_slice(), b"\n"].concat(), "none is left out");
+    assert_eq!(frame::encode(&tail).unwrap(), [none.as_slice(), b"\n"].concat(), "none is left out");
 }

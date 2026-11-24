@@ -11,10 +11,11 @@ pub struct HubSettings {
     /// Whether it keeps its machine from going to sleep by itself while there's work.
     pub keep_awake: bool,
     /// Whether it allows a tool's use itself when an agent with full access asks anyway, as Claude's CLI does before
-    /// a command it can't check, so nobody waits on it. `None` from a hub from before it could.
+    /// a command it can't check, so nobody waits on it. `None` where that's not known, which a client shows as off and
+    /// doesn't let be changed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_asked_in_full_access: Option<bool>,
-    /// Defaults chosen on this hub, by agent kind. None means the hub predates account defaults.
+    /// Defaults chosen on this hub, by agent kind. `None` where they're not known, which shows no row to choose them in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_defaults: Option<Vec<AccountDefault>>,
     /// What it says of the GitHub accounts it holds. `None` from a hub that keeps none, which is how a client tells it
@@ -29,8 +30,7 @@ pub struct HubSettings {
 pub struct GithubSettings {
     /// The default: the [`GithubAccount`](super::GithubAccount) the hub reads GitHub as, and agents push and open pull
     /// requests as, on every provider where Roundhouse sets up GitHub, for every repository on GitHub. `None` is none,
-    /// so the hub reads nothing of GitHub, which a hub from before it had an identity of its own took as each machine's
-    /// own login. Connecting the first GitHub account
+    /// so the hub reads nothing of GitHub. Connecting the first GitHub account
     /// the hub has a record of makes it the default. Otherwise only
     /// [`GithubAccountSetDefault`](crate::client::github_accounts::GithubAccountSetDefault) changes it, so a default
     /// whose login is disconnected or has ended stays the default, holding no login that can be used, until it's
@@ -45,7 +45,7 @@ pub struct GithubSettings {
     /// The providers whose machines Roundhouse leaves GitHub to, so their workers are given none of the default, and a
     /// workspace there says nothing of whether the default can push: the local provider, whose machine is the
     /// person's own, and any other whose entry in the hub's providers file says so. Every other provider's workers are
-    /// given the default. Empty from a hub from before it said, which gave the default to every worker. *Unconfirmed.*
+    /// given the default. *Unconfirmed.*
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub left_to_machine: Vec<ProviderName>,
     /// The providers whose machines Roundhouse sets up GitHub on, in the order the hub has them, so Settings' Providers

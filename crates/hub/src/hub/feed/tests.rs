@@ -90,8 +90,8 @@ fn each_subagents_copies_are_in_order_apart_from_any_others() {
     assert_eq!(heard(&mut client), std::iter::once(told(&session("s", 2))).chain(subagents).collect::<Vec<_>>());
 }
 
-/// Only a hub that doesn't keep revisions makes a copy without one, and a client takes each, so the feed can't leave
-/// any out.
+/// A copy without a revision supersedes any, as `Rev::supersedes` says, so the feed can't leave one out, though the
+/// hub makes none.
 #[test]
 fn a_copy_without_a_revision_is_always_told_of() {
     let feed = Feed::new();

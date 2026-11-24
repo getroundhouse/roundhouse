@@ -110,8 +110,8 @@ fn a_worker_of_protocol_5_reads_each_requests_source() {
 }
 
 /// A source of a kind this build doesn't know makes the request unreadable, so the worker refuses it, rather than make
-/// the worktree some other way. So does a request that names no source, as a hub from before sources named only its
-/// checkout's `repo_path`.
+/// the worktree some other way. So does a request that names no source, such as one that names only a checkout's
+/// `repo_path`.
 #[test]
 fn a_source_of_a_kind_this_build_doesnt_know_or_none_at_all_isnt_read() {
     let newer = br#"{"id":7,"request":{"method":"prepare_workspace","repo_name":"r","source":{"kind":"mirror","url":"x"},"workspace_name":"b","branch":"b","base_ref":null}}"#;

@@ -156,22 +156,22 @@ pub struct Records {
     pub workspaces: Vec<Workspace>,
     pub sessions: Vec<Session>,
     pub comments: Vec<DiffComment>,
-    /// `None` from a hub from before it kept any.
+    /// `None` leaves a client with no settings to show until the feed tells it of them.
     #[serde(default)]
     pub hub_settings: Option<HubSettings>,
-    /// Empty from a hub from before it kept them.
+    /// Empty where the hub keeps none.
     #[serde(default)]
     pub accounts: Vec<Account>,
-    /// `None` from a hub from before it kept one.
+    /// `None` leaves a client with nothing in the new-workspace dialog until the feed tells it of what is.
     #[serde(default)]
     pub new_workspace_draft: Option<NewWorkspaceDraft>,
-    /// Empty from a hub that keeps no GitHub accounts, as its settings' `github` says.
+    /// Empty where the hub keeps none.
     #[serde(default)]
     pub github_accounts: Vec<GithubAccount>,
-    /// Empty from a hub that keeps no GitHub accounts, or that can't sign in with GitHub.
+    /// Empty where the hub has none.
     #[serde(default)]
     pub github_sign_ins: Vec<GithubSignIn>,
-    /// Empty from a hub from before apps of your own.
+    /// Empty where the hub has no app of your own.
     #[serde(default)]
     pub github_apps: Vec<GithubApp>,
     /// The terminals open in every workspace. Empty when none is open.

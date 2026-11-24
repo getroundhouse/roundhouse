@@ -45,7 +45,7 @@ pub(crate) struct WorkerLink {
     pub(super) acks: Acks,
     /// Set as the hub leaves the worker running for the next hub, so its going isn't taken for the worker's.
     pub(super) left: AtomicBool,
-    /// Which build the worker said it is, once it has said hello: `None` for a worker from before workers said.
+    /// Which build the worker said it is, once it has said hello: `None` where its hello named none.
     pub(super) build: OnceLock<Option<String>>,
     /// The version of the protocol its hello chose, once it has said hello.
     pub(super) version: OnceLock<u32>,
@@ -217,7 +217,7 @@ impl WorkerLink {
         self.version.get().copied()
     }
 
-    /// The build its hello named. `None` before its hello, and from a worker from before workers said.
+    /// The build its hello named. `None` before its hello, and where it named none.
     pub(crate) fn said_build(&self) -> Option<&str> {
         self.build.get().and_then(Option::as_deref)
     }
