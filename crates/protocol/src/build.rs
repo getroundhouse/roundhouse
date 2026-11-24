@@ -45,7 +45,7 @@ impl StampedBuild {
     }
 }
 
-/// Which build a program is, which its `main` makes with [`this_build!`] and passes down.
+/// Which build a program is, which its `main` makes with [`this_build!`](crate::this_build!) and passes down.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Build {
     stamped: Option<StampedBuild>,

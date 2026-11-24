@@ -7,12 +7,12 @@ use crate::model::CommitId;
 
 /// Every file a worktree changes against its base, committed, uncommitted or untracked, and the lines they add and
 /// remove in all. A file git ignores isn't in it. A worker sends it to its hub, and the hub sends it to clients as
-/// [`Observation::WorkspaceChanges`](super::Observation::WorkspaceChanges), so the two protocols share one form.
+/// [`Observation::WorkspaceChanges`](crate::model::Observation::WorkspaceChanges), so the two protocols share one form.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ChangeSummary {
     /// The commit the summary is taken against: the merge base with the workspace's base ref, or HEAD's commit when
-    /// there's no base ref or git finds no merge base with it, as a [`super::GitDiff`] is. A file's lines change when
-    /// this does, though its content and its version don't.
+    /// there's no base ref or git finds no merge base with it, as a [`GitDiff`](crate::model::GitDiff) is. A file's
+    /// lines change when this does, though its content and its version don't.
     pub base_commit: CommitId,
     /// The sums of the lines of every file the worktree changes, including those `files` leaves out. A file with no
     /// lines counted adds none.
