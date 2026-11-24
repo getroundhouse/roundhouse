@@ -7,7 +7,8 @@ use protocol::model::{Level, Rev};
 
 use super::super::{Kept, Taken};
 
-/// A kind of copy the hub sends whole, with its revision, which a client keeps as [`Rev::supersedes`] says.
+/// A kind of copy the hub sends whole, with its revision, which a client keeps whichever copy of is newer. Every hub a
+/// client of this version reaches gives every copy a revision, as a test of the hub's checks.
 pub(in super::super) trait Revised: PartialEq + Debug {
     type Key: Clone + Eq + Hash + Debug;
 
@@ -65,15 +66,13 @@ impl<T: Revised> ByRevision<T> {
         let this_connection = |taken: Taken| taken >= self.connected;
         let newest = self.listed.get(level).filter(|listed| this_connection(listed.taken)).map(|listed| listed.copy);
         // Older than one already taken in, so everything in it is too.
-        if at != Rev::default() && newest.is_some_and(|newest| at < newest) {
+        if newest.is_some_and(|newest| at < newest) {
             return false;
         }
         let covers = |key: &T::Key| T::level(key).as_ref() == Some(level);
         // Removed on this connection since a copy this list has, so the list read it before it went.
         let removed_since = |key: &T::Key, rev: Rev| {
-            self.removed
-                .get(key)
-                .is_some_and(|gone| this_connection(gone.taken) && at != Rev::default() && gone.copy > rev)
+            self.removed.get(key).is_some_and(|gone| this_connection(gone.taken) && gone.copy > rev)
         };
         let mut next: HashMap<T::Key, Kept<Arc<T>>> = HashMap::new();
         for copy in list {
@@ -90,16 +89,13 @@ impl<T: Revised> ByRevision<T> {
         }
         for (key, held) in &self.held {
             let compared = this_connection(held.taken) || !covers(key);
-            let outlasts_list = !covers(key) || (compared && at != Rev::default() && held.copy.rev() > at);
-            let newer_than_listed =
-                next.get(key).is_none_or(|listed| compared && !listed.copy.rev().supersedes(held.copy.rev()));
+            let outlasts_list = !covers(key) || (compared && held.copy.rev() > at);
+            let newer_than_listed = next.get(key).is_none_or(|listed| compared && listed.copy.rev() <= held.copy.rev());
             if outlasts_list && newer_than_listed {
                 next.insert(key.clone(), held.clone());
             }
         }
-        self.removed.retain(|key, gone| {
-            !covers(key) || (this_connection(gone.taken) && at != Rev::default() && gone.copy > at)
-        });
+        self.removed.retain(|key, gone| !covers(key) || (this_connection(gone.taken) && gone.copy > at));
         let was_listed = self.listed.contains_key(level);
         self.listed.insert(level.clone(), Kept { copy: newest.unwrap_or_default().max(at), taken: *taken });
         let changed = next != self.held || !was_listed;
@@ -111,9 +107,9 @@ impl<T: Revised> ByRevision<T> {
     pub(in super::super) fn apply(&mut self, copy: T, taken: &mut Taken) -> bool {
         let Some(key) = copy.key() else { return false };
         let rev = copy.rev();
-        let removed_since = self.removed.get(&key).is_some_and(|gone| !rev.supersedes(gone.copy));
+        let removed_since = self.removed.get(&key).is_some_and(|gone| rev <= gone.copy);
         let held = self.held.get(&key).map(|held| &*held.copy);
-        let held_is_newer = held.is_some_and(|held| !rev.supersedes(held.rev()));
+        let held_is_newer = held.is_some_and(|held| rev <= held.rev());
         if self.listed_already(&key, rev) || removed_since || held_is_newer || held == Some(&copy) {
             return false;
         }
@@ -131,7 +127,7 @@ impl<T: Revised> ByRevision<T> {
         // One from an earlier connection says nothing of this one's revisions.
         let copy = if gone.taken >= connected { gone.copy.max(rev) } else { rev };
         *gone = Kept { copy, taken: *taken };
-        if self.held.get(key).is_some_and(|held| rev.supersedes(held.copy.rev())) {
+        if self.held.get(key).is_some_and(|held| rev > held.copy.rev()) {
             self.held.remove(key);
             return true;
         }
@@ -169,6 +165,6 @@ impl<T: Revised> ByRevision<T> {
     /// Whether the newest list of `key`'s level already says what a copy or a removal of it at `rev` says.
     fn listed_already(&self, key: &T::Key, rev: Rev) -> bool {
         let listed = T::level(key).and_then(|level| self.listed.get(&level).map(|listed| listed.copy));
-        listed.is_some_and(|listed| rev != Rev::default() && rev <= listed)
+        listed.is_some_and(|listed| rev <= listed)
     }
 }

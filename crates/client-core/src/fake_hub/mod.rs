@@ -6,6 +6,7 @@
 #![cfg(unix)]
 #![expect(clippy::unwrap_used, reason = "only tests use it, so failing loudly is what it should do")]
 
+mod asked;
 mod base_pages;
 mod chats;
 pub mod events;
@@ -14,6 +15,8 @@ mod github;
 mod listing;
 mod logs;
 mod model_lists;
+mod observing;
+mod old_forms;
 mod parts;
 mod revisions;
 mod serve;
@@ -21,11 +24,14 @@ mod stand_in;
 mod terminals;
 #[cfg(test)]
 mod tests;
+mod whole_diff;
 mod worker_reads;
 mod world;
 
+pub use asked::Asked;
 pub use following::Following;
-pub use github::{GithubSays, GithubSends};
+pub use github::GithubSays;
+pub use old_forms::OLD_FORM;
 pub use serve::serve;
 pub use stand_in::{BUILD, BUILD_NUMBER};
 pub use worker_reads::WorkerReads;

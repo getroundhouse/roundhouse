@@ -66,20 +66,6 @@ fn a_list_and_the_feed_keep_whichever_copy_is_newer_whatever_order_they_come_in(
     assert_eq!(calls(&subagents, "s"), ["b", "a"], "in the order they started");
 }
 
-#[test]
-fn a_copy_with_no_revision_replaces_the_one_held_as_any_records_does() {
-    let mut subagents = Subagents::default();
-    subagents.want("s".into());
-    subagents.apply(subagent("s", "a", 1, 5));
-    let mut finished = subagent("s", "a", 1, 0);
-    finished.status = SubagentStatus::Finished;
-
-    assert!(subagents.apply(finished.clone()));
-    assert!(!subagents.apply(finished.clone()), "the same copy again changes nothing");
-
-    assert_eq!(shown(&subagents, "s", "a"), Some(finished));
-}
-
 /// A session's list says which of its subagents there are, so one held that it lacks is gone, unless the copy held is
 /// newer than the list, and a copy no newer than it is already said, as for any level's list. A removal drops an older
 /// copy, as for any record.

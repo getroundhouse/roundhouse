@@ -9,7 +9,7 @@ use client_core::{Client, SubscriptionItem};
 use protocol::client::HubNotice;
 use protocol::event::EventBody;
 use protocol::model::{
-    Account, AccountId, AgentAccount, LimitWindow, ModelLabel, Seq, SessionId, SessionStatus, UsageLimit,
+    Account, AccountId, AgentAccount, LimitWindow, ModelLabel, Observation, Seq, SessionId, SessionStatus, UsageLimit,
 };
 use serde_json::json;
 
@@ -102,12 +102,12 @@ fn a_chat_names_the_account_its_agent_launched_under_and_the_feed_announces_what
     // The feed says so, so a client that isn't asking sees the limits as soon as they're heard.
     let told = std::iter::from_fn(|| feed.items.recv_timeout(TIMEOUT).ok()).find_map(|item| match item {
         SubscriptionItem::Notice(notice) => match *notice {
-            HubNotice::Account(told) if !told.limits.is_empty() => Some(told),
+            HubNotice::Observation(Observation::AccountLimits { account, .. }) => Some(account),
             _ => None,
         },
         _ => None,
     });
-    assert_eq!(told.map(|told| told.id), ada().id);
+    assert_eq!(told, ada().id);
 }
 
 #[test]

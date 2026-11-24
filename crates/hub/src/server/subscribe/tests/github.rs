@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use github::References;
 use protocol::client::listed::Listed;
-use protocol::client::subscriptions::{FeedSubscribe, Follow, Subscribe, Subscription};
+use protocol::client::subscriptions::{Follow, Subscribe, Subscription};
 use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
 use protocol::model::{
     About, GithubRepositoryName, Issue, IssueNumber, IssueState, IssueSummary, Observation, Observed, Read, Reference,
@@ -133,32 +133,4 @@ async fn a_connection_that_reads_every_observation_is_sent_github_as_observation
 
     client.until("the observation", |sent| sent.iter().any(|frame| said_of_twelve(frame).is_some())).await;
     assert!(!client.sent.iter().any(github), "{:?}", client.sent);
-}
-
-/// A client of version 3, which follows the feed, is sent no observation of a chip that another client follows, since
-/// it reads what GitHub says as `HubFrame::Github`.
-#[tokio::test]
-async fn the_feed_sends_no_observation_of_github() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_an_issue(dir.path()).await;
-    let mut before = Connection::greeted(&hub, 3).await;
-    ok(&mut before, 1, FeedSubscribe { subscription_id: 1 }).await;
-    let mut observing_client = Connection::greeted(&hub, 4).await;
-
-    let starts = vec![observing(1, Follow::Reference { reference: twelve() })];
-    ok(&mut observing_client, 1, Subscribe { stop: Vec::new(), start: starts }).await;
-    observing_client.until("the observation", |sent| sent.iter().any(|frame| said_of_twelve(frame).is_some())).await;
-    // Of a session's level, which `FeedSubscribe` is sent too, as it is every notice but a workspace's level's. Sent
-    // after the observation, so once the feed's subscriber has it, it would have had the observation.
-    hub.notify(super::given::subagent_made(&hub));
-
-    before
-        .until("the notice after it", |sent| {
-            sent.iter().any(|frame| matches!(frame, HubFrame::Notice { notice: HubNotice::Subagent(_), .. }))
-        })
-        .await;
-    assert!(!before.sent.iter().any(|frame| matches!(
-        frame,
-        HubFrame::Notice { notice: HubNotice::Observation(_) | HubNotice::ObservationRemoved { .. }, .. }
-    )));
 }

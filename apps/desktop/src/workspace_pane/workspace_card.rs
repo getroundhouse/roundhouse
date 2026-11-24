@@ -60,7 +60,6 @@ impl Said {
         let hub = (!hub_version.is_empty()).then(|| SharedString::from(hub_version.to_string()));
         let (version, moving_to) = match records.worker_build(workspace) {
             WorkerBuild::NotKnown => (None, None),
-            WorkerBuild::Hubs => (hub.map(Version::Named), None),
             WorkerBuild::Other(Some(build)) => {
                 let moving_to = hub.filter(|hub| hub != build);
                 (Some(Version::Named(SharedString::from(build.to_string()))), moving_to)
@@ -151,7 +150,7 @@ fn runs_on(workspace: &Workspace) -> SharedString {
 #[cfg(test)]
 mod tests {
     use client_core::records::HubRecords;
-    use protocol::model::Records;
+    use protocol::model::{Observation, Observed, OtherBuild, Records, Rev};
 
     use super::*;
 
@@ -159,37 +158,50 @@ mod tests {
         Workspace { path: Some("/workspaces/aspen".into()), port_base: 4000, ..protocol::fixtures::workspace("w") }
     }
 
-    /// What the card says of `workspace`, as a client that holds it reads it, with the hub at `hub_version`.
-    fn said_of(workspace: &Workspace, hub_version: &str) -> Said {
+    /// What the card says of `workspace`, as a client that holds it reads it, with the hub at `hub_version`, and its
+    /// worker another build, as `other` says, where it is.
+    fn said_of(workspace: &Workspace, other: Option<OtherBuild>, hub_version: &str) -> Said {
+        let observations = other.map(|other| Observation::WorkspaceWorkerBuild {
+            workspace_id: workspace.id.clone(),
+            build: Observed::Current { value: other },
+            rev: Rev::new(2),
+        });
         let mut held = HubRecords::default();
-        held.apply_list(Records { workspaces: vec![workspace.clone()], ..Records::default() });
+        let listed = Records {
+            workspaces: vec![workspace.clone()],
+            observations: observations.into_iter().collect(),
+            rev: Rev::new(2),
+            ..Records::default()
+        };
+        held.apply_list(listed);
         Said::of(&held.snapshot(), workspace, hub_version, &[])
     }
 
+    /// The hub says which build a worker is only of one that's another build than its own, so a workspace whose
+    /// worker it says nothing of, as one of its own build or none, draws no version.
     #[test]
-    fn a_workspace_on_the_hub_s_build_says_only_that() {
-        let said = said_of(&aspen(), "1.0.0");
+    fn a_workspace_whose_worker_isn_t_known_says_no_version() {
+        let said = said_of(&aspen(), None, "1.0.0");
 
-        assert_eq!(said.version, Some(Version::Named("1.0.0".into())));
-        assert_eq!(said.moving_to, None);
+        assert_eq!((said.version, said.moving_to), (None, None));
         assert_eq!(said.ports.as_deref(), Some("4000–4009"));
         assert_eq!(said.path.as_deref(), Some("/workspaces/aspen"));
     }
 
     #[test]
-    fn a_workspace_still_on_another_build_says_which_it_moves_to() {
-        let workspace = Workspace { worker_build: Some("0.9.0".into()), ..aspen() };
+    fn a_workspace_still_on_another_build_says_which_and_what_it_moves_to() {
+        let named = said_of(&aspen(), Some(OtherBuild { said: Some("0.9.0".into()) }), "1.0.0");
+        let unnamed = said_of(&aspen(), Some(OtherBuild { said: None }), "1.0.0");
 
-        let said = said_of(&workspace, "1.0.0");
-
-        assert_eq!((said.version, said.moving_to.as_deref()), (Some(Version::Named("0.9.0".into())), Some("1.0.0")));
+        assert_eq!((named.version, named.moving_to.as_deref()), (Some(Version::Named("0.9.0".into())), Some("1.0.0")));
+        assert_eq!((unnamed.version, unnamed.moving_to.as_deref()), (Some(Version::Earlier), Some("1.0.0")));
     }
 
     #[test]
     fn what_isn_t_known_is_left_out() {
         let workspace = Workspace { path: None, port_base: 0, ..aspen() };
 
-        let said = said_of(&workspace, "");
+        let said = said_of(&workspace, None, "");
 
         assert_eq!((said.path, said.version, said.ports), (None, None, None));
     }

@@ -77,6 +77,11 @@ impl<R: OfSession> BySession<R> {
         self.changed(|held, _| held.let_go(&Level::Session { id: session.clone() }))
     }
 
+    /// Whether something follows `session`, so its records are kept.
+    pub(crate) fn follows(&self, session: &SessionId) -> bool {
+        self.wanted.contains_key(session)
+    }
+
     /// Starts a new connection, as [`ByRevision::connected_again`] says.
     pub(crate) fn connected_again(&mut self) {
         self.held.connected_again(&mut self.taken);

@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use client_core::fake_hub::{WorkerReads, World};
+use client_core::fake_hub::{Asked, WorkerReads, World};
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::model::{
     ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, CommitId, FileDiff, FileDiffBody, FileVersion, GitDiff,
@@ -103,14 +103,15 @@ pub(super) const VERSION: &str = "5626abf";
 
 /// A workspace whose summary lists the first `most` of `files` and leaves out the rest, with its totals over all of
 /// them, on a fake hub whose worker reads what `reads` says on request, and is otherwise from before the requests, and
-/// the diff Changes lists.
+/// the diff Changes lists, and what the hub was asked.
 pub(super) fn summarized(
     cx: &mut TestAppContext,
     (files, most): (Vec<ChangedFile>, usize),
     reads: WorkerReads,
     said: fn(ChangeSummary) -> Observed<ChangeSummary>,
-) -> (FakeHub, Ui<'_>, Diff) {
+) -> (FakeHub, Ui<'_>, Diff, Asked) {
     let mut world = World::default();
+    let asked = world.asked.clone();
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");
     world.chat(&workspace, protocol::model::SessionStatus::Idle, Vec::new());
@@ -127,7 +128,7 @@ pub(super) fn summarized(
     let mut ui = Ui::open_on(cx, &fake);
     ui.wait("a workspace", |ui| ui.view().selected().is_some() && ui.pane().is_some());
     let diff = ui.open_changes();
-    (fake, ui, diff)
+    (fake, ui, diff, asked)
 }
 
 /// `files`, with `a.txt` at `version`.

@@ -38,15 +38,17 @@ pub fn cache_worth_telling<'a>(session: &Session, cache: ConversationCache<'a>) 
 #[cfg(test)]
 mod tests {
     use protocol::model::{
-        CACHE_WORTH_TELLING_TOKENS, CacheTtl, ContextUsage, PromptCache, Records, Seq, Session, SessionStatus,
+        CACHE_WORTH_TELLING_TOKENS, CacheTtl, ContextUsage, ConversationCache, Observation, Observed, PromptCache,
+        Records, Rev, Seq, Session, SessionStatus,
     };
     use serde_json::json;
 
     use super::{cache_worth_telling, idle_cache};
     use crate::records::HubRecords;
 
-    /// A chat in `status`, as a hub names it, whose agent's context holds `used_tokens`.
-    fn session(status: &str, used_tokens: u64) -> Session {
+    /// A chat in `status`, as a hub names it, whose agent's context holds `used_tokens`, with what its cache holds as
+    /// the hub's level sends it.
+    fn session(status: &str, used_tokens: u64) -> (Session, Observation) {
         let context = ContextUsage {
             used_tokens,
             max_tokens: 1_000_000,
@@ -54,19 +56,26 @@ mod tests {
             max_set_by: None,
             parts: Vec::new(),
         };
-        Session {
+        let session = Session {
             status: serde_json::from_value::<SessionStatus>(json!(status)).unwrap(),
             last_seq: Seq::new(4),
-            context: Some(context),
-            prompt_cache: Some(PromptCache { used_at_ms: 0, ttl: CacheTtl::OneHour, model: None, tokens: 0 }),
             ..protocol::fixtures::session("s")
-        }
+        };
+        let held = PromptCache { used_at_ms: 0, ttl: CacheTtl::OneHour, model: None, tokens: 0 };
+        let cache = Observed::AsOf { value: ConversationCache::worked_out(Some(held), Some(&context)), as_of_ms: 1 };
+        (session.clone(), Observation::SessionCache { session_id: session.id, cache, rev: Rev::new(2) })
     }
 
-    /// What `session`'s cache is worth, as a client that holds it reads it.
-    fn told(session: &Session) -> (bool, bool) {
+    /// What `session`'s cache is worth, as a client that holds it, and what its cache holds, reads it.
+    fn told((session, cache): &(Session, Observation)) -> (bool, bool) {
         let mut held = HubRecords::default();
-        held.apply_list(Records { sessions: vec![session.clone()], ..Records::default() });
+        let listed = Records {
+            sessions: vec![session.clone()],
+            observations: vec![cache.clone()],
+            rev: Rev::new(3),
+            ..Records::default()
+        };
+        held.apply_list(listed);
         let snapshot = held.snapshot();
         let cache = snapshot.conversation_cache(snapshot.session(&session.id).unwrap());
         (idle_cache(session, cache).is_some(), cache_worth_telling(session, cache).is_some())
@@ -78,8 +87,9 @@ mod tests {
         assert_eq!(told(&session("waiting_approval", 313_500)), (true, true), "it can expire while it waits");
         assert_eq!(told(&session("idle", CACHE_WORTH_TELLING_TOKENS - 1)), (true, false));
         assert_eq!(told(&session("running", 313_500)), (false, false), "each request keeps it warm");
-        let closed = Session { closed_at_ms: Some(1), ..session("idle", 313_500) };
-        assert_eq!(told(&closed), (true, false), "nobody will send a closed chat anything");
+        let (open, cache) = session("idle", 313_500);
+        let closed = Session { closed_at_ms: Some(1), ..open };
+        assert_eq!(told(&(closed, cache)), (true, false), "nobody will send a closed chat anything");
     }
 
     #[test]

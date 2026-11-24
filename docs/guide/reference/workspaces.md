@@ -36,7 +36,7 @@ Rest the pointer on a workspace's name in its header for a card that says where 
 
 - **Its warnings,** first, while it has any, with what to do about each. A warning's sign after the name says there are some.
 - **The path of its worktree,** with a button that copies it.
-- **The version its agents run on,** and where they run.
+- **The version its agents run on, while it's another than the hub's,** and where they run.
 - **Its ten ports.**
 
 ![The card a workspace's name opens](../../spec/screens/workspace-card.png)

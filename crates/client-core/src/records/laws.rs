@@ -7,7 +7,7 @@ use proptest::test_runner::{Config, RngSeed};
 
 use protocol::model::{
     Account, FoundGithubLogin, GhLogin, GhLoginWorks, GithubReach, GithubRepositoryName, HubSettings, HubUpdate,
-    LimitWindow, NewWorkspaceDraft, Reach, Record, Session, SessionId, Title, UsageLimit,
+    NewWorkspaceDraft, Reach, Record, Session, SessionId, Title,
 };
 
 use super::*;
@@ -33,12 +33,12 @@ fn session(id: &SessionId, title: u8, rev: u64) -> Session {
 
 impl Hub {
     /// Few records, so changes land on the same ones often. A removed record never comes back, as an
-    /// ID is never reused. `revisions` off is a hub from before they existed.
-    fn run(changes: &[(u8, u8)], revisions: bool) -> Hub {
+    /// ID is never reused.
+    fn run(changes: &[(u8, u8)]) -> Hub {
         let mut held: Vec<Session> = Vec::new();
         let mut removed: Vec<SessionId> = Vec::new();
-        // A hub that keeps revisions starts at 1, because 0 means one that doesn't.
-        let rev_at = |count: usize| if revisions { u64::try_from(count).unwrap() + 1 } else { 0 };
+        // From 1, as a hub's counter starts.
+        let rev_at = |count: usize| u64::try_from(count).unwrap() + 1;
         let mut hub =
             Hub { notices: Vec::new(), lists: vec![Records { rev: Rev::new(rev_at(0)), ..Records::default() }] };
         for &(which, what) in changes {
@@ -93,7 +93,7 @@ fn changes() -> impl Strategy<Value = Vec<(u8, u8)>> {
 /// Every notice at least once, some twice, and lists read at any point, all in any order.
 fn everything_in_any_order() -> impl Strategy<Value = (Hub, Vec<Delivery>)> {
     (changes(), vec(any::<Index>(), 0..6), vec(any::<Index>(), 0..4)).prop_flat_map(|(changes, again, lists)| {
-        let hub = Hub::run(&changes, true);
+        let hub = Hub::run(&changes);
         let mut deliveries = Vec::from_fn(hub.notices.len(), Delivery::Notice);
         if !hub.notices.is_empty() {
             deliveries.extend(again.iter().map(|i| Delivery::Notice(i.index(hub.notices.len()))));
@@ -106,7 +106,7 @@ fn everything_in_any_order() -> impl Strategy<Value = (Hub, Vec<Delivery>)> {
 /// Some notices lost, as when a client falls behind, then a list read after the last change.
 fn some_lost_then_a_list() -> impl Strategy<Value = (Hub, Vec<Delivery>)> {
     (changes(), vec(any::<Index>(), 0..12), vec(any::<Index>(), 0..4)).prop_flat_map(|(changes, kept, lists)| {
-        let hub = Hub::run(&changes, true);
+        let hub = Hub::run(&changes);
         let mut deliveries: Vec<Delivery> = Vec::new();
         if !hub.notices.is_empty() {
             deliveries.extend(kept.iter().map(|i| Delivery::Notice(i.index(hub.notices.len()))));
@@ -148,26 +148,6 @@ proptest! {
 
         prop_assert_eq!(sessions(&records), hub.now());
     }
-
-    /// A hub without revisions: subscribe, list, then take the notices that queued since, in order,
-    /// which is what one connection gives.
-    #[test]
-    fn without_revisions_the_order_of_one_connection_is_enough(
-        changes in changes(),
-        listed_at in any::<Index>(),
-        subscribed_at in any::<Index>(),
-    ) {
-        let hub = Hub::run(&changes, false);
-        let listed_at = listed_at.index(hub.lists.len());
-        let mut records = HubRecords::default();
-
-        hub.deliver(&mut records, Delivery::List(listed_at));
-        for at in subscribed_at.index(listed_at + 1)..hub.notices.len() {
-            hub.deliver(&mut records, Delivery::Notice(at));
-        }
-
-        prop_assert_eq!(sessions(&records), hub.now());
-    }
 }
 
 /// A kind of record other than a session, for what the laws above say of sessions, which holds for every kind.
@@ -186,9 +166,9 @@ fn kinds() -> [Kind; 6] {
         Kind {
             name: "what a hub found in the update feed",
             copy: |version, rev| {
-                let found = Some(format!("0.1.{version}"));
+                let looked_at_ms = i64::from(version);
                 let update =
-                    HubUpdate { version: found, looked_at_ms: 1, problem: None, attempt: None, rev: Rev::new(rev) };
+                    HubUpdate { version: None, looked_at_ms, problem: None, attempt: None, rev: Rev::new(rev) };
                 Record::HubUpdate(update)
             },
             other: None,
@@ -318,15 +298,8 @@ fn dialog(text: &str, rev: u64) -> NewWorkspaceDraft {
     NewWorkspaceDraft { text: text.to_string(), rev: Rev::new(rev), ..NewWorkspaceDraft::default() }
 }
 
-fn account(id: &str, used_percent: u8, rev: u64) -> Account {
-    let limit =
-        UsageLimit { window: LimitWindow::SevenDays, model: None, used_percent, resets_at_ms: None, heard_at_ms: None };
-    Account {
-        email: Some(format!("{id}@example.com")),
-        limits: vec![limit],
-        rev: Rev::new(rev),
-        ..protocol::fixtures::account(id)
-    }
+fn account(id: &str, used_at_ms: u8, rev: u64) -> Account {
+    Account { used_at_ms: Some(i64::from(used_at_ms)), rev: Rev::new(rev), ..protocol::fixtures::account(id) }
 }
 
 fn found(provider: &str, login: GhLogin, rev: u64) -> FoundGithubLogin {

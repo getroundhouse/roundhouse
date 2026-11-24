@@ -5,21 +5,24 @@
 //! runs. Views read them all through a [`Snapshot`].
 //!
 //! No IO. Lists, feed notices and replies can arrive in any order, and each record keeps whichever copy has the newer
-//! revision, so the result is the same however they interleave. A hub that doesn't keep revisions sends 0, and then the
-//! copy that arrives last wins. One ordered connection keeps that right for lists and notices, though a reply can still
-//! overtake a notice.
+//! revision, so the result is the same however they interleave.
 
 #[cfg(test)]
 use protocol::client::HubNotice;
 #[cfg(test)]
 use protocol::model::{RecordKey, Records, Rev};
 
+mod blanking;
 mod by_revision;
 #[cfg(test)]
 mod laws;
+#[cfg(any(test, feature = "testing"))]
+mod observed_of;
 mod of_session;
 mod snapshot;
 
+#[cfg(any(test, feature = "testing"))]
+pub use observed_of::{observed_of, with_observations};
 pub use of_session::subagent_named;
 pub use snapshot::{AccountIdentity, Changes, GithubName, InWorkspace, ListOfModels, Snapshot, WorkerBuild};
 

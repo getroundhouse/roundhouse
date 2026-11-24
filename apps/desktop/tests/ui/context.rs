@@ -14,7 +14,8 @@ use crate::support::{Gate, Stack, Ui, one_chat, open_on_the_chat};
 /// How full the record of the chat showing says its agent's context is.
 fn context(ui: &Ui<'_>) -> Option<ContextUsage> {
     let pane = ui.pane()?;
-    ui.cx.read_entity(&pane, |pane, _| pane.session().and_then(|session| session.context.clone()))
+    let session = ui.cx.read_entity(&pane, |pane, _| pane.session().cloned())?;
+    ui.view().records().context(&session).cloned()
 }
 
 /// What the ring says to assistive apps, which is how full it's drawn.

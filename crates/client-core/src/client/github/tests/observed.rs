@@ -1,5 +1,5 @@
-//! What a client holds of GitHub's observations, against a fake hub that sends them as a hub of each build does, and
-//! what a view is told of them.
+//! What a client holds of GitHub's observations, against a fake hub that sends them as a hub does, and what a view is
+//! told of them.
 
 use std::time::Duration;
 
@@ -11,8 +11,8 @@ use protocol::model::{
     RepositoryUnseen, Rev, SessionStatus, WorkspaceId,
 };
 
-use super::super::held::{GithubHeld, github_keys, notice_key};
-use crate::fake_hub::{GithubSends, World, serve};
+use super::super::held::{GithubHeld, HeldObservations, github_keys, notice_key};
+use crate::fake_hub::{World, serve};
 use crate::records::HubRecords;
 use crate::{Client, FollowedWorkspace, GithubFeed, RecordsFeed, ShownOfGithub};
 
@@ -27,11 +27,10 @@ fn twelve() -> ReferenceAsk {
 }
 
 /// A world with the workspace `elm`, whose pull request is #7, open with a check running and its worktree a commit
-/// ahead, the workspace `oak`, where GitHub showed no repository, and issue 12, served by a hub that sends GitHub as
-/// `sends` says, with a client of it, and the directory its socket is in, which goes when the test ends.
-fn served(sends: GithubSends) -> (tempfile::TempDir, Client) {
+/// ahead, the workspace `oak`, where GitHub showed no repository, and issue 12, with a client of a hub that serves it,
+/// and the directory its socket is in, which goes when the test ends.
+fn served() -> (tempfile::TempDir, Client) {
     let mut world = World::default();
-    world.github_says.sends = sends;
     let repo = world.repo("aspen");
     let elm = world.workspace(&repo, "elm");
     let oak = world.workspace(&repo, "oak");
@@ -112,32 +111,13 @@ impl Read {
     }
 }
 
-/// Which form the feed holds each in: the workspace's pull request, and the chip, each as (an observation, an update).
-fn forms(feed: &GithubFeed, elm: &WorkspaceId) -> [(bool, bool); 2] {
-    [
-        feed.held_as(&ObservationKey::WorkspacePullRequest { workspace_id: elm.clone() }),
-        feed.held_as(&ObservationKey::Reference { reference: twelve() }),
-    ]
-}
-
-/// A view reads the same of GitHub whichever form its hub sends: as observations at every level from a hub of this
-/// build, as `GithubUpdate` at every level from one from before them, and each form at its own levels from one that
-/// sends only a chip as an observation. Each is held in the form its hub sent, so what the view read came from that
-/// form.
+/// A view reads what GitHub says of a workspace's own pull request, of a repository GitHub showed none of, and of a
+/// chip, as the hub's observations of each say, once they've come.
 #[test]
-fn a_view_reads_the_same_of_github_whichever_form_its_hub_sends_it_in() {
-    let mut read = Vec::new();
-    for (sends, held) in [
-        (GithubSends::Observations, [(true, false), (true, false)]),
-        (GithubSends::Updates, [(false, true), (false, true)]),
-        (GithubSends::ChipsObserved, [(false, true), (true, false)]),
-    ] {
-        let (_dir, client) = served(sends);
-        let (said, records, _shown) = read_once_said(&client);
-        let elm = records.snapshot().workspaces().iter().find(|w| w.name == "elm").unwrap().id.clone();
-        assert_eq!(forms(&records.github(), &elm), held, "{sends:?}");
-        read.push(said);
-    }
+fn a_view_reads_github_from_the_hubs_observations() {
+    let (_dir, client) = served();
+
+    let (read, _records, _shown) = read_once_said(&client);
 
     let expected = Read {
         state: Some(PrState::Open),
@@ -147,7 +127,7 @@ fn a_view_reads_the_same_of_github_whichever_form_its_hub_sends_it_in() {
         chip: Some("Decide".into()),
         said: true,
     };
-    assert_eq!(read, vec![expected; 3]);
+    assert_eq!(read, expected);
 }
 
 /// How `w`'s pull request stands, saying it's at `head` and stands as `state`, at `rev`.
@@ -211,8 +191,9 @@ impl Holding {
 
     fn pull_request(&self, w: &str) -> Option<OwnPullRequest> {
         let snapshot = self.records.snapshot();
-        let observed = |key: &ObservationKey| snapshot.github_observation(key);
-        self.held.pull_request(&w.into(), &observed).and_then(|found| found.pull_request)
+        let of = |key: &ObservationKey| snapshot.observation(key);
+        let observed = HeldObservations { of: &of, hub_listed: snapshot.hub_listed() };
+        GithubHeld::pull_request(&w.into(), &observed).and_then(|found| found.pull_request)
     }
 }
 
@@ -235,8 +216,8 @@ fn the_detail_goes_with_the_summary_only_at_its_head() {
     assert!(read.pull_request.checks.is_some() && read.pull_request.stack.is_some());
 }
 
-/// A view is told of a change to an observation of what it shows, as it's told of a `GithubUpdate`, and isn't told of
-/// one of what it doesn't show, or one that changes nothing.
+/// A view is told of a change to an observation of what it shows, and isn't told of one of what it doesn't show, or
+/// one that changes nothing.
 #[test]
 fn a_view_is_told_of_a_change_to_what_it_shows_and_of_nothing_else() {
     let mut holding = Holding::default();

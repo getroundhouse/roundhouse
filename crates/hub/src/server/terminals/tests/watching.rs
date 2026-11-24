@@ -4,7 +4,9 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use protocol::client::terminals::{TerminalRows, TerminalWatch};
+use protocol::client::Request;
+use protocol::client::subscriptions::{Follow, Subscribe, Subscription};
+use protocol::client::terminals::TerminalRows;
 use protocol::client::{ApiError, ClientRequest, HubFrame};
 use protocol::terminal::{
     Numbering, PictureSending, RowJson, RowNumber, ScreenState, Shown, Span, TerminalExit, TerminalPicture,
@@ -241,7 +243,8 @@ async fn a_reply_to_a_slow_client_waits_behind_little_of_a_watched_terminal() {
     let dir = tempfile::tempdir().unwrap();
     let mut worker = Worker::open(dir.path()).await;
     let mut connected = Connected::to(&worker.hub, 16 * 1024).await;
-    connected.send(1, ClientRequest::TerminalWatch(TerminalWatch { id: "t".into(), subscription_id: 7 })).await;
+    let watch = Subscribe { stop: Vec::new(), start: vec![Subscription::new(7, Follow::Terminal { id: "t".into() })] };
+    connected.send(1, watch.into_request()).await;
     settled().await;
     let wide = "x".repeat(1024);
 

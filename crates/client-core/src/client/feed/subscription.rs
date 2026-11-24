@@ -1,11 +1,10 @@
 use super::super::follow::{FollowError, Following, Reach, Source};
-use super::super::github::{github_keys, notice_key, own_keys};
+use super::super::github::{github_keys, notice_key};
 use super::super::workspace_level::{FollowedWorkspace, Workspaces};
 use super::super::{Client, ClientError, GithubFeed, Result, Subscription, SubscriptionItem};
 use crate::Agents;
 use crate::records::{HubRecords, Snapshot};
 use parking_lot::Mutex;
-use protocol::client::github::GithubUpdate;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::Follow;
 use protocol::model::WorkspaceId;
@@ -143,7 +142,7 @@ impl Source for RecordsSource {
                 Listed::Hub(records) => {
                     let keys = github_keys(&records.observations);
                     let changed = held.lock().apply_list(*records);
-                    self.github.relisted(&keys, changed);
+                    self.github.observed(&keys, changed);
                     changed
                 }
                 // Of another level, which this doesn't follow.
@@ -157,18 +156,9 @@ impl Source for RecordsSource {
                 }
                 changed
             }
-            SubscriptionItem::Github(update) => {
-                // The hub sends it in the form from before observations, so what's held of it as one goes.
-                if let GithubUpdate::PullRequest { workspace, .. } = &*update {
-                    let own = own_keys(workspace);
-                    let forgot = held.lock().forget_observed(|key| own.contains(key));
-                    self.github.take(*update);
-                    return Ok(forgot);
-                }
-                self.github.take(*update);
-                false
-            }
-            SubscriptionItem::Event(_)
+            // Sent only to a client of version 4 that doesn't read GitHub as observations.
+            SubscriptionItem::Github(_)
+            | SubscriptionItem::Event(_)
             | SubscriptionItem::Tail(_)
             | SubscriptionItem::Delta(_)
             | SubscriptionItem::Terminal(_)

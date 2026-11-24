@@ -47,7 +47,7 @@ fn each_file_at_a_path_listed_twice_shows_its_own_diff(cx: &mut TestAppContext) 
         reads.file_diffs.insert((ChangedFileAt { untracked, path: "a.txt".into() }, 0), vec![page]);
     }
     let read = reads.diffs_read.clone();
-    let (_hub, mut ui, diff) = summarized(cx, (files, 2), reads, current);
+    let (_hub, mut ui, diff, _asked) = summarized(cx, (files, 2), reads, current);
     let drawn = |ui: &crate::support::Ui<'_>| {
         ui.cx.read_entity(&diff.file, |view, cx| view.file(cx).map(|file| (file.added(), file.removed())))
     };

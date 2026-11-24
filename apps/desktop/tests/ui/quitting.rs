@@ -70,7 +70,7 @@ fn whats_typed_just_before_quitting_is_kept(cx: &mut TestAppContext) {
 fn leave_something_in_the_dialog(ui: &mut Ui<'_>, stack: &Stack) -> Frozen {
     ui.give_up_on_a_frozen_hub_soon();
     ui.open_new_workspace();
-    let frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
+    let frozen = ui.freeze_hub(stack);
     ui.input("half a thought");
     ui.press("escape");
     frozen
@@ -146,7 +146,7 @@ fn quitting_asks_about_whats_typed_once_the_hub_has_had_long_enough_to_take_it(c
     ui.input("half");
     ui.view().drafts().unwrap().flushed().recv().unwrap();
     ui.give_up_on_a_frozen_hub_soon();
-    let _frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
+    let _frozen = ui.freeze_hub(&stack);
     ui.input(" a thought");
 
     quit_from_the_menu(&mut ui);
@@ -158,7 +158,7 @@ fn quitting_asks_about_whats_typed_once_the_hub_has_had_long_enough_to_take_it(c
 
 /// Sends a prompt while the hub doesn't answer, so it's still on its way.
 fn send_to_a_frozen_hub(ui: &mut Ui<'_>, stack: &Stack) -> Frozen {
-    let frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
+    let frozen = ui.freeze_hub(stack);
     ui.input("say:look");
     ui.press("enter");
     frozen
@@ -192,7 +192,7 @@ fn quitting_waits_for_a_prompt_on_its_way_to_the_hub(cx: &mut TestAppContext) {
 fn quitting_waits_for_a_call_on_its_way_to_the_hub(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
+    let frozen = ui.freeze_hub(&stack);
     let _reply = ui.view().client().unwrap().start(client_core::Client::hub_status);
     let thawing = frozen.thaw_after(Duration::from_millis(500));
 

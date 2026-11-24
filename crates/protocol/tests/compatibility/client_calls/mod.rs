@@ -8,6 +8,7 @@ mod pinned;
 mod pinned_replies;
 mod replies;
 mod requests;
+mod retired;
 mod session_requests;
 
 mod round_trip;

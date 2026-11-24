@@ -4,9 +4,13 @@
 use protocol::model::{GithubAppSlug, GithubRepositoryName, GithubUsername};
 
 /// Where GitHub installs the app called `slug` from, letting the person choose its repositories, and, where it's
-/// installed already, change which it reaches.
-pub(crate) fn install_page(slug: &GithubAppSlug) -> String {
-    format!("https://github.com/apps/{slug}/installations/new")
+/// installed already, change which it reaches. GitHub's page of apps while what it calls the app isn't known, as
+/// `docs/spec/settings.md` says.
+pub(crate) fn install_page(slug: Option<&GithubAppSlug>) -> String {
+    match slug {
+        Some(slug) => format!("https://github.com/apps/{slug}/installations/new"),
+        None => "https://github.com/apps/".to_string(),
+    }
 }
 
 /// Whether `repository` is of the owner an app is installed `on`, as GitHub compares names, without case. An app of

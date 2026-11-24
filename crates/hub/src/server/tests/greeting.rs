@@ -18,6 +18,7 @@ fn hello(newest: impl std::fmt::Display, oldest: Option<u32>) -> String {
 const STATUS: &str = r#"{"method":"hub_status"}"#;
 
 /// What the hub does with a frame.
+#[derive(Clone)]
 enum Then {
     /// Takes a hello, at this version.
     Greets(u32),
@@ -72,6 +73,8 @@ fn cases() -> Vec<(&'static str, Vec<Step>)> {
         (hello(ours, None), hello(HUB_SPEAKS.oldest, None), hello(newest + 1, Some(ours)));
     let (past_range, unspoken, unreadable) =
         (hello(newest + 2, Some(newest + 1)), hello(9999, None), hello(r#""3""#, None));
+    // Spelled out, since it's the version this hub stopped speaking, whatever it speaks next.
+    let too_old = hello(3, None);
     let mismatch = |says: &str| Then::Refuses(ErrorCode::VersionMismatch, says.to_string());
     let past = mismatch(&format!("protocols {} to {}", newest + 1, newest + 2));
     let unsupported = || Then::Refuses(ErrorCode::Unsupported, String::new());
@@ -93,6 +96,11 @@ fn cases() -> Vec<(&'static str, Vec<Step>)> {
             calls(vec![(&past_range, past), (STATUS, Then::Closes)]),
         ),
         ("a hello at a version this hub doesn't speak", calls(vec![(&unspoken, mismatch("")), (STATUS, Then::Closes)])),
+        // As from a client of version 3, which says only its own.
+        (
+            "a hello at version 3, which a hub that speaks 5 alone with 4 no longer speaks",
+            calls(vec![(&too_old, mismatch("")), (STATUS, Then::Closes)]),
+        ),
         // One it can't read can't be a hello it answers, so it's refused as any first request but a hello is.
         ("a hello this hub can't read", calls(vec![(&unreadable, mismatch("")), (STATUS, Then::Closes)])),
         ("a request before a hello", calls(vec![(repos, mismatch("")), (STATUS, Then::Closes)])),
@@ -167,6 +175,38 @@ async fn a_request_that_needs_a_device_takes_the_one_its_hello_said() {
             let reply = connection.send(&line, case).await;
 
             assert!(then.holds(reply.as_ref(), id), "{case}, call {id}: {reply:?}");
+        }
+    }
+}
+
+/// The requests only a client of version 3 sent, which followed a session's log, the hub's records, a terminal and what
+/// it showed of GitHub, and the read of a page of a workspace's changed files, are refused as unsupported at every
+/// version this hub speaks, as a request it doesn't know is, and the connection carries on. Spelled out, as a client of
+/// an earlier build sends them.
+#[tokio::test]
+async fn a_request_this_hub_no_longer_answers_is_refused_as_unsupported() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let retired = [
+        r#"{"method":"feed_subscribe","subscription_id":2}"#,
+        r#"{"method":"session_subscribe","id":"s","from_seq":5,"subscription_id":3}"#,
+        r#"{"method":"session_subscribe_places","id":"s","subagent":null,"from_place":1,"subscription_id":4}"#,
+        r#"{"method":"session_unsubscribe","subscription_id":3}"#,
+        r#"{"method":"github_subscribe","subscription_id":3,"shown":{"workspaces":["w"],"references":[]}}"#,
+        r#"{"method":"terminal_watch","id":"t","subscription_id":4}"#,
+        r#"{"method":"workspace_changed_files","id":"w","after":{"untracked":true,"path":"a.js"}}"#,
+    ];
+
+    for version in [HUB_SPEAKS.oldest, HUB_SPEAKS.newest] {
+        let mut connection = Connection::open(&hub);
+        let unsupported = || Then::Refuses(ErrorCode::Unsupported, String::new());
+        let mut steps = vec![(hello(version, None), Then::Greets(version))];
+        steps.extend(retired.iter().map(|line| ((*line).to_string(), unsupported())));
+        steps.push((STATUS.to_string(), Then::ShowsStatus));
+        for (line, id, then) in calls(steps.iter().map(|(line, then)| (line.as_str(), then.clone())).collect()) {
+            let reply = connection.send(&line, "a request no longer answered").await;
+
+            assert!(then.holds(reply.as_ref(), id), "version {version}, {line}: {reply:?}");
         }
     }
 }

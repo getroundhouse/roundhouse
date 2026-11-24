@@ -5,41 +5,28 @@ use protocol::model::FileDiff;
 
 use super::file::{Key, OneFile, Read, Taken};
 use super::pages::{Unread, every_page, taken};
-use crate::review::listed::{Listed, Summary, SummaryFile};
 use crate::review::{ChangedEntry, Review, ReviewEvent};
 
 impl Review {
-    /// Says which file the file tab shows the diff of, or none, and reads it, while the summary is current.
+    /// Says which file the file tab shows the diff of, or none, and reads it.
     pub fn show_diff_of(&mut self, entry: Option<ChangedEntry>, cx: &mut Context<Self>) {
         self.diffed = entry;
         self.read_the_file_again_if_it_moved(cx);
     }
 
     /// Reads the file the file tab shows again if the summary says something else of it than when it was last read,
-    /// its last read failed, or it's another file, and lets go of the one read once the tab shows none. Once the
-    /// summary listed isn't current, the file read with it shows as it was read, and another file is read with the
-    /// whole diff, which then takes over, as it would at the next moment that reads it, but for one the summary marks
-    /// as named in bytes that aren't UTF-8, which is read neither way.
+    /// its last read failed, or it's another file, and lets go of the one read once the tab shows none. The summary
+    /// can be current or as of an earlier read: reading the file starts the workspace's worker, after which the summary
+    /// turns current. Nothing is read of a file the summary marks as named in bytes that aren't UTF-8.
     pub(in crate::review) fn read_the_file_again_if_it_moved(&mut self, cx: &mut Context<Self>) {
+        let Some(listed) = &mut self.listed else { return };
         let Some(entry) = self.diffed.clone() else {
-            if let Some(Listed::Summary(Summary { file: SummaryFile::OneFile(file), .. })) = &mut self.listed {
-                *file = None;
-            }
+            listed.file = None;
             return;
         };
         let key = self.key_of(&entry);
-        // From the whole diff, at the moments that's read, where it's listed or the hub refused one file's diff.
-        let Some(Listed::Summary(Summary { current, file: SummaryFile::OneFile(file), .. })) = &self.listed else {
-            return;
-        };
-        let read_for = file.as_ref().filter(|file| file.of(&entry));
-        if !*current {
-            if read_for.is_none() && !self.names_no_file(&entry) {
-                self.refresh(cx);
-            }
-            return;
-        }
-        let previous = match read_for {
+        let Some(listed) = &self.listed else { return };
+        let previous = match listed.file.as_ref().filter(|file| file.of(&entry)) {
             Some(OneFile { key: read_as, read: Read::Taken(_) | Read::Reading { .. }, .. }) if *read_as == key => {
                 return;
             }
@@ -56,11 +43,11 @@ impl Review {
         let read = |entry: &ChangedEntry| self.worktree_readable && !self.names_no_file(entry);
         let Some(entry) = self.diffed.clone().filter(read) else { return };
         let key = self.key_of(&entry);
-        let Some(Listed::Summary(Summary { file: SummaryFile::OneFile(file), .. })) = &mut self.listed else { return };
         let at = key.as_ref().map_or_else(|| entry.at(), |key| key.at.clone());
         let from = key.as_ref().and_then(|key| key.from.clone());
         let listed = key.as_ref().and_then(|key| key.version.clone());
-        *file = Some(OneFile { entry: entry.clone(), key, read: Read::Reading { previous } });
+        let Some(summary) = &mut self.listed else { return };
+        summary.file = Some(OneFile { entry: entry.clone(), key, read: Read::Reading { previous } });
         self.one_file_asks += 1;
         let (asked, client, id) = (self.one_file_asks, self.client.clone(), self.workspace_id.clone());
         cx.spawn(async move |this, cx| {
@@ -77,20 +64,12 @@ impl Review {
         if asked != self.one_file_asks {
             return;
         }
-        let Some(Listed::Summary(summary)) = &mut self.listed else { return };
-        let SummaryFile::OneFile(Some(file)) = &mut summary.file else { return };
+        let Some(file) = self.listed.as_mut().and_then(|listed| listed.file.as_mut()) else { return };
         let status = file.key.as_ref().map(|key| key.status);
         let from = file.key.as_ref().and_then(|key| key.from.clone());
         let previous = file.shown().cloned();
         match read.and_then(|diff| taken(&file.entry.path, from, status, diff)) {
             Ok(taken) => file.read = Read::Taken(taken),
-            // A hub, or a worker, from before it, so the file is read with the whole diff, as from a hub that keeps
-            // no summary.
-            Err(Unread::Hub(e)) if e.is_unsupported() => {
-                summary.file = SummaryFile::WholeDiff(None);
-                self.refresh(cx);
-                return;
-            }
             Err(unread) => {
                 file.read = Read::Failed { previous };
                 if let Some(message) = unread.said() {
@@ -104,7 +83,7 @@ impl Review {
 
     /// What the summary says of `entry`.
     fn key_of(&self, entry: &ChangedEntry) -> Option<Key> {
-        let Some(Listed::Summary(Summary { summarized, .. })) = &self.listed else { return None };
+        let summarized = self.listed.as_ref()?.summarized.as_ref()?;
         let file = entry.in_summary(summarized)?;
         Some(Key {
             at: file.at(),

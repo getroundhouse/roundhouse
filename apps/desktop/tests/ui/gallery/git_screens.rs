@@ -11,7 +11,7 @@ use super::steps::{Screen, Step};
 use super::worlds::{
     ada, conversation, github_accounts, github_default_ended, github_gh_default, github_gh_logged_out,
     github_gh_offered, github_gh_other_user, github_gh_refused, github_gh_unread, github_no_default, github_signing_in,
-    github_signing_in_to, no_github_accounts,
+    github_signing_in_to, github_unnamed, no_github_accounts,
 };
 use client_core::fake_hub::World;
 
@@ -28,6 +28,7 @@ const fn git(name: &'static str, world: fn() -> World, steps: &'static [Step]) -
 pub(crate) const SCREENS: &[Screen] = &[
     git("settings-git", github_accounts, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
     git("settings-git-none", no_github_accounts, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
+    git("settings-git-unnamed", github_unnamed, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
     git("settings-git-default-ended", github_default_ended, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
     git("settings-git-no-default", github_no_default, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
     git("settings-git-older-hub", conversation, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),

@@ -60,7 +60,8 @@ fn a_sign_in_shows_its_code_while_it_waits_and_ends_signed_in_as_the_default(cx:
     // The records have it once the hub has said so, which can come after the panel says it's done.
     ui.wait("the account", |ui| !ui.view().records().github_accounts().is_empty());
     let account = ui.view().records().github_accounts()[0].clone();
-    assert_eq!(account.user.name.as_str(), "ada");
+    // What GitHub calls its user comes apart from its record, once the hub has asked.
+    ui.wait("its username", |ui| ui.view().records().github_username(&account).to_string() == "ada");
     assert_eq!(account.held_login.map(|held| held.how), Some(GithubLoginKind::SignIn));
     // Which account is the default is on the hub's settings, a record of their own, which reaches the app apart from
     // the account's, so it's waited for rather than read as soon as the account is there.

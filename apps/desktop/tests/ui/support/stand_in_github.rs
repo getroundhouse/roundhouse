@@ -71,11 +71,9 @@ impl Ui<'_> {
     /// what GitHub has from it, so that read can't land after a test's own. Returns the branch, and the commit it's at.
     pub(crate) fn push(&mut self, id: &WorkspaceId) -> (String, String) {
         let (path, branch) = pushed(self, id);
-        self.wait("the push to be read", |ui| {
-            let workspace = record(ui, id);
-            let pushed = workspace.branches.as_ref().and_then(|branches| branches.checked_out());
-            pushed.is_some_and(|branch| branch.upstream.is_some()) && workspace.pull_request_link.is_some()
-        });
+        // The hub links the workspace to a pull request once its worker has read the push, and the read of GitHub the
+        // push brings has found it. Its branches are its own level's, which nothing here follows.
+        self.wait("the push to be read", |ui| record(ui, id).pull_request_link.is_some());
         let head = git(&path, &["rev-parse", "HEAD"]).trim().to_string();
         (branch, head)
     }

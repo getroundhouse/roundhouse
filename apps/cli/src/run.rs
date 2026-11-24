@@ -293,7 +293,7 @@ pub(crate) fn short(id: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::{HubUpdate, Records, Rev, UpdateAttempt};
+    use protocol::model::{HubUpdate, Observation, Observed, Records, ReleaseOffer, Rev, UpdateAttempt};
 
     use super::{held, stopped, updates_line};
 
@@ -319,7 +319,15 @@ mod tests {
         };
         let attempt = |attempt| HubUpdate { attempt: Some(attempt), ..found(Some("0.1.9"), None) };
         let failed = UpdateAttempt::Failed { to: "0.1.9".into(), why: "offline".into() };
-        let line = |found: Option<HubUpdate>| updates_line(&held(Records { hub_update: found, ..Records::default() }));
+        // The release offered, as the hub's level sends it, beside the record, whose own field is blank to this client.
+        let line = |found: Option<HubUpdate>| {
+            let offered = found.as_ref().map(|found| Observation::ReleaseOffered {
+                offered: Observed::Current { value: ReleaseOffer { version: found.version.clone() } },
+                rev: Rev::new(1),
+            });
+            let observations = offered.into_iter().collect();
+            updates_line(&held(Records { hub_update: found, observations, rev: Rev::new(1), ..Records::default() }))
+        };
 
         assert_eq!(line(None), "it hasn't read the update feed yet");
         assert_eq!(line(Some(found(Some("0.1.9"), None))), "it would update to 0.1.9");

@@ -6,7 +6,7 @@
 use desktop::updates::{Kind, Refusal};
 use look::Region;
 use protocol::event::EventBody;
-use protocol::model::{Seq, SessionStatus};
+use protocol::model::{Observation, Observed, OtherBuild, Rev, Seq, SessionStatus};
 
 use super::frame::{CHAT, Frame, Part, SIDEBAR, SIDEBAR_MENU, WORKSPACE_CARD};
 use super::screens::FOCUS;
@@ -160,6 +160,13 @@ pub(crate) const UPDATE_SCREENS: &[Screen] = &[
         frame: WORKSPACE_CARD,
         steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id(TITLE), shows: Region::WorkspaceCard.id() }],
     },
+    Screen {
+        name: "workspace-card-earlier",
+        spec: "updates.md",
+        world: Some(on_an_earlier_build),
+        frame: WORKSPACE_CARD,
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id(TITLE), shows: Region::WorkspaceCard.id() }],
+    },
 ];
 
 /// The sidebar, and the card the build line's version or what's said in its place opens.
@@ -183,6 +190,15 @@ fn on_the_older_build() -> World {
     let mut world = under_a_home_folder();
     let shown = world.workspaces.iter_mut().find(|workspace| workspace.name == FOCUS).unwrap();
     shown.worker_build = Some("0.9.0".to_string());
+    world
+}
+
+/// The same, on a build too old to say which it is, as the hub says of a worker from before workers said.
+fn on_an_earlier_build() -> World {
+    let mut world = under_a_home_folder();
+    let workspace_id = world.workspaces.iter().find(|workspace| workspace.name == FOCUS).unwrap().id.clone();
+    let build = Observed::Current { value: OtherBuild { said: None } };
+    world.observations.push(Observation::WorkspaceWorkerBuild { workspace_id, build, rev: Rev::new(1) });
     world
 }
 

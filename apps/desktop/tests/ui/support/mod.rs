@@ -37,7 +37,7 @@ mod workspaces;
 pub(crate) use asked::id;
 pub(crate) use click::{click, under_the_middle_of};
 pub(crate) use daemons::{binaries, hub_environment};
-pub(crate) use diff::Diff;
+pub(crate) use diff::{Diff, sidebar_loaded};
 pub(crate) use fake::{FakeHub, one_chat, open_on_the_chat};
 pub(crate) use files::files_holding;
 pub(crate) use frozen::Frozen;

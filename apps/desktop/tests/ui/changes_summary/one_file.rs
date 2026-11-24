@@ -1,4 +1,4 @@
-//! The file the file tab shows, read with one file's diff while the summary is current.
+//! The file the file tab shows, read with one file's diff, whether the summary is current or as of an earlier read.
 
 #![cfg(test)]
 
@@ -21,16 +21,16 @@ use super::world::{
 };
 use crate::support::{Diff, Ui};
 
-/// While the summary is current, the file the file tab shows is read on its own, every page of it, and the moments
-/// that read the whole diff, such as Changes being chosen, don't. It's read again when the summary gives it another
-/// version, showing what was read until the new read comes, and not when it gives another file one. Once the summary
-/// stops being current, it stays listed, and another file clicked is read with the whole diff, which takes over, and
-/// once a summary is current again, that file is read on its own as the summary names it.
+/// The file the file tab shows is read on its own, every page of it, and the moments that read the changes again, such
+/// as Changes being chosen, read nothing else. It's read again when the summary gives it another version, showing
+/// what was read until the new read comes, and not when it gives another file one. Once the summary is as of an
+/// earlier read, it stays listed, unmarked, and another file clicked is read on its own as it names it, and the whole
+/// diff is never read.
 #[gpui_kit::test]
 fn the_file_shown_is_read_on_its_own_and_again_only_when_the_summary_moves_it(cx: &mut TestAppContext) {
     let reads = reading_a_txt();
     let read = reads.diffs_read.clone();
-    let (_hub, mut ui, diff) = summarized(cx, (versioned(every_file(), VERSION), 2), reads, current);
+    let (_hub, mut ui, diff, asked) = summarized(cx, (versioned(every_file(), VERSION), 2), reads, current);
     let workspace = ui.view().selected().cloned().unwrap();
     let summary = |files, rev| {
         let changes = current(ChangeSummary::listing_at_most(CommitId::from(BASE), files, 2));
@@ -39,15 +39,13 @@ fn the_file_shown_is_read_on_its_own_and_again_only_when_the_summary_moves_it(cx
     let pages_read = |read: &Arc<Mutex<Vec<(ChangedFileAt, u32)>>>| -> Vec<u32> {
         read.lock().iter().map(|(_, line)| *line).collect()
     };
-    let whole = |ui: &Ui<'_>| ui.cx.read_entity(&diff.review, |r, _| r.whole_diff_reads());
 
     ui.open_diff_of(&diff, "a.txt");
 
     assert_eq!(pages_read(&read), [0, 4], "both its pages");
     assert_eq!(drawn_line(&ui, &diff, 2).as_deref(), Some("read on its own"), "its own diff, not the whole diff's");
-    let before = whole(&ui);
     ui.click("sidebar-tab-changes");
-    assert_eq!(whole(&ui), before, "choosing Changes doesn't read the whole diff");
+    assert_eq!(pages_read(&read), [0, 4], "choosing Changes reads nothing");
     let mut another_file_moved = versioned(every_file(), VERSION);
     another_file_moved[1].version = Some(FileVersion::from("ed1f00d".to_string()));
     ui.view().feed().unwrap().take_observation(summary(another_file_moved, 3));
@@ -66,34 +64,28 @@ fn the_file_shown_is_read_on_its_own_and_again_only_when_the_summary_moves_it(cx
         changes: Observed::AsOf { value: moved, as_of_ms: 1 },
         rev: Rev::new(5),
     });
-    let lists_the_summary = |ui: &Ui<'_>| ui.cx.read_entity(&diff.review, |r, _| r.lists_the_summary());
-    ui.wait("the summary as of a read", |ui| !lists_the_summary(ui));
+    ui.wait("the summary as of a read", |ui| {
+        matches!(ui.view().records().workspace_changes(&workspace), Some(Observed::AsOf { .. }))
+    });
     assert!(ui.has("changed-files-left-out"), "the summary stays listed once it's no longer current");
-    assert_eq!(whole(&ui), before, "and nothing reads the whole diff for it");
-    ui.open_diff_of(&diff, "src/new.rs");
-    assert_eq!(whole(&ui), before + 1, "another file is read with the whole diff");
-    assert_eq!(drawn_line(&ui, &diff, 3).as_deref(), Some("fn c() {}"));
-    assert!(!ui.has("changed-files-left-out"), "which Changes lists now");
-    // Clicked from the whole diff, which can't say the file is untracked, it's asked for as the next summary names it.
     ui.click("file-src/new.rs");
-    ui.view().feed().unwrap().take_observation(summary(versioned(every_file(), "814f4a4"), 6));
-    let asked = |read: &Arc<Mutex<Vec<(ChangedFileAt, u32)>>>| read.lock().last().map(|(at, _)| at.clone());
-    ui.wait("src/new.rs read on its own", |_| asked(&read).is_some_and(|at| at.path == "src/new.rs"));
-    assert_eq!(asked(&read).map(|at| at.untracked), Some(true), "as the summary names it");
+    let last = |read: &Arc<Mutex<Vec<(ChangedFileAt, u32)>>>| read.lock().last().map(|(at, _)| at.clone());
+    ui.wait("src/new.rs read on its own", |_| last(&read).is_some_and(|at| at.path == "src/new.rs"));
+    assert_eq!(last(&read).map(|at| at.untracked), Some(true), "as the summary names it");
+    assert_eq!(asked.count("workspace_diff"), 0, "the whole diff, never");
 }
 
 /// Once the workspace is being archived, the hub refuses every read of its worktree, so nothing is read: the summary
-/// that's no longer current stays listed, the file read before shows as it was read, and another file clicked is read
-/// neither on its own nor with the whole diff, and says it couldn't be read, with no error.
+/// stays listed, the file read before shows as it was read, and another file clicked is read neither on its own nor
+/// with the whole diff, and says it couldn't be read, with no error.
 #[gpui_kit::test]
 fn nothing_is_read_of_a_workspace_being_archived(cx: &mut TestAppContext) {
     let reads = reading_a_txt();
     let read = reads.diffs_read.clone();
-    let (_hub, mut ui, diff) = summarized(cx, (versioned(every_file(), VERSION), 2), reads, current);
+    let (_hub, mut ui, diff, asked) = summarized(cx, (versioned(every_file(), VERSION), 2), reads, current);
     let workspace = ui.view().selected().cloned().unwrap();
-    let whole = |ui: &Ui<'_>| ui.cx.read_entity(&diff.review, |r, _| r.whole_diff_reads());
     ui.open_diff_of(&diff, "a.txt");
-    let before = (whole(&ui), read.lock().len());
+    let before = read.lock().len();
     let archiving = Workspace {
         status: WorkspaceStatus::Archiving,
         rev: Rev::new(10),
@@ -107,13 +99,15 @@ fn nothing_is_read_of_a_workspace_being_archived(cx: &mut TestAppContext) {
         changes: Observed::AsOf { value: as_of, as_of_ms: 1 },
         rev: Rev::new(11),
     });
-    ui.wait("the summary as of a read", |ui| !ui.cx.read_entity(&diff.review, |r, _| r.lists_the_summary()));
+    ui.wait("the summary as of a read", |ui| {
+        matches!(ui.view().records().workspace_changes(&workspace), Some(Observed::AsOf { .. }))
+    });
     ui.click("file-src/new.rs");
     ui.wait("src/new.rs to say it couldn't be read", |ui| {
         ui.cx.read_entity(&diff.file, desktop::file_diff::FileDiff::says_instead) == Some(COULDNT)
     });
 
-    assert_eq!((whole(&ui), read.lock().len()), before, "nothing read");
+    assert_eq!((asked.count("workspace_diff"), read.lock().len()), (0, before), "nothing read");
     assert_eq!(ui.view().error.as_deref(), None);
     assert!(ui.has("changed-files-left-out"), "the summary stays listed");
     ui.click("file-a.txt");
@@ -129,26 +123,27 @@ fn listed(ui: &Ui<'_>, path: &str) -> bool {
     version.is_some_and(|version| version.as_str() != VERSION)
 }
 
-/// A hub whose worker is from before one file's diff refuses it, so the file tab shows the file from the whole diff,
-/// as from a hub that keeps no summary, until the next connection, where it's asked for again.
+/// A worker that can't read one file's diff, as one from before it, leaves the file saying it couldn't be read, and
+/// nothing else is read for it, until the next connection, where it's asked for again.
 #[gpui_kit::test]
-fn a_hub_that_cant_read_one_file_shows_it_from_the_whole_diff(cx: &mut TestAppContext) {
+fn a_file_its_worker_cant_read_says_so_and_is_asked_for_again_on_the_next_connection(cx: &mut TestAppContext) {
     let reads = WorkerReads::default();
-    let asked = reads.diffs_read.clone();
-    let (_hub, mut ui, diff) = summarized(cx, (every_file(), 2), reads, current);
-    let added = |ui: &Ui<'_>| ui.cx.read_entity(&diff.file, |view, cx| view.file(cx).map(FilePatch::added));
+    let read = reads.diffs_read.clone();
+    let (_hub, mut ui, diff, asked) = summarized(cx, (every_file(), 2), reads, current);
+    ui.wait("its row", |ui| ui.has("file-a.txt"));
 
-    ui.open_diff_of(&diff, "a.txt");
+    ui.click("file-a.txt");
 
-    assert_eq!(added(&ui), Some(1), "the whole diff's a.txt");
-    assert_eq!(asked.lock().len(), 1, "refused");
+    ui.wait("a.txt to say it couldn't be read", |ui| {
+        ui.cx.read_entity(&diff.file, desktop::file_diff::FileDiff::says_instead) == Some(COULDNT)
+    });
+    assert_eq!((read.lock().len(), asked.count("workspace_diff")), (1, 0), "refused, and nothing else read");
     let (pane, client) = (ui.pane().unwrap(), ui.view().client().unwrap());
     ui.cx.update_entity(&pane, |p, cx| {
         p.reconnect(&client, cx);
         p.catch_up(cx);
     });
-    ui.wait("the file's diff asked for again", |_| asked.lock().len() == 2);
-    ui.wait("the whole diff's a.txt again", |ui| added(ui) == Some(1));
+    ui.wait("the file's diff asked for again", |_| read.lock().len() == 2);
 }
 
 /// What the file tab shows of a file, once its own diff is read.
@@ -270,15 +265,14 @@ fn the_file_tab_draws_what_one_file_s_diff_says_of_the_file(cx: &mut TestAppCont
         ..file(path, ChangeStatus::Modified, 1)
     };
     let files: Vec<_> = rows.iter().map(|row| listed(&row.path)).collect();
-    let (_hub, mut ui, diff) = summarized(cx, (files.clone(), rows.len()), reads, current);
-    let whole_diff_reads = ui.cx.read_entity(&diff.review, |r, _| r.whole_diff_reads());
+    let (_hub, mut ui, diff, asked) = summarized(cx, (files.clone(), rows.len()), reads, current);
 
     for Row { path, shows, pages, .. } in rows {
         open_and_see(&mut ui, &diff, path, shows);
 
         assert_eq!(reads_of(path), pages, "{path}'s pages read");
     }
-    assert_eq!(ui.cx.read_entity(&diff.review, |r, _| r.whole_diff_reads()), whole_diff_reads, "nor the whole diff");
+    assert_eq!(asked.count("workspace_diff"), 0, "nor the whole diff");
     let not_utf8 = listing(&ui).and_then(|listing| listing.rows.iter().find(|row| row.path == NOT_UTF8).cloned());
     assert_eq!(not_utf8.map(|row| (row.added, row.removed)), Some((1, 0)), "{NOT_UTF8}'s row keeps its lines");
 

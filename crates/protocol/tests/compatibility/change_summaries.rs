@@ -2,8 +2,6 @@
 //! diff, spelled out, since a worker can outlive the hub that started it, and the next hub can be of another build.
 //! And a client's read of a page of the files a summary leaves out, which the hub passes on to the worker.
 
-use protocol::client::workspaces::WorkspaceChangedFiles;
-use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HubFrame, ReplyOutcome};
 use protocol::frame;
 use protocol::model::{
     ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, ChangedFilesPage, FileDiff, FileDiffBody, FileVersion,
@@ -150,20 +148,6 @@ const PAGE: &str = concat!(
     r#""base_commit":"c1","files":[{"path":"node_modules/b.js","from":null,"status":"untracked","lines":null,"#,
     r#""version":null}],"left_out":0"#
 );
-
-#[test]
-fn a_client_s_read_of_a_page_of_changed_files_and_its_reply_keep_their_form() {
-    let asking = ClientRequest::WorkspaceChangedFiles(WorkspaceChangedFiles { id: "w".into(), after: after() });
-
-    keeps_its_form(
-        &ClientFrame { id: 7, request: asking },
-        &format!(r#"{{"id":7,"request":{{"method":"workspace_changed_files","id":"w",{AFTER}}}}}"#),
-    );
-    keeps_its_form(
-        &HubFrame::Reply { id: 7, outcome: ReplyOutcome::Response(ClientResponse::ChangedFilesPage(page())) },
-        &format!(r#"{{"frame":"reply","id":7,"response":{{"result":"changed_files_page",{PAGE}}}}}"#),
-    );
-}
 
 #[test]
 fn the_request_for_a_page_of_changed_files_and_its_reply_keep_their_form() {

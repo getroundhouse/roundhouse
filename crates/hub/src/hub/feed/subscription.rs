@@ -41,12 +41,6 @@ impl Feed {
         self.sender.subscribe()
     }
 
-    /// How many follow it.
-    #[cfg(test)]
-    pub(in super::super) fn receivers(&self) -> usize {
-        self.sender.receiver_count()
-    }
-
     /// Tells every client following the feed of `notice`, which moves what `moves` says, unless it's a copy of a record
     /// no newer than one it has told of that a client sent it is sent too, or than that record's removal, so each copy
     /// of a record that a client hears is newer than the last. A copy that moves anything is compared with only those

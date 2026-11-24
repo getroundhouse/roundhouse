@@ -52,9 +52,9 @@ impl Reply for Repos {
     }
 }
 
-/// Every repository, workspace, session and comment, read at one moment, with the revision it was read at. Follow
-/// the feed first, with [`FeedSubscribe`](super::subscriptions::FeedSubscribe), then list, and keep whichever copy of
-/// a record is newer.
+/// Every repository, workspace, session and comment, read at one moment, with the revision it was read at, in the
+/// forms a client of version 4 reads. A client follows the hub's level with
+/// [`Subscribe`](super::subscriptions::Subscribe), which lists them as it starts, so no client of this build sends it.
 #[derive(Clone, Copy, Debug)]
 pub struct RecordsList;
 

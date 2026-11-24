@@ -4,7 +4,7 @@
 
 use client_core::records::Snapshot;
 use gpui_kit::{Context, Window};
-use protocol::model::{GithubAccount, GithubApp, GithubAppId};
+use protocol::model::{GithubAccount, GithubAppId, GithubAppSlug};
 
 use super::app_panel::{AppStep, OnGithub};
 use super::app_words;
@@ -64,16 +64,23 @@ impl Kept {
         cx.notify();
     }
 
-    /// Opens GitHub's page for installing `app`, and the panel at its last step, waiting for it, in place of any other.
-    pub(super) fn install_on_github(&mut self, app: &GithubApp, window: &mut Window, cx: &mut Context<Self>) {
-        cx.open_url(&install_page(&app.slug));
+    /// Opens GitHub's page for installing the app `app`, which GitHub calls `slug`, where that's known, and the panel
+    /// at its last step, waiting for it, in place of any other.
+    pub(super) fn install_on_github(
+        &mut self,
+        app: GithubAppId,
+        slug: Option<&GithubAppSlug>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.open_url(&install_page(slug));
         let installing = matches!(
             self.app_panel().map(|panel| &panel.step),
-            Some(AppStep::Installing { app: shown, .. }) if *shown == app.id
+            Some(AppStep::Installing { app: shown, .. }) if *shown == app
         );
         if !installing {
-            self.open_app_at(AppStep::Installing { app: app.id, looking: false, failed: None }, cx);
-            self.installing(app.id, window, cx);
+            self.open_app_at(AppStep::Installing { app, looking: false, failed: None }, cx);
+            self.installing(app, window, cx);
         }
     }
 

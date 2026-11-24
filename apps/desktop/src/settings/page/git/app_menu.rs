@@ -26,14 +26,9 @@ struct Item {
 /// The menu of `app`, installed nowhere.
 pub(super) fn app_menu(drawing: &Drawing<'_>, app: &GithubApp, cx: &App) -> AnyElement {
     let at = Asked::App(app.id);
-    let items = vec![install(app), check_again("Check again", app, at.clone()), remove(app, false, at)];
-    menu_of(
-        drawing.kept,
-        SharedString::from(format!("git-more-app-{}", app.id)),
-        &app.name,
-        !drawing.can_ask(cx),
-        items,
-    )
+    let name = drawing.records.github_app_name(app);
+    let items = vec![install(drawing, app), check_again("Check again", app, at.clone()), remove(&name, app, false, at)];
+    menu_of(drawing.kept, SharedString::from(format!("git-more-app-{}", app.id)), &name, !drawing.can_ask(cx), items)
 }
 
 /// The menu of `account`, an installation as `installed` says, whose login works when `works`. `None` when it would
@@ -60,9 +55,9 @@ pub(super) fn installation_menu(
         let act: Act = Rc::new(move |kept, window, cx| kept.ask_to_disconnect(id.clone(), &name, says, window, cx));
         items.push(Item { label: "Disconnect", off: false, act });
     } else if let Some(app) = app {
-        items.extend([check_again("Connect again", app, at.clone()), install(app)]);
+        items.extend([check_again("Connect again", app, at.clone()), install(drawing, app)]);
     }
-    items.extend(app.map(|app| remove(app, default, at)));
+    items.extend(app.map(|app| remove(&drawing.records.github_app_name(app), app, default, at)));
     let id = SharedString::from(format!("git-more-{}", account.id));
     let off = !drawing.can_ask(cx);
     let name = drawing.records.github_username(account).to_string();
@@ -70,13 +65,10 @@ pub(super) fn installation_menu(
 }
 
 /// Install on GitHub, which opens GitHub's page for installing `app`, and the panel waiting for it.
-fn install(app: &GithubApp) -> Item {
-    let app = app.clone();
-    Item {
-        label: "Install on GitHub",
-        off: false,
-        act: Rc::new(move |kept, window, cx| kept.install_on_github(&app, window, cx)),
-    }
+fn install(drawing: &Drawing<'_>, app: &GithubApp) -> Item {
+    let (id, slug) = (app.id, drawing.records.github_app_said(app).map(|said| said.slug.clone()));
+    let act: Act = Rc::new(move |kept, window, cx| kept.install_on_github(id, slug.as_ref(), window, cx));
+    Item { label: "Install on GitHub", off: false, act }
 }
 
 /// Has the hub look for where `app` is installed, and connect it there, saying `at` why it couldn't.
@@ -85,10 +77,11 @@ fn check_again(label: &'static str, app: &GithubApp, at: Asked) -> Item {
     Item { label, off: false, act: Rc::new(move |kept, _, cx| kept.connect_installations(id, at.clone(), cx)) }
 }
 
-/// Remove app, for `app`, whose installation is the default when `default`, saying `at` why the hub couldn't.
-fn remove(app: &GithubApp, default: bool, at: Asked) -> Item {
-    let app = app.clone();
-    let act: Act = Rc::new(move |kept, window, cx| kept.ask_to_remove_app(&app, default, at.clone(), window, cx));
+/// Remove app, for `app`, called `name`, whose installation is the default when `default`, saying `at` why the hub
+/// couldn't.
+fn remove(name: &str, app: &GithubApp, default: bool, at: Asked) -> Item {
+    let (id, name) = (app.id, name.to_string());
+    let act: Act = Rc::new(move |kept, window, cx| kept.ask_to_remove_app(id, &name, default, at.clone(), window, cx));
     Item { label: "Remove app", off: false, act }
 }
 

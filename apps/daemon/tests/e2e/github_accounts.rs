@@ -13,7 +13,8 @@ use hub::{GithubAnswer, GithubGate, GithubScript, GithubStandIn};
 use protocol::client::github_accounts::{GithubAccountConnect, GithubAccountDisconnect, HubMachineLogins};
 use protocol::client::github_apps::{GithubAppMake, GithubManifestCode};
 use protocol::model::{
-    GhLogin, GhLoginWorks, GithubReach, GithubRepositoryName, GithubToken, MachineLogins, Reach, SetupStatus, SshLogin,
+    GhLogin, GhLoginWorks, GithubRepositoryName, GithubToken, MachineLogins, Observation, Observed, Reach, SetupStatus,
+    SshLogin,
 };
 use protocol::paths::ENV_TEST_GITHUB_API;
 
@@ -189,22 +190,32 @@ fn a_hub_records_whether_the_default_can_push_to_a_workspaces_repository_on_gith
     git(&repo, &["remote", "add", "origin", "git@github.com:cli/cli.git"]);
     let client = stack.client();
     client.call(GithubAccountConnect { token: GithubToken::new(TOKEN), id: None }).unwrap();
-    let listed = |stack: &Stack| stack.client().records().unwrap().github_reach;
+    // As the hub's level lists it to a client of this version: current while it's checked, and otherwise as of then.
+    let listed = |stack: &Stack| -> Vec<Observed<Reach>> {
+        let observations = stack.client().records().unwrap().observations;
+        let reach = observations.into_iter().filter_map(|observed| {
+            let Observation::RepositoryReach { reach, .. } = observed else { return None };
+            Some(reach)
+        });
+        reach.collect()
+    };
 
     stack.workspace(&client);
-    wait_until("the repository's reach", || !listed(&stack).is_empty());
+    wait_until("the repository's reach", || {
+        listed(&stack).iter().any(|reach| matches!(reach, Observed::Current { .. }))
+    });
     let [checked] = &listed(&stack)[..] else { panic!("{:?}", listed(&stack)) };
     update(&mut stack);
     let [left] = &listed(&stack)[..] else { panic!("{:?}", listed(&stack)) };
     gate.open();
-    wait_until("it checked again", || listed(&stack).first().is_some_and(|reach| !reach.stale));
+    wait_until("it checked again", || {
+        listed(&stack).first().is_some_and(|reach| matches!(reach, Observed::Current { .. }))
+    });
 
     let reason = "Permission to cli/cli.git denied to ada.".to_string();
     let cli = GithubRepositoryName::named("cli/cli");
-    assert_eq!(checked.reach, Reach::Refused { repository: cli, username: "ada".into(), reason, installation: None });
-    assert!(!checked.stale && checked.answered_at_ms.is_some(), "{checked:?}");
-    let as_it_was = GithubReach { stale: true, rev: left.rev, ..checked.clone() };
-    assert_eq!(left, &as_it_was, "the last run's, as it was, with when GitHub answered");
-    let [again] = &listed(&stack)[..] else { panic!() };
-    assert!(again.answered_at_ms > checked.answered_at_ms, "{again:?}");
+    let refused = Reach::Refused { repository: cli, username: "ada".into(), reason, installation: None };
+    assert_eq!(checked, &Observed::Current { value: refused.clone() });
+    let Observed::AsOf { value, .. } = left else { panic!("{left:?}") };
+    assert_eq!(value, &refused, "the last run's, as it was, as of when GitHub answered");
 }

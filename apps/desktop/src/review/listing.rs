@@ -1,5 +1,5 @@
 //! What Changes lists of a workspace's changed files: the files the hub's summary of them names, and how many it
-//! leaves out, where the hub sends one, and otherwise the files of the whole diff.
+//! leaves out.
 
 use std::sync::Arc;
 
@@ -7,8 +7,8 @@ use gpui_kit::{Context, SharedString};
 use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, LineCounts, Observed};
 
 use super::Review;
-use super::listed::{Listed, Summary, SummaryFile};
-use crate::patch::{FilePatch, FileStatus};
+use super::listed::Summary;
+use crate::patch::FileStatus;
 use client_core::workspace_lines::counted;
 
 /// Which of the changed files one is: its path, and whether it's the untracked file there, since one path can be two
@@ -22,9 +22,8 @@ pub struct ChangedEntry {
 
 impl ChangedEntry {
     /// Whether it's the file `path` and `untracked` say, of a list where `shared` says whether another file is at
-    /// that path. A list where the path is once is of the one file there, whether it's tracked or not, since the whole
-    /// diff says which of its files git tracks only where a path is twice, as [`WholeDiff`](super::listed::WholeDiff)
-    /// says, so a file the summary lists as untracked is the whole diff's file at its path.
+    /// that path. A list where the path is once is of the one file there, whether it's tracked or not, since a patch
+    /// says which of its files git tracks only where a path is twice.
     pub fn is(&self, path: &str, untracked: bool, shared: bool) -> bool {
         self.path.as_ref() == path && (!shared || self.untracked == untracked)
     }
@@ -56,11 +55,8 @@ pub struct ChangedRow {
 #[derive(Clone, Debug, Default)]
 pub struct Listing {
     pub rows: Arc<[ChangedRow]>,
-    /// How many the workspace changes past those in `rows`, which only a summary leaves out.
+    /// How many the workspace changes past those in `rows`, which the summary leaves out.
     pub left_out: u64,
-    /// The whole diff left out some untracked files, and doesn't say how many. A summary counts every file it leaves
-    /// out in `left_out`, so this is never so of one.
-    pub truncated: bool,
 }
 
 impl ChangedRow {
@@ -78,82 +74,49 @@ impl Listing {
 }
 
 impl Review {
-    /// Takes what client-core holds of the workspace's changed files, `None` where the hub doesn't send them, and lists
-    /// them while they're current, in place of what was listed before. Otherwise the whole diff's files are listed, as
-    /// from a hub that doesn't send them: a summary as of an earlier read can be older than the whole diff, which is
-    /// read again as the tab is switched to. A summary that was current and isn't now, as when its worker goes, or the
-    /// connection does, stays listed until the whole diff is next read, at the moments it's read.
+    /// Takes what client-core holds of the workspace's changed files, `None` until the workspace's level has listed
+    /// them, and lists them in place of what was listed before: the files the summary names, current or as of an
+    /// earlier read, which Changes shows alike, or none while it isn't known, as for a workspace that changes nothing.
+    /// The file the file tab shows is read again where the summary moves it.
     pub fn take_summary(&mut self, changes: Option<&Observed<ChangeSummary>>, cx: &mut Context<Self>) {
-        let Some(Observed::Current { value: summary }) = changes else {
-            if let Some(Listed::Summary(listed)) = &mut self.listed {
-                listed.current = false;
-            }
-            return;
+        let Some(changes) = changes else { return };
+        let summarized = match changes {
+            Observed::Current { value } | Observed::AsOf { value, .. } => Some(value.clone()),
+            Observed::NotKnown | Observed::Unknown => None,
         };
-        let (file, seen) = match self.listed.take() {
-            // Of the same worker, since one that goes takes the summary's currency with it, so what it refused it
-            // refuses still.
-            Some(Listed::Summary(Summary { current: true, file, .. })) => (file, None),
-            // The worker may be another now, so what was refused is asked for again.
-            Some(Listed::Summary(mut listed @ Summary { current: false, .. })) => {
-                listed.ask_again();
-                (listed.file, None)
-            }
-            Some(Listed::WholeDiff(whole)) => {
-                (SummaryFile::OneFile(None), self.diffed.as_ref().map(|entry| whole.taken(entry)))
-            }
-            None => (SummaryFile::OneFile(None), None),
-        };
-        self.listed = Some(Listed::Summary(Summary { summarized: summary.clone(), current: true, file }));
+        let file = self.listed.take().and_then(|listed| listed.file);
+        self.listed = Some(Summary { summarized, file });
         self.list_again(cx);
         self.say_what_changes(cx);
-        // The file the whole diff showed shows until it's read on its own.
-        match seen {
-            Some(seen) => self.read_one_file(Some(seen), cx),
-            None => self.read_the_file_again_if_it_moved(cx),
-        }
+        self.read_the_file_again_if_it_moved(cx);
     }
 
-    /// What Changes lists now, or `None` until the changes are first read.
+    /// What Changes lists now, or `None` until the workspace's level has listed its changes.
     pub fn listing(&self) -> Option<&Listing> {
         self.listing.as_ref()
     }
 
-    /// How many lines the workspace's changes add and remove, in all: the summary's totals, over every file, or the
-    /// sums of the whole diff's files.
+    /// How many lines the workspace's changes add and remove, in all: the summary's totals, over every file.
     pub fn totals(&self) -> (usize, usize) {
-        match &self.listed {
-            Some(Listed::Summary(Summary { summarized, .. })) => {
-                (counted(summarized.lines.added), counted(summarized.lines.removed))
-            }
-            Some(Listed::WholeDiff(whole)) => whole
-                .files
-                .iter()
-                .fold((0, 0), |(added, removed), file| (added + file.added(), removed + file.removed())),
-            None => (0, 0),
-        }
+        let summarized = self.listed.as_ref().and_then(|listed| listed.summarized.as_ref());
+        summarized.map_or((0, 0), |summarized| (counted(summarized.lines.added), counted(summarized.lines.removed)))
     }
 
     /// Lists again what Changes shows, from what's listed.
     pub(super) fn list_again(&mut self, cx: &mut Context<Self>) {
-        self.listing = self.listed.as_ref().map(|listed| match listed {
-            Listed::Summary(Summary { summarized, .. }) => Listing {
+        self.listing = self.listed.as_ref().map(|listed| match &listed.summarized {
+            Some(summarized) => Listing {
                 rows: by_path(summarized.files.iter().map(summarized_row).collect()),
                 left_out: summarized.left_out,
-                truncated: false,
             },
-            Listed::WholeDiff(whole) => Listing {
-                rows: by_path(whole.entries().map(|(untracked, file)| patched_row(file, untracked)).collect()),
-                left_out: 0,
-                truncated: whole.truncated,
-            },
+            None => Listing::default(),
         });
         cx.notify();
     }
 }
 
-/// How a file of the summary changed, as the whole diff would say it: one that isn't tracked as added, and one that
-/// changed between a file, a link and a submodule as modified.
+/// How a file of the summary changed, as a patch would say it: one that isn't tracked as added, and one that changed
+/// between a file, a link and a submodule as modified.
 pub(super) fn file_status(status: ChangeStatus) -> FileStatus {
     match status {
         ChangeStatus::Added | ChangeStatus::Untracked => FileStatus::Added,
@@ -169,7 +132,7 @@ fn by_path(mut rows: Vec<ChangedRow>) -> Arc<[ChangedRow]> {
     rows.into()
 }
 
-/// A file as the summary has it, with the status the whole diff would give it.
+/// A file as the summary has it, with the status a patch would give it.
 fn summarized_row(file: &ChangedFile) -> ChangedRow {
     let status = file_status(file.status);
     let count = |lines: fn(LineCounts) -> u64| file.lines.map_or(0, |counts| counted(lines(counts)));
@@ -182,18 +145,12 @@ fn summarized_row(file: &ChangedFile) -> ChangedRow {
     }
 }
 
-/// A file as the whole diff has it, the untracked one at its path where `untracked` says so.
-fn patched_row(file: &FilePatch, untracked: bool) -> ChangedRow {
-    let (path, status) = (file.path().clone(), file.status());
-    ChangedRow { path, untracked, status, added: file.added(), removed: file.removed() }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn a_summarized_file_lists_with_the_status_the_whole_diff_would_give_it() {
+    fn a_summarized_file_lists_with_the_status_a_patch_would_give_it() {
         let file = |status| ChangedFile {
             path: "a.rs".into(),
             from: None,

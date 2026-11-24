@@ -37,7 +37,7 @@ fn a_tab_clicked_gives_way_to_the_first_change_and_one_clicked_after_it_stays(cx
     let stack = Stack::new();
     let (mut ui, workspace) = in_a_new_workspace(cx, &stack);
     let review = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.diff.as_ref().map(|d| d.review.clone())).unwrap();
-    ui.wait("the hub's summary", |ui| ui.cx.read_entity(&review, |r, _| r.lists_the_summary()));
+    ui.wait("the hub's summary", |ui| ui.cx.read_entity(&review, |r, _| r.listing().is_some()));
     ui.click("sidebar-tab-all-files");
     assert_eq!(tab(&ui), Some(SidebarTab::AllFiles));
 

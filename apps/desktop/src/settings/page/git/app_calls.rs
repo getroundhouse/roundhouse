@@ -2,7 +2,7 @@
 //! again, and to remove an app, which asks first. Why the hub couldn't is said under the row it was asked from.
 
 use gpui_kit::{Context, Window};
-use protocol::model::{GithubApp, GithubAppId};
+use protocol::model::GithubAppId;
 
 use super::kept::{Asked, Kept};
 use super::{app_words, words};
@@ -31,11 +31,12 @@ impl Kept {
         .detach();
     }
 
-    /// Asks whether to have the hub forget `app`, whose installation is the default when `default`, and does once it's
-    /// confirmed, saying `at` why it couldn't, if it couldn't.
+    /// Asks whether to have the hub forget the app `app`, called `name`, whose installation is the default when
+    /// `default`, and does once it's confirmed, saying `at` why it couldn't, if it couldn't.
     pub(super) fn ask_to_remove_app(
         &mut self,
-        app: &GithubApp,
+        app: GithubAppId,
+        name: &str,
         default: bool,
         at: Asked,
         window: &mut Window,
@@ -44,13 +45,13 @@ impl Kept {
         self.failed = None;
         let asked = Question {
             id: "remove-github-app",
-            title: app_words::remove_asks(&app.name).into(),
+            title: app_words::remove_asks(name).into(),
             says: app_words::remove_says(default).into(),
             keep: "Cancel",
             act: "Remove",
             removes: true,
         };
-        let (id, this) = (app.id, cx.weak_entity());
+        let (id, this) = (app, cx.weak_entity());
         asking::ask(asked, window, cx, move |_, cx| {
             let _ = this.update(cx, |this, cx| this.remove_app(id, at.clone(), cx));
         });

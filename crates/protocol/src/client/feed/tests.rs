@@ -128,7 +128,7 @@ fn a_notice_that_is_not_of_one_observation_is_handed_back() {
     }
 }
 
-/// Every notice goes to one level, or to none, and only a `FeedSubscribe` is sent what goes to none.
+/// Every notice goes to one level, or to none, and no subscription is sent what goes to none.
 #[test]
 fn each_notice_is_sent_at_the_level_it_is_of() {
     let s = || Some(Level::Session { id: "s".into() });

@@ -2,9 +2,9 @@ use protocol::client::HubNotice;
 use protocol::client::listed::SessionRecords;
 use protocol::fixtures::{github_account, github_app, github_sign_in};
 use protocol::model::{
-    AgentKind, DiffComment, DiffSide, GithubAccount, GithubApp, GithubAppId, GithubReach, GithubRepositoryName,
-    GithubSettings, GithubUser, GithubUserId, HubSettings, ModelList, ModelListKey, ModelLookup, Proposal, Reach,
-    Record, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal, Title, Workspace,
+    AgentKind, DiffComment, DiffSide, GithubAccount, GithubAppId, GithubAppSaid, GithubRepositoryName, GithubSettings,
+    GithubUser, GithubUserId, HubSettings, ModelList, ModelListKey, ModelLookup, Observation, Observed, Proposal,
+    Reach, Record, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal, Title, Workspace,
 };
 
 use crate::records::HubRecords;
@@ -175,21 +175,6 @@ fn the_same_copy_listed_again_is_no_change_to_a_view() {
     assert!(!changes.sessions(&"w".into()) && !changes.workspace(&"w".into()) && !changes.comments(&"w".into()));
 }
 
-/// From a hub that keeps no revisions, every copy has the same, so only when each was taken in tells them apart.
-#[test]
-fn a_change_from_a_hub_without_revisions_is_still_told_of() {
-    let mut held = HubRecords::default();
-    held.apply_list(Records { workspaces: vec![workspace("w", 10, 0)], ..Records::default() });
-    let before = held.snapshot();
-
-    let mut renamed = workspace("w", 10, 0);
-    renamed.title = Title::tidied("Renamed");
-    held.apply_notice(HubNotice::Workspace(renamed));
-    let now = held.snapshot();
-
-    assert!(now.changes_since(&before).workspace(&"w".into()));
-}
-
 /// A session's subagents are listed in the order they started, each found by its call, and go as the feed removes
 /// them, as any record does.
 #[test]
@@ -222,53 +207,78 @@ fn a_sessions_subagents_are_listed_as_they_started_and_found_by_their_call() {
     assert_eq!(ids(held.snapshot().subagents(&"s".into()), |s| s.call.as_str()), ["a"]);
 }
 
-/// Two accounts of one user and one of another, a sign-in, and three apps of your own.
+/// Two accounts of one user, one of another and one whose username isn't known, a sign-in, and three apps of your own
+/// and one whose name isn't known, each named by the hub's observation of it, whatever its record says.
 #[test]
 fn what_a_hub_says_of_github_is_listed_in_the_order_views_show_it_and_found_by_its_id() {
-    let named = |id: &str, name: &str| GithubAccount {
-        user: GithubUser { id: GithubUserId::new(1), name: name.into() },
+    let account = |id: &str, number: u64| GithubAccount {
+        user: GithubUser { id: GithubUserId::new(number), name: "old".into() },
         ..github_account(id)
     };
-    let app = |id, name: &str| GithubApp { name: name.to_string(), ..github_app(id) };
+    let named = |id: &str, name: &str| Observation::GithubUsername {
+        account: id.into(),
+        username: Observed::Current { value: name.into() },
+        rev: Rev::new(1),
+    };
+    let app_said = |id: u64, name: &str| Observation::GithubAppSaid {
+        app: GithubAppId::new(id),
+        said: Observed::Current {
+            value: GithubAppSaid { slug: name.into(), name: name.to_string(), owner: github_app(id).owner },
+        },
+        rev: Rev::new(1),
+    };
     let mut held = HubRecords::default();
 
     held.apply_list(Records {
-        github_accounts: vec![named("g3", "bea"), named("g2", "Ada"), named("g1", "ada")],
+        github_accounts: vec![account("g4", 7), account("g3", 2), account("g2", 1), account("g1", 1)],
         github_sign_ins: vec![github_sign_in("s")],
-        github_apps: vec![app(9, "bea-roundhouse"), app(8, "Ada-roundhouse"), app(7, "ada-roundhouse")],
+        github_apps: [6, 9, 8, 7].map(github_app).to_vec(),
+        observations: vec![
+            named("g3", "bea"),
+            named("g2", "Ada"),
+            named("g1", "ada"),
+            app_said(9, "bea-roundhouse"),
+            app_said(8, "Ada-roundhouse"),
+            app_said(7, "ada-roundhouse"),
+        ],
         rev: Rev::new(1),
         ..Records::default()
     });
     let shown = held.snapshot();
 
     let accounts: Vec<&str> = shown.github_accounts().iter().map(|a| a.id.as_str()).collect();
-    assert_eq!(accounts, ["g1", "g2", "g3"], "by name in any case, then ID");
-    assert_eq!(shown.github_account(&"g3".into()).map(|a| a.user.name.as_str()), Some("bea"));
+    assert_eq!(accounts, ["g1", "g2", "g3", "g4"], "by name in any case, then ID, then the one not named");
+    let usernames: Vec<String> = shown.github_accounts().iter().map(|a| shown.github_username(a).to_string()).collect();
+    assert_eq!(usernames, ["ada", "Ada", "bea", "#7"], "by its number, where its name isn't known");
     assert_eq!(shown.github_sign_in(&"s".into()).map(|s| s.status.is_waiting()), Some(true));
     assert_eq!(shown.github_sign_ins().count(), 1);
     let apps: Vec<u64> = shown.github_apps().iter().map(|a| a.id.get()).collect();
-    assert_eq!(apps, [7, 8, 9], "by name in any case, then number");
-    assert_eq!(shown.github_app(GithubAppId::new(9)).map(|a| a.name.as_str()), Some("bea-roundhouse"));
+    assert_eq!(apps, [7, 8, 9, 6], "by name in any case, then number, then the one not named");
+    let nine = shown.github_app(GithubAppId::new(9)).unwrap();
+    assert_eq!(shown.github_app_said(nine).map(|said| said.name.as_str()), Some("bea-roundhouse"));
     assert!(shown.github_account(&"gone".into()).is_none() && shown.github_sign_in(&"gone".into()).is_none());
     assert!(shown.github_app(GithubAppId::new(1)).is_none());
 }
 
+/// What a push from `r`'s workspaces would meet, as the hub's level sends it.
+fn reach_of(repo: &str, reach: Reach, rev: u64) -> Observation {
+    Observation::RepositoryReach { repo: repo.into(), reach: Observed::Current { value: reach }, rev: Rev::new(rev) }
+}
+
 #[test]
 fn a_workspace_says_what_a_push_from_it_meets_by_its_repositorys_reach() {
-    let reach =
-        |reach: Reach, rev: u64| GithubReach { reach, rev: Rev::new(rev), ..protocol::fixtures::github_reach("r") };
     let repository = GithubRepositoryName::named("example/project");
     let reason = "Permission denied to ada.".into();
     let refused = Reach::Refused { repository, username: "ada".into(), reason, installation: None };
     let mut held = HubRecords::default();
-    held.apply_list(Records { github_reach: vec![reach(refused.clone(), 6)], ..listed() });
+    held.apply_list(Records { observations: vec![reach_of("r", refused.clone(), 6)], ..listed() });
 
     let shown = held.snapshot();
     assert_eq!(shown.github_reach(&"r".into()), Some(&refused));
     assert_eq!(shown.in_workspace(&"w".into()).unwrap().github_reach(), Some(&refused), "its repository's");
     assert_eq!(shown.github_reach(&"r2".into()), None, "not checked yet");
 
-    held.apply_notice(HubNotice::GithubReach(reach(Reach::NotOnGithub, 8)));
+    held.apply_notice(HubNotice::Observation(reach_of("r", Reach::NotOnGithub, 8)));
     assert_eq!(held.snapshot().in_workspace(&"w".into()).unwrap().github_reach(), Some(&Reach::NotOnGithub));
 }
 
@@ -278,7 +288,7 @@ fn a_workspace_says_what_a_push_from_it_meets_by_its_repositorys_reach() {
 fn a_workspace_on_a_provider_left_to_its_machine_says_nothing_of_its_repositorys_reach() {
     let repository = GithubRepositoryName::named("example/project");
     let refused = Reach::Refused { repository, username: "ada".into(), reason: "No.".into(), installation: None };
-    let github_reach = vec![GithubReach { reach: refused.clone(), ..protocol::fixtures::github_reach("r") }];
+    let observations = vec![reach_of("r", refused.clone(), 2)];
     let on_vms = Workspace { provider: "vms".into(), ..workspace("w2", 20, 3) };
     let github =
         GithubSettings { account: None, sent: None, left_to_machine: vec!["local".into()], set_up: Vec::new() };
@@ -292,7 +302,7 @@ fn a_workspace_on_a_provider_left_to_its_machine_says_nothing_of_its_repositorys
     let mut held = HubRecords::default();
     held.apply_list(Records {
         workspaces: vec![on_vms, workspace("w", 10, 2)],
-        github_reach,
+        observations,
         hub_settings: Some(hub_settings),
         ..listed()
     });

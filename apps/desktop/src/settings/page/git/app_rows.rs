@@ -26,7 +26,10 @@ pub(super) fn installation_parts(
 ) -> (Picture, Option<Detail>, Option<AnyElement>) {
     let detail = match standing.said() {
         Some(said) if !standing.works() => Detail::Said(said, tone),
-        Some(_) | None => Detail::Said(app_words::installed_on(installed.on.name.as_str()), Tone::Plain),
+        Some(_) | None => {
+            let on = drawing.records.installed_on(account).map_or_else(String::new, |on| on.to_string());
+            Detail::Said(app_words::installed_on(&on), Tone::Plain)
+        }
     };
     (Picture::Mark(Lucide::Bot), Some(detail), installation_menu(drawing, account, installed, standing.works(), cx))
 }
@@ -46,7 +49,7 @@ fn app_row(drawing: &Drawing<'_>, app: &GithubApp, cx: &App) -> AnyElement {
     let shown = Row {
         id: SharedString::from(format!("git-app-{}", app.id)),
         picture: Picture::Mark(Lucide::Bot),
-        name: app.name.clone(),
+        name: drawing.records.github_app_name(app),
         dim: false,
         default: false,
         how: Some(app_words::APP.into()),

@@ -36,28 +36,6 @@ impl Reply for Terminal {
     }
 }
 
-/// Watches the terminal: what it shows, as frames of `HubFrame::TerminalPicture` for `subscription_id`, which the
-/// client picks, as for a session's, since a frame can arrive before the reply. The first is fresh and whole, from the
-/// hub's copy of the screen if it has one, and each after it has only what the client lacks of the newest the hub has,
-/// with at most one frame on its way at a time, so a client on a slow link is sent the newest of what the terminal
-/// shows rather than all that came between. Its shell's end comes as a `HubFrame::Terminal` with
-/// [`TerminalUpdate::Exited`], after which nothing more does. `SessionUnsubscribe` stops it. Answers with nothing.
-///
-/// [`TerminalUpdate::Exited`]: crate::terminal::TerminalUpdate::Exited
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct TerminalWatch {
-    pub id: TerminalId,
-    pub subscription_id: u64,
-}
-
-impl Request for TerminalWatch {
-    type Reply = ();
-
-    fn into_request(self) -> ClientRequest {
-        ClientRequest::TerminalWatch(self)
-    }
-}
-
 /// Rows of the terminal's history, by their numbers in `numbering`, as its worker sends them, for a client scrolled
 /// back past the rows it holds. The hub keeps none, and asks the worker. In another numbering, the reply has no rows,
 /// and says which numbering the terminal's rows are in now.

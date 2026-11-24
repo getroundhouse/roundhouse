@@ -7,10 +7,9 @@ impl HubNotice {
     /// The level whose subscriptions are sent it. The records of one session, which are its subagents, its proposals
     /// and how each reply read out ended, go to that session's level. Each observation goes to the level its kind is
     /// sent at, as [`ObservationKey::level`](crate::model::ObservationKey::level) says. Every other record goes to the
-    /// hub's level. `None` for what's sent at no level: `Resync`, which only a `FeedSubscribe` is sent, since a
-    /// `Subscribe` subscription that falls behind is sent where it stands again, `Unknown`, and the removal of a
-    /// proposal, which names no session, and which the hub never sends. A `FeedSubscribe` is sent every notice but
-    /// those of a workspace's level, which no client of the version it's kept for reads.
+    /// hub's level. `None` for what's sent at no level: `Resync`, which no subscription is sent, since one that falls
+    /// behind is sent where it stands again, `Unknown`, and the removal of a proposal, which names no session, and
+    /// which the hub never sends.
     pub fn level(&self) -> Option<Level> {
         let session = |id: &crate::model::SessionId| Some(Level::Session { id: id.clone() });
         match self {

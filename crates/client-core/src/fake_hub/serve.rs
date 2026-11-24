@@ -57,8 +57,12 @@ fn serve_requests(world: &World, connection: u64, stream: UnixStream) {
     for line in BufReader::new(stream).split(b'\n') {
         let Ok(line) = line else { return };
         let Ok(ClientFrame { id, request }) = frame::decode::<ClientFrame>(&line) else { return };
+        world.asked.heard(&request);
         let (first, outcome, then) = match answer(world, connection, request) {
-            Ok(Outcome::Reply { first, response, then }) => (first, ReplyOutcome::Response(response), then),
+            // With each old form filled, as a hub fills every reply.
+            Ok(Outcome::Reply { first, response, then }) => {
+                (first, ReplyOutcome::Response(super::old_forms::response_filled(response)), then)
+            }
             Ok(Outcome::Never) => continue,
             Err(error) => (Vec::new(), ReplyOutcome::Error(error), Vec::new()),
         };
@@ -156,6 +160,12 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             reply(C::GithubSignIn(GithubSignIn { id, status, rev: world.after_listed() }))
         }
         R::WorkspaceFileDiff(workspaces::WorkspaceFileDiff { id, path, untracked, first_line, .. }) => {
+            // From the world's patch of every change, where it says nothing of what the worker reads of one file.
+            if !world.worker_reads.contains_key(&id)
+                && let Some(diff) = world.file_diff_of_diff(&id, &path)
+            {
+                return reply(C::FileDiff(diff));
+            }
             let at = protocol::model::ChangedFileAt { untracked, path };
             reply(C::FileDiff(reads_of(world, &id)?.file_diff(at, first_line)?))
         }
@@ -343,20 +353,11 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         | R::PairingWait(_)
         | R::DeviceList
         | R::DeviceRevoke(_)
-        // What only a client of version 3 sends, which follows through a request of its own for each of what it follows,
-        // and lists the records, as a client of this build doesn't.
+        // What only a client of version 3 sent, which listed the records itself, as a client of this build doesn't.
         | R::RecordsList
-        | R::FeedSubscribe(_)
-        | R::SessionSubscribe(_)
-        | R::SessionSubscribePlaces(_)
-        | R::SessionUnsubscribe(_)
         | R::SessionSubagents(_)
         | R::SessionProposals(_)
         | R::SessionRepliesHeard(_)
-        | R::GithubSubscribe(_)
-        | R::TerminalWatch(_)
-        // What no client of this build sends, since Changes reads none of the files past a summary.
-        | R::WorkspaceChangedFiles(_)
         | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't know that request")),
         R::TerminalRows(rows) => super::terminals::rows(world, &rows),
         R::TerminalBounds(bounds) => super::terminals::bounds(world, &bounds),

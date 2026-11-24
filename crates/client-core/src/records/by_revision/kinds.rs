@@ -26,33 +26,9 @@ impl Revised for Record {
 impl Revised for Observation {
     type Key = ObservationKey;
 
+    /// Every kind this build knows is kept, of every level.
     fn key(&self) -> Option<ObservationKey> {
-        match self {
-            Observation::WorkspaceLines { .. }
-            | Observation::WorkspaceChanges { .. }
-            | Observation::WorkspacePullRequest { .. }
-            | Observation::WorkspacePullRequestDetail { .. }
-            | Observation::WorkspaceRepositoryUnseen { .. }
-            | Observation::Reference { .. } => Some(Observation::key(self)),
-            // Read from a version of the client protocol this client doesn't speak, so its hub sends it none, and one
-            // that came would be drawn as one this client can't.
-            Observation::WorkspaceBranches { .. }
-            | Observation::WorkspaceWorkerBuild { .. }
-            | Observation::ReleaseOffered { .. }
-            | Observation::RepositoryReach { .. }
-            | Observation::GithubUsername { .. }
-            | Observation::GithubAppSaid { .. }
-            | Observation::GithubAppBot { .. }
-            | Observation::InstalledOn { .. }
-            | Observation::ModelCatalog { .. }
-            | Observation::AccountIdentity { .. }
-            | Observation::AccountLimits { .. }
-            | Observation::SessionContext { .. }
-            | Observation::SessionTodos { .. }
-            | Observation::SessionCache { .. }
-            | Observation::WaitRead { .. }
-            | Observation::Unknown => None,
-        }
+        Some(Observation::key(self)).filter(|key| *key != ObservationKey::Unknown)
     }
 
     fn rev(&self) -> Rev {

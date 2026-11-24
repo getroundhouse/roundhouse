@@ -21,7 +21,8 @@ fn chat(id: &str, used_tokens: u64) -> Session {
 /// A client's copy of a hub's records that holds `chats`.
 fn holding<'a>(chats: impl IntoIterator<Item = &'a Session>) -> Snapshot {
     let mut held = HubRecords::default();
-    held.apply_list(Records { sessions: chats.into_iter().cloned().collect(), ..Records::default() });
+    let listed = Records { sessions: chats.into_iter().cloned().collect(), ..Records::default() };
+    held.apply_list(client_core::records::with_observations(listed));
     held.snapshot()
 }
 

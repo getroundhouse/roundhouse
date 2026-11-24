@@ -162,7 +162,7 @@ mod tests {
     use SessionStatus::{Background, Idle, Interrupted, Running, Unknown, WaitingApproval};
     use client_core::records::HubRecords;
     use protocol::event::TaskKind;
-    use protocol::model::{HubUpdate, Record, Rev};
+    use protocol::model::{HubUpdate, Records, Rev};
 
     use super::*;
 
@@ -219,7 +219,8 @@ mod tests {
     /// A client's copy of the records of a hub that found `found`.
     fn holding(found: &HubUpdate) -> Snapshot {
         let mut held = HubRecords::default();
-        held.apply_record(Record::HubUpdate(found.clone()));
+        let listed = Records { hub_update: Some(found.clone()), rev: found.rev, ..Records::default() };
+        held.apply_list(client_core::records::with_observations(listed));
         held.snapshot()
     }
 

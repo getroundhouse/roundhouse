@@ -16,7 +16,7 @@ Two tabs switch what it lists:
 - **A workspace that changes nothing shows All files,** and switches to Changes when it first changes something. A tab you click stays.
 - **Changes shows as a list of paths, or in folders,** switched by the button at the sidebar's top right.
 - **Each changed file has an icon for how it changed:** added, modified, removed or renamed.
-- **While the workspace shows, Changes follows its files as they change,** whoever changes them: the agent, your editor or git. Where the hub can't keep up with them, as with an older worker, the list is read again when a turn ends.
+- **While the workspace shows, Changes follows its files as they change,** whoever changes them: the agent, your editor or git, once something has started the workspace's worker, such as a turn or a terminal. Until then it lists them as they last were, and nothing is read as you show it. Clicking a file reads it, which starts the worker.
 - **A workspace that changes over 5,000 files lists 5,000,** the ones git tracks first, with a row at the end that says how many more there are, such as `1,204 more files not shown`. The Changes tab's count, and the lines added and removed at the right end of the tabs, cover every file.
 - **Dragging the sidebar's inner edge changes its width,** from 300px to 800px.
 
@@ -47,7 +47,7 @@ Clicking a file shows it in the workspace's file tab: its diff from Changes, or 
 - **Lines added and removed are tinted green and red,** and the words that changed more strongly.
 - **A switch at the right end of the bar** shows the diff in one column, side by side, or as the whole file.
 - **A Markdown file's diff can show rendered,** the fourth choice on the switch: what the change removed is struck through on red, and what it added is on green, each where it was. A paragraph that changed shows as it was, then as it is.
-- **The file shown is read again when it changes,** whoever changes it, and where the hub can't keep up with the workspace's files, when a turn ends.
+- **The file shown is read again when it changes,** whoever changes it.
 - **What you've opened stays open** when the diff is read again.
 - **A file whose name isn't valid UTF-8, which Linux allows, shows no diff,** and says why in its place. Its row in Changes still shows its lines added and removed.
 

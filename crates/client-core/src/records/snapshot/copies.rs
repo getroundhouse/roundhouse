@@ -101,17 +101,20 @@ impl Listed {
                 Record::GithubAccount(account) => listed.github.account(account),
                 Record::GithubSignIn(sign_in) => listed.github.sign_in(sign_in),
                 Record::GithubApp(app) => listed.github.app(app),
-                Record::GithubReach(reach) => listed.github.reach(reach),
                 Record::Terminal(terminal) => {
                     let its: &mut Vec<_> = terminals.entry(terminal.workspace_id.clone()).or_default();
                     its.push((terminal.clone(), taken));
                 }
                 // Held apart, as `HubRecords::apply_record` says, but for a found login, from a hub from before
-                // Settings' Providers, which no view shows.
-                Record::Subagent(_) | Record::Proposal(_) | Record::ReplyHeard(_) | Record::FoundGithubLogin(_) => {}
+                // Settings' Providers, which no view shows, and a repository's reach, which a client of this version
+                // reads as an observation.
+                Record::Subagent(_)
+                | Record::Proposal(_)
+                | Record::ReplyHeard(_)
+                | Record::FoundGithubLogin(_)
+                | Record::GithubReach(_) => {}
             }
         }
-        listed.github.order();
         listed.repos.sort_by(Repo::by_name);
         listed.repo_at = listed.repos.iter().enumerate().map(|(at, repo)| (repo.id.clone(), at)).collect();
         workspaces.sort_by(|(a, _), (b, _)| a.oldest_first(b));

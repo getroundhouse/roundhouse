@@ -1,7 +1,7 @@
 //! Every message about a terminal, spelled out, since a client, its hub and the hub's workers can each be a different
 //! build, and a worker outlives the hub that started it.
 
-use protocol::client::terminals::{TerminalClose, TerminalOpen, TerminalRows, TerminalWatch};
+use protocol::client::terminals::{TerminalClose, TerminalOpen, TerminalRows};
 use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HubFrame, HubNotice, HubStatus, ReplyOutcome};
 use protocol::frame;
 use protocol::model::{RecordKey, Records, Rev, Terminal};
@@ -31,8 +31,6 @@ fn every_request_a_client_makes_of_a_terminal_keeps_its_form() {
         ClientRequest::TerminalOpen(open),
         r#"{"method":"terminal_open","workspace_id":"w","id":"t","size":{"cols":80,"rows":24}}"#,
     );
-    let watch = TerminalWatch { id: "t".into(), subscription_id: 4 };
-    client_asked(ClientRequest::TerminalWatch(watch), r#"{"method":"terminal_watch","id":"t","subscription_id":4}"#);
     let rows = TerminalRows { id: "t".into(), numbering: Numbering::new(2), from: RowNumber::new(40), count: 100 };
     client_asked(
         ClientRequest::TerminalRows(rows),

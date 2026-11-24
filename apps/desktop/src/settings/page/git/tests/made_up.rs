@@ -51,7 +51,8 @@ pub(super) fn listed(records: Records, default: Option<&str>) -> Snapshot {
         rev: Rev::default(),
     };
     let mut held = HubRecords::default();
-    held.apply_list(Records { hub_settings: Some(settings), rev: Rev::new(1), ..records });
+    let listed = Records { hub_settings: Some(settings), rev: Rev::new(1), ..records };
+    held.apply_list(client_core::records::with_observations(listed));
     held.snapshot()
 }
 

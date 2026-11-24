@@ -136,7 +136,10 @@ fn an_app_is_made_on_github_and_connected_as_the_window_comes_back_once_its_inst
 
     ui.wait("Done", |ui| ui.has("git-close"));
     let account = installation(&ui).unwrap();
-    assert_eq!(account.user.name.as_str(), "ada-roundhouse[bot]");
+    // What GitHub calls its bot comes apart from its record, once the hub has asked.
+    ui.wait("its bot's username", |ui| {
+        ui.view().records().github_username(&account).to_string() == "ada-roundhouse[bot]"
+    });
     assert_eq!(account.held_login.map(|held| held.how), Some(GithubLoginKind::App));
     // Which account is the default is on the hub's settings, a record of their own, which reaches the app apart from
     // the account's, so it's waited for rather than read as soon as the account is there.

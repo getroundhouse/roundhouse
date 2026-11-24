@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, files, workspaces};
 use protocol::model::{
-    ByteRange, ChangedFileAt, ChangedFilesPage, CommitId, FileContents, FileDiff, FileOpened, FilePages, FileRange,
-    GitDiff, GitStatus, WorkspaceId, WorktreeFiles,
+    ByteRange, CommitId, FileContents, FileDiff, FileOpened, FilePages, FileRange, GitDiff, GitStatus, WorkspaceId,
+    WorktreeFiles,
 };
 use protocol::worker;
 
@@ -21,18 +21,6 @@ impl Hub {
         let worktree = self.ready_worktree(&id).await?;
         let (path, base_ref) = (worktree.path().to_owned(), worktree.workspace().base_ref.clone());
         worktree.link().call(worker::GitDiff { path, base_ref }).await
-    }
-
-    /// The page of the files the workspace changes after the one `after` names, which the worker reads, as
-    /// `WorkspaceChangedFiles` says. The hub keeps none of it.
-    pub(crate) async fn workspace_changed_files(
-        self: &Arc<Self>,
-        id: WorkspaceId,
-        after: ChangedFileAt,
-    ) -> Result<ChangedFilesPage, ApiError> {
-        let worktree = self.ready_worktree(&id).await?;
-        let (path, base_ref) = (worktree.path().to_owned(), worktree.workspace().base_ref.clone());
-        worktree.link().call(worker::ListChangedFiles { path, base_ref, after }).await
     }
 
     /// One page of the diff of the entry of one changed file asked for, as the worker reads it against the workspace's
@@ -125,81 +113,5 @@ impl Hub {
         let worktree = self.ready_worktree(&id).await?;
         let path = worktree.path().to_owned();
         worktree.link().call(worker::FilePages { path, commit, file, page_lines, pages }).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use parking_lot::Mutex;
-    use protocol::client::{ApiError, ErrorCode};
-    use protocol::model::{ChangeStatus, ChangedFile, ChangedFileAt, ChangedFilesPage};
-    use protocol::worker::{ListChangedFiles, WorkerRequest, WorkerResponse};
-
-    use crate::hub::Hub;
-    use crate::hub::tests::{hub_with_worktree, serving};
-    use crate::worker_link::WorkerLink;
-
-    fn after() -> ChangedFileAt {
-        ChangedFileAt { untracked: true, path: "u1.txt".into() }
-    }
-
-    fn page() -> ChangedFilesPage {
-        let file = ChangedFile {
-            path: "u2.txt".into(),
-            from: None,
-            status: ChangeStatus::Untracked,
-            lines: None,
-            version: None,
-            name_not_utf8: false,
-        };
-        ChangedFilesPage { base_commit: "c1".into(), files: vec![file], left_out: 0 }
-    }
-
-    /// A hub for the workspace `w`, whose worker answers a request for a page of its changed files with `answer`, and
-    /// what that worker was asked.
-    fn hub_answering(
-        dir: &std::path::Path,
-        answer: fn() -> Result<WorkerResponse, ApiError>,
-    ) -> (Arc<Hub>, Arc<Mutex<Vec<ListChangedFiles>>>) {
-        let hub = hub_with_worktree(dir);
-        let asked = Arc::new(Mutex::new(Vec::new()));
-        let kept = asked.clone();
-        let link = WorkerLink::answering(move |request| {
-            let WorkerRequest::ListChangedFiles(listing) = request else { return Some(Ok(WorkerResponse::Ok)) };
-            kept.lock().push(listing);
-            Some(answer())
-        });
-        serving(&hub, &link);
-        (hub, asked)
-    }
-
-    /// The hub passes a client's read of a page of a workspace's changed files on to the workspace's worker, with its
-    /// worktree and base, and the worker's page back, and refuses one of a workspace it doesn't have, asking nothing.
-    #[tokio::test]
-    async fn a_page_of_changed_files_is_read_from_the_workspace_s_worker() {
-        let dir = tempfile::tempdir().unwrap();
-        let (hub, asked) = hub_answering(dir.path(), || Ok(WorkerResponse::ChangedFilesPage(page())));
-
-        let read = hub.workspace_changed_files("w".into(), after()).await.unwrap();
-        let refused = hub.workspace_changed_files("nowhere".into(), after()).await.unwrap_err();
-
-        assert_eq!(read, page());
-        assert_eq!(refused.code, ErrorCode::NotFound);
-        let base_ref = hub.workspace(&"w".into()).await.unwrap().base_ref;
-        assert_eq!(*asked.lock(), [ListChangedFiles { path: "/w".into(), base_ref, after: after() }]);
-    }
-
-    /// A worker from before the request refuses it, which the hub passes on, so a client shows only how many files the
-    /// summary leaves out.
-    #[tokio::test]
-    async fn a_worker_from_before_the_request_has_the_hub_refuse_it_as_unsupported() {
-        let dir = tempfile::tempdir().unwrap();
-        let (hub, _) = hub_answering(dir.path(), || Err(ApiError::new(ErrorCode::Unsupported, "unknown request")));
-
-        let refused = hub.workspace_changed_files("w".into(), after()).await.unwrap_err();
-
-        assert_eq!(refused.code, ErrorCode::Unsupported);
     }
 }

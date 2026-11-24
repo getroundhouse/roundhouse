@@ -1,57 +1,22 @@
-//! What Changes lists, which is either the whole diff or the hub's summary of the changed files, and where the file the
-//! file tab shows is read from with each, so every reader asks one value which of them it is.
+//! What Changes lists, which is the hub's summary of the changed files, and the file the file tab shows, read on its
+//! own with it, so every reader asks one value.
 
 use protocol::model::{ChangeSummary, CommitId};
 
 use super::Review;
 use super::listing::ChangedEntry;
-use super::one_file::{OneFile, Taken};
+use super::one_file::OneFile;
 use crate::patch::FilePatch;
 
-/// What Changes lists.
-#[derive(Debug)]
-#[expect(clippy::large_enum_variant, reason = "a workspace's pane holds one, so boxing the larger saves nothing")]
-pub(super) enum Listed {
-    /// The whole diff, as last read, which lists every file and holds each one's patch.
-    WholeDiff(WholeDiff),
-    /// The hub's summary of the changed files.
-    Summary(Summary),
-}
-
-/// The whole diff, as one read of it found it.
-#[derive(Debug)]
-pub(super) struct WholeDiff {
-    /// Every changed file, in order of path.
-    pub(super) files: Vec<FilePatch>,
-    /// The commit the diff was taken from, which holds each file as it was before the change. `None` from a worker
-    /// too old to say.
-    pub(super) base_commit: Option<CommitId>,
-    /// The hub left some untracked files out.
-    pub(super) truncated: bool,
-}
-
-/// A summary the hub sent, while Changes lists it.
+/// What Changes lists, once the workspace's level has listed it.
 #[derive(Debug)]
 pub(super) struct Summary {
-    /// What it lists, as the hub sent it. The files it leaves out aren't read, so only how many there are shows.
-    pub(super) summarized: ChangeSummary,
-    /// Whether the hub keeps it current now. One that stops being current, as when its worker goes, or the
-    /// connection does, stays listed until the whole diff is next read, at the moments it's read, with the file read
-    /// with it.
-    pub(super) current: bool,
-    pub(super) file: SummaryFile,
-}
-
-/// Where the file the file tab shows is read from while a summary is listed.
-#[derive(Debug)]
-#[expect(clippy::large_enum_variant, reason = "a workspace's pane holds one, so boxing the larger saves nothing")]
-pub(super) enum SummaryFile {
-    /// On its own, with one file's diff. `None` while the tab shows no file.
-    OneFile(Option<OneFile>),
-    /// From the whole diff, `None` until it's read, since the hub, or its worker, refused one file's diff. Until the
-    /// next connection, or until the summary stops being current, as it does when its worker goes, since the hub
-    /// replaces an older worker with one of its own build.
-    WholeDiff(Option<WholeDiff>),
+    /// What it lists, as the hub sent it, whether current or as of an earlier read. `None` while the hub's summary isn't
+    /// known, which lists nothing, as a workspace that changes nothing does. The files it leaves out aren't read, so
+    /// only how many there are shows.
+    pub(super) summarized: Option<ChangeSummary>,
+    /// The file the file tab shows, read with one file's diff. `None` while the tab shows no file.
+    pub(super) file: Option<OneFile>,
 }
 
 /// What the file tab has of one file's diff.
@@ -71,68 +36,26 @@ pub enum Diffed<'a> {
     NameNotUtf8,
 }
 
-impl Summary {
-    /// One file's diff, which the hub, or its worker, refused, is asked for again, as from another.
-    pub(super) fn ask_again(&mut self) {
-        if let SummaryFile::WholeDiff(_) = self.file {
-            self.file = SummaryFile::OneFile(None);
-        }
-    }
-}
-
-impl WholeDiff {
-    /// Each file, and whether it's the untracked one at its path. The whole diff is git's diff of what it tracks, and
-    /// then each untracked file's, so of two at one path, which are in that order, the second is the untracked one.
-    pub(super) fn entries(&self) -> impl Iterator<Item = (bool, &FilePatch)> {
-        let before = std::iter::once(None).chain(self.files.iter().map(Some));
-        before.zip(&self.files).map(|(before, file)| (before.is_some_and(|before| before.path() == file.path()), file))
-    }
-
-    /// The patch of `entry`, if it has one, as [`ChangedEntry::is`] finds it.
-    fn patch(&self, entry: &ChangedEntry) -> Option<&FilePatch> {
-        let shared = self.entries().filter(|(_, file)| *file.path() == entry.path).count() > 1;
-        let mut entries = self.entries();
-        entries.find(|(untracked, file)| entry.is(file.path(), *untracked, shared)).map(|(_, file)| file)
-    }
-
-    /// What it has of `entry`.
-    fn diffed(&self, entry: &ChangedEntry) -> Diffed<'_> {
-        self.patch(entry).map_or(Diffed::Unchanged, Diffed::Patch)
-    }
-
-    /// `entry` as it found it, to show while that file is read on its own.
-    pub(super) fn taken(&self, entry: &ChangedEntry) -> Taken {
-        let base = self.base_commit.clone();
-        self.patch(entry).map_or(Taken::Unchanged, |patch| Taken::Patch { patch: patch.clone(), base })
-    }
-}
-
 impl Review {
-    /// What the file tab has of the diff of the file it shows: from the whole diff, where Changes lists it or the hub
-    /// refused one file's diff, otherwise as one file's diff read it, and nothing of a file the summary marks as named
-    /// in bytes that aren't UTF-8. One that hasn't been read couldn't be while the worktree can't be read, since
-    /// nothing is.
+    /// What the file tab has of the diff of the file it shows, as one file's diff read it, and nothing of a file the
+    /// summary marks as named in bytes that aren't UTF-8. One that hasn't been read couldn't be while the worktree
+    /// can't be read, since nothing is.
     pub fn diffed(&self) -> Diffed<'_> {
         let unread = if self.worktree_readable { Diffed::Loading } else { Diffed::Failed };
         let Some(entry) = &self.diffed else { return Diffed::Loading };
         if self.names_no_file(entry) {
             return Diffed::NameNotUtf8;
         }
-        match &self.listed {
-            None => unread,
-            Some(Listed::WholeDiff(whole)) => whole.diffed(entry),
-            Some(Listed::Summary(summary)) => match &summary.file {
-                SummaryFile::WholeDiff(Some(whole)) => whole.diffed(entry),
-                SummaryFile::OneFile(Some(file)) if file.of(entry) => file.diffed(),
-                SummaryFile::WholeDiff(None) | SummaryFile::OneFile(_) => unread,
-            },
+        match self.listed.as_ref().and_then(|listed| listed.file.as_ref()) {
+            Some(file) if file.of(entry) => file.diffed(),
+            Some(_) | None => unread,
         }
     }
 
     /// Whether the summary listed marks `entry` as named in bytes that aren't UTF-8, so the name it gives names no file
     /// a request could read.
     pub(super) fn names_no_file(&self, entry: &ChangedEntry) -> bool {
-        let Some(Listed::Summary(Summary { summarized, .. })) = &self.listed else { return false };
+        let Some(summarized) = self.listed.as_ref().and_then(|listed| listed.summarized.as_ref()) else { return false };
         entry.in_summary(summarized).is_some_and(|file| file.name_not_utf8)
     }
 
@@ -146,19 +69,11 @@ impl Review {
     }
 
     /// The commit the file the file tab shows was diffed against, which holds it as it was before the change, and what
-    /// the diff leaves out of it is read from: the whole diff's, or the one file's diff's, or else the summary's.
-    /// `None` until the changes are read, or from a worker too old to say.
+    /// the diff leaves out of it is read from: the one file's diff's, or else the summary's. `None` until the changes
+    /// are listed, or from a worker too old to say.
     pub fn base_commit(&self) -> Option<&CommitId> {
-        match &self.listed {
-            None => None,
-            Some(Listed::WholeDiff(whole)) => whole.base_commit.as_ref(),
-            Some(Listed::Summary(summary)) => {
-                let read = match &summary.file {
-                    SummaryFile::WholeDiff(whole) => whole.as_ref().and_then(|whole| whole.base_commit.as_ref()),
-                    SummaryFile::OneFile(file) => file.as_ref().and_then(OneFile::base_commit),
-                };
-                read.or(Some(&summary.summarized.base_commit))
-            }
-        }
+        let listed = self.listed.as_ref()?;
+        let read = listed.file.as_ref().and_then(OneFile::base_commit);
+        read.or(listed.summarized.as_ref().map(|summarized| &summarized.base_commit))
     }
 }

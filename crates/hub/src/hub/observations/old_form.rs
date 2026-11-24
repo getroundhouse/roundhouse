@@ -241,7 +241,6 @@ impl OldForm for ClientResponse {
             | C::Agents(_)
             | C::GitStatus(_)
             | C::GitDiff(_)
-            | C::ChangedFilesPage(_)
             | C::FileDiff(_)
             | C::SetupLog(_)
             | C::PullRequest(_)

@@ -22,27 +22,25 @@ use serde::{Deserialize, Serialize};
 
 /// The client protocol's version, apart from the worker protocol's, so a break in one doesn't break the other. It
 /// changes only for a real break, as `docs/principles/versions.md` says. Version 4 is the one a client follows
-/// everything through [`Subscribe`](super::subscriptions::Subscribe) alone in.
-pub const CLIENT_PROTOCOL_VERSION: u32 = 4;
+/// everything through [`Subscribe`](super::subscriptions::Subscribe) alone in, and version 5 the one it reads every copy
+/// of what the hub only observes in as an observation, from [`EVERY_OBSERVATION_FROM`].
+pub const CLIENT_PROTOCOL_VERSION: u32 = 5;
 
-/// The versions of the client protocol a hub of this build speaks: its own, the one before it, for a client of an
-/// older build, as `docs/principles/versions.md` says, and the next, [`EVERY_OBSERVATION_FROM`], which no client speaks
-/// yet. Version 3 is the one a client follows through a request of its own for each of the hub's records, a session, a
-/// terminal and what it shows of GitHub. Nothing a hub sends a client of version 3 differs from what it sent it before
-/// version 4.
+/// The versions of the client protocol a hub of this build speaks: its own, and the one before it, for a client of an
+/// older build, as `docs/principles/versions.md` says. A client of version 4 reads each copy that became an observation
+/// in the form from before it, which the hub fills from the observation.
 ///
 /// Each is written out, rather than taken from [`CLIENT_PROTOCOL_VERSION`], since at a break the hub speaks the new
 /// version a merge before clients do, so a client of the build that first speaks it can talk to the hub of the build
 /// before. A hub has to speak its own build's clients' version, which the assertion below holds.
-pub const HUB_SPEAKS: Versions = Versions { oldest: 3, newest: 5 };
+pub const HUB_SPEAKS: Versions = Versions { oldest: 4, newest: 5 };
 
 const _: () = assert!(HUB_SPEAKS.speaks(CLIENT_PROTOCOL_VERSION), "a hub speaks its own build's clients' version");
 
 /// The version of the client protocol from which a client reads every copy of what the hub only observes as an
 /// observation, and none in the form it replaced: GitHub's whatever its start says, and each kind that
 /// [`ObservationKey::read_from`](crate::model::ObservationKey::read_from) says is read from it. So no client of one
-/// version holds such a copy in two forms. A hub speaks it only once it sends every such kind, as one of this build
-/// does, and no client speaks it yet.
+/// version holds such a copy in two forms.
 pub const EVERY_OBSERVATION_FROM: u32 = 5;
 
 /// A request to a hub, which names what the hub answers it with.
@@ -103,7 +101,6 @@ pub enum ClientResponse {
     Workspaces(workspaces::Workspaces),
     GitStatus(GitStatus),
     GitDiff(GitDiff),
-    ChangedFilesPage(crate::model::ChangedFilesPage),
     FileDiff(FileDiff),
     SetupLog(workspaces::SetupLog),
     PullRequest(workspaces::PullRequestReply),
@@ -256,17 +253,18 @@ pub enum HubFrame {
         subscription_id: u64,
         notice: HubNotice,
     },
-    /// What the hub knows now of one of what a [`super::github::GithubSubscribe`] shows.
+    /// What the hub knows now of a workspace's own pull request, or of an issue or a pull request a chip shows, to a
+    /// client of version 4 whose start doesn't read GitHub as observations.
     Github {
         subscription_id: u64,
         update: super::github::GithubUpdate,
     },
-    /// That the shell of the terminal a `TerminalWatch` follows ended, after which nothing more comes.
+    /// That the shell of the terminal a subscription follows ended, after which nothing more comes.
     Terminal {
         subscription_id: u64,
         update: TerminalUpdate,
     },
-    /// A frame of what the terminal a `TerminalWatch` follows shows, the newest the hub has whenever the last has been
+    /// A frame of what the terminal a subscription follows shows, the newest the hub has whenever the last has been
     /// written.
     TerminalPicture {
         subscription_id: u64,

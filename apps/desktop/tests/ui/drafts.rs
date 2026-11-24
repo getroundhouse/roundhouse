@@ -243,6 +243,8 @@ fn a_change_made_elsewhere_while_something_from_here_is_on_its_way_shows_once_it
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
+    // Here rather than as the hub is held still, since nothing may run on the main thread just before that.
+    ui.wait_for_the_sidebar_of_changes();
     let chat = ui.active_chat();
     ui.input("typed here");
     let drafts = ui.view().drafts().unwrap();

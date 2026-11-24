@@ -3,9 +3,7 @@
 
 use std::cmp::Ordering;
 
-use protocol::model::{
-    DiffComment, HubSettings, Level, Observation, Records, Repo, Session, Workspace, WorkspaceId, WorkspaceStatus,
-};
+use protocol::model::{DiffComment, HubSettings, Records, Repo, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
 use super::revisions::MADE;
 use super::world::{LoginSupport, World};
@@ -34,20 +32,16 @@ impl World {
             // As from a hub since Settings' Providers.
             found_github_logins: Vec::new(),
             github_apps: self.github_apps.clone(),
-            github_reach: self.github_reach.clone(),
+            // As a hub sends a client of version 5, which reads what each held as an observation.
+            github_reach: Vec::new(),
             terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),
             model_lists: self.model_lists.clone(),
             hub_update: self.hub_update.clone(),
-            observations: self.observations_at(&Level::Hub),
+            // Listed with them by `following`, from what these make, as `World::observations_at` says.
+            observations: Vec::new(),
             // As a hub's list is, at its newest.
             rev: self.listed_at,
         }
-    }
-
-    /// The world's observations sent at `level`.
-    pub(super) fn observations_at(&self, level: &Level) -> Vec<Observation> {
-        let at_level = self.observations.iter().filter(|observation| observation.key().level().as_ref() == Some(level));
-        at_level.cloned().collect()
     }
 
     pub(super) fn repos_listed(&self) -> Vec<Repo> {

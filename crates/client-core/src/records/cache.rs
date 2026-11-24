@@ -1,12 +1,11 @@
+use super::blanking::blanked;
 use super::by_revision::ByRevision;
 use super::of_session::BySession;
 use super::snapshot::{Listed, ObservationsListed, Snapshot};
 use crate::Agents;
 use protocol::client::listed::{ReferenceObservations, SessionRecords, WorkspaceObservations};
 use protocol::client::{HubNotice, ObservationNotice, RecordNotice};
-use protocol::model::{
-    Level, Observation, ObservationKey, Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent,
-};
+use protocol::model::{Level, Observation, Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent};
 use std::cell::OnceCell;
 use std::sync::Arc;
 
@@ -38,8 +37,8 @@ pub(super) struct Kept<T> {
 }
 
 /// When a copy was taken in, as a count of the copies taken in before it, so a copy taken in later is newer. It tells
-/// views which copies they've already seen, which a record's revision can't, since a hub that doesn't keep revisions
-/// gives every copy the same.
+/// views which copies they've already seen, and what came on the connection now from what an earlier one left, which a
+/// record's revision can't, since a hub whose revisions started again gives a newer copy an older one.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct Taken(pub(super) u64);
 
@@ -58,7 +57,7 @@ impl HubRecords {
     pub fn apply_list(&mut self, mut list: Records) -> bool {
         let at = list.rev;
         let observations = std::mem::take(&mut list.observations);
-        let records = self.records.apply_list(&Level::Hub, at, list.into_records(), &mut self.taken);
+        let records = self.records.apply_list(&Level::Hub, at, list.into_records().map(blanked), &mut self.taken);
         let observed = self.observations.apply_list(&Level::Hub, at, observations, &mut self.taken);
         if records {
             self.shown.take();
@@ -92,7 +91,7 @@ impl HubRecords {
 
     /// Takes in one record, from a notice or a reply. Returns whether it changed anything.
     pub fn apply_record(&mut self, record: Record) -> bool {
-        match record {
+        match blanked(record) {
             // Kept apart, since only the subagents and proposals of the sessions a view shows are kept, each session's
             // listed on its own rather than with everything, so a list of everything says nothing of them.
             Record::Subagent(subagent) => self.subagents.apply(subagent),
@@ -175,7 +174,8 @@ impl HubRecords {
                 | Level::Reference { .. }
                 | Level::Unknown => None,
             });
-            Arc::new(ObservationsListed::of(held, workspaces_listed.collect()))
+            let hub_listed = self.observations.levels_listed().any(|level| *level == Level::Hub);
+            Arc::new(ObservationsListed::of(held, workspaces_listed.collect(), hub_listed))
         });
         Snapshot::new(
             records.clone(),
@@ -195,21 +195,33 @@ impl HubRecords {
         self.replies_heard.want(session.clone());
     }
 
-    /// Follows `session` once less, letting go of its records of every kind once nothing follows it, since they reach a
-    /// client only while it follows the session. Returns whether it let go of any.
+    /// Follows `session` once less, letting go of its records of every kind, and its observations, once nothing follows
+    /// it, since they reach a client only while it follows the session. Returns whether it let go of any.
     pub(crate) fn forget_session(&mut self, session: &SessionId) -> bool {
         let subagents = self.subagents.forget(session);
         let proposals = self.proposals.forget(session);
-        self.replies_heard.forget(session) || subagents || proposals
+        let heard = self.replies_heard.forget(session);
+        let observed = !self.subagents.follows(session) && self.let_go_of(&Level::Session { id: session.clone() });
+        heard || subagents || proposals || observed
     }
 
-    /// Takes in where a session's own records stand, as its subscription lists them. Returns whether anything changed.
+    /// Takes in where a session's own records and observations stand, as its subscription lists them, while it's
+    /// followed. Returns whether anything changed.
     pub(crate) fn apply_session_list(&mut self, listed: SessionRecords) -> bool {
-        // Its observations are sent only to a client of a version this one doesn't speak.
-        let SessionRecords { session_id, subagents, proposals, replies_heard, observations: _, rev } = listed;
+        let SessionRecords { session_id, subagents, proposals, replies_heard, observations, rev } = listed;
+        let observed = self.subagents.follows(&session_id)
+            && self.observations.apply_list(
+                &Level::Session { id: session_id.clone() },
+                rev,
+                observations,
+                &mut self.taken,
+            );
+        if observed {
+            self.shown_observations.take();
+        }
         let subagents = self.subagents.apply_list(&session_id, subagents, rev);
         let proposals = self.proposals.apply_list(&session_id, proposals, rev);
-        self.replies_heard.apply_list(&session_id, replies_heard, rev) || subagents || proposals
+        self.replies_heard.apply_list(&session_id, replies_heard, rev) || subagents || proposals || observed
     }
 
     /// Lets go of the observations held only through `level`, which a client stops following, as of a workspace
@@ -242,16 +254,6 @@ impl HubRecords {
         let ReferenceObservations { reference, observations, rev } = listed;
         let level = Level::Reference { reference };
         let changed = self.observations.apply_list(&level, rev, observations, &mut self.taken);
-        if changed {
-            self.shown_observations.take();
-        }
-        changed
-    }
-
-    /// Lets go of the observations `of` says, as of what GitHub says of one thing, which the hub now sends in the form
-    /// from before observations. Returns whether that dropped any.
-    pub(crate) fn forget_observed(&mut self, of: impl Fn(&ObservationKey) -> bool) -> bool {
-        let changed = self.observations.forget(of);
         if changed {
             self.shown_observations.take();
         }
