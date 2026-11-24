@@ -65,6 +65,18 @@ fn calls(requests: Vec<(&str, Then)>) -> Vec<Step> {
     (1..).zip(requests).map(|(id, (request, then))| (call(id, request), id, then)).collect()
 }
 
+/// Hellos at versions spelled out, whatever this hub speaks next, each from a client that says only its own: 3, which
+/// it stopped speaking, 6, which reads everything as 5 does and which it speaks ahead of its clients, and 7, which it
+/// doesn't speak.
+fn spelled_out() -> Vec<(&'static str, Vec<Step>)> {
+    let refused = || Then::Refuses(ErrorCode::VersionMismatch, String::new());
+    vec![
+        ("a hello at version 3", calls(vec![(&hello(3, None), refused()), (STATUS, Then::Closes)])),
+        ("a hello at version 6", calls(vec![(&hello(6, None), Then::Greets(6)), (STATUS, Then::ShowsStatus)])),
+        ("a hello at version 7", calls(vec![(&hello(7, None), refused()), (STATUS, Then::Closes)])),
+    ]
+}
+
 /// What a connection sends first, and what the hub does with each frame. A refusal that closes the connection is
 /// followed by a request for the hub's status, which goes unanswered.
 fn cases() -> Vec<(&'static str, Vec<Step>)> {
@@ -73,15 +85,14 @@ fn cases() -> Vec<(&'static str, Vec<Step>)> {
         (hello(ours, None), hello(HUB_SPEAKS.oldest, None), hello(newest + 1, Some(ours)));
     let (past_range, unspoken, unreadable) =
         (hello(newest + 2, Some(newest + 1)), hello(9999, None), hello(r#""3""#, None));
-    // Spelled out, since it's the version this hub stopped speaking, whatever it speaks next.
-    let too_old = hello(3, None);
     let mismatch = |says: &str| Then::Refuses(ErrorCode::VersionMismatch, says.to_string());
     let past = mismatch(&format!("protocols {} to {}", newest + 1, newest + 2));
     let unsupported = || Then::Refuses(ErrorCode::Unsupported, String::new());
     let repos = r#"{"method":"repo_list"}"#;
     // As a request this hub doesn't know: here, the answer a client sent before decisions were typed.
     let approve = r#"{"method":"session_approve","id":"s","approval_id":"a","decision":{"decision":"allow"}}"#;
-    vec![
+    let mut cases = spelled_out();
+    cases.extend([
         ("a hello at this version", calls(vec![(&hello_ours, Then::Greets(ours)), (STATUS, Then::ShowsStatus)])),
         (
             "a hello at the oldest version this hub speaks",
@@ -96,11 +107,6 @@ fn cases() -> Vec<(&'static str, Vec<Step>)> {
             calls(vec![(&past_range, past), (STATUS, Then::Closes)]),
         ),
         ("a hello at a version this hub doesn't speak", calls(vec![(&unspoken, mismatch("")), (STATUS, Then::Closes)])),
-        // As from a client of version 3, which says only its own.
-        (
-            "a hello at version 3, which a hub that speaks 5 alone with 4 no longer speaks",
-            calls(vec![(&too_old, mismatch("")), (STATUS, Then::Closes)]),
-        ),
         // One it can't read can't be a hello it answers, so it's refused as any first request but a hello is.
         ("a hello this hub can't read", calls(vec![(&unreadable, mismatch("")), (STATUS, Then::Closes)])),
         ("a request before a hello", calls(vec![(repos, mismatch("")), (STATUS, Then::Closes)])),
@@ -130,7 +136,8 @@ fn cases() -> Vec<(&'static str, Vec<Step>)> {
                 (repos, mismatch("")),
             ]),
         ),
-    ]
+    ]);
+    cases
 }
 
 /// Each case is a connection of its own, which leaves the hub as it found it, so every case shares one hub.

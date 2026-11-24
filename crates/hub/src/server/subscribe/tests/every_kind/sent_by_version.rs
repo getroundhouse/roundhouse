@@ -1,11 +1,13 @@
-//! What a client that says hello at version 5 is sent of every kind of observation, and what one at version 4 is sent
-//! beside it on the same hub, as each follows the hub, a workspace, a session and a chip.
+//! What a client that says hello at version 5 is sent of every kind of observation, what one at version 6, which reads
+//! the same, is sent, and what one at version 4 is sent beside them on the same hub, as each follows the hub, a
+//! workspace, a session and a chip.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
-use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice, RecordNotice};
+use protocol::client::{EVERY_OBSERVATION_FROM, HUB_SPEAKS, HubFrame, HubNotice, RecordNotice};
 use protocol::model::{Observation, ObservationKey, Record, RecordKey, Rev};
 use tokio::sync::broadcast;
 
@@ -20,7 +22,8 @@ use crate::server::tests::Connection;
 /// sent no `GithubUpdate`, no copy of a record that moves only an observation's old form, and no `GithubReach`, though
 /// its starts don't say they read GitHub as observations. One of version 4 beside it is sent each old form instead: the
 /// record's field filled, under a newer revision as the observation changes, `GithubReach`, and `GithubUpdate`, and no
-/// observation but those every version reads.
+/// observation but those every version reads. One of the newest version the hub speaks, 6, which reads every
+/// observation as 5 does, is sent the same as the one of 5, and ends holding the same.
 #[tokio::test]
 async fn a_client_of_version_5_is_sent_every_observation_and_one_of_version_4_each_old_form() {
     let dir = tempfile::tempdir().unwrap();
@@ -30,6 +33,7 @@ async fn a_client_of_version_5_is_sent_every_observation_and_one_of_version_4_ea
     }
     let mut fed = hub.subscribe_fed();
     let mut observing = Connection::greeted(&hub, EVERY_OBSERVATION_FROM).await;
+    let mut later = Connection::greeted(&hub, HUB_SPEAKS.newest).await;
     let mut before = Connection::greeted(&hub, 4).await;
     let follows = vec![
         start(HUB, Follow::Hub),
@@ -37,7 +41,7 @@ async fn a_client_of_version_5_is_sent_every_observation_and_one_of_version_4_ea
         start(SESSION, Follow::Session { id: s(), from: None }),
         start(CHIP, Follow::Reference { reference: chip() }),
     ];
-    for (client, lists) in [(&mut observing, 4), (&mut before, 3)] {
+    for (client, lists) in [(&mut observing, 4), (&mut later, 4), (&mut before, 3)] {
         ok(client, 1, Subscribe { stop: Vec::new(), start: follows.clone() }).await;
         let listed = |sent: &[HubFrame]| sent.iter().filter(|frame| matches!(frame, HubFrame::Listed { .. })).count();
         client.until("every level's list", |sent| listed(sent) == lists).await;
@@ -52,34 +56,59 @@ async fn a_client_of_version_5_is_sent_every_observation_and_one_of_version_4_ea
             before.until("its old form filled", |sent| records_in(sent).any(filled)).await;
         }
     }
-    caught_up(&hub, &mut observing, &mut before).await;
+    caught_up(&hub, [&mut observing, &mut later], &mut before).await;
 
     let old_form_only = old_form_only(&mut fed);
-    sent_every_observation(&hub, &observing).await;
-    sent_no_old_form(&observing, &old_form_only);
+    for client in [&observing, &later] {
+        sent_every_observation(&hub, client).await;
+        sent_no_old_form(client, &old_form_only);
+    }
+    assert!(held_by(&observing) == held_by(&later), "versions 5 and 6 hold different copies");
     sent_each_old_form(&before, &old_form_only);
 }
 
 /// Waits until each client has been sent what the hub told before, at each level it follows, since each subscription is
 /// sent its own on its own: a notice at the hub's level, as [`mark`] waits, a subagent of `s` at its session's, what
-/// [`v`] changes read again at its own, and, to the client of version 5, the chip's observation as it is now.
-async fn caught_up(hub: &Hub, observing: &mut Connection, before: &mut Connection) {
+/// [`v`] changes read again at its own, and, to each client of version 5 or later, the chip's observation as it is now.
+async fn caught_up(hub: &Hub, observing: [&mut Connection; 2], before: &mut Connection) {
     let changes = ObservationKey::WorkspaceChanges { workspace_id: v() };
     make(hub, &changes, 3).await;
     let read_again = held(hub, &changes).await;
     let chip = held(hub, &ObservationKey::Reference { reference: chip() }).await;
     hub.notify(super::super::given::subagent_made(hub));
-    for client in [&mut *observing, &mut *before] {
+    let [observing, later] = observing;
+    for client in [&mut *observing, &mut *later, &mut *before] {
         mark(hub, client).await;
         let subagent = |(at, notice): (u64, &HubNotice)| at == SESSION && matches!(notice, HubNotice::Subagent(_));
         client.until("the subagent", |sent| notices_in(sent).any(subagent)).await;
         client.until("the changes read again", |sent| told_in(sent, WORKSPACE, &read_again)).await;
     }
-    observing.until("the chip as it is now", |sent| told_in(sent, CHIP, &chip)).await;
+    for client in [observing, later] {
+        client.until("the chip as it is now", |sent| told_in(sent, CHIP, &chip)).await;
+    }
     // Sent as each subscription starts.
     for on in [HUB, CHIP] {
         before.until("what GitHub says", |sent| github_in(sent, on)).await;
     }
+}
+
+/// The newest copy of each observation and each record `client` was sent, by revision, whichever subscription sent it,
+/// but for the comment [`mark`] tells each client of, under a revision of its own.
+fn held_by(client: &Connection) -> (HashMap<ObservationKey, Observation>, HashMap<RecordKey, Record>) {
+    let mut observations: HashMap<ObservationKey, Observation> = HashMap::new();
+    for (_, observation) in observations_of(client) {
+        let held = observations.get(&observation.key());
+        if held.is_none_or(|held| held.rev() < observation.rev()) {
+            observations.insert(observation.key(), observation.clone());
+        }
+    }
+    let mut copies: HashMap<RecordKey, Record> = HashMap::new();
+    for (_, record) in records(client).filter(|(_, record)| !matches!(record, Record::Comment(_))) {
+        if copies.get(&record.key()).is_none_or(|held| held.rev() < record.rev()) {
+            copies.insert(record.key(), record);
+        }
+    }
+    (observations, copies)
 }
 
 /// Whether `sent` has a `GithubUpdate` on subscription `on`.
@@ -99,25 +128,25 @@ fn told_in(sent: &[HubFrame], at: u64, observation: &Observation) -> bool {
     notices_in(sent).any(of)
 }
 
-/// A client of version 5 is listed each kind at the subscription of its level, and told of it there, last as the hub
+/// A client of version 5 or later is listed each kind at the subscription of its level, and told of it there, last as the hub
 /// holds it now, and is sent no observation anywhere else.
 async fn sent_every_observation(hub: &Hub, client: &Connection) {
     for kind in every_kind() {
         let Sent { at, .. } = sent(&kind);
         let Some(at) = at else {
-            assert!(observations(client).all(|(_, observation)| observation.key() != kind), "{kind:?} sent");
+            assert!(observations_of(client).all(|(_, observation)| observation.key() != kind), "{kind:?} sent");
             continue;
         };
         assert!(listed(client, at).any(|observation| observation.key() == kind), "{kind:?} not listed");
         let now = held(hub, &kind).await;
         assert_eq!(told(client, at, &kind).last().copied(), Some(&now), "{kind:?} not told as it is now");
     }
-    for (at, observation) in observations(client) {
+    for (at, observation) in observations_of(client) {
         assert_eq!(Some(at), sent(&observation.key()).at, "{observation:?} on another level's subscription");
     }
 }
 
-/// A client of version 5 is sent no `GithubUpdate`, no `GithubReach`, and none of `old_form_only`, the copies of
+/// A client of version 5 or later is sent no `GithubUpdate`, no `GithubReach`, and none of `old_form_only`, the copies of
 /// records the feed said move only an observation's old form.
 fn sent_no_old_form(client: &Connection, old_form_only: &[Arc<HubNotice>]) {
     let told = |notice: &HubNotice| old_form_only.iter().any(|old| **old == *notice);
@@ -147,7 +176,7 @@ fn sent_each_old_form(client: &Connection, old_form_only: &[Arc<HubNotice>]) {
             Before::Record { record, says } => filled(client, &kind, &record, says),
         }
     }
-    for (_, observation) in observations(client) {
+    for (_, observation) in observations_of(client) {
         let before = sent(&observation.key()).before;
         assert!(matches!(before, Before::Itself), "{observation:?} sent to a client of version 4");
     }
@@ -250,7 +279,7 @@ fn told<'a>(client: &'a Connection, at: u64, kind: &ObservationKey) -> Vec<&'a O
 }
 
 /// Each observation `client` was sent, listed or told, with the subscription it was sent on.
-fn observations(client: &Connection) -> impl Iterator<Item = (u64, &Observation)> {
+fn observations_of(client: &Connection) -> impl Iterator<Item = (u64, &Observation)> {
     let listed = [HUB, WORKSPACE, SESSION, CHIP].into_iter().flat_map(|at| listed(client, at).map(move |o| (at, o)));
     let told = notices(client).filter_map(|(at, notice)| {
         let HubNotice::Observation(observation) = notice else { return None };
