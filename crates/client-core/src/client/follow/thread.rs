@@ -131,7 +131,6 @@ impl<S: Source> Follower<S> {
             }
             // Deleted, which the records say too, so whoever reads it lets go of it rather than hearing it failed.
             Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => self.lost(None),
-            Err(e) if self.source.does_without(&e) => self.lost(None),
             Err(e) => self.lost(Some(FollowError::Following(e))),
         }
     }

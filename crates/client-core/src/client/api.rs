@@ -28,8 +28,7 @@ impl Client {
         }
     }
 
-    /// Asks the hub to stop if that cuts nothing off, which it decides. A busy one refuses with `Conflict`, and one
-    /// older than this request refuses it, as `is_unsupported` says.
+    /// Asks the hub to stop if that cuts nothing off, which it decides. A busy one refuses with `Conflict`.
     pub fn hub_shutdown_if_idle(&self) -> Result<()> {
         match self.call(admin::HubShutdownIfIdle) {
             // The hub did what was asked before its reply got out.
@@ -38,8 +37,7 @@ impl Client {
         }
     }
 
-    /// Changes the hub's own settings, and returns them as they are now. A hub older than this refuses it, as
-    /// `is_unsupported` says.
+    /// Changes the hub's own settings, and returns them as they are now.
     pub fn hub_configure(&self, change: HubSettingsChange) -> Result<HubSettings> {
         self.call(admin::HubConfigure { settings: change })
     }
@@ -75,13 +73,12 @@ impl Client {
         self.call(workspaces::WorkspaceRestore { id: id.clone() })
     }
 
-    /// See [`workspaces::WorkspaceRename`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`workspaces::WorkspaceRename`].
     pub fn workspace_rename(&self, id: &WorkspaceId, title: &str) -> Result<Workspace> {
         self.call(workspaces::WorkspaceRename { id: id.clone(), title: title.to_string() })
     }
 
-    /// See [`workspaces::WorkspaceRegenerateTitle`]. It waits on a model, usually for a second or two. A hub older
-    /// than this refuses it, as `is_unsupported` says.
+    /// See [`workspaces::WorkspaceRegenerateTitle`]. It waits on a model, usually for a second or two.
     pub fn workspace_regenerate_title(&self, id: &WorkspaceId) -> Result<Workspace> {
         self.call(workspaces::WorkspaceRegenerateTitle { id: id.clone() })
     }
@@ -94,11 +91,11 @@ impl Client {
         self.call(workspaces::WorkspaceDiff { id: id.clone() })
     }
 
-    /// See [`workspaces::WorkspaceFileDiff`]: the page of the diff of the entry `at` names, as a summary names it,
-    /// from the patch's line `first_line`, which is 0 or the `next_line` of the page before. `from` is where a rename
-    /// moved it from. Nothing of it is kept. A hub older than this refuses it, and so does one whose worker is, as
-    /// `is_unsupported` says, and a hub or worker from before `untracked` answers with the tracked entry at the path.
-    /// `docs/principles/observations.md` plans the Changes tab's reads of it.
+    /// See [`workspaces::WorkspaceFileDiff`]: the page of the diff of the entry `at` names, as a summary names it, from
+    /// the patch's line `first_line`, which is 0 or the `next_line` of the page before. `from` is where a rename moved
+    /// it from. Nothing of it is kept. A hub whose worker is older than this refuses it, as `is_unsupported` says, and
+    /// a worker from before `untracked` answers with the tracked entry at the path. `docs/principles/observations.md`
+    /// plans the Changes tab's reads of it.
     pub fn workspace_file_diff(
         &self,
         id: &WorkspaceId,
@@ -123,8 +120,7 @@ impl Client {
         Ok(self.call(workspaces::WorkspacePullRequest { id: id.clone() })?.pull_request)
     }
 
-    /// See [`references::ReferencesRead`]. It waits on GitHub for those the hub hasn't read lately. A hub older than
-    /// this refuses it, as `is_unsupported` says.
+    /// See [`references::ReferencesRead`]. It waits on GitHub for those the hub hasn't read lately.
     pub fn references_read(&self, workspace: &WorkspaceId, asks: Vec<ReferenceAsk>) -> Result<Vec<ReferenceRead>> {
         Ok(self.call(references::ReferencesRead { workspace: workspace.clone(), references: asks })?.references)
     }
@@ -174,8 +170,7 @@ impl Client {
         self.call(sessions::SessionGet { id: id.clone() })
     }
 
-    /// Which of the session's events hold `query`, as [`protocol::find::Needle::is_in_event`] says. A hub older than
-    /// this refuses it as unsupported.
+    /// Which of the session's events hold `query`, as [`protocol::find::Needle::is_in_event`] says.
     pub fn session_find(&self, id: &SessionId, subagent: Option<&SubagentId>, query: &str) -> Result<Found> {
         self.call(log::SessionFind { id: id.clone(), subagent: subagent.cloned(), query: query.to_string() })
     }
@@ -216,7 +211,7 @@ impl Client {
         self.call(round)
     }
 
-    /// See [`agent::SessionDecide`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`agent::SessionDecide`].
     pub fn session_decide(&self, id: &SessionId, approval_id: &ApprovalId, decision: Decision) -> Result<()> {
         self.call(agent::SessionDecide { id: id.clone(), approval_id: approval_id.clone(), decision })
     }
@@ -234,37 +229,37 @@ impl Client {
         self.call(sessions::SessionReopen { id: id.clone() })
     }
 
-    /// See [`conversation::SessionConversationStart`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`conversation::SessionConversationStart`].
     pub fn session_conversation_start(&self, id: &SessionId) -> Result<Session> {
         self.call(conversation::SessionConversationStart { id: id.clone() })
     }
 
-    /// See [`conversation::SessionConversationEnd`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`conversation::SessionConversationEnd`].
     pub fn session_conversation_end(&self, id: &SessionId) -> Result<Session> {
         self.call(conversation::SessionConversationEnd { id: id.clone() })
     }
 
-    /// See [`conversation::SessionReplyHeard`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`conversation::SessionReplyHeard`].
     pub fn session_reply_heard(&self, id: &SessionId, message: MessageId, ending: Ending) -> Result<()> {
         self.call(conversation::SessionReplyHeard { id: id.clone(), message, ending })
     }
 
-    /// See [`conversation::SessionSpeaking`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`conversation::SessionSpeaking`].
     pub fn session_speaking(&self, id: &SessionId, through: SpokenThrough) -> Result<()> {
         self.call(conversation::SessionSpeaking { id: id.clone(), through })
     }
 
-    /// See [`sessions::SessionMarkRead`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`sessions::SessionMarkRead`].
     pub fn session_mark_read(&self, id: &SessionId, through_seq: Seq) -> Result<Session> {
         self.call(sessions::SessionMarkRead { id: id.clone(), through_seq })
     }
 
-    /// See [`sessions::SessionMarkUnread`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`sessions::SessionMarkUnread`].
     pub fn session_mark_unread(&self, id: &SessionId) -> Result<Session> {
         self.call(sessions::SessionMarkUnread { id: id.clone() })
     }
 
-    /// See [`sessions::SessionRename`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`sessions::SessionRename`].
     pub fn session_rename(&self, id: &SessionId, title: &str) -> Result<Session> {
         self.call(sessions::SessionRename { id: id.clone(), title: title.to_string() })
     }

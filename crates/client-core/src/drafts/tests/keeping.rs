@@ -15,11 +15,6 @@ pub(super) enum Answer {
     /// As a hub that has it does. It takes each file, and says the chat isn't there for each draft and each file let go
     /// of, which the keeper takes as an answer like any other, so the fake needn't make up a session.
     Answered,
-    /// As a hub too old to keep drafts does.
-    Refused,
-    /// As a hub that keeps chats' drafts but not decisions, comments or the new-workspace dialog does. It says
-    /// `refused` before each it refuses.
-    KeepsOnlyChatsDrafts,
     /// As `Answered`, but as a hub that knows no kind of file but one that goes as it is, `Other`, refuses the rest, as
     /// one older than the app refuses a kind newer than it. It says `refused` before each.
     KnowsNoKindOfFile,
@@ -41,25 +36,16 @@ pub(super) fn hub(socket: &Path, answer: Answer) -> (Client, Heard) {
     let client = stand_in_hub::connect(socket, move |request| {
         let added = added(&request);
         let a_chats_draft = matches!(request, ClientRequest::SessionDraft(_));
-        let not_a_chats = !matches!(
-            request,
-            ClientRequest::SessionDraft(_) | ClientRequest::AttachmentAdd(_) | ClientRequest::AttachmentRemove(_)
-        );
         let Some((id, what)) = heard_of(request) else { return Does::Nothing };
         let code = match answer {
-            Answer::KeepsOnlyChatsDrafts if not_a_chats => ErrorCode::Unsupported,
             Answer::KnowsNoKindOfFile if added.as_ref().is_some_and(|file| file.media_type != MediaType::Other) => {
                 ErrorCode::Unsupported
             }
             Answer::TypedLaterElsewhere if a_chats_draft => ErrorCode::Conflict,
-            Answer::Answered
-            | Answer::KeepsOnlyChatsDrafts
-            | Answer::KnowsNoKindOfFile
-            | Answer::TypedLaterElsewhere => ErrorCode::NotFound,
-            Answer::Refused => ErrorCode::Unsupported,
+            Answer::Answered | Answer::KnowsNoKindOfFile | Answer::TypedLaterElsewhere => ErrorCode::NotFound,
             Answer::HangsUp => return Does::HangsUp,
         };
-        let refused = !matches!(answer, Answer::Refused) && code == ErrorCode::Unsupported;
+        let refused = code == ErrorCode::Unsupported;
         let _ = said.send((id, if refused { format!("refused {what}") } else { what }));
         let outcome = match added {
             Some(file) if code == ErrorCode::NotFound => ReplyOutcome::Response(ClientResponse::Attachment(file)),
@@ -140,14 +126,12 @@ pub(super) fn pairs(said: &[(&str, &str)]) -> Vec<(String, String)> {
 }
 
 #[test]
-fn only_the_newest_of_each_chat_is_kept_once_the_hub_has_answered_the_first() {
+fn only_the_newest_of_each_chat_is_kept() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("h")));
-    heard.recv_timeout(TIMEOUT).unwrap();
 
-    for text in ["he", "hel", "hello"] {
+    for text in ["h", "he", "hel", "hello"] {
         drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new(text)));
     }
     drafts.typed(DraftChange::Composer(chat("b"), DraftToKeep::new("other")));
@@ -162,8 +146,6 @@ fn typing_that_goes_on_is_still_kept_every_so_often() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("h")));
-    heard.recv_timeout(TIMEOUT).unwrap();
     let (stop, stopped) = flume::bounded::<()>(1);
     // A letter at a time, more often than the pause, until told to stop. Each change would put off a keeper that waits
     // for typing to stop, so it would never hear one.
@@ -190,41 +172,12 @@ fn a_change_kept_at_once_takes_the_place_of_one_still_waiting() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("sent")));
-    heard.recv_timeout(TIMEOUT).unwrap();
 
     drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("sent, and more")));
     drafts.set(DraftChange::Composer(chat("a"), DraftToKeep::default()));
 
     assert_eq!(heard.recv_timeout(TIMEOUT).unwrap(), ("a".to_string(), String::new()));
     assert_eq!(kept(&drafts, &heard), [], "what it replaced is never kept, so it can't outlive it");
-}
-
-/// As when the app has updated but its hub hasn't yet, until the hub restarts as the build that keeps them.
-#[test]
-fn what_a_hub_that_doesnt_keep_drafts_refuses_waits_for_the_next_connection() {
-    let dir = tempfile::tempdir().unwrap();
-    let (old, heard_by_old) = hub(&dir.path().join("old.sock"), Answer::Refused);
-    let drafts = Drafts::start(&old);
-    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("h")));
-    assert_eq!(kept(&drafts, &heard_by_old), pairs(&[("a", "h")]), "the first goes at once");
-    let notes = file("f1");
-    drafts.attach(FilesFor::Chat(chat("b")), notes.clone());
-    drafts.set(DraftChange::Composer(
-        chat("b"),
-        DraftToKeep { text: "look".to_string(), files: vec![notes.attachment.id.clone()] },
-    ));
-    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("hi")));
-    assert_eq!(kept(&drafts, &heard_by_old), [], "it's asked no more");
-    assert!(drafts.unkept(&DraftKey::Composer(chat("a"))) && drafts.unkept(&DraftKey::Composer(chat("b"))));
-    let (new, heard) = hub(&dir.path().join("new.sock"), Answer::Answered);
-
-    drafts.reconnect(&new);
-
-    let mut kept = kept(&drafts, &heard);
-    kept.sort();
-    assert_eq!(kept, pairs(&[("a", "hi"), ("b", "+f1"), ("b", "look f1")]));
-    assert!(!drafts.unkept(&DraftKey::Composer(chat("a"))) && !drafts.unkept(&DraftKey::Composer(chat("b"))));
 }
 
 #[test]

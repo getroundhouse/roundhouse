@@ -24,7 +24,7 @@ use parking_lot::Mutex;
 use protocol::client::listed::Listed;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice, HubStatus,
-    ReplyOutcome, subscriptions,
+    ReplyOutcome, admin, subscriptions,
 };
 use protocol::model::{Repo, RepoId, RepoOrigin, Rev};
 use protocol::paths::Paths;
@@ -69,8 +69,6 @@ struct Args {
 enum IfIdle {
     /// Goes by what it says is running then, as a hub does.
     Decides,
-    /// Doesn't know the request, as a hub from before one could decide.
-    Unknown,
     /// Has an agent start first, as a prompt sent after it last said it was idle would, so it refuses, and says one
     /// is running from then on.
     Busy,
@@ -205,11 +203,10 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
                     std::thread::spawn(move || notice_agents(&writer, subscription_id, said, &args, &paths));
                 }
             }
-            // As a hub from before hubs described their agents: one that speaks this protocol refuses a request it
-            // doesn't know and carries on.
+            // Its records hold no chat, so it describes no agent a chat runs.
             ClientRequest::AgentList if args.speaks_this_protocol => {
-                let unknown = ApiError::new(ErrorCode::Unsupported, "this hub doesn't know that request");
-                reply(&writer, request.id, ReplyOutcome::Error(unknown));
+                let agents = ClientResponse::Agents(admin::Agents { agents: Vec::new() });
+                reply(&writer, request.id, ReplyOutcome::Response(agents));
             }
             ClientRequest::HubStatus => {
                 let status = ClientResponse::HubStatus(status(args, paths));
@@ -222,11 +219,6 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
                 std::thread::spawn(move || restart(&args, &paths));
             }
             ClientRequest::HubShutdownIfIdle if args.speaks_this_protocol => {
-                if args.asked_to_stop_if_idle == IfIdle::Unknown {
-                    let unknown = ApiError::new(ErrorCode::Unsupported, "this hub doesn't know that request");
-                    reply(&writer, request.id, ReplyOutcome::Error(unknown));
-                    continue;
-                }
                 if args.asked_to_stop_if_idle == IfIdle::Busy {
                     std::fs::write(paths.data_dir.join(RUNNING), "1").unwrap();
                 }

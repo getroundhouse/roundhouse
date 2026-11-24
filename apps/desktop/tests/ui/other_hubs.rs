@@ -130,28 +130,6 @@ fn an_update_finishes_by_itself_once_nothing_else_is_under_way_on_the_older_hub(
     wait_for_the_apps_own_hub(&mut ui, &mut older);
 }
 
-/// A hub from the update before this one can't be asked to stop only if it's idle, so the app goes by what the hub
-/// said was running, as it did before hubs could decide. Such a hub stops whenever it's asked, so with an agent running
-/// it's the app's own check alone that keeps it, as it connects and when it looks again.
-#[gpui_kit::test]
-fn an_update_finishes_on_a_hub_from_before_one_could_decide_whether_it_is_idle(cx: &mut TestAppContext) {
-    let mut stack = Stack::new();
-    stack.hub.build_number = Some(2);
-    let args = ["--speaks-this-protocol", "--build", "1", "--running", "1", "--asked-to-stop-if-idle", "unknown"];
-    let mut older = stack.start_stand_in_hub(&args);
-    let mut ui = Ui::open(cx, &stack);
-    assert!(
-        matches!(ui.build_line().update, Some(Updating::Finishing { .. })),
-        "running: the app connects to the older hub and keeps it, rather than stopping it and starting its own"
-    );
-    ui.wait_out_a_look();
-    assert!(older.0.try_wait().unwrap().is_none(), "running: the older hub is kept, after the app looks again");
-
-    older.set_running(0);
-
-    wait_for_the_apps_own_hub(&mut ui, &mut older);
-}
-
 /// A prompt sent between the app seeing the hub idle and stopping it starts an agent, which finishing the update by
 /// itself mustn't stop. The hub refuses, and the app carries on with it, and waits on the agent.
 #[gpui_kit::test]
@@ -240,8 +218,8 @@ fn restarting_a_hub_that_has_already_gone_still_connects(cx: &mut TestAppContext
     ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
 }
 
-/// A hub installed as a service that has found a newer release offers to update, and one from before it could update
-/// from a client, as the fake hub is, says to update it on its machine.
+/// A hub installed as a service that has found a newer release offers to update, and says why it refused, as the fake
+/// hub does, which changes nothing.
 #[gpui_kit::test]
 fn a_hub_that_found_an_update_offers_it_and_says_why_it_refused(cx: &mut TestAppContext) {
     let mut world = World::default();
@@ -258,8 +236,9 @@ fn a_hub_that_found_an_update_offers_it_and_says_why_it_refused(cx: &mut TestApp
 
     ui.click("update-hub");
 
-    ui.wait("the card to say why", |ui| {
-        matches!(ui.build_line().update, Some(Updating::Hub { problem: Some(why), .. }) if why.contains("its machine"))
-    });
+    ui.wait(
+        "the card to say why",
+        |ui| matches!(ui.build_line().update, Some(Updating::Hub { problem: Some(why), .. }) if !why.is_empty()),
+    );
     assert!(ui.has("update-hub"), "to try again");
 }

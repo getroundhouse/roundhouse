@@ -29,13 +29,8 @@ impl AppView {
         cx.spawn(async move |this, cx| {
             let version = next.clone();
             let asked = cx.background_spawn(async move { client.call(HubUpdateTo { version }) }).await;
-            let why = match asked {
-                Ok(()) => return,
-                Err(e) if e.is_unsupported() => {
-                    "This hub is from before it could be updated from here, so update it on its machine.".to_owned()
-                }
-                Err(e) => e.to_string(),
-            };
+            let Err(e) = asked else { return };
+            let why = client_core::refusals::reason(&e);
             let _ = this.update(cx, |this, cx| {
                 this.hub_update_asked = Some(HubUpdateAsk::Refused { next, why });
                 cx.notify();

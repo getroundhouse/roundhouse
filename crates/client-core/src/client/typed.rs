@@ -14,28 +14,27 @@ use super::{Client, Result};
 
 impl Client {
     /// See [`drafts::SessionDraft`]: `typed_at_ms` is when the change was typed, and one without it counts as typed as
-    /// it arrives. A hub older than this refuses it, as `is_unsupported` says, and one that has a change typed after it
-    /// refuses it as `is_conflict` says.
+    /// it arrives. A hub that has a change typed after it refuses it as `is_conflict` says.
     pub fn session_draft(&self, id: &SessionId, draft: &DraftToKeep, typed_at_ms: Option<i64>) -> Result<Session> {
         self.call(drafts::SessionDraft { id: id.clone(), draft: draft.clone(), typed_at_ms })
     }
 
-    /// See [`drafts::SessionDecisionDraft`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`drafts::SessionDecisionDraft`].
     pub fn session_decision_draft(&self, id: &SessionId, draft: Option<&DecisionDraft>) -> Result<Session> {
         self.call(drafts::SessionDecisionDraft { id: id.clone(), draft: draft.cloned() })
     }
 
-    /// See [`drafts::WorkspaceCommentDraft`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`drafts::WorkspaceCommentDraft`].
     pub fn workspace_comment_draft(&self, id: &WorkspaceId, draft: Option<&CommentDraft>) -> Result<Workspace> {
         self.call(drafts::WorkspaceCommentDraft { id: id.clone(), draft: draft.cloned() })
     }
 
-    /// See [`drafts::NewWorkspaceDraftKeep`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`drafts::NewWorkspaceDraftKeep`].
     pub fn new_workspace_draft_keep(&self, draft: &NewWorkspaceDraftToKeep) -> Result<NewWorkspaceDraft> {
         self.call(drafts::NewWorkspaceDraftKeep { draft: draft.clone() })
     }
 
-    /// See [`drafts::NewWorkspaceDraftFileAdd`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`drafts::NewWorkspaceDraftFileAdd`].
     pub fn new_workspace_draft_file_add(
         &self,
         id: &AttachmentId,
@@ -47,18 +46,17 @@ impl Client {
         self.call(drafts::NewWorkspaceDraftFileAdd { id: id.clone(), name: name.to_string(), media_type, data })
     }
 
-    /// See [`drafts::NewWorkspaceDraftFileRead`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`drafts::NewWorkspaceDraftFileRead`].
     pub fn new_workspace_draft_file_read(&self, id: &AttachmentId) -> Result<Vec<u8>> {
         Ok(self.call(drafts::NewWorkspaceDraftFileRead { id: id.clone() })?.data.into_vec())
     }
 
-    /// See [`drafts::NewWorkspaceDraftFileRemove`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`drafts::NewWorkspaceDraftFileRemove`].
     pub fn new_workspace_draft_file_remove(&self, id: &AttachmentId) -> Result<()> {
         self.call(drafts::NewWorkspaceDraftFileRemove { id: id.clone() })
     }
 
-    /// See [`NewWorkspaceCreate`]. A hub older than this refuses it, as `is_unsupported` says, and a client then makes
-    /// the workspace a step at a time, sending the files itself.
+    /// See [`NewWorkspaceCreate`].
     pub fn new_workspace_create(
         &self,
         made_of: &NewWorkspaceDraftToKeep,

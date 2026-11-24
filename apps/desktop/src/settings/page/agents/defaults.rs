@@ -29,7 +29,7 @@ pub(super) fn section(drawing: &Drawing<'_>, accounts: &[&Account], cx: &App) ->
     // A hub that keeps no defaults puts no chat on an account.
     let intro = if drawing.defaults.is_some() { INTRO } else { "Choose which account new chats use across this hub." };
     let rows: Vec<Div> = drawing.agents.with_logins().map(|agent| row(drawing, agent, accounts, cx)).collect();
-    // With no kind to choose for, as on a hub from before hubs kept logins, there's no line for rows to go under.
+    // With no kind to choose for, as before the hub has described its agents, there's no line for rows to go under.
     let rows = (!rows.is_empty()).then(|| list(cx).children(rows));
     let error = drawing.kept.read(cx).choosing.error.as_ref().map(|said| {
         div().pt(look::Space::Medium).typeset(look::Type::Body).text_color(colors.error).child(said.clone())

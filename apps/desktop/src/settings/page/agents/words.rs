@@ -20,10 +20,6 @@ const WARNS_AT_MOST_MS: i64 = 30 * DAY_MS;
 pub(super) const ABOUT: &str = "The accounts agents run under: the logins found where they ran, and those given to the \
                                 hub with a token, which can be connected, renewed and disconnected.";
 
-/// What a hub that can't keep a login is said to be.
-pub(super) const OLDER_HUB: &str =
-    "This hub is from before hubs kept logins, so it can't connect an account until it's updated.";
-
 /// What Added says while the person has given the hub no login.
 pub(super) const NONE_ADDED: &str = "None yet. Connect an account to add its login to this hub.";
 
@@ -211,28 +207,18 @@ pub(super) fn none_found(agents: &Agents) -> String {
     }
 }
 
-/// What the hub's refusal to connect a login means.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum Refused {
-    /// The hub is from before hubs kept logins, so it can't connect any.
-    OlderHub,
-    /// This, which the panel says.
-    Said(String),
-}
-
-/// What to say of the hub's refusal to connect a login, as a new account or, when `renewing`, in place of an account's.
-/// Its message is said where it's meant for a person, as one for a name or a token it can't take is.
-pub(super) fn refused(e: &ClientError, renewing: bool) -> Refused {
+/// What the panel says of the hub's refusal to connect a login, as a new account or, when `renewing`, in place of an
+/// account's. Its message is said where it's meant for a person, as one for a name or a token it can't take is.
+pub(super) fn refused(e: &ClientError, renewing: bool) -> String {
     let conflict = matches!(e, ClientError::Api(api) if api.code == ErrorCode::Conflict);
-    Refused::Said(match e {
-        e if e.is_unsupported() => return Refused::OlderHub,
+    match e {
         _ if conflict && renewing => {
             "Another account holds this token already. Make a new one for this account.".to_string()
         }
         _ if conflict => "This token is connected already, under another name.".to_string(),
         e if e.is_not_found() => refusals::gone("account"),
         e => refusals::couldnt("connect it", e),
-    })
+    }
 }
 
 /// What to say when the hub couldn't forget an account's login.

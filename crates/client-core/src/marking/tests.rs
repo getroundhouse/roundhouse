@@ -1,9 +1,7 @@
-use protocol::client::{ApiError, ClientRequest, ErrorCode, ReplyOutcome};
 use protocol::fixtures::{session, workspace};
 use protocol::model::{Seq, Session, SessionStatus, WorkspaceStatus};
 
 use super::{Mark, Reading, needs_a_look, waiting_on_you, workspace_marking};
-use crate::stand_in_hub::{self, Does};
 
 /// A chat whose newest reply is at `reply`, read through `read`, last worked in at `active_ms`.
 fn chat(id: &str, reply: u64, read: u64, active_ms: i64) -> Session {
@@ -70,26 +68,6 @@ fn without_a_hub_a_chat_no_longer_in_front_is_read_again_once_it_is() {
     assert!(!reading.read(Some(&a)), "still in front");
     reading.forget_unless(None);
     assert!(reading.read(Some(&a)), "gone and back");
-}
-
-/// Marks a chat each way on a hub that answers every mark with `answer`.
-fn marked_on(answer: impl Fn() -> ReplyOutcome + Send + 'static) -> [crate::Result<()>; 2] {
-    let dir = tempfile::tempdir().unwrap();
-    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
-        let marks = matches!(request, ClientRequest::SessionMarkRead(_) | ClientRequest::SessionMarkUnread(_));
-        if marks { Does::Answers(Box::new(answer())) } else { Does::Nothing }
-    });
-    let chat = chat("a", 4, 2, 0);
-    [Mark::Read.chat(&client, &chat), Mark::Unread.chat(&client, &chat)]
-}
-
-#[test]
-fn a_hub_too_old_to_keep_replies_has_none_to_mark_and_any_other_refusal_fails() {
-    let older = || ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "an older hub"));
-    assert!(marked_on(older).iter().all(Result::is_ok), "an older hub keeps no replies");
-
-    let refused = || ReplyOutcome::Error(ApiError::new(ErrorCode::Internal, "something else"));
-    assert!(marked_on(refused).iter().all(Result::is_err), "any other refusal is said");
 }
 
 #[test]

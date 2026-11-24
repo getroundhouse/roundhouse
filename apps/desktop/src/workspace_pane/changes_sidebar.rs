@@ -166,7 +166,6 @@ impl WorkspacePane {
         let all_files_events = cx.subscribe(&all_files, |this, _, event: &AllFilesEvent, cx| match event {
             AllFilesEvent::Open(path) => this.open_file(path.clone(), cx),
             AllFilesEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
-            AllFilesEvent::Unsupported => this.tell_tab(TabShown::hub_cant_list_files, cx),
         });
         self.subscriptions.extend([review_events, file_events, changes_events, all_files_events]);
         let (tab, files_behind, sidebar_tab) = (None, false, TabShown::default());

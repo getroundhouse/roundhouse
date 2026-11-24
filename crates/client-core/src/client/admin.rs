@@ -117,14 +117,10 @@ pub enum IdleStop {
 /// Stops the hub this client is connected to if that cuts nothing off, and returns once it has exited, or says it's
 /// busy. The hub decides as it stops, so a prompt sent after the client last saw it idle isn't cut off. Asked on the
 /// client's own connection, since the hub counts a request on any other as one it would cut off.
-///
-/// A hub from before it could decide is stopped as [`stop_hub_if_still`] does, if it's still the one with this `pid`,
-/// on the caller's word that it was idle, which is all there was to go on before.
-pub fn stop_hub_if_idle(client: &Client, socket: &Path, pid: u32) -> Result<IdleStop> {
+pub fn stop_hub_if_idle(client: &Client) -> Result<IdleStop> {
     match client.hub_shutdown_if_idle() {
         Ok(()) => wait_for_exit(client).map(|()| IdleStop::Stopped),
         Err(ClientError::Api(e)) if e.code == ErrorCode::Conflict => Ok(IdleStop::Busy),
-        Err(e) if e.is_unsupported() => stop_hub_if_still(socket, pid).map(|()| IdleStop::Stopped),
         Err(e) => Err(e),
     }
 }

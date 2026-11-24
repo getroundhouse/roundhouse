@@ -8,7 +8,6 @@ use protocol::find::Needle;
 use protocol::model::SessionId;
 use std::ops::Range;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The most events read at once, well within what a log holds.
 pub(super) const LONGEST: usize = 1000;
@@ -18,14 +17,6 @@ pub(super) const LONGEST: usize = 1000;
 pub(in super::super) struct Searches {
     /// Held while the hub is asked, so it's asked one search at a time, and one that's gone by its turn isn't asked.
     pub(super) asking: Mutex<()>,
-    /// The hub said it can't find, so it isn't asked again until there's a new connection, which may be to a newer one.
-    pub(super) cant_find: AtomicBool,
-}
-
-impl Searches {
-    pub(in super::super) fn reconnected(&self) {
-        self.cant_find.store(false, Ordering::SeqCst);
-    }
 }
 
 /// How far a search has got.
@@ -37,8 +28,6 @@ pub enum Searched {
     Done,
     /// It's shorter than [`Search::SHORTEST`], so the hub wasn't asked.
     TooShort,
-    /// The hub is too old to find.
-    CantFind,
     /// Asking the hub or reading what it named failed, as [`Search::take_error`] says.
     Failed,
 }
@@ -151,17 +140,7 @@ impl Job {
             if self.gone() {
                 return Ok(Searched::Underway);
             }
-            if self.searches.cant_find.load(Ordering::SeqCst) {
-                return Ok(Searched::CantFind);
-            }
-            match self.client.session_find(session_id, view.subagent(), needle.query()) {
-                Ok(found) => found,
-                Err(e) if e.is_unsupported() => {
-                    self.searches.cant_find.store(true, Ordering::SeqCst);
-                    return Ok(Searched::CantFind);
-                }
-                Err(e) => return Err(e),
-            }
+            self.client.session_find(session_id, view.subagent(), needle.query())?
         };
         // A search reads by place, so the places the hub names are the positions in the log.
         let positions: Vec<Position> = found.places.iter().copied().map(Position::of_place).collect();

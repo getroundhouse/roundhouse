@@ -155,10 +155,7 @@ impl AppView {
     /// where they chose to be, unless the prompt couldn't be sent, which goes to the new chat's composer for them to
     /// see.
     pub(super) fn made(&mut self, made: made::Made, asked_from: &InView, cx: &mut Context<Self>) {
-        let made::Made { workspace, session, unsent, dialog_to_empty } = made;
-        if let (Some(made_of), Some(dialog)) = (dialog_to_empty, &self.new_workspace) {
-            dialog.update(cx, |dialog, cx| dialog.made_without_the_hub(&made_of, cx));
-        }
+        let made::Made { workspace, session, unsent } = made;
         let made_id = workspace.map(|workspace| workspace.id);
         let chat = session.map(|session| session.id);
         if made_id.is_some() {

@@ -52,7 +52,7 @@ impl Transcript {
             let Err(NotTaken { error, prompt }) = sending.recv().await else { return };
             let _ = this.update(cx, |t, cx| {
                 t.catch_up(cx);
-                cx.emit(refused(not_sent(&error), prompt));
+                cx.emit(refused(client_core::refusals::couldnt("send that", &error), prompt));
                 cx.notify();
             });
         })
@@ -113,14 +113,5 @@ impl Transcript {
             }
         })
         .detach();
-    }
-}
-
-/// What to tell someone whose prompt didn't go. A hub from before attachments is the one failure they can fix.
-fn not_sent(error: &client_core::ClientError) -> String {
-    if error.is_unsupported() {
-        "Couldn't send that: this hub can't take attachments until it's updated".to_string()
-    } else {
-        client_core::refusals::couldnt("send that", error)
     }
 }

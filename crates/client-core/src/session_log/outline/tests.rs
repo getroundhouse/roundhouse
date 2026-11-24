@@ -72,10 +72,6 @@ fn the_list_is_wanted_until_the_hub_answers_and_after_a_failure_only_once_its_re
     log.list_prompts(Vec::new());
     log.retry_failed();
     assert!(!log.wants_prompt_list(), "a list once answered is never asked for again");
-
-    let mut older = SessionLog::new(Place::default());
-    older.prompts_unlisted();
-    assert!(!older.wants_prompt_list());
 }
 
 #[test]
@@ -181,7 +177,6 @@ fn a_compaction_is_drawn_at_its_place_among_the_agents_own_events() {
     assert_eq!(log.compaction_row(&compacted(Seq::new(10), 4)), 3);
 }
 
-/// A hub can be new enough to list prompts and too old to list compactions.
 #[test]
 fn the_compactions_list_is_wanted_apart_from_the_prompts() {
     let mut log = SessionLog::new(Place::default());
@@ -192,9 +187,9 @@ fn the_compactions_list_is_wanted_apart_from_the_prompts() {
     assert!(!log.wants_compaction_list(), "a failure isn't asked again at once");
     log.retry_failed();
     assert!(log.wants_compaction_list());
-    log.compactions_unlisted();
+    log.list_compactions(Vec::new());
     log.retry_failed();
-    assert!(!log.wants_compaction_list(), "a hub too old to list them isn't asked again");
+    assert!(!log.wants_compaction_list(), "a list once answered is never asked for again");
 }
 
 #[test]

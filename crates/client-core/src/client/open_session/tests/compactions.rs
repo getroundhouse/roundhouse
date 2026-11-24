@@ -75,27 +75,6 @@ fn the_hubs_compactions_are_listed_once_its_subscription_has_started() {
     assert!(subscribed < listed, "it subscribes before it lists, so the list misses nothing: {requests:?}");
 }
 
-/// Such as one from before compactions were listed, but after prompts were.
-#[test]
-fn a_hub_too_old_to_list_compactions_is_followed_without_them_and_not_asked_again() {
-    let dir = tempfile::tempdir().unwrap();
-    let socket = dir.path().join("hub.sock");
-    let heard = start_hub(&socket, vec![refused(ErrorCode::Unsupported, "unknown request")]);
-    let client = Client::connect(&socket, "test").unwrap();
-
-    let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start(&client, &feed, &session(), View::Own);
-    until("answered", || open.read(|log| !log.wants_compaction_list() && !log.wants_prompt_list()));
-    open.want(0..1, Some(0));
-    let errors = open.take_errors();
-    let connected = open.follow.connected();
-    drop(open);
-
-    assert!(errors.is_empty(), "{errors:?}");
-    assert!(connected);
-    assert_eq!(lists_asked(&requests_until_unsubscribed(&heard, 1)), 1);
-}
-
 #[test]
 fn a_hub_that_fails_to_list_compactions_goes_on_being_followed_and_is_asked_again_on_a_new_connection() {
     let dir = tempfile::tempdir().unwrap();

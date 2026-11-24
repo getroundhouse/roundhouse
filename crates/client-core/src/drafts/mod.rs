@@ -4,9 +4,9 @@
 //! each change as it's made, and a thread of its own keeps the newest of each, one call at a time, so they reach the
 //! hub in the order they were made. Each file goes before any draft that names it, since the hub leaves out a file it
 //! hasn't got, and one let go of goes after the draft that stopped naming it, since the hub keeps any a draft names.
-//! What a hub can't take, because the connection went or it doesn't keep that kind, waits for the next connection. The
-//! count of what hasn't reached the hub, for each draft, says what quitting would lose, and quitting
-//! waits for it with [`Drafts::flushed`], which needs no other thread. The same count, and the last copy of what's
+//! What a hub can't take because the connection went waits for the next connection. The count of what hasn't reached
+//! the hub, for each draft, says what quitting would lose, and quitting waits for it with [`Drafts::flushed`], which
+//! needs no other thread. The same count, and the last copy of what's
 //! there that this client and the hub agree on, say whether what's on the hub was made somewhere else, such as in
 //! another client, as [`Drafts::from_elsewhere`] says.
 

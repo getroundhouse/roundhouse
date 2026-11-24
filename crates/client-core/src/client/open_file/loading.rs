@@ -13,8 +13,6 @@ pub enum Opening {
     Text(FileText),
     /// It's an image, or something else that isn't text.
     NotText,
-    /// The hub is too old to open files.
-    Unsupported,
     /// It couldn't be opened, such as when it isn't there, or the connection went, so it's opened again on the next
     /// connection it's given.
     Failed,
@@ -123,7 +121,6 @@ fn open(shared: &Shared) {
     let (opened, error) = match client.workspace_file_open_at(id, commit, path) {
         Ok(FileOpened::Text(opened)) => (Opening::Text(FileText::new(opened)), None),
         Ok(FileOpened::NotText | FileOpened::Unknown) => (Opening::NotText, None),
-        Err(e) if e.is_unsupported() => (Opening::Unsupported, None),
         Err(e) => (Opening::Failed, Some(e)),
     };
     let mut state = shared.state.lock();

@@ -10,7 +10,7 @@ use protocol::model::{
 
 use super::{context, conversation};
 use client_core::fake_hub::events::user_prompt;
-use client_core::fake_hub::{HOUR_MS, LoginSupport, NOW_MS, World};
+use client_core::fake_hub::{HOUR_MS, NOW_MS, World};
 use protocol::event::{EventBody, ExitReason};
 
 /// What the hub says of a launch that Automatic found no account with usage to spare for.
@@ -79,13 +79,6 @@ pub(in crate::gallery) fn none_found() -> World {
     let mut world = conversation();
     hold(&mut world, vec![work()]);
     world.account_defaults = vec![claude_default(&work().account.id)];
-    world
-}
-
-/// The conversation, on a hub from before hubs kept logins, which describes Claude with nothing that makes one.
-pub(in crate::gallery) fn logins_unkept() -> World {
-    let mut world = conversation();
-    world.logins = LoginSupport::None;
     world
 }
 

@@ -45,8 +45,7 @@ impl Client {
         Ok((seq, duplicate))
     }
 
-    /// Queues a prompt that says only `text`, for a test. A hub older than queues refuses it, as `is_unsupported`
-    /// says.
+    /// Queues a prompt that says only `text`, for a test.
     #[cfg(any(test, feature = "testing"))]
     pub fn session_queue(&self, id: &SessionId, client_msg_id: ClientMessageId, text: &str) -> Result<Session> {
         self.queue_carried(id, client_msg_id, Prompt::new(text))

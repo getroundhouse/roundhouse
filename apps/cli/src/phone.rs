@@ -3,7 +3,7 @@
 use std::io::IsTerminal;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, anyhow, bail};
+use anyhow::{Context, bail};
 use client_core::{Client, ClientError};
 use protocol::client::ErrorCode;
 use qrcode::QrCode;
@@ -16,7 +16,7 @@ pub(crate) fn phone_command(client: &Client, command: PhoneCmd) -> anyhow::Resul
     match command {
         PhoneCmd::Pair => pair(client),
         PhoneCmd::List => {
-            let devices = client.device_list().map_err(too_old)?;
+            let devices = client.device_list()?;
             if devices.is_empty() {
                 println!("no devices are paired. Pair one with `roundhouse phone pair`");
             }
@@ -32,7 +32,7 @@ pub(crate) fn phone_command(client: &Client, command: PhoneCmd) -> anyhow::Resul
             Ok(())
         }
         PhoneCmd::Revoke { phone } => {
-            let devices = client.device_list().map_err(too_old)?;
+            let devices = client.device_list()?;
             let found: Vec<_> =
                 devices.iter().filter(|d| d.name == phone || d.id.as_str().starts_with(&phone)).collect();
             let [device] = found.as_slice() else { bail!("name exactly one paired device") };
@@ -44,7 +44,7 @@ pub(crate) fn phone_command(client: &Client, command: PhoneCmd) -> anyhow::Resul
 }
 
 fn pair(client: &Client) -> anyhow::Result<()> {
-    let pairing = client.pairing_start().map_err(too_old)?;
+    let pairing = client.pairing_start()?;
     println!("Scan this on your phone, or paste the link into another desktop's hub switcher:\n");
     println!("{}\n", qr_code(&pairing.link.to_string())?);
     println!("Pairing link:\n{}\n", pairing.link);
@@ -73,16 +73,6 @@ fn qr_code(link: &str) -> anyhow::Result<String> {
         return Ok(image);
     }
     Ok(image.lines().map(|line| format!("\x1b[97;40m{line}\x1b[0m")).collect::<Vec<_>>().join("\n"))
-}
-
-fn too_old(error: ClientError) -> anyhow::Error {
-    if error.is_unsupported() {
-        anyhow!(
-            "this hub is too old to pair phones. `roundhouse hub stop` stops it, and the next command starts a new one"
-        )
-    } else {
-        anyhow::Error::new(error)
-    }
 }
 
 fn now_ms() -> i64 {

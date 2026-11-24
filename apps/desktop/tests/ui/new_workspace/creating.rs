@@ -76,10 +76,10 @@ fn copied(dir: &std::path::Path, names: &[&str]) -> ClipboardItem {
 }
 
 /// What's in the dialog is the app's until the workspace is made, which these don't do, so a fake hub will do, one
-/// that keeps nothing of the dialog, as an older hub doesn't. Closing the dialog keeps what's in it for next time, and
-/// asks nothing of the hub. A file pasted, or chosen from its `+` menu, waits in it. Plan mode turns on with Shift-Tab
-/// or the `+` menu, as in the composer. A workspace that shows behind it, as one does once it's made, is made a pane
-/// that brings its chat to the front, which would focus its composer, but the keys stay with the dialog.
+/// that keeps nothing of the dialog. Closing the dialog keeps what's in it for next time, and asks nothing of the hub.
+/// A file pasted, or chosen from its `+` menu, waits in it. Plan mode turns on with Shift-Tab or the `+` menu, as in
+/// the composer. A workspace that shows behind it, as one does once it's made, is made a pane that brings its chat to
+/// the front, which would focus its composer, but the keys stay with the dialog.
 #[gpui_kit::test]
 fn the_dialog_keeps_whats_typed_attached_and_planned_and_the_keys_while_another_workspace_shows(
     cx: &mut TestAppContext,

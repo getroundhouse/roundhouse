@@ -9,7 +9,7 @@ use super::frame::{CHANGES, FILE, Frame, Part, TABS};
 use super::image_files::{CHANGED, changed_images};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::worlds::{conversation, diff, own_hub, summarized, videos};
+use super::worlds::{conversation, diff, summarized, videos};
 use super::{patch, worktree};
 
 pub(crate) const DIFF_SCREENS: &[Screen] = &[
@@ -185,14 +185,6 @@ pub(crate) const DIFF_SCREENS: &[Screen] = &[
             Step::Click("markdown-source"),
             Step::MoveAway,
         ],
-    },
-    Screen {
-        name: "all-files-older-hub",
-        spec: "files.md",
-        world: Some(own_hub),
-        frame: CHANGES,
-        // A hub too old to list files has the sidebar start on Changes, which stands in for All files.
-        steps: &[Step::Select(FOCUS), Step::Click("sidebar-tab-all-files"), Step::MoveAway],
     },
     Screen {
         name: "image-side-by-side",

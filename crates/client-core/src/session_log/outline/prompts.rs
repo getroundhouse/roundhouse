@@ -25,7 +25,7 @@ pub(super) enum Listing {
     Wanted,
     /// The hub failed to answer, so it isn't asked again until [`SessionLog::retry_failed`].
     Failed,
-    /// The hub listed them, or is too old to.
+    /// The hub listed them.
     Done,
 }
 
@@ -109,11 +109,6 @@ impl SessionLog {
         self.outline.listing = Listing::Done;
     }
 
-    /// The hub is too old to list prompts, so the log keeps only those it's given.
-    pub(crate) fn prompts_unlisted(&mut self) {
-        self.outline.listing = Listing::Done;
-    }
-
     /// The hub failed to list them. The log keeps those it has, and asks again on a new connection.
     pub(crate) fn prompt_list_failed(&mut self) {
         self.outline.listing = Listing::Failed;
@@ -135,11 +130,6 @@ impl SessionLog {
         for line in lines {
             self.outline.add_compaction(line);
         }
-        self.outline.compactions_listing = Listing::Done;
-    }
-
-    /// The hub is too old to list compactions, so the log keeps only those it's given.
-    pub(crate) fn compactions_unlisted(&mut self) {
         self.outline.compactions_listing = Listing::Done;
     }
 

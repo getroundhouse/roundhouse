@@ -21,16 +21,12 @@ pub enum AllFilesEvent {
     /// Show this file in the file tab.
     Open(SharedString),
     Error(String),
-    /// The hub is too old to list files, which All files says in the list's place.
-    Unsupported,
 }
 
 /// What All files has to show.
 pub(super) enum Listing {
     Loading,
     Listed(Listed),
-    /// The hub is older than the app, and can't list files.
-    Unsupported,
     /// It couldn't, and there was no list from before to keep showing.
     Failed(String),
 }
@@ -121,13 +117,9 @@ impl AllFiles {
                     }
                     // Lost with the connection, and listed again once the pane catches up on the next one.
                     Err(ClientError::Disconnected) => {}
-                    Err(e) if e.is_unsupported() => {
-                        t.listing = Listing::Unsupported;
-                        cx.emit(AllFilesEvent::Unsupported);
-                    }
                     // A list from before is still worth showing.
                     Err(_) if t.worktree.is_some() => {}
-                    Err(e) => t.listing = Listing::Failed(e.to_string()),
+                    Err(e) => t.listing = Listing::Failed(client_core::refusals::reason(&e)),
                 }
                 cx.notify();
             });
@@ -233,7 +225,7 @@ impl AllFiles {
                     .filter(|folder| folders.contains(*folder) || folder.starts_with(&inside))
                     .cloned()
                     .collect(),
-                Listing::Loading | Listing::Unsupported | Listing::Failed(_) => Vec::new(),
+                Listing::Loading | Listing::Failed(_) => Vec::new(),
             };
             // Reading one goes on to read each open folder in it, so one inside another isn't read again here.
             let outermost: Vec<String> = lazy
@@ -254,7 +246,7 @@ impl AllFiles {
     pub(super) fn lay_out(&mut self) {
         let rows = match &self.listing {
             Listing::Listed(listed) => listed.tree.rows(|path| self.open.contains(path)),
-            Listing::Loading | Listing::Unsupported | Listing::Failed(_) => Vec::new(),
+            Listing::Loading | Listing::Failed(_) => Vec::new(),
         };
         self.rows = rows;
     }
@@ -308,7 +300,6 @@ impl Render for AllFiles {
         let truncated = matches!(&self.listing, Listing::Listed(listed) if listed.truncated);
         let body = match &self.listing {
             Listing::Loading => look::nothing_to_show("Loading…").into_any_element(),
-            Listing::Unsupported => look::nothing_to_show("The hub is too old to list files").into_any_element(),
             Listing::Failed(message) => {
                 look::nothing_to_show(format!("Couldn't list the files: {message}")).into_any_element()
             }

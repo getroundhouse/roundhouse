@@ -170,40 +170,6 @@ fn a_chat_has_one_search_at_the_hub_at_a_time_and_one_typed_over_isn_t_asked() {
 }
 
 #[test]
-fn a_hub_too_old_to_find_isn_t_asked_again_until_a_new_connection() {
-    let dir = tempfile::tempdir().unwrap();
-    let socket = dir.path().join("hub.sock");
-    let requests = start_hub_answering(&socket, |request| {
-        if matches!(request, ClientRequest::SessionFind(_)) {
-            Some(refused(ErrorCode::Unsupported, "unknown request"))
-        } else {
-            answered_simply(request)
-        }
-    });
-    let client = connect(&socket);
-    let open = own(&client);
-    let finished = |search: &Search| search.searched() != Searched::Underway;
-
-    let first = open.search(&client, needle("parser"), 64);
-    until("the first is answered", || finished(&first));
-    let second = open.search(&client, needle("parsers"), 64);
-    until("the second is answered", || finished(&second));
-    // Kept, so the first connection is still open for the follower to let go of its subscription on.
-    let again = connect(&socket);
-    open.reconnect(&again);
-    let third = open.search(&again, needle("parser"), 64);
-    until("the third is answered", || finished(&third));
-
-    for search in [&first, &second, &third] {
-        assert_eq!(search.searched(), Searched::CantFind);
-        assert!(search.take_error().is_none(), "it's no failure");
-    }
-    drop(open);
-    let requests = requests_until_unsubscribed(&requests, 2);
-    assert_eq!(queries_asked(&requests), [("parser", None); 2], "once on each connection: {requests:?}");
-}
-
-#[test]
 fn a_query_too_short_isn_t_asked_and_a_failure_says_why_once() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");

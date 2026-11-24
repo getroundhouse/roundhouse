@@ -128,7 +128,6 @@ pub struct PairingWorld {
 /// The login capabilities of the hub whose version the world stands for.
 #[derive(Clone, Copy, Default, Eq, PartialEq)]
 pub enum LoginSupport {
-    None,
     Accounts,
     #[default]
     Defaults,

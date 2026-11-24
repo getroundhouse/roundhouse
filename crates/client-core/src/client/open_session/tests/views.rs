@@ -196,6 +196,15 @@ fn an_event_with_no_place_is_refused_live_or_in_a_page() {
                     let events = if page { vec![unplaced()] } else { Vec::new() };
                     Does::Answers(Box::new(ReplyOutcome::Response(placed(events))))
                 }
+                // Lists, so the only error is the event's.
+                ClientRequest::SessionPromptList(_) => {
+                    let none = ClientResponse::Prompts(log::Prompts { prompts: Vec::new() });
+                    Does::Answers(Box::new(ReplyOutcome::Response(none)))
+                }
+                ClientRequest::SessionCompactionList(_) => {
+                    let none = ClientResponse::Compactions(log::Compactions { compactions: Vec::new() });
+                    Does::Answers(Box::new(ReplyOutcome::Response(none)))
+                }
                 _ => {
                     let refused = ApiError::new(ErrorCode::Unsupported, "this hub doesn't know that request");
                     Does::Answers(Box::new(ReplyOutcome::Error(refused)))
