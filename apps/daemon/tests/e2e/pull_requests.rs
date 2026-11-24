@@ -11,6 +11,7 @@ use protocol::client::ErrorCode;
 use protocol::client::subscriptions::Follow;
 use protocol::model::{BranchName, Head, PrState, PullRequestLinked, WorkspaceId};
 
+use crate::carrying_on::update;
 use crate::support::github::{StandInGithub, push, pushed_workspace, workspace_on_github};
 use crate::support::{self, is_alive, started_pid, wait_for_turn_end, wait_until};
 
@@ -120,7 +121,7 @@ fn a_starting_hub_reads_every_workspaces_pull_request_without_being_asked() {
     github.say_from(7, Open, first.branch.as_str());
     github.say_from(8, Open, second.branch.as_str());
 
-    stack.restart_hub();
+    update(&mut stack);
     let client = stack.client();
     let _following = following_the_hub(&client);
 
@@ -187,7 +188,7 @@ fn a_worker_started_only_for_a_read_is_stopped_after() {
     let (workspace, session) = pushed_workspace(&stack, &client);
     github.say_from(7, Open, workspace.branch.as_str());
 
-    stack.restart_hub();
+    update(&mut stack);
     let client = stack.client();
     let _following = following_the_hub(&client);
     wait_until("it to be read", || recorded(&client, &workspace.id) == Some(7));
@@ -209,7 +210,7 @@ fn a_worker_started_only_for_a_read_stays_once_a_prompt_wants_it() {
     let asked = github.queries();
     github.hold();
 
-    stack.restart_hub();
+    update(&mut stack);
     let client = stack.client();
     let _following = following_the_hub(&client);
     wait_until("it to be read again", || github.queries() > asked);
@@ -237,7 +238,7 @@ fn reads_nobody_asked_for_leave_the_last_of_githubs_limit_to_the_rest() {
     github.leave(900);
     let asked = github.queries();
 
-    stack.restart_hub();
+    update(&mut stack);
     let client = stack.client();
     let _following = following_the_hub(&client);
     wait_until("GitHub to be asked", || github.queries() > asked);
