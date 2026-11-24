@@ -46,7 +46,7 @@ pub fn session(id: &str) -> Session {
         interaction: Interaction::Typing,
         draft: Draft::default(),
         decision_draft: None,
-        open_approvals: None,
+        open_approvals: Vec::new(),
         untaken: None,
         agent_opened: None,
         rev: Rev::default(),

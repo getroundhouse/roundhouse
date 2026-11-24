@@ -79,7 +79,7 @@ fn told_until_the_turn_ends(feed: &Subscription, chat: &SessionId) -> Vec<Sessio
 
 /// Whether a copy of a chat's record says it's waiting on the person.
 fn waits(session: &Session) -> bool {
-    session.status == SessionStatus::WaitingApproval || session.open_approvals.as_ref().is_none_or(|o| !o.is_empty())
+    session.status == SessionStatus::WaitingApproval || !session.open_approvals.is_empty()
 }
 
 #[test]

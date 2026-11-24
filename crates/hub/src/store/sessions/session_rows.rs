@@ -89,9 +89,12 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             draft: json_at(row, c.draft)?.unwrap_or_default(),
             // The same.
             decision_draft: json_at(row, c.decision_draft)?,
-            // Written only by this hub, as JSON. One it can't read says nothing, which a client takes as none.
+            // Written only by this hub, as JSON. One it can't read says nothing, which leaves whether a compaction waits
+            // to the hub.
             untaken: json_at(row, c.untaken)?,
-            open_approvals: json_at(row, c.open_approvals)?,
+            // Written only by this hub, as JSON, which a chat can't do without, so one it can't read fails the row, as
+            // the queue does.
+            open_approvals: required_json_at(row, c.open_approvals)?,
             agent_opened: Some(row.at(c.agent_opened)?),
             agent_capabilities: json_at(row, c.agent_capabilities)?,
             waits,
@@ -143,7 +146,7 @@ impl Store {
             draft: &draft_column(&session.draft)?,
             decision_draft: &session.decision_draft.as_ref().map(serde_json::to_string).transpose()?,
             untaken: &serde_json::to_string(session.untaken.as_deref().unwrap_or_default())?,
-            open_approvals: &serde_json::to_string(session.open_approvals.as_deref().unwrap_or_default())?,
+            open_approvals: &serde_json::to_string(&session.open_approvals)?,
             reply_outcome: &session.reply_outcome.as_ref().map(text_of),
             agent_capabilities: &session.agent_capabilities.as_ref().map(serde_json::to_string).transpose()?,
             account_source: &session.account_source.as_ref().map(text_of),

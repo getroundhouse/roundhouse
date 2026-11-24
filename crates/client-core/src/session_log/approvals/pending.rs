@@ -13,10 +13,9 @@ pub struct RecordedApprovals {
 }
 
 impl RecordedApprovals {
-    /// What `session` says. A hub says it of every chat, and one whose record says nothing, which only a hub that
-    /// couldn't read what it keeps of them would send, waits on none.
+    /// What `session` says.
     pub fn of(session: &Session) -> Self {
-        Self { open: session.open_approvals.clone().unwrap_or_default(), through: session.last_seq }
+        Self { open: session.open_approvals.clone(), through: session.last_seq }
     }
 }
 

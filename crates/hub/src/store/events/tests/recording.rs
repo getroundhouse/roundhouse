@@ -96,7 +96,7 @@ fn a_request_and_the_hubs_answer_are_recorded_one_after_the_other_and_leave_the_
     assert_eq!((asked.event.body, answered.event.body), (request, answer));
     assert_eq!(answered.event.seq, asked.event.seq.next());
     let after = session(&store);
-    assert_eq!(after.open_approvals, Some(Vec::new()), "nothing is left waiting");
+    assert_eq!(after.open_approvals, Vec::new(), "nothing is left waiting");
     assert_eq!((after.status, after.user_active_at_ms), (before.status, Some(1)), "the person did nothing");
     assert_eq!(store.get_workspace(&"w".into()).unwrap().user_active_at_ms, Some(1), "nor in its workspace");
     assert!(!answered.by_the_person);

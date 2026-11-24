@@ -4,7 +4,7 @@
 use protocol::event::SessionEvent;
 use protocol::model::{ClientDevice, Interaction, InteractionMode, Session};
 
-const RECORD: &str = r#"{"id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2,"rev":3"#;
+const RECORD: &str = r#"{"id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2,"rev":3,"open_approvals":[]"#;
 
 fn record(more: &str) -> String {
     format!("{RECORD}{more}}}")

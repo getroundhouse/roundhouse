@@ -191,8 +191,9 @@ impl Client {
     /// The request waiting in `session` under `approval`, as its record says, read from the log, or `None` where none
     /// waits under it, as for one decided already.
     pub fn waiting_request(&self, session: &Session, approval: &ApprovalId) -> Result<Option<SessionEvent>> {
-        let open = session.open_approvals.as_deref().unwrap_or_default();
-        let Some(waiting) = open.iter().find(|waiting| waiting.approval_id == *approval) else { return Ok(None) };
+        let Some(waiting) = session.open_approvals.iter().find(|waiting| waiting.approval_id == *approval) else {
+            return Ok(None);
+        };
         let (events, _) = self.session_read(&session.id, waiting.seq, 1, false)?;
         Ok(events.into_iter().find(|event| event.seq == waiting.seq))
     }

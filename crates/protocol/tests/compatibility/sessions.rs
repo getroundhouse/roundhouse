@@ -7,27 +7,39 @@ use protocol::frame;
 use protocol::model::{AccountSource, OpenApproval, PromptLine, Seq, Session, SessionStatus, Settlement};
 
 fn session(more: &str) -> Session {
-    let notice = format!(
-        r#"{{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{{"unasked":"everything","beyond":"asks"}},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2,"rev":3{more}}}"#
-    );
-    let notice: HubNotice = frame::decode(notice.as_bytes()).unwrap();
+    waiting_on("[]", more)
+}
+
+/// A chat whose agent waits on the approvals `open`, with `more` on its record.
+fn waiting_on(open: &str, more: &str) -> Session {
+    let notice: HubNotice = frame::decode(notice(&format!(r#","open_approvals":{open}{more}"#)).as_bytes()).unwrap();
     let HubNotice::Session(session) = notice else { panic!("{notice:?}") };
     session
 }
 
-/// An older hub says none of it, which a client has to tell from a hub that says nothing waits.
+/// The feed's notice of a chat, with `more` on its record.
+fn notice(more: &str) -> String {
+    format!(
+        r#"{{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{{"unasked":"everything","beyond":"asks"}},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2,"rev":3{more}}}"#
+    )
+}
+
+/// Every chat says which approvals its agent waits on, which is none as often as not, so a record that doesn't say
+/// isn't one, and doesn't read. One that can't say which prompts the agent has yet to take, or whether it has opened its
+/// conversation, leaves each out, and then the hub has the last word on a compaction.
 #[test]
 fn what_a_sessions_agent_is_waiting_on_keeps_its_form() {
-    let says = session(r#","open_approvals":[{"seq":3,"approval_id":"a"}],"untaken":[4],"agent_opened":true"#);
-    assert_eq!(says.open_approvals, Some(vec![OpenApproval { seq: Seq::new(3), approval_id: "a".into() }]));
+    let says = waiting_on(r#"[{"seq":3,"approval_id":"a"}]"#, r#","untaken":[4],"agent_opened":true"#);
+    assert_eq!(says.open_approvals, vec![OpenApproval { seq: Seq::new(3), approval_id: "a".into() }]);
     assert_eq!((says.untaken, says.agent_opened), (Some(vec![Seq::new(4)]), Some(true)));
-    let nothing_waits = session(r#","open_approvals":[],"untaken":[],"agent_opened":false"#);
-    assert_eq!((nothing_waits.open_approvals, nothing_waits.untaken), (Some(vec![]), Some(vec![])));
+    let nothing_waits = waiting_on("[]", r#","untaken":[],"agent_opened":false"#);
+    assert_eq!((nothing_waits.open_approvals, nothing_waits.untaken), (vec![], Some(vec![])));
     assert_eq!(nothing_waits.agent_opened, Some(false));
 
-    let older = session("");
-    assert!(!older.compaction_waits(), "an older hub is asked, and has the last word");
-    assert_eq!((older.open_approvals, older.untaken, older.agent_opened), (None, None, None));
+    let unsaid = session("");
+    assert!(!unsaid.compaction_waits(), "the hub is asked, and has the last word");
+    assert_eq!((unsaid.untaken, unsaid.agent_opened), (None, None));
+    assert!(frame::decode::<HubNotice>(notice("").as_bytes()).is_err(), "a chat that says nothing of its approvals");
     assert_eq!(
         serde_json::to_value(OpenApproval { seq: Seq::new(3), approval_id: "a".into() }).unwrap(),
         serde_json::json!({ "seq": 3, "approval_id": "a" })
@@ -72,7 +84,7 @@ fn which_way_a_prompt_was_settled_keeps_its_form() {
 
 #[test]
 fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
-    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"rev":3}"#;
+    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"rev":3,"open_approvals":[]}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();
 
@@ -83,7 +95,7 @@ fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
 
 #[test]
 fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
-    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"running","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"rev":3}"#;
+    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"running","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"rev":3,"open_approvals":[]}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();
 
@@ -95,7 +107,7 @@ fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
 /// as a hub's stored rows from before held it.
 #[test]
 fn a_session_that_says_how_full_the_context_is_still_reads() {
-    let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"rev":3,"context":{"used_tokens":5,"max_tokens":10,"model_tokens":20,"max_set_by":"settings","parts":[{"name":"Messages","tokens":5}]}}"#;
+    let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"rev":3,"open_approvals":[],"context":{"used_tokens":5,"max_tokens":10,"model_tokens":20,"max_set_by":"settings","parts":[{"name":"Messages","tokens":5}]}}"#;
 
     let HubNotice::Session(session) = frame::decode::<HubNotice>(said).unwrap() else { panic!() };
 
@@ -130,7 +142,7 @@ fn a_session_always_names_its_model_mode_and_effort() {
     assert_eq!((named.model.as_str(), named.effort.clone()), ("opus", protocol::capability::settings::Effort::High));
     assert_eq!(named.mode, protocol::fixtures::full_access());
 
-    let line = r#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2,"rev":3}"#;
+    let line = r#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2,"rev":3,"open_approvals":[]}"#;
     for (named, left) in [
         (r#""model":"opus","#, ""),
         (r#""mode":{"unasked":"everything","beyond":"asks"},"#, ""),
@@ -149,7 +161,7 @@ fn a_session_always_names_its_model_mode_and_effort() {
 #[test]
 fn a_session_in_a_mode_this_build_doesnt_know_still_reads() {
     let newer = session("").mode;
-    let line = r#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"what_it_learned","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2,"rev":3}"#;
+    let line = r#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"what_it_learned","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2,"rev":3,"open_approvals":[]}"#;
     let HubNotice::Session(session) = frame::decode(line.as_bytes()).unwrap() else { panic!("not a session") };
 
     assert!(!session.mode.is_known());

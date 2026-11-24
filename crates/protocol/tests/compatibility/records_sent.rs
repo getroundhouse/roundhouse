@@ -51,7 +51,8 @@ const SESSION: &str = concat!(
     r#""dependencies":[],"linear":true},"read_at_ms":1},"checks":{"said":{"revision":"head-7","requirements_known":true,"#,
     r#""checks":[{"name":"checks","source":"app:1","url":null,"state":"pending","required":true}]},"#,
     r#""read_at_ms":1}}]},"baseline":[],"deadline_at_ms":null,"read_error":null,"last_attempt_at_ms":1,"#,
-    r#""affected":[]}}],"account":null,"queued":[],"queue_held":false,"rev":4,"title_source":"first_line"}"#,
+    r#""affected":[]}}],"account":null,"queued":[],"queue_held":false,"open_approvals":[],"rev":4,"#,
+    r#""title_source":"first_line"}"#,
 );
 
 /// An account the person named, with none of who it is or what's left of its limits.
@@ -151,7 +152,7 @@ const SESSION_FILLED: &str = concat!(
     r#""deadline_at_ms":null,"read_error":null,"last_attempt_at_ms":1,"affected":[]}}],"#,
     r#""context":{"used_tokens":5,"max_tokens":10,"parts":[]},"prompt_cache":{"used_at_ms":1,"#,
     r#""ttl":"five_minutes","model":null,"tokens":3},"todos":{"items":[{"text":"Test","status":"pending"}]},"#,
-    r#""account":null,"queued":[],"queue_held":false,"rev":4,"title_source":"first_line"}"#,
+    r#""account":null,"queued":[],"queue_held":false,"open_approvals":[],"rev":4,"title_source":"first_line"}"#,
 );
 
 /// An account, with who it is and what's left of its limits.
