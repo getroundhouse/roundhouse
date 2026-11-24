@@ -70,8 +70,7 @@ fn independent_waits_coexist_and_retries_reuse_the_original() {
 
     assert_eq!(retried, first);
     let session = store.get_session(&"s".into()).unwrap().session;
-    assert_eq!(session.open_waits(), [first.clone(), second]);
-    assert_eq!(session.wait, Some(first));
+    assert_eq!(session.waits, [first, second]);
     assert_eq!(how(&store, "a"), None);
     assert_eq!(how(&store, "b"), None);
 }
@@ -204,7 +203,7 @@ fn a_chats_record_shows_its_open_wait_and_moves_as_one_starts_or_ends() {
     let mut revs = vec![read().rev];
     let mut moved = |shown: Option<&str>| {
         let session = read();
-        assert_eq!(session.wait.map(|wait| wait.id.to_string()).as_deref(), shown);
+        assert_eq!(session.waits.first().map(|wait| wait.id.to_string()).as_deref(), shown);
         assert!(session.rev > *revs.last().unwrap(), "the revision moved, to show {shown:?}");
         revs.push(session.rev);
     };
@@ -223,10 +222,10 @@ fn a_chats_record_shows_its_open_wait_and_moves_as_one_starts_or_ends() {
     store.call_off_workspace_waits(&"w".into(), 4).unwrap();
     moved(None);
 
-    assert_eq!(read().wait, None);
+    assert_eq!(read().waits, []);
     let shown = wait("e");
     store.start_wait(&shown).unwrap();
-    assert_eq!(read().wait, Some(shown), "as it was asked for");
+    assert_eq!(read().waits, [shown], "as it was asked for");
 }
 
 /// A wait an older hub kept keeps what it asked for, what it saw as it started and its deadline, but none of the pull

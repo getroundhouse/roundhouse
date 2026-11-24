@@ -10,7 +10,7 @@ fn announced(feed: &mut crate::hub::Notices) -> Vec<Option<WaitId>> {
         if let HubNotice::Session(session) = notice
             && session.id.as_str() == "s"
         {
-            copies.push(session.wait.map(|wait| wait.id));
+            copies.push(session.waits.first().map(|wait| wait.id.clone()));
         }
     }
     copies

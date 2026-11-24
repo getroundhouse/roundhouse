@@ -1,17 +1,24 @@
 //! What a hub sends of each kind of record that once held a field a client of version 5 reads elsewhere or not at all,
 //! spelled out as these types write it, to the byte, since that client reads each from a hub that leaves the fields
-//! out: a field an observation replaced, which it reads from its observation, and the list of every record's
-//! `found_github_logins`, which it reads as empty. And what the hub of the build before this one sends of each, with
-//! the fields there, which these types read. Every kind of record that held such a field is here.
+//! out: a field an observation replaced, which it reads from its observation, a repository's `path`, which it reads
+//! from `origin`, a chat's `wait`, which it reads from `waits`, and the list of every record's `found_github_logins`,
+//! which it reads as empty. And what the hub of the build before this one sends of each, with the fields there, which
+//! these types read. Every kind of record that held such a field is here.
 
 use protocol::fixtures;
 use protocol::model::{
     Account, GithubAccount, GithubApp, GithubAppId, GithubInstallation, GithubInstallationId, GithubRepositoryName,
-    HubUpdate, IssueNumber, ModelList, ModelListKey, ModelLookup, PullRequestLink, PullRequestLinked, Records, Rev,
-    Session, Wait, WaitEnd, WaitEnded, Workspace,
+    HubUpdate, IssueNumber, ModelList, ModelListKey, ModelLookup, PullRequestLink, PullRequestLinked, Records, Repo,
+    RepoOrigin, RepoUrl, Rev, Session, Wait, WaitEnd, WaitEnded, Workspace,
 };
 
 use crate::keeps_its_form;
+
+/// A repository with no checkout, where it is said by `origin` alone.
+const REPO: &str = concat!(
+    r#"{"id":"r","name":"repo","origin":{"kind":"remote","url":"https://github.com/ada/roundhouse.git"},"#,
+    r#""created_at_ms":1,"rev":2}"#,
+);
 
 /// A workspace whose pull request is #7, with none of its branches, which build its worker is, or how many files were
 /// uncommitted as its pull request was read.
@@ -22,8 +29,9 @@ const WORKSPACE: &str = concat!(
     r#""pull_request_link":{"repository":"o/r","number":7,"url":"https://github.com/o/r/pull/7"}}"#,
 );
 
-/// A chat with an open wait and an ended one, with none of how full its context is, its cache or its to-do list. The
-/// open wait's watch keeps its keys, empty, and the ended wait keeps what it last read.
+/// A chat with an open wait and an ended one, with none of how full its context is, its cache, its to-do list or its
+/// oldest open wait apart from the rest. The open wait's watch keeps its keys, empty, and the ended wait keeps what it
+/// last read.
 const SESSION: &str = concat!(
     r#"{"id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","#,
     r#""beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":0,"created_at_ms":0,"updated_at_ms":0,"#,
@@ -80,6 +88,12 @@ const RECORDS: &str = concat!(
 // As the hub of the build before sends each, with every such field filled from its observation for a client of
 // version 4, written out by that build's types.
 
+/// A repository with no checkout, with `""` as its checkout beside `origin`.
+const REPO_FILLED: &str = concat!(
+    r#"{"id":"r","name":"repo","path":"","origin":{"kind":"remote","#,
+    r#""url":"https://github.com/ada/roundhouse.git"},"created_at_ms":1,"rev":2}"#,
+);
+
 /// A workspace, with its branches, its worker's build and how many files are uncommitted on its link.
 const WORKSPACE_FILLED: &str = concat!(
     r#"{"id":"w","repo_id":"r","name":"w","branch":"w","base_ref":null,"path":null,"status":"ready","#,
@@ -90,12 +104,26 @@ const WORKSPACE_FILLED: &str = concat!(
     r#""name":"w"},"had":[]},"worker_build":"0.1.900"}"#,
 );
 
-/// A chat with its context, its cache and its to-do list, and an open wait whose watch holds what it last read.
+/// A chat with its context, its cache and its to-do list, and an open wait whose watch holds what it last read, which
+/// is its oldest open wait too, as `wait`.
 const SESSION_FILLED: &str = concat!(
     r#"{"id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","#,
     r#""beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":0,"created_at_ms":0,"updated_at_ms":0,"#,
     r#""title":null,"closed_at_ms":null,"reply_seq":0,"turn_started_at_ms":null,"user_active_at_ms":null,"#,
-    r#""read_seq":0,"background_tasks":[],"waits":[{"id":"open","session_id":"s","workspace_id":"w","#,
+    r#""read_seq":0,"background_tasks":[],"#,
+    r#""wait":{"id":"open","session_id":"s","workspace_id":"w","number":7,"call":"open","until":"required_checks","#,
+    r#""started_at_ms":1,"watching":{"requested":[7],"#,
+    r#""snapshot":{"repository":{"url":"https://github.com/example/project","name_with_owner":"example/project"},"#,
+    r#""observed_at_ms":1,"pull_requests":[{"repository":"example/project","number":7,"#,
+    r#""summary":{"said":{"about":{"url":"https://github.com/example/project/pull/7","title":"Change 7","#,
+    r#""opened_at_ms":1,"comments":0,"labels":[],"body":""},"state":"OPEN","is_draft":false,"review":"","#,
+    r#""merge_state":"CLEAN","mergeable":"mergeable","base_branch":"main","head":"head-7","base":"base","added":0,"#,
+    r#""removed":0},"read_at_ms":1},"history":{"said":{},"read_at_ms":1},"stack":{"said":{"destination":"main","#,
+    r#""dependencies":[],"linear":true},"read_at_ms":1},"checks":{"said":{"revision":"head-7","#,
+    r#""requirements_known":true,"checks":[{"name":"checks","source":"app:1","url":null,"state":"pending","#,
+    r#""required":true}]},"read_at_ms":1}}]},"baseline":[],"deadline_at_ms":null,"read_error":null,"#,
+    r#""last_attempt_at_ms":1,"affected":[]}},"#,
+    r#""waits":[{"id":"open","session_id":"s","workspace_id":"w","#,
     r#""number":7,"call":"open","until":"required_checks","started_at_ms":1,"watching":{"requested":[7],"#,
     r#""snapshot":{"repository":{"url":"https://github.com/example/project","#,
     r#""name_with_owner":"example/project"},"observed_at_ms":1,"#,
@@ -169,6 +197,11 @@ const RECORDS_FILLED: &str = concat!(
     r#""rev":10}"#,
 );
 
+fn repo() -> Repo {
+    let url = RepoUrl::try_from("https://github.com/ada/roundhouse.git".to_owned()).unwrap();
+    Repo { id: "r".into(), name: "repo".into(), origin: RepoOrigin::Remote { url }, created_at_ms: 1, rev: Rev::new(2) }
+}
+
 fn workspace() -> Workspace {
     let link = PullRequestLink {
         repository: GithubRepositoryName::named("o/r"),
@@ -198,7 +231,7 @@ fn session_waiting(open: Wait) -> Session {
         ended: Some(WaitEnded { at_ms: 2, how: WaitEnd::ChecksPassed }),
         ..fixtures::pull_request_wait("ended")
     };
-    Session { waits: Some(vec![open, ended]), rev: Rev::new(4), ..fixtures::session("s") }
+    Session { waits: vec![open, ended], rev: Rev::new(4), ..fixtures::session("s") }
 }
 
 fn account() -> Account {
@@ -238,6 +271,7 @@ fn records() -> Records {
 /// Each is written to the byte as a client of version 5 reads it, and reads as it was.
 #[test]
 fn a_record_keeps_the_form_a_client_of_version_5_reads() {
+    keeps_its_form(&repo(), REPO);
     keeps_its_form(&workspace(), WORKSPACE);
     keeps_its_form(&session(), SESSION);
     keeps_its_form(&account(), ACCOUNT);
@@ -253,6 +287,7 @@ fn a_record_keeps_the_form_a_client_of_version_5_reads() {
 /// wait's watch, which that hub fills with what the wait last read, and which a client reads from its observation.
 #[test]
 fn a_record_the_hub_of_the_build_before_fills_reads_as_it_does_without_the_fields() {
+    assert_eq!(serde_json::from_str::<Repo>(REPO_FILLED).unwrap(), repo());
     assert_eq!(serde_json::from_str::<Workspace>(WORKSPACE_FILLED).unwrap(), workspace());
     assert_eq!(
         serde_json::from_str::<Session>(SESSION_FILLED).unwrap(),

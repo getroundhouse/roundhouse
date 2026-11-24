@@ -62,9 +62,10 @@ impl Subagent {
     }
 
     /// The one of `subagents` that `named` names: the one with that ID, or else the one the call it names started,
-    /// since a client from before subagents had IDs of their own names each by its call. A read, a subscription or a
-    /// search names a subagent so, and the hub finds it as this says, with SQL of its own, which its store's tests hold
-    /// to this. A fake hub finds one by it. Only they use it, so it's behind `testing`.
+    /// since a client names a subagent by its call until it has the subagent's record, as a tab opened on one before
+    /// its agent said it started does. A read, a subscription or a search names a subagent so, and the hub finds it as
+    /// this says, with SQL of its own, which its store's tests hold to this. A fake hub finds one by it. Only they use
+    /// it, so it's behind `testing`.
     #[cfg(any(test, feature = "testing"))]
     pub fn named<'a>(subagents: &'a [Subagent], named: &SubagentId) -> Option<&'a Subagent> {
         let by_call = || subagents.iter().find(|subagent| SubagentId::of_call(&subagent.call) == *named);

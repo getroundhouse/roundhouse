@@ -27,7 +27,7 @@ fn a_wait_s_line_says_where_its_pull_request_stands_and_stop_calls_it_off(cx: &m
     let chat = ui.active_chat();
     ui.input(r#"mcp:wait_for_pull_requests {"pull_requests":[7],"until":"merged"}"#);
     ui.press("enter");
-    let waiting = || stack.client().session_get(&chat).unwrap().wait;
+    let waiting = || stack.client().session_get(&chat).unwrap().waits.into_iter().next();
     ui.wait("the wait to start", |_| waiting().is_some());
     let wait = waiting().unwrap();
     let text = format!("wait-text/{}", wait.id);

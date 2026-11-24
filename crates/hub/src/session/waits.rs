@@ -51,7 +51,7 @@ impl LiveSession {
             return Ok(());
         }
         let (hub, id) = (self.hub()?, self.id.clone());
-        if hub.blocking(move |store| store.get_session(&id)).await?.session.open_waits().is_empty() {
+        if hub.blocking(move |store| store.get_session(&id)).await?.session.waits.is_empty() {
             self.record(Origin::Hub, EventBody::AgentTasks { tasks: left, stopped: Vec::new() }, None).await?;
         }
         Ok(())

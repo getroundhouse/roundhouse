@@ -22,8 +22,8 @@ impl Store {
     }
 
     /// The subagent `named` names in `session_id`: the one with that ID, or else the one the call it names started,
-    /// since a client from before subagents had IDs of their own names each by its call. One that names neither is
-    /// taken as it is, which reads no events, as it did before.
+    /// since a client names a subagent by its call until it has the subagent's record, as a tab opened on one before
+    /// its agent said it started does. One that names neither is taken as it is, and reads no events.
     pub fn subagent_named(&self, session_id: &SessionId, named: &SubagentId) -> Result<SubagentId, StoreError> {
         Ok(self.recorded_subagent(session_id, named)?.unwrap_or_else(|| named.clone()))
     }

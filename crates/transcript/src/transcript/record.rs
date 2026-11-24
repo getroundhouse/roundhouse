@@ -71,7 +71,7 @@ impl AtWork {
             working: session.status.is_working(),
             turn_started_at_ms: session.turn_started_at_ms,
             background: session.background_tasks.clone(),
-            waits: session.open_waits().iter().map(open).collect(),
+            waits: session.waits.iter().map(open).collect(),
             reply_seq: session.reply_seq,
             failed: session.turn_failed(),
             cache: idle_cache(session, cache).filter(|_| !session.status.in_turn()).map(|held| IdleCache {

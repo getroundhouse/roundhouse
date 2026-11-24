@@ -33,7 +33,7 @@ async fn explicit_waits_follow_remote_reads_and_failed_starts_leave_existing_wai
     assert_eq!(failed.unwrap_err().code, ErrorCode::Worker);
     let kept: Vec<_> = hub.store.remote_waits().unwrap().into_iter().map(|wait| hub.as_read(wait)).collect();
     assert_eq!(kept, [started.wait]);
-    assert_eq!(hub.store.get_session(&"s".into()).unwrap().session.open_waits().len(), 1);
+    assert_eq!(hub.store.get_session(&"s".into()).unwrap().session.waits.len(), 1);
     let asked = github.asked();
     assert!(asked.iter().all(|asked| asked.contains("authorization: bearer a-token\r\n")), "{asked:?}");
 }

@@ -43,7 +43,7 @@ fn an_open_waits_record_keeps_none_of_what_it_read_and_one_that_ends_keeps_its_l
 
     assert!(changed.is_empty());
     assert_eq!(store.wait(&wait.id).unwrap(), frozen);
-    assert!(store.get_session(&"s".into()).unwrap().session.open_waits().is_empty());
+    assert!(store.get_session(&"s".into()).unwrap().session.waits.is_empty());
     drop(store);
     let reopened = crate::store::tests::open_in(dir.path());
     assert_eq!(reopened.wait(&wait.id).unwrap(), frozen);

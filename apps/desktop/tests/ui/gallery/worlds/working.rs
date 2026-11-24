@@ -61,7 +61,7 @@ pub(in crate::gallery) fn waiting_on_checks() -> World {
     **watch = watch.recorded();
     world.observe(observed::wait_read(chat.clone(), wait.id.clone(), read(vec![opened.pull_request.clone()])));
     world.sessions.iter_mut().filter(|session| session.id == chat).for_each(|session| {
-        session.waits = Some(vec![wait.clone()]);
+        session.waits = vec![wait.clone()];
     });
     world.github_says.pull_requests.insert(focus, opened);
     world
@@ -99,7 +99,7 @@ pub(in crate::gallery) fn waiting_on_stacks() -> World {
     queued.summary.said.queue = Some(QueueState::AwaitingChecks);
     world.observe(observed::wait_read(chat.clone(), "merge", read(vec![queued])));
     world.sessions.iter_mut().filter(|session| session.id == chat).for_each(|session| {
-        session.waits = Some(vec![wait.clone(), second.clone()]);
+        session.waits = vec![wait.clone(), second.clone()];
     });
     world
 }
