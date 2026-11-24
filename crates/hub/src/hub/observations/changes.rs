@@ -28,6 +28,20 @@ impl Hub {
         self.change_observation::<K>(of, |_| Change::Read { value, read_at_ms }).await
     }
 
+    /// Keeps a read, as [`Hub::observation_read`] does, if `wanted` says it's still wanted, which it's asked under the
+    /// lock every change takes. So whatever stops wanting it, and then forgets what's kept of it, as
+    /// [`Hub::observations_gone_where`] does, finds the read either kept by then, and forgets it, or never made, as when
+    /// the hub lets go of a list of models while its agent's answer lands.
+    pub(crate) async fn observation_read_while<K: Kind>(
+        &self,
+        of: K::Of,
+        value: K::Value,
+        read_at_ms: i64,
+        wanted: impl FnOnce() -> bool,
+    ) -> Result<(), ApiError> {
+        self.change_observation_while::<K>(of, wanted, |_| Change::Read { value, read_at_ms }).await
+    }
+
     /// Keeps what `merge` makes of what the store keeps of the observation of `of`, or of nothing where it keeps none,
     /// with what was heard at `heard_at_ms`, for a kind whose every hearing says only part of it, such as what an agent
     /// hears of its account's limits, which can leave out what hasn't changed. Under the lock every change takes, so of
@@ -97,6 +111,30 @@ impl Hub {
         self.change_observation::<K>(of, |_| Change::Gone).await
     }
 
+    /// Forgets each observation of kind `K` that `gone` picks out, and tells clients, as [`Hub::observation_gone`] does
+    /// of each, under the lock every change takes from before it picks them out. So a read kept while it was still
+    /// wanted, as [`Hub::observation_read_while`] says, is forgotten, where the caller stopped wanting it first, and one
+    /// that asks after finds it isn't wanted. Stops at the first that fails, which only a database that gives no
+    /// revision has.
+    pub(crate) async fn observations_gone_where<K: Kind>(&self, gone: impl Fn(&K::Of) -> bool) -> Result<(), ApiError> {
+        let mut moved = Vec::new();
+        let forgot = async {
+            let _changing = self.observations.changing.lock().await;
+            for of in self.observations.kept_of::<K>().into_iter().filter(|of| gone(of)) {
+                let old_form_on = K::old_form_on(&of);
+                if self.changed_observation_held::<K>(of, |_| Change::Gone).await? {
+                    moved.extend(old_form_on);
+                }
+            }
+            Ok(())
+        };
+        let forgot = forgot.await;
+        for record in moved {
+            self.old_form_moved(record).await;
+        }
+        forgot
+    }
+
     /// Forgets every observation of workspace `id`, of every kind, since the workspace is gone, and tells clients. One
     /// operation, so no kind is left out. Called where a workspace is discarded, and again by whatever may have kept
     /// one of it as it went, as a read that lands after can. A failure, which only a database that gives no revision
@@ -157,8 +195,19 @@ impl Hub {
         of: K::Of,
         change: impl FnOnce(&Table<K>) -> Change<K::Value>,
     ) -> Result<(), ApiError> {
+        self.change_observation_while::<K>(of, || true, change).await
+    }
+
+    /// What [`Hub::change_observation`] does, if `wanted` says the change is still wanted, as
+    /// [`Hub::observation_read_while`] says.
+    async fn change_observation_while<K: Kind>(
+        &self,
+        of: K::Of,
+        wanted: impl FnOnce() -> bool,
+        change: impl FnOnce(&Table<K>) -> Change<K::Value>,
+    ) -> Result<(), ApiError> {
         let old_form_on = K::old_form_on(&of);
-        if self.changed_observation::<K>(of, change).await?
+        if self.changed_observation::<K>(of, wanted, change).await?
             && let Some(record) = old_form_on
         {
             self.old_form_moved(record).await;
@@ -166,15 +215,28 @@ impl Hub {
         Ok(())
     }
 
-    /// What [`Hub::change_observation`] does under the lock every change takes. Whether it changed what clients are
-    /// told.
+    /// What [`Hub::change_observation_while`] does under the lock every change takes. Whether it changed what clients
+    /// are told.
     async fn changed_observation<K: Kind>(
+        &self,
+        of: K::Of,
+        wanted: impl FnOnce() -> bool,
+        change: impl FnOnce(&Table<K>) -> Change<K::Value>,
+    ) -> Result<bool, ApiError> {
+        let _changing = self.observations.changing.lock().await;
+        if !wanted() {
+            return Ok(false);
+        }
+        self.changed_observation_held::<K>(of, change).await
+    }
+
+    /// What [`Hub::changed_observation`] does once it holds the lock every change takes, which the caller holds.
+    async fn changed_observation_held<K: Kind>(
         &self,
         of: K::Of,
         change: impl FnOnce(&Table<K>) -> Change<K::Value>,
     ) -> Result<bool, ApiError> {
         let observations = &self.observations;
-        let _changing = observations.changing.lock().await;
         let step = {
             let mut tables = observations.tables.lock();
             let table = K::table(&mut tables);

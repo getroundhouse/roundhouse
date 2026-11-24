@@ -1,4 +1,6 @@
-//! Forgetting every observation of a workspace that's gone, whatever its kind.
+//! Forgetting observations: every one of a workspace that's gone, whatever its kind, and those a caller picks out.
+
+use std::sync::Arc;
 
 use protocol::client::HubNotice;
 use protocol::model::{
@@ -101,4 +103,27 @@ async fn the_observations_of_a_workspace_the_hub_doesn_t_have_are_swept() {
     assert_eq!(kinds_kept(&hub, "gone"), 0);
     assert_eq!(kinds_kept(&hub, "w"), 5, "of a workspace it has");
     assert!(hub.observations.keeps::<Referenced>(&chip), "a chip's");
+}
+
+/// A read that found itself still wanted, and is being kept as the caller stops wanting it and forgets what's kept, is
+/// forgotten with the rest, since what's forgotten is picked out under the lock the read holds, as when the hub lets go
+/// of a list of models while its agent's answer lands.
+#[tokio::test]
+async fn a_read_still_landing_as_what_it_s_of_is_forgotten_goes_with_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let (wanted, asked) = tokio::sync::oneshot::channel();
+    let reading = tokio::spawn({
+        let hub = Arc::clone(&hub);
+        async move {
+            let still = || wanted.send(()).is_ok();
+            hub.observation_read_while::<WorkspaceLines>("w".into(), lines(3, 1), 1_000, still).await.unwrap();
+        }
+    });
+    asked.await.unwrap();
+
+    hub.observations_gone_where::<WorkspaceLines>(|_| true).await.unwrap();
+    reading.await.unwrap();
+
+    assert!(!hub.observations.keeps::<WorkspaceLines>(&"w".into()), "forgotten");
 }

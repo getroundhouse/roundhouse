@@ -1,6 +1,9 @@
 //! What an agent offers where a chat would launch, which the hub keeps as an observation, and fills each list of models'
 //! record with for a client of a version from before it.
 
+use std::sync::Arc;
+use std::time::Duration;
+
 use protocol::capability::settings::{Effort, ModelCatalog};
 use protocol::model::{AgentKind, ModelList, ModelListKey, ModelLookup, Observation, Observed, RepoOrigin};
 
@@ -98,4 +101,38 @@ async fn letting_go_of_a_list_lets_go_of_what_was_offered_there() {
 
     assert_eq!(listed(&again, &held).await, (None, None));
     assert_eq!(listed(&again, &kept).await, (None, None), "the file's");
+}
+
+/// An answer that lands as the hub lets go of its list, as when which login a launch is handed changes, is another
+/// login's, so it isn't kept, though it found its list held as it began to, and doesn't answer a list made in its
+/// place since. Otherwise the next to ask there would be served it at once, as one the cache file kept.
+#[tokio::test]
+async fn an_answer_that_lands_as_its_list_is_let_go_of_is_dropped() {
+    let dir = tempfile::tempdir().unwrap();
+    let installed = key(Some("0.170.0"));
+    let hub = hub_in(dir.path());
+    let asked = hub.model_list_asking(&installed).await;
+    // A change to an observation under way, which the answer waits behind.
+    let under_way = hub.holding_observations().await;
+    let answer = tokio::spawn({
+        let (hub, key) = (Arc::clone(&hub), installed.clone());
+        async move { hub.model_list_settled(&key, asked, offered()).await }
+    });
+    // It runs up to the lock it waits for, on the test's one thread.
+    tokio::task::yield_now().await;
+    let forgetting = tokio::spawn({
+        let hub = Arc::clone(&hub);
+        async move { hub.forget_model_lists(|_| true).await }
+    });
+    waiting::task::until(Duration::from_secs(5), "the list let go of", || hub.model_list_held(&installed).is_none())
+        .await;
+    let again = hub.model_list_asking(&installed).await;
+
+    drop(under_way);
+    answer.await.unwrap();
+    forgetting.await.unwrap();
+
+    assert_eq!(listed(&hub, &installed).await.0, None, "nothing kept of what it offered");
+    let list = hub.model_list_held(&installed).expect("the list made since");
+    assert_eq!((list.rev, list.lookup), (again, ModelLookup::Asking), "still asking");
 }
