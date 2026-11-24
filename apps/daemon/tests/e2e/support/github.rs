@@ -33,6 +33,31 @@ impl StandInGithub {
         self.pull_requests.set(number, state);
     }
 
+    /// A workspace on GitHub, as [`workspace_on_github`] says, with its branch pushed to `origin`, as [`Self::push`]
+    /// says, once the read of its pull request that the push brings has found what GitHub has from the branch, so it
+    /// can't land after a test's own.
+    pub(crate) fn pushed_workspace(&self, stack: &Stack, client: &Client) -> (Workspace, Session) {
+        let (workspace, session) = workspace_on_github(stack, client);
+        self.push(&workspace);
+        let looked = || super::workspace(client, &workspace.id).pull_request_link.is_some();
+        wait_until("the read the push brings to be recorded", looked);
+        (workspace, session)
+    }
+
+    /// Has `workspace`'s branch pushed to `origin`, as far as its worktree knows, at the commit it's at, as a push
+    /// would leave it, once the hub has heard of it: its worker tells it, and it asks GitHub for the branch's pull
+    /// request, which a branch pushed nowhere needs nothing of GitHub to say. A client is sent the branches only at the
+    /// workspace's level, and following that asks for the pull request at once, as a client asks, which can find none
+    /// before the push is heard of.
+    pub(crate) fn push(&self, workspace: &Workspace) {
+        let asked = self.queries();
+        let path = std::path::PathBuf::from(workspace.path.as_ref().unwrap());
+        let branch = workspace.branch.as_str();
+        git(&path, &["update-ref", &format!("refs/remotes/origin/{branch}"), "HEAD"]);
+        git(&path, &["branch", "-q", "--set-upstream-to", &format!("origin/{branch}")]);
+        wait_until("the read the push brings to ask GitHub", || self.queries() > asked);
+    }
+
     /// The same, from the branch `branch` of example/project.
     pub(crate) fn say_from(&self, number: u64, state: GithubPullRequestState, branch: &str) {
         self.pull_requests.set_from(number, state, branch);
@@ -80,28 +105,6 @@ pub(crate) fn workspace_on_github(stack: &Stack, client: &Client) -> (Workspace,
     let made = stack.workspace(client);
     wait_for_address(client);
     made
-}
-
-/// The same, with its branch pushed to `origin`, as far as its worktree knows, at the commit it's at, as a push would
-/// leave it, once the hub's record says so, as its worker tells it, and once the read of its pull request that the
-/// push brings has found what GitHub has from the branch, so it can't land after a test's own.
-pub(crate) fn pushed_workspace(stack: &Stack, client: &Client) -> (Workspace, Session) {
-    let (workspace, session) = workspace_on_github(stack, client);
-    push(client, &workspace);
-    wait_until("the read the push brings", || super::workspace(client, &workspace.id).pull_request_link.is_some());
-    (workspace, session)
-}
-
-/// Has `workspace`'s branch pushed to `origin`, as [`pushed_workspace`] says.
-pub(crate) fn push(client: &Client, workspace: &Workspace) {
-    let path = std::path::PathBuf::from(workspace.path.as_ref().unwrap());
-    let branch = workspace.branch.as_str();
-    git(&path, &["update-ref", &format!("refs/remotes/origin/{branch}"), "HEAD"]);
-    git(&path, &["branch", "-q", "--set-upstream-to", &format!("origin/{branch}")]);
-    wait_until("the branch to be pushed, as its record says", || {
-        let branches = super::workspace(client, &workspace.id).branches;
-        branches.as_ref().and_then(|branches| branches.checked_out()).is_some_and(|branch| branch.upstream.is_some())
-    });
 }
 
 /// Once a repository's record has the address its worker read.

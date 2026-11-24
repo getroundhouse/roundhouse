@@ -4,7 +4,7 @@
 use client_core::records::{HubRecords, Snapshot};
 use protocol::fixtures::account;
 use protocol::model::{
-    Account, AgentDescription, AgentKind, HeldLogin, LimitWindow, LoginDescription, Records, UsageLimit,
+    Account, AgentDescription, AgentKind, HeldLogin, LimitWindow, LoginDescription, Observation, Records, UsageLimit,
 };
 
 /// Sunday 1 November 2026, at 3 PM in UTC, which held still is the local time zone.
@@ -22,11 +22,15 @@ pub(super) fn added(id: &str, name: &str) -> Account {
     }
 }
 
-/// A client's copy of a hub's records that holds `accounts`, which the page reads them from.
-pub(super) fn holding<'a>(accounts: impl IntoIterator<Item = &'a Account>) -> Snapshot {
+/// A client's copy of a hub's records that holds `accounts`, which the page reads them from, and what `observed` says
+/// of them, such as who each is.
+pub(super) fn holding<'a>(
+    accounts: impl IntoIterator<Item = &'a Account>,
+    observed: impl IntoIterator<Item = Observation>,
+) -> Snapshot {
     let mut held = HubRecords::default();
-    let listed = Records { accounts: accounts.into_iter().cloned().collect(), ..Records::default() };
-    held.apply_list(client_core::records::with_observations(listed));
+    let (accounts, observations) = (accounts.into_iter().cloned().collect(), observed.into_iter().collect());
+    held.apply_list(Records { accounts, observations, ..Records::default() });
     held.snapshot()
 }
 

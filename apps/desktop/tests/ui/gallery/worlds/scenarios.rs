@@ -25,8 +25,9 @@ pub(in super::super) fn own_hub() -> World {
 /// The conversation, on an older hub installed as a service, which has found the app's release in the update feed.
 pub(in super::super) fn hub_update_found() -> World {
     let mut world = older_hub(false);
+    world.observe(protocol::fixtures::observed::release_offered(Some(client_core::fake_hub::BUILD)));
     world.hub_update = Some(protocol::model::HubUpdate {
-        version: Some(client_core::fake_hub::BUILD.to_owned()),
+        version: None,
         looked_at_ms: NOW_MS - HOUR_MS / 2,
         problem: None,
         attempt: None,
@@ -81,9 +82,24 @@ pub(in super::super) fn archiving() -> World {
 /// The conversation, in a chat whose agent has said how full its context is, on an account with a five-hour limit
 /// that starts again in three hours and a week's limit that starts again in six days.
 pub(in super::super) fn context() -> World {
+    context_on(accounts::found(), how_full())
+}
+
+/// The conversation, in a chat whose agent has said its context is as `context` says, on `account`.
+fn context_on(account: accounts::Heard, context: ContextUsage) -> World {
     let mut world = conversation();
+    let chat = world.sessions.last_mut().unwrap();
+    chat.account = Some(account.account.id.clone());
+    let chat = chat.id.clone();
+    world.say_context(&chat, context);
+    accounts::hold(&mut world, vec![account]);
+    world
+}
+
+/// How full the chat's context is in the context's world.
+fn how_full() -> ContextUsage {
     let part = |name: &str, tokens, kind| ContextPart { name: name.to_string(), tokens, kind };
-    world.sessions.last_mut().unwrap().context = Some(ContextUsage {
+    ContextUsage {
         used_tokens: 313_500,
         max_tokens: 500_000,
         model_tokens: None,
@@ -99,16 +115,11 @@ pub(in super::super) fn context() -> World {
             part("Autocompact buffer", 33_000, ContextPartKind::Buffer),
             part("Free space", 153_500, ContextPartKind::Free),
         ],
-    });
-    let account = accounts::found();
-    world.sessions.last_mut().unwrap().account = Some(account.id.clone());
-    world.accounts.push(account);
-    world
+    }
 }
 
 /// The same, on an account that also has a week's limit of Fable's own, most of it used.
 pub(in super::super) fn context_with_a_models_limit() -> World {
-    let mut world = context();
     let fables = UsageLimit {
         window: LimitWindow::ModelSevenDays,
         model: Some(ModelLabel::new("Fable")),
@@ -116,14 +127,14 @@ pub(in super::super) fn context_with_a_models_limit() -> World {
         resets_at_ms: Some(NOW_MS + 100 * HOUR_MS),
         heard_at_ms: None,
     };
-    world.accounts.last_mut().unwrap().limits.push(fables);
-    world
+    let mut found = accounts::found();
+    found.limits.get_or_insert_default().push(fables);
+    context_on(found, how_full())
 }
 
 /// The same, nearly full, where the agent's settings make the context half of what its model holds.
 pub(in super::super) fn context_capped() -> World {
-    let mut world = context();
-    let context = world.sessions.last_mut().unwrap().context.as_mut().unwrap();
+    let mut context = how_full();
     (context.used_tokens, context.model_tokens, context.max_set_by) =
         (465_200, Some(1_000_000), Some(MaxSetBy::Settings));
     for part in &mut context.parts {
@@ -133,14 +144,12 @@ pub(in super::super) fn context_capped() -> World {
             _ => part.tokens,
         };
     }
-    world
+    context_on(accounts::found(), context)
 }
 
 /// The same, before any agent under the account has heard of a limit.
 pub(in super::super) fn context_without_limits() -> World {
-    let mut world = context();
-    world.accounts[0].limits.clear();
-    world
+    context_on(accounts::Heard { limits: None, ..accounts::found() }, how_full())
 }
 
 /// A chat whose one turn is over. It took a little longer as the hub saw it than the agent counted, and the hub's count

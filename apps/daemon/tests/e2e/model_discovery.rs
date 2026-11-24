@@ -1,9 +1,9 @@
 //! The first workspace's model choices come from the same CLI as its first turn.
 
-use crate::support::{Stack, git, wait_until};
+use crate::support::{Stack, git, known, wait_until};
 use protocol::capability::settings::{Effort, Settings};
 use protocol::client::admin::{ModelTarget, ModelsFor};
-use protocol::model::{AgentKind, ModelListKey, ModelLookup, ModelName, NewWorkspaceDraftToKeep};
+use protocol::model::{AgentKind, ModelListKey, ModelLookup, ModelName, NewWorkspaceDraftToKeep, Observation};
 use serde_json::{Value, json};
 
 #[test]
@@ -85,10 +85,13 @@ fn answered(stack: &Stack, key: &ModelListKey, times: usize) -> protocol::capabi
     let client = stack.client();
     let mut catalog = None;
     wait_until("the agent's answer", || {
-        let lists = client.records().unwrap().model_lists;
-        let list = lists.into_iter().find(|list| list.key == *key && list.lookup == ModelLookup::Answered);
-        catalog = list.and_then(|list| list.catalog);
-        catalog.is_some() && lists_asked(stack) == times
+        let records = client.records().unwrap();
+        let answered = records.model_lists.iter().any(|list| list.key == *key && list.lookup == ModelLookup::Answered);
+        catalog = records.observations.iter().find_map(|observation| match observation {
+            Observation::ModelCatalog { list, catalog, .. } if list == key => known(catalog).cloned(),
+            _ => None,
+        });
+        answered && catalog.is_some() && lists_asked(stack) == times
     });
     catalog.unwrap()
 }

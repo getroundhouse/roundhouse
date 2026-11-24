@@ -2,25 +2,20 @@
 
 use protocol::capability::settings::ModelCatalog;
 use protocol::client::{ApiError, ErrorCode, admin};
+use protocol::fixtures::observed;
 use protocol::model::{AgentKind, ModelList, ModelListKey, ModelLookup, Rev};
 
 use super::World;
 
 impl World {
     /// Has `agent` offer `catalog` in every repository there is now, on the local provider, under the machine's own
-    /// login, as a hub that had asked it would list them.
+    /// login, as a hub that had asked it would list them and send what they offer.
     pub fn offer_models(&mut self, agent: AgentKind, catalog: &ModelCatalog) {
-        for repo in &self.repos {
-            let key = ModelListKey {
-                agent,
-                repo: repo.id.clone(),
-                provider: "local".into(),
-                account: None,
-                cli_version: None,
-            };
-            let list =
-                ModelList { key, catalog: Some(catalog.clone()), lookup: ModelLookup::Answered, rev: Rev::default() };
-            self.model_lists.push(list);
+        let repos: Vec<_> = self.repos.iter().map(|repo| repo.id.clone()).collect();
+        for repo in repos {
+            let key = ModelListKey { agent, repo, provider: "local".into(), account: None, cli_version: None };
+            self.observe(observed::catalog(key.clone(), catalog.clone()));
+            self.model_lists.push(ModelList { key, catalog: None, lookup: ModelLookup::Answered, rev: Rev::default() });
         }
     }
 

@@ -112,7 +112,8 @@ async fn the_machines_line_names_the_profiles_gh_token_and_connecting_still_take
     assert_eq!(only_the_token, Some(bob.clone()));
     assert_eq!(both, Some(bob.clone()));
     assert_eq!(offered, GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes });
-    assert_eq!(connected.user.name.as_str(), "ada");
+    let username = hub.observations.value_of::<crate::hub::GithubUsername>(&connected.id);
+    assert_eq!(username.as_ref().map(protocol::model::GithubUsername::as_str), Some("ada"));
     assert_eq!(once_connected, Some(bob), "the line reads as agents do, whatever the hub holds");
     let GithubCredential::Account(credential) = hub.git_credential().borrow().for_workers() else { panic!() };
     assert_eq!(

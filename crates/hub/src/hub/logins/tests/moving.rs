@@ -110,10 +110,11 @@ async fn the_first_request_after_a_move_isnt_taken_for_one_that_found_the_cache_
     let accounts = TwoAccounts::start(dir.path()).await;
     let (chats, chat) = (&accounts.chats, &accounts.chat);
 
-    let moved = chats.assign(chat, &accounts.personal.id, false).await.unwrap();
+    chats.assign(chat, &accounts.personal.id, false).await.unwrap();
+    let moved = chats.cache_held(chat);
     let after_the_move = chats.token_in_turn(chat, Some(cold())).await;
 
-    assert_eq!(moved.prompt_cache, None, "the move forgot the cache");
+    assert_eq!(moved, None, "the move forgot the cache");
     assert_eq!(after_the_move.as_deref(), Some("personal-token"));
     assert_eq!(chats.found_expired(chat), []);
 }

@@ -1,5 +1,4 @@
-//! What an agent offers where a chat would launch, which the hub keeps as an observation, and fills each list of models'
-//! record with for a client of a version from before it.
+//! What an agent offers where a chat would launch, which the hub keeps as an observation.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -42,7 +41,7 @@ async fn listed(hub: &Hub, key: &ModelListKey) -> (Option<Observed<ModelCatalog>
 
 /// A hub that starts again has what an agent offered as of its answer, with no list held, since a list is held only
 /// while the hub has been asked for it. Asked again, one of a CLI a provider installed, whose version says what it
-/// offers, is answered from it at once, and the agent isn't asked, and its list's record holds it.
+/// offers, is answered from it at once, and the agent isn't asked, and its list's record says it answered.
 #[tokio::test]
 async fn what_an_agent_offered_is_kept_across_a_restart_and_serves_at_once() {
     let dir = tempfile::tempdir().unwrap();
@@ -58,9 +57,9 @@ async fn what_an_agent_offered_is_kept_across_a_restart_and_serves_at_once() {
     assert!(matches!(&observed, Some(Observed::AsOf { value, .. }) if *value == offered()), "{observed:?}");
     assert_eq!(list, None, "no list held");
     assert_eq!(again.model_catalog(lookup(&installed)).await.unwrap(), offered());
-    let (_, list) = listed(&again, &installed).await;
-    let list = list.expect("held once asked for");
-    assert_eq!((list.catalog, list.lookup), (Some(offered()), ModelLookup::Answered), "filled, and not asked");
+    let (observed, list) = listed(&again, &installed).await;
+    assert_eq!(list.expect("held once asked for").lookup, ModelLookup::Answered, "not asked");
+    assert!(matches!(&observed, Some(Observed::AsOf { value, .. }) if *value == offered()), "{observed:?}");
 }
 
 /// One the machine's own CLI offered, which can change whenever its machine's CLI is updated, serves at once too, and
@@ -78,10 +77,11 @@ async fn what_the_machine_s_own_cli_offered_serves_at_once_and_is_asked_again() 
     let catalog = again.model_catalog(lookup(&own)).await;
 
     assert_eq!(catalog.unwrap(), offered());
-    let (_, list) = listed(&again, &own).await;
+    let (observed, list) = listed(&again, &own).await;
     let list = list.expect("held once asked for");
     assert!(!matches!(list.lookup, ModelLookup::Answered), "asked again: {:?}", list.lookup);
-    assert_eq!(list.catalog, Some(offered()), "what it offered before, meanwhile");
+    let meanwhile = matches!(&observed, Some(Observed::AsOf { value, .. }) if *value == offered());
+    assert!(meanwhile, "what it offered before, meanwhile: {observed:?}");
 }
 
 /// Letting go of a list lets go of what its agent offered, and of what the cache file kept of one no list holds, so a

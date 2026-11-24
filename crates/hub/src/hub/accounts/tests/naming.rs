@@ -8,7 +8,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::Seq;
 
-use super::on_a_machine::{a_turn_hearing, named, on_a_machine, the_week, without_when};
+use super::on_a_machine::{Observed, a_turn_hearing, named, observed, on_a_machine, the_week, without_when};
 use crate::hub::stand_in_workers::{a_chat, hub_with_stand_in_workers, logged_in, logged_in_as, the_agent_says};
 
 /// A chat names whose account its agent launched under once its worker says, before the agent has heard of any limit,
@@ -28,12 +28,13 @@ async fn a_chat_names_its_account_as_soon_as_its_agent_launches_and_one_login_in
     for chat in [&first, &second] {
         a_turn_hearing(&hub, &asked, &chat.id, Vec::new()).await;
         // Who it is is told once the session names it, so it's waited for too.
-        accounts.push(named(&hub, &chat.id, |account| account.email.is_some()).await);
+        accounts.push(named(&hub, &chat.id, |account| account.identity.email.is_some()).await);
     }
 
     let [account, other] = &accounts[..] else { unreachable!() };
-    assert_eq!((Some(&account.id), &account.email), (ada.id.as_ref(), &ada.email), "whose it is, from the launch");
-    assert_eq!(account.plan, ada.plan);
+    let whose = (Some(&account.id), &account.identity.email);
+    assert_eq!(whose, (ada.id.as_ref(), &ada.email), "whose it is, from the launch");
+    assert_eq!(account.identity.plan, ada.plan);
     assert_eq!(account.limits, [], "and nothing heard of its limits");
     assert_eq!(other.id, account.id);
     assert_eq!(hub.store.list_records().unwrap().accounts.len(), 1);
@@ -55,12 +56,12 @@ async fn a_chat_whose_agent_relaunches_under_another_login_names_that_account_an
     // Someone else, with the same model provider, whose agent hears nothing of its limits.
     *machine.lock() = Ok(logged_in_as("grace@example.com", "Max"));
     a_turn_hearing(&hub, &asked, &chat.id, Vec::new()).await;
-    let grace = named(&hub, &chat.id, |account| Some(&account.id) != ada.id.as_ref() && account.email.is_some()).await;
+    let someone_else = |account: &Observed| Some(&account.id) != ada.id.as_ref() && account.identity.email.is_some();
+    let grace = named(&hub, &chat.id, someone_else).await;
 
-    assert_eq!((grace.email.as_deref(), grace.limits), (Some("grace@example.com"), vec![]), "Ada's limits aren't hers");
-    let mut ada_now = hub.store.account(&ada.id.unwrap()).unwrap().unwrap();
-    hub.fill_old_forms(&mut ada_now);
-    assert_eq!(without_when(&ada_now.limits), [the_week()]);
+    let theirs = (grace.identity.email.as_deref(), grace.limits);
+    assert_eq!(theirs, (Some("grace@example.com"), vec![]), "Ada's limits aren't hers");
+    assert_eq!(without_when(&observed(&hub, &ada.id.unwrap()).limits), [the_week()]);
 }
 
 /// The worker couldn't say whose the machine's login is, twice, as when the CLI's call timed out, so the hub asks again

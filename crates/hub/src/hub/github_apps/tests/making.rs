@@ -84,7 +84,8 @@ async fn making_an_app_keeps_it_connects_where_its_installed_and_workers_commit_
     let asked = github.asked().len();
     let again = made(&hub).await;
 
-    assert_eq!(app.bot.as_ref().map(|bot| (bot.id.get(), bot.name.as_str())), Some((41, "ada-roundhouse[bot]")));
+    let bot = hub.observations.value_of::<crate::hub::GithubAppBot>(&APP);
+    assert_eq!(bot.as_ref().map(|bot| (bot.id.get(), bot.name.as_str())), Some((41, "ada-roundhouse[bot]")));
     assert_eq!(again, app, "the same code again finds the app it made");
     assert_eq!((asked, github.asked().len()), (4, 4), "making it, its bot, its installations and a token, and once");
     let mut told = told(&mut feed);
@@ -96,14 +97,15 @@ async fn making_an_app_keeps_it_connects_where_its_installed_and_workers_commit_
         .iter()
         .filter_map(|notice| if let HubNotice::GithubApp(app) = notice { Some(app) } else { None })
         .collect();
-    let (Some(kept), Some(with_bot)) = (apps.first(), apps.last()) else { panic!("{told:?}") };
+    let (Some(_), Some(with_bot)) = (apps.first(), apps.last()) else { panic!("{told:?}") };
     let Some(account) = told
         .iter()
         .find_map(|notice| if let HubNotice::GithubAccount(account) = notice { Some(account) } else { None })
     else {
         panic!("{told:?}")
     };
-    assert_eq!((kept.bot.as_ref(), kept.slug.as_str()), (None, "ada-roundhouse"), "named as GitHub made it");
+    let said = hub.observations.value_of::<crate::hub::GithubAppSaid>(&APP);
+    assert_eq!(said.map(|said| said.slug), Some("ada-roundhouse".into()), "named as GitHub made it");
     assert_eq!(*with_bot, &app);
     assert_eq!(account.installation.as_ref().map(|installed| installed.id.get()), Some(70));
     assert!(told.iter().any(|notice| matches!(notice, HubNotice::HubSettings(_))), "it became the default: {told:?}");
@@ -185,7 +187,7 @@ async fn removing_an_app_forgets_it_and_its_installations_logins_and_tells_every
     let removed = hub.github_app_remove(APP).await.unwrap();
     let again = hub.github_app_remove(APP).await.unwrap_err();
 
-    assert_eq!((removed.id, removed.slug.as_str()), (APP, "ada-roundhouse"), "the reply is the app as it last was");
+    assert_eq!(removed.id, APP, "the reply is the app as it last was");
     assert_eq!(again.code, ErrorCode::NotFound);
     let told = told(&mut feed);
     let [HubNotice::GithubAccount(account), HubNotice::Removed { record, .. }, gone @ ..] = told.as_slice() else {

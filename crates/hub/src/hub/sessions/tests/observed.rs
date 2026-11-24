@@ -1,8 +1,6 @@
-//! How full a session's agent's context is, and its to-do list, which the hub keeps as observations, and fills the
-//! session's record with for a client of a version from before them.
+//! How full a session's agent's context is, and its to-do list, which the hub keeps as observations.
 
 use protocol::capability::output::{Todo, TodoList, TodoStatus};
-use protocol::client::ClientResponse;
 use protocol::model::{ContextUsage, Observation, Observed, Rev, Session, SessionId};
 use rusqlite::Connection;
 
@@ -36,18 +34,14 @@ fn s() -> SessionKey {
     SessionKey { workspace_id: "w".into(), session_id: "s".into() }
 }
 
-/// What `hub` lists at `s`'s level, and its record as a reply carries it.
+/// What `hub` lists at `s`'s level, and its record.
 async fn listed(hub: &Hub) -> (Vec<Observation>, Session) {
     let observations = hub.session_records("s".into()).await.unwrap().observations;
     let session = hub.blocking(|store| store.get_session(&"s".into())).await.unwrap().session;
-    let mut reply = ClientResponse::Session(session);
-    hub.fill_old_forms(&mut reply);
-    let ClientResponse::Session(session) = reply else { unreachable!() };
     (observations, session)
 }
 
-/// A hub that starts again has both as of the agent's report, and fills the session's record with them, in a reply
-/// and in the list of every record.
+/// A hub that starts again has both as of the agent's report.
 #[tokio::test]
 async fn a_sessions_context_and_todos_are_kept_across_a_restart_as_of_the_report() {
     let dir = tempfile::tempdir().unwrap();
@@ -59,7 +53,7 @@ async fn a_sessions_context_and_todos_are_kept_across_a_restart_as_of_the_report
 
     let again = hub_in_again(dir.path());
 
-    let (observations, session) = listed(&again).await;
+    let (observations, _) = listed(&again).await;
     let context_said = Observed::AsOf { value: context(60_000), as_of_ms: 1_000 };
     let todos_said = Observed::AsOf { value: todos(), as_of_ms: 2_000 };
     assert_eq!(
@@ -69,10 +63,6 @@ async fn a_sessions_context_and_todos_are_kept_across_a_restart_as_of_the_report
             Observation::SessionTodos { session_id: "s".into(), todos: todos_said, rev: Rev::default() },
         ]
     );
-    assert_eq!((session.context, session.todos), (Some(context(60_000)), Some(todos())), "the reply filled");
-    let records = again.records_list().await.unwrap();
-    let listed = records.sessions.iter().find(|session| session.id.as_str() == "s").unwrap();
-    assert_eq!(listed.context, Some(context(60_000)), "the list of every record filled");
 }
 
 /// `observations`, each at no revision, which a test doesn't fix, context first.
@@ -121,7 +111,7 @@ async fn a_session_from_before_opens_with_its_context_and_todos_not_known() {
     }
     let (observations, session) = listed(&hub).await;
     assert_eq!(observations, [], "not known");
-    assert_eq!((session.title.as_deref(), session.context, session.todos), (Some("Kept"), None, None));
+    assert_eq!(session.title.as_deref(), Some("Kept"));
 }
 
 /// Both go with the session: a hub that starts on a database without it doesn't keep them, and a session closed with

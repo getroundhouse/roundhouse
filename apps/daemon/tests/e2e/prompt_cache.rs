@@ -8,17 +8,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use client_core::Client;
 use protocol::capability::settings::Settings;
 use protocol::event::EventBody;
-use protocol::model::{CacheTtl, ModelName, PromptCache, SessionId};
+use protocol::model::{CacheTtl, ModelName, Observation, PromptCache, SessionId};
 
-use crate::support::{Stack, wait_for_turn_end, wait_until};
+use crate::support::{self, Stack, wait_for_turn_end, wait_until};
 
 fn now_ms() -> i64 {
     i64::try_from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()).unwrap()
 }
 
-/// What the chat's record says the cache holds, once that's `as_expected`. The hub tells of the cache as a turn ends,
-/// a moment after the chat's record says the turn has, so a record read between the two has the cache as it was before
-/// the turn.
+/// What the hub's level says the cache holds of the chat's conversation, once that's `as_expected`. The hub tells of the
+/// cache as a turn ends, a moment after the chat's record says the turn has, so what's read between the two is the
+/// cache as it was before the turn.
 fn cache_once(
     client: &Client,
     session: &SessionId,
@@ -27,23 +27,29 @@ fn cache_once(
 ) -> Option<PromptCache> {
     let mut cache = None;
     wait_until(what, || {
-        cache = client.session_get(session).unwrap().prompt_cache;
+        cache = support::at_the_hub(client, |observation| match observation {
+            Observation::SessionCache { session_id, cache, .. } if session_id == session => {
+                support::known(cache).and_then(|cache| cache.held.clone())
+            }
+            _ => None,
+        });
         as_expected(cache.as_ref())
     });
     cache
 }
 
-/// What the cache holds of the chat's conversation, once its record says it holds some.
-fn cache_held(client: &Client, session: &SessionId) -> PromptCache {
+/// What the cache holds of the chat's conversation, once the hub says it holds some.
+pub(crate) fn cache_held(client: &Client, session: &SessionId) -> PromptCache {
     cache_once(client, session, "the cache to hold the conversation", |cache| cache.is_some()).unwrap()
 }
 
 #[test]
-fn a_chats_record_says_when_its_agents_newest_request_was_sent_and_for_how_long_its_cache_lasts() {
+fn the_hub_says_when_a_chats_agents_newest_request_was_sent_and_for_how_long_its_cache_lasts() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    assert_eq!(session.prompt_cache, None, "the agent hasn't asked anything yet");
+    let nothing_cached = |cache: Option<&PromptCache>| cache.is_none();
+    cache_once(&client, &session.id, "the agent hasn't asked anything yet", nothing_cached);
 
     let before = now_ms();
     client.session_prompt(&session.id, "say:hello", None).unwrap();
@@ -112,8 +118,9 @@ fn choosing_another_model_leaves_nothing_cached_and_choosing_the_same_leaves_the
     cache_held(&client, &session.id);
     let model = |model| Settings { model: Some(model), ..Settings::default() };
 
-    let same = client.session_configure(&session.id, model(session.model.clone())).unwrap();
-    assert!(same.prompt_cache.is_some());
-    let other = client.session_configure(&session.id, model(ModelName::named("haiku"))).unwrap();
-    assert_eq!(other.prompt_cache, None, "the next request is to a model whose cache doesn't hold the conversation");
+    client.session_configure(&session.id, model(session.model.clone())).unwrap();
+    cache_held(&client, &session.id);
+    client.session_configure(&session.id, model(ModelName::named("haiku"))).unwrap();
+    // The next request is to a model whose cache doesn't hold the conversation.
+    cache_once(&client, &session.id, "nothing cached for the other model", |cache| cache.is_none());
 }

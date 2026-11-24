@@ -16,13 +16,9 @@ mod blanking;
 mod by_revision;
 #[cfg(test)]
 mod laws;
-#[cfg(any(test, feature = "testing"))]
-mod observed_of;
 mod of_session;
 mod snapshot;
 
-#[cfg(any(test, feature = "testing"))]
-pub use observed_of::{observed_of, with_observations};
 pub use of_session::subagent_named;
 pub use snapshot::{AccountIdentity, Changes, GithubName, InWorkspace, ListOfModels, Snapshot, WorkerBuild};
 

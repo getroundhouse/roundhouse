@@ -85,10 +85,10 @@ async fn a_hub_tells_its_clients_the_release_it_would_update_to() {
         }
     });
     let told = told.await.expect("the feed never told of the update");
-    assert_eq!(told.version.as_deref(), Some("0.1.9"), "the newest with an archive");
     assert_eq!(told.problem, None);
     assert_eq!(listed(&hub).await, Some(told), "a client connecting later");
-    assert_eq!(offered(&hub).await, Some(Observed::Current { value: offer(Some("0.1.9")) }), "as an observation");
+    let newest = Some(Observed::Current { value: offer(Some("0.1.9")) });
+    assert_eq!(offered(&hub).await, newest, "the newest with an archive");
 }
 
 #[tokio::test]
@@ -100,7 +100,8 @@ async fn a_hub_on_the_newest_release_says_none_is_newer() {
     hub.look_for_update(&on(feed, "0.1.9"), Duration::ZERO).await;
 
     let update = listed(&hub).await.expect("the hub read the feed");
-    assert_eq!((update.version, update.problem), (None, None));
+    assert_eq!(update.problem, None);
+    assert_eq!(offered(&hub).await, Some(Observed::Current { value: offer(None) }));
 }
 
 /// A feed whose signature doesn't match may not be the release workflow's, so nothing is taken from it, and what the
@@ -118,7 +119,6 @@ async fn a_feed_signed_with_another_key_changes_nothing_but_says_why() {
     hub.look_for_update(&on(planted, "0.1.8"), Duration::ZERO).await;
 
     let after = listed(&hub).await.unwrap();
-    assert_eq!(after.version.as_deref(), Some("0.1.9"), "as the read before found it");
     assert!(after.problem.as_deref().is_some_and(|problem| problem.contains("signature")), "{after:?}");
     assert!(after.rev.supersedes(before.rev), "a newer copy, so every client takes it");
     let Some(Observed::AsOf { value, as_of_ms }) = offered(&hub).await else { panic!("not as of the read before") };
@@ -301,8 +301,10 @@ async fn an_archive_other_than_the_feeds_is_never_placed() {
 
     hub.update_to("0.1.9".into()).await.unwrap();
 
-    let after = told(&mut notices, failed).await;
-    assert_eq!(after.version.as_deref(), Some("0.1.9"), "to try again");
+    told(&mut notices, failed).await;
+    let still = offered(&hub).await;
+    let offered_still = matches!(&still, Some(Observed::Current { value } | Observed::AsOf { value, .. }) if *value == offer(Some("0.1.9")));
+    assert!(offered_still, "to try again");
     assert!(!placed.exists());
     assert!(!hub.restarting());
     hub.update_to("0.1.9".into()).await.expect("tried again");

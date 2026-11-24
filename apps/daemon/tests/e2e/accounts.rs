@@ -13,7 +13,7 @@ use protocol::model::{
 };
 use serde_json::json;
 
-use crate::support::{Stack, TIMEOUT, wait_for_status, wait_for_turn_end, wait_until};
+use crate::support::{self, Stack, TIMEOUT, wait_for_status, wait_for_turn_end, wait_until};
 
 /// The week's limit the fake agent hears of in its process's first turn, and says when asked.
 pub(crate) fn the_week() -> UsageLimit {
@@ -76,11 +76,22 @@ pub(crate) fn wait_for_adas_week(client: &Client, session: &SessionId) {
     wait_for_adas_limits(client, session, &[the_week()]);
 }
 
-/// Waits until the session names Ada's account, and its record has `limits`.
+/// What the hub says is left of the account `id`'s limits, without when each was heard, or none while it hasn't heard
+/// of any.
+pub(crate) fn limits_of(client: &Client, id: &AccountId) -> Vec<UsageLimit> {
+    let limits = support::at_the_hub(client, |observation| match observation {
+        Observation::AccountLimits { account, limits, .. } if account == id => support::known(limits).cloned(),
+        _ => None,
+    });
+    let unheard = |limit: UsageLimit| UsageLimit { heard_at_ms: None, ..limit };
+    limits.unwrap_or_default().into_iter().map(unheard).collect()
+}
+
+/// Waits until the session names Ada's account, and the hub says it has `limits`.
 fn wait_for_adas_limits(client: &Client, session: &SessionId, limits: &[UsageLimit]) {
-    wait_until("the account's record to have its limits", || {
+    wait_until("the account to have its limits", || {
         named_account(client, session)
-            .is_some_and(|account| Some(&account.id) == ada().id.as_ref() && account.limits == limits)
+            .is_some_and(|account| Some(&account.id) == ada().id.as_ref() && limits_of(client, &account.id) == limits)
     });
 }
 
@@ -98,7 +109,14 @@ fn a_chat_names_the_account_its_agent_launched_under_and_the_feed_announces_what
 
     let account = named_account(&client, &session.id).unwrap();
     assert_eq!(Some(account.id.clone()), ada().id);
-    assert_eq!((account.email, account.plan), (ada().email, ada().plan), "who it is, as the worker read it");
+    let identity = support::at_the_hub(&client, |observation| match observation {
+        Observation::AccountIdentity { account: of, identity, .. } if *of == account.id => {
+            support::known(identity).cloned()
+        }
+        _ => None,
+    });
+    let identity = identity.expect("who it is");
+    assert_eq!((identity.email, identity.plan), (ada().email, ada().plan), "who it is, as the worker read it");
     // The feed says so, so a client that isn't asking sees the limits as soon as they're heard.
     let told = std::iter::from_fn(|| feed.items.recv_timeout(TIMEOUT).ok()).find_map(|item| match item {
         SubscriptionItem::Notice(notice) => match *notice {

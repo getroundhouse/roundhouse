@@ -188,8 +188,8 @@ fn under_a_home_folder() -> World {
 /// it was at work.
 fn on_the_older_build() -> World {
     let mut world = under_a_home_folder();
-    let shown = world.workspaces.iter_mut().find(|workspace| workspace.name == FOCUS).unwrap();
-    shown.worker_build = Some("0.9.0".to_string());
+    let workspace_id = world.workspaces.iter().find(|workspace| workspace.name == FOCUS).unwrap().id.clone();
+    world.observe(protocol::fixtures::observed::worker_build(workspace_id, Some("0.9.0")));
     world
 }
 

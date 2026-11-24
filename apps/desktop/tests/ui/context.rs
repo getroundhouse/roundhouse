@@ -6,8 +6,8 @@
 use client_core::fake_hub::events::{first_turn, replied, text, user_prompt};
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::event::EventBody;
-use protocol::fixtures::account;
-use protocol::model::{Account, ContextUsage, LimitWindow, MaxSetBy, Seq, SessionStatus, UsageLimit};
+use protocol::fixtures::{account, observed};
+use protocol::model::{AccountIdentity, ContextUsage, LimitWindow, MaxSetBy, Seq, SessionStatus, UsageLimit};
 
 use crate::support::{Gate, Stack, Ui, one_chat, open_on_the_chat};
 
@@ -132,20 +132,19 @@ fn after_a_turn_on_a_fake_hub(cx: &mut TestAppContext) -> (crate::support::FakeH
         resets_at_ms: None,
         heard_at_ms: None,
     };
-    let account = Account {
-        email: Some("ada@example.com".to_string()),
-        limits: vec![week],
-        ..account("claude-0000000000000001")
-    };
-    let session = world.sessions.last_mut().unwrap();
-    session.context = Some(ContextUsage {
+    let account = account("claude-0000000000000001");
+    let ada = AccountIdentity { email: Some("ada@example.com".to_string()), ..AccountIdentity::default() };
+    world.observe(observed::identity(account.id.clone(), ada));
+    world.observe(observed::limits(account.id.clone(), vec![week]));
+    let context = ContextUsage {
         used_tokens: 16_000,
         max_tokens: 200_000,
         model_tokens: Some(1_000_000),
         max_set_by: Some(MaxSetBy::Settings),
         parts: Vec::new(),
-    });
-    session.account = Some(account.id.clone());
+    };
+    world.observe(observed::context(chat.clone(), context));
+    world.sessions.last_mut().unwrap().account = Some(account.id.clone());
     world.accounts.push(account);
     open_on_the_chat(cx, world, &chat)
 }

@@ -97,9 +97,6 @@ fn an_apps_key_is_kept_once_for_its_code_and_number_and_changes_nothing_workers_
     let same_number = logins.keep_app(&made(), &GithubManifestCode::new("another-code")).unwrap();
 
     assert!(first.changed && !again.changed && !same_number.changed);
-    // What GitHub says of it, the hub keeps as an observation, so the record names it by its number.
-    let owner = user(0, "#0");
-    assert_eq!((first.app.slug.as_str(), &first.app.owner, &first.app.bot), ("#9", &owner, &None));
     assert_eq!(logins.made_from(&code()).unwrap(), Some(first.app.clone()));
     assert_eq!(logins.app_key(APP).unwrap(), (first.app, GithubAppKey::new("a-made-up-key")));
     assert_eq!(files_in(dir.path()), [r#"{"format":"app","key":"a-made-up-key"}"#]);

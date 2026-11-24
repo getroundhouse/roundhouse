@@ -12,7 +12,7 @@ use protocol::client::subscriptions::Follow;
 use protocol::model::{BranchName, Head, PrState, PullRequestLinked, WorkspaceId};
 
 use crate::carrying_on::update;
-use crate::support::github::{StandInGithub, push, pushed_workspace, workspace_on_github};
+use crate::support::github::{StandInGithub, workspace_on_github};
 use crate::support::{self, is_alive, started_pid, wait_for_turn_end, wait_until};
 
 /// The number of the pull request the workspace's record links to, as every client gets it.
@@ -25,7 +25,7 @@ fn one_client_asking_records_the_pull_request_for_every_client_and_for_after_a_r
     let github = StandInGithub::start();
     let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, _) = pushed_workspace(&stack, &client);
+    let (workspace, _) = github.pushed_workspace(&stack, &client);
     github.say_from(7, Open, workspace.branch.as_str());
 
     let asked = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
@@ -59,7 +59,7 @@ fn which_pull_request_is_the_workspaces_goes_by_the_branch_its_pushed_to() {
     let unpushed = (read(), github.queries());
     // Pushed, to a branch whose only pull request merged from an earlier branch of the same name, whose newest commit
     // was never here.
-    push(&client, &workspace);
+    github.push(&workspace);
     let earlier = (read(), found());
     // Opened from it, with a commit someone else pushed, which the worktree hasn't fetched.
     github.say_from(8, Open, branch);
@@ -102,7 +102,7 @@ fn with_nothing_known_a_read_github_cant_answer_fails() {
     let (workspace, _) = workspace_on_github(&stack, &client);
     // Before the push, so the read it brings finds nothing either.
     github.fail(true);
-    push(&client, &workspace);
+    github.push(&workspace);
 
     let failed = client.workspace_pull_request(&workspace.id);
 
@@ -116,8 +116,8 @@ fn a_starting_hub_reads_every_workspaces_pull_request_without_being_asked() {
     let github = StandInGithub::start();
     let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (first, _) = pushed_workspace(&stack, &client);
-    let (second, _) = pushed_workspace(&stack, &client);
+    let (first, _) = github.pushed_workspace(&stack, &client);
+    let (second, _) = github.pushed_workspace(&stack, &client);
     github.say_from(7, Open, first.branch.as_str());
     github.say_from(8, Open, second.branch.as_str());
 
@@ -143,7 +143,7 @@ fn the_end_of_a_turn_reads_the_pull_request() {
     let github = StandInGithub::start();
     let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, session) = pushed_workspace(&stack, &client);
+    let (workspace, session) = github.pushed_workspace(&stack, &client);
     github.say_from(7, Open, workspace.branch.as_str());
 
     client.session_prompt(&session.id, "say:opened one", None).unwrap();
@@ -160,12 +160,15 @@ fn checking_out_another_branch_reads_the_pull_request_again_though_it_was_merged
     let github = StandInGithub::start();
     let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, _) = pushed_workspace(&stack, &client);
+    let (workspace, _) = github.pushed_workspace(&stack, &client);
     github.say_from(7, Open, workspace.branch.as_str());
     client.workspace_pull_request(&workspace.id).unwrap();
     github.say_from(7, Merged, workspace.branch.as_str());
     let merged = client.workspace_pull_request(&workspace.id).unwrap().map(|pr| pr.pull_request.said().state);
-    let head = |client: &Client| support::workspace(client, &workspace.id).branches.map(|branches| branches.head);
+    let head = |client: &Client| {
+        let known = |branches: Option<&_>| branches.is_some();
+        support::branches_once(client, &workspace.id, "the branches", known).map(|branches| branches.head)
+    };
     let started_on = Head::Branch { name: workspace.branch.clone() };
     assert_eq!((head(&client), merged), (Some(started_on), Some(PrState::Merged)), "known before it moves");
 
@@ -185,7 +188,7 @@ fn a_worker_started_only_for_a_read_is_stopped_after() {
     let github = StandInGithub::start();
     let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, session) = pushed_workspace(&stack, &client);
+    let (workspace, session) = github.pushed_workspace(&stack, &client);
     github.say_from(7, Open, workspace.branch.as_str());
 
     update(&mut stack);
@@ -205,7 +208,7 @@ fn a_worker_started_only_for_a_read_stays_once_a_prompt_wants_it() {
     let github = StandInGithub::start();
     let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, session) = pushed_workspace(&stack, &client);
+    let (workspace, session) = github.pushed_workspace(&stack, &client);
     github.say_from(7, Open, workspace.branch.as_str());
     let asked = github.queries();
     github.hold();
@@ -233,7 +236,7 @@ fn reads_nobody_asked_for_leave_the_last_of_githubs_limit_to_the_rest() {
     let github = StandInGithub::start();
     let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, _) = pushed_workspace(&stack, &client);
+    let (workspace, _) = github.pushed_workspace(&stack, &client);
     github.say_from(7, Open, workspace.branch.as_str());
     github.leave(900);
     let asked = github.queries();
@@ -265,7 +268,7 @@ fn with_githubs_limit_spent_a_read_says_what_is_known_without_asking_github() {
     github.say_from(7, Open, workspace.branch.as_str());
     // Before the push, so the read it brings finds nothing either.
     github.leave(0);
-    push(&client, &workspace);
+    github.push(&workspace);
     // Which GitHub says leaves nothing, if the push's read hasn't.
     let _ = client.workspace_pull_request(&workspace.id);
     let asked = github.queries();
@@ -284,7 +287,7 @@ fn a_read_asked_for_while_another_waits_shares_its_answer() {
     let github = StandInGithub::start();
     let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, _) = pushed_workspace(&stack, &client);
+    let (workspace, _) = github.pushed_workspace(&stack, &client);
     github.say_from(7, Open, workspace.branch.as_str());
     let before = github.queries();
     client.workspace_pull_request(&workspace.id).unwrap();

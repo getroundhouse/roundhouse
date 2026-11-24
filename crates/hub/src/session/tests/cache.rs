@@ -1,6 +1,5 @@
 //! What the API's cache holds of a chat's conversation, which the session tells of as the observation `SessionCache`,
-//! and fills the chat's record with for a client of a version from before it, and which the next request is compared
-//! with to find whether it found the cache expired.
+//! and which the next request is compared with to find whether it found the cache expired.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -57,15 +56,13 @@ fn context(used_tokens: u64) -> ContextUsage {
     ContextUsage { used_tokens, max_tokens: 200_000, model_tokens: None, max_set_by: None, parts: Vec::new() }
 }
 
-/// What `hub` lists of what the cache holds of `s`, and what `s`'s record says of it, as a reply carries it.
-async fn listed(hub: &Hub) -> (Option<Observed<ConversationCache>>, Option<PromptCache>) {
+/// What `hub` lists of what the cache holds of `s`.
+async fn listed(hub: &Hub) -> Option<Observed<ConversationCache>> {
     let records = hub.records_list().await.unwrap();
-    let observed = records.observations.into_iter().find_map(|observation| {
+    records.observations.into_iter().find_map(|observation| {
         let Observation::SessionCache { cache, .. } = observation else { return None };
         Some(cache)
-    });
-    let session = records.sessions.into_iter().find(|session| session.id.as_str() == "s").unwrap();
-    (observed, session.prompt_cache)
+    })
 }
 
 /// Whether `s`'s log says a request found the cache expired.
@@ -90,16 +87,19 @@ async fn what_the_cache_holds_is_told_as_of_its_request_and_kept_across_a_restar
     let hub = hub_in(dir.path());
     let live = chat(&hub);
     says(&live, Report::Context { context: context(60_000) }).await;
-    assert_eq!(listed(&hub).await, (None, None), "how full the context is says nothing of what the cache holds");
+    assert_eq!(listed(&hub).await, None, "how full the context is says nothing of what the cache holds");
 
     says(&live, Report::Cache { request: request(0, 80_000) }).await;
 
-    let (observed, filled) = listed(&hub).await;
-    let held = filled.expect("the record filled");
-    let told = ConversationCache { held: Some(held.clone()), worth_telling: true };
-    assert_eq!(observed, Some(Observed::AsOf { value: told, as_of_ms: held.used_at_ms }));
+    let observed = listed(&hub).await;
+    let Some(Observed::AsOf { value: ConversationCache { held: Some(held), worth_telling: true }, as_of_ms }) =
+        observed
+    else {
+        panic!("{observed:?}")
+    };
+    assert_eq!((held.tokens, as_of_ms), (80_000, held.used_at_ms), "as of its request");
     says(&live, Report::Context { context: context(20_000) }).await;
-    let Some(Observed::AsOf { value, .. }) = listed(&hub).await.0 else { panic!("not known") };
+    let Some(Observed::AsOf { value, .. }) = listed(&hub).await else { panic!("not known") };
     assert_eq!(value, ConversationCache { held: Some(held), worth_telling: false }, "the context went down");
     hub.observations_written().await;
     drop((live, hub));
@@ -122,7 +122,7 @@ async fn a_request_while_the_agent_works_isnt_told_of() {
 
     says(&live, Report::Cache { request: request(0, 80_000) }).await;
 
-    assert_eq!(listed(&hub).await, (None, None));
+    assert_eq!(listed(&hub).await, None);
 }
 
 /// A database from before what the cache holds left it opens with the column gone and the session as it was but for
@@ -144,9 +144,9 @@ async fn a_session_from_before_opens_with_what_its_cache_holds_not_known() {
     let hub = hub_in_again(dir.path());
 
     assert!(!columns(dir.path()).iter().any(|column| column == "prompt_cache"), "the column kept");
-    assert_eq!(listed(&hub).await, (None, None), "not known");
+    assert_eq!(listed(&hub).await, None, "not known");
     let live = chat(&hub);
     says(&live, Report::Cache { request: request(0, 80_000) }).await;
     assert!(!found_expired(&hub), "nothing to compare with");
-    assert!(listed(&hub).await.0.is_some(), "known from the request");
+    assert!(listed(&hub).await.is_some(), "known from the request");
 }

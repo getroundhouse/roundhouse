@@ -3,13 +3,11 @@
 //! hub words why agents can't push, and while the hub hasn't read it lately. Its token is `gh`'s, so none is here.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::fixtures::github_account;
-use protocol::model::{
-    GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, GithubUser, GithubUserId, HeldGithubLogin, UnusableLogin,
-};
+use protocol::fixtures::{github_account, github_user};
+use protocol::model::{GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, HeldGithubLogin, UnusableLogin};
 
 use super::conversation;
-use super::github::{FEB_3_MS, blocking, github_accounts, northwind, sending};
+use super::github::{FEB_3_MS, Named, blocking, github_accounts, hold, northwind, sending};
 use client_core::fake_hub::{HOUR_MS, NOW_MS, World};
 
 /// [`github_accounts`], whose hub's `gh` is logged in as `ada`, with a token GitHub takes, so Connect account offers it.
@@ -30,8 +28,8 @@ pub(in crate::gallery) fn github_gh_refused() -> World {
 /// The conversation, on a hub whose default GitHub account is `gh`'s login on its machine, as `ada`, beside a token.
 pub(in crate::gallery) fn github_gh_default() -> World {
     let mut world = conversation();
-    world.github = Some(sending(&gh_ada()));
-    world.github_accounts = vec![gh_ada(), northwind(FEB_3_MS)];
+    world.github = Some(sending(&gh_ada().account));
+    hold(&mut world, vec![gh_ada(), northwind(FEB_3_MS)]);
     world
 }
 
@@ -62,21 +60,18 @@ pub(in crate::gallery) fn github_gh_unread() -> World {
 
 fn blocked_by_gh(why: UnusableLogin, reason: &str) -> World {
     let mut world = github_gh_default();
-    world.github = Some(blocking(&gh_ada(), why, reason));
+    world.github = Some(blocking(&gh_ada().account, why, reason));
     world
 }
 
 /// `ada`, as the login `gh` has on the hub's machine, connected an hour ago.
-fn gh_ada() -> GithubAccount {
+fn gh_ada() -> Named {
     let held = HeldGithubLogin {
         how: GithubLoginKind::Gh,
         connected_at_ms: NOW_MS - HOUR_MS,
         ends_at_ms: None,
         needs_sign_in: false,
     };
-    GithubAccount {
-        user: GithubUser { id: GithubUserId::new(1), name: "ada".into() },
-        held_login: Some(held),
-        ..github_account("github-0004")
-    }
+    let account = GithubAccount { user: github_user(1), held_login: Some(held), ..github_account("github-0004") };
+    Named { account, username: "ada", on: None }
 }

@@ -166,7 +166,6 @@ impl FollowedModels {
 mod tests {
     use super::*;
     use client_core::records::HubRecords;
-    use protocol::capability::settings::ModelCatalog;
     use protocol::model::{ModelList, Record, Rev};
 
     /// A client's copy of the hub's records holding `lists`.
@@ -178,7 +177,7 @@ mod tests {
         held.snapshot()
     }
 
-    fn list(rev: u64, lookup: ModelLookup, catalog: Option<ModelCatalog>) -> ModelList {
+    fn list(rev: u64, lookup: ModelLookup) -> ModelList {
         let key = ModelListKey {
             agent: protocol::model::AgentKind::Codex,
             repo: "r".into(),
@@ -186,7 +185,7 @@ mod tests {
             account: None,
             cli_version: None,
         };
-        ModelList { key, catalog, lookup, rev: Rev::new(rev) }
+        ModelList { key, catalog: None, lookup, rev: Rev::new(rev) }
     }
 
     /// The reply names the list, and what it says is read from the records alone, which take the reply's copy in
@@ -198,10 +197,10 @@ mod tests {
             target: ModelTarget::Project("r".into()),
             again: false,
         };
-        let answer = Some(Ok(list(1, ModelLookup::Asking, None).key));
+        let answer = Some(Ok(list(1, ModelLookup::Asking).key));
         let lookup = FollowedModels { asked: Some(asked), answer, ..FollowedModels::default() };
-        let asking = list(2, ModelLookup::Asking, None);
-        let failed = list(3, ModelLookup::Failed { message: "logged out".into() }, None);
+        let asking = list(2, ModelLookup::Asking);
+        let failed = list(3, ModelLookup::Failed { message: "logged out".into() });
 
         assert!(lookup.waiting(&holding(&[])) && lookup.waiting(&holding(&[&asking])), "nothing is listed yet");
         assert_eq!(lookup.failed(&holding(&[&failed])), Some("logged out"));

@@ -5,9 +5,9 @@
 
 use std::path::{Path, PathBuf};
 
-use client_core::{Client, Restart};
+use client_core::Restart;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{BranchName, Head, Seq, SetupStatus};
+use protocol::model::{BranchName, Branches, Head, Seq, SetupStatus};
 use protocol::worker::{WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 
 use crate::attaching::Attached;
@@ -206,9 +206,9 @@ fn the_next_hub_hears_of_a_branch_checked_out_after_the_last_one_went() {
     let (workspace, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:first", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    let head = |client: &Client| support::workspace(client, &workspace.id).branches.map(|branches| branches.head);
+    let on = |head: Head| move |branches: Option<&Branches>| branches.is_some_and(|branches| branches.head == head);
     let started_on = Head::Branch { name: workspace.branch.clone() };
-    wait_until("the branches to be known", || head(&client) == Some(started_on.clone()));
+    support::branches_once(&client, &workspace.id, "the branches to be known", on(started_on));
     drop(client);
 
     stack.kill_hub();
@@ -224,7 +224,7 @@ fn the_next_hub_hears_of_a_branch_checked_out_after_the_last_one_went() {
     stack.start_hub();
 
     let client = stack.client();
-    wait_until("the next hub to hear of the branch", || head(&client) == Some(next_thing.clone()));
+    support::branches_once(&client, &workspace.id, "the next hub to hear of the branch", on(next_thing));
 }
 
 /// So a restart can't interrupt a setup that the next hub would only find failed.

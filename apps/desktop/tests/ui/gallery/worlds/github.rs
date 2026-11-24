@@ -1,10 +1,10 @@
 //! The GitHub accounts agents push as, as Git in Settings lists them: the accounts the person gave the hub, by signing
 //! in with GitHub and with tokens, in each state one can be in. Their tokens are the hub's, so none is here.
 
-use protocol::fixtures::{github_account, github_sign_in};
+use protocol::fixtures::{github_account, github_sign_in, github_user, observed};
 use protocol::model::{
-    GithubAccount, GithubLoginKind, GithubSettings, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin,
-    Observation, Observed, Rev, SentCredential, UnusableLogin,
+    GithubAccount, GithubLoginKind, GithubSettings, GithubSignInStatus, HeldGithubLogin, Observation, Observed, Rev,
+    SentCredential, UnusableLogin,
 };
 
 use super::conversation;
@@ -16,12 +16,38 @@ pub(super) const FEB_3_MS: i64 = 1_801_666_800_000;
 /// Oct 29, 2026, at 3 PM in UTC, three days before the pictures are taken.
 const OCT_29_MS: i64 = 1_793_286_000_000;
 
+/// A GitHub account's record, and what GitHub calls its user, and, for an installation of an app of your own, the user
+/// or organization it's on.
+pub(in crate::gallery) struct Named {
+    pub(in crate::gallery) account: GithubAccount,
+    pub(in crate::gallery) username: &'static str,
+    pub(in crate::gallery) on: Option<&'static str>,
+}
+
+/// Has the world's hub hold `accounts`, in place of any it held, with what GitHub calls each.
+pub(in crate::gallery) fn hold(world: &mut World, accounts: Vec<Named>) {
+    world.github_accounts.clear();
+    for account in accounts {
+        add(world, account);
+    }
+}
+
+/// Has the world's hub hold `account` too, with what GitHub calls it.
+pub(in crate::gallery) fn add(world: &mut World, named: Named) {
+    let Named { account, username, on } = named;
+    world.observe(observed::username(account.id.clone(), username));
+    if let Some(on) = on {
+        world.observe(observed::installed_on(account.id.clone(), on));
+    }
+    world.github_accounts.push(account);
+}
+
 /// The conversation, on a hub with three GitHub accounts: `ada`, signed in, the default; `ada_northwind`, a token that
 /// ends in February; and `grace`, whose token ended three days ago.
 pub(in crate::gallery) fn github_accounts() -> World {
     let mut world = conversation();
-    world.github = Some(sending(&ada()));
-    world.github_accounts = vec![ada(), northwind(FEB_3_MS), grace()];
+    world.github = Some(sending(&ada().account));
+    hold(&mut world, vec![ada(), northwind(FEB_3_MS), grace()]);
     world
 }
 
@@ -30,7 +56,7 @@ pub(in crate::gallery) fn github_accounts() -> World {
 pub(in crate::gallery) fn github_unnamed() -> World {
     let mut world = github_accounts();
     let username = Observed::NotKnown;
-    world.observations.push(Observation::GithubUsername { account: grace().id, username, rev: Rev::new(1) });
+    world.observe(Observation::GithubUsername { account: grace().account.id, username, rev: Rev::new(1) });
     world
 }
 
@@ -58,7 +84,7 @@ pub(in crate::gallery) fn github_no_default() -> World {
     let sent = SentCredential::NoAccount { reason: reason.to_string() };
     world.github =
         Some(GithubSettings { account: None, sent: Some(sent), left_to_machine: Vec::new(), set_up: Vec::new() });
-    world.github_accounts = vec![ada(), northwind(FEB_3_MS)];
+    hold(&mut world, vec![ada(), northwind(FEB_3_MS)]);
     world
 }
 
@@ -69,8 +95,8 @@ pub(in crate::gallery) fn github_default_ended() -> World {
     let reason = "The token of ada_northwind, the default account, has ended. Until it's renewed, Roundhouse can't \
                   read pull requests, and agents on the providers it sets up can't push. Renew it, or choose another \
                   default.";
-    world.github = Some(blocking(&northwind(OCT_29_MS), UnusableLogin::Ended, reason));
-    world.github_accounts = vec![ada(), northwind(OCT_29_MS)];
+    world.github = Some(blocking(&northwind(OCT_29_MS).account, UnusableLogin::Ended, reason));
+    hold(&mut world, vec![ada(), northwind(OCT_29_MS)]);
     world
 }
 
@@ -116,7 +142,7 @@ pub(in crate::gallery) fn blocking(account: &GithubAccount, why: UnusableLogin, 
 }
 
 /// The account `ada` signed in as, three weeks ago, whose token the hub renews by itself.
-pub(in crate::gallery) fn ada() -> GithubAccount {
+pub(in crate::gallery) fn ada() -> Named {
     held(
         "github-0001",
         1,
@@ -131,7 +157,7 @@ pub(in crate::gallery) fn ada() -> GithubAccount {
 }
 
 /// `ada_northwind`, a token made for 90 days, which ends at `ends_at_ms`.
-pub(super) fn northwind(ends_at_ms: i64) -> GithubAccount {
+pub(super) fn northwind(ends_at_ms: i64) -> Named {
     held(
         "github-0002",
         2,
@@ -146,7 +172,7 @@ pub(super) fn northwind(ends_at_ms: i64) -> GithubAccount {
 }
 
 /// `grace`, a token made for 90 days, which ended three days ago.
-fn grace() -> GithubAccount {
+fn grace() -> Named {
     let ended = HeldGithubLogin {
         how: GithubLoginKind::Token,
         connected_at_ms: OCT_29_MS - 90 * DAY_MS,
@@ -156,10 +182,8 @@ fn grace() -> GithubAccount {
     held("github-0003", 3, "grace", ended)
 }
 
-fn held(id: &str, user: u64, name: &str, held: HeldGithubLogin) -> GithubAccount {
-    GithubAccount {
-        user: GithubUser { id: GithubUserId::new(user), name: name.into() },
-        held_login: Some(held),
-        ..github_account(id)
-    }
+/// The account `id`, of GitHub's user `user`, called `name`, whose login the hub holds as `held` says.
+fn held(id: &str, user: u64, name: &'static str, held: HeldGithubLogin) -> Named {
+    let account = GithubAccount { user: github_user(user), held_login: Some(held), ..github_account(id) };
+    Named { account, username: name, on: None }
 }

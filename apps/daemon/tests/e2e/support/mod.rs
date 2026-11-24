@@ -5,6 +5,7 @@
 pub(crate) use approvals::{approve_plan, pending_approval, wait_for_approval};
 pub(crate) use feed::{next_notice, next_notice_of, session_of, workspace_of};
 pub(crate) use gate::Gate;
+pub(crate) use observed::{Observing, at_the_hub, branches_once, known};
 pub(crate) use processes::{is_alive, parent_of, signal, terminate};
 
 mod approvals;
@@ -13,6 +14,7 @@ mod feed;
 mod gate;
 pub(crate) mod gh;
 pub(crate) mod github;
+mod observed;
 mod processes;
 mod raw;
 pub(crate) use raw::{RawConnection, changes_in, following};

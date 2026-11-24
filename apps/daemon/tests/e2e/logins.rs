@@ -7,9 +7,9 @@
 
 use client_core::Client;
 use protocol::event::EventBody;
-use protocol::model::{Account, AccountId, AgentKind, LoginToken};
+use protocol::model::{Account, AccountId, AgentKind, LoginToken, UsageLimit};
 
-use crate::accounts::log_out;
+use crate::accounts::{limits_of, log_out};
 use crate::carrying_on::restart;
 use crate::support::{Stack, assistant_text, wait_for_turn_end, wait_until};
 
@@ -73,7 +73,7 @@ fn an_agent_on_another_machine_runs_under_the_login_the_hub_holds_and_its_chat_n
     let text = assistant_text(&wait_for_turn_end(&client, &session.id, 1));
     wait_until("the chat to name the login's account, and the account what its agent heard of its limits", || {
         client.session_get(&session.id).unwrap().account.as_ref() == Some(&connected.id)
-            && !listed(&client, &connected.id).limits.is_empty()
+            && !limits_of(&client, &connected.id).is_empty()
     });
     // As a client from before accounts were records asks.
     let as_older_clients_ask = client.session_account(&session.id).unwrap();
@@ -81,7 +81,9 @@ fn an_agent_on_another_machine_runs_under_the_login_the_hub_holds_and_its_chat_n
     assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=a-made-up-token"), "{text}");
     assert_eq!(client.records().unwrap().accounts.len(), 1, "no account but the login's");
     assert_eq!(as_older_clients_ask.account.logged_in_as(), Some(&connected.id));
-    assert_eq!(as_older_clients_ask.limits, listed(&client, &connected.id).limits);
+    let unheard = |limit: &UsageLimit| UsageLimit { heard_at_ms: None, ..limit.clone() };
+    let older_clients_limits: Vec<UsageLimit> = as_older_clients_ask.limits.iter().map(unheard).collect();
+    assert_eq!(older_clients_limits, limits_of(&client, &connected.id));
     assert!(!asked_under_a_token(&stack), "nothing asked the CLI whose the token is");
 }
 

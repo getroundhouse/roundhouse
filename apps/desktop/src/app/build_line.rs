@@ -162,7 +162,8 @@ mod tests {
     use SessionStatus::{Background, Idle, Interrupted, Running, Unknown, WaitingApproval};
     use client_core::records::HubRecords;
     use protocol::event::TaskKind;
-    use protocol::model::{HubUpdate, Records, Rev};
+    use protocol::fixtures::observed;
+    use protocol::model::{HubUpdate, Observation, Records, Rev};
 
     use super::*;
 
@@ -205,10 +206,14 @@ mod tests {
         }
     }
 
-    /// A hub installed as a service that has found a newer release, `version`, as the app is connected to it, with an
-    /// update in `attempt`, at `rev`.
-    fn found(version: Option<&str>, attempt: Option<UpdateAttempt>, rev: u64) -> HubUpdate {
-        HubUpdate { version: version.map(str::to_string), looked_at_ms: 1, problem: None, attempt, rev: Rev::new(rev) }
+    /// What a hub installed as a service found in the update feed: its record of how an update is going, with an
+    /// update in `attempt`, at `rev`, and the release the feed offers, `version`, if one is newer.
+    type Found = (HubUpdate, Observation);
+
+    /// What a hub found, as [`Found`] says, as the app is connected to it.
+    fn found(version: Option<&str>, attempt: Option<UpdateAttempt>, rev: u64) -> Found {
+        let update = HubUpdate { version: None, looked_at_ms: 1, problem: None, attempt, rev: Rev::new(rev) };
+        (update, observed::release_offered(version))
     }
 
     fn hub(next: &str, updating: bool, problem: Option<&str>) -> Updating {
@@ -217,15 +222,20 @@ mod tests {
     }
 
     /// A client's copy of the records of a hub that found `found`.
-    fn holding(found: &HubUpdate) -> Snapshot {
+    fn holding((update, offered): &Found) -> Snapshot {
         let mut held = HubRecords::default();
-        let listed = Records { hub_update: Some(found.clone()), rev: found.rev, ..Records::default() };
-        held.apply_list(client_core::records::with_observations(listed));
+        let observations = vec![offered.clone()];
+        held.apply_list(Records {
+            hub_update: Some(update.clone()),
+            observations,
+            rev: update.rev,
+            ..Records::default()
+        });
         held.snapshot()
     }
 
     /// The line on an app connected to a hub `def` that found `found`, having asked as `asked`.
-    fn line_with(downloaded: Option<&str>, found: &HubUpdate, asked: Option<&HubUpdateAsk>) -> BuildLine {
+    fn line_with(downloaded: Option<&str>, found: &Found, asked: Option<&HubUpdateAsk>) -> BuildLine {
         BuildLine::new("abc", Some("def"), false, NOTHING, downloaded, &holding(found), asked)
     }
 

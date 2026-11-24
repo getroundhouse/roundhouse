@@ -112,5 +112,5 @@ fn refused() -> World {
 
 /// Approved as `ada`, the default.
 fn approved() -> World {
-    github_signing_in_to(GithubSignInStatus::Approved { account: ada().id })
+    github_signing_in_to(GithubSignInStatus::Approved { account: ada().account.id })
 }

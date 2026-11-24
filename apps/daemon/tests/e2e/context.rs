@@ -10,7 +10,7 @@ use protocol::event::EventBody;
 use protocol::model::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy, Observation, Observed, Seq, SessionId};
 
 use crate::accounts::wait_for_adas_week;
-use crate::support::{Stack, TIMEOUT, wait_for_turn_end, wait_until};
+use crate::support::{Observing, Stack, TIMEOUT, known, wait_for_turn_end};
 
 /// What the fake agent says its context holds once a conversation has seen this many prompts, and a turn has ended
 /// since it launched. Its settings make the context a fifth of what its model holds, which only a turn's end says.
@@ -34,9 +34,12 @@ pub(crate) fn after_prompts(prompts: u64) -> ContextUsage {
 }
 
 pub(crate) fn wait_for_context(client: &Client, session: &SessionId, context: &ContextUsage) {
-    wait_until("the record to say how full the context is", || {
-        client.session_get(session).unwrap().context.as_ref() == Some(context)
-    });
+    let said = |observation: &Observation| match observation {
+        Observation::SessionContext { session_id, context, .. } if session_id == session => known(context).cloned(),
+        _ => None,
+    };
+    let mut chat = Observing::at(client, Follow::Session { id: session.clone(), from: None });
+    chat.until("the chat's level to say how full the context is", said, |said| said == Some(context));
 }
 
 #[test]

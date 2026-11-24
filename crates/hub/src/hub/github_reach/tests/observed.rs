@@ -1,8 +1,7 @@
-//! Whether the default can push to a repository, which the hub keeps as an observation, and makes the record
-//! `GithubReach` from for a client of a version from before it: across a restart, from a database from before, as the
-//! checks start with nothing known, and forgotten with the repository.
+//! Whether the default can push to a repository, which the hub keeps as an observation: across a restart, from a
+//! database from before, as the checks start with nothing known, and forgotten with the repository.
 
-use protocol::model::{GithubReach, Observation, Observed, Reach, RecordKey, RepoUrl};
+use protocol::model::{Observation, Observed, Reach, RepoUrl};
 use protocol::worker::{RepoUrlReply, WorkerRequest, WorkerResponse};
 use rusqlite::Connection;
 use tokio::sync::watch;
@@ -29,14 +28,13 @@ fn refused() -> Reach {
     Reach::Refused { repository: CLI, username: "ada".into(), reason, installation: None }
 }
 
-/// What `hub` lists of `repo`'s reach, as an observation, and as the record made from it.
-async fn listed(hub: &Hub, repo: &str) -> (Option<Observed<Reach>>, Vec<GithubReach>) {
+/// What `hub` lists of `repo`'s reach.
+async fn listed(hub: &Hub, repo: &str) -> Option<Observed<Reach>> {
     let records = hub.records_list().await.unwrap();
-    let observed = records.observations.into_iter().find_map(|observation| {
+    records.observations.into_iter().find_map(|observation| {
         let Observation::RepositoryReach { repo: of, reach, .. } = observation else { return None };
         (of.as_str() == repo).then_some(reach)
-    });
-    (observed, records.github_reach)
+    })
 }
 
 /// Has the hub's repository, `r`, fetch from `cli/cli`, as a worker read it.
@@ -45,8 +43,7 @@ fn on_cli(hub: &Hub) {
     hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
 }
 
-/// A hub that starts again has each repository's reach as of GitHub's answer, which the record made from it calls
-/// stale, with when GitHub answered, until it's checked again.
+/// A hub that starts again has each repository's reach as of GitHub's answer, until it's checked again.
 #[tokio::test]
 async fn a_reach_is_kept_across_a_restart_as_of_githubs_answer() {
     let github = refusing().await;
@@ -57,18 +54,17 @@ async fn a_reach_is_kept_across_a_restart_as_of_githubs_answer() {
     let (_credential, following) = watch::channel(account("ada", "a-token"));
     let checks = checking(&hub, following);
     let answered = told(&mut feed).await;
+    let answered_at_ms = hub.observations.read_at::<RepositoryReach>(&"r".into());
     checks.abort();
     hub.observations_written().await;
     drop(hub);
 
     let again = hub_calling_github_again(dir.path(), github.api());
 
-    let (observed, records) = listed(&again, "r").await;
+    let observed = listed(&again, "r").await;
     let Some(Observed::AsOf { value, as_of_ms }) = observed else { panic!("{observed:?}") };
-    assert_eq!((value, Some(as_of_ms)), (refused(), answered.answered_at_ms));
-    let [record] = records.as_slice() else { panic!("{records:?}") };
-    assert_eq!((&record.reach, record.answered_at_ms, record.stale), (&refused(), answered.answered_at_ms, true));
-    assert!(!answered.stale, "it was this run's as it was answered");
+    assert_eq!((value, Some(as_of_ms)), (refused(), answered_at_ms));
+    assert_eq!(answered.observed, Observed::Current { value: refused() }, "it was this run's as it was answered");
 }
 
 /// A database from before reach left it opens with its table gone, the repository as it was, and its reach not known,
@@ -102,8 +98,8 @@ async fn a_repository_from_before_opens_with_its_reach_not_known_until_the_first
         hub.store.get_repo(&"r".into()).unwrap().origin.url().map(ToString::to_string).as_deref(),
         Some("https://github.com/cli/cli.git")
     );
-    assert_eq!(before_a_check, (None, Vec::new()), "not known");
-    assert_eq!(checked.reach, refused());
+    assert_eq!(before_a_check, None, "not known");
+    assert_eq!(checked.reach(), refused());
 }
 
 /// A repository whose address is still to be read, as one an older hub added, with no reach known, as on the first
@@ -126,7 +122,7 @@ async fn as_the_checks_start_a_repository_whose_reach_and_address_arent_known_ha
     let _checking = checking(&hub, following);
     let checked = told(&mut feed).await;
 
-    assert_eq!(checked.reach, refused());
+    assert_eq!(checked.reach(), refused());
 }
 
 /// A repository's reach goes with it: a hub that starts on a database without the repository keeps none of it.
@@ -142,8 +138,6 @@ async fn a_reach_is_forgotten_with_its_repository() {
 
     let again = hub_calling_github_again(dir.path(), crate::hub::tests::NO_GITHUB.to_string());
 
-    let repos: Vec<RecordKey> =
-        listed(&again, "r").await.1.iter().map(|reach| RecordKey::GithubReach { repo: reach.repo.clone() }).collect();
-    assert_eq!(repos, [RecordKey::GithubReach { repo: "r".into() }]);
+    assert!(listed(&again, "r").await.is_some());
     assert!(!again.observations.keeps::<RepositoryReach>(&"gone".into()));
 }

@@ -1,10 +1,10 @@
 use protocol::client::HubNotice;
 use protocol::client::listed::SessionRecords;
-use protocol::fixtures::{github_account, github_app, github_sign_in};
+use protocol::fixtures::{github_account, github_app, github_sign_in, github_user};
 use protocol::model::{
     AgentKind, DiffComment, DiffSide, GithubAccount, GithubAppId, GithubAppSaid, GithubRepositoryName, GithubSettings,
-    GithubUser, GithubUserId, HubSettings, ModelList, ModelListKey, ModelLookup, Observation, Observed, Proposal,
-    Reach, Record, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal, Title, Workspace,
+    HubSettings, ModelList, ModelListKey, ModelLookup, Observation, Observed, Proposal, Reach, Record, RecordKey,
+    Records, Repo, Rev, Session, Subagent, Terminal, Title, Workspace,
 };
 
 use crate::records::HubRecords;
@@ -211,10 +211,7 @@ fn a_sessions_subagents_are_listed_as_they_started_and_found_by_their_call() {
 /// and one whose name isn't known, each named by the hub's observation of it, whatever its record says.
 #[test]
 fn what_a_hub_says_of_github_is_listed_in_the_order_views_show_it_and_found_by_its_id() {
-    let account = |id: &str, number: u64| GithubAccount {
-        user: GithubUser { id: GithubUserId::new(number), name: "old".into() },
-        ..github_account(id)
-    };
+    let account = |id: &str, number: u64| GithubAccount { user: github_user(number), ..github_account(id) };
     let named = |id: &str, name: &str| Observation::GithubUsername {
         account: id.into(),
         username: Observed::Current { value: name.into() },
@@ -223,7 +220,7 @@ fn what_a_hub_says_of_github_is_listed_in_the_order_views_show_it_and_found_by_i
     let app_said = |id: u64, name: &str| Observation::GithubAppSaid {
         app: GithubAppId::new(id),
         said: Observed::Current {
-            value: GithubAppSaid { slug: name.into(), name: name.to_string(), owner: github_app(id).owner },
+            value: GithubAppSaid { slug: name.into(), name: name.to_string(), owner: github_user(1) },
         },
         rev: Rev::new(1),
     };

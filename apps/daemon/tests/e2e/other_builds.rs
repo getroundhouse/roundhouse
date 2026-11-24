@@ -4,12 +4,12 @@
 #![cfg(test)]
 
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::SessionStatus;
+use protocol::model::{Observation, SessionStatus};
 
 use crate::carrying_on::restart;
 use crate::support::{
-    Stack, assistant_text, is_alive, latest_started_pid, parent_of, read_all, started_pid, wait_for_status,
-    wait_for_turn_end, wait_until, workspace,
+    self, Stack, assistant_text, is_alive, latest_started_pid, parent_of, read_all, started_pid, wait_for_status,
+    wait_for_turn_end, wait_until,
 };
 
 /// What the hub logs as a look at the workspace keeps its worker from another build, since something there is at work.
@@ -42,7 +42,14 @@ fn a_worker_from_another_build_is_replaced_once_nothing_in_its_workspace_is_at_w
     wait_until("two looks to keep the worker from the older build", || kept() >= 2);
     assert!(is_alive(older), "the worker from the older build was stopped while its agent was at work");
     let client = stack.client();
-    let build = |client| workspace(client, &made.id).worker_build;
+    let build = |client| {
+        support::at_the_hub(client, |observation| match observation {
+            Observation::WorkspaceWorkerBuild { workspace_id, build, .. } if *workspace_id == made.id => {
+                support::known(build).and_then(|build| build.said.clone())
+            }
+            _ => None,
+        })
+    };
     assert_eq!(build(&client).as_deref(), Some("older"), "the workspace doesn't say its worker is the older build");
     std::fs::write(&done, "").unwrap();
     wait_for_turn_end(&client, &session.id, 2);

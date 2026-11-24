@@ -1,8 +1,10 @@
 //! The screen's chat at work: writing a reply, thinking, working in the background, steered, and with prompts queued.
 
 use protocol::attachment::{Attachment, MediaType};
+use protocol::fixtures::observed;
 use protocol::model::{
-    CheckState, PullRequestNumber, PullRequestSelection, QueueState, QueuedPrompt, SessionStatus, Wait, WaitUntil,
+    CheckState, PullRequest, PullRequestNumber, PullRequestSelection, QueueState, QueuedPrompt, SessionStatus, Wait,
+    WaitRead, WaitUntil,
 };
 use protocol::prompt::Prompt;
 
@@ -56,7 +58,8 @@ pub(in crate::gallery) fn waiting_on_checks() -> World {
     wait.number = 182;
     let watch = wait.watch.as_mut().unwrap();
     watch.requested = PullRequestSelection::try_from(vec![PullRequestNumber::try_from(182).unwrap()]).unwrap();
-    watch.snapshot.pull_requests = vec![opened.pull_request.clone()];
+    **watch = watch.recorded();
+    world.observe(observed::wait_read(chat.clone(), wait.id.clone(), read(vec![opened.pull_request.clone()])));
     world.sessions.iter_mut().filter(|session| session.id == chat).for_each(|session| {
         session.waits = Some(vec![wait.clone()]);
     });
@@ -81,9 +84,10 @@ pub(in crate::gallery) fn waiting_on_stacks() -> World {
     wait.session_id = chat.clone();
     wait.workspace_id = focus.clone();
     let watch = wait.watch.as_mut().unwrap();
-    let stack = &mut watch.snapshot.pull_requests[0].stack.as_mut().unwrap().said;
-    stack.dependencies = vec![PullRequestNumber::try_from(6).unwrap()];
-    watch.snapshot.pull_requests.insert(0, protocol::fixtures::pull_request(6));
+    **watch = watch.recorded();
+    let mut seventh = protocol::fixtures::pull_request(7);
+    seventh.stack.as_mut().unwrap().said.dependencies = vec![PullRequestNumber::try_from(6).unwrap()];
+    world.observe(observed::wait_read(chat.clone(), "stack", read(vec![protocol::fixtures::pull_request(6), seventh])));
     let mut second = Wait { id: "merge".into(), until: WaitUntil::Merged, ..wait.clone() };
     second.number = 9;
     let watch = second.watch.as_mut().unwrap();
@@ -93,11 +97,16 @@ pub(in crate::gallery) fn waiting_on_stacks() -> World {
     let mut queued = protocol::fixtures::pull_request(9);
     queued.checks.as_mut().unwrap().said.checks[0].state = CheckState::Passed;
     queued.summary.said.queue = Some(QueueState::AwaitingChecks);
-    watch.snapshot.pull_requests = vec![queued];
+    world.observe(observed::wait_read(chat.clone(), "merge", read(vec![queued])));
     world.sessions.iter_mut().filter(|session| session.id == chat).for_each(|session| {
         session.waits = Some(vec![wait.clone(), second.clone()]);
     });
     world
+}
+
+/// What a wait last read: `pull_requests`, as it read them when it started.
+fn read(pull_requests: Vec<PullRequest>) -> WaitRead {
+    WaitRead { pull_requests, observed_at_ms: 1, read_error: None, last_attempt_at_ms: 1, affected: Vec::new() }
 }
 
 /// Partway through a thought.

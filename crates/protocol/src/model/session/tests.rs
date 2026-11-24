@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::model::{CacheTtl, WaitUntil};
+use crate::model::WaitUntil;
 
 /// Waits are the hub's, which the next hub keeps, starting the agent again once one ends, so an agent with only
 /// waits in the background isn't counted as running. One with anything else there, or on a turn, is.
@@ -23,15 +23,11 @@ fn an_agent_with_only_waits_in_the_background_isnt_counted_as_running() {
     assert!(!Idle.counts_as_running(&[]));
 }
 
-/// A chat in `status`, as a hub names it, whose agent's context holds `used_tokens`.
-fn session(status: &str, used_tokens: u64) -> Session {
-    let context =
-        ContextUsage { used_tokens, max_tokens: 1_000_000, model_tokens: None, max_set_by: None, parts: Vec::new() };
+/// A chat in `status`, as a hub names it.
+fn session(status: &str) -> Session {
     Session {
         status: serde_json::from_value(json!(status)).unwrap(),
         last_seq: Seq::new(4),
-        context: Some(context),
-        prompt_cache: Some(PromptCache { used_at_ms: 0, ttl: CacheTtl::OneHour, model: None, tokens: 0 }),
         ..crate::fixtures::session("s")
     }
 }
@@ -40,7 +36,7 @@ fn session(status: &str, used_tokens: u64) -> Session {
 /// writes, with a `call` the CLI didn't say as null.
 #[test]
 fn a_session_from_a_hub_that_doesnt_keep_waits_has_none_and_one_that_does_has_its_open_wait() {
-    let mut said = serde_json::to_value(session("background", 0)).unwrap();
+    let mut said = serde_json::to_value(session("background")).unwrap();
     said["wait"] = json!({
         "id": "a", "session_id": "s", "workspace_id": "w", "number": 7, "call": null, "until": "checks",
         "started_at_ms": 1,
@@ -48,7 +44,7 @@ fn a_session_from_a_hub_that_doesnt_keep_waits_has_none_and_one_that_does_has_it
 
     let waiting: Session = serde_json::from_value(said).unwrap();
 
-    assert_eq!(session("idle", 0).wait, None);
+    assert_eq!(session("idle").wait, None);
     let wait = waiting.wait.unwrap();
     assert_eq!((wait.number, wait.call, wait.until, wait.ended), (7, None, WaitUntil::Checks, None));
 }
@@ -76,14 +72,14 @@ fn a_compaction_waits_for_the_turn_for_every_prompt_to_be_taken_and_for_a_conver
     let says = |status, untaken: &[Seq], agent_opened| Session {
         untaken: Some(untaken.to_vec()),
         agent_opened: Some(agent_opened),
-        ..session(status, 9_000)
+        ..session(status)
     };
     assert!(!says("idle", &[], true).compaction_waits());
     assert!(says("running", &[], true).compaction_waits());
     assert!(says("idle", &[Seq::new(5)], true).compaction_waits(), "a prompt or compaction on its way");
     assert!(says("idle", &[], false).compaction_waits(), "nothing to compact yet");
-    assert!(session("running", 9_000).compaction_waits(), "a hub that doesn't say still says when it's working");
-    assert!(!session("idle", 9_000).compaction_waits(), "and is asked otherwise");
+    assert!(session("running").compaction_waits(), "a hub that doesn't say still says when it's working");
+    assert!(!session("idle").compaction_waits(), "and is asked otherwise");
 }
 
 /// Either way the agent stopped short lasts until a turn starts again, and a turn that started since a failed one says

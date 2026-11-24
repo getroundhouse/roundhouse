@@ -293,7 +293,8 @@ pub(crate) fn short(id: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::{HubUpdate, Observation, Observed, Records, ReleaseOffer, Rev, UpdateAttempt};
+    use protocol::fixtures::observed;
+    use protocol::model::{HubUpdate, Observation, Records, Rev, UpdateAttempt};
 
     use super::{held, stopped, updates_line};
 
@@ -310,23 +311,20 @@ mod tests {
 
     #[test]
     fn a_service_s_status_says_what_it_found_in_the_update_feed() {
-        let found = |version: Option<&str>, problem: Option<&str>| HubUpdate {
-            version: version.map(str::to_owned),
-            looked_at_ms: 1,
-            problem: problem.map(str::to_owned),
-            attempt: None,
-            rev: Rev::default(),
+        // What a hub found: its record of how an update is going, and the release the feed offers, as the hub's level
+        // sends it, beside the record.
+        let found_with = |version: Option<&str>, problem: Option<&str>, attempt: Option<UpdateAttempt>| {
+            let problem = problem.map(str::to_owned);
+            let update = HubUpdate { version: None, looked_at_ms: 1, problem, attempt, rev: Rev::default() };
+            (update, observed::release_offered(version))
         };
-        let attempt = |attempt| HubUpdate { attempt: Some(attempt), ..found(Some("0.1.9"), None) };
+        let found = |version, problem| found_with(version, problem, None);
+        let attempt = |attempt| found_with(Some("0.1.9"), None, Some(attempt));
         let failed = UpdateAttempt::Failed { to: "0.1.9".into(), why: "offline".into() };
-        // The release offered, as the hub's level sends it, beside the record, whose own field is blank to this client.
-        let line = |found: Option<HubUpdate>| {
-            let offered = found.as_ref().map(|found| Observation::ReleaseOffered {
-                offered: Observed::Current { value: ReleaseOffer { version: found.version.clone() } },
-                rev: Rev::new(1),
-            });
-            let observations = offered.into_iter().collect();
-            updates_line(&held(Records { hub_update: found, observations, rev: Rev::new(1), ..Records::default() }))
+        let line = |found: Option<(HubUpdate, Observation)>| {
+            let (hub_update, observations) =
+                found.map_or((None, Vec::new()), |(update, offered)| (Some(update), vec![offered]));
+            updates_line(&held(Records { hub_update, observations, rev: Rev::new(1), ..Records::default() }))
         };
 
         assert_eq!(line(None), "it hasn't read the update feed yet");
