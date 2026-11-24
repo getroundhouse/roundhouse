@@ -26,14 +26,16 @@ use serde::{Deserialize, Serialize};
 /// of what the hub only observes in as an observation, from [`EVERY_OBSERVATION_FROM`].
 pub const CLIENT_PROTOCOL_VERSION: u32 = 5;
 
-/// The versions of the client protocol a hub of this build speaks: its own, and the one before it, for a client of an
-/// older build, as `docs/principles/versions.md` says. A client of version 4 reads each copy that became an observation
-/// in the form from before it, which the hub fills from the observation.
+/// The versions of the client protocol a hub of this build speaks: its own, the one before it, for a client of an
+/// older build, as `docs/principles/versions.md` says, and the next, 6, which no client speaks yet. A client of version
+/// 4 reads each copy that became an observation in the form from before it, which the hub fills from the observation.
+/// Version 6 reads everything as 5 does, and is a break only so that the hub of the build that clients speak it in can
+/// stop speaking 4, and with it every form only 4 reads.
 ///
 /// Each is written out, rather than taken from [`CLIENT_PROTOCOL_VERSION`], since at a break the hub speaks the new
 /// version a merge before clients do, so a client of the build that first speaks it can talk to the hub of the build
 /// before. A hub has to speak its own build's clients' version, which the assertion below holds.
-pub const HUB_SPEAKS: Versions = Versions { oldest: 4, newest: 5 };
+pub const HUB_SPEAKS: Versions = Versions { oldest: 4, newest: 6 };
 
 const _: () = assert!(HUB_SPEAKS.speaks(CLIENT_PROTOCOL_VERSION), "a hub speaks its own build's clients' version");
 
