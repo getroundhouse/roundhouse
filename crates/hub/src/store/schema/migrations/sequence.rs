@@ -87,4 +87,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Rust(super::titles::tidied),
     // Each open wait the singular tool started, ended as called off, in `waits`.
     Sql(super::waits::UNWATCHED_CALLED_OFF),
+    // Each background task stored with no kind, given `command`, in `agent_tasks` events and in `sessions`.
+    Rust(super::tasks::kinds_given),
 ];

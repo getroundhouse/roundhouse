@@ -231,13 +231,15 @@ fn a_dropped_call_keeps_the_form_and_the_kind_it_s_stored_under() {
     assert_eq!(serde_json::to_value(&event.body).unwrap()["type"], "tool_call_dropped");
 }
 
-/// A list the hub stored before it kept kinds has none, which the hub reads as its record's list and sends filled in.
-/// Everything left running was drawn alike then, and a command is the kind that claims least.
+/// Every task says its kind, as the hub stores and sends it, and every worker sends it, so one that doesn't, as the hub
+/// stored one before it kept kinds and a migration has since given one, doesn't read.
 #[test]
-fn a_background_task_stored_before_kinds_were_kept_is_a_command() {
-    let task: AgentTask = serde_json::from_str(r#"{"id":"t1","description":"Run the tests"}"#).unwrap();
+fn a_background_task_without_its_kind_doesnt_read() {
+    let without = serde_json::from_str::<AgentTask>(r#"{"id":"t1","description":"Run the tests"}"#);
+    let with = serde_json::from_str::<AgentTask>(r#"{"id":"t1","description":"Run the tests","kind":"command"}"#);
 
-    assert_eq!(task.kind, TaskKind::Command);
+    assert!(without.is_err(), "{without:?}");
+    assert_eq!(with.unwrap().kind, TaskKind::Command);
 }
 
 /// A newer hub's kind mustn't cost the list: the hub reads a stored list it can't parse as empty, which would say
