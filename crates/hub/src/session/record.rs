@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use protocol::capability::approvals::ApprovalMode;
 use protocol::client::{ApiError, HubNotice};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Interaction, InteractionMode, RunCapabilities, RunId, Session, SubagentId};
@@ -58,13 +59,13 @@ impl LiveSession {
     ) -> Result<(SessionEvent, bool), ApiError> {
         let hub = self.hub()?;
         let run = origin.run();
-        let (Step { body, mut change, next, waits }, still_current, interaction) = {
+        let (Step { body, mut change, next, waits }, still_current, interaction, mode_held) = {
             let state = self.state.lock();
             let interaction = admit(&state)?;
             // The current agent saying it, which only a running one can, or the hub with one running.
             let agent = state.agent.is_some() || run.is_some();
             let still_current = run.is_some() && state.agent.map(|agent| agent.run) == run;
-            (state.progress.step(origin, body, agent), still_current, interaction)
+            (state.progress.step(origin, body, agent), still_current, interaction, state.settings.mode)
         };
         if interaction.is_some() {
             change.interaction = interaction;
@@ -75,9 +76,12 @@ impl LiveSession {
                 change.initialized = Some(crate::store::Initialized { conversation: agent_session_id.clone() });
             }
             // Only while its run is still the session's, as of now, in order with what's recorded: a run whose exit
-            // was taken in since its caller looked has no claims on the record for its exit to take off.
+            // was taken in since its caller looked has no claims on the record for its exit to take off. The mode it
+            // says is the record's from then, which the next launch starts in, so a chat that was planning when its
+            // agent went is still planning when it comes back.
             if still_current {
                 change.claims = claims_of(run, &body);
+                change.mode = mode_said(&body).filter(|said| *said != mode_held);
             }
         }
         let made = Made::of(&change, waits);
@@ -130,6 +134,9 @@ impl LiveSession {
             let was_in_turn = state.progress.status.in_turn();
             let (had, was) = (state.interaction.device().map(|had| had.id.clone()), state.interaction.mode());
             take_all(&mut state, recorded);
+            if let Some(mode) = made.mode {
+                state.settings.mode = mode;
+            }
             let turn_ended = was_in_turn && !state.progress.status.in_turn();
             let left = left_conversation(had.as_ref(), &state.interaction);
             let mode_changed = state.interaction.mode() != was;
@@ -232,6 +239,8 @@ fn changed_beside_status(appended: &[&Appended]) -> bool {
 struct Made {
     /// Its record says something new of its status, or of its queue being held.
     changed: bool,
+    /// The approval mode its record has now, if the commit changed it.
+    mode: Option<ApprovalMode>,
     /// It waits for the agent to pick up again, as [`super::status::after_background`] says.
     waits: bool,
     turn_ended: bool,
@@ -240,13 +249,19 @@ struct Made {
 impl Made {
     fn of(change: &SessionChange, waits: bool) -> Self {
         let turn_ended = change.status.as_ref().is_some_and(|status| matches!(status.turn, TurnEdge::Ends(_)));
-        Self { changed: !change.is_none(), waits, turn_ended }
+        Self { changed: !change.is_none(), mode: change.mode, waits, turn_ended }
     }
 }
 
 /// What `body` says its run, `run`, claims, if it says, which the session holds that run to until it exits.
 fn claims_of(run: Option<RunId>, body: &EventBody) -> Option<RunCapabilities> {
     run.zip(body.claims()).map(|(run, claims)| RunCapabilities::new(run, claims.clone()))
+}
+
+/// The approval mode `body` says the agent is in, if it's the agent saying it changed mode, or confirming a change.
+fn mode_said(body: &EventBody) -> Option<ApprovalMode> {
+    let EventBody::AgentMode { mode } = body else { return None };
+    Some(*mode)
 }
 
 /// Has `change` say which of its worker's numbers the agent of `origin` has had recorded, in the same commit as the

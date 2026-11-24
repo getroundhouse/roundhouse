@@ -1,6 +1,7 @@
 //! What an event changes about its session's record, which commits with it.
 
 use super::super::{StoreError, seq_column, text_of};
+use protocol::capability::approvals::ApprovalMode;
 use protocol::event::{AgentTask, TurnOutcome};
 use protocol::model::{Interaction, RunId, Seq, SessionId, SessionStatus};
 use rusqlite::{Connection, params};
@@ -46,6 +47,9 @@ pub struct SessionChange {
     /// How the person talks with the agent from here on: conversation mode turned on, with the conversation on its
     /// device, as the event that draws its rule says, or typing again, as a prompt they type says.
     pub interaction: Option<Interaction>,
+    /// The approval mode the current run said it's in, where that's another than the record's, which the next launch
+    /// starts in.
+    pub mode: Option<ApprovalMode>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,6 +65,7 @@ impl SessionChange {
             && self.initialized.is_none()
             && self.claims.is_none()
             && self.interaction.is_none()
+            && self.mode.is_none()
     }
 }
 
@@ -111,6 +116,9 @@ pub(super) fn change_session(
             tx.execute("UPDATE sessions SET conversation = NULL WHERE id = ? AND conversation IS NOT NULL", [id])?;
         }
         Some(Interaction::Unknown) | None => {}
+    }
+    if let Some(mode) = change.mode {
+        tx.execute("UPDATE sessions SET mode = ? WHERE id = ?", params![serde_json::to_string(&mode)?, id])?;
     }
     if let Some(held) = change.queue_held {
         tx.execute("UPDATE sessions SET queue_held = ? WHERE id = ?", params![held, id])?;

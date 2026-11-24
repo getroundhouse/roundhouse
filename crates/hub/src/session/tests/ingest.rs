@@ -135,3 +135,60 @@ async fn the_agents_to_do_list_is_kept_as_an_observation_and_only_a_change_moves
     assert_eq!((kept, filled), (Some(todos(TodoStatus::Done)), Some(todos(TodoStatus::Done))));
     assert!(done > first, "a change moves the record, for a client of version 4");
 }
+
+/// The mode the current run says it's in changes the session's record in the transaction that records the event, and
+/// nothing else writes it, so no hub that stops between two writes can leave the log and the record saying different
+/// modes. What a replaced run says, and a mode the record has already, change nothing, and the live session takes the
+/// change too, so the next launch starts in it.
+#[tokio::test]
+async fn the_mode_the_agent_says_is_written_only_with_the_event_that_says_it() {
+    use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker, store_of};
+    use crate::store::columns::OneValue;
+    use protocol::fixtures::plan_mode;
+
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let link = stand_in_worker(&hub);
+    let run = RunId::new(2);
+    let live = carried_on(&hub, &link, run);
+    let store = store_of(&hub);
+    // How far the log had gone as of each write of the session's mode, which only recording an event moves.
+    let watch = "CREATE TEMP TABLE mode_writes (seq INTEGER);
+        CREATE TEMP TRIGGER mode_written AFTER UPDATE OF mode ON sessions BEGIN
+            INSERT INTO mode_writes VALUES (NEW.last_seq);
+        END";
+    store.holding_writes().execute_batch(watch).unwrap();
+    let says = async |run, mode| {
+        let body = EventBody::AgentMode { mode };
+        live.send_item(Item::Event { run, body: Box::new(body), raw: None, attachments: Vec::new(), seq: None }).await;
+        flushed(&live).await;
+    };
+    let before = store.get_session(&live.id).unwrap().session.mode;
+    let mut feed = hub.subscribe_feed();
+
+    says(RunId::new(1), plan_mode()).await;
+    says(run, plan_mode()).await;
+    says(run, plan_mode()).await;
+
+    assert_ne!(before, plan_mode());
+    let log = store.read_events(&live.id, Seq::FIRST, 100, u64::MAX, false).unwrap();
+    let said: Vec<i64> = log
+        .iter()
+        .filter(|event| matches!(event.body, EventBody::AgentMode { .. }) && event.run == Some(run))
+        .map(|event| event.seq.get().cast_signed())
+        .collect();
+    let written: Vec<i64> = {
+        let writes = store.holding_writes();
+        let mut statement = writes.prepare("SELECT seq FROM mode_writes ORDER BY rowid").unwrap();
+        statement.query_map([], OneValue::read).unwrap().collect::<Result<_, _>>().unwrap()
+    };
+    assert_eq!(said.len(), 2, "each is in the log");
+    assert_eq!(written, [said[0]], "once, as the first from the current run was recorded");
+    assert_eq!(store.get_session(&live.id).unwrap().session.mode, plan_mode());
+    assert_eq!(live.state.lock().settings.mode, plan_mode(), "the next launch starts in it");
+    let told = std::iter::from_fn(|| feed.try_recv().ok()).filter_map(|notice| {
+        let protocol::client::HubNotice::Session(told) = &*notice else { return None };
+        Some(told.mode)
+    });
+    assert_eq!(told.collect::<Vec<_>>(), [plan_mode()], "every client heard of it once");
+}

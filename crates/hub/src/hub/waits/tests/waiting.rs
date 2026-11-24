@@ -116,14 +116,8 @@ async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
         let dir = tempfile::tempdir().unwrap();
         let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
         pull_requests.set(7, PullRequestState::Open);
-        let change = SessionChange {
-            status: Some(status.into()),
-            queue_held: Some(queue_held),
-            recorded: None,
-            initialized: None,
-            claims: None,
-            interaction: None,
-        };
+        let change =
+            SessionChange { status: Some(status.into()), queue_held: Some(queue_held), ..SessionChange::default() };
         let said = EventBody::Notice { level: NoticeLevel::Info, message: "x".into(), subagent: None };
         hub.store.append(&"s".into(), None, &said, None, None, Some(change)).unwrap();
         let starts = Arc::new(parking_lot::Mutex::new(0));
@@ -164,14 +158,7 @@ async fn a_chat_whose_record_lists_only_a_wait_isnt_counted_as_running() {
         let task = AgentTask { id: "t".into(), description: None, kind, call: None, subagent: None };
         let listed = EventBody::AgentTasks { tasks: vec![task.clone()], stopped: vec![] };
         let status = StatusChange { background_tasks: Some(vec![task]), ..SessionStatus::Background.into() };
-        let change = SessionChange {
-            status: Some(status),
-            queue_held: None,
-            recorded: None,
-            initialized: None,
-            claims: None,
-            interaction: None,
-        };
+        let change = SessionChange { status: Some(status), ..SessionChange::default() };
         hub.store.append(&"s".into(), None, &listed, None, None, Some(change)).unwrap();
 
         hub.live_session(&"s".into()).await.unwrap();

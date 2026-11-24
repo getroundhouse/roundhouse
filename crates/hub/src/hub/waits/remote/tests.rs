@@ -44,14 +44,7 @@ async fn outages_keep_the_last_snapshot_and_access_loss_ends_with_it() {
     let hub = hub_with_worktree(dir.path());
     let wait = pull_request_wait("a");
     hub.start_wait(wait.clone()).await.unwrap();
-    let change = crate::store::SessionChange {
-        status: None,
-        queue_held: Some(true),
-        recorded: None,
-        initialized: None,
-        claims: None,
-        interaction: None,
-    };
+    let change = crate::store::SessionChange { queue_held: Some(true), ..crate::store::SessionChange::default() };
     hub.store
         .append(
             &"s".into(),
@@ -100,14 +93,7 @@ async fn a_shared_reads_pr_access_failure_ends_each_wait_on_it_and_no_unrelated_
     hub.store.start_wait(&a).unwrap();
     hub.store.start_wait(&b).unwrap();
     hub.store.start_wait(&c).unwrap();
-    let change = crate::store::SessionChange {
-        status: None,
-        queue_held: Some(true),
-        recorded: None,
-        initialized: None,
-        claims: None,
-        interaction: None,
-    };
+    let change = crate::store::SessionChange { queue_held: Some(true), ..crate::store::SessionChange::default() };
     hub.store
         .append(
             &"s".into(),
