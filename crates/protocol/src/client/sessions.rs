@@ -209,7 +209,7 @@ impl Request for SessionRename {
 /// Refused with `NotFound` when there's no such session or account, with `InvalidRequest` when the hub can hold no
 /// login for the chat's kind of agent or the account isn't a login added for that kind, and with `Conflict` when its
 /// login has ended or been disconnected, as choosing a default is, since the chat couldn't launch under it. The same
-/// again changes nothing more. A hub older than this refuses it as unsupported.
+/// again changes nothing more.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionAssignAccount {
     pub id: SessionId,

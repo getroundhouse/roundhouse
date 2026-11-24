@@ -18,8 +18,8 @@ pub enum Listed {
     /// The records of one session.
     Session(SessionRecords),
     /// Every observation sent at one workspace's level. The hub queues it before its reply to the `Subscribe` that
-    /// started the subscription, so a client that has the reply with no `Listed::Workspace` before it knows the hub is
-    /// from before workspaces had a level of their own.
+    /// started the subscription, so a client that has the reply with no `Listed::Workspace` before it knows the hub
+    /// refused that workspace, such as one it no longer has.
     Workspace(WorkspaceObservations),
     /// The observations of one issue or pull request, as a chip draws it.
     Reference(ReferenceObservations),
@@ -39,8 +39,7 @@ pub struct SessionRecords {
     pub proposals: Vec<Proposal>,
     /// In no order, since each is read by its reply.
     pub replies_heard: Vec<ReplyHeard>,
-    /// In no order. A kind it lacks is not known. Empty from a hub from before a session's level sent any, and to a
-    /// client of a version that reads none at it.
+    /// In no order. A kind it lacks is not known. Empty to a client of a version that reads none at it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub observations: Vec<Observation>,
     /// The hub's newest revision when they were read.

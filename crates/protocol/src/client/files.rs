@@ -7,8 +7,7 @@ use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{CommitId, FileContents, FileOpened, FilePages, FileRange, WorkspaceId, WorktreeFiles};
 
 /// The files in the workspace's worktree, for browsing them: tracked, new and ignored, apart from what's in a
-/// folder git ignores whole, or that's a repository of its own, which is listed as a folder for
-/// `WorkspaceFolderRead`. A hub older than this refuses it as unsupported.
+/// folder git ignores whole, or that's a repository of its own, which is listed as a folder for `WorkspaceFolderRead`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspaceFiles {
     pub id: WorkspaceId,
@@ -23,8 +22,7 @@ impl Request for WorkspaceFiles {
 }
 
 /// What's directly in the folder at `path` in the workspace's worktree, its files and its folders, for opening one
-/// that `WorkspaceFiles` lists as a folder. Refused unless it's a folder inside the worktree, links followed. A hub
-/// older than this refuses it as unsupported.
+/// that `WorkspaceFiles` lists as a folder. Refused unless it's a folder inside the worktree, links followed.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspaceFolderRead {
     pub id: WorkspaceId,
@@ -47,8 +45,7 @@ impl Reply for WorktreeFiles {
 }
 
 /// What the file at `path` in the workspace's worktree holds, for showing it. `path` is relative to the worktree,
-/// as `WorkspaceFiles` gives it, and refused unless it's a file inside the worktree, links followed. A hub older
-/// than this refuses it as unsupported.
+/// as `WorkspaceFiles` gives it, and refused unless it's a file inside the worktree, links followed.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspaceFileRead {
     pub id: WorkspaceId,
@@ -68,9 +65,7 @@ impl Request for WorkspaceFileRead {
 /// `WorkspaceFiles` gives it, and a link there isn't followed, so it reads as the path it leads to. Refused with
 /// `InvalidRequest` when `commit` isn't a full object ID, such as a short one or a branch's name, when `path`
 /// isn't written as a list gives it, and when the commit has a folder or a submodule there. Refused with
-/// `NotFound` when the repository has no commit by that ID, or the commit has nothing at `path`. A hub older than
-/// this refuses it as unsupported, rather than reading the file as it is now, which a field added to
-/// `WorkspaceFileRead` would get.
+/// `NotFound` when the repository has no commit by that ID, or the commit has nothing at `path`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspaceFileReadAt {
     pub id: WorkspaceId,
@@ -88,7 +83,8 @@ impl Request for WorkspaceFileReadAt {
 
 /// Part of the file at `path` in the workspace's worktree, as it is now: `length` bytes from `start`, for playing a
 /// video that `WorkspaceFileRead` says is one. Refused as `WorkspaceFileRead` is, and with `InvalidRequest` when
-/// `length` is 0 or more than [`crate::model::MAX_RANGE_BYTES`]. A hub older than this refuses it as unsupported.
+/// `length` is 0 or more than [`crate::model::MAX_RANGE_BYTES`]. A hub whose worker is older than this refuses it as
+/// unsupported.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspaceFileReadRange {
     pub id: WorkspaceId,
@@ -122,7 +118,7 @@ impl Reply for FileContents {
 /// Opens the file at `path` as `commit` held it, to be read a page of lines at a time with `WorkspaceFilePages`,
 /// for showing a file that can be too big for `WorkspaceFileReadAt` to send, such as the lines a diff leaves out
 /// of it. Answers with `FileOpened`, with every page when the file is small enough to send at once, and is refused
-/// as `WorkspaceFileReadAt` is. A hub older than this refuses it as unsupported.
+/// as `WorkspaceFileReadAt` is.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspaceFileOpenAt {
     pub id: WorkspaceId,
@@ -149,7 +145,7 @@ impl Reply for FileOpened {
 /// `page_lines` lines a page, as the open said. Answers with `FilePages`: those asked for, in the order the file has
 /// them, as many as fit in what's sent at once and always the first, and none past the file's end. A line too long to
 /// send whole is cut short, and says so. Refused as `WorkspaceFileReadAt` is, and with `InvalidRequest` when
-/// `page_lines` is 0 or more than 4096. A hub older than this refuses it as unsupported.
+/// `page_lines` is 0 or more than 4096.
 ///
 /// The request says how many lines a page has, rather than leaving it to the worker, so page `n` is the same lines
 /// whichever build of the worker reads it.

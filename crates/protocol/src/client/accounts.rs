@@ -1,6 +1,5 @@
 //! The requests about the logins a hub holds for agents' accounts, which it hands to the workers it launches agents on,
-//! for the chats on each account, and the default each kind's chats are put on when they're on none yet. A hub older
-//! than one refuses it, as `is_unsupported` says.
+//! for the chats on each account, and the default each kind's chats are put on when they're on none yet.
 
 use serde::{Deserialize, Serialize};
 

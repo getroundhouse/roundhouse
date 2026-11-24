@@ -29,9 +29,9 @@ pub struct AgentDescription {
     /// What the heading over the limits of the account it runs under says, such as "Claude usage".
     pub usage_heading: String,
     /// The login a hub can hold for an account of this kind and hand to the workers it launches agents on. `None` for a
-    /// kind a hub can hold none for, whose agents run under the login on their worker's machine, and from a hub older
-    /// than this. It describes the kind's login, and doesn't say this hub keeps logins: one that doesn't refuses
-    /// `account_connect` as `Unsupported`, which a client still has to expect.
+    /// kind a hub can hold none for, whose agents run under the login on their worker's machine. It describes the
+    /// kind's login, and doesn't say this hub keeps logins: one that doesn't refuses `account_connect` as
+    /// `Unsupported`, which a client still has to expect.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub login: Option<LoginDescription>,
 }

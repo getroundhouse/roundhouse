@@ -147,9 +147,9 @@ fn a_subagent_that_starts_again_after_it_ended_works_again_under_the_call_that_f
 }
 
 /// A subagent its agent gives an ID of its own is kept by that ID, which its events and its end name, with the call that
-/// started it beside it. It's found by either, since a client from before subagents had IDs names each by its call, as
-/// `Subagent::named` says, which a fake hub finds one by, so the store finds each as it does, and one whose ID is
-/// another's call by its ID.
+/// started it beside it. It's found by either, since a client names a subagent by its call until it has the subagent's
+/// record, as `Subagent::named` says, which a fake hub finds one by, so the store finds each as it does, and one whose
+/// ID is another's call by its ID.
 #[test]
 fn a_subagent_named_by_its_agent_is_kept_by_that_name_and_found_by_its_call_too() {
     let dir = tempfile::tempdir().unwrap();

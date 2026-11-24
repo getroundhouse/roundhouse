@@ -78,9 +78,9 @@ fn hub_that_says_missing(socket: &std::path::Path) -> (crate::Client, Asked) {
     (client, asked)
 }
 
-/// What a hub from before it described its agents answers when asked for them.
+/// A refusal to describe the hub's agents, which a client takes as none described.
 fn agents_unknown() -> ApiError {
-    ApiError::new(ErrorCode::Unsupported, "a hub from before it described its agents")
+    ApiError::new(ErrorCode::Unsupported, "refused")
 }
 
 fn chip(n: u64) -> Level {

@@ -65,7 +65,7 @@ fn hub(socket: &Path) -> Client {
                 vec![HubFrame::Listed { subscription_id, listed: Listed::Hub(Box::default()) }]
             });
         } else if request == ClientRequest::AgentList {
-            ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "an older hub"))
+            ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "refused"))
         } else if request == ClientRequest::RepoList {
             return Does::HangsUp;
         } else {

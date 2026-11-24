@@ -50,9 +50,9 @@ async fn tells_no_reach(feed: &mut crate::hub::Notices) -> bool {
     tokio::time::timeout(std::time::Duration::from_millis(500), told(feed)).await.is_err()
 }
 
-/// The repository's address is still to be read, as each is once a hub from before addresses is upgraded, so the last
-/// run's record names which repository on GitHub to check, and no worker has to read it first. Once it's checked, it's
-/// this run's, with when GitHub answered.
+/// The repository's address is still to be read, as it is from when the repository is added, or added again, until a
+/// worker reads it, so the last run's record names which repository on GitHub to check, and no worker has to read it
+/// first. Once it's checked, it's this run's, with when GitHub answered.
 #[tokio::test]
 async fn as_the_hub_starts_each_repository_the_last_run_recorded_is_checked_again_with_the_default() {
     let github = refusing().await;

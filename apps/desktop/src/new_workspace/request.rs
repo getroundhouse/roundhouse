@@ -18,8 +18,9 @@ pub struct Request {
     pub coming_back: Vec<Attachment>,
     /// The kind of agent its first chat runs.
     pub agent: AgentKind,
-    /// The model and effort the dialog showed. `None` from a hub that doesn't describe its agents, with nothing picked,
-    /// for what the agent starts a chat with.
+    /// The model and effort the dialog showed, or `None` for what the agent starts a chat with. With nothing picked,
+    /// they're `None` when the hub refused to describe its agents or its reply couldn't be read, and until the agent
+    /// has said what it offers.
     pub model: Option<ModelName>,
     pub effort: Option<Effort>,
     /// The agent's plan mode, if plan mode was on in the dialog, and otherwise `None`, for the one it starts a chat in.

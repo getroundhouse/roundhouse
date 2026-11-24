@@ -7,8 +7,7 @@ use protocol::model::{FileDiff, FileDiffBody, FileVersion};
 
 use super::{answered, asked};
 
-/// A request names the tracked file at its path, as one from before `untracked` did, unless it says it's the untracked
-/// one.
+/// A request names the tracked file at its path, and leaves `untracked` out, unless it says it's the untracked one.
 #[test]
 fn the_request_for_one_file_s_diff_keeps_its_form_and_reads_from_its_first_page_without_a_rename() {
     let renamed = workspaces::WorkspaceFileDiff {

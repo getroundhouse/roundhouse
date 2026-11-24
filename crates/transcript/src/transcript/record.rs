@@ -27,7 +27,7 @@ pub(crate) struct AtWork {
     /// Working on a turn, which the transcript ends with the working line for. While the agent waits on someone, its
     /// card says so instead.
     pub(crate) working: bool,
-    /// When the newest turn started, by the hub's clock. `None` from a hub that doesn't say.
+    /// When the newest turn started, by the hub's clock. `None` until one has.
     pub(crate) turn_started_at_ms: Option<i64>,
     /// What it's running in the background, in the order it started them. Its waits on the pull request are among
     /// them, and have no line, since `wait` is the hub's own of the one it has open.

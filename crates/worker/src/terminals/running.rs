@@ -101,7 +101,7 @@ impl Terminals {
     /// Starts a shell in the worktree, unless the terminal runs already.
     pub(crate) async fn start(&self, start: TerminalStart, given: Arc<Environment>) -> Result<(), ApiError> {
         allowed(start.size)?;
-        // Its ID names the files its process records are in. A hub refuses one that can't, but an older one doesn't.
+        // Its ID names the files its process records are in, so one that can't is refused, as a hub refuses it.
         paths::file_name_id("a terminal's", start.terminal.as_str())?;
         let _starting = self.starting.lock().await;
         let number = {

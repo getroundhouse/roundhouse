@@ -35,8 +35,8 @@ impl Request for ProposalAnswer {
 /// prompt of its own, as [`ProposalAnswer`] does. It's refused as [`ProposalAnswer`] is, and as an invalid request
 /// without a note.
 ///
-/// It's a request of its own, which a hub older than this refuses as unsupported. As a field of [`ProposalAnswer`], an
-/// older hub would read it as an answer that chose nothing. *Unconfirmed.*
+/// It's a request of its own, rather than a field of [`ProposalAnswer`] that a hub without the field would read as an
+/// answer that chose nothing. *Unconfirmed.*
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ProposalAnotherRound {
     pub id: ProposalId,
@@ -63,8 +63,7 @@ impl Reply for Proposal {
 /// The revisions of the proposal `id` from `from` on, oldest first, at most `limit` of them, and at least one when
 /// there are any from `from`, but never more than [`ProposalRevisionsRead::MOST`], so however often a proposal is
 /// revised, a read is no larger than a few of its revisions. A proposal lists only its newest, whose number says how
-/// many there are. One the hub doesn't have is refused as not found, and a hub older than this refuses it as
-/// unsupported.
+/// many there are. One the hub doesn't have is refused as not found.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ProposalRevisionsRead {
     pub id: ProposalId,

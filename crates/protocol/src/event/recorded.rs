@@ -31,8 +31,8 @@ pub struct SessionEvent {
     #[serde(default)]
     pub place: Place,
     /// How the person was talking with the agent as it was recorded: typed, or out loud in conversation mode, as the
-    /// session's record said once the event had changed it, so the prompt that turns the mode off was typed. Typing from
-    /// a hub that doesn't record it, and for what was recorded before it did.
+    /// session's record said once the event had changed it, so the prompt that turns the mode off was typed. Typing for
+    /// what was recorded before the hub recorded it.
     #[serde(default, skip_serializing_if = "InteractionMode::is_typing")]
     pub interaction: InteractionMode,
     pub body: EventBody,
@@ -71,8 +71,8 @@ pub enum EventBody {
     AgentStarted {
         pid: u32,
         resumed: bool,
-        /// Which build the agent runs on, which is its worker's, as the worker's hello said. `None` from a worker from
-        /// before workers said, and from a hub from before it recorded this.
+        /// Which build the agent runs on, which is its worker's, as the worker's hello said. `None` in a start recorded
+        /// before the hub recorded this.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         build: Option<String>,
         /// The build the chat's agent last ran on, when that's another than `build`, as after an update or a rollback,
@@ -219,7 +219,7 @@ pub enum EventBody {
         num_turns: Option<u64>,
         /// When the turn started, by the hub's clock, which the hub adds as it records the end. So every turn is timed
         /// the way the working line counts it, and a client needn't load the turn's start to time it. `None` from the
-        /// agent, which doesn't know it, and from a hub that doesn't add it.
+        /// agent, which doesn't know it, and in a turn's end recorded before the hub added it.
         #[serde(default)]
         started_at_ms: Option<i64>,
         /// The models the agent's own replies in the turn came from, in the order they first did, its subagents'
@@ -248,7 +248,7 @@ pub enum EventBody {
         subagent: Option<SubagentId>,
         failure: RequestFailure,
         /// It repeats the agent's own failed request before it. `None` for the first in a row, for a subagent's, from
-        /// the agent, which doesn't know, and from a hub that doesn't add it.
+        /// the agent, which doesn't know, and in a failure recorded before the hub added it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         again: Option<Again>,
     },
@@ -272,9 +272,7 @@ pub enum EventBody {
     ApprovalResolved {
         approval_id: ApprovalId,
         /// What was decided, with any secret answer taken out, as [`Decision::without_secrets`] says. `None` where
-        /// nobody decided, since the request was cancelled: by a stop, the agent's going, or the agent itself. A hub
-        /// from before decisions were recorded sends none, so whatever closed a request there reads as cancelled.
-        /// *Unconfirmed:* how one from such a hub reads.
+        /// nobody decided, since the request was cancelled: by a stop, the agent's going, or the agent itself.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         decision: Option<Box<Decision>>,
         /// The hub decided itself, as its settings have it allow what an agent with full access still asks about,

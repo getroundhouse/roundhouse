@@ -31,8 +31,7 @@ fn what_a_hub_asks_of_a_worker_it_reconnects_to_keeps_its_form() {
     assert_eq!(reply, WorkerResponse::RunningAgents(RunningAgentsReply { agents: vec![running] }));
 }
 
-/// Numbered for a hub that asked the worker to keep running without it, and not otherwise, which a hub from before
-/// numbering still reads.
+/// Numbered for a hub that asked the worker to keep running without it, and not otherwise.
 #[test]
 fn what_a_worker_sends_keeps_its_form_numbered_and_not() {
     let report = Report::Limits { limits: vec![], every_models_week: false };
@@ -92,7 +91,7 @@ fn what_a_worker_says_an_agent_is_writing_keeps_its_form() {
 }
 
 /// An agent trying a request again, as a worker sends it, and a tail that holds it, as a worker sends one to a hub
-/// that connects and a hub sends one to a client. A tail from before says nothing of it.
+/// that connects and a hub sends one to a client. A tail leaves it out while the agent isn't trying one again.
 #[test]
 fn what_a_worker_says_of_a_request_tried_again_keeps_its_form() {
     let retrying = r#"{"attempt":2,"of":10,"status":503,"delay_ms":1204}"#;

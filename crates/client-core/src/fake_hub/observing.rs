@@ -1,5 +1,5 @@
-//! The observations a fake hub sends, as a hub of version 5 sends them: those its world names, and a summary of each
-//! workspace's changes where the world has git's patch of them and names none.
+//! The observations a fake hub sends, as a hub sends them: those its world names, and a summary of each workspace's
+//! changes where the world has git's patch of them and names none.
 
 use std::collections::HashMap;
 

@@ -34,10 +34,10 @@ pub(super) struct Said {
 type ToDo = (String, Option<String>);
 
 /// What a workspace says of its repository's `reach`, if anything. Nothing while a push would be taken, or the hub
-/// couldn't tell, since a push that fails then says why itself, or while the default is each machine's own, which the
-/// hub has no token of to check, or the repository isn't on GitHub, or an older hub said its pushes went round the
-/// default, which this build's never says. A workspace on a provider that leaves GitHub to its machines has no reach
-/// to say, as client-core's copy of the workspace gives it. *Unconfirmed.*
+/// couldn't tell, since a push that fails then says why itself, or the repository isn't on GitHub, or the reach is
+/// `Unknown`: a newer hub's, or one of a kind since taken out that the hub's cache file holds until the next check. A
+/// workspace on a provider that leaves GitHub to its machines has no reach to say, as client-core's copy of the
+/// workspace gives it. *Unconfirmed.*
 pub(super) fn said(reach: &Reach) -> Option<Said> {
     let (repository, username, (then, install_at)) = match reach {
         Reach::Refused { repository, username, reason, installation } => {

@@ -171,8 +171,7 @@ fn what_an_agent_heard_of_its_accounts_limits_keeps_its_form_and_a_newer_window_
     assert_eq!(said, [(LimitWindow::SevenDays, None, 4, Some(9)), (LimitWindow::Unknown, None, 1, None)]);
 }
 
-/// Spelled out, since an agent could hear one by itself, and the log would hold it for good. A client from before
-/// models' weeks reads one as a window it has no name for, and leaves it out.
+/// Spelled out, since an agent could hear one by itself, and the log would hold it for good.
 #[test]
 fn a_models_own_week_keeps_its_form_with_the_models_label() {
     let event: SessionEvent = frame::decode(

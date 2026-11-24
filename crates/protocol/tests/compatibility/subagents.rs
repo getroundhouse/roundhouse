@@ -21,7 +21,8 @@ fn an_event_names_its_subagent_as_it_was_stored() {
     }
 }
 
-/// A subagent's background task names its subagent, and one from before tasks named theirs says only its call.
+/// A subagent's background task names its subagent, and one in a list recorded before tasks named theirs says only its
+/// call.
 #[test]
 fn a_subagents_task_names_it_or_only_its_call() {
     let named = r#"{"id":"t1","description":null,"kind":"subagent","call":"toolu_2","subagent":"task_1"}"#;
@@ -34,8 +35,8 @@ fn a_subagents_task_names_it_or_only_its_call() {
     }
 }
 
-/// What a subagent is writing, and which subagents work in the background, name it as the tail was first sent, so a
-/// peer from before reads whose each message is.
+/// What a subagent is writing, and which subagents work in the background, name it as the tail was first sent, since
+/// those are the names every peer reads to tell whose each message is.
 #[test]
 fn what_a_subagent_is_writing_names_it_as_it_was_sent() {
     let sent = r#"{"messages":[{"message_id":"m","parent_tool_use_id":"toolu_1","blocks":[]}],"in_background":[{"call":"toolu_1"}]}"#;
@@ -99,7 +100,7 @@ fn a_request_names_the_subagent_that_asks() {
 }
 
 /// Which record a subagent's is names it as `call`, as it did when a subagent was named by the call that started it,
-/// so a peer from then reads it.
+/// since that's the name every client reads.
 #[test]
 fn a_subagents_record_key_names_it_as_it_was_first_sent() {
     let key = RecordKey::Subagent { session_id: SessionId::from("s"), subagent: SubagentId::from("task_1") };

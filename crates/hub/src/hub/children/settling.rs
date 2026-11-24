@@ -47,7 +47,7 @@ impl Hub {
         for child in children {
             let there = match link.call(WorktreeThere { path: child.path.clone() }).await {
                 Ok(WorktreeThereReply { there }) => there,
-                // The worker can't say, as one from before the question, or one that's gone. Left for the next.
+                // The worker can't say, such as one that's gone. Left for the next.
                 Err(e) => return debug!(%id, "asking whether a worktree is there: {}", e.message),
             };
             let settled = match (&child.status, there) {

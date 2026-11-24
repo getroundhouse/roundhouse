@@ -34,9 +34,8 @@ pub enum RecordKey {
     Account {
         id: AccountId,
     },
-    /// A subagent, in its session. The hub never removes one, so this isn't sent, and a peer from before it would read
-    /// it as `Unknown`. Its ID is written `call`, as it was when a subagent was named by the call that started it, so a
-    /// peer from then reads it.
+    /// A subagent, in its session. The hub never removes one, so this isn't sent. Its ID is written `call`, as it was
+    /// when a subagent was named by the call that started it.
     Subagent {
         session_id: SessionId,
         #[serde(rename = "call")]
@@ -60,16 +59,14 @@ pub enum RecordKey {
     },
     /// Sent once the hub has let go of it, as [`ModelList`] says.
     ModelList(ModelListKey),
-    /// A hub has at most one, which it never removes once it has it, as [`HubUpdate`] says, so this isn't sent, and a
-    /// peer from before it would read it as `Unknown`.
+    /// A hub has at most one, which it never removes once it has it, as [`HubUpdate`] says, so this isn't sent.
     HubUpdate,
-    /// A proposal. The hub never removes one while its chat is there, so this isn't sent, and a peer from before it
-    /// would read it as `Unknown`.
+    /// A proposal. The hub never removes one while its chat is there, so this isn't sent.
     Proposal {
         id: ProposalId,
     },
     /// How one of a session's replies said out loud ended, by the reply. The hub never removes one while its chat is
-    /// there, so this isn't sent, and a peer from before it would read it as `Unknown`.
+    /// there, so this isn't sent.
     ReplyHeard {
         session_id: SessionId,
         message: MessageId,
@@ -177,15 +174,14 @@ pub struct Records {
     /// Empty from a hub from before apps of your own.
     #[serde(default)]
     pub github_apps: Vec<GithubApp>,
-    /// The terminals open in every workspace. Empty from a hub from before terminals.
+    /// The terminals open in every workspace. Empty when none is open.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub terminals: Vec<Terminal>,
-    /// What the agents that discover their own models offer, where the hub has been asked. Empty from a hub from
-    /// before it kept them.
+    /// What the agents that discover their own models offer, where the hub has been asked. Empty while it keeps none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub model_lists: Vec<ModelList>,
     /// The release the hub would update to, from a hub installed as a service, once it has read the feed, as
-    /// [`HubUpdate`] says. `None` from any other hub, and from one from before it read the feed.
+    /// [`HubUpdate`] says. `None` from any other hub.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hub_update: Option<HubUpdate>,
     /// The observations the hub sends at its own level, as [`ObservationKey::level`](super::ObservationKey::level)

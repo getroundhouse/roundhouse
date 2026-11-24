@@ -17,7 +17,7 @@ use crate::server::{Closer, Outgoing};
 /// What feeds a subscription at workspace `id`'s level, and what says once its first list is queued, so one the hub
 /// doesn't have is refused. What feeds it queues the list first, so it goes only to a subscription that has started,
 /// and the `Subscribe` that starts it waits for that before its reply, so a client that has the reply with no list
-/// before it knows the hub is from before workspaces had a level.
+/// before it knows the hub refused the workspace, such as one it no longer has.
 pub(super) async fn feeding(
     hub: &Arc<Hub>,
     id: WorkspaceId,

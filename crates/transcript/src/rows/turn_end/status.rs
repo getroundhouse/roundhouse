@@ -54,8 +54,8 @@ pub(in super::super) fn line(ended: &SessionEvent, around: &Around, find: &FindL
 
 /// When the turn that ended at `ended_at_ms` started, and how long it took, for its line and its card alike. A start
 /// after the end is no start. The time is by the hub's clock where it said when the turn started, which is what the
-/// working line counts by, so the time doesn't jump when the turn ends. A turn a hub recorded before it said that has
-/// the agent's own count.
+/// working line counts by, so the time doesn't jump when the turn ends. A turn whose end was recorded before the hub
+/// added that has the agent's own count.
 fn timed(ended_at_ms: i64, started_at_ms: Option<i64>, duration_ms: Option<u64>) -> (Option<i64>, Option<u64>) {
     let started_at_ms = started_at_ms.filter(|started| *started <= ended_at_ms);
     let took_ms = started_at_ms.and_then(|started| u64::try_from(ended_at_ms.checked_sub(started)?).ok());
@@ -127,7 +127,7 @@ mod tests {
     fn a_turn_is_timed_by_the_hubs_clock_where_the_hub_said_when_it_started() {
         assert_eq!(timed(1_600, Some(100), Some(1_400)), (Some(100), Some(1_500)));
         assert_eq!(timed(1_600, Some(1_600), Some(1_400)), (Some(1_600), Some(0)));
-        assert_eq!(timed(1_600, None, Some(1_400)), (None, Some(1_400)), "a hub that didn't say");
+        assert_eq!(timed(1_600, None, Some(1_400)), (None, Some(1_400)), "an end that doesn't say");
         assert_eq!(timed(1_600, None, None), (None, None));
     }
 

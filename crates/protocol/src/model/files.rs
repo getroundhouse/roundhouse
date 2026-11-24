@@ -169,8 +169,7 @@ mod tests {
         assert_eq!(newer, FileContents::Unknown);
     }
 
-    /// An image's bytes travel as base64 beside the kind they are, which a build from before images reads as
-    /// `Unknown`, and so shows as a file it can't show.
+    /// An image's bytes travel as base64 beside the kind they are, and read back as the same image.
     #[test]
     fn an_image_travels_as_its_kind_and_its_bytes_in_base64() {
         let image = FileContents::Image { media_type: MediaType::Png, data: AttachmentBytes::new(b"\x89PNG".to_vec()) };

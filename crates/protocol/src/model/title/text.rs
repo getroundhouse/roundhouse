@@ -34,8 +34,8 @@ impl Title {
         Some(Self(format!("{}…", shortened.trim_end())))
     }
 
-    /// A title as it was stored or sent, tidied, or `None` if nothing is left. Its length isn't checked, so one
-    /// from an older hub still reads.
+    /// A title as it was stored or sent, tidied, or `None` if nothing is left. Its length isn't checked, so one the
+    /// hub stored long, as an earlier build could, still reads.
     pub fn tidied(text: &str) -> Option<Self> {
         let words = one_line(text, usize::MAX);
         (!words.is_empty()).then_some(Self(words))

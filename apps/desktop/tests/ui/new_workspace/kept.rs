@@ -64,8 +64,8 @@ fn whats_in_the_dialog_is_there_when_the_app_opens_again_and_is_the_first_chats(
     let making = Held::checkout(&stack);
     ui.press("enter");
     ui.wait("it to start making it", |_| making.runs() == 1);
-    // The hub goes on keeping plan mode until the first chat has it, and one from before it kept the dialog never
-    // empties it, so it's the dialog that turns it off for the next workspace.
+    // The hub goes on keeping plan mode until the first chat has it, so it's the dialog that turns it off for the next
+    // workspace.
     assert!(!ui.dialog_planning(), "Create turns plan mode off in the dialog itself");
     making.release();
     ui.wait_for_a_new_workspace(before);

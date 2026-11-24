@@ -78,16 +78,16 @@ fn the_same_draft_typed_later_moves_when_it_was_typed_and_no_revision() {
 }
 
 #[test]
-fn a_change_from_a_client_that_doesnt_say_when_it_was_typed_is_typed_as_it_comes() {
+fn a_change_that_doesnt_say_when_it_was_typed_is_typed_as_it_comes() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let typed = now_ms();
     store.set_draft(&id(), &DraftToKeep::new("typed here"), Some(typed)).unwrap();
 
-    let older_client = store.set_draft(&id(), &DraftToKeep::new("typed on an older build"), None).unwrap();
+    let untimed = store.set_draft(&id(), &DraftToKeep::new("a new workspace's first prompt"), None).unwrap();
     let before_it = store.set_draft(&id(), &DraftToKeep::new("typed before"), Some(typed - 1));
 
-    assert!(older_client.changed);
+    assert!(untimed.changed);
     assert!(matches!(before_it, Err(StoreError::TypedEarlier)), "it was kept");
 }
 

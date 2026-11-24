@@ -103,9 +103,9 @@ async fn a_repository_from_before_opens_with_its_reach_not_known_until_the_first
     assert_eq!(checked.reach(), refused());
 }
 
-/// A repository whose address is still to be read, as one an older hub added, with no reach known, as on the first
-/// start after reach left the database, can't be told which repository on GitHub it is, so the checks have a worker
-/// on the hub's machine read its address as they start, and check it then, rather than once a worker next links.
+/// A repository whose address is still to be read, as one just added, or added again, with no reach known, as on the
+/// first start after reach left the database, can't be told which repository on GitHub it is, so the checks have a
+/// worker on the hub's machine read its address as they start, and check it then, rather than once a worker next links.
 #[tokio::test]
 async fn as_the_checks_start_a_repository_whose_reach_and_address_arent_known_has_its_address_read_and_is_checked() {
     let github = refusing().await;

@@ -15,13 +15,11 @@ pub struct GithubAccount {
     /// Who it is, by GitHub's number for its user, as GitHub said as the account was connected. What GitHub calls the
     /// user now is the observation `GithubUsername`.
     pub user: GithubUserNumber,
-    /// `None` for an app's installation that was disconnected or uninstalled there, and from a hub from before
-    /// Disconnect removed an account, for one that was disconnected.
+    /// `None` for an app's installation that was disconnected or uninstalled there.
     #[serde(default)]
     pub held_login: Option<HeldGithubLogin>,
     /// Where it's installed, for one that's an installation of an app of your own, whose `user` is then the app's bot.
-    /// It stays once its login has gone, as when the app was removed or uninstalled there. `None` for any other, and
-    /// from a hub from before apps.
+    /// It stays once its login has gone, as when the app was removed or uninstalled there. `None` for any other.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub installation: Option<GithubInstallation>,
     #[serde(default)]

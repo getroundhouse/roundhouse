@@ -129,8 +129,7 @@ impl HubLink {
         self.link.feed().map(|feed| feed.snapshot())
     }
 
-    /// `workspace`'s pull request, as the hub sent it, or, from a hub too old to send it, as its record has it. `None`
-    /// until the hub has looked.
+    /// `workspace`'s pull request, as the hub sent it. `None` until the hub has looked.
     pub(crate) fn pull_request_of(&self, workspace: &Workspace) -> Option<PullRequestFound> {
         self.marks.as_ref()?.0.feed().pull_request(workspace)
     }

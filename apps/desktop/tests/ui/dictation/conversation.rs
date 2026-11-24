@@ -308,7 +308,7 @@ fn the_hub_refusing_to_turn_the_mode_off_says_why_and_it_can_be_asked_again(cx: 
         ui.wait(&format!("the refusal, asking {asking}"), |ui| ui.view().error.is_some());
         assert_eq!(
             ui.view().error.as_deref(),
-            // As a hub too old to have conversation mode refuses, which is how the fake one refuses a change.
+            // The fake hub refuses every change as unsupported, which reads as this.
             Some("Couldn't turn conversation mode off: this hub can't do that until it's updated")
         );
         assert!(ui.has(CONVERSATION_BAR), "the mode is still on, asking {asking}");

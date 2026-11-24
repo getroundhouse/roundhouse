@@ -9,7 +9,7 @@ use crate::model::{ReferenceAsk, ReferenceRead, WorkspaceId};
 /// pull request is. The hub keeps what it found for every
 /// client, and reads one again only once what it has is a minute old, so a client asks for those it shows, as often
 /// as it likes, and two clients showing one chat ask GitHub once. Safe to send again, since it changes nothing but
-/// what the hub keeps of GitHub. A hub older than this refuses it as unsupported.
+/// what the hub keeps of GitHub.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ReferencesRead {
     pub workspace: WorkspaceId,

@@ -63,7 +63,8 @@ pub struct ProposalOption {
     pub body: String,
     /// The letter the agent gave it, such as to keep the one it had in the revision before when an option before it
     /// was dropped. `None` takes the first letter no other option of its question has, as
-    /// [`ProposalQuestion::letter`] says. A peer from before reads each option by its place instead.
+    /// [`ProposalQuestion::letter`] says. A worker from before options had letters reads each option by its place
+    /// instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub letter: Option<OptionLetter>,
 }

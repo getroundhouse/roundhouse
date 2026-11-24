@@ -17,8 +17,7 @@ pub struct Propose {
     pub call: Option<ToolUseId>,
     pub key: AskKey,
     /// The images what the agent wrote points to in the worktree, each by the address it gives it, as a reply's text
-    /// names them, which the hub keeps with the revision. A hub from before images ignores them, and the page draws
-    /// none.
+    /// names them, which the hub keeps with the revision.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<LinkedImage>,
     /// The bytes of each of `images`, as the worker read them, which the hub keeps as the chat's, as it does a reply's.

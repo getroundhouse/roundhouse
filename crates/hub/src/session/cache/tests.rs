@@ -54,7 +54,7 @@ fn nothing_is_found_without_a_request_before_or_by_one_that_isnt_a_prompts_first
 
     assert_eq!(found_expired(None, &request(14_800, 238_000), 2_000), None);
     assert_eq!(found_expired(Some(&before()), &not_first, 2_000), None);
-    assert_eq!(found_expired(Some(&unsaid), &request(14_800, 238_000), 2_000), None, "a hub that didn't keep it");
+    assert_eq!(found_expired(Some(&unsaid), &request(14_800, 238_000), 2_000), None, "the last read and wrote none");
 }
 
 #[test]

@@ -44,8 +44,8 @@ struct Offered {
 
 impl Offered {
     /// For a chat that runs `model` at `effort`: the models and levels its agent is offered, each level this build can
-    /// name, or from a hub that doesn't describe its agent, only what the chat runs now, since nothing else is known to
-    /// be one it takes.
+    /// name, or, before the hub has described the agent or for a kind this build has no description of, only what the
+    /// chat runs now, since nothing else is known to be one it takes.
     fn to(agent: Option<&AgentDescription>, model: &ModelName, effort: Effort) -> Offered {
         let Some(agent) = agent else {
             let models = vec![(model.clone(), SharedString::from(model.as_str().to_string()))];
@@ -186,7 +186,7 @@ mod tests {
 
         assert_eq!(named("fable", Some(&agent())), "Fable");
         assert_eq!(named("claude-opus-5-5", Some(&agent())), "claude-opus-5-5", "a full ID the agent doesn't offer");
-        assert_eq!(named("opus", None), "opus", "from a hub that doesn't describe its agent");
+        assert_eq!(named("opus", None), "opus", "with no description of its agent");
     }
 
     #[test]

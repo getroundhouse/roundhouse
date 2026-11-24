@@ -31,7 +31,7 @@ impl Request for SessionQueue {
 /// Changes the text of the prompt queued under `client_msg_id`, which keeps its place and the files it was queued
 /// with, so with any the text can be empty. Refused with `Conflict` once it's been sent, since the agent has it by
 /// then, and with `NotFound` once it's been taken out, so a change that comes too late is never queued as a prompt
-/// of its own. A hub older than this refuses it as unsupported.
+/// of its own.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionChangeQueued {
     pub id: SessionId,

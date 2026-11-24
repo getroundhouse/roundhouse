@@ -11,7 +11,7 @@ use crate::session::effort_name;
 pub(crate) fn print_agents(client: &Client) -> anyhow::Result<()> {
     let agents = Agents::read(client)?;
     if agents.described().is_empty() {
-        anyhow::bail!("the hub doesn't describe its agents, which one older than this client can't");
+        anyhow::bail!("the hub doesn't describe its agents: it refused to, or its reply couldn't be read");
     }
     let new_chats = agents.for_new_chat();
     for agent in agents.described().iter().filter(|agent| agent.kind != AgentKind::Unknown) {

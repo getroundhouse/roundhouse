@@ -91,7 +91,8 @@ fn options(session: &Session) -> String {
     format!("model={} mode={} effort={}", session.model.as_str(), mode_name(session.mode), effort_name(&session.effort))
 }
 
-/// What the hub says `kind` offers, which only a hub older than this client doesn't.
+/// What the hub says `kind` offers. Fails for a kind this build can't name, and when the hub refused to describe its
+/// agents or its reply couldn't be read.
 fn described(agents: &Agents, kind: AgentKind) -> anyhow::Result<&AgentDescription> {
     match agents.of(kind) {
         Some(agent) => Ok(agent),

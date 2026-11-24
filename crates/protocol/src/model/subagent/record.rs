@@ -26,8 +26,8 @@ pub struct Subagent {
     /// It works on while the agent carries on, rather than its call waiting for it.
     #[serde(default)]
     pub in_background: bool,
-    /// The model its replies come from, as its newest reply named it. `None` until it's replied, and from a hub from
-    /// before this was kept.
+    /// The model its replies come from, as its newest reply named it. `None` until it's replied, and for one that
+    /// replied before this was kept, whose stored row may not say.
     #[serde(default)]
     pub model: Option<ModelName>,
     pub status: SubagentStatus,
@@ -37,15 +37,16 @@ pub struct Subagent {
     pub ended_at_ms: Option<i64>,
     /// About how many tokens its conversation holds, as its agent last counted them, as a context's `used_tokens` is,
     /// and not what its requests took in all. So it can fall, as when the subagent compacts. `None` until the agent
-    /// says, from an agent that can't say what it holds, and from a hub from before this was kept.
+    /// says, from an agent that can't say what it holds, and for one that ended before this was kept, whose stored row
+    /// may not say.
     #[serde(default)]
     pub context_tokens: Option<u64>,
     /// How many calls it's made.
     #[serde(default)]
     pub calls: u32,
     /// What it's done lately, which its call shows while it works, with each call typed, as
-    /// [`crate::capability::calls`] says a call is stored. Only while it works: it's emptied when it ends. `None` from a
-    /// hub that doesn't keep it.
+    /// [`crate::capability::calls`] says a call is stored. Only while it works: it's emptied when it ends. `None` until
+    /// it's done something, and where the hub can't read what it stored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lately: Option<Lately>,
     /// What it reported, once it finished.

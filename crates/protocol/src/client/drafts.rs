@@ -1,7 +1,6 @@
 //! The requests that keep what's typed and not sent, so it's there after the app restarts, and in every client: in a
 //! session's composer, in answer to its question, on a workspace's diff, and in the new-workspace dialog, with its
-//! files. Keeping what's kept already changes nothing, so sending one again does nothing more. A hub older than one
-//! refuses it, as `is_unsupported` says.
+//! files. Keeping what's kept already changes nothing, so sending one again does nothing more.
 
 use serde::{Deserialize, Serialize};
 

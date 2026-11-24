@@ -114,8 +114,7 @@ impl Reply for HubSettings {
 }
 
 /// What each kind of agent the hub runs is called and offers, as [`AgentDescription`] says. It doesn't change while
-/// the hub runs, so a client asks once a connection. A hub older than this refuses it as unsupported, and runs only
-/// Claude.
+/// the hub runs, so a client asks once a connection.
 #[derive(Clone, Copy, Debug)]
 pub struct AgentList;
 

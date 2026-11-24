@@ -81,8 +81,7 @@ impl ReadLimit {
 }
 
 /// Reads the agent's own events, or those of the subagent `subagent`, from `from_place` on, as [`SessionRead`] reads
-/// every event, up to the same [`ReadLimit`]. A hub older than this refuses it as unsupported, and a client reads by
-/// `seq`.
+/// every event, up to the same [`ReadLimit`].
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionReadPlaces {
     pub id: SessionId,
@@ -118,7 +117,7 @@ impl Reply for PlacedEvents {
 }
 
 /// Every prompt recorded in the session, oldest first, each as one line, for finding one in a long chat without
-/// reading the whole log. A hub older than this refuses it as unsupported.
+/// reading the whole log.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionPromptList {
     pub id: SessionId,
@@ -145,7 +144,7 @@ impl Reply for Prompts {
 }
 
 /// Every compaction of the agent's own conversation that compacted, oldest first, each as one line, for marking them
-/// in a long chat without reading the whole log. A hub older than this refuses it as unsupported.
+/// in a long chat without reading the whole log.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionCompactionList {
     pub id: SessionId,
@@ -173,8 +172,7 @@ impl Reply for Compactions {
 
 /// Which of the agent's own events, or those of the subagent `subagent`, hold `query`, by place, as
 /// [`crate::find::Needle::is_in_event`] says, for finding text in a long chat without reading the whole log. An empty
-/// query, or one longer than [`crate::find::Needle::MOST_CHARS`], is refused as invalid, and a hub older than this
-/// refuses it as unsupported.
+/// query, or one longer than [`crate::find::Needle::MOST_CHARS`], is refused as invalid.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionFind {
     pub id: SessionId,

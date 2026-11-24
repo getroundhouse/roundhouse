@@ -7,8 +7,7 @@ use protocol::frame;
 use protocol::model::{AgentKind, LoginDescription, ModelName};
 
 /// A kind is described by its claims, which say the models a chat can be given and the one it starts on, beside what
-/// isn't a capability. A hub from before said each in fields of their own, which a client of this build doesn't read,
-/// so it can't read that hub's agents, as it can't read its sessions.
+/// isn't a capability.
 #[test]
 fn what_each_kind_offers_reads_from_its_claims_and_what_a_newer_hub_adds_reads_as_unknown() {
     let reply = br#"{"frame":"reply","id":5,"response":{"result":"agents","agents":[{"kind":"claude","name":"Claude Code","usage_heading":"Claude usage","capabilities":{"settings":{"models":{"offered":[{"model":"opus","label":"Opus","efforts":["low","xhigh","future"],"default_effort":"xhigh"},{"model":"haiku","label":"Haiku"}],"default_model":"opus"},"effort":{}},"context":{"compaction":{"keeping":"read"}},"from_a_newer_hub":{}},"login":{"made_with":"claude setup-token","lasts_ms":31536000000,"from_a_newer_hub":true},"from_a_newer_hub":true},{"kind":"from_a_newer_hub","name":"Other","usage_heading":"Other usage","capabilities":{}}]}}"#;

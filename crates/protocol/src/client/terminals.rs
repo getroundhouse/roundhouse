@@ -1,5 +1,5 @@
-//! The requests about a workspace's terminals, whose shells its worker runs. A hub older than terminals refuses each,
-//! as `is_unsupported` says.
+//! The requests about a workspace's terminals, whose shells its worker runs. A hub whose worker is from before
+//! terminals were sent as rows refuses those the worker doesn't know, as `is_unsupported` says.
 
 use serde::{Deserialize, Serialize};
 

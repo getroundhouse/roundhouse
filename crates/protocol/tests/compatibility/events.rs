@@ -174,8 +174,7 @@ fn a_turn_the_agent_started_by_itself_keeps_the_form_and_the_kind_its_stored_und
     assert_eq!(ended[1].wait.as_ref().map(|wait| &wait.watching), Some(&Watching::Unknown));
 }
 
-/// The hub keeps conversation mode's start in the form it sends, and an older client reads it as an event it can't
-/// draw, as `Unknown` does.
+/// The hub keeps conversation mode's start in the form it sends.
 #[test]
 fn conversation_mode_turned_on_keeps_its_form() {
     let started = EventBody::ConversationStarted {

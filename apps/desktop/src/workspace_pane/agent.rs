@@ -7,8 +7,8 @@ use protocol::model::{AgentDescription, AgentKind};
 use super::WorkspacePane;
 
 impl WorkspacePane {
-    /// What the hub says of the agent the chat showing runs. `None` with no chat, and from a hub that doesn't describe
-    /// it.
+    /// What the hub says of the agent the chat showing runs. `None` with no chat, for a kind this build can't name, as
+    /// a newer hub's, and when the hub refused to describe its agents or its reply couldn't be read.
     pub(super) fn agent(&self) -> Option<AgentDescription> {
         let kind = self.session()?.agent;
         self.records.snapshot().agents().of(kind).cloned()
@@ -39,7 +39,7 @@ impl WorkspacePane {
     }
 
     /// Whether the agent of the chat showing compacts when asked, so `Compact now` and a typed `/compact` ask it to.
-    /// One the hub doesn't describe isn't asked, since it may not.
+    /// One without a description, as [`WorkspacePane::agent`] says, isn't asked, since it may not.
     pub(super) fn compacts(&self) -> bool {
         self.session().and_then(|s| s.agent_capabilities.as_ref()).map_or_else(
             || self.agent().is_some_and(|agent| agent.compacts()),

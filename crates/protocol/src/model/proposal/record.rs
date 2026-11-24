@@ -26,7 +26,7 @@ pub struct Proposal {
     pub revisions: Vec<RevisionSummary>,
     /// Once the agent withdrew it, as no longer of use, why and when, so nothing more can be said to it. It's on the
     /// proposal and not on a revision, since it's the agent's act on the whole proposal, where a [`Response`] is the
-    /// person's to one revision. A hub from before withdrawing sends none. *Unconfirmed.*
+    /// person's to one revision. `None` until it's withdrawn. *Unconfirmed.*
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub withdrawn: Option<Withdrawal>,
     pub created_at_ms: i64,

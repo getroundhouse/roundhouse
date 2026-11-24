@@ -1,5 +1,5 @@
 //! Every message about a list of models, spelled out, since a client and its hub can each be a different build, and
-//! an agent's description says whether its models are discovered in a form a client from before reads.
+//! an agent's description says whether its models are discovered beside the models it offers, which every build reads.
 
 use protocol::capability::settings::Effort;
 use protocol::capability::settings::{EffortOffer, ModelCatalog, ModelOffer, Models, Stage};
@@ -88,7 +88,8 @@ fn a_catalog_keeps_its_form_as_an_observation_and_its_removal() {
     );
 }
 
-/// A hub from before them lists none, and a newer hub's state of a lookup reads as unknown rather than failing the list.
+/// A hub with no lists leaves them out, and a newer hub's state of a lookup reads as unknown rather than failing the
+/// list.
 #[test]
 fn a_list_of_records_reads_without_them_and_a_newer_state_reads_as_unknown() {
     let before: Records =
@@ -101,9 +102,10 @@ fn a_list_of_records_reads_without_them_and_a_newer_state_reads_as_unknown() {
     assert_eq!(newer.lookup, ModelLookup::Unknown);
 }
 
-/// A client from before reads the offered models of both forms, which is none before they're discovered.
+/// Both forms say the offered models, which is none before they're discovered, since `offered` has no default in any
+/// build, so every build needs it to read either form.
 #[test]
-fn an_agents_models_say_whether_theyre_discovered_in_a_form_a_client_from_before_reads() {
+fn an_agents_models_say_whether_theyre_discovered_beside_the_models_offered() {
     keeps_its_form(&Models::Discoverable, r#"{"discoverable":true,"offered":[]}"#);
     keeps_its_form(&Models::Static(ModelCatalog::default()), r#"{"offered":[]}"#);
     let starting = ModelCatalog { offered: Vec::new(), default_model: Some(ModelName::named("opus")) };

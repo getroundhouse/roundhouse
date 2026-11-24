@@ -1,5 +1,5 @@
-//! Explicit remote targets, independent of the checked-out branch. New methods prevent older hubs from silently
-//! interpreting a plural wait as a legacy single-branch wait.
+//! Explicit remote targets, independent of the checked-out branch. They're asked with methods of their own, apart from
+//! the legacy single-branch wait's.
 
 use serde::{Deserialize, Serialize};
 

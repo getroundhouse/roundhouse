@@ -204,7 +204,7 @@ fn a_prompt_whose_settling_isnt_loaded_stands_as_the_hubs_list_says() {
     let mut log = SessionLog::new(Place::default());
     log.apply_event(event(Seq::new(1), prompt()));
     log.apply_event(event(Seq::new(3), notice()));
-    assert_eq!(log.prompt_state(Seq::new(1)), PromptState::Taken, "guessed, as from a hub that doesn't say");
+    assert_eq!(log.prompt_state(Seq::new(1)), PromptState::Taken, "guessed, before the hub's list has arrived");
 
     let dropped = SettledAt { seq: Seq::new(2), place: Place::new(2), how: Some(Settlement::Dropped) };
     log.list_prompts(vec![protocol::model::PromptLine::new(Seq::new(1), "steer", 0).settled_at(dropped)]);

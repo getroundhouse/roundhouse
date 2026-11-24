@@ -112,7 +112,7 @@ async fn a_request_sent_again_gets_what_it_made_however_things_have_changed_sinc
 async fn a_move_cut_short_is_settled_by_whether_its_worker_says_the_worktree_is_there() {
     use WorkspaceStatus::{Archived, Ready};
     let there = |there| Ok(WorkerResponse::WorktreeThere(WorktreeThereReply { there }));
-    let cant_say = Err(ApiError::new(ErrorCode::Worker, "a worker that doesn't know the question"));
+    let cant_say = Err(ApiError::new(ErrorCode::Worker, "a worker that's gone"));
     let (seen_on, made_on, ours, another) = ("fix-the-login-bug", "alder", None, Some("0.9.0"));
     let last_seen = Branch { name: seen_on.into(), tip: "c1".into(), upstream: None };
     let last_seen = Branches { head: Head::Branch { name: seen_on.into() }, had: vec![last_seen] };

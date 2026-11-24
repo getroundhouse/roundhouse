@@ -212,6 +212,6 @@ fn whats_sent_is_for_the_default_it_names_and_no_account_for_none() {
     assert!(!SentCredential::Unknown.is_for(None), "a newer hub's can't be told");
     assert_eq!(settings(Some(&ada)).sent_for_default(), Some(&blocked));
     assert_eq!(settings(Some(&grace)).sent_for_default(), None, "the default changed, and it hasn't been worked out");
-    let older = GithubSettings { account: Some(ada), sent: None, left_to_machine: Vec::new(), set_up: Vec::new() };
-    assert_eq!(older.sent_for_default(), None, "from a hub from before it said");
+    let unrecorded = GithubSettings { account: Some(ada), sent: None, left_to_machine: Vec::new(), set_up: Vec::new() };
+    assert_eq!(unrecorded.sent_for_default(), None, "the hub hasn't recorded what it sends");
 }
