@@ -4,9 +4,9 @@ use super::super::{GithubUsername, ProviderName, Rev};
 
 /// Who a provider's machines' own `gh` was logged in to github.com as, as a record a hub from before Settings' Providers
 /// kept, keyed by the provider, which asked the first worker of each provider it linked to, as
-/// [`FindGithubLogin`](crate::worker::FindGithubLogin) says. A hub from since sends none, and has the hub's own
-/// machine's on its settings, as [`GithubSettings::machine`](crate::model::GithubSettings::machine) says. It never
-/// carries the token.
+/// [`FindGithubLogin`](crate::worker::FindGithubLogin) says. A hub from since sends none, and says who its own
+/// machine's `gh` is logged in as when a client asks, with
+/// [`HubMachineLogins`](crate::client::github_accounts::HubMachineLogins). It never carries the token.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct FoundGithubLogin {
     pub provider: ProviderName,
