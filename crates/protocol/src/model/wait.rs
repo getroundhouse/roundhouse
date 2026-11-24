@@ -22,8 +22,10 @@ pub struct Wait {
     /// `None` while it waits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended: Option<WaitEnded>,
-    /// Explicit remote targets; absent for a legacy wait on the checked-out branch. Sent as `watching`, the name it
-    /// took when its pull requests changed form under `watch`.
+    /// The pull requests it watches, as its agent asked, and what it saw of them as it started. `None` for one the
+    /// singular `wait_for_pull_request` tool started on the workspace's own pull request, which is stored so once it has
+    /// ended, and which a hub of this build has none of open. Sent as `watching`, the name it took when its pull
+    /// requests changed form under `watch`.
     #[serde(default, rename = "watching", skip_serializing_if = "Option::is_none")]
     pub watch: Option<Box<super::PullRequestWatch>>,
 }

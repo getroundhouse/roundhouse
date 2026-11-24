@@ -1,6 +1,9 @@
 //! How many migrations there were before some of them, counting the floor's, so a test can make an older database and
 //! see what migrating keeps.
 
+/// How many migrations a database at the floor has run, which are the floor's.
+pub(crate) const AT_THE_FLOOR: usize = super::migration::STARTS_AT.migrations;
+
 /// How many migrations there were before each workspace recorded its settled repository source and worker environment.
 pub(crate) const BEFORE_WORKSPACE_PLACEMENT: usize = 80;
 

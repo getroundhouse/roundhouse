@@ -103,19 +103,6 @@ impl Store {
         Ok(update.query_row(params![ended.at_ms, text_of(&ended.how), id.as_str()], wait_from_row).optional()?)
     }
 
-    /// Ends every open wait on the workspace's own pull request, which an older worker's `wait_for_pull_request`
-    /// started, as called off, at `at_ms`, since nothing judges one now, and returns those it ended. An agent still
-    /// asking after one hears so, and starts another on explicit pull requests if it still needs one.
-    pub fn call_off_unwatched_waits(&self, at_ms: i64) -> Result<Vec<Wait>, StoreError> {
-        let conn = lock(&self.writer);
-        let mut update = conn.prepare_cached(&format!(
-            "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE ended_at_ms IS NULL AND watch IS NULL RETURNING {}",
-            WaitColumns::LIST
-        ))?;
-        let ended = update.query_map(params![at_ms, text_of(&WaitEnd::Cancelled)], wait_from_row)?;
-        Ok(ended.collect::<rusqlite::Result<_>>()?)
-    }
-
     /// Every session with a wait that hasn't ended.
     pub fn sessions_waiting(&self) -> Result<HashSet<SessionId>, StoreError> {
         let conn = lock(&self.reader);

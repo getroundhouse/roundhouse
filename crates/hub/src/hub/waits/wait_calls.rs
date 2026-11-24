@@ -70,21 +70,6 @@ impl Hub {
         Ok(())
     }
 
-    /// Calls off the waits on a workspace's own pull request that an older worker's `wait_for_pull_request` started and
-    /// that are still open, as the hub starts, since nothing judges one now.
-    pub(crate) async fn call_off_unwatched_waits(&self) {
-        let at_ms = now_ms();
-        match self.blocking(move |store| store.call_off_unwatched_waits(at_ms)).await {
-            Ok(called_off) => {
-                for wait in called_off {
-                    info!(wait = %wait.id, "a wait from an older worker's tool was called off");
-                    self.announce_chat_of(&wait).await;
-                }
-            }
-            Err(e) => warn!("couldn't call off the waits from an older worker's tool: {}", e.message),
-        }
-    }
-
     pub(super) async fn own_wait(&self, session_id: &SessionId, id: WaitId) -> Result<Wait, ApiError> {
         let wait = self.blocking(move |store| store.wait(&id)).await?;
         if wait.session_id != *session_id {

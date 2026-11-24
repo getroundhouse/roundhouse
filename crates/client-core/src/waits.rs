@@ -22,8 +22,9 @@ pub fn watched(watching: &Watching) -> String {
 /// what it's for once, in the count, as "Waiting on #6, #7 · 2 required checks running", since only those count, and
 /// the bar counts every check. A wait until a merge says where the pull request holding it stands, in the bar's words,
 /// as "Waiting on #9 to merge · Queued to merge", naming it when the wait watches several, as "Waiting on #6, #7 to
-/// merge · #6: Review required". A wait the singular tool started, which only an older hub can still have open, has no
-/// reading, so it says only what it waits on. `read` is what the wait last read, as
+/// merge · #6: Review required". A wait with no reading says only what it waits on. That's any wait until the hub has
+/// said what it read, and one the singular tool started, which nothing reads, and which is open only where an earlier
+/// hub's calling it off failed. `read` is what the wait last read, as
 /// [`Snapshot::wait_read`](crate::records::Snapshot::wait_read) says.
 pub fn waiting(wait: &Wait, read: Option<&WaitRead>) -> String {
     let watching = watches(wait, read);
@@ -246,7 +247,8 @@ mod tests {
         assert_eq!(merged, "Waiting on #7, #6 to merge \u{b7} #7: 1 check running", "once #6 has merged");
     }
 
-    /// A wait the singular tool started has no reading of its pull request, so its line says only what it waits on.
+    /// A wait with no reading of its pull request, as one the singular tool started has none, says only what it waits
+    /// on.
     #[test]
     fn a_wait_with_no_reading_says_only_what_it_waits_on() {
         let wait = Wait { watch: None, until: WaitUntil::Checks, ..pull_request_wait("w1") };

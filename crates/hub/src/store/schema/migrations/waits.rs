@@ -74,3 +74,13 @@ pub(super) const SEEN_DROPPED: &str = r"
     ALTER TABLE waits DROP COLUMN seen_left_queue_at_ms;
     ALTER TABLE waits DROP COLUMN seen_changes_requested_at_ms;
 ";
+
+/// Each wait on a workspace's own pull request that the singular `wait_for_pull_request` tool started and that's still
+/// open, ended as called off, now, since nothing judges one. That tool went before the floor, but the two builds before
+/// it left a database at the floor's schema with such waits in it. Ending one moves its chat's revision, as any wait's
+/// end does, and an agent's CLI asking after one hears it was called off.
+pub(super) const UNWATCHED_CALLED_OFF: &str = r"
+    UPDATE waits
+        SET ended_at_ms = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), ended = 'cancelled'
+        WHERE watch IS NULL AND ended_at_ms IS NULL;
+";
