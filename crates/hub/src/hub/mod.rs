@@ -64,12 +64,15 @@ mod coordinator;
 pub(crate) use coordinator::Hub;
 use coordinator::{KEEPS_WORKERS, new_id, off_thread};
 pub(crate) use dirs::HubDirs;
+#[cfg(test)]
+pub(crate) use observations::{
+    AccountIdentity, Referenced, ReleaseOffered, WaitKey, WaitRead, WorkspaceBranches, WorkspaceChanges,
+    WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen, WorkspaceWorkerBuild,
+};
 pub(crate) use observations::{
     GithubAppBot, GithubAppSaid, GithubProfile, GithubUsername, InstalledOn, Kind, Observations, RepositoryReach,
     SessionCache, SessionContext, SessionKey, SessionTodos,
 };
-#[cfg(test)]
-pub(crate) use observations::{ReleaseOffered, WaitKey, WaitRead, WorkspaceChanges, WorkspaceLines};
 
 mod devices;
 mod dirs;
