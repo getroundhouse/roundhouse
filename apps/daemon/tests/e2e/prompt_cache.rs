@@ -5,14 +5,37 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use client_core::Client;
 use protocol::capability::settings::Settings;
 use protocol::event::EventBody;
-use protocol::model::{CacheTtl, ModelName, PromptCache};
+use protocol::model::{CacheTtl, ModelName, PromptCache, SessionId};
 
-use crate::support::{Stack, wait_for_turn_end};
+use crate::support::{Stack, wait_for_turn_end, wait_until};
 
 fn now_ms() -> i64 {
     i64::try_from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()).unwrap()
+}
+
+/// What the chat's record says the cache holds, once that's `as_expected`. The hub tells of the cache as a turn ends,
+/// a moment after the chat's record says the turn has, so a record read between the two has the cache as it was before
+/// the turn.
+fn cache_once(
+    client: &Client,
+    session: &SessionId,
+    what: &str,
+    as_expected: impl Fn(Option<&PromptCache>) -> bool,
+) -> Option<PromptCache> {
+    let mut cache = None;
+    wait_until(what, || {
+        cache = client.session_get(session).unwrap().prompt_cache;
+        as_expected(cache.as_ref())
+    });
+    cache
+}
+
+/// What the cache holds of the chat's conversation, once its record says it holds some.
+fn cache_held(client: &Client, session: &SessionId) -> PromptCache {
+    cache_once(client, session, "the cache to hold the conversation", |cache| cache.is_some()).unwrap()
 }
 
 #[test]
@@ -27,7 +50,7 @@ fn a_chats_record_says_when_its_agents_newest_request_was_sent_and_for_how_long_
     wait_for_turn_end(&client, &session.id, 1);
     let after = now_ms();
 
-    let cache = client.session_get(&session.id).unwrap().prompt_cache.expect("the turn's request, on the record");
+    let cache = cache_held(&client, &session.id);
     assert_eq!((cache.ttl, cache.model.clone()), (CacheTtl::OneHour, Some(ModelName::named("fake-model"))));
     // Sent as long before the hub heard of it as the model took to start answering, a minute in the fake.
     assert!((before - 60_000..=after - 60_000).contains(&cache.used_at_ms), "{before} {cache:?} {after}");
@@ -40,12 +63,15 @@ fn a_prompt_whose_request_wrote_the_conversation_again_found_the_cache_expired_a
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    let PromptCache { used_at_ms: first_sent, .. } = client.session_get(&session.id).unwrap().prompt_cache.unwrap();
+    let PromptCache { used_at_ms: first_sent, .. } = cache_held(&client, &session.id);
 
     client.session_prompt(&session.id, "cold", None).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 2);
     let prompt = events.iter().rfind(|e| matches!(e.body, EventBody::UserPrompt { .. })).unwrap().seq;
-    let cold_sent = client.session_get(&session.id).unwrap().prompt_cache.unwrap().used_at_ms;
+    let cold = cache_once(&client, &session.id, "the cold prompt's request", |cache| {
+        cache.is_some_and(|cache| cache.used_at_ms != first_sent)
+    });
+    let cold_sent = cold.unwrap().used_at_ms;
     client.session_prompt(&session.id, "say:warm again", None).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 3);
 
@@ -65,15 +91,15 @@ fn a_compacted_chats_cache_holds_none_of_its_conversation_and_a_later_request_fi
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    assert!(client.session_get(&session.id).unwrap().prompt_cache.is_some());
+    cache_held(&client, &session.id);
 
     client.session_compact(&session.id, None).unwrap();
     wait_for_turn_end(&client, &session.id, 2);
-    assert_eq!(client.session_get(&session.id).unwrap().prompt_cache, None);
+    cache_once(&client, &session.id, "the cache to hold none of the conversation", |cache| cache.is_none());
 
     client.session_prompt(&session.id, "say:hello again", None).unwrap();
     wait_for_turn_end(&client, &session.id, 3);
-    assert!(client.session_get(&session.id).unwrap().prompt_cache.is_some());
+    cache_held(&client, &session.id);
 }
 
 #[test]
@@ -83,6 +109,7 @@ fn choosing_another_model_leaves_nothing_cached_and_choosing_the_same_leaves_the
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
+    cache_held(&client, &session.id);
     let model = |model| Settings { model: Some(model), ..Settings::default() };
 
     let same = client.session_configure(&session.id, model(session.model.clone())).unwrap();
