@@ -66,3 +66,11 @@ fn without_read(watch: &str) -> Option<String> {
     fields.insert("affected".into(), Value::Array(Vec::new()));
     Some(watch.to_string())
 }
+
+/// When a wait's pull request last left the merge queue, and last had changes asked for, as the wait saw them as it
+/// started, which a wait of the tool that waited on one pull request kept, and which nothing has read or written since
+/// that tool went, before the floor. Nothing is carried, since no wait reads them.
+pub(super) const SEEN_DROPPED: &str = r"
+    ALTER TABLE waits DROP COLUMN seen_left_queue_at_ms;
+    ALTER TABLE waits DROP COLUMN seen_changes_requested_at_ms;
+";

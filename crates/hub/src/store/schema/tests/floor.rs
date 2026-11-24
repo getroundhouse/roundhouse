@@ -6,6 +6,7 @@ use rusqlite::types::Value;
 use super::super::*;
 use super::older::made_from;
 use crate::store::backup::files_in;
+use crate::store::columns::OneValue;
 use crate::store::{Store, WorkspacePlacement};
 
 /// A database as 0.1.870's migrations left it, with rows in it, which those migrations made before they were one
@@ -86,4 +87,9 @@ fn a_database_the_floors_release_left_migrates_with_what_it_holds() {
     let records = store.list_records().unwrap();
     assert_eq!(records.accounts.len(), 1);
     assert!(records.github_accounts.is_empty(), "an account with no login goes, as a migration since the floor has it");
+    let unused = "SELECT count(*) FROM (SELECT name FROM pragma_table_info('repos')
+        UNION ALL SELECT name FROM pragma_table_info('waits'))
+        WHERE name IN ('push_around', 'seen_left_queue_at_ms', 'seen_changes_requested_at_ms')";
+    let left: i64 = open_connection(&path).unwrap().query_row(unused, [], OneValue::read).unwrap();
+    assert_eq!(left, 0, "the columns nothing used go");
 }
