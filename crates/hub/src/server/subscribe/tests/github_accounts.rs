@@ -5,7 +5,7 @@
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
-use protocol::model::{DiffComment, DiffSide, GithubAccount, Observation, Observed, Rev};
+use protocol::model::{GithubAccount, Observation, Observed, Rev};
 
 use super::given::{ok, start};
 use crate::hub::GithubUsername;
@@ -71,17 +71,7 @@ async fn a_username_reaches_each_client_in_the_form_its_version_reads() {
     hub.observation_read::<GithubUsername>("g".into(), "ada".into(), 1_000).await.unwrap();
     hub.observation_read::<GithubUsername>("g".into(), "ada-lovelace".into(), 2_000).await.unwrap();
 
-    let marker = HubNotice::Comment(DiffComment {
-        id: "c".into(),
-        workspace_id: "w".into(),
-        path: "a.rs".into(),
-        side: DiffSide::New,
-        line: 1,
-        text: "after".into(),
-        created_at_ms: 1,
-        // A copy with no revision is always sent.
-        rev: Rev::default(),
-    });
+    let marker = super::given::comment_made(&hub, "after");
     hub.notify(marker.clone());
     for client in [&mut before, &mut observing] {
         let at_the_marker = |sent: &[HubFrame]| {
@@ -118,16 +108,7 @@ async fn a_client_of_version_4_is_sent_the_record_again_only_as_the_username_cha
     hub.observation_read::<GithubUsername>("g".into(), "ada".into(), 2_000).await.unwrap();
     hub.observation_no_longer_read_again::<GithubUsername>("g".into()).await.unwrap();
     hub.observation_read::<GithubUsername>("g".into(), "grace".into(), 3_000).await.unwrap();
-    let marker = HubNotice::Comment(DiffComment {
-        id: "c".into(),
-        workspace_id: "w".into(),
-        path: "a.rs".into(),
-        side: DiffSide::New,
-        line: 1,
-        text: "after".into(),
-        created_at_ms: 1,
-        rev: Rev::default(),
-    });
+    let marker = super::given::comment_made(&hub, "after");
     hub.notify(marker.clone());
     let at_the_marker = |sent: &[HubFrame]| {
         sent.iter().any(|frame| matches!(frame, HubFrame::Notice { notice, .. } if *notice == marker))

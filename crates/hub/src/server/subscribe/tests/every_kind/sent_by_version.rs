@@ -68,7 +68,7 @@ async fn caught_up(hub: &Hub, observing: &mut Connection, before: &mut Connectio
     make(hub, &changes, 3).await;
     let read_again = held(hub, &changes).await;
     let chip = held(hub, &ObservationKey::Reference { reference: chip() }).await;
-    hub.notify(HubNotice::Subagent(protocol::fixtures::subagent("c")));
+    hub.notify(super::super::given::subagent_made(hub));
     for client in [&mut *observing, &mut *before] {
         mark(hub, client).await;
         let subagent = |(at, notice): (u64, &HubNotice)| at == SESSION && matches!(notice, HubNotice::Subagent(_));

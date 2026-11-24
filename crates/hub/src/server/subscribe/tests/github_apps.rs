@@ -5,9 +5,7 @@
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
-use protocol::model::{
-    DiffComment, DiffSide, GithubApp, GithubAppId, GithubAppSaid, GithubUser, GithubUserId, Observation, Rev,
-};
+use protocol::model::{GithubApp, GithubAppId, GithubAppSaid, GithubUser, GithubUserId, Observation};
 
 use super::given::{ok, start};
 use crate::hub::GithubAppSaid as Said;
@@ -68,17 +66,7 @@ async fn what_github_says_of_an_app_reaches_each_client_in_the_form_its_version_
     let owner = GithubUser { id: GithubUserId::new(2), name: "adalabs".into() };
     let said = GithubAppSaid { slug: "ada-roundhouse".into(), name: "Ada's".into(), owner };
     hub.observation_read::<Said>(APP, said, 1_000).await.unwrap();
-    let marker = HubNotice::Comment(DiffComment {
-        id: "c".into(),
-        workspace_id: "w".into(),
-        path: "a.rs".into(),
-        side: DiffSide::New,
-        line: 1,
-        text: "after".into(),
-        created_at_ms: 1,
-        // A copy with no revision is always sent.
-        rev: Rev::default(),
-    });
+    let marker = super::given::comment_made(&hub, "after");
     hub.notify(marker.clone());
     for client in [&mut before, &mut observing] {
         let at_the_marker = |sent: &[HubFrame]| {

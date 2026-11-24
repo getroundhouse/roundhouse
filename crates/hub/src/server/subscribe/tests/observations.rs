@@ -42,7 +42,7 @@ async fn a_workspace_s_lines_are_listed_and_sent_to_whoever_follows_the_hub_and_
     hub.observation_gone::<WorkspaceLines>("w".into()).await.unwrap();
 
     // Of `s`, after the rest, so once it's sent on the session's subscription, whatever that was sent before it was too.
-    hub.notify(HubNotice::Subagent(protocol::fixtures::subagent("c")));
+    hub.notify(super::given::subagent_made(hub));
 
     let of_s = |frame: &HubFrame| {
         matches!(frame, HubFrame::Notice { subscription_id: SESSION, notice: HubNotice::Subagent(_) })

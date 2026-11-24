@@ -13,6 +13,7 @@ mod given;
 mod models;
 mod observations;
 mod release_offered;
+mod revisions;
 mod rules;
 mod sessions;
 mod worker_builds;

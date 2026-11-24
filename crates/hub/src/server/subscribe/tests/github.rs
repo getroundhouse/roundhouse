@@ -150,7 +150,7 @@ async fn the_feed_sends_no_observation_of_github() {
     observing_client.until("the observation", |sent| sent.iter().any(|frame| said_of_twelve(frame).is_some())).await;
     // Of a session's level, which `FeedSubscribe` is sent too, as it is every notice but a workspace's level's. Sent
     // after the observation, so once the feed's subscriber has it, it would have had the observation.
-    hub.notify(HubNotice::Subagent(protocol::fixtures::subagent("c")));
+    hub.notify(super::given::subagent_made(&hub));
 
     before
         .until("the notice after it", |sent| {

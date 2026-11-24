@@ -8,7 +8,7 @@ use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscription};
 use protocol::client::{ClientResponse, HubFrame, HubNotice, Outcome, Request};
 use protocol::event::SessionEvent;
-use protocol::model::{DiffComment, DiffSide, Rev, RunId};
+use protocol::model::{DiffComment, DiffSide, RunId};
 use protocol::tail::Tail;
 use protocol::terminal::{
     Numbering, PictureSending, RowJson, RowNumber, ScreenState, Shown, Span, TerminalPicture, TerminalRow, TerminalSize,
@@ -54,17 +54,8 @@ impl Given {
     /// A change to a record of the hub's level, and to one of `s`'s own, what its agent is writing, and what `t` shows,
     /// once its worker has been told something watches it.
     pub(super) async fn changes(&self) {
-        self.hub.notify(HubNotice::Comment(DiffComment {
-            id: "c".into(),
-            workspace_id: "w".into(),
-            path: "a.rs".into(),
-            side: DiffSide::New,
-            line: 1,
-            text: "why".into(),
-            created_at_ms: 0,
-            rev: Rev::default(),
-        }));
-        self.hub.notify(HubNotice::Subagent(protocol::fixtures::subagent("c")));
+        self.hub.notify(comment_made(&self.hub, "why"));
+        self.hub.notify(subagent_made(&self.hub));
         self.session.send_item(Item::Tail { run: RunId::new(1), tail: writing(RunId::new(1), "Reading the") }).await;
         waiting::task::until(WAIT, "the worker to be told t is watched", || self.told().contains(&true)).await;
         let row = |text: &str| {
@@ -138,4 +129,25 @@ pub(super) async fn ok(connection: &mut Connection, id: u64, request: impl Reque
 
 pub(super) fn start(subscription_id: u64, follow: Follow) -> Subscription {
     Subscription::new(subscription_id, follow)
+}
+
+/// The comment `c` on `w`'s diff, saying `text`, as the hub would tell of it made now: at a revision newer than any it
+/// has told of, so it's sent. A test sends it after something, as a marker that a client sent it has been sent that too.
+pub(super) fn comment_made(hub: &Hub, text: &str) -> HubNotice {
+    HubNotice::Comment(DiffComment {
+        id: "c".into(),
+        workspace_id: "w".into(),
+        path: "a.rs".into(),
+        side: DiffSide::New,
+        line: 1,
+        text: text.into(),
+        created_at_ms: 1,
+        rev: crate::hub::tests::store_of(hub).next_rev().unwrap(),
+    })
+}
+
+/// The subagent `c` of `s`, as the hub would tell of it made now, as [`comment_made`] says.
+pub(super) fn subagent_made(hub: &Hub) -> HubNotice {
+    let rev = crate::hub::tests::store_of(hub).next_rev().unwrap();
+    HubNotice::Subagent(protocol::model::Subagent { rev, ..protocol::fixtures::subagent("c") })
 }
