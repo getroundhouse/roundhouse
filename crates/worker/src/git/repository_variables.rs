@@ -6,8 +6,9 @@ use process::Environment;
 /// and shallow and graft files are, and where git runs from within it. `git rev-parse --local-env-vars` lists them,
 /// and they're the ones git itself takes out when it runs a command in another repository, such as a submodule's, in
 /// `sanitize_repo_env`. Like git, not `GIT_CONFIG_PARAMETERS` or `GIT_CONFIG_COUNT`, which are the settings a command
-/// was given, such as with `git -c`, and go on to one in another repository.
-const OF_A_REPOSITORY: [&str; 13] = [
+/// was given, such as with `git -c`, and go on to one in another repository. It keeps one that git no longer reads, so
+/// a worker on a machine whose git is older takes that out too.
+const OF_A_REPOSITORY: [&str; 14] = [
     "GIT_ALTERNATE_OBJECT_DIRECTORIES",
     "GIT_CONFIG",
     "GIT_OBJECT_DIRECTORY",
@@ -19,6 +20,9 @@ const OF_A_REPOSITORY: [&str; 13] = [
     "GIT_NO_REPLACE_OBJECTS",
     "GIT_REPLACE_REF_BASE",
     "GIT_PREFIX",
+    // Listed by git before 2.40, which set it in a submodule's command to the submodule's path. Every command of
+    // those gits but the few that recurse into submodules refuses to run with it set, as `git status` does.
+    "GIT_INTERNAL_SUPER_PREFIX",
     "GIT_SHALLOW_FILE",
     "GIT_COMMON_DIR",
 ];
@@ -43,7 +47,8 @@ mod tests {
     /// The settings a command was given, which git hands on to one in another repository.
     const HANDED_ON: [&str; 2] = ["GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT"];
 
-    /// So a git that reads another is caught here, and the list made to have it too.
+    /// So a git that reads another is caught here, and the list made to have it too. The list can have more than this
+    /// machine's git names, since it keeps those of older gits.
     #[test]
     fn they_re_every_one_this_machine_s_git_says_is_of_a_repository_but_its_settings() {
         let dir = tempfile::tempdir().unwrap();
