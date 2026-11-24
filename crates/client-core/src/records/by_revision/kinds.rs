@@ -42,6 +42,7 @@ impl Revised for Observation {
             | Observation::SessionContext { .. }
             | Observation::SessionTodos { .. }
             | Observation::SessionCache { .. }
+            | Observation::WaitRead { .. }
             | Observation::Unknown => None,
         }
     }

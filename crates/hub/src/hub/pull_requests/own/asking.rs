@@ -87,7 +87,8 @@ impl Hub {
             warn!("reading which waits to read the pull requests of: {}", e.message);
             Vec::new()
         });
-        let mut waited = waited(waits);
+        // With what each last read, whose stack names the lower pull requests it watches too.
+        let mut waited = waited(waits.into_iter().map(|wait| self.as_read(wait)).collect());
         let mut plans = Vec::new();
         for workspace in workspaces {
             let address = self.repo_of(&workspace).await.ok().and_then(|repo| repo.origin.url().cloned());

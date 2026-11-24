@@ -1,6 +1,6 @@
 use super::{
     AccountIdentity, ConversationCache, Observation, ObservationKey, Observed, OwnPullRequestDetail,
-    OwnPullRequestSaid, ReadFrom, ReferenceSaid,
+    OwnPullRequestSaid, ReadFrom, ReferenceSaid, WaitRead,
 };
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
@@ -128,7 +128,7 @@ fn of_an_account() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
 
 /// Of each kind of what an agent says of its chat.
 fn of_a_session() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
-    vec![session_context(), session_todos(), session_cache()]
+    vec![session_context(), session_todos(), session_cache(), wait_read()]
 }
 
 /// How full a session's context is, with its key and revision, and how it's sent.
@@ -174,6 +174,43 @@ fn session_cache() -> (Observation, ObservationKey, Rev, Sent) {
         Rev::new(13),
         (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
     )
+}
+
+/// What a wait last read, with its key and revision, and how it's sent.
+fn wait_read() -> (Observation, ObservationKey, Rev, Sent) {
+    let read = WaitRead {
+        pull_requests: Vec::new(),
+        observed_at_ms: 1,
+        read_error: None,
+        last_attempt_at_ms: 1,
+        affected: Vec::new(),
+    };
+    (
+        Observation::WaitRead {
+            session_id: "s".into(),
+            wait: "a".into(),
+            read: Observed::AsOf { value: read, as_of_ms: 1 },
+            rev: Rev::new(14),
+        },
+        ObservationKey::WaitRead { session_id: "s".into(), wait: "a".into() },
+        Rev::new(14),
+        (Some(Level::Session { id: "s".into() }), Some(ReadFrom::EveryObservation)),
+    )
+}
+
+/// A wait's watch is what its record keeps with what it last read, whatever it read.
+#[test]
+fn a_watch_is_its_record_and_its_read() {
+    let mut watch = *crate::fixtures::pull_request_wait("a").watch.unwrap();
+    watch.read_error = Some("offline".into());
+    watch.last_attempt_at_ms = 9;
+    watch.affected = vec![crate::model::PullRequestNumber::try_from(7).unwrap()];
+
+    let recorded = watch.recorded();
+
+    assert_eq!((recorded.snapshot.pull_requests.len(), &recorded.read_error, recorded.affected.len()), (0, &None, 0));
+    assert_eq!((&recorded.requested, &recorded.snapshot.repository), (&watch.requested, &watch.snapshot.repository));
+    assert_eq!(recorded.with_read(watch.read()), watch);
 }
 
 #[test]

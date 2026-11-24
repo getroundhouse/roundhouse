@@ -1,7 +1,9 @@
 use super::super::{
     ByColumn, Columns, OneValue, Store, StoreError, columns, json_from, lock, text_at, text_from, text_of,
 };
-use protocol::model::{SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WorkspaceId, WorkspaceStatus};
+use protocol::model::{
+    PullRequestWatch, SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WorkspaceId, WorkspaceStatus,
+};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::collections::HashSet;
 
@@ -14,7 +16,9 @@ columns! {
 }
 
 impl Store {
-    /// Starts an independent wait in an open chat. Retrying a tool call returns its original wait, even after it ends.
+    /// Starts an independent wait in an open chat. Retrying a tool call returns its original wait, even after it ends,
+    /// as its record keeps it, which it returns. One that's open keeps none of what it read, which the hub keeps apart, and one that ended
+    /// as it started keeps it, as `Store::revise_remote_waits` says.
     pub fn start_wait(&self, wait: &Wait) -> Result<Wait, StoreError> {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
@@ -36,6 +40,7 @@ impl Store {
                 id: wait.session_id.to_string(),
             });
         }
+        let kept = Wait { watch: kept_watch(wait).map(Box::new), ..wait.clone() };
         let values = WaitValues {
             id: &wait.id.as_str(),
             session_id: &wait.session_id.as_str(),
@@ -46,11 +51,11 @@ impl Store {
             started_at_ms: &wait.started_at_ms,
             ended_at_ms: &wait.ended.map(|ended| ended.at_ms),
             ended: &wait.ended.map(|ended| text_of(&ended.how)),
-            watch: &wait.watch.as_ref().map(serde_json::to_string).transpose()?,
+            watch: &kept.watch.as_ref().map(serde_json::to_string).transpose()?,
         };
         tx.prepare_cached(&format!("INSERT INTO waits {}", WaitValues::INSERT))?.execute(values.params())?;
         tx.commit()?;
-        Ok(wait.clone())
+        Ok(kept)
     }
 
     /// Ends the workspace's open waits as cancelled, as it starts being archived. Returns those it ended.
@@ -143,6 +148,12 @@ fn call_off(
     .query_row(params![at_ms, text_of(&how), session_id.as_str(), wait.map(WaitId::as_str)], OneValue::read::<String>)
     .optional()
     .map(|id| id.map(WaitId::from))
+}
+
+/// What `wait`'s record keeps of its watch: none of what it read while it's open.
+fn kept_watch(wait: &Wait) -> Option<PullRequestWatch> {
+    let watch = wait.watch.as_deref()?;
+    Some(if wait.ended.is_some() { watch.clone() } else { watch.recorded() })
 }
 
 /// The wait in a row of [`WaitColumns`].

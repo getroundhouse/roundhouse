@@ -46,6 +46,7 @@ mod replies_heard;
 mod repo_sources;
 mod repos;
 mod restarts;
+mod session_observations;
 mod sessions;
 mod subagents;
 mod subscribe;

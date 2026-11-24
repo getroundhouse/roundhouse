@@ -47,7 +47,7 @@ pub(super) fn how(wait: &Wait) -> Option<WaitEnd> {
 async fn a_worker_reads_a_wait_with_the_pull_requests_as_last_read_and_only_for_its_own_chat() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.store.start_wait(&wait()).unwrap();
+    hub.start_wait(wait()).await.unwrap();
     let mut other = idle_session(1);
     other.session.id = "t".into();
     hub.store.insert_session(&other, None).unwrap();

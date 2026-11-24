@@ -2,12 +2,14 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{AccountIdentity, ConversationCache, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
+use super::{
+    AccountIdentity, ConversationCache, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid, WaitRead,
+};
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
 use crate::model::{
     AccountId, ChangeSummary, ContextUsage, Level, LineCounts, ModelListKey, ReferenceAsk, RepositoryUnseen, Rev,
-    SessionId, UsageLimit, WorkspaceId,
+    SessionId, UsageLimit, WaitId, WorkspaceId,
 };
 
 /// One observation, of any kind, with what it's of, its revision and what it says, as a list or the feed gives it. A
@@ -65,6 +67,11 @@ pub enum Observation {
     /// agent isn't working, as a turn ends, and as something empties the cache, and not on every request. Never
     /// current.
     SessionCache { session_id: SessionId, cache: Observed<ConversationCache>, rev: Rev },
+    /// What an open wait last read of the pull requests it watches, worked out from GitHub's part of the hub's cache as
+    /// each read of them ends. Sent at the wait's session's level, since only its chat draws the wait's line. Gone as
+    /// the wait ends, when its record takes the last read. Never current. A client of a version from before it reads
+    /// it in the wait's `watching`, on the session's record.
+    WaitRead { session_id: SessionId, wait: WaitId, read: Observed<WaitRead>, rev: Rev },
     #[serde(other)]
     Unknown,
 }
@@ -110,6 +117,10 @@ pub enum ObservationKey {
     SessionCache {
         session_id: SessionId,
     },
+    WaitRead {
+        session_id: SessionId,
+        wait: WaitId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -148,6 +159,9 @@ impl Observation {
             Observation::SessionCache { session_id, .. } => {
                 ObservationKey::SessionCache { session_id: session_id.clone() }
             }
+            Observation::WaitRead { session_id, wait, .. } => {
+                ObservationKey::WaitRead { session_id: session_id.clone(), wait: wait.clone() }
+            }
             Observation::Unknown => ObservationKey::Unknown,
         }
     }
@@ -167,7 +181,8 @@ impl Observation {
             | Observation::AccountLimits { rev, .. }
             | Observation::SessionContext { rev, .. }
             | Observation::SessionTodos { rev, .. }
-            | Observation::SessionCache { rev, .. } => *rev,
+            | Observation::SessionCache { rev, .. }
+            | Observation::WaitRead { rev, .. } => *rev,
             Observation::Unknown => Rev::default(),
         }
     }
@@ -194,9 +209,9 @@ impl ObservationKey {
                 Some(Level::Workspace { id: workspace_id.clone() })
             }
             ObservationKey::Reference { reference } => Some(Level::Reference { reference: reference.clone() }),
-            ObservationKey::SessionContext { session_id } | ObservationKey::SessionTodos { session_id } => {
-                Some(Level::Session { id: session_id.clone() })
-            }
+            ObservationKey::SessionContext { session_id }
+            | ObservationKey::SessionTodos { session_id }
+            | ObservationKey::WaitRead { session_id, .. } => Some(Level::Session { id: session_id.clone() }),
             ObservationKey::Unknown => None,
         }
     }
@@ -215,7 +230,8 @@ impl ObservationKey {
             | ObservationKey::AccountLimits { .. }
             | ObservationKey::SessionContext { .. }
             | ObservationKey::SessionTodos { .. }
-            | ObservationKey::SessionCache { .. } => Some(ReadFrom::EveryObservation),
+            | ObservationKey::SessionCache { .. }
+            | ObservationKey::WaitRead { .. } => Some(ReadFrom::EveryObservation),
             ObservationKey::Unknown => None,
         }
     }

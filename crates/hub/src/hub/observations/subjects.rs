@@ -2,7 +2,7 @@
 
 use std::hash::Hash;
 
-use protocol::model::{AccountId, ModelListKey, ReferenceAsk, SessionId, WorkspaceId};
+use protocol::model::{AccountId, ModelListKey, ReferenceAsk, SessionId, WaitId, WorkspaceId};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +20,8 @@ pub(crate) enum Owner<'a> {
     Workspace(&'a WorkspaceId),
     /// A session, which goes with its workspace too.
     Session(&'a SessionKey),
+    /// A wait, which goes with its session and its workspace too, and as it ends.
+    Wait(&'a WaitKey),
     Account(&'a AccountId),
     /// The hub itself, for what's of no record, which is never gone, and goes only as the hub lets go of it.
     Hub,
@@ -31,6 +33,7 @@ impl<'a> Owner<'a> {
         match self {
             Owner::Workspace(workspace) => Some(workspace),
             Owner::Session(session) => Some(&session.workspace_id),
+            Owner::Wait(wait) => Some(&wait.workspace_id),
             Owner::Account(_) | Owner::Hub => None,
         }
     }
@@ -68,6 +71,20 @@ pub(crate) struct SessionKey {
 impl Subject for SessionKey {
     fn owner(&self) -> Option<Owner<'_>> {
         Some(Owner::Session(self))
+    }
+}
+
+/// A wait, as what's observed of it is kept by: with its session and workspace, so it's forgotten with either.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub(crate) struct WaitKey {
+    pub(crate) workspace_id: WorkspaceId,
+    pub(crate) session_id: SessionId,
+    pub(crate) wait: WaitId,
+}
+
+impl Subject for WaitKey {
+    fn owner(&self) -> Option<Owner<'_>> {
+        Some(Owner::Wait(self))
     }
 }
 

@@ -51,7 +51,7 @@ fn waiting_by(hub: &Hub, workspace: WorkspaceId, chat: &str) -> WaitId {
 }
 
 fn read_error(hub: &Hub, wait: &WaitId) -> Option<String> {
-    hub.store.wait(wait).unwrap().watch.unwrap().read_error
+    hub.as_read(hub.store.wait(wait).unwrap()).watch.unwrap().read_error
 }
 
 fn ended(hub: &Hub, wait: &WaitId) -> Option<WaitEnd> {
@@ -87,7 +87,7 @@ async fn workspaces_due_as_one_token_are_read_together_without_a_worker() {
 }
 
 /// `w`'s and `v`'s waits are read as this machine's own login, so in one read, whose queries ask of both, and which
-/// finds #7's checks have passed, so both end.
+/// finds #7's checks have passed, as GitHub's part of the cache keeps it, so both end, each record keeping that read.
 #[tokio::test]
 async fn waits_due_as_one_token_are_read_together_and_end_as_the_read_finds() {
     let dir = tempfile::tempdir().unwrap();
@@ -102,6 +102,8 @@ async fn waits_due_as_one_token_are_read_together_and_end_as_the_read_finds() {
     watching.abort();
 
     assert_eq!((ended(&hub, &wait), ended(&hub, &theirs)), (Some(WaitEnd::ChecksPassed), Some(WaitEnd::ChecksPassed)));
+    let frozen = hub.store.wait(&wait).unwrap().watch.unwrap();
+    assert_eq!(frozen.snapshot.pull_requests.len(), 1, "the ended record keeps the read that ended it");
     let queries: Vec<_> = github.asked().into_iter().filter(|asked| asked.starts_with("post /graphql ")).collect();
     assert_eq!(queries.len(), 2, "{queries:?}");
     assert!(queries.iter().all(|query| query.contains("r0: repository(") && query.contains("r1: repository(")));

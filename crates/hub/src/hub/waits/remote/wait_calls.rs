@@ -68,7 +68,7 @@ impl Hub {
             })),
         };
         remote_rules::judge(&mut wait, at_ms);
-        let wait = self.blocking(move |store| store.start_wait(&wait)).await?;
+        let wait = self.start_wait(wait).await?;
         self.announce_chat_of(&wait).await;
         self.with_pull_request(wait).await
     }
@@ -78,18 +78,14 @@ impl Hub {
         id: &WorkspaceId,
         snapshot: &PullRequestsSnapshot,
     ) {
-        let (id, snapshot, at_ms) = (id.clone(), snapshot.clone(), now_ms());
+        let (kept, at_ms) = (self.as_kept(snapshot), now_ms());
         let changed = self
-            .blocking(move |store| {
-                store.revise_remote_waits(Some(&id), |wait| {
-                    remote_rules::expire(wait, at_ms);
-                    remote_rules::observe(wait, &snapshot, at_ms);
-                })
+            .judge_waits(id, move |wait| {
+                remote_rules::expire(wait, at_ms);
+                remote_rules::observe(wait, &kept, at_ms);
             })
             .await;
-        if let Ok(waits) = changed {
-            self.announce_remote_changes(waits).await;
-        }
+        self.announce_remote_changes(changed).await;
     }
 
     /// Records on the workspace's waits that what they watch in `repository`, or in any repository, couldn't be read,
@@ -103,47 +99,46 @@ impl Hub {
         affected: &[PullRequestNumber],
     ) {
         let affected = affected.to_vec();
-        let (id, repository, error, at_ms) = (id.clone(), repository.cloned(), error.clone(), now_ms());
+        let (repository, error, at_ms) = (repository.cloned(), error.clone(), now_ms());
         let changed = self
-            .blocking(move |store| {
-                store.revise_remote_waits(Some(&id), |wait| {
-                    remote_rules::expire(wait, at_ms);
-                    if wait.ended.is_some() {
-                        return;
-                    }
-                    let Some(watch) = &mut wait.watch else { return };
-                    if repository.as_ref().is_some_and(|repository| watch.snapshot.repository != *repository) {
-                        return;
-                    }
-                    // Those it watches, which are those it was asked for while it has read none, as after an update
-                    // emptied what an older hub kept.
-                    let watched = watch.numbers();
-                    let ours: Vec<_> = affected.iter().copied().filter(|number| watched.contains(number)).collect();
-                    if !affected.is_empty() && ours.is_empty() {
-                        return;
-                    }
-                    watch.read_error = Some(error.message.clone());
-                    watch.last_attempt_at_ms = at_ms;
-                    if matches!(error.code, ErrorCode::Unavailable | ErrorCode::Unsupported | ErrorCode::NotFound) {
-                        watch.affected = ours;
-                        wait.ended = Some(WaitEnded { at_ms, how: WaitEnd::Unavailable });
-                    }
-                })
+            .judge_waits(id, move |wait| {
+                remote_rules::expire(wait, at_ms);
+                if wait.ended.is_some() {
+                    return;
+                }
+                let Some(watch) = &mut wait.watch else { return };
+                if repository.as_ref().is_some_and(|repository| watch.snapshot.repository != *repository) {
+                    return;
+                }
+                // Those it watches, which are those it was asked for while it has read none, as after an update
+                // emptied what an older hub kept.
+                let watched = watch.numbers();
+                let ours: Vec<_> = affected.iter().copied().filter(|number| watched.contains(number)).collect();
+                if !affected.is_empty() && ours.is_empty() {
+                    return;
+                }
+                watch.read_error = Some(error.message.clone());
+                watch.last_attempt_at_ms = at_ms;
+                if matches!(error.code, ErrorCode::Unavailable | ErrorCode::Unsupported | ErrorCode::NotFound) {
+                    watch.affected = ours;
+                    wait.ended = Some(WaitEnded { at_ms, how: WaitEnd::Unavailable });
+                }
             })
             .await;
-        if let Ok(waits) = changed {
-            self.announce_remote_changes(waits).await;
-        }
+        self.announce_remote_changes(changed).await;
     }
 
+    /// Tells clients of each of `waits` that ended, since its chat's record shows only open waits, and wakes its agent. What
+    /// one that goes on read changed its chat's record only for a client of a version from before the observation,
+    /// which the observation's change told.
     async fn announce_remote_changes(self: &Arc<Self>, waits: Vec<Wait>) {
         let mut announced = HashSet::new();
         let mut woken = HashSet::new();
-        for wait in &waits {
+        for wait in waits.iter().filter(|wait| wait.ended.is_some()) {
             if announced.insert(wait.session_id.clone()) {
                 self.announce_chat_of(wait).await;
             }
-            if wait.ended.is_some() && woken.insert(wait.session_id.clone()) {
+            if woken.insert(wait.session_id.clone()) {
                 self.wake_for(wait).await;
             }
         }
@@ -155,7 +150,10 @@ impl Hub {
         loop {
             let at_ms = now_ms();
             let changed = self.blocking(move |store| store.expire_remote_waits(at_ms)).await;
-            if let Ok(waits) = changed {
+            if let Ok(waits) = changed
+                && !waits.is_empty()
+            {
+                self.wait_reads_settled().await;
                 self.announce_remote_changes(waits).await;
             }
             tokio::time::sleep(Duration::from_secs(1)).await;

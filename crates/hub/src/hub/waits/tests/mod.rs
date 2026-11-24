@@ -1,4 +1,5 @@
-//! Waits through the hub, as a worker asks for them, with a stand-in for GitHub whose pull requests each test sets.
+//! Waits through the hub, as a worker asks for them, with a stand-in for GitHub whose pull requests each test sets, and
+//! what the hub keeps of what each read.
 
 use super::*;
 use crate::hub::tests::{hub_on_github, hub_with_worktree, taking_worker};
@@ -10,6 +11,7 @@ use protocol::worker::{CancelWait, WorkerAsk, WorkerRequest, WorkerResponse};
 
 mod announced;
 mod call_off;
+mod observed;
 
 mod waiting;
 pub(super) use waiting::wait;

@@ -31,7 +31,8 @@ async fn explicit_waits_follow_remote_reads_and_failed_starts_leave_existing_wai
     assert_eq!(watch.snapshot.repository.name_with_owner, "example/project");
     assert_eq!(watch.snapshot.pull_requests[0].checks_said().unwrap().checks[0].state, CheckState::Pending);
     assert_eq!(failed.unwrap_err().code, ErrorCode::Worker);
-    assert_eq!(hub.store.remote_waits().unwrap(), [started.wait]);
+    let kept: Vec<_> = hub.store.remote_waits().unwrap().into_iter().map(|wait| hub.as_read(wait)).collect();
+    assert_eq!(kept, [started.wait]);
     assert_eq!(hub.store.get_session(&"s".into()).unwrap().session.open_waits().len(), 1);
     let asked = github.asked();
     assert!(asked.iter().all(|asked| asked.contains("authorization: bearer a-token\r\n")), "{asked:?}");
@@ -42,7 +43,7 @@ async fn outages_keep_the_last_snapshot_and_access_loss_ends_with_it() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let wait = pull_request_wait("a");
-    hub.store.start_wait(&wait).unwrap();
+    hub.start_wait(wait.clone()).await.unwrap();
     let change = crate::store::SessionChange {
         status: None,
         queue_held: Some(true),
@@ -68,7 +69,7 @@ async fn outages_keep_the_last_snapshot_and_access_loss_ends_with_it() {
     let repository = wait.watch.as_ref().unwrap().snapshot.repository.clone();
 
     hub.remote_waits_failed(&"w".into(), Some(&repository), &ApiError::new(ErrorCode::Worker, "offline"), &[]).await;
-    let pending = hub.store.wait(&wait.id).unwrap();
+    let pending = hub.as_read(hub.store.wait(&wait.id).unwrap());
     assert_eq!(pending.ended, None);
     assert_eq!(pending.watch.as_ref().unwrap().snapshot, wait.watch.as_ref().unwrap().snapshot);
     hub.remote_waits_failed(&"w".into(), Some(&repository), &ApiError::new(ErrorCode::Unavailable, "access lost"), &[])

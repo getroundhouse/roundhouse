@@ -96,6 +96,9 @@ pub(crate) struct Hub {
     /// What the hub last found in the update feed, which it reads only as a service.
     pub(crate) updates: Updates,
     pub(super) pull_requests: pull_requests::Reading,
+    /// Held while the hub judges waits on what was read of their pull requests, and while it settles what ended ones
+    /// read, as `Hub::judge_waits` says.
+    pub(super) waits_judged: AsyncMutex<()>,
     /// What the hub last read from GitHub, for every part of it that reads GitHub, and every client.
     pub(super) github_cache: Arc<GithubCache>,
     /// The hub's observations of what others own, as it last observed them.
@@ -193,6 +196,7 @@ impl Hub {
             model_lists: ModelLists::default(),
             updates: Updates::new(dirs.service_builds),
             pull_requests: pull_requests::Reading::new(),
+            waits_judged: AsyncMutex::new(()),
             followers: Followers::default(),
             github_reads_ended: github_observed::ReadsEnded::default(),
             github_forgotten: github_reads::Forgotten::default(),

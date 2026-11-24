@@ -13,4 +13,5 @@ use std::time::Duration;
 #[cfg(test)]
 mod tests;
 
+mod reads;
 mod wait_calls;

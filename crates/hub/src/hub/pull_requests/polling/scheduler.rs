@@ -72,7 +72,8 @@ impl Hub {
 
     /// How many pull requests the waits in `workspaces` watch, as they're asked of GitHub.
     async fn waited_in(&self, workspaces: &[Workspace]) -> usize {
-        let mut waited = waited(self.blocking(Store::remote_waits).await.unwrap_or_default());
+        let waits = self.blocking(Store::remote_waits).await.unwrap_or_default();
+        let mut waited = waited(waits.into_iter().map(|wait| self.as_read(wait)).collect());
         let mut theirs = workspaces.iter().filter_map(|workspace| waited.remove(&workspace.id));
         theirs.by_ref().flatten().map(|waited| waited.selection.numbers().len()).sum()
     }

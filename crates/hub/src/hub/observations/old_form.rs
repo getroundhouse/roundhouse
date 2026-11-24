@@ -7,12 +7,13 @@
 //! and one of a version that reads the observation itself doesn't read it.
 
 use protocol::client::ClientResponse;
-use protocol::model::{Account, ModelList, Record, RecordKey, Records, Session, UsageLimit};
+use protocol::model::{Account, ModelList, Record, RecordKey, Records, Session, UsageLimit, Wait};
 use tracing::warn;
 
 use super::kept::Observations;
 use super::kinds::{
     AccountIdentity, AccountLimits, Kind, ModelCatalog, SessionCache, SessionContext, SessionKey, SessionTodos,
+    WaitKey, WaitRead,
 };
 use super::tables::Tables;
 use crate::hub::Hub;
@@ -49,6 +50,26 @@ impl OldForm for Session {
         self.context = SessionContext::table(tables).value(&of).cloned();
         self.todos = SessionTodos::table(tables).value(&of).cloned();
         self.prompt_cache = SessionCache::table(tables).value(&of).and_then(|cache| cache.held.clone());
+        for wait in self.waits.iter_mut().flatten().chain(self.wait.as_mut()) {
+            wait.fill(tables);
+        }
+    }
+}
+
+/// What an open wait last read, in its watch, as its record keeps it while that isn't known. An ended wait's record
+/// keeps its last read, frozen as it ended.
+impl OldForm for Wait {
+    fn fill(&mut self, tables: &mut Tables) {
+        if self.ended.is_some() {
+            return;
+        }
+        let of = WaitKey {
+            workspace_id: self.workspace_id.clone(),
+            session_id: self.session_id.clone(),
+            wait: self.id.clone(),
+        };
+        let (Some(watch), Some(read)) = (self.watch.as_mut(), WaitRead::table(tables).value(&of)) else { return };
+        **watch = watch.recorded().with_read(read.clone());
     }
 }
 

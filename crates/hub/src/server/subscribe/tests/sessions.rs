@@ -1,17 +1,18 @@
-//! How full a session's agent's context is, and what the API's cache holds of it, which a client of version 4 reads on
-//! the session's record, at the hub's level, and a client of the version that reads every observation reads as
-//! observations, at the session's level and the hub's.
+//! How full a session's agent's context is, what the API's cache holds of it, and what its waits read, which a client
+//! of version 4 reads on the session's record, at the hub's level, and a client of the version that reads every
+//! observation reads as observations, at the session's level and the hub's.
 
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
 use protocol::model::{
     CacheTtl, ContextUsage, ConversationCache, DiffComment, DiffSide, Observation, Observed, PromptCache, Rev, Session,
+    Wait, WaitRead,
 };
 
 use super::given::{ok, start};
 use crate::hub::tests::hub_in;
-use crate::hub::{SessionCache, SessionContext, SessionKey};
+use crate::hub::{SessionCache, SessionContext, SessionKey, WaitKey};
 use crate::server::tests::Connection;
 
 /// What `s`'s agent says of its context, with `used_tokens` in it.
@@ -74,16 +75,34 @@ fn caches_observed(client: &Connection) -> Vec<ConversationCache> {
     told.collect()
 }
 
+/// Why each read of `s`'s wait that `client` was sent, listed or told, failed, if it did.
+fn read_errors_observed(client: &Connection) -> Vec<Option<String>> {
+    let error = |observation: &Observation| {
+        let Observation::WaitRead { read: Observed::AsOf { value, .. }, .. } = observation else { return None };
+        Some(value.read_error.clone())
+    };
+    let told = client.sent.iter().flat_map(|frame| {
+        if let HubFrame::Listed { listed: Listed::Session(records), .. } = frame {
+            return records.observations.iter().filter_map(error).collect();
+        }
+        let HubFrame::Notice { notice: HubNotice::Observation(observation), .. } = frame else { return Vec::new() };
+        error(observation).into_iter().collect()
+    });
+    told.collect()
+}
+
 /// A hub whose session's context isn't known lists the session to a client of version 4 with none, and to one of the
 /// version that reads every observation with no observation of it at the session's level. Two reports from the
 /// session's agent, which the store keeps as `crate::session` does, then send the first the record twice, filled,
 /// each under a newer revision, and no observation, and the second the observation twice, at the session's level, and
 /// no copy of the record, which moved only for them. What the API's cache holds, at the hub's level, goes the same
-/// way.
+/// way, and so does what an open wait of the session's read, at its level.
 #[tokio::test]
-async fn a_sessions_context_and_cache_reach_each_client_in_the_form_its_version_reads() {
+async fn a_sessions_context_cache_and_waits_reach_each_client_in_the_form_its_version_reads() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
+    let wait = Wait { call: None, ..protocol::fixtures::pull_request_wait("a") };
+    hub.start_wait(wait.clone()).await.unwrap();
     let mut before = Connection::greeted(&hub, 4).await;
     let mut observing = Connection::speaking(&hub, EVERY_OBSERVATION_FROM);
     let follow_s = || start(2, Follow::Session { id: "s".into(), from: None });
@@ -104,6 +123,9 @@ async fn a_sessions_context_and_cache_reach_each_client_in_the_form_its_version_
     let held = PromptCache { used_at_ms: 3_000, ttl: CacheTtl::OneHour, model: None, tokens: 70_000 };
     let cache = ConversationCache { held: Some(held.clone()), worth_telling: true };
     hub.observation_worked_out::<SessionCache>(s(), cache.clone(), 3_000).await.unwrap();
+    let read = WaitRead { read_error: Some("offline".into()), ..wait.watch.as_ref().unwrap().read() };
+    let of = WaitKey { workspace_id: "w".into(), session_id: "s".into(), wait: "a".into() };
+    hub.observation_worked_out::<crate::hub::WaitRead>(of, read, 1).await.unwrap();
     let marker = HubNotice::Comment(DiffComment {
         id: "c".into(),
         workspace_id: "w".into(),
@@ -126,12 +148,16 @@ async fn a_sessions_context_and_cache_reach_each_client_in_the_form_its_version_
     let copies = sessions_sent(&before);
     let told: Vec<Option<u64>> =
         copies.iter().map(|session| session.context.as_ref().map(|context| context.used_tokens)).collect();
-    assert_eq!(told, [None, Some(60_000), Some(70_000), Some(70_000)]);
+    assert_eq!(told, [None, Some(60_000), Some(70_000), Some(70_000), Some(70_000)]);
     assert_eq!(copies.last().unwrap().prompt_cache, Some(held));
+    let failed = copies.last().unwrap().open_waits()[0].watch.as_ref().unwrap().read_error.clone();
+    assert_eq!(failed.as_deref(), Some("offline"), "the wait's watch filled");
     assert!(copies.windows(2).all(|pair| pair[0].rev < pair[1].rev), "the revision moved: {copies:?}");
     assert_eq!(contexts_observed(&before), [], "no observation to a client of version 4");
     assert_eq!(contexts_observed(&observing), [Some(60_000), Some(70_000)]);
     assert_eq!(caches_observed(&before), [], "no observation to a client of version 4");
     assert_eq!(caches_observed(&observing), [cache], "at the hub's level");
+    assert_eq!(read_errors_observed(&before), [] as [Option<String>; 0], "no observation to a client of version 4");
+    assert_eq!(read_errors_observed(&observing), [None, Some("offline".to_string())], "listed, then told");
     assert_eq!(sessions_sent(&observing).len(), 1, "no copy that moves only those");
 }
