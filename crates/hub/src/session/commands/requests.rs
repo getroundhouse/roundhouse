@@ -1,6 +1,7 @@
 use super::super::controls::Askable;
 use super::super::conversation::Sending;
 use super::super::decisions::refusal;
+use super::super::record::Admitted;
 use super::super::{Command, LiveSession, LiveState, Origin};
 use super::after_the_turn::Sendable;
 use crate::hub::Hub;
@@ -139,7 +140,8 @@ impl LiveSession {
                 Err(refusal) => return self.sent_before(hub, client_msg_id, refusal).await,
             };
             let body = EventBody::UserPrompt { client_msg_id, prompt: prompt.clone(), from };
-            let (event, duplicate) = self.record_in_order(Origin::Hub, body, None, |_| Ok(interaction)).await?;
+            let admitted = Admitted { interaction, ..Admitted::default() };
+            let (event, duplicate) = self.record_in_order(Origin::Hub, body, None, |_| Ok(admitted)).await?;
             (event, duplicate, prompt)
         };
         if duplicate {

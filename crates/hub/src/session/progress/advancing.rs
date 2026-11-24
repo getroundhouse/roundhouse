@@ -141,7 +141,7 @@ impl Progress {
             } else {
                 None
             },
-            mode: None,
+            settings: None,
         };
         let waits = after_background(self.status, status, self.background_tasks.len(), background_tasks.len());
         let of_the_turn = origin.run().is_some() && of_the_turn(&body, known);
