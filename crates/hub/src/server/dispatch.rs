@@ -1,19 +1,17 @@
 use super::Connection;
 use super::admit::Greeting;
-use super::pump::Following;
 use super::sends::Sends;
-use super::subscribing::{follow_feed, follow_log, unsubscribe};
-use super::terminals;
 use crate::attachment_files::FileFor;
 use crate::hub::Hub;
 use crate::session::ReadingOn;
 use crate::store::AddedBy;
+use crate::versions;
 use protocol::client::{
     ApiError, ClientRequest, ClientResponse, ErrorCode, accounts, admin, agent, attachments, comments, conversation,
-    drafts, files, github_accounts, github_apps, log, new_workspace, queue, records, references, sessions,
-    subscriptions, waits, workspaces,
+    drafts, files, github_accounts, github_apps, log, new_workspace, queue, records, references, sessions, waits,
+    workspaces,
 };
-use protocol::model::{ByteRange, Place, Seq};
+use protocol::model::{ByteRange, Level};
 use std::sync::Arc;
 /// The reply to `request`, with each field of a record in it that holds an observation's old form filled from the
 /// observation, as `crate::hub::observations::OldForm` says.
@@ -42,7 +40,6 @@ async fn answered(
         R::Hello(_) => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
         R::Unknown => return Err(hub.unsupported(None)),
         R::TerminalOpen(open) => C::Terminal(hub.terminal_open(open).await?),
-        R::TerminalWatch(watch) => terminals::watch(hub, connection, watch)?,
         R::TerminalRows(rows) => C::TerminalRows(hub.terminal_rows(rows).await?),
         R::TerminalBounds(asked) => C::TerminalBounds(hub.terminal_bounds(asked).await?),
         R::TerminalText(asked) => C::TerminalText(hub.terminal_text(asked).await?),
@@ -92,8 +89,11 @@ async fn answered(
         R::HubConfigure(admin::HubConfigure { settings }) => C::HubSettings(hub.hub_configure(settings).await?),
         R::RepoAdd(records::RepoAdd { path }) => C::Repo(hub.repo_add(path).await?),
         R::RepoList => C::Repos(records::Repos { repos: hub.repo_list().await? }),
-        // As the feed is sent them, since only a client from before `Subscribe` asks.
-        R::RecordsList => C::Records(Sends::feed().records(hub.records_list().await?)),
+        // In the forms a client of version 4 reads, as the hub's level sends them a start that doesn't read GitHub as
+        // observations, since only a client of version 3 asked, and no client of a version this hub speaks does.
+        R::RecordsList => {
+            C::Records(Sends::at(Level::Hub, false, versions::CLIENTS.oldest).records(hub.records_list().await?))
+        }
         R::ModelsFor(asked) => C::ModelList(hub.models_for(asked).await?),
         R::AgentList => C::Agents(admin::Agents { agents: hub.agent_list() }),
         R::WorkspaceCreate(workspaces::WorkspaceCreate { repo_id, name, base_ref, client_request_id }) => {
@@ -117,9 +117,6 @@ async fn answered(
         }
         R::WorkspaceStatus(workspaces::WorkspaceStatus { id }) => C::GitStatus(hub.workspace_status(id).await?),
         R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => C::GitDiff(hub.workspace_diff(id).await?),
-        R::WorkspaceChangedFiles(workspaces::WorkspaceChangedFiles { id, after }) => {
-            C::ChangedFilesPage(hub.workspace_changed_files(id, after).await?)
-        }
         R::WorkspaceFileDiff(asked) => C::FileDiff(hub.workspace_file_diff(asked).await?),
         R::WorkspaceFiles(files::WorkspaceFiles { id }) => C::WorktreeFiles(hub.workspace_files(id).await?),
         R::WorkspaceFolderRead(files::WorkspaceFolderRead { id, path }) => {
@@ -146,10 +143,6 @@ async fn answered(
         }
         R::WorkspacePullRequest(workspaces::WorkspacePullRequest { id }) => {
             C::PullRequest(workspaces::PullRequestReply { pull_request: hub.workspace_pull_request(id).await? })
-        }
-        R::GithubSubscribe(subscribe) => {
-            super::github::follow(hub, connection, subscribe)?;
-            C::Ok
         }
         R::ReferencesRead(references::ReferencesRead { workspace, references }) => {
             C::References(references::References { references: hub.references_read(&workspace, references).await? })
@@ -187,10 +180,6 @@ async fn answered(
         R::SessionFind(log::SessionFind { id, subagent, query }) => {
             C::Found(hub.session_find(id, subagent, &query).await?)
         }
-        R::SessionSubscribe(subscriptions::SessionSubscribe { id, from_seq, subscription_id }) => {
-            follow_log(hub, connection, id, subscription_id, Following::Log { next: from_seq.max(Seq::FIRST) }).await?;
-            C::Ok
-        }
         R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, include_raw }) => {
             C::PlacedEvents(hub.session_read_places(id, subagent, from_place, limit, max_bytes, include_raw).await?)
         }
@@ -199,24 +188,6 @@ async fn answered(
         R::ProposalAnswer(answer) => C::Proposal(hub.answer_proposal(answer).await?),
         R::ProposalAnotherRound(round) => C::Proposal(hub.ask_another_round(round).await?),
         R::ProposalRevisionsRead(read) => C::ProposalRevisions(hub.proposal_revisions(read).await?),
-        R::SessionSubscribePlaces(subscriptions::SessionSubscribePlaces {
-            id,
-            subagent,
-            from_place,
-            subscription_id,
-        }) => {
-            let following = Following::places(hub, &id, subagent, from_place.max(Place::FIRST)).await?;
-            follow_log(hub, connection, id, subscription_id, following).await?;
-            C::Ok
-        }
-        R::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id }) => {
-            follow_feed(hub, connection, subscription_id)?;
-            C::Ok
-        }
-        R::SessionUnsubscribe(subscriptions::SessionUnsubscribe { subscription_id }) => {
-            unsubscribe(connection, subscription_id);
-            C::Ok
-        }
         R::SessionPrompt(agent::SessionPrompt { id, client_msg_id, prompt }) => {
             let (seq, duplicate) = hub.session_prompt(id, client_msg_id, prompt, device).await?;
             C::PromptRecorded(agent::PromptRecorded { seq, duplicate })

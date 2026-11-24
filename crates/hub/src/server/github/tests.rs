@@ -1,16 +1,13 @@
-//! A client's subscription to what GitHub says of what it shows, over a connection in memory, as one on the hub's
-//! socket is served.
+//! What a client of version 4 that doesn't read GitHub as observations is sent of what GitHub says of what it follows,
+//! as `HubFrame::Github`, over a connection in memory, as one on the hub's socket is served.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use github::{PullRequestState, References};
-use protocol::client::github::{GithubShown, GithubSubscribe, GithubUpdate};
-use protocol::client::subscriptions::{FeedSubscribe, SessionUnsubscribe};
-use protocol::client::{
-    CLIENT_PROTOCOL_VERSION, ClientFrame, ClientRequest, ClientResponse, ErrorCode, Hello, HubFrame, ReplyOutcome,
-    Request,
-};
+use protocol::client::github::GithubUpdate;
+use protocol::client::subscriptions::{Follow, Subscribe, Subscribed, Subscription};
+use protocol::client::{ClientFrame, ClientRequest, ClientResponse, ErrorCode, Hello, HubFrame, ReplyOutcome, Request};
 use protocol::frame;
 use protocol::model::{
     About, GithubRepositoryName, Issue, IssueNumber, IssueState, IssueSummary, PrState, PullRequest, Read, Reference,
@@ -37,19 +34,14 @@ struct Client {
 }
 
 impl Client {
-    /// A client that has said hello to `hub`.
+    /// A client that has said hello to `hub` at version 4.
     async fn of(hub: &Arc<Hub>) -> Self {
         let (client, served) = tokio::io::duplex(1 << 16);
         let (read, write) = tokio::io::split(served);
         tokio::spawn(serve_connection(hub.clone(), read, write, Gate::local(hub)));
         let (frames, sending) = tokio::io::split(client);
         let mut client = Self { frames: BufReader::new(frames).lines(), sending, next_call: 0, updates: Vec::new() };
-        let hello = Hello {
-            protocol_version: CLIENT_PROTOCOL_VERSION,
-            client: "test".into(),
-            oldest_protocol_version: None,
-            device: None,
-        };
+        let hello = Hello { protocol_version: 4, client: "test".into(), oldest_protocol_version: None, device: None };
         client.call(ClientRequest::Hello(hello)).await.unwrap();
         client
     }
@@ -81,10 +73,12 @@ impl Client {
         }
     }
 
-    /// Tells the hub that `subscription` shows `shown`.
-    async fn show(&mut self, subscription_id: u64, shown: GithubShown) {
-        let reply = self.call(GithubSubscribe { subscription_id, shown }.into_request()).await;
-        assert_eq!(reply, Ok(ClientResponse::Ok));
+    /// Stops each of `stop`, and follows `follow` as subscription `subscription_id`, reading GitHub as
+    /// `HubFrame::Github`.
+    async fn follow(&mut self, stop: Vec<u64>, subscription_id: u64, follow: Follow) {
+        let start = vec![Subscription::new(subscription_id, follow)];
+        let reply = self.call(Subscribe { stop, start }.into_request()).await;
+        assert_eq!(reply, Ok(ClientResponse::Subscribed(Subscribed::default())));
     }
 
     /// Reads what the hub sends until what it has sent of GitHub holds `done`.
@@ -163,10 +157,10 @@ fn titled(read: Option<ReferenceRead>) -> Option<String> {
     }
 }
 
-/// A client that says what it shows is sent what the hub reads of it, without asking for it, and then each change, as
+/// A client that follows something is sent what the hub reads of it, without asking for it, and then each change, as
 /// the hub reads it for whatever reason, such as an agent's turn ending.
 #[tokio::test]
-async fn a_client_is_sent_what_it_shows_and_then_what_changes_of_it() {
+async fn a_client_is_sent_what_it_follows_and_then_what_changes_of_it() {
     let dir = tempfile::tempdir().unwrap();
     let references = References::default();
     references.set(issue(12, "Decide"));
@@ -174,8 +168,10 @@ async fn a_client_is_sent_what_it_shows_and_then_what_changes_of_it() {
     pull_requests.set(7, PullRequestState::Open);
     let mut client = Client::of(&hub).await;
 
-    let w = WorkspaceId::from("w");
-    client.show(1, GithubShown { workspaces: vec![w.clone()], closely: vec![w], references: vec![own(12)] }).await;
+    client.follow(Vec::new(), 1, Follow::Hub).await;
+    client.follow(Vec::new(), 2, Follow::Reference { reference: own(12) }).await;
+    // Which has the hub read its pull request, as the pull request's bar does.
+    client.follow(Vec::new(), 3, Follow::Workspace { id: "w".into() }).await;
     client
         .until("the issue and the pull request", |sent| {
             titled(reference(sent, &own(12))).is_some() && pull_request(sent, "w").is_some()
@@ -192,10 +188,9 @@ async fn a_client_is_sent_what_it_shows_and_then_what_changes_of_it() {
     assert_eq!(titled(reference(&client.updates, &own(12))).as_deref(), Some("Decide"));
 }
 
-/// Sent again, what a subscription shows is replaced, and what's newly shown is sent. A subscription ID another kind
-/// of subscription has is refused, and ending the subscription ends what it shows.
+/// What a subscription stopped followed is followed no longer, and what's newly followed is sent.
 #[tokio::test]
-async fn what_a_subscription_shows_is_replaced_by_what_it_says_next() {
+async fn what_a_stopped_subscription_followed_is_followed_no_longer() {
     let dir = tempfile::tempdir().unwrap();
     let references = References::default();
     references.set(issue(12, "Decide"));
@@ -203,33 +198,24 @@ async fn what_a_subscription_shows_is_replaced_by_what_it_says_next() {
     let (hub, _pull_requests, _github) = hub_on_github_with(dir.path(), &references).await;
     let mut client = Client::of(&hub).await;
 
-    client.show(1, GithubShown { references: vec![own(12)], ..GithubShown::default() }).await;
+    client.follow(Vec::new(), 1, Follow::Reference { reference: own(12) }).await;
     client.until("the first issue", |sent| titled(reference(sent, &own(12))).is_some()).await;
-    client.show(1, GithubShown { references: vec![own(13)], ..GithubShown::default() }).await;
+    client.follow(vec![1], 2, Follow::Reference { reference: own(13) }).await;
     client.until("the second issue", |sent| titled(reference(sent, &own(13))).is_some()).await;
 
-    let feed = client.call(FeedSubscribe { subscription_id: 2 }.into_request()).await;
-    assert_eq!(feed, Ok(ClientResponse::Ok));
-    let taken = client.call(GithubSubscribe { subscription_id: 2, shown: GithubShown::default() }.into_request()).await;
-    assert_eq!(taken, Err(ErrorCode::InvalidRequest));
-    let ended = client.call(SessionUnsubscribe { subscription_id: 1 }.into_request()).await;
-    assert_eq!(ended, Ok(ClientResponse::Ok));
-    let followed = [Followed::Reference(own(12)), Followed::Reference(own(13))];
-    assert!(
-        !followed.iter().any(|followed| hub.followed(followed)),
-        "nothing's followed once the subscription has ended"
-    );
+    assert!(!hub.followed(&Followed::Reference(own(12))), "the first, once its subscription has stopped");
+    assert!(hub.followed(&Followed::Reference(own(13))));
 }
 
-/// What a client shows ends with its connection, so the hub stops reading it for a client that's gone.
+/// What a client follows ends with its connection, so the hub stops reading it for a client that's gone.
 #[tokio::test]
-async fn what_a_client_shows_ends_with_its_connection() {
+async fn what_a_client_follows_ends_with_its_connection() {
     let dir = tempfile::tempdir().unwrap();
     let references = References::default();
     references.set(issue(12, "Decide"));
     let (hub, _pull_requests, _github) = hub_on_github_with(dir.path(), &references).await;
     let mut client = Client::of(&hub).await;
-    client.show(1, GithubShown { references: vec![own(12)], ..GithubShown::default() }).await;
+    client.follow(Vec::new(), 1, Follow::Reference { reference: own(12) }).await;
     assert!(hub.followed(&Followed::Reference(own(12))));
 
     drop(client);
@@ -245,7 +231,7 @@ async fn a_workspace_not_looked_at_yet_is_sent_as_that() {
     let (hub, _pull_requests, _github) = hub_on_github_with(dir.path(), &References::default()).await;
     let mut client = Client::of(&hub).await;
 
-    client.show(1, GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() }).await;
+    client.follow(Vec::new(), 1, Follow::Hub).await;
 
     client
         .until("that the hub hasn't looked", |sent| {
@@ -269,7 +255,7 @@ async fn an_archived_workspaces_pull_request_the_cache_forgot_is_read_again_once
     pull_requests.set(7, PullRequestState::Merged);
     let mut client = Client::of(&hub).await;
 
-    client.show(1, GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() }).await;
+    client.follow(Vec::new(), 1, Follow::Hub).await;
 
     client
         .until("the pull request, merged", |sent| {
@@ -292,7 +278,7 @@ async fn an_archived_workspaces_pull_request_the_cache_has_only_the_summary_of_i
     pull_requests.set(7, PullRequestState::Merged);
     let mut client = Client::of(&hub).await;
 
-    client.show(1, GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() }).await;
+    client.follow(Vec::new(), 1, Follow::Hub).await;
 
     client
         .until("the pull request, merged, with its checks", |sent| {
@@ -317,8 +303,7 @@ async fn an_archived_workspaces_pull_request_that_couldnt_be_read_again_is_tried
     tokio::spawn(hub.clone().watch_followed_references());
     let mut client = Client::of(&hub).await;
 
-    let feed = client.call(FeedSubscribe { subscription_id: 2 }.into_request()).await;
-    client.show(1, GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() }).await;
+    client.follow(Vec::new(), 1, Follow::Hub).await;
     waiting::task::until(WAIT, "a read that fails", || github.asked().len() > asked).await;
     pull_requests.fail(false);
 
@@ -327,7 +312,6 @@ async fn an_archived_workspaces_pull_request_that_couldnt_be_read_again_is_tried
             pull_request(sent, "w").is_some_and(|pr| pr.said().state == PrState::Merged)
         })
         .await;
-    assert_eq!(feed, Ok(ClientResponse::Ok));
     assert_eq!(linked_to(&hub).await, Some(7), "the record keeps its link");
 }
 

@@ -4,7 +4,6 @@
 use std::sync::Arc;
 
 use protocol::client::ApiError;
-use protocol::client::github::GithubShown;
 use protocol::client::listed::{Listed, ReferenceObservations};
 use protocol::model::{Level, ReferenceAsk};
 use tokio::sync::{mpsc, watch};
@@ -12,7 +11,7 @@ use tokio::sync::{mpsc, watch};
 use super::notices::{forward, send_listed};
 use super::starting::Feeding;
 use crate::hub::Hub;
-use crate::server::github::pump;
+use crate::server::github::{GithubShown, pump};
 use crate::server::sends::Sends;
 use crate::server::{Closer, Outgoing};
 

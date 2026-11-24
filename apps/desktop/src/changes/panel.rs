@@ -149,7 +149,6 @@ impl Render for Changes {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let layout = layout(cx);
         let review = self.review.read(cx);
-        let truncated = review.listing().is_some_and(|listing| listing.truncated);
         let listing = review.listing().cloned();
         let changed = listing.as_ref().map(|listing| {
             if self.laid_out != Some(layout) {
@@ -158,7 +157,6 @@ impl Render for Changes {
             }
             listing.changed()
         });
-        let muted = look::colors(cx).text_muted;
         let body = match changed {
             None => look::nothing_to_show("Loading…").into_any_element(),
             Some(0) => look::nothing_to_show("No changes yet").into_any_element(),
@@ -174,17 +172,6 @@ impl Render for Changes {
         };
         v_flex()
             .size_full()
-            .when(truncated, |d| {
-                d.child(
-                    div()
-                        .flex_none()
-                        .px(look::Space::Medium)
-                        .py(look::Space::XSmall)
-                        .typeset(look::Type::Detail)
-                        .text_color(muted)
-                        .child("Some untracked files aren't shown"),
-                )
-            })
             .child(body)
             .children(listing.filter(|listing| listing.left_out > 0).map(|listing| left_out(listing.left_out, cx)))
     }

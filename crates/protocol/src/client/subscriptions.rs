@@ -1,6 +1,5 @@
-//! The requests that start and stop subscriptions. [`Subscribe`] follows anything, at any level, and the rest are its
-//! forerunners, which follow a session's log or the hub's feed of its records, kept for clients of version 3 of the
-//! client protocol. The client picks each `subscription_id`, because what's followed can arrive before the reply does.
+//! The request that starts and stops subscriptions, [`Subscribe`], which follows anything, at any level. The client
+//! picks each `subscription_id`, because what's followed can arrive before the reply does.
 
 use serde::{Deserialize, Serialize};
 
@@ -16,8 +15,7 @@ use crate::model::{Level, Place, ReferenceAsk, Seq, SessionId, SubagentId, Termi
 /// before this refuses it as unsupported, and every hub that speaks version 4 of the client protocol has it.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Subscribe {
-    /// Stops a subscription of any kind, including one a request from before this started, as
-    /// [`SessionUnsubscribe`] does.
+    /// Stops a subscription.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stop: Vec<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -39,13 +37,12 @@ pub struct Subscription {
     pub subscription_id: u64,
     #[serde(flatten)]
     pub follow: Follow,
-    /// Whether the client reads what GitHub says as observations: at the hub's level, how each workspace's pull request
-    /// stands, at a workspace's, its pull request's checks, history and stack and whether GitHub showed its repository,
-    /// and at an issue's or a pull request's, what a chip draws. The hub sends them in place of `HubFrame::Github`.
-    /// Where it's false, as every client from before it sends, the hub sends `HubFrame::Github` as [`Follow`] says, and
-    /// none of GitHub's observations in any list or notice. A hub from before it ignores it, and a hub from before it
-    /// sent a workspace's pull request as observations sends `HubFrame::Github` at the hub's level, and nothing of
-    /// GitHub's at a workspace's.
+    /// Whether a client of version 4 reads what GitHub says as observations: at the hub's level, how each workspace's
+    /// pull request stands, at a workspace's, its pull request's checks, history and stack and whether GitHub showed its
+    /// repository, and at an issue's or a pull request's, what a chip draws. The hub sends them in place of
+    /// `HubFrame::Github`. Where it's false, the hub sends that client `HubFrame::Github` as [`Follow`] says, and none of
+    /// GitHub's observations in any list or notice. A client of version 5 reads GitHub as observations whatever it says,
+    /// as [`EVERY_OBSERVATION_FROM`](super::EVERY_OBSERVATION_FROM) has it, so it sends none.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub github_observed: bool,
 }
@@ -65,17 +62,15 @@ pub enum Follow {
     /// [`HubNotice::level`](super::HubNotice::level) says, with how each workspace's own pull request stands among its
     /// observations, to a start that reads GitHub so, as [`Subscription::github_observed`] says. To any other, every
     /// one of those but GitHub's, and a `HubFrame::Github` for each workspace's own pull request, then again as it
-    /// changes, as a [`GithubSubscribe`](super::github::GithubSubscribe) that showed every workspace would be sent.
+    /// changes.
     Hub,
     /// Sends a [`Listed::Workspace`](super::listed::Listed::Workspace), queued before the reply to the `Subscribe`
     /// that starts it, then every notice the feed sends at the workspace's level, its pull request's checks, history
     /// and stack among them only to a start that reads GitHub so, as [`Subscription::github_observed`] says. And has
-    /// the hub read the workspace's pull request at once, and then as often as one shown in full is read, as a
-    /// `GithubSubscribe` that shows it `closely` does.
+    /// the hub read the workspace's pull request at once, and then as often as one the pull request's bar shows.
     Workspace { id: WorkspaceId },
     /// Sends a [`Listed::Session`](super::listed::Listed::Session), then the events from `from`, then the tail, and then
-    /// every event and delta, as [`SessionSubscribe`] and [`SessionSubscribePlaces`] do, with every notice the feed
-    /// sends at the session's level.
+    /// every event and delta, with every notice the feed sends at the session's level.
     Session {
         id: SessionId,
         /// How far the client has the session's log, and so where the events it's sent start: after a reconnect, one
@@ -83,13 +78,17 @@ pub enum Follow {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         from: Option<LogFrom>,
     },
-    /// Sends what the terminal shows, as [`TerminalWatch`](super::terminals::TerminalWatch) does.
+    /// Sends what the terminal shows, as frames of `HubFrame::TerminalPicture`. The first is fresh and whole, from the
+    /// hub's copy of the screen if it has one, and each after it has only what the client lacks of the newest the hub
+    /// has, with at most one frame on its way at a time, so a client on a slow link is sent the newest of what the
+    /// terminal shows rather than all that came between. Its shell's end comes as a `HubFrame::Terminal` with
+    /// [`TerminalUpdate::Exited`](crate::terminal::TerminalUpdate::Exited), after which nothing more does.
     Terminal { id: TerminalId },
-    /// Has the hub read the issue or pull request again once it's stale, as a `GithubSubscribe` that shows it as a
-    /// chip does. To a start that reads GitHub as observations, as [`Subscription::github_observed`] says, sends a
+    /// Has the hub read the issue or pull request again once it's stale, as it does what a chip shows. To a start that
+    /// reads GitHub as observations, as [`Subscription::github_observed`] says, sends a
     /// [`Listed::Reference`](super::listed::Listed::Reference), then each change to the observations it lists. To
     /// any other, sends a `HubFrame::Github` of what GitHub says of it once the hub has read it, and again as that
-    /// changes, as a `GithubSubscribe` sends them for its `references`.
+    /// changes.
     Reference { reference: ReferenceAsk },
     /// From a newer client. Refused as unsupported.
     #[serde(other)]
@@ -114,10 +113,10 @@ impl Follow {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "by", rename_all = "snake_case")]
 pub enum LogFrom {
-    /// Every event, from `seq` on, as [`SessionSubscribe`] sends them.
+    /// Every event, from `seq` on.
     Seq { seq: Seq },
-    /// Only the agent's own events, or only the subagent `subagent`'s, from `place` on, as [`SessionSubscribePlaces`]
-    /// sends them. The tail and deltas are only what that one is writing.
+    /// Only the agent's own events, or only the subagent `subagent`'s, from `place` on. The tail and deltas are only
+    /// what that one is writing.
     Place {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         subagent: Option<SubagentId>,
@@ -151,70 +150,4 @@ impl Reply for Subscribed {
 pub struct Refused {
     pub subscription_id: u64,
     pub error: ApiError,
-}
-
-/// Sends every event from `from_seq` on, then keeps streaming as new ones are recorded. To catch up after
-/// reconnecting, subscribe from one past the last `seq` received.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct SessionSubscribe {
-    pub id: SessionId,
-    pub from_seq: Seq,
-    pub subscription_id: u64,
-}
-
-impl Request for SessionSubscribe {
-    type Reply = ();
-
-    fn into_request(self) -> ClientRequest {
-        ClientRequest::SessionSubscribe(self)
-    }
-}
-
-/// Follows the agent's own events, or one subagent's, from `from_place` on, as [`SessionSubscribe`] follows every
-/// event. The tail and deltas are only what that one is writing. To catch up after reconnecting, subscribe from one
-/// past the last place received. A hub older than this refuses it as unsupported.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct SessionSubscribePlaces {
-    pub id: SessionId,
-    pub subagent: Option<SubagentId>,
-    pub from_place: Place,
-    pub subscription_id: u64,
-}
-
-impl Request for SessionSubscribePlaces {
-    type Reply = ();
-
-    fn into_request(self) -> ClientRequest {
-        ClientRequest::SessionSubscribePlaces(self)
-    }
-}
-
-/// Works for any kind of subscription.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct SessionUnsubscribe {
-    pub subscription_id: u64,
-}
-
-impl Request for SessionUnsubscribe {
-    type Reply = ();
-
-    fn into_request(self) -> ClientRequest {
-        ClientRequest::SessionUnsubscribe(self)
-    }
-}
-
-/// Sends a [`super::HubNotice`] whenever a record changes. Subscribe, then list with
-/// [`RecordsList`](super::records::RecordsList), and keep whichever copy of each record has the newer revision. List
-/// again on `Resync`.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct FeedSubscribe {
-    pub subscription_id: u64,
-}
-
-impl Request for FeedSubscribe {
-    type Reply = ();
-
-    fn into_request(self) -> ClientRequest {
-        ClientRequest::FeedSubscribe(self)
-    }
 }

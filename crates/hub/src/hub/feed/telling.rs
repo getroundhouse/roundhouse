@@ -18,13 +18,6 @@ impl Hub {
         self.feed.subscribe()
     }
 
-    /// How many follow the feed, each subscription and each of the hub's own tasks that reads it, for a test that waits
-    /// for one to start.
-    #[cfg(test)]
-    pub(crate) fn feed_receivers(&self) -> usize {
-        self.feed.receivers()
-    }
-
     /// Tells every client following the feed of `notice`, with each field of a record's that a client of a version
     /// from before an observation reads it in filled from the observation, as `crate::hub::observations::OldForm` says,
     /// as [`Feed::send`](super::Feed::send) says.

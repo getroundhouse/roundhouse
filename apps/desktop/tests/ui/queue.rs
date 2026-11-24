@@ -13,7 +13,7 @@ use protocol::model::{QueuedPrompt, SessionStatus};
 use protocol::prompt::Prompt;
 
 use crate::steering::working;
-use crate::support::{Frozen, Gate, Stack, Ui, one_chat, open_on_the_chat};
+use crate::support::{Gate, Stack, Ui, one_chat, open_on_the_chat};
 use protocol::prompt::PromptFrom;
 
 pub(crate) fn queued(ui: &Ui) -> Vec<QueuedPrompt> {
@@ -149,7 +149,7 @@ fn cmd_enter_queues_a_prompt_with_its_files_which_shows_while_they_re_added_and_
     let png = png.into_inner();
     let len = png.len();
     // Hold the upload until the pending row is checked, independently of file size or machine load.
-    let frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
+    let frozen = ui.freeze_hub(&stack);
     ui.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, png)));
     ui.wait("the image to be attached", |ui| ui.attached() == ["Pasted image.png"]);
     ui.input("attached");

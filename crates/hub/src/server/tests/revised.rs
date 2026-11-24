@@ -145,7 +145,6 @@ fn of_reply(response: &ClientResponse) -> Vec<(String, Rev)> {
         | C::Agents(_)
         | C::GitStatus(_)
         | C::GitDiff(_)
-        | C::ChangedFilesPage(_)
         | C::FileDiff(_)
         | C::SetupLog(_)
         | C::PullRequest(_)

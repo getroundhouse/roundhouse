@@ -228,10 +228,15 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
             oldest_protocol_version: None,
             device: None,
         }),
-        ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe {
-            id: session.id.clone(),
-            from_seq: Seq::new(1),
-            subscription_id: 7,
+        ClientRequest::Subscribe(subscriptions::Subscribe {
+            stop: Vec::new(),
+            start: vec![subscriptions::Subscription::new(
+                7,
+                subscriptions::Follow::Session {
+                    id: session.id.clone(),
+                    from: Some(subscriptions::LogFrom::Seq { seq: Seq::new(1) }),
+                },
+            )],
         }),
     ];
     for (id, request) in requests.into_iter().enumerate() {

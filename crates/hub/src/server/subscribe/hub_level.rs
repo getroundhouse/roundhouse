@@ -4,7 +4,6 @@
 
 use std::sync::Arc;
 
-use protocol::client::github::GithubShown;
 use protocol::client::listed::Listed;
 use protocol::client::{ApiError, HubNotice};
 use protocol::model::{RecordKey, Records};
@@ -13,7 +12,7 @@ use tokio::sync::{mpsc, watch};
 use super::notices::{forward, send_listed};
 use super::starting::Feeding;
 use crate::hub::Hub;
-use crate::server::github::pump;
+use crate::server::github::{GithubShown, pump};
 use crate::server::sends::Sends;
 use crate::server::{Closer, Outgoing};
 

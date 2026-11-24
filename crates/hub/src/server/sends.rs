@@ -1,5 +1,5 @@
-//! What each subscription is sent of the feed's notices, decided in one place, [`Sends::notice`], for `FeedSubscribe`
-//! and for every level `Subscribe` follows: the notices of its level, in the forms its client reads. Which those are, a
+//! What each subscription is sent of the feed's notices, decided in one place, [`Sends::notice`], for every level
+//! `Subscribe` follows: the notices of its level, in the forms its client reads. Which those are, a
 //! copy's form from before observations or its observation, as `docs/principles/keeping-observations.md` has them, one
 //! function decides, [`Sends::keeps`], by what each kind's [`ObservationKey::read_from`] says, the version of the
 //! client protocol the subscription's connection chose, and whether its start reads GitHub as observations, whatever
@@ -10,52 +10,32 @@ use protocol::client::{EVERY_OBSERVATION_FROM, HubNotice};
 use protocol::model::{Level, Observation, ObservationKey, ReadFrom, Records};
 
 use crate::hub::{Fed, Moves};
-use crate::versions;
 
 /// What one subscription is sent of the feed.
 #[derive(Clone, Debug)]
 pub(super) struct Sends {
-    of: Of,
+    /// The level whose notices it's sent.
+    level: Level,
     /// Whether its start asked to be sent what GitHub says as GitHub's observations, in its level's list and notices,
-    /// rather than as `HubFrame::Github`, as its level sends it. Only a `Subscribe` start asks for them, and every
-    /// level that sends anything of GitHub's sends each kind of it as an observation.
+    /// rather than as `HubFrame::Github`, as its level sends it. Every level that sends anything of GitHub's sends each
+    /// kind of it as an observation.
     github_observed: bool,
     /// The version of the client protocol its connection chose.
     version: u32,
-}
-
-/// Whose notices a subscription is sent.
-#[derive(Clone, Debug)]
-enum Of {
-    /// Those of one level, as `Subscribe` follows it.
-    Level(Level),
-    /// Every notice but those of a workspace's level, which only `Subscribe` follows, as `FeedSubscribe` is sent them,
-    /// so no client of the version it's kept for is sent the largest, such as a workspace's changed files, for every
-    /// workspace.
-    Feed,
 }
 
 impl Sends {
     /// What a subscription `Subscribe` started at `level` is sent, on a connection whose hello chose `version`, reading
     /// GitHub's observations if `github_observed` or its version reads every observation.
     pub(super) fn at(level: Level, github_observed: bool, version: u32) -> Self {
-        Self { of: Of::Level(level), github_observed, version }
-    }
-
-    /// What a subscription `FeedSubscribe` started is sent, and what `RecordsList` lists, which only a client of
-    /// version 3 sends, so in the forms from before observations.
-    pub(super) fn feed() -> Self {
-        Self { of: Of::Feed, github_observed: false, version: versions::CLIENTS.oldest }
+        Self { level, github_observed, version }
     }
 
     /// Whether it's sent `fed`: a notice of its level, in a form its client reads, and that moves something its client
     /// reads, which it hasn't heard in a copy as new.
     pub(super) fn notice(&self, fed: &Fed) -> bool {
         let notice = &*fed.notice;
-        let of = match &self.of {
-            Of::Level(level) => notice.level().as_ref() == Some(level),
-            Of::Feed => !matches!(notice.level(), Some(Level::Workspace { .. })),
-        };
+        let of = notice.level().as_ref() == Some(&self.level);
         let moves = match fed.moves {
             Moves::Anything => !fed.told_in_old_form || self.reads_every_observation(),
             Moves::OldFormOnly => !self.reads_every_observation(),

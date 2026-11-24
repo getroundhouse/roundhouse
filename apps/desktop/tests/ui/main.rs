@@ -33,6 +33,7 @@ mod lost_release;
 mod marks;
 mod menus;
 mod new_workspace;
+mod not_known;
 mod notifications;
 mod other_hubs;
 mod outline;

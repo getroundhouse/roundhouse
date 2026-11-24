@@ -130,7 +130,7 @@ fn start_a_comment(ui: &mut Ui<'_>, stack: &Stack) -> Frozen {
     ui.open_diff_of(&diff, "a.txt");
     ui.start_comment(&diff, "a.txt", 2);
     ui.view().drafts().unwrap().flushed().recv().unwrap();
-    let frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
+    let frozen = ui.freeze_hub(stack);
     ui.input("Why this word?");
     frozen
 }
@@ -232,7 +232,7 @@ fn restarting_to_update_counts_what_the_hub_hasnt_had_of_the_new_workspace_dialo
     let stack = Stack::new();
     let mut ui = the_dialog_with_an_update_ready(cx, &stack);
     ui.give_up_on_a_frozen_hub_soon();
-    let _frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
+    let _frozen = ui.freeze_hub(&stack);
     ui.input("half a thought");
     ui.press("escape");
 

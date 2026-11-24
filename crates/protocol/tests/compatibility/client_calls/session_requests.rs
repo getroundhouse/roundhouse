@@ -5,7 +5,7 @@ use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::capability::approvals::{AfterDenial, Decision};
 use protocol::capability::settings::{Effort, Settings};
 use protocol::client::{
-    ClientRequest, agent, attachments, conversation, drafts, log, new_workspace, queue, sessions, subscriptions, waits,
+    ClientRequest, agent, attachments, conversation, drafts, log, new_workspace, queue, sessions, waits,
 };
 use protocol::fixtures;
 use protocol::frame;
@@ -156,36 +156,6 @@ fn a_read_of_a_sessions_log_without_include_raw_includes_none() {
         panic!("{by_place:?}")
     };
     assert!(!include_raw);
-}
-
-#[test]
-fn every_request_that_follows_a_sessions_log_or_the_feed_keeps_its_form() {
-    asked(
-        ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe {
-            id: "s".into(),
-            from_seq: Seq::new(5),
-            subscription_id: 3,
-        }),
-        r#"{"method":"session_subscribe","id":"s","from_seq":5,"subscription_id":3}"#,
-    );
-    let follow = ClientRequest::SessionSubscribePlaces(subscriptions::SessionSubscribePlaces {
-        id: "s".into(),
-        subagent: None,
-        from_place: Place::new(1),
-        subscription_id: 4,
-    });
-    asked(
-        follow,
-        r#"{"method":"session_subscribe_places","id":"s","subagent":null,"from_place":1,"subscription_id":4}"#,
-    );
-    asked(
-        ClientRequest::SessionUnsubscribe(subscriptions::SessionUnsubscribe { subscription_id: 3 }),
-        r#"{"method":"session_unsubscribe","subscription_id":3}"#,
-    );
-    asked(
-        ClientRequest::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id: 2 }),
-        r#"{"method":"feed_subscribe","subscription_id":2}"#,
-    );
 }
 
 #[test]

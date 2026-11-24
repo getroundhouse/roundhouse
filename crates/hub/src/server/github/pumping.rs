@@ -1,9 +1,9 @@
-//! Feeding a subscription to what GitHub says of what a client shows.
+//! Feeding a subscription what GitHub says of what it follows, as `HubFrame::Github`.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use protocol::client::github::{GithubShown, GithubUpdate};
+use protocol::client::github::GithubUpdate;
 use protocol::client::{HubFrame, HubNotice};
 use protocol::model::{
     Observation, PullRequestFound, ReferenceAsk, ReferenceRead, RepositoryUnseen, Workspace, WorkspaceId,
@@ -15,6 +15,14 @@ use tracing::warn;
 use crate::github_cache::Item;
 use crate::hub::Hub;
 use crate::server::Outgoing;
+
+/// What a subscription is sent `HubFrame::Github` of: every workspace's own pull request, at the hub's level, or one
+/// issue or pull request, at its own.
+#[derive(Clone, Debug, Default)]
+pub(in crate::server) struct GithubShown {
+    pub(in crate::server) workspaces: Vec<WorkspaceId>,
+    pub(in crate::server) references: Vec<ReferenceAsk>,
+}
 
 /// Feeds one subscription: what the hub knows of each of what's shown, then what changes of it, from the reads the
 /// cache keeps and the workspaces' records, until the subscription or its connection ends.

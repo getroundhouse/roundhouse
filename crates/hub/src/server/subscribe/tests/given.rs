@@ -108,16 +108,6 @@ impl ByKind {
         }
         kinds
     }
-
-    /// Whether it holds all that [`Given::changes`] and following `w`, `s` and `t` send.
-    pub(super) fn has_all(&self) -> bool {
-        let of = |kind: fn(&HubNotice) -> bool| self.notices.iter().filter(|notice| kind(notice)).count();
-        of(|notice| matches!(notice, HubNotice::Comment(_))) == 1
-            && of(|notice| matches!(notice, HubNotice::Subagent(_))) == 1
-            && self.tails.len() == 2
-            && self.pictures.len() == 1
-            && self.github.len() == 1
-    }
 }
 
 pub(super) async fn ok(connection: &mut Connection, id: u64, request: impl Request) -> ClientResponse {

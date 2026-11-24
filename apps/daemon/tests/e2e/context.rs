@@ -4,8 +4,10 @@
 
 use client_core::{Client, SubscriptionItem};
 use protocol::client::HubNotice;
+use protocol::client::listed::Listed;
+use protocol::client::subscriptions::Follow;
 use protocol::event::EventBody;
-use protocol::model::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy, Seq, SessionId};
+use protocol::model::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy, Observation, Observed, Seq, SessionId};
 
 use crate::accounts::wait_for_adas_week;
 use crate::support::{Stack, TIMEOUT, wait_for_turn_end, wait_until};
@@ -38,31 +40,38 @@ pub(crate) fn wait_for_context(client: &Client, session: &SessionId, context: &C
 }
 
 #[test]
-fn a_chats_record_says_how_full_its_agents_context_is_and_follows_it() {
+fn a_chats_level_says_how_full_its_agents_context_is_and_follows_it() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    assert_eq!(session.context, None, "nothing has said yet");
-    let feed = client.follow(protocol::client::subscriptions::Follow::Hub).unwrap();
+    let level = Follow::Session { id: session.id.clone(), from: None };
+    let followed = client.follow(level).unwrap();
 
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    wait_for_context(&client, &session.id, &after_prompts(1));
 
-    // The feed says so, so a client that isn't asking sees it. What the turn's start said may come first, which can be
-    // from before anything said how much the model holds.
-    let mut told = std::iter::from_fn(|| feed.items.recv_timeout(TIMEOUT).ok()).filter_map(|item| match item {
-        SubscriptionItem::Notice(notice) => match *notice {
-            HubNotice::Session(told) => told.context,
-            _ => None,
-        },
+    // The session's level says so, as it lists itself and then as it changes, so a client that follows the chat sees
+    // it. What the turn's start said may come first, which can be from before anything said how much the model holds.
+    let said = |observation: &Observation| match observation {
+        Observation::SessionContext { context: Observed::AsOf { value, .. }, .. } => Some(value.clone()),
         _ => None,
+    };
+    let mut told = std::iter::from_fn(|| followed.items.recv_timeout(TIMEOUT).ok()).flat_map(|item| match item {
+        SubscriptionItem::Listed(listed) => match *listed {
+            Listed::Session(records) => records.observations.iter().filter_map(said).collect(),
+            _ => Vec::new(),
+        },
+        SubscriptionItem::Notice(notice) => match *notice {
+            HubNotice::Observation(observation) => said(&observation).into_iter().collect(),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
     });
     assert_eq!(told.find(|context| context == &after_prompts(1)), Some(after_prompts(1)));
 
     client.session_prompt(&session.id, "say:more", None).unwrap();
     wait_for_turn_end(&client, &session.id, 2);
-    wait_for_context(&client, &session.id, &after_prompts(2));
+    assert_eq!(told.find(|context| context == &after_prompts(2)), Some(after_prompts(2)));
 }
 
 #[test]

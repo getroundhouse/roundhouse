@@ -2,16 +2,14 @@
 //! changes what it follows in one request as what's shown changes. What the hub says of every workspace's own pull
 //! request comes from following the hub, as [`crate::RecordsFeed`] does, and what it says only at a workspace's own
 //! level from following the workspace there, as `client::workspace_level` does. What a chip's level sends as an
-//! observation goes into the copy of the hub's records, and what's sent in the form from before observations,
-//! `GithubUpdate`, is held here.
+//! observation goes into the copy of the hub's records.
 
 use parking_lot::Mutex;
 use std::cell::Cell;
 
-use protocol::client::github::GithubUpdate;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::Follow;
-use protocol::model::{Level, ObservationKey, ReferenceAsk};
+use protocol::model::{Level, ReferenceAsk};
 
 use super::held::{GithubHeld, github_keys, notice_key};
 use crate::client::follow::{Reach, Source};
@@ -74,8 +72,7 @@ impl Source for GithubSource {
     }
 
     /// Takes what an issue's or a pull request's level sends as observations into the copy of the hub's records, telling
-    /// the views here that show it, and holds what's sent as `GithubUpdate` here, letting go of what the copy holds of
-    /// it as an observation. What's sent of a chip no longer followed, which was already on its way as it was let go
+    /// the views here that show it. What's sent of a chip no longer followed, which was already on its way as it was let go
     /// of, is dropped, so nothing brings back what letting go of it let go of.
     fn apply(&mut self, _: &Client, held: &Mutex<GithubHeld>, item: SubscriptionItem) -> Result<bool> {
         let Some(Level::Reference { reference }) = item.level() else { return Ok(false) };
@@ -92,13 +89,6 @@ impl Source for GithubSource {
             });
         };
         match item {
-            SubscriptionItem::Github(update) => {
-                if let GithubUpdate::Reference { reference, .. } = &*update {
-                    let key = ObservationKey::Reference { reference: reference.clone() };
-                    change(&|records| records.forget_observed(|of| *of == key));
-                }
-                Ok(held.lock().apply(*update))
-            }
             SubscriptionItem::Listed(listed) => {
                 let keys = match *listed {
                     Listed::Reference(observations) => {
@@ -120,7 +110,9 @@ impl Source for GithubSource {
                 }
                 Ok(false)
             }
-            SubscriptionItem::Event(_)
+            // Sent only to a client of version 4 that doesn't read GitHub as observations.
+            SubscriptionItem::Github(_)
+            | SubscriptionItem::Event(_)
             | SubscriptionItem::Tail(_)
             | SubscriptionItem::Delta(_)
             | SubscriptionItem::Terminal(_)
@@ -130,11 +122,7 @@ impl Source for GithubSource {
 
     /// Follows the chips shown now, if that has changed, and lets go of what no view shows.
     fn asked(&mut self, connection: Option<&Client>, held: &Mutex<GithubHeld>, _: &dyn Fn()) -> Result<bool> {
-        let wanted = {
-            let mut held = held.lock();
-            held.forget_unshown();
-            followed(&held)
-        };
+        let wanted = followed(&held.lock());
         let (Some(client), Some(changing)) = (connection, &self.changing) else { return Ok(false) };
         if wanted == self.asked_for {
             return Ok(false);

@@ -2,7 +2,6 @@
 //! `w`'s worker, which has the terminal `t` open, and runs the agent of the session `s`.
 
 mod accounts;
-mod as_the_four;
 mod every_kind;
 mod falling_behind;
 mod github;
@@ -16,6 +15,7 @@ mod release_offered;
 mod revisions;
 mod rules;
 mod sessions;
+mod terminals;
 mod worker_builds;
 mod workspace_branches;
 mod workspace_github;

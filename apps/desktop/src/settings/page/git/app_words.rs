@@ -5,7 +5,7 @@
 use client_core::records::Snapshot;
 use client_core::{ClientError, refusals};
 use protocol::client::ErrorCode;
-use protocol::model::{GithubAccountId, GithubApp};
+use protocol::model::{GithubAccountId, GithubAppSaid};
 
 use super::added::listed;
 use crate::manifest_flow::{NotAnOrganization, Under};
@@ -83,9 +83,13 @@ pub(super) fn chosen(under: &Under, name: &str) -> String {
     }
 }
 
-/// What the first two steps say once GitHub has made `app`.
-pub(super) fn made(app: &GithubApp) -> [String; 2] {
-    [format!("Under {}, as {}", app.owner.name, app.name), format!("Made {} on GitHub", app.slug)]
+/// What the first two steps say once GitHub has made the app called `name`, as GitHub says of it in `said`, while
+/// that's known.
+pub(super) fn made(name: &str, said: Option<&GithubAppSaid>) -> [String; 2] {
+    match said {
+        Some(said) => [format!("Under {}, as {name}", said.owner.name), format!("Made {} on GitHub", said.slug)],
+        None => [format!("As {name}"), "Made on GitHub".to_string()],
+    }
 }
 
 /// What installing it says once it's installed `on` an account or organization.

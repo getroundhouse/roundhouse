@@ -3,10 +3,9 @@
 use super::super::frame;
 use super::super::steps::{Screen, Step, Target};
 use super::{opening, scrollbar};
-use crate::support::{Cells, first_labelled_in, in_window, menu_item};
+use crate::support::{Cells, first_labelled_in, in_window, menu_item, sidebar_loaded};
 use desktop::app::AppView;
 use desktop::pull_request::Lookup;
-use desktop::sidebar_tabs::SidebarTab;
 use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt as _;
@@ -66,15 +65,6 @@ fn chat_loaded(pane: &WorkspacePane, cx: &App) -> bool {
     pane.transcript().is_some_and(|t| {
         let t = t.read(cx);
         t.loaded_events() == t.row_count() && (empty || t.row_count() > 0)
-    })
-}
-
-/// Whether the sidebar of changes shows what it starts on: the changes, or all the files where there are none.
-fn sidebar_loaded(pane: &WorkspacePane, cx: &App) -> bool {
-    pane.diff.as_ref().is_some_and(|diff| match pane.sidebar_tab() {
-        Some(SidebarTab::Changes) => true,
-        Some(SidebarTab::AllFiles) => diff.all_files.read(cx).is_listed(),
-        None => false,
     })
 }
 

@@ -141,12 +141,17 @@ fn a_client_copy_of_the_records_keeps_up_with_the_hub() {
     let removed = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 2, "Removed", None).unwrap();
     client.comment_delete(&removed.id).unwrap();
 
-    // Everything the feed announces. A session's newest event moves without a notice, so it's left out.
+    // Everything the feed announces. A session's newest event moves without a notice, so it's left out, and so is each
+    // record's revision, which moves too as an observation whose old form the record holds changes, and a client of
+    // this version is sent no copy that moves only that.
     let shown = |records: &Snapshot| {
-        let workspaces = records.workspaces().to_vec();
+        let mut workspaces = records.workspaces().to_vec();
         let mut sessions: Vec<_> = workspaces.iter().map(|w| records.sessions(&w.id).to_vec()).collect();
         for session in sessions.iter_mut().flatten() {
-            (session.last_seq, session.updated_at_ms) = (Seq::default(), 0);
+            (session.last_seq, session.updated_at_ms, session.rev) = (Seq::default(), 0, Rev::default());
+        }
+        for workspace in &mut workspaces {
+            workspace.rev = Rev::default();
         }
         let comments: Vec<_> = workspaces.iter().map(|w| records.comments(&w.id).to_vec()).collect();
         (records.repos().to_vec(), workspaces, sessions, comments)

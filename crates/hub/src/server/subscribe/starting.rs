@@ -56,11 +56,11 @@ async fn start_one(
     {
         let subscriptions = connection.subscriptions.lock();
         match subscriptions.get(&subscription_id) {
-            Some(subscription) if followed.is_some() && subscription.followed == followed => return Ok(()),
+            Some(subscription) if followed.as_ref() == Some(&subscription.followed) => return Ok(()),
             Some(_) => return Err(taken(subscription_id)),
             None => {}
         }
-        let references = subscriptions.values().filter(|s| matches!(s.followed, Some(Followed::Reference(_)))).count();
+        let references = subscriptions.values().filter(|s| matches!(s.followed, Followed::Reference(_))).count();
         if matches!(followed, Some(Followed::Reference(_))) && references >= MOST_REFERENCES_SHOWN {
             let message = format!("over {MOST_REFERENCES_SHOWN} issues and pull requests followed on one connection");
             return Err(ApiError::new(ErrorCode::InvalidRequest, message));
@@ -69,16 +69,9 @@ async fn start_one(
     let Some(followed) = followed else { return Err(unknown("a level")) };
     let sends = sends(followed.level());
     let Started { feeding, listed } = feeding(hub, connection, subscription_id, follow, sends).await?;
-    {
-        let mut subscriptions = connection.subscriptions.lock();
-        // Another kind of request, which doesn't wait its turn as this does, may have taken the ID meanwhile.
-        if subscriptions.contains_key(&subscription_id) {
-            return Err(taken(subscription_id));
-        }
-        let task = tokio::spawn(feeding).abort_handle();
-        let subscription = subscribing::Served::new(hub, [followed.clone()], task);
-        subscriptions.insert(subscription_id, subscription.of_subscribe(followed));
-    }
+    let task = tokio::spawn(feeding).abort_handle();
+    let subscription = subscribing::Served::new(hub, followed, task);
+    connection.subscriptions.lock().insert(subscription_id, subscription);
     // Only an error once the subscription has stopped, as another kind of request can stop it, which leaves no list to
     // wait for.
     if let Some(listed) = listed {

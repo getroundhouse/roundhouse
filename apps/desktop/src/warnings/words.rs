@@ -39,7 +39,7 @@ impl Warning {
         let (to_do, answer) = match (login, installation) {
             (_, Some(InstalledApp { slug, on })) if installed_on_owner(repository, on) => {
                 let to_do = format!("Install the app on {owner} with access to {repository}, or {connect}.");
-                (to_do, Some(Answer::OnGithub { label: "Install on GitHub", page: install_page(slug) }))
+                (to_do, Some(Answer::OnGithub { label: "Install on GitHub", page: install_page(Some(slug)) }))
             }
             (_, Some(InstalledApp { on, .. })) => {
                 let to_do = format!(

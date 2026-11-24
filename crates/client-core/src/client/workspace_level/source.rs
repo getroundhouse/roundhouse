@@ -104,7 +104,6 @@ impl Source for WorkspacesSource {
             });
         };
         match item {
-            SubscriptionItem::Github(update) => self.github.take(*update),
             SubscriptionItem::Listed(listed) => {
                 let Listed::Workspace(observations) = *listed else { return Ok(false) };
                 let keys = github_keys(&observations.observations);
@@ -118,7 +117,9 @@ impl Source for WorkspacesSource {
                     self.github.observed(&[key], changed.get());
                 }
             }
-            SubscriptionItem::Event(_)
+            // Sent only to a client of version 4 that doesn't read GitHub as observations.
+            SubscriptionItem::Github(_)
+            | SubscriptionItem::Event(_)
             | SubscriptionItem::Tail(_)
             | SubscriptionItem::Delta(_)
             | SubscriptionItem::Terminal(_)

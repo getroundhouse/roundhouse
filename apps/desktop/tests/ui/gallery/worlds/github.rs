@@ -4,7 +4,7 @@
 use protocol::fixtures::{github_account, github_sign_in};
 use protocol::model::{
     GithubAccount, GithubLoginKind, GithubSettings, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin,
-    SentCredential, UnusableLogin,
+    Observation, Observed, Rev, SentCredential, UnusableLogin,
 };
 
 use super::conversation;
@@ -22,6 +22,15 @@ pub(in crate::gallery) fn github_accounts() -> World {
     let mut world = conversation();
     world.github = Some(sending(&ada()));
     world.github_accounts = vec![ada(), northwind(FEB_3_MS), grace()];
+    world
+}
+
+/// The same, before the hub has asked GitHub what `grace`'s user is called now, as after an update emptied the cache,
+/// so her row is named by her user's number and listed after the named ones.
+pub(in crate::gallery) fn github_unnamed() -> World {
+    let mut world = github_accounts();
+    let username = Observed::NotKnown;
+    world.observations.push(Observation::GithubUsername { account: grace().id, username, rev: Rev::new(1) });
     world
 }
 

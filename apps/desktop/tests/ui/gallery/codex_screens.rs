@@ -44,6 +44,15 @@ fn models() -> protocol::capability::settings::ModelCatalog {
     }
 }
 
+/// The same, but for Codex's list in the project, whose lookup has answered and whose models haven't come yet.
+fn answered_unlisted() -> World {
+    let mut world = offered();
+    for list in world.model_lists.iter_mut().filter(|list| list.key.agent == AgentKind::Codex) {
+        list.catalog = None;
+    }
+    world
+}
+
 fn offered() -> World {
     let mut world = super::worlds::titled();
     world.offer_models(AgentKind::Codex, &models());
@@ -71,6 +80,19 @@ pub(super) const SCREENS: &[Screen] = &[
             Step::ClickItem("Codex"),
             Step::WaitFor("new-workspace-model"),
             Step::Click("new-workspace-model"),
+        ],
+    },
+    Screen {
+        name: "codex-models-loading",
+        spec: "chats.md",
+        world: Some(answered_unlisted),
+        frame: Frame::Dialog,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Click("new-in-repo-1"),
+            Step::Click("new-workspace-agent"),
+            Step::ClickItem("Codex"),
+            Step::WaitFor("load-models"),
         ],
     },
     Screen {

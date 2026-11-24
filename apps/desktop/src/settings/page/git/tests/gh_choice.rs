@@ -10,7 +10,10 @@ fn offered(gh: Option<GhLogin>, accounts: &[GithubAccount]) -> Option<String> {
     let mut panel = ChoosingPanel::default();
     panel.gh = gh;
     let mut held = HubRecords::default();
-    held.apply_list(Records { github_accounts: accounts.to_vec(), ..Records::default() });
+    held.apply_list(client_core::records::with_observations(Records {
+        github_accounts: accounts.to_vec(),
+        ..Records::default()
+    }));
     panel.offered(&held.snapshot()).map(ToString::to_string)
 }
 

@@ -100,11 +100,15 @@ The bottom of the sidebar shows which build is running, faint, since a bug repor
 
   ![A prompt sent once the app had updated, whose agent started on the new version](screens/updated.png)
 
-- **A workspace still on the version before the app's,** whose name's card says which version it's on, and that it moves to the app's once nothing in it is at work, as `workspaces.md` says of the card. It's the only place that shows a workspace waiting to move. *Unconfirmed.*
+- **A workspace still on the version before the app's,** whose name's card says which version it's on, and that it moves to the app's once nothing in it is at work, as `workspaces.md` says of the card. One whose worker is too old to say which version it is says `An earlier version, moves to 1.0.0 once nothing in it is at work`. It's the only place that shows a workspace waiting to move. *Unconfirmed.*
 
   **The card of a workspace still on the version before the app's.** *Unconfirmed.*
 
   ![The card of a workspace still on the version before the app's](screens/workspace-card-moving.png)
+
+  **The card of a workspace whose worker is too old to say which version it is.** *Unconfirmed.*
+
+  ![The card of a workspace on an earlier version, which its worker doesn't name](screens/workspace-card-earlier.png)
 
 ## A hub installed as a service
 

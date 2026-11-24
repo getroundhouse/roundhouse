@@ -26,7 +26,7 @@ pub fn watched(watching: &Watching) -> String {
 /// reading, so it says only what it waits on. `read` is what the wait last read, as
 /// [`Snapshot::wait_read`](crate::records::Snapshot::wait_read) says.
 pub fn waiting(wait: &Wait, read: Option<&WaitRead>) -> String {
-    let watching = wait.watching();
+    let watching = watches(wait, read);
     let what = watched(&watching);
     let Some(read) = read else { return format!("Waiting on {what}") };
     if read.read_error.is_some() {
@@ -49,6 +49,19 @@ pub fn waiting(wait: &Wait, read: Option<&WaitRead>) -> String {
             Some(stands) => format!("Waiting on {what} \u{b7} {stands}"),
             None => format!("Waiting on {what}"),
         },
+    }
+}
+
+/// Which pull requests the open wait `wait` watches, and until what: those `read`, what it last read, had in its scope,
+/// which takes in the ones below those it was asked about in their stacks. An open wait's record keeps none of what it
+/// read, so by itself it names only those it was asked about, as it does until the wait is first read.
+fn watches(wait: &Wait, read: Option<&WaitRead>) -> Watching {
+    let scope = read.map(|read| &read.pull_requests).filter(|scope| !scope.is_empty());
+    match (wait.watching(), scope) {
+        (Watching::PullRequests { until, .. }, Some(scope)) => {
+            Watching::PullRequests { numbers: scope.iter().map(|row| row.number.get()).collect(), until }
+        }
+        (watching, _) => watching,
     }
 }
 
@@ -151,9 +164,15 @@ mod tests {
 
     use super::{waiting, watched};
 
-    /// What `wait`'s record says it last read, as a hub of version 4 sends it.
-    fn read(wait: &Wait) -> Option<protocol::model::WaitRead> {
-        wait.watch.as_deref().map(protocol::model::PullRequestWatch::read)
+    /// What `wait`'s line says, with it as a client holds it: its record, which keeps none of what an open wait read,
+    /// and what it last read, apart.
+    fn line(wait: &Wait) -> String {
+        let read = wait.watch.as_deref().map(protocol::model::PullRequestWatch::read);
+        let mut record = wait.clone();
+        if let Some(watch) = record.watch.as_mut() {
+            **watch = watch.recorded();
+        }
+        waiting(&record, read.as_ref())
     }
 
     /// `pr` with every check it has passed.
@@ -186,7 +205,7 @@ mod tests {
         let with = |until, change: fn(&mut PullRequest)| {
             let mut wait = Wait { until, ..wait.clone() };
             change(&mut wait.watch.as_mut().unwrap().snapshot.pull_requests[0]);
-            waiting(&wait, read(&wait).as_ref())
+            line(&wait)
         };
 
         assert_eq!(with(WaitUntil::RequiredChecks, |_| {}), "Waiting on #7 \u{b7} 1 required check running");
@@ -203,7 +222,8 @@ mod tests {
         assert_eq!(with(WaitUntil::Merged, unknown), "Waiting on #7 to merge", "nothing but to see it on GitHub");
     }
 
-    /// A wait on a stack is held by the lowest of it that hasn't merged, which its line names.
+    /// A wait on a stack is held by the lowest of it that hasn't merged, which its line names, after every pull request
+    /// of the stack, which only what the wait read names: its record keeps the one it was asked about.
     #[test]
     fn a_wait_until_a_stack_merges_names_the_pull_request_holding_it() {
         let mut wait = Wait { until: WaitUntil::Merged, ..pull_request_wait("w1") };
@@ -215,14 +235,10 @@ mod tests {
             vec![PullRequestNumber::try_from(6).unwrap()];
         snapshot.pull_requests.push(lower);
 
-        assert_eq!(waiting(&wait, read(&wait).as_ref()), "Waiting on #7, #6 to merge \u{b7} #6: Review required");
+        assert_eq!(line(&wait), "Waiting on #7, #6 to merge \u{b7} #6: Review required");
         let snapshot = &mut wait.watch.as_mut().unwrap().snapshot;
         snapshot.pull_requests[1].summary.said.state = PrState::Merged;
-        assert_eq!(
-            waiting(&wait, read(&wait).as_ref()),
-            "Waiting on #7, #6 to merge \u{b7} #7: 1 check running",
-            "once #6 has merged"
-        );
+        assert_eq!(line(&wait), "Waiting on #7, #6 to merge \u{b7} #7: 1 check running", "once #6 has merged");
     }
 
     /// A wait the singular tool started has no reading of its pull request, so its line says only what it waits on.
@@ -230,7 +246,7 @@ mod tests {
     fn a_wait_with_no_reading_says_only_what_it_waits_on() {
         let wait = Wait { watch: None, until: WaitUntil::Checks, ..pull_request_wait("w1") };
 
-        assert_eq!(waiting(&wait, read(&wait).as_ref()), "Waiting on #7's checks");
+        assert_eq!(line(&wait), "Waiting on #7's checks");
         assert_eq!(waiting(&Wait { until: WaitUntil::Done, ..wait }, None), "Waiting on #7");
     }
 
@@ -241,7 +257,7 @@ mod tests {
         let mut wait = pull_request_wait("w1");
         wait.watch.as_mut().unwrap().snapshot.pull_requests.clear();
 
-        assert_eq!(waiting(&wait, read(&wait).as_ref()), "Waiting on #7 for required checks");
+        assert_eq!(line(&wait), "Waiting on #7 for required checks");
     }
 
     /// GitHub couldn't be read, so there's no count, and the line says what it waits until after the numbers.
@@ -250,9 +266,6 @@ mod tests {
         let mut wait = pull_request_wait("w1");
         wait.watch.as_mut().unwrap().read_error = Some("offline".into());
 
-        assert_eq!(
-            waiting(&wait, read(&wait).as_ref()),
-            "Waiting on #7 for required checks \u{b7} couldn't refresh GitHub"
-        );
+        assert_eq!(line(&wait), "Waiting on #7 for required checks \u{b7} couldn't refresh GitHub");
     }
 }

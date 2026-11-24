@@ -122,9 +122,8 @@ impl Changing {
             return Ok(Vec::new());
         }
         let next_id = || self.connection.next_id.fetch_add(1, Ordering::Relaxed);
-        // Each says it reads what GitHub says as observations, which a hub sends at each level where it can, and a hub
-        // from before them ignores.
-        let start_of = |follow| Start { github_observed: true, ..Start::new(next_id(), follow) };
+        // A hub of this client's version sends what GitHub says as observations whatever a start says.
+        let start_of = |follow| Start::new(next_id(), follow);
         let starts = start.into_iter().map(start_of).collect::<Vec<_>>();
         let started = starts.iter().map(|start| (start.subscription_id, start.follow.level())).collect::<Vec<_>>();
         {

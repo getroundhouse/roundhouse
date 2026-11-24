@@ -25,7 +25,8 @@ pub(super) fn added(id: &str, name: &str) -> Account {
 /// A client's copy of a hub's records that holds `accounts`, which the page reads them from.
 pub(super) fn holding<'a>(accounts: impl IntoIterator<Item = &'a Account>) -> Snapshot {
     let mut held = HubRecords::default();
-    held.apply_list(Records { accounts: accounts.into_iter().cloned().collect(), ..Records::default() });
+    let listed = Records { accounts: accounts.into_iter().cloned().collect(), ..Records::default() };
+    held.apply_list(client_core::records::with_observations(listed));
     held.snapshot()
 }
 

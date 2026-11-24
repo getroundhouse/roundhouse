@@ -5,16 +5,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use protocol::client::github::GithubUpdate;
 use protocol::client::listed::{Listed, ReferenceObservations};
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame, ReplyOutcome};
 use protocol::model::{
-    GithubLoginKind, GithubRepositoryName, IssueNumber, Level, Observation, ObservationKey, Observed, PullRequestFound,
-    ReferenceAsk, ReferenceRead, ReferenceSaid, RepositoryUnseen, Rev,
+    GithubRepositoryName, IssueNumber, Level, Observation, ObservationKey, Observed, ReferenceAsk, ReferenceRead,
+    ReferenceSaid, Rev,
 };
 
-use super::super::held::GithubHeld;
+use super::super::held::{GithubHeld, HeldObservations};
 use super::super::source::GithubSource;
 use crate::client::follow::{Following, Source as _};
 use crate::records::HubRecords;
@@ -69,8 +68,11 @@ fn hub_that_says_missing(socket: &std::path::Path) -> (crate::Client, Asked) {
                 return vec![HubFrame::Listed { subscription_id, listed: Listed::Hub(Box::default()) }];
             }
             let Follow::Reference { reference } = follow else { return Vec::new() };
-            let update = GithubUpdate::Reference { reference: reference.clone(), read: ReferenceRead::Missing };
-            vec![HubFrame::Github { subscription_id, update }]
+            let said = Observed::Current { value: ReferenceSaid::Missing };
+            let missing = Observation::Reference { reference: reference.clone(), said, rev: Rev::new(2) };
+            let listed =
+                ReferenceObservations { reference: reference.clone(), observations: vec![missing], rev: Rev::new(2) };
+            vec![HubFrame::Listed { subscription_id, listed: Listed::Reference(listed) }]
         })
     });
     (client, asked)
@@ -116,21 +118,11 @@ fn what_views_show_is_followed_together_and_what_the_hub_sends_reaches_them() {
 }
 
 /// Every workspace's own pull request comes from following the hub, whatever views show. That the hub hasn't looked
-/// at one is held as said, apart from the hub not having said anything yet, so a bar that showed one it found can say
-/// it's looking once the hub's cache has forgotten it. And GitHub showing the default no repository to look in is held
-/// beside it.
+/// at one is said once the hub has listed its level without it, apart from the hub not having said anything yet, so a
+/// bar that showed one it found can say it's looking once the hub's cache has forgotten it.
 #[test]
-fn every_workspaces_pull_request_comes_from_following_the_hub_and_that_it_hasnt_looked_is_held_apart() {
+fn that_the_hub_hasnt_looked_at_a_workspaces_pull_request_is_said_once_it_lists_its_level() {
     let dir = tempfile::tempdir().unwrap();
-    let unseen = RepositoryUnseen {
-        repository: GithubRepositoryName::named("o/r"),
-        username: "ada".into(),
-        login: GithubLoginKind::Token,
-        installation: None,
-        said: "Could not resolve to a Repository with the name 'o/r'.".into(),
-        approve_at: None,
-    };
-    let told = unseen.clone();
     let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
         if request == ClientRequest::AgentList {
             return Does::Answers(Box::new(ReplyOutcome::Error(agents_unknown())));
@@ -140,29 +132,19 @@ fn every_workspaces_pull_request_comes_from_following_the_hub_and_that_it_hasnt_
             if *follow != Follow::Hub {
                 return Vec::new();
             }
-            let said = |found, unseen| HubFrame::Github {
-                subscription_id,
-                update: GithubUpdate::PullRequest { workspace: "w".into(), found, unseen },
-            };
-            let listed = HubFrame::Listed { subscription_id, listed: Listed::Hub(Box::default()) };
-            let none_found = Some(PullRequestFound { pull_request: None });
-            vec![listed, said(none_found, None), said(None, Some(told.clone()))]
+            vec![HubFrame::Listed { subscription_id, listed: Listed::Hub(Box::default()) }]
         })
     });
     let workspace = protocol::fixtures::workspace("w");
-    let nothing_followed = GithubHeld::default();
     let none = |_: &ObservationKey| None;
-    assert!(!nothing_followed.said_pull_request(&workspace.id, &none), "nothing's said before the hub is followed");
+    let unlisted = HeldObservations { of: &none, hub_listed: false };
+    assert!(!GithubHeld::said_pull_request(&workspace.id, &unlisted), "nothing's said before the hub is followed");
 
     let records = RecordsFeed::start(&client);
     let feed = records.github();
 
-    waiting::thread::until(TIMEOUT, "the hub to say it hasn't looked, and can't see where to", || {
-        feed.said_pull_request(&workspace)
-            && feed.pull_request(&workspace).is_none()
-            && feed.unseen(&workspace).is_some()
-    });
-    assert_eq!(feed.unseen(&workspace), Some(unseen));
+    waiting::thread::until(TIMEOUT, "the hub to say it hasn't looked", || feed.said_pull_request(&workspace));
+    assert!(feed.pull_request(&workspace).is_none());
 }
 
 /// Past the most chips a hub takes, those of the views made longest ago are left out, since the newest is likeliest to
@@ -232,7 +214,7 @@ fn what_s_sent_of_a_chip_no_longer_followed_is_dropped() {
     };
     let held_of_it = || {
         let key = ObservationKey::Reference { reference: ask(1) };
-        records.reach().read(|records| records.snapshot().github_observation(&key).is_some()).unwrap()
+        records.reach().read(|records| records.snapshot().observation(&key).is_some()).unwrap()
     };
     source.apply(&client, &held, listed()).unwrap();
     assert!(held_of_it(), "followed");

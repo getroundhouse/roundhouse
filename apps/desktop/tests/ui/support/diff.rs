@@ -7,8 +7,9 @@ use std::rc::Rc;
 
 use desktop::file_diff::{FileDiff, LineAt};
 use desktop::review::{Review, ReviewEvent};
+use desktop::sidebar_tabs::SidebarTab;
 use desktop::workspace_pane::WorkspacePane;
-use gpui_kit::{AppContext as _, Entity, SharedString};
+use gpui_kit::{App, AppContext as _, Entity, SharedString};
 use protocol::model::DiffSide;
 
 use super::Ui;
@@ -18,6 +19,15 @@ use super::Ui;
 pub(crate) struct Diff {
     pub(crate) review: Entity<Review>,
     pub(crate) file: Entity<FileDiff>,
+}
+
+/// Whether the sidebar of changes shows what it starts on: the changes, or all the files where there are none.
+pub(crate) fn sidebar_loaded(pane: &WorkspacePane, cx: &App) -> bool {
+    pane.diff.as_ref().is_some_and(|diff| match pane.sidebar_tab() {
+        Some(SidebarTab::Changes) => true,
+        Some(SidebarTab::AllFiles) => diff.all_files.read(cx).is_listed(),
+        None => false,
+    })
 }
 
 impl Ui<'_> {
@@ -57,7 +67,7 @@ impl Ui<'_> {
         // A diff made just now loads what's there now. One made before loads again, and only that load is new.
         // While the hub keeps the changed files current, Changes lists its summary of them, and nothing reads the
         // whole diff.
-        let summarized = |ui: &Ui| ui.cx.read_entity(&diff.review, |r, _| r.lists_the_summary());
+        let summarized = |ui: &Ui| ui.cx.read_entity(&diff.review, |r, _| r.listing().is_some());
         match before {
             Some(_) => self.wait("the diff to load again", |ui| loaded.get() || summarized(ui)),
             None => self.wait("the diff to load", |ui| ui.cx.read_entity(&diff.review, |r, _| r.listing().is_some())),

@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use super::{TIMEOUT, Ui};
+use gpui_kit::AppContext as _;
+
+use super::{Stack, TIMEOUT, Ui, sidebar_loaded};
 
 /// A process stopped, as a hub that doesn't answer, until this goes.
 pub(crate) struct Frozen(String);
@@ -70,6 +72,24 @@ fn stopped(pid: &str) -> bool {
 const GIVE_UP_AFTER: Duration = Duration::from_millis(250);
 
 impl Ui<'_> {
+    /// Holds the stack's hub still until what's returned goes, as [`Frozen::stop`] does, once the workspace on screen
+    /// has read what it reads by itself, as [`Self::wait_for_the_sidebar_of_changes`] says.
+    pub(crate) fn freeze_hub(&mut self, stack: &Stack) -> Frozen {
+        self.wait_for_the_sidebar_of_changes();
+        Frozen::stop(stack.client().hub_status().unwrap().pid)
+    }
+
+    /// Waits until the workspace on screen, if there is one, shows what its sidebar of changes starts on, for a test
+    /// about to hold its hub still. The sidebar lists the workspace's files once the hub's summary of its changes says
+    /// there are none, and the summary comes by itself, a moment after the workspace does. In a test the app's reads
+    /// run on the test's own thread, so a list asked of a hub held still would wait for good, and the test with it.
+    pub(crate) fn wait_for_the_sidebar_of_changes(&mut self) {
+        self.wait("the sidebar of changes to show what it starts on", |ui| {
+            let Some(pane) = ui.pane() else { return true };
+            ui.cx.read_entity(&pane, |pane, cx| !pane.changes_open(cx) || sidebar_loaded(pane, cx))
+        });
+    }
+
     /// Has quitting, and restarting to update, give up on what's on its way to a hub after [`GIVE_UP_AFTER`], rather
     /// than the app's own wait, for a test whose hub is held still until after they've given up on it.
     pub(crate) fn give_up_on_a_frozen_hub_soon(&mut self) {

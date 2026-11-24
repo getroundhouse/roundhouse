@@ -33,10 +33,12 @@ pub(super) fn app(drawing: &Drawing<'_>, panel: &Panel, app: &AppPanel, cx: &App
         AppStep::Choosing(_) | AppStep::OnGithub { .. } => None,
     };
     let installed = made.and_then(|made| installation(drawing.records, made.id));
-    let bot = made.and_then(|made| made.bot.as_ref()).map(|bot| bot.name.as_str());
+    let bot = made.and_then(|made| drawing.records.github_app_bot(made)).map(|bot| bot.name.as_str());
     let lead = lead(drawing, installed, bot);
     let [first, second] = match (&app.step, made) {
-        (_, Some(made)) => app_words::made(made),
+        (_, Some(made)) => {
+            app_words::made(&drawing.records.github_app_name(made), drawing.records.github_app_said(made))
+        }
         (AppStep::OnGithub { chosen, .. }, None) => {
             [app_words::chosen(&chosen.under, &chosen.name), app_words::MAKE.to_string()]
         }
@@ -44,9 +46,8 @@ pub(super) fn app(drawing: &Drawing<'_>, panel: &Panel, app: &AppPanel, cx: &App
             [app_words::CHOOSE.to_string(), app_words::MAKE.to_string()]
         }
     };
-    let third = installed.and_then(|account| account.installation.as_ref());
-    let third =
-        third.map_or(app_words::INSTALL.to_string(), |installed| app_words::installed_on(installed.on.name.as_str()));
+    let third = installed.and_then(|account| drawing.records.installed_on(account));
+    let third = third.map_or(app_words::INSTALL.to_string(), |on| app_words::installed_on(&on.to_string()));
     let kept = drawing.kept;
     let steps = match &app.step {
         AppStep::Choosing(choosing) => [
@@ -201,9 +202,9 @@ fn install(
         return refusal(app_words::gone(), cx).into_any_element();
     };
     let (installing, checking) = (drawing.kept.clone(), drawing.kept.clone());
-    let shown = made.clone();
+    let (id, slug) = (made.id, drawing.records.github_app_said(made).map(|said| said.slug.clone()));
     let install = button("git-install", "Install on GitHub", true, false, move |window, cx| {
-        installing.update(cx, |kept, cx| kept.install_on_github(&shown, window, cx));
+        installing.update(cx, |kept, cx| kept.install_on_github(id, slug.as_ref(), window, cx));
     })
     .icon(Lucide::ExternalLink);
     let check = button("git-check-again", "Check again", false, looking || !drawing.can_ask(cx), move |_, cx| {
@@ -234,6 +235,6 @@ fn waiting_line(said: impl Into<SharedString>, cx: &App) -> Div {
 /// with its bot's name, once it has one.
 fn lead(drawing: &Drawing<'_>, installed: Option<&GithubAccount>, bot: Option<&str>) -> String {
     let Some(account) = installed else { return app_words::lead(bot) };
-    let on = account.installation.as_ref().map_or("GitHub", |installed| installed.on.name.as_str());
-    app_words::lead_installed(&drawing.records.github_username(account).to_string(), on, drawing.is_default(account))
+    let on = drawing.records.installed_on(account).map_or_else(|| "GitHub".to_string(), |on| on.to_string());
+    app_words::lead_installed(&drawing.records.github_username(account).to_string(), &on, drawing.is_default(account))
 }

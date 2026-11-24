@@ -95,7 +95,7 @@ fn refused(
         "{github_says} Install the app on {owner} with access to {repository}, choose another default, or connect an \
          account that can push there."
     );
-    (then, Some(install_page(slug)))
+    (then, Some(install_page(Some(slug))))
 }
 
 /// What to do once GitHub has no repository `repository` that `username` can see, as [`refused`] says.
@@ -124,7 +124,7 @@ fn not_found(
         "{none} Check that it's where origin pushes, install the app on {owner} with access to it, choose another \
          default, or connect an account that can see it."
     );
-    (then, Some(install_page(slug)))
+    (then, Some(install_page(Some(slug))))
 }
 
 /// What to do once GitHub didn't take the default's token: connect it again, and for an app of your own's
@@ -139,7 +139,7 @@ fn token_refused(installation: Option<&InstalledApp>) -> ToDo {
         "GitHub doesn't take its token, as when the app has been uninstalled from {on}. Install it there again and \
          connect it again, or choose another default."
     );
-    (then, Some(install_page(slug)))
+    (then, Some(install_page(Some(slug))))
 }
 
 impl WorkspacePane {

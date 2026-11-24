@@ -4,29 +4,12 @@
 
 use std::sync::Arc;
 
-use protocol::client::terminals::TerminalWatch;
-use protocol::client::{ApiError, ClientResponse, HubFrame};
+use protocol::client::HubFrame;
 use protocol::terminal::{PictureSending, TerminalExit, TerminalPicture, TerminalUpdate};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 
-use crate::hub::{Followed, Hub, Watcher};
-use crate::server::subscribing::add_subscription;
-use crate::server::{Connection, Outgoing};
-
-/// Starts watching the terminal, for subscription `subscription_id`.
-pub(in crate::server) fn watch(
-    hub: &Arc<Hub>,
-    connection: &Connection,
-    watch: TerminalWatch,
-) -> Result<ClientResponse, ApiError> {
-    let TerminalWatch { id, subscription_id } = watch;
-    let watcher = hub.terminal_watch(&id)?;
-    add_subscription(hub, connection, subscription_id, Followed::Terminal(id), || {
-        let watching = Watching { subscription_id, frames: connection.frames.clone() };
-        tokio::spawn(watching.watch(watcher)).abort_handle()
-    })?;
-    Ok(ClientResponse::Ok)
-}
+use crate::hub::Watcher;
+use crate::server::Outgoing;
 
 /// A client watching a terminal.
 pub(in crate::server) struct Watching {

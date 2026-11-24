@@ -1,13 +1,15 @@
 //! What a hub says of GitHub, as views read it: the GitHub accounts it holds, the sign-ins with GitHub it has started,
-//! the apps of your own it holds the key of, and what a push from each repository would meet, each as the hub's
-//! records have it.
+//! and the apps of your own it holds the key of, each as the hub's records have it, with what GitHub says of each app,
+//! and what a push from each repository would meet, as the hub's observations have it.
 
 use std::collections::HashMap;
 
 use protocol::model::{
-    GithubAccount, GithubAccountId, GithubApp, GithubAppId, GithubReach, GithubSignIn, GithubSignInId, Reach, RepoId,
+    GithubAccount, GithubAccountId, GithubApp, GithubAppId, GithubAppSaid, GithubSignIn, GithubSignInId, GithubUser,
+    Observation, ObservationKey, Reach, RepoId,
 };
 
+use super::observed::said;
 use super::{GithubName, Snapshot};
 
 #[derive(Debug, Default)]
@@ -16,11 +18,9 @@ pub(super) struct GithubListed {
     /// [`Snapshot::github_username`] says.
     accounts: HashMap<GithubAccountId, GithubAccount>,
     sign_ins: HashMap<GithubSignInId, GithubSignIn>,
-    /// By name, in any case, then by number.
-    apps: Vec<GithubApp>,
-    app_at: HashMap<GithubAppId, usize>,
-    /// By the repository it's of.
-    reach: HashMap<RepoId, Reach>,
+    /// In no order, since they're shown by name, which a view reads apart from the record, as
+    /// [`Snapshot::github_app_said`] says.
+    apps: HashMap<GithubAppId, GithubApp>,
 }
 
 impl GithubListed {
@@ -33,17 +33,7 @@ impl GithubListed {
     }
 
     pub(super) fn app(&mut self, app: &GithubApp) {
-        self.apps.push(app.clone());
-    }
-
-    pub(super) fn reach(&mut self, reach: &GithubReach) {
-        self.reach.insert(reach.repo.clone(), reach.reach.clone());
-    }
-
-    /// Puts the apps in the order views show them, once every record is in.
-    pub(super) fn order(&mut self) {
-        self.apps.sort_by_cached_key(|app| (app.name.to_lowercase(), app.id.get()));
-        self.app_at = self.apps.iter().enumerate().map(|(at, app)| (app.id, at)).collect();
+        self.apps.insert(app.id, app.clone());
     }
 }
 
@@ -79,19 +69,52 @@ impl Snapshot {
         self.records.github.sign_ins.values()
     }
 
-    /// Every app of your own the hub holds the key of, by name, in any case.
-    pub fn github_apps(&self) -> &[GithubApp] {
-        &self.records.github.apps
+    /// Every app of your own the hub holds the key of, by name, in any case, then by number. One whose name isn't known
+    /// comes after those named, by its number.
+    pub fn github_apps(&self) -> Vec<&GithubApp> {
+        let mut apps: Vec<&GithubApp> = self.records.github.apps.values().collect();
+        apps.sort_by_cached_key(|app| {
+            (self.github_app_said(app).map(|said| said.name.to_lowercase()).ok_or(()), app.id.get())
+        });
+        apps
     }
 
     /// The record of the app of your own `id`, until it's removed.
     pub fn github_app(&self, id: GithubAppId) -> Option<&GithubApp> {
-        self.records.github.app_at.get(&id).map(|&at| &self.records.github.apps[at])
+        self.records.github.apps.get(&id)
+    }
+
+    /// What GitHub says of `app`: its slug, its name and its owner, as the hub last asked GitHub as the app. `None`
+    /// while that isn't known, as for an app whose key is gone, which is drawn by its number.
+    pub fn github_app_said<'a>(&'a self, app: &'a GithubApp) -> Option<&'a GithubAppSaid> {
+        let held = self.observation(&ObservationKey::GithubAppSaid { app: app.id });
+        let Some(Observation::GithubAppSaid { said: app_said, .. }) = held else { return None };
+        said(app_said)
+    }
+
+    /// What `app` is called, as GitHub says, or its number, as `#7`, while that isn't known.
+    pub fn github_app_name(&self, app: &GithubApp) -> String {
+        self.github_app_said(app).map_or_else(|| format!("#{}", app.id), |said| said.name.clone())
+    }
+
+    /// `app`'s bot, which commits made through it are by, as the hub last asked GitHub. `None` until it has.
+    pub fn github_app_bot<'a>(&'a self, app: &'a GithubApp) -> Option<&'a GithubUser> {
+        let Some(Observation::GithubAppBot { bot, .. }) =
+            self.observation(&ObservationKey::GithubAppBot { app: app.id })
+        else {
+            return None;
+        };
+        said(bot)
     }
 
     /// What a push from the repository `id`'s workspaces would meet, as the hub last checked, or `None` while it hasn't,
     /// and from a hub that doesn't check.
     pub fn github_reach(&self, id: &RepoId) -> Option<&Reach> {
-        self.records.github.reach.get(id)
+        let Some(Observation::RepositoryReach { reach, .. }) =
+            self.observation(&ObservationKey::RepositoryReach { repo: id.clone() })
+        else {
+            return None;
+        };
+        said(reach)
     }
 }

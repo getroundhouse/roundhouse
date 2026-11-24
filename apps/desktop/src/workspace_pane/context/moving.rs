@@ -200,7 +200,10 @@ mod tests {
     fn offered_to(on: Option<&str>, accounts: &[Account]) -> Option<Vec<(String, bool)>> {
         let on = on.map(AccountId::from);
         let mut held = HubRecords::default();
-        held.apply_list(Records { accounts: accounts.to_vec(), ..Records::default() });
+        held.apply_list(client_core::records::with_observations(Records {
+            accounts: accounts.to_vec(),
+            ..Records::default()
+        }));
         let choices = offered(AgentKind::Claude, on.as_ref(), &held.snapshot(), NOW)?;
         Some(choices.into_iter().map(|choice| (choice.called.to_string(), choice.works)).collect())
     }
