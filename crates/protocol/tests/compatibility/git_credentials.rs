@@ -57,7 +57,7 @@ fn a_git_credential_of_a_kind_this_build_doesnt_know_reads_as_unknown() {
 }
 
 #[test]
-fn a_credential_from_a_hub_from_before_commit_identities_has_none() {
+fn a_credential_that_names_no_identity_has_none() {
     let line = r#"{"kind":"account","username":"ada","token":"made-up"}"#;
 
     let read: GithubCredential = serde_json::from_str(line).unwrap();

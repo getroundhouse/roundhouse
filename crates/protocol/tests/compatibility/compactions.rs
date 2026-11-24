@@ -71,13 +71,13 @@ fn a_turns_end_says_it_was_only_a_compaction_only_when_it_was() {
 }
 
 #[test]
-fn a_tail_from_a_hub_that_doesnt_say_its_compacting_isnt_and_one_that_does_keeps_its_form() {
-    let older: Tail = frame::decode(br#"{"messages":[]}"#).unwrap();
+fn a_tail_that_doesnt_say_its_compacting_isnt_and_one_that_does_keeps_its_form() {
+    let idle: Tail = frame::decode(br#"{"messages":[]}"#).unwrap();
     let compacting = br#"{"messages":[],"compacting":{"run":3,"written_chars":8463}}"#;
 
     let tail: Tail = frame::decode(compacting).unwrap();
 
-    assert_eq!(older.compacting, None);
+    assert_eq!(idle.compacting, None);
     assert_eq!(tail.compacting.as_ref().and_then(|c| c.written_chars), Some(8_463));
     assert_eq!(frame::encode(&tail).unwrap(), [compacting.as_slice(), b"\n"].concat());
     assert_eq!(serde_json::from_str::<Compacting>("{}").unwrap(), Compacting::default(), "one that says nothing more");

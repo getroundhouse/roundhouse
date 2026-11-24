@@ -5,10 +5,9 @@ use protocol::client::listed::{Listed, ReferenceObservations};
 use protocol::client::{HubFrame, HubNotice};
 use protocol::model::{
     About, AccountIdentity, ChangeStatus, ChangeSummary, ChangedFile, FileVersion, GithubRepositoryName, IssueNumber,
-    IssueSaid, IssueState, IssueSummary, LimitWindow, LineCounts, Observation, ObservationKey, Observed, RecordKey,
-    Records, ReferenceAsk, ReferenceSaid, Rev, UsageLimit,
+    IssueSaid, IssueState, IssueSummary, LimitWindow, LineCounts, Observation, ObservationKey, Observed, Records,
+    ReferenceAsk, ReferenceSaid, Rev, UsageLimit,
 };
-use serde::Deserialize;
 
 use crate::keeps_its_form;
 use crate::workspace_pull_requests::pull_request_said;
@@ -144,47 +143,14 @@ fn a_list_keeps_its_observations_under_its_own_revision() {
     assert!(json.contains(&format!(r#""observations":[{observation}],"rev":0"#)), "{json}");
 }
 
-/// The feed's notices as a client from before observations reads them: every kind of record, a removal of one, and
-/// `Resync`, with anything else unknown.
-#[derive(Deserialize, Debug, PartialEq)]
-#[serde(tag = "notice", rename_all = "snake_case")]
-enum NoticeBefore {
-    Removed {
-        record: RecordKey,
-        rev: Rev,
-    },
-    Resync,
-    #[serde(other)]
-    Unknown,
-}
-
-/// A list as a client from before observations reads it.
-#[derive(Deserialize, Debug, PartialEq)]
-struct RecordsBefore {
-    repos: Vec<serde_json::Value>,
-    rev: Rev,
-}
-
-/// A client from before skips both notices and the list's new field, and this one reads a list from a hub from before
-/// as having none.
+/// A list that holds no observation at the hub's level leaves them out, and reads as having none.
 #[test]
-fn a_build_from_before_skips_what_this_one_sends_and_this_one_reads_what_that_sent() {
-    let copy = serde_json::to_string(&HubNotice::Observation(lines(Observed::NotKnown))).unwrap();
-    let gone = HubNotice::ObservationRemoved {
-        observation: ObservationKey::WorkspaceLines { workspace_id: "w".into() },
-        rev: Rev::new(6),
-    };
-    let gone = serde_json::to_string(&gone).unwrap();
-    let listed = Records { observations: vec![lines(Observed::NotKnown)], rev: Rev::new(7), ..Records::default() };
-    let before: Records =
+fn a_list_that_holds_no_observation_leaves_them_out() {
+    let none: Records =
         serde_json::from_str(r#"{"repos":[],"workspaces":[],"sessions":[],"comments":[],"rev":4}"#).unwrap();
 
-    assert_eq!(serde_json::from_str::<NoticeBefore>(&copy).unwrap(), NoticeBefore::Unknown, "{copy}");
-    assert_eq!(serde_json::from_str::<NoticeBefore>(&gone).unwrap(), NoticeBefore::Unknown, "{gone}");
-    let read = serde_json::from_str::<RecordsBefore>(&serde_json::to_string(&listed).unwrap()).unwrap();
-    assert_eq!(read, RecordsBefore { repos: Vec::new(), rev: Rev::new(7) });
-    assert_eq!(before.observations, Vec::new());
-    assert!(!serde_json::to_string(&before).unwrap().contains("observations"));
+    assert_eq!(none.observations, Vec::new());
+    assert!(!serde_json::to_string(&none).unwrap().contains("observations"));
 }
 
 /// What a newer hub may send: a kind of observation, a kind of key, or a freshness this build doesn't know, each read as

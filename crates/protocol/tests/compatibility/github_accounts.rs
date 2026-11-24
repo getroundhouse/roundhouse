@@ -50,25 +50,25 @@ fn a_notice_of_a_github_account_reads_as_its_record() {
 }
 
 #[test]
-fn a_list_of_every_record_reads_its_github_accounts_and_one_from_a_hub_that_keeps_none_has_none() {
+fn a_list_of_every_record_reads_its_github_accounts_and_one_that_lists_none_has_none() {
     let line = format!(
         r#"{{"repos":[],"workspaces":[],"sessions":[],"comments":[],"github_accounts":[{{{ACCOUNT}}}],"rev":5}}"#
     );
-    let older = r#"{"repos":[],"workspaces":[],"sessions":[],"comments":[],"rev":5}"#;
+    let none = r#"{"repos":[],"workspaces":[],"sessions":[],"comments":[],"rev":5}"#;
 
     assert_eq!(listed(&line).github_accounts, [account()]);
-    assert_eq!(listed(older).github_accounts, []);
+    assert_eq!(listed(none).github_accounts, []);
 }
 
-/// A login from a hub from before a sign-in could need signing in again says nothing of it.
+/// A login that says nothing of signing in again can be renewed, which is how nearly every one is.
 #[test]
-fn a_signed_in_login_keeps_its_form_and_one_from_a_hub_from_before_needs_no_sign_in() {
+fn a_signed_in_login_keeps_its_form_and_one_that_says_nothing_of_signing_in_again_needs_no_sign_in() {
     let held =
         HeldGithubLogin { how: GithubLoginKind::SignIn, connected_at_ms: 1, ends_at_ms: Some(9), needs_sign_in: true };
-    let older = r#"{"how":"sign_in","connected_at_ms":1,"ends_at_ms":9}"#;
+    let unsaid = r#"{"how":"sign_in","connected_at_ms":1,"ends_at_ms":9}"#;
 
     let written = serde_json::to_string(&held).unwrap();
-    let read: HeldGithubLogin = serde_json::from_str(older).unwrap();
+    let read: HeldGithubLogin = serde_json::from_str(unsaid).unwrap();
 
     assert_eq!(written, r#"{"how":"sign_in","connected_at_ms":1,"ends_at_ms":9,"needs_sign_in":true}"#);
     assert_eq!(read, HeldGithubLogin { needs_sign_in: false, ..held });
@@ -103,20 +103,20 @@ fn every_state_of_a_sign_in_keeps_its_form() {
 }
 
 #[test]
-fn a_list_of_every_record_reads_its_sign_ins_and_one_from_a_hub_that_cant_sign_in_has_none() {
+fn a_list_of_every_record_reads_its_sign_ins_and_one_that_lists_none_has_none() {
     let line = format!(
         r#"{{"repos":[],"workspaces":[],"sessions":[],"comments":[],"github_sign_ins":[{{{SIGN_IN}}}],"rev":5}}"#
     );
-    let older = r#"{"repos":[],"workspaces":[],"sessions":[],"comments":[],"github_accounts":[],"rev":5}"#;
+    let none = r#"{"repos":[],"workspaces":[],"sessions":[],"comments":[],"github_accounts":[],"rev":5}"#;
 
     assert_eq!(listed(&line).github_sign_ins, [sign_in()]);
-    assert_eq!(listed(older).github_sign_ins, []);
+    assert_eq!(listed(none).github_sign_ins, []);
 }
 
-/// What the hub's settings say it sends every worker for the default, in each form, and the settings of a hub from
-/// before they said, which say nothing of it.
+/// What the hub's settings say it sends every worker for the default, in each form, and settings that say nothing of
+/// it, as before the hub first records what it sends.
 #[test]
-fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_before_says_none() {
+fn what_workers_are_sent_keeps_its_form_on_the_settings_and_settings_not_yet_recorded_say_none() {
     let reason = "The token of ada, the default account, has ended.";
     let forms = [
         (
@@ -140,7 +140,7 @@ fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_
         (UnusableLogin::GhOtherUser, "gh_other_user"),
         (UnusableLogin::GhUnread, "gh_unread"),
     ];
-    let older: GithubSettings = serde_json::from_str(r#"{"account":"g"}"#).unwrap();
+    let unrecorded: GithubSettings = serde_json::from_str(r#"{"account":"g"}"#).unwrap();
 
     for (sent, form) in forms {
         let settings = GithubSettings {
@@ -157,16 +157,15 @@ fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_
         assert_eq!(serde_json::to_value(why).unwrap(), form);
     }
     assert_eq!(
-        older,
+        unrecorded,
         GithubSettings { account: Some("g".into()), sent: None, left_to_machine: Vec::new(), set_up: Vec::new() }
     );
 }
 
-/// The providers the hub's settings say it leaves GitHub to the machines of, and those it sets up, by name, and the
-/// settings of a hub from before they said, which say none, so every provider's workspaces are taken to be set up, as
-/// that hub's were.
+/// The providers the hub's settings say it leaves GitHub to the machines of, and those it sets up, by name, and
+/// settings that name none, which leave none to their machines, so every provider's workspaces are taken to be set up.
 #[test]
-fn the_providers_left_to_their_machines_keep_their_form_and_a_hub_from_before_leaves_none() {
+fn the_providers_left_to_their_machines_keep_their_form_and_settings_that_name_none_leave_none() {
     let settings = GithubSettings {
         account: None,
         sent: None,
@@ -174,13 +173,13 @@ fn the_providers_left_to_their_machines_keep_their_form_and_a_hub_from_before_le
         set_up: vec!["incus".into()],
     };
     let written = r#"{"account":null,"left_to_machine":["keyed","local"],"set_up":["incus"]}"#;
-    let older: GithubSettings = serde_json::from_str("{}").unwrap();
+    let none: GithubSettings = serde_json::from_str("{}").unwrap();
 
     assert_eq!(serde_json::to_string(&settings).unwrap(), written);
     assert_eq!(serde_json::from_str::<GithubSettings>(written).unwrap(), settings);
     assert!(!settings.sets_up(&"local".into()) && settings.sets_up(&"vms".into()));
-    assert!(older.sets_up(&"local".into()), "{older:?}");
-    assert!(older.set_up.is_empty(), "{older:?}");
+    assert!(none.sets_up(&"local".into()), "{none:?}");
+    assert!(none.set_up.is_empty(), "{none:?}");
 }
 
 /// What GitHub calls a GitHub account's user, which a hub sends at its own level to a client of a version that reads it

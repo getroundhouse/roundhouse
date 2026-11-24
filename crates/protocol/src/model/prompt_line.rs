@@ -30,7 +30,8 @@ pub struct SettledAt {
     pub seq: Seq,
     /// Among the agent's own events.
     pub place: Place,
-    /// Whether the agent took it or it was dropped. `None` from a hub that doesn't say.
+    /// Whether the agent took it or it was dropped. `None` reads as one this build doesn't know, which a client works
+    /// out from what's loaded after the prompt.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub how: Option<Settlement>,
 }

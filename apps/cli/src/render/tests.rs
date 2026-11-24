@@ -92,7 +92,7 @@ fn an_agent_started_on_another_build_than_its_chat_s_last_says_it_was_updated() 
     let said = "agent resumed, pid 7, Roundhouse chat worker updated from 0.9.0 to 1.0.0";
     assert_eq!(started(7, true, Some("1.0.0"), Some("0.9.0")), said);
     assert_eq!(started(7, false, Some("1.0.0"), None), "agent started, pid 7");
-    assert_eq!(started(7, true, None, None), "agent resumed, pid 7", "from a hub from before builds were recorded");
+    assert_eq!(started(7, true, None, None), "agent resumed, pid 7", "one recorded before builds were");
 }
 
 #[test]

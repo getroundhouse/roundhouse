@@ -78,12 +78,13 @@ fn which_way_a_prompt_was_settled_keeps_its_form() {
     assert_eq!(how(r#","how":"taken""#), Some(Settlement::Taken));
     assert_eq!(how(r#","how":"dropped""#), Some(Settlement::Dropped));
     assert_eq!(how(r#","how":"later""#), Some(Settlement::Unknown));
-    assert_eq!(how(""), None, "from an older hub");
+    assert_eq!(how(""), None, "where the line doesn't say");
     assert_eq!(serde_json::to_string(&Settlement::Dropped).unwrap(), r#""dropped""#);
 }
 
+/// 0 is what a hub says of a chat with no reply yet, and of one nobody has read.
 #[test]
-fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
+fn a_chat_that_says_nothing_of_its_replies_reads_as_read() {
     let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"rev":3,"open_approvals":[]}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();
@@ -93,8 +94,9 @@ fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
     assert!(!session.unread());
 }
 
+/// A chat's record that doesn't say when its turn started, as one stored before the hub kept it may not, has none.
 #[test]
-fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
+fn a_running_session_that_doesnt_say_when_its_turn_started_has_none() {
     let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"running","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"rev":3,"open_approvals":[]}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();

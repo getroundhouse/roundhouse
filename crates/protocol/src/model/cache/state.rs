@@ -67,8 +67,7 @@ pub struct PromptCache {
     /// The model the request asked, whose cache it is. `None` when the agent didn't say.
     #[serde(default)]
     pub model: Option<ModelName>,
-    /// How much of the conversation it holds: what the request read from it and wrote to it. 0 from a hub that
-    /// didn't say.
+    /// How much of the conversation it holds: what the request read from it and wrote to it.
     #[serde(default)]
     pub tokens: u64,
 }

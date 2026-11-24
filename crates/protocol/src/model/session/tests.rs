@@ -78,7 +78,7 @@ fn a_compaction_waits_for_the_turn_for_every_prompt_to_be_taken_and_for_a_conver
     assert!(says("running", &[], true).compaction_waits());
     assert!(says("idle", &[Seq::new(5)], true).compaction_waits(), "a prompt or compaction on its way");
     assert!(says("idle", &[], false).compaction_waits(), "nothing to compact yet");
-    assert!(session("running").compaction_waits(), "a hub that doesn't say still says when it's working");
+    assert!(session("running").compaction_waits(), "a record that doesn't say still says when it's working");
     assert!(!session("idle").compaction_waits(), "and is asked otherwise");
 }
 

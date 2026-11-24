@@ -250,8 +250,8 @@ pub struct Session {
     /// leaves whether a compaction waits for them to the hub, which has the last word.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub untaken: Option<Vec<Seq>>,
-    /// Whether the agent has opened its conversation, so there's something to compact. `None` from a hub that doesn't
-    /// say.
+    /// Whether the agent has opened its conversation, so there's something to compact. `None` where that's not known,
+    /// which leaves whether a compaction waits for it to the hub.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_opened: Option<bool>,
     pub rev: Rev,
@@ -268,8 +268,9 @@ pub struct OpenApproval {
 
 impl Session {
     /// Whether the hub would refuse to ask the agent to compact now, as far as the record says: while the agent is on a
-    /// turn, has a prompt it hasn't taken, or hasn't opened its conversation. The hub has the last word, and a hub
-    /// that doesn't say what the agent has yet to take, or whether it has opened, is refused only for the turn.
+    /// turn, has a prompt it hasn't taken, or hasn't opened its conversation. The hub has the last word, and a record
+    /// that doesn't say what the agent has yet to take, or whether it has opened, holds a compaction back only for the
+    /// turn.
     pub fn compaction_waits(&self) -> bool {
         let untaken = self.untaken.as_ref().is_some_and(|untaken| !untaken.is_empty());
         self.status.in_turn() || untaken || self.agent_opened == Some(false)

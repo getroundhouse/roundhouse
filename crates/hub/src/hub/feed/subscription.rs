@@ -39,8 +39,8 @@ impl Feed {
         let notice = match RecordNotice::try_from(notice) {
             Ok(of) => {
                 let (newest, rev) = (sent.entry(of.key()).or_default(), of.rev());
-                // Only a hub that doesn't keep revisions makes a copy without one, which is always sent, as a client
-                // always takes it.
+                // A copy without a revision is always sent, as `Rev::supersedes` says, though the hub makes none:
+                // every row and every record it keeps in memory takes its revision from the counter.
                 if !rev.supersedes(*newest) {
                     trace!(rev = rev.get(), newest = newest.get(), "left out a copy no newer than one told of");
                     return;

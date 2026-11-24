@@ -8,7 +8,7 @@ pub(in crate::store) const NEWEST_START: &str = "SELECT json_extract(body, '$.bu
 
 impl Store {
     /// The build the session's agent last started on, as its newest `AgentStarted` says. `None` before its first, and
-    /// when that didn't say, as from a hub from before it recorded builds.
+    /// when that didn't say, as one recorded before the hub recorded builds doesn't.
     pub fn last_agent_build(&self, id: &SessionId) -> Result<Option<String>, StoreError> {
         let build = lock(&self.reader).query_row(NEWEST_START, [id.as_str()], OneValue::read).optional()?;
         Ok(build.flatten())

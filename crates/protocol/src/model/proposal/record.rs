@@ -20,8 +20,8 @@ pub struct Proposal {
     /// Each revision in short, oldest first, the newest too, so a chat draws each revision's line, and the timeline
     /// each revision, from the record. The owner chose this over each client reading every revision in full, and over
     /// a request of its own for the summaries. A client would have to send that request again whenever the record
-    /// changed, and would draw the lines wrong until the reply came. A hub from before revisions sends none, for a
-    /// proposal with only its first.
+    /// changed, and would draw the lines wrong until the reply came. The hub lists every revision it keeps, so a list
+    /// that's empty draws no revision's line.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub revisions: Vec<RevisionSummary>,
     /// Once the agent withdrew it, as no longer of use, why and when, so nothing more can be said to it. It's on the

@@ -50,10 +50,10 @@ fn every_reply_about_pairing_a_device_keeps_its_form() {
 }
 
 #[test]
-fn a_device_from_a_hub_that_doesnt_count_its_connections_has_none() {
-    let older = r#"{"result":"device","id":"d","name":"Phone","paired_at_ms":1,"last_seen_ms":5}"#;
+fn a_device_that_doesnt_count_its_connections_has_none() {
+    let uncounted = r#"{"result":"device","id":"d","name":"Phone","paired_at_ms":1,"last_seen_ms":5}"#;
 
-    let reply: ClientResponse = frame::decode(older.as_bytes()).unwrap();
+    let reply: ClientResponse = frame::decode(uncounted.as_bytes()).unwrap();
 
     assert_eq!(reply, ClientResponse::Device(Device { connections: 0, ..device() }));
 }

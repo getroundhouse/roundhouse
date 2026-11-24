@@ -70,10 +70,6 @@ fn what_a_worker_asks_of_a_wait_and_its_hubs_answer_keep_their_form() {
         assert_eq!(serde_json::to_string(&ask).unwrap(), wire);
         assert_eq!(serde_json::from_str::<WorkerAsk>(wire).unwrap(), ask);
     };
-    // An older worker's wait on the workspace's own pull request, which a hub of this build refuses as unsupported.
-    let older: WorkerAsk =
-        serde_json::from_str(r#"{"method":"start_wait","until":"checks","call":"toolu_1"}"#).unwrap();
-    assert_eq!(older, WorkerAsk::Unknown);
     keeps_its_form(WorkerAsk::Wait(ReadWait { wait: "w".into() }), r#"{"method":"wait","wait":"w"}"#);
     keeps_its_form(WorkerAsk::CancelWait(CancelWait { wait: "w".into() }), r#"{"method":"cancel_wait","wait":"w"}"#);
 

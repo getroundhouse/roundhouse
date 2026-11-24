@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 /// update, which the hub carries on with until nothing in the workspace is at work, and then replaces with its own.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OtherBuild {
-    /// The build, as the worker's hello named it. `None` for a worker from before workers said, which is another build
-    /// all the same.
+    /// The build, as the worker's hello named it. `None` where its hello named none, which is another build all the
+    /// same.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub said: Option<String>,
 }

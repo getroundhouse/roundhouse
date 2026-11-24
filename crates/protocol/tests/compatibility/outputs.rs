@@ -84,7 +84,7 @@ fn an_mcp_block_the_adapter_didnt_know_is_kept_and_one_this_build_doesnt_know_re
 }
 
 #[test]
-fn a_subagents_record_keeps_its_typed_calls_and_one_from_before_has_none() {
+fn a_subagents_record_keeps_its_typed_calls() {
     let record = json!({"session_id":"s","id":"c","call":"c","status":"working","started_at_ms":1,"calls":1,"rev":1,
         "lately":{"calls":[{"before":{"text":"Looking","cut":false},"id":"r",
             "call":{"kind":"read","path":"a.rs"},
@@ -98,9 +98,4 @@ fn a_subagents_record_keeps_its_typed_calls_and_one_from_before_has_none() {
     assert!(call.result.as_ref().is_some_and(|result| result.cut));
     let written = serde_json::to_value(&read).unwrap();
     assert_eq!(written["lately"], record["lately"], "as it was written");
-    let older: Subagent =
-        serde_json::from_value(json!({"session_id":"s","id":"c","call":"c","status":"working","rev":1,
-        "started_at_ms":1,"calls":1,"latest_call":{"id":"r","name":"Read","input":{"file_path":"a.rs"}}}))
-        .unwrap();
-    assert_eq!(older.lately, None);
 }

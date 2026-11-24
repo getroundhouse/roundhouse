@@ -68,7 +68,7 @@ pub struct Account {
     pub held_login: Option<HeldLogin>,
     /// When the person last sent something in a session that names the account, by the hub's clock, so a client can
     /// say when the account was last used. What they sent before the session's first launch counts once that launch
-    /// names it. `None` until they have, and from a hub from before it kept it.
+    /// names it. `None` until they have, as for an account last used before the hub kept this, whose row doesn't say.
     #[serde(default)]
     pub used_at_ms: Option<i64>,
     /// How much of the account's week the person keeps for themselves, as [`Reserve`] says. `None` keeps none back.
