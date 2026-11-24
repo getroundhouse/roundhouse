@@ -158,8 +158,11 @@ pub(in super::super) enum Opening {
 
 /// The failed request whose card offers Retry, if one does: the one the newest turn ended on, while the record says
 /// that turn failed and no turn has started since, and while nothing has been sent, which Retry would only repeat.
+/// The record comes apart from the chat's events, and can say the turn failed after the log already has a prompt
+/// recorded past its end, as when Retry's own prompt was taken and its turn ran before the chat's record said so, so
+/// such a prompt takes Retry away too, and a second press can't send it again.
 pub(crate) fn retry_at(log: &SessionLog, at_work: &AtWork) -> Option<Seq> {
-    if !at_work.failed || log.has_prompts_waiting() {
+    if !at_work.failed || log.has_prompts_waiting() || nearby::prompted_after(log, at_work.reply_seq) {
         return None;
     }
     nearby::failed_request_ending(log, at_work.reply_seq)

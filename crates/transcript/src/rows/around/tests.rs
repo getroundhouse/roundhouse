@@ -349,6 +349,9 @@ fn only_the_card_the_newest_turn_ended_on_offers_retry_until_something_is_sent()
     at_work.failed = true;
 
     assert_eq!(retry_at(&twice, &at_work), Some(Seq::new(7)), "not the older turn's");
-    let sent = log(turns.into_iter().chain([event(Seq::new(9), prompt("Try Sonnet"))]));
+    let sent = log(turns.iter().cloned().chain([event(Seq::new(9), prompt("Try Sonnet"))]));
     assert_eq!(retry_at(&sent, &at_work), None, "something has been sent since");
+    let taken_since = [event(Seq::new(9), prompt("Continue")), event(Seq::new(10), taken(Seq::new(9)))];
+    let ran = log(turns.into_iter().chain(taken_since));
+    assert_eq!(retry_at(&ran, &at_work), None, "its prompt taken and its turn begun, before the record says so");
 }
