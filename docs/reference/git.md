@@ -42,3 +42,7 @@ A worker's git config sets who commits are by only in a repository with a remote
 - **A worktree's remotes are its repository's,** so the condition holds in a worktree as it does in the checkout.
 - **A file included under the condition can't hold a remote's address.** Every git fails on one, as git 2.54 does.
 - **git passes over an include of a file that isn't there.** So removing the included file is enough to stop including it.
+
+## A repository's variables
+
+- **git before 2.40 lists `GIT_INTERNAL_SUPER_PREFIX` among a repository's variables, in `git rev-parse --local-env-vars`,** and git 2.40 and later don't read it. git set it in a submodule's command to the submodule's path. With it set, git 2.39 refuses every command but the few that recurse into submodules: `git status` exits 128 with "status doesn't support --super-prefix". So the worker's list of a repository's variables, in `crates/worker/src/git/repository_variables.rs`, keeps it.
