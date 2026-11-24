@@ -23,3 +23,4 @@ pub use copies::{Changes, InWorkspace, Snapshot};
 pub(super) use observed::ObservationsListed;
 pub use of_accounts::{AccountIdentity, GithubName};
 pub use of_models::ListOfModels;
+pub use of_workspaces::WorkerBuild;

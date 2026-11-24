@@ -14,10 +14,13 @@ impl Snapshot {
         workspace.branches.as_ref()
     }
 
-    /// Which build `workspace`'s worker is, while it's connected and another build than the hub's. `None` while it's
-    /// the hub's build, or not connected.
-    pub fn worker_build<'a>(&'a self, workspace: &'a Workspace) -> Option<&'a str> {
-        workspace.worker_build.as_deref()
+    /// Which build `workspace`'s worker is. A hub of version 4 says only whether it's another build than its own, and
+    /// which, so one that isn't reads as the hub's own, connected or not.
+    pub fn worker_build<'a>(&'a self, workspace: &'a Workspace) -> WorkerBuild<'a> {
+        match workspace.worker_build.as_deref() {
+            Some(build) => WorkerBuild::Other(Some(build)),
+            None => WorkerBuild::Hubs,
+        }
     }
 
     /// The release the update feed offers a hub installed as a service, as the hub last read it. `None` where no
@@ -25,4 +28,16 @@ impl Snapshot {
     pub fn release_offered(&self) -> Option<&str> {
         self.hub_update()?.version.as_deref()
     }
+}
+
+/// Which build a workspace's worker is, as a view reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorkerBuild<'a> {
+    /// Not known, as while no worker is connected.
+    NotKnown,
+    /// The hub's own build.
+    Hubs,
+    /// Another build than the hub's, which the hub moves the workspace to once nothing in it is at work: the one it
+    /// named, or `None` for a worker too old to say.
+    Other(Option<&'a str>),
 }

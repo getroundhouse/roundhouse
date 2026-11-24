@@ -8,9 +8,10 @@
 
 use std::time::Duration;
 
-use client_core::records::Snapshot;
+use client_core::records::{Snapshot, WorkerBuild};
 use gpui_kit::{AppContext as _, Context, Task};
 use protocol::client::HubStatus;
+use protocol::model::Workspace;
 
 use super::{AppView, hub_source};
 
@@ -75,7 +76,8 @@ impl WorkersMoving {
 }
 
 fn on_other_builds(records: &Snapshot) -> usize {
-    records.workspaces().iter().filter(|workspace| records.worker_build(workspace).is_some()).count()
+    let other = |workspace: &&Workspace| matches!(records.worker_build(workspace), WorkerBuild::Other(_));
+    records.workspaces().iter().filter(other).count()
 }
 
 #[cfg(test)]

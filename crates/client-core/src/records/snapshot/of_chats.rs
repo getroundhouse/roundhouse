@@ -3,7 +3,7 @@
 //! chat's waits last read of the pull requests it watches. Each is read here alone, from the chat's record, so that
 //! where the hub sends one apart from the record, as an observation, only these change.
 
-use protocol::model::{CACHE_WORTH_TELLING_TOKENS, ContextUsage, PullRequestWatch, Session, Wait};
+use protocol::model::{CACHE_WORTH_TELLING_TOKENS, ContextUsage, Session, Wait, WaitRead};
 
 use super::Snapshot;
 use crate::prompt_cache::ConversationCache;
@@ -21,9 +21,10 @@ impl Snapshot {
         ConversationCache { held: session.prompt_cache.as_ref(), worth_telling: big }
     }
 
-    /// What `wait` last read of the pull requests it watches, and how its last read went. `None` for one the singular
-    /// tool started, which only a hub from before it was dropped can still have open, and which reads nothing.
-    pub fn wait_read<'a>(&'a self, wait: &'a Wait) -> Option<&'a PullRequestWatch> {
-        wait.watch.as_deref()
+    /// What the open wait `wait` last read of the pull requests it watches, and how its last read went. `None` for one
+    /// the singular tool started, which only a hub from before it was dropped can still have open, and which reads
+    /// nothing.
+    pub fn wait_read(&self, wait: &Wait) -> Option<WaitRead> {
+        wait.watch.as_deref().map(protocol::model::PullRequestWatch::read)
     }
 }
