@@ -6,7 +6,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ObservationNotice, RecordNotice};
 use protocol::model::{
-    AccountId, GithubAccountId, Level, Observation, Observed, RepoId, Rev, SessionId, WaitId, WorkspaceId,
+    AccountId, GithubAccountId, GithubAppId, Level, Observation, Observed, RepoId, Rev, SessionId, WaitId, WorkspaceId,
 };
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
@@ -247,7 +247,7 @@ impl Observations {
     /// when it was read, under one revision newer than any a client holds, since a client of the hub before can hold
     /// any revision that hub gave. Where there's no revision to give, as when the database fails, it starts with none
     /// of them, as the log says, and each is not known until it's read again. Those of a workspace, a session, an
-    /// agent's account, a repository, a GitHub account or an open wait the database doesn't have are forgotten, as one
+    /// agent's account, a repository, a GitHub account, an app of your own or an open wait the database doesn't have are forgotten, as one
     /// a hub stopped before forgetting, or a file refused to, leaves, so no client is listed them.
     pub(crate) fn open(file: Arc<CacheFile>, store: &Store) -> Self {
         let mut tables = Tables::default();
@@ -265,7 +265,7 @@ impl Observations {
         }
         let writer = Writer::new(file);
         match owners(store) {
-            Ok(Owners { workspaces, sessions, waits, accounts, repos, github_accounts }) => {
+            Ok(Owners { workspaces, sessions, waits, accounts, repos, github_accounts, apps }) => {
                 let gone = |owner: Owner<'_>| match owner {
                     Owner::Workspace(id) => !workspaces.contains(id),
                     Owner::Session(key) => !sessions.contains(&key.session_id),
@@ -273,6 +273,7 @@ impl Observations {
                     Owner::Account(id) => !accounts.contains(id),
                     Owner::Repo(id) => !repos.contains(id),
                     Owner::GithubAccount(id) => !github_accounts.contains(id),
+                    Owner::App(id) => !apps.contains(id),
                     // Never gone: what it owns goes only as the hub lets go of it.
                     Owner::Hub => false,
                 };
@@ -364,6 +365,7 @@ struct Owners {
     accounts: HashSet<AccountId>,
     repos: HashSet<RepoId>,
     github_accounts: HashSet<GithubAccountId>,
+    apps: HashSet<GithubAppId>,
 }
 
 /// Each owner `store` has, as [`Observations::open`] forgets the observations of the rest.
@@ -375,5 +377,6 @@ fn owners(store: &Store) -> Result<Owners, StoreError> {
         accounts: store.account_ids()?,
         repos: store.list_repos()?.into_iter().map(|repo| repo.id).collect(),
         github_accounts: store.github_account_ids()?,
+        apps: store.github_app_ids()?,
     })
 }

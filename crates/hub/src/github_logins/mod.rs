@@ -41,7 +41,6 @@ pub(crate) use installations::{Looked, MintDue};
 #[cfg(test)]
 pub(crate) use nobody::NOBODY_ASKS_AN_HOUR;
 mod profiles;
-#[cfg(test)]
 pub(crate) use profiles::PROFILE_READ_EVERY;
 pub(crate) use profiles::{Heard, ProfileDue, ReadFrom};
 mod renewals;

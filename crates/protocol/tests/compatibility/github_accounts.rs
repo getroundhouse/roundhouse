@@ -5,8 +5,9 @@
 use protocol::client::{ClientResponse, HubNotice};
 use protocol::frame;
 use protocol::model::{
-    GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId,
-    HeldGithubLogin, Observation, ObservationKey, Observed, RecordKey, Records, Rev, SentCredential, UnusableLogin,
+    GithubAccount, GithubAppId, GithubAppSaid, GithubLoginKind, GithubSettings, GithubSignIn, GithubSignInStatus,
+    GithubUser, GithubUserId, HeldGithubLogin, Observation, ObservationKey, Observed, RecordKey, Records, Rev,
+    SentCredential, UnusableLogin,
 };
 
 use crate::keeps_its_form;
@@ -221,5 +222,40 @@ fn a_github_username_keeps_its_form_as_a_notice_and_a_removal() {
     keeps_its_form(
         &gone,
         r#"{"notice":"observation_removed","observation":{"kind":"github_username","account":"g-1"},"rev":6}"#,
+    );
+}
+
+/// What GitHub says of an app of your own, its bot, and where an installation is, which a hub sends at its own level to
+/// a client of a version that reads them so, as notices.
+#[test]
+fn what_github_says_of_an_app_keeps_its_form_as_a_notice() {
+    let app = GithubAppId::new(9);
+    let owner = GithubUser { id: GithubUserId::new(2), name: "adalabs".into() };
+    let said = GithubAppSaid { slug: "ada-roundhouse".into(), name: "Ada's Roundhouse".into(), owner };
+    let said = HubNotice::Observation(Observation::GithubAppSaid {
+        app,
+        said: Observed::Current { value: said },
+        rev: Rev::new(5),
+    });
+    let bot = GithubUser { id: GithubUserId::new(41), name: "ada-roundhouse[bot]".into() };
+    let bot = HubNotice::Observation(Observation::GithubAppBot {
+        app,
+        bot: Observed::Current { value: bot },
+        rev: Rev::new(6),
+    });
+    let on = Observed::AsOf { value: "adalabs".into(), as_of_ms: 1_795_230_000_000 };
+    let on = HubNotice::Observation(Observation::InstalledOn { account: "g".into(), on, rev: Rev::new(7) });
+
+    keeps_its_form(
+        &said,
+        r#"{"notice":"observation","kind":"github_app_said","app":9,"said":{"freshness":"current","value":{"slug":"ada-roundhouse","name":"Ada's Roundhouse","owner":{"id":2,"name":"adalabs"}}},"rev":5}"#,
+    );
+    keeps_its_form(
+        &bot,
+        r#"{"notice":"observation","kind":"github_app_bot","app":9,"bot":{"freshness":"current","value":{"id":41,"name":"ada-roundhouse[bot]"}},"rev":6}"#,
+    );
+    keeps_its_form(
+        &on,
+        r#"{"notice":"observation","kind":"installed_on","account":"g","on":{"freshness":"as_of","value":"adalabs","as_of_ms":1795230000000},"rev":7}"#,
     );
 }

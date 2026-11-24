@@ -44,7 +44,8 @@ impl GithubLogins {
         Ok(change)
     }
 
-    /// Connects an app's installation as the hub does, keeping that its user is the app's bot, `bot`.
+    /// Connects an app's installation as the hub does, keeping that its user is the app's bot, `bot`, and what GitHub
+    /// calls what it's on.
     pub(crate) fn installation_connected(
         &self,
         app: GithubAppId,
@@ -57,7 +58,8 @@ impl GithubLogins {
         let change = self.connect_installation(app, bot, installation, token, by_person, now_ms)?;
         if let Some(change) = &change {
             let account = change.account.id.clone();
-            self.observations.keep_as_read::<GithubUsername>(account, bot.name.clone(), now_ms);
+            self.observations.keep_as_read::<GithubUsername>(account.clone(), bot.name.clone(), now_ms);
+            self.observations.keep_as_read::<crate::hub::InstalledOn>(account, installation.on.name.clone(), now_ms);
             self.heard_of(now_ms)?;
         }
         Ok(change)

@@ -1,13 +1,9 @@
-//! The rule's rows for what the hub keeps of GitHub: its accounts, the sign-ins to them, and the apps of the person's
-//! own.
+//! The rule's rows for what the hub keeps of GitHub: its accounts and the sign-ins to them.
 
-use protocol::client::github_apps::GithubManifestCode;
 use protocol::fixtures;
-use protocol::model::{
-    GithubAccountId, GithubAppId, GithubLoginKind, GithubSignInStatus, GithubUser, GithubUserId, Rev,
-};
+use protocol::model::{GithubAccountId, GithubLoginKind, GithubSignInStatus, GithubUser, GithubUserId, Rev};
 
-use super::super::{GithubAppMaking, GithubConnecting, Store};
+use super::super::{GithubConnecting, Store};
 use super::rule::Said;
 use crate::login_files::LoginFile;
 
@@ -61,23 +57,4 @@ pub(super) fn waiting(store: &Store) {
 
 pub(super) fn refused(store: &Store) -> Said {
     Said::record(&store.set_github_sign_in(&"i".into(), &GithubSignInStatus::Refused).unwrap())
-}
-
-const APP: GithubAppId = GithubAppId::new(9);
-
-pub(super) fn app(store: &Store) -> Rev {
-    store.list_records().unwrap().github_apps[0].rev
-}
-
-pub(super) fn made_app(store: &Store) {
-    let (key, code, owner) = (LoginFile::new(), GithubManifestCode::new("a-code"), ada());
-    let slug = "ada-roundhouse".into();
-    let making =
-        GithubAppMaking { id: APP, slug: &slug, name: "Ada's Roundhouse", owner: &owner, key: &key, made_from: &code };
-    store.make_github_app(&making).unwrap();
-}
-
-pub(super) fn bot(store: &Store) -> Said {
-    let bot = GithubUser { id: GithubUserId::new(41), name: "ada-roundhouse[bot]".into() };
-    Said::Changed(store.set_github_app_bot(APP, &bot).unwrap().is_some())
 }

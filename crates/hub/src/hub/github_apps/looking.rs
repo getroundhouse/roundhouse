@@ -5,38 +5,32 @@
 
 use std::sync::Arc;
 
-use protocol::client::{ApiError, HubNotice};
-use protocol::model::{GithubApp, GithubAppId};
+use protocol::client::{ApiError, ErrorCode};
+use protocol::model::{GithubApp, GithubAppId, GithubUser};
 use tracing::{error, warn};
 
 use super::super::{Hub, off_thread};
-use crate::github_logins::{GithubAccountChange, InstallationToken, Looked, MintDue};
-use crate::store::now_ms;
-use github::Minted;
+use crate::github_logins::{GithubAccountChange, InstallationToken, Looked, MintDue, PROFILE_READ_EVERY};
+use crate::hub::{GithubAppBot, GithubAppSaid, InstalledOn};
+use crate::store::{StoreError, now_ms};
+use github::{GithubAppKey, Installation, Minted};
 
 impl Hub {
     /// Looks for where the app `id` is installed, and connects each installation [`GithubLogins::installations_found`]
     /// says to, as `by_person` asked or as the hub does by itself, telling every client of each record that changed,
-    /// and answers with the app's record. GitHub is asked first for the app's bot, until it has said, then for its
-    /// installations, then for a token for each to connect, each within its time limit. Refused with what GitHub's
-    /// first failure was, which leaves what was connected before it.
+    /// and answers with the app's record. GitHub is asked first what it says of the app, as [`Hub::read_app`] says,
+    /// then for the app's bot, until it has said, then for its installations, whose user or organization each is on
+    /// the hub keeps, then for a token for each to connect, each within its time limit. Refused with what GitHub's
+    /// first failure was, which leaves what was connected before it, and when the app's key is gone or can't be read.
     ///
     /// [`GithubLogins::installations_found`]: crate::github_logins::GithubLogins::installations_found
     pub(super) async fn look_at_app(&self, id: GithubAppId, by_person: bool) -> Result<GithubApp, ApiError> {
         let logins = Arc::clone(&self.github_logins);
-        let (mut app, key) = off_thread(move || logins.app_key(id)).await?;
-        let bot = if let Some(bot) = app.bot.clone() {
-            bot
-        } else {
-            let bot = self.github.bot(&app.slug).await?;
-            let (logins, told) = (Arc::clone(&self.github_logins), bot.clone());
-            if let Some(changed) = off_thread(move || logins.app_bot(id, &told)).await? {
-                self.notify(HubNotice::GithubApp(changed.clone()));
-                app = changed;
-            }
-            bot
-        };
+        let (_, key) = off_thread(move || logins.app_key(id)).await?;
+        self.read_app(id, &key).await?;
+        let bot = self.app_bot(id).await?;
         let found = self.github.installations(id, &key).await?;
+        self.installations_named(id, &found).await;
         let logins = Arc::clone(&self.github_logins);
         let Looked { connect, forgot } =
             off_thread(move || logins.installations_found(id, &found, by_person, now_ms())).await?;
@@ -49,14 +43,92 @@ impl Hub {
                 continue;
             };
             let token = InstallationToken { token, token_ends_at_ms: ends_at_ms };
-            let (logins, told, connected_at_ms) = (Arc::clone(&self.github_logins), bot.clone(), now_ms());
+            let (logins, told, connected_at_ms, on) =
+                (Arc::clone(&self.github_logins), bot.clone(), now_ms(), installation.on.name.clone());
             let connecting =
                 move || logins.connect_installation(id, &told, &installation, token, by_person, connected_at_ms);
             if let Some(change) = off_thread(connecting).await? {
+                let account = change.account.id.clone();
                 let change = self.github_user_connected(change, bot.clone(), None, connected_at_ms).await;
+                if let Err(e) = self.observation_read::<InstalledOn>(account, on, connected_at_ms).await {
+                    warn!(app = %id, "couldn't keep where a connected installation is: {}", e.message);
+                }
+                self.workers_sent_again(id).await;
                 self.announce_github_account(change);
             }
         }
+        self.app_record(id).await
+    }
+
+    /// Asks GitHub, as the app `id`, with its `key`, what it says of the app, its slug, name and owner, and keeps it, at
+    /// once when the hub doesn't know it, as on the first start after it stopped keeping it in its database, and a day
+    /// after it last asked, as it does a GitHub account's user, so an app renamed or moved to another owner on GitHub
+    /// shows as it is. A failure is only said while the hub knows what GitHub said before, which stands, and refuses
+    /// the look while it knows nothing, since it can't tell which installation is on the app's owner, nor its bot.
+    async fn read_app(&self, id: GithubAppId, key: &GithubAppKey) -> Result<(), ApiError> {
+        let asked_at_ms = now_ms();
+        let every = i64::try_from(PROFILE_READ_EVERY.as_millis()).unwrap_or(i64::MAX);
+        let read_at_ms = self.observations.read_at::<GithubAppSaid>(&id);
+        if read_at_ms.is_some_and(|read_at_ms| read_at_ms > asked_at_ms.saturating_sub(every)) {
+            return Ok(());
+        }
+        match self.github.app(id, key).await {
+            Ok(said) => self.observation_read::<GithubAppSaid>(id, said, asked_at_ms).await,
+            Err(e) if read_at_ms.is_some() => {
+                warn!(app = %id, "couldn't ask GitHub what it says of an app, so what it said before stands: {}", e.message);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// The app `id`'s bot, as the hub holds it, or else as GitHub says it, asked as nobody by the app's slug, which it
+    /// keeps. Refused while the hub knows neither, as when GitHub hasn't said what it calls the app.
+    async fn app_bot(&self, id: GithubAppId) -> Result<GithubUser, ApiError> {
+        if let Some(bot) = self.observations.value_of::<GithubAppBot>(&id) {
+            return Ok(bot);
+        }
+        let Some(said) = self.observations.value_of::<GithubAppSaid>(&id) else {
+            return Err(ApiError::new(ErrorCode::Unavailable, "GitHub hasn't said what it calls the app yet"));
+        };
+        let asked_at_ms = now_ms();
+        let bot = self.github.bot(&said.slug).await?;
+        self.observation_read::<GithubAppBot>(id, bot.clone(), asked_at_ms).await?;
+        Ok(bot)
+    }
+
+    /// Keeps what GitHub calls the user or organization each installation of the app `id` that `found` lists is on, for
+    /// the GitHub account that's that installation, by the number of what it's on, which links the two.
+    async fn installations_named(&self, id: GithubAppId, found: &[Installation]) {
+        let accounts = match self.blocking(move |store| store.installation_accounts(id)).await {
+            Ok(accounts) => accounts,
+            Err(e) => return warn!(app = %id, "couldn't read an app's installations' accounts: {}", e.message),
+        };
+        let read_at_ms = now_ms();
+        for (account, _) in accounts {
+            let Some(installed) = &account.installation else { continue };
+            let Some(listed) = found.iter().find(|listed| listed.on.id == installed.on.id) else { continue };
+            if let Err(e) = self.observation_read::<InstalledOn>(account.id, listed.on.name.clone(), read_at_ms).await {
+                warn!(app = %id, "couldn't keep where an installation is: {}", e.message);
+            }
+        }
+        self.workers_sent_again(id).await;
+    }
+
+    /// Works out what workers are sent again, once the hub has kept where an installation of the app `id` is, since what
+    /// they're sent, and the check of reach, say where the default's installation is.
+    async fn workers_sent_again(&self, id: GithubAppId) {
+        let logins = Arc::clone(&self.github_logins);
+        if let Err(e) = off_thread(move || logins.heard_of(now_ms())).await {
+            warn!(app = %id, "couldn't work out what workers are sent again: {}", e.message);
+        }
+    }
+
+    /// The app `id`'s record, with what GitHub says of it, as a reply carries it. Refused once it's gone.
+    pub(super) async fn app_record(&self, id: GithubAppId) -> Result<GithubApp, ApiError> {
+        let found = self.blocking(move |store| store.github_app(id)).await?;
+        let mut app = found.ok_or_else(|| StoreError::NotFound { kind: "app of your own", id: id.to_string() })?;
+        self.fill_old_forms(&mut app);
         Ok(app)
     }
 

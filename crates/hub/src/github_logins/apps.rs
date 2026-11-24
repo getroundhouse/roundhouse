@@ -2,7 +2,7 @@
 
 use protocol::client::github_apps::GithubManifestCode;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{GithubAccount, GithubApp, GithubAppId, GithubUser, Rev};
+use protocol::model::{GithubAccount, GithubApp, GithubAppId, Rev};
 
 use super::{GithubLogin, GithubLogins};
 use crate::error::internal;
@@ -40,8 +40,7 @@ impl GithubLogins {
             return Ok(AppChange { app, changed: false });
         }
         let app = files.connect(&GithubLogin::App(made.key.clone()), |file| {
-            let MadeApp { id, slug, name, owner, key: _ } = made;
-            let making = GithubAppMaking { id: *id, slug, name, owner, key: file, made_from: code };
+            let making = GithubAppMaking { id: made.id, key: file, made_from: code };
             Ok((self.store.make_github_app(&making)?, None))
         })?;
         Ok(AppChange { app, changed: true })
@@ -59,7 +58,9 @@ impl GithubLogins {
         files: &Locked<'_, GithubLogin>,
         id: GithubAppId,
     ) -> Result<(GithubApp, GithubAppKey), ApiError> {
-        let (app, file) = self.store.github_app_key(id)?;
+        let (mut app, file) = self.store.github_app_key(id)?;
+        // Named as the hub last heard GitHub call it, for what's said of it.
+        self.observations.fill(&mut app);
         let read = file.map_or(Ok(Stored::Nothing), |file| files.read(&file));
         let refused = |why: &str| Err(ApiError::new(ErrorCode::Conflict, format!("{why} the key of {}", app.slug)));
         match read {
@@ -70,11 +71,6 @@ impl GithubLogins {
         }
     }
 
-    /// Says the app `id`'s bot is `bot`, as GitHub said, and answers with its record when that changed it.
-    pub(crate) fn app_bot(&self, id: GithubAppId, bot: &GithubUser) -> Result<Option<GithubApp>, ApiError> {
-        Ok(self.store.set_github_app_bot(id, bot)?)
-    }
-
     /// Has the hub forget the app `id`, at `now_ms`, as `GithubAppRemove` says: the login of each of its
     /// installations, as disconnecting each does, then its key, and then its record, so whatever stops the hub between
     /// leaves a record whose key is gone, which tidying removes as the hub next starts, and never a token or a key
@@ -82,7 +78,9 @@ impl GithubLogins {
     /// blocks. Refused with `NotFound` when the hub has no record of it.
     pub(crate) fn remove_app(&self, id: GithubAppId, now_ms: i64) -> Result<AppRemoved, ApiError> {
         self.changing(now_ms, |files| {
-            let (app, key) = self.store.github_app_key(id)?;
+            let (mut app, key) = self.store.github_app_key(id)?;
+            // As it last was, which is what's known of it, if anything, as the reply says.
+            self.observations.fill(&mut app);
             let mut accounts = Vec::new();
             for (account, file) in self.store.installation_accounts(id)? {
                 let Some(file) = file else { continue };

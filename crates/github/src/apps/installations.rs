@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use jiff::Timestamp;
 use protocol::client::ApiError;
-use protocol::model::{GithubAppId, GithubInstallationId, GithubToken, GithubUser};
+use protocol::model::{GithubAppId, GithubAppSaid, GithubInstallationId, GithubToken, GithubUser};
 use serde::Deserialize;
 use tracing::warn;
 
@@ -56,7 +56,25 @@ struct Given {
     expires_at: Option<String>,
 }
 
+/// What `GET /app` answers that the hub reads: what GitHub says of the app now, which its person can change on GitHub.
+#[derive(Deserialize)]
+struct Said {
+    slug: String,
+    name: String,
+    owner: Account,
+}
+
 impl Github {
+    /// What GitHub says of `app` now, its slug, its name and its owner, as `GET /app` answers the app, asked with a JWT
+    /// signed with `key`, within [`ASK_WITHIN`](super::super::ASK_WITHIN). Refused as [`Github::installations`] is.
+    pub async fn app(&self, app: GithubAppId, key: &GithubAppKey) -> Result<GithubAppSaid, ApiError> {
+        let jwt = key.signed_as(app, Timestamp::now().as_millisecond())?;
+        let answered = within(self.ask(http::Method::GET, "/app", Some(jwt.as_str()), None)).await?;
+        let said: Said = serde_json::from_str(&as_app(&answered, "what it is")?.body)
+            .map_err(|e| unavailable(format!("what GitHub answered the app of itself isn't an app: {e}")))?;
+        Ok(GithubAppSaid { slug: said.slug.into(), name: said.name, owner: said.owner.user() })
+    }
+
     /// Every installation of `app`, as GitHub lists them to the app, asked with a JWT signed with `key`, a page at a
     /// time, each within [`ASK_WITHIN`](super::super::ASK_WITHIN). Refused with `Conflict` for a key the hub can't
     /// sign with, and with `Unavailable` when GitHub can't be reached, doesn't answer in time, refuses the JWT, as

@@ -5,8 +5,8 @@ use std::path::Path;
 
 use protocol::client::github_apps::GithubManifestCode;
 use protocol::model::{
-    GithubAccount, GithubApp, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, InstalledApp,
-    SentCredential, UnusableLogin,
+    GithubAccount, GithubApp, GithubAppId, GithubAppSaid, GithubInstallation, GithubInstallationId, GithubLoginKind,
+    InstalledApp, SentCredential, UnusableLogin,
 };
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 
@@ -15,26 +15,26 @@ use super::credential::{reason, sent};
 use super::{default_of, logins_in};
 use github::{GithubAppKey, Installation, MadeApp, Minted};
 
-const APP: GithubAppId = GithubAppId::new(9);
+pub(super) const APP: GithubAppId = GithubAppId::new(9);
 
 /// When the first installation's token ends: an hour after the logins started, as GitHub has one last.
-const ENDS_AT_MS: i64 = 1000 + 3_600_000;
+pub(super) const ENDS_AT_MS: i64 = 1000 + 3_600_000;
 
 fn user(id: u64, name: &str) -> GithubUser {
     GithubUser { id: GithubUserId::new(id), name: name.into() }
 }
 
-fn bot() -> GithubUser {
+pub(super) fn bot() -> GithubUser {
     user(41, "ada-roundhouse[bot]")
 }
 
-fn code() -> GithubManifestCode {
+pub(super) fn code() -> GithubManifestCode {
     GithubManifestCode::new("a-code")
 }
 
 /// The app 9, as GitHub made it from [`code`], under the organization adalabs, with a key that only needs to be kept,
 /// since nothing here signs with it.
-fn made() -> MadeApp {
+pub(super) fn made() -> MadeApp {
     MadeApp {
         id: APP,
         slug: "ada-roundhouse".into(),
@@ -45,16 +45,25 @@ fn made() -> MadeApp {
 }
 
 /// The installation `id` of the app on the organization adalabs, its owner.
-fn on_adalabs(id: u64) -> Installation {
+pub(super) fn on_adalabs(id: u64) -> Installation {
     Installation { id: GithubInstallationId::new(id), on: user(2, "adalabs") }
 }
 
-fn kept(logins: &GithubLogins) -> GithubApp {
-    logins.keep_app(&made(), &code()).unwrap().app
+/// The app [`made`], kept as the hub keeps it, with what GitHub said of it as it made it.
+pub(super) fn kept(logins: &GithubLogins) -> GithubApp {
+    let app = logins.keep_app(&made(), &code()).unwrap().app;
+    let MadeApp { slug, name, owner, .. } = made();
+    logins.observations.keep_as_read::<crate::hub::GithubAppSaid>(APP, GithubAppSaid { slug, name, owner }, 1000);
+    app
 }
 
 /// `installation`, connected at 1000 as the hub's check would, with `token`, which ends at `ends_at_ms`.
-fn installed(logins: &GithubLogins, installation: &Installation, token: &str, ends_at_ms: i64) -> GithubAccount {
+pub(super) fn installed(
+    logins: &GithubLogins,
+    installation: &Installation,
+    token: &str,
+    ends_at_ms: i64,
+) -> GithubAccount {
     let token = InstallationToken { token: GithubToken::new(token), token_ends_at_ms: ends_at_ms };
     logins.installation_connected(APP, &bot(), installation, token, false, 1000).unwrap().unwrap().account
 }
@@ -88,8 +97,9 @@ fn an_apps_key_is_kept_once_for_its_code_and_number_and_changes_nothing_workers_
     let same_number = logins.keep_app(&made(), &GithubManifestCode::new("another-code")).unwrap();
 
     assert!(first.changed && !again.changed && !same_number.changed);
-    let owner = user(2, "adalabs");
-    assert_eq!((first.app.slug.as_str(), &first.app.owner, &first.app.bot), ("ada-roundhouse", &owner, &None));
+    // What GitHub says of it, the hub keeps as an observation, so the record names it by its number.
+    let owner = user(0, "#0");
+    assert_eq!((first.app.slug.as_str(), &first.app.owner, &first.app.bot), ("#9", &owner, &None));
     assert_eq!(logins.made_from(&code()).unwrap(), Some(first.app.clone()));
     assert_eq!(logins.app_key(APP).unwrap(), (first.app, GithubAppKey::new("a-made-up-key")));
     assert_eq!(files_in(dir.path()), [r#"{"format":"app","key":"a-made-up-key"}"#]);
@@ -102,7 +112,8 @@ fn an_installation_is_its_apps_bot_on_its_user_and_as_the_default_workers_commit
     let (logins, store) = logins_in(dir.path());
     kept(&logins);
 
-    let account = installed(&logins, &on_adalabs(70), "ghs_first", ENDS_AT_MS);
+    let mut account = installed(&logins, &on_adalabs(70), "ghs_first", ENDS_AT_MS);
+    logins.observations.fill(&mut account);
 
     let installation = GithubInstallation { app: APP, id: GithubInstallationId::new(70), on: user(2, "adalabs") };
     assert_eq!((account.user.id, account.installation.clone()), (bot().id, Some(installation)));
@@ -342,14 +353,14 @@ fn tidying_removes_an_app_whose_key_is_gone_as_removing_it_would_have() {
 #[test]
 fn a_check_reads_what_github_calls_an_installation_from_its_apps_bot() {
     let dir = tempfile::tempdir().unwrap();
-    let (logins, store) = logins_in(dir.path());
+    let (logins, _) = logins_in(dir.path());
     kept(&logins);
     let token = InstallationToken { token: GithubToken::new("ghs_first"), token_ends_at_ms: ENDS_AT_MS };
     let account = logins.connect_installation(APP, &bot(), &on_adalabs(70), token, false, 1000).unwrap().unwrap();
     let day_ms = i64::try_from(super::super::PROFILE_READ_EVERY.as_millis()).unwrap();
 
     let without_a_bot = logins.check(1001).unwrap().profiles;
-    store.set_github_app_bot(APP, &bot()).unwrap();
+    logins.observations.keep_as_read::<crate::hub::GithubAppBot>(APP, bot(), 1002);
     let not_known = logins.check(1002).unwrap().profiles;
     logins.observations.keep_as_read::<crate::hub::GithubUsername>(account.account.id.clone(), bot().name, 1002);
     let read = logins.check(1003).unwrap().profiles;

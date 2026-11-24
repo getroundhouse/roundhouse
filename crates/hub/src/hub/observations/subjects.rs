@@ -2,7 +2,9 @@
 
 use std::hash::Hash;
 
-use protocol::model::{AccountId, GithubAccountId, ModelListKey, ReferenceAsk, RepoId, SessionId, WaitId, WorkspaceId};
+use protocol::model::{
+    AccountId, GithubAccountId, GithubAppId, ModelListKey, ReferenceAsk, RepoId, SessionId, WaitId, WorkspaceId,
+};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +27,8 @@ pub(crate) enum Owner<'a> {
     Account(&'a AccountId),
     Repo(&'a RepoId),
     GithubAccount(&'a GithubAccountId),
+    /// An app of your own, forgotten as it's removed.
+    App(&'a GithubAppId),
     /// The hub itself, for what's of no record, which is never gone, and goes only as the hub lets go of it.
     Hub,
 }
@@ -36,7 +40,7 @@ impl<'a> Owner<'a> {
             Owner::Workspace(workspace) => Some(workspace),
             Owner::Session(session) => Some(&session.workspace_id),
             Owner::Wait(wait) => Some(&wait.workspace_id),
-            Owner::Account(_) | Owner::Repo(_) | Owner::GithubAccount(_) | Owner::Hub => None,
+            Owner::Account(_) | Owner::Repo(_) | Owner::GithubAccount(_) | Owner::App(_) | Owner::Hub => None,
         }
     }
 }
@@ -105,5 +109,11 @@ impl Subject for RepoId {
 impl Subject for GithubAccountId {
     fn owner(&self) -> Option<Owner<'_>> {
         Some(Owner::GithubAccount(self))
+    }
+}
+
+impl Subject for GithubAppId {
+    fn owner(&self) -> Option<Owner<'_>> {
+        Some(Owner::App(self))
     }
 }

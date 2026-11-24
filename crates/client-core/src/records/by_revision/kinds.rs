@@ -38,6 +38,9 @@ impl Revised for Observation {
             // that came would be drawn as one this client can't.
             Observation::RepositoryReach { .. }
             | Observation::GithubUsername { .. }
+            | Observation::GithubAppSaid { .. }
+            | Observation::GithubAppBot { .. }
+            | Observation::InstalledOn { .. }
             | Observation::ModelCatalog { .. }
             | Observation::AccountIdentity { .. }
             | Observation::AccountLimits { .. }

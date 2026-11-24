@@ -46,3 +46,17 @@ pub(super) const GITHUB_USERS_OBSERVED: &str = r"
 pub(super) const REACH_OBSERVED: &str = r"
     DROP TABLE github_reach;
 ";
+
+/// What GitHub says of each app of your own, its slug, name, owner and bot, and the name of the user or organization
+/// each installation is on, which the hub keeps as observations, in its cache file, and no longer here. Nothing of
+/// them is carried there: the hub asks GitHub again, as the app, as it starts. What Roundhouse made, each app's number,
+/// its key's file and what it was made from, and each installation's number and the number of what it's on, stay.
+pub(super) const APPS_OBSERVED: &str = r"
+    ALTER TABLE github_apps DROP COLUMN slug;
+    ALTER TABLE github_apps DROP COLUMN name;
+    ALTER TABLE github_apps DROP COLUMN owner_id;
+    ALTER TABLE github_apps DROP COLUMN owner;
+    ALTER TABLE github_apps DROP COLUMN bot_id;
+    ALTER TABLE github_apps DROP COLUMN bot;
+    ALTER TABLE github_accounts DROP COLUMN installed_on;
+";

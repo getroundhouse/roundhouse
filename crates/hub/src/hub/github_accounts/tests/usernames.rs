@@ -84,7 +84,9 @@ async fn an_account_from_before_opens_with_its_username_not_known() {
     let record = record.expect("the record kept");
     assert_eq!(observed, None, "not known");
     assert_eq!((record.user.id.get(), record.user.name.as_str()), (7, "#7"));
-    assert_eq!(record.installation.map(|installed| installed.on.name.to_string()).as_deref(), Some("adalabs"));
+    let installed =
+        record.installation.map(|installed| (installed.app.get(), installed.id.get(), installed.on.id.get()));
+    assert_eq!(installed, Some((9, 70, 2)), "where it's installed, by number");
 }
 
 /// What GitHub calls the user goes with the account, as it's disconnected, and a hub that starts again keeps none of

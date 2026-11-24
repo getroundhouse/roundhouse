@@ -1,5 +1,5 @@
 use super::{
-    AccountIdentity, ConversationCache, Observation, ObservationKey, Observed, OwnPullRequestDetail,
+    AccountIdentity, ConversationCache, GithubAppSaid, Observation, ObservationKey, Observed, OwnPullRequestDetail,
     OwnPullRequestSaid, ReadFrom, ReferenceSaid, WaitRead,
 };
 use crate::capability::output::TodoList;
@@ -20,6 +20,7 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
         of_github(),
         of_a_repository(),
         of_a_github_account(),
+        of_an_app(),
         of_an_agent(),
         of_an_account(),
         of_a_session(),
@@ -140,6 +141,38 @@ fn of_a_github_account() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
         Rev::new(12),
         (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
     )]
+}
+
+/// Of each kind of what GitHub says of an app of your own, and of where each of its installations is.
+fn of_an_app() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
+    let app = crate::model::GithubAppId::new(9);
+    let bot = crate::model::GithubUser { id: crate::model::GithubUserId::new(41), name: "ada-roundhouse[bot]".into() };
+    let said = GithubAppSaid { slug: "ada-roundhouse".into(), name: "Ada's".into(), owner: bot.clone() };
+    let at_the_hub = (Some(Level::Hub), Some(ReadFrom::EveryObservation));
+    vec![
+        (
+            Observation::GithubAppSaid { app, said: Observed::Current { value: said }, rev: Rev::new(14) },
+            ObservationKey::GithubAppSaid { app },
+            Rev::new(14),
+            at_the_hub.clone(),
+        ),
+        (
+            Observation::GithubAppBot { app, bot: Observed::Current { value: bot }, rev: Rev::new(15) },
+            ObservationKey::GithubAppBot { app },
+            Rev::new(15),
+            at_the_hub.clone(),
+        ),
+        (
+            Observation::InstalledOn {
+                account: "g".into(),
+                on: Observed::Current { value: "adalabs".into() },
+                rev: Rev::new(16),
+            },
+            ObservationKey::InstalledOn { account: "g".into() },
+            Rev::new(16),
+            at_the_hub,
+        ),
+    ]
 }
 
 /// Of each kind of what an agent's account is, as its agents say.

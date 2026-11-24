@@ -7,12 +7,13 @@ use std::time::Duration;
 
 use protocol::client::ApiError;
 use protocol::model::{
-    GithubAccount, GithubAccountId, GithubApp, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind,
-    GithubUser,
+    GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
+    GithubUserId,
 };
 use tracing::{info, warn};
 
 use super::{GithubAccountChange, GithubLogin, GithubLogins, InstallationToken};
+use crate::hub::GithubAppSaid;
 use crate::login_files::{Locked, Stored};
 use crate::store::{GithubConnected, GithubConnecting, later_ms};
 use github::{GithubAppKey, Installation, Minted};
@@ -44,7 +45,9 @@ impl GithubLogins {
     /// What `app`'s installations as GitHub lists them, `found`, come to at `now_ms`. Only one on the app's owner
     /// counts, as [`on_its_owner`] says. Each account that holds a login for one that isn't among them, as once it was
     /// uninstalled on GitHub, has its login forgotten, as disconnecting it would, and of the rest, those to connect are
-    /// answered with, as [`wanted`] says, as `by_person` asked or not. An app that's gone has none.
+    /// answered with, as [`wanted`] says, as `by_person` asked or not. An app that's gone has none, and so has one
+    /// whose owner the hub doesn't know, as before it has first asked GitHub as the app since it stopped keeping that
+    /// in its database: which installation is on its owner can't be told, so it connects nothing and forgets nothing.
     pub(crate) fn installations_found(
         &self,
         app: GithubAppId,
@@ -53,9 +56,9 @@ impl GithubLogins {
         now_ms: i64,
     ) -> Result<Looked, ApiError> {
         self.changing(now_ms, |files| {
-            let Some(kept) = self.store.github_app(app)? else { return Ok(Looked::default()) };
+            let Some(owner) = self.owner_of(app)? else { return Ok(Looked::default()) };
             let found: Vec<&Installation> =
-                found.iter().filter(|installation| on_its_owner(&kept, installation)).collect();
+                found.iter().filter(|installation| on_its_owner(owner, installation)).collect();
             let accounts = self.store.installation_accounts(app)?;
             let mut looked = Looked::default();
             for (account, file) in &accounts {
@@ -82,8 +85,8 @@ impl GithubLogins {
 
     /// Keeps `token`, made for `installation` of `app`, whose bot is `bot`, as the login of the account of the app on
     /// the same user or organization, or of a new one, at `now_ms`, while it's still [`wanted`], [`on_its_owner`], and
-    /// the app is still kept, as when neither a client nor the hub connected it meanwhile. The first account the hub
-    /// has a record of becomes the default, as it does however it's connected.
+    /// the app is still kept, as when neither a client nor the hub connected it meanwhile, and its owner is known. The
+    /// first account the hub has a record of becomes the default, as it does however it's connected.
     pub(crate) fn connect_installation(
         &self,
         app: GithubAppId,
@@ -94,9 +97,9 @@ impl GithubLogins {
         now_ms: i64,
     ) -> Result<Option<GithubAccountChange>, ApiError> {
         self.changing(now_ms, |files| {
-            let Some(kept) = self.store.github_app(app)? else { return Ok(None) };
+            let Some(owner) = self.owner_of(app)? else { return Ok(None) };
             let account = self.store.installed_on(app, installation.on.id)?;
-            if !on_its_owner(&kept, installation) || !wanted(account.as_ref(), installation, by_person) {
+            if !on_its_owner(owner, installation) || !wanted(account.as_ref(), installation, by_person) {
                 return Ok(None);
             }
             let new_id = GithubAccountId::from(uuid::Uuid::new_v4().to_string());
@@ -120,6 +123,15 @@ impl GithubLogins {
         })?
         .map(|change| change.settled(&self.store))
         .transpose()
+    }
+
+    /// The number of the user or organization the app `app` is under, as GitHub last said, while the app is kept. `None`
+    /// for one that's gone, and while what GitHub says of it isn't known, which is never taken for an owner.
+    fn owner_of(&self, app: GithubAppId) -> Result<Option<GithubUserId>, ApiError> {
+        if self.store.github_app(app)?.is_none() {
+            return Ok(None);
+        }
+        Ok(self.observations.value_of::<GithubAppSaid>(&app).map(|said| said.owner.id))
     }
 
     /// Each installation whose token has less than [`MINTED_WITH_LEFT`] left at `now_ms`, or has ended, with its app's
@@ -205,6 +217,6 @@ fn wanted(account: Option<&GithubAccount>, installation: &Installation, by_perso
 /// private, as the owner decided, so only its owner can install it, and that's its one installation. One elsewhere,
 /// as once the person has made the app public on GitHub, is someone else's, which the hub doesn't connect, so no one
 /// but the owner has agents act as the app. *Unconfirmed:* leaving out one elsewhere rather than connecting it.
-fn on_its_owner(app: &GithubApp, installation: &Installation) -> bool {
-    installation.on.id == app.owner.id
+fn on_its_owner(owner: GithubUserId, installation: &Installation) -> bool {
+    installation.on.id == owner
 }

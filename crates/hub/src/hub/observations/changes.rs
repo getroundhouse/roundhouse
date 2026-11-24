@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use protocol::client::{ApiError, HubNotice, ObservationNotice};
-use protocol::model::{GithubAccountId, WorkspaceId};
+use protocol::model::{GithubAccountId, GithubAppId, WorkspaceId};
 use tracing::warn;
 
 use super::file::Write;
@@ -183,6 +183,16 @@ impl Hub {
         let _changing = self.observations.changing.lock().await;
         if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::GithubAccount(id)).await {
             warn!(%id, "forgetting the observations of a GitHub account that's gone: {}", e.message);
+        }
+    }
+
+    /// Forgets every observation of the app of your own `id`, of every kind, since the app is gone, and tells clients, as
+    /// [`Hub::github_account_observations_gone`] does for a GitHub account. What a failure leaves is forgotten as the
+    /// hub next starts.
+    pub(crate) async fn app_observations_gone(&self, id: GithubAppId) {
+        let _changing = self.observations.changing.lock().await;
+        if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::App(&id)).await {
+            warn!(%id, "forgetting the observations of an app of your own that's gone: {}", e.message);
         }
     }
 

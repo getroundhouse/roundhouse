@@ -52,6 +52,9 @@ impl ObservationsListed {
                 // Never held, as `Revised` says.
                 Observation::RepositoryReach { .. }
                 | Observation::GithubUsername { .. }
+                | Observation::GithubAppSaid { .. }
+                | Observation::GithubAppBot { .. }
+                | Observation::InstalledOn { .. }
                 | Observation::ModelCatalog { .. }
                 | Observation::AccountIdentity { .. }
                 | Observation::AccountLimits { .. }

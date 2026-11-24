@@ -14,7 +14,7 @@ columns! {
     /// The columns every read of a GitHub account's row takes, as [`account_at`] reads them.
     pub(super) struct GithubAccountColumns {
         id, user_id, login_kind, login_file, login_connected_at_ms, login_ends_at_ms, rev,
-        login_needs_sign_in, app_id, installation_id, installed_on_id, installed_on,
+        login_needs_sign_in, app_id, installation_id, installed_on_id,
     }
 }
 
@@ -75,20 +75,18 @@ fn unnamed(id: GithubUserId) -> GithubUser {
     GithubUser { id, name: format!("#{id}").into() }
 }
 
-/// Where a row's account is installed, when it's an app's installation, as all four of its columns say.
+/// Where a row's account is installed, when it's an app's installation, as all three of its columns say: its app, the
+/// installation, and the user or organization it's on, by number, which links the account to GitHub's installation.
+/// What GitHub calls that user or organization the hub only observes, as `crate::hub::observations::InstalledOn` says,
+/// so it's named by its number here, as a user is.
 fn installation_at(row: &Row<'_>) -> rusqlite::Result<Option<GithubInstallation>> {
     let c = GithubAccountColumns::at(0);
-    let columns = (
-        row.at::<Option<u64>>(c.app_id)?,
-        row.at(c.installation_id)?,
-        row.at(c.installed_on_id)?,
-        row.at::<Option<String>>(c.installed_on)?,
-    );
-    let (Some(app), Some(id), Some(on_id), Some(on)) = columns else { return Ok(None) };
+    let columns = (row.at::<Option<u64>>(c.app_id)?, row.at(c.installation_id)?, row.at(c.installed_on_id)?);
+    let (Some(app), Some(id), Some(on_id)) = columns else { return Ok(None) };
     Ok(Some(GithubInstallation {
         app: GithubAppId::new(app),
         id: GithubInstallationId::new(id),
-        on: GithubUser { id: GithubUserId::new(on_id), name: on.into() },
+        on: unnamed(GithubUserId::new(on_id)),
     }))
 }
 
@@ -306,14 +304,13 @@ pub(in super::super) fn connect_login(
     tx.execute(
         "INSERT INTO github_accounts
              (id, user_id, login_kind, login_file, login_connected_at_ms, login_ends_at_ms, login_needs_sign_in,
-              app_id, installation_id, installed_on_id, installed_on)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8, ?9, ?10)
+              app_id, installation_id, installed_on_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8, ?9)
              ON CONFLICT (id) DO UPDATE
              SET user_id = excluded.user_id, login_kind = excluded.login_kind,
                  login_file = excluded.login_file, login_connected_at_ms = excluded.login_connected_at_ms,
                  login_ends_at_ms = excluded.login_ends_at_ms, login_needs_sign_in = 0, app_id = excluded.app_id,
-                 installation_id = excluded.installation_id, installed_on_id = excluded.installed_on_id,
-                 installed_on = excluded.installed_on",
+                 installation_id = excluded.installation_id, installed_on_id = excluded.installed_on_id",
         params![
             id.as_str(),
             user.id.get(),
@@ -324,7 +321,6 @@ pub(in super::super) fn connect_login(
             installation.map(|installation| installation.app.get()),
             installation.map(|installation| installation.id.get()),
             installation.map(|installation| installation.on.id.get()),
-            installation.map(|installation| installation.on.name.as_str()),
         ],
     )?;
     if first {

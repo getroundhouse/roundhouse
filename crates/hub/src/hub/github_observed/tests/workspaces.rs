@@ -345,6 +345,9 @@ fn is_as_of(observation: &Observation) -> bool {
         | Observation::Reference { .. }
         | Observation::RepositoryReach { .. }
         | Observation::GithubUsername { .. }
+        | Observation::GithubAppSaid { .. }
+        | Observation::GithubAppBot { .. }
+        | Observation::InstalledOn { .. }
         | Observation::ModelCatalog { .. }
         | Observation::AccountIdentity { .. }
         | Observation::AccountLimits { .. }

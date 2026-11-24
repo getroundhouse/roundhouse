@@ -139,10 +139,10 @@ fn an_app_is_made_on_github_and_connected_as_the_window_comes_back_once_its_inst
     // Which account is the default is on the hub's settings, a record of their own, which reaches the app apart from
     // the account's, so it's waited for rather than read as soon as the account is there.
     ui.wait("the first account to be the default", |ui| default(ui) == Some(account.id.clone()));
-    assert_eq!(
-        says(&mut ui),
-        "ada-roundhouse[bot] is installed on adalabs. It's the default, so agents push as it wherever Roundhouse sets up GitHub."
-    );
+    // Where it's installed is GitHub's to say, which the hub keeps apart from the account's record, so its name comes
+    // in a change of its own, after the account's, as the bot's name comes after the app's.
+    let installed = "ada-roundhouse[bot] is installed on adalabs. It's the default, so agents push as it wherever Roundhouse sets up GitHub.";
+    ui.wait("where it's installed", |ui| says(ui) == installed);
     assert_eq!(steps(&mut ui)[2], "Done: Installed on adalabs");
 
     ui.click("git-close");
