@@ -6,6 +6,7 @@ use protocol::event::EventBody;
 use protocol::model::{ClientDevice, DeviceId, Interaction, Session};
 use protocol::prompt::Prompt;
 
+use super::record::Admitted;
 use super::{LiveSession, LiveState, Origin};
 
 /// How a prompt came to be recorded, which decides what it does to conversation mode.
@@ -86,7 +87,7 @@ impl LiveSession {
                     let started = EventBody::ConversationStarted { device };
                     let closed = |state: &LiveState| {
                         if state.is_open() {
-                            Ok(None)
+                            Ok(Admitted::default())
                         } else {
                             Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"))
                         }

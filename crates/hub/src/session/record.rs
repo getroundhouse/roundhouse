@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use protocol::capability::approvals::ApprovalMode;
+use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, HubNotice};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, Interaction, InteractionMode, RunCapabilities, RunId, Session, SubagentId};
@@ -44,31 +45,41 @@ impl LiveSession {
         refused: impl FnOnce(&LiveState) -> Option<ApiError>,
     ) -> Result<(SessionEvent, bool), ApiError> {
         let _in_order = self.recording.lock().await;
-        self.record_in_order(origin, body, raw, |state| refused(state).map_or(Ok(None), Err)).await
+        self.record_in_order(origin, body, raw, |state| refused(state).map_or(Ok(Admitted::default()), Err)).await
+    }
+
+    /// Records `body`, the hub's word that the person changed the chat's mode, with the model, mode and effort they
+    /// changed, `settings`, which are saved in the same commit, so no hub that stops between two writes can leave the
+    /// record in a mode the log never says it changed to.
+    pub(super) async fn record_settings(&self, body: EventBody, settings: Settings) -> Result<(), ApiError> {
+        let _in_order = self.recording.lock().await;
+        let admitted = Admitted { settings: Some(settings), ..Admitted::default() };
+        self.record_in_order(Origin::Hub, body, None, |_| Ok(admitted)).await?;
+        Ok(())
     }
 
     /// Records `body` as [`LiveSession::record_unless`] does, for a caller that holds `recording` already, so it can
     /// decide what to record from what everything recorded before it left. `admit` refuses it, as `refused` does there,
-    /// or says how the person talks with the agent from it on, when it changes that, as a prompt they type does.
+    /// or says what the person changes with it, as [`Admitted`] says.
     pub(super) async fn record_in_order(
         &self,
         origin: Origin,
         body: EventBody,
         raw: Option<String>,
-        admit: impl FnOnce(&LiveState) -> Result<Option<Interaction>, ApiError>,
+        admit: impl FnOnce(&LiveState) -> Result<Admitted, ApiError>,
     ) -> Result<(SessionEvent, bool), ApiError> {
         let hub = self.hub()?;
         let run = origin.run();
-        let (Step { body, mut change, next, waits }, still_current, interaction, mode_held) = {
+        let (Step { body, mut change, next, waits }, still_current, admitted, mode_held) = {
             let state = self.state.lock();
-            let interaction = admit(&state)?;
+            let admitted = admit(&state)?;
             // The current agent saying it, which only a running one can, or the hub with one running.
             let agent = state.agent.is_some() || run.is_some();
             let still_current = run.is_some() && state.agent.map(|agent| agent.run) == run;
-            (state.progress.step(origin, body, agent), still_current, interaction, state.settings.mode)
+            (state.progress.step(origin, body, agent), still_current, admitted, state.settings.mode)
         };
-        if interaction.is_some() {
-            change.interaction = interaction;
+        if admitted.interaction.is_some() {
+            change.interaction = admitted.interaction;
         }
         note_recorded(origin, &mut change);
         if origin.speaks_for_session() {
@@ -81,8 +92,12 @@ impl LiveSession {
             // agent went is still planning when it comes back.
             if still_current {
                 change.claims = claims_of(run, &body);
-                change.mode = mode_said(&body).filter(|said| *said != mode_held);
+                let said = mode_said(&body).filter(|said| *said != mode_held);
+                change.settings = said.map(|mode| Settings { mode: Some(mode), ..Settings::default() });
             }
+        }
+        if admitted.settings.is_some() {
+            change.settings = admitted.settings;
         }
         let made = Made::of(&change, waits);
         let id = self.id.clone();
@@ -134,8 +149,8 @@ impl LiveSession {
             let was_in_turn = state.progress.status.in_turn();
             let (had, was) = (state.interaction.device().map(|had| had.id.clone()), state.interaction.mode());
             take_all(&mut state, recorded);
-            if let Some(mode) = made.mode {
-                state.settings.mode = mode;
+            if let Some(settings) = &made.settings {
+                state.settings = state.settings.clone().changed(settings);
             }
             let turn_ended = was_in_turn && !state.progress.status.in_turn();
             let left = left_conversation(had.as_ref(), &state.interaction);
@@ -239,8 +254,8 @@ fn changed_beside_status(appended: &[&Appended]) -> bool {
 struct Made {
     /// Its record says something new of its status, or of its queue being held.
     changed: bool,
-    /// The approval mode its record has now, if the commit changed it.
-    mode: Option<ApprovalMode>,
+    /// The model, mode and effort the commit changed on its record, which the next launch starts with.
+    settings: Option<Settings>,
     /// It waits for the agent to pick up again, as [`super::status::after_background`] says.
     waits: bool,
     turn_ended: bool,
@@ -249,13 +264,23 @@ struct Made {
 impl Made {
     fn of(change: &SessionChange, waits: bool) -> Self {
         let turn_ended = change.status.as_ref().is_some_and(|status| matches!(status.turn, TurnEdge::Ends(_)));
-        Self { changed: !change.is_none(), mode: change.mode, waits, turn_ended }
+        Self { changed: !change.is_none(), settings: change.settings.clone(), waits, turn_ended }
     }
 }
 
 /// What `body` says its run, `run`, claims, if it says, which the session holds that run to until it exits.
 fn claims_of(run: Option<RunId>, body: &EventBody) -> Option<RunCapabilities> {
     run.zip(body.claims()).map(|(run, claims)| RunCapabilities::new(run, claims.clone()))
+}
+
+/// What the person changes with an event, as an `admit` passed to [`LiveSession::record_in_order`] says, which commits
+/// with it.
+#[derive(Default)]
+pub(super) struct Admitted {
+    /// How the person talks with the agent from the event on, when it changes that, as a prompt they type does.
+    pub(super) interaction: Option<Interaction>,
+    /// The model, mode and effort they changed, which the event says they did.
+    pub(super) settings: Option<Settings>,
 }
 
 /// The approval mode `body` says the agent is in, if it's the agent saying it changed mode, or confirming a change.

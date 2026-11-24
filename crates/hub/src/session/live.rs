@@ -1,6 +1,6 @@
 use super::ChatSettings;
 use super::controls::Askable;
-use super::{Origin, Starting, commands, ingest, limits, messages, progress};
+use super::{Starting, commands, ingest, limits, messages, progress};
 use crate::attachment_files::FileFor;
 use crate::error::internal;
 use crate::hub::Hub;
@@ -277,8 +277,8 @@ impl LiveSession {
     }
 
     /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true. A running agent reports
-    /// a change of mode itself, and with none running, it goes in the log here, so the log says when every change was
-    /// made. *Unconfirmed:* that the hub records it.
+    /// a change of mode itself, and with none running, it goes in the log here, in the commit that saves it, so the log
+    /// says when every change was made. *Unconfirmed:* that the hub records it.
     ///
     /// It's refused unless the chat's kind takes the settings the change leaves it with, which hold every setting the
     /// change names, so this is the only check a change needs. For a kind that discovers its models, those are judged
@@ -326,9 +326,9 @@ impl LiveSession {
             agent_took_it = delivery == Delivery::Delivered;
         }
         let was = self.state.lock().settings.clone();
-        self.keep_settings(&hub, change.clone()).await?;
-        if let Some(mode) = change.mode.filter(|mode| *mode != was.mode && !agent_took_it) {
-            self.record_or_log(Origin::Hub, EventBody::AgentMode { mode }).await;
+        match change.mode.filter(|mode| *mode != was.mode && !agent_took_it) {
+            Some(mode) => self.record_settings(EventBody::AgentMode { mode }, change.clone()).await?,
+            None => self.keep_settings(&hub, change.clone()).await?,
         }
         // Another model's cache doesn't hold the conversation, so the next request finds nothing cached.
         if change.model.is_some_and(|model| model != was.model) {
@@ -337,7 +337,8 @@ impl LiveSession {
         self.announce(&hub).await
     }
 
-    /// Saves the model, mode and effort `change` sets, and launches the next agent with them.
+    /// Saves the model, mode and effort `change` sets, where no event says they changed, and launches the next agent
+    /// with them.
     pub(super) async fn keep_settings(&self, hub: &Hub, change: Settings) -> Result<(), ApiError> {
         let (id, saved) = (self.id.clone(), change.clone());
         hub.blocking(move |store| store.set_session_settings(&id, &saved)).await?;

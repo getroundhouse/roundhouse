@@ -43,12 +43,24 @@ fn named(model: &'static str, plan: bool, effort: Level) -> Settings {
 
 /// Each change of mode the chat's log records, in order.
 fn modes_logged(hub: &Hub, chat: &SessionId) -> Vec<ApprovalMode> {
+    mode_events(hub, chat).into_iter().map(|(mode, _)| mode).collect()
+}
+
+/// Each change of mode the chat's log records, in order, with where in the log it is.
+fn mode_events(hub: &Hub, chat: &SessionId) -> Vec<(ApprovalMode, i64)> {
     let log = hub.store.read_events(chat, Seq::FIRST, 1000, u64::MAX, false).unwrap();
-    let mode = |body: EventBody| {
-        let EventBody::AgentMode { mode } = body else { return None };
-        Some(mode)
+    let mode = |event: protocol::event::SessionEvent| {
+        let EventBody::AgentMode { mode } = event.body else { return None };
+        Some((mode, event.seq.get().cast_signed()))
     };
-    log.into_iter().filter_map(|event| mode(event.body)).collect()
+    log.into_iter().filter_map(mode).collect()
+}
+
+/// How far the log had got at each write of the chat's settings that the test's trigger saw, in order.
+fn settings_written(hub: &Hub) -> Vec<Option<i64>> {
+    let writes = hub.store.holding_writes();
+    let mut statement = writes.prepare("SELECT seq FROM settings_writes ORDER BY rowid").unwrap();
+    statement.query_map([], crate::store::columns::OneValue::read).unwrap().collect::<Result<_, _>>().unwrap()
 }
 
 /// Each change a stand-in was asked to give the running agent of `chat`, in order.
@@ -82,13 +94,21 @@ async fn crash(hub: &std::sync::Arc<Hub>, asked: &Asked, chat: &SessionId) {
 }
 
 /// With no agent running, nothing will say the chat changed mode, so the hub logs each change of mode itself, and only
-/// a change. A change leaves what it doesn't set as it was, and the first launch is given what the hub holds.
+/// a change, in the transaction that saves the settings, so no hub that stops between two writes can leave the record
+/// in a mode the log never says it changed to. A change leaves what it doesn't set as it was, and the first launch is
+/// given what the hub holds.
 #[tokio::test]
 async fn a_change_with_no_agent_running_is_saved_leaving_the_rest_and_the_first_launch_is_given_it() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (_, chat) = a_chat(&hub).await;
     let mut feed = hub.subscribe_feed();
+    // How far the log had got at each write of the chat's settings, which only recording an event moves.
+    let watch = "CREATE TEMP TABLE settings_writes (seq INTEGER);
+        CREATE TEMP TRIGGER settings_written AFTER UPDATE OF model, mode, effort ON sessions BEGIN
+            INSERT INTO settings_writes VALUES (NEW.last_seq);
+        END";
+    hub.store.holding_writes().execute_batch(watch).unwrap();
 
     let planning = hub.session_configure(chat.id.clone(), in_mode(protocol::fixtures::plan_mode())).await.unwrap();
     let told = last_told(&mut feed, &chat.id);
@@ -96,6 +116,7 @@ async fn a_change_with_no_agent_running_is_saved_leaving_the_rest_and_the_first_
     hub.session_configure(chat.id.clone(), in_mode(protocol::fixtures::plan_mode())).await.unwrap();
     let low = hub.session_configure(chat.id.clone(), at(Effort::Low)).await.unwrap();
     let logged = modes_logged(&hub, &chat.id);
+    let written = settings_written(&hub);
     let launch = a_turn(&hub, &asked, &chat.id, Prompt::new("go"), None).await;
 
     let described = ChatSettings::of(&chat);
@@ -108,6 +129,9 @@ async fn a_change_with_no_agent_running_is_saved_leaving_the_rest_and_the_first_
     assert_eq!(ChatSettings::of(&low), expected, "the model and the mode as they were");
     assert_eq!(record(&hub, &chat.id), expected, "as the record says");
     assert_eq!(logged, [protocol::fixtures::plan_mode()], "once, since the others changed no mode");
+    let [(_, mode_changed)] = mode_events(&hub, &chat.id)[..] else { panic!("one change of mode was logged") };
+    assert_eq!(written[0], Some(mode_changed), "the change of mode, in the transaction that logged it");
+    assert_eq!(written, [Some(mode_changed); 4], "once for each change, the others with nothing logged");
     assert_eq!(changes_asked(&asked, &chat.id), [], "no agent was running to ask");
     assert_eq!(launch.settings, named("haiku", true, Level::Low));
     assert_eq!(

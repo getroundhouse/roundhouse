@@ -11,7 +11,7 @@ use protocol::model::{
     Account, AccountId, AccountSource, AgentKind, AttachmentId, ClientRequestId, Draft, Interaction, ModelName,
     QueuedPrompt, Rev, RunId, Session, SessionId, SessionStatus, Title, Wait, WorkspaceId,
 };
-use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
 
 /// What moving a session to another account changed besides it, as [`Store::move_session`] says.
 #[derive(Debug, PartialEq, Eq)]
@@ -211,21 +211,9 @@ impl Store {
         Ok(sessions.into_iter().map(|s| s.session).collect())
     }
 
-    /// Keeps the model, mode and effort `change` sets. One that's `None` is left as it is, and a chat keeps no other.
+    /// Keeps the model, mode and effort `change` sets, as [`set_settings`] says, where no event says it changed.
     pub fn set_session_settings(&self, id: &SessionId, change: &Settings) -> Result<(), StoreError> {
-        let Settings { model, mode, effort, .. } = change;
-        lock(&self.writer).execute(
-            "UPDATE sessions
-                 SET model = COALESCE(?, model), mode = COALESCE(?, mode), effort = COALESCE(?, effort)
-                 WHERE id = ?",
-            params![
-                model.as_ref().map(ModelName::as_str),
-                mode.as_ref().map(serde_json::to_string).transpose()?,
-                effort.as_ref().map(text_of),
-                id.as_str()
-            ],
-        )?;
-        Ok(())
+        set_settings(&lock(&self.writer), id, change)
     }
 
     /// Moves the session to `account`: puts it on the hub's login for it, which its record names, since no agent under
@@ -327,4 +315,22 @@ impl Store {
 /// cache holds, as an observation, so it forgets it, and the record doesn't change.
 pub(in super::super) fn forgets_cache(before: Option<&AccountId>, account: &AccountId) -> bool {
     before != Some(account)
+}
+
+/// Keeps the model, mode and effort `change` sets, in one statement. One that's `None` is left as it is, and a chat
+/// keeps no other.
+pub(in super::super) fn set_settings(conn: &Connection, id: &SessionId, change: &Settings) -> Result<(), StoreError> {
+    let Settings { model, mode, effort, .. } = change;
+    conn.execute(
+        "UPDATE sessions
+             SET model = COALESCE(?, model), mode = COALESCE(?, mode), effort = COALESCE(?, effort)
+             WHERE id = ?",
+        params![
+            model.as_ref().map(ModelName::as_str),
+            mode.as_ref().map(serde_json::to_string).transpose()?,
+            effort.as_ref().map(text_of),
+            id.as_str()
+        ],
+    )?;
+    Ok(())
 }
