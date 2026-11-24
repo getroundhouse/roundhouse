@@ -233,11 +233,12 @@ async fn closing_a_terminal_ends_its_shell_which_removes_it() {
 
     let closed = hub.terminal_close(TerminalClose { id: "t".into() }).await.unwrap();
     let meanwhile = listed(&hub).await.terminals;
+    // The close is answered without waiting for the worker, so the stand-in may not have read the stop yet.
+    let stop = WorkerRequest::TerminalStop(worker::TerminalStop { terminal: "t".into() });
+    waiting::task::until(Duration::from_secs(10), "the shell wasn't ended", || asked.lock().contains(&stop)).await;
     hub.terminal_update(&link, "t".into(), &exited());
 
     assert_eq!(closed, opened);
-    let stop = WorkerRequest::TerminalStop(worker::TerminalStop { terminal: "t".into() });
-    assert!(asked.lock().contains(&stop), "the shell wasn't ended");
     assert_eq!(meanwhile, vec![opened], "listed until its shell has ended");
     let HubNotice::Removed { record, .. } = next(&mut feed).await else { panic!("the terminal wasn't removed") };
     assert_eq!(record, RecordKey::Terminal { id: "t".into() });
