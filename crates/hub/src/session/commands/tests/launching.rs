@@ -86,7 +86,6 @@ async fn a_launch_names_the_chats_settings_by_its_kinds_claims_and_holds_the_run
     assert_eq!(live.run_claims(), Some(claimed()));
     assert_eq!(on_record(&hub).await, Some(RunCapabilities { run, claims: Box::new(claimed()) }));
     let init = EventBody::AgentInit {
-        capabilities: None,
         agent_session_id: Some("c".into()),
         model: None,
         cwd: None,

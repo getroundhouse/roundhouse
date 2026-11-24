@@ -1,3 +1,4 @@
+use crate::capability::Capabilities;
 use crate::capability::approvals::{AfterDenial, Asks, Decision, Remember, Request};
 use crate::capability::asking::{Choose, PlanContext, Question, QuestionOption, TypedAnswer};
 use crate::capability::settings::Effort;
@@ -184,6 +185,12 @@ pub fn turn_ended(outcome: TurnOutcome) -> EventBody {
         only_compacted: false,
         request_failed: false,
     }
+}
+
+/// A run's start that claims `claims`, as its worker said when it launched it, saying nothing else of it.
+pub fn started_claiming(claims: Capabilities) -> EventBody {
+    let capabilities = Some(Box::new(claims));
+    EventBody::AgentStarted { pid: 1, resumed: false, build: None, previous_build: None, capabilities }
 }
 
 /// A request to the model that failed on the account's usage limit, saying `message`, as the agent sends it, the

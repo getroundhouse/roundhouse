@@ -80,17 +80,12 @@ pub enum EventBody {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         previous_build: Option<String>,
         /// What the run claims, as its worker said when it launched it, which the hub holds it to while it runs. `None`
-        /// from a worker of protocol 3, whose run says it as it initializes, and from a hub from before this.
+        /// in a start recorded before runs said their claims as they launched.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         capabilities: Option<Box<crate::capability::Capabilities>>,
     },
     /// The agent reported its configuration. Claude does this at the start of every turn.
     AgentInit {
-        /// What a run of a worker of protocol 3 claims, before its conversation output, which a run of protocol 4
-        /// says on its `AgentStarted` instead. The log keeps the claim under its run ID, so a later launch cannot
-        /// change how earlier output is interpreted.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        capabilities: Option<Box<crate::capability::Capabilities>>,
         agent_session_id: Option<AgentSessionId>,
         /// As the agent said it, which is untrusted. A [`ModelName`] refuses some names as it's read, so one in the log
         /// would fail every read that reached this event. Where a model is kept as one, one that names none is dropped.

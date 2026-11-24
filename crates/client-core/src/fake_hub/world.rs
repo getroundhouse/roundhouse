@@ -72,7 +72,6 @@ pub struct World {
     /// The records of the accounts the world's chats run under.
     pub accounts: Vec<Account>,
     pub account_defaults: Vec<protocol::model::AccountDefault>,
-    pub logins: LoginSupport,
     /// What the hub's settings say of GitHub, or nothing, for a world whose screens don't show it.
     pub github: Option<GithubSettings>,
     pub github_accounts: Vec<GithubAccount>,
@@ -118,14 +117,6 @@ pub struct World {
 #[derive(Clone, Copy)]
 pub struct PairingWorld {
     pub paired_device: Option<&'static str>,
-}
-
-/// The login capabilities of the hub whose version the world stands for.
-#[derive(Clone, Copy, Default, Eq, PartialEq)]
-pub enum LoginSupport {
-    Accounts,
-    #[default]
-    Defaults,
 }
 
 /// A hub's build, other than the app's.

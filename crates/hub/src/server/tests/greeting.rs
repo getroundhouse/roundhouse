@@ -89,8 +89,8 @@ fn cases() -> Vec<(&'static str, Vec<Step>)> {
     let past = mismatch(&format!("protocols {} to {}", newest + 1, newest + 2));
     let unsupported = || Then::Refuses(ErrorCode::Unsupported, String::new());
     let repos = r#"{"method":"repo_list"}"#;
-    // As a request this hub doesn't know: here, the answer a client sent before decisions were typed.
-    let approve = r#"{"method":"session_approve","id":"s","approval_id":"a","decision":{"decision":"allow"}}"#;
+    // A request this hub knows, in a form it can't read: a decision with none.
+    let undecided = r#"{"method":"session_decide","id":"s","approval_id":"a"}"#;
     let mut cases = spelled_out();
     cases.extend([
         ("a hello at this version", calls(vec![(&hello_ours, Then::Greets(ours)), (STATUS, Then::ShowsStatus)])),
@@ -123,7 +123,7 @@ fn cases() -> Vec<(&'static str, Vec<Step>)> {
         ),
         (
             "a request this hub can't read",
-            calls(vec![(&hello_ours, Then::Greets(ours)), (approve, unsupported()), (STATUS, Then::ShowsStatus)]),
+            calls(vec![(&hello_ours, Then::Greets(ours)), (undecided, unsupported()), (STATUS, Then::ShowsStatus)]),
         ),
         ("a frame naming no call", vec![(r#"{"request":{"method":"hub_status"}}"#.to_string(), 1, Then::Closes)]),
         // Last, since they leave the hub restarting and then stopping, which in a test's process stops nothing. A

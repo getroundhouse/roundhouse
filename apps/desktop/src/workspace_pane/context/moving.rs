@@ -62,12 +62,9 @@ fn offered(agent: AgentKind, on: Option<&AccountId>, records: &Snapshot, now_ms:
 }
 
 impl WorkspacePane {
-    /// What the menu offers for `session`, as [`offered`] says. `None` when there's nowhere else to move it, and from
-    /// a hub from before it kept defaults, which can't move one. One that keeps defaults but is from before moves has
-    /// it, and refuses the move, which the person is told.
+    /// What the menu offers for `session`, as [`offered`] says. `None` when there's nowhere else to move it.
     pub(super) fn moves(&self, session: &Session, cx: &Context<Self>) -> Option<Moves> {
         let all = self.shown.all();
-        all.hub_settings()?.account_defaults.as_ref()?;
         let on = session.hub_account().cloned();
         let accounts = offered(session.agent, on.as_ref(), all, look::now_ms(cx))?;
         let off = self.hub == Hub::Away;

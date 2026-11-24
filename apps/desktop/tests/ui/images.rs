@@ -109,7 +109,7 @@ fn in_a_workspace(
 fn changing_an_image(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Diff, [Vec<u8>; 3]) {
     let (before, after, added) = (png(30, 20), marked_png(40, 20, &MARKS), png(10, 10));
     let (fake, mut ui) = in_a_workspace(cx, |world, workspace| {
-        let base_commit = Some(CommitId::from("3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5"));
+        let base_commit = CommitId::from("3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5");
         world.diffs.insert(workspace.clone(), GitDiff { base_commit, patch: PATCH.to_string(), truncated: false });
         world.base_files.insert("shot.png".to_string(), read_as_image(&before));
         world.base_files.insert("gone.png".to_string(), read_as_image(&png(20, 10)));

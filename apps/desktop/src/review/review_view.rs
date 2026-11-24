@@ -13,8 +13,6 @@ pub enum ReviewEvent {
     /// What's listed says the workspace changes this many files, as the summary is taken in, and at each moment that
     /// reads the changes again.
     Counted(usize),
-    /// The comment being written was saved, which took it off the hub.
-    Saved,
     /// The comment being written couldn't be saved, so here it is back, which the hub still keeps.
     NotSaved(CommentDraft),
 }

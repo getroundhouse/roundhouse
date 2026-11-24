@@ -27,8 +27,8 @@ impl Review {
     }
 
     /// Saves the comment being written, as a new one on its line, or as the text of the one it changes, once `kept`
-    /// answers. It shows once client-core's copy has it, like any other change, and says whether it was saved, giving
-    /// it back if it wasn't.
+    /// answers. It shows once client-core's copy has it, like any other change. Saving takes it off the hub as what's
+    /// being written, so one that couldn't be saved is given back, with why.
     pub fn save_comment(&mut self, saving: CommentDraft, kept: flume::Receiver<()>, cx: &mut Context<Self>) {
         let (id, draft) = (self.workspace_id.clone(), saving.clone());
         let saved = self.client.start(move |client| {
@@ -49,12 +49,9 @@ impl Review {
         cx.spawn(async move |this, cx| {
             let saved = saved.recv().await;
             let _ = this.update(cx, |_, cx| {
-                match saved {
-                    Ok(_) => cx.emit(ReviewEvent::Saved),
-                    Err(e) => {
-                        cx.emit(ReviewEvent::Error(client_core::refusals::couldnt("save that comment", &e)));
-                        cx.emit(ReviewEvent::NotSaved(saving));
-                    }
+                if let Err(e) = saved {
+                    cx.emit(ReviewEvent::Error(client_core::refusals::couldnt("save that comment", &e)));
+                    cx.emit(ReviewEvent::NotSaved(saving));
                 }
                 cx.notify();
             });

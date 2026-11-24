@@ -162,9 +162,7 @@ impl MediaType {
             return Err(AttachmentProblem::TooLarge { limit_bytes: MAX_FILE_BYTES });
         }
         let found = Self::sniff(bytes);
-        // A client from before drawings says one is text, which it is.
-        let drawing_as_text = self == MediaType::Text && found == MediaType::Svg;
-        if self == MediaType::Other || found == self || drawing_as_text {
+        if self == MediaType::Other || found == self {
             Ok(())
         } else {
             Err(AttachmentProblem::NotWhatItSays { said: self, found })

@@ -139,7 +139,7 @@ A chat stays on the account it's put on until you [move it](../guides/watch-cont
 
 If an account expires or is disconnected, agents in the chats on it cannot start until you renew or reconnect it. If it's your default, new chats can't start either until you do, or choose another default, which the chats already on it don't follow, so [move them](../guides/watch-context-and-limits.md#move-a-chat-to-another-account) to another account. It stays selected and does not fall back to another account or machine credentials.
 
-A hub from before account defaults cannot change them. Update the hub to choose one. An older worker that cannot enforce the selected account also refuses new launches until it is updated.
+An older worker that cannot enforce the selected account also refuses new launches until it is updated.
 
 ## Git
 

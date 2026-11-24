@@ -18,13 +18,13 @@ impl Snapshot {
     }
 
     /// Which build `workspace`'s worker is, which the hub says only of a connected worker that's another build than
-    /// its own.
+    /// its own. One whose hello named no build, which no worker of protocol 5 or 6 sends, isn't known.
     pub fn worker_build<'a>(&'a self, workspace: &'a Workspace) -> WorkerBuild<'a> {
         let key = ObservationKey::WorkspaceWorkerBuild { workspace_id: workspace.id.clone() };
         let Some(Observation::WorkspaceWorkerBuild { build, .. }) = self.observation(&key) else {
             return WorkerBuild::NotKnown;
         };
-        said(build).map_or(WorkerBuild::NotKnown, |other| WorkerBuild::Other(other.said.as_deref()))
+        said(build).and_then(|other| other.said.as_deref()).map_or(WorkerBuild::NotKnown, WorkerBuild::Other)
     }
 
     /// The release the update feed offers a hub installed as a service, as the hub last read it. `None` where no
@@ -43,7 +43,7 @@ impl Snapshot {
 pub enum WorkerBuild<'a> {
     /// Not known, as while no worker is connected, or one of the hub's own build is, which the hub doesn't say.
     NotKnown,
-    /// Another build than the hub's, which the hub moves the workspace to once nothing in it is at work: the one it
-    /// named, or `None` for a worker too old to say.
-    Other(Option<&'a str>),
+    /// Another build than the hub's, the one its worker named, which the hub moves the workspace off once nothing in it
+    /// is at work.
+    Other(&'a str),
 }

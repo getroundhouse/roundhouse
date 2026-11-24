@@ -146,16 +146,6 @@ fn ephemeral_archive_and_restore_requests_keep_their_form() {
     );
 }
 
-/// A hub from before the hub read workspaces' pull requests itself asked the worker for one, and for GitHub's limit,
-/// which a worker now reads as a request it doesn't know, and refuses as unsupported, as after a rollback.
-#[test]
-fn the_requests_for_a_pull_request_and_githubs_limit_are_unknown_now() {
-    for form in [r#"{"method":"pull_request","path":"/w"}"#, r#"{"method":"github_rate_limit","path":"/w"}"#] {
-        let call: WorkerCall = serde_json::from_str(&format!(r#"{{"id":7,"request":{form}}}"#)).unwrap();
-        assert_eq!(call.request, WorkerRequest::Unknown, "{form}");
-    }
-}
-
 #[test]
 fn every_request_about_the_worktree_keeps_its_form() {
     asked(WorkerRequest::GitStatus(worker::GitStatus { path: "/w".into() }), r#"{"method":"git_status","path":"/w"}"#);
@@ -344,7 +334,7 @@ fn every_reply_about_the_worktree_keeps_its_form() {
         WorkerResponse::GitStatus(no_commit_yet),
         r#"{"result":"git_status","branch":"birch","head":null,"ahead":0,"behind":0,"files":[],"unreferenced_commits":false}"#,
     );
-    let diff = GitDiff { base_commit: Some("c1".into()), patch: String::new(), truncated: false };
+    let diff = GitDiff { base_commit: "c1".into(), patch: String::new(), truncated: false };
     answered(WorkerResponse::GitDiff(diff), r#"{"result":"git_diff","base_commit":"c1","patch":"","truncated":false}"#);
     let written = WorkerResponse::AttachmentWritten(worker::AttachmentWritten {
         path: "/w/.context/attachments/build.log".into(),

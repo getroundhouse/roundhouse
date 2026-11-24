@@ -186,7 +186,7 @@ fn a_prompt_the_hub_lists_as_taken_stays_at_the_end_until_the_event_that_took_it
     let line = protocol::model::PromptLine::new(Seq::new(3), "steer", 0).settled_at(SettledAt {
         seq: Seq::new(5),
         place: Place::new(5),
-        how: None,
+        how: Some(Settlement::Taken),
     });
     log.list_prompts(vec![line]);
 

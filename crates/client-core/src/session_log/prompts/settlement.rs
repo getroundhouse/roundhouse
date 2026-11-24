@@ -40,10 +40,10 @@ impl Settled {
         self.0.get(&prompt).copied()
     }
 
-    /// Takes `at` for the prompt recorded at `prompt`, unless it's known to have been settled later, since the last
-    /// event to settle it is where it's drawn. Returns whether anything changed.
+    /// Takes `at` for the prompt recorded at `prompt`, unless it's known to have been settled by the same event or a
+    /// later one, since the last event to settle it is where it's drawn. Returns whether anything changed.
     pub(super) fn settle(&mut self, prompt: Seq, at: SettledAt) -> bool {
-        if self.0.get(&prompt).is_some_and(|known| known.seq > at.seq || *known == at) {
+        if self.0.get(&prompt).is_some_and(|known| known.seq >= at.seq) {
             return false;
         }
         Arc::make_mut(&mut self.0).insert(prompt, at);

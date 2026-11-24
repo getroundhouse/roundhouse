@@ -34,24 +34,14 @@ pub(super) struct Said {
     /// First, since they're what needs doing.
     warnings: Vec<Warning>,
     path: Option<SharedString>,
-    version: Option<Version>,
+    /// The build the workspace's worker named, while it's another than the hub's.
+    version: Option<SharedString>,
     /// The hub's build, while the workspace's worker is another, which the hub moves it to once nothing in it is at
     /// work.
     moving_to: Option<SharedString>,
     runs_on: SharedString,
     ports: Option<SharedString>,
 }
-
-/// Which build the workspace's worker is, as the card says it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Version {
-    Named(SharedString),
-    /// Another build than the hub's, which its worker doesn't say.
-    Earlier,
-}
-
-/// What the card says of a worker that's another build than the hub's and doesn't say which, as the owner chose.
-const EARLIER: &str = "An earlier version";
 
 impl Said {
     /// Of `workspace`, as `records`, the copy it's from, reads it. `hub_version` is the hub's build, which the next
@@ -60,11 +50,10 @@ impl Said {
         let hub = (!hub_version.is_empty()).then(|| SharedString::from(hub_version.to_string()));
         let (version, moving_to) = match records.worker_build(workspace) {
             WorkerBuild::NotKnown => (None, None),
-            WorkerBuild::Other(Some(build)) => {
+            WorkerBuild::Other(build) => {
                 let moving_to = hub.filter(|hub| hub != build);
-                (Some(Version::Named(SharedString::from(build.to_string()))), moving_to)
+                (Some(SharedString::from(build.to_string())), moving_to)
             }
-            WorkerBuild::Other(None) => (Some(Version::Earlier), hub),
         };
         // A workspace from before each had its own ports has none.
         let ports = (workspace.port_base > 0).then(|| {
@@ -96,19 +85,11 @@ impl Said {
             let moving = self.moving_to.clone().map(|to| {
                 div().text_color(colors.text_faint).child(format!("Moves to {to} once nothing in it is at work"))
             });
-            let named = match &version {
-                Version::Named(version) => format!("Version {version}"),
-                Version::Earlier => EARLIER.to_string(),
-            };
             let said = match &self.moving_to {
-                Some(to) => format!("{named}, moves to {to} once nothing in it is at work"),
-                None => named,
+                Some(to) => format!("Version {version}, moves to {to} once nothing in it is at work"),
+                None => format!("Version {version}"),
             };
-            let shown = match version {
-                Version::Named(version) => version,
-                Version::Earlier => EARLIER.into(),
-            };
-            row("Version", said, v_flex().child(shown).children(moving), cx)
+            row("Version", said, v_flex().child(version).children(moving), cx)
         });
         let ports = self.ports.clone().map(|ports| row("Ports", format!("Ports {ports}"), div().child(ports), cx));
         let rows = v_flex()
@@ -178,23 +159,24 @@ mod tests {
     }
 
     /// The hub says which build a worker is only of one that's another build than its own, so a workspace whose
-    /// worker it says nothing of, as one of its own build or none, draws no version.
+    /// worker it says nothing of, as one of its own build or none, draws no version, and nor does one whose hello named
+    /// no build, which no worker of protocol 5 or 6 sends.
     #[test]
     fn a_workspace_whose_worker_isn_t_known_says_no_version() {
         let said = said_of(&aspen(), None, "1.0.0");
+        let unnamed = said_of(&aspen(), Some(OtherBuild { said: None }), "1.0.0");
 
         assert_eq!((said.version, said.moving_to), (None, None));
+        assert_eq!((unnamed.version, unnamed.moving_to), (None, None), "nor one whose worker's hello named none");
         assert_eq!(said.ports.as_deref(), Some("4000–4009"));
         assert_eq!(said.path.as_deref(), Some("/workspaces/aspen"));
     }
 
     #[test]
     fn a_workspace_still_on_another_build_says_which_and_what_it_moves_to() {
-        let named = said_of(&aspen(), Some(OtherBuild { said: Some("0.9.0".into()) }), "1.0.0");
-        let unnamed = said_of(&aspen(), Some(OtherBuild { said: None }), "1.0.0");
+        let said = said_of(&aspen(), Some(OtherBuild { said: Some("0.9.0".into()) }), "1.0.0");
 
-        assert_eq!((named.version, named.moving_to.as_deref()), (Some(Version::Named("0.9.0".into())), Some("1.0.0")));
-        assert_eq!((unnamed.version, unnamed.moving_to.as_deref()), (Some(Version::Earlier), Some("1.0.0")));
+        assert_eq!((said.version.as_deref(), said.moving_to.as_deref()), (Some("0.9.0"), Some("1.0.0")));
     }
 
     #[test]

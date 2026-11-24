@@ -33,9 +33,16 @@ impl World {
             version: None,
             name_not_utf8: false,
         });
-        let summary = ChangeSummary::new(base_of(diff), files.collect());
+        let summary = ChangeSummary::new(diff.base_commit.clone(), files.collect());
         let changes = Observed::Current { value: summary };
         Some(Observation::WorkspaceChanges { workspace_id: workspace.clone(), changes, rev: MADE })
+    }
+
+    /// What `workspace`'s worktree changes, as git's patch of all of it: what the world says, or nothing, against a
+    /// commit the world doesn't name.
+    pub(super) fn whole_diff(&self, workspace: &WorkspaceId) -> GitDiff {
+        let unchanged = || GitDiff { base_commit: CommitId::from("0000000"), patch: String::new(), truncated: false };
+        self.diffs.get(workspace).cloned().unwrap_or_else(unchanged)
     }
 
     /// The diff of the file at `path` alone, as the world's patch of `workspace`'s changes has it, in one page, or the
@@ -48,12 +55,8 @@ impl World {
             Some(file) => FileDiffBody::Patch { patch: file.patch, next_line: None },
             None => FileDiffBody::Unchanged,
         };
-        Some(FileDiff { base_commit: base_of(diff), version: None, body })
+        Some(FileDiff { base_commit: diff.base_commit.clone(), version: None, body })
     }
-}
-
-fn base_of(diff: &GitDiff) -> CommitId {
-    diff.base_commit.clone().unwrap_or_else(|| CommitId::from("0000000"))
 }
 
 /// Each file `patch` changes, in the order it has them.

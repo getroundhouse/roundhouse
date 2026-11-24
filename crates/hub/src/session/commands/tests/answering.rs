@@ -5,7 +5,6 @@ use std::task::{Context, Waker};
 
 use protocol::capability::Capabilities;
 use protocol::capability::approvals::Requests;
-use protocol::event::EventBody;
 use protocol::fixtures::{allow_once, approval_request, to_run};
 use protocol::model::RunId;
 
@@ -25,14 +24,7 @@ async fn an_answer_to_a_request_in_the_log_is_taken_however_soon_it_comes() {
     let live = carried_on(&hub, &link, run);
     let mut claims = Capabilities::default();
     claims.approvals.requests = Some(Requests { parts: Vec::new(), kept: Vec::new() });
-    let init = EventBody::AgentInit {
-        capabilities: Some(Box::new(claims)),
-        agent_session_id: None,
-        model: None,
-        cwd: None,
-        mode: None,
-        agent_version: None,
-    };
+    let init = protocol::fixtures::started_claiming(claims);
     live.send_item(Item::Event { run, body: Box::new(init), raw: None, attachments: Vec::new(), seq: None }).await;
     flushed(&live).await;
     let request = approval_request("a", to_run("ls")).into();

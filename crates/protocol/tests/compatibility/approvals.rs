@@ -9,7 +9,6 @@ use protocol::capability::calls::{Call, CallKind};
 use protocol::client::{ClientFrame, ClientRequest, agent};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::fixtures::typed_command;
-use protocol::frame;
 use serde_json::{Value, json};
 
 /// The event `body` is, as the log keeps it, which it's read from and written back as.
@@ -165,14 +164,4 @@ fn a_request_closed_with_no_decision_keeps_its_form() {
     let body = kept(json!({"type":"approval_resolved","approval_id":"a"}));
 
     assert!(matches!(body, EventBody::ApprovalResolved { decision: None, by_setting: false, .. }), "{body:?}");
-}
-
-/// A client from before answers with `session_approve`, which this build reads as a request it doesn't know, so the hub
-/// refuses it rather than misreading it.
-#[test]
-fn an_answer_in_the_form_from_before_typed_decisions_is_not_a_decision() {
-    let before = br#"{"id":3,"request":{"method":"session_approve","id":"s","approval_id":"a","decision":{"decision":"allow"}}}"#;
-
-    let frame: ClientFrame = frame::decode(before).unwrap();
-    assert_eq!(frame.request, ClientRequest::Unknown);
 }

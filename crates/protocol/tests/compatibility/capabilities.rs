@@ -24,16 +24,23 @@ fn a_launch_says_what_it_starts_from_in_its_own_form() {
     assert_eq!(serde_json::from_value::<AgentSpec>(sent).unwrap(), spec);
 }
 
+/// A run of worker protocol 3 said its claims as it initialized, and the log keeps that event as it was, so it still
+/// reads, as an initialization that says nothing of claims, which a run says as it launches.
 #[test]
-fn legacy_initialization_has_no_claims_and_new_claims_survive_the_log_shape() {
-    let old: EventBody = serde_json::from_value(json!({"type":"agent_init","agent_session_id":"a"})).unwrap();
-    let EventBody::AgentInit { capabilities: None, .. } = old else { panic!("{old:?}") };
-    let new: EventBody = serde_json::from_value(json!({"type":"agent_init","agent_session_id":"a",
-        "capabilities":{"prompts":{"steer":{}}}}))
-    .unwrap();
-    let EventBody::AgentInit { capabilities: Some(ref claims), .. } = new else { panic!("{new:?}") };
-    assert!(claims.prompts.steer.is_some());
-    assert_eq!(serde_json::from_value::<EventBody>(serde_json::to_value(&new).unwrap()).unwrap(), new);
+fn an_initialization_that_said_its_run_s_claims_still_reads() {
+    let stored = json!({"type":"agent_init","agent_session_id":"a","model":"opus","cwd":"/w",
+        "capabilities":{"prompts":{"steer":{}}},"agent_version":"2.1"});
+
+    let read: EventBody = serde_json::from_value(stored).unwrap();
+
+    assert_eq!(read.claims(), None);
+    let EventBody::AgentInit { agent_session_id: Some(id), model: Some(model), .. } = &read else { panic!("{read:?}") };
+    assert_eq!((id.as_str(), model.as_str()), ("a", "opus"));
+    assert_eq!(
+        serde_json::to_value(&read).unwrap(),
+        json!({"type":"agent_init","agent_session_id":"a","model":"opus","cwd":"/w","agent_version":"2.1"}),
+        "a hub that sends it on sends no claims with it"
+    );
 }
 
 /// The mode an agent reports it starts in, and each it goes into, which the log keeps for good.

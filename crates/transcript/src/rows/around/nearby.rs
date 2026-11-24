@@ -93,14 +93,7 @@ mod tests {
     }
 
     fn turn_started_in(mode: ApprovalMode) -> EventBody {
-        EventBody::AgentInit {
-            capabilities: None,
-            agent_session_id: None,
-            model: None,
-            cwd: None,
-            mode: Some(mode),
-            agent_version: None,
-        }
+        EventBody::AgentInit { agent_session_id: None, model: None, cwd: None, mode: Some(mode), agent_version: None }
     }
 
     #[test]

@@ -130,7 +130,7 @@ fn status_and_diff_come_from_the_worker() {
     for (untracked, holds, lacks) in [(false, "-one", "+changed"), (true, "+changed", "-one")] {
         let at = ChangedFileAt { untracked, path: "a.txt".into() };
         let one = client.workspace_file_diff(&workspace.id, &at, None, 0).unwrap();
-        assert_eq!(Some(&one.base_commit), diff.base_commit.as_ref());
+        assert_eq!(one.base_commit, diff.base_commit);
         assert_eq!(one.version.is_some(), untracked, "only the untracked file is in the worktree");
         let FileDiffBody::Patch { patch, next_line: None } = one.body else { panic!("{one:?}") };
         assert!(patch.contains(holds) && !patch.contains(lacks) && !patch.contains("+new"), "{untracked}: {patch}");
@@ -148,7 +148,7 @@ fn a_client_browses_the_worktree_s_files_through_the_hub() {
         && echo build/ >> .gitignore && echo changed > a.txt";
     client.session_prompt(&session.id, script, None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    let base = client.workspace_diff(&workspace.id).unwrap().base_commit.unwrap();
+    let base = client.workspace_diff(&workspace.id).unwrap().base_commit;
     let webm = protocol::fixtures::webm(2000);
     std::fs::write(PathBuf::from(workspace.path.clone().unwrap()).join("board.webm"), &webm).unwrap();
 

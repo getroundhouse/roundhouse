@@ -148,7 +148,7 @@ async fn diff_covers_commits_uncommitted_and_untracked_work() {
     run(&repo, &["commit", "-qm", "main moved"]);
 
     let diff = diff(&given(), &prepared.path, Some("main")).await.unwrap();
-    assert_eq!(diff.base_commit, Some(merge_base));
+    assert_eq!(diff.base_commit, merge_base);
     assert!(diff.patch.contains("+from a commit"), "{}", diff.patch);
     assert!(diff.patch.contains("+uncommitted"), "{}", diff.patch);
     assert!(diff.patch.contains("+brand new"), "{}", diff.patch);
@@ -163,7 +163,7 @@ async fn a_diff_with_no_base_names_head_s_commit() {
     let repo = new_repo(dir.path());
     let worktree = repo.to_str().unwrap();
     std::fs::write(repo.join("a.txt"), "uncommitted\n").unwrap();
-    let head = Some(CommitId::from(run(&repo, &["rev-parse", "HEAD"])));
+    let head = CommitId::from(run(&repo, &["rev-parse", "HEAD"]));
     let empty = dir.path().join("empty");
     std::fs::create_dir_all(&empty).unwrap();
     run(&empty, &["init", "-q"]);

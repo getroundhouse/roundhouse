@@ -121,7 +121,6 @@ fn opened(start: &Start) -> EventBody {
         }
     };
     EventBody::AgentInit {
-        capabilities: None,
         agent_session_id: Some(conversation),
         model: None,
         cwd: None,

@@ -60,7 +60,7 @@ fn reviewing_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Diff, W
     let mut world = World::default();
     let repo = world.repo("signals");
     let workspaces = ["ledger", "points"].map(|name| world.workspace(&repo, name));
-    let base_commit = Some(CommitId::from("3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5"));
+    let base_commit = CommitId::from("3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5");
     for workspace in &workspaces {
         for _ in 0..2 {
             world.chat(workspace, SessionStatus::Idle, Vec::new());

@@ -109,7 +109,7 @@ fn the_default_is_the_account_the_hubs_settings_name_for_its_kind(cx: &mut TestA
 
     assert!(drawing(Some(&chosen)).is_default(&added("a2", "Personal")));
     assert!(!drawing(Some(&chosen)).is_default(&added("a1", "Work")));
-    assert!(!drawing(None).is_default(&added("a2", "Personal")), "a hub that keeps no defaults");
+    assert!(!drawing(None).is_default(&added("a2", "Personal")), "before the hub's settings arrive");
 }
 
 #[test]

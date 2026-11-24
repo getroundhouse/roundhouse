@@ -44,9 +44,8 @@ pub(super) enum Read {
 /// What a read found of a file.
 #[derive(Clone, Debug)]
 pub(in crate::review) enum Taken {
-    /// Its patch, against `base`, the commit what the patch leaves out is read from. `None` from a worker too old to
-    /// name it.
-    Patch { patch: FilePatch, base: Option<CommitId> },
+    /// Its patch, against `base`, the commit what the patch leaves out is read from.
+    Patch { patch: FilePatch, base: CommitId },
     /// The worktree changes nothing at its path now.
     Unchanged,
 }
@@ -70,7 +69,7 @@ impl OneFile {
     /// The commit the patch shown is against.
     pub(in crate::review) fn base_commit(&self) -> Option<&CommitId> {
         match self.shown()? {
-            Taken::Patch { base, .. } => base.as_ref(),
+            Taken::Patch { base, .. } => Some(base),
             Taken::Unchanged => None,
         }
     }

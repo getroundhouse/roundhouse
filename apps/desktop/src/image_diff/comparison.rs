@@ -267,25 +267,21 @@ impl ImageDiff {
     pub(super) fn read(&mut self, cx: &mut Context<Self>) {
         let Some(path) = self.path.as_ref() else { return };
         let review = self.review.read(cx);
-        let Some(file) = review.file().filter(|file| file.is_binary() && file.path() == path) else { return };
+        let binary = review.file_against().filter(|(file, _)| file.is_binary() && file.path() == path);
+        let Some((file, base)) = binary else { return };
         let (before, after) = (file.old_path().map(ToString::to_string), file.new_path().map(ToString::to_string));
-        let ((client, id), base) = (review.source(), review.base_commit().cloned());
-        let from = base.clone().zip(before.clone());
+        let ((client, id), base) = (review.source(), base.clone());
+        let from = before.clone().map(|before| (base.clone(), before));
         let read_before = from.is_none() || from != self.before_from || !matches!(self.before, Side::Image(_));
         let shown = (self.before.hash(), self.after.hash());
         self.reads += 1;
         let read = self.reads;
         cx.spawn(async move |this, cx| {
             let sides = cx.background_spawn(async move {
-                let before = match (before, base) {
+                let before = match before {
                     _ if !read_before => None,
-                    (None, _) => Some(Side::Absent),
-                    (Some(path), Some(base)) => side(client.workspace_file_read_at(&id, &base, &path), shown.0),
-                    // Without the commit the diff is against, there's nothing to read the file as it was from.
-                    (Some(_), None) => {
-                        let unnamed = Unshown::Failed("the diff doesn't name the commit it's against".to_string());
-                        Some(Side::Other(unnamed.said().into()))
-                    }
+                    None => Some(Side::Absent),
+                    Some(path) => side(client.workspace_file_read_at(&id, &base, &path), shown.0),
                 };
                 let after =
                     after.map_or(Some(Side::Absent), |path| side(client.workspace_file_read(&id, &path), shown.1));

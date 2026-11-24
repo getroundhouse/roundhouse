@@ -19,7 +19,7 @@ pub(super) fn changed_images() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
     finished_chat(&mut world, &focus);
-    let base_commit = Some(CommitId::from(patch::BASE_COMMIT));
+    let base_commit = CommitId::from(patch::BASE_COMMIT);
     world.diffs.insert(focus, GitDiff { base_commit, patch: patch::IMAGES.to_string(), truncated: false });
     world.base_files.insert(CHANGED.to_string(), png(pictures::badge(SHOT_HEIGHT, true)));
     world.worktree_files.insert(CHANGED.to_string(), png(pictures::badge(SHOT_HEIGHT, false)));
