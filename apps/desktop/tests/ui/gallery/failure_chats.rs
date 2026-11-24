@@ -54,11 +54,13 @@ fn failed_world() -> World {
     world
 }
 
-/// Has the hub say the last chat stopped short on the turn its log ends with, which failed.
+/// Has the hub say the last chat stopped short on the turn its log ends with, which failed. The reply has been read,
+/// as the chat in front has on a real hub: the app marks one it shows unread, and a fake hub refuses to, which the
+/// window says in a banner.
 pub(super) fn stopped_short(world: &mut World) {
-    let chat = world.sessions.last_mut().unwrap();
-    chat.reply_seq = chat.last_seq;
-    chat.reply_outcome = Some(TurnOutcome::Error);
+    let chat = world.sessions.last().unwrap().id.clone();
+    world.read_reply(&chat);
+    world.sessions.last_mut().unwrap().reply_outcome = Some(TurnOutcome::Error);
 }
 
 /// A request the account's usage limit refused, which resets at `resets_at_ms`, saying it repeats the failure `again`

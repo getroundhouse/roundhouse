@@ -148,9 +148,9 @@ impl Source for SessionSource {
 
 impl SessionSource {
     /// Asks for the session's prompts, once. It's only asked for here, with the subscription started, so it misses
-    /// nothing: every prompt the subscription won't send was recorded before this. A hub too old to list them leaves
-    /// only the prompts the log is given, and one that fails to is asked again on a new connection, while the chat goes
-    /// on either way. A subagent's events hold no prompts, so a view of them asks for none.
+    /// nothing: every prompt the subscription won't send was recorded before this. A hub that fails to list them is
+    /// asked again on a new connection, while the chat goes on either way. A subagent's events hold no prompts, so a
+    /// view of them asks for none.
     pub(super) fn list_prompts(&self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<bool> {
         if matches!(self.view, View::Subagent(_)) || !held.lock().wants_prompt_list() {
             return Ok(false);
@@ -159,10 +159,6 @@ impl SessionSource {
             Ok(lines) => {
                 change(held).list_prompts(lines);
                 Ok(true)
-            }
-            Err(e) if e.is_unsupported() => {
-                change(held).prompts_unlisted();
-                Ok(false)
             }
             Err(e) => {
                 change(held).prompt_list_failed();
@@ -183,10 +179,6 @@ impl SessionSource {
             Ok(lines) => {
                 change(held).list_compactions(lines);
                 Ok(true)
-            }
-            Err(e) if e.is_unsupported() => {
-                change(held).compactions_unlisted();
-                Ok(false)
             }
             Err(e) => {
                 change(held).compaction_list_failed();

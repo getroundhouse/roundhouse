@@ -12,11 +12,10 @@ use crate::support::{Stack, wait_until};
 fn a_hub_with_nothing_on_it_stops_when_asked_to_if_idle() {
     let mut stack = Stack::start();
     let client = stack.client();
-    let pid = client.hub_status().unwrap().pid;
     // So nothing asked for as the stack started is still under way.
     wait_until("the hub to be idle", || client.hub_status().unwrap().is_idle());
 
-    let stopped = stop_hub_if_idle(&client, &stack.socket(), pid).unwrap();
+    let stopped = stop_hub_if_idle(&client).unwrap();
 
     assert_eq!(stopped, IdleStop::Stopped);
     assert!(stack.hub.take().unwrap().wait().unwrap().success());
@@ -28,11 +27,10 @@ fn a_hub_with_nothing_on_it_stops_when_asked_to_if_idle() {
 fn a_hub_stops_if_idle_while_another_client_is_connected() {
     let mut stack = Stack::start();
     let client = stack.client();
-    let pid = client.hub_status().unwrap().pid;
     wait_until("the hub to be idle", || client.hub_status().unwrap().is_idle());
     let _other = stack.client();
     wait_until("the hub to count the other client", || client.hub_status().unwrap().clients == 2);
 
-    assert_eq!(stop_hub_if_idle(&client, &stack.socket(), pid).unwrap(), IdleStop::Stopped);
+    assert_eq!(stop_hub_if_idle(&client).unwrap(), IdleStop::Stopped);
     assert!(stack.hub.take().unwrap().wait().unwrap().success());
 }

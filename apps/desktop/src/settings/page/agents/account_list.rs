@@ -87,13 +87,6 @@ pub(super) fn listed(records: &Snapshot) -> (Vec<&Account>, Vec<&Account>) {
     (found, added)
 }
 
-/// Whether the hub is from before hubs kept logins: one that describes its agents, none of them with a login, or that
-/// refused to connect one as too old to, as `refused_as_older` says. A hub that hasn't described any yet isn't taken
-/// for one, since nothing it said says so.
-pub(super) fn older_hub(agents: &Agents, refused_as_older: bool) -> bool {
-    refused_as_older || (agents.named().next().is_some() && agents.with_logins().next().is_none())
-}
-
 fn found_list(drawing: &Drawing<'_>, found: &[&Account], cx: &App) -> Div {
     let rows = found.iter().map(|account| row::row(drawing, account, cx));
     let none =
@@ -103,22 +96,17 @@ fn found_list(drawing: &Drawing<'_>, found: &[&Account], cx: &App) -> Div {
 }
 
 /// Added, with Connect account by its heading. The panel for a new account is under the heading, where the account
-/// will be, and the one for an account's own login is at its row. Nothing is said of the hub's age without a hub to
-/// ask, and Connect account is off then, as it is with nothing to connect.
+/// will be, and the one for an account's own login is at its row. Connect account is off without a hub to ask, as it
+/// is with nothing to connect.
 fn added_list(drawing: &Drawing<'_>, added: &[&Account], cx: &App) -> Div {
     let kinds: Vec<&AgentDescription> = drawing.agents.with_logins().collect();
     let kept = drawing.kept.read(cx);
     let can_ask = kept.can_ask();
-    let older = can_ask && older_hub(drawing.agents, kept.refused_as_older);
-    let connect = connect_button(drawing, &kinds, can_ask && !older);
+    let connect = connect_button(drawing, &kinds, can_ask);
     let panel = kept.panel.as_ref().filter(|panel| matches!(panel.to, To::New { .. }));
     let panel = panel.map(|panel| div().py(look::Space::Large).child(panel::panel(drawing, panel, cx)));
-    let said = if older {
-        Some(("accounts-older-hub", words::OLDER_HUB))
-    } else {
-        (added.is_empty() && panel.is_none()).then_some(("accounts-none-added", words::NONE_ADDED))
-    };
-    let said = said.map(|(id, said)| said_in_the_list(id, said.into(), cx));
+    let said = (added.is_empty() && panel.is_none())
+        .then(|| said_in_the_list("accounts-none-added", words::NONE_ADDED.into(), cx));
     let rows = added.iter().map(|account| row::row(drawing, account, cx));
     let list = list(cx).children(panel).children(said).children(rows);
     v_flex().child(heading("Added", None, words::added_says(drawing.defaults.is_some()), Some(connect), cx)).child(list)

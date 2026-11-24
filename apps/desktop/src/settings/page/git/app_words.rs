@@ -132,7 +132,6 @@ pub(super) fn not_written(e: &ClientError) -> String {
         ClientError::Api(api) if api.code == ErrorCode::InvalidRequest => {
             format!("Choose another name: {}.", api.message)
         }
-        e if e.is_unsupported() => "This hub can't make an app of your own until it's updated.".to_string(),
         e => refusals::couldnt("open GitHub", e),
     }
 }
@@ -146,7 +145,6 @@ pub(super) fn not_made(e: &ClientError) -> (String, bool) {
                 .to_string(),
             false,
         ),
-        e if e.is_unsupported() => ("This hub can't make an app of your own until it's updated.".to_string(), false),
         e => (
             format!(
                 "The hub couldn't take the app's key from GitHub: {}. GitHub takes its code for an hour, so try again.",

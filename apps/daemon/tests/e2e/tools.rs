@@ -262,7 +262,7 @@ fn a_wait_lasts_across_the_hub_stopping_for_an_update() {
         // The previous client's socket has closed, but the hub may not have seen it go yet. Wait only for that,
         // so the assertion below still catches a wait being counted as work that would keep the hub running.
         wait_until("the previous client to disconnect", || client.hub_status().unwrap().clients == 1);
-        let stopped = stop_hub_if_idle(&client, &stack.socket(), stack.hub_pid()).unwrap();
+        let stopped = stop_hub_if_idle(&client).unwrap();
         assert_eq!(stopped, IdleStop::Stopped, "a wait holds up no update");
         stack.hub.take().unwrap().wait().unwrap();
     };

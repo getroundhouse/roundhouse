@@ -32,8 +32,6 @@ fn a_decision_and_a_comment_are_each_kept_apart_from_the_chats_draft() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.set(DraftChange::Composer(chat("a"), DraftToKeep::new("first")));
-    kept(&drafts, &heard);
 
     drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("typed")));
     drafts.typed(DraftChange::Decision(chat("a"), Some(denying("half"))));
@@ -46,48 +44,6 @@ fn a_decision_and_a_comment_are_each_kept_apart_from_the_chats_draft() {
     assert_eq!(sorted(kept(&drafts, &heard)), said, "only the newest of each");
     let keys = [DraftKey::Composer(chat("a")), DraftKey::Decision(chat("a")), DraftKey::Comment(workspace("w"))];
     assert!(keys.iter().all(|key| !drafts.unkept(key)));
-}
-
-#[test]
-fn what_a_hub_that_keeps_only_chats_drafts_refuses_waits_for_the_next_connection_and_the_rest_goes_on() {
-    let dir = tempfile::tempdir().unwrap();
-    let (older, heard) = hub(&dir.path().join("older.sock"), Answer::KeepsOnlyChatsDrafts);
-    let drafts = Drafts::start(&older);
-    drafts.set(DraftChange::Decision(chat("a"), Some(denying("half"))));
-    drafts.set(DraftChange::Comment(workspace("w"), Some(comment("why?"))));
-    let refused = kept(&drafts, &heard);
-    assert_eq!(refused, pairs(&[("a", "refused decision half"), ("w", "refused comment why?")]));
-
-    drafts.set(DraftChange::Composer(chat("a"), DraftToKeep::new("typed")));
-
-    assert_eq!(kept(&drafts, &heard), pairs(&[("a", "typed")]), "the rest goes on, and the hub isn't asked again");
-    assert!(drafts.unkept(&DraftKey::Decision(chat("a"))), "it would be lost if the app stopped now");
-    assert!(drafts.unkept(&DraftKey::Comment(workspace("w"))));
-    let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
-    drafts.reconnect(&client);
-    assert_eq!(sorted(kept(&drafts, &heard)), pairs(&[("a", "decision half"), ("w", "comment why?")]));
-    assert!(!drafts.unkept(&DraftKey::Decision(chat("a"))));
-}
-
-/// What's held for the next connection is kept all at once on it, so a hub that refuses one kind of draft is asked
-/// about it once, rather than for each draft of that kind.
-#[test]
-fn a_hub_that_refuses_a_kind_of_draft_is_asked_about_it_once_a_connection() {
-    let dir = tempfile::tempdir().unwrap();
-    let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
-    let drafts = Drafts::start(&gone);
-    for (chat_id, workspace_id) in [("a", "w"), ("b", "x")] {
-        drafts.set(DraftChange::Decision(chat(chat_id), Some(denying("half"))));
-        drafts.set(DraftChange::Comment(workspace(workspace_id), Some(comment("why?"))));
-    }
-    drafts.flushed().recv_timeout(TIMEOUT).unwrap();
-    let (older, heard) = hub(&dir.path().join("older.sock"), Answer::KeepsOnlyChatsDrafts);
-
-    drafts.reconnect(&older);
-
-    let asked = kept(&drafts, &heard);
-    let refused = |kind: &str| asked.iter().filter(|(_, what)| what.starts_with(&format!("refused {kind}"))).count();
-    assert_eq!((refused("decision"), refused("comment")), (1, 1), "{asked:?}");
 }
 
 /// The chat's record at `rev`, with its request denied in the words `typed`, being written.

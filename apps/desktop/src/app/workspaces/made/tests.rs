@@ -1,14 +1,14 @@
-//! Against a stand-in hub, which can be one too old to make a workspace from what it keeps of the dialog.
+//! Against a stand-in hub.
 #![cfg(unix)]
 
 use std::time::Duration;
 
 use client_core::stand_in_hub::{self, Does};
-use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
+use protocol::attachment::{Attachment, MediaType};
 use protocol::capability::settings::Effort;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, agent, attachments, drafts};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
 use protocol::fixtures;
-use protocol::model::{AgentKind, AttachmentId, Draft, ModelName, RepoId, Seq};
+use protocol::model::{AgentKind, AttachmentId, Draft, ModelName, RepoId};
 
 use super::*;
 
@@ -32,43 +32,8 @@ fn hub_that_says(
 fn asked(request: &ClientRequest) -> String {
     match request {
         ClientRequest::NewWorkspaceCreate(_) => "create from the dialog".to_string(),
-        ClientRequest::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id }) => format!("read {id}"),
-        ClientRequest::WorkspaceCreate(_) => "workspace".to_string(),
-        ClientRequest::SessionEnsure(_) => "chat".to_string(),
-        ClientRequest::AttachmentAdd(attachments::AttachmentAdd { id, .. }) => format!("add {id}"),
-        ClientRequest::SessionPrompt(agent::SessionPrompt { prompt, .. }) => {
-            let carrying: Vec<&str> = prompt.files.iter().map(AttachmentId::as_str).collect();
-            format!("prompt carrying {}", carrying.join(", "))
-        }
         other => format!("{other:?}"),
     }
-}
-
-/// What a hub too old to make a workspace from what it keeps answers each step of making one a step at a time with,
-/// reading back each of the dialog's files as `read` says.
-fn too_old(request: &ClientRequest, read: &impl Fn(&AttachmentId) -> ReplyOutcome) -> Option<ReplyOutcome> {
-    let answer = match request {
-        ClientRequest::NewWorkspaceCreate(_) => {
-            return Some(ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "unknown request")));
-        }
-        ClientRequest::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id }) => return Some(read(id)),
-        ClientRequest::WorkspaceCreate(_) => ClientResponse::Workspace(fixtures::workspace("w")),
-        ClientRequest::SessionEnsure(_) => ClientResponse::Session(fixtures::session("s")),
-        ClientRequest::AttachmentAdd(attachments::AttachmentAdd { id, name, media_type, data, .. }) => {
-            let size_bytes = data.len() as u64;
-            ClientResponse::Attachment(Attachment {
-                id: id.clone(),
-                name: name.clone(),
-                media_type: *media_type,
-                size_bytes,
-            })
-        }
-        ClientRequest::SessionPrompt(_) => {
-            ClientResponse::PromptRecorded(agent::PromptRecorded { seq: Seq::new(1), duplicate: false })
-        }
-        _ => return None,
-    };
-    Some(ReplyOutcome::Response(answer))
 }
 
 /// A file the hub keeps for the dialog, which the dialog hadn't read back.
@@ -93,56 +58,15 @@ fn request() -> Request {
     Request { coming_back: vec![on_the_hub()], made_of, ..request }
 }
 
-#[test]
-fn a_hub_too_old_to_make_it_is_sent_it_a_step_at_a_time_with_the_files_it_keeps_first() {
-    let dir = tempfile::tempdir().unwrap();
-    let read = |_: &AttachmentId| {
-        let data = AttachmentBytes::new(b"kept".to_vec());
-        ReplyOutcome::Response(ClientResponse::AttachmentData(attachments::AttachmentData { data }))
-    };
-    let (client, heard) = hub_that_says(&dir, move |request| too_old(request, &read));
-    let request = request();
-    let (made_of, here) = (request.made_of.clone(), request.prompt.files[0].attachment.id.clone());
-
-    let made = make(&client, request);
-
-    assert!(made.unsent.is_none(), "{:?}", made.unsent.map(|unsent| unsent.error));
-    assert!(made.workspace.is_some() && made.session.is_some());
-    let said: Vec<String> = heard.try_iter().collect();
-    assert_eq!(
-        said,
-        [
-            "create from the dialog".to_string(),
-            "read kept".to_string(),
-            "workspace".to_string(),
-            "chat".to_string(),
-            "add kept".to_string(),
-            format!("add {here}"),
-            format!("prompt carrying kept, {here}"),
-        ]
-    );
-    assert_eq!(made.dialog_to_empty, Some(made_of), "the dialog is to let go of what it took");
-}
-
-/// So nothing is made without it, and it can be read back again.
-#[test]
-fn a_file_the_hub_kept_that_cant_be_read_back_gives_all_of_it_back_before_anything_is_made() {
-    let dir = tempfile::tempdir().unwrap();
-    let read = |_: &AttachmentId| ReplyOutcome::Error(ApiError::new(ErrorCode::NotFound, "no attachment kept"));
-    let (client, heard) = hub_that_says(&dir, move |request| too_old(request, &read));
-    let request = request();
-    let here = request.prompt.files[0].attachment.id.clone();
-
-    let made = make(&client, request);
-
-    assert!(made.workspace.is_none() && made.dialog_to_empty.is_none());
-    assert_eq!(heard.try_iter().collect::<Vec<_>>(), ["create from the dialog", "read kept"]);
-    let unsent = made.unsent.expect("it's given back");
-    assert_eq!(unsent.failed, Step::Workspace);
-    let given_back = unsent.given_back.expect("all of it");
-    assert_eq!(given_back.prompt.text, "say:hi");
-    assert_eq!(given_back.prompt.files.iter().map(|file| &file.attachment.id).collect::<Vec<_>>(), [&here]);
-    assert_eq!(given_back.coming_back, [on_the_hub()]);
+/// How a hub that made it answers, with `unsent` and `unchosen` as it says, and a chat whose composer holds the prompt
+/// if `in_composer`.
+fn made(in_composer: bool, unsent: Option<UnsentPrompt>, unchosen: Option<ApiError>) -> ReplyOutcome {
+    let mut session = fixtures::session("s");
+    if in_composer {
+        session.draft = Draft { text: "say:hi".to_string(), files: vec![on_the_hub()] };
+    }
+    let made = NewWorkspaceMade { workspace: fixtures::workspace("w"), session, unchosen, unsent };
+    ReplyOutcome::Response(ClientResponse::NewWorkspaceMade(Box::new(made)))
 }
 
 /// A hub that makes it, and couldn't send the prompt, which it put in the chat's composer if `in_composer`, and whose
@@ -151,14 +75,9 @@ fn made_by_the_hub(in_composer: bool, unchosen: bool) -> Made {
     let dir = tempfile::tempdir().unwrap();
     let (client, _) = hub_that_says(&dir, move |request| {
         let ClientRequest::NewWorkspaceCreate(_) = request else { return None };
-        let mut session = fixtures::session("s");
-        if in_composer {
-            session.draft = Draft { text: "say:hi".to_string(), files: vec![on_the_hub()] };
-        }
         let unchosen = unchosen.then(|| ApiError::new(ErrorCode::InvalidRequest, "not that effort"));
         let unsent = Some(UnsentPrompt { error: ApiError::new(ErrorCode::Internal, "it went wrong"), in_composer });
-        let made = NewWorkspaceMade { workspace: fixtures::workspace("w"), session, unchosen, unsent };
-        Some(ReplyOutcome::Response(ClientResponse::NewWorkspaceMade(Box::new(made))))
+        Some(made(in_composer, unsent, unchosen))
     });
     make(&client, request())
 }
@@ -208,11 +127,9 @@ fn a_hub_that_goes_away_while_making_it_isnt_taken_for_one_that_refused() {
 #[test]
 fn the_hub_is_asked_to_make_it_only_once_it_keeps_what_was_asked_for() {
     let dir = tempfile::tempdir().unwrap();
-    let read = |_: &AttachmentId| {
-        let data = AttachmentBytes::new(b"kept".to_vec());
-        ReplyOutcome::Response(ClientResponse::AttachmentData(attachments::AttachmentData { data }))
-    };
-    let (client, heard) = hub_that_says(&dir, move |request| too_old(request, &read));
+    let (client, heard) = hub_that_says(&dir, |request| {
+        matches!(request, ClientRequest::NewWorkspaceCreate(_)).then(|| made(false, None, None))
+    });
     let (kept, keeping) = flume::bounded(1);
     let request = Request { kept: Some(keeping), ..request() };
 

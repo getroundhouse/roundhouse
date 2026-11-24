@@ -7,9 +7,8 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::fixtures::{account, observed};
 use protocol::model::{Account, AccountIdentity, AgentDescription, AgentKind, HeldLogin, Observation};
 
-use super::super::older_hub;
-use super::super::words::{self, Refused, Standing};
-use super::made_up::{DAY_MS, MINUTE_MS, NOW_MS, added, claude, holding, setup_token};
+use super::super::words::{self, Standing};
+use super::made_up::{DAY_MS, MINUTE_MS, NOW_MS, added, claude, holding};
 
 /// What `account` is called, as a client that holds it, and what `observed` says of it, reads it.
 fn called(account: &Account, observed: &[Observation]) -> String {
@@ -27,14 +26,6 @@ fn an_added_account_is_called_by_its_name_and_a_found_one_by_its_email() {
     assert_eq!(called(&Account { name: Some("Work".to_string()), ..account("a") }, &ada), "ada@example.com");
     assert_eq!(called(&account("a"), &api_key), "API key");
     assert_eq!(called(&account("claude-1"), &[]), "claude-1", "with nothing else to go by");
-}
-
-#[test]
-fn a_hub_is_from_before_hubs_kept_logins_when_it_describes_no_kind_with_one_or_says_so() {
-    assert!(!older_hub(&Agents::default(), false), "nothing described, as before the hub has said");
-    assert!(older_hub(&Agents::new(vec![claude(None)]), false), "Claude, with nothing that makes a token");
-    assert!(!older_hub(&Agents::new(vec![claude(Some(setup_token()))]), false));
-    assert!(older_hub(&Agents::new(vec![claude(Some(setup_token()))]), true), "it refused to connect one");
 }
 
 /// How a login that lasts a year and ends at `ends_at_ms` stands at [`NOW_MS`], with times in UTC.
@@ -126,15 +117,11 @@ fn what_a_login_lasts_is_said_in_whole_years_or_days() {
 }
 
 #[test]
-fn a_hub_too_old_to_keep_logins_is_told_apart_from_what_it_says_for_a_person() {
+fn a_refusal_to_connect_a_login_says_what_the_hub_says_for_a_person() {
     let api = |code, message: &str| ClientError::Api(ApiError::new(code, message));
-    let said_renewing = |e: ClientError, renewing| match words::refused(&e, renewing) {
-        Refused::Said(said) => said,
-        Refused::OlderHub => panic!("{e} isn't from an older hub"),
-    };
+    let said_renewing = |e: ClientError, renewing| words::refused(&e, renewing);
     let said = |e| said_renewing(e, true);
 
-    assert_eq!(words::refused(&api(ErrorCode::Unsupported, "doesn't know that request"), false), Refused::OlderHub);
     assert_eq!(
         said(api(ErrorCode::InvalidRequest, "the token has a space or a line break inside, which no CLI's has")),
         "Couldn't connect it: the token has a space or a line break inside, which no CLI's has"

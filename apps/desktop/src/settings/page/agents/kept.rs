@@ -8,7 +8,7 @@ use protocol::model::{Account, AccountId, AgentKind, LoginToken};
 use super::super::field::Field;
 use super::super::redraw::{RedrawAt, bring_into_sight};
 use super::Asking;
-use super::words::{self, Refused};
+use super::words;
 use crate::asking::{self, Question};
 
 /// The page's state, kept only while it shows, so a token half pasted goes with it, and so does the wait for what the
@@ -16,8 +16,6 @@ use crate::asking::{self, Question};
 #[derive(Default)]
 pub(super) struct Kept {
     pub(super) panel: Option<Panel>,
-    /// The hub refused to connect a login as too old to keep any.
-    pub(super) refused_as_older: bool,
     /// Why the hub couldn't forget the login of the account under whose row it's said.
     not_disconnected: Option<(AccountId, String)>,
     /// The hub to ask, as of the page's last frame, with client-core's copy of its records. `None` while there's no hub
@@ -176,11 +174,7 @@ impl Kept {
     ) {
         match answer.map_err(|e| words::refused(&e, renewing)) {
             Ok(_) => self.put_away_panel(window, cx),
-            Err(Refused::OlderHub) => {
-                self.put_away_panel(window, cx);
-                self.refused_as_older = true;
-            }
-            Err(Refused::Said(said)) => {
+            Err(said) => {
                 let token = Field::token(window, cx, Kept::connect);
                 let Some(panel) = self.panel.as_mut() else { return };
                 (panel.token, panel.refused, panel.connecting) = (token, Some(said), None);

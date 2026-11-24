@@ -100,7 +100,7 @@ impl HubSource {
             }
             status = client.hub_status()?;
         } else if should_replace(&status, self.build_number) {
-            match client_core::stop_hub_if_idle(&client, &self.paths.socket, status.pid)? {
+            match client_core::stop_hub_if_idle(&client)? {
                 IdleStop::Stopped => client = self.connect_or_start()?,
                 IdleStop::Busy => {}
             }

@@ -56,22 +56,19 @@ fn lists_asked(requests: &[ClientRequest]) -> usize {
 }
 
 #[test]
-fn a_hub_too_old_to_list_prompts_is_followed_without_them_and_not_asked_again() {
+fn the_hubs_prompts_are_listed_once_its_subscription_has_started() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
-    let heard = start_hub(&socket, vec![refused(ErrorCode::Unsupported, "unknown request")]);
+    let heard = start_hub(&socket, vec![listed(vec![PromptLine::new(Seq::new(3), "far back", 0)])]);
     let client = Client::connect(&socket, "test").unwrap();
 
     let feed = RecordsFeed::start(&client);
     let open = OpenSession::start(&client, &feed, &session(), View::Own);
-    until("answered", || open.read(|log| !log.wants_prompt_list()));
-    open.want(0..1, Some(0));
+    until("listed", || seqs(&open) == [Seq::new(3)]);
     let errors = open.take_errors();
-    let connected = open.follow.connected();
     drop(open);
 
     assert!(errors.is_empty(), "{errors:?}");
-    assert!(connected);
     let requests = requests_until_unsubscribed(&heard, 1);
     assert_eq!(lists_asked(&requests), 1, "{requests:?}");
     let subscribed = requests.iter().position(|r| follows_session(r).is_some());

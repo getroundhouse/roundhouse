@@ -130,14 +130,13 @@ pub(super) fn waiting(until: Option<&str>) -> String {
     }
 }
 
-/// What a panel says when the hub couldn't start a sign-in: what a conflict and an older hub mean for one, and
-/// otherwise why, as for anything asked.
+/// What a panel says when the hub couldn't start a sign-in: what a conflict means for one, and otherwise why, as for
+/// anything asked.
 pub(super) fn not_started(e: &ClientError) -> String {
     match e {
         ClientError::Api(api) if api.code == ErrorCode::Conflict => {
             "As many sign-ins as the hub allows are waiting. Finish or cancel one, then try again.".to_string()
         }
-        e if e.is_unsupported() => "This hub can't sign in with GitHub until it's updated. Use a token.".to_string(),
         e => refusals::couldnt("start signing in", e),
     }
 }

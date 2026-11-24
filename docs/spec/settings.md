@@ -186,12 +186,8 @@ The app's own settings, and where they're shown.
 
   ![An account's card, with its week in amber, down to what it reserves](screens/settings-agents-in-reserve.png)
 
-- **With no hub to ask, the accounts stay listed, every button is off, and nothing is said of the hub's age.** *Unconfirmed.*
-- **A hub from before hubs kept logins can't connect one, and says so in place of Added's rows, with Connect account off.** One that describes its agents with none of them given what makes a login says so from the start, and one that refuses to connect a login as too old for it says so from then on, while Agents shows. One that hasn't described its agents, as before it has said, has Connect account off and says nothing of its age, since nothing it has said tells. *Unconfirmed.*
-
-  **A hub from before hubs kept logins, which describes Claude with nothing that makes a login.** *Unconfirmed.*
-
-  ![Agents on a hub that can't keep logins](screens/settings-agents-older-hub.png)
+- **With no hub to ask, the accounts stay listed, and every button is off.** *Unconfirmed.*
+- **A hub that hasn't described its agents, as before it has said, has Connect account off.** *Unconfirmed.*
 
 ## Git
 

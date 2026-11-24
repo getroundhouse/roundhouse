@@ -23,7 +23,7 @@ use super::logs::{prompt_lines, read};
 use super::parts::{part, worktree_video};
 use super::stand_in::{claude, fixed_pairing, status, version};
 use super::worker_reads::WorkerReads;
-use super::world::{LoginSupport, NOW_MS, World};
+use super::world::{NOW_MS, World};
 
 /// Listens until the process ends, since nothing stops it. Each world gets a socket of its own, so no test reaches
 /// another's.
@@ -111,9 +111,9 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         R::RepoList => reply(C::Repos(records::Repos { repos: world.repos_listed() })),
         R::ModelsFor(asked) => reply(C::ModelList(world.model_list_for(&asked)?)),
         // As the app's own hub describes its agent, even as an older hub, so a screen of one draws the agent as it
-        // would, but for what makes a login, which a hub from before hubs kept them doesn't say.
+        // would.
         R::AgentList => {
-            reply(C::Agents(admin::Agents { agents: world.agents.clone().unwrap_or_else(|| vec![claude(world)]) }))
+            reply(C::Agents(admin::Agents { agents: world.agents.clone().unwrap_or_else(|| vec![claude()]) }))
         }
         R::WorkspaceList(workspaces::WorkspaceList { include_archived }) => {
             reply(C::Workspaces(workspaces::Workspaces { workspaces: world.workspaces_listed(include_archived) }))
@@ -147,11 +147,6 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         | R::SessionDecisionDraft(drafts::SessionDecisionDraft { id, .. }) => {
             reply(C::Session(world.session(&id)?.clone()))
         }
-        // As an older hub refuses it. Agents asks none, since such a hub says nothing of what makes a login, so the
-        // refusal itself is tested against a stand-in, with `Kept`.
-        R::AccountConnect(_) if world.logins == LoginSupport::None => {
-            Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't keep logins"))
-        }
         // As a hub that started it would answer, as the world says it stands, though this one keeps no record of it, so
         // a screen can show how a sign-in the app started went. The app shows it from the record the answer carries.
         R::GithubSignInStart(github_accounts::GithubSignInStart { id }) => {
@@ -168,18 +163,8 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             let at = protocol::model::ChangedFileAt { untracked, path };
             reply(C::FileDiff(reads_of(world, &id)?.file_diff(at, first_line)?))
         }
-        // As a hub too old to keep it, so a comment being written is what restarting would lose.
-        R::WorkspaceCommentDraft(_) => {
-            Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't keep a comment being written"))
-        }
-        // The same, for what's in the new-workspace dialog.
-        R::NewWorkspaceDraftKeep(_)
-        | R::NewWorkspaceDraftFileAdd(_)
-        | R::NewWorkspaceDraftFileRead(_)
-        | R::NewWorkspaceDraftFileRemove(_)
-        | R::NewWorkspaceCreate(_) => {
-            Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't keep what's in the new-workspace dialog"))
-        }
+        // The world's dialog names no files.
+        R::NewWorkspaceDraftFileRead(_) => Err(not_found("file")),
         R::SessionEnsure(sessions::SessionEnsure { workspace_id, .. }) => {
             let open = world.sessions_listed(&workspace_id).into_iter().rfind(Session::is_open);
             reply(C::Session(open.ok_or_else(|| read_only("give this workspace a chat"))?))
@@ -189,17 +174,9 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             let events = read(ReadLimit::asked(limit, max_bytes), world.events_from(&id, from_seq));
             reply(C::Events(log::Events { events, last_seq: session.last_seq }))
         }
-        // An older hub's build is from before prompts were listed.
-        R::SessionPromptList(_) if world.hub.is_some() => {
-            Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't list prompts"))
-        }
         R::SessionPromptList(log::SessionPromptList { id }) => {
             world.session(&id)?;
             reply(C::Prompts(log::Prompts { prompts: prompt_lines(world, &id) }))
-        }
-        // An older hub's build is from before compactions were listed too.
-        R::SessionCompactionList(_) if world.hub.is_some() => {
-            Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't list compactions"))
         }
         R::SessionCompactionList(log::SessionCompactionList { id }) => {
             world.session(&id)?;
@@ -243,10 +220,6 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         }
         R::AttachmentReadRange(attachments::AttachmentReadRange { id, start, length, .. }) => {
             reply(C::FileRange(part(world.attachments.get(&id), start, length)?))
-        }
-        // An older hub's build is from before files were listed, too.
-        R::WorkspaceFiles(_) if world.hub.is_some() => {
-            Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't list files"))
         }
         R::WorkspaceFiles(_) => reply(C::WorktreeFiles(world.worktree.clone())),
         R::WorkspaceFolderRead(files::WorkspaceFolderRead { path, .. }) => {
@@ -321,15 +294,22 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         | R::GithubAccountSetDefault(_)
         | R::GithubSignInCancel(_)
         | R::GithubAppMake(_)
-        | R::GithubAppRemove(_) => Err(read_only("change anything")),
+        | R::GithubAppRemove(_)
+        | R::NewWorkspaceDraftKeep(_)
+        | R::NewWorkspaceDraftFileAdd(_)
+        | R::NewWorkspaceDraftFileRemove(_) => Err(read_only("change anything")),
         R::GithubAccountConnectGh => github::connect_gh(world),
         R::HubGhLogin => github::gh_login(world),
         R::HubMachineLogins => github::machine_logins(world),
         R::GithubAppInstallationsConnect(_) => github::look_for_installations(world),
         R::GithubAppManifestWrite(write) => reply(github::manifest(write)),
-        // So a screen can show the app waiting on a workspace it asked for, or on a new title. The workspace's record
-        // saying it's being made, or on its way out, is the world's to say.
-        R::WorkspaceCreate(_) | R::WorkspaceRegenerateTitle(_) => Ok(Outcome::Never),
+        // So a screen can show the app waiting on a workspace it asked for, or on a new title, with a comment being
+        // written that restarting would lose, as it's on its way. The workspace's record saying it's being made, or on
+        // its way out, is the world's to say.
+        R::WorkspaceCreate(_)
+        | R::NewWorkspaceCreate(_)
+        | R::WorkspaceRegenerateTitle(_)
+        | R::WorkspaceCommentDraft(_) => Ok(Outcome::Never),
         R::PairingStart if world.pairing.is_some() => reply(C::Pairing(fixed_pairing())),
         R::PairingWait(_) if world.pairing.is_some() => match world.pairing.and_then(|p| p.paired_device) {
             Some(name) => reply(C::Device(protocol::pairing::Device {

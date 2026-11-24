@@ -37,12 +37,6 @@ pub(in crate::client) trait Source: 'static {
     fn wanted_until(&self, _held: &Mutex<Self::Held>) -> Option<Instant> {
         None
     }
-
-    /// Whether `error`, from [`Source::resume`], is one its readers do without, rather than hear of, as a hub too old
-    /// to serve something whose absence the source says itself.
-    fn does_without(&self, _error: &ClientError) -> bool {
-        false
-    }
 }
 
 /// What went wrong while following, for a person to hear about. A connection going isn't one of these:

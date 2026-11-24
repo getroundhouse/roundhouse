@@ -2,7 +2,7 @@ use protocol::client::{CLIENT_PROTOCOL_VERSION, HubStatus};
 use protocol::model::{AgentDescription, LoginDescription};
 use protocol::pairing::{Pairing, PairingCode, PairingLink};
 
-use super::world::{LoginSupport, NOW_MS, World};
+use super::world::{NOW_MS, World};
 
 /// The build the app and its hub both say they are, so the label on every screen stays the same whatever this
 /// checkout's version is.
@@ -11,10 +11,10 @@ pub const BUILD: &str = "1.0.0";
 pub const BUILD_NUMBER: u64 = 2;
 
 /// Claude as the app's own hub describes it, so the picker, the context's cards, a turn's card and Agents say what
-/// they would, or as a hub from before hubs kept logins does, which says nothing of what makes one.
-pub(super) fn claude(world: &World) -> AgentDescription {
+/// they would.
+pub(super) fn claude() -> AgentDescription {
     AgentDescription {
-        login: (world.logins != LoginSupport::None).then(|| LoginDescription {
+        login: Some(LoginDescription {
             made_with: "claude setup-token".into(),
             lasts_ms: Some(365 * 24 * 60 * 60 * 1000),
         }),

@@ -281,8 +281,11 @@ impl ImageDiff {
                     _ if !read_before => None,
                     (None, _) => Some(Side::Absent),
                     (Some(path), Some(base)) => side(client.workspace_file_read_at(&id, &base, &path), shown.0),
-                    // The diff names its commit unless it's from a worker too old to.
-                    (Some(_), None) => Some(Side::Other(Unshown::Unsupported.said().into())),
+                    // Without the commit the diff is against, there's nothing to read the file as it was from.
+                    (Some(_), None) => {
+                        let unnamed = Unshown::Failed("the diff doesn't name the commit it's against".to_string());
+                        Some(Side::Other(unnamed.said().into()))
+                    }
                 };
                 let after =
                     after.map_or(Some(Side::Absent), |path| side(client.workspace_file_read(&id, &path), shown.1));

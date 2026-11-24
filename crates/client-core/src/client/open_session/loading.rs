@@ -134,7 +134,6 @@ impl OpenSession {
 
     /// Carries on on a new connection, from the last event it received.
     pub fn reconnect(&self, client: &Client) {
-        self.searches.reconnected();
         self.follow.reconnect(client);
     }
 

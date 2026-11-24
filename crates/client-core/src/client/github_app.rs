@@ -1,6 +1,6 @@
 //! The calls about apps of your own, GitHub Apps the person makes through GitHub's manifest flow, whose installations
 //! agents act as: asking for an app's manifest, making it from the code GitHub sends the person back with, connecting
-//! where it's installed, and removing it. A hub older than these refuses them, as `is_unsupported` says.
+//! where it's installed, and removing it.
 
 use protocol::client::github_apps::{self, GithubAppManifest, GithubManifestCode};
 use protocol::model::{GithubApp, GithubAppId};

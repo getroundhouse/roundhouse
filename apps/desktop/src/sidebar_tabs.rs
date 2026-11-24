@@ -28,14 +28,6 @@ enum Read {
     Something,
 }
 
-/// Whether the hub can list a worktree's files, which one older than the app may not.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum Hub {
-    #[default]
-    ListsFiles,
-    TooOld,
-}
-
 /// Which tab a workspace's sidebar of changes shows. A workspace that changes nothing shows All files, since an empty
 /// list of changes shows nothing, and one that changes something shows Changes. A tab that's clicked shows instead,
 /// until the workspace's first change, which is mostly an agent's, at the end of a turn, and shows Changes, since
@@ -44,18 +36,16 @@ enum Hub {
 pub(crate) struct TabShown {
     clicked: Option<SidebarTab>,
     read: Read,
-    hub: Hub,
 }
 
 impl TabShown {
     /// `None` until the changes are read or a tab is clicked, so neither tab is marked and then replaced. Changes
-    /// stands in where All files would say nothing: for changes that can't be read, and on a hub that can't list
-    /// files.
+    /// stands in for changes that can't be read, where All files would say nothing.
     pub(crate) fn tab(self) -> Option<SidebarTab> {
-        let by_changes = match (self.read, self.hub) {
-            (Read::NotYet, _) => None,
-            (Read::Nothing, Hub::ListsFiles) => Some(SidebarTab::AllFiles),
-            (Read::Nothing, Hub::TooOld) | (Read::Failed | Read::Something, _) => Some(SidebarTab::Changes),
+        let by_changes = match self.read {
+            Read::NotYet => None,
+            Read::Nothing => Some(SidebarTab::AllFiles),
+            Read::Failed | Read::Something => Some(SidebarTab::Changes),
         };
         self.clicked.or(by_changes)
     }
@@ -81,16 +71,6 @@ impl TabShown {
         if self.read == Read::NotYet {
             self.read = Read::Failed;
         }
-    }
-
-    /// The hub said it can't list files.
-    pub(crate) fn hub_cant_list_files(&mut self) {
-        self.hub = Hub::TooOld;
-    }
-
-    /// The hub may be another now, which can.
-    pub(crate) fn reconnected(&mut self) {
-        self.hub = Hub::ListsFiles;
     }
 }
 
@@ -193,20 +173,5 @@ mod tests {
         assert_eq!(after(&mut shown, &[0]), Some(AllFiles));
         shown.read_failed();
         assert_eq!(shown.tab(), Some(AllFiles), "what was read still stands");
-    }
-
-    #[test]
-    fn a_hub_that_cant_list_files_shows_changes_unless_all_files_is_clicked() {
-        let mut shown = TabShown::default();
-        shown.read(0);
-
-        shown.hub_cant_list_files();
-
-        assert_eq!(shown.tab(), Some(Changes));
-        shown.reconnected();
-        assert_eq!(shown.tab(), Some(AllFiles), "another hub may list them");
-        shown.hub_cant_list_files();
-        shown.click(AllFiles);
-        assert_eq!(shown.tab(), Some(AllFiles), "which says the hub can't");
     }
 }

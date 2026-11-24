@@ -17,11 +17,6 @@ All files, the sidebar on the right's list of every file in a workspace's worktr
 - **Every name in All files is in the mono font, a file's as a folder's,** at the size of a folder's in Changes, since the list is a tree of paths to browse, as an editor's or a terminal's is. A folder's is muted and a file's in the text colour, so the files, which open, stand out.
 - **A folder's row is its icon and its name, with no chevron, as in an editor's tree of files,** the icon opening as the folder does, and what it holds starts under its name, so each level sits a step in from the one it's in. Changes keeps its chevrons. *Unconfirmed:* a line down what an open folder holds, under its icon, as in Changes.
 - **The list is read again when All files shows, when the workspace shows, and when a turn ends while it's on screen,** with each open folder in view that's read when it opens, so what the agent makes shows up without asking, and the folders open stay open, even when a new file splits a row of folders in two. A workspace whose turn ends while it isn't on screen reads its list once it is, rather than every workspace's being read at every turn. *Unconfirmed.*
-- **A hub older than the app says it can't list files,** in the list's place. *Unconfirmed.*
-
-  **All files, on a hub too old to list them.** *Unconfirmed.*
-
-  ![All files on a hub too old to list them](screens/all-files-older-hub.png)
 
 ## A file opened from All files
 

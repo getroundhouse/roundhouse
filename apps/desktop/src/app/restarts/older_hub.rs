@@ -68,7 +68,7 @@ impl AppView {
                 // The dialog asking whether to restart now doesn't hold it up, since finishing an idle hub stops
                 // nothing, and the dialog goes with the hub.
                 if idle && t.still_finishing(pid) {
-                    t.restart_hub_if_idle(pid, cx);
+                    t.restart_hub_if_idle(cx);
                 }
             });
         }));
@@ -101,9 +101,9 @@ impl AppView {
 
     /// For an older hub that looked idle, which this says stops nothing, so the hub is asked to stop only if it still
     /// is. One that's busy after all is connected to again, and the update goes on waiting.
-    pub(super) fn restart_hub_if_idle(&mut self, pid: u32, cx: &mut Context<Self>) {
+    pub(super) fn restart_hub_if_idle(&mut self, cx: &mut Context<Self>) {
         let Some(client) = self.client() else { return };
-        self.stop_then_connect(cx, move |socket| client_core::stop_hub_if_idle(&client, socket, pid).map(drop));
+        self.stop_then_connect(cx, move |_| client_core::stop_hub_if_idle(&client).map(drop));
     }
 
     /// Has the app be connecting. A workspace already on screen stays there, as `view.rs` draws it, holding what it
@@ -136,7 +136,7 @@ impl AppView {
         let build = self.hub.build_number;
         self.read_the_older_hub(cx, move |t, status, cx| {
             if hub_source::should_replace(&status, build) {
-                t.restart_hub_if_idle(status.pid, cx);
+                t.restart_hub_if_idle(cx);
             } else {
                 t.ask_to_restart_now(status, cx);
             }

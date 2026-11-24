@@ -20,6 +20,6 @@ mod tests;
 mod words;
 
 use account_list::Drawing;
-pub(super) use account_list::page;
 #[cfg(test)]
-use account_list::{listed, older_hub};
+use account_list::listed;
+pub(super) use account_list::page;

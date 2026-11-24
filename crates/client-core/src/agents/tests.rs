@@ -44,21 +44,11 @@ fn a_new_chat_runs_the_first_kind_the_hub_describes_that_this_build_can_name() {
 }
 
 #[test]
-fn a_hub_too_old_to_describe_its_agents_describes_none_and_a_new_chat_runs_claude() {
-    let refused = ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "an older hub"));
-
-    let agents = read_from(refused).unwrap();
-
-    assert_eq!(agents, Agents::default());
-    assert_eq!(agents.of(AgentKind::Claude), None);
-    assert_eq!(agents.for_new_chat(), AgentKind::Claude);
-    assert_eq!(agents.new_chat(), None);
-}
-
-#[test]
 fn only_losing_the_connection_fails_asking() {
     let refused = ReplyOutcome::Error(ApiError::new(ErrorCode::Internal, "something else"));
-    assert_eq!(read_from(refused).unwrap(), Agents::default());
+    let agents = read_from(refused).unwrap();
+    assert_eq!(agents, Agents::default());
+    assert_eq!((agents.new_chat(), agents.for_new_chat()), (None, AgentKind::Claude), "a new chat runs Claude");
 
     let dir = tempfile::tempdir().unwrap();
     let client = stand_in_hub::connect(&dir.path().join("hub.sock"), |_| Does::HangsUp);

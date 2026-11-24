@@ -43,7 +43,3 @@ pub(super) fn limit(window: LimitWindow, used_percent: u8, resets_at_ms: i64) ->
 pub(super) fn claude(login: Option<LoginDescription>) -> AgentDescription {
     AgentDescription { login, ..protocol::fixtures::claude() }
 }
-
-pub(super) fn setup_token() -> LoginDescription {
-    LoginDescription { made_with: "claude setup-token".to_string(), lasts_ms: None }
-}

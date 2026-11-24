@@ -207,14 +207,6 @@ impl NewWorkspaceDialog {
         self.keeping.restoring.iter().map(|file| file.id.clone())
     }
 
-    /// Has the hub stop keeping what a workspace made a step at a time took from the dialog, for a hub too old to make
-    /// one from what it keeps, which would empty it itself: what's here now is kept, and the files `made_of` named are
-    /// let go of.
-    pub(crate) fn made_without_the_hub(&mut self, made_of: &NewWorkspaceDraftToKeep, cx: &App) {
-        self.keep(true, cx);
-        self.let_go_of(&made_of.files);
-    }
-
     /// Whether anything is typed or attached that quitting or restarting would lose, because the hub hasn't had it.
     pub(crate) fn would_lose(&self, cx: &App) -> bool {
         let unkept = self.keeping.keeper.as_ref().is_none_or(|keeper| keeper.unkept(&DraftKey::NewWorkspace));

@@ -7,13 +7,12 @@ use protocol::model::{CompactionLine, PromptLine, SessionId};
 use super::{Client, Result};
 
 impl Client {
-    /// Every prompt in the session, oldest first, as a line each. A hub older than this refuses it as unsupported.
+    /// Every prompt in the session, oldest first, as a line each.
     pub fn session_prompt_list(&self, id: &SessionId) -> Result<Vec<PromptLine>> {
         Ok(self.call(log::SessionPromptList { id: id.clone() })?.prompts)
     }
 
-    /// Every compaction of the agent's own conversation that compacted, oldest first, as a line each. A hub older than
-    /// this refuses it as unsupported.
+    /// Every compaction of the agent's own conversation that compacted, oldest first, as a line each.
     pub fn session_compaction_list(&self, id: &SessionId) -> Result<Vec<CompactionLine>> {
         Ok(self.call(log::SessionCompactionList { id: id.clone() })?.compactions)
     }

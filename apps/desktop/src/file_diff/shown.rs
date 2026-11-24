@@ -146,7 +146,7 @@ impl FileDiff {
                 return;
             }
             Opening::Text(text) => text,
-            Opening::NotText | Opening::Unsupported | Opening::Failed => {
+            Opening::NotText | Opening::Failed => {
                 shown.settled = true;
                 return;
             }

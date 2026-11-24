@@ -90,22 +90,18 @@ fn the_pages_a_view_wants_are_fetched_once_and_it_hears_when_they_come() {
 }
 
 #[test]
-fn a_file_that_couldnt_be_opened_is_opened_on_the_next_connection_but_not_on_a_hub_too_old() {
+fn a_file_that_couldnt_be_opened_is_opened_on_the_next_connection() {
     let dir = tempfile::tempdir().unwrap();
-    let (failing, older, newer) = (dir.path().join("1.sock"), dir.path().join("2.sock"), dir.path().join("3.sock"));
+    let (failing, newer) = (dir.path().join("1.sock"), dir.path().join("2.sock"));
     start_hub_answering(&failing, |_| Some(refused(ErrorCode::Internal, "no")));
-    start_hub_answering(&older, |_| Some(refused(ErrorCode::Unsupported, "unknown request")));
     start_hub_answering(&newer, |request| Some(answered(request)));
-    let (failed, old) = (start(&failing), start(&older));
+    let failed = start(&failing);
 
     wait_for(&failed, "it to fail", |opening| matches!(opening, Opening::Failed));
-    wait_for(&old, "the hub to say it's too old", |opening| matches!(opening, Opening::Unsupported));
     assert!(failed.reconnect(&Client::connect(&newer, "test").unwrap()), "opened again");
-    assert!(!old.reconnect(&Client::connect(&newer, "test").unwrap()), "not opened again");
 
     wait_for(&failed, "it to open", |opening| matches!(opening, Opening::Text(_)));
     assert_eq!(failed.take_errors().len(), 1, "what went wrong the first time");
-    assert!(old.read(|opening| matches!(opening, Opening::Unsupported)), "not asked again");
 }
 
 #[test]

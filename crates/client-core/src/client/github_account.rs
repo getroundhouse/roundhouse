@@ -1,7 +1,6 @@
 //! The calls about the GitHub accounts a hub holds, the default of which agents push and open pull requests as on every
 //! machine: connecting a token or `gh`'s login on the hub's machine, disconnecting one, choosing the default, and
-//! signing in with GitHub. A hub older than these refuses them, as `is_unsupported` says, and its settings say nothing
-//! of GitHub.
+//! signing in with GitHub.
 
 use protocol::client::github_accounts;
 use protocol::model::{

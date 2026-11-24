@@ -9,7 +9,7 @@ use look::Region;
 use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::worlds::{accounts, automatic, conversation, logins_unkept, none_found, own_hub, reserves};
+use super::worlds::{accounts, automatic, conversation, none_found, own_hub, reserves};
 use client_core::fake_hub::{LoginSupport, World};
 
 /// What puts the cursor in Settings' search.
@@ -173,13 +173,6 @@ pub(crate) const SCREENS: &[Screen] = &[
             AGENTS,
             Step::Hover { on: Target::Id("account-claude-login-0002"), shows: Region::AccountCard.id() },
         ],
-    },
-    Screen {
-        name: "settings-agents-older-hub",
-        spec: "settings.md",
-        world: Some(logins_unkept),
-        frame: Frame::Layout,
-        steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS, Step::WaitFor("accounts-older-hub")],
     },
     Screen {
         name: "settings-voice",

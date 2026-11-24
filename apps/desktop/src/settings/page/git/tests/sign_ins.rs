@@ -70,10 +70,6 @@ fn a_sign_in_the_hub_couldnt_start_says_why_for_a_person() {
         refused(ErrorCode::Conflict, "four waiting").starts_with("As many sign-ins as the hub allows are waiting.")
     );
     assert_eq!(
-        refused(ErrorCode::Unsupported, "unknown request"),
-        "This hub can't sign in with GitHub until it's updated. Use a token."
-    );
-    assert_eq!(
         refused(ErrorCode::Unavailable, "GitHub didn't answer"),
         "Couldn't start signing in: GitHub didn't answer"
     );

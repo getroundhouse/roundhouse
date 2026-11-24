@@ -62,7 +62,6 @@ fn a_code_github_no_longer_takes_starts_again_and_anything_else_tries_the_same_c
 
     let (said, again) = app_words::not_made(&api(ErrorCode::InvalidRequest));
     assert!(said.starts_with("GitHub no longer takes the code") && !again);
-    assert!(!app_words::not_made(&api(ErrorCode::Unsupported)).1);
     let (said, again) = app_words::not_made(&api(ErrorCode::Unavailable));
     assert_eq!(
         said,

@@ -53,12 +53,12 @@ impl Query {
         }
     }
 
-    /// Whether every match is counted, with the whole chat in the log if the hub wasn't asked or couldn't say.
+    /// Whether every match is counted, with the whole chat in the log if the hub wasn't asked or failed.
     pub(super) fn complete(&self, everything_held: bool) -> bool {
         match self.searched() {
             Searched::Done => true,
             Searched::Underway => false,
-            Searched::TooShort | Searched::CantFind | Searched::Failed => everything_held,
+            Searched::TooShort | Searched::Failed => everything_held,
         }
     }
 
@@ -72,7 +72,7 @@ impl Query {
         let more = match self.searched() {
             _ if self.complete(everything_held) => More::No,
             Searched::Underway => More::Counting,
-            Searched::Done | Searched::TooShort | Searched::CantFind | Searched::Failed => More::Unlooked,
+            Searched::Done | Searched::TooShort | Searched::Failed => More::Unlooked,
         };
         says(self.at.and_then(|at| self.counts.place(at)), self.counts.total(), more)
     }
@@ -164,12 +164,11 @@ impl Transcript {
         self.after_counting(cx);
     }
 
-    /// Carries on on a new connection, asking again of a search that failed, or of a hub that couldn't find, since it
-    /// may be a newer one.
+    /// Carries on on a new connection, asking again of a search that failed.
     pub(crate) fn find_on_new_connection(&mut self) {
         let (client, session) = (&self.client, &self.session);
         let Some(query) = self.finding.as_mut().and_then(|finding| finding.query.as_mut()) else { return };
-        if matches!(query.search.searched(), Searched::Failed | Searched::CantFind) {
+        if query.search.searched() == Searched::Failed {
             query.search = session.search(client, query.needle.clone(), NEAR);
         }
     }

@@ -42,8 +42,6 @@ pub(crate) enum Unshown {
     TooBig(u64),
     /// It was there when the files were listed, and isn't now.
     Gone,
-    /// The hub is older than the app, and can't read files.
-    Unsupported,
     Failed(String),
     /// It says it's an image, and it can't be decoded.
     Unreadable,
@@ -60,7 +58,6 @@ impl Unshown {
             Unshown::Binary => "This file isn't text, so it can't be shown".to_string(),
             Unshown::TooBig(bytes) => format!("This file is too big to show, at {}", describe_size(*bytes)),
             Unshown::Gone => "This file isn't there now".to_string(),
-            Unshown::Unsupported => "The hub is too old to show files".to_string(),
             Unshown::Failed(message) => format!("Couldn't read the file: {message}"),
             Unshown::Unreadable => "This image couldn't be read".to_string(),
             Unshown::Text => "This file is text, not an image".to_string(),
@@ -103,9 +100,8 @@ pub(crate) fn what_it_gives(contents: Result<FileContents, ClientError>) -> Read
         Ok(FileContents::Video { media_type, bytes }) => Read::Video(media_type, bytes),
         Ok(FileContents::Binary | FileContents::Unknown) => Read::Instead(Unshown::Binary),
         Ok(FileContents::TooBig { bytes }) => Read::Instead(Unshown::TooBig(bytes)),
-        Err(e) if e.is_unsupported() => Read::Instead(Unshown::Unsupported),
         Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => Read::Instead(Unshown::Gone),
-        Err(e) => Read::Instead(Unshown::Failed(e.to_string())),
+        Err(e) => Read::Instead(Unshown::Failed(client_core::refusals::reason(&e))),
     }
 }
 

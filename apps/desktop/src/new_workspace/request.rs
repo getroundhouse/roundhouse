@@ -12,8 +12,7 @@ use protocol::prompt::{Prompt, says_or_carries};
 pub struct Request {
     pub repo: RepoId,
     /// What was typed and attached, which is sent once the workspace is made, unless it says nothing and carries
-    /// nothing, as [`Request::has_prompt`] says. Its files are the ones the dialog had, to give back, or to send to a
-    /// hub too old to make the workspace from what it keeps.
+    /// nothing, as [`Request::has_prompt`] says. Its files are the ones the dialog had, to give back.
     pub prompt: Prompt<FileToSend>,
     /// Files the hub keeps for the dialog that hadn't been read back yet, which come before the prompt's.
     pub coming_back: Vec<Attachment>,

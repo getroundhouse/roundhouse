@@ -38,7 +38,8 @@ pub enum ClientError {
 }
 
 impl ClientError {
-    /// The hub is too old to know this request, or to read it. Hide or disable whatever needed it.
+    /// The hub, or the worker it asked, doesn't know this request or can't read it, such as one from before it, or a
+    /// hub that doesn't know a kind of file newer than it.
     pub fn is_unsupported(&self) -> bool {
         matches!(self, ClientError::Api(e) if e.code == ErrorCode::Unsupported)
     }

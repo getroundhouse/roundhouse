@@ -35,28 +35,6 @@ fn the_dialogs_files_go_before_the_draft_that_names_them_and_are_let_go_of_after
     assert_eq!(kept(&drafts, &heard), pairs(&[("dialog", ""), ("dialog", "-f1")]));
 }
 
-#[test]
-fn what_a_hub_that_keeps_only_chats_drafts_refuses_of_the_dialog_waits_for_the_next_connection_files_and_all() {
-    let dir = tempfile::tempdir().unwrap();
-    let (older, heard) = hub(&dir.path().join("older.sock"), Answer::KeepsOnlyChatsDrafts);
-    let drafts = Drafts::start(&older);
-    drafts.attach(FilesFor::NewWorkspace, file("f1"));
-    drafts.set(DraftChange::NewWorkspace(dialog("fix the login", &["f1"])));
-    drafts.attach(FilesFor::NewWorkspace, file("f2"));
-    let refused = pairs(&[("dialog", "refused +f1"), ("dialog", "refused +f1")]);
-    assert_eq!(kept(&drafts, &heard), refused, "its first file, as it is, then as one of a kind any hub knows");
-
-    drafts.set(DraftChange::Composer(chat("a"), DraftToKeep::new("typed")));
-
-    assert_eq!(kept(&drafts, &heard), pairs(&[("a", "typed")]), "the rest goes on, and the hub isn't asked again");
-    assert!(drafts.unkept(&DraftKey::NewWorkspace), "it would be lost if the app stopped now");
-    let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
-    drafts.reconnect(&client);
-    let said = pairs(&[("dialog", "+f1"), ("dialog", "+f2"), ("dialog", "fix the login f1")]);
-    assert_eq!(kept(&drafts, &heard), said, "its files in the order they came");
-    assert!(!drafts.unkept(&DraftKey::NewWorkspace));
-}
-
 /// As one the app knows and its hub doesn't, since the hub refuses that as it would a request it doesn't know.
 #[test]
 fn a_file_of_a_kind_the_hub_doesnt_know_goes_to_the_dialog_as_one_that_goes_as_it_is() {
@@ -73,27 +51,13 @@ fn a_file_of_a_kind_the_hub_doesnt_know_goes_to_the_dialog_as_one_that_goes_as_i
 }
 
 #[test]
-fn a_file_the_dialog_let_go_of_waits_for_a_hub_that_keeps_the_dialog() {
-    let dir = tempfile::tempdir().unwrap();
-    let (older, heard) = hub(&dir.path().join("older.sock"), Answer::KeepsOnlyChatsDrafts);
-    let drafts = Drafts::start(&older);
-
-    drafts.detach(FilesFor::NewWorkspace, &"f1".into());
-
-    assert_eq!(kept(&drafts, &heard), pairs(&[("dialog", "refused -f1")]));
-    let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
-    drafts.reconnect(&client);
-    assert_eq!(kept(&drafts, &heard), pairs(&[("dialog", "-f1")]), "or that hub would keep it for good");
-}
-
-#[test]
 fn a_file_let_go_of_before_it_reached_the_hub_never_goes_to_it() {
     let dir = tempfile::tempdir().unwrap();
-    let (older, heard) = hub(&dir.path().join("older.sock"), Answer::KeepsOnlyChatsDrafts);
-    let drafts = Drafts::start(&older);
+    let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
+    let drafts = Drafts::start(&gone);
     drafts.attach(FilesFor::NewWorkspace, file("f1"));
     drafts.set(DraftChange::NewWorkspace(dialog("look", &["f1"])));
-    kept(&drafts, &heard);
+    drafts.flushed().recv_timeout(TIMEOUT).unwrap();
 
     drafts.set(DraftChange::NewWorkspace(dialog("", &[])));
     drafts.detach(FilesFor::NewWorkspace, &"f1".into());

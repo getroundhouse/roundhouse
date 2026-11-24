@@ -10,8 +10,7 @@ use protocol::model::{
 use super::{Client, Result};
 
 impl Client {
-    /// Adding the same `id` again returns what the first one added. A hub older than attachments refuses this, as
-    /// `is_unsupported` says, before anything is sent to the agent.
+    /// Adding the same `id` again returns what the first one added.
     pub fn attachment_add(
         &self,
         session_id: &SessionId,
@@ -49,24 +48,24 @@ impl Client {
         Ok(data.into_vec())
     }
 
-    /// See [`attachments::AttachmentRemove`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`attachments::AttachmentRemove`].
     pub fn attachment_remove(&self, session_id: &SessionId, id: &AttachmentId) -> Result<()> {
         self.call(attachments::AttachmentRemove { session_id: session_id.clone(), id: id.clone() })?;
         self.forget_given(session_id, id);
         Ok(())
     }
 
-    /// See [`files::WorkspaceFiles`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`files::WorkspaceFiles`].
     pub fn workspace_files(&self, id: &WorkspaceId) -> Result<WorktreeFiles> {
         self.call(files::WorkspaceFiles { id: id.clone() })
     }
 
-    /// See [`files::WorkspaceFolderRead`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`files::WorkspaceFolderRead`].
     pub fn workspace_folder_read(&self, id: &WorkspaceId, path: &str) -> Result<WorktreeFiles> {
         self.call(files::WorkspaceFolderRead { id: id.clone(), path: path.to_string() })
     }
 
-    /// See [`attachments::AttachmentReadRange`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`attachments::AttachmentReadRange`].
     pub fn attachment_read_range(
         &self,
         session_id: &SessionId,
@@ -77,7 +76,8 @@ impl Client {
         self.call(attachments::AttachmentReadRange { session_id: session_id.clone(), id: id.clone(), start, length })
     }
 
-    /// See [`files::WorkspaceFileReadRange`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`files::WorkspaceFileReadRange`]. A hub whose worker is older than this refuses it, as `is_unsupported`
+    /// says.
     pub fn workspace_file_read_range(
         &self,
         id: &WorkspaceId,
@@ -88,20 +88,18 @@ impl Client {
         self.call(files::WorkspaceFileReadRange { id: id.clone(), path: path.to_string(), start, length })
     }
 
-    /// See [`files::WorkspaceFileRead`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`files::WorkspaceFileRead`].
     pub fn workspace_file_read(&self, id: &WorkspaceId, path: &str) -> Result<FileContents> {
         self.call(files::WorkspaceFileRead { id: id.clone(), path: path.to_string() })
     }
 
-    /// What a file held in `commit`, such as the diff's base, to show what a change replaced. A hub older than this
-    /// refuses it, as `is_unsupported` says.
+    /// What a file held in `commit`, such as the diff's base, to show what a change replaced.
     pub fn workspace_file_read_at(&self, id: &WorkspaceId, commit: &CommitId, path: &str) -> Result<FileContents> {
         self.call(files::WorkspaceFileReadAt { id: id.clone(), commit: commit.clone(), path: path.to_string() })
     }
 
-    /// Opens a file as it was in `commit`, to be read a page at a time with [`Self::workspace_file_pages`], for
-    /// showing one that can be too big for [`Self::workspace_file_read_at`] to send. A hub older than this refuses
-    /// it, as `is_unsupported` says.
+    /// Opens a file as it was in `commit`, to be read a page at a time with [`Self::workspace_file_pages`], for showing
+    /// one that can be too big for [`Self::workspace_file_read_at`] to send.
     pub fn workspace_file_open_at(&self, id: &WorkspaceId, commit: &CommitId, path: &str) -> Result<FileOpened> {
         self.call(files::WorkspaceFileOpenAt { id: id.clone(), commit: commit.clone(), path: path.to_string() })
     }

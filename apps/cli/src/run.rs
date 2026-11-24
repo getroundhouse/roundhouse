@@ -258,19 +258,8 @@ fn update_hub(paths: &Paths, status: &HubStatus) -> anyhow::Result<()> {
         println!("{}", updates_line(&records));
         return Ok(());
     };
-    match client.call(admin::HubUpdateTo { version: version.clone() }) {
-        Err(e) if e.is_unsupported() => {
-            println!(
-                "that hub is from before a client could update it, so install a newer release's hub on its machine"
-            );
-        }
-        updating => {
-            updating?;
-            println!(
-                "the hub is updating to {version}, and restarts on it once it's placed, with its agents still at work"
-            );
-        }
-    }
+    client.call(admin::HubUpdateTo { version: version.clone() })?;
+    println!("the hub is updating to {version}, and restarts on it once it's placed, with its agents still at work");
     Ok(())
 }
 

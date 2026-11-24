@@ -36,8 +36,8 @@ pub(crate) const UPDATE_SCREENS: &[Screen] = &[
         spec: "updates.md",
         world: Some(diff),
         frame: SIDEBAR,
-        // The hub keeps what's typed and attached in a composer, and the gallery's hub is too old to keep a comment
-        // being written, so it's the comment that restarting would lose.
+        // The hub keeps what's typed and attached in a composer, and the gallery's hub leaves a comment being written on
+        // its way, so it's the comment that restarting would lose.
         steps: &[
             Step::Select(FOCUS),
             Step::OpenFile("crates/protocol/src/model.rs"),
