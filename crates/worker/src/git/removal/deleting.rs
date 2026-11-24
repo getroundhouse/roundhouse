@@ -79,7 +79,7 @@ async fn remove(
     }
     // Where git keeps its record of this worktree, which goes when git forgets it.
     let found = git(given, worktree, &["rev-parse", "--absolute-git-dir"]).await?;
-    if !found.success && forgotten(given, repo, worktree).await? {
+    if !found.status.success() && forgotten(given, repo, worktree).await? {
         return remove_forgotten(given, worktree, force, deleting, deleter).await;
     }
     let record = PathBuf::from(found.succeeded()?.trim());
@@ -138,7 +138,7 @@ pub(in super::super) async fn remove_part_made(
     }
     let found = git(given, worktree, &["rev-parse", "--absolute-git-dir"]).await?;
     let record = PathBuf::from(found.stdout.trim());
-    if !found.success || !locked_part_made(&record).await {
+    if !found.status.success() || !locked_part_made(&record).await {
         return Ok(false);
     }
     if let Err(refused) = remove_in_place(given, repo, &worktree.to_string_lossy(), Force::PartMade).await

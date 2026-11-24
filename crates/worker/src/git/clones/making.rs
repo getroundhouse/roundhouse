@@ -80,7 +80,7 @@ async fn clone(given: &Environment, url: &str, making: &Path) -> Result<(), ApiE
     git_ok(given, making, &["remote", "add", "origin", url]).await?;
     git_ok(given, making, &["fetch", "--quiet", "origin"]).await?;
     let head = git(given, making, &["remote", "set-head", "origin", "--auto"]).await?;
-    if !head.success {
+    if !head.status.success() {
         // A workspace's base is `origin`'s `HEAD` only by default, and then `origin/main` or `origin/master`, so a clone
         // of a remote with none, as an empty one is, is whole without it.
         warn!(url, "cloned the repository without origin's HEAD: {}", head.stderr);

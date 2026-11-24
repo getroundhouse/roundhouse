@@ -108,7 +108,9 @@ pub(super) async fn made_there(given: &Environment, cwd: &Path, path: &Path, bra
     let (Ok(dirs), Ok(ours), Some(head)) = tokio::join!(dirs, ours, branches::checked_out(given, path)) else {
         return false;
     };
-    let Some((theirs, record)) = dirs.stdout.trim().split_once('\n').filter(|_| dirs.success && ours.success) else {
+    let Some((theirs, record)) =
+        dirs.stdout.trim().split_once('\n').filter(|_| dirs.status.success() && ours.status.success())
+    else {
         return false;
     };
     theirs == ours.stdout.trim() && head == *branch && !locked_part_made(Path::new(record)).await
@@ -135,7 +137,7 @@ async fn finish_add(
     added: GitOutput,
     warnings: &mut Vec<String>,
 ) -> Result<(), ApiError> {
-    if added.success {
+    if added.status.success() {
         return Ok(());
     }
     if !was_there && made_there(given, cwd, path, branch).await {
@@ -165,7 +167,7 @@ async fn make_parent(path: &Path) -> Result<(), ApiError> {
 /// `origin`'s default branch if there's a remote, otherwise the branch checked out in the repo.
 async fn default_base(given: &Environment, repo: &Path) -> Result<String, ApiError> {
     let head = git(given, repo, &["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]).await?;
-    if head.success && !head.stdout.trim().is_empty() {
+    if head.status.success() && !head.stdout.trim().is_empty() {
         return Ok(head.stdout.trim().to_string());
     }
     // Without one, the rest are asked side by side, and the first of them that's there taken, in this order.
@@ -180,7 +182,7 @@ async fn default_base(given: &Environment, repo: &Path) -> Result<String, ApiErr
         }
     }
     let current = current?;
-    if current.success {
+    if current.status.success() {
         return Ok(current.stdout.trim().to_string());
     }
     Ok("HEAD".to_string())
@@ -194,7 +196,7 @@ async fn fetch_if_remote(worktrees: &Worktrees, base: &str, warnings: &mut Vec<S
     let Some(remote_branch) = base.strip_prefix("origin/") else { return Ok(()) };
     let reading = worktrees.reading().await?;
     match tokio::time::timeout(FETCH_TIMEOUT, reading.fetch(&["--quiet", "origin", remote_branch])).await {
-        Ok(Ok(output)) if output.success => {}
+        Ok(Ok(output)) if output.status.success() => {}
         Ok(Ok(output)) => warnings.push(format!("couldn't fetch {base}, using the local copy: {}", output.stderr)),
         Ok(Err(e)) => warnings.push(format!("couldn't fetch {base}, using the local copy: {}", e.message)),
         Err(_) => warnings.push(format!("fetching {base} timed out, using the local copy")),

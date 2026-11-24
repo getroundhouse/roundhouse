@@ -1,7 +1,7 @@
 //! One page of a patch, read as git writes it, so a later page keeps none of what's before it, and git is stopped once
 //! the page is full.
 
-use super::super::git_error;
+use super::super::{git_error, git_failed};
 use protocol::client::ApiError;
 use std::io;
 use std::process::Stdio;
@@ -35,7 +35,7 @@ pub(super) async fn patch_page(
     let exited = git.wait_with_output().await.map_err(|e| couldnt("wait for", &e))?;
     if !(exited.status.success() || compared && exited.status.code() == Some(1)) {
         let said = String::from_utf8_lossy(&exited.stderr);
-        return Err(git_error(format!("git's diff of one file failed: {}", said.trim())));
+        return Err(git_failed("git's diff of one file", exited.status, &said));
     }
     Ok(page)
 }

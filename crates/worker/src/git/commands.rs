@@ -3,7 +3,7 @@ use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{BranchName, CommitId, GitDiff, GitFile, GitStatus};
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use tokio::process::Command;
 
 /// Keeps a diff response bounded when an agent leaves build output untracked and unignored.
@@ -14,11 +14,20 @@ pub(super) fn git_error(message: impl Into<String>) -> ApiError {
     ApiError::new(ErrorCode::Worker, message)
 }
 
+/// The error for `command`, a git that ended with `status`, which isn't success, having printed `said` on stderr. It
+/// says how git ended, with a code or by a signal, since one ended by a signal can have printed nothing.
+pub(super) fn git_failed(command: &str, status: ExitStatus, said: &str) -> ApiError {
+    let said = said.trim();
+    if said.is_empty() {
+        return git_error(format!("{command} failed ({status}), and printed nothing"));
+    }
+    git_error(format!("{command} failed ({status}): {said}"))
+}
+
 pub(super) struct GitOutput {
     /// `git` and its arguments, which an error names.
     pub(super) command: String,
-    pub(super) success: bool,
-    pub(super) code: Option<i32>,
+    pub(super) status: ExitStatus,
     pub(super) stdout: String,
     pub(super) stderr: String,
 }
@@ -64,8 +73,7 @@ pub(super) async fn git(given: &Environment, cwd: &Path, args: &[&str]) -> Resul
     let output = run(given, cwd, args).await?;
     Ok(GitOutput {
         command: format!("git {}", args.join(" ")),
-        success: output.status.success(),
-        code: output.status.code(),
+        status: output.status,
         stdout: String::from_utf8_lossy_owned(output.stdout),
         stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
     })
@@ -78,13 +86,13 @@ pub(super) async fn git_ok(given: &Environment, cwd: &Path, args: &[&str]) -> Re
 impl GitOutput {
     /// What git printed, if it succeeded, or an error naming the command, with what git said.
     pub(super) fn succeeded(self) -> Result<String, ApiError> {
-        if self.success { Ok(self.stdout) } else { Err(git_error(format!("{} failed: {}", self.command, self.stderr))) }
+        if self.status.success() { Ok(self.stdout) } else { Err(git_failed(&self.command, self.status, &self.stderr)) }
     }
 
     /// What a `git diff --no-index` printed, as [`Self::succeeded`] says, but that it exits with 1 when the two files
     /// differ, which isn't a failure.
     pub(super) fn compared(self) -> Result<String, ApiError> {
-        if self.code == Some(1) { Ok(self.stdout) } else { self.succeeded() }
+        if self.status.code() == Some(1) { Ok(self.stdout) } else { self.succeeded() }
     }
 }
 
@@ -96,7 +104,7 @@ pub(super) async fn git_ok_bytes(given: &Environment, cwd: &Path, args: &[&str])
         return Ok(output.stdout);
     }
     let said = String::from_utf8_lossy(&output.stderr);
-    Err(git_error(format!("git {} failed: {}", args.join(" "), said.trim())))
+    Err(git_failed(&format!("git {}", args.join(" ")), output.status, &said))
 }
 
 /// For commands that print NUL-separated paths, such as `git ls-files -z`.
@@ -114,7 +122,7 @@ pub(crate) async fn list_nul_separated(
 /// a branch with no commits yet isn't, and an error when git couldn't say, as outside a repository.
 pub(super) async fn commit_of(given: &Environment, cwd: &Path, name: &str) -> Result<Option<CommitId>, ApiError> {
     let found = git(given, cwd, &["rev-parse", "--verify", "--quiet", &format!("{name}^{{commit}}")]).await?;
-    match found.code {
+    match found.status.code() {
         Some(0) => Ok(Some(CommitId::from(found.stdout.trim()))),
         // git's word for a name that's no commit.
         Some(1) => Ok(None),
@@ -137,7 +145,7 @@ pub(super) fn reject_option_like(value: &str, what: &str) -> Result<(), ApiError
 /// rather than as one something else has.
 pub(super) async fn valid_branch_name(given: &Environment, cwd: &Path, branch: &BranchName) -> Result<(), ApiError> {
     reject_option_like(branch.as_str(), "a branch name")?;
-    if !git(given, cwd, &["check-ref-format", "--branch", branch.as_str()]).await?.success {
+    if !git(given, cwd, &["check-ref-format", "--branch", branch.as_str()]).await?.status.success() {
         return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{branch} isn't a valid branch name")));
     }
     Ok(())
@@ -186,7 +194,7 @@ pub async fn worktree_there(given: &Environment, path: &str) -> Result<bool, Api
     }
     let top = git(given, &worktree, &["rev-parse", "--show-toplevel"]).await?;
     // Git names the top with every link followed, so the path is compared the same way.
-    Ok(top.success && std::fs::canonicalize(top.stdout.trim()).ok() == std::fs::canonicalize(&worktree).ok())
+    Ok(top.status.success() && std::fs::canonicalize(top.stdout.trim()).ok() == std::fs::canonicalize(&worktree).ok())
 }
 
 async fn any_ref_holds_head(given: &Environment, worktree: &Path) -> Result<bool, ApiError> {
@@ -298,7 +306,7 @@ pub(super) async fn diff_base(
 ) -> Result<Option<CommitId>, ApiError> {
     if let Some(base) = base_ref {
         let merge_base = git(given, worktree, &["merge-base", base, "HEAD"]).await?;
-        if merge_base.success {
+        if merge_base.status.success() {
             return Ok(Some(CommitId::from(merge_base.stdout.trim())));
         }
     }

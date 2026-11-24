@@ -38,7 +38,7 @@ mod commands;
 pub(crate) use commands::list_nul_separated;
 pub(crate) use commands::version;
 use commands::{
-    GitOutput, command, commit_of, compared_base, exists, git, git_error, git_ok, git_ok_bytes, off_thread, ref_exists,
-    reject_option_like, run, valid_branch_name,
+    GitOutput, command, commit_of, compared_base, exists, git, git_error, git_failed, git_ok, git_ok_bytes, off_thread,
+    ref_exists, reject_option_like, run, valid_branch_name,
 };
 pub use commands::{diff, restore_workspace, status, worktree_there};
