@@ -7,7 +7,7 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use protocol::capability::settings::ModelCatalog;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{ModelList, ModelListKey, ModelLookup, RecordKey, RepoOrigin};
+use protocol::model::{ModelList, ModelListKey, ModelLookup, RecordKey, RepoOrigin, Rev};
 use tokio::sync::{Mutex as AsyncMutex, watch};
 use tokio::time::Instant;
 use tracing::warn;
@@ -88,6 +88,15 @@ impl ModelLists {
         if due { Due::Yes } else { Due::No(Box::new(list)) }
     }
 
+    /// Whether the list at `key` is still the one a lookup began asking for under revision `asked`. Nothing but that
+    /// lookup's answer gives it another while it asks, so a list let go of, or one made in its place since, isn't.
+    fn asking_for(&self, key: &ModelListKey, asked: Rev) -> bool {
+        self.held.lock().get(key).is_some_and(|held| {
+            let list = held.list.borrow();
+            list.rev == asked && list.lookup == ModelLookup::Asking
+        })
+    }
+
     fn set(&self, list: ModelList, answered: bool) {
         let mut held = self.held.lock();
         let now = answered.then(Instant::now);
@@ -135,8 +144,10 @@ impl Hub {
             self.notify(HubNotice::ModelList(list.clone()));
             return Ok(list);
         }
+        // Held before the lookup starts, so its answer, however soon it lands, finds the list it's for.
         let asking = ModelList { key: key.clone(), catalog: None, lookup: ModelLookup::Asking, rev };
-        let list = match self.start_lookup(lookup) {
+        lists.set(asking.clone(), false);
+        let list = match self.start_lookup(lookup, rev) {
             Ok(()) => asking,
             Err(not) => {
                 let message = match not {
@@ -145,10 +156,12 @@ impl Hub {
                     }
                     NotStarted::Stopped => "the hub is stopping",
                 };
-                ModelList { key, catalog: None, lookup: ModelLookup::Failed { message: message.into() }, rev }
+                let failed =
+                    ModelList { key, catalog: None, lookup: ModelLookup::Failed { message: message.into() }, rev };
+                lists.set(failed.clone(), false);
+                failed
             }
         };
-        lists.set(list.clone(), false);
         self.notify(HubNotice::ModelList(list.clone()));
         Ok(list)
     }
@@ -210,47 +223,58 @@ impl Hub {
         }
         drop(changing);
         // What each offered goes with it, and so does one the cache file kept that no list held. After the lock a
-        // list's change takes, as `settle_model_list` says.
-        for key in self.observations.kept_of::<observations::ModelCatalog>().into_iter().filter(|key| is_gone(key)) {
-            if let Err(e) = self.observation_gone::<observations::ModelCatalog>(key.clone()).await {
-                warn!(list = %key, "letting go of which models an agent offers: {}", e.message);
-            }
+        // list's change takes, as `settle_model_list` says, and picked out under the observation's, so an answer that
+        // found its list still held is forgotten too, and one that asks from now finds it gone.
+        if let Err(e) = self.observations_gone_where::<observations::ModelCatalog>(&is_gone).await {
+            warn!("letting go of which models agents offer: {}", e.message);
         }
     }
 
-    fn start_lookup(self: &Arc<Self>, lookup: Lookup) -> Result<(), NotStarted> {
+    /// Starts asking the agent for the list `lookup` is for, which is held as asking under revision `asked`.
+    fn start_lookup(self: &Arc<Self>, lookup: Lookup, asked: Rev) -> Result<(), NotStarted> {
         let key = lookup.key.clone();
         let hub = Arc::clone(self);
         let work = async move {
             step("asking the agent which models it offers");
             let answer = hub.look_up_models(&lookup).await;
-            uncut(async move { hub.settle_model_list(&lookup.key, answer).await }).await;
+            uncut(async move { hub.settle_model_list(&lookup.key, asked, answer).await }).await;
         };
         let (hub, ending) = (Arc::clone(self), key.clone());
         let after = move |ended: Ended| async move {
             if !ended.finished_or_ran_uncut() {
                 let failed =
                     ApiError::new(ErrorCode::Unavailable, "the agent didn't say which models it offers in time");
-                hub.settle_model_list(&ending, Err(failed)).await;
+                hub.settle_model_list(&ending, asked, Err(failed)).await;
             }
         };
         self.model_lists.lookups.start(JobKind::LookUpModels, key, LOOKUP, work, after)
     }
 
-    /// Records what the agent answered, or that it failed, keeping the last catalog it gave, unless the hub has let go
-    /// of the list meanwhile. What it answered is kept as an observation first, so the list's record, which holds it
-    /// for a client of a version from before it, says it as it's told. That's before the lock a list's change takes,
-    /// since listing every record takes that lock under the one an observation's change takes.
-    async fn settle_model_list(&self, key: &ModelListKey, answer: Result<ModelCatalog, ApiError>) {
-        if let Ok(catalog) = &answer
-            && self.model_lists.held.lock().contains_key(key)
-            && let Err(e) =
-                self.observation_read::<observations::ModelCatalog>(key.clone(), catalog.clone(), now_ms()).await
-        {
-            warn!(list = %key, "keeping which models an agent offers: {}", e.message);
-        }
+    /// Records what the agent answered, or that it failed, keeping the last catalog it gave, on the list the lookup
+    /// began asking for under revision `asked`, unless the hub has let go of that list meanwhile, as when which login a
+    /// launch is handed changes, where the answer is another login's. What it answered is kept as an observation
+    /// first, so the list's record, which holds it for a client of a version from before it, says it as it's told.
+    /// That's before the lock a list's change takes, since listing every record takes that lock under the one an
+    /// observation's change takes. So whether the list is still held is asked under the observation's lock, under
+    /// which [`Hub::forget_model_lists`] picks out what it lets go of.
+    async fn settle_model_list(&self, key: &ModelListKey, asked: Rev, answer: Result<ModelCatalog, ApiError>) {
         let lists = &self.model_lists;
+        if let Ok(catalog) = &answer {
+            let still = || lists.asking_for(key, asked);
+            let read = self.observation_read_while::<observations::ModelCatalog>(
+                key.clone(),
+                catalog.clone(),
+                now_ms(),
+                still,
+            );
+            if let Err(e) = read.await {
+                warn!(list = %key, "keeping which models an agent offers: {}", e.message);
+            }
+        }
         let _changing = lists.changing.lock().await;
+        if !lists.asking_for(key, asked) {
+            return;
+        }
         let Some(was) = lists.held.lock().get(key).map(|held| held.list.borrow().clone()) else { return };
         // Without a revision of its own, clients go on showing the copy they have, but a check waiting still hears.
         let rev = match self.blocking(Store::next_rev).await {
@@ -270,13 +294,30 @@ impl Hub {
     }
 }
 
-/// Has the list at `key` answered `catalog`, as a lookup the hub started does, for a test that runs none.
+/// Lists of models as a lookup the hub started would leave them, for a test that runs none.
 #[cfg(test)]
 impl Hub {
+    /// Has the list at `key` answered `catalog`.
     pub(crate) async fn model_list_answered(&self, key: &ModelListKey, catalog: ModelCatalog) {
+        let asked = self.model_list_asking(key).await;
+        self.model_list_settled(key, asked, catalog).await;
+    }
+
+    /// Holds the list at `key` as asking, as a lookup begins, under the revision this returns.
+    pub(crate) async fn model_list_asking(&self, key: &ModelListKey) -> Rev {
         let rev = self.blocking(Store::next_rev).await.unwrap();
         self.model_lists.set(ModelList { key: key.clone(), catalog: None, lookup: ModelLookup::Asking, rev }, false);
-        self.settle_model_list(key, Ok(catalog)).await;
+        rev
+    }
+
+    /// Has the lookup that began asking for the list at `key` under revision `asked` answer `catalog`.
+    pub(crate) async fn model_list_settled(&self, key: &ModelListKey, asked: Rev, catalog: ModelCatalog) {
+        self.settle_model_list(key, asked, Ok(catalog)).await;
+    }
+
+    /// The list the hub holds at `key`, if it holds one.
+    pub(crate) fn model_list_held(&self, key: &ModelListKey) -> Option<ModelList> {
+        self.model_lists.held.lock().get(key).map(|held| held.list.borrow().clone())
     }
 }
 
