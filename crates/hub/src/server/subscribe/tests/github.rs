@@ -61,6 +61,12 @@ fn said_of_twelve(frame: &HubFrame) -> Option<&Observed<ReferenceSaid>> {
     (*reference == twelve()).then_some(said)
 }
 
+/// What GitHub says of issue 12, if `frame` is a notice of its observation as current.
+fn current_of_twelve(frame: &HubFrame) -> Option<&ReferenceSaid> {
+    let Observed::Current { value } = said_of_twelve(frame)? else { return None };
+    Some(value)
+}
+
 /// Whether `frame` is of GitHub's old form.
 fn github(frame: &HubFrame) -> bool {
     matches!(frame, HubFrame::Github { .. })
@@ -69,6 +75,11 @@ fn github(frame: &HubFrame) -> bool {
 /// A chip followed by a start that reads GitHub as observations is listed first, as not known before the hub has read
 /// it, and then sent what GitHub says of it, current from that read, and never `HubFrame::Github`. One followed by a
 /// start that doesn't, on the same connection, is sent `HubFrame::Github` alone, as before observations.
+///
+/// What the hub holds of a chip newly followed is sent at once, as of when it was read, and is current from the next
+/// read the hub keeps. So where the read the start asked for is kept before the hub has taken in that the start follows
+/// the chip, which a busy machine can make happen, the start is sent that read as of when it was made, and then as
+/// current.
 #[tokio::test]
 async fn a_chip_is_sent_as_an_observation_only_to_a_start_that_reads_github_so() {
     let dir = tempfile::tempdir().unwrap();
@@ -80,8 +91,8 @@ async fn a_chip_is_sent_as_an_observation_only_to_a_start_that_reads_github_so()
     ok(&mut client, 1, Subscribe { stop: Vec::new(), start: starts }).await;
 
     client
-        .until("the observation and the update", |sent| {
-            sent.iter().any(|frame| said_of_twelve(frame).is_some())
+        .until("the current observation and the update", |sent| {
+            sent.iter().any(|frame| current_of_twelve(frame).is_some())
                 && sent.iter().any(|frame| matches!(frame, HubFrame::Github { subscription_id: 2, .. }))
         })
         .await;
@@ -91,8 +102,8 @@ async fn a_chip_is_sent_as_an_observation_only_to_a_start_that_reads_github_so()
     });
     let (1, listed) = listed.expect("listed first") else { panic!("listed to the start that doesn't read them") };
     assert_eq!((&listed.reference, listed.observations.as_slice()), (&twelve(), &[][..]), "not read yet");
-    let said = client.sent.iter().find_map(said_of_twelve).unwrap();
-    let Observed::Current { value: ReferenceSaid::Issue(issue) } = said else { panic!("{said:?}") };
+    let said = client.sent.iter().find_map(current_of_twelve).unwrap();
+    let ReferenceSaid::Issue(issue) = said else { panic!("{said:?}") };
     assert_eq!(issue.summary.about.title, "Decide");
     let to = |frame: &HubFrame| match frame {
         HubFrame::Notice { subscription_id, .. } | HubFrame::Github { subscription_id, .. } => Some(*subscription_id),
