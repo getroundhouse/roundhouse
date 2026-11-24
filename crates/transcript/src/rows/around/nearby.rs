@@ -15,6 +15,12 @@ pub(super) fn events_after(log: &SessionLog, seq: Seq, reach: usize) -> impl Ite
     (after..after.saturating_add(reach).min(log.row_count())).filter_map(|ix| event_in(log, ix))
 }
 
+/// Whether a prompt is recorded after the event at `seq`, among the rows loaded after it.
+pub(super) fn prompted_after(log: &SessionLog, seq: Seq) -> bool {
+    log.row_of(seq).is_some()
+        && events_after(log, seq, usize::MAX).any(|event| matches!(event.body, EventBody::UserPrompt { .. }))
+}
+
 /// The events before the one at `seq`, nearest first, as far as `reach` rows back.
 pub(super) fn events_before(log: &SessionLog, seq: Seq, reach: usize) -> impl Iterator<Item = &SessionEvent> {
     let row = log.row_of(seq).unwrap_or(0);
