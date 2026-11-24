@@ -115,8 +115,10 @@ impl Hub {
                     if repository.as_ref().is_some_and(|repository| watch.snapshot.repository != *repository) {
                         return;
                     }
-                    let ours: Vec<_> =
-                        affected.iter().copied().filter(|number| watch.snapshot.get(*number).is_some()).collect();
+                    // Those it watches, which are those it was asked for while it has read none, as after an update
+                    // emptied what an older hub kept.
+                    let watched = watch.numbers();
+                    let ours: Vec<_> = affected.iter().copied().filter(|number| watched.contains(number)).collect();
                     if !affected.is_empty() && ours.is_empty() {
                         return;
                     }
