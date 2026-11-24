@@ -38,10 +38,10 @@ impl Transcript {
         }
         let open = |transcript: &Self| -> Vec<Seq> {
             let m = transcript.model.borrow();
-            transcript.log.open_approvals(m.approvals.as_ref()).iter().map(|e| e.seq).collect()
+            transcript.log.open_approvals(&m.approvals).iter().map(|e| e.seq).collect()
         };
         let before = open(self);
-        self.session.waiting_on(recorded.as_ref());
+        self.session.waiting_on(&recorded);
         self.model.borrow_mut().approvals = recorded;
         let after = open(self);
         if before == after {
@@ -94,7 +94,7 @@ impl Transcript {
     fn waiting_to_be_asked(&self) -> Vec<Waiting> {
         let m = self.model.borrow();
         self.log
-            .open_approvals(m.approvals.as_ref())
+            .open_approvals(&m.approvals)
             .into_iter()
             .filter_map(|event| {
                 let EventBody::ApprovalRequested { approval_id, .. } = &event.body else { return None };
@@ -109,7 +109,7 @@ impl Transcript {
     pub(crate) fn answer_plan(&mut self, approval_id: ApprovalId, approve: bool, cx: &mut Context<Self>) {
         let decision = {
             let m = self.model.borrow();
-            let open = self.log.open_approvals(m.approvals.as_ref());
+            let open = self.log.open_approvals(&m.approvals);
             let asked = open.iter().find(
                 |event| matches!(&event.body, EventBody::ApprovalRequested { approval_id: id, .. } if *id == approval_id),
             );

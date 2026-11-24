@@ -32,8 +32,7 @@ pub(crate) struct Model {
     /// The failed request whose card offers Retry, as [`crate::rows::retry_at`] says, as of the last look.
     pub retry_at: Option<Seq>,
     /// The approvals the session's record says its agent is waiting on, which a plan's card and the panel follow.
-    /// None from a hub that doesn't say, whose are found among what's loaded.
-    pub approvals: Option<RecordedApprovals>,
+    pub approvals: RecordedApprovals,
     /// Each subagent's record, as the hub keeps them. None from a hub that doesn't.
     pub subagents: SubagentRecords,
     /// The `seq` of the event each subagent's call was drawn in, by that call, so the row is measured again when its
@@ -78,7 +77,7 @@ impl Model {
             pictures: HashMap::new(),
             at_work,
             retry_at: None,
-            approvals: None,
+            approvals: RecordedApprovals::default(),
             subagents: SubagentRecords::default(),
             subagent_rows: RefCell::default(),
             proposals: HashMap::new(),

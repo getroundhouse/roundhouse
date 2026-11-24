@@ -50,7 +50,7 @@ impl OpenSession {
         let mut log = SessionLog::new(Place::default());
         // What waits is asked about wherever it was asked, from the start. A subagent's view asks nothing.
         if !matches!(view, View::Subagent(_)) {
-            log.waiting_on(RecordedApprovals::of(session).as_ref());
+            log.waiting_on(&RecordedApprovals::of(session));
         }
         let source = SessionSource {
             session_id: session.id.clone(),
@@ -113,7 +113,7 @@ impl OpenSession {
     }
 
     /// Fetches each request `recorded` says is waiting that isn't loaded, as [`SessionLog::waiting_on`] says.
-    pub fn waiting_on(&self, recorded: Option<&RecordedApprovals>) {
+    pub fn waiting_on(&self, recorded: &RecordedApprovals) {
         self.follow.quietly(|log| Arc::make_mut(log).waiting_on(recorded));
         self.follow.wake();
     }

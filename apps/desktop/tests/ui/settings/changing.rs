@@ -3,7 +3,6 @@
 use crate::menus::{SETTINGS, choose};
 use crate::support;
 use crate::support::{FakeHub, Gate, Stack, Ui, labelled};
-use client_core::fake_hub::World;
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 
 use super::made_up::in_a_workspace;
@@ -263,17 +262,4 @@ fn each_switch_for_the_hubs_own_settings_changes_it_and_shows_what_the_hub_says_
     stack.client().hub_configure(change).unwrap();
 
     ui.wait("Keep awake to show what another client chose", |ui| keep_awake_switch(ui) == (true, true));
-}
-
-/// A hub from before hubs kept settings sends none, which a fake hub can be.
-#[gpui_kit::test]
-fn the_switch_cant_be_flipped_with_a_hub_from_before_it_kept_settings(cx: &mut TestAppContext) {
-    let mut older = World::default();
-    older.keeps_no_settings = true;
-    let fake = FakeHub::holding(older);
-    let mut ui = Ui::open_on(cx, &fake);
-    open_settings(&mut ui);
-
-    assert_eq!(keep_awake_switch(&mut ui), (false, false), "an older hub doesn't keep the computer awake at all");
-    assert_eq!(switch(&mut ui, SKIP_SAFETY_CHECKS), (false, false), "nor allow a tool's use itself");
 }

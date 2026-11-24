@@ -40,7 +40,7 @@ fn a_chat_opened_while_a_request_from_long_before_waits_fetches_that_request() {
     let feed = RecordsFeed::start(&client);
     let open = OpenSession::start(&client, &feed, &session, View::Own);
 
-    let asked = || open.read(|log| log.open_approvals(recorded.as_ref()).iter().map(|e| e.seq).collect::<Vec<_>>());
+    let asked = || open.read(|log| log.open_approvals(&recorded).iter().map(|e| e.seq).collect::<Vec<_>>());
     until("the request is fetched", || asked() == [ASKED_AT]);
     let read = heard
         .try_iter()

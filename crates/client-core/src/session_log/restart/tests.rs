@@ -26,7 +26,7 @@ fn notes(log: &SessionLog, recorded: &RecordedApprovals) -> Vec<String> {
         let EventBody::ApprovalRequested { request, .. } = &event.body else { panic!("only requests are open") };
         request.why.clone().unwrap_or_default()
     };
-    log.open_approvals(Some(recorded)).iter().map(note).collect()
+    log.open_approvals(recorded).iter().map(note).collect()
 }
 
 /// A request waiting that no page holds, fetched on its own, is shown until it comes again, then as it comes.
@@ -34,7 +34,7 @@ fn notes(log: &SessionLog, recorded: &RecordedApprovals) -> Vec<String> {
 fn a_request_fetched_on_its_own_is_fetched_again_and_shown_until_it_comes() {
     let seq = Seq::new(5);
     let mut log = SessionLog::new(Place::new(600));
-    log.waiting_on(Some(&waiting(seq)));
+    log.waiting_on(&waiting(seq));
     assert_eq!(log.requests_to_fetch(), vec![seq]);
     log.install_request(seq, Some(asked(seq, "before")));
 
@@ -52,7 +52,7 @@ fn a_request_fetched_on_its_own_is_fetched_again_and_shown_until_it_comes() {
 fn a_request_that_fails_to_come_again_is_fetched_again_on_retrying() {
     let seq = Seq::new(5);
     let mut log = SessionLog::new(Place::new(600));
-    log.waiting_on(Some(&waiting(seq)));
+    log.waiting_on(&waiting(seq));
     log.requests_to_fetch();
     log.install_request(seq, Some(asked(seq, "before")));
     log.read_again();
@@ -70,7 +70,7 @@ fn a_request_that_fails_to_come_again_is_fetched_again_on_retrying() {
 fn a_request_whose_page_is_let_go_of_before_it_came_again_is_fetched_again() {
     let last = 15_000;
     let mut log = SessionLog::new(Place::new(last));
-    log.waiting_on(Some(&waiting(Seq::FIRST)));
+    log.waiting_on(&waiting(Seq::FIRST));
     let mut first = page(1..251);
     first[0] = asked(Seq::FIRST, "before");
     log.focus_on(0..1, Some(0));

@@ -61,8 +61,8 @@ impl Source for WorkspacesSource {
     type Held = Wanted;
 
     /// Each workspace's list comes before the reply to the request that follows it, so once it's answered, a
-    /// workspace followed with none is one this hub sends no level of, as a hub from before workspaces had one, and
-    /// what was held of it, from the connection before, is let go of.
+    /// workspace followed with none is one the hub refused, such as one it no longer has, and what was held of it, from
+    /// the connection before, is let go of.
     fn resume(&mut self, client: &Client, held: &Mutex<Wanted>) -> Result<Subscription> {
         self.changing = None;
         let wanted = held.lock().follows();

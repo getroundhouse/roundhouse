@@ -43,7 +43,7 @@ pub(super) fn page(hub: &OfHub) -> Page {
 }
 
 /// A switch for one of the hub's own settings: on as `says` reads them, and flipped by asking the hub for the change
-/// `to` makes. It shows off and can't be flipped while there's no hub to ask, or with a hub that doesn't say.
+/// `to` makes. It shows off and can't be flipped while there's no hub to ask, or until the hub has said.
 fn hub_switch(hub: &OfHub, says: fn(&HubSettings) -> Option<bool>, to: fn(bool) -> HubSettingsChange) -> Control {
     let client = hub.asking.as_ref().map(|asking| asking.client.clone());
     let is_on = client.as_ref().and(hub.records.hub_settings()).and_then(says);

@@ -9,7 +9,7 @@ use look::Region;
 use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::worlds::{accounts, automatic, conversation, none_found, own_hub, reserves};
+use super::worlds::{accounts, automatic, conversation, none_found, reserves};
 use client_core::fake_hub::{LoginSupport, World};
 
 /// What puts the cursor in Settings' search.
@@ -241,21 +241,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::WaitFor(RETRY),
         ],
     },
-    Screen {
-        name: "settings-older-hub",
-        spec: "settings.md",
-        world: Some(settings_unkept),
-        frame: Frame::Layout,
-        steps: &[Step::Select(FOCUS), Step::OpenSettings],
-    },
 ];
-
-/// An older hub, from before hubs kept settings.
-fn settings_unkept() -> World {
-    let mut world = own_hub();
-    world.keeps_no_settings = true;
-    world
-}
 
 fn default_ended() -> World {
     let mut world = accounts();

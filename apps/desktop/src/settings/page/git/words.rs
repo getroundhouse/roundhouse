@@ -20,9 +20,6 @@ pub(super) fn added_says() -> String {
     )
 }
 
-/// What Added says of itself under its heading on a hub that keeps no GitHub accounts, which uses no default.
-pub(super) const ADDED_SAYS_OLDER: &str = "GitHub accounts you've given the hub.";
-
 /// What Added says while the hub holds no GitHub account. *Unconfirmed.*
 pub(super) fn none_added() -> String {
     format!(
@@ -31,10 +28,6 @@ pub(super) fn none_added() -> String {
         crate::names::MACHINE,
     )
 }
-
-/// What a hub that keeps no GitHub accounts is said to be, in place of both lists.
-pub(super) const OLDER_HUB: &str = "This hub is from before hubs kept GitHub accounts, so agents use each machine's own \
-                                    login, and it can't connect an account until it's updated.";
 
 /// What's said in place of a row's line when the page was to change something with no hub to ask.
 pub(super) const NO_HUB: &str = "There's no hub to ask.";

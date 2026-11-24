@@ -15,19 +15,19 @@ use super::revisions::MADE;
 use super::serve::{Answer, Outcome, read_only};
 use super::world::World;
 
-/// Who `gh` on the hub's machine is, as the world says, or that the hub is too old to say.
+/// Who `gh` on the hub's machine is, as the world says, or that the hub couldn't say.
 pub(super) fn gh_login(world: &World) -> Answer {
     match &world.hub_gh_login {
         Some(login) => Ok(Outcome::reply(ClientResponse::GhLogin(login.clone()))),
-        None => Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't read gh's login")),
+        None => Err(ApiError::new(ErrorCode::Internal, "a fake hub's world says nothing of gh's login")),
     }
 }
 
-/// Who `gh` and the SSH key on the hub's machine are, as the world says, or refused, as a hub from before it read them.
+/// Who `gh` and the SSH key on the hub's machine are, as the world says, or that the hub couldn't say.
 pub(super) fn machine_logins(world: &World) -> Answer {
     match &world.machine_logins {
         Some(logins) => Ok(Outcome::reply(ClientResponse::MachineLogins(logins.clone()))),
-        None => Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't read its machine's logins")),
+        None => Err(ApiError::new(ErrorCode::Internal, "a fake hub's world says nothing of its machine's logins")),
     }
 }
 

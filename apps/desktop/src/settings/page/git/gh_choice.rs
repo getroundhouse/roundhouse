@@ -13,7 +13,7 @@ use super::words;
 #[derive(Default)]
 pub(super) struct ChoosingPanel {
     /// Who `gh` on the hub's machine is logged in as, once the hub has said, and `None` until then, or when the hub
-    /// couldn't say, as one from before it read `gh` can't.
+    /// couldn't say.
     pub(super) gh: Option<GhLogin>,
     /// What the hub said when it last refused to use `gh`'s login, for the person to read.
     pub(super) refused: Option<String>,

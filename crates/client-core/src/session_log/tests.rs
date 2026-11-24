@@ -1,7 +1,7 @@
 use super::pages::{PAGE_EVENTS, page_range};
 use super::*;
 use protocol::event::NoticeLevel;
-use protocol::fixtures::{allow_once, approval_request, asking, decided, event, to_run};
+use protocol::fixtures::event;
 use protocol::model::Place;
 use protocol::prompt::Prompt;
 use protocol::prompt::PromptFrom;
@@ -160,33 +160,6 @@ fn live_events_grow_the_log_and_replays_do_not() {
     log.apply_event(notice(Seq::new(3)));
     log.apply_event(notice(Seq::new(3)));
     assert_eq!(log.row_count(), 3);
-}
-
-#[test]
-fn open_approvals_are_those_not_yet_answered() {
-    let requested = |id: &str| EventBody::from(approval_request(id, to_run("ls")));
-    let mut log = SessionLog::new(Place::default());
-    log.apply_event(event(Seq::new(1), requested("a")));
-    log.apply_event(event(Seq::new(2), requested("b")));
-    log.apply_event(event(Seq::new(3), decided("a", allow_once())));
-    let open = log.open_approvals(None);
-    assert_eq!(open.len(), 1);
-    assert_eq!(open[0].seq, Seq::new(2));
-}
-
-#[test]
-fn a_request_with_events_after_it_that_arent_loaded_isnt_open() {
-    let requested = EventBody::from(approval_request("a", asking(Vec::new())));
-    let mut log = SessionLog::new(Place::default());
-    log.apply_event(event(Seq::new(1), requested));
-
-    // Its answer could be the event that isn't here.
-    log.apply_event(event(
-        Seq::new(3),
-        EventBody::Notice { level: NoticeLevel::Info, message: "later".into(), subagent: None },
-    ));
-
-    assert!(log.open_approvals(None).is_empty());
 }
 
 #[test]

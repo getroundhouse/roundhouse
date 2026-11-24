@@ -17,7 +17,7 @@ impl World {
             sessions: in_order(&self.sessions, Session::oldest_first),
             comments: in_order(self.comments.values().flatten(), DiffComment::oldest_first),
             // As a hub starts out.
-            hub_settings: (!self.keeps_no_settings).then(|| HubSettings {
+            hub_settings: Some(HubSettings {
                 account_defaults: (self.logins == LoginSupport::Defaults).then(|| self.account_defaults.clone()),
                 keep_awake: true,
                 allow_asked_in_full_access: Some(false),
@@ -25,7 +25,7 @@ impl World {
                 rev: MADE,
             }),
             accounts: self.accounts.clone(),
-            // As from a hub that doesn't keep one, since its hub refuses to.
+            // None kept, since the world's hub keeps nothing it's given.
             new_workspace_draft: None,
             github_accounts: self.github_accounts.clone(),
             github_sign_ins: self.github_sign_ins.clone(),

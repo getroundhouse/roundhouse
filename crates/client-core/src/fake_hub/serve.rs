@@ -30,6 +30,7 @@ use super::world::{NOW_MS, World};
 pub fn serve(socket: &Path, world: World) {
     let listener = UnixListener::bind(socket).unwrap();
     let mut world = world;
+    world.record_open_approvals();
     world.listed_at = world.rev();
     let world = Arc::new(world);
     std::thread::spawn(move || {

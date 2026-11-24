@@ -38,7 +38,8 @@ fn a_recorded_block_is_known_by_its_place_in_its_message() {
 #[test]
 fn a_question_is_drawn_only_once_it_s_no_longer_waiting() {
     let question = asked_a_question("q");
-    let m = Model::default();
+    let open = vec![OpenApproval { seq: Seq::new(1), approval_id: "q".into() }];
+    let m = Model { approvals: RecordedApprovals { open, through: Seq::new(1) }, ..Model::default() };
     let waiting = log([event(Seq::new(1), question.clone())]);
     assert!(Around::read(&waiting, &m, Seq::new(1), &question).asked.is_none(), "it's in the composer's place");
 
@@ -173,13 +174,10 @@ fn an_approvals_card_is_open_as_the_record_says_whatever_is_loaded_after_it() {
         OpenApproval { seq: Seq::new(1), approval_id: "a".into() },
         OpenApproval { seq: Seq::new(3), approval_id: "b".into() },
     ];
-    let recorded = Model { approvals: Some(RecordedApprovals { open, through: Seq::new(3) }), ..Model::default() };
+    let recorded = |open| Model { approvals: RecordedApprovals { open, through: Seq::new(3) }, ..Model::default() };
 
-    assert!(
-        !Around::read(&with_a_gap, &Model::default(), Seq::new(1), &request).approval_open,
-        "from a hub that doesn't say"
-    );
-    assert!(Around::read(&with_a_gap, &recorded, Seq::new(1), &request).approval_open);
+    assert!(!Around::read(&with_a_gap, &recorded(Vec::new()), Seq::new(1), &request).approval_open, "none open");
+    assert!(Around::read(&with_a_gap, &recorded(open), Seq::new(1), &request).approval_open);
 }
 
 #[test]

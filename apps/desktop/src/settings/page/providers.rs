@@ -68,7 +68,7 @@ struct MachineRead {
 enum Said {
     Asking,
     Read(MachineLogins),
-    /// The hub couldn't say, as one from before it read them can't, or there's no hub to ask.
+    /// The hub couldn't say, or there's no hub to ask.
     Unsaid,
 }
 
@@ -88,7 +88,7 @@ impl MachineRead {
 }
 
 /// Every provider the hub's settings name: those left to their machines first, this Mac first among them, then those
-/// Roundhouse sets up GitHub on, in the order the hub has them. None from a hub that doesn't say.
+/// Roundhouse sets up GitHub on, in the order the hub has them. None until the hub's settings arrive.
 fn providers(records: &Snapshot, machine: &Said) -> Vec<Section> {
     let Some(github) = records.hub_settings().and_then(|settings| settings.github.as_ref()) else { return Vec::new() };
     let hub = hub_reads_as(records);

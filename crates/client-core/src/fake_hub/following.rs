@@ -119,11 +119,8 @@ fn hub(world: &World, subscription_id: u64) -> Vec<HubFrame> {
 }
 
 /// The workspace `id`'s own observations, with what GitHub says of its pull request, then what the feed says of its
-/// level. Nothing, where the world says its hub lists no workspace's level.
+/// level.
 fn workspace(world: &World, id: &WorkspaceId, subscription_id: u64) -> Vec<HubFrame> {
-    if world.lists_no_workspace_level {
-        return Vec::new();
-    }
     let level = Level::Workspace { id: id.clone() };
     let mut observations = world.observations_at(&level);
     observations.extend(github::workspace_observed(world, id));

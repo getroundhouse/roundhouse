@@ -22,8 +22,8 @@ impl Asks {
     /// What the request `body` asks in the composer's place, of a run that claims `claims`, or `None` for a plan,
     /// whose card is in the transcript with the plan, for what this build can't ask, and for any other event. A
     /// tool's use can be denied in words only where the run takes them. Claims that aren't known at all, neither the
-    /// run's nor its kind's, come from a hub from before kinds said their claims, which runs only Claude, whose runs
-    /// take words, so they're taken to.
+    /// run's nor its kind's, as of a kind newer than this build, or before the hub has described its agents, are
+    /// taken to take words, as Claude's runs do.
     pub(crate) fn of(body: &EventBody, claims: Option<&Capabilities>) -> Option<Self> {
         let approval = Approval::of(body)?.into_owned();
         if approval.questions().is_some() {
@@ -149,9 +149,9 @@ mod tests {
     use protocol::model::{AnswerSoFar, SoFar, UseChoice};
 
     #[test]
-    fn a_call_only_offers_a_written_denial_when_the_run_claims_it_or_on_a_hub_from_before_claims() {
+    fn a_call_only_offers_a_written_denial_when_the_run_claims_it_or_nothing_says() {
         let body: EventBody = approval_request("q", to_run("ls")).into();
-        assert!(Asks::of(&body, None).unwrap().can_type(0), "a run from before claims takes words");
+        assert!(Asks::of(&body, None).unwrap().can_type(0), "a run nothing says the claims of takes words");
         let mut claims = Capabilities::default();
         claims.approvals.requests = Some(Requests { parts: Vec::new(), kept: Vec::new() });
         assert!(!Asks::of(&body, Some(&claims)).unwrap().can_type(0));
