@@ -1,7 +1,7 @@
 //! Fetches and follows the hub's history for the view an open session requests.
 
 use super::super::follow::{Reach, Source};
-use super::super::{Client, ClientError, Result, Subscription, SubscriptionItem};
+use super::super::{Client, Result, Subscription, SubscriptionItem};
 use super::View;
 use crate::records::HubRecords;
 use crate::session_log::{Position, SessionLog};
@@ -95,7 +95,7 @@ impl Source for SessionSource {
                 false
             }
             SubscriptionItem::Event(event) => {
-                log.apply_event(placed(*event)?);
+                log.apply_event(*event);
                 true
             }
             SubscriptionItem::Tail(tail) => {
@@ -208,21 +208,11 @@ pub(super) fn read_range(
         let rows = from.row().unwrap_or(0)..range.end.row().unwrap_or(0);
         let limit = u32::try_from(rows.len()).unwrap_or(u32::MAX);
         let page = client.session_read_places(session_id, view.subagent(), from.place(), limit)?.0;
-        let page = page.into_iter().map(placed).collect::<Result<Vec<_>>>()?;
         let Some(last) = page.last().map(Position::of) else { break };
         events.extend(page);
         from = last.next();
     }
     Ok(events)
-}
-
-/// `event`, which the hub sent with its place among the events from its agent or subagent, as it records every event
-/// with one. A log is held by place, so one with none is refused, rather than left out without a word.
-fn placed(event: SessionEvent) -> Result<SessionEvent> {
-    if event.place == Place::default() {
-        return Err(ClientError::Unexpected(format!("event {} of {} has no place", event.seq, event.session_id)));
-    }
-    Ok(event)
 }
 
 /// Lets go of the session's own records once nothing it follows of the session is left, as a view that closes its chat

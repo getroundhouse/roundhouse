@@ -8,7 +8,7 @@ use protocol::model::{AccountSource, OpenApproval, PromptLine, Seq, Session, Ses
 
 fn session(more: &str) -> Session {
     let notice = format!(
-        r#"{{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{{"unasked":"everything","beyond":"asks"}},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2{more}}}"#
+        r#"{{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{{"unasked":"everything","beyond":"asks"}},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2,"rev":3{more}}}"#
     );
     let notice: HubNotice = frame::decode(notice.as_bytes()).unwrap();
     let HubNotice::Session(session) = notice else { panic!("{notice:?}") };
@@ -58,7 +58,8 @@ fn a_chats_account_source_keeps_its_form_and_one_not_yet_launched_says_none() {
 #[test]
 fn which_way_a_prompt_was_settled_keeps_its_form() {
     let how = |settled: &str| {
-        let line = format!(r#"{{"seq":7,"text":"Fix it","files":0,"settled":{{"seq":9,"place":6{settled}}}}}"#);
+        let line =
+            format!(r#"{{"seq":7,"place":3,"text":"Fix it","files":0,"settled":{{"seq":9,"place":6{settled}}}}}"#);
         serde_json::from_str::<PromptLine>(&line).unwrap().settled().unwrap().how
     };
 
@@ -71,7 +72,7 @@ fn which_way_a_prompt_was_settled_keeps_its_form() {
 
 #[test]
 fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
-    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
+    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"rev":3}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();
 
@@ -82,7 +83,7 @@ fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
 
 #[test]
 fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
-    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"running","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
+    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"running","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"rev":3}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();
 
@@ -94,7 +95,7 @@ fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
 /// as a hub's stored rows from before held it.
 #[test]
 fn a_session_that_says_how_full_the_context_is_still_reads() {
-    let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"context":{"used_tokens":5,"max_tokens":10,"model_tokens":20,"max_set_by":"settings","parts":[{"name":"Messages","tokens":5}]}}"#;
+    let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"rev":3,"context":{"used_tokens":5,"max_tokens":10,"model_tokens":20,"max_set_by":"settings","parts":[{"name":"Messages","tokens":5}]}}"#;
 
     let HubNotice::Session(session) = frame::decode::<HubNotice>(said).unwrap() else { panic!() };
 
@@ -129,7 +130,7 @@ fn a_session_always_names_its_model_mode_and_effort() {
     assert_eq!((named.model.as_str(), named.effort.clone()), ("opus", protocol::capability::settings::Effort::High));
     assert_eq!(named.mode, protocol::fixtures::full_access());
 
-    let line = r#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2}"#;
+    let line = r#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2,"rev":3}"#;
     for (named, left) in [
         (r#""model":"opus","#, ""),
         (r#""mode":{"unasked":"everything","beyond":"asks"},"#, ""),
@@ -148,7 +149,7 @@ fn a_session_always_names_its_model_mode_and_effort() {
 #[test]
 fn a_session_in_a_mode_this_build_doesnt_know_still_reads() {
     let newer = session("").mode;
-    let line = r#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"what_it_learned","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2}"#;
+    let line = r#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"what_it_learned","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2,"rev":3}"#;
     let HubNotice::Session(session) = frame::decode(line.as_bytes()).unwrap() else { panic!("not a session") };
 
     assert!(!session.mode.is_known());

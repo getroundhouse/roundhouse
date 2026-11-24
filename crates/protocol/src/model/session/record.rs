@@ -255,7 +255,6 @@ pub struct Session {
     /// say.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_opened: Option<bool>,
-    #[serde(default)]
     pub rev: Rev,
     #[serde(default)]
     pub title_source: TitleSource,

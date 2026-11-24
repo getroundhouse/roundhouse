@@ -1,8 +1,12 @@
 //! How what names a subagent is written, which stays as it was stored, whatever the field is called in Rust.
 
 use protocol::event::EventBody;
-use protocol::model::{RecordKey, SessionId, Subagent, SubagentId};
+use protocol::fixtures;
+use protocol::frame;
+use protocol::model::{RecordKey, Rev, SessionId, Subagent, SubagentId};
 use protocol::tail::{StreamDelta, Tail};
+
+use crate::keeps_its_form;
 
 /// Each of the agent's events that can be a subagent's names it under the name it was stored with, from when a
 /// subagent was named by the call that started it, so the logs hubs have kept still say whose each event is.
@@ -69,17 +73,20 @@ fn a_subagent_starts_by_its_own_id_or_by_its_call_as_it_was_stored() {
     }
 }
 
-/// A subagent's record says its ID beside its call, and one from a hub from before subagents had IDs of their own says
-/// only its call, which is then its ID.
+/// A subagent's record says its ID beside the call that started it, which can be another, and its revision. One with
+/// either left out isn't a record, so it doesn't read.
 #[test]
-fn a_subagents_record_names_it_by_its_id_or_by_its_call() {
-    let sent = |id: &str| format!(r#"{{"session_id":"s",{id}"call":"toolu_1","status":"working","started_at_ms":1}}"#);
-    for (record, id) in [(sent(r#""id":"task_1","#), "task_1"), (sent(""), "toolu_1")] {
-        let subagent: Subagent = serde_json::from_str(&record).unwrap();
+fn a_subagents_record_keeps_its_form_and_one_without_its_id_or_revision_doesnt_read() {
+    let record = Subagent { id: "task_1".into(), rev: Rev::new(2), ..fixtures::subagent("toolu_1") };
+    let line = concat!(
+        r#"{"session_id":"s","id":"task_1","call":"toolu_1","kind":null,"description":null,"prompt":null,"#,
+        r#""in_background":false,"model":null,"status":"working","started_at_ms":0,"ended_at_ms":null,"#,
+        r#""context_tokens":null,"calls":0,"report":null,"rev":2}"#,
+    );
 
-        assert_eq!(subagent.id(), SubagentId::from(id), "{record}");
-        let written = serde_json::to_value(&subagent).unwrap();
-        assert_eq!(written.get("id").and_then(|id| id.as_str()), subagent.id.as_ref().map(SubagentId::as_str));
+    keeps_its_form(&record, line);
+    for left_out in [r#""id":"task_1","#, r#","rev":2"#] {
+        assert!(frame::decode::<Subagent>(line.replace(left_out, "").as_bytes()).is_err(), "without {left_out}");
     }
 }
 
@@ -87,7 +94,9 @@ fn a_subagents_record_names_it_by_its_id_or_by_its_call() {
 #[test]
 fn a_request_names_the_subagent_that_asks() {
     let asked = |by: &str| {
-        format!(r#"{{"type":"approval_requested","approval_id":"a",{by}"tool_use_id":null,"description":null}}"#)
+        format!(
+            r#"{{"type":"approval_requested","approval_id":"a","request":{{"asks":{{"asks":"call","call":{{"kind":"command","command":"ls"}}}}}},{by}"tool_use_id":null,"description":null}}"#
+        )
     };
     for (stored, by) in [(asked(r#""asked_by":"task_1","#), Some("task_1")), (asked(""), None)] {
         let event: EventBody = serde_json::from_str(&stored).unwrap();

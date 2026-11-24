@@ -8,11 +8,11 @@ use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFr
 use protocol::event::{EventBody, NoticeLevel, SessionEvent};
 use protocol::model::{Place, Seq, Session, SubagentId};
 
-use super::super::{FollowError, OpenSession, View};
+use super::super::{OpenSession, View};
 use super::follows_session;
-use crate::session_log::{Row, SessionLog};
+use crate::session_log::Row;
 use crate::stand_in_hub::{Does, StandIn, subscribed};
-use crate::{Client, ClientError, RecordsFeed};
+use crate::{Client, RecordsFeed};
 
 /// The session's events: the agent's own at the odd `seq`s, and a subagent's among them at the even ones, so no event
 /// but the first has its `seq` as its place. Each says its `seq` and the build of the hub that served it, as a
@@ -172,64 +172,4 @@ fn an_open_view_reads_its_events_again_as_far_as_the_new_hub_has_them() {
     open.want(300..301, Some(300));
 
     wait_until(&open, row_300, &Some("601 from 2".into()));
-}
-
-/// No hub sends an event without its place, since it places each as it records it, so one that came would have no row
-/// to go in. It's refused with an error that says so, whether it comes live or in a page, rather than left out.
-#[test]
-fn an_event_with_no_place_is_refused_live_or_in_a_page() {
-    for live in [true, false] {
-        let dir = tempfile::tempdir().unwrap();
-        let socket = dir.path().join("hub.sock");
-        let unplaced = || SessionEvent { place: Place::default(), ..recorded(1, "1") };
-        StandIn::of_build("1").listen(&socket, move |request| {
-            let placed =
-                |events| ClientResponse::PlacedEvents(log::PlacedEvents { events, last_place: Place::new(600) });
-            #[expect(clippy::wildcard_enum_match_arm, reason = "a hub refuses every request it doesn't know")]
-            match request {
-                ClientRequest::Subscribe(subscribe) if subscribe.start.is_empty() => Does::Nothing,
-                ClientRequest::Subscribe(subscribe) => subscribed(&subscribe, |subscription_id, _| {
-                    live.then(|| HubFrame::Event { subscription_id, event: unplaced() }).into_iter().collect()
-                }),
-                ClientRequest::SessionReadPlaces(read) => {
-                    let page = !live && read.limit > 1;
-                    let events = if page { vec![unplaced()] } else { Vec::new() };
-                    Does::Answers(Box::new(ReplyOutcome::Response(placed(events))))
-                }
-                // Lists, so the only error is the event's.
-                ClientRequest::SessionPromptList(_) => {
-                    let none = ClientResponse::Prompts(log::Prompts { prompts: Vec::new() });
-                    Does::Answers(Box::new(ReplyOutcome::Response(none)))
-                }
-                ClientRequest::SessionCompactionList(_) => {
-                    let none = ClientResponse::Compactions(log::Compactions { compactions: Vec::new() });
-                    Does::Answers(Box::new(ReplyOutcome::Response(none)))
-                }
-                _ => {
-                    let refused = ApiError::new(ErrorCode::Unsupported, "this hub doesn't know that request");
-                    Does::Answers(Box::new(ReplyOutcome::Error(refused)))
-                }
-            }
-        });
-        let client = Client::connect(&socket, "test").unwrap();
-        let feed = RecordsFeed::start(&client);
-        let open = OpenSession::start(&client, &feed, &session(), View::Own);
-        wait_until(&open, |open| open.read(SessionLog::row_count), &600);
-
-        open.want(0..1, Some(0));
-
-        let mut errors = Vec::new();
-        waiting::thread::until(Duration::from_secs(10), "it never refused the event", || {
-            errors.extend(open.take_errors());
-            !errors.is_empty()
-        });
-
-        let refused = |cause: &ClientError| matches!(cause, ClientError::Unexpected(_));
-        match &errors[..] {
-            [FollowError::Following(cause)] if live => assert!(refused(cause), "{cause:?}"),
-            [FollowError::Asked(cause)] if !live => assert!(refused(cause), "{cause:?}"),
-            other => panic!("live: {live}, {other:?}"),
-        }
-        assert_eq!(open.read(SessionLog::loaded_events), 0, "and isn't held");
-    }
 }

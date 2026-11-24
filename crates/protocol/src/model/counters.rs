@@ -31,8 +31,7 @@ macro_rules! counters {
 
 counters!(
     /// When a record last changed, from one counter per hub, so a client can tell which of two copies is
-    /// newer. A hub that doesn't keep revisions sends none, which reads as 0, and one that does never
-    /// uses 0.
+    /// newer.
     #[derive(Default)]
     Rev,
     /// One launch of an agent. The hub picks it before the launch, and it never repeats, even across
@@ -47,8 +46,8 @@ counters!(
     #[derive(Default)]
     Seq,
     /// An event's place among the events from the same agent or subagent in its session, so a client can follow one of
-    /// them apart from the rest. The first is 1, and there are no gaps. A hub that doesn't record it sends none, which
-    /// reads as 0.
+    /// them apart from the rest. The first is 1, and there are no gaps, so 0 is before the first, where no event is, as
+    /// it is of a `Seq`.
     #[derive(Default)]
     Place,
 );

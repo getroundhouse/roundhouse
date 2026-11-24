@@ -235,7 +235,7 @@ impl World {
     pub(super) fn subagent_named(&self, id: &SessionId, named: Option<&SubagentId>) -> Option<SubagentId> {
         let named = named?;
         let found = self.subagents.get(id).and_then(|subagents| Subagent::named(subagents, named));
-        Some(found.map_or_else(|| named.clone(), Subagent::id))
+        Some(found.map_or_else(|| named.clone(), |found| found.id.clone()))
     }
 }
 

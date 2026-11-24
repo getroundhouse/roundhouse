@@ -219,7 +219,7 @@ pub fn subagent_started(call: &str, in_background: bool) -> EventBody {
 pub fn subagent(call: &str) -> Subagent {
     Subagent {
         session_id: "s".into(),
-        id: Some(call.into()),
+        id: call.into(),
         call: call.into(),
         kind: None,
         description: None,

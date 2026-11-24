@@ -178,7 +178,7 @@ fn saying(event: &SessionEvent) -> Option<Saying<'_>> {
 /// Another call can't start one that's already a subagent's.
 fn started<'a>(held: &'a mut Vec<Subagent>, event: &SessionEvent, start: Start<'_>) -> Option<&'a mut Subagent> {
     let Start { subagent, call, kind, description, prompt, in_background } = start;
-    if let Some(again) = held.iter().position(|it| it.id() == subagent) {
+    if let Some(again) = held.iter().position(|it| it.id == subagent) {
         let again = &mut held[again];
         if again.status == SubagentStatus::Working {
             return None;
@@ -193,7 +193,7 @@ fn started<'a>(held: &'a mut Vec<Subagent>, event: &SessionEvent, start: Start<'
     }
     held.push(Subagent {
         session_id: event.session_id.clone(),
-        id: Some(subagent),
+        id: subagent,
         call: call.clone(),
         kind: kind.clone(),
         description: description.clone(),
@@ -222,7 +222,7 @@ fn worked<'a>(
     model: Option<&String>,
     wrote: bool,
 ) -> Option<&'a mut Subagent> {
-    let it = held.iter_mut().find(|it| it.id() == *subagent)?;
+    let it = held.iter_mut().find(|it| it.id == *subagent)?;
     let mut changed = false;
     if let Some(model) = model
         && let Ok(model) = ModelName::try_from(model.clone())
@@ -246,5 +246,5 @@ fn worked<'a>(
 
 /// The record of `subagent`, if it's working.
 fn working<'a>(held: &'a mut [Subagent], subagent: &SubagentId) -> Option<&'a mut Subagent> {
-    held.iter_mut().find(|it| it.id() == *subagent && it.status == SubagentStatus::Working)
+    held.iter_mut().find(|it| it.id == *subagent && it.status == SubagentStatus::Working)
 }

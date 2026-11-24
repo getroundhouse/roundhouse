@@ -8,10 +8,8 @@ use crate::model::{ModelName, Rev, SessionId, SubagentId, ToolUseId};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Subagent {
     pub session_id: SessionId,
-    /// Which subagent it is, as [`Subagent::id`] reads it. `None` from a hub from before subagents had IDs of their
-    /// own, which names each by its call.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<SubagentId>,
+    /// Which subagent it is, by the ID its agent gives it, which its events name.
+    pub id: SubagentId,
     /// The call that started it, which its row in the chat is drawn for.
     pub call: ToolUseId,
     /// Its kind of agent, such as `Explore`.
@@ -52,16 +50,10 @@ pub struct Subagent {
     /// What it reported, once it finished.
     #[serde(default)]
     pub report: Option<String>,
-    #[serde(default)]
     pub rev: Rev,
 }
 
 impl Subagent {
-    /// Which subagent it is: its ID, or its call from a hub from before subagents had IDs of their own.
-    pub fn id(&self) -> SubagentId {
-        self.id.clone().unwrap_or_else(|| SubagentId::of_call(&self.call))
-    }
-
     /// The one of `subagents` that `named` names: the one with that ID, or else the one the call it names started,
     /// since a client names a subagent by its call until it has the subagent's record, as a tab opened on one before
     /// its agent said it started does. A read, a subscription or a search names a subagent so, and the hub finds it as
@@ -70,7 +62,7 @@ impl Subagent {
     #[cfg(any(test, feature = "testing"))]
     pub fn named<'a>(subagents: &'a [Subagent], named: &SubagentId) -> Option<&'a Subagent> {
         let by_call = || subagents.iter().find(|subagent| SubagentId::of_call(&subagent.call) == *named);
-        subagents.iter().find(|subagent| subagent.id() == *named).or_else(by_call)
+        subagents.iter().find(|subagent| subagent.id == *named).or_else(by_call)
     }
 }
 

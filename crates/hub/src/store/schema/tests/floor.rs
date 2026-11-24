@@ -1,6 +1,8 @@
 //! The floor's database: one that 0.1.870 left, which this build migrates, and a new one, which starts from its schema.
 
-use protocol::model::Seq;
+use protocol::event::EventBody;
+use protocol::fixtures;
+use protocol::model::{Place, Rev, Seq};
 use rusqlite::types::Value;
 
 use super::super::*;
@@ -83,7 +85,21 @@ fn a_database_the_floors_release_left_migrates_with_what_it_holds() {
     assert_eq!(store.workspace_placement(&"w".into()).unwrap(), WorkspacePlacement::local_checkout("/src/rails"));
     let session = store.get_session(&"s".into()).unwrap().session;
     assert_eq!(session.title.map(|title| title.to_string()).as_deref(), Some("Tidy the parser"));
-    assert_eq!(store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, false).unwrap().len(), 2);
+    let events = store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, false).unwrap();
+    let places: Vec<Place> = events.iter().map(|event| event.place).collect();
+    assert_eq!(places, [Place::new(1), Place::new(2), Place::new(3)]);
+    let EventBody::ApprovalRequested { request, .. } = &events[2].body else { panic!("{:?}", events[2]) };
+    assert_eq!(request.asks, fixtures::to_run("cargo test"));
+    let subagents = store.list_session_records(&"s".into()).unwrap().subagents;
+    let named: Vec<_> =
+        subagents.iter().map(|subagent| (subagent.id.as_str(), subagent.call.as_str(), subagent.rev)).collect();
+    assert_eq!(named, [("task_1", "toolu_2", Rev::new(9))]);
+    let draft = store.new_workspace_draft().unwrap();
+    assert_eq!(
+        (draft.text.as_str(), draft.rev),
+        ("Fix the flaky test", Rev::new(3)),
+        "read, rather than taken for none"
+    );
     let records = store.list_records().unwrap();
     assert_eq!(records.accounts.len(), 1);
     assert!(records.github_accounts.is_empty(), "an account with no login goes, as a migration since the floor has it");

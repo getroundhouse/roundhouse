@@ -113,7 +113,8 @@ impl WorkspacePane {
         cx: &mut Context<Self>,
     ) {
         // One named by the call that started it is named as its record names it, once that's come.
-        let subagent = subagent_named(self.subagents_of(&session), &subagent).map_or(subagent, |named| named.id());
+        let subagent =
+            subagent_named(self.subagents_of(&session), &subagent).map_or(subagent, |named| named.id.clone());
         let tab = self.subagents.tab.as_ref();
         let showing = tab.is_some_and(|tab| tab.session == session && tab.subagent == subagent);
         if !showing && let Some(chat) = self.shown.session(&session).cloned() {
@@ -173,7 +174,7 @@ impl WorkspacePane {
         if let Some(tab) = &mut self.subagents.tab
             && let Some(named) = subagent_named(self.shown.all().subagents(&tab.session), &tab.subagent)
         {
-            tab.subagent = named.id();
+            tab.subagent = named.id.clone();
         }
     }
 

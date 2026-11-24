@@ -47,11 +47,6 @@ impl Request {
         self.suggested.iter().any(|suggested| same(&suggested))
     }
 
-    /// One that asks what this build doesn't know, and says nothing more.
-    pub fn unknown() -> Box<Request> {
-        Box::new(Request { asks: Asks::Unknown, suggested: Vec::new(), always: false, why: None })
-    }
-
     /// Where each question whose answer is a secret is among its questions, as
     /// [`Questions`](crate::capability::asking::Capability::Questions) says, which reaches the agent and nothing else.
     pub fn secret_questions(&self) -> impl Iterator<Item = usize> {

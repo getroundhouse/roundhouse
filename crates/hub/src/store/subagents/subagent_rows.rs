@@ -61,12 +61,12 @@ pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) ->
     let read = held.clone();
     let changed = Subagent::note(&mut held, event);
     for now in &changed {
-        match read.iter().find(|was| was.id() == now.id()) {
+        match read.iter().find(|was| was.id == now.id) {
             Some(was) => update(tx, was, now)?,
             None => insert(tx, now)?,
         }
     }
-    Ok(changed.iter().map(|subagent| subagent.id()).collect())
+    Ok(changed.iter().map(|subagent| subagent.id.clone()).collect())
 }
 
 /// The records in `session` that `touched` names.
@@ -101,7 +101,7 @@ fn insert(tx: &Connection, subagent: &Subagent) -> Result<(), StoreError> {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     tx.prepare_cached(sql)?.execute(params![
         subagent.session_id.as_str(),
-        subagent.id().as_str(),
+        subagent.id.as_str(),
         subagent.call.as_str(),
         subagent.kind,
         subagent.description,
@@ -138,7 +138,7 @@ const UPDATE: &str = "UPDATE subagents SET
 fn update(tx: &Connection, was: &Subagent, now: &Subagent) -> Result<(), StoreError> {
     tx.prepare_cached(UPDATE)?.execute(params![
         now.session_id.as_str(),
-        now.id().as_str(),
+        now.id.as_str(),
         was.in_background != now.in_background,
         now.in_background,
         was.status != now.status,
@@ -170,7 +170,7 @@ fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
     let c = SubagentColumns::at(0);
     Ok(Subagent {
         session_id: row.at::<String>(c.session_id)?.into(),
-        id: Some(row.at::<String>(c.id)?.into()),
+        id: row.at::<String>(c.id)?.into(),
         call: row.at::<String>(c.call)?.into(),
         kind: repaired_text_at(row, c.kind)?,
         description: repaired_text_at(row, c.description)?,

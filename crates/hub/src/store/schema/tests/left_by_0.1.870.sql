@@ -1,5 +1,6 @@
 -- A database as the first 72 of the hub's migrations left it, which is how release 0.1.870 left one, with synthetic
--- rows, as `sqlite3 .dump` wrote it. Made with those migrations, before they became one schema.
+-- rows, as `sqlite3 .dump` wrote it. Made with those migrations, before they became one schema. The approval request,
+-- the subagent and the new-workspace dialog's draft were added after, in the forms 0.1.870's types write.
 PRAGMA foreign_keys=OFF;
 BEGIN TRANSACTION;
 CREATE TABLE repos (
@@ -36,7 +37,7 @@ CREATE TABLE sessions (
         created_at_ms INTEGER NOT NULL,
         updated_at_ms INTEGER NOT NULL
     , title TEXT, closed_at_ms INTEGER, rev INTEGER NOT NULL DEFAULT 0, client_request_id TEXT, reply_seq INTEGER NOT NULL DEFAULT 0, read_seq INTEGER NOT NULL DEFAULT 0, background_tasks TEXT NOT NULL DEFAULT '[]', title_source TEXT NOT NULL DEFAULT 'first_line', queued TEXT NOT NULL DEFAULT '[]', queue_held INTEGER NOT NULL DEFAULT 0, untaken TEXT NOT NULL DEFAULT '[]', turn_started_at_ms INTEGER, effort TEXT, context TEXT, account_id TEXT, user_active_at_ms INTEGER, prompt_cache TEXT, draft TEXT, decision_draft TEXT, recorded_run INTEGER, recorded_through INTEGER, open_approvals TEXT NOT NULL DEFAULT '[]', reply_outcome TEXT, agent_session_id TEXT, agent_capabilities TEXT, account_source TEXT);
-INSERT INTO sessions VALUES('s','w','claude','opus','{"unasked":"everything","beyond":"asks"}',0,'idle',2,3000,4000,'Tidy the parser',NULL,11,NULL,0,0,'[]','first_line','[]',0,'[]',NULL,'high',NULL,'a',NULL,NULL,NULL,NULL,NULL,NULL,'[]',NULL,'c0ffee',NULL,NULL);
+INSERT INTO sessions VALUES('s','w','claude','opus','{"unasked":"everything","beyond":"asks"}',0,'idle',3,3000,4000,'Tidy the parser',NULL,11,NULL,0,0,'[]','first_line','[]',0,'[]',NULL,'high',NULL,'a',NULL,NULL,NULL,NULL,NULL,NULL,'[]',NULL,'c0ffee',NULL,NULL);
 CREATE TABLE diff_comments (
         id TEXT PRIMARY KEY,
         workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -94,6 +95,7 @@ CREATE TABLE IF NOT EXISTS "events" (
     );
 INSERT INTO events VALUES('s',1,3000,'user_prompt',NULL,NULL,NULL,1,'{"type":"user_prompt","text":"Tidy the parser","attachments":[]}',NULL);
 INSERT INTO events VALUES('s',2,3500,'notice',NULL,1,NULL,2,'{"type":"notice","level":"info","message":"Tidied."}',NULL);
+INSERT INTO events VALUES('s',3,3600,'approval_requested',NULL,1,NULL,3,'{"type":"approval_requested","approval_id":"a","request":{"asks":{"asks":"call","call":{"kind":"command","command":"cargo test","runs":"waits"}}},"tool_use_id":"toolu_1"}',NULL);
 CREATE TABLE subagents (
         session_id TEXT NOT NULL REFERENCES sessions(id),
         call TEXT NOT NULL,
@@ -109,6 +111,7 @@ CREATE TABLE subagents (
         rev INTEGER NOT NULL DEFAULT 0, model TEXT, context_tokens INTEGER, id TEXT, lately TEXT,
         PRIMARY KEY (session_id, call)
     );
+INSERT INTO subagents VALUES('s','toolu_2','Explore','Look around',NULL,0,'finished',3550,3580,2,'Found it.',9,NULL,NULL,'task_1',NULL);
 CREATE TABLE hub_identity (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         hub_id TEXT NOT NULL
@@ -133,7 +136,7 @@ CREATE TABLE IF NOT EXISTS "new_workspace_draft" (
         draft TEXT,
         rev INTEGER NOT NULL DEFAULT 0
     );
-INSERT INTO new_workspace_draft VALUES(1,NULL,3);
+INSERT INTO new_workspace_draft VALUES(1,'{"repo_id":"r","text":"Fix the flaky test","rev":0}',3);
 CREATE TABLE IF NOT EXISTS "new_workspace_draft_files" (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,

@@ -11,7 +11,6 @@ pub struct Repo {
     #[serde(default)]
     pub origin: RepoOrigin,
     pub created_at_ms: i64,
-    #[serde(default)]
     pub rev: Rev,
 }
 

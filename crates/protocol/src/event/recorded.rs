@@ -24,11 +24,10 @@ pub struct SessionEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<RunId>,
     /// The subagent it's from, or `None` for the agent's own. The hub records it from [`EventBody::subagent`], or from
-    /// the agent's line for an `AgentOther` recorded before that named its subagent. A hub that doesn't record it sends
-    /// none, and `place` as 0.
+    /// the agent's line for an `AgentOther` recorded before that named its subagent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent: Option<SubagentId>,
-    #[serde(default)]
+    /// Its place among the events from the same agent or subagent, which a chat's log is held by.
     pub place: Place,
     /// How the person was talking with the agent as it was recorded: typed, or out loud in conversation mode, as the
     /// session's record said once the event had changed it, so the prompt that turns the mode off was typed. Typing for
@@ -255,9 +254,7 @@ pub enum EventBody {
     ApprovalRequested {
         approval_id: ApprovalId,
         /// What the agent asks, as its adapter read it. Boxed, since few events are approvals, and every event takes
-        /// the room of the largest. One a hub from before typed requests sends says none, and reads as asking what
-        /// this build doesn't know, rather than failing the event.
-        #[serde(default = "Request::unknown")]
+        /// the room of the largest.
         request: Box<Request>,
         /// The call it asks to make, when it asks to make one, which a typed request doesn't name, so every adapter
         /// says it here: the call's result then says whether the person denied it.

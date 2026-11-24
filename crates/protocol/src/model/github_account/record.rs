@@ -22,7 +22,6 @@ pub struct GithubAccount {
     /// It stays once its login has gone, as when the app was removed or uninstalled there. `None` for any other.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub installation: Option<GithubInstallation>,
-    #[serde(default)]
     pub rev: Rev,
 }
 

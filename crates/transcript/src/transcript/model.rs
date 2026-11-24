@@ -122,7 +122,7 @@ impl SubagentRecords {
 
     /// Keeps `record` in place of the copy held of its subagent.
     pub(crate) fn insert(&mut self, record: Arc<Subagent>) {
-        let id = record.id();
+        let id = record.id.clone();
         self.started_by.insert(record.call.clone(), id.clone());
         self.by_id.insert(id, record);
     }

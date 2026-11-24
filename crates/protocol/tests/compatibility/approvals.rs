@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 
 /// The event `body` is, as the log keeps it, which it's read from and written back as.
 fn kept(body: Value) -> EventBody {
-    let mut stored = json!({"session_id":"s","seq":1,"ts_ms":1,"place":0});
+    let mut stored = json!({"session_id":"s","seq":1,"ts_ms":1,"place":1});
     stored["body"] = body;
     let event: SessionEvent = serde_json::from_value(stored.clone()).unwrap();
     assert_eq!(serde_json::to_value(&event).unwrap(), stored, "and it's written the way it's read");
@@ -86,21 +86,18 @@ fn a_request_to_approve_a_plan_keeps_its_form() {
     assert_eq!(request(body).0.asks, Asks::Plan { plan: "1. Read".into(), file: Some("/plans/read.md".into()) });
 }
 
-/// A newer adapter's kind mustn't cost the event, and nor must one from a hub from before requests were typed, which
-/// says what it asks only in forms this build doesn't read. A client can only refuse either.
+/// A newer adapter's kind mustn't cost the event, which a client can only refuse. A request that doesn't say what it
+/// asks isn't one, and doesn't read.
 #[test]
-fn a_request_asking_what_this_build_doesnt_know_still_reads() {
+fn a_request_asking_what_this_build_doesnt_know_still_reads_and_one_that_asks_nothing_doesnt() {
     let newer = json!({"type":"approval_requested","approval_id":"a",
         "request":{"asks":{"asks":"a_choice_of_files","files":["a"]}}});
-    let before = json!({"type":"approval_requested","approval_id":"a","tool_name":"Bash","tool_use_id":"toolu_1",
-        "input":{"command":"ls"},"description":null,"suggestions":null,"asking":{"kind":"tool_use"}});
-    let asks = |body| match serde_json::from_value(body).unwrap() {
-        EventBody::ApprovalRequested { request, .. } => request.asks,
-        other => panic!("{other:?}"),
-    };
+    let asking_nothing = json!({"type":"approval_requested","approval_id":"a","tool_use_id":"toolu_1"});
 
-    assert_eq!(asks(newer), Asks::Unknown);
-    assert_eq!(asks(before), Asks::Unknown);
+    let EventBody::ApprovalRequested { request, .. } = serde_json::from_value(newer).unwrap() else { panic!() };
+
+    assert_eq!(request.asks, Asks::Unknown);
+    assert!(serde_json::from_value::<EventBody>(asking_nothing).is_err());
 }
 
 /// What a client sends, as a hub reads it, and passes on to a worker, which takes the same decision.

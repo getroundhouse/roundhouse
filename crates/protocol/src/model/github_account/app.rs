@@ -18,7 +18,6 @@ use super::{GithubAppId, GithubInstallationId, GithubUserNumber};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubApp {
     pub id: GithubAppId,
-    #[serde(default)]
     pub rev: Rev,
 }
 

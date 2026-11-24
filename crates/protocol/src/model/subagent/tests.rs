@@ -11,9 +11,9 @@ use super::lately::{CALLS_KEPT, RESULT_KEPT, TEXT_KEPT, kept};
 /// is none.
 #[test]
 fn a_subagent_is_named_by_its_id_or_else_by_its_call() {
-    let named = |id: &str, call: &str| Subagent { id: Some(id.into()), ..fixtures::subagent(call) };
+    let named = |id: &str, call: &str| Subagent { id: id.into(), ..fixtures::subagent(call) };
     let subagents = [named("agent-1", "toolu_1"), named("toolu_1-again", "agent-1"), fixtures::subagent("toolu_3")];
-    let found = |name: &str| Subagent::named(&subagents, &name.into()).map(Subagent::id);
+    let found = |name: &str| Subagent::named(&subagents, &name.into()).map(|it| it.id.clone());
 
     assert_eq!(found("toolu_1"), Some(SubagentId::from("agent-1")), "by its call");
     assert_eq!(found("agent-1"), Some(SubagentId::from("agent-1")), "its ID, though it's another's call");
@@ -202,7 +202,7 @@ fn an_event_changes_only_the_records_it_touches() {
             ts_ms: i64::try_from(seq).unwrap(),
             ..fixtures::event(Seq::new(u64::try_from(seq).unwrap()), body)
         };
-        let noted: Vec<SubagentId> = Subagent::note(&mut every, &event).iter().map(|it| it.id()).collect();
+        let noted: Vec<SubagentId> = Subagent::note(&mut every, &event).iter().map(|it| it.id.clone()).collect();
         assert_eq!(noted_as_the_hub_does(&mut kept, &event), noted, "{event:?}");
         assert_eq!(kept, every, "{event:?}");
     }
@@ -213,16 +213,16 @@ fn an_event_changes_only_the_records_it_touches() {
 /// says which changed.
 fn noted_as_the_hub_does(kept: &mut Vec<Subagent>, event: &SessionEvent) -> Vec<SubagentId> {
     let touches = |it: &&Subagent| match Subagent::touched_by(event) {
-        Some(TouchedSubagents::One(id)) => it.id() == id,
-        Some(TouchedSubagents::Starting { subagent, call }) => it.id() == subagent || it.call == call,
+        Some(TouchedSubagents::One(id)) => it.id == id,
+        Some(TouchedSubagents::Starting { subagent, call }) => it.id == subagent || it.call == call,
         Some(TouchedSubagents::Working) => it.status == SubagentStatus::Working,
         None => false,
     };
     let mut read: Vec<Subagent> = kept.iter().filter(touches).cloned().collect();
     let changed: Vec<Subagent> = Subagent::note(&mut read, event).into_iter().map(|it| it.clone()).collect();
-    let ids = changed.iter().map(Subagent::id).collect();
+    let ids = changed.iter().map(|it| it.id.clone()).collect();
     for it in changed {
-        match kept.iter_mut().find(|held| held.id() == it.id()) {
+        match kept.iter_mut().find(|held| held.id == it.id) {
             Some(held) => *held = it,
             None => kept.push(it),
         }
