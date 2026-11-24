@@ -2,7 +2,7 @@
 
 use std::hash::Hash;
 
-use protocol::model::{AccountId, GithubAccountId, ModelListKey, ReferenceAsk, SessionId, WaitId, WorkspaceId};
+use protocol::model::{AccountId, GithubAccountId, ModelListKey, ReferenceAsk, RepoId, SessionId, WaitId, WorkspaceId};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,7 @@ pub(crate) enum Owner<'a> {
     /// A wait, which goes with its session and its workspace too, and as it ends.
     Wait(&'a WaitKey),
     Account(&'a AccountId),
+    Repo(&'a RepoId),
     GithubAccount(&'a GithubAccountId),
     /// The hub itself, for what's of no record, which is never gone, and goes only as the hub lets go of it.
     Hub,
@@ -35,7 +36,7 @@ impl<'a> Owner<'a> {
             Owner::Workspace(workspace) => Some(workspace),
             Owner::Session(session) => Some(&session.workspace_id),
             Owner::Wait(wait) => Some(&wait.workspace_id),
-            Owner::Account(_) | Owner::GithubAccount(_) | Owner::Hub => None,
+            Owner::Account(_) | Owner::Repo(_) | Owner::GithubAccount(_) | Owner::Hub => None,
         }
     }
 }
@@ -92,6 +93,12 @@ impl Subject for WaitKey {
 impl Subject for AccountId {
     fn owner(&self) -> Option<Owner<'_>> {
         Some(Owner::Account(self))
+    }
+}
+
+impl Subject for RepoId {
+    fn owner(&self) -> Option<Owner<'_>> {
+        Some(Owner::Repo(self))
     }
 }
 

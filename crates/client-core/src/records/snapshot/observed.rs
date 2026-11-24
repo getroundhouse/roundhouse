@@ -50,7 +50,8 @@ impl ObservationsListed {
                     listed.github.insert(observation.key(), observation);
                 }
                 // Never held, as `Revised` says.
-                Observation::GithubUsername { .. }
+                Observation::RepositoryReach { .. }
+                | Observation::GithubUsername { .. }
                 | Observation::ModelCatalog { .. }
                 | Observation::AccountIdentity { .. }
                 | Observation::AccountLimits { .. }

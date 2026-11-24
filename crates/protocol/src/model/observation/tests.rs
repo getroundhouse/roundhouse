@@ -18,6 +18,7 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
     [
         of_a_workspace(),
         of_github(),
+        of_a_repository(),
         of_a_github_account(),
         of_an_agent(),
         of_an_account(),
@@ -111,6 +112,20 @@ fn of_github() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::GithubObserved)),
         ),
     ]
+}
+
+/// Of each kind of what GitHub says of a repository.
+fn of_a_repository() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
+    vec![(
+        Observation::RepositoryReach {
+            repo: "r".into(),
+            reach: Observed::Current { value: crate::model::Reach::NotOnGithub },
+            rev: Rev::new(13),
+        },
+        ObservationKey::RepositoryReach { repo: "r".into() },
+        Rev::new(13),
+        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+    )]
 }
 
 /// Of each kind of what GitHub says of a GitHub account the hub holds a login for.

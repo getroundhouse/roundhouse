@@ -1,9 +1,12 @@
 //! Whether the default GitHub account can push to each repository's repository on GitHub, spelled out: its records, as
-//! the feed and a list carry them, since a client of another build finds a record by its kind's name and its key.
+//! the feed and a list carry them, since a client of another build finds a record by its kind's name and its key, and
+//! the observation they're made from.
 
 use protocol::client::{ClientResponse, HubNotice};
 use protocol::frame;
-use protocol::model::{GithubReach, GithubRepositoryName, InstalledApp, Reach, RecordKey, Rev};
+use protocol::model::{
+    GithubReach, GithubRepositoryName, InstalledApp, Observation, ObservationKey, Observed, Reach, RecordKey, Rev,
+};
 
 use super::keeps_its_form;
 
@@ -128,4 +131,26 @@ fn a_reach_from_a_newer_hub_reads_as_unknown_and_names_no_repository() {
 
     assert_eq!((read.reach.repository(), read.rev), (None, Rev::default()));
     assert_eq!(read.reach, Reach::Unknown);
+}
+
+/// Whether the default can push to a repository, which a hub sends at its own level to a client of a version that
+/// reads it so, as a notice and as its removal.
+#[test]
+fn a_repositorys_reach_keeps_its_form_as_a_notice_and_a_removal() {
+    let reach = Reach::Pushes { repository: GithubRepositoryName::named("cli/cli"), username: "ada".into() };
+    let reach = Observed::AsOf { value: reach, as_of_ms: 1_795_230_000_000 };
+    let copy = HubNotice::Observation(Observation::RepositoryReach { repo: "r".into(), reach, rev: Rev::new(5) });
+    let gone = HubNotice::ObservationRemoved {
+        observation: ObservationKey::RepositoryReach { repo: "r".into() },
+        rev: Rev::new(6),
+    };
+
+    keeps_its_form(
+        &copy,
+        r#"{"notice":"observation","kind":"repository_reach","repo":"r","reach":{"freshness":"as_of","value":{"state":"pushes","repository":"cli/cli","username":"ada"},"as_of_ms":1795230000000},"rev":5}"#,
+    );
+    keeps_its_form(
+        &gone,
+        r#"{"notice":"observation_removed","observation":{"kind":"repository_reach","repo":"r"},"rev":6}"#,
+    );
 }

@@ -10,7 +10,7 @@ use protocol::client::ClientResponse;
 use protocol::model::{Account, GithubAccount, ModelList, Record, RecordKey, Records, Session, UsageLimit, Wait};
 use tracing::warn;
 
-use super::github_kinds::GithubUsername;
+use super::github_kinds::{GithubUsername, RepositoryReach};
 use super::kept::Observations;
 use super::kinds::{
     AccountIdentity, AccountLimits, Kind, ModelCatalog, SessionCache, SessionContext, SessionKey, SessionTodos,
@@ -111,7 +111,8 @@ impl OldForm for Record {
     }
 }
 
-/// Each record of a kind that holds an observation's old form.
+/// Each record of a kind that holds an observation's old form, and each record made from an observation, which the
+/// store keeps none of.
 impl OldForm for Records {
     fn fill(&mut self, tables: &mut Tables) {
         for account in &mut self.accounts {
@@ -126,6 +127,12 @@ impl OldForm for Records {
         for account in &mut self.github_accounts {
             account.fill(tables);
         }
+        let reaches = made_from::<RepositoryReach>(tables).into_iter().filter_map(|record| {
+            let Record::GithubReach(reach) = record else { return None };
+            Some(reach)
+        });
+        self.github_reach = reaches.collect();
+        self.github_reach.sort_by(|a, b| a.repo.cmp(&b.repo));
     }
 }
 
@@ -205,6 +212,14 @@ impl OldForm for ClientResponse {
             | C::Subscribed(_) => {}
         }
     }
+}
+
+/// Each record made from an observation of kind `K` that `tables` keeps, as [`Kind::old_record`] makes it.
+fn made_from<K: Kind>(tables: &mut Tables) -> Vec<Record> {
+    let kept = &K::table(tables).kept;
+    kept.iter()
+        .filter_map(|(of, kept)| K::old_record(of, kept.said.observed(), kept.said.read_at_ms, kept.rev))
+        .collect()
 }
 
 impl Observations {

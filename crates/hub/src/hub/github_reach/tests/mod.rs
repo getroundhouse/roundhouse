@@ -2,5 +2,6 @@
 //! address names, as addresses are read and as the hub's logins change.
 
 mod checking;
+mod observed;
 mod reaching;
 mod support;

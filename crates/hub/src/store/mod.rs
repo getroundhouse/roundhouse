@@ -23,7 +23,6 @@ mod events;
 mod find;
 mod github_accounts;
 mod github_apps;
-mod github_reach;
 mod github_sign_ins;
 mod hub_settings;
 mod instances;
@@ -50,7 +49,7 @@ mod schema;
 #[cfg(test)]
 pub(crate) use schema::{
     BEFORE_ACCOUNT_IDENTITY_OBSERVED, BEFORE_ACCOUNT_LIMITS_OBSERVED, BEFORE_GITHUB_USERS_OBSERVED,
-    BEFORE_SESSION_CACHE_OBSERVED, BEFORE_SESSION_CONTEXT_OBSERVED, BEFORE_WAIT_READ_OBSERVED,
+    BEFORE_REACH_OBSERVED, BEFORE_SESSION_CACHE_OBSERVED, BEFORE_SESSION_CONTEXT_OBSERVED, BEFORE_WAIT_READ_OBSERVED,
 };
 mod sent;
 mod sessions;

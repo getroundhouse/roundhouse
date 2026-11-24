@@ -66,4 +66,7 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     // What GitHub calls each GitHub account's user, and its profile, which the hub keeps as observations, in
     // `github_accounts`.
     Sql(super::github_accounts::GITHUB_USERS_OBSERVED),
+    // Whether the default GitHub account can push to each repository, which the hub keeps as an observation, as
+    // `github_reach` was.
+    Sql(super::github_accounts::REACH_OBSERVED),
 ];
