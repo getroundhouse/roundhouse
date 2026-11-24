@@ -11,7 +11,7 @@ use client_core::prompt_cache::{cache_worth_telling, idle_cache};
 use client_core::records::{Snapshot, subagent_named};
 use gpui_kit::{Context, SharedString, Task};
 use protocol::event::AgentTask;
-use protocol::model::{AgentDescription, PromptCache, PullRequestWatch, Seq, Session, Subagent, SubagentStatus, Wait};
+use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, Wait, WaitRead};
 
 use super::{Transcript, TranscriptEvent};
 use crate::rows::Opens;
@@ -59,14 +59,14 @@ pub(crate) struct IdleCache {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct OpenWait {
     pub(crate) wait: Wait,
-    pub(crate) read: Option<PullRequestWatch>,
+    pub(crate) read: Option<WaitRead>,
 }
 
 impl AtWork {
     /// What `session`'s record says, as `records`, the copy it's from, reads it.
     pub(crate) fn of(records: &Snapshot, session: &Session) -> Self {
         let cache = records.conversation_cache(session);
-        let open = |wait: &Wait| OpenWait { wait: wait.clone(), read: records.wait_read(wait).cloned() };
+        let open = |wait: &Wait| OpenWait { wait: wait.clone(), read: records.wait_read(wait) };
         AtWork {
             working: session.status.is_working(),
             turn_started_at_ms: session.turn_started_at_ms,

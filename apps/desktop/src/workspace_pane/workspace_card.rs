@@ -2,7 +2,7 @@
 //! button that copies the path, which build its agents are on, where they run, and the ports set aside for it. One
 //! worker does all of a workspace's work, every chat's included, so this is the workspace's rather than a chat's.
 
-use client_core::records::Snapshot;
+use client_core::records::{Snapshot, WorkerBuild};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
@@ -34,7 +34,7 @@ pub(super) struct Said {
     /// First, since they're what needs doing.
     warnings: Vec<Warning>,
     path: Option<SharedString>,
-    version: Option<SharedString>,
+    version: Option<Version>,
     /// The hub's build, while the workspace's worker is another, which the hub moves it to once nothing in it is at
     /// work.
     moving_to: Option<SharedString>,
@@ -42,13 +42,31 @@ pub(super) struct Said {
     ports: Option<SharedString>,
 }
 
+/// Which build the workspace's worker is, as the card says it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Version {
+    Named(SharedString),
+    /// Another build than the hub's, which its worker doesn't say.
+    Earlier,
+}
+
+/// What the card says of a worker that's another build than the hub's and doesn't say which, as the owner chose.
+const EARLIER: &str = "An earlier version";
+
 impl Said {
     /// Of `workspace`, as `records`, the copy it's from, reads it. `hub_version` is the hub's build, which the next
     /// worker is, empty when the app hasn't heard it.
     pub(super) fn of(records: &Snapshot, workspace: &Workspace, hub_version: &str, warnings: &[Warning]) -> Self {
         let hub = (!hub_version.is_empty()).then(|| SharedString::from(hub_version.to_string()));
-        let worker = records.worker_build(workspace).map(|build| SharedString::from(build.to_string()));
-        let moving_to = hub.clone().filter(|hub| worker.as_ref().is_some_and(|worker| worker != hub));
+        let (version, moving_to) = match records.worker_build(workspace) {
+            WorkerBuild::NotKnown => (None, None),
+            WorkerBuild::Hubs => (hub.map(Version::Named), None),
+            WorkerBuild::Other(Some(build)) => {
+                let moving_to = hub.filter(|hub| hub != build);
+                (Some(Version::Named(SharedString::from(build.to_string()))), moving_to)
+            }
+            WorkerBuild::Other(None) => (Some(Version::Earlier), hub),
+        };
         // A workspace from before each had its own ports has none.
         let ports = (workspace.port_base > 0).then(|| {
             let last = workspace.port_base.saturating_add(PORTS_PER_WORKSPACE - 1);
@@ -57,7 +75,7 @@ impl Said {
         Self {
             warnings: warnings.to_vec(),
             path: workspace.path.clone().map(SharedString::from),
-            version: worker.or(hub),
+            version,
             moving_to,
             runs_on: runs_on(workspace),
             ports,
@@ -79,11 +97,19 @@ impl Said {
             let moving = self.moving_to.clone().map(|to| {
                 div().text_color(colors.text_faint).child(format!("Moves to {to} once nothing in it is at work"))
             });
-            let said = match &self.moving_to {
-                Some(to) => format!("Version {version}, moves to {to} once nothing in it is at work"),
-                None => format!("Version {version}"),
+            let named = match &version {
+                Version::Named(version) => format!("Version {version}"),
+                Version::Earlier => EARLIER.to_string(),
             };
-            row("Version", said, v_flex().child(version).children(moving), cx)
+            let said = match &self.moving_to {
+                Some(to) => format!("{named}, moves to {to} once nothing in it is at work"),
+                None => named,
+            };
+            let shown = match version {
+                Version::Named(version) => version,
+                Version::Earlier => EARLIER.into(),
+            };
+            row("Version", said, v_flex().child(shown).children(moving), cx)
         });
         let ports = self.ports.clone().map(|ports| row("Ports", format!("Ports {ports}"), div().child(ports), cx));
         let rows = v_flex()
@@ -144,7 +170,7 @@ mod tests {
     fn a_workspace_on_the_hub_s_build_says_only_that() {
         let said = said_of(&aspen(), "1.0.0");
 
-        assert_eq!(said.version.as_deref(), Some("1.0.0"));
+        assert_eq!(said.version, Some(Version::Named("1.0.0".into())));
         assert_eq!(said.moving_to, None);
         assert_eq!(said.ports.as_deref(), Some("4000–4009"));
         assert_eq!(said.path.as_deref(), Some("/workspaces/aspen"));
@@ -156,7 +182,7 @@ mod tests {
 
         let said = said_of(&workspace, "1.0.0");
 
-        assert_eq!((said.version.as_deref(), said.moving_to.as_deref()), (Some("0.9.0"), Some("1.0.0")));
+        assert_eq!((said.version, said.moving_to.as_deref()), (Some(Version::Named("0.9.0".into())), Some("1.0.0")));
     }
 
     #[test]
