@@ -4,7 +4,8 @@ use protocol::capability::asking::QuestionAnswer;
 use protocol::event::{ContentBlock, EventBody, ExitReason, TurnOutcome};
 use serde_json::{Value, json};
 
-use protocol::capability::calls::call::{Command, MessageSubagent, Read, StartSubagent};
+use protocol::capability::Capabilities;
+use protocol::capability::calls::call::{Command, MessageSubagent, Read};
 use protocol::capability::calls::output::{Ended, Lines};
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::find::Needle;
@@ -12,12 +13,12 @@ use protocol::fixtures::{
     approval_request, asking, command_output, decided, question, typed_call, typed_command, typed_denied, typed_result,
     typed_subagent,
 };
-use protocol::model::Seq;
+use protocol::model::{RunCapabilities, RunId, Seq};
 use protocol::prompt::Prompt;
 
 use super::{count, of_row, rows_drawing};
 use crate::find::Part;
-use crate::fixtures::{advised, event, from_the_agent, log, subagents, within};
+use crate::fixtures::{advised, event, from_the_agent, log};
 use crate::folds::Fold;
 use crate::transcript::Model;
 use protocol::prompt::PromptFrom;
@@ -54,11 +55,6 @@ fn came_back(block: ContentBlock) -> EventBody {
     EventBody::AgentUser { subagent: None, blocks: vec![block] }
 }
 
-/// What came back for the call `id`, as words.
-fn sent_back(id: &str, text: &str) -> EventBody {
-    came_back(typed_result(id, CallOutput::Words { text: text.into() }, false))
-}
-
 /// What the command made as the call `id` printed, and that it exited with `code`, which failed unless it's 0.
 fn printed(id: &str, text: &str, code: i32) -> EventBody {
     came_back(typed_result(id, command_output(text, Some(code), Ended::Exited), code != 0))
@@ -79,17 +75,6 @@ fn a_call_is_drawn_as_its_kind_and_one_of_no_kind_a_client_knows_by_its_input() 
 
     assert_eq!(parts(&unknown, "parser", 0), [Part::Input], "any tool, by its input");
     assert_eq!(parts(&typed, "parser", 0), [Part::Command]);
-}
-
-#[test]
-fn a_call_that_hands_work_off_gathers_its_subagent_s_work() {
-    let work = || event(Seq::new(2), within("helper", says("Looking at the parser")));
-    let unknown = log([event(Seq::new(1), call("helper", other("delegate", json!({})))), work()]);
-    let typed = log([event(Seq::new(1), call("helper", Call::Subagent(typed_subagent("Look.")))), work()]);
-
-    assert_eq!((count(&unknown, "parser", 0), count(&unknown, "parser", 1)), (0, 1), "in a row of its own");
-    assert_eq!((count(&typed, "parser", 0), count(&typed, "parser", 1)), (1, 0), "in the call's row");
-    assert_eq!(rows_drawing(&typed, &Model::default(), Position::of_row(1)), [0]);
 }
 
 /// A failed command's result holds what it printed alone, so a line in it that reads like how Claude said a command
@@ -133,10 +118,10 @@ fn a_prompt_is_found_where_its_drawn() {
     let needle = |log: &SessionLog| Vec::from_fn(5, |row| count(log, "sidebar", row));
 
     assert_eq!(needle(&log), [0, 0, 0, 1, 0], "the thought, and not the prompt waiting at the end");
-    assert_eq!(rows_drawing(&log, &Model::default(), Position::of_row(2)), Vec::<usize>::new());
+    assert_eq!(rows_drawing(&log, Position::of_row(2)), Vec::<usize>::new());
     log.apply_event(event(Seq::new(5), EventBody::PromptTaken { prompt: Seq::new(3) }));
     assert_eq!(needle(&log), [0, 0, 0, 1, 1], "under the thought, in the row that took it");
-    assert_eq!(rows_drawing(&log, &Model::default(), Position::of_row(2)), [4]);
+    assert_eq!(rows_drawing(&log, Position::of_row(2)), [4]);
 }
 
 #[test]
@@ -150,11 +135,7 @@ fn a_call_s_result_is_found_in_the_call_s_row_which_draws_it() {
     assert_eq!(count(&log, "cargo", 0), 1, "the command");
     assert_eq!(count(&log, "the tests", 0), 1, "what the agent said it's for");
     assert_eq!(count(&log, "failed", 1), 0, "the result draws nothing of its own");
-    assert_eq!(
-        rows_drawing(&log, &Model::default(), Position::of_row(1)),
-        [0, 1],
-        "but its call's row is counted again"
-    );
+    assert_eq!(rows_drawing(&log, Position::of_row(1)), [0, 1], "but its call's row is counted again");
 }
 
 /// A message to a subagent at work is found as its call shows it open: what it said, as what the subagent was asked,
@@ -170,6 +151,31 @@ fn a_message_to_a_subagent_is_found_as_what_it_was_asked() {
 
     assert_eq!(parts(&log, "parser", 0), [Part::Asked, Part::Output]);
     assert_eq!(parts(&log, "thread-1", 0), [Part::Output], "only where it came back");
+}
+
+/// A call's own prose is found in the row that draws it, in the order that row shows it: what a subagent was asked,
+/// then what it reported in its call's result, as one run in the foreground does, and what an advisor said. An agent
+/// that doesn't record its subagents' work has the same found in its call.
+#[test]
+fn a_call_s_prose_is_found_in_the_row_that_draws_it_in_the_order_it_shows() {
+    let report = CallOutput::Report { report: "The parser is sound.".into() };
+    let advice = CallOutput::Words { text: "Test the parser first.".into() };
+    let log = log([
+        event(Seq::new(1), call("helper", Call::Subagent(typed_subagent("Ask about the parser")))),
+        event(Seq::new(2), came_back(typed_result("helper", report, false))),
+        event(Seq::new(3), advised(&["own"])),
+        event(Seq::new(4), from_the_agent(came_back(typed_result("own", advice, false)))),
+    ]);
+    let unrecording =
+        Model { claims: Some(RunCapabilities::new(RunId::new(1), Capabilities::default())), ..Model::default() };
+    let needle = Needle::new("parser").unwrap();
+    let in_its_call =
+        |m: &Model| -> Vec<Part> { of_row(&log, m, &needle, 0).into_iter().map(|found| found.id.1).collect() };
+
+    assert_eq!(in_its_call(&Model::default()), [Part::Asked, Part::Report]);
+    assert_eq!(in_its_call(&unrecording), [Part::Asked, Part::Report], "for an agent that doesn't record them");
+    assert_eq!(parts(&log, "parser", 1), [], "the result draws nothing of its own");
+    assert_eq!(parts(&log, "parser", 2), [Part::Advice]);
 }
 
 /// A call the person denied never ran, so what the agent was told is found once, as what the person said, and not as
@@ -214,42 +220,6 @@ fn what_the_app_writes_itself_isn_t_found() {
     assert_eq!(count(&log, "Read", 0), 0, "the line's label");
     assert_eq!(count(&log, "2 lines", 0), 0, "how much it read");
     assert_eq!(count(&log, "1", 0), 0, "the lines' numbers");
-}
-
-#[test]
-fn a_subagent_s_work_is_found_in_the_call_that_started_it() {
-    let log = log([
-        event(Seq::new(1), subagents(&["helper"])),
-        event(Seq::new(2), within("helper", says("Looking at the parser"))),
-    ]);
-
-    assert_eq!(count(&log, "parser", 0), 1);
-    assert_eq!(count(&log, "parser", 1), 0);
-    assert_eq!(rows_drawing(&log, &Model::default(), Position::of_row(1)), [0]);
-}
-
-/// A call's own prose is found in the row that draws it, in the order that row shows it: a call in a subagent's work
-/// in the row of the call that started the subagent, between what it was asked and its report.
-#[test]
-fn a_call_s_prose_is_found_in_the_row_that_draws_it_in_the_order_it_shows() {
-    let asked = StartSubagent { description: Some("Look".into()), ..typed_subagent("Ask about the parser") };
-    let report = CallOutput::Report { report: "The parser is sound.".into() };
-    let log = log([
-        event(Seq::new(1), call("helper", Call::Subagent(asked))),
-        event(Seq::new(2), within("helper", advised(&["nested"]))),
-        event(Seq::new(3), within("helper", from_the_agent(sent_back("nested", "Test the parser first.")))),
-        // In the foreground, it reports in its call's result.
-        event(Seq::new(4), came_back(typed_result("helper", report, false))),
-        event(Seq::new(5), advised(&["own"])),
-        event(Seq::new(6), from_the_agent(sent_back("own", "The parser is fine."))),
-    ]);
-    let needle = Needle::new("parser").unwrap();
-    let parts = |ix| -> Vec<Part> {
-        of_row(&log, &Model::default(), &needle, ix).into_iter().map(|found| found.id.1).collect()
-    };
-
-    assert_eq!(parts(0), [Part::Asked, Part::Advice, Part::Report], "a subagent's call is in its call's row");
-    assert_eq!(parts(4), [Part::Advice], "and this one in a row of its own");
 }
 
 #[test]

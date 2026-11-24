@@ -2,36 +2,30 @@
 
 use std::ops::Range;
 
-use protocol::model::{Place, Seq};
+use protocol::event::SessionEvent;
+use protocol::model::Place;
 
-/// An event's position in a [`super::SessionLog`]: its `seq` in a log read [`super::By::Seq`], and its place among
-/// the events from one agent or subagent in one read [`super::By::Place`]. The first is 1, and there are no gaps. 0 is
-/// before the first, where no event is, such as the end of a log that reaches nowhere yet.
+/// An event's position in a [`super::SessionLog`], which is its place among the events from one agent or subagent. The
+/// first is 1, and there are no gaps. 0 is before the first, where no event is, such as the end of a log that reaches
+/// nowhere yet.
 ///
-/// The log makes one from a `seq` or a place by what it reads by, but for a line an older hub listed without its place,
-/// which goes by its `seq` in a log by place, as the outline's `row_at` says. A search, in `Job::search`, makes one from
-/// each place the hub's find names, since a search reads by place. Only the requests for a log's events turn one back
-/// into a `seq` or a place.
+/// A search, in `Job::search`, makes one from each place the hub's find names. Only the requests for a log's events
+/// turn one back into a place.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position(u64);
 
 impl Position {
-    /// The position at `seq`, in a log by `seq`.
-    pub(crate) const fn of_seq(seq: Seq) -> Self {
-        Self(seq.get())
-    }
-
-    /// The position at `place`, in a log by place.
+    /// The position at `place`.
     pub(crate) const fn of_place(place: Place) -> Self {
         Self(place.get())
     }
 
-    /// The `seq` it is, in a log by `seq`, for asking the hub for what's there.
-    pub(crate) const fn seq(self) -> Seq {
-        Seq::new(self.0)
+    /// Where `event` goes: at its place.
+    pub fn of(event: &SessionEvent) -> Self {
+        Self::of_place(event.place)
     }
 
-    /// The place it is, in a log by place, for asking the hub for what's there.
+    /// The place it is, for asking the hub for what's there.
     pub(crate) const fn place(self) -> Place {
         Place::new(self.0)
     }
@@ -70,20 +64,12 @@ mod tests {
 
     #[test]
     fn nothing_is_at_0_and_the_first_event_is_in_the_first_row() {
-        let first = Position::of_seq(Seq::FIRST);
+        let first = Position::of_place(Place::FIRST);
 
         assert_eq!(Position::default().row(), None);
         assert_eq!(first.row(), Some(0));
         assert_eq!(Position::of_row(0), first);
         assert_eq!(Position::default().next(), first, "and comes after 0");
-    }
-
-    #[test]
-    fn a_seq_and_a_place_turn_back_into_what_they_were() {
-        let (seq, place) = (Position::of_seq(Seq::new(7)), Position::of_place(Place::new(7)));
-
-        assert_eq!((seq.seq(), place.place()), (Seq::new(7), Place::new(7)));
-        assert_eq!(seq, place, "the same number is the same position, which only the log can tell apart");
     }
 
     proptest! {

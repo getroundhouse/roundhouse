@@ -3,7 +3,9 @@
 use protocol::capability::asking::{Choose, Question, QuestionOption, TypedAnswer};
 use protocol::event::EventBody;
 use protocol::fixtures;
-use protocol::model::{OptionPlace, ProposalOption, ProposalQuestion, Proposed, Recommendation, RevisionNumber, Seq};
+use protocol::model::{
+    OptionPlace, Place, ProposalOption, ProposalQuestion, Proposed, Recommendation, RevisionNumber, Seq,
+};
 use protocol::prompt::{Prompt, PromptFrom};
 
 use super::context::{sample_log, sample_workspace, texts};
@@ -83,7 +85,7 @@ fn only_names_from_outside_the_workspace_s_own_are_spelled_as_hinted() {
 /// doesn't.
 #[test]
 fn a_prompt_the_hub_wrote_gives_no_hints() {
-    let mut log = SessionLog::new(Seq::new(0));
+    let mut log = SessionLog::new(Place::default());
     let from = PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST };
     let told = Prompt::new("I chose B, Kesslerbahn Platform, in your proposal \"Holding\" (p).");
     log.apply_event(fixtures::event(Seq::new(1), EventBody::UserPrompt { client_msg_id: None, prompt: told, from }));

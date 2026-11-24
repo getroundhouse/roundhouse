@@ -243,8 +243,8 @@ fn a_rows_height_is_known_once_its_measured_until_it_changes_or_the_list_does() 
 }
 
 /// The last row is the end of the chat, and what it drew goes to the row of the record that takes its place, which
-/// isn't as tall as what the end drew. A chat read by place that has just learned how far it goes has its first row
-/// take the end's place, and that's kept as a guess for as long as the row isn't loaded.
+/// isn't as tall as what the end drew. A chat that has just learned how far it goes has its first row take the end's
+/// place, and that's kept as a guess for as long as the row isn't loaded.
 #[test]
 fn a_row_that_takes_the_last_ones_place_counts_as_a_guess_until_its_measured() {
     let mut state = session(3, 50.);

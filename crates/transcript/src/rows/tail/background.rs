@@ -2,7 +2,6 @@
 //! subagent's robot and the button its call's line has, and past what there's room for, one for each group with
 //! several, which opens to its tasks, as `crate::task_lines` says. Then one for each open wait on pull requests, with Stop.
 
-use client_core::session_log::By;
 use client_core::waits;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -25,14 +24,14 @@ use crate::transcript::Transcript;
 use client_core::calls::agent;
 
 /// The lines for the tasks the agent runs in the background, as `crate::task_lines` lists them.
-pub(super) fn lines(tasks: &[AgentTask], folds: &Folds, by: By, shared: &Shared, cx: &App) -> Vec<AnyElement> {
+pub(super) fn lines(tasks: &[AgentTask], folds: &Folds, shared: &Shared, cx: &App) -> Vec<AnyElement> {
     let line = |line| match line {
-        TaskLine::Task(group, task) => going(group, task, by, shared, cx).into_any_element(),
+        TaskLine::Task(group, task) => going(group, task, shared, cx).into_any_element(),
         TaskLine::Several { group, tasks, open } => several(group, &tasks, open, shared, cx),
         // Set in by a mark's width and the line's own gap, so its mark starts where the group's words do.
         TaskLine::Under(group, task) => tail_line(cx)
             .child(div().flex_none().w(look::Size::Inline.width()))
-            .child(going(group, task, by, shared, cx).flex_1().min_w_0())
+            .child(going(group, task, shared, cx).flex_1().min_w_0())
             .into_any_element(),
     };
     task_lines(tasks, folds).into_iter().map(line).collect()
@@ -89,10 +88,10 @@ fn what_for(tasks: &[&AgentTask]) -> String {
 /// A background task's line: its group's mark, and what the agent said it's for. A subagent has the robot its call's
 /// line has, so its line reads as that call, and it ends with the button that opens the subagent tab, as its call's
 /// line does, once the agent has said which subagent it is, or which call started it.
-fn going(group: TaskGroup, task: &AgentTask, by: By, shared: &Shared, cx: &App) -> Div {
+fn going(group: TaskGroup, task: &AgentTask, shared: &Shared, cx: &App) -> Div {
     let (mark, pointed_at) = mark(group, shared, cx);
     let text = task.description.clone().unwrap_or_else(|| group.one().to_string());
-    let open = Opens::task(task).filter(|_| by == By::Place).map(|opens| {
+    let open = Opens::task(task).map(|opens| {
         let id = ElementId::Name(format!("background-open/{}", task.id).into());
         open_tab(id, opens, task.description.as_deref().unwrap_or(agent::UNTITLED), &shared.this)
     });

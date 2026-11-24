@@ -33,22 +33,11 @@ pub struct Changes {
     pub requests_fetched: bool,
 }
 
-/// What a log's rows follow, and so what an event's position is.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum By {
-    /// Every event in the session, by `seq`.
-    #[default]
-    Seq,
-    /// The events from one agent or subagent, by their place among them.
-    Place,
-}
-
 /// A copy shares what's large with the log it was copied from, until one of them changes it: each event, which never
 /// changes, the outline's lines, where each prompt was settled and the tail. So a copy costs little however long the
 /// chat is, and [`crate::OpenSession::version`] makes one whenever a version is read and the log then changes.
 #[derive(Clone, Debug, Default)]
 pub struct SessionLog {
-    pub(super) by: By,
     /// The position of the newest event, or 0 when it has none.
     pub(super) last: Position,
     /// The newest event the subscription has delivered, or 0 for none. It delivers every page after this, so those
@@ -56,7 +45,7 @@ pub struct SessionLog {
     pub(super) received: Position,
     /// What's loaded, by position.
     pub(super) events: BTreeMap<Position, Arc<SessionEvent>>,
-    /// The position of each event loaded, by its `seq`, when that isn't its position.
+    /// The position of each event loaded, by its `seq`.
     pub(super) positions: HashMap<Seq, Position>,
     /// The pages loaded, as `pages::page_of` numbers them.
     pub(super) pages: BTreeSet<usize>,
@@ -82,25 +71,12 @@ pub struct SessionLog {
 }
 
 impl SessionLog {
-    /// The whole log, which reaches `last_seq`, which a subscription fills from after [`before_live`].
-    pub fn new(last_seq: Seq) -> Self {
-        Self::reaching(By::Seq, Position::of_seq(last_seq))
-    }
-
     /// The events from one agent or subagent, which reach the place `last`, which a subscription fills from after
-    /// [`before_live`].
-    pub fn by_place(last: Place) -> Self {
-        Self::reaching(By::Place, Position::of_place(last))
-    }
-
-    /// A log by `by` that reaches `last`, looking at its last row, or with none, at where its first will be.
-    pub(super) fn reaching(by: By, last: Position) -> Self {
+    /// [`before_live`]. It looks at its last row, or with none, at where its first will be.
+    pub fn new(last: Place) -> Self {
+        let last = Position::of_place(last);
         let focus = last.row().unwrap_or(0);
-        Self { by, last, received: before_live(last), focus: focus..focus + 1, ..Default::default() }
-    }
-
-    pub fn by(&self) -> By {
-        self.by
+        Self { last, received: before_live(last), focus: focus..focus + 1, ..Default::default() }
     }
 
     /// A row for each position up to the newest event's.
@@ -120,34 +96,20 @@ impl SessionLog {
         }
     }
 
-    /// The row of the event at `seq`, if this log has it there: in the whole log, its row by `seq`, and otherwise
-    /// its row if it's loaded.
+    /// The row of the event at `seq`, if it's loaded.
     pub fn row_of(&self, seq: Seq) -> Option<usize> {
         self.position_of(seq)?.row()
     }
 
     /// Where the event at `seq` is, if this log has it there, as [`SessionLog::row_of`] says.
     pub(super) fn position_of(&self, seq: Seq) -> Option<Position> {
-        match self.by {
-            By::Seq => Some(Position::of_seq(seq)).filter(|position| *position <= self.last),
-            By::Place => self.positions.get(&seq).copied(),
-        }
-    }
-
-    /// Where `event` goes in this log: its `seq`, or its place.
-    pub fn position(&self, event: &SessionEvent) -> Position {
-        match self.by {
-            By::Seq => Position::of_seq(event.seq),
-            By::Place => Position::of_place(event.place),
-        }
+        self.positions.get(&seq).copied()
     }
 
     /// Holds `event`. A position only ever has the one event, so one put in again replaces itself.
     pub(super) fn insert(&mut self, event: SessionEvent) {
-        let position = self.position(&event);
-        if self.by == By::Place {
-            self.positions.insert(event.seq, position);
-        }
+        let position = Position::of(&event);
+        self.positions.insert(event.seq, position);
         self.events.insert(position, Arc::new(event));
     }
 
@@ -168,8 +130,8 @@ impl SessionLog {
 
     /// Takes an event from a live subscription.
     pub fn apply_event(&mut self, event: SessionEvent) {
-        let position = self.position(&event);
-        // One at 0 has no row: a hub numbers events from 1, and one that records no places isn't read by place.
+        let position = Position::of(&event);
+        // One at 0 has no row. A hub places every event from 1, and an open session refuses one it sends at 0.
         let Some(row) = position.row() else { return };
         if let EventBody::UserPrompt { client_msg_id: Some(id), .. } = &event.body {
             self.pending.retain(|prompt| prompt.client_msg_id != *id);
@@ -251,7 +213,7 @@ impl SessionLog {
     }
 
     /// Whether every event it follows is loaded, so looking through them looks through it all. One that doesn't know
-    /// yet how far its events go, as one by place doesn't until the hub says, holds none.
+    /// yet how far its events go, as it doesn't until the hub says, holds none.
     pub fn holds_every_event(&self) -> bool {
         self.row_count() > 0 && self.events.len() == self.row_count()
     }

@@ -7,13 +7,14 @@ use proptest::test_runner::{Config, RngSeed};
 use super::pages::PAGE_EVENTS;
 use super::tests::{is_rewritten, page, rewritten};
 use super::*;
+use protocol::model::Place;
 use protocol::prompt::Prompt;
 use protocol::prompt::PromptFrom;
 
 /// A log as a view of an open session holds it once the subscription has delivered what it starts with.
-fn opened(last_seq: Seq) -> SessionLog {
-    let mut log = SessionLog::new(last_seq);
-    for event in page(before_live(log.last()).next().seq().get()..last_seq.next().get()) {
+fn opened(last: Place) -> SessionLog {
+    let mut log = SessionLog::new(last);
+    for event in page(before_live(log.last()).next().place().get()..last.next().get()) {
         log.apply_event(event);
     }
     log
@@ -34,7 +35,7 @@ fn fetch_from(log: &mut SessionLog, focus: usize, fails: Option<usize>, served: 
             log.fetch_failed();
             return;
         }
-        log.install_page(range.start, served(range.start.seq().get()..range.end.min(after_last).seq().get()));
+        log.install_page(range.start, served(range.start.place().get()..range.end.min(after_last).place().get()));
     }
 }
 
@@ -42,9 +43,9 @@ fn scroll_to(log: &mut SessionLog, focus: usize) {
     fetch(log, focus, None);
 }
 
-/// Any `seq` of those numbered `numbers`.
-fn seq_in(numbers: Range<u64>) -> impl Strategy<Value = Seq> {
-    numbers.prop_map(Seq::new)
+/// Any place of those numbered `numbers`.
+fn place_in(numbers: Range<u64>) -> impl Strategy<Value = Place> {
+    numbers.prop_map(Place::new)
 }
 
 proptest! {
@@ -56,8 +57,8 @@ proptest! {
 
     /// What's on screen is always there, and is the event its row says it is.
     #[test]
-    fn the_row_in_focus_is_loaded_and_holds_its_own_event(last_seq in seq_in(1u64..30_000), focuses in vec(0usize..30_000, 1..12)) {
-        let mut log = opened(last_seq);
+    fn the_row_in_focus_is_loaded_and_holds_its_own_event(last in place_in(1u64..30_000), focuses in vec(0usize..30_000, 1..12)) {
+        let mut log = opened(last);
         for focus in focuses {
             let focus = focus % log.row_count();
 
@@ -66,14 +67,14 @@ proptest! {
             let Row::Event(event) = log.row(focus) else {
                 panic!("row {focus} isn't loaded");
             };
-            prop_assert_eq!(Position::of_seq(event.seq), Position::of_row(focus));
+            prop_assert_eq!(Position::of_place(event.place), Position::of_row(focus));
         }
     }
 
     /// A small viewport leaves room in the cache target, wherever a long session has been scrolled.
     #[test]
-    fn one_row_viewports_stay_within_the_cache_target(last_seq in seq_in(1u64..30_000), focuses in vec(0usize..30_000, 1..20)) {
-        let mut log = opened(last_seq);
+    fn one_row_viewports_stay_within_the_cache_target(last in place_in(1u64..30_000), focuses in vec(0usize..30_000, 1..20)) {
+        let mut log = opened(last);
         for focus in focuses {
             let focus = focus % log.row_count();
 
@@ -85,12 +86,12 @@ proptest! {
 
     /// Everything it asks for exists, and starts on a page boundary, so each page has one key.
     #[test]
-    fn it_only_asks_for_whole_pages_that_exist(last_seq in seq_in(1u64..30_000), focus in 0usize..30_000) {
-        let mut log = SessionLog::new(last_seq);
+    fn it_only_asks_for_whole_pages_that_exist(last in place_in(1u64..30_000), focus in 0usize..30_000) {
+        let mut log = SessionLog::new(last);
         log.focus_on(focus..focus + 1, Some(focus));
 
         for range in log.pages_to_fetch() {
-            prop_assert!(range.start <= log.last(), "{range:?} is past {last_seq}");
+            prop_assert!(range.start <= log.last(), "{range:?} is past {last}");
             let rows = range.start.row().unwrap()..range.end.row().unwrap();
             prop_assert_eq!(rows.start % PAGE_EVENTS, 0);
             prop_assert_eq!(rows.len(), PAGE_EVENTS);
@@ -99,8 +100,8 @@ proptest! {
 
     /// A page on its way isn't asked for twice.
     #[test]
-    fn a_page_on_its_way_is_not_asked_for_again(last_seq in seq_in(1u64..30_000), focus in 0usize..30_000) {
-        let mut log = SessionLog::new(last_seq);
+    fn a_page_on_its_way_is_not_asked_for_again(last in place_in(1u64..30_000), focus in 0usize..30_000) {
+        let mut log = SessionLog::new(last);
         log.focus_on(focus..focus + 1, Some(focus));
         log.pages_to_fetch();
 
@@ -110,8 +111,8 @@ proptest! {
     /// A log whose subscription started after `before_live`, and has had every event since, loads any row a
     /// view scrolls to, so a page part-delivered live is never taken for a whole one.
     #[test]
-    fn rows_from_live_events_and_from_scrolling_all_load(last_seq in seq_in(1u64..3_000), focuses in vec(0usize..3_000, 1..20)) {
-        let mut log = opened(last_seq);
+    fn rows_from_live_events_and_from_scrolling_all_load(last in place_in(1u64..3_000), focuses in vec(0usize..3_000, 1..20)) {
+        let mut log = opened(last);
         for focus in focuses {
             let focus = focus % log.row_count();
 
@@ -124,8 +125,8 @@ proptest! {
     /// However fetches fail, once retrying is allowed, as on a new connection, every row loads, so nothing
     /// asked for alongside a failed fetch is left waiting for good.
     #[test]
-    fn after_failed_fetches_every_row_still_loads(last_seq in seq_in(1u64..3_000), steps in vec((0usize..3_000, 0usize..4), 1..20)) {
-        let mut log = opened(last_seq);
+    fn after_failed_fetches_every_row_still_loads(last in place_in(1u64..3_000), steps in vec((0usize..3_000, 0usize..4), 1..20)) {
+        let mut log = opened(last);
         for (focus, fails) in steps {
             let focus = focus % log.row_count();
 
@@ -141,11 +142,11 @@ proptest! {
     /// the newest pages have come live again, each row a view scrolls to is as the new hub has it.
     #[test]
     fn a_log_read_again_shows_what_it_held_until_each_row_comes_again(
-        last_seq in seq_in(1u64..6_000),
+        last in place_in(1u64..6_000),
         before in vec(0usize..6_000, 0..8),
         after in vec(0usize..6_000, 1..12),
     ) {
-        let mut log = opened(last_seq);
+        let mut log = opened(last);
         for focus in before {
             let focus = focus % log.row_count();
             scroll_to(&mut log, focus);
@@ -156,7 +157,7 @@ proptest! {
 
         prop_assert_eq!(log.row_count(), rows);
         prop_assert_eq!(log.loaded_rows(), held);
-        for event in rewritten(log.received().next().seq().get()..last_seq.next().get()) {
+        for event in rewritten(log.received().next().place().get()..last.next().get()) {
             log.apply_event(event);
         }
         for focus in after {
@@ -176,11 +177,11 @@ proptest! {
     /// session has been scrolled and with prompts sent that aren't recorded yet, which the tail shows.
     #[test]
     fn the_loaded_rows_are_the_ones_that_hold_something(
-        last_seq in seq_in(1u64..6_000),
+        last in place_in(1u64..6_000),
         focuses in vec(0usize..6_000, 0..12),
         sent in 0usize..3,
     ) {
-        let mut log = opened(last_seq);
+        let mut log = opened(last);
         for focus in focuses {
             let focus = focus % log.row_count();
             scroll_to(&mut log, focus);

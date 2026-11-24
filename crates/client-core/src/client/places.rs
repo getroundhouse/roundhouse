@@ -8,8 +8,7 @@ use super::{Client, Result};
 
 impl Client {
     /// Returns the agent's own events, or those of the subagent `subagent`, from `from_place` on, and the place
-    /// of the newest of them. A hub from before places refuses it, which [`super::ClientError::is_unsupported`] says.
-    /// See [`log::SessionReadPlaces`].
+    /// of the newest of them. See [`log::SessionReadPlaces`].
     pub fn session_read_places(
         &self,
         id: &SessionId,

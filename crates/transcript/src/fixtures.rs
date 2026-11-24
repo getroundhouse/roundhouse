@@ -6,7 +6,7 @@ use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{EventBody, SessionEvent, TurnOutcome};
 use protocol::fixtures;
 pub(crate) use protocol::fixtures::event;
-use protocol::model::{Rev, Seq, Subagent, SubagentStatus};
+use protocol::model::{Place, Rev, Subagent, SubagentStatus};
 use protocol::prompt::Prompt;
 use protocol::prompt::PromptFrom;
 
@@ -17,7 +17,7 @@ pub(crate) fn record(call: &str, status: SubagentStatus) -> Subagent {
 }
 
 pub(crate) fn log(events: impl IntoIterator<Item = SessionEvent>) -> SessionLog {
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     for event in events {
         log.apply_event(event);
     }

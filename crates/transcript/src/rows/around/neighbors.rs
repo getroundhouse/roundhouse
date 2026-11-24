@@ -234,14 +234,12 @@ impl Around {
     }
 
     /// Every image the event draws now, for its row to ask the hub for: a prompt's, and those of each call or result
-    /// that's open, including what a call gathered from its subagent, or the calls it shows from its subagent's record.
-    /// A closed call's images wait until it's opened.
+    /// that's open, including the calls it shows from its subagent's record. A closed call's images wait until it's
+    /// opened.
     pub(in super::super) fn images(&self) -> Vec<&Carried> {
         let mut images: Vec<&Carried> = self.carried.iter().collect();
         for block in self.blocks.iter().filter(|block| block.open) {
             images.extend(block.reply.result().into_iter().flat_map(Answer::images));
-            let gathered = block.subagent.iter().flat_map(|subagent| subagent.events.iter().flatten());
-            images.extend(gathered.flat_map(|(_, around)| around.images()));
             let lately = block.subagent.iter().flat_map(|subagent| &subagent.lately).filter(|(_, around)| around.open);
             images.extend(lately.flat_map(|(_, around)| around.reply.result().into_iter().flat_map(Answer::images)));
         }
@@ -269,7 +267,7 @@ impl BlockAround {
                 let recorded = Recorded::of(block);
                 let hands_off = recorded.is_some_and(|call| call.hands_off());
                 let subagent = hands_off.then(|| Subagent::read(log, m, seq, id, open, opening));
-                let names = recorded.and_then(|call| Names::read(log, m, call));
+                let names = recorded.and_then(|call| Names::read(m, call));
                 (Reply::to(log, m, seq, id), subagent, names, m.proposals.get(id).cloned())
             }
             ContentBlock::CallResult { .. } if !with_call => (Reply::of(block, m), None, None, None),
@@ -296,7 +294,7 @@ pub(crate) fn drawn_in_row<'a>(log: &'a SessionLog, event: &'a SessionEvent) -> 
 /// Whether the result `tool_use_id`, in the event at `seq`, is drawn with its call, which is close enough before it to
 /// have found it, as [`BlockAround`] says.
 pub(crate) fn drawn_with_its_call(log: &SessionLog, seq: Seq, tool_use_id: &ToolUseId) -> Option<Seq> {
-    nearby::call_before(log, seq, tool_use_id, NEAR).map(|(call, _)| call)
+    nearby::call_before(log, seq, tool_use_id, NEAR)
 }
 
 /// Whether `body` is a request for approval that asks the person questions, which is drawn as a call's line once it's

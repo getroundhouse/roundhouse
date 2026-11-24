@@ -1,7 +1,7 @@
 //! Reading a log again where it is, as from a hub of another build, besides what the laws say of its rows.
 
 use protocol::fixtures::{self, event};
-use protocol::model::{ApprovalId, OpenApproval, Seq};
+use protocol::model::{ApprovalId, OpenApproval, Place, Seq};
 
 use super::super::pages::page_range;
 use super::super::tests::{is_rewritten, page, rewritten};
@@ -33,7 +33,7 @@ fn notes(log: &SessionLog, recorded: &RecordedApprovals) -> Vec<String> {
 #[test]
 fn a_request_fetched_on_its_own_is_fetched_again_and_shown_until_it_comes() {
     let seq = Seq::new(5);
-    let mut log = SessionLog::new(Seq::new(600));
+    let mut log = SessionLog::new(Place::new(600));
     log.waiting_on(Some(&waiting(seq)));
     assert_eq!(log.requests_to_fetch(), vec![seq]);
     log.install_request(seq, Some(asked(seq, "before")));
@@ -51,7 +51,7 @@ fn a_request_fetched_on_its_own_is_fetched_again_and_shown_until_it_comes() {
 #[test]
 fn a_request_that_fails_to_come_again_is_fetched_again_on_retrying() {
     let seq = Seq::new(5);
-    let mut log = SessionLog::new(Seq::new(600));
+    let mut log = SessionLog::new(Place::new(600));
     log.waiting_on(Some(&waiting(seq)));
     log.requests_to_fetch();
     log.install_request(seq, Some(asked(seq, "before")));
@@ -69,7 +69,7 @@ fn a_request_that_fails_to_come_again_is_fetched_again_on_retrying() {
 #[test]
 fn a_request_whose_page_is_let_go_of_before_it_came_again_is_fetched_again() {
     let last = 15_000;
-    let mut log = SessionLog::new(Seq::new(last));
+    let mut log = SessionLog::new(Place::new(last));
     log.waiting_on(Some(&waiting(Seq::FIRST)));
     let mut first = page(1..251);
     first[0] = asked(Seq::FIRST, "before");
@@ -78,7 +78,7 @@ fn a_request_whose_page_is_let_go_of_before_it_came_again_is_fetched_again() {
     log.read_again();
 
     for start in (251..last).step_by(250) {
-        let position = Position::of_seq(Seq::new(start));
+        let position = Position::of_place(Place::new(start));
         log.focus_on(position.row().unwrap()..position.row().unwrap() + 1, Some(position.row().unwrap()));
         log.install_page(position, page(start..start + 250));
     }
@@ -90,7 +90,7 @@ fn a_request_whose_page_is_let_go_of_before_it_came_again_is_fetched_again() {
 
 #[test]
 fn the_hub_is_asked_for_the_prompts_and_compactions_again() {
-    let mut log = SessionLog::new(Seq::new(600));
+    let mut log = SessionLog::new(Place::new(600));
     log.list_prompts(Vec::new());
     log.list_compactions(Vec::new());
     assert!(!log.wants_prompt_list() && !log.wants_compaction_list());
@@ -103,7 +103,7 @@ fn the_hub_is_asked_for_the_prompts_and_compactions_again() {
 /// Only the pages up to where the newest come live again are fetched again, since the subscription sends those after.
 #[test]
 fn the_newest_pages_come_live_and_are_not_fetched_again() {
-    let mut log = SessionLog::new(Seq::new(600));
+    let mut log = SessionLog::new(Place::new(600));
     for event in page(251..601) {
         log.apply_event(event);
     }
@@ -113,7 +113,7 @@ fn the_newest_pages_come_live_and_are_not_fetched_again() {
 
     log.read_again();
 
-    assert_eq!(log.received(), Position::of_seq(Seq::new(250)), "the subscription starts after the first page");
+    assert_eq!(log.received(), Position::of_place(Place::new(250)), "the subscription starts after the first page");
     assert_eq!(log.pages_to_fetch(), vec![page_range(0)]);
     log.install_page(page_range(0).start, rewritten(1..251));
     assert!(matches!(log.row(0), Row::Event(event) if is_rewritten(event)));

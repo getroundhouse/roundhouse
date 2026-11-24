@@ -3,7 +3,7 @@ use std::ops::Range;
 use super::*;
 use protocol::model::Seq;
 
-/// The prompt `line`, in its own row in a chat that holds every event.
+/// The prompt `line`, in its own row in a chat no subagent has worked in, where each event's place is its `seq`.
 fn prompt(line: PromptLine) -> Line {
     Line { row: usize::try_from(line.seq().get()).unwrap() - 1, kind: Kind::Prompt { line, number: 1 } }
 }

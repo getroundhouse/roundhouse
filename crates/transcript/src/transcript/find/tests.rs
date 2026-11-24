@@ -18,7 +18,7 @@ use protocol::prompt::Prompt;
 use super::count::{At, Counts};
 use super::stretch::{Known, counted_in};
 use super::{More, changed_to_count, count_held, first_match, held_to_count, says};
-use crate::fixtures::{event, log, record, subagents, within};
+use crate::fixtures::{event, log, record, subagents};
 use crate::transcript::{Model, SubagentRecords};
 use protocol::prompt::PromptFrom;
 
@@ -48,15 +48,6 @@ fn placed(place: u64, body: EventBody) -> SessionEvent {
     SessionEvent { place: Place::new(place), ..event(Seq::new(place * 3), body) }
 }
 
-/// The agent's own events, by place, as a chat follows them.
-fn own(events: impl IntoIterator<Item = SessionEvent>) -> SessionLog {
-    let mut log = SessionLog::by_place(Place::default());
-    for event in events {
-        log.apply_event(event);
-    }
-    log
-}
-
 /// The record of the subagent the call `call` started, done, with `report`.
 fn reported(call: &str, report: &str) -> SubagentRecords {
     let record = Subagent {
@@ -69,11 +60,6 @@ fn reported(call: &str, report: &str) -> SubagentRecords {
     let mut records = SubagentRecords::default();
     records.insert(Arc::new(record));
     records
-}
-
-/// Whatever else happened, so the events that matter are on pages of their own.
-fn filler(seqs: std::ops::Range<u64>) -> impl Iterator<Item = SessionEvent> {
-    seqs.map(|seq| event(Seq::new(seq), agent_says("nothing to see")))
 }
 
 /// Counts `rows` of `log` into `counts`, as the transcript does.
@@ -92,21 +78,20 @@ fn follow(
     counts: &mut Counts,
     changed: std::ops::Range<usize>,
 ) {
-    let (found, rows) = changed_to_count(log, m, (needle, candidates, counts), changed);
+    let (found, rows) = changed_to_count(log, (needle, candidates, counts), changed);
     candidates.extend(found);
     count(log, m, needle, rows, counts);
 }
 
 #[test]
 fn what_the_log_holds_is_counted_by_the_rows_that_draw_it() {
-    let log = own([
+    let log = log([
         placed(1, agent_says("the lexer")),
         placed(2, agent_says("the parser")),
         placed(3, runs("run", "cargo test")),
     ]);
-    let m = Model::default();
 
-    let (found, rows) = held_to_count(&log, &m, &needle("parser"));
+    let (found, rows) = held_to_count(&log, &needle("parser"));
 
     assert_eq!(found, [Position::of_row(1)], "in its place's row, not its seq's");
     assert_eq!(rows.into_iter().collect::<Vec<_>>(), [1], "only the rows of what holds it");
@@ -132,24 +117,6 @@ fn a_result_that_comes_after_its_call_is_counted_in_the_call_s_row() {
 }
 
 #[test]
-fn a_subagent_s_work_held_before_its_call_moves_into_the_call_once_it_loads() {
-    let needle = needle("parser");
-    let m = Model::default();
-    let work = || event(Seq::new(300), within("helper", agent_says("Looking at the parser")));
-    let (mut candidates, mut counts) = (BTreeSet::new(), Counts::default());
-    // Its page loads first, without the call, so it's drawn in its own row.
-    follow(&log([work()]), &m, &needle, &mut candidates, &mut counts, 299..300);
-    assert_eq!(counts.of(299), 1);
-
-    // Then the call's page, which draws it, far from where its page changed.
-    let both = log(std::iter::once(event(Seq::new(1), subagents(&["helper"]))).chain(filler(2..300)).chain([work()]));
-    follow(&both, &m, &needle, &mut candidates, &mut counts, 0..250);
-
-    assert_eq!((counts.of(0), counts.of(299)), (1, 0), "in the call now, and not where it was");
-    assert_eq!(counts.total(), 1, "once");
-}
-
-#[test]
 fn a_subagent_s_call_counts_the_report_its_record_has_as_it_draws_it() {
     let needle = needle("parser");
     let call = || placed(1, subagents(&["helper"]));
@@ -159,7 +126,7 @@ fn a_subagent_s_call_counts_the_report_its_record_has_as_it_draws_it() {
     let subagents = reported("helper", "The parser is fixed");
     let m = Model { subagents, ..Model::default() };
     let mut counts = Counts::default();
-    count(&own([call()]), &m, &needle, [0].into(), &mut counts);
+    count(&log([call()]), &m, &needle, [0].into(), &mut counts);
 
     assert_eq!(read, [(0, 1)], "read in a stretch");
     assert_eq!(counts.of(0), 1, "and held");
@@ -200,7 +167,7 @@ fn a_stretch_counts_a_prompt_where_the_chat_draws_it() {
     // A prompt's `seq` is three times its place.
     let taken = |place, prompt_place: u64| placed(place, EventBody::PromptTaken { prompt: Seq::new(prompt_place * 3) });
     let says = |place, text| placed(place, agent_says(text));
-    let chat = own([prompt(1), taken(2, 1), says(3, "first"), prompt(4), says(5, "second"), taken(6, 4)]);
+    let chat = log([prompt(1), taken(2, 1), says(3, "first"), prompt(4), says(5, "second"), taken(6, 4)]);
     let known = || Known { settled: chat.settled_prompts(), ..Known::default() };
 
     let fourth = [Position::of_row(3)];
@@ -299,7 +266,7 @@ fn a_typed_file_call_is_found_as_its_row_draws_it() {
     let tailing = protocol::fixtures::command_output("depot up", None, went_on);
     let cell =
         NotebookEdit { path: "a.ipynb".into(), cell: None, source: "may_pass()".into(), does: CellEdit::Replace };
-    let log = own([
+    let log = log([
         placed(1, typed("read", read)),
         placed(2, came_back("read", lines)),
         placed(3, typed("patch", patch)),
@@ -347,7 +314,7 @@ fn a_typed_search_or_call_of_the_web_is_found_as_its_row_draws_it() {
     let gone = vec![CommandPart::Search { pattern: Some("may_pass".into()), path: Some("gone".into()) }];
     let failed = Call::Command(Command { parts: gone, ..protocol::fixtures::typed_command("rg -n may_pass gone") });
     let missing = protocol::fixtures::command_output("rg: gone: No such file or directory", Some(2), Ended::Exited);
-    let log = own([
+    let log = log([
         placed(1, typed("search", search)),
         placed(2, came_back("search", lines)),
         placed(3, typed("find", find)),

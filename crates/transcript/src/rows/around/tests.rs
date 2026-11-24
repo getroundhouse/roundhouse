@@ -1,21 +1,21 @@
 use std::sync::Arc;
 
 use client_core::Answered;
-use client_core::session_log::{RecordedApprovals, SessionLog};
+use client_core::session_log::RecordedApprovals;
 use protocol::attachment::{Attachment, MediaType};
 use protocol::capability::approvals::{Asks, Decision};
 use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::calls::call::Read;
 use protocol::capability::calls::output::Ended;
 use protocol::capability::calls::{Call, CallOutput};
-use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::event::{ContentBlock, EventBody};
 use protocol::fixtures::{approval_request, cancelled, decided, deny, question as asked_as};
-use protocol::model::{Lately, LatelyCall, LatelyResult, OpenApproval, Place, Seq, Subagent, SubagentStatus};
+use protocol::model::{Lately, LatelyCall, LatelyResult, OpenApproval, Seq, Subagent, SubagentStatus};
 
 use super::{Answer, Around, Closes, Reply, Settled, block_key, retry_at};
 use crate::fixtures::{
     advised, asked_a_question, asked_to_use, asking, calls, event, failed_request, from_the_agent, log, prompt, record,
-    result, subagents, turn_ended, within,
+    result, subagents, turn_ended,
 };
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
@@ -220,30 +220,12 @@ fn a_call_s_images_are_fetched_only_once_it_s_open() {
     assert_eq!(Around::read(&log, &m, Seq::new(1), &calls(&["a"])).images().len(), 1, "open");
 }
 
-#[test]
-fn a_subagent_s_images_are_fetched_with_the_call_that_started_it() {
-    let agent = subagents(&["a"]);
-    let log = log([
-        event(Seq::new(1), agent.clone()),
-        event(Seq::new(2), within("a", calls(&["b"]))),
-        event(Seq::new(3), within("a", with_an_image("b"))),
-    ]);
-    let mut m = Model::default();
-    m.folds.choose(ItemKey::Event(Seq::new(2), 0), Fold::Output, true);
-    assert!(Around::read(&log, &m, Seq::new(1), &agent).images().is_empty(), "the agent's call is closed");
-
-    m.folds.choose(ItemKey::Event(Seq::new(1), 0), Fold::Output, true);
-
-    assert_eq!(Around::read(&log, &m, Seq::new(1), &agent).images().len(), 1, "opened, it gathers its subagent's");
-}
-
-/// A chat that reads by place holds only the agent's own events, so what a working subagent has done lately comes
-/// from its record, images and all.
+/// A chat holds only the agent's own events, so what a working subagent has done lately comes from its record, images
+/// and all.
 #[test]
 fn a_working_subagent_s_latest_images_are_fetched_once_its_call_under_working_on_is_open() {
     let agent = subagents(&["agent"]);
-    let mut log = SessionLog::by_place(Place::default());
-    log.apply_event(SessionEvent { place: Place::new(1), ..event(Seq::new(1), agent.clone()) });
+    let log = log([event(Seq::new(1), agent.clone())]);
     let image = Attachment { id: "i1".into(), name: "image".into(), media_type: MediaType::Png, size_bytes: 1 };
     let read = Call::Read(Read { path: "a.png".into(), lines: None, pages: None });
     let output = CallOutput::Words { text: String::new() };

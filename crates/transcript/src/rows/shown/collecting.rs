@@ -1,6 +1,4 @@
-use super::super::around::{
-    Around, BlockAround, Opening, blocks_of, drawn_in_its_call, drawn_in_row, drawn_with_its_call, its_call,
-};
+use super::super::around::{Around, BlockAround, Opening, blocks_of, drawn_in_row, drawn_with_its_call};
 use super::super::tools;
 use crate::find;
 use crate::find::{Part, TextId};
@@ -32,19 +30,16 @@ pub(crate) fn of_row(log: &SessionLog, m: &Model, needle: &Needle, ix: usize) ->
         return gather.found;
     }
     let Row::Event(event) = log.row(ix) else { return gather.found };
-    if drawn_in_its_call(log, m, event) {
-        return gather.found;
-    }
     let Some(event) = drawn_in_row(log, event) else { return gather.found };
     let around = Around::read_as(log, m, event.seq, &event.body, Opening::All);
     of_event(event, &around, &mut gather);
     gather.found
 }
 
-/// The rows the event at `position` in the log is drawn in: its own, unless it's a subagent's, drawn in the call that
-/// started it, or a prompt, drawn where it was settled, and the rows of the calls any of its results are drawn with. A
-/// prompt at the end is in none that's found in, and so is 0, where no event is.
-pub(crate) fn rows_drawing(log: &SessionLog, m: &Model, position: Position) -> Vec<usize> {
+/// The rows the event at `position` in the log is drawn in: its own, unless it's a prompt, drawn where it was settled,
+/// and the rows of the calls any of its results are drawn with. A prompt at the end is in none that's found in, and so
+/// is 0, where no event is.
+pub(crate) fn rows_drawing(log: &SessionLog, position: Position) -> Vec<usize> {
     let Some(own) = position.row() else { return Vec::new() };
     let Row::Event(event) = log.row(own) else { return vec![own] };
     if matches!(event.body, EventBody::UserPrompt { .. }) {
@@ -52,9 +47,6 @@ pub(crate) fn rows_drawing(log: &SessionLog, m: &Model, position: Position) -> V
     }
     // A call found near it is loaded, so the log has its row.
     let row_of = |call: Seq| log.row_of(call);
-    if let Some(call) = its_call(log, m, event) {
-        return row_of(call).into_iter().collect();
-    }
     let mut rows = vec![own];
     for block in blocks_of(&event.body) {
         if let ContentBlock::CallResult { tool_use_id, .. } = block
@@ -70,8 +62,8 @@ pub(crate) fn rows_drawing(log: &SessionLog, m: &Model, position: Position) -> V
 
 /// The rows to count again when the event at `position` in the log is found to hold the needle, or changes: those
 /// it's drawn in, and its own, which draws nothing of it when it's drawn in another's.
-pub(crate) fn rows_to_count(log: &SessionLog, m: &Model, position: Position) -> Vec<usize> {
-    let mut rows = rows_drawing(log, m, position);
+pub(crate) fn rows_to_count(log: &SessionLog, position: Position) -> Vec<usize> {
+    let mut rows = rows_drawing(log, position);
     rows.extend(position.row());
     rows.sort_unstable();
     rows.dedup();
@@ -177,7 +169,7 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
 }
 
 /// What a block shows, as [`super::super::render_block`] draws it.
-pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, gather: &mut Gather) {
+fn of_block(block: &ContentBlock, drawing: &BlockAround, gather: &mut Gather) {
     let key = &drawing.key;
     match block {
         ContentBlock::Text { text, .. } => gather.written(key, Part::Text, text),

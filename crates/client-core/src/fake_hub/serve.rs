@@ -215,9 +215,6 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             let through = theirs.last().map_or(Place::new(0), |event| event.place);
             reply(C::Found(Found { places: places.collect(), through }))
         }
-        R::SessionReadPlaces(_) if world.reads_every_event_together => {
-            Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't read the agent's own events apart"))
-        }
         R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, .. }) => {
             world.session(&id)?;
             let subagent = world.subagent_named(&id, subagent.as_ref());

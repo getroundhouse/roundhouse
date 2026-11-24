@@ -13,7 +13,7 @@ use super::super::tests::{
 };
 use super::*;
 use crate::RecordsFeed;
-use crate::session_log::{By, SessionLog};
+use crate::session_log::SessionLog;
 use crate::stand_in_hub::{self, Does};
 
 /// The position of the event at `place`, in a log by place, as a search reads.
@@ -94,7 +94,7 @@ fn connect(socket: &std::path::Path) -> Client {
 /// The chat's own events, followed by place, as the app follows them.
 fn own(client: &Client) -> OpenSession {
     let feed = RecordsFeed::start(client);
-    OpenSession::start_view(client, &feed, &session(), View::Own)
+    OpenSession::start(client, &feed, &session(), View::Own)
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn what_the_hub_names_is_read_with_what_s_around_it_a_stretch_at_a_time() {
     let client = connect(&socket);
     let helper: SubagentId = "helper".into();
     let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start_view(&client, &feed, &session(), View::Subagent(helper.clone()));
+    let open = OpenSession::start(&client, &feed, &session(), View::Subagent(helper.clone()));
     let mut heard = Vec::new();
     let starts = |reads: Vec<(u64, Option<SubagentId>)>| -> Vec<u64> {
         assert!(reads.iter().all(|(_, of)| of.as_ref() == Some(&helper)), "{reads:?}");
@@ -227,22 +227,6 @@ fn a_query_too_short_isn_t_asked_and_a_failure_says_why_once() {
     drop(open);
     let requests = requests_until_unsubscribed(&requests, 1);
     assert_eq!(queries_asked(&requests), [("parser", None)]);
-}
-
-/// Such as one followed by `seq` because its hub is too old to read by place, and so to find.
-#[test]
-fn a_log_by_seq_isn_t_looked_through_at_the_hub() {
-    let dir = tempfile::tempdir().unwrap();
-    let socket = dir.path().join("hub.sock");
-    let requests = start_hub_answering(&socket, answered_simply);
-    let client = connect(&socket);
-    let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start(&client, &feed, &session());
-
-    assert_eq!(open.read(SessionLog::by), By::Seq);
-    assert_eq!(open.search(&client, needle("parser"), 64).searched(), Searched::CantFind);
-    drop(open);
-    assert!(queries_asked(&requests_until_unsubscribed(&requests, 1)).is_empty());
 }
 
 #[test]

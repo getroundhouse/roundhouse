@@ -41,8 +41,7 @@ impl Settled {
     }
 
     /// Takes `at` for the prompt recorded at `prompt`, unless it's known to have been settled later, since the last
-    /// event to settle it is where it's drawn. The same event at another place, as from a hub that reads by place
-    /// after one that couldn't, takes that place. Returns whether anything changed.
+    /// event to settle it is where it's drawn. Returns whether anything changed.
     pub(super) fn settle(&mut self, prompt: Seq, at: SettledAt) -> bool {
         if self.0.get(&prompt).is_some_and(|known| known.seq > at.seq || *known == at) {
             return false;
@@ -70,8 +69,8 @@ impl SessionLog {
             Some(Settlement::Unknown) | None => {}
         }
         let mut dropped = false;
-        // What comes after it in this log, which holds every event about a prompt, whether it's the whole log or the
-        // agent's own events. One it doesn't hold, such as one past its end, has nothing after it yet.
+        // What comes after it in this log, which holds every event about a prompt, since each is the agent's own. One it
+        // doesn't hold, such as one past its end, has nothing after it yet.
         let Some(row) = self.row_of(seq) else { return PromptState::Waiting };
         for later in row + 1..self.row_count() {
             // Not loaded, so far behind the tail, where it was settled long ago.
@@ -94,7 +93,7 @@ impl SessionLog {
         match self.settled.at(seq) {
             Some(at) => {
                 // Until the event that settled it arrives, as when the hub's list says first, it stays at the end.
-                let row = self.row_at(at.seq, at.place);
+                let row = Self::row_at(at.place);
                 if row < self.row_count() { PromptAt::Settled(row) } else { PromptAt::End }
             }
             None if self.settled.newest().is_some_and(|newest| seq > newest) => PromptAt::End,
@@ -190,7 +189,7 @@ impl SessionLog {
     /// the row of where it was settled before, `left`, and of where it's settled now change, if they're loaded, and so
     /// does where the outline puts it. Only a live event moves one to or from the end, and it changes the tail anyway.
     pub(in super::super) fn prompt_moved(&mut self, seq: Seq, left: Option<SettledAt>) {
-        let settled = [left, self.settled.at(seq)].into_iter().flatten().map(|at| self.row_at(at.seq, at.place));
+        let settled = [left, self.settled.at(seq)].into_iter().flatten().map(|at| Self::row_at(at.place));
         let rows: Vec<usize> = self.row_of(seq).into_iter().chain(settled).collect();
         for row in rows {
             if matches!(self.row(row), Row::Event(_)) {

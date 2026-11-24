@@ -162,8 +162,8 @@ pub fn found_github_login(provider: &str) -> FoundGithubLogin {
     }
 }
 
-/// `body` as the event at `seq` in the session `s`'s log, from the agent itself, as a hub that doesn't record runs or
-/// places sends it.
+/// `body` as the event at `seq` in the session `s`'s log, from the agent itself, as a hub that doesn't record runs sends
+/// it. It's at the place `seq` among the agent's own events, as in a log no subagent has worked in.
 pub fn event(seq: Seq, body: EventBody) -> SessionEvent {
     SessionEvent {
         session_id: "s".into(),
@@ -171,7 +171,7 @@ pub fn event(seq: Seq, body: EventBody) -> SessionEvent {
         ts_ms: 0,
         run: None,
         subagent: None,
-        place: Place::default(),
+        place: Place::new(seq.get()),
         interaction: InteractionMode::Typing,
         body,
         raw: None,

@@ -67,9 +67,6 @@ pub struct World {
     pub worktree_videos: HashMap<String, Vec<u8>>,
     /// What the files the world's diff changes held in the commit it was taken from, by path.
     pub base_files: HashMap<String, FileContents>,
-    /// Whether the hub is from before it read the agent's own events apart from its subagents', so a chat holds every
-    /// event, and a subagent's work is gathered into its call.
-    pub reads_every_event_together: bool,
     /// The hub's build, for a screen about a hub that isn't the app's build.
     pub hub: Option<HubBuild>,
     /// The records of the accounts the world's chats run under.

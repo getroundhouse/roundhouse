@@ -2,31 +2,28 @@ use super::super::follow::{FollowError, Following};
 use super::super::{Client, RecordsFeed};
 use super::search;
 use super::source::SessionSource;
-use crate::session_log::{By, Changes, RecordedApprovals, SessionLog};
+use crate::session_log::{Changes, RecordedApprovals, SessionLog};
 use protocol::find::Needle;
 use protocol::model::{ClientMessageId, Place, QueuedPrompt, Session, SessionId, SubagentId};
 use search::{Search, Searched, Searches};
 use std::ops::Range;
 use std::sync::Arc;
 
-/// Which of a session's events a view follows.
+/// Which of a session's events a view follows, by their places among them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum View {
-    /// Every event, by `seq`.
-    Whole,
-    /// The agent's own events, by place. A hub from before places can't read them apart, so from one this is every
-    /// event, by `seq`, which [`SessionLog::by`] says.
+    /// The agent's own events.
     Own,
-    /// The events of one subagent, by place.
+    /// The events of one subagent.
     Subagent(SubagentId),
 }
 
 impl View {
-    /// The subagent whose events it follows, or `None` for the agent's own, or every event.
+    /// The subagent whose events it follows, or `None` for the agent's own.
     pub(super) fn subagent(&self) -> Option<&SubagentId> {
         match self {
             View::Subagent(subagent) => Some(subagent),
-            View::Whole | View::Own => None,
+            View::Own => None,
         }
     }
 }
@@ -44,32 +41,20 @@ pub struct OpenSession {
 }
 
 impl OpenSession {
-    /// Starts following every event, on a thread of its own, so this doesn't wait for the hub, with the session's own
-    /// records kept in `records`, as [`OpenSession::start_view`] says. Once it has subscribed, it asks for the
-    /// session's prompts.
-    pub fn start(client: &Client, records: &RecordsFeed, session: &Session) -> OpenSession {
-        OpenSession::start_view(client, records, session, View::Whole)
-    }
-
-    /// Starts following the events `view` takes, on a thread of its own. Once it has subscribed, it asks for the
-    /// session's prompts, unless it follows a subagent, whose events hold none. `records`, the copy of the same hub's
-    /// records, holds the session's own records, its subagents, proposals and how its replies were heard, as its
-    /// subscription sends them, until every clone of this has gone.
-    pub fn start_view(client: &Client, records: &RecordsFeed, session: &Session, view: View) -> OpenSession {
-        // One by place doesn't know how far it goes until the hub says.
-        let mut log = match view {
-            View::Whole => SessionLog::new(session.last_seq),
-            View::Own | View::Subagent(_) => SessionLog::by_place(Place::default()),
-        };
+    /// Starts following the events `view` takes, on a thread of its own, so this doesn't wait for the hub. Once it has
+    /// subscribed, it asks for the session's prompts, unless it follows a subagent, whose events hold none. `records`,
+    /// the copy of the same hub's records, holds the session's own records, its subagents, proposals and how its replies
+    /// were heard, as its subscription sends them, until every clone of this has gone.
+    pub fn start(client: &Client, records: &RecordsFeed, session: &Session, view: View) -> OpenSession {
+        // It doesn't know how far it goes until the hub says.
+        let mut log = SessionLog::new(Place::default());
         // What waits is asked about wherever it was asked, from the start. A subagent's view asks nothing.
         if !matches!(view, View::Subagent(_)) {
             log.waiting_on(RecordedApprovals::of(session).as_ref());
         }
         let source = SessionSource {
             session_id: session.id.clone(),
-            wanted: view.clone(),
             view: view.clone(),
-            last_seq: session.last_seq,
             placed: false,
             read_from: client.hub_version().to_string(),
             records: records.reach(),
@@ -157,18 +142,13 @@ impl OpenSession {
     /// its own, and says when there's more through [`OpenSession::changed`]. The hub says which events hold it, by
     /// place, and the search reads each with what's within `around` places of it, a stretch at a time, for a view to
     /// count what the rows it doesn't hold draw. Events the log holds, and those it's given from now on, a view looks
-    /// through itself. A log by `seq` is from a hub too old to read by place, and so to find. The search stops once it
-    /// has gone, and `client` is the connection it asks on.
+    /// through itself. The search stops once it has gone, and `client` is the connection it asks on.
     pub fn search(&self, client: &Client, needle: Needle, around: usize) -> Search {
-        let (every, by) = self.follow.read(|log| (log.holds_every_event(), log.by()));
-        if every {
+        if self.follow.read(|log| log.holds_every_event()) {
             return Search::finished(Searched::Done);
         }
         if needle.query().trim().chars().count() < Search::SHORTEST {
             return Search::finished(Searched::TooShort);
-        }
-        if by == By::Seq {
-            return Search::finished(Searched::CantFind);
         }
         let asking = search::Asking { session_id: self.session_id.clone(), view: self.view.clone(), needle, around };
         search::Job::start(client, asking, &self.searches, self.follow.teller())

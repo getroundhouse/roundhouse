@@ -1,12 +1,12 @@
 //! A call that handed work to a subagent: what it's for, what kind of agent unless it's the default, the model it runs
 //! on, and how many calls it's made.
 //!
-//! When the hub keeps the subagent's work apart, it's drawn from the subagent's record. Opened, it shows the blocks
-//! the subagent tab starts and ends with: what it was asked, and its report once it's done, with its newest call
+//! The subagent's work is kept apart, in the subagent tab, so it's drawn from the subagent's record. Opened, it shows the
+//! blocks the subagent tab starts and ends with: what it was asked, and its report once it's done, with its newest call
 //! between them while it works. A button at the line's end opens the tab.
 //!
-//! From a hub that doesn't, opened, it shows what it was asked, then everything it did, under a rule, the way the
-//! transcript draws the agent's own work. [`crate::rows::around`] gathers that work from the log.
+//! For an agent that doesn't record its subagents' work, as Antigravity's doesn't, opened, it shows what it was asked,
+//! then what its call sent back, under a rule.
 
 use client_core::calls::agent::{self, Agent};
 use client_core::calls::count;
@@ -19,7 +19,7 @@ use gpui_kit::{
 };
 use look::Lined as _;
 use look::Typeset as _;
-use protocol::event::{AgentTask, ContentBlock, SessionEvent, TaskKind};
+use protocol::event::{AgentTask, TaskKind};
 use protocol::model::{SubagentId, SubagentStatus, ToolUseId};
 
 use super::line::{Line, Part};
@@ -28,8 +28,7 @@ use crate::find::{FindLook, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::model_names::model_name;
-use crate::rows::around::{Around, blocks_of};
-use crate::rows::shown::{self, Gather};
+use crate::rows::shown::Gather;
 use crate::rows::{render_block, written};
 use crate::selection::Selection;
 use crate::transcript::Transcript;
@@ -63,14 +62,14 @@ pub(super) fn draw(
     let opened = || {
         Some(match subagent {
             Some(subagent) if subagent.apart => page(call, answer, subagent, toggle, cx),
-            Some(_) | None => gathered(call, answer, subagent, toggle, cx),
+            Some(_) | None => unrecorded(call, answer, toggle, cx),
         })
     };
     line::drawn(line, answer, opened, toggle, cx)
 }
 
-/// What [`draw`] shows open, for finding: what it was asked, what it did, if that's gathered into it, and its report.
-/// While its work is kept apart, what it's done lately, which changes as it works, isn't found.
+/// What [`draw`] shows open, for finding: what it was asked, and its report. While its work is kept apart, what it's
+/// done lately, which changes as it works, isn't found.
 pub(super) fn shown(
     call: &Agent,
     answer: Option<&Answer>,
@@ -82,19 +81,13 @@ pub(super) fn shown(
         gather.plain(key, Text::Title, title);
     }
     line::shown_failure(answer, false, key, gather);
-    let events = subagent.and_then(|s| s.events.as_deref()).unwrap_or_default();
     gather.inside(key, Fold::Output, |gather| {
         if let Some(prompt) = call.prompt {
             gather.written(key, Text::Asked, prompt);
         }
-        for (event, around) in events {
-            for (block, drawing) in blocks_of(&event.body).iter().zip(&around.blocks) {
-                shown::of_block(block, drawing, gather);
-            }
-        }
         let report = match subagent {
             Some(subagent) if subagent.apart => apart_report(answer, subagent),
-            Some(_) | None => gathered_report(answer, events),
+            Some(_) | None => answered(answer),
         };
         if let Some(report) = report {
             gather.written(key, Text::Report, report);
@@ -208,8 +201,13 @@ fn apart_report<'a>(answer: Option<&'a Answer>, subagent: &'a Subagent) -> Optio
     match &subagent.record {
         Some(record) if record.status == SubagentStatus::Working => None,
         Some(record) => record.report.as_deref(),
-        None => answer.and_then(Answer::success).filter(|text| says_something(text)),
+        None => answered(answer),
     }
+}
+
+/// What a subagent run in the foreground reported in its call's result, if it says anything.
+fn answered(answer: Option<&Answer>) -> Option<&str> {
+    answer.and_then(Answer::success).filter(|text| says_something(text))
 }
 
 /// Whether what a subagent's call sent back says anything to report: not nothing, as one started in the background
@@ -254,36 +252,13 @@ fn report_text(report: &str, toggle: &Toggle) -> AnyElement {
     written(toggle, Text::Report, report, None, Some(&[]))
 }
 
-/// The report of a subagent whose work is gathered into its call, if it shows it: a subagent run in the foreground
-/// reports in its call's result, and its own words say the same, when they came.
-fn gathered_report<'a>(answer: Option<&'a Answer>, events: &[(SessionEvent, Around)]) -> Option<&'a str> {
-    let said = events
-        .iter()
-        .any(|(event, _)| blocks_of(&event.body).iter().any(|block| matches!(block, ContentBlock::Text { .. })));
-    answer.and_then(Answer::success).filter(|text| !said && says_something(text))
-}
-
-/// Gathered from the log: what it was asked, then what it did, under a rule like a thread.
-fn gathered(
-    call: &Agent,
-    answer: Option<&Answer>,
-    subagent: Option<&Subagent>,
-    toggle: &Toggle,
-    cx: &App,
-) -> AnyElement {
-    let events = subagent.and_then(|s| s.events.as_deref()).unwrap_or_default();
+/// Of a subagent whose work isn't kept apart: what it was asked, then what its call sent back, under a rule like a
+/// thread.
+fn unrecorded(call: &Agent, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     // Made in the order they're shown, which is the order a call nested in another's row has its texts placed in.
     let asked = asked(call, toggle, cx);
-    let mut work = Vec::new();
-    for (event, around) in events {
-        // Drawn in the call's row, so opening one of its calls makes this row taller.
-        let drawn = blocks_of(&event.body).iter().zip(&around.blocks).filter_map(|(block, drawing)| {
-            render_block(toggle.seq, toggle.in_row.nesting(), block, drawing, toggle.shared, toggle.find, cx)
-        });
-        work.extend(drawn);
-    }
-    let report = gathered_report(answer, events);
-    // The rule is on the column's left edge, like everything else, and the work sits in from it to show it's nested.
+    // The rule is on the column's left edge, like everything else, and what's drawn sits in from it to show it's
+    // nested.
     v_flex()
         .pl(look::Space::Medium)
         .mt(look::Space::XSmall)
@@ -291,9 +266,8 @@ fn gathered(
         .gap(look::Space::Small)
         .line_left(cx)
         .children(asked)
-        .children(work)
         // A call's result names no images, so only one written into the report is drawn.
-        .when_some(report, |d, report| d.child(report_text(report, toggle)))
+        .when_some(answered(answer), |d, report| d.child(report_text(report, toggle)))
         .into_any_element()
 }
 
@@ -310,14 +284,7 @@ mod tests {
     /// A subagent as its call's line has it, from its record, from a hub that keeps its work apart.
     fn kept(record: Record) -> Subagent {
         let calls = usize::try_from(record.calls).unwrap();
-        Subagent {
-            call: record.call.clone(),
-            calls,
-            events: None,
-            apart: true,
-            record: Some(Arc::new(record)),
-            lately: Vec::new(),
-        }
+        Subagent { call: record.call.clone(), calls, apart: true, record: Some(Arc::new(record)), lately: Vec::new() }
     }
 
     #[test]

@@ -75,7 +75,7 @@ impl SessionLog {
         self.pages.insert(page);
         let (mut settles, mut prompts) = (Vec::new(), Vec::new());
         for event in events {
-            let position = self.position(&event);
+            let position = Position::of(&event);
             // One at 0 has no row, as with a live one.
             let Some(_) = position.row() else { continue };
             self.last = self.last.max(position);

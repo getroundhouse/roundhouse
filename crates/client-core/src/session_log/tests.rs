@@ -27,23 +27,18 @@ pub(super) fn is_rewritten(event: &SessionEvent) -> bool {
     matches!(&event.body, EventBody::Notice { message, .. } if message.ends_with(" rewritten"))
 }
 
-/// The positions of the events at these `seq`s, in a log by `seq`.
-fn seqs(range: Range<u64>) -> Range<Position> {
-    Position::of_seq(Seq::new(range.start))..Position::of_seq(Seq::new(range.end))
-}
-
 /// The positions of the events at these places, in a log by place.
 fn places(range: Range<u64>) -> Range<Position> {
     Position::of_place(Place::new(range.start))..Position::of_place(Place::new(range.end))
 }
 
 #[test]
-fn rows_are_indexed_by_seq_whatever_is_loaded() {
-    let mut log = SessionLog::new(Seq::new(1000));
+fn rows_are_indexed_by_place_whatever_is_loaded() {
+    let mut log = SessionLog::new(Place::new(1000));
     assert_eq!(log.row_count(), 1000);
     assert_eq!(log.row(0), Row::Unloaded);
     log.focus_on(300..301, Some(300));
-    log.install_page(Position::of_seq(Seq::new(251)), page(251..501));
+    log.install_page(Position::of_place(Place::new(251)), page(251..501));
     assert!(matches!(log.row(250), Row::Event(e) if e.seq == Seq::new(251)));
     assert_eq!(log.row(249), Row::Unloaded);
     assert_eq!(log.row(500), Row::Unloaded);
@@ -51,10 +46,10 @@ fn rows_are_indexed_by_seq_whatever_is_loaded() {
 
 #[test]
 fn it_asks_for_the_page_in_view_first_and_only_once() {
-    let mut log = SessionLog::new(Seq::new(1000));
+    let mut log = SessionLog::new(Place::new(1000));
     log.focus_on(300..301, Some(300));
     let first = log.pages_to_fetch();
-    assert_eq!(first, vec![seqs(251..501), seqs(1..251)], "501 on is on its way from the subscription");
+    assert_eq!(first, vec![places(251..501), places(1..251)], "501 on is on its way from the subscription");
     assert!(log.pages_to_fetch().is_empty(), "already in flight");
 
     log.fetch_failed();
@@ -62,58 +57,58 @@ fn it_asks_for_the_page_in_view_first_and_only_once() {
     log.retry_failed();
     assert_eq!(log.pages_to_fetch(), first, "but is once retrying is allowed, all of it");
 
-    assert!(SessionLog::new(Seq::default()).pages_to_fetch().is_empty());
+    assert!(SessionLog::new(Place::default()).pages_to_fetch().is_empty());
 }
 
 /// A view opens a chat at its end, which comes live, so a log asked to fetch before any view has looked fetches nothing,
 /// rather than the start of a chat nobody is reading.
 #[test]
 fn before_a_view_has_looked_nothing_is_fetched() {
-    assert!(SessionLog::new(Seq::new(1000)).pages_to_fetch().is_empty());
+    assert!(SessionLog::new(Place::new(1000)).pages_to_fetch().is_empty());
 }
 
 #[test]
 fn an_installed_page_reports_the_rows_it_filled_and_is_not_fetched_again() {
-    let mut log = SessionLog::new(Seq::new(800));
+    let mut log = SessionLog::new(Place::new(800));
     log.focus_on(300..301, Some(300));
-    assert_eq!(log.pages_to_fetch(), vec![seqs(251..501), seqs(1..251)]);
-    log.install_page(Position::of_seq(Seq::new(1)), page(1..251));
+    assert_eq!(log.pages_to_fetch(), vec![places(251..501), places(1..251)]);
+    log.install_page(Position::of_place(Place::new(1)), page(1..251));
     assert_eq!(log.take_changes().rows, Some(0..250));
-    log.install_page(Position::of_seq(Seq::new(251)), page(251..501));
+    log.install_page(Position::of_place(Place::new(251)), page(251..501));
     assert_eq!(log.take_changes().rows, Some(250..500));
     assert!(log.pages_to_fetch().is_empty());
 }
 
 #[test]
 fn a_short_last_page_fills_only_the_rows_there_are() {
-    let mut log = SessionLog::new(Seq::new(300));
+    let mut log = SessionLog::new(Place::new(300));
     for event in page(1..301) {
         log.apply_event(event);
     }
     log.take_changes();
-    log.install_page(Position::of_seq(Seq::new(251)), page(251..301));
+    log.install_page(Position::of_place(Place::new(251)), page(251..301));
     assert_eq!(log.take_changes().rows, Some(250..300));
 }
 
 #[test]
 fn it_never_holds_a_whole_long_session() {
-    let mut log = SessionLog::new(Seq::new(15_000));
+    let mut log = SessionLog::new(Place::new(15_000));
     for at in 0..15_000 / PAGE_EVENTS {
         log.focus_on(at * PAGE_EVENTS..at * PAGE_EVENTS + 1, Some(at * PAGE_EVENTS));
         let positions = page_range(at);
-        log.install_page(positions.start, page(positions.start.seq().get()..positions.end.seq().get()));
+        log.install_page(positions.start, page(positions.start.place().get()..positions.end.place().get()));
         assert!(log.loaded_events() <= MAX_LOADED_EVENTS + PAGE_EVENTS);
     }
     // What's near the view and the tail stayed, and what was dropped can be fetched again.
     assert!(matches!(log.row(14_999), Row::Event(_)));
     assert_eq!(log.row(0), Row::Unloaded);
     log.focus_on(0..1, Some(0));
-    assert_eq!(log.pages_to_fetch(), vec![seqs(1..251), seqs(251..501)]);
+    assert_eq!(log.pages_to_fetch(), vec![places(1..251), places(251..501)]);
 }
 
 #[test]
 fn live_events_never_build_up_past_the_limit() {
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     for event in page(1..10_001) {
         log.apply_event(event);
     }
@@ -123,7 +118,7 @@ fn live_events_never_build_up_past_the_limit() {
 
 #[test]
 fn a_prompt_shows_at_once_with_the_tail_then_becomes_the_recorded_event() {
-    let mut log = SessionLog::new(Seq::new(5));
+    let mut log = SessionLog::new(Place::new(5));
     log.add_pending(QueuedPrompt {
         client_msg_id: "m1".into(),
         prompt: Prompt::new("hello"),
@@ -148,7 +143,7 @@ fn a_prompt_shows_at_once_with_the_tail_then_becomes_the_recorded_event() {
 
 #[test]
 fn a_prompt_that_could_not_be_sent_can_be_taken_back() {
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.add_pending(QueuedPrompt {
         client_msg_id: "m1".into(),
         prompt: Prompt::new("hello"),
@@ -161,7 +156,7 @@ fn a_prompt_that_could_not_be_sent_can_be_taken_back() {
 
 #[test]
 fn live_events_grow_the_log_and_replays_do_not() {
-    let mut log = SessionLog::new(Seq::new(2));
+    let mut log = SessionLog::new(Place::new(2));
     log.apply_event(notice(Seq::new(3)));
     log.apply_event(notice(Seq::new(3)));
     assert_eq!(log.row_count(), 3);
@@ -170,7 +165,7 @@ fn live_events_grow_the_log_and_replays_do_not() {
 #[test]
 fn open_approvals_are_those_not_yet_answered() {
     let requested = |id: &str| EventBody::from(approval_request(id, to_run("ls")));
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.apply_event(event(Seq::new(1), requested("a")));
     log.apply_event(event(Seq::new(2), requested("b")));
     log.apply_event(event(Seq::new(3), decided("a", allow_once())));
@@ -182,7 +177,7 @@ fn open_approvals_are_those_not_yet_answered() {
 #[test]
 fn a_request_with_events_after_it_that_arent_loaded_isnt_open() {
     let requested = EventBody::from(approval_request("a", asking(Vec::new())));
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.apply_event(event(Seq::new(1), requested));
 
     // Its answer could be the event that isn't here.
@@ -196,7 +191,7 @@ fn a_request_with_events_after_it_that_arent_loaded_isnt_open() {
 
 #[test]
 fn the_streaming_tail_follows_deltas_and_clears_with_the_finished_message() {
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.apply_delta(&StreamDelta {
         run: None,
         message_id: "m".into(),
@@ -219,7 +214,7 @@ fn the_streaming_tail_follows_deltas_and_clears_with_the_finished_message() {
 
 #[test]
 fn changes_gather_into_one_range_until_a_view_looks() {
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.add_pending(QueuedPrompt { client_msg_id: "p".into(), prompt: Prompt::new("hi"), from: PromptFrom::Person });
     log.apply_event(event(
         Seq::new(1),
@@ -259,7 +254,7 @@ fn prompt() -> EventBody {
 
 #[test]
 fn a_log_by_place_has_a_row_for_each_place_whatever_seq_its_event_has() {
-    let mut log = SessionLog::by_place(Place::default());
+    let mut log = SessionLog::new(Place::default());
     log.reaches(Place::new(2));
 
     for event in [
@@ -271,7 +266,7 @@ fn a_log_by_place_has_a_row_for_each_place_whatever_seq_its_event_has() {
         log.apply_event(event);
     }
 
-    assert_eq!((log.by(), log.row_count()), (By::Place, 4));
+    assert_eq!(log.row_count(), 4);
     assert!(matches!(log.row(1), Row::Event(e) if e.seq == Seq::new(7)));
     assert_eq!(
         (log.row_of(Seq::new(7)), log.row_of(Seq::new(5))),
@@ -289,7 +284,7 @@ fn a_log_by_place_has_a_row_for_each_place_whatever_seq_its_event_has() {
 
 #[test]
 fn a_log_by_place_fetches_nothing_until_a_view_asks_once_it_knows_how_far_it_goes() {
-    let mut log = SessionLog::by_place(Place::default());
+    let mut log = SessionLog::new(Place::default());
 
     log.reaches(Place::new(3000));
 
@@ -298,10 +293,10 @@ fn a_log_by_place_fetches_nothing_until_a_view_asks_once_it_knows_how_far_it_goe
 
 #[test]
 fn a_log_by_place_fetches_and_lets_go_of_whole_pages_of_places() {
-    let mut log = SessionLog::by_place(Place::default());
+    let mut log = SessionLog::new(Place::default());
     log.reaches(Place::new(3000));
     log.focus_on(300..301, Some(300));
-    assert_eq!(log.pages_to_fetch(), vec![places(251..501), places(1..251), places(501..751)], "by place, as by seq");
+    assert_eq!(log.pages_to_fetch(), vec![places(251..501), places(1..251), places(501..751)], "by place");
 
     let events = (251..501).map(|place| placed(Seq::new(place * 2), place, notice(Seq::new(place * 2)).body));
     log.install_page(places(251..501).start, events.collect());
@@ -322,8 +317,8 @@ fn a_log_by_place_fetches_and_lets_go_of_whole_pages_of_places() {
 /// A log of 11 rows, which holds rows 5 to 9.
 #[test]
 fn it_holds_the_rows_it_has_loaded_and_any_past_its_end() {
-    let mut log = SessionLog::new(Seq::new(11));
-    log.install_page(Position::of_seq(Seq::new(6)), page(6..11));
+    let mut log = SessionLog::new(Place::new(11));
+    log.install_page(Position::of_place(Place::new(6)), page(6..11));
 
     assert!(log.holds(5..10));
     assert!(!log.holds(4..10), "the row before isn't loaded");
@@ -336,7 +331,7 @@ fn it_holds_the_rows_it_has_loaded_and_any_past_its_end() {
 fn an_event_at_0_is_held_neither_live_nor_by_the_page() {
     let at_0 = || placed(Seq::new(5), 0, notice(Seq::new(5)).body);
     let reaching_2 = || {
-        let mut log = SessionLog::by_place(Place::default());
+        let mut log = SessionLog::new(Place::default());
         log.reaches(Place::new(2));
         log
     };
@@ -351,19 +346,8 @@ fn an_event_at_0_is_held_neither_live_nor_by_the_page() {
 }
 
 #[test]
-fn a_log_by_place_that_has_to_read_the_whole_log_keeps_the_prompts_on_their_way() {
-    let mut log = SessionLog::by_place(Place::default());
-    log.add_pending(QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("go"), from: PromptFrom::Person });
-
-    log.read_whole(Seq::new(5));
-
-    assert_eq!(log.by(), By::Seq);
-    assert_eq!((log.row_count(), log.pending()[0].prompt.text.as_str()), (5, "go"));
-}
-
-#[test]
 fn a_copy_shares_what_it_holds_until_one_of_them_changes_it() {
-    let mut log = SessionLog::new(Seq::new(2));
+    let mut log = SessionLog::new(Place::new(2));
     log.apply_event(event(Seq::new(3), prompt()));
     let copy = log.clone();
     let (Row::Event(held), Row::Event(copied)) = (log.row(2), copy.row(2)) else { panic!("the prompt is loaded") };
