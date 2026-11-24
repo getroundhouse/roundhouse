@@ -105,6 +105,8 @@ fn choosing_automatic_takes_the_badge_away_until_an_account_is_chosen_again(cx: 
     ui.wait("Automatic", |ui| automatic(ui));
     assert!(stack.client().records().unwrap().hub_settings.unwrap().account_defaults.unwrap()[0].automatic);
     ui.wait("the badge to go", |ui| !ui.has(badge.clone()));
+    // The record can come before the answer to the request, until which the picker stays off.
+    ui.wait("the picker to come on", |ui| ui.on("account-default-claude"));
 
     ui.click("account-default-claude");
     ui.click_menu_item("Work");
