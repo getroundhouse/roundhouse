@@ -128,11 +128,9 @@ fn checking_shows_at_once_that_the_update_server_is_out_of_reach(cx: &mut TestAp
 /// beside that and renames it into place, so the note is there only once it's whole, and a test that waits for it
 /// reads all of it.
 fn updater_that_notes(installed: &VelopackLocatorConfig) -> std::path::PathBuf {
-    use std::os::unix::fs::PermissionsExt as _;
     let noted = installed.RootAppDir.with_file_name("asked");
     let script = format!("#!/bin/sh\necho \"$@\" > '{0}.part' && mv '{0}.part' '{0}'\n", noted.display());
-    std::fs::write(&installed.UpdateExePath, script).unwrap();
-    std::fs::set_permissions(&installed.UpdateExePath, std::fs::Permissions::from_mode(0o755)).unwrap();
+    process::testing::write_program(&installed.UpdateExePath, script).unwrap();
     noted
 }
 

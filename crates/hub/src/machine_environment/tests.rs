@@ -90,7 +90,7 @@ mod login_shell {
         let folder = dir.join("with space");
         std::fs::create_dir_all(&folder).unwrap();
         let printer = folder.join("roundhoused");
-        std::fs::copy(PRINTER.path(), &printer).unwrap();
+        process::testing::install_program(&PRINTER.path(), &printer).unwrap();
         printer
     }
 

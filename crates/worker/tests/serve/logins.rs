@@ -16,7 +16,7 @@ static PROGRAM: process::testing::Example = process::testing::Example::new("logi
 /// Uses the adapter's native stand-in, which answers the login controls before taking prompts.
 fn cli(dir: &Path) -> PathBuf {
     let binary = dir.join(format!("login-cli{}", std::env::consts::EXE_SUFFIX));
-    std::fs::copy(PROGRAM.path(), &binary).unwrap();
+    process::testing::install_program(&PROGRAM.path(), &binary).unwrap();
     std::fs::write(dir.join("login-script.json"), r#"{"mode":"record-login"}"#).unwrap();
     binary
 }

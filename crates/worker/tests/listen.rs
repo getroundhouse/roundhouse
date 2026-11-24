@@ -36,8 +36,7 @@ impl Listening {
     fn start(idle_limit: Duration) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let cli = dir.path().join("fake-cli");
-        std::fs::write(&cli, "#!/bin/sh\nwhile [ ! -e done ]; do sleep 0.02; done\n").unwrap();
-        std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+        process::testing::write_program(&cli, "#!/bin/sh\nwhile [ ! -e done ]; do sleep 0.02; done\n").unwrap();
         std::fs::create_dir(dir.path().join("state")).unwrap();
         let config = Config {
             build: Build::UNSTAMPED,

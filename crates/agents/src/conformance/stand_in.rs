@@ -19,7 +19,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use super::capture::Entry;
 use super::lines::{Lines, asked_by_itself, ids_in};
-use super::{executable, quoted};
+use super::quoted;
 
 /// Hands its arguments over as a file, and its stdin and stdout over FIFOs. The copy of stdin ignores SIGTERM, which
 /// stopping the agent sends its whole group, so what the adapter wrote just before is still heard. It ends once the
@@ -66,7 +66,8 @@ impl StandIn {
                 return Err(io::Error::other(format!("mkfifo {} failed", fifo.display())));
             }
         }
-        let program = executable(dir, "stand-in", &format!("#!/bin/sh\nDIR={}\n{SCRIPT}", quoted(dir)))?;
+        let program = dir.join("stand-in");
+        process::testing::write_program(&program, format!("#!/bin/sh\nDIR={}\n{SCRIPT}", quoted(dir)))?;
         let opened = Arc::new(AtomicBool::new(false));
         let replay = Replay { dir: dir.to_path_buf(), lines, saw, opened: opened.clone() };
         let replayer = std::thread::spawn(move || replay.run(process));

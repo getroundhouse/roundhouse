@@ -11,10 +11,10 @@ use tokio::sync::mpsc;
 use crate::conformance::capture::{self, Entry};
 use crate::conformance::driver::{Driver, Launcher};
 use crate::conformance::lines::Lines;
+use crate::conformance::quoted;
 use crate::conformance::scenario::{Failed, Scenario};
 use crate::conformance::stand_in::{QUIET, StandIn};
 use crate::conformance::trial::{Played, Report, Trial};
-use crate::conformance::{executable, quoted};
 use crate::{AgentOutput, AgentProcess};
 
 /// The agent-specific launch and wire dialect, with all replay orchestration shared.
@@ -101,7 +101,8 @@ fn prepare_stand_ins(
     saw: &mpsc::UnboundedSender<String>,
 ) -> Result<Prepared, Failed> {
     let script = format!("#!/bin/sh\nDIR={}\n{DISPATCHER}", quoted(root));
-    let bin = executable(root, "stand-in", &script).map_err(|e| Failed(format!("making dispatcher: {e}")))?;
+    let bin = root.join("stand-in");
+    process::testing::write_program(&bin, script).map_err(|e| Failed(format!("making dispatcher: {e}")))?;
     let mut meta = Vec::with_capacity(processes.len());
     let mut stand_ins = Vec::with_capacity(processes.len());
     for (idx, process) in processes.into_iter().enumerate() {

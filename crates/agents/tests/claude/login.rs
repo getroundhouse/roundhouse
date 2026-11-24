@@ -46,7 +46,7 @@ fn settings() -> Value {
 fn options(dir: &Path, settings: &Value) -> AgentOptions {
     let program = PROGRAM.path();
     let bin = dir.join(format!("login-cli{}", std::env::consts::EXE_SUFFIX));
-    std::fs::copy(program, &bin).unwrap();
+    process::testing::install_program(&program, &bin).unwrap();
     std::fs::write(dir.join("login-script.json"), json!({"settings":settings}).to_string()).unwrap();
     AgentOptions {
         binary: BinaryLookup { explicit: Some(bin), ..BinaryLookup::default() },

@@ -12,15 +12,12 @@ use crate::support::{Stack, git, wait_until};
 /// slow the machine.
 #[test]
 fn a_hub_serves_while_a_providers_adapter_has_yet_to_say_hello() {
-    use std::os::unix::fs::PermissionsExt;
-
     let patient = Timers { adapter_hello_within: Duration::from_mins(10), ..Timers::FOR_TESTS };
     let mut stack = Stack::start_with(vec![patient.env()]);
     stack.kill_hub();
     // Reads what it's asked and never answers, until its stdin closes.
     let adapter = stack.path("silent-adapter");
-    std::fs::write(&adapter, "#!/bin/sh\nwhile read -r line; do :; done\n").unwrap();
-    std::fs::set_permissions(&adapter, std::fs::Permissions::from_mode(0o755)).unwrap();
+    process::testing::write_program(&adapter, "#!/bin/sh\nwhile read -r line; do :; done\n").unwrap();
     let file = serde_json::json!({"default": "silent", "providers": [{"name": "silent", "program": adapter}]});
     std::fs::write(stack.path("home/providers.json"), file.to_string()).unwrap();
 

@@ -19,8 +19,7 @@ impl Stack {
         let bin = self.dir.path().join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         let gh = bin.join("gh");
-        std::fs::write(&gh, format!("#!/bin/sh\n{also}\nexit 1\n")).unwrap();
-        std::fs::set_permissions(&gh, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        process::testing::write_program(&gh, format!("#!/bin/sh\n{also}\nexit 1\n")).unwrap();
         // Workers get this PATH, with the stand-in at its front.
         let hub = self.start_hub_ahead(environment.put_first_on_path(&bin));
         StandInGh { _hub: hub }

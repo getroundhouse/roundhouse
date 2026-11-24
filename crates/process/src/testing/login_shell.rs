@@ -3,7 +3,6 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::OnceLock;
 
 /// `/bin/sh`, but as a login shell that reads `.profile` in its `HOME` and nothing of the machine's, such as
@@ -27,7 +26,7 @@ exec /bin/sh "$@"
 ///
 /// # Panics
 ///
-/// If there's nowhere beside the test binary to keep it, or `install` can't put it there.
+/// If there's nowhere beside the test binary to keep it, or it can't be written there.
 pub fn login_shell() -> &'static Path {
     static SHELL: OnceLock<PathBuf> = OnceLock::new();
     SHELL.get_or_init(|| {
@@ -40,18 +39,14 @@ pub fn login_shell() -> &'static Path {
 /// Makes the folder at `dir`, with the stand-in in it as `sh`.
 fn make(dir: &Path) -> io::Result<()> {
     fs::create_dir(dir)?;
-    let script = dir.join("sh.sh");
-    fs::write(&script, LOGIN_SHELL)?;
-    let status = Command::new("install").args(["-m", "755"]).arg(&script).arg(dir.join("sh")).status()?;
-    if !status.success() {
-        return Err(io::Error::other(format!("install exited with {status}")));
-    }
-    fs::remove_file(script)
+    super::write_program(&dir.join("sh"), LOGIN_SHELL)
 }
 
 // The stand-in is a shell script, which only a Unix runs, as only a Unix has a login shell to ask.
 #[cfg(all(test, unix))]
 mod tests {
+    use std::process::Command;
+
     use super::*;
 
     /// Asked as the hub asks a login shell, it has what the profile in its home exports, and runs the command, with

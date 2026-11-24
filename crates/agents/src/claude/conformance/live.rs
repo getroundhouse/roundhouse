@@ -13,9 +13,9 @@ use super::messages::ScriptedModel;
 use super::{MODEL, fixture, project_folder, scripts, spec};
 use crate::conformance::capture::{Entry, Tap};
 use crate::conformance::driver::{Driver, Launcher};
+use crate::conformance::quoted;
 use crate::conformance::scenario::{Against, Failed, Scenario};
 use crate::conformance::trial::{Live, Played, Report, Trial};
-use crate::conformance::{executable, quoted};
 use crate::{AgentOptions, AgentOutput, AgentProcess, BinaryLookup};
 
 /// What a scripted trial's environment can hold of this machine's: only what the CLI and its tools need to run, so
@@ -208,7 +208,9 @@ fn sandboxed(scratch: &Scratch, cli: &Path, port: &str, home: Option<&Path>) -> 
     let profile_file = scratch.dir.path().join("sandbox.sb");
     std::fs::write(&profile_file, profile(port, home, cli))?;
     let body = format!("#!/bin/sh\nexec /usr/bin/sandbox-exec -f {} {} \"$@\"\n", quoted(&profile_file), quoted(cli));
-    executable(scratch.dir.path(), "claude", &body)
+    let bin = scratch.dir.path().join("claude");
+    process::testing::write_program(&bin, body)?;
+    Ok(bin)
 }
 
 /// What the CLI is given beyond what it inherits: on the scripted model, a home of its own and the model, with a key

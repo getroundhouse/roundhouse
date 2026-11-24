@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 
 use protocol::StampedBuild;
 
-use crate::support::{Stack, install_executable, wait_until};
+use crate::support::{Stack, wait_until};
 
 /// Every update leaves a copy behind, so a client that starts a hub removes those nothing runs from, once they're old
 /// enough. A worker that outlived the hub of its build runs from that build's copy, which stays.
@@ -19,7 +19,7 @@ fn starting_a_hub_removes_the_copies_nothing_runs_from_but_not_a_worker_s() {
     stack.kill_hub();
     let app = stack.path("app");
     std::fs::create_dir_all(&app).unwrap();
-    install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &app.join("roundhoused"));
+    process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &app.join("roundhoused")).unwrap();
     // The version this daemon gives, which a copy is checked against.
     let build = |number| StampedBuild::new(protocol::this_build!().version(), number).unwrap();
     let paths = stack.paths();
@@ -27,7 +27,7 @@ fn starting_a_hub_removes_the_copies_nothing_runs_from_but_not_a_worker_s() {
     for (number, ago) in [(1, 48), (2, 48), (3, 1)] {
         let copy = paths.hub_copy(&build(number));
         std::fs::create_dir_all(copy.parent().unwrap()).unwrap();
-        install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &copy);
+        process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &copy).unwrap();
         let made = SystemTime::now() - Duration::from_hours(ago);
         File::options().write(true).open(&copy).unwrap().set_modified(made).unwrap();
     }
