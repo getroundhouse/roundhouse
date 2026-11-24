@@ -9,7 +9,7 @@ use protocol::model::{AgentKind, ModelList, ModelListKey, ModelLookup, Observati
 
 use super::super::model_lists::Lookup;
 use crate::hub::Hub;
-use crate::hub::tests::{hub_in, hub_in_again};
+use crate::hub::tests::{hub_in, hub_in_again, store_of};
 
 /// The list of Codex's models in `r`, on the local provider, of the CLI of `cli_version`, or the machine's own.
 fn key(cli_version: Option<&str>) -> ModelListKey {
@@ -135,4 +135,25 @@ async fn an_answer_that_lands_as_its_list_is_let_go_of_is_dropped() {
     assert_eq!(listed(&hub, &installed).await.0, None, "nothing kept of what it offered");
     let list = hub.model_list_held(&installed).expect("the list made since");
     assert_eq!((list.rev, list.lookup), (again, ModelLookup::Asking), "still asking");
+}
+
+/// An answer the hub couldn't keep, as when its database gives no revision, leaves the list failed, with why, rather
+/// than answered with no catalog to come, so a client offers Retry rather than waiting for good.
+#[tokio::test]
+async fn an_answer_the_hub_couldnt_keep_leaves_its_list_failed() {
+    let dir = tempfile::tempdir().unwrap();
+    let installed = key(Some("0.170.0"));
+    let hub = hub_in(dir.path());
+    let asked = hub.model_list_asking(&installed).await;
+    let refuse =
+        "CREATE TRIGGER no_rev BEFORE UPDATE ON counters WHEN OLD.name = 'rev' BEGIN SELECT RAISE(ABORT, 'no'); END";
+    store_of(&hub).holding_writes().execute_batch(refuse).unwrap();
+
+    hub.model_list_settled(&installed, asked, offered()).await;
+
+    let list = hub.model_list_held(&installed).expect("the list asked for");
+    let ModelLookup::Failed { message } = &list.lookup else { panic!("not failed: {:?}", list.lookup) };
+    assert!(message.contains("couldn't keep"), "{message}");
+    store_of(&hub).holding_writes().execute_batch("DROP TRIGGER no_rev").unwrap();
+    assert_eq!(listed(&hub, &installed).await.0, None, "nothing kept of what it offered");
 }
