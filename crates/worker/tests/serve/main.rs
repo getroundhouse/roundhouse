@@ -257,24 +257,26 @@ async fn prompt(dir: &Path) -> (String, String) {
     (file.to_string(), told.to_string())
 }
 
-/// What the agent's CLI is given as `--mcp-config`, and told in its system prompt, as a worker in `dir` starts it with a
-/// token, after being asked to serve its tools if `serving`.
-async fn told_at_start(dir: &Path, serving: bool) -> (String, String) {
+/// How a worker in `dir` answers a start with a token for the tools, or none, after being asked to serve them if
+/// `serving`, and, once one has started, what its CLI was given as `--mcp-config` and told in its system prompt.
+async fn at_start(dir: &Path, serving: bool, token: bool) -> (WorkerOutcome, Option<(String, String)>) {
     let Worker { read: hub_read, write: mut hub_write, running } =
         start_worker(config(dir, Some(cli(dir, KEEPS_ITS_MCP_CONFIG))));
     let mut frames = BufReader::new(hub_read).lines();
     let mut calls = vec![hello()];
     calls.extend(serving.then_some(WorkerRequest::ServeTools(ServeTools { port: None })));
-    calls.push(WorkerRequest::AgentStart(agent_start("s", dir, Some(ToolsToken::new("token-s")))));
+    calls.push(WorkerRequest::AgentStart(agent_start("s", dir, token.then(|| ToolsToken::new("token-s")))));
     let last = calls.len() as u64 - 1;
     send(&mut hub_write, calls).await;
-    let started = reply(&mut frames, last).await;
-    assert!(matches!(started, WorkerOutcome::Response(WorkerResponse::AgentStarted(_))), "{started:?}");
-    let (path, _) = given(dir).await;
-    let (_, prompt) = prompt(dir).await;
+    let outcome = reply(&mut frames, last).await;
+    let told = if matches!(outcome, WorkerOutcome::Response(WorkerResponse::AgentStarted(_))) {
+        Some(((given(dir).await).0, (prompt(dir).await).1))
+    } else {
+        None
+    };
     hub_write.shutdown().await.unwrap();
     timeout(Duration::from_secs(10), running).await.expect("the worker didn't exit").unwrap();
-    (path, prompt)
+    (outcome, told)
 }
 
 fn agent_start(session_id: &str, cwd: &Path, tools_token: Option<ToolsToken>) -> AgentSpec {
@@ -345,18 +347,25 @@ async fn call_tool(port: u16, token: &str) -> String {
     response
 }
 
+/// An agent handed a token for the tools starts only while the worker serves them, since it would otherwise start
+/// without them. One handed none starts without them, told of them all the same, as one with them is, since a chat keeps
+/// what it was first told.
 #[tokio::test]
-async fn an_agent_goes_without_the_tools_when_they_arent_served() {
-    let (unserved, served) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+async fn an_agent_handed_a_token_starts_only_while_the_tools_are_served() {
+    let dirs = [(); 3].map(|()| tempfile::tempdir().unwrap());
 
-    let unserved = told_at_start(unserved.path(), false).await;
-    let served = told_at_start(served.path(), true).await;
+    let (refused, none) = at_start(dirs[0].path(), false, true).await;
+    let (_, served) = at_start(dirs[1].path(), true, true).await;
+    let (_, tokenless) = at_start(dirs[2].path(), false, false).await;
 
-    assert_eq!(unserved.0, "", "started without a --mcp-config");
-    assert_ne!(served.0, "", "started with a --mcp-config");
-    // Told of them all the same, as one with them is, since a chat keeps what it was first told.
-    assert_eq!(unserved.1, served.1);
-    assert!(unserved.1.contains("When Roundhouse serves you tools"), "{}", unserved.1);
+    let WorkerOutcome::Error(refused) = refused else { panic!("started: {refused:?}") };
+    assert!(refused.message.contains("doesn't serve Roundhouse's tools"), "{refused:?}");
+    assert_eq!(none, None, "no agent was started");
+    let ((served, told), (tokenless, told_without)) = (served.unwrap(), tokenless.unwrap());
+    assert_ne!(served, "", "started with a --mcp-config");
+    assert_eq!(tokenless, "", "started without a --mcp-config");
+    assert_eq!(told, told_without);
+    assert!(told_without.contains("When Roundhouse serves you tools"), "{told_without}");
 }
 
 /// So a hub that connects to it again carries on with their sessions rather than taking them for stopped.

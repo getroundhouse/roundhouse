@@ -128,7 +128,7 @@ async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
                     *starts.lock() += 1;
                 }
                 // Not that it started, so starting fails.
-                Some(Ok(WorkerResponse::Ok))
+                Some(Ok(crate::hub::tests::taken(&request)))
             }
         });
         hub.workers.lock().insert("w".into(), link.clone());

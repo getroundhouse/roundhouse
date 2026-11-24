@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use protocol::client::ErrorCode;
+use protocol::client::{ApiError, ErrorCode};
+use protocol::event::{EventBody, ExitReason};
+use protocol::model::Seq;
 use protocol::model::{DiffComment, DiffSide, Rev, Workspace};
+use protocol::prompt::Prompt;
 use protocol::worker::{AskReply, DiffComments, ServeTools, ToolsServing, WorkerAsk, WorkerRequest, WorkerResponse};
 
-use crate::hub::tests::hub_in;
+use crate::hub::stand_in_workers::{TIMEOUT, a_chat, hub_whose_stand_ins_answer_first};
+use crate::hub::tests::{described, hub_in};
 use crate::store::Made;
 use crate::worker_link::WorkerLink;
 
@@ -100,20 +104,62 @@ async fn a_worker_is_asked_for_the_port_its_tools_were_last_on_and_a_session_kee
     assert_eq!(again, token);
 }
 
+/// A worker that never answers, or that refuses, fails each launch it's asked to serve its tools for, and is asked again
+/// for the next, since nothing of a failure is kept from one launch to the next.
 #[tokio::test(start_paused = true)]
-async fn agents_go_without_the_tools_of_a_worker_that_didnt_serve_them_and_it_isnt_asked_again() {
+async fn a_worker_that_doesnt_serve_its_tools_fails_each_launch_and_is_asked_again_for_the_next() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    let asked = Arc::new(Mutex::new(0));
-    let counted = asked.clone();
-    let link = WorkerLink::answering(move |_| {
-        *counted.lock() += 1;
-        None
+    let refusal = || ApiError::new(ErrorCode::Worker, "the worker is shutting down");
+    for (refuses, said) in [(false, "didn't answer within 10s"), (true, "the worker is shutting down")] {
+        let asked = Arc::new(Mutex::new(0));
+        let counted = asked.clone();
+        let link = WorkerLink::answering(move |_| {
+            *counted.lock() += 1;
+            refuses.then(|| Err(refusal()))
+        });
+
+        let first = hub.tools_for(&"w".into(), &"s".into(), &link).await.unwrap_err();
+        let next = hub.tools_for(&"w".into(), &"s".into(), &link).await.unwrap_err();
+
+        for failed in [first, next] {
+            assert!(failed.message.starts_with("the worker didn't serve Roundhouse's tools: "), "{failed:?}");
+            assert!(failed.message.ends_with(said), "{failed:?}");
+        }
+        assert_eq!(*asked.lock(), 2, "asked again, refusing: {refuses}");
+    }
+}
+
+/// The launch that a worker doesn't serve its tools for doesn't start an agent, and the chat says why, as of any launch
+/// that fails, with the prompt that asked for it never reaching an agent. The next prompt asks the worker again.
+#[tokio::test]
+async fn a_chat_whose_worker_doesnt_serve_its_tools_says_why_its_agent_didnt_start() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, asked) = hub_whose_stand_ins_answer_first(dir.path(), vec![described()], |request| {
+        let WorkerRequest::ServeTools(_) = request else { return None };
+        Some(Err(ApiError::new(ErrorCode::Worker, "the worker is shutting down")))
     });
+    let (_, chat) = a_chat(&hub).await;
+    let served = || asked.requests(|request| matches!(request, WorkerRequest::ServeTools(_)).then_some(())).len();
 
-    let first = hub.tools_for(&"w".into(), &"s".into(), &link).await;
-    let next = hub.tools_for(&"w".into(), &"s".into(), &link).await;
+    for prompt in ["first", "next"] {
+        let (seq, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new(prompt), None).await.unwrap();
+        let said = || {
+            let log = hub.store.read_events(&chat.id, Seq::FIRST, 1000, u64::MAX, false).unwrap();
+            let dropped = log.iter().any(|e| e.body == EventBody::PromptDropped { prompt: seq });
+            let why = log.into_iter().filter(|e| e.seq > seq).find_map(|e| {
+                let EventBody::AgentExited { reason: ExitReason::StartFailed, stderr_tail, .. } = e.body else {
+                    return None;
+                };
+                Some(stderr_tail)
+            });
+            why.filter(|_| dropped).ok_or(format!("{prompt} wasn't dropped with why"))
+        };
 
-    assert_eq!((first, next), (None, None));
-    assert_eq!(*asked.lock(), 1);
+        let why = waiting::task::until_ok(TIMEOUT, said).await;
+
+        assert_eq!(why, ["the worker didn't serve Roundhouse's tools: the worker is shutting down"], "{prompt}");
+    }
+    assert_eq!(served(), 2, "asked again for the next prompt");
+    assert!(asked.launches(&chat.id).is_empty(), "no agent started without its tools");
 }

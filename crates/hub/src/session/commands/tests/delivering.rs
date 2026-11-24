@@ -10,7 +10,7 @@ use protocol::model::{Seq, SessionId};
 use protocol::worker::{AgentStarted, WorkerRequest, WorkerResponse};
 
 use super::launching::{Asked, methods};
-use crate::hub::tests::{claimed, hub_with_worktree, serving};
+use crate::hub::tests::{claimed, hub_with_worktree, serving, taken};
 use crate::worker_link::WorkerLink;
 
 /// Its run refused the prompt, so it never had it, and says nothing more of the turn the prompt started. The queue
@@ -23,7 +23,7 @@ async fn a_chat_whose_prompt_its_running_agent_never_had_isnt_left_at_work() {
         if let WorkerRequest::AgentControl(_) = request {
             return Some(Err(protocol::client::ApiError::new(ErrorCode::Worker, "the agent refused it")));
         }
-        let WorkerRequest::AgentStart(spec) = request else { return Some(Ok(WorkerResponse::Ok)) };
+        let WorkerRequest::AgentStart(spec) = request else { return Some(Ok(taken(&request))) };
         Some(Ok(WorkerResponse::AgentStarted(AgentStarted {
             pid: 7,
             run: spec.run,
@@ -58,7 +58,7 @@ async fn a_prompt_an_agent_that_has_gone_wasnt_given_goes_to_the_next_one() {
             if matches!(request, WorkerRequest::AgentControl(_)) && !gone.swap(true, Ordering::SeqCst) {
                 return Some(Ok(WorkerResponse::AgentNotRunning));
             }
-            let WorkerRequest::AgentStart(spec) = request else { return Some(Ok(WorkerResponse::Ok)) };
+            let WorkerRequest::AgentStart(spec) = request else { return Some(Ok(taken(&request))) };
             Some(Ok(WorkerResponse::AgentStarted(AgentStarted {
                 pid: 7,
                 run: spec.run,

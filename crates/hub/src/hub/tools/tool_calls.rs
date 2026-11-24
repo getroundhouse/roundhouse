@@ -8,51 +8,30 @@ use protocol::worker::{
 };
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::warn;
 
 /// A worker on this machine starts serving in milliseconds. Every wait on another process has a limit, as
-/// `docs/principles/failure.md` says, and with this one an agent whose worker is slow to serve starts without the tools
-/// rather than waiting, and so do the worker's agents after it.
+/// `docs/principles/failure.md` says, so a worker slow to serve fails the launch it was asked for, and the next launch
+/// asks it again.
 const SERVE_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl Hub {
-    /// What the session's agent reaches the worker's tools with, once the worker serves them. `None` if it can't, and
-    /// the agent goes without them.
+    /// What the session's agent reaches the worker's tools with, once the worker serves them: on the port they were
+    /// last on, or on another it records when something else has taken that, with the token the session has had since
+    /// its first. An agent never starts without them, so a worker that doesn't serve them, in time or at all, fails the
+    /// launch, and nothing is kept of it for the next.
     pub(crate) async fn tools_for(
         &self,
         workspace_id: &WorkspaceId,
         session_id: &SessionId,
         link: &WorkerLink,
-    ) -> Option<ToolsToken> {
-        match self.serve_tools(workspace_id, session_id, link).await {
-            Ok(token) => Some(token),
-            Err(e) => {
-                warn!(%workspace_id, "the agent goes without the worker's tools: {}", error_chain(&e));
-                None
-            }
-        }
-    }
-
-    /// Has the worker serve its tools on the port they were last on, which it can't when something else has taken it,
-    /// so the port they're on is recorded, and gives the session the token it has had since its first.
-    pub(super) async fn serve_tools(
-        &self,
-        workspace_id: &WorkspaceId,
-        session_id: &SessionId,
-        link: &WorkerLink,
     ) -> Result<ToolsToken, ApiError> {
-        let unserved =
-            || ApiError::new(ErrorCode::Worker, format!("the worker didn't serve its tools within {SERVE_TIMEOUT:?}"));
-        if link.serves_no_tools() {
-            return Err(unserved());
-        }
         let id = workspace_id.clone();
         let recorded = self.blocking(move |store| store.tools_port(&id)).await?;
         let serving = link.call(ServeTools { port: recorded });
-        let ToolsServing { port } = tokio::time::timeout(SERVE_TIMEOUT, serving).await.map_err(|_| {
-            link.tools_unserved();
-            unserved()
-        })??;
+        let ToolsServing { port } = match tokio::time::timeout(SERVE_TIMEOUT, serving).await {
+            Ok(served) => served.map_err(|e| unserved(&error_chain(&e)))?,
+            Err(_) => return Err(unserved(&format!("it didn't answer within {SERVE_TIMEOUT:?}"))),
+        };
         if recorded != Some(port) {
             let id = workspace_id.clone();
             self.blocking(move |store| store.set_tools_port(&id, port)).await?;
@@ -106,4 +85,9 @@ impl Hub {
             WorkerAsk::Unknown => Err(self.unsupported(None)),
         }
     }
+}
+
+/// Why an agent didn't start: its worker didn't serve Roundhouse's tools, because of `why`.
+fn unserved(why: &str) -> ApiError {
+    ApiError::new(ErrorCode::Worker, format!("the worker didn't serve Roundhouse's tools: {why}"))
 }

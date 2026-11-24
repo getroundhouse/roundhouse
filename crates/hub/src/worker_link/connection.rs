@@ -36,9 +36,6 @@ pub(crate) struct WorkerLink {
     pub(super) kept: AtomicBool,
     /// The command the hub runs to reach the worker.
     pub(super) process: ChildProcess,
-    /// It didn't serve its tools when asked, as a worker that doesn't know how never answers, so its agents go without
-    /// them from then on rather than each waiting for it.
-    pub(super) tools_unserved: AtomicBool,
     /// What the worker has sent, but for its replies, while it's held, which [`WorkerLink::release`] ends. `None` once
     /// it has been, or if it never was. Held while each frame is passed on, so they go in the order they came.
     pub(super) held: AsyncMutex<Option<Vec<WorkerFrame>>>,
@@ -90,7 +87,6 @@ impl WorkerLink {
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
             process,
-            tools_unserved: AtomicBool::new(false),
             held: AsyncMutex::new((opening == Opening::LeftRunning).then(Vec::new)),
             acks: Acks::default(),
             left: AtomicBool::new(false),
@@ -179,7 +175,6 @@ impl WorkerLink {
             closed: watch::channel(true).0,
             kept: AtomicBool::new(false),
             process: ChildProcess::already_exited(),
-            tools_unserved: AtomicBool::new(false),
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),
@@ -225,16 +220,6 @@ impl WorkerLink {
     /// How many calls to the worker wait for its reply.
     pub(crate) fn calls_under_way(&self) -> usize {
         self.calls.waiting()
-    }
-
-    /// For a worker that didn't serve its tools when asked.
-    pub(crate) fn tools_unserved(&self) {
-        self.tools_unserved.store(true, Ordering::Relaxed);
-    }
-
-    /// Whether it didn't serve its tools when asked.
-    pub(crate) fn serves_no_tools(&self) -> bool {
-        self.tools_unserved.load(Ordering::Relaxed)
     }
 
     /// Whether it's the workspace's worker in `workers`, rather than one that's been replaced or stopped.

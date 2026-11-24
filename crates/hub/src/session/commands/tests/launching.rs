@@ -12,7 +12,7 @@ use protocol::worker::{AgentStarted, Delivery, WorkerRequest, WorkerResponse};
 use serde_json::Value;
 
 use crate::hub::Hub;
-use crate::hub::tests::{claimed, flushed, hub_with_worktree, serving};
+use crate::hub::tests::{claimed, flushed, hub_with_worktree, serving, taken};
 use crate::session::{Item, LiveSession, Origin};
 use crate::worker_link::WorkerLink;
 
@@ -26,7 +26,7 @@ fn worker(hub: &Hub, found: Option<RunId>, claims: Capabilities) -> (Arc<WorkerL
     let kept = asked.clone();
     let link = WorkerLink::answering(move |request| {
         kept.lock().push(serde_json::to_value(&request).unwrap());
-        let WorkerRequest::AgentStart(spec) = request else { return Some(Ok(WorkerResponse::Ok)) };
+        let WorkerRequest::AgentStart(spec) = request else { return Some(Ok(taken(&request))) };
         Some(Ok(WorkerResponse::AgentStarted(AgentStarted {
             pid: 7,
             run: found.unwrap_or(spec.run),

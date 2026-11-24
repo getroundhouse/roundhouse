@@ -9,8 +9,8 @@ use protocol::capability::{context, settings, turns};
 use protocol::client::ApiError;
 use protocol::model::{AgentAccount, CacheTtl, ChangeSummary, InstanceId, ProviderName, Workspace};
 use protocol::worker::{
-    AgentStarted, ArchivedBranch, ArchivedBundle, ArchivedGit, AttachmentWritten, NamesGitHasReply, SetupDone,
-    WorkerRequest, WorkerResponse, WorkspaceReady,
+    AgentStarted, ArchivedBranch, ArchivedBundle, ArchivedGit, AttachmentWritten, NamesGitHasReply, ServeTools,
+    SetupDone, ToolsServing, WorkerRequest, WorkerResponse, WorkspaceReady,
 };
 use providers::{
     Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand, WorkerEnvironment,
@@ -110,7 +110,8 @@ impl Asked {
 
 /// What a stand-in worker answers, which refuses nothing. Git has no name a workspace might take, so each worktree
 /// asked for is made, in `/ws`, on the branch asked for, with nothing in it to lose and nothing changed, its setup
-/// script passes, a file a prompt carries is written to it, and an agent starts there and takes what it's sent. Nobody
+/// script passes, a file a prompt carries is written to it, its tools are served on the port asked for, or else on
+/// 4100, and an agent starts there and takes what it's sent. Nobody
 /// is logged in to an agent's CLI on its machine, so the account it's asked an agent runs under is nobody's. Anything
 /// else is answered as done, with nothing to say.
 pub(super) fn answer(request: WorkerRequest) -> WorkerResponse {
@@ -141,6 +142,9 @@ pub(super) fn answer(request: WorkerRequest) -> WorkerResponse {
     }
     if let WorkerRequest::AccountFor(_) = request {
         return WorkerResponse::Account(AgentAccount { logged_in: false, ..AgentAccount::default() });
+    }
+    if let WorkerRequest::ServeTools(ServeTools { port }) = request {
+        return WorkerResponse::ToolsServing(ToolsServing { port: port.unwrap_or(4100) });
     }
     if let WorkerRequest::AgentStart(spec) = request {
         let capabilities = Box::new(claims());

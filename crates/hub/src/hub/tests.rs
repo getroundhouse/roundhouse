@@ -183,6 +183,16 @@ pub(crate) fn serving(hub: &Hub, link: &Arc<WorkerLink>) {
     hub.workers.lock().insert("w".into(), link.clone());
 }
 
+/// What a stand-in worker answers a request its test isn't about: its tools served, on the port asked for or else on
+/// 4100, as every launch asks first, and anything else done.
+pub(crate) fn taken(request: &protocol::worker::WorkerRequest) -> protocol::worker::WorkerResponse {
+    use protocol::worker::{ServeTools, ToolsServing, WorkerRequest, WorkerResponse};
+    if let WorkerRequest::ServeTools(ServeTools { port }) = request {
+        return WorkerResponse::ToolsServing(ToolsServing { port: port.unwrap_or(4100) });
+    }
+    WorkerResponse::Ok
+}
+
 /// A stand-in for `w`'s worker that takes everything it's asked, and what it was asked, in order, as JSON.
 pub(crate) fn taking_worker(hub: &Hub) -> (Arc<WorkerLink>, Arc<parking_lot::Mutex<Vec<String>>>) {
     let asked = Arc::new(parking_lot::Mutex::new(Vec::new()));
