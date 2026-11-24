@@ -99,3 +99,42 @@ async fn a_username_reaches_each_client_in_the_form_its_version_reads() {
     assert!(told_its_username(&observing.sent, "ada") && told_its_username(&observing.sent, "ada-lovelace"));
     assert_eq!(accounts_sent(&observing), [], "no copy that moves only its username");
 }
+
+/// The record holds the username alone, and nothing of how fresh it is, so a client of version 4 is sent it again as
+/// the username changes, and not as it only turns current, as the hub's checks start, or goes as of its last read, as
+/// they stop.
+#[tokio::test]
+async fn a_client_of_version_4_is_sent_the_record_again_only_as_the_username_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = "INSERT INTO github_accounts (id, user_id, username) VALUES ('g', 7, 'ada');";
+    drop(store_from_before(dir.path(), BEFORE_GITHUB_USERS_OBSERVED, rows));
+    let hub = hub_in_again(dir.path());
+    let mut before = Connection::greeted(&hub, 4).await;
+    ok(&mut before, 1, Subscribe { stop: Vec::new(), start: vec![start(1, Follow::Hub)] }).await;
+    before.until("the list", |sent| sent.iter().any(|frame| matches!(frame, HubFrame::Listed { .. }))).await;
+
+    hub.observation_read::<GithubUsername>("g".into(), "ada".into(), 1_000).await.unwrap();
+    hub.observation_kept_current::<GithubUsername>("g".into()).await.unwrap();
+    hub.observation_read::<GithubUsername>("g".into(), "ada".into(), 2_000).await.unwrap();
+    hub.observation_no_longer_read_again::<GithubUsername>("g".into()).await.unwrap();
+    hub.observation_read::<GithubUsername>("g".into(), "grace".into(), 3_000).await.unwrap();
+    let marker = HubNotice::Comment(DiffComment {
+        id: "c".into(),
+        workspace_id: "w".into(),
+        path: "a.rs".into(),
+        side: DiffSide::New,
+        line: 1,
+        text: "after".into(),
+        created_at_ms: 1,
+        rev: Rev::default(),
+    });
+    hub.notify(marker.clone());
+    let at_the_marker = |sent: &[HubFrame]| {
+        sent.iter().any(|frame| matches!(frame, HubFrame::Notice { notice, .. } if *notice == marker))
+    };
+    before.until("the marker", at_the_marker).await;
+
+    let copies = accounts_sent(&before);
+    let names: Vec<&str> = copies.iter().map(|account| account.user.name.as_str()).collect();
+    assert_eq!(names, ["ada", "grace"]);
+}
