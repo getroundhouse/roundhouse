@@ -285,18 +285,10 @@ async fn asked_to_go(hub: &Hub, terminate: &mut Terminate, stops_with: Option<&T
             info!("terminated");
             true
         }
-        () = test_gone(stops_with) => {
+        () = TestProcess::until_gone(stops_with) => {
             info!("the test this hub is for has gone");
             true
         }
-    }
-}
-
-/// Returns once `test` has gone, and never for a hub with none, as the product's is.
-async fn test_gone(test: Option<&TestProcess>) {
-    match test {
-        Some(test) => test.gone().await,
-        None => std::future::pending().await,
     }
 }
 

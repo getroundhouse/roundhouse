@@ -6,4 +6,4 @@ mod outliving;
 mod transport;
 #[cfg(unix)]
 use transport::config;
-pub(crate) use transport::{Given, Transport, run};
+pub(crate) use transport::{ForTests, Given, Transport, run};

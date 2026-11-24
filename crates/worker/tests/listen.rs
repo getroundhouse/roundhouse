@@ -33,7 +33,13 @@ struct Listening {
 }
 
 impl Listening {
+    /// With no test to stop with, as a worker of the product's has.
     fn start(idle_limit: Duration) -> Self {
+        Self::stopping_with(idle_limit, std::future::pending())
+    }
+
+    /// Stopping with a test once `test_gone` returns, as a test's worker does.
+    fn stopping_with(idle_limit: Duration, test_gone: impl Future<Output = ()> + Send + 'static) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let cli = dir.path().join("fake-cli");
         process::testing::write_program(&cli, "#!/bin/sh\nwhile [ ! -e done ]; do sleep 0.02; done\n").unwrap();
@@ -58,7 +64,7 @@ impl Listening {
         };
         let socket = dir.path().join("worker.sock");
         let path = socket.clone();
-        let running = tokio::spawn(async move { listen(&path, config, idle_limit).await });
+        let running = tokio::spawn(async move { listen(&path, config, idle_limit, test_gone).await });
         Self { dir, socket, running }
     }
 
@@ -243,26 +249,35 @@ async fn a_second_hub_is_refused_while_one_is_connected() {
     worker.stopped().await;
 }
 
-/// So a hub that was killed doesn't leave agents running unrecorded for good.
+/// So a hub that was killed doesn't leave agents running unrecorded for good: once the worker has had no hub for its
+/// limit, or, for a test's worker, once the test has gone, as a run that's killed before the test stops them leaves it.
 #[tokio::test]
-async fn a_worker_left_without_a_hub_stops_its_agents_in_time() {
-    let worker = Listening::start(Duration::from_millis(500));
-    let (mut hub, _, _) = Hub::greet(&worker.socket, true).await;
-    let (started, _) = hub.call(worker.start_spec()).await;
-    let WorkerOutcome::Response(WorkerResponse::AgentStarted(AgentStarted { pid, .. })) = started else {
-        panic!("{started:?}")
-    };
+async fn a_worker_left_without_a_hub_stops_its_agents_in_time_or_with_its_test() {
+    for with_its_test in [false, true] {
+        let (test, test_going) = tokio::sync::oneshot::channel::<()>();
+        let worker = if with_its_test {
+            Listening::stopping_with(Duration::from_mins(10), async move { drop(test_going.await) })
+        } else {
+            Listening::start(Duration::from_millis(500))
+        };
+        let (mut hub, _, _) = Hub::greet(&worker.socket, true).await;
+        let (started, _) = hub.call(worker.start_spec()).await;
+        let WorkerOutcome::Response(WorkerResponse::AgentStarted(AgentStarted { pid, .. })) = started else {
+            panic!("{started:?}")
+        };
 
-    hub.go().await;
-    worker.stopped().await;
+        hub.go().await;
+        drop(test);
+        worker.stopped().await;
 
-    let alive = std::process::Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .stderr(std::process::Stdio::null())
-        .status()
-        .unwrap()
-        .success();
-    assert!(!alive, "the agent outlived its worker");
+        let alive = std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success();
+        assert!(!alive, "the agent outlived its worker, with its test {with_its_test}");
+    }
 }
 
 /// What a Claude chat starts with, as a launch says it.
