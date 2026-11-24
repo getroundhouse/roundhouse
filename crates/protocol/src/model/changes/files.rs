@@ -20,7 +20,7 @@ impl LineCounts {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ChangedFile {
     /// From the top of the worktree, with `/` between folders, as git names it. Bytes that aren't UTF-8 are replaced,
-    /// as a [`super::GitDiff`]'s patch replaces them, and `name_not_utf8` says so.
+    /// as a [`GitDiff`](crate::model::GitDiff)'s patch replaces them, and `name_not_utf8` says so.
     pub path: String,
     /// Where a renamed file was at the base commit. `None` for any other change.
     pub from: Option<String>,
