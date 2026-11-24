@@ -102,11 +102,14 @@ impl StandIn {
     }
 }
 
-/// A hub whose workspace `w`, `alder`, has its worktree at `/ws/alder`, on `alder/start`, and a stand-in for its
-/// worker that answers as `worker` says.
+/// A hub whose workspace `w`, `alder`, has its worktree at `/ws/alder`, on `alder/start`, as its worker has said, and
+/// a stand-in for its worker that answers as `worker` says.
 pub(super) fn workspace(dir: &std::path::Path, worker: StandIn) -> (Arc<Hub>, Arc<WorkerLink>, Arc<Mutex<Seen>>) {
     let hub = hub_in(dir);
-    hub.store.workspace_ready(&"w".into(), "/ws/alder", &"alder/start".into(), "main", None).unwrap();
+    hub.store.workspace_ready(&"w".into(), "/ws/alder", &"alder/start".into(), "main").unwrap();
+    let start = Branch { name: BranchName::from("alder/start"), tip: "abc".into(), upstream: None };
+    let branches = Branches { head: Head::Branch { name: start.name.clone() }, had: vec![start] };
+    hub.keep_branches_as_read(&"w".into(), branches, 1_000);
     let seen = Arc::new(Mutex::new(Seen::default()));
     let noted = seen.clone();
     let link = WorkerLink::answering(move |request| Some(worker.answer(&noted, request)));
@@ -216,7 +219,8 @@ async fn a_worktree_on_a_branch_that_exists_is_only_on_the_workspace_s() {
     create(&hub, &link, on("alder/x/y"), "k2").await.unwrap();
     let fix = Branch { name: BranchName::from("fix"), tip: "abc".into(), upstream: None };
     let switched = Branches { head: Head::Branch { name: fix.name.clone() }, had: vec![fix] };
-    hub.store.set_child_branches(&"w".into(), &at("x-y"), &switched).unwrap();
+    let made = hub.store.child_at(&"w".into(), &at("x-y")).unwrap().unwrap();
+    hub.child_branches_known(&"w".into(), made.id, switched).await;
     let in_another = create(&hub, &link, on("fix"), "k3").await;
 
     assert_eq!(refused.code, ErrorCode::NotFound);

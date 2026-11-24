@@ -12,7 +12,7 @@ use crate::hub::tests::{claimed, described, hub_describing, hub_in};
 const W: &str = "w";
 
 fn ready(hub: &crate::hub::Hub) {
-    hub.store.workspace_ready(&W.into(), "/w", &"alder".into(), "main", None).unwrap();
+    hub.store.workspace_ready(&W.into(), "/w", &"alder".into(), "main").unwrap();
 }
 
 /// What a refusal's code is, or `None` for what was done.

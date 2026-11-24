@@ -1,8 +1,9 @@
-use self::naming::Try;
+use self::naming::{Had, NotKnown, Try};
 use super::super::ready::ReadyWorkspace;
 use super::super::{Hub, new_id};
 use super::naming;
 use crate::error::internal;
+use crate::hub::observations::{ChildWorktreeBranches, ChildWorktreeKey};
 use crate::store::{Made, now_ms};
 use crate::worker_link::WorkerLink;
 use protocol::client::{ApiError, ErrorCode};
@@ -43,7 +44,9 @@ impl Hub {
         let ready = self.ready_workspace(workspace_id).await?;
         let (tries, base) = match &on {
             NewWorktreeOn::NewBranch { name, base } => {
-                let tries = naming::new_branches(ready.workspace(), ready.path(), name);
+                let branches = self.branches_of(ready.id());
+                let tries = naming::new_branches(ready.workspace(), branches.as_ref(), ready.path(), name)
+                    .map_err(|NotKnown| not_known(ready.id(), None))?;
                 (tries, Some(base.clone().unwrap_or_else(|| "HEAD".to_string())))
             }
             NewWorktreeOn::Existing { branch } => (self.places_of_its(&ready, branch).await?, None),
@@ -67,6 +70,7 @@ impl Hub {
                 made_by: MadeBy::Undetermined,
                 created_at_ms: now_ms(),
                 status: ChildStatus::Creating,
+                // Kept apart, as the observation `ChildWorktreeBranches`.
                 branches: None,
                 rev: Rev::default(),
             };
@@ -86,7 +90,7 @@ impl Hub {
     }
 
     /// Where a worktree of `branch` goes, and the numbered places after it, or `NotFound` if it isn't one of the
-    /// workspace's branches.
+    /// workspace's branches, or `Unavailable` where that can't be told, as [`naming::places_of_its`] says.
     pub(super) async fn places_of_its(
         &self,
         ready: &ReadyWorkspace,
@@ -94,9 +98,22 @@ impl Hub {
     ) -> Result<Vec<Try>, ApiError> {
         let id = ready.id().clone();
         let others = self.blocking(move |store| store.every_child_of(&id)).await?;
-        naming::places_of_its(ready.workspace(), ready.path(), branch, &others).ok_or_else(|| {
-            ApiError::new(ErrorCode::NotFound, format!("{branch} isn't one of this workspace's branches"))
-        })
+        let others: Vec<_> = others
+            .into_iter()
+            .map(|other| {
+                let of = ChildWorktreeKey { workspace_id: other.workspace_id.clone(), id: other.id.clone() };
+                (other, self.observations.value_of::<ChildWorktreeBranches>(&of))
+            })
+            .collect();
+        let own = self.branches_of(ready.id());
+        let had = Had { own: own.as_ref(), others: &others };
+        match naming::places_of_its(ready.workspace(), &had, ready.path(), branch) {
+            Ok(Some(tries)) => Ok(tries),
+            Ok(None) => {
+                Err(ApiError::new(ErrorCode::NotFound, format!("{branch} isn't one of this workspace's branches")))
+            }
+            Err(NotKnown) => Err(not_known(ready.id(), Some(branch))),
+        }
     }
 
     /// The answer for an ask heard again, from what it made the first time. One a hub stopped while making is made
@@ -158,8 +175,11 @@ impl Hub {
     ) -> Result<WorktreeCreated, ApiError> {
         let ChildWorktreeAdded { commit, copied, warnings, branches } = added;
         let id = child.id.clone();
-        let made = self.blocking(move |store| store.child_ready(&id, branches.as_ref())).await?;
+        let made = self.blocking(move |store| store.child_ready(&id)).await?;
         let made = made.ok_or_else(|| ApiError::new(ErrorCode::Conflict, "it was removed as it was made"))?;
+        if let Some(branches) = branches {
+            self.child_branches_known(&made.workspace_id, made.id.clone(), branches).await;
+        }
         watch_child(link, &made).await;
         Ok(WorktreeCreated { worktree: made, commit, copied, warnings })
     }
@@ -217,4 +237,21 @@ pub(super) async fn watch_child(link: &WorkerLink, child: &ChildWorktree) {
 /// What git says of the worktree at `path`, or `None` if it couldn't say, as when it's gone.
 pub(super) async fn git_status(link: &WorkerLink, path: &str) -> Option<GitStatus> {
     link.call(worker::GitStatus { path: path.to_owned() }).await.ok()
+}
+
+/// That which branches are the workspace `id`'s can't be told, since what its worktrees have had isn't known: its own
+/// until its worker says them, as after the hub's cache was emptied, and for good of one removed before the hub kept
+/// them apart. For `branch`, an existing branch asked for, says what can be asked for instead.
+fn not_known(id: &WorkspaceId, branch: Option<&BranchName>) -> ApiError {
+    let why = match branch {
+        Some(branch) => format!(
+            "whether {branch} is one of workspace {id}'s branches can't be told, since which branches its worktrees \
+             have had isn't known. A worktree on a new branch made from {branch} can be asked for instead"
+        ),
+        None => format!(
+            "which branches workspace {id}'s worktree has had isn't known until its worker says them, so where a new \
+             branch goes can't be told. Ask again in a moment"
+        ),
+    };
+    ApiError::new(ErrorCode::Unavailable, why)
 }

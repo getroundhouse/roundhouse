@@ -5,8 +5,8 @@ use super::{
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
 use crate::model::{
-    AgentKind, ChangeSummary, ContextUsage, GithubRepositoryName, IssueNumber, Level, LineCounts, ModelListKey,
-    ReferenceAsk, Rev,
+    AgentKind, BranchName, Branches, ChangeSummary, ContextUsage, GithubRepositoryName, Head, IssueNumber, Level,
+    LineCounts, ModelListKey, ReferenceAsk, Rev,
 };
 
 /// The level an observation is sent at, and which subscriptions are sent it.
@@ -18,6 +18,7 @@ fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
     [
         of_a_workspace(),
         of_github(),
+        of_a_workspace_worker(),
         of_a_repository(),
         of_a_github_account(),
         of_an_app(),
@@ -113,6 +114,21 @@ fn of_github() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::GithubObserved)),
         ),
     ]
+}
+
+/// Of each kind of what a workspace's worker says of its worktree.
+fn of_a_workspace_worker() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
+    let branches = Branches { head: Head::Branch { name: BranchName::from("aspen") }, had: Vec::new() };
+    vec![(
+        Observation::WorkspaceBranches {
+            workspace_id: "w".into(),
+            branches: Observed::Current { value: branches },
+            rev: Rev::new(14),
+        },
+        ObservationKey::WorkspaceBranches { workspace_id: "w".into() },
+        Rev::new(14),
+        (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::EveryObservation)),
+    )]
 }
 
 /// Of each kind of what GitHub says of a repository.

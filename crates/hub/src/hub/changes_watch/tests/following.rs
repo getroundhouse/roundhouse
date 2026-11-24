@@ -79,7 +79,7 @@ async fn a_worker_from_before_the_watch_has_the_summary_read_once_instead() {
 async fn only_a_worker_something_else_started_is_told_and_each_taken_on_is() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, started) = hub_with_stand_in_workers(dir.path());
-    hub.store.workspace_ready(&w(), "/w", &"alder".into(), "main", None).unwrap();
+    hub.store.workspace_ready(&w(), "/w", &"alder".into(), "main").unwrap();
     let _following = hub.follow([Followed::Workspace(w())]);
 
     hub.changes_watching(&w()).await;

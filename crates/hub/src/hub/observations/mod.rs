@@ -16,6 +16,7 @@ mod subjects;
 mod tables;
 #[cfg(test)]
 mod tests;
+mod workspace_kinds;
 mod writer;
 
 pub(crate) use file::PART;
@@ -29,3 +30,5 @@ pub(crate) use kinds::{
     WaitKey, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail,
     WorkspaceRepositoryUnseen,
 };
+pub(crate) use subjects::ChildWorktreeKey;
+pub(crate) use workspace_kinds::{ChildWorktreeBranches, WorkspaceBranches};

@@ -9,4 +9,4 @@ mod branches;
 
 #[cfg(test)]
 pub(super) use branches::child_path;
-pub(super) use branches::{Try, new_branches, places_of_its};
+pub(super) use branches::{Had, NotKnown, Try, new_branches, places_of_its};

@@ -1,6 +1,6 @@
 use protocol::model::{Branch, BranchName, CommitId, RemoteName};
 
-use super::*;
+use super::super::*;
 use crate::hub::tests::{hub_with_worktree, taking_worker};
 
 /// Branches with HEAD on `name`, each with its newest commit, and what the worktree knows of its upstream's, if it has
@@ -98,9 +98,9 @@ async fn only_the_worker_the_workspace_has_now_is_heard() {
 
     let frame = |branch: &str| WorkerFrame::Branches { branches: on(branch, &[]) };
     hub.branches_frame(&id, &replaced, frame("aspen")).await;
-    let from_replaced = hub.workspace(&id).await.unwrap().branches;
+    let from_replaced = hub.branches_of(&id);
     hub.branches_frame(&id, &current, frame("header")).await;
-    let from_current = hub.workspace(&id).await.unwrap().branches;
+    let from_current = hub.branches_of(&id);
 
     assert_eq!(from_replaced, None);
     assert_eq!(from_current, Some(on("header", &[])));

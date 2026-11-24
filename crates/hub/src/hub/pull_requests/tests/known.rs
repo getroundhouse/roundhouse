@@ -39,7 +39,7 @@ async fn an_ask_after_a_push_reads_again_rather_than_take_a_read_from_before() {
     hub.workspace_pull_request("w".into()).await.unwrap();
     assert_eq!(queries(&github).len(), a_read, "an ask just after a read takes what it found");
 
-    hub.store.set_workspace_branches(&"w".into(), &pushed("pushed", "pushed", (0, 0))).unwrap();
+    hub.branches_known(&"w".into(), pushed("pushed", "pushed", (0, 0))).await;
     hub.workspace_pull_request("w".into()).await.unwrap();
 
     assert!(queries(&github).len() > a_read, "read again after the push");
@@ -147,4 +147,32 @@ async fn a_read_that_fails_after_github_showed_no_repository_records_no_none() {
     assert_eq!(failed.unwrap_err().code, ErrorCode::Unavailable);
     assert_eq!(hub.store.get_workspace(&"w".into()).unwrap().pull_request_link, None, "not recorded as none");
     assert!(hub.unseen_of(&"w".into()).is_some(), "still unseen, as last heard");
+}
+
+/// With its branches not known, as on the first start after they left the database with no worker running, which pull
+/// request is the workspace's can't be told: a read asks GitHub nothing and records nothing, so one found before is
+/// what's known, with the worktree as it stood against it then, and one not looked for yet isn't recorded as having
+/// none, which would offer to make one.
+#[tokio::test]
+async fn with_its_branches_not_known_a_read_asks_and_records_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.branches_known(&"w".into(), pushed("local", "head-7", (2, 0))).await;
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    hub.observe_github_once().await;
+    let asked = queries(&github).len();
+    hub.branches_forgotten(&"w".into()).await;
+
+    let found_before = hub.workspace_pull_request("w".into()).await.unwrap();
+    let linked_before = hub.store.get_workspace(&"w".into()).unwrap().pull_request_link;
+    hub.store.set_workspace_pull_request(&"w".into(), None, None).unwrap();
+    let not_looked_for = hub.workspace_pull_request("w".into()).await;
+
+    assert_eq!(found_before.as_ref().map(numbered), Some((7, PrState::Open)), "as last read");
+    assert_eq!(found_before.map(|own| own.local.ahead), Some(2), "as it stood then, not as nothing to push");
+    assert_eq!(linked_before.and_then(|linked| linked.link).map(|link| link.number.get()), Some(7));
+    assert_eq!(not_looked_for.unwrap_err().code, ErrorCode::Unavailable);
+    assert_eq!(hub.store.get_workspace(&"w".into()).unwrap().pull_request_link, None, "no none recorded");
+    assert_eq!(queries(&github).len(), asked, "nothing asked of GitHub");
 }

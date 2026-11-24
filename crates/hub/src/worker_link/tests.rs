@@ -46,8 +46,7 @@ fn hub_using(dir: &Path, provider: &Arc<dyn Provider>) -> Arc<Hub> {
 /// are from.
 fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
-    store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
-    store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
+    store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main").unwrap();
     let address = model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
     store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
     let providers = ProviderSet::only(provider.clone());
@@ -64,6 +63,7 @@ fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub
         HubStart::ByHand,
         timers,
     ));
+    hub.keep_branches_as_read(&"w".into(), pushed("head-7", "head-7", (0, 0)), 1_000);
     reading_as_ada(&hub);
     hub
 }
@@ -71,7 +71,7 @@ fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub
 /// The same, with `timers`.
 fn hub_timed(dir: &Path, provider: &Arc<dyn Provider>, timers: Timers) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
-    store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
+    store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main").unwrap();
     store.read_repo_url(&"r".into(), "/repo", None).unwrap();
     let providers = ProviderSet::only(provider.clone());
     let github = Github::new(github::GithubConfig::at(NO_GITHUB.to_string()));

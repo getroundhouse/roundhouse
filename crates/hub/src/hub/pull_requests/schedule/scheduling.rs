@@ -1,5 +1,6 @@
 use super::super::Asked;
-use protocol::model::{MergeState, OwnPullRequest, PrState, Workspace, WorkspaceId, WorkspaceStatus};
+use super::super::own::found_on_another_branch;
+use protocol::model::{Branches, MergeState, OwnPullRequest, PrState, Workspace, WorkspaceId, WorkspaceStatus};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use tokio::time::Instant;
@@ -85,7 +86,7 @@ fn moving(own: &OwnPullRequest) -> bool {
 }
 
 /// The ready workspaces of `listed` that are due to be read, in the order to read them, each beside the state of its
-/// pull request as the hub knows it, `None` where it knows none. One not read since the hub started comes first, those
+/// pull request as the hub knows it, `None` where it knows none, and its branches as the hub knows them. One not read since the hub started comes first, those
 /// with an open pull request first among them, since they're the likeliest to have moved. Then whichever has been due
 /// longest. A merged or closed pull request is done, so it's left until someone shows it or an agent's turn ends,
 /// unless it was found on another branch than the one checked out, so it isn't the workspace's now, as when the read
@@ -94,15 +95,15 @@ fn moving(own: &OwnPullRequest) -> bool {
 /// before the wait started didn't end it. One a client shows in full, in `shown`, is due every [`SHOWN`] while it's
 /// not done.
 pub(in super::super) fn due<'a>(
-    listed: &'a [(Workspace, Option<PrState>)],
+    listed: &'a [(Workspace, Option<PrState>, Option<Branches>)],
     schedules: &HashMap<WorkspaceId, Schedule>,
     waited: &HashSet<WorkspaceId>,
     shown: &HashSet<WorkspaceId>,
     now: Instant,
 ) -> Vec<&'a Workspace> {
-    let done = |w: &Workspace, state: Option<PrState>| {
+    let done = |w: &Workspace, state: Option<PrState>, branches: Option<&Branches>| {
         matches!(state, Some(PrState::Merged | PrState::Closed))
-            && !w.pull_request_found_on_another_branch()
+            && !found_on_another_branch(w, branches)
             && !waited.contains(&w.id)
     };
     let due_at = |w: &Workspace, schedule: &Schedule| {
@@ -111,8 +112,8 @@ pub(in super::super) fn due<'a>(
     };
     let mut due: Vec<_> = listed
         .iter()
-        .filter(|(w, state)| read_in_turn(w) && !done(w, *state))
-        .map(|(w, state)| (w, *state, schedules.get(&w.id).map(|schedule| due_at(w, schedule))))
+        .filter(|(w, state, branches)| read_in_turn(w) && !done(w, *state, branches.as_ref()))
+        .map(|(w, state, _)| (w, *state, schedules.get(&w.id).map(|schedule| due_at(w, schedule))))
         .filter(|(_, _, due_at)| due_at.is_none_or(|due_at| due_at <= now))
         .collect();
     due.sort_by_key(|(_, state, due_at)| (due_at.is_some(), *state != Some(PrState::Open), *due_at));

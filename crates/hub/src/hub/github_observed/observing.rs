@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use protocol::client::{ApiError, HubNotice};
-use protocol::model::RecordKey;
+use protocol::model::{Observation, RecordKey};
 use tokio::sync::broadcast::error::RecvError;
 use tracing::warn;
 
@@ -52,7 +52,10 @@ impl Hub {
                     Err(RecvError::Closed) => return,
                 },
                 notice = feed.recv() => match notice.as_deref() {
-                    Ok(HubNotice::Workspace(workspace)) => observing.workspaces.recorded(&self, workspace).await,
+                    Ok(HubNotice::Workspace(workspace)) => observing.workspaces.recorded(&self, &workspace.id).await,
+                    Ok(HubNotice::Observation(Observation::WorkspaceBranches { workspace_id, .. })) => {
+                        observing.workspaces.recorded(&self, workspace_id).await;
+                    }
                     Ok(HubNotice::Removed { record: RecordKey::Workspace { id }, .. }) => {
                         observing.workspaces.removed(&self, id).await;
                     }

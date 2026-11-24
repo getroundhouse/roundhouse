@@ -1,8 +1,9 @@
 use super::super::Hub;
-use super::own::{WaitsRead, WorkspaceRead};
+use super::own::{WaitsRead, WorkspaceRead, found_on_another_branch};
 use super::recording::Found;
 use super::schedule;
 use super::token_limits::TokenLimits;
+use super::unseen::OwnUnread;
 use crate::hub::github_observed::{Heard, ReadWent};
 use crate::jobs;
 use crate::store::now_ms;
@@ -102,6 +103,17 @@ pub(in super::super) struct Reading {
     /// no worker, and so don't wait behind a workspace's read whose worker is slow to say how its worktree stands.
     pub(super) agent_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
     pub(super) remote_read_at: Mutex<HashMap<WorkspaceId, Instant>>,
+    /// How many files were uncommitted in each workspace's worktree as its pull request was last read since the hub
+    /// started, which the observation of that pull request then says, as [`Hub::uncommitted_known`] reads it.
+    pub(super) counted: Mutex<HashMap<WorkspaceId, Counted>>,
+}
+
+/// How many files were uncommitted in a workspace's worktree as its pull request was read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Counted {
+    /// The pull request's address.
+    pub(super) url: String,
+    pub(super) files: u32,
 }
 
 impl Reading {
@@ -112,6 +124,7 @@ impl Reading {
             limits: TokenLimits::default(),
             agent_gates: Mutex::new(HashMap::new()),
             remote_read_at: Mutex::new(HashMap::new()),
+            counted: Mutex::new(HashMap::new()),
         }
     }
 
@@ -193,7 +206,8 @@ impl Hub {
         }
         // What's known is the branch's own, found since the worktree checked it out, unless the cache has forgotten it.
         let forgotten = known.is_none() && workspace.pull_request_link.is_some();
-        if when == When::OnAnotherBranch && !workspace.pull_request_found_on_another_branch() && !forgotten {
+        let elsewhere = found_on_another_branch(&workspace, self.branches_of(id).as_ref());
+        if when == When::OnAnotherBranch && !elsewhere && !forgotten {
             return Ok(Answer::Read(known.and_then(|found| found.pull_request)));
         }
         // A client asks, and a read just now, such as as a turn ended, or for another client, found it.
@@ -204,6 +218,8 @@ impl Hub {
             if let Some(workspace) = changed {
                 self.notify(HubNotice::Workspace(workspace));
             }
+            // Only how many files are uncommitted was read, which what's worked out of it says from now.
+            self.github_read_ended(id, ReadWent::Recounted, Heard::Nothing);
             return Ok(Answer::Read(found.read.pull_request));
         }
         let read_at = Instant::now();
@@ -276,7 +292,13 @@ impl Hub {
         }
         // After the workspace, so whoever's told has it as it's recorded now.
         let heard = self.heard_of_repository(&read).await;
-        self.github_read_ended(id, if read.is_err() { ReadWent::Failed } else { ReadWent::Read }, heard);
+        let ended = match &read {
+            Ok(_) => ReadWent::Read,
+            // Nothing was read, since which pull request is the workspace's can't be told.
+            Err(OwnUnread::NotKnown) => ReadWent::HeldBack,
+            Err(OwnUnread::Failed(_) | OwnUnread::Unseen { .. }) => ReadWent::Failed,
+        };
+        self.github_read_ended(id, ended, heard);
         let answer = match read {
             Ok(Found { read, .. }) => Answer::Read(read.pull_request),
             Err(unread) => Answer::Known(recorded.or(known), unread.error()),
@@ -295,7 +317,8 @@ impl Hub {
         self.read_pull_request_soon(id, Asked::Waiting, When::Always);
     }
 
-    /// After the worktree checked out another branch or pushed the one it's on, as [`Asked::Agent`] says.
+    /// After the worktree checked out another branch or pushed the one it's on, or once the hub first knows which it has
+    /// checked out, as [`Asked::Agent`] says.
     pub(in super::super) fn read_pull_request_after_move(self: &Arc<Self>, id: &WorkspaceId, when: When) {
         self.read_pull_request_soon(id, Asked::Agent, when);
     }

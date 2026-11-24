@@ -48,7 +48,7 @@ mod same_again;
 mod schema;
 #[cfg(test)]
 pub(crate) use schema::{
-    BEFORE_ACCOUNT_IDENTITY_OBSERVED, BEFORE_ACCOUNT_LIMITS_OBSERVED, BEFORE_APPS_OBSERVED,
+    BEFORE_ACCOUNT_IDENTITY_OBSERVED, BEFORE_ACCOUNT_LIMITS_OBSERVED, BEFORE_APPS_OBSERVED, BEFORE_BRANCHES_OBSERVED,
     BEFORE_GITHUB_USERS_OBSERVED, BEFORE_REACH_OBSERVED, BEFORE_SESSION_CACHE_OBSERVED,
     BEFORE_SESSION_CONTEXT_OBSERVED, BEFORE_WAIT_READ_OBSERVED,
 };
@@ -80,7 +80,7 @@ pub use repos::RepoToRead;
 pub(crate) use run_logins::Placed;
 pub(crate) use sessions::SessionLogin;
 pub use titles::{Retitle, Retitled};
-pub use workspaces::{BranchesSet, Ended, Move, WorkspacePlacement};
+pub use workspaces::{Ended, Move, WorkspacePlacement};
 
 mod database;
 use columns::{At, ByColumn, Column, Columns, OneValue, columns};

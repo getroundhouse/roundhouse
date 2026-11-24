@@ -15,7 +15,11 @@ fn running() -> OwnPullRequest {
 }
 
 /// A workspace whose pull request the hub found to be #7, beside its state as the hub knows it, or that has none.
-fn workspace(id: &str, status: WorkspaceStatus, state: Option<PrState>) -> (Workspace, Option<PrState>) {
+fn workspace(
+    id: &str,
+    status: WorkspaceStatus,
+    state: Option<PrState>,
+) -> (Workspace, Option<PrState>, Option<Branches>) {
     let link = state.map(|_| PullRequestLink {
         repository: GithubRepositoryName::named("o/r"),
         number: IssueNumber::try_from(7).unwrap(),
@@ -25,6 +29,7 @@ fn workspace(id: &str, status: WorkspaceStatus, state: Option<PrState>) -> (Work
     (
         Workspace { status, pull_request_link: Some(PullRequestLinked { link }), ..protocol::fixtures::workspace(id) },
         state,
+        None,
     )
 }
 
@@ -34,7 +39,7 @@ fn read(ago: &[(&str, Duration)], now: Instant) -> HashMap<WorkspaceId, Schedule
 }
 
 fn next(
-    workspaces: &[(Workspace, Option<PrState>)],
+    workspaces: &[(Workspace, Option<PrState>, Option<Branches>)],
     schedules: &HashMap<WorkspaceId, Schedule>,
     now: Instant,
 ) -> Option<String> {
@@ -205,19 +210,22 @@ fn a_merged_pull_request_found_on_another_branch_is_read_again_in_turn() {
     let now = Instant::now();
     let on = |name: &str| Branches { head: Head::Branch { name: BranchName::from(name) }, had: Vec::new() };
     let merged_on = |id: &str, found_on: Option<&str>, checked_out: &str| {
-        let (merged, state) = workspace(id, WorkspaceStatus::Ready, Some(PrState::Merged));
+        let (merged, state, _) = workspace(id, WorkspaceStatus::Ready, Some(PrState::Merged));
         let pull_request_branch = found_on.map(BranchName::from);
-        (Workspace { branches: Some(on(checked_out)), pull_request_branch, ..merged }, state)
+        (Workspace { pull_request_branch, ..merged }, state, Some(on(checked_out)))
     };
     let schedules = read(&[("moved", SOONEST), ("stayed", SOONEST), ("before", SOONEST)], now);
 
     let moved = next(&[merged_on("moved", Some("aspen"), "header")], &schedules, now);
     let stayed = next(&[merged_on("stayed", Some("aspen"), "aspen")], &schedules, now);
     let before = next(&[merged_on("before", None, "aspen")], &schedules, now);
+    let (unknown, state, _) = merged_on("unknown", Some("aspen"), "header");
+    let not_known = next(&[(unknown, state, None)], &schedules, now);
 
     assert_eq!(moved.as_deref(), Some("moved"));
     assert_eq!(stayed, None, "it's still the branch's, and done");
     assert_eq!(before.as_deref(), Some("before"), "found before the hub kept where");
+    assert_eq!(not_known, None, "branches not known say nothing of another branch, so it's done");
 }
 
 /// One a client shows in full is due every 30 seconds however long it has come back the same, while it's open, and

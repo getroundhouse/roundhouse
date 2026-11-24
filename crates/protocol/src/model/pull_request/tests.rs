@@ -219,31 +219,6 @@ fn any_pull_request() -> impl Strategy<Value = OwnPullRequest> {
     )
 }
 
-/// One found on a branch other than the one checked out isn't the workspace's now, but none found on no branch, as
-/// where `gh` can't work at all, says nothing of any branch.
-#[test]
-fn only_what_was_found_on_a_branch_can_be_another_branchs() {
-    use crate::model::{BranchName, Branches, GithubRepositoryName, Head, IssueNumber, PullRequestLink};
-    let link = PullRequestLink {
-        repository: GithubRepositoryName::named("o/r"),
-        number: IssueNumber::try_from(7).unwrap(),
-        url: "https://github.com/o/r/pull/7".into(),
-        uncommitted: 0,
-    };
-    let on = |link: Option<PullRequestLink>, branch: Option<&str>| crate::model::Workspace {
-        branches: Some(Branches { head: Head::Branch { name: BranchName::from("next") }, had: Vec::new() }),
-        pull_request_branch: branch.map(BranchName::from),
-        pull_request_link: Some(PullRequestLinked { link }),
-        ..crate::fixtures::workspace("w")
-    };
-
-    assert!(on(Some(link.clone()), Some("aspen")).pull_request_found_on_another_branch());
-    assert!(on(None, Some("aspen")).pull_request_found_on_another_branch(), "the branch on now may have one");
-    assert!(on(Some(link.clone()), None).pull_request_found_on_another_branch(), "found before branches were kept");
-    assert!(!on(Some(link), Some("next")).pull_request_found_on_another_branch());
-    assert!(!on(None, None).pull_request_found_on_another_branch(), "as where gh can't work");
-}
-
 /// Not looked, looked and found none, and found one each read back as themselves on the record's link, as the
 /// whole pull request does.
 #[test]

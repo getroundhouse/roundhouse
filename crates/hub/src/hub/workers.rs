@@ -263,6 +263,9 @@ impl Hub {
         self.terminals_lost(link.id).await;
         // And what it watched.
         self.changes_watcher_gone(workspace_id, link).await;
+        if current {
+            self.branches_let_go(workspace_id).await;
+        }
     }
 
     /// Asks a worker to stop and waits for its output to end. If it's stuck, it's ended as [`Hub::end_stuck_worker`]

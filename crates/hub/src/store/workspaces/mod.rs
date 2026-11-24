@@ -7,5 +7,5 @@ mod tests;
 mod workspace_rows;
 
 pub use placement::WorkspacePlacement;
-pub use workspace_rows::{BranchesSet, Ended, Move};
+pub use workspace_rows::{Ended, Move};
 pub(super) use workspace_rows::{WorkspaceColumns, workspace_from_row, workspace_on};

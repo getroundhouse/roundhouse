@@ -50,7 +50,8 @@ impl ObservationsListed {
                     listed.github.insert(observation.key(), observation);
                 }
                 // Never held, as `Revised` says.
-                Observation::RepositoryReach { .. }
+                Observation::WorkspaceBranches { .. }
+                | Observation::RepositoryReach { .. }
                 | Observation::GithubUsername { .. }
                 | Observation::GithubAppSaid { .. }
                 | Observation::GithubAppBot { .. }

@@ -4,7 +4,7 @@ These rules cover records: what one is, how one changes, and how a client keeps 
 
 ## What a record is
 
-- **A record is state the hub owns: what Roundhouse decides, what people enter, and what the hub recorded of a moment that's past.** What the hub only observes is an observation, as `docs/principles/observations.md` says, even where the hub decides from it. For example, a workspace's branches are git's, so they're an observation, and which pull request the hub worked out from them is a record. The branch an archived workspace had checked out is a record too, since the hub recorded it as the worktree went. *Not built:* a workspace's branches are a field of its record.
+- **A record is state the hub owns: what Roundhouse decides, what people enter, and what the hub recorded of a moment that's past.** What the hub only observes is an observation, as `docs/principles/observations.md` says, even where the hub decides from it. For example, a workspace's branches are git's, so they're an observation, and which pull request the hub worked out from them is a record. The branch an archived workspace had checked out is a record too, since the hub recorded it as the worktree went.
 
   ```rust
   // crates/protocol/src/model/record.rs, abridged

@@ -37,7 +37,7 @@ async fn a_worktree_whose_status_cant_be_read_is_archived_only_when_forced() {
             ..fixtures::child_worktree("try")
         };
         hub.store.insert_child(&other, &"k".into()).unwrap();
-        hub.store.child_ready(&other.id, None).unwrap();
+        hub.store.child_ready(&other.id).unwrap();
         let unreadable = if its_own { workspace.path.clone().unwrap() } else { OTHER.to_string() };
         answering_first(&hub, &workspace.id, &asked, move |request| {
             let WorkerRequest::GitStatus(GitStatus { path }) = request else { return None };

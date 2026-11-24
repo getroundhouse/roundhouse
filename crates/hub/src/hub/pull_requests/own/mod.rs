@@ -14,4 +14,5 @@ mod scopes;
 mod tests;
 
 pub(in crate::hub::pull_requests) use asking::WorkspaceRead;
+pub(in crate::hub) use judging::found_on_another_branch;
 pub(in crate::hub::pull_requests) use scopes::WaitsRead;

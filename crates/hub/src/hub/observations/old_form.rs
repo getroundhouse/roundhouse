@@ -8,7 +8,7 @@
 
 use protocol::client::ClientResponse;
 use protocol::model::{
-    Account, GithubAccount, GithubApp, ModelList, Record, RecordKey, Records, Session, UsageLimit, Wait,
+    Account, GithubAccount, GithubApp, ModelList, Record, RecordKey, Records, Session, UsageLimit, Wait, Workspace,
 };
 use tracing::warn;
 
@@ -16,15 +16,29 @@ use super::github_kinds::{GithubAppBot, GithubAppSaid, GithubUsername, Installed
 use super::kept::Observations;
 use super::kinds::{
     AccountIdentity, AccountLimits, Kind, ModelCatalog, SessionCache, SessionContext, SessionKey, SessionTodos,
-    WaitKey, WaitRead,
+    WaitKey, WaitRead, WorkspacePullRequest,
 };
 use super::tables::Tables;
+use super::workspace_kinds::WorkspaceBranches;
 use crate::hub::Hub;
 
 /// A record, or what holds records, with a field a client of a version from before an observation reads it in.
 pub(crate) trait OldForm {
     /// Fills each such field from what `tables` keeps.
     fn fill(&mut self, tables: &mut Tables);
+}
+
+/// The workspace's branches, on its record, `None` while they aren't known, and how many files were uncommitted as its
+/// pull request was read, on its link, which no client reads, 0 where what's kept of its pull request is of another.
+impl OldForm for Workspace {
+    fn fill(&mut self, tables: &mut Tables) {
+        self.branches = WorkspaceBranches::table(tables).value(&self.id).cloned();
+        if let Some(link) = self.pull_request_link.as_mut().and_then(|linked| linked.link.as_mut()) {
+            let own = WorkspacePullRequest::table(tables).value(&self.id).and_then(|said| said.pull_request.as_ref());
+            let of_the_link = own.filter(|own| own.pull_request.summary.about.url == link.url);
+            link.uncommitted = of_the_link.map_or(0, |own| own.local.uncommitted);
+        }
+    }
 }
 
 /// What GitHub calls the account's user, on its record. While it isn't known, as before the hub has first asked GitHub
@@ -111,6 +125,7 @@ impl OldForm for Wait {
 impl OldForm for Record {
     fn fill(&mut self, tables: &mut Tables) {
         match self {
+            Record::Workspace(workspace) => workspace.fill(tables),
             Record::Account(account) => account.fill(tables),
             Record::ModelList(list) => list.fill(tables),
             Record::Session(session) => session.fill(tables),
@@ -118,7 +133,6 @@ impl OldForm for Record {
             Record::GithubApp(app) => app.fill(tables),
             // Hold no observation's old form.
             Record::Repo(_)
-            | Record::Workspace(_)
             | Record::Comment(_)
             | Record::HubSettings(_)
             | Record::NewWorkspaceDraft(_)
@@ -138,6 +152,9 @@ impl OldForm for Record {
 /// store keeps none of.
 impl OldForm for Records {
     fn fill(&mut self, tables: &mut Tables) {
+        for workspace in &mut self.workspaces {
+            workspace.fill(tables);
+        }
         for account in &mut self.accounts {
             account.fill(tables);
         }
@@ -162,7 +179,7 @@ impl OldForm for Records {
     }
 }
 
-/// The replies that carry a record holding an observation's old form: an account's, a GitHub account's, an app of your own's, a list of models', and a session's,
+/// The replies that carry a record holding an observation's old form: a workspace's, an account's, a GitHub account's, an app of your own's, a list of models', and a session's,
 /// alone, in a list of a workspace's, or as a new workspace's first. Every reply is named, so a new one that carries such a record is
 /// filled. Those that carry every record are filled as they're listed, and the hub reads a `SessionAccount` from an
 /// account's record it fills.
@@ -181,7 +198,16 @@ impl OldForm for ClientResponse {
             C::GithubAccount(account) => account.fill(tables),
             C::GithubApp(app) => app.fill(tables),
             C::ModelList(list) => list.fill(tables),
-            C::NewWorkspaceMade(made) => made.session.fill(tables),
+            C::Workspace(workspace) => workspace.fill(tables),
+            C::Workspaces(listed) => {
+                for workspace in &mut listed.workspaces {
+                    workspace.fill(tables);
+                }
+            }
+            C::NewWorkspaceMade(made) => {
+                made.workspace.fill(tables);
+                made.session.fill(tables);
+            }
             // Hold no record that holds an observation's old form, or are filled as they're listed.
             C::Paired(_)
             | C::Devices(_)
@@ -196,8 +222,6 @@ impl OldForm for ClientResponse {
             | C::Repos(_)
             | C::Records(_)
             | C::Agents(_)
-            | C::Workspace(_)
-            | C::Workspaces(_)
             | C::GitStatus(_)
             | C::GitDiff(_)
             | C::ChangedFilesPage(_)

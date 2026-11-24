@@ -3,7 +3,7 @@
 //! [`WorkspaceRepositoryUnseen`], which the task that works out GitHub's observations keeps from what each read heard,
 //! so a hub that starts again has it as of the read that heard it, as `docs/principles/keeping-observations.md` says.
 
-use protocol::client::ApiError;
+use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{GithubLoginKind, GithubRepositoryName, RepositoryUnseen, WorkspaceId};
 use tracing::warn;
 
@@ -23,6 +23,9 @@ pub(in crate::hub::pull_requests) enum OwnUnread {
         said: String,
     },
     Failed(ApiError),
+    /// Which pull request is the workspace's can't be told, since its branches aren't known, as `Wanted::NotKnown`
+    /// says, so nothing was read.
+    NotKnown,
 }
 
 impl OwnUnread {
@@ -31,6 +34,11 @@ impl OwnUnread {
         match self {
             Self::Unseen { said, .. } => github::HeadsUnread::Unseen { said: said.clone() }.error(),
             Self::Failed(error) => error.clone(),
+            Self::NotKnown => ApiError::new(
+                ErrorCode::Unavailable,
+                "which branch the workspace has checked out isn't known until its worker says, so its pull request \
+                 can't be read",
+            ),
         }
     }
 }
@@ -56,7 +64,7 @@ impl Hub {
             Err(OwnUnread::Unseen { repository, said }) => {
                 self.unseen_as_default(repository, said).await.map_or(Heard::Nothing, Heard::Unseen)
             }
-            Err(OwnUnread::Failed(_)) => Heard::Nothing,
+            Err(OwnUnread::Failed(_) | OwnUnread::NotKnown) => Heard::Nothing,
         }
     }
 

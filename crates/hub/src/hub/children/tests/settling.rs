@@ -1,6 +1,7 @@
 //! Settling the records of a workspace's other worktrees once the hub has its worker, and what the worker reads of
 //! their branches.
 
+use crate::hub::observations::{ChildWorktreeBranches, ChildWorktreeKey};
 use protocol::worker::WorkerFrame;
 
 use super::*;
@@ -68,17 +69,19 @@ async fn the_others_are_settled_and_watched_with_the_workspace_s_own() {
     );
 }
 
-/// What a worker reads of another worktree's branches goes on that worktree's record, only from the worker the
+/// What a worker reads of another worktree's branches the hub keeps of that worktree, only from the worker the
 /// workspace has now, since one that's been replaced may still have frames on the way.
 #[tokio::test]
-async fn another_worktree_s_branches_go_on_its_record_only_from_the_worker_the_workspace_has() {
+async fn another_worktree_s_branches_are_kept_only_from_the_worker_the_workspace_has() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, link, _) = workspace(dir.path(), StandIn::default());
     create(&hub, &link, new_branch("try"), "k").await.unwrap();
     let replaced = WorkerLink::unconnected();
     let on = |name: &str| Branches { head: Head::Branch { name: BranchName::from(name) }, had: vec![] };
     let frame = |name: &str| WorkerFrame::ChildBranches { path: at("try"), branches: on(name) };
-    let recorded = || hub.store.child_at(&"w".into(), &at("try")).unwrap().and_then(|child| child.branches);
+    let child = hub.store.child_at(&"w".into(), &at("try")).unwrap().unwrap();
+    let of = ChildWorktreeKey { workspace_id: "w".into(), id: child.id };
+    let recorded = || hub.observations.value_of::<ChildWorktreeBranches>(&of);
 
     let taken = hub.branches_frame(&"w".into(), &link, frame("alder/try")).await;
     let from_the_current = recorded();
@@ -86,7 +89,7 @@ async fn another_worktree_s_branches_go_on_its_record_only_from_the_worker_the_w
 
     assert!(taken.is_none() && from_one_replaced.is_none(), "each is taken, heard or not");
     assert_eq!(from_the_current, Some(on("alder/try")));
-    assert_eq!(recorded(), Some(on("alder/try")), "the replaced worker's wasn't recorded");
+    assert_eq!(recorded(), Some(on("alder/try")), "the replaced worker's wasn't kept");
 }
 
 /// Something else where one was being made, which the worker says when it's asked for it, isn't that worktree, so its
