@@ -10,7 +10,7 @@ use super::kinds::{
     SessionTodos, Subject, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
     WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
-use super::workspace_kinds::{ChildWorktreeBranches, WorkspaceBranches};
+use super::workspace_kinds::{ChildWorktreeBranches, WorkspaceBranches, WorkspaceWorkerBuild};
 use super::writer::Writer;
 use crate::cache_file::CacheFile;
 
@@ -24,6 +24,7 @@ pub(crate) struct Tables {
     pub(super) workspace_pull_request_detail: Table<WorkspacePullRequestDetail>,
     pub(super) workspace_repository_unseen: Table<WorkspaceRepositoryUnseen>,
     pub(super) workspace_branches: Table<WorkspaceBranches>,
+    pub(super) workspace_worker_build: Table<WorkspaceWorkerBuild>,
     pub(super) repository_reach: Table<RepositoryReach>,
     pub(super) github_username: Table<GithubUsername>,
     pub(super) github_app_said: Table<GithubAppSaid>,
@@ -52,10 +53,12 @@ pub(super) type Gone<'a> = &'a (dyn Fn(Owner<'_>) -> bool + Sync);
 
 /// What the store does with every kind's table alike.
 pub(super) trait AnyTable {
-    fn form(&self) -> Form;
+    /// Its table in the cache file, and that table's version, or `None` for a kind kept in memory alone.
+    fn form(&self) -> Option<Form>;
     /// Each observation it keeps that's sent at `level`.
     fn listed(&self, level: &Level) -> Vec<Observation>;
-    /// Keeps what the cache file kept, each as of when it was read, at `rev`.
+    /// Keeps what the cache file kept, each as of when it was read, at `rev`, which is nothing of a kind kept in memory
+    /// alone.
     fn load(&mut self, file: &CacheFile, rev: Rev) -> rusqlite::Result<()>;
     /// Whether it keeps an observation of an owner that `gone` picks out.
     fn keeps_of(&self, gone: Gone<'_>) -> bool;
@@ -65,8 +68,8 @@ pub(super) trait AnyTable {
 }
 
 impl<K: Kind> AnyTable for Table<K> {
-    fn form(&self) -> Form {
-        K::FORM
+    fn form(&self) -> Option<Form> {
+        (!K::IN_MEMORY_ALONE).then_some(K::FORM)
     }
 
     fn listed(&self, level: &Level) -> Vec<Observation> {
@@ -76,6 +79,9 @@ impl<K: Kind> AnyTable for Table<K> {
     }
 
     fn load(&mut self, file: &CacheFile, rev: Rev) -> rusqlite::Result<()> {
+        if K::IN_MEMORY_ALONE {
+            return Ok(());
+        }
         for Row { of, value, read_at_ms } in file::load::<K>(file)? {
             self.keep_loaded(of, value, read_at_ms, rev);
         }
@@ -100,7 +106,7 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 21] {
+    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 22] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -109,6 +115,7 @@ impl Tables {
             workspace_pull_request_detail,
             workspace_repository_unseen,
             workspace_branches,
+            workspace_worker_build,
             repository_reach,
             github_username,
             github_app_said,
@@ -132,6 +139,7 @@ impl Tables {
             workspace_pull_request_detail,
             workspace_repository_unseen,
             workspace_branches,
+            workspace_worker_build,
             repository_reach,
             github_username,
             github_app_said,
@@ -164,8 +172,8 @@ impl Tables {
         self.each().into_iter().flat_map(|table| table.forget_of(gone, writer)).collect()
     }
 
-    /// The form of each kind's table in the cache file.
+    /// The form of each kind's table in the cache file, of each kind not kept in memory alone.
     pub(super) fn forms() -> Vec<Form> {
-        Tables::default().each().iter().map(|table| table.form()).collect()
+        Tables::default().each().iter().filter_map(|table| table.form()).collect()
     }
 }

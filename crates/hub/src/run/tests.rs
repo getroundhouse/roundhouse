@@ -69,19 +69,6 @@ fn a_starting_hub_records_a_setup_the_last_left_running_as_failed() {
     assert_eq!(setup, protocol::model::SetupStatus::Failed { code: None }, "it's left as the last run left it");
 }
 
-/// Only a worker this hub carries on with can be another build, and carrying on with one says which, so what the last
-/// run recorded, as when it was killed while carrying on with one, says nothing of the workers there are now.
-#[test]
-fn a_starting_hub_forgets_which_build_each_worker_was() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = store_with_session(dir.path());
-    store.set_workspace_worker_build(&"w".into(), Some("0.9.0")).unwrap();
-
-    recover(&store).unwrap();
-
-    assert_eq!(store.get_workspace(&"w".into()).unwrap().worker_build, None);
-}
-
 /// What GitHub is asked after a sign-in with was only in the last hub's memory, so none it left waiting can go on.
 #[test]
 fn a_starting_hub_records_every_sign_in_with_github_the_last_left_waiting_as_ended() {

@@ -8,12 +8,13 @@ use tokio::time::sleep_until;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{RunId, SessionStatus};
+use protocol::model::{ObservationKey, RunId, SessionStatus};
 use protocol::prompt::Prompt;
 use protocol::worker::{GitStatus, WorkerRequest, WorkerResponse, previous};
 use tokio::sync::broadcast::error::TryRecvError;
 
 use super::*;
+use crate::hub::observations::WorkspaceWorkerBuild;
 use crate::hub::setup::SetupGate;
 use crate::hub::tests::{carried_on, flushed, hub_in, hub_with_worktree, serving, stand_in_worker, terminal_in_w};
 use crate::session::{Item, LiveSession, Origin};
@@ -129,8 +130,9 @@ async fn a_worker_of_another_build_is_replaced_once_two_looks_in_a_row_find_noth
     let halfway_after = |look: u32| start + every * look + every / 2;
     let current = |hub: &Hub| hub.workers.lock().get(&w()).is_some_and(|current| Arc::ptr_eq(current, &link));
 
-    // As carrying on with it records, before the looks start.
-    hub.store.set_workspace_worker_build(&w(), Some("0.9.0")).unwrap();
+    // As carrying on with it keeps, before the looks start.
+    hub.worker_build_heard(&w(), &link).await;
+    assert!(hub.observations.keeps::<WorkspaceWorkerBuild>(&w()));
     let mut feed = hub.subscribe_feed();
     hub.replace_once_idle(w(), link.clone());
     sleep_until(halfway_after(1)).await;
@@ -149,16 +151,17 @@ async fn a_worker_of_another_build_is_replaced_once_two_looks_in_a_row_find_noth
         assert!(Instant::now() < deadline, "not replaced after two looks in a row that found nothing at work");
         tokio::task::yield_now().await;
     }
-    // The next worker is the hub's own build, so its workspace says so, and every client hears it.
+    // The next worker is the hub's own build, so which build it was is forgotten, and every client hears it.
+    let gone = ObservationKey::WorkspaceWorkerBuild { workspace_id: w() };
     loop {
         match feed.try_recv().map(std::sync::Arc::unwrap_or_clone) {
-            Ok(HubNotice::Workspace(workspace)) if workspace.id == w() && workspace.worker_build.is_none() => break,
+            Ok(HubNotice::ObservationRemoved { observation, .. }) if observation == gone => break,
             Ok(_) | Err(TryRecvError::Lagged(_)) => {}
             Err(e) => assert!(Instant::now() < deadline, "no client heard the workspace move to the hub's build: {e}"),
         }
         tokio::task::yield_now().await;
     }
-    assert_eq!(hub.store.get_workspace(&w()).unwrap().worker_build, None);
+    assert!(!hub.observations.keeps::<WorkspaceWorkerBuild>(&w()));
 }
 
 /// What the app needs to take an update that ends none of the workers: the oldest protocol among them, counting the

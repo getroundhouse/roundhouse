@@ -79,8 +79,9 @@ pub struct Workspace {
     pub pull_request_branch: Option<BranchName>,
     /// Which build its worker is, while that's another than the hub's: one an earlier hub left running, as after an
     /// update, which the hub carries on with until nothing in the workspace is at work, and then replaces with its own.
-    /// `None` while its worker, or the next one, is the hub's own build, since every worker a hub starts is, and from a
-    /// hub too old to say.
+    /// `None` while its worker, or the next one, is the hub's own build, since every worker a hub starts is, from a hub
+    /// too old to say, and of a worker too old to name its build. A hub keeps it as the observation
+    /// `WorkspaceWorkerBuild`, and fills this from it for a client of a version from before it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worker_build: Option<String>,
 }

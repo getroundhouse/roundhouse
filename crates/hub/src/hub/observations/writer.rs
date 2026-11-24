@@ -40,8 +40,11 @@ impl Writer {
     }
 
     /// Queues `write` of the observation of `of`, which is made once every write queued before it is. One the file
-    /// refuses is only logged, as [`file::write`] says.
+    /// refuses is only logged, as [`file::write`] says. Nothing of a kind kept in memory alone, which has no table.
     pub(super) fn write<K: Kind>(&self, of: K::Of, write: Write<K::Value>) {
+        if K::IN_MEMORY_ALONE {
+            return;
+        }
         self.queue(Box::new(move |file| file::write::<K>(file, &of, write)));
     }
 

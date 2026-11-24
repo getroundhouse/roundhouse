@@ -59,7 +59,6 @@ columns! {
     pub(in super::super) struct WorkspaceColumns {
         id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup,
         port_base, title, title_source, pull_request_link, user_active_at_ms, comment_draft, pull_request_branch,
-        worker_build,
     } then {
         rev,
     }
@@ -104,7 +103,8 @@ pub(in super::super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Worksp
         // Kept apart, as the observation `WorkspaceBranches`, which fills it as the record leaves the hub.
         branches: None,
         pull_request_branch: row.at::<Option<String>>(c.pull_request_branch)?.map(BranchName::from),
-        worker_build: row.at(c.worker_build)?,
+        // Kept apart, as the observation `WorkspaceWorkerBuild`, which fills it as the record leaves the hub.
+        worker_build: None,
         rev: rev_of(row, c.rev)?,
     })
 }
@@ -165,7 +165,6 @@ impl Store {
             user_active_at_ms: &workspace.user_active_at_ms,
             comment_draft: &workspace.comment_draft.as_ref().map(serde_json::to_string).transpose()?,
             pull_request_branch: &workspace.pull_request_branch.as_ref().map(BranchName::as_str),
-            worker_build: &workspace.worker_build,
             client_request_id: &client_request_id.map(ClientRequestId::as_str),
             repo_source: &serde_json::to_string(&placement.source)?,
             worker_environment: &serde_json::to_string(&placement.environment)?,

@@ -75,7 +75,7 @@ pub use level::Level;
 pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
 pub use observation::{
-    AccountIdentity, ConversationCache, GithubAppSaid, IssueSaid, Observation, ObservationKey, Observed,
+    AccountIdentity, ConversationCache, GithubAppSaid, IssueSaid, Observation, ObservationKey, Observed, OtherBuild,
     OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReadFrom, ReferenceSaid,
     WaitRead,
 };

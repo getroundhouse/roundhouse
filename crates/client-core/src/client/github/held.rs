@@ -59,6 +59,7 @@ impl View {
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspaceChanges { .. }
             | ObservationKey::WorkspaceBranches { .. }
+            | ObservationKey::WorkspaceWorkerBuild { .. }
             | ObservationKey::RepositoryReach { .. }
             | ObservationKey::GithubUsername { .. }
             | ObservationKey::GithubAppSaid { .. }
@@ -160,6 +161,7 @@ impl GithubHeld {
                 ObservationKey::WorkspaceLines { .. }
                 | ObservationKey::WorkspaceChanges { .. }
                 | ObservationKey::WorkspaceBranches { .. }
+                | ObservationKey::WorkspaceWorkerBuild { .. }
                 | ObservationKey::RepositoryReach { .. }
                 | ObservationKey::GithubUsername { .. }
                 | ObservationKey::GithubAppSaid { .. }
@@ -248,6 +250,7 @@ impl GithubHeld {
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspaceChanges { .. }
             | ObservationKey::WorkspaceBranches { .. }
+            | ObservationKey::WorkspaceWorkerBuild { .. }
             | ObservationKey::RepositoryReach { .. }
             | ObservationKey::GithubUsername { .. }
             | ObservationKey::GithubAppSaid { .. }

@@ -256,7 +256,8 @@ impl Observations {
             Ok(rev) => {
                 for table in tables.each() {
                     if let Err(error) = table.load(&file, rev) {
-                        warn!(table = table.form().table, "reading observations from the cache's file: {error}");
+                        let table = table.form().map(|form| form.table);
+                        warn!(table, "reading observations from the cache's file: {error}");
                     }
                 }
             }
