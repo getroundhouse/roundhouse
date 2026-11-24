@@ -52,7 +52,6 @@ pub struct Workspace {
     pub setup: SetupStatus,
     /// The first of the [`PORTS_PER_WORKSPACE`] ports set aside for this workspace, so workspaces don't collide.
     pub port_base: u16,
-    #[serde(default)]
     pub rev: Rev,
     /// What it's called on screen. `None` until its first prompt or a rename.
     #[serde(default, deserialize_with = "Title::deserialize_optional")]

@@ -131,7 +131,7 @@ impl SessionLog {
     /// Takes an event from a live subscription.
     pub fn apply_event(&mut self, event: SessionEvent) {
         let position = Position::of(&event);
-        // One at 0 has no row. A hub places every event from 1, and an open session refuses one it sends at 0.
+        // One at 0 has no row, and no hub sends one, since it places every event from 1.
         let Some(row) = position.row() else { return };
         if let EventBody::UserPrompt { client_msg_id: Some(id), .. } = &event.body {
             self.pending.retain(|prompt| prompt.client_msg_id != *id);

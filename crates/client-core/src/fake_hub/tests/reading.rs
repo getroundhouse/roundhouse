@@ -205,7 +205,7 @@ fn a_chat_s_subagents_go_by_the_id_their_agent_gives_or_by_their_call() {
 
     let subagents = session_records(&client, &chat).subagents;
 
-    let ids: Vec<_> = subagents.iter().map(|subagent| (subagent.id(), subagent.status)).collect();
+    let ids: Vec<_> = subagents.iter().map(|subagent| (subagent.id.clone(), subagent.status)).collect();
     let working = SubagentStatus::Working;
     assert_eq!(ids, [(SubagentId::of_call(&"toolu_1".into()), working), (SubagentId::from("agent-7"), working)]);
 }

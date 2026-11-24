@@ -75,12 +75,12 @@ mod tests {
     fn a_call_s_row_finds_the_record_of_the_subagent_it_started_whatever_its_agent_named_it() {
         let log = log([event(Seq::new(1), subagents(&["agent"]))]);
         let mut m = Model::default();
-        let started = Record { id: Some("thread-1".into()), calls: 3, ..record("agent", SubagentStatus::Working) };
+        let started = Record { id: "thread-1".into(), calls: 3, ..record("agent", SubagentStatus::Working) };
         m.subagents.insert(Arc::new(started));
 
         let row = Subagent::read(&log, &m, Seq::new(1), &"agent".into(), false, Opening::AsChosen);
 
-        assert_eq!(row.record.as_deref().map(Record::id), Some("thread-1".into()));
+        assert_eq!(row.record.as_deref().map(|record| record.id.clone()), Some("thread-1".into()));
         assert_eq!(row.calls, 3);
         assert_eq!(m.subagent_rows.borrow().get(&ToolUseId::from("agent")), Some(&Seq::new(1)));
         assert_eq!(m.subagents.subagent_started_by(&"agent".into()), SubagentId::from("thread-1"), "its tab's");

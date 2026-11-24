@@ -20,7 +20,6 @@ pub struct DiffComment {
     pub line: u32,
     pub text: String,
     pub created_at_ms: i64,
-    #[serde(default)]
     pub rev: Rev,
 }
 

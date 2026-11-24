@@ -58,7 +58,7 @@ mod tests {
     fn a_call_to_subagents_names_each_as_its_record_does() {
         let mut m = Model::default();
         let recorded = |id: &str, call, description: &str| Record {
-            id: Some(id.into()),
+            id: id.into(),
             kind: Some("explorer".into()),
             description: Some(description.into()),
             ..record(call, SubagentStatus::Working)

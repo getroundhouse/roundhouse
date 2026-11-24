@@ -30,7 +30,6 @@ pub struct Proposal {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub withdrawn: Option<Withdrawal>,
     pub created_at_ms: i64,
-    #[serde(default)]
     pub rev: Rev,
 }
 

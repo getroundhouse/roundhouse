@@ -21,7 +21,6 @@ pub struct HubUpdate {
     /// one asks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attempt: Option<UpdateAttempt>,
-    #[serde(default)]
     pub rev: Rev,
 }
 

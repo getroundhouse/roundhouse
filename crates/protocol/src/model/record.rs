@@ -110,7 +110,7 @@ impl Record {
             Record::Account(account) => RecordKey::Account { id: account.id.clone() },
             Record::NewWorkspaceDraft(_) => RecordKey::NewWorkspaceDraft,
             Record::Subagent(subagent) => {
-                RecordKey::Subagent { session_id: subagent.session_id.clone(), subagent: subagent.id() }
+                RecordKey::Subagent { session_id: subagent.session_id.clone(), subagent: subagent.id.clone() }
             }
             Record::GithubAccount(account) => RecordKey::GithubAccount { id: account.id.clone() },
             Record::GithubSignIn(sign_in) => RecordKey::GithubSignIn { id: sign_in.id.clone() },

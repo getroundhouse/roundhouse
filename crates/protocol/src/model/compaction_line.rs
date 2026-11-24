@@ -11,8 +11,7 @@ use crate::event::{CompactedBy, CompactionOutcome, EventBody, SessionEvent};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CompactionLine {
     pub seq: Seq,
-    /// 0 from a hub that doesn't record places.
-    #[serde(default)]
+    /// Among the agent's own events.
     pub place: Place,
     #[serde(default)]
     pub by: CompactedBy,
@@ -98,10 +97,11 @@ mod tests {
     }
 
     #[test]
-    fn a_line_with_only_its_seq_reads_with_nothing_else_known() {
-        let line: CompactionLine = serde_json::from_value(serde_json::json!({ "seq": 9 })).unwrap();
+    fn a_line_with_only_its_seq_and_place_reads_with_nothing_else_known_and_one_without_its_place_doesnt_read() {
+        let line: CompactionLine = serde_json::from_value(serde_json::json!({ "seq": 9, "place": 7 })).unwrap();
 
-        assert_eq!(line.place, Place::default());
+        assert!(serde_json::from_value::<CompactionLine>(serde_json::json!({ "seq": 9 })).is_err());
+        assert_eq!(line.place, Place::new(7));
         assert_eq!(line.by, CompactedBy::Unknown);
         assert_eq!((line.before_tokens, line.after_tokens), (None, None));
     }

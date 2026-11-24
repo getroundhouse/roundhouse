@@ -126,19 +126,9 @@ fn a_known_request_with_a_new_field_still_decodes() {
 }
 
 #[test]
-fn a_record_from_a_hub_without_revisions_reads_as_revision_zero() {
-    let line = br#"{"notice":"repo","id":"r","name":"repo","path":"/repo","created_at_ms":1}"#;
-
-    let notice: HubNotice = frame::decode(line).unwrap();
-
-    let HubNotice::Repo(repo) = notice else { panic!("{notice:?}") };
-    assert_eq!(repo.rev, Rev::default());
-}
-
-#[test]
 fn an_event_or_delta_from_a_hub_without_runs_has_none() {
     let event: SessionEvent =
-        frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"turn_ended","outcome":"success","result":null,"duration_ms":null,"cost_usd":null,"num_turns":null}}"#)
+        frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"place":1,"body":{"type":"turn_ended","outcome":"success","result":null,"duration_ms":null,"cost_usd":null,"num_turns":null}}"#)
             .unwrap();
     let delta: StreamDelta =
         frame::decode(br#"{"message_id":"m","change":{"type":"text","index":0,"text":"hi"}}"#).unwrap();
@@ -159,7 +149,7 @@ fn a_removed_record_of_a_kind_this_build_does_not_know_still_reads() {
 #[test]
 fn what_an_agent_heard_of_its_accounts_limits_keeps_its_form_and_a_newer_window_still_reads() {
     let event: SessionEvent = frame::decode(
-        br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"agent_limits","limits":[{"window":"seven_days","used_percent":4,"resets_at_ms":9},{"window":"thirty_days","used_percent":1}]}}"#,
+        br#"{"session_id":"s","seq":1,"ts_ms":1,"place":1,"body":{"type":"agent_limits","limits":[{"window":"seven_days","used_percent":4,"resets_at_ms":9},{"window":"thirty_days","used_percent":1}]}}"#,
     )
     .unwrap();
 
@@ -175,7 +165,7 @@ fn what_an_agent_heard_of_its_accounts_limits_keeps_its_form_and_a_newer_window_
 #[test]
 fn a_models_own_week_keeps_its_form_with_the_models_label() {
     let event: SessionEvent = frame::decode(
-        br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"agent_limits","limits":[{"window":"model_seven_days","model":"Fable","used_percent":88,"resets_at_ms":9}]}}"#,
+        br#"{"session_id":"s","seq":1,"ts_ms":1,"place":1,"body":{"type":"agent_limits","limits":[{"window":"model_seven_days","model":"Fable","used_percent":88,"resets_at_ms":9}]}}"#,
     )
     .unwrap();
 
@@ -190,7 +180,7 @@ fn a_models_own_week_keeps_its_form_with_the_models_label() {
 #[test]
 fn a_turns_end_from_a_hub_that_doesnt_add_its_start_or_keep_its_models_and_tokens_has_none() {
     let event: SessionEvent =
-        frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"turn_ended","outcome":"success","result":null,"duration_ms":9,"cost_usd":null,"num_turns":null}}"#)
+        frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"place":1,"body":{"type":"turn_ended","outcome":"success","result":null,"duration_ms":9,"cost_usd":null,"num_turns":null}}"#)
             .unwrap();
 
     let EventBody::TurnEnded { started_at_ms, models, tokens, .. } = event.body else { panic!("{event:?}") };
@@ -200,7 +190,7 @@ fn a_turns_end_from_a_hub_that_doesnt_add_its_start_or_keep_its_models_and_token
 /// Spelled out, since the log holds this form for good.
 #[test]
 fn a_turns_end_keeps_the_form_of_its_models_and_tokens() {
-    let stored = br#"{"session_id":"s","seq":1,"ts_ms":9,"place":0,"body":{"type":"turn_ended","outcome":"success","result":null,"errors":[],"duration_ms":9,"cost_usd":null,"num_turns":null,"started_at_ms":1,"models":["claude-sonnet-5-5","claude-haiku-5-5"],"tokens":{"input_tokens":6,"output_tokens":550,"cache_read_tokens":1142851,"cache_write_tokens":1615}}}"#;
+    let stored = br#"{"session_id":"s","seq":1,"ts_ms":9,"place":1,"body":{"type":"turn_ended","outcome":"success","result":null,"errors":[],"duration_ms":9,"cost_usd":null,"num_turns":null,"started_at_ms":1,"models":["claude-sonnet-5-5","claude-haiku-5-5"],"tokens":{"input_tokens":6,"output_tokens":550,"cache_read_tokens":1142851,"cache_write_tokens":1615}}}"#;
 
     let event: SessionEvent = frame::decode(stored).unwrap();
 
@@ -217,7 +207,7 @@ fn a_turns_end_keeps_the_form_of_its_models_and_tokens() {
 /// made.
 #[test]
 fn a_workspace_from_a_hub_that_doesnt_keep_when_it_was_last_worked_in_goes_by_when_it_was_made() {
-    let line = br#"{"notice":"workspace","id":"w","repo_id":"r","name":"n","branch":"n","base_ref":null,"path":null,"status":"ready","provider":"local","instance_id":"w","created_at_ms":7,"archived_at_ms":null,"setup":{"state":"succeeded"},"port_base":55000}"#;
+    let line = br#"{"notice":"workspace","id":"w","repo_id":"r","name":"n","branch":"n","base_ref":null,"path":null,"status":"ready","provider":"local","instance_id":"w","created_at_ms":7,"archived_at_ms":null,"setup":{"state":"succeeded"},"port_base":55000,"rev":2}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();
 
@@ -229,7 +219,7 @@ fn a_workspace_from_a_hub_that_doesnt_keep_when_it_was_last_worked_in_goes_by_wh
 #[test]
 fn a_dropped_call_keeps_the_form_and_the_kind_it_s_stored_under() {
     let stored =
-        br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"tool_call_dropped","tool_use_id":"srvtoolu_1"}}"#;
+        br#"{"session_id":"s","seq":1,"ts_ms":1,"place":1,"body":{"type":"tool_call_dropped","tool_use_id":"srvtoolu_1"}}"#;
 
     let event: SessionEvent = frame::decode(stored).unwrap();
 
@@ -277,14 +267,17 @@ fn a_background_task_from_a_hub_that_doesnt_keep_its_call_has_none() {
     assert_eq!(serde_json::to_string(&task).unwrap(), newer);
 }
 
+/// A chat's log is held by place, so an event without one isn't an event of it, and doesn't read. One that names no
+/// subagent is the agent's own.
 #[test]
-fn an_event_from_a_hub_that_doesnt_record_subagents_is_the_agents_own_at_place_zero() {
-    let event: SessionEvent =
-        frame::decode(br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"agent_other","kind":"tool_progress"}}"#)
-            .unwrap();
+fn an_event_without_its_place_doesnt_read_and_one_that_names_no_subagent_is_the_agents_own() {
+    let line = r#"{"session_id":"s","seq":1,"ts_ms":1,"place":1,"body":{"type":"agent_other","kind":"tool_progress"}}"#;
 
-    assert_eq!((event.subagent, event.place), (None, Place::default()));
+    let event: SessionEvent = frame::decode(line.as_bytes()).unwrap();
+
+    assert_eq!((event.subagent, event.place), (None, Place::FIRST));
     assert_eq!(event.body.subagent(), None);
+    assert!(frame::decode::<SessionEvent>(line.replace(r#""place":1,"#, "").as_bytes()).is_err());
 }
 
 #[test]

@@ -91,8 +91,7 @@ proptest! {
 
 #[test]
 fn a_login_held_in_a_way_from_a_newer_hub_reads_as_unknown() {
-    let newer =
-        json!({"id": "g", "user": {"id": 7, "name": "ada"}, "held_login": {"how": "passkey", "connected_at_ms": 1}});
+    let newer = json!({"id": "g", "user": {"id": 7, "name": "ada"}, "held_login": {"how": "passkey", "connected_at_ms": 1}, "rev": 1});
 
     let account: GithubAccount = serde_json::from_value(newer).unwrap();
 
@@ -101,15 +100,15 @@ fn a_login_held_in_a_way_from_a_newer_hub_reads_as_unknown() {
 
 #[test]
 fn an_account_that_says_only_who_it_is_holds_no_login_and_one_that_says_no_end_never_ends() {
-    let disconnected = json!({"id": "g", "user": {"id": 7, "name": "ada"}});
-    let held =
-        json!({"id": "g", "user": {"id": 7, "name": "ada"}, "held_login": {"how": "token", "connected_at_ms": 1}});
+    let disconnected = json!({"id": "g", "user": {"id": 7, "name": "ada"}, "rev": 1});
+    let held = json!({"id": "g", "user": {"id": 7, "name": "ada"}, "held_login": {"how": "token", "connected_at_ms": 1},
+        "rev": 1});
 
     let disconnected: GithubAccount = serde_json::from_value(disconnected).unwrap();
     let held: GithubAccount = serde_json::from_value(held).unwrap();
 
     assert_eq!(disconnected.user.id, GithubUserId::new(7));
-    assert_eq!((disconnected.held_login, disconnected.rev), (None, Rev::default()));
+    assert_eq!((disconnected.held_login, disconnected.rev), (None, Rev::new(1)));
     assert_eq!(held.held_login.and_then(|held| held.ends_at_ms), None);
     assert!(held.held_login.unwrap().works_at(i64::MAX));
 }

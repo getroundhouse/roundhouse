@@ -57,13 +57,13 @@ fn an_apps_record_and_its_manifest_keep_their_forms_as_replies() {
 /// From the hub of the build before, which still filled what GitHub says of it for a client of version 4.
 #[test]
 fn a_notice_of_an_app_reads_as_its_record_and_its_removal_by_its_key() {
-    let line = r#"{"notice":"github_app","id":9,"slug":"ada-roundhouse","name":"Ada's Roundhouse","owner":{"id":1,"name":"ada"}}"#;
+    let line = r#"{"notice":"github_app","id":9,"slug":"ada-roundhouse","name":"Ada's Roundhouse","owner":{"id":1,"name":"ada"},"rev":3}"#;
     let removed = r#"{"notice":"removed","record":{"kind":"github_app","id":9},"rev":4}"#;
 
     let notice = frame::decode::<HubNotice>(line.as_bytes()).unwrap();
     let removal = frame::decode::<HubNotice>(removed.as_bytes()).unwrap();
 
-    assert_eq!(notice, HubNotice::GithubApp(GithubApp { rev: Rev::default(), ..app() }));
+    assert_eq!(notice, HubNotice::GithubApp(GithubApp { rev: Rev::new(3), ..app() }));
     let key = RecordKey::GithubApp { id: GithubAppId::new(9) };
     assert_eq!(removal, HubNotice::Removed { record: key, rev: Rev::new(4) });
 }

@@ -14,7 +14,6 @@ use super::super::{GithubAccountId, GithubSignInId, GithubUserCode, Rev};
 pub struct GithubSignIn {
     pub id: GithubSignInId,
     pub status: GithubSignInStatus,
-    #[serde(default)]
     pub rev: Rev,
 }
 

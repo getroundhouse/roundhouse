@@ -28,8 +28,7 @@ pub struct PromptLine {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SettledAt {
     pub seq: Seq,
-    /// Among the agent's own events, or 0 from a hub that doesn't record places.
-    #[serde(default)]
+    /// Among the agent's own events.
     pub place: Place,
     /// Whether the agent took it or it was dropped. `None` from a hub that doesn't say.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -66,8 +65,6 @@ impl SettledAt {
 #[derive(Deserialize)]
 struct Sent {
     seq: Seq,
-    /// A hub from before places sends none.
-    #[serde(default)]
     place: Place,
     text: String,
     files: u32,
@@ -134,7 +131,7 @@ impl PromptLine {
         self.seq
     }
 
-    /// Where the prompt is among the agent's own events, or 0 from a hub that doesn't record places.
+    /// Where the prompt is among the agent's own events.
     pub fn place(&self) -> Place {
         self.place
     }
@@ -213,17 +210,17 @@ mod tests {
     #[test]
     fn a_line_read_from_a_hub_is_tidied_and_cut() {
         let long = "x".repeat(PromptLine::MOST_CHARS + 1);
-        let sent = serde_json::json!({ "seq": 7, "text": format!("Fix\u{202E}\n{long}"), "files": 2 });
+        let sent = serde_json::json!({ "seq": 7, "place": 3, "text": format!("Fix\u{202E}\n{long}"), "files": 2 });
 
         let line: PromptLine = serde_json::from_value(sent).unwrap();
 
-        assert_eq!(line, PromptLine::new(Seq::new(7), &format!("Fix {long}"), 2));
+        assert_eq!(line, PromptLine::new(Seq::new(7), &format!("Fix {long}"), 2).placed(Place::new(3)));
         assert!(line.text().starts_with("Fix x"), "{line:?}");
         assert_eq!(line.text().chars().count(), PromptLine::MOST_CHARS);
     }
 
     #[test]
-    fn a_line_says_where_it_was_settled_and_one_from_a_hub_that_doesnt_say_or_records_no_places_has_neither() {
+    fn a_line_says_where_it_was_settled_and_one_without_its_place_doesnt_read() {
         let at = SettledAt { seq: Seq::new(9), place: Place::new(6), how: None };
         let line = PromptLine::new(Seq::new(7), "Fix it", 2).placed(Place::new(3)).settled_at(at);
 
@@ -231,8 +228,10 @@ mod tests {
 
         assert_eq!(sent["settled"], serde_json::json!({ "seq": 9, "place": 6 }));
         assert_eq!(serde_json::from_value::<PromptLine>(sent).unwrap(), line);
-        let older = serde_json::json!({ "seq": 7, "text": "Fix it", "files": 2 });
-        let older = serde_json::from_value::<PromptLine>(older).unwrap();
-        assert_eq!((older.settled(), older.place()), (None, Place::default()));
+        let unsettled = serde_json::json!({ "seq": 7, "place": 3, "text": "Fix it", "files": 2 });
+        let unsettled = serde_json::from_value::<PromptLine>(unsettled).unwrap();
+        assert_eq!((unsettled.settled(), unsettled.place()), (None, Place::new(3)));
+        let unplaced = serde_json::json!({ "seq": 7, "text": "Fix it", "files": 2 });
+        assert!(serde_json::from_value::<PromptLine>(unplaced).is_err());
     }
 }

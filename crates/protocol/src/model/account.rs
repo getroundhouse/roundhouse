@@ -74,7 +74,6 @@ pub struct Account {
     /// How much of the account's week the person keeps for themselves, as [`Reserve`] says. `None` keeps none back.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reserve: Option<Reserve>,
-    #[serde(default)]
     pub rev: Rev,
 }
 
@@ -328,11 +327,11 @@ mod tests {
 
     #[test]
     fn an_account_record_that_says_only_who_it_is_still_reads() {
-        let account: Account = serde_json::from_str(r#"{"id":"claude-1"}"#).unwrap();
+        let account: Account = serde_json::from_str(r#"{"id":"claude-1","rev":3}"#).unwrap();
 
         assert_eq!(account.id, AccountId::from("claude-1"));
         assert_eq!((account.name, account.login_agent, account.held_login), (None, None, None));
-        assert_eq!((account.used_at_ms, account.reserve, account.rev), (None, None, Rev::default()));
+        assert_eq!((account.used_at_ms, account.reserve, account.rev), (None, None, Rev::new(3)));
     }
 
     #[test]

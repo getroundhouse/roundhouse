@@ -197,7 +197,7 @@ fn a_sessions_subagents_are_listed_as_they_started_and_found_by_their_call() {
     assert!(!now.changes_since(&before).subagents(&"t".into()));
     let unchanged = |snapshot: &super::Snapshot| snapshot.subagent(&"s".into(), &"b".into()).cloned().unwrap();
     assert!(std::sync::Arc::ptr_eq(&unchanged(&before), &unchanged(&now)), "one that didn't change is shared");
-    let gone = RecordKey::Subagent { session_id: "s".into(), subagent: subagent("s", "b", 2, 5).id() };
+    let gone = RecordKey::Subagent { session_id: "s".into(), subagent: subagent("s", "b", 2, 5).id.clone() };
     assert!(held.apply_notice(HubNotice::Removed { record: gone, rev: Rev::new(7) }), "removed, as a record can be");
     assert_eq!(ids(held.snapshot().subagents(&"s".into()), |s| s.call.as_str()), ["a"]);
 }

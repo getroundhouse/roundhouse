@@ -207,12 +207,13 @@ impl Transcript {
             let mut m = self.model.borrow_mut();
             // A tab opened on the subagent a call started, before its record came, names it by that call, and the hub
             // follows it by the ID its agent gives it once the agent says it started. Its record names it so.
-            let named = m.alone.as_ref().and_then(|alone| subagent_named(subagents, alone)).map(|named| named.id());
+            let named =
+                m.alone.as_ref().and_then(|alone| subagent_named(subagents, alone)).map(|named| named.id.clone());
             if named.is_some() {
                 m.alone = named;
             }
             let held = |subagent: &Arc<Subagent>| {
-                m.subagents.get(&subagent.id()).is_some_and(|held| Arc::ptr_eq(held, subagent))
+                m.subagents.get(&subagent.id).is_some_and(|held| Arc::ptr_eq(held, subagent))
             };
             let changed: Vec<&Arc<Subagent>> = subagents.iter().filter(|subagent| !held(subagent)).collect();
             if changed.is_empty() {
@@ -221,7 +222,7 @@ impl Transcript {
             let drawn = m.subagent_rows.borrow();
             let rows: Vec<_> = changed.iter().filter_map(|subagent| drawn.get(&subagent.call).copied()).collect();
             drop(drawn);
-            let shown = changed.iter().find(|subagent| m.alone.as_ref() == Some(&subagent.id())).copied();
+            let shown = changed.iter().find(|subagent| m.alone.as_ref() == Some(&subagent.id)).copied();
             if let Some(subagent) = shown {
                 let at_work = AtWork::of_subagent(subagent);
                 if m.at_work.working != at_work.working {

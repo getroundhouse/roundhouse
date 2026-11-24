@@ -80,7 +80,7 @@ fn a_sessions_list_and_removals_keep_the_rule_every_level_keeps() {
 
     assert_eq!(calls(&subagents, "s"), ["b", "c"], "a is gone, and c came after the list");
     assert!(!subagents.apply(subagent("s", "a", 1, 6)), "older than the list, which lacks it");
-    assert!(subagents.remove(&"s".into(), subagent("s", "c", 3, 8).id(), Rev::new(9)));
+    assert!(subagents.remove(&"s".into(), subagent("s", "c", 3, 8).id.clone(), Rev::new(9)));
     assert!(!subagents.apply(subagent("s", "c", 3, 8)), "older than its removal");
     assert_eq!(calls(&subagents, "s"), ["b"]);
 }
@@ -108,9 +108,9 @@ fn a_session_is_let_go_of_once_nothing_follows_it() {
 /// and by its ID first, since that's what a subagent's events name.
 #[test]
 fn a_subagent_is_named_by_its_id_or_else_by_its_call() {
-    let named = |id: &str, call: &str| Arc::new(Subagent { id: Some(id.into()), ..subagent("s", call, 1, 1) });
+    let named = |id: &str, call: &str| Arc::new(Subagent { id: id.into(), ..subagent("s", call, 1, 1) });
     let subagents = [named("task_1", "toolu_1"), named("toolu_2", "toolu_3"), named("task_2", "toolu_2")];
-    let found = |name: &str| subagent_named(&subagents, &name.into()).map(|subagent| subagent.id().to_string());
+    let found = |name: &str| subagent_named(&subagents, &name.into()).map(|subagent| subagent.id.to_string());
 
     assert_eq!(found("task_1").as_deref(), Some("task_1"));
     assert_eq!(found("toolu_1").as_deref(), Some("task_1"), "by its call");

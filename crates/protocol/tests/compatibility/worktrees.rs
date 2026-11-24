@@ -150,9 +150,9 @@ fn a_record_keeps_the_form_of_each_kind_and_reads_kinds_it_doesnt_know() {
         r#"{"id":"c1","workspace_id":"w","path":"/c/holly/x","branch":"holly/x","session_id":"s","made_by":{"kind":"undetermined"},"created_at_ms":5,"status":{"kind":"creating"},"rev":0}"#,
     );
 
-    let newer = r#"{"id":"c1","workspace_id":"w","path":"/p","branch":"b","session_id":"s","made_by":{"kind":"a_hook","name":"h"},"created_at_ms":5,"status":{"kind":"moved","to":"/x","at":[1]}}"#;
+    let newer = r#"{"id":"c1","workspace_id":"w","path":"/p","branch":"b","session_id":"s","made_by":{"kind":"a_hook","name":"h"},"created_at_ms":5,"status":{"kind":"moved","to":"/x","at":[1]},"rev":3}"#;
     let newer: ChildWorktree = serde_json::from_str(newer).unwrap();
-    assert_eq!((newer.made_by, newer.status, newer.rev), (MadeBy::Unknown, ChildStatus::Unknown, Rev::default()));
+    assert_eq!((newer.made_by, newer.status, newer.rev), (MadeBy::Unknown, ChildStatus::Unknown, Rev::new(3)));
 }
 
 /// The folder's name is how a hub and a worker of other builds agree where these go. A worker that doesn't know what a

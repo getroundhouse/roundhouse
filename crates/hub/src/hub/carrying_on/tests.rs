@@ -1,9 +1,9 @@
 //! What a starting hub records of a session an earlier hub left at work, whose agent has gone, before it serves.
 
 use protocol::event::{AgentTask, TaskKind};
+use protocol::fixtures;
 use protocol::model::{SessionStatus, Wait, WaitUntil};
 use protocol::prompt::Prompt;
-use serde_json::json;
 
 use super::*;
 use crate::store::tests::store_with_session;
@@ -18,7 +18,7 @@ fn a_session_whose_agent_has_gone_is_interrupted_as_it_is_with_the_hub_there() {
     let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x"), from: PromptFrom::Person };
     let started = StatusChange { status: SessionStatus::Running, turn: TurnEdge::Starts, background_tasks: None };
     let prompted = store.append(&id, None, &prompt, None, None, Some(started.into())).unwrap();
-    let asking = json!({"type": "approval_requested", "approval_id": "a", "tool_name": "Bash", "input": {}});
+    let asking: EventBody = fixtures::approval_request("a", fixtures::to_run("ls")).into();
     let task = AgentTask { id: "t".into(), description: None, kind: TaskKind::Command, call: None, subagent: None };
     let waiting = StatusChange {
         status: SessionStatus::WaitingApproval,
@@ -26,7 +26,7 @@ fn a_session_whose_agent_has_gone_is_interrupted_as_it_is_with_the_hub_there() {
         background_tasks: Some(vec![task]),
     };
     let run = Some(RunId::new(1));
-    store.append(&id, run, &serde_json::from_value(asking).unwrap(), None, None, Some(waiting.into())).unwrap();
+    store.append(&id, run, &asking, None, None, Some(waiting.into())).unwrap();
 
     interrupt(&store, &id, vec![prompted.event.seq]).unwrap();
 

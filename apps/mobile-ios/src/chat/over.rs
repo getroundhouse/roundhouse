@@ -92,7 +92,7 @@ impl ChatView {
         let records = self.feed.snapshot();
         // One named by the call that started it is named as its record names it, once that's come.
         let subagent =
-            subagent_named(records.subagents(&shown.session.id), &subagent).map_or(subagent, |named| named.id());
+            subagent_named(records.subagents(&shown.session.id), &subagent).map_or(subagent, |named| named.id.clone());
         let open = matches!(self.over.screen(), Some(Screen::Subagent(screen)) if screen.subagent == subagent);
         if !open {
             let (client, feed, session) = (self.client.clone(), self.feed.clone(), shown.session.clone());
@@ -165,7 +165,7 @@ impl ChatView {
                 // The hub follows one opened by the call that started it by the ID its agent gives it, once the agent
                 // says it started.
                 if let Some(named) = subagent_named(records.subagents(&session), &screen.subagent) {
-                    screen.subagent = named.id();
+                    screen.subagent = named.id.clone();
                 }
                 screen.transcript.update(cx, |transcript, cx| transcript.records_changed(records, cx));
             }

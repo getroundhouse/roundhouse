@@ -26,7 +26,6 @@ pub struct ChildWorktree {
     /// Its branches, as its worker last read them. `None` until a worker has watched them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branches: Option<Branches>,
-    #[serde(default)]
     pub rev: Rev,
 }
 

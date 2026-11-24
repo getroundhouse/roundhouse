@@ -23,7 +23,7 @@ impl OfSession for Subagent {
     }
 
     fn id(&self) -> SubagentId {
-        Subagent::id(self)
+        self.id.clone()
     }
 
     fn rev(&self) -> Rev {

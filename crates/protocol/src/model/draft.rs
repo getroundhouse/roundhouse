@@ -36,7 +36,6 @@ pub struct NewWorkspaceDraft {
     /// in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<ApprovalMode>,
-    #[serde(default)]
     pub rev: Rev,
 }
 

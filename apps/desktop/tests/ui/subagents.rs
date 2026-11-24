@@ -257,7 +257,11 @@ fn a_subagent_tab_opened_by_its_call_names_it_as_its_record_does_and_draws_what_
 
     let recorded = |ui: &Ui<'_>| {
         let view = ui.view();
-        view.records().subagents(&chat).iter().find(|subagent| subagent.call == call).map(|subagent| subagent.id())
+        view.records()
+            .subagents(&chat)
+            .iter()
+            .find(|subagent| subagent.call == call)
+            .map(|subagent| subagent.id.clone())
     };
     ui.wait("the subagent's record", |ui| recorded(ui).is_some());
     let id = recorded(&ui).unwrap();
@@ -353,7 +357,7 @@ fn a_subagent_tab_opened_before_its_record_comes_is_named_as_the_record_names_it
     let recorded = "Look around the crates";
     let record = Subagent {
         session_id: chat.clone(),
-        id: Some(id.clone()),
+        id: id.clone(),
         description: Some(recorded.to_string()),
         rev: later,
         ..protocol::fixtures::subagent(call)

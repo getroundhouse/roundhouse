@@ -133,7 +133,7 @@ fn a_subagent_that_starts_again_after_it_ended_works_again_under_the_call_that_f
     assert_eq!(again.started_at_ms, restart.ts_ms, "at it from when it started again");
     assert!(again.rev > finished.rev);
     let subagents = store.list_session_records(&"s".into()).unwrap().subagents;
-    let listed: Vec<SubagentId> = subagents.iter().map(Subagent::id).collect();
+    let listed: Vec<SubagentId> = subagents.iter().map(|subagent| subagent.id.clone()).collect();
     assert_eq!(
         listed,
         [SubagentId::from("between"), "task-1".into()],
@@ -168,7 +168,7 @@ fn a_subagent_named_by_its_agent_is_kept_by_that_name_and_found_by_its_call_too(
     record(&store, &ended("thread-1", TaskOutcome::Finished, Some("Done.")));
 
     let kept = subagent(&store, "thread-1");
-    assert_eq!((kept.id(), kept.call.as_str()), ("thread-1".into(), "toolu_9"));
+    assert_eq!((kept.id.clone(), kept.call.as_str()), ("thread-1".into(), "toolu_9"));
     assert_eq!((kept.calls, kept.status, kept.report.as_deref()), (1, Finished, Some("Done.")));
     let named = |name: &str| store.subagent_named(&"s".into(), &name.into()).unwrap();
     assert_eq!((named("thread-1"), named("toolu_9")), ("thread-1".into(), "thread-1".into()));
@@ -177,7 +177,11 @@ fn a_subagent_named_by_its_agent_is_kept_by_that_name_and_found_by_its_call_too(
     let listed = store.list_session_records(&"s".into()).unwrap().subagents;
     for name in ["thread-1", "toolu_9", "toolu_10", "unknown"] {
         let recorded = store.recorded_subagent(&"s".into(), &name.into()).unwrap();
-        assert_eq!(recorded, Subagent::named(&listed, &name.into()).map(Subagent::id), "named {name}");
+        assert_eq!(
+            recorded,
+            Subagent::named(&listed, &name.into()).map(|subagent| subagent.id.clone()),
+            "named {name}"
+        );
     }
     assert_eq!(named("toolu_9"), "toolu_9".into(), "by its ID, though it's another's call");
 }

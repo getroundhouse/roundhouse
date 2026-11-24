@@ -8,7 +8,7 @@ use protocol::capability::calls::{Call, CallOutput};
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::{ContentBlock, EventBody, TaskOutcome};
 use protocol::fixtures::{typed_call, typed_result};
-use protocol::model::{ModelName, Subagent, SubagentId, SubagentStatus};
+use protocol::model::{ModelName, Rev, Subagent, SubagentId, SubagentStatus};
 use protocol::prompt::Prompt;
 
 use crate::hub::stand_in_workers::{a_chat, a_turn, hub_with_stand_in_workers, the_agent_says};
@@ -89,11 +89,12 @@ async fn the_feed_tells_of_each_change_to_a_subagents_record_and_the_list_says_t
     ];
     let as_it = "as it started, made its call, heard back, was counted, said what it found, and ended";
     assert_eq!(heard, told, "{as_it}");
+    assert!(notices[0].rev > Rev::default(), "a record a client can tell is newer than none, from its first copy");
     assert!(notices.windows(2).all(|pair| pair[0].rev < pair[1].rev), "each copy newer than the last");
     let listed = hub.session_records(chat.id.clone()).await.unwrap();
     let [subagent] = listed.subagents.as_slice() else { panic!("one subagent: {:?}", listed.subagents) };
     assert_eq!(notices.last(), Some(subagent), "the last told of is what's listed");
-    assert_eq!((subagent.id(), subagent.call.as_str()), (SubagentId::from("task_c1"), "c1"));
+    assert_eq!((subagent.id.clone(), subagent.call.as_str()), (SubagentId::from("task_c1"), "c1"));
     assert_eq!((subagent.prompt.as_deref(), subagent.in_background), (Some("Look around."), true));
     assert_eq!(subagent.report.as_deref(), Some("There's a README here."));
     assert!(subagent.rev <= listed.rev, "as of the list's revision");
