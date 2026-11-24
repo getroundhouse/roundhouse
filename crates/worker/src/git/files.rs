@@ -7,7 +7,7 @@ use std::path::Path;
 
 use protocol::client::ApiError;
 
-use super::{git_error, run};
+use super::{git_failed, run};
 
 /// What kind of entry git tracks at a path, from its mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,8 +60,8 @@ fn staged(line: &str) -> Option<(String, Tracked)> {
 async fn listed(given: &Environment, worktree: &Path, args: &[&str]) -> Result<Vec<String>, ApiError> {
     let output = run(given, worktree, args).await?;
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(git_error(format!("git {} failed: {}", args.join(" "), stderr.trim())));
+        let said = String::from_utf8_lossy(&output.stderr);
+        return Err(git_failed(&format!("git {}", args.join(" ")), output.status, &said));
     }
     let entries = output.stdout.split(|byte| *byte == 0).filter(|entry| !entry.is_empty());
     Ok(entries.filter_map(|entry| std::str::from_utf8(entry).ok()).map(str::to_string).collect())

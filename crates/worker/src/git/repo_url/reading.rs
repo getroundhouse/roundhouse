@@ -16,7 +16,7 @@ const NO_SUCH_REMOTE: i32 = 2;
 /// no hub of this build reads.
 pub async fn repo_url(machine: &Environment, repo: &Path) -> Result<RepoUrlReply, ApiError> {
     let read = git(machine, repo, &["remote", "get-url", "origin"]).await?;
-    let url = match read.code {
+    let url = match read.status.code() {
         Some(0) => RepoUrl::without_credential(read.stdout.trim()),
         Some(NO_SUCH_REMOTE) => return Ok(RepoUrlReply { url: None, push: None }),
         // Not what git said, which can name the address, and an address can hold a token. Outside a repository, so a

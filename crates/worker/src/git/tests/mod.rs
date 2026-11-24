@@ -1,3 +1,4 @@
+mod failures;
 mod making;
 mod support;
 mod workspaces;

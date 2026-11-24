@@ -1,6 +1,6 @@
 //! What git ignores in a worktree, and where the worktree's own git state is, as a watch of its files needs them.
 
-use super::{command, git_error, git_ok, git_ok_bytes, nul_separated};
+use super::{command, git_error, git_failed, git_ok, git_ok_bytes, nul_separated};
 use process::Environment;
 use protocol::client::ApiError;
 use std::path::{Path, PathBuf};
@@ -43,7 +43,7 @@ pub(crate) async fn which_ignored(
     // 1 says none of them is ignored.
     match output.status.code() {
         Some(0 | 1) => Ok(nul_separated(&output.stdout).map(<[u8]>::to_vec).collect()),
-        _ => Err(git_error(format!("git check-ignore failed: {}", String::from_utf8_lossy(&output.stderr).trim()))),
+        _ => Err(git_failed("git check-ignore", output.status, &String::from_utf8_lossy(&output.stderr))),
     }
 }
 

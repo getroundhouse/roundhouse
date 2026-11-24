@@ -61,7 +61,7 @@ pub(crate) async fn checked_out(given: &Environment, worktree: &Path) -> Option<
         return None;
     }
     let symbolic = git(given, worktree, &["symbolic-ref", "--quiet", "HEAD"]).await.ok()?;
-    if !symbolic.success {
+    if !symbolic.status.success() {
         return None;
     }
     symbolic.stdout.trim().strip_prefix("refs/heads/").map(BranchName::from)
@@ -83,7 +83,7 @@ pub(crate) async fn read(given: &Environment, worktree: &Path, places: &Places) 
     // can't read HEAD's reflog, as on a branch with no commits yet, which `git switch --orphan` makes, rather than
     // nothing being known.
     let reflog = reflog?;
-    let mut names = if reflog.success { left(&reflog.stdout) } else { BTreeSet::new() };
+    let mut names = if reflog.status.success() { left(&reflog.stdout) } else { BTreeSet::new() };
     if let Head::Branch { name } = &head {
         names.insert(name.clone());
     }
@@ -142,13 +142,13 @@ pub(crate) fn matters(places: &Places, read: Option<&Read>, file: &Path) -> bool
 
 async fn head(given: &Environment, worktree: &Path) -> Result<Head, ApiError> {
     let symbolic = git(given, worktree, &["symbolic-ref", "--quiet", "HEAD"]).await?;
-    if symbolic.success {
+    if symbolic.status.success() {
         let target = symbolic.stdout.trim();
         let name = target.strip_prefix("refs/heads/").ok_or_else(|| git_error(format!("HEAD is {target}")))?;
         return Ok(Head::Branch { name: BranchName::from(name) });
     }
     // 1 is git's word for a HEAD that's detached, and anything else is a failure.
-    if symbolic.code != Some(1) {
+    if symbolic.status.code() != Some(1) {
         return Err(git_error(format!("git couldn't say what's checked out: {}", symbolic.stderr)));
     }
     let commit = commit_of(given, worktree, "HEAD").await?.ok_or_else(|| git_error("HEAD is detached at no commit"))?;
@@ -211,7 +211,7 @@ async fn addresses<'a>(
     let mut addresses = HashMap::new();
     for remote in remotes {
         let read = git(given, worktree, &["remote", "get-url", "--", remote]).await?;
-        let address = read.success.then(|| RepoUrl::without_credential(read.stdout.trim())).flatten();
+        let address = read.status.success().then(|| RepoUrl::without_credential(read.stdout.trim())).flatten();
         if let Some(address) = address {
             addresses.insert(remote.clone(), address);
         }
