@@ -24,7 +24,25 @@ pub(crate) struct Given {
     pub claude_bin: Option<PathBuf>,
     pub codex_bin: Option<PathBuf>,
     pub antigravity_bin: Option<PathBuf>,
+    pub for_tests: ForTests,
+}
+
+/// What a test gives its workers beside its hub's own, which a build without `testing`, as the product's is, never
+/// takes: it has the defaults, and no test to stop with, whatever the environment says.
+pub(crate) struct ForTests {
     pub timers: worker::Timers,
+    /// The test this worker stops with once it has gone while it has no hub, as `hub::TestProcess` says, which only a
+    /// worker that can outlive its hub has.
+    #[cfg_attr(windows, expect(dead_code, reason = "only a worker that can outlive its hub stops with its test"))]
+    pub stops_with: Option<hub::TestProcess>,
+}
+
+impl ForTests {
+    /// As this process's environment says, which has to be read before the hub's variables are forgotten.
+    pub(crate) fn from_env() -> Self {
+        let var = |name: &str| std::env::var(name).ok();
+        Self { timers: worker::Timers::from_env(var), stops_with: hub::TestProcess::from_env(var) }
+    }
 }
 
 pub(crate) fn run(transport: Transport, given: Given) -> anyhow::Result<()> {
@@ -65,6 +83,6 @@ pub(super) fn config(given: Given, refused: Option<String>) -> anyhow::Result<wo
         // This process's own environment, as the provider started it.
         machine: process::Environment::NONE,
         refused,
-        timers: given.timers,
+        timers: given.for_tests.timers,
     })
 }

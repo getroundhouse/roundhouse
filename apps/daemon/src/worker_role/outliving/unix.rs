@@ -59,8 +59,10 @@ pub(crate) fn listen(given: Given) -> anyhow::Result<()> {
         tracing::info!("another worker, started at the same time, has the instance");
         return Ok(());
     };
+    let stops_with = given.for_tests.stops_with.clone();
     let config = config(given, None)?;
-    run_to_end(worker::listen(socket, config, WITHOUT_A_HUB))??;
+    let test_gone = async move { hub::TestProcess::until_gone(stops_with.as_ref()).await };
+    run_to_end(worker::listen(socket, config, WITHOUT_A_HUB, test_gone))??;
     Ok(())
 }
 
