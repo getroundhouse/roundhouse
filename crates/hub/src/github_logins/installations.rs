@@ -111,7 +111,6 @@ impl GithubLogins {
                     connected_at_ms: now_ms,
                     ends_at_ms: None,
                     installation: None,
-                    profile: None,
                 };
                 let GithubConnected { account, replaced, settings } =
                     self.store.connect_github_installation(&connecting, &installed)?;

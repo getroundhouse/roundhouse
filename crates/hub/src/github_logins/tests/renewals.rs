@@ -52,7 +52,7 @@ fn only_a_sign_in_whose_token_ends_within_the_hour_and_that_needs_no_signing_in_
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
     ada_signed_in(&logins, &store, login_ending("a-token", ENDS));
-    logins.connect(&connect("a-pasted-token", None, "pasted"), &owner(8, "grace", Some(ENDS))).unwrap();
+    logins.connected(&connect("a-pasted-token", None, "pasted"), &owner(8, "grace", Some(ENDS))).unwrap();
     let lasting = SignedIn { token_ends_at_ms: None, ..login_ending("a-lasting-token", ENDS) };
     sign_in_kept(&logins, &store, &owner(9, "lin", None), "lasting", lasting);
     sign_in_kept(&logins, &store, &owner(10, "mo", None), "refused", login_ending("a-refused-token", ENDS));

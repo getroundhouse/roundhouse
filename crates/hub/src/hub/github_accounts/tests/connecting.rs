@@ -17,6 +17,16 @@ fn asking(token: &str) -> GithubAccountConnect {
     GithubAccountConnect { token: GithubToken::new(token), id: None }
 }
 
+/// Each notice in `feed` so far of a record, once each, leaving out the observation of what GitHub calls the account's
+/// user, and the copy of its record told for that alone, as `usernames` has them.
+fn records_told(feed: &mut crate::hub::Notices) -> Vec<HubNotice> {
+    let mut told: Vec<HubNotice> = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone))
+        .filter(|notice| !matches!(notice, HubNotice::Observation(_) | HubNotice::ObservationRemoved { .. }))
+        .collect();
+    told.dedup();
+    told
+}
+
 #[tokio::test]
 async fn every_client_is_told_of_what_changed_a_github_accounts_record_and_the_default_and_only_that() {
     let github = StandIn::start(vec![("a-token", Answer::user(7, "ada", None))]).await;
@@ -25,8 +35,7 @@ async fn every_client_is_told_of_what_changed_a_github_accounts_record_and_the_d
     let mut feed = hub.subscribe_feed();
 
     let connected = hub.github_account_connect(asking("a-token")).await.unwrap();
-    let (told, made_default) =
-        (feed.try_recv().map(std::sync::Arc::unwrap_or_clone), feed.try_recv().map(std::sync::Arc::unwrap_or_clone));
+    let [told, made_default] = records_told(&mut feed).try_into().map(|told: [HubNotice; 2]| told.map(Ok)).unwrap();
     let again = hub.github_account_connect(asking(" a-token\n")).await.unwrap();
     let told_again = feed.try_recv().map(std::sync::Arc::unwrap_or_clone);
     let machines_own = hub.github_account_set_default(GithubAccountSetDefault { account: None }).await.unwrap();
@@ -48,10 +57,7 @@ async fn every_client_is_told_of_what_changed_a_github_accounts_record_and_the_d
     assert_eq!(disconnected, connected, "the reply is the record as it last was");
     let removed = RecordKey::GithubAccount { id: connected.id.clone() };
     assert!(matches!(&told_last, Ok(HubNotice::Removed { record, .. }) if *record == removed), "{told_last:?}");
-    assert!(
-        matches!(feed.try_recv().map(std::sync::Arc::unwrap_or_clone), Err(TryRecvError::Empty)),
-        "no default, so the settings didn't change"
-    );
+    assert_eq!(records_told(&mut feed), [], "no default, so the settings didn't change");
 }
 
 #[tokio::test]

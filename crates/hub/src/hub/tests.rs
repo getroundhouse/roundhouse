@@ -266,13 +266,14 @@ pub(crate) fn hub_without_account(dir: &Path, api: String, timers: Timers) -> Ar
 }
 
 /// Has the hub hold `ada`'s token, `a-token`, as its first GitHub account, so its default, as connecting it would,
-/// without asking GitHub whose it is.
+/// without asking GitHub whose it is, and know who she is on GitHub.
 pub(crate) fn reading_as_ada(hub: &Hub) {
     let asked = GithubAccountConnect { token: protocol::model::GithubToken::new("a-token"), id: None };
     let connect = Connect::new(asked, crate::store::now_ms()).unwrap();
     let user = protocol::model::GithubUser { id: protocol::model::GithubUserId::new(7), name: "ada".into() };
     let owner = github::TokenOwner { user, profile: github::GithubProfile::default(), ends_at_ms: None };
-    hub.github_logins.connect(&connect, &owner).unwrap();
+    let account = hub.github_logins.connect(&connect, &owner).unwrap().account.id;
+    crate::github_logins::tests::heard(&hub.github_logins, &account, &owner, crate::store::now_ms());
 }
 
 /// A stand-in for GitHub answering from the pull requests a test sets, and a hub reading it as [`hub_reading_github`]

@@ -56,7 +56,7 @@ fn kept(logins: &GithubLogins) -> GithubApp {
 /// `installation`, connected at 1000 as the hub's check would, with `token`, which ends at `ends_at_ms`.
 fn installed(logins: &GithubLogins, installation: &Installation, token: &str, ends_at_ms: i64) -> GithubAccount {
     let token = InstallationToken { token: GithubToken::new(token), token_ends_at_ms: ends_at_ms };
-    logins.connect_installation(APP, &bot(), installation, token, false, 1000).unwrap().unwrap().account
+    logins.installation_connected(APP, &bot(), installation, token, false, 1000).unwrap().unwrap().account
 }
 
 /// What workers are sent while the default is an installation whose token is `token`.
@@ -105,7 +105,8 @@ fn an_installation_is_its_apps_bot_on_its_user_and_as_the_default_workers_commit
     let account = installed(&logins, &on_adalabs(70), "ghs_first", ENDS_AT_MS);
 
     let installation = GithubInstallation { app: APP, id: GithubInstallationId::new(70), on: user(2, "adalabs") };
-    assert_eq!((&account.user, account.installation), (&bot(), Some(installation)));
+    assert_eq!((account.user.id, account.installation.clone()), (bot().id, Some(installation)));
+    assert_eq!(logins.named(&account), bot().name, "its username is its bot's");
     let held = account.held_login.unwrap();
     assert_eq!((held.how, held.ends_at_ms), (GithubLoginKind::App, None), "its record changes for no new token");
     assert_eq!(default_of(&store), Some(account.id), "the first account the hub holds becomes the default");
@@ -175,7 +176,7 @@ fn the_clock_connects_an_installation_once_and_one_the_person_disconnected_only_
     let by_the_clock = connecting(false);
     let by_the_person = connecting(true);
     let token = InstallationToken { token: GithubToken::new("ghs_late"), token_ends_at_ms: ENDS_AT_MS };
-    let late = logins.connect_installation(APP, &bot(), &found[0], token, false, 2000).unwrap();
+    let late = logins.installation_connected(APP, &bot(), &found[0], token, false, 2000).unwrap();
 
     assert_eq!((new, held), (found.to_vec(), Vec::new()));
     assert_eq!((by_the_clock, by_the_person), (Vec::new(), found.to_vec()));
@@ -193,7 +194,7 @@ fn only_an_installation_on_the_apps_owner_is_connected() {
     let token = InstallationToken { token: GithubToken::new("ghs_elsewhere"), token_ends_at_ms: ENDS_AT_MS };
 
     let looked = logins.installations_found(APP, &[elsewhere.clone(), on_adalabs(70)], true, 2000).unwrap();
-    let connected = logins.connect_installation(APP, &bot(), &elsewhere, token, true, 2000).unwrap();
+    let connected = logins.installation_connected(APP, &bot(), &elsewhere, token, true, 2000).unwrap();
 
     assert_eq!(looked.connect, [on_adalabs(70)]);
     assert!(connected.is_none(), "{connected:?}");
@@ -332,4 +333,32 @@ fn tidying_removes_an_app_whose_key_is_gone_as_removing_it_would_have() {
 
     assert_eq!(refused.code, ErrorCode::Conflict);
     assert_eq!(store.github_app(APP).unwrap(), None);
+}
+
+/// What GitHub calls an installation's user is its app's bot, as the app's record says, so a check reads it from there,
+/// each day, and at once while the hub doesn't know it, asking GitHub nothing. While the app's record doesn't say its
+/// bot, as once the app is removed, it's asked of GitHub with no login, by the installation's user's number, which is
+/// its bot's.
+#[test]
+fn a_check_reads_what_github_calls_an_installation_from_its_apps_bot() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, store) = logins_in(dir.path());
+    kept(&logins);
+    let token = InstallationToken { token: GithubToken::new("ghs_first"), token_ends_at_ms: ENDS_AT_MS };
+    let account = logins.connect_installation(APP, &bot(), &on_adalabs(70), token, false, 1000).unwrap().unwrap();
+    let day_ms = i64::try_from(super::super::PROFILE_READ_EVERY.as_millis()).unwrap();
+
+    let without_a_bot = logins.check(1001).unwrap().profiles;
+    store.set_github_app_bot(APP, &bot()).unwrap();
+    let not_known = logins.check(1002).unwrap().profiles;
+    logins.observations.keep_as_read::<crate::hub::GithubUsername>(account.account.id.clone(), bot().name, 1002);
+    let read = logins.check(1003).unwrap().profiles;
+    let a_day_on = logins.check(1002 + day_ms).unwrap().profiles;
+
+    let [asked] = without_a_bot.as_slice() else { panic!("{without_a_bot:?}") };
+    assert_eq!((&asked.from, asked.user), (&ReadFrom::Nobody, bot().id), "by the bot's number");
+    let [due] = not_known.as_slice() else { panic!("{not_known:?}") };
+    assert!(matches!(&due.from, ReadFrom::Bot(bot) if bot.as_str() == "ada-roundhouse[bot]"), "{due:?}");
+    assert!(read.is_empty(), "{read:?}");
+    assert_eq!(a_day_on.len(), 1, "{a_day_on:?}");
 }

@@ -7,9 +7,10 @@
 //! and one of a version that reads the observation itself doesn't read it.
 
 use protocol::client::ClientResponse;
-use protocol::model::{Account, ModelList, Record, RecordKey, Records, Session, UsageLimit, Wait};
+use protocol::model::{Account, GithubAccount, ModelList, Record, RecordKey, Records, Session, UsageLimit, Wait};
 use tracing::warn;
 
+use super::github_kinds::GithubUsername;
 use super::kept::Observations;
 use super::kinds::{
     AccountIdentity, AccountLimits, Kind, ModelCatalog, SessionCache, SessionContext, SessionKey, SessionTodos,
@@ -22,6 +23,17 @@ use crate::hub::Hub;
 pub(crate) trait OldForm {
     /// Fills each such field from what `tables` keeps.
     fn fill(&mut self, tables: &mut Tables);
+}
+
+/// What GitHub calls the account's user, on its record. While it isn't known, as before the hub has first asked GitHub
+/// since it stopped keeping it in the database, it's as the store reads it, the user's number, as `#<number>`, since
+/// the field isn't optional.
+impl OldForm for GithubAccount {
+    fn fill(&mut self, tables: &mut Tables) {
+        if let Some(username) = GithubUsername::table(tables).value(&self.id) {
+            self.user.name = username.clone();
+        }
+    }
 }
 
 /// Who the account is, and what's left of its limits, on its record, which says nothing of when each was heard.
@@ -79,6 +91,7 @@ impl OldForm for Record {
             Record::Account(account) => account.fill(tables),
             Record::ModelList(list) => list.fill(tables),
             Record::Session(session) => session.fill(tables),
+            Record::GithubAccount(account) => account.fill(tables),
             // Hold no observation's old form.
             Record::Repo(_)
             | Record::Workspace(_)
@@ -86,7 +99,6 @@ impl OldForm for Record {
             | Record::HubSettings(_)
             | Record::NewWorkspaceDraft(_)
             | Record::Subagent(_)
-            | Record::GithubAccount(_)
             | Record::GithubSignIn(_)
             | Record::FoundGithubLogin(_)
             | Record::GithubApp(_)
@@ -111,10 +123,13 @@ impl OldForm for Records {
         for session in &mut self.sessions {
             session.fill(tables);
         }
+        for account in &mut self.github_accounts {
+            account.fill(tables);
+        }
     }
 }
 
-/// The replies that carry a record holding an observation's old form: an account's, a list of models', and a session's,
+/// The replies that carry a record holding an observation's old form: an account's, a GitHub account's, a list of models', and a session's,
 /// alone, in a list of a workspace's, or as a new workspace's first. Every reply is named, so a new one that carries such a record is
 /// filled. Those that carry every record are filled as they're listed, and the hub reads a `SessionAccount` from an
 /// account's record it fills.
@@ -130,6 +145,7 @@ impl OldForm for ClientResponse {
                     session.fill(tables);
                 }
             }
+            C::GithubAccount(account) => account.fill(tables),
             C::ModelList(list) => list.fill(tables),
             C::NewWorkspaceMade(made) => made.session.fill(tables),
             // Hold no record that holds an observation's old form, or are filled as they're listed.
@@ -171,7 +187,6 @@ impl OldForm for ClientResponse {
             | C::Attachment(_)
             | C::AttachmentData(_)
             | C::SessionAccount(_)
-            | C::GithubAccount(_)
             | C::GithubSignIn(_)
             | C::GhLogin(_)
             | C::MachineLogins(_)

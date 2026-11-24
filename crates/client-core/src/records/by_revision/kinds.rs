@@ -36,7 +36,8 @@ impl Revised for Observation {
             | Observation::Reference { .. } => Some(Observation::key(self)),
             // Read from a version of the client protocol this client doesn't speak, so its hub sends it none, and one
             // that came would be drawn as one this client can't.
-            Observation::ModelCatalog { .. }
+            Observation::GithubUsername { .. }
+            | Observation::ModelCatalog { .. }
             | Observation::AccountIdentity { .. }
             | Observation::AccountLimits { .. }
             | Observation::SessionContext { .. }

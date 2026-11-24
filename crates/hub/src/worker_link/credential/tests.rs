@@ -53,7 +53,7 @@ async fn until_set(sets: &mut watch::Receiver<Vec<GithubCredential>>, count: usi
 
 /// The GitHub logins of a hub in `dir`, with none.
 fn logins_in(dir: &Path) -> GithubLogins {
-    GithubLogins::new(Arc::new(store_with_session(dir)), dir, 0)
+    crate::github_logins::tests::logins_over(&Arc::new(store_with_session(dir)), dir, 0)
 }
 
 /// Connects `token`, as ada's, who has no name and no public email on GitHub, renewing the account `renewing` if it's
@@ -62,7 +62,9 @@ fn connect(logins: &GithubLogins, token: &str, renewing: Option<&GithubAccountId
     let asked = GithubAccountConnect { token: GithubToken::new(token), id: renewing.cloned() };
     let user = GithubUser { id: GithubUserId::new(7), name: "ada".into() };
     let owner = TokenOwner { user, profile: GithubProfile::default(), ends_at_ms: None };
-    logins.connect(&Connect::new(asked, 0).unwrap(), &owner).unwrap().account.id
+    let account = logins.connect(&Connect::new(asked, 0).unwrap(), &owner).unwrap().account.id;
+    crate::github_logins::tests::heard(logins, &account, &owner, 0);
+    account
 }
 
 /// Ada's `token`, which commits as ada, at the address GitHub gives her.

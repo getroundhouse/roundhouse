@@ -67,9 +67,13 @@ impl Hub {
         let approved = Approved::new(id.clone(), SignedIn::given(granted, granted_at_ms), granted_at_ms);
         let hub = Arc::clone(self);
         uncut(async move {
-            let logins = Arc::clone(&hub.github_logins);
-            match off_thread(move || logins.approve_sign_in(&approved, &owner)).await {
-                Ok(change) => {
+            let (logins, told) = (Arc::clone(&hub.github_logins), owner.clone());
+            match off_thread(move || logins.approve_sign_in(&approved, &told)).await {
+                Ok(mut change) => {
+                    if let Some(account) = change.account.take() {
+                        let (user, profile) = (owner.user, Some(owner.profile));
+                        change.account = Some(hub.github_user_connected(account, user, profile, granted_at_ms).await);
+                    }
                     hub.announce_sign_in(change);
                 }
                 Err(e) => {

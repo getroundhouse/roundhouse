@@ -5,19 +5,19 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::model::{GithubToken, GithubUser, GithubUserId};
+use protocol::model::{GithubToken, GithubUser, GithubUserId, Observation, Observed};
 use protocol::worker::{GitIdentity, GithubCredential};
 
 use super::*;
-use crate::github_logins::Connect;
+use crate::github_logins::{Connect, DefaultCredential};
 use crate::hub::Hub;
 use crate::hub::tests::hub_calling_github;
 use crate::store::now_ms;
 use github::GithubProfile;
 use github::{Answer, Gate, StandIn, TokenOwner};
 
-/// A hub calling `github`, whose default is ada, connected at 1000 by her token, `a-token`, as GitHub said then that
-/// she had no name and showed no email, so the first check asks again.
+/// A hub calling `github`, whose default is ada, connected at 1000 by her token, `a-token`, with nothing kept of who
+/// she is on GitHub, as on the first start after the hub stopped keeping it in its database, so the first check asks.
 fn hub_with_ada(dir: &std::path::Path, github: &StandIn) -> Arc<Hub> {
     let hub = hub_calling_github(dir, github.api());
     let connect = Connect::new(GithubAccountConnect { token: GithubToken::new("a-token"), id: None }, 1000).unwrap();
@@ -27,7 +27,10 @@ fn hub_with_ada(dir: &std::path::Path, github: &StandIn) -> Arc<Hub> {
     hub
 }
 
-/// Ada has named herself on GitHub since, shows an email, and has renamed herself there.
+/// Ada has named herself on GitHub since, shows an email, and has renamed herself there. Until the check, the hub
+/// doesn't know what GitHub calls her, so workers are sent a block, and pull requests aren't read as her. The check
+/// asks GitHub, and clients hear of her username, a client of version 4 on her account's record, and workers are sent
+/// her name.
 #[tokio::test]
 async fn a_check_asks_github_who_an_account_is_and_clients_hear_of_its_new_username_and_workers_of_its_name() {
     let renamed = Answer::user_with_profile(7, "ada-lovelace", Some("Ada Lovelace"), Some("ada@example.com"));
@@ -35,13 +38,22 @@ async fn a_check_asks_github_who_an_account_is_and_clients_hear_of_its_new_usern
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_ada(dir.path(), &github);
     let mut feed = hub.subscribe_feed();
+    let unnamed = hub.git_credential().borrow().clone();
+    let read_as_before = hub.reads_as().map_err(|e| e.code);
 
     hub.check_github_logins(now_ms()).await;
     hub.check_github_logins(now_ms()).await;
 
+    assert!(matches!(unnamed, DefaultCredential::Unnamed { .. }), "{unnamed:?}");
+    assert_eq!(read_as_before, Err(ErrorCode::Worker), "no pull request is read as an account not named");
     let told: Vec<HubNotice> =
         std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect();
-    let [HubNotice::GithubAccount(account)] = told.as_slice() else { panic!("{told:?}") };
+    let [HubNotice::Observation(Observation::GithubUsername { username, .. }), HubNotice::GithubAccount(account)] =
+        told.as_slice()
+    else {
+        panic!("{told:?}")
+    };
+    assert!(matches!(username, Observed::AsOf { value, .. } if value.as_str() == "ada-lovelace"), "{username:?}");
     assert_eq!(account.user.name.as_str(), "ada-lovelace");
     let GithubCredential::Account(credential) = hub.git_credential().borrow().for_workers() else { panic!() };
     let identity = GitIdentity { name: "Ada Lovelace".to_string(), email: "ada@example.com".to_string() };

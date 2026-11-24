@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::sync::Barrier;
 
-use protocol::model::GithubLoginKind;
+use protocol::model::{GithubLoginKind, GithubUsername};
 
 use super::sign_ins::{login_ending, sign_in_kept};
 use super::*;
@@ -14,7 +14,7 @@ use github::GithubProfile;
 /// The GitHub logins of a hub whose data directory is `dir`, started at 1000, and its store.
 pub(super) fn logins_in(dir: &Path) -> (Arc<GithubLogins>, Arc<Store>) {
     let store = Arc::new(store_with_session(dir));
-    (Arc::new(GithubLogins::new(store.clone(), dir, 1000)), store)
+    (Arc::new(super::logins_over(&store, dir, 1000)), store)
 }
 
 /// `token`, connected at 1000, renewing `id`'s login, or else making the account `new_id`.
@@ -69,12 +69,12 @@ fn a_token_is_kept_in_a_file_of_its_own_and_only_the_first_account_becomes_the_d
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
 
-    let first = logins.connect(&connect("first-token", None, "g1"), &owner(7, "ada", Some(5000))).unwrap();
+    let first = logins.connected(&connect("first-token", None, "g1"), &owner(7, "ada", Some(5000))).unwrap();
     store.set_github_default(None).unwrap();
-    let second = logins.connect(&connect("second-token", None, "g2"), &owner(8, "grace", None)).unwrap();
+    let second = logins.connected(&connect("second-token", None, "g2"), &owner(8, "grace", None)).unwrap();
 
     assert!(first.changed);
-    assert_eq!(first.account.user, owner(7, "ada", None).user);
+    assert_eq!(first.account.user.id, owner(7, "ada", None).user.id);
     let held = first.account.held_login.unwrap();
     assert_eq!((held.how, held.connected_at_ms, held.ends_at_ms), (GithubLoginKind::Token, 1000, Some(5000)));
     assert_eq!(first.settings.and_then(|settings| settings.github).unwrap().account, Some("g1".into()));
@@ -89,11 +89,11 @@ fn a_token_is_kept_in_a_file_of_its_own_and_only_the_first_account_becomes_the_d
 fn the_same_token_again_is_its_account_changing_nothing_before_github_is_asked_and_after() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
-    let first = logins.connect(&connect("a-token", None, "g1"), &ada()).unwrap().account;
+    let first = logins.connected(&connect("a-token", None, "g1"), &ada()).unwrap().account;
 
     let unasked = logins.held(&connect("a-token", None, "g2")).unwrap();
     let renewing_its_own = logins.held(&connect("a-token", Some("g1"), "g2")).unwrap();
-    let asked = logins.connect(&connect("a-token", None, "g2"), &ada()).unwrap();
+    let asked = logins.connected(&connect("a-token", None, "g2"), &ada()).unwrap();
     let another = logins.held(&connect("another-token", None, "g2")).unwrap();
 
     let unchanged = GithubAccountChange { account: first, changed: false, settings: None };
@@ -108,12 +108,13 @@ fn the_same_token_again_is_its_account_changing_nothing_before_github_is_asked_a
 fn renewing_replaces_the_token_in_place_takes_the_users_new_name_and_keeps_the_default() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
-    logins.connect(&connect("an-old-token", None, "g1"), &ada()).unwrap();
+    logins.connected(&connect("an-old-token", None, "g1"), &ada()).unwrap();
 
     let renewed = Connect { connected_at_ms: 3000, ..connect("a-new-token", Some("g1"), "g2") };
-    let change = logins.connect(&renewed, &owner(7, "ada-renamed", Some(9000))).unwrap();
+    let change = logins.connected(&renewed, &owner(7, "ada-renamed", Some(9000))).unwrap();
 
-    assert_eq!((change.account.id.as_str(), change.account.user.name.as_str()), ("g1", "ada-renamed"));
+    let named = logins.observations.value_of::<crate::hub::GithubUsername>(&change.account.id);
+    assert_eq!((change.account.id.as_str(), named.as_ref().map(GithubUsername::as_str)), ("g1", Some("ada-renamed")));
     assert_eq!(change.account.held_login.map(|held| (held.connected_at_ms, held.ends_at_ms)), Some((3000, Some(9000))));
     assert_eq!(change.settings, None);
     assert_eq!(default_of(&store), Some("g1".into()));
@@ -124,12 +125,12 @@ fn renewing_replaces_the_token_in_place_takes_the_users_new_name_and_keeps_the_d
 fn renewing_is_refused_for_another_users_token_one_another_account_holds_and_no_account_and_changes_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
-    logins.connect(&connect("work-token", None, "work"), &ada()).unwrap();
-    logins.connect(&connect("home-token", None, "home"), &owner(8, "grace", None)).unwrap();
+    logins.connected(&connect("work-token", None, "work"), &ada()).unwrap();
+    logins.connected(&connect("home-token", None, "home"), &owner(8, "grace", None)).unwrap();
     let before = store.list_records().unwrap().github_accounts;
 
     let held_by_home = logins.held(&connect("home-token", Some("work"), "g"));
-    let graces = logins.connect(&connect("new-token", Some("work"), "g"), &owner(8, "grace", None));
+    let graces = logins.connected(&connect("new-token", Some("work"), "g"), &owner(8, "grace", None));
     let nobody = logins.held(&connect("new-token", Some("nobody"), "g"));
 
     assert_eq!(held_by_home.unwrap_err().code, ErrorCode::Conflict);
@@ -143,8 +144,8 @@ fn renewing_is_refused_for_another_users_token_one_another_account_holds_and_no_
 fn disconnecting_forgets_the_token_and_the_record_and_the_default_and_again_is_not_found() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
-    logins.connect(&connect("a-token", None, "g1"), &ada()).unwrap();
-    logins.connect(&connect("b-token", None, "g2"), &owner(8, "grace", None)).unwrap();
+    logins.connected(&connect("a-token", None, "g1"), &ada()).unwrap();
+    logins.connected(&connect("b-token", None, "g2"), &owner(8, "grace", None)).unwrap();
     let before = store.list_records().unwrap().github_accounts;
 
     let disconnected = logins.disconnect(&"g1".into(), 2000).unwrap();
@@ -168,8 +169,8 @@ fn disconnecting_forgets_the_token_and_the_record_and_the_default_and_again_is_n
 fn disconnecting_an_account_that_isnt_the_default_leaves_the_settings() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
-    logins.connect(&connect("a-token", None, "g1"), &ada()).unwrap();
-    logins.connect(&connect("b-token", None, "g2"), &owner(8, "grace", None)).unwrap();
+    logins.connected(&connect("a-token", None, "g1"), &ada()).unwrap();
+    logins.connected(&connect("b-token", None, "g2"), &owner(8, "grace", None)).unwrap();
 
     let disconnected = logins.disconnect(&"g2".into(), 2000).unwrap();
 
@@ -182,11 +183,11 @@ fn disconnecting_an_account_that_isnt_the_default_leaves_the_settings() {
 fn the_default_is_refused_for_an_account_with_no_record_or_no_login_that_can_be_used_and_can_be_the_machines_own() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
-    logins.connect(&connect("work-token", None, "work"), &ada()).unwrap();
-    logins.connect(&connect("old-token", None, "ended"), &owner(7, "ada", Some(1500))).unwrap();
-    logins.connect(&connect("gone-token", None, "gone"), &ada()).unwrap();
+    logins.connected(&connect("work-token", None, "work"), &ada()).unwrap();
+    logins.connected(&connect("old-token", None, "ended"), &owner(7, "ada", Some(1500))).unwrap();
+    logins.connected(&connect("gone-token", None, "gone"), &ada()).unwrap();
     logins.disconnect(&"gone".into(), 2000).unwrap();
-    logins.connect(&connect("lost-token", None, "lost"), &ada()).unwrap();
+    logins.connected(&connect("lost-token", None, "lost"), &ada()).unwrap();
     let mut paths = std::fs::read_dir(dir.path().join("github-logins")).unwrap().map(|entry| entry.unwrap().path());
     std::fs::remove_file(paths.find(|path| std::fs::read_to_string(path).unwrap() == "lost-token").unwrap()).unwrap();
 
@@ -204,8 +205,8 @@ fn the_default_is_refused_for_an_account_with_no_record_or_no_login_that_can_be_
 fn choosing_the_default_moves_the_settings_revision_and_choosing_it_again_doesnt() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
-    logins.connect(&connect("work-token", None, "work"), &ada()).unwrap();
-    logins.connect(&connect("home-token", None, "home"), &ada()).unwrap();
+    logins.connected(&connect("work-token", None, "work"), &ada()).unwrap();
+    logins.connected(&connect("home-token", None, "home"), &ada()).unwrap();
 
     let home = logins.set_default(Some(&"home".into()), 2000).unwrap();
     let again = logins.set_default(Some(&"home".into()), 2000).unwrap();
@@ -220,8 +221,8 @@ fn choosing_the_default_moves_the_settings_revision_and_choosing_it_again_doesnt
 fn tidying_removes_an_account_whose_file_isnt_a_token_and_what_no_account_names_but_not_agents_or_a_newer_form() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
-    logins.connect(&connect("kept-token", None, "kept"), &ada()).unwrap();
-    logins.connect(&connect("garbled-token", None, "garbled"), &ada()).unwrap();
+    logins.connected(&connect("kept-token", None, "kept"), &ada()).unwrap();
+    logins.connected(&connect("garbled-token", None, "garbled"), &ada()).unwrap();
     sign_in_kept(&logins, &store, &owner(8, "grace", None), "newer", login_ending("newer-token", 9000));
     let github_logins = dir.path().join("github-logins");
     let mut paths = std::fs::read_dir(&github_logins).unwrap().map(|entry| entry.unwrap().path());
@@ -256,7 +257,7 @@ fn eight_connects_of_one_token_at_once_make_one_account() {
         let (logins, barrier) = (logins.clone(), barrier.clone());
         std::thread::spawn(move || {
             barrier.wait();
-            logins.connect(&connect("a-token", None, &format!("g{at}")), &ada()).unwrap().account.id
+            logins.connected(&connect("a-token", None, &format!("g{at}")), &ada()).unwrap().account.id
         })
     });
     let mut made: Vec<GithubAccountId> = connects.into_iter().map(|connect| connect.join().unwrap()).collect();

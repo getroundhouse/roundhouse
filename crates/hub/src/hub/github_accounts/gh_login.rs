@@ -86,8 +86,9 @@ impl Hub {
             Said::NoLogin(why) => return Err(ApiError::new(ErrorCode::Conflict, refused(why))),
             Said::Unread(why) => return Err(ApiError::new(ErrorCode::Unavailable, why)),
         };
-        let logins = Arc::clone(&self.github_logins);
-        let change = off_thread(move || logins.connect_gh(&owner, token, now_ms())).await?;
+        let (logins, told, connected_at_ms) = (Arc::clone(&self.github_logins), owner.clone(), now_ms());
+        let change = off_thread(move || logins.connect_gh(&told, token, connected_at_ms)).await?;
+        let change = self.github_user_connected(change, owner.user, Some(owner.profile), connected_at_ms).await;
         Ok(self.announce_github_account(change))
     }
 

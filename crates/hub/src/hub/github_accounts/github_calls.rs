@@ -16,11 +16,13 @@ impl Hub {
         let connect = Arc::new(Connect::new(asked, now_ms())?);
         let (logins, before) = (Arc::clone(&self.github_logins), Arc::clone(&connect));
         if let Some(held) = off_thread(move || logins.held(&before)).await? {
-            return Ok(held.account);
+            return Ok(self.announce_github_account(held));
         }
-        let owner = self.github.token_owner(connect.token()).await?;
-        let logins = Arc::clone(&self.github_logins);
-        let change = off_thread(move || logins.connect(&connect, &owner)).await?;
+        let owner = Arc::new(self.github.token_owner(connect.token()).await?);
+        let (logins, connecting, told) = (Arc::clone(&self.github_logins), Arc::clone(&connect), Arc::clone(&owner));
+        let change = off_thread(move || logins.connect(&connecting, &told)).await?;
+        let (user, profile) = (owner.user.clone(), owner.profile.clone());
+        let change = self.github_user_connected(change, user, Some(profile), connect.connected_at_ms()).await;
         Ok(self.announce_github_account(change))
     }
 
@@ -32,11 +34,14 @@ impl Hub {
         let logins = Arc::clone(&self.github_logins);
         match off_thread(move || logins.disconnect(&id, now_ms())).await? {
             Disconnected::Kept(change) => Ok(self.announce_github_account(change)),
-            Disconnected::Removed(GithubRemoved { account, rev, settings }) => {
+            Disconnected::Removed(GithubRemoved { mut account, rev, settings }) => {
+                // Named as it last was, before what GitHub calls its user is forgotten with it.
+                self.fill_old_forms(&mut account);
                 self.notify(HubNotice::Removed { record: RecordKey::GithubAccount { id: account.id.clone() }, rev });
                 if let Some(settings) = settings {
                     self.notify(HubNotice::HubSettings(settings));
                 }
+                self.github_account_observations_gone(&account.id).await;
                 Ok(account)
             }
         }
@@ -61,6 +66,8 @@ impl Hub {
         if let Err(e) = off_thread(move || logins.tidy(now_ms())).await {
             error!("couldn't make the GitHub logins' files and the GitHub accounts agree: {}", e.message);
         }
+        // Of each account tidying removed.
+        self.observations_of_no_github_account_gone().await;
         let logins = Arc::clone(&self.github_logins);
         match off_thread(move || logins.holds_gh()).await {
             Ok(true) => self.read_gh().await,
@@ -69,9 +76,11 @@ impl Hub {
         }
     }
 
-    /// Tells every client what changed of a GitHub account's record, and of the settings when it changed the default.
+    /// Tells every client what changed of a GitHub account's record, and of the settings when it changed the default,
+    /// and returns the record, named as the hub last heard GitHub call its user.
     pub(in super::super) fn announce_github_account(&self, change: GithubAccountChange) -> GithubAccount {
-        let GithubAccountChange { account, changed, settings } = change;
+        let GithubAccountChange { mut account, changed, settings } = change;
+        self.fill_old_forms(&mut account);
         if changed {
             self.notify(HubNotice::GithubAccount(account.clone()));
         }

@@ -59,7 +59,7 @@ impl Hub {
             }
             for due in profiles {
                 let hub = Arc::clone(self);
-                unwaited.spawn(async move { hub.read_profile(due).await });
+                unwaited.spawn(async move { hub.read_profile(due, now_ms).await });
             }
             if gh {
                 let hub = Arc::clone(self);

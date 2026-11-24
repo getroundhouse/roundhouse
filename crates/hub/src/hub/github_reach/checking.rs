@@ -152,8 +152,13 @@ impl Checks {
     }
 
     /// Starts checking each of `repos` with `credential`, each on a task of its own, so a GitHub that doesn't answer
-    /// for one holds up none of the others.
+    /// for one holds up none of the others. None while the hub doesn't know the default's username, which each
+    /// answer names, so each repository's reach stays as it was until the credential names it, when every repository
+    /// is checked.
     fn check(&mut self, credential: &DefaultCredential, repos: Vec<RepoId>) {
+        if matches!(credential, DefaultCredential::Unnamed { .. }) {
+            return;
+        }
         for repo in repos {
             let Some(pushes_to) = self.pushes_to.get(&repo).cloned() else { continue };
             self.started += 1;
@@ -162,7 +167,9 @@ impl Checks {
             let (hub, credential) = (Arc::clone(&self.hub), credential.clone());
             let asked_as = match &credential {
                 DefaultCredential::Account { username, .. } => Some(username.clone()),
-                DefaultCredential::NoAccount { .. } | DefaultCredential::Blocked { .. } => None,
+                DefaultCredential::NoAccount { .. }
+                | DefaultCredential::Unnamed { .. }
+                | DefaultCredential::Blocked { .. } => None,
             };
             self.under_way.spawn(async move {
                 let reach = super::reaching::reach(&hub.github, pushes_to, &credential).await;

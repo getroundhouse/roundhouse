@@ -22,6 +22,8 @@ pub(super) async fn reach(
         DefaultCredential::NoAccount { reason } | DefaultCredential::Blocked { reason, .. } => {
             return Reach::Blocked { repository, reason: reason.clone() };
         }
+        // Which the check of reach checks nothing with, since it can't name the account. Can't tell, were it asked.
+        DefaultCredential::Unnamed { reason, .. } => return Reach::CouldntTell { repository, why: reason.clone() },
     };
     match github.push_reach(&repository, credential).await {
         Ok(PushAnswer::Takes) => Reach::Pushes { repository, username },

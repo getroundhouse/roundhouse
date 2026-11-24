@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;
 use std::sync::Arc;
@@ -6,14 +7,17 @@ use parking_lot::Mutex;
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    GithubAccount, GithubAccountId, GithubAppId, GithubLoginKind, GithubToken, GithubUser, HubSettings, UnusableLogin,
+    GithubAccount, GithubAccountId, GithubAppId, GithubLoginKind, GithubToken, GithubUser, GithubUsername, HubSettings,
+    UnusableLogin,
 };
 use tokio::sync::watch;
 
 use super::blocks::Unusable;
 use super::gh_login::GhKept;
+use super::nobody::NobodyAsks;
 use super::{DefaultCredential, GithubLogin};
 use crate::error::internal;
+use crate::hub::{GithubUsername as Username, Observations};
 use crate::login_files::{Locked, LoginFiles};
 use crate::pasted_token::pasted_token;
 use crate::store::{GithubConnected, GithubConnecting, GithubRemoved, Store, StoreError};
@@ -27,6 +31,9 @@ use github::TokenOwner;
 /// the settings as it follows [`GithubLogins::recorded_settings`].
 pub(crate) struct GithubLogins {
     pub(super) store: Arc<Store>,
+    /// The hub's observations, which hold what GitHub calls each account's user and what its profile says, which the
+    /// logins read and the hub keeps, as `crate::hub::observations::GithubUsername` says.
+    pub(super) observations: Arc<Observations>,
     pub(super) files: LoginFiles<GithubLogin>,
     /// What workers are to give their processes for github.com, with who GitHub knows the default as, as of the last
     /// change, which is made under the lock.
@@ -35,6 +42,11 @@ pub(crate) struct GithubLogins {
     pub(super) recorded: watch::Sender<Option<HubSettings>>,
     /// What the hub last read of the login `gh` has on its machine, in memory alone, as `GithubLogins::gh_read` says.
     pub(super) gh: Mutex<Option<GhKept>>,
+    /// When GitHub last refused an account's token as the hub asked who it is, by account, in memory alone, so it's
+    /// asked with no login from then until it's connected again, as `GithubLogins::profile_read` says.
+    pub(super) refused: Mutex<HashMap<GithubAccountId, i64>>,
+    /// When the hub has asked GitHub who an account is with no login, as [`NobodyAsks`] says.
+    pub(super) nobody: Mutex<NobodyAsks>,
 }
 
 /// A token to connect, as a client asked: trimmed, and given the ID a new account would get.
@@ -58,11 +70,16 @@ impl Connect {
     pub(crate) fn token(&self) -> &GithubToken {
         &self.token
     }
+
+    /// When it was connected, by the hub's clock, which is when GitHub was asked whose it is.
+    pub(crate) fn connected_at_ms(&self) -> i64 {
+        self.connected_at_ms
+    }
 }
 
 /// The account's record after a connect or a disconnect, whether that changed it, and the settings when it changed the
 /// default, so the hub announces only what did.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GithubAccountChange {
     pub(crate) account: GithubAccount,
     pub(crate) changed: bool,
@@ -77,7 +94,7 @@ impl GithubAccountChange {
     /// The same, with the settings it changed as they are once what workers are sent for the default they name is
     /// recorded on them too, rather than as the change read them just before, so the copy the hub announces never
     /// names a default with what's sent for the one before it.
-    pub(super) fn settled(self, store: &Store) -> Result<Self, ApiError> {
+    pub(crate) fn settled(self, store: &Store) -> Result<Self, ApiError> {
         let settings = self.settings.map(|_| store.hub_settings()).transpose()?;
         Ok(Self { settings, ..self })
     }
@@ -117,16 +134,19 @@ enum Plan {
 impl GithubLogins {
     /// The logins of a hub whose data directory is `data_dir`, with what workers are to be sent at `now_ms`, recorded
     /// on the hub's settings, before any client can read them.
-    pub(crate) fn new(store: Arc<Store>, data_dir: &Path, now_ms: i64) -> Self {
+    pub(crate) fn new(store: Arc<Store>, observations: Arc<Observations>, data_dir: &Path, now_ms: i64) -> Self {
         // Replaced before this returns, so before anything can follow it. A block, so even a mistake there fails closed.
         let reason = "Roundhouse hasn't read its GitHub accounts".to_string();
         let unread = DefaultCredential::Blocked { reason, account: None, why: UnusableLogin::Unreadable };
         let logins = Self {
             store,
+            observations,
             files: LoginFiles::new(data_dir),
             credential: watch::Sender::new(unread),
             recorded: watch::Sender::new(None),
             gh: Mutex::new(None),
+            refused: Mutex::new(HashMap::new()),
+            nobody: Mutex::new(NobodyAsks::default()),
         };
         logins.publish(&logins.files.lock(), now_ms);
         logins
@@ -161,7 +181,6 @@ impl GithubLogins {
                     connected_at_ms: connect.connected_at_ms,
                     ends_at_ms: owner.ends_at_ms,
                     installation: None,
-                    profile: Some(&owner.profile),
                 };
                 let GithubConnected { account, replaced, settings } = self.store.connect_github_login(&connecting)?;
                 Ok(((account, settings), replaced))
@@ -198,6 +217,7 @@ impl GithubLogins {
             if !self.holds_gh()? {
                 *self.gh.lock() = None;
             }
+            self.refused.lock().remove(id);
             Ok(Disconnected::Removed(removed))
         })?;
         match disconnected {
@@ -273,7 +293,7 @@ impl GithubLogins {
         let account = self.record(id)?;
         match user {
             Some(user) if user.id != account.user.id => {
-                let message = format!("that token is {}'s on GitHub, not {}'s", user.name, account.user.name);
+                let message = format!("that token is {}'s on GitHub, not {}'s", user.name, self.named(&account));
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
             _ => Ok(Plan::Keep(id.clone())),
@@ -284,40 +304,37 @@ impl GithubLogins {
     /// being renewed, in a form only a newer build reads, or with no file that holds a token.
     fn usable(&self, files: &Locked<'_, GithubLogin>, id: &GithubAccountId, now_ms: i64) -> Result<(), ApiError> {
         let account = self.record(id)?;
+        let name = self.named(&account);
         match self.token_of(files, &account, now_ms)? {
             Ok(_) => Ok(()),
-            Err(Unusable::Unreadable(Some(e))) => {
-                Err(internal(format!("couldn't read {}'s login: {e}", account.user.name)))
-            }
+            Err(Unusable::Unreadable(Some(e))) => Err(internal(format!("couldn't read {name}'s login: {e}"))),
             Err(Unusable::Disconnected | Unusable::Ended | Unusable::Unreadable(None)) => {
-                let message = format!("{} needs a login; renew or reconnect it first", account.user.name);
+                let message = format!("{name} needs a login; renew or reconnect it first");
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
             Err(Unusable::SignInAgain) => {
-                let message = format!("{} needs signing in with GitHub again first", account.user.name);
+                let message = format!("{name} needs signing in with GitHub again first");
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
             Err(Unusable::Renewing) => {
                 let renewing = if account.installation.is_some() { "token" } else { "sign-in with GitHub" };
-                let message = format!("{}'s {renewing} is being renewed; try again in a minute", account.user.name);
+                let message = format!("{name}'s {renewing} is being renewed; try again in a minute");
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
             Err(Unusable::Newer) => {
-                let message = format!("{}'s login is one only a newer Roundhouse can read", account.user.name);
+                let message = format!("{name}'s login is one only a newer Roundhouse can read");
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
             Err(Unusable::GhLoggedOut(why)) => {
-                let message =
-                    format!("gh on the hub's machine has no login that works for {} ({why})", account.user.name);
+                let message = format!("gh on the hub's machine has no login that works for {name} ({why})");
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
             Err(Unusable::GhOtherUser(now)) => {
-                let message = format!("gh on the hub's machine is logged in as {now} now, not {}", account.user.name);
+                let message = format!("gh on the hub's machine is logged in as {now} now, not {name}");
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
             Err(Unusable::GhUnread(_)) => {
-                let message =
-                    format!("the hub couldn't read gh's login for {} lately; try again in a minute", account.user.name);
+                let message = format!("the hub couldn't read gh's login for {name} lately; try again in a minute");
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
         }
@@ -326,5 +343,11 @@ impl GithubLogins {
     pub(super) fn record(&self, id: &GithubAccountId) -> Result<GithubAccount, ApiError> {
         let found = self.store.github_account(id)?;
         Ok(found.ok_or_else(|| StoreError::NotFound { kind: "GitHub account", id: id.to_string() })?)
+    }
+
+    /// What GitHub calls `account`'s user, as the hub last heard it, or its number, as `#<number>`, while that isn't
+    /// known, for what the logins say of it to a person.
+    pub(super) fn named(&self, account: &GithubAccount) -> GithubUsername {
+        self.observations.value_of::<Username>(&account.id).unwrap_or_else(|| account.user.name.clone())
     }
 }

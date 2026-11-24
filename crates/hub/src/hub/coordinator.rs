@@ -102,7 +102,7 @@ pub(crate) struct Hub {
     /// What the hub last read from GitHub, for every part of it that reads GitHub, and every client.
     pub(super) github_cache: Arc<GithubCache>,
     /// The hub's observations of what others own, as it last observed them.
-    pub(super) observations: Observations,
+    pub(super) observations: Arc<Observations>,
     /// The reads of workspaces' changes from their workers that are running now, by workspace, as `Hub::read_lines`
     /// says.
     pub(super) line_reads: Jobs<WorkspaceId>,
@@ -159,6 +159,7 @@ impl Hub {
         timers: Timers,
     ) -> Self {
         let cache_file = Arc::new(CacheFile::open(&dirs.cache_file, &[&github_cache::PART, &observations::PART]));
+        let observations = Arc::new(Observations::open(cache_file.clone(), &store));
         Self {
             remote: crate::remote::Remote::new(crate::remote::RemoteConfig {
                 address: dirs.network_address,
@@ -167,13 +168,13 @@ impl Hub {
             }),
             build,
             logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
-            github_logins: Arc::new(GithubLogins::new(store.clone(), &dirs.data, now_ms())),
+            github_logins: Arc::new(GithubLogins::new(store.clone(), Arc::clone(&observations), &dirs.data, now_ms())),
             github,
             ssh: Ssh::new(machine.clone()),
             gh: Gh::new(machine.clone(), dirs.data.clone()),
             machine,
             addresses_read: Notify::new(),
-            observations: Observations::open(cache_file.clone(), &store),
+            observations,
             github_cache: Arc::new(GithubCache::open(cache_file)),
             line_reads: Jobs::new(),
             changes_watches: changes_watch::Watches::default(),

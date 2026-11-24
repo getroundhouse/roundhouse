@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use protocol::client::{ApiError, ObservationNotice};
-use protocol::model::WorkspaceId;
+use protocol::model::{GithubAccountId, WorkspaceId};
 use tracing::warn;
 
 use super::file::Write;
@@ -100,6 +100,29 @@ impl Hub {
         self.observations.value_of::<K>(of)
     }
 
+    /// Keeps that the hub keeps every observation of kind `K` up to date from now on, by reading each again on a
+    /// schedule of its own, as it reads every GitHub account's username each day, so each read of any from now is
+    /// current. What was read before isn't, so each stays as of when it was read until its next read.
+    pub(crate) async fn observations_kept_current<K: Kind>(&self) {
+        let _changing = self.observations.changing.lock().await;
+        K::table(&mut self.observations.tables.lock()).all_kept_current = true;
+    }
+
+    /// Keeps that the hub no longer reads the observations of kind `K` again on its schedule, as
+    /// [`Hub::observations_kept_current`] said it did, as when it stops, so each that was current is as of its last read,
+    /// which clients are told, as [`Hub::observation_no_longer_read_again`] does for one.
+    pub(crate) async fn observations_no_longer_read_again<K: Kind>(&self) {
+        {
+            let _changing = self.observations.changing.lock().await;
+            K::table(&mut self.observations.tables.lock()).all_kept_current = false;
+        }
+        for of in self.observations.kept_of::<K>() {
+            if let Err(e) = self.change_observation::<K>(of, |_| Change::NoLongerReadAgain).await {
+                warn!("saying an observation is as of its last read: {}", e.message);
+            }
+        }
+    }
+
     /// Whether something keeps the observation of `of` up to date now, as [`Hub::observation_kept_current`] said.
     pub(crate) fn observation_is_kept_current<K: Kind>(&self, of: &K::Of) -> bool {
         K::table(&mut self.observations.tables.lock()).kept_current(of)
@@ -149,6 +172,32 @@ impl Hub {
         let _changing = self.observations.changing.lock().await;
         if let Err(e) = self.forget_observations_of(&|owner| owner.workspace() == Some(id)).await {
             warn!(%id, "forgetting the observations of a workspace that's gone: {}", e.message);
+        }
+    }
+
+    /// Forgets every observation of the GitHub account `id`, of every kind, since the account is gone, and tells clients,
+    /// as [`Hub::workspace_observations_gone`] does for a workspace. Called where an account is removed, and again by
+    /// whatever may have kept one of it as it went, as a read of its username that lands after can. What a failure
+    /// leaves is forgotten as the hub next starts.
+    pub(crate) async fn github_account_observations_gone(&self, id: &GithubAccountId) {
+        let _changing = self.observations.changing.lock().await;
+        if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::GithubAccount(id)).await {
+            warn!(%id, "forgetting the observations of a GitHub account that's gone: {}", e.message);
+        }
+    }
+
+    /// Forgets every observation of a GitHub account the hub doesn't have, and tells clients, as one tidying removed as
+    /// the hub starts leaves. The accounts are listed under the lock every change takes, as
+    /// [`Hub::observations_of_no_workspace_gone`] lists the workspaces.
+    pub(crate) async fn observations_of_no_github_account_gone(&self) {
+        let _changing = self.observations.changing.lock().await;
+        let have = match self.blocking(Store::github_account_ids).await {
+            Ok(have) => have,
+            Err(e) => return warn!("listing GitHub accounts to forget the observations of those gone: {}", e.message),
+        };
+        let gone = |owner: Owner<'_>| matches!(owner, Owner::GithubAccount(id) if !have.contains(id));
+        if let Err(e) = self.forget_observations_of(&gone).await {
+            warn!("forgetting the observations of GitHub accounts that are gone: {}", e.message);
         }
     }
 
@@ -281,7 +330,9 @@ impl Hub {
         };
         observations.writer.write::<K>(of.clone(), write);
         let notice = K::table(&mut observations.tables.lock()).change(&of, changed, rev);
-        self.tell_of_observation(notice);
+        if let Some(notice) = notice {
+            self.tell_of_observation(notice);
+        }
         Ok(true)
     }
 

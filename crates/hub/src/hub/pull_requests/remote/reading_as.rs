@@ -22,14 +22,14 @@ impl std::fmt::Display for ReadsAs {
 
 impl Hub {
     /// Who pull requests are read as, as the default says now. With no default, or one that blocks, as once it was
-    /// disconnected, a read fails, as one that may work later, once an account is connected or another is chosen, so
+    /// disconnected, or one whose username the hub doesn't know yet, a read fails, as one that may work later, once an account is connected or another is chosen, so
     /// a wait goes on waiting.
     pub(in crate::hub) fn reads_as(&self) -> Result<ReadsAs, ApiError> {
         match &*self.git_credential().borrow() {
             DefaultCredential::Account { account, .. } => Ok(ReadsAs(account.clone())),
-            DefaultCredential::NoAccount { reason } | DefaultCredential::Blocked { reason, .. } => {
-                Err(ApiError::new(ErrorCode::Worker, reason.clone()))
-            }
+            DefaultCredential::NoAccount { reason }
+            | DefaultCredential::Unnamed { reason, .. }
+            | DefaultCredential::Blocked { reason, .. } => Err(ApiError::new(ErrorCode::Worker, reason.clone())),
         }
     }
 
@@ -42,6 +42,7 @@ impl Hub {
             }
             DefaultCredential::Account { .. }
             | DefaultCredential::NoAccount { .. }
+            | DefaultCredential::Unnamed { .. }
             | DefaultCredential::Blocked { .. } => {
                 Err(ApiError::new(ErrorCode::Worker, "the default GitHub account changed as it was read"))
             }

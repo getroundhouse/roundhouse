@@ -20,6 +20,13 @@ pub(crate) enum DefaultCredential {
         username: GithubUsername,
         installation: Option<InstalledApp>,
     },
+    /// The login of `account`, the default, which can be used, but whose username the hub doesn't know yet, as on the
+    /// first start after the hub stopped keeping usernames in its database, until it has asked GitHub, which it does as
+    /// it starts. Git can't be given a username, nor commits an author, so workers are sent a block saying `reason`
+    /// meanwhile, and the hub's settings say so. The hub decides nothing from it: the check of reach checks no
+    /// repository with it, and pull requests aren't read as it. *Unconfirmed:* a block, rather than waiting to send
+    /// workers anything.
+    Unnamed { account: GithubAccountId, reason: String },
     /// Nobody, saying `reason`, as [`GithubCredential::Blocked`] does, since the login of `account`, the default, can't
     /// be used, as `why` says. `account` is `None` when the hub couldn't read which is the default.
     Blocked { reason: String, account: Option<GithubAccountId>, why: UnusableLogin },
@@ -30,9 +37,9 @@ impl DefaultCredential {
     pub(crate) fn for_workers(&self) -> GithubCredential {
         match self {
             DefaultCredential::Account { credential, .. } => GithubCredential::Account(credential.clone()),
-            DefaultCredential::NoAccount { reason } | DefaultCredential::Blocked { reason, .. } => {
-                GithubCredential::Blocked { reason: reason.clone() }
-            }
+            DefaultCredential::NoAccount { reason }
+            | DefaultCredential::Unnamed { reason, .. }
+            | DefaultCredential::Blocked { reason, .. } => GithubCredential::Blocked { reason: reason.clone() },
         }
     }
 
@@ -43,6 +50,11 @@ impl DefaultCredential {
         Some(match self {
             DefaultCredential::NoAccount { reason } => SentCredential::NoAccount { reason: reason.clone() },
             DefaultCredential::Account { account, .. } => SentCredential::Account { account: account.clone() },
+            DefaultCredential::Unnamed { account, reason } => SentCredential::Blocked {
+                account: account.clone(),
+                why: UnusableLogin::Unreadable,
+                reason: reason.clone(),
+            },
             DefaultCredential::Blocked { reason, account, why } => {
                 SentCredential::Blocked { account: account.clone()?, why: *why, reason: reason.clone() }
             }

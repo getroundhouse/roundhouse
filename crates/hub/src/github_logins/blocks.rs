@@ -79,6 +79,16 @@ pub(super) fn no_account(has_accounts: bool) -> String {
     )
 }
 
+/// What the block for a default whose login can be used, but whose username the hub doesn't know yet, says, as
+/// [`DefaultCredential::Unnamed`](super::DefaultCredential::Unnamed) does. *Unconfirmed:* the words.
+pub(super) fn unnamed() -> String {
+    reason(
+        "Roundhouse is asking GitHub who its default GitHub account is",
+        "GitHub has said",
+        "It asks again within a minute.",
+    )
+}
+
 /// What the block for a default, `account`, whose login can't be used, as `unusable` says, says. An app's installation
 /// is named with where it's installed, and is connected again, and renewed, with the app.
 pub(super) fn lost(account: &GithubAccount, unusable: &Unusable) -> String {

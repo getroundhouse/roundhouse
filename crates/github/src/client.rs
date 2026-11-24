@@ -86,6 +86,20 @@ impl Github {
         owner(within(self.ask(http::Method::GET, "/user", Some(token.as_str()), None)).await?)
     }
 
+    /// Who GitHub's user numbered `id` is, its name and public email, as `GET /user/{id}` says, asked as nobody, within
+    /// [`ASK_WITHIN`], for an account whose own login can't be asked with, as one whose token has ended. GitHub answers
+    /// it for a person and for an app's bot alike. With no login, GitHub takes 60 such calls an hour from one address,
+    /// which other programs there count against too, so a caller asks it sparingly, and stops asking for a while once
+    /// it's [`NotRead::Limited`].
+    pub async fn user_numbered(&self, id: GithubUserId) -> Result<TokenOwner, NotRead> {
+        let path = format!("/user/{}", id.get());
+        let answered = within(self.ask(http::Method::GET, &path, None, None)).await.map_err(NotRead::Failed)?;
+        if answered.limited {
+            return Err(NotRead::Limited);
+        }
+        owner(answered).map_err(NotRead::Failed)
+    }
+
     /// Asks GitHub's API to `method` `path`, as whoever `bearer` is, if anyone, with `body` as JSON, and answers with
     /// what GitHub answered, whatever it is. Unbounded, so its caller puts its own limit on the whole call.
     pub(super) async fn ask(
@@ -176,6 +190,15 @@ pub(super) async fn within<T>(call: impl Future<Output = Result<T, ApiError>>) -
         Ok(answer) => answer,
         Err(_) => Err(unavailable(format!("GitHub didn't answer within {} s", ASK_WITHIN.as_secs()))),
     }
+}
+
+/// Why [`Github::user_numbered`] said nothing of the user.
+#[derive(Debug)]
+pub enum NotRead {
+    /// GitHub is limiting how often it's asked with no login, from this address.
+    Limited,
+    /// Anything else, as GitHub not being reached, or answering with anything but the user.
+    Failed(ApiError),
 }
 
 /// `Unavailable`, as GitHub limits how often the hub calls it.

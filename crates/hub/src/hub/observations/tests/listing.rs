@@ -103,7 +103,7 @@ async fn a_list_waits_for_a_change_made<K: Kind, F: Future<Output = (Vec<Observa
     assert_eq!(observations, std::slice::from_ref(&changed), "the new copy");
     assert!(rev >= changed.rev());
     let read_then = Observed::AsOf { value: after, as_of_ms: 2_000 };
-    assert_eq!(changed, K::observation(&"w".into(), read_then, changed.rev()));
+    assert_eq!(Some(changed.clone()), K::observation(&"w".into(), read_then, changed.rev()));
 }
 
 /// A change made while another process holds the cache file, which can hold up its write for seconds, is kept and told
