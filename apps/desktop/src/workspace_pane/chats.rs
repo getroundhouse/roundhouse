@@ -147,7 +147,6 @@ impl WorkspacePane {
         let view = cx.new(|cx| {
             let mut transcript = Transcript::new(client, &feed, &session, cx);
             transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
-            transcript.records_changed(&records, cx);
             transcript
         });
         Self::attach_transcript_hints(&view, cx);
@@ -179,7 +178,10 @@ impl WorkspacePane {
             TranscriptEvent::GoToWorkspace { workspace } => cx.emit(PaneEvent::GoToWorkspace(workspace.clone())),
             TranscriptEvent::FindClosed => this.with_window(cx, |t, window, cx| t.focus_showing(window, cx)),
         });
-        self.chats.entry(session.id).or_default().transcript = Some((view, events));
+        self.chats.entry(session.id).or_default().transcript = Some((view.clone(), events));
+        // The records go in only once the pane follows the transcript, since GPUI starts a subscription after what was
+        // emitted before it, and a chat whose log the client holds already asks its question as it takes them.
+        view.update(cx, |transcript, cx| transcript.records_changed(&records, cx));
         self.pass_on_agents(cx);
     }
 
