@@ -24,7 +24,7 @@ fn roundhouse() -> RepoUrl {
 
 /// A stand-in for a worker that reads `url` from every checkout, as [`worker_answering`] says.
 fn worker_reading(url: Option<RepoUrl>) -> (Arc<WorkerLink>, Arc<Mutex<Vec<String>>>) {
-    worker_answering(Some(Ok(WorkerResponse::RepoUrl(RepoUrlReply { url, push: None }))))
+    worker_answering(Some(Ok(WorkerResponse::RepoUrl(RepoUrlReply { url }))))
 }
 
 /// A stand-in for a worker that answers each read with `answer`, or never, for `None`, and the checkouts it was asked
@@ -106,22 +106,21 @@ async fn only_a_worker_whose_recorded_environment_shares_the_hubs_filesystem_is_
     assert_eq!(to_read(&hub), [] as [String; 0]);
 }
 
-/// One from before reading addresses is asked once, whatever else is to be read, and one that fails or never answers
-/// is asked about each. Each leaves the repository its checkout, for the next worker here to read.
+/// One that fails or never answers is asked about each, and leaves the repository its checkout, for the next worker
+/// here to read.
 #[tokio::test(start_paused = true)]
 async fn a_worker_that_doesnt_say_leaves_the_checkout_to_be_read_by_the_next() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     hub.store.add_repo(&"r2".into(), "second", "/second", 0).unwrap();
     let mut feed = hub.subscribe_feed();
-    let unsupported = Some(Err(ApiError::new(ErrorCode::Unsupported, "a request this worker doesn't know")));
     let failed = Some(Err(ApiError::new(ErrorCode::Worker, "git couldn't read where /repo fetches from")));
 
-    for (answer, asked_about) in [(unsupported, 1), (failed, 2), (None, 2)] {
+    for answer in [failed, None] {
         let (link, asked) = worker_answering(answer.clone());
         let started = tokio::time::Instant::now();
         Arc::clone(&hub).read_repo_urls("w".into(), link).await;
-        assert_eq!(asked.lock().len(), asked_about, "{answer:?}");
+        assert_eq!(asked.lock().len(), 2, "{answer:?}");
         assert!(started.elapsed() <= READ_WITHIN * 2, "{answer:?}");
     }
     let unread = hub.records_list().await.unwrap().repos;

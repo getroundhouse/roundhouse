@@ -126,8 +126,6 @@ impl Hub {
         let ended = self.terminals.asked_what_runs.lock().remove(&link.id).unwrap_or_default();
         let running = match answered {
             Ok(reply) => reply.terminals,
-            // A worker from before terminals runs none.
-            Err(e) if e.code == ErrorCode::Unsupported => return (0, Vec::new()),
             Err(e) => {
                 warn!(%workspace_id, "asking the worker an earlier hub left for its terminals: {}", e.message);
                 return (0, Vec::new());

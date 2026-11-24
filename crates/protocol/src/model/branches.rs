@@ -62,12 +62,11 @@ pub struct Upstream {
     pub tip: Option<CommitId>,
     /// The address of the repository `remote` names, as `git remote get-url` gives it, without any credential it can
     /// hold, so the hub can tell which repository on GitHub the branch is pushed to without asking the worker. A
-    /// remote's own, which can be a fork's, rather than the repository's. `None` for `.`, for a remote git has no
-    /// address for, and from a worker from before it said.
+    /// remote's own, which can be a fork's, rather than the repository's. `None` for `.`, and for a remote git has no
+    /// address for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address: Option<RepoUrl>,
-    /// How far apart the branch and its `tip` are. `None` while there's no `tip`, and from a worker from before it
-    /// said.
+    /// How far apart the branch and its `tip` are. `None` while there's no `tip`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub apart: Option<Apart>,
 }

@@ -23,9 +23,8 @@ use crate::model::{GithubToken, GithubUsername};
 /// A worker on a provider whose machines Roundhouse leaves GitHub to, such as the local provider, is only ever set
 /// [`MachineOwn`](GithubCredential::MachineOwn), as its link opens.
 ///
-/// A worker from before this answers `Unsupported`, and goes on with the machine's own. One that can't apply it, such
-/// as one whose git is older than 2.31, the first to read `GIT_CONFIG_COUNT`, or that can't write its files, answers
-/// `Unavailable`, and what it starts uses the machine's own.
+/// A worker that can't apply it, such as one whose git is older than 2.31, the first to read `GIT_CONFIG_COUNT`, or
+/// that can't write its files, answers `Unavailable`, and what it starts uses the machine's own.
 ///
 /// What still goes round it: the person's own `url.<ssh>.insteadOf` or `pushInsteadOf` for GitHub, and a host alias
 /// such as `git@github-work:`, which push over SSH with the machine's key; tools built on libgit2, Git LFS, and tools
@@ -75,10 +74,9 @@ pub struct GitCredential {
     /// machine with no git config of its own, and commits say the account rather than whoever the machine's git does.
     /// A worker sets it as git's `user.name` and `user.email` for every process it starts, from their next `git`, over
     /// the repository's and the person's own, and takes them out again with a credential that has none. Only in a
-    /// repository with a remote on github.com, since the credential is only for github.com. A worker from before it
-    /// reads past it, so it pushes as the account, and commits as whoever the machine's git says. `None` from a hub
-    /// from before it, and from one that gives an account none, as this one does an account it hasn't asked GitHub
-    /// about, which commits as the machine's git says.
+    /// repository with a remote on github.com, since the credential is only for github.com. `None` from a hub from
+    /// before it, and from one that gives an account none, as this one does an account it hasn't asked GitHub about,
+    /// which commits as the machine's git says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<GitIdentity>,
 }

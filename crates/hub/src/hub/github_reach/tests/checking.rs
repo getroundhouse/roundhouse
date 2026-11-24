@@ -5,11 +5,10 @@ use std::sync::Arc;
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::github_apps::GithubManifestCode;
 use protocol::model::{GithubToken, InstalledApp, Observation, Observed, Reach};
-use protocol::worker::PushRoute;
 use tokio::sync::watch;
 
 use super::super::CHECKED_AGAIN_EVERY;
-use super::support::{CLI, account, checking, reads, reads_pushing, told, told_within};
+use super::support::{CLI, account, checking, reads, told, told_within};
 use crate::github_logins::DefaultCredential;
 use crate::hub::Hub;
 use crate::hub::RepositoryReach;
@@ -136,25 +135,6 @@ async fn a_repository_is_checked_for_what_its_address_names_as_each_is_read() {
     assert_eq!(elsewhere.reach(), Reach::NotOnGithub);
     assert_eq!(on_github.reach(), refused_as("ada"));
     assert_eq!(github.asked().len(), 1, "only cli/cli was asked of GitHub");
-}
-
-/// A worker from before this build says its pushes go round the git credential, as over SSH, which the hub no longer
-/// reads, since a push meets the default on every provider where Roundhouse sets up GitHub, whose workers send even a
-/// push over SSH through it. So the repository is checked with the default all the same.
-#[tokio::test]
-async fn a_repository_an_older_worker_says_pushes_round_the_credential_is_checked_all_the_same() {
-    let github = refusing().await;
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_calling_github(dir.path(), github.api());
-    let mut feed = hub.subscribe_feed();
-    let (_credential, following) = watch::channel(account("ada", "a-token"));
-    let _checking = checking(&hub, following);
-
-    reads_pushing(&hub, "https://github.com/cli/cli.git", PushRoute::Around).await;
-    let checked = told(&mut feed).await;
-
-    assert_eq!(checked.reach(), refused_as("ada"));
-    assert_eq!(github.asked().len(), 1);
 }
 
 /// As when another default is chosen, and as when the default's sign-in is renewed, which changes its token, and so

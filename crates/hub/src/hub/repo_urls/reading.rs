@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::client::{ErrorCode, HubNotice};
+use protocol::client::HubNotice;
 use protocol::model::{RepoUrl, WorkspaceId};
 use protocol::provider::WorkerFilesystem;
 use protocol::worker::{ReadRepoUrl, RepoUrlReply};
@@ -15,9 +15,6 @@ use crate::worker_link::WorkerLink;
 /// stuck takes this long. One that hasn't said by then leaves the address to be read by the next worker to link. Not
 /// something a test from outside would sit through, so not one of [`crate::Timers`].
 pub(super) const READ_WITHIN: Duration = Duration::from_secs(10);
-
-/// The worker can't read any repository's address, as one from before [`ReadRepoUrl`] can't.
-struct Unsupported;
 
 impl Hub {
     /// Whether `workspace`'s worker runs on the hub's own filesystem, read from its recorded placement without
@@ -66,38 +63,30 @@ impl Hub {
     }
 
     /// Has `link`'s worker, which runs on the hub's machine, read the address of each repository whose address is to
-    /// be read, one at a time, and keeps each it says, announcing each record that changes. One the worker can't
-    /// say, as one from before [`ReadRepoUrl`] can't, or doesn't within [`READ_WITHIN`], is left to be read, so the
-    /// record stays its checkout until a worker here can say.
+    /// be read, one at a time, and keeps each it says, announcing each record that changes. One the worker can't say,
+    /// or doesn't within [`READ_WITHIN`], is left to be read, so the record stays its checkout until a worker here can
+    /// say.
     async fn read_repo_urls_by(&self, link: &WorkerLink) {
         let to_read = match self.blocking(Store::repos_to_read).await {
             Ok(to_read) => to_read,
             Err(e) => return warn!("finding which repositories' addresses to read: {}", e.message),
         };
         for repo in to_read {
-            if self.read_repo_url(link, repo).await.is_err() {
-                return;
-            }
+            self.read_repo_url(link, repo).await;
         }
     }
 
-    async fn read_repo_url(&self, link: &WorkerLink, repo: RepoToRead) -> Result<(), Unsupported> {
+    async fn read_repo_url(&self, link: &WorkerLink, repo: RepoToRead) {
         let RepoToRead { id, name, checkout } = repo;
-        // Where an older worker says its pushes go is no longer kept, since a push meets the default only on a provider
-        // where Roundhouse sets up GitHub, which rewrites GitHub's addresses to go through it.
         let url = match tokio::time::timeout(READ_WITHIN, link.call(ReadRepoUrl { path: checkout.clone() })).await {
-            Ok(Ok(RepoUrlReply { url, .. })) => url,
-            Ok(Err(e)) if e.code == ErrorCode::Unsupported => {
-                info!(repo = name, "{link} can't read where a checkout fetches from: {}", e.message);
-                return Err(Unsupported);
-            }
+            Ok(Ok(RepoUrlReply { url })) => url,
             Ok(Err(e)) => {
                 warn!(repo = name, "{link} couldn't read where {checkout} fetches from: {}", e.message);
-                return Ok(());
+                return;
             }
             Err(_) => {
                 warn!(repo = name, "{link} didn't say where {checkout} fetches from within {READ_WITHIN:?}");
-                return Ok(());
+                return;
             }
         };
         let said = url.as_ref().map_or_else(|| "no address".to_owned(), RepoUrl::to_string);
@@ -111,6 +100,5 @@ impl Hub {
             }
             Err(e) => warn!(repo = name, "keeping the address {link} read: {}", e.message),
         }
-        Ok(())
     }
 }

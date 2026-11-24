@@ -29,13 +29,11 @@ pub(crate) struct Following {
     /// What the hub has workers give their processes for github.com, or `None` for a worker on a provider whose
     /// machines Roundhouse leaves GitHub to, as `Hub::leaves_github_to_machine` says.
     credential: Option<watch::Receiver<DefaultCredential>>,
-    /// Whether the log has said the worker doesn't know the request, which it says once a link.
-    said_unsupported: bool,
 }
 
 impl Following {
     pub(crate) fn new(link: Arc<WorkerLink>, credential: Option<watch::Receiver<DefaultCredential>>) -> Self {
-        Self { link, credential, said_unsupported: false }
+        Self { link, credential }
     }
 
     /// Queues the set of the credential the hub has now, or of the machine's own, and returns the worker's answer to
@@ -85,7 +83,7 @@ impl Following {
     }
 
     /// What an answer that came, or didn't, within [`SET_WITHIN`] comes to, as [`Following::answered`] says.
-    fn taken(&mut self, answered: Result<Result<(), ApiError>, Elapsed>) -> Result<(), ApiError> {
+    fn taken(&self, answered: Result<Result<(), ApiError>, Elapsed>) -> Result<(), ApiError> {
         let refused = match answered {
             Ok(Ok(())) => return Ok(()),
             Ok(Err(refused)) => refused,
@@ -94,13 +92,6 @@ impl Following {
         let link = &self.link;
         let message = &refused.message;
         match refused.code {
-            // From a worker from before sets, which is the same on every set, so it's said once.
-            ErrorCode::Unsupported => {
-                if !std::mem::replace(&mut self.said_unsupported, true) {
-                    warn!("{link} doesn't take a git credential, so what it starts uses its machine's own: {message}");
-                }
-                Ok(())
-            }
             ErrorCode::Unavailable => {
                 warn!("{link} couldn't apply its git credential, so what it starts uses its machine's own: {message}");
                 Ok(())
@@ -116,7 +107,8 @@ impl Following {
             | ErrorCode::Internal
             | ErrorCode::Unknown
             | ErrorCode::Unauthorized
-            | ErrorCode::LocalOnly => Err(refused),
+            | ErrorCode::LocalOnly
+            | ErrorCode::Unsupported => Err(refused),
         }
     }
 }
