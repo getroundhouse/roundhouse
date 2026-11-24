@@ -6,8 +6,7 @@ use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
 use protocol::model::{
-    CacheTtl, ContextUsage, ConversationCache, DiffComment, DiffSide, Observation, Observed, PromptCache, Rev, Session,
-    Wait, WaitRead,
+    CacheTtl, ContextUsage, ConversationCache, Observation, Observed, PromptCache, Session, Wait, WaitRead,
 };
 
 use super::given::{ok, start};
@@ -136,17 +135,7 @@ async fn a_sessions_context_cache_and_waits_reach_each_client_in_the_form_its_ve
     let read = WaitRead { read_error: Some("offline".into()), ..wait.watch.as_ref().unwrap().read() };
     let of = WaitKey { workspace_id: "w".into(), session_id: "s".into(), wait: "a".into() };
     hub.observation_worked_out::<crate::hub::WaitRead>(of, read, 1).await.unwrap();
-    let marker = HubNotice::Comment(DiffComment {
-        id: "c".into(),
-        workspace_id: "w".into(),
-        path: "a.rs".into(),
-        side: DiffSide::New,
-        line: 1,
-        text: "after".into(),
-        created_at_ms: 1,
-        // A copy with no revision is always sent.
-        rev: Rev::default(),
-    });
+    let marker = super::given::comment_made(&hub, "after");
     hub.notify(marker.clone());
 
     for client in [&mut before, &mut observing] {

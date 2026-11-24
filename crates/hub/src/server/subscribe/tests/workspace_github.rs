@@ -8,7 +8,7 @@ use protocol::client::listed::Listed;
 use protocol::client::records::RecordsList;
 use protocol::client::subscriptions::{Follow, Subscribe, Subscription};
 use protocol::client::{ClientResponse, HubFrame, HubNotice, ObservationNotice};
-use protocol::model::{DiffComment, DiffSide, Observation, ObservationKey, Observed, OwnPullRequestSaid, PrState, Rev};
+use protocol::model::{Observation, ObservationKey, Observed, OwnPullRequestSaid, PrState};
 
 use super::given::{ok, start};
 use crate::hub::Hub;
@@ -73,16 +73,7 @@ fn listed_rev(frame: &HubFrame) -> Option<u64> {
 
 /// A notice of the hub's level, after whatever was sent before it, so a client that has it would have that too.
 fn after_the_rest(hub: &Hub) {
-    hub.notify(HubNotice::Comment(DiffComment {
-        id: "c".into(),
-        workspace_id: "w".into(),
-        path: "a.rs".into(),
-        side: DiffSide::New,
-        line: 1,
-        text: "why".into(),
-        created_at_ms: 0,
-        rev: Rev::default(),
-    }));
+    hub.notify(super::given::comment_made(hub, "why"));
 }
 
 fn has_the_rest(sent: &[HubFrame]) -> bool {

@@ -77,7 +77,7 @@ async fn the_hub_s_level_listed_again_shows_each_workspace_it_lists() {
     store_of(&hub).insert_workspace(&protocol::fixtures::workspace("v"), &placement, None).unwrap();
 
     for _ in 0..=FEED_HOLDS {
-        hub.notify(HubNotice::Subagent(protocol::fixtures::subagent("c")));
+        hub.notify(super::given::subagent_made(&hub));
     }
 
     let of_v = |frame: &HubFrame| matches!(frame, HubFrame::Github { update: GithubUpdate::PullRequest { workspace, .. }, .. } if *workspace == "v".into());

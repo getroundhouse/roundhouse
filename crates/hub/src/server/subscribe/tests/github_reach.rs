@@ -4,9 +4,7 @@
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
-use protocol::model::{
-    DiffComment, DiffSide, GithubReach, GithubRepositoryName, Observation, Observed, Reach, Records, Rev,
-};
+use protocol::model::{GithubReach, GithubRepositoryName, Observation, Observed, Reach, Records};
 
 use super::given::{ok, start};
 use crate::hub::RepositoryReach;
@@ -67,17 +65,7 @@ async fn a_reach_reaches_each_client_in_the_form_its_version_reads() {
 
     hub.observation_read::<RepositoryReach>("r".into(), refused.clone(), 2_000).await.unwrap();
 
-    let marker = HubNotice::Comment(DiffComment {
-        id: "c".into(),
-        workspace_id: "w".into(),
-        path: "a.rs".into(),
-        side: DiffSide::New,
-        line: 1,
-        text: "after".into(),
-        created_at_ms: 1,
-        // A copy with no revision is always sent.
-        rev: Rev::default(),
-    });
+    let marker = super::given::comment_made(&hub, "after");
     hub.notify(marker.clone());
     for client in [&mut before, &mut observing] {
         let at_the_marker = |sent: &[HubFrame]| {

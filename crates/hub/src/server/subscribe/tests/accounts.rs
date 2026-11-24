@@ -4,9 +4,7 @@
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
-use protocol::model::{
-    Account, AgentAccount, DiffComment, DiffSide, LimitWindow, Observation, Observed, Rev, UsageLimit,
-};
+use protocol::model::{Account, AgentAccount, LimitWindow, Observation, Observed, Rev, UsageLimit};
 
 use super::given::{ok, start};
 use crate::hub::tests::{hub_in_again, store_of};
@@ -167,17 +165,7 @@ async fn an_account_s_limits_reach_each_client_in_the_form_its_version_reads() {
 
 /// Waits until `client` is sent a notice `hub` tells after all it told before, so it has been sent everything before.
 pub(super) async fn mark(hub: &crate::hub::Hub, client: &mut Connection) {
-    let marker = HubNotice::Comment(DiffComment {
-        id: "c".into(),
-        workspace_id: "w".into(),
-        path: "a.rs".into(),
-        side: DiffSide::New,
-        line: 1,
-        text: "after".into(),
-        created_at_ms: 1,
-        // A copy with no revision is always sent.
-        rev: Rev::default(),
-    });
+    let marker = super::given::comment_made(hub, "after");
     hub.notify(marker.clone());
     let at_the_marker = |sent: &[HubFrame]| {
         sent.iter().any(|frame| matches!(frame, HubFrame::Notice { notice, .. } if *notice == marker))
