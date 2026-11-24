@@ -155,7 +155,7 @@ fn disconnecting_forgets_the_token_and_the_record_and_the_default_and_again_is_n
 
     let Disconnected::Removed(removed) = disconnected else { panic!("{disconnected:?}") };
     assert_eq!(removed.account, before[0], "the reply is the record as it last was");
-    assert!(removed.rev.supersedes(before[1].rev), "its removal moved the records' revision");
+    assert!(removed.rev > before[1].rev, "its removal moved the records' revision");
     assert_eq!(removed.settings.and_then(|settings| settings.github).map(|github| github.account), Some(None));
     assert_eq!(again.unwrap_err().code, ErrorCode::NotFound);
     assert_eq!(nobody.unwrap_err().code, ErrorCode::NotFound);

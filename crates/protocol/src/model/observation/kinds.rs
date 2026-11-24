@@ -231,7 +231,7 @@ impl Observation {
         }
     }
 
-    /// The revision of this copy, which says whether it replaces another, as [`Rev::supersedes`] does.
+    /// The revision of this copy, which says whether it replaces another: one at a higher revision does.
     /// `Rev::default()` for a kind this build doesn't know.
     pub fn rev(&self) -> Rev {
         match self {

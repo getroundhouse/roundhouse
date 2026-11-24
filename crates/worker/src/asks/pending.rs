@@ -8,8 +8,9 @@ use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
 
-/// A hub answers most asks in seconds, even when it reads GitHub for the answer, and one from before workers could ask
-/// never does.
+/// A hub answers most asks in seconds, even when it reads GitHub for the answer. Every wait on another process has a
+/// limit, as `docs/principles/failure.md` says, and this one fails an agent's call that no hub answers, as when it's
+/// asked while the hub is restarting or gone, and no hub connects in time to be asked it again.
 const ANSWER_TIMEOUT: Duration = Duration::from_mins(1);
 
 /// How many times as long an ask that makes or removes a worktree is waited for, since a fetch, checking out a large

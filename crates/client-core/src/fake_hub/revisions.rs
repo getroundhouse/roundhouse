@@ -1,7 +1,7 @@
 //! The revisions a fake hub serves its world at, as a hub serves its records: each at the revision of its newest
 //! change, and every list at the hub's newest revision. A world is made whole before it's served, so a record its test
-//! gave no revision is at [`MADE`], as if the world were made in one change. Nothing it serves is then at no revision,
-//! which only a hub that keeps none sends, and which a client takes in the order it comes, whatever else it holds.
+//! gave no revision, which leaves it at 0, is at [`MADE`], as if the world were made in one change. Nothing it serves
+//! is then at 0, which is no record's revision, and which a client holding a copy wouldn't take.
 
 use protocol::model::{Observation, Rev};
 

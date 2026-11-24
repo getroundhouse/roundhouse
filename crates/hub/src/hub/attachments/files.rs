@@ -114,8 +114,9 @@ impl Hub {
 
     /// A file's bytes, such as an image's, for drawing it, or one of the new-workspace dialog's, to send with the first
     /// prompt. A session's other files' are gone once a prompt has put them in the worktree. A video the agent's text
-    /// points to is refused, since it's read a part at a time as it plays, and a client from before the hub kept videos
-    /// would otherwise read each whole, up to 100 MB, to find it isn't an image it can draw.
+    /// points to is refused: a client reads one a part at a time as it plays, with [`Self::file_read_range`], and this
+    /// keeps any from reading one whole, up to 100 MB, in one reply. A video a person added still reads whole, as a client
+    /// reads back a draft's files to put them back with what's typed.
     pub(crate) async fn file_read(&self, kept_for: FileFor, id: AttachmentId) -> Result<AttachmentBytes, ApiError> {
         let on_record = self.kept_file(kept_for, &id).await?;
         if on_record.from_agent && on_record.file.media_type.is_video() {

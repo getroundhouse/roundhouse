@@ -31,7 +31,9 @@ macro_rules! counters {
 
 counters!(
     /// When a record last changed, from one counter per hub, so a client can tell which of two copies is
-    /// newer.
+    /// newer: a copy at a higher one replaces one at a lower. Every row, and every record the hub keeps in memory,
+    /// takes its revision from the counter, which is past 0 before any record is made, so 0 is no record's, and is
+    /// before the first, as a `Seq`'s is.
     #[derive(Default)]
     Rev,
     /// One launch of an agent. The hub picks it before the launch, and it never repeats, even across
@@ -70,14 +72,6 @@ macro_rules! log_positions {
 }
 
 log_positions!(Seq, Place);
-
-impl Rev {
-    /// Whether a copy at this revision replaces one at `held`: it's newer, or it has none, and then copies replace each
-    /// other in the order they arrive.
-    pub fn supersedes(self, held: Rev) -> bool {
-        self == Rev::default() || self > held
-    }
-}
 
 #[cfg(test)]
 mod tests {

@@ -120,7 +120,7 @@ async fn a_feed_signed_with_another_key_changes_nothing_but_says_why() {
 
     let after = listed(&hub).await.unwrap();
     assert!(after.problem.as_deref().is_some_and(|problem| problem.contains("signature")), "{after:?}");
-    assert!(after.rev.supersedes(before.rev), "a newer copy, so every client takes it");
+    assert!(after.rev > before.rev, "a newer copy, so every client takes it");
     let Some(Observed::AsOf { value, as_of_ms }) = offered(&hub).await else { panic!("not as of the read before") };
     assert_eq!(value, offer(Some("0.1.9")));
     assert!(as_of_ms <= read_at_ms, "as of the read that worked");
@@ -272,7 +272,7 @@ async fn a_hub_updates_once_at_a_time_to_what_it_found_whatever_it_reads_meanwhi
 
     assert_eq!(other.code, ErrorCode::Conflict, "{other:?}");
     assert_eq!(meanwhile.attempt, Some(under_way()), "a read leaves the update as it is");
-    assert!(meanwhile.rev.supersedes(Rev::default()));
+    assert!(meanwhile.rev > Rev::default());
     again.expect("sent again, it changes nothing");
 }
 

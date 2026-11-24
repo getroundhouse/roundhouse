@@ -42,21 +42,6 @@ fn every_request_a_client_makes_of_a_terminal_keeps_its_form() {
     );
 }
 
-/// The requests of the way before rows, from an app that sent a terminal's bytes, are ones a hub no longer knows, so
-/// it refuses each as `Unsupported` and carries on.
-#[test]
-fn a_request_from_before_rows_is_one_a_hub_doesnt_know() {
-    let before = [
-        r#"{"method":"terminal_attach","id":"t","subscription_id":3}"#,
-        r#"{"method":"terminal_input","id":"t","input":"bHMN"}"#,
-        r#"{"method":"terminal_resize","id":"t","size":{"cols":120,"rows":40}}"#,
-    ];
-    for request in before {
-        let read = frame::decode::<ClientRequest>(request.as_bytes());
-        assert!(matches!(read, Ok(ClientRequest::Unknown)), "{request} read as {read:?}");
-    }
-}
-
 #[test]
 fn a_terminals_record_keeps_its_form_as_a_reply_a_notice_and_a_removal() {
     let record = r#""id":"t","workspace_id":"w","opened_at_ms":5,"rev":9"#;
@@ -216,21 +201,6 @@ fn what_a_worker_from_before_rows_sends_of_a_terminal_still_reads() {
     assert_eq!(read(resized), skipped);
     let exited = TerminalUpdate::Exited(TerminalExit { code: Some(0) });
     assert_eq!(read(ended), WorkerFrame::Terminal { terminal: "t".into(), update: exited });
-}
-
-/// The requests of the way before rows, from a hub that followed a terminal's bytes, are ones a worker no longer
-/// knows, so it refuses each as `Unsupported` and carries on.
-#[test]
-fn a_request_from_before_rows_is_one_a_worker_doesnt_know() {
-    let before = [
-        r#"{"method":"terminal_input","terminal":"t","input":"Aw=="}"#,
-        r#"{"method":"terminal_resize","terminal":"t","size":{"cols":80,"rows":24}}"#,
-        r#"{"method":"terminal_show","terminal":"t"}"#,
-    ];
-    for request in before {
-        let read = frame::decode::<WorkerRequest>(request.as_bytes());
-        assert!(matches!(read, Ok(WorkerRequest::Unknown)), "{request} read as {read:?}");
-    }
 }
 
 /// So a client can say what stopping the hub would end, and a hub from before terminals has none to count.

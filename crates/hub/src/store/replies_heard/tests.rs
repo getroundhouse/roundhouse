@@ -23,7 +23,7 @@ fn the_first_thing_said_of_a_reply_is_kept_and_listed_by_its_chat() {
 
     assert_eq!(again, None);
     assert_eq!(first.ending, cut);
-    assert!(second.rev.supersedes(first.rev));
+    assert!(second.rev > first.rev);
     assert_eq!(listed, [first, second.clone()]);
     assert_eq!(rev, second.rev);
 }
@@ -87,7 +87,7 @@ fn what_the_device_says_takes_the_place_of_what_the_hub_settled() {
 
     assert_eq!((settled.ending, settled.settled_by), (stopped, SettledBy::Hub));
     assert_eq!((put_right.ending, put_right.settled_by), (Ending::ToTheEnd, SettledBy::Device));
-    assert!(put_right.rev.supersedes(settled.rev));
+    assert!(put_right.rev > settled.rev);
 }
 
 /// A device that says none of a reply was read out, as one that took the conversation over partway through it says,

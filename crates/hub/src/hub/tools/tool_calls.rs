@@ -10,8 +10,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::warn;
 
-/// A worker on this machine starts serving in milliseconds, and one that doesn't know the request never answers it, so
-/// an agent starts without the tools rather than waiting, and so do the worker's agents after it.
+/// A worker on this machine starts serving in milliseconds. Every wait on another process has a limit, as
+/// `docs/principles/failure.md` says, and with this one an agent whose worker is slow to serve starts without the tools
+/// rather than waiting, and so do the worker's agents after it.
 const SERVE_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl Hub {
