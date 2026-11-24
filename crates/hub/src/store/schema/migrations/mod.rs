@@ -11,6 +11,7 @@ mod proposals;
 mod repos;
 mod session_accounts;
 mod sessions;
+mod tasks;
 mod titles;
 mod todos;
 mod waits;

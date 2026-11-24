@@ -61,3 +61,6 @@ pub(crate) const BEFORE_WORKER_BUILD_OBSERVED: usize = 102;
 
 /// How many migrations there were before each workspace's and chat's title was stored as it reads.
 pub(crate) const BEFORE_TITLES_TIDIED: usize = 105;
+
+/// How many migrations there were before each background task stored with no kind was given `command`.
+pub(crate) const BEFORE_TASK_KINDS_GIVEN: usize = 107;
