@@ -1,4 +1,5 @@
-//! Starts and advances explicit-target waits through the same persisted tasks and wake/cancel paths as older waits.
+//! Starts and advances waits on the pull requests an agent names, through the persisted tasks and the paths that wake
+//! and cancel every wait.
 
 use super::{Hub, START_WITHIN, new_id, now_ms, remote_rules};
 use protocol::client::{ApiError, ErrorCode};

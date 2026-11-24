@@ -159,25 +159,6 @@ fn a_wait_nobody_asked_for_isnt_there() {
     assert!(matches!(store.wait(&"nothing".into()), Err(StoreError::NotFound { kind: "wait", .. })));
 }
 
-/// `a` is a wait an older worker's tool started on the workspace's own pull request, which nothing judges now, so it's
-/// called off, where `b`, on explicit pull requests, goes on, and `c`, which had ended, keeps how it ended.
-#[test]
-fn only_open_waits_on_the_workspaces_own_pull_request_are_called_off() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = store_with_two_chats(dir.path());
-    store.start_wait(&wait("a")).unwrap();
-    store.start_wait(&protocol::fixtures::pull_request_wait("b")).unwrap();
-    store.start_wait(&Wait { session_id: "t".into(), ..wait("c") }).unwrap();
-    let merged = WaitEnded { at_ms: 7, how: WaitEnd::Merged };
-    store.end_wait(&"c".into(), merged).unwrap();
-
-    let called_off = store.call_off_unwatched_waits(9).unwrap();
-
-    assert_eq!(called_off.iter().map(|wait| wait.id.as_str()).collect::<Vec<_>>(), ["a"]);
-    assert_eq!(how(&store, "a"), Some(WaitEnded { at_ms: 9, how: WaitEnd::Cancelled }));
-    assert_eq!((how(&store, "b"), how(&store, "c")), (None, Some(merged)));
-}
-
 #[test]
 fn a_wait_is_found_by_the_call_that_started_it_whether_or_not_it_has_ended() {
     let dir = tempfile::tempdir().unwrap();
@@ -193,8 +174,7 @@ fn a_wait_is_found_by_the_call_that_started_it_whether_or_not_it_has_ended() {
 }
 
 /// The chat's record shows the wait it has open, and each start and end moves its revision, so the feed announces it,
-/// however the wait ends: by the agent, as the hub calls off those of an older worker's tool, or as its workspace is
-/// archived.
+/// however the wait ends: by the agent, or as its workspace is archived.
 #[test]
 fn a_chats_record_shows_its_open_wait_and_moves_as_one_starts_or_ends() {
     let dir = tempfile::tempdir().unwrap();
@@ -216,7 +196,9 @@ fn a_chats_record_shows_its_open_wait_and_moves_as_one_starts_or_ends() {
     moved(Some("b"));
     store.start_wait(&wait("c")).unwrap();
     moved(Some("b"));
-    store.call_off_unwatched_waits(3).unwrap();
+    store.end_wait(&"b".into(), WaitEnded { at_ms: 3, how: WaitEnd::Cancelled }).unwrap();
+    moved(Some("c"));
+    store.end_wait(&"c".into(), WaitEnded { at_ms: 3, how: WaitEnd::Cancelled }).unwrap();
     moved(None);
     store.start_wait(&wait("d")).unwrap();
     store.call_off_workspace_waits(&"w".into(), 4).unwrap();
@@ -257,4 +239,33 @@ fn a_wait_from_before_facets_keeps_its_watch_but_the_pull_requests_it_saw() {
     let conn = rusqlite::Connection::open(dir.path().join("hub.db")).unwrap();
     let left: Option<String> = conn.query_row("SELECT watch FROM waits WHERE id = 'b'", [], OneValue::read).unwrap();
     assert_eq!(left.as_deref(), Some("not a watch"));
+}
+
+/// A database at the floor can hold an open wait the singular tool started, which nothing judges now, so migrating it
+/// ends that wait once, as called off, and moves its chat's revision, so a client sees it gone. One that had ended
+/// keeps how it ended.
+#[test]
+fn an_open_wait_the_singular_tool_started_is_called_off_once_as_the_database_migrates() {
+    let dir = tempfile::tempdir().unwrap();
+    let mode = serde_json::to_string(&idle_session(1).session.mode).unwrap();
+    let chat = |id: &str| {
+        format!(
+            "INSERT INTO sessions (id, workspace_id, agent, model, mode, effort, status, created_at_ms, updated_at_ms)
+                 VALUES ('{id}', 'w', 'claude', 'sonnet', '{mode}', 'high', 'idle', 0, 0);"
+        )
+    };
+    let waits =
+        "INSERT INTO waits (id, session_id, workspace_id, number, call, until, started_at_ms, ended_at_ms, ended)
+        VALUES ('open', 's', 'w', 7, 'toolu_1', 'checks', 1, NULL, NULL),
+            ('ended', 's', 'w', 7, 'toolu_2', 'done', 1, 2, 'merged');";
+    // The chat `t` is made after the waits, so its revision is newer than `s`'s until `s`'s moves.
+    let rows = format!("{}{waits}{}", chat("s"), chat("t"));
+
+    let store = crate::store::older::store_from_before(dir.path(), crate::store::schema::AT_THE_FLOOR, &rows);
+
+    let read = |id: &str| store.get_session(&id.into()).unwrap().session;
+    assert_eq!(read("s").waits, [], "no wait is open");
+    assert!(read("s").rev > read("t").rev, "its chat's revision moved");
+    assert_eq!(how(&store, "open").map(|ended| ended.how), Some(WaitEnd::Cancelled));
+    assert_eq!(how(&store, "ended"), Some(WaitEnded { at_ms: 2, how: WaitEnd::Merged }));
 }

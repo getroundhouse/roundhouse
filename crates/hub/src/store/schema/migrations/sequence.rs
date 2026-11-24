@@ -85,4 +85,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     // Each workspace's and chat's title as it reads, so the hub reads one as it's stored, in `workspaces` and
     // `sessions`.
     Rust(super::titles::tidied),
+    // Each open wait the singular tool started, ended as called off, in `waits`.
+    Sql(super::waits::UNWATCHED_CALLED_OFF),
 ];

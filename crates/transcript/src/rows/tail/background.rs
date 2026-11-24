@@ -109,8 +109,9 @@ pub(super) fn wait_line(open: &OpenWait, shared: &Shared, cx: &App) -> Div {
 }
 
 /// What a wait's line says, and what pointing at it says: what it waits on, and where its pull requests stand, from
-/// the hub's reading of them. A wait the singular tool started, which only a hub from before it was dropped can still
-/// have open, has no reading, so it says only what it waits on.
+/// the hub's reading of them. A wait with no reading says only what it waits on. That's any wait until the hub has said
+/// what it read, and one the singular tool started, which nothing reads, and which is open only where an earlier hub's
+/// calling it off failed.
 fn wait_words(OpenWait { wait, read }: &OpenWait) -> (String, &'static str) {
     let pointed_at = match (read, wait.until) {
         (Some(_), _) => {
