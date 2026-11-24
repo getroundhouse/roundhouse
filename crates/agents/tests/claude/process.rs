@@ -21,7 +21,9 @@ use tokio::time::timeout;
 
 /// A script standing in for the CLI, which runs `body`.
 pub(crate) fn script(dir: &Path, body: &str) -> PathBuf {
-    agents::conformance::executable(dir, "fake-cli", &format!("#!/bin/sh\n{body}\n")).unwrap()
+    let script = dir.join("fake-cli");
+    process::testing::write_program(&script, format!("#!/bin/sh\n{body}\n")).unwrap();
+    script
 }
 
 pub(crate) fn spec(dir: &Path) -> AgentSpec {

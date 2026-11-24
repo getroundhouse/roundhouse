@@ -1,7 +1,6 @@
 //! A script that holds the hub's work on a workspace open until the test lets it go, so the test can see what shows
 //! meanwhile.
 
-use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 
 use super::{Stack, commit_settings, git};
@@ -26,8 +25,7 @@ impl Held {
         let hooks = stack.repo().with_file_name("hooks");
         std::fs::create_dir_all(&hooks).unwrap();
         let hook = hooks.join("post-checkout");
-        std::fs::write(&hook, format!("#!/bin/sh\n{}\n", held.script())).unwrap();
-        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        process::testing::write_program(&hook, format!("#!/bin/sh\n{}\n", held.script())).unwrap();
         git(&stack.repo(), &["config", "core.hooksPath", hooks.to_str().unwrap()]);
         held
     }

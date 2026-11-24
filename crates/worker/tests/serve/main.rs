@@ -221,10 +221,8 @@ async fn replies_to(config: Config, calls: &[Vec<u8>]) -> std::collections::BTre
 
 /// A stand-in for the Claude CLI, in `dir`, that runs `body`.
 fn cli(dir: &Path, body: &str) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
     let cli = dir.join("fake-cli");
-    std::fs::write(&cli, format!("#!/bin/sh\n{body}\n")).unwrap();
-    std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+    process::testing::write_program(&cli, format!("#!/bin/sh\n{body}\n")).unwrap();
     cli
 }
 

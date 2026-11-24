@@ -19,7 +19,7 @@ pub(crate) use raw::{RawConnection, changes_in, following};
 
 mod stack;
 pub(crate) use stack::{
-    Follower, Stack, TIMEOUT, assert_gapless, assistant_text, commit_settings, git, in_mode, install_executable,
-    latest_started_pid, patient_with_workers, read_all, session_records, started_pid, wait_for_setup, wait_for_status,
-    wait_for_turn_end, wait_for_turn_end_while_progressing, wait_until, workspace,
+    Follower, Stack, TIMEOUT, assert_gapless, assistant_text, commit_settings, git, in_mode, latest_started_pid,
+    patient_with_workers, read_all, session_records, started_pid, wait_for_setup, wait_for_status, wait_for_turn_end,
+    wait_for_turn_end_while_progressing, wait_until, workspace,
 };

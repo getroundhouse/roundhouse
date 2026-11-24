@@ -1,6 +1,6 @@
 //! A stand-in for `gh`, since GitHub can't be reached from a test.
 
-use super::{Stack, install_executable};
+use super::Stack;
 use std::path::PathBuf;
 
 mod stand_in;

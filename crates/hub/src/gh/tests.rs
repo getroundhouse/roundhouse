@@ -31,15 +31,13 @@ const NO_TOKEN: &str = "echo 'no oauth token found for github.com' >&2\nexit 1";
 /// `status` for `gh auth status` and `token` for `gh auth token`, which use only what the shell has built in. Anything
 /// else fails.
 fn gh(dir: &Path, status: &str, token: &str) -> MachineEnvironment {
-    use std::os::unix::fs::PermissionsExt as _;
     let bin = dir.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     let asked = dir.join("asked").display().to_string();
     let script = format!(
         "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{asked}'\ncase \"$1 $2\" in\n'auth status')\n{status}\n;;\n'auth token')\n{token}\n;;\n*)\nexit 9\n;;\nesac\n"
     );
-    std::fs::write(bin.join("gh"), script).unwrap();
-    std::fs::set_permissions(bin.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    process::testing::write_program(&bin.join("gh"), script).unwrap();
     MachineEnvironment::only(&[("PATH", &bin.display().to_string())])
 }
 

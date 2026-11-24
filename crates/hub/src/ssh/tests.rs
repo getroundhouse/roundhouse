@@ -16,13 +16,11 @@ const GREETED: &str =
 /// A stand-in for `ssh` in `dir`, alone on the `PATH` it's given, that writes what it's asked to `asked`, then runs
 /// `answer`, which uses only what the shell has built in.
 fn ssh(dir: &Path, answer: &str) -> MachineEnvironment {
-    use std::os::unix::fs::PermissionsExt as _;
     let bin = dir.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     let asked = dir.join("asked").display().to_string();
     let script = format!("#!/bin/sh\nprintf '%s\\n' \"$*\" > '{asked}'\n{answer}\n");
-    std::fs::write(bin.join("ssh"), script).unwrap();
-    std::fs::set_permissions(bin.join("ssh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    process::testing::write_program(&bin.join("ssh"), script).unwrap();
     MachineEnvironment::only(&[("PATH", &bin.display().to_string())])
 }
 

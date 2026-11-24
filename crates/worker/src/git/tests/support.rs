@@ -52,17 +52,6 @@ pub(crate) fn post_checkout_hook(repo: &Path, body: &str) {
     let hooks = repo.with_file_name("hooks");
     std::fs::create_dir_all(&hooks).unwrap();
     let hook = hooks.join("post-checkout");
-    std::fs::write(&hook, format!("#!/bin/sh\n{body}\n")).unwrap();
-    make_executable(&hook);
+    process::testing::write_program(&hook, format!("#!/bin/sh\n{body}\n")).unwrap();
     run(repo, &["config", "core.hooksPath", hooks.to_str().unwrap()]);
 }
-
-#[cfg(unix)]
-fn make_executable(path: &Path) {
-    use std::os::unix::fs::PermissionsExt as _;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
-}
-
-/// Git for Windows runs a hook with a `#!` line without Unix mode bits.
-#[cfg(windows)]
-fn make_executable(_path: &Path) {}

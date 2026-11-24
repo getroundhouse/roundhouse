@@ -24,10 +24,8 @@ use github::{Github, PullRequestState, PullRequests, Script, StandIn};
 
 /// A local provider whose worker is `script`.
 fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
-    use std::os::unix::fs::PermissionsExt;
     let exe = dir.join("worker");
-    std::fs::write(&exe, format!("#!/bin/sh\n{script}\n")).unwrap();
-    std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+    process::testing::write_program(&exe, format!("#!/bin/sh\n{script}\n")).unwrap();
     Arc::new(LocalProvider::new(LocalConfig {
         worker_exe: exe,
         instances_dir: dir.join("instances"),
