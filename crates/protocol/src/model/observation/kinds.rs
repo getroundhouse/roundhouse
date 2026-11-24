@@ -3,13 +3,15 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AccountIdentity, ConversationCache, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid, WaitRead,
+    AccountIdentity, ConversationCache, GithubAppSaid, Observed, OwnPullRequestDetail, OwnPullRequestSaid,
+    ReferenceSaid, WaitRead,
 };
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
 use crate::model::{
-    AccountId, ChangeSummary, ContextUsage, GithubAccountId, GithubUsername, Level, LineCounts, ModelListKey, Reach,
-    ReferenceAsk, RepoId, RepositoryUnseen, Rev, SessionId, UsageLimit, WaitId, WorkspaceId,
+    AccountId, ChangeSummary, ContextUsage, GithubAccountId, GithubAppId, GithubUser, GithubUsername, Level,
+    LineCounts, ModelListKey, Reach, ReferenceAsk, RepoId, RepositoryUnseen, Rev, SessionId, UsageLimit, WaitId,
+    WorkspaceId,
 };
 
 /// One observation, of any kind, with what it's of, its revision and what it says, as a list or the feed gives it. A
@@ -47,6 +49,18 @@ pub enum Observation {
     /// number stays on the account's record, as what links the two. A client of a version from before it reads it on
     /// the account's record, as [`ReadFrom::EveryObservation`] says.
     GithubUsername { account: GithubAccountId, username: Observed<GithubUsername>, rev: Rev },
+    /// What GitHub says of an app of your own: what it calls the app, its name and its owner, as the app last asked
+    /// GitHub, with its key. Sent at the hub's level, since Settings draws every app. It's current while the hub asks
+    /// again each day. The app's number stays on its record, as what links the two. A client of a version from before
+    /// it reads it on the app's record, as [`ReadFrom::EveryObservation`] says.
+    GithubAppSaid { app: GithubAppId, said: Observed<GithubAppSaid>, rev: Rev },
+    /// An app of your own's bot, `{slug}[bot]`, as GitHub last said it, which commits through the app are by. Sent at
+    /// the hub's level, as [`Observation::GithubAppSaid`] is.
+    GithubAppBot { app: GithubAppId, bot: Observed<GithubUser>, rev: Rev },
+    /// What GitHub calls the user or organization an app of your own's installation, a GitHub account, is on, as the
+    /// hub last listed the app's installations, which it does each minute. Sent at the hub's level. Its number stays
+    /// on the account's record, as what links the account to GitHub's installation.
+    InstalledOn { account: GithubAccountId, on: Observed<GithubUsername>, rev: Rev },
     /// What an agent offers where a chat would launch, as its CLI last listed it, by the list's key, which says the
     /// agent, the project, the provider, the account and the CLI's version. Sent at the hub's level, since the new
     /// workspace dialog and every chat's picker draw it. Never current, since the hub asks again only when it's due.
@@ -115,6 +129,15 @@ pub enum ObservationKey {
     GithubUsername {
         account: GithubAccountId,
     },
+    GithubAppSaid {
+        app: GithubAppId,
+    },
+    GithubAppBot {
+        app: GithubAppId,
+    },
+    InstalledOn {
+        account: GithubAccountId,
+    },
     ModelCatalog {
         list: ModelListKey,
     },
@@ -163,6 +186,9 @@ impl Observation {
             Observation::Reference { reference, .. } => ObservationKey::Reference { reference: reference.clone() },
             Observation::RepositoryReach { repo, .. } => ObservationKey::RepositoryReach { repo: repo.clone() },
             Observation::GithubUsername { account, .. } => ObservationKey::GithubUsername { account: account.clone() },
+            Observation::GithubAppSaid { app, .. } => ObservationKey::GithubAppSaid { app: *app },
+            Observation::GithubAppBot { app, .. } => ObservationKey::GithubAppBot { app: *app },
+            Observation::InstalledOn { account, .. } => ObservationKey::InstalledOn { account: account.clone() },
             Observation::ModelCatalog { list, .. } => ObservationKey::ModelCatalog { list: list.clone() },
             Observation::AccountIdentity { account, .. } => {
                 ObservationKey::AccountIdentity { account: account.clone() }
@@ -196,6 +222,9 @@ impl Observation {
             | Observation::Reference { rev, .. }
             | Observation::RepositoryReach { rev, .. }
             | Observation::GithubUsername { rev, .. }
+            | Observation::GithubAppSaid { rev, .. }
+            | Observation::GithubAppBot { rev, .. }
+            | Observation::InstalledOn { rev, .. }
             | Observation::ModelCatalog { rev, .. }
             | Observation::AccountIdentity { rev, .. }
             | Observation::AccountLimits { rev, .. }
@@ -221,6 +250,9 @@ impl ObservationKey {
             | ObservationKey::WorkspacePullRequest { .. }
             | ObservationKey::RepositoryReach { .. }
             | ObservationKey::GithubUsername { .. }
+            | ObservationKey::GithubAppSaid { .. }
+            | ObservationKey::GithubAppBot { .. }
+            | ObservationKey::InstalledOn { .. }
             | ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
             | ObservationKey::AccountLimits { .. }
@@ -249,6 +281,9 @@ impl ObservationKey {
             | ObservationKey::Reference { .. } => Some(ReadFrom::GithubObserved),
             ObservationKey::RepositoryReach { .. }
             | ObservationKey::GithubUsername { .. }
+            | ObservationKey::GithubAppSaid { .. }
+            | ObservationKey::GithubAppBot { .. }
+            | ObservationKey::InstalledOn { .. }
             | ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
             | ObservationKey::AccountLimits { .. }

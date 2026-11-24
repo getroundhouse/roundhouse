@@ -1,46 +1,44 @@
 use protocol::client::github_apps::GithubManifestCode;
-use protocol::model::{GithubApp, GithubAppId, GithubAppSlug, GithubUser, GithubUserId, Rev};
+use protocol::model::{GithubApp, GithubAppId, GithubUser, GithubUserId, Rev};
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
+use std::collections::HashSet;
 
-use super::super::{ByColumn, Columns, Store, StoreError, columns, current_rev, lock, rev_of};
+use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, current_rev, lock, rev_of};
 use crate::login_files::LoginFile;
 
 columns! {
     /// The columns every read of an app's row takes, as [`app_at`] reads them.
-    struct AppColumns { id, slug, name, owner_id, owner, bot_id, bot, rev, key_file }
+    struct AppColumns { id, rev, key_file }
 }
 
-/// An app of your own GitHub has just made, to keep.
+/// An app of your own GitHub has just made, to keep: what Roundhouse keeps of it, while what GitHub says of it, its
+/// slug, name and owner, the hub keeps as an observation, as `crate::hub::observations::GithubAppSaid` says.
 #[derive(Clone, Copy)]
 pub(crate) struct GithubAppMaking<'a> {
     pub(crate) id: GithubAppId,
-    pub(crate) slug: &'a GithubAppSlug,
-    pub(crate) name: &'a str,
-    pub(crate) owner: &'a GithubUser,
     /// Where its key is.
     pub(crate) key: &'a LoginFile,
     /// What GitHub made it from, which it takes only once.
     pub(crate) made_from: &'a GithubManifestCode,
 }
 
-/// A row's record, and the file of its key, `None` for a row that names a file the hub doesn't make.
+/// A row's record, and the file of its key, `None` for a row that names a file the hub doesn't make. What GitHub says
+/// of the app isn't kept here, since the hub only observes it, so the record names the app by its number, as `#<number>`,
+/// for its slug and its name, with an owner of no number, `#0`, and no bot, which the hub fills with what it holds as
+/// the record leaves it, as `crate::hub::observations::OldForm` says. *Unconfirmed:* the stand-ins.
 fn app_at(row: &Row<'_>) -> rusqlite::Result<(GithubApp, Option<LoginFile>)> {
     let c = AppColumns::at(0);
-    let bot = match (row.at::<Option<u64>>(c.bot_id)?, row.at::<Option<String>>(c.bot)?) {
-        (Some(id), Some(name)) => Some(GithubUser { id: GithubUserId::new(id), name: name.into() }),
-        _ => None,
-    };
+    let id = GithubAppId::new(row.at(c.id)?);
     let app = GithubApp {
-        id: GithubAppId::new(row.at(c.id)?),
-        slug: row.at::<String>(c.slug)?.into(),
-        name: row.at(c.name)?,
-        owner: GithubUser { id: GithubUserId::new(row.at(c.owner_id)?), name: row.at::<String>(c.owner)?.into() },
-        bot,
+        id,
+        slug: format!("#{id}").into(),
+        name: format!("#{id}"),
+        owner: GithubUser { id: GithubUserId::new(0), name: "#0".into() },
+        bot: None,
         rev: rev_of(row, c.rev)?,
     };
     Ok((app, LoginFile::parse(&row.at::<String>(c.key_file)?)))
 }
-
 /// Every app, oldest first, for a list of every record.
 pub(in super::super) fn github_apps(conn: &Connection) -> rusqlite::Result<Vec<GithubApp>> {
     let mut statement = conn.prepare_cached(&format!("SELECT {} FROM github_apps ORDER BY rowid", AppColumns::LIST))?;
@@ -84,39 +82,30 @@ impl Store {
     /// Keeps the record of the app `making`, whose key is in `making.key` already, and answers with it. Its commit is
     /// on disk before this returns, so a key the hub has said it holds isn't lost to a power cut.
     pub(crate) fn make_github_app(&self, making: &GithubAppMaking<'_>) -> Result<GithubApp, StoreError> {
-        let GithubAppMaking { id, slug, name, owner, key, made_from } = *making;
+        let GithubAppMaking { id, key, made_from } = *making;
         self.lasting(|tx| {
             tx.execute(
-                "INSERT INTO github_apps (id, slug, name, owner_id, owner, key_file, made_from)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)",
-                params![
-                    id.get(),
-                    slug.as_str(),
-                    name,
-                    owner.id.get(),
-                    owner.name.as_str(),
-                    key.as_str(),
-                    made_from.as_str()
-                ],
+                "INSERT INTO github_apps (id, key_file, made_from) VALUES (?, ?, ?)",
+                params![id.get(), key.as_str(), made_from.as_str()],
             )?;
             Ok(row_of(tx, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?.0)
         })
     }
 
-    /// Says the app `id`'s bot is `bot`, as GitHub said, and answers with its record when that changed it.
-    pub(crate) fn set_github_app_bot(
-        &self,
-        id: GithubAppId,
-        bot: &GithubUser,
-    ) -> Result<Option<GithubApp>, StoreError> {
+    /// Every app's ID.
+    pub(crate) fn github_app_ids(&self) -> Result<HashSet<GithubAppId>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn.prepare("SELECT id FROM github_apps")?;
+        let ids = statement.query_map([], OneValue::read::<u64>)?;
+        Ok(ids.map(|id| id.map(GithubAppId::new)).collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Moves the revision of the app `id`'s record, since what GitHub says of it changed, which the record holds the
+    /// old form of, and returns the record. `None` for an app with none.
+    pub(in super::super) fn github_app_moved(&self, id: GithubAppId) -> Result<Option<GithubApp>, StoreError> {
         let conn = lock(&self.writer);
-        let changed = conn.execute(
-            "UPDATE github_apps SET bot_id = ?, bot = ? WHERE id = ? AND (bot_id IS NOT ? OR bot IS NOT ?)",
-            params![bot.id.get(), bot.name.as_str(), id.get(), bot.id.get(), bot.name.as_str()],
-        )?;
-        if changed == 0 {
-            return Ok(None);
-        }
+        // Moves the revision, as `github_apps_rev_on_update` does for any update that doesn't.
+        conn.execute("UPDATE github_apps SET id = id WHERE id = ?", [id.get()])?;
         Ok(row_of(&conn, id)?.map(|(app, _)| app))
     }
 

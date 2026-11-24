@@ -3,7 +3,7 @@
 use protocol::model::{Level, Observation, ObservationKey, RecordKey, Rev};
 
 use super::file::{self, Row, Write};
-use super::github_kinds::{GithubProfile, GithubUsername, RepositoryReach};
+use super::github_kinds::{GithubAppBot, GithubAppSaid, GithubProfile, GithubUsername, InstalledOn, RepositoryReach};
 use super::kept::Table;
 use super::kinds::{
     AccountIdentity, AccountLimits, Form, Kind, ModelCatalog, Owner, Referenced, SessionCache, SessionContext,
@@ -24,6 +24,9 @@ pub(crate) struct Tables {
     pub(super) workspace_repository_unseen: Table<WorkspaceRepositoryUnseen>,
     pub(super) repository_reach: Table<RepositoryReach>,
     pub(super) github_username: Table<GithubUsername>,
+    pub(super) github_app_said: Table<GithubAppSaid>,
+    pub(super) github_app_bot: Table<GithubAppBot>,
+    pub(super) installed_on: Table<InstalledOn>,
     pub(super) model_catalog: Table<ModelCatalog>,
     pub(super) account_identity: Table<AccountIdentity>,
     pub(super) account_limits: Table<AccountLimits>,
@@ -94,7 +97,7 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 16] {
+    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 19] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -104,6 +107,9 @@ impl Tables {
             workspace_repository_unseen,
             repository_reach,
             github_username,
+            github_app_said,
+            github_app_bot,
+            installed_on,
             model_catalog,
             account_identity,
             account_limits,
@@ -122,6 +128,9 @@ impl Tables {
             workspace_repository_unseen,
             repository_reach,
             github_username,
+            github_app_said,
+            github_app_bot,
+            installed_on,
             model_catalog,
             account_identity,
             account_limits,

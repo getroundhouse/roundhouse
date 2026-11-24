@@ -118,6 +118,14 @@ impl Answer {
         Answer::With { status: 201, headers: Vec::new(), body: body.to_string() }
     }
 
+    /// The app `id`, `slug`, named `name`, under the organization `owner`, by number and name, as `GET /app` answers
+    /// the app of itself.
+    pub fn app_said(id: u64, slug: &str, name: &str, owner: (u64, &str)) -> Self {
+        let (owner_id, owner) = owner;
+        let owner = json!({"login": owner, "id": owner_id, "type": "Organization"});
+        Self::json(&json!({"id": id, "slug": slug, "name": name, "owner": owner}))
+    }
+
     /// An app's installations, each its number and the organization it's on, by number and name, as
     /// `GET /app/installations` lists them.
     pub fn installations(installations: &[(u64, u64, &str)]) -> Self {

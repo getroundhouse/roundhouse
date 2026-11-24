@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use protocol::client::github_apps::GithubManifestCode;
 use protocol::client::{ApiError, HubNotice};
-use protocol::model::{GithubApp, GithubAppId, RecordKey};
+use protocol::model::{GithubApp, GithubAppId, GithubAppSaid, RecordKey};
 use tracing::warn;
 
 use super::super::{Hub, off_thread};
 use crate::github_logins::{AppChange, AppRemoved, GithubAccountChange};
+use crate::hub::GithubAppSaid as Said;
 use crate::store::now_ms;
 
 impl Hub {
@@ -18,18 +19,24 @@ impl Hub {
     pub(crate) async fn github_app_make(&self, code: GithubManifestCode) -> Result<GithubApp, ApiError> {
         let (logins, asked) = (Arc::clone(&self.github_logins), code.clone());
         if let Some(app) = off_thread(move || logins.made_from(&asked)).await? {
-            return Ok(app);
+            return self.app_record(app.id).await;
         }
         let made = self.github.make_app(&code).await?;
-        let logins = Arc::clone(&self.github_logins);
-        let AppChange { app, changed } = off_thread(move || logins.keep_app(&made, &code)).await?;
+        let said = GithubAppSaid { slug: made.slug.clone(), name: made.name.clone(), owner: made.owner.clone() };
+        let (logins, made_at_ms) = (Arc::clone(&self.github_logins), now_ms());
+        let AppChange { mut app, changed } = off_thread(move || logins.keep_app(&made, &code)).await?;
         if changed {
+            // What GitHub said of it as it made it, as it would say asked as the app.
+            if let Err(e) = self.observation_read::<Said>(app.id, said, made_at_ms).await {
+                warn!(app = %app.id, "couldn't keep what GitHub said of an app it made: {}", e.message);
+            }
+            self.fill_old_forms(&mut app);
             self.notify(HubNotice::GithubApp(app.clone()));
         }
         match self.look_at_app(app.id, true).await {
             Ok(looked) => Ok(looked),
             Err(e) => {
-                warn!(app = %app.slug, "made the app, but couldn't look for where it's installed: {}", e.message);
+                warn!(app = %app.id, "made the app, but couldn't look for where it's installed: {}", e.message);
                 Ok(app)
             }
         }
@@ -50,6 +57,7 @@ impl Hub {
             self.announce_github_account(GithubAccountChange { account, changed: true, settings: None });
         }
         self.notify(HubNotice::Removed { record: RecordKey::GithubApp { id }, rev });
+        self.app_observations_gone(id).await;
         Ok(app)
     }
 }

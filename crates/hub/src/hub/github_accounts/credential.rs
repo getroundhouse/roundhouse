@@ -14,7 +14,7 @@ use tracing::error;
 
 use super::super::Hub;
 use crate::github_logins::DefaultCredential;
-use crate::hub::{GithubProfile, GithubUsername};
+use crate::hub::{GithubAppBot, GithubAppSaid, GithubProfile, GithubUsername, InstalledOn};
 use crate::store::now_ms;
 
 impl Hub {
@@ -47,11 +47,15 @@ impl Hub {
     /// [`check_github_logins_every`](crate::Timers::check_github_logins_every) after, by the wall clock, as
     /// [`Hub::check_github_logins`] says, each once the last has finished, until
     /// [`Hub::stop_checking_github_logins`]. Meanwhile what GitHub calls each account's user, and what its profile says,
-    /// is kept current, since the checks read each again each day.
+    /// and what GitHub says of each app of your own and its bot, are kept current, since the checks read each again
+    /// each day, and so is where each app's installation is, which each look at the app lists each minute.
     pub(crate) async fn watch_github_logins(self: Arc<Self>) {
         // Each is read again each day while the checks run, so what's read of it meanwhile is current.
         self.observations_kept_current::<GithubUsername>().await;
         self.observations_kept_current::<GithubProfile>().await;
+        self.observations_kept_current::<GithubAppSaid>().await;
+        self.observations_kept_current::<GithubAppBot>().await;
+        self.observations_kept_current::<InstalledOn>().await;
         let stopped = stopped(self.github_checks_stopped.subscribe());
         check_by_the_wall_clock(self.timers.check_github_logins_every, now_ms, stopped, |now_ms| {
             let hub = Arc::clone(&self);
@@ -60,6 +64,9 @@ impl Hub {
         .await;
         self.observations_no_longer_read_again::<GithubUsername>().await;
         self.observations_no_longer_read_again::<GithubProfile>().await;
+        self.observations_no_longer_read_again::<GithubAppSaid>().await;
+        self.observations_no_longer_read_again::<GithubAppBot>().await;
+        self.observations_no_longer_read_again::<InstalledOn>().await;
     }
 
     /// Stops checking the GitHub logins, as the hub stops, and waits for `watching`, the task

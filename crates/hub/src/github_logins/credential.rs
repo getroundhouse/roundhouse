@@ -205,10 +205,13 @@ impl GithubLogins {
         DefaultCredential::Account { account: account.id, credential, username: user.name, installation: None }
     }
 
-    /// Where `installation`'s app is installed, as a reach says of it, unless the hub has no record of the app.
+    /// Where `installation`'s app is installed, as a reach says of it, unless the hub has no record of the app, as
+    /// GitHub last said them, or named by their numbers while it hasn't, as a client of a version from before is sent
+    /// them, since they're only words a person reads.
     fn installed_app(&self, installation: &GithubInstallation) -> Result<Option<InstalledApp>, StoreError> {
-        let app = self.store.github_app(installation.app)?;
-        Ok(app.map(|app| InstalledApp { slug: app.slug, on: installation.on.name.clone() }))
+        let Some(mut app) = self.store.github_app(installation.app)? else { return Ok(None) };
+        self.observations.fill(&mut app);
+        Ok(Some(InstalledApp { slug: app.slug, on: installation.on.name.clone() }))
     }
 }
 

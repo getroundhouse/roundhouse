@@ -22,11 +22,14 @@ pub(super) fn as_the_app(answering: &mut Answering, head: &str) -> Option<Answer
     if let Some(code) = line.strip_prefix("POST /app-manifests/").and_then(|rest| rest.split_once("/conversions ")) {
         return Some(answering.conversions.remove(code.0).unwrap_or_else(|| Answer::status(404, Vec::new())));
     }
-    if !line.contains(" /app/") {
+    if !line.contains(" /app/") && !line.starts_with("GET /app ") {
         return None;
     }
     if !signed_by_the_key(head) {
         return Some(Answer::status(401, Vec::new()));
+    }
+    if line.starts_with("GET /app ") {
+        return Some(Answering::next(&mut answering.apps).unwrap_or_else(|| Answer::status(404, Vec::new())));
     }
     if line.starts_with("GET /app/installations?") || line.starts_with("GET /app/installations ") {
         return Some(Answering::next(&mut answering.installations).unwrap_or_else(|| Answer::installations(&[])));

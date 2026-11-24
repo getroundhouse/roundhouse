@@ -11,7 +11,7 @@ use protocol::model::{GithubAccount, GithubAccountId, GithubToken, GithubUserId,
 use tracing::warn;
 
 use super::{Due, GithubLogin, GithubLogins};
-use crate::hub::{GithubProfile, GithubUsername as Username};
+use crate::hub::{GithubAppBot, GithubProfile, GithubUsername as Username};
 use crate::login_files::{Locked, LoginFile, Stored};
 use github::TokenOwner;
 
@@ -57,7 +57,7 @@ impl GithubLogins {
     /// [`GithubLogins::read_due`] says, under the lock `files` holds. A token's, a sign-in's or `gh`'s is read from
     /// GitHub with its token while its login works by its record and holds one. One being renewed, among `renewing`, is
     /// left for the next check, which asks with the token renewing gives, since GitHub revokes the token its file holds
-    /// now as it gives the next. An app's installation is read from its app's record, while that says the app's bot.
+    /// now as it gives the next. An app's installation is read from what the hub holds of its app's bot, while it holds it.
     /// Any other, whose own login can't be asked with, as one whose token has ended, or that GitHub has refused since it
     /// was connected, or an installation whose app has been removed, is asked of GitHub with no login, by its user's
     /// number, as far as [`NobodyAsks`](super::nobody::NobodyAsks) lets it.
@@ -76,7 +76,7 @@ impl GithubLogins {
             }
             let (id, user) = (account.id.clone(), account.user.id);
             if let Some(installation) = &account.installation {
-                let bot = self.store.github_app(installation.app)?.and_then(|app| app.bot);
+                let bot = self.observations.value_of::<GithubAppBot>(&installation.app);
                 if let Some(bot) = bot.filter(|bot| bot.id == user) {
                     due.push(ProfileDue { account: id, user, from: ReadFrom::Bot(bot.name) });
                     continue;

@@ -60,6 +60,9 @@ impl View {
             | ObservationKey::WorkspaceChanges { .. }
             | ObservationKey::RepositoryReach { .. }
             | ObservationKey::GithubUsername { .. }
+            | ObservationKey::GithubAppSaid { .. }
+            | ObservationKey::GithubAppBot { .. }
+            | ObservationKey::InstalledOn { .. }
             | ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
             | ObservationKey::AccountLimits { .. }
@@ -157,6 +160,9 @@ impl GithubHeld {
                 | ObservationKey::WorkspaceChanges { .. }
                 | ObservationKey::RepositoryReach { .. }
                 | ObservationKey::GithubUsername { .. }
+                | ObservationKey::GithubAppSaid { .. }
+                | ObservationKey::GithubAppBot { .. }
+                | ObservationKey::InstalledOn { .. }
                 | ObservationKey::ModelCatalog { .. }
                 | ObservationKey::AccountIdentity { .. }
                 | ObservationKey::AccountLimits { .. }
@@ -241,6 +247,9 @@ impl GithubHeld {
             | ObservationKey::WorkspaceChanges { .. }
             | ObservationKey::RepositoryReach { .. }
             | ObservationKey::GithubUsername { .. }
+            | ObservationKey::GithubAppSaid { .. }
+            | ObservationKey::GithubAppBot { .. }
+            | ObservationKey::InstalledOn { .. }
             | ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
             | ObservationKey::AccountLimits { .. }

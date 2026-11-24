@@ -7,10 +7,12 @@
 //! and one of a version that reads the observation itself doesn't read it.
 
 use protocol::client::ClientResponse;
-use protocol::model::{Account, GithubAccount, ModelList, Record, RecordKey, Records, Session, UsageLimit, Wait};
+use protocol::model::{
+    Account, GithubAccount, GithubApp, ModelList, Record, RecordKey, Records, Session, UsageLimit, Wait,
+};
 use tracing::warn;
 
-use super::github_kinds::{GithubUsername, RepositoryReach};
+use super::github_kinds::{GithubAppBot, GithubAppSaid, GithubUsername, InstalledOn, RepositoryReach};
 use super::kept::Observations;
 use super::kinds::{
     AccountIdentity, AccountLimits, Kind, ModelCatalog, SessionCache, SessionContext, SessionKey, SessionTodos,
@@ -32,6 +34,27 @@ impl OldForm for GithubAccount {
     fn fill(&mut self, tables: &mut Tables) {
         if let Some(username) = GithubUsername::table(tables).value(&self.id) {
             self.user.name = username.clone();
+        }
+        // What an app's installation is on, likewise, named by its number while it isn't known.
+        if let Some(installation) = &mut self.installation
+            && let Some(on) = InstalledOn::table(tables).value(&self.id)
+        {
+            installation.on.name = on.clone();
+        }
+    }
+}
+
+/// What GitHub says of the app, and its bot, on its record. While what GitHub says isn't known, as before the hub has
+/// first asked GitHub as the app since it stopped keeping it in the database, it's as the store reads it: the app's
+/// number, as `#<number>`, for its slug and its name, an owner of no number, `#0`, and no bot.
+impl OldForm for GithubApp {
+    fn fill(&mut self, tables: &mut Tables) {
+        if let Some(said) = GithubAppSaid::table(tables).value(&self.id) {
+            let protocol::model::GithubAppSaid { slug, name, owner } = said.clone();
+            (self.slug, self.name, self.owner) = (slug, name, owner);
+        }
+        if let Some(bot) = GithubAppBot::table(tables).value(&self.id) {
+            self.bot = Some(bot.clone());
         }
     }
 }
@@ -92,6 +115,7 @@ impl OldForm for Record {
             Record::ModelList(list) => list.fill(tables),
             Record::Session(session) => session.fill(tables),
             Record::GithubAccount(account) => account.fill(tables),
+            Record::GithubApp(app) => app.fill(tables),
             // Hold no observation's old form.
             Record::Repo(_)
             | Record::Workspace(_)
@@ -101,7 +125,6 @@ impl OldForm for Record {
             | Record::Subagent(_)
             | Record::GithubSignIn(_)
             | Record::FoundGithubLogin(_)
-            | Record::GithubApp(_)
             | Record::GithubReach(_)
             | Record::Terminal(_)
             | Record::HubUpdate(_)
@@ -127,6 +150,9 @@ impl OldForm for Records {
         for account in &mut self.github_accounts {
             account.fill(tables);
         }
+        for app in &mut self.github_apps {
+            app.fill(tables);
+        }
         let reaches = made_from::<RepositoryReach>(tables).into_iter().filter_map(|record| {
             let Record::GithubReach(reach) = record else { return None };
             Some(reach)
@@ -136,7 +162,7 @@ impl OldForm for Records {
     }
 }
 
-/// The replies that carry a record holding an observation's old form: an account's, a GitHub account's, a list of models', and a session's,
+/// The replies that carry a record holding an observation's old form: an account's, a GitHub account's, an app of your own's, a list of models', and a session's,
 /// alone, in a list of a workspace's, or as a new workspace's first. Every reply is named, so a new one that carries such a record is
 /// filled. Those that carry every record are filled as they're listed, and the hub reads a `SessionAccount` from an
 /// account's record it fills.
@@ -153,6 +179,7 @@ impl OldForm for ClientResponse {
                 }
             }
             C::GithubAccount(account) => account.fill(tables),
+            C::GithubApp(app) => app.fill(tables),
             C::ModelList(list) => list.fill(tables),
             C::NewWorkspaceMade(made) => made.session.fill(tables),
             // Hold no record that holds an observation's old form, or are filled as they're listed.
@@ -197,7 +224,6 @@ impl OldForm for ClientResponse {
             | C::GithubSignIn(_)
             | C::GhLogin(_)
             | C::MachineLogins(_)
-            | C::GithubApp(_)
             | C::GithubAppManifest(_)
             | C::WorktreeFiles(_)
             | C::FileContents(_)

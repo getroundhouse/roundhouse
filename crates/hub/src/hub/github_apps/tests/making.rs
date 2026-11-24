@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use protocol::client::github_apps::GithubManifestCode;
 use protocol::client::{ErrorCode, HubNotice};
-use protocol::model::{GithubApp, GithubAppId, GithubToken, RecordKey};
+use protocol::model::{GithubApp, GithubAppId, GithubToken, ObservationKey, RecordKey};
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 
 use crate::hub::Hub;
@@ -16,12 +16,12 @@ use crate::hub::tests::hub_calling_github;
 use crate::store::now_ms;
 use github::{Answer, Gate, Script, StandIn};
 
-const APP: GithubAppId = GithubAppId::new(9);
-const MINUTE_MS: i64 = 60 * 1000;
+pub(super) const APP: GithubAppId = GithubAppId::new(9);
+pub(super) const MINUTE_MS: i64 = 60 * 1000;
 
 /// A stand-in that makes the app 9 from `a-code`, under the organization adalabs, names its bot, lists it installed
 /// on adalabs, as 70, in turn as `listed` says, and makes that installation `tokens` in turn.
-async fn github(listed: Vec<Answer>, tokens: Vec<Answer>) -> StandIn {
+pub(super) async fn github(listed: Vec<Answer>, tokens: Vec<Answer>) -> StandIn {
     StandIn::with(Script {
         conversions: vec![("a-code", Answer::app_made(9, "ada-roundhouse", (2, "adalabs")))],
         named: vec![("ada-roundhouse[bot]", Answer::user(41, "ada-roundhouse[bot]", None))],
@@ -32,22 +32,22 @@ async fn github(listed: Vec<Answer>, tokens: Vec<Answer>) -> StandIn {
     .await
 }
 
-fn on_adalabs() -> Answer {
+pub(super) fn on_adalabs() -> Answer {
     Answer::installations(&[(70, 2, "adalabs")])
 }
 
 /// The token `token`, ending `in_ms` from now, as GitHub gives an installation's.
-fn token_ending(token: &str, in_ms: i64) -> Answer {
+pub(super) fn token_ending(token: &str, in_ms: i64) -> Answer {
     let ends = jiff::Timestamp::from_millisecond(now_ms() + in_ms).unwrap();
     Answer::installation_token(token, &ends.to_string())
 }
 
-async fn made(hub: &Hub) -> GithubApp {
+pub(super) async fn made(hub: &Hub) -> GithubApp {
     hub.github_app_make(GithubManifestCode::new("a-code")).await.unwrap()
 }
 
 /// Every notice in `feed` so far.
-fn told(feed: &mut crate::hub::Notices) -> Vec<HubNotice> {
+pub(super) fn told(feed: &mut crate::hub::Notices) -> Vec<HubNotice> {
     std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect()
 }
 
@@ -92,12 +92,19 @@ async fn making_an_app_keeps_it_connects_where_its_installed_and_workers_commit_
     // for that alone.
     told.retain(|notice| !matches!(notice, HubNotice::Observation(_)));
     told.dedup();
-    let [HubNotice::GithubApp(kept), HubNotice::GithubApp(with_bot), HubNotice::GithubAccount(account), ..] =
-        told.as_slice()
+    let apps: Vec<&GithubApp> = told
+        .iter()
+        .filter_map(|notice| if let HubNotice::GithubApp(app) = notice { Some(app) } else { None })
+        .collect();
+    let (Some(kept), Some(with_bot)) = (apps.first(), apps.last()) else { panic!("{told:?}") };
+    let Some(account) = told
+        .iter()
+        .find_map(|notice| if let HubNotice::GithubAccount(account) = notice { Some(account) } else { None })
     else {
         panic!("{told:?}")
     };
-    assert_eq!((kept.bot.as_ref(), with_bot), (None, &app));
+    assert_eq!((kept.bot.as_ref(), kept.slug.as_str()), (None, "ada-roundhouse"), "named as GitHub made it");
+    assert_eq!(*with_bot, &app);
     assert_eq!(account.installation.as_ref().map(|installed| installed.id.get()), Some(70));
     assert!(told.iter().any(|notice| matches!(notice, HubNotice::HubSettings(_))), "it became the default: {told:?}");
     assert_eq!(sent(&hub), bots("ghs_first"));
@@ -178,12 +185,21 @@ async fn removing_an_app_forgets_it_and_its_installations_logins_and_tells_every
     let removed = hub.github_app_remove(APP).await.unwrap();
     let again = hub.github_app_remove(APP).await.unwrap_err();
 
-    assert_eq!((removed.id, again.code), (APP, ErrorCode::NotFound));
+    assert_eq!((removed.id, removed.slug.as_str()), (APP, "ada-roundhouse"), "the reply is the app as it last was");
+    assert_eq!(again.code, ErrorCode::NotFound);
     let told = told(&mut feed);
-    let [HubNotice::GithubAccount(account), HubNotice::Removed { record, .. }] = told.as_slice() else {
+    let [HubNotice::GithubAccount(account), HubNotice::Removed { record, .. }, gone @ ..] = told.as_slice() else {
         panic!("{told:?}")
     };
     assert_eq!((account.held_login, record), (None, &RecordKey::GithubApp { id: APP }));
+    let forgotten: Vec<_> = gone
+        .iter()
+        .map(|notice| {
+            let HubNotice::ObservationRemoved { observation, .. } = notice else { panic!("{notice:?}") };
+            observation.clone()
+        })
+        .collect();
+    assert_eq!(forgotten, [ObservationKey::GithubAppSaid { app: APP }, ObservationKey::GithubAppBot { app: APP }]);
     assert!(blocked(&hub).contains("was disconnected"));
 }
 

@@ -6,6 +6,7 @@ mod as_the_four;
 mod falling_behind;
 mod github;
 mod github_accounts;
+mod github_apps;
 mod github_reach;
 mod given;
 mod models;

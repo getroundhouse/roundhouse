@@ -19,7 +19,9 @@ mod tests;
 mod writer;
 
 pub(crate) use file::PART;
-pub(crate) use github_kinds::{GithubProfile, GithubUsername, RepositoryReach};
+pub(crate) use github_kinds::{
+    GithubAppBot, GithubAppSaid, GithubProfile, GithubUsername, InstalledOn, RepositoryReach,
+};
 pub(crate) use kept::Observations;
 pub(crate) use kinds::Kind;
 pub(crate) use kinds::{

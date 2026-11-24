@@ -1,8 +1,10 @@
 //! The kinds of what GitHub says of what the hub holds of GitHub: whether its default account can push to each
-//! repository, and who each GitHub account it holds a login for is.
+//! repository, who each GitHub account it holds a login for is, and what each app of your own is, and where each of
+//! its installations is.
 
 use protocol::model::{
-    GithubAccountId, GithubReach, Observation, ObservationKey, Observed, Reach, Record, RecordKey, RepoId, Rev,
+    GithubAccountId, GithubAppId, GithubReach, GithubUser, Observation, ObservationKey, Observed, Reach, Record,
+    RecordKey, RepoId, Rev,
 };
 
 use super::kept::Table;
@@ -69,6 +71,87 @@ impl Kind for GithubUsername {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.github_username
+    }
+
+    fn old_form_on(account: &GithubAccountId) -> Option<RecordKey> {
+        Some(RecordKey::GithubAccount { id: account.clone() })
+    }
+}
+
+/// What GitHub says of an app of your own, its slug, name and owner, as the app last asked GitHub with its key, or as
+/// GitHub said as it made it, sent at the hub's level. A client of a version from before it reads it on the app's
+/// record.
+pub(crate) struct GithubAppSaid;
+
+impl Kind for GithubAppSaid {
+    type Of = GithubAppId;
+    type Value = protocol::model::GithubAppSaid;
+    const FORM: Form = Form { table: "github_app_said", version: 1 };
+
+    fn observation(app: &GithubAppId, said: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
+        Some(Observation::GithubAppSaid { app: *app, said, rev })
+    }
+
+    fn key(app: &GithubAppId) -> Option<ObservationKey> {
+        Some(ObservationKey::GithubAppSaid { app: *app })
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.github_app_said
+    }
+
+    fn old_form_on(app: &GithubAppId) -> Option<RecordKey> {
+        Some(RecordKey::GithubApp { id: *app })
+    }
+}
+
+/// An app of your own's bot, as GitHub said it, asked as nobody by the app's slug, sent at the hub's level. Apart from
+/// [`GithubAppSaid`], since GitHub says it in another call, as of another time. A client of a version from before it
+/// reads it on the app's record.
+pub(crate) struct GithubAppBot;
+
+impl Kind for GithubAppBot {
+    type Of = GithubAppId;
+    type Value = GithubUser;
+    const FORM: Form = Form { table: "github_app_bot", version: 1 };
+
+    fn observation(app: &GithubAppId, bot: Observed<GithubUser>, rev: Rev) -> Option<Observation> {
+        Some(Observation::GithubAppBot { app: *app, bot, rev })
+    }
+
+    fn key(app: &GithubAppId) -> Option<ObservationKey> {
+        Some(ObservationKey::GithubAppBot { app: *app })
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.github_app_bot
+    }
+
+    fn old_form_on(app: &GithubAppId) -> Option<RecordKey> {
+        Some(RecordKey::GithubApp { id: *app })
+    }
+}
+
+/// What GitHub calls the user or organization an app's installation, a GitHub account, is on, as the hub last listed
+/// the app's installations, sent at the hub's level. A client of a version from before it reads it on the account's
+/// record.
+pub(crate) struct InstalledOn;
+
+impl Kind for InstalledOn {
+    type Of = GithubAccountId;
+    type Value = protocol::model::GithubUsername;
+    const FORM: Form = Form { table: "installed_on", version: 1 };
+
+    fn observation(account: &GithubAccountId, on: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
+        Some(Observation::InstalledOn { account: account.clone(), on, rev })
+    }
+
+    fn key(account: &GithubAccountId) -> Option<ObservationKey> {
+        Some(ObservationKey::InstalledOn { account: account.clone() })
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.installed_on
     }
 
     fn old_form_on(account: &GithubAccountId) -> Option<RecordKey> {
