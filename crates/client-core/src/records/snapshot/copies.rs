@@ -195,17 +195,6 @@ impl Snapshot {
         self.records.terminals.get(workspace).map_or(&[], |its| &its.items)
     }
 
-    /// What an agent that discovers its own models offers where `key` says. `None` until it's arrived, and once the hub
-    /// has let go of it.
-    pub fn model_list(&self, key: &ModelListKey) -> Option<&ModelList> {
-        self.records.model_lists.get(key)
-    }
-
-    /// Every list of models the hub holds, in no order.
-    pub fn model_lists(&self) -> impl Iterator<Item = &ModelList> {
-        self.records.model_lists.values()
-    }
-
     /// The record of the account `id`. `None` until it's arrived, and from a hub from before it kept them.
     pub fn account(&self, id: &AccountId) -> Option<&Account> {
         self.records.accounts.get(id)
