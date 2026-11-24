@@ -14,7 +14,7 @@ use crate::github_app_pages::install_page;
 /// The account that's `app`'s installation, holding a login, once the hub has connected one.
 pub(super) fn installation(records: &Snapshot, app: GithubAppId) -> Option<&GithubAccount> {
     let installed = |account: &&GithubAccount| account.installation.as_ref().is_some_and(|on| on.app == app);
-    records.github_accounts().iter().filter(installed).find(|account| account.held_login.is_some())
+    records.github_accounts().into_iter().filter(installed).find(|account| account.held_login.is_some())
 }
 
 impl Kept {

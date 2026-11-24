@@ -65,8 +65,8 @@ pub(super) fn installation_menu(
     items.extend(app.map(|app| remove(app, default, at)));
     let id = SharedString::from(format!("git-more-{}", account.id));
     let off = !drawing.can_ask(cx);
-    let name = drawing.records.github_username(account).as_str();
-    (!items.is_empty()).then(|| menu_of(drawing.kept, id, name, off, items))
+    let name = drawing.records.github_username(account).to_string();
+    (!items.is_empty()).then(|| menu_of(drawing.kept, id, &name, off, items))
 }
 
 /// Install on GitHub, which opens GitHub's page for installing `app`, and the panel waiting for it.

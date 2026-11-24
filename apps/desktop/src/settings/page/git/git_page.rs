@@ -102,7 +102,7 @@ impl RenderOnce for GitPage {
 
 /// When what the rows of `accounts` say of a time next changes, after `now_ms`: as a login ends, so a token's says it
 /// has, and a sign-in's that it's being renewed, until the hub says it has been.
-pub(super) fn changes_at_ms(accounts: &[GithubAccount], now_ms: i64) -> Option<i64> {
-    let ends = accounts.iter().filter_map(|account| account.held_login.and_then(|held| held.ends_at_ms));
+pub(super) fn changes_at_ms<'a>(accounts: impl IntoIterator<Item = &'a GithubAccount>, now_ms: i64) -> Option<i64> {
+    let ends = accounts.into_iter().filter_map(|account| account.held_login.and_then(|held| held.ends_at_ms));
     ends.filter(|ends_at_ms| *ends_at_ms > now_ms).min()
 }

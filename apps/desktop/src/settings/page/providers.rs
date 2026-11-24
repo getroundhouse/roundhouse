@@ -117,7 +117,7 @@ fn name_of(provider: &ProviderName) -> SharedString {
 /// Who the hub reads GitHub as: its default account's user, while it has one.
 fn hub_reads_as(records: &Snapshot) -> Option<String> {
     let default = records.hub_settings()?.github.as_ref()?.account.as_ref()?;
-    let account = records.github_accounts().iter().find(|account| &account.id == default)?;
+    let account = records.github_account(default)?;
     Some(records.github_username(account).to_string())
 }
 

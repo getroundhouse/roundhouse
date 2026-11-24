@@ -3,7 +3,9 @@
 //! GitHub account's user. Each is read here alone, from the account's record, so that where the hub sends one apart
 //! from the record, as an observation, only these change.
 
-use protocol::model::{Account, GithubAccount, GithubUsername, HeardLimits};
+use std::fmt;
+
+use protocol::model::{Account, GithubAccount, GithubUserId, GithubUsername, HeardLimits};
 
 use super::Snapshot;
 
@@ -37,7 +39,35 @@ impl Snapshot {
     }
 
     /// What GitHub calls `account`'s user, as the hub last asked.
-    pub fn github_username<'a>(&'a self, account: &'a GithubAccount) -> &'a GithubUsername {
-        &account.user.name
+    pub fn github_username<'a>(&'a self, account: &'a GithubAccount) -> GithubName<'a> {
+        GithubName::Named(&account.user.name)
+    }
+}
+
+/// What GitHub calls a GitHub account's user, as a view reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GithubName<'a> {
+    Named(&'a GithubUsername),
+    /// Not known, until the hub has asked GitHub, by the user's number, which never changes. Drawn as the number,
+    /// `#7`, wherever a name goes, and what decides from the name treats it as can't tell.
+    NotKnown(GithubUserId),
+}
+
+impl<'a> GithubName<'a> {
+    /// The username, where it's known.
+    pub fn known(self) -> Option<&'a GithubUsername> {
+        match self {
+            GithubName::Named(name) => Some(name),
+            GithubName::NotKnown(_) => None,
+        }
+    }
+}
+
+impl fmt::Display for GithubName<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GithubName::Named(name) => f.write_str(name.as_str()),
+            GithubName::NotKnown(number) => write!(f, "#{number}"),
+        }
     }
 }
