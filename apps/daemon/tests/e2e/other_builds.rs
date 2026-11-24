@@ -25,9 +25,7 @@ fn update(stack: &mut Stack) {
 
 #[test]
 fn a_worker_from_another_build_is_replaced_once_nothing_in_its_workspace_is_at_work() {
-    // With the hub's debug lines, which say each time a look keeps the worker.
-    let log = (protocol::paths::ENV_LOG, "info,hub=debug".to_string());
-    let mut stack = Stack::start_with(vec![(worker::TEST_BUILD, "older".to_string()), log]);
+    let mut stack = Stack::start_with(vec![(worker::TEST_BUILD, "older".to_string())]);
     let client = stack.client();
     let (made, session) = stack.workspace(&client);
     let done = stack.path("done");
@@ -38,7 +36,8 @@ fn a_worker_from_another_build_is_replaced_once_nothing_in_its_workspace_is_at_w
 
     update(&mut stack);
     // Its agent has work in the background, so the next hub carries on with the worker the agent is on, over the two
-    // looks that would have stopped it with nothing at work.
+    // looks that would have stopped it with nothing at work. The hub says each time a look keeps the worker, at debug,
+    // which every stack's hub logs its own code at.
     let kept = || std::fs::read_to_string(stack.hub_log()).unwrap().matches(KEPT).count();
     wait_until("two looks to keep the worker from the older build", || kept() >= 2);
     assert!(is_alive(older), "the worker from the older build was stopped while its agent was at work");

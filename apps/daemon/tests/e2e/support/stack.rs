@@ -178,6 +178,10 @@ fn hub_environment(dir: &Path) -> WholeEnvironment {
         .put_first_on_path(process::testing::logged_out_gh())
         .set(protocol::paths::ENV_HOME, dir.join("home"))
         .set(protocol::paths::ENV_WORKSPACES, dir.join("workspaces"))
+        // So what a failed test prints of its hubs' log, as dropping a `Stack` says, has why a hub did what it did,
+        // which the hub's own code says at this level, such as why a read nobody asked for didn't start. Not what the
+        // libraries under it say at it, which is a few lines for every request.
+        .set(protocol::paths::ENV_LOG, "info,hub=debug,github=debug")
         .set("ROUNDHOUSE_CLAUDE_BIN", fake_agent())
         .set("FAKE_CLAUDE_STATE", dir.join("agent-state"))
         // So an agent started again doesn't sit through the CLI's 2 s before it asks after a task.

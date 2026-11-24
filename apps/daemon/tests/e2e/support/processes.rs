@@ -105,6 +105,12 @@ impl Stack {
 
 impl Drop for Stack {
     fn drop(&mut self) {
+        // For a test that failed, since what it waited for and never saw is often the hub's to explain, and nothing of
+        // a stack outlasts its test but what the test printed.
+        if std::thread::panicking() {
+            let logged = std::fs::read(self.hub_log()).unwrap_or_default();
+            eprintln!("what the stack's hubs logged:\n{}", String::from_utf8_lossy(&logged));
+        }
         self.stop_hub();
         // A hub that was killed left its workers running for the next hub, and there's no next one.
         self.kill_what_hubs_left_running();
