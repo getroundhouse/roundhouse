@@ -7,7 +7,7 @@ use look::Region;
 
 use super::jumps::assert_at_the_bottom;
 use super::worlds::{Turns, open_on_a_chat};
-use super::{prompt_rows, row_id, scrolled_to, selected};
+use super::{loaded_prompt_rows, row_id, scrolled_to, selected};
 use crate::finding::{FRAME, find, settle_with_the_match_in_view};
 use crate::support::Ui;
 
@@ -29,9 +29,8 @@ fn at_the_end(ui: &Ui<'_>) -> bool {
 fn option_up_and_down_step_the_chat_between_its_prompts(cx: &mut TestAppContext) {
     // Long replies, so every prompt but the first has more than a screen of chat above it.
     let turns = (0..6).fold(Turns::default(), |turns, turn| turns.prose(4, turn));
-    let (_fake, mut ui, _) = open_on_a_chat(cx, turns);
-    ui.wait("the outline", |ui| ui.has("outline"));
-    let rows = prompt_rows(&ui);
+    let (_fake, mut ui, log) = open_on_a_chat(cx, turns);
+    let rows = loaded_prompt_rows(&mut ui, &log);
     ui.wait("the end of the chat", |ui| scrolled_to(ui) > rows[3]);
     ui.input("Signals clear");
 
@@ -59,9 +58,8 @@ fn option_up_and_down_step_the_chat_between_its_prompts(cx: &mut TestAppContext)
 fn a_step_as_find_goes_to_a_match_goes_where_it_sends_the_chat(cx: &mut TestAppContext) {
     let between = Vec::from_fn(60, |part| format!("Part {part}.")).join("\n\n");
     let turns = Turns::default().prose(4, 0).turn(&[&format!("A needle here.\n\n{between}\n\nA needle there.")]);
-    let (_fake, mut ui, _) = open_on_a_chat(cx, turns);
-    ui.wait("the outline", |ui| ui.has("outline"));
-    let rows = prompt_rows(&ui);
+    let (_fake, mut ui, log) = open_on_a_chat(cx, turns);
+    let rows = loaded_prompt_rows(&mut ui, &log);
     find(&mut ui, "needle");
     settle_with_the_match_in_view(&mut ui);
 

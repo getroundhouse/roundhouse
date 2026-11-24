@@ -8,7 +8,10 @@ use gpui_kit::{AppContext as _, ElementId, Pixels, ScrollDelta, TestAppContext, 
 use protocol::model::CompactionLine;
 
 use super::worlds::{Turns, open_on_a_chat};
-use super::{open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected, wait_out_the_list};
+use super::{
+    loaded_prompt_rows, open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected,
+    wait_out_the_list,
+};
 use crate::support::{Stack, Ui};
 
 /// On a real hub, since the window draws a prompt that isn't loaded where the hub's list of prompts says the agent took
@@ -56,9 +59,8 @@ fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppCo
 fn from_the_end_of_a_chat_any_prompt_with_a_screen_above_it_comes_to_the_bottom(cx: &mut TestAppContext) {
     // Long replies, so every prompt but the first few has more than a screen of chat above it.
     let turns = (0..12).fold(Turns::default(), |turns, turn| turns.prose(4, turn));
-    let (_fake, mut ui, _) = open_on_a_chat(cx, turns);
-    ui.wait("the outline", |ui| ui.has("outline"));
-    let rows = prompt_rows(&ui);
+    let (_fake, mut ui, log) = open_on_a_chat(cx, turns);
+    let rows = loaded_prompt_rows(&mut ui, &log);
     ui.wait("the end of the chat", |ui| scrolled_to(ui) > rows[10]);
 
     // The last too, with its reply below it, and from the end of the chat.
@@ -74,9 +76,8 @@ fn a_prompt_on_the_first_screen_cant_come_to_the_bottom_so_the_chat_goes_to_its_
     // Short, so the first three prompts are all on the first screen.
     let short = (0..3).fold(Turns::default(), |turns, turn| turns.turn(&[&format!("short turn {turn}")]));
     let turns = (0..6).fold(short, |turns, turn| turns.prose(4, turn));
-    let (_fake, mut ui, _) = open_on_a_chat(cx, turns);
-    ui.wait("the outline", |ui| ui.has("outline"));
-    let rows = prompt_rows(&ui);
+    let (_fake, mut ui, log) = open_on_a_chat(cx, turns);
+    let rows = loaded_prompt_rows(&mut ui, &log);
     ui.wait("the end of the chat", |ui| scrolled_to(ui) > rows[3]);
 
     jump_to(&mut ui, rows[1]);
@@ -93,9 +94,9 @@ fn a_prompt_on_the_first_screen_cant_come_to_the_bottom_so_the_chat_goes_to_its_
 
 #[gpui_kit::test]
 fn a_chat_with_one_long_turn_jumps_back_up_to_its_prompt(cx: &mut TestAppContext) {
-    let (_fake, mut ui, _) = open_on_a_chat(cx, Turns::default().burst("only"));
-    ui.wait("the outline", |ui| ui.has("outline"));
-    let [only] = prompt_rows(&ui)[..] else { panic!("one prompt: {:?}", prompt_rows(&ui)) };
+    let (_fake, mut ui, log) = open_on_a_chat(cx, Turns::default().burst("only"));
+    let rows = loaded_prompt_rows(&mut ui, &log);
+    let [only] = rows[..] else { panic!("one prompt: {rows:?}") };
     ui.wait("the end of the chat", |ui| scrolled_to(ui) > only);
 
     jump_to(&mut ui, only);
@@ -111,9 +112,8 @@ fn a_chat_with_one_long_turn_jumps_back_up_to_its_prompt(cx: &mut TestAppContext
 
 #[gpui_kit::test]
 fn after_a_jump_the_list_opens_again_only_once_the_pointer_moves_over_the_ticks(cx: &mut TestAppContext) {
-    let (_fake, mut ui, _) = open_on_a_chat(cx, Turns::default().turn(&["first"]).turn(&["second"]));
-    ui.wait("the outline", |ui| ui.has("outline"));
-    let first = prompt_rows(&ui)[0];
+    let (_fake, mut ui, log) = open_on_a_chat(cx, Turns::default().turn(&["first"]).turn(&["second"]));
+    let first = loaded_prompt_rows(&mut ui, &log)[0];
     open_the_list(&mut ui);
 
     // Where the row covers the ticks, so once the list has gone the pointer rests on them.
