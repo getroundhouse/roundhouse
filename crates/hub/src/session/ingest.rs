@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use protocol::attachment::NewAttachment;
 use protocol::capability::approvals::{ApprovalMode, Asks, Decision, Remember, Request};
-use protocol::capability::settings::Settings;
 use protocol::event::{CompactionOutcome, EventBody, ExitReason};
 use protocol::model::{ApprovalId, RunId};
 use protocol::tail::{Retrying, StreamDelta, Tail};
@@ -133,7 +132,6 @@ async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &Ev
                 session.launched(run);
             }
         }
-        EventBody::AgentMode { mode } if current => session.note_mode(*mode).await,
         // What the cache held is no longer the conversation, and the next request writes the summary.
         EventBody::AgentCompacted { outcome: CompactionOutcome::Compacted { .. }, .. } if current => {
             session.cache_holds(None).await;
@@ -213,23 +211,6 @@ impl LiveSession {
         }
         state.tail.retrying(run, retrying);
         publish(&mut state, LiveItem::Rewritten);
-    }
-
-    /// The agent changed mode, or confirmed a change. The next launch has to start in this one, so a chat that was
-    /// planning when its agent went is still planning when it comes back.
-    async fn note_mode(&self, mode: ApprovalMode) {
-        let Ok(hub) = self.hub() else { return };
-        if self.state.lock().settings.mode == mode {
-            return;
-        }
-        let newer = Settings { mode: Some(mode), ..Settings::default() };
-        if let Err(e) = self.keep_settings(&hub, newer).await {
-            error!(session = %self.id, "could not record the agent's mode: {e}");
-            return;
-        }
-        if let Err(e) = self.announce(&hub).await {
-            error!(session = %self.id, "could not announce the agent's mode: {e}");
-        }
     }
 
     /// Closes open approvals that nobody can answer now: those from `run`, or all if it's `None`.

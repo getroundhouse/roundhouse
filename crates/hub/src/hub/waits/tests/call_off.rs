@@ -15,14 +15,7 @@ fn kept_with_its_queue(hub: &Hub, wait: &Wait, held: Option<bool>) -> Session {
     let task = AgentTask { id: "t".into(), description: None, kind: TaskKind::Wait, call: None, subagent: None };
     let listed = EventBody::AgentTasks { tasks: vec![task.clone()], stopped: vec![] };
     let status = StatusChange { background_tasks: Some(vec![task]), ..SessionStatus::Background.into() };
-    let change = SessionChange {
-        status: Some(status),
-        queue_held: held,
-        recorded: None,
-        initialized: None,
-        claims: None,
-        interaction: None,
-    };
+    let change = SessionChange { status: Some(status), queue_held: held, ..SessionChange::default() };
     hub.store.append(&"s".into(), None, &listed, None, None, Some(change)).unwrap();
     hub.store.get_session(&"s".into()).unwrap().session
 }

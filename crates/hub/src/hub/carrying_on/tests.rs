@@ -62,14 +62,7 @@ fn a_chat_that_only_waited_is_left_waiting_and_one_at_work_is_interrupted() {
         }
         let listed =
             EventBody::AgentTasks { tasks: status.background_tasks.clone().unwrap_or_default(), stopped: vec![] };
-        let change = SessionChange {
-            status: Some(status),
-            queue_held: None,
-            recorded: None,
-            initialized: None,
-            claims: None,
-            interaction: None,
-        };
+        let change = SessionChange { status: Some(status), ..SessionChange::default() };
         store.append(&"s".into(), None, &listed, None, None, Some(change)).unwrap();
         interrupt(&store, &"s".into(), Vec::new()).unwrap();
         let session = store.get_session(&"s".into()).unwrap().session;
