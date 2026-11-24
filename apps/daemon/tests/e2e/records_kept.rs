@@ -10,6 +10,7 @@ use protocol::event::EventBody;
 use protocol::model::{Records, Rev};
 
 use crate::accounts::{named_account, wait_for_adas_week};
+use crate::carrying_on::update;
 use crate::context::{after_prompts, wait_for_context};
 use crate::support::{Stack, wait_for_turn_end};
 
@@ -33,8 +34,7 @@ fn a_chats_record_its_accounts_and_every_other_are_as_they_were_once_the_hub_has
     let account = named_account(&client, &session.id).expect("the chat names its account");
     let all_before = client.records().unwrap();
 
-    stack.kill_hub();
-    stack.start_hub();
+    update(&mut stack);
     let client = stack.client();
     let after = client.session_get(&session.id).unwrap();
     let account_after = named_account(&client, &session.id);

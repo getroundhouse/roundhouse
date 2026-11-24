@@ -22,11 +22,27 @@ pub(crate) fn restart(stack: &mut Stack) {
     restart_then(stack, Restart::Exited, || {});
 }
 
+/// As an update has it: the hub restarts, and the next one starts. The hub goes at once, or once a setup under way has
+/// finished, whichever it says, where [`restart`] is for a test that says which. A hub that goes by itself first writes
+/// to its cache file what it kept of everything it observed, so the next knows all it knew, such as where a
+/// workspace's branch is pushed. One that's killed, as [`Stack::restart_hub`] has it, can go with the last of that
+/// still to write, and the next then knows less than the first told its clients.
+pub(crate) fn update(stack: &mut Stack) {
+    client_core::restart_hub(&stack.client()).unwrap();
+    wait_for_the_hub_to_go(stack);
+    stack.start_hub();
+}
+
 /// Asks the hub to restart, as `restart` does, and once it has said how that went, does `meanwhile`, such as letting
 /// what it waits for finish, and waits for it to go.
 fn restart_then(stack: &mut Stack, said: Restart, meanwhile: impl FnOnce()) {
     assert_eq!(client_core::restart_hub(&stack.client()).unwrap(), said);
     meanwhile();
+    wait_for_the_hub_to_go(stack);
+}
+
+/// Waits for the stack's hub to exit by itself, as one asked to restart does.
+fn wait_for_the_hub_to_go(stack: &mut Stack) {
     let mut hub = stack.hub.take().unwrap();
     wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
 }

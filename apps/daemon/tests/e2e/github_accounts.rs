@@ -17,6 +17,7 @@ use protocol::model::{
 };
 use protocol::paths::ENV_TEST_GITHUB_API;
 
+use crate::carrying_on::update;
 use crate::support::gh::{LOGGED_IN_AS, LOGGED_IN_WITH, StandInGh};
 use crate::support::{Stack, commit_settings, git, wait_for_setup, wait_until};
 
@@ -139,7 +140,7 @@ fn a_workspaces_git_gets_the_token_the_check_makes_an_installation_as_the_hub_st
     commit_settings(&stack, &format!("[scripts]\nsetup = '''\n{ASKS_GIT_UNTIL_FILLED}\n'''\n"));
     stack.client().call(GithubAppMake { code: GithubManifestCode::new("a-code") }).unwrap();
 
-    stack.restart_hub();
+    update(&mut stack);
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
 
@@ -193,7 +194,7 @@ fn a_hub_records_whether_the_default_can_push_to_a_workspaces_repository_on_gith
     stack.workspace(&client);
     wait_until("the repository's reach", || !listed(&stack).is_empty());
     let [checked] = &listed(&stack)[..] else { panic!("{:?}", listed(&stack)) };
-    stack.restart_hub();
+    update(&mut stack);
     let [left] = &listed(&stack)[..] else { panic!("{:?}", listed(&stack)) };
     gate.open();
     wait_until("it checked again", || listed(&stack).first().is_some_and(|reach| !reach.stale));
