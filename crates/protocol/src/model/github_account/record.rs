@@ -33,7 +33,22 @@ pub struct GithubAccount {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubUser {
     pub id: GithubUserId,
+    /// Empty where it's left out, as a record may leave it once no version a hub speaks reads the name there, since an
+    /// observation says it.
+    #[serde(default = "no_name")]
     pub name: GithubUsername,
+}
+
+impl GithubUser {
+    /// Nobody: the number no user has, and no name, which is what a record that leaves a user out whole reads as.
+    pub fn nobody() -> Self {
+        Self { id: GithubUserId::new(0), name: no_name() }
+    }
+}
+
+/// The name of a [`GithubUser`] read with none.
+fn no_name() -> GithubUsername {
+    GithubUsername::from("")
 }
 
 /// What a [`GithubAccount`]'s record says of the login the hub holds for it, as

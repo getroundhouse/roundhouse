@@ -17,11 +17,17 @@ use super::{GithubAppId, GithubInstallationId, GithubUser};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubApp {
     pub id: GithubAppId,
-    /// What GitHub calls it in addresses, which it's installed from, at `https://github.com/apps/{slug}`.
+    /// What GitHub calls it in addresses, which it's installed from, at `https://github.com/apps/{slug}`. Empty where
+    /// it's left out, as this, the name and the owner each may be once no version a hub speaks reads them here, since
+    /// an observation says them.
+    #[serde(default = "no_slug")]
     pub slug: GithubAppSlug,
     /// What GitHub shows it as, as the person named it.
+    #[serde(default)]
     pub name: String,
-    /// The user or organization it's under, as GitHub made it, which is the one it can be installed on.
+    /// The user or organization it's under, as GitHub made it, which is the one it can be installed on. Left out, it's
+    /// [`GithubUser::nobody`].
+    #[serde(default = "GithubUser::nobody")]
     pub owner: GithubUser,
     /// Its bot, `{slug}[bot]`, which acts on GitHub through its installations, and which commits made through it are
     /// by. `None` until the hub has asked GitHub its number, as it does as the app is made, and again each time it
@@ -30,6 +36,11 @@ pub struct GithubApp {
     pub bot: Option<GithubUser>,
     #[serde(default)]
     pub rev: Rev,
+}
+
+/// The slug of a [`GithubApp`] read with none.
+fn no_slug() -> GithubAppSlug {
+    GithubAppSlug::from("")
 }
 
 /// Where an app of your own is installed, as a GitHub account's record says of one that's an installation of it. Each
