@@ -107,8 +107,8 @@ impl Snapshot {
         said(bot)
     }
 
-    /// What a push from the repository `id`'s workspaces would meet, as the hub last checked, or `None` while it hasn't,
-    /// and from a hub that doesn't check.
+    /// What a push from the repository `id`'s workspaces would meet, as the hub last checked, or `None` while it
+    /// hasn't.
     pub fn github_reach(&self, id: &RepoId) -> Option<&Reach> {
         let Some(Observation::RepositoryReach { reach, .. }) =
             self.observation(&ObservationKey::RepositoryReach { repo: id.clone() })

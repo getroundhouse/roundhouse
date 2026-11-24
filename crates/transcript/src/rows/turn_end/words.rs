@@ -113,12 +113,12 @@ mod tests {
     }
 
     #[test]
-    fn a_turn_from_a_hub_that_didnt_say_when_it_started_says_when_it_ended() {
+    fn a_turn_whose_end_doesnt_say_when_it_started_says_when_it_ended() {
         let times = times(None, &moment("Nov 1, 2026", "2:15 PM"), Some("1m, 40s".to_string()));
         assert_eq!(times.day.as_deref(), Some("Nov 1, 2026"));
         assert_eq!(times.rows, rows(&[("Ended", "2:15 PM"), ("Duration", "1m, 40s")]));
 
         let untimed = super::times(None, &moment("Nov 1, 2026", "2:15 PM"), None);
-        assert_eq!(untimed.rows, rows(&[("Ended", "2:15 PM")]), "one too old to say how long it took either");
+        assert_eq!(untimed.rows, rows(&[("Ended", "2:15 PM")]), "one that doesn't say how long it took either");
     }
 }

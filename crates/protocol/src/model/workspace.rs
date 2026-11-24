@@ -14,11 +14,10 @@ pub enum WorkspaceStatus {
     Ready,
     /// On its way to `Archived`, from the moment it's asked, while the hub checks nothing would be lost, runs the
     /// archive script, stops its agents and removes its worktree. Back to `Ready` if any of that refuses or fails.
-    /// An older hub says `Ready` throughout.
     Archiving,
     Archived,
     /// On its way back to `Ready`, from the moment it's asked, while its worker makes its worktree again. Back to
-    /// `Archived` if that fails. An older hub says `Archived` throughout.
+    /// `Archived` if that fails.
     Restoring,
     #[serde(other)]
     Unknown,
@@ -61,11 +60,11 @@ pub struct Workspace {
     #[serde(default)]
     pub title_source: TitleSource,
     /// Which pull request its branch has, as the hub last found, kept across restarts, or that it has none. `None` until
-    /// the hub has looked, again once GitHub shows no repository where it found none, and from a hub too old to keep it.
+    /// the hub has looked, and again once GitHub shows no repository where it found none.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "pull_request::deserialize_looked")]
     pub pull_request_link: Option<PullRequestLinked>,
-    /// The comment being written on its diff and not saved, as [`CommentDraft`] says. `None` from a hub that doesn't
-    /// keep it.
+    /// The comment being written on its diff and not saved, as [`CommentDraft`] says. `None` while none is being
+    /// written.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment_draft: Option<CommentDraft>,
     /// The branch the worktree had checked out when the hub last looked for its pull request, which is the branch

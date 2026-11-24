@@ -62,7 +62,7 @@ impl Drawing<'_> {
     }
 
     /// How `account`'s login stands: the default's as the hub says what workers are sent for it, and, while it
-    /// doesn't say, as from a hub from before it did, and any other's, as its record says at the page's moment.
+    /// doesn't say, as just after the default changes, and any other's, as its record says at the page's moment.
     pub(super) fn standing(&self, account: &GithubAccount, cx: &App) -> Standing {
         match self.sent().filter(|_| self.is_default(account)) {
             Some(sent) => Standing::sent(sent, account.held_login.as_ref(), cx),

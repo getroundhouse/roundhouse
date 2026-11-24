@@ -144,7 +144,7 @@ fn a_worker_reached_through_attach_outlives_the_command_when_its_hub_asks_and_st
     assert!(!dir.path().join("instance").join(WORKER_SOCKET_FILE).exists());
 }
 
-/// As a hub that's stopping for good, and one from before workers could outlive it, expect.
+/// As a hub that's stopping for good expects.
 #[test]
 fn a_worker_reached_through_attach_stops_with_a_hub_that_didnt_ask_it_to_keep_running() {
     let dir = tempfile::tempdir().unwrap();

@@ -19,7 +19,7 @@ pub(super) struct TurnCard {
     /// What the agent is called, if the hub has said.
     pub(super) agent: Option<SharedString>,
     pub(super) models: Vec<ModelName>,
-    /// By the hub's clock. `None` from a hub too old to say.
+    /// By the hub's clock. `None` where the turn's end doesn't say, as one recorded before the hub added it doesn't.
     pub(super) started_at_ms: Option<i64>,
     pub(super) ended_at_ms: i64,
     /// How long the turn took, as its line says it.

@@ -20,10 +20,10 @@ fn what_a_hub_found_keeps_its_form_as_a_notice_and_in_a_list() {
     assert!(json.contains(&format!(r#""hub_update":{{{record}}}"#)), "{json}");
 }
 
-/// How an update a client asked for is going, as a client reads it. One from before it could update reads as none,
-/// and a state a newer hub adds as one this client doesn't know.
+/// How an update a client asked for is going, as a client reads it. A record says none until a client asks for an
+/// update, and a state a newer hub adds reads as one this client doesn't know.
 #[test]
-fn an_update_under_way_or_failed_keeps_its_form_and_one_from_before_reads_as_none() {
+fn an_update_under_way_or_failed_keeps_its_form_and_none_asked_for_reads_as_none() {
     let under_way = HubUpdate { attempt: Some(UpdateAttempt::UnderWay { to: "0.1.9".into() }), ..found() };
     let failed = UpdateAttempt::Failed { to: "0.1.9".into(), why: "offline".into() };
     let before: HubUpdate =
@@ -37,10 +37,10 @@ fn an_update_under_way_or_failed_keeps_its_form_and_one_from_before_reads_as_non
     assert_eq!(newer, UpdateAttempt::Unknown);
 }
 
-/// A hub from before it read the feed, or that doesn't, lists none, and a client from before reads the notice as one it
-/// doesn't know, rather than failing the feed.
+/// A hub that doesn't read the feed, since it isn't installed as a service, lists none, and a client reads a notice a
+/// newer hub adds as one it doesn't know, rather than failing the feed.
 #[test]
-fn a_list_reads_without_it_and_a_client_from_before_skips_its_notice() {
+fn a_list_reads_without_it_and_a_client_skips_a_newer_hub_s_notice() {
     let before: Records =
         serde_json::from_str(r#"{"repos":[],"workspaces":[],"sessions":[],"comments":[],"rev":4}"#).unwrap();
     let unknown: HubNotice =

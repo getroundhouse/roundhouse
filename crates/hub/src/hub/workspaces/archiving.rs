@@ -328,8 +328,8 @@ impl Hub {
     }
 
     /// Records what the workspace's worker finds: a worktree that's there is a ready workspace's, and one that isn't
-    /// is an archived one's, whichever the earlier hub was doing. Fails if the worker can't say, such as one from a
-    /// build that doesn't know the question.
+    /// is an archived one's, whichever the earlier hub was doing. Fails if the worker can't say, such as one that's
+    /// gone.
     async fn settle_move(self: &Arc<Self>, id: &WorkspaceId, moving: Move) -> Result<Workspace, ApiError> {
         let workspace = self.workspace(id).await?;
         let path = workspace.path.clone().ok_or_else(|| internal("a workspace being moved has no path"))?;

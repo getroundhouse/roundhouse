@@ -99,7 +99,7 @@ pub trait Answer: Sized {
 
 /// Every ask. Each says on its type what it asks and what it's answered with. One with no fields is a variant with
 /// none, as [`WorkerRequest`] says of a request. A hub answers one it doesn't know with `Unsupported`, as it does a
-/// client's, and a hub from before workers could ask doesn't answer at all, so a worker gives up after a while.
+/// client's, and a worker gives up on one the hub doesn't answer within a while.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum WorkerAsk {

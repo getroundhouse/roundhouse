@@ -1,5 +1,5 @@
-//! A session's record from a hub that keeps less of it, and what it says its agent is waiting on, and which way a prompt
-//! was settled. A hub keeps the approvals in its database in the form it sends.
+//! A session's record with fields left out, and what it says its agent is waiting on, and which way a prompt was
+//! settled. A hub keeps the approvals in its database in the form it sends.
 
 use protocol::client::HubNotice;
 use protocol::event::TurnOutcome;
@@ -34,10 +34,10 @@ fn what_a_sessions_agent_is_waiting_on_keeps_its_form() {
     );
 }
 
-/// A hub from before sources says nothing of where a chat's login comes from, which reads as on none yet, and a source
-/// from a newer peer reads as one this build doesn't know. Only a chat on the hub's is on an account.
+/// A chat says nothing of where its login comes from until its agent first launches, which reads as on none yet, and a
+/// source from a newer peer reads as one this build doesn't know. Only a chat on the hub's is on an account.
 #[test]
-fn a_chats_account_source_keeps_its_form_and_a_hub_from_before_says_none() {
+fn a_chats_account_source_keeps_its_form_and_one_not_yet_launched_says_none() {
     let on_the_hubs = session(r#","account":"claude-1","account_source":"hub""#);
     let ambient = session(r#","account":"claude-1","account_source":"ambient""#);
     let newer = session(r#","account":"claude-1","account_source":"elsewhere""#);
@@ -101,11 +101,11 @@ fn a_session_that_says_how_full_the_context_is_still_reads() {
     assert_eq!((session.id.as_str(), session.last_seq), ("s", Seq::new(9)));
 }
 
-/// A hub that doesn't keep how the newest turn ended says nothing of it, so no chat of its turns red for a turn that
-/// failed. One that says a turn failed is stopped short until a turn starts, and an outcome a later hub names isn't a
-/// failure.
+/// A chat says nothing of how its newest turn ended until a turn has ended, or when that turn ended without saying, so
+/// it doesn't read as failed. One that says a turn failed is stopped short until a turn starts, and an outcome a later
+/// hub names isn't a failure.
 #[test]
-fn a_session_from_a_hub_that_doesnt_keep_how_its_turn_ended_didnt_fail() {
+fn a_session_that_doesnt_say_how_its_turn_ended_didnt_fail() {
     let older = session("");
     let failed = session(r#","reply_seq":4,"reply_outcome":"error""#);
     let later = session(r#","reply_seq":4,"reply_outcome":"something_newer""#);

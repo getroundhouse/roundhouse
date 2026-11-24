@@ -15,13 +15,13 @@ pub struct AgentTask {
     pub description: Option<String>,
     #[serde(default)]
     pub kind: TaskKind,
-    /// The call that started it, or that started it again, once the agent has said. None from an agent or a hub that
-    /// doesn't say.
+    /// The call that started it, or that started it again, once the agent has said. None from an agent that doesn't
+    /// say, and in a list recorded before calls were kept.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call: Option<ToolUseId>,
     /// The subagent it is, by the ID its agent gives it, so its line opens the subagent tab on it, however it was
-    /// started. None for any other kind, and from an agent or a hub that doesn't say, whose line opens the tab on the
-    /// subagent its `call` started.
+    /// started. None for any other kind, from an agent that doesn't say, and in a list recorded before tasks named
+    /// their subagents, whose line opens the tab on the subagent its `call` started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent: Option<SubagentId>,
 }
@@ -35,8 +35,7 @@ pub enum TaskKind {
     /// A command that watches for something, and wakes the agent each time it happens. It does nothing meanwhile.
     Monitor,
     /// A wait on the workspace's pull request, which the hub keeps, so it goes on across the hub's restart, and the
-    /// agent hears how it ended. It does nothing meanwhile but ask the hub how it stands. A client that doesn't know
-    /// it reads it as a command.
+    /// agent hears how it ended. It does nothing meanwhile but ask the hub how it stands.
     Wait,
     /// A command the agent left running. It might end by itself, as a test run does, or be held open, as an app is,
     /// and the agent doesn't say which. It's also what a list from before kinds were kept holds, and what a kind
@@ -54,7 +53,7 @@ pub struct EndedTask {
     pub outcome: TaskOutcome,
     /// For a wait on pull requests, what the hub kept of it: what it watched and how it ended. The hub adds it as it
     /// records the event, from its record of the wait the task's call started, since the agent hears only the tool's
-    /// answer. `None` for any other kind, and from a hub that doesn't add it.
+    /// answer. `None` for any other kind, and for a wait the hub has no record of, or couldn't read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wait: Option<EndedWait>,
 }

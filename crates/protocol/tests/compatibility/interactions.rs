@@ -10,8 +10,8 @@ fn record(more: &str) -> String {
     format!("{RECORD}{more}}}")
 }
 
-/// Conversation mode keeps its form on the record, with its device. Typing, as nearly every chat is, is left out, as a
-/// hub from before says, and a mode this build doesn't know reads as one, rather than failing the whole record.
+/// Conversation mode keeps its form on the record, with its device. Typing, as nearly every chat is, is left out, and a
+/// mode this build doesn't know reads as one, rather than failing the whole record.
 #[test]
 fn a_records_interaction_keeps_its_form_and_typing_is_left_out() {
     let form = r#"{"mode":"conversation","device":{"id":"d1","name":"Mac Studio"}}"#;
@@ -61,7 +61,7 @@ fn the_mode_a_run_is_told_keeps_its_form_and_typing_is_left_out_of_a_launch() {
 
     let launch = r#"{"session_id":"s","run":4,"agent":"claude","cwd":"/w","start":"new","settings":{"model":null,"mode":null,"effort":null,"speed":null,"thinking":null,"persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null},"env":[]"#;
     let typed: AgentSpec = serde_json::from_str(&format!("{launch}}}")).unwrap();
-    assert_eq!(typed.interaction, InteractionMode::Typing, "a launch from before");
+    assert_eq!(typed.interaction, InteractionMode::Typing, "a launch that leaves the mode out");
     let in_the_mode = AgentSpec { interaction: InteractionMode::Conversation, ..typed.clone() };
     let said = format!(r#"{{"method":"agent_start",{},"interaction":"conversation"}}"#, &launch[1..]);
     super::worker_calls::asked(WorkerRequest::AgentStart(in_the_mode), &said);

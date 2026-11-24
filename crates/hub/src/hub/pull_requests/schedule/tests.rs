@@ -203,7 +203,8 @@ fn a_read_that_fails_waits_longer_each_time_however_it_was_asked_for() {
 }
 
 /// One found on another branch than the one checked out isn't the workspace's now, merged or not, as when the read
-/// that should have followed a switch failed, or the hub found it before it kept which branch it found it on.
+/// that should have followed a switch failed, or the workspace's row was stored before the hub kept which branch it
+/// found it on.
 #[test]
 fn a_merged_pull_request_found_on_another_branch_is_read_again_in_turn() {
     let now = Instant::now();

@@ -108,7 +108,7 @@ fn the_agents_own_events_and_a_subagents_are_read_and_followed_apart() {
     assert_eq!((&agent.events[..read.len()], last), (read.as_slice(), Place::new(u64::try_from(read.len()).unwrap())));
     let (rest, last) = client.session_read_places(&session.id, Some(&id), Place::new(2), 1000).unwrap();
     assert_eq!((rest.as_slice(), last), (&work.events[1..], Place::new(3)));
-    // A client from before subagents had IDs of their own names one by the call that started it.
+    // A client names a subagent by the call that started it until it has the subagent's record.
     let by_its_call = Some(SubagentId::of_call(&call));
     let (named, _) = client.session_read_places(&session.id, by_its_call.as_ref(), Place::new(1), 1000).unwrap();
     assert_eq!(named, work.events, "read by its call");

@@ -150,8 +150,8 @@ pub(super) fn limits_left(limits: &[(SharedString, u8, Option<Reserve>)]) -> Str
 }
 
 /// Which day the person last sent something in a chat under the account, as its card says, such as "Last used
-/// yesterday". `None` until they have, and from a hub from before it kept that, which can't be told apart, so nothing
-/// is said of either.
+/// yesterday". `None` until they have, and for some accounts last used before the hub kept that, whose stored rows
+/// don't say. The two can't be told apart, so nothing is said of either.
 pub(super) fn last_used(account: &Account, now_ms: i64, cx: &App) -> Option<String> {
     let day = look::day_ago(account.used_at_ms?, now_ms, cx)?;
     Some(format!("Last used {day}"))

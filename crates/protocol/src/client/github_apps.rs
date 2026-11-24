@@ -1,7 +1,6 @@
 //! The requests about apps of your own: GitHub Apps the person makes under their own GitHub account, or an
 //! organization's, through GitHub's manifest flow, whose key the hub holds, and whose installation is a GitHub account
-//! agents can push and open pull requests as, as its bot. A hub older than these refuses them, as `is_unsupported`
-//! says.
+//! agents can push and open pull requests as, as its bot.
 //!
 //! Making one goes: a client asks the hub for the app's manifest, and sends it to GitHub's form under the account or
 //! organization the app is for, `https://github.com/settings/apps/new` for the person's own, or

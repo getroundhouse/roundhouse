@@ -1,7 +1,5 @@
 //! The requests about the GitHub accounts a hub holds, the default of which agents push and open pull requests as on
-//! every machine, and about signing in with GitHub to connect one. A hub older than these refuses them, as
-//! `is_unsupported` says, and its settings say nothing of GitHub. One that holds GitHub accounts but can't sign in with
-//! GitHub refuses only the sign-in's.
+//! every machine, and about signing in with GitHub to connect one.
 
 use serde::{Deserialize, Serialize};
 
@@ -59,8 +57,7 @@ impl Request for HubGhLogin {
 /// Asks who `gh` and the SSH key on the hub's own machine are on GitHub, and answers with them, so a client can show who
 /// agents on the local provider are there. The hub runs `gh` as [`HubGhLogin`] says, and `ssh -T git@github.com`,
 /// never letting it ask anything, each time it's asked, and keeps nothing of them. It never refuses for what it read,
-/// which says what it couldn't tell. A hub from before it could refuses it, as `is_unsupported` says. *Unconfirmed:*
-/// reading them only when asked.
+/// which says what it couldn't tell. *Unconfirmed:* reading them only when asked.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HubMachineLogins;
 
@@ -123,8 +120,7 @@ impl Reply for GithubAccount {
 /// for where the app is installed would otherwise connect it again: they leave it disconnected while the app stays
 /// installed there, and only [`GithubAppInstallationsConnect`](super::github_apps::GithubAppInstallationsConnect)
 /// connects it again. Disconnecting one doesn't uninstall the app on GitHub, and disconnecting one whose login the hub
-/// doesn't hold changes nothing, so sending it again does nothing more. A hub from before Disconnect removed an
-/// account keeps every account's record so, and the default with it.
+/// doesn't hold changes nothing, so sending it again does nothing more.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct GithubAccountDisconnect {
     pub id: GithubAccountId,
@@ -140,10 +136,9 @@ impl Request for GithubAccountDisconnect {
 
 /// Chooses the default GitHub account, as [`GithubSettings::account`](crate::model::GithubSettings::account) says, and
 /// answers with the hub's settings. `None` leaves no default, so the hub reads nothing of GitHub and blocks the
-/// workers it sets up GitHub for, which a hub from before it had an identity of its own took as each machine's own
-/// login. Choosing the default again
-/// changes nothing. Refused with `NotFound` when the hub has no record of the account, and with `Conflict` when its
-/// login can't be used now, as when it's been disconnected or has ended, leaving the default as it was.
+/// workers it sets up GitHub for. Choosing the default again changes nothing. Refused with `NotFound` when the hub has
+/// no record of the account, and with `Conflict` when its login can't be used now, as when it's been disconnected or
+/// has ended, leaving the default as it was.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct GithubAccountSetDefault {
     #[serde(default)]

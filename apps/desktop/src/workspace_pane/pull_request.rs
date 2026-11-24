@@ -47,9 +47,9 @@ impl WorkspacePane {
         (Lookup::of(github.pull_request(workspace), unseen), warnings)
     }
 
-    /// Takes the pull request as the hub sent it, or as the workspace's record has it from a hub too old to send it,
-    /// once the hub has said anything of it: looking where it said it hasn't looked, as once its cache has forgotten
-    /// it. Until then the bar keeps what it showed, as between connecting and the hub's first word.
+    /// Takes the pull request as the hub sent it, once the hub has said anything of it: looking where it said it hasn't
+    /// looked, as once its cache has forgotten it. Until then the bar keeps what it showed, as between connecting and
+    /// the hub's first word.
     pub(crate) fn take_pull_request(&mut self, cx: &mut Context<Self>) {
         let github = self.records.github();
         if github.said_pull_request(self.workspace()) {

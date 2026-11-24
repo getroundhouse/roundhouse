@@ -153,8 +153,8 @@ pub fn github_sign_in(id: &str) -> GithubSignIn {
     }
 }
 
-/// `body` as the event at `seq` in the session `s`'s log, from the agent itself, as a hub that doesn't record runs sends
-/// it. It's at the place `seq` among the agent's own events, as in a log no subagent has worked in.
+/// `body` as the event at `seq` in the session `s`'s log, from the agent itself and with no run, as an event recorded
+/// before runs were has. It's at the place `seq` among the agent's own events, as in a log no subagent has worked in.
 pub fn event(seq: Seq, body: EventBody) -> SessionEvent {
     SessionEvent {
         session_id: "s".into(),

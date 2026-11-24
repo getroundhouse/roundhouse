@@ -38,8 +38,8 @@ pub struct GithubSettings {
     #[serde(default)]
     pub account: Option<GithubAccountId>,
     /// What the hub sends every worker for the default, as [`SentCredential`] says, so a client shows whether agents
-    /// can push as the hub has it. It moves the settings' revision only when what's sent changes. `None` from a hub
-    /// from before it said, whose client works nothing out in its place.
+    /// can push as the hub has it. It moves the settings' revision only when what's sent changes. `None` until the hub
+    /// first records what it sends, and a client works nothing out in its place.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sent: Option<SentCredential>,
     /// The providers whose machines Roundhouse leaves GitHub to, so their workers are given none of the default, and a
@@ -49,7 +49,7 @@ pub struct GithubSettings {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub left_to_machine: Vec<ProviderName>,
     /// The providers whose machines Roundhouse sets up GitHub on, in the order the hub has them, so Settings' Providers
-    /// lists each. Empty from a hub from before it said. *Unconfirmed.*
+    /// lists each. Empty when it sets GitHub up on no provider, as with only the local one. *Unconfirmed.*
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub set_up: Vec<ProviderName>,
 }
@@ -81,8 +81,7 @@ pub struct HubSettingsChange {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AccountDefault {
     pub agent: AgentKind,
-    /// The account chosen for the kind. While `automatic`, it's the one chosen before, which choosing Automatic leaves,
-    /// and which a client from before Automatic shows as the default.
+    /// The account chosen for the kind. While `automatic`, it's the one chosen before, which choosing Automatic leaves.
     pub account: AccountId,
     /// Whether the kind's chats are put on whichever login added for it has the most of its week to spare, as
     /// [`AccountSetAutomatic`](crate::client::accounts::AccountSetAutomatic) says, rather than on `account`.

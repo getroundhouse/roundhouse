@@ -9,7 +9,8 @@ use crate::model::{AttachmentId, SessionId};
 
 /// Adds a file to a session, for a prompt to carry. Sending the same `id` again returns the attachment it made,
 /// whatever else it says. Refused if the file is too big, or isn't the kind it says, as [`MediaType::check`] decides.
-/// A hub older than attachments refuses it as unsupported, so a client finds out before it sends the prompt.
+/// A hub refuses a kind it doesn't know, such as one newer than it, as unsupported, so a client finds out before it
+/// sends the prompt, and can add the file as [`MediaType::Other`] instead.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AttachmentAdd {
     pub session_id: SessionId,
@@ -67,8 +68,7 @@ impl Reply for AttachmentData {
 
 /// Part of a file the hub keeps, `length` bytes from `start`, for playing a video an agent's text points to, which
 /// the hub keeps as an attachment. Not found as `AttachmentRead`'s file is, and refused with `InvalidRequest` when
-/// `length` is 0 or more than [`crate::model::MAX_RANGE_BYTES`]. A hub older than this refuses it as unsupported. It
-/// answers with a [`crate::model::FileRange`].
+/// `length` is 0 or more than [`crate::model::MAX_RANGE_BYTES`]. It answers with a [`crate::model::FileRange`].
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AttachmentReadRange {
     pub session_id: SessionId,
@@ -88,7 +88,7 @@ impl Request for AttachmentReadRange {
 /// Lets go of a file a client added to a session that's no longer going anywhere, such as one taken off a draft. The
 /// hub keeps one the session's draft, a prompt waiting in its queue or a prompt it was sent still names, and one put in
 /// the worktree, and it never lets go of an image from the agent. One that isn't there changes nothing, so sending it
-/// again does nothing more. Answers with `Ok` either way. A hub older than this refuses it, as `is_unsupported` says.
+/// again does nothing more. Answers with `Ok` either way.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AttachmentRemove {
     pub session_id: SessionId,

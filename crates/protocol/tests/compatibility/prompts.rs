@@ -1,6 +1,6 @@
 //! What a prompt is on the wire and in stored rows: what it says beside the request, record or event that carries it,
-//! with its files as `attachments`, as it was before a prompt had a type of its own. Each form is read and written as
-//! a peer from before reads and writes it.
+//! with its files as `attachments`, as it was before a prompt had a type of its own. Each form is kept as it is, since
+//! stored rows hold it and every peer reads and writes it so.
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::client::{ClientFrame, ClientRequest, agent, queue::SessionQueue};
@@ -36,7 +36,8 @@ fn a_prompt_sent_keeps_its_form() {
         ClientRequest::SessionPrompt(agent::SessionPrompt { id: "s".into(), client_msg_id: Some("m".into()), prompt });
     keeps_its_json_form(&sent, &ClientFrame { id: 1, request });
 
-    // One said out loud says so, and one typed leaves it out, as above, so a prompt from before was typed.
+    // One said out loud says so, and one typed leaves it out, as above, so a prompt stored before `spoken` reads as
+    // typed.
     let spoken = json!({"id": 1, "request": {
         "method": "session_prompt", "id": "s", "client_msg_id": "m", "text": "is it done?", "spoken": true,
     }});
@@ -45,7 +46,7 @@ fn a_prompt_sent_keeps_its_form() {
         ClientRequest::SessionPrompt(agent::SessionPrompt { id: "s".into(), client_msg_id: Some("m".into()), prompt });
     keeps_its_json_form(&spoken, &ClientFrame { id: 1, request });
 
-    // As a client from before attachments, or one that sends no ID, writes it.
+    // As a client writes a prompt that carries no file and has no ID.
     let older = br#"{"id":2,"request":{"method":"session_prompt","id":"s","text":"hi","client_msg_id":null}}"#;
     let request = ClientRequest::SessionPrompt(agent::SessionPrompt {
         id: "s".into(),
@@ -137,7 +138,7 @@ fn a_recorded_prompt_keeps_its_form() {
 }
 
 /// Spelled out, since a hub lists a chat's prompts as these lines, and says who wrote one only when it wasn't the
-/// person, so a hub from before reads as the person's.
+/// person, so a line that doesn't say reads as the person's.
 #[test]
 fn a_prompt_line_says_who_wrote_it_but_for_the_person() {
     let line = |text: &str, from| PromptLine::new(Seq::new(7), text, 0).placed(Place::new(6)).written_by(from);

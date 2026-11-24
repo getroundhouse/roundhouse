@@ -10,8 +10,8 @@ use protocol::prompt::Prompt;
 use super::{Client, Result};
 
 impl Client {
-    /// Sends a prompt that says only `text`, for a test, which can send it under no ID, as a client from before them
-    /// did. Returns its `seq`, and whether it had already been recorded.
+    /// Sends a prompt that says only `text`, for a test, which can send it under no ID. Returns its `seq`, and whether
+    /// it had already been recorded.
     #[cfg(any(test, feature = "testing"))]
     pub fn session_prompt(
         &self,

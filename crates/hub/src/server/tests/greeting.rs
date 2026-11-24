@@ -186,11 +186,11 @@ async fn a_request_that_needs_a_device_takes_the_one_its_hello_said() {
     }
 }
 
-/// The requests only a client of version 3 or 4 sent, which followed a session's log, the hub's records, a terminal and
-/// what it showed of GitHub, listed every record, a session's subagents, proposals and how its replies were heard, or
-/// asked whose account a session's agent runs under, and the read of a page of a workspace's changed files, are
-/// refused as unsupported at every version this hub speaks, as a request it doesn't know is, and the connection
-/// carries on. Spelled out, as a client of an earlier build sends them.
+/// The requests this hub no longer knows, which followed a session's log, the hub's records, a terminal and what it
+/// showed of GitHub, listed every record, a session's subagents, proposals and how its replies were heard, or asked
+/// whose account a session's agent runs under, and the read of a page of a workspace's changed files, are refused as
+/// unsupported at every version this hub speaks, as any request it doesn't know is, such as a newer client's, and the
+/// connection carries on. Spelled out, since the protocol no longer has them.
 #[tokio::test]
 async fn a_request_this_hub_no_longer_answers_is_refused_as_unsupported() {
     let dir = tempfile::tempdir().unwrap();

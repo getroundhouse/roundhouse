@@ -196,7 +196,8 @@ fn another_round_and_its_response_keep_their_form() {
     );
 }
 
-/// The agent's withdrawal: the ask, and the record that says it's withdrawn, which a peer from before leaves out.
+/// The agent's withdrawal: the ask, and the record that says it's withdrawn, which a record of one not withdrawn leaves
+/// out.
 #[test]
 fn withdrawing_a_proposal_and_its_record_keep_their_form() {
     let withdraw = Withdraw { id: "p".into(), why: "Decided".into(), call: Some("toolu_3".into()) };

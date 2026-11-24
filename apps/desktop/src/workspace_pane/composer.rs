@@ -74,7 +74,7 @@ impl WorkspacePane {
         let text = self.composer.read(cx).text().to_string();
         let Some(transcript) = self.transcript() else { return };
         // As `Compact now` does, so it's recorded and drawn as a compaction whichever way it was asked. To an agent that
-        // doesn't compact when asked, or one the hub doesn't describe, it goes as a prompt, as any other text does.
+        // doesn't compact when asked, or one without a description, it goes as a prompt, as any other text does.
         if self.attached.is_empty()
             && self.compacts()
             && let Some(rest) = after_compact(&text)
@@ -148,7 +148,8 @@ impl WorkspacePane {
     }
 
     /// The mode `session`'s agent plans in if `planning`, and otherwise the one it starts a chat in, as the hub
-    /// describes it. `None` if it has no such mode, or the hub doesn't describe it.
+    /// describes it. `None` if it has no such mode, for a kind this build can't name, and when the hub refused to
+    /// describe its agents or its reply couldn't be read.
     fn mode_planning(&self, session: &SessionId, planning: bool) -> Option<ApprovalMode> {
         let agent = self.sessions().iter().find(|s| s.id == *session)?.agent;
         let held = self.records.snapshot();

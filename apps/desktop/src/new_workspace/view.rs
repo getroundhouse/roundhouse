@@ -105,7 +105,8 @@ impl NewWorkspaceDialog {
             return bar.child(controls).into_any_element();
         }
         let this = cx.weak_entity();
-        // Only once there's something to show, which a hub that doesn't describe its agents leaves to the hub.
+        // Only once there's something to show. When the hub refused to describe its agents or its reply couldn't be
+        // read, what the chat runs is left to the hub.
         let agent = self.agent();
         let picker = self.shown().filter(|_| !self.models_waiting()).map(|(model, effort)| {
             model_picker("new-workspace-model", agent.as_ref(), &model, effort, None, move |picked, _, cx| {

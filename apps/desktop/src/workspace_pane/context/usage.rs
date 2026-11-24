@@ -46,7 +46,7 @@ pub(super) enum Chosen {
 
 impl WorkspacePane {
     /// The record of the account the chat showing runs under, and which of its limits are shown. `None` until its
-    /// agent has launched, when the hub couldn't tell whose account it is, and from a hub that doesn't keep accounts.
+    /// agent has launched, when the hub couldn't tell whose account it is, and before the account's record has arrived.
     pub(in super::super) fn usage(&self, cx: &Context<Self>) -> Option<Usage> {
         let session = self.session()?;
         let records = self.shown.all().clone();

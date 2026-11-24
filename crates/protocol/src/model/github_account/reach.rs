@@ -8,10 +8,10 @@ use super::super::{GithubAppSlug, GithubUsername};
 /// What a push from a repository's workspaces would meet, as the hub last checked, by GitHub's own answer to what
 /// `git push` asks before it sends anything. Each of GitHub's answers names the default by `username` as GitHub knows
 /// it: a token's or a sign-in's user, or an app's installation's bot, such as `ada-roundhouse[bot]`, rather than the
-/// `x-access-token` git gives GitHub with an installation's token, which a hub from before named. Each that stops a
-/// push says too, for an installation, where its app is installed, in `installation`, since what to do is done there.
-/// It's `None` for a token's or a sign-in's account, and from a hub from before it said. *Unconfirmed:*
-/// `installation`, and none on `Pushes`, of which a workspace says nothing.
+/// `x-access-token` git gives GitHub with an installation's token. Each that stops a push says too, for an
+/// installation, where its app is installed, in `installation`, since what to do is done there. It's `None` for a
+/// token's or a sign-in's account. *Unconfirmed:* `installation`, and none on `Pushes`, of which a workspace says
+/// nothing.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum Reach {

@@ -1,6 +1,5 @@
 //! What git uses for github.com in what a real worker starts, once its hub has set the git credential: real git,
-//! asking the worker's own binary as its helper, in a workspace's setup script. And that it no longer finds who its
-//! machine's own `gh` is logged in as, which an older hub asks.
+//! asking the worker's own binary as its helper, in a workspace's setup script.
 
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};

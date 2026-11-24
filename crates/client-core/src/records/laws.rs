@@ -233,7 +233,7 @@ fn every_kind_of_record_keeps_its_newest_copy_as_a_session_does() {
         let key = copy(1, 2).key();
         assert_eq!(shown(&held, &key), None, "{name}, until the list has arrived");
         held.apply_list(listed([], 1));
-        assert_eq!(shown(&held, &key), None, "{name}, from a hub from before it kept them");
+        assert_eq!(shown(&held, &key), None, "{name}, from a hub that has none");
 
         assert!(held.apply_list(listed(with_other(copy(1, 2)), 3)), "{name}, in a list");
         assert!(held.apply_notice(copy(2, 5).into()), "{name}, in a newer notice");

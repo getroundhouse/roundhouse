@@ -1,5 +1,4 @@
-//! The requests about agents' waits on their pull request, which the hub keeps. A hub older than one refuses it, as
-//! `is_unsupported` says.
+//! The requests about agents' waits on their pull request, which the hub keeps.
 
 use serde::{Deserialize, Serialize};
 

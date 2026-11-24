@@ -60,8 +60,8 @@ impl Settled {
 impl SessionLog {
     /// Where the prompt recorded at `seq` stands. The log records whether the agent took or dropped every prompt, and
     /// until it does, the prompt is waiting. One the agent dropped can still be taken by the agent after it, so the last
-    /// to settle it says, as the hub's list of prompts does without its event being loaded. From a hub too old to say
-    /// which, it's found from what's loaded after the prompt.
+    /// to settle it says, as the hub's list of prompts does without its event being loaded. Until that list has said
+    /// which, or when it says in a newer hub's way, it's found from what's loaded after the prompt.
     pub fn prompt_state(&self, seq: Seq) -> PromptState {
         match self.settled.at(seq).and_then(|at| at.how) {
             Some(Settlement::Taken) => return PromptState::Taken,

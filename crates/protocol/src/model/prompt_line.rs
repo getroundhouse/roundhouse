@@ -71,10 +71,10 @@ struct Sent {
     place: Place,
     text: String,
     files: u32,
-    /// A hub from before it said where each prompt was settled sends none.
+    /// Left out while the prompt isn't settled.
     #[serde(default)]
     settled: Option<SettledAt>,
-    /// A hub from before prompts said who wrote them sends none, as for the person's.
+    /// Left out for the person's.
     #[serde(default)]
     from: PromptFrom,
 }
@@ -156,8 +156,8 @@ impl PromptLine {
         &self.from
     }
 
-    /// Where it was settled, as the hub listed it. `None` while the agent hasn't taken it, from a hub that doesn't
-    /// say, and for a line made from the prompt's event, which can't.
+    /// Where it was settled, as the hub listed it. `None` while the agent hasn't taken it, and for a line made from the
+    /// prompt's event, which can't.
     pub fn settled(&self) -> Option<SettledAt> {
         self.settled
     }

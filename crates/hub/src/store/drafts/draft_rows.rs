@@ -30,7 +30,8 @@ impl Store {
         let kept = draft_column(&Draft { text: draft.text.clone(), files })?;
         let now = now_ms();
         let typed = typed_at_ms.map_or(now, |at| at.min(now));
-        // Only a change that says when it was typed can be typed earlier. One from an older client is typed as it comes.
+        // Only a change that says when it was typed can be typed earlier. One that doesn't, as the hub keeps a new
+        // workspace's unsent first prompt, is typed as it comes.
         if typed_at_ms.is_some() {
             let typed_later = conn.query_row(
                 "SELECT draft_typed_at_ms > ?3 AND draft IS NOT ?1 FROM sessions WHERE id = ?2 AND closed_at_ms IS NULL",

@@ -1,6 +1,5 @@
 //! The line said for the agent while it can't answer what was said out loud: what its adapter reports, what it claims,
-//! and what the tail says of it, which a hub from before reads as a report it doesn't know, and a tail from before as
-//! no line.
+//! and what the tail says of it, which a tail outside conversation mode leaves out.
 
 use protocol::capability::Report;
 use protocol::capability::output::{CoverLine, CoverWait};
@@ -36,7 +35,7 @@ fn a_run_claims_cover_lines_in_its_own_form() {
     assert!(Report::Covered { wait: CoverWait(1) }.allowed(&claims));
 }
 
-/// The tail says the line with the run it's for, and one from before says none.
+/// The tail says the line with the run it's for, and one outside conversation mode leaves it out.
 #[test]
 fn the_line_in_a_tail_keeps_its_form() {
     let line = CoverLine { wait: CoverWait(1), number: 1, text: "One sec.".into() };

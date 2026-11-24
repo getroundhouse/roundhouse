@@ -116,7 +116,7 @@ fn what_a_hub_sends_a_client_that_watches_keeps_its_form() {
     );
 }
 
-/// A hub from before terminals lists none, and a list with none has the form it had before, for a client from then.
+/// A list of records with no terminals leaves them out, and reads without them.
 #[test]
 fn a_list_of_records_has_its_terminals_and_reads_without_them() {
     let before: Records =

@@ -163,18 +163,18 @@ pub struct Session {
     /// ended. It moves with a change of status, so the feed announces it.
     #[serde(default)]
     pub reply_seq: Seq,
-    /// How that turn ended, as its end said. `None` until a turn has ended, for one that ended without saying, and from
-    /// a hub that doesn't keep it. It moves with `reply_seq`.
+    /// How that turn ended, as its end said. `None` until a turn has ended, and for one that ended without saying. It
+    /// moves with `reply_seq`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reply_outcome: Option<TurnOutcome>,
-    /// When the newest turn started, by the hub's clock. `None` until one has, and from a hub that doesn't keep it.
-    /// It moves with a change of status, so the feed announces it.
+    /// When the newest turn started, by the hub's clock. `None` until one has, and for a chat whose newest turn started
+    /// before the hub kept this. It moves with a change of status, so the feed announces it.
     #[serde(default)]
     pub turn_started_at_ms: Option<i64>,
     /// When the person last sent the agent something, by the hub's clock: a prompt, as it's sent or as it's queued
     /// for when the agent finishes, rather than when the hub sends it from the queue, or an answer to a question or
-    /// an approval. `None` until then, and from a hub that doesn't keep it. Each moves the record, so the feed
-    /// announces it. [`Session::last_active_at_ms`] says when the chat was last worked in from it.
+    /// an approval. `None` until then, and for a chat last sent something before the hub kept this. Each moves the
+    /// record, so the feed announces it. [`Session::last_active_at_ms`] says when the chat was last worked in from it.
     #[serde(default)]
     pub user_active_at_ms: Option<i64>,
     /// How far the person has read, so a reply past it is unread. It's theirs rather than the session's, which a
@@ -195,8 +195,8 @@ pub struct Session {
     /// it gave says, or the worker, for an ambient login, which can be another at each launch, if someone logs in as
     /// another on the machine. `None` until an agent has launched or the chat has been moved, when nobody was logged
     /// in or the login can't be told from another, while the worker is asked about a launch the hub gave no login
-    /// after one it gave one, and from a hub that doesn't keep it. It stays once the agent has gone, as the context
-    /// does.
+    /// after one it gave one, and for a chat that hasn't launched an agent since before the hub kept this. It stays
+    /// once the agent has gone, as the context does.
     #[serde(default)]
     pub account: Option<AccountId>,
     /// Where the login every launch of the chat's agent, resume and title call takes comes from: the hub, for the
@@ -211,8 +211,7 @@ pub struct Session {
     ///
     /// `None` until the chat's agent first launches, and for a chat on none from before sources, such as one that ran
     /// under the ambient login then, whose next launch takes its kind's default whatever `account` names. The hub's
-    /// with no `account` reads as `None` too, so the next launch fills it in. Also `None` from a hub from before
-    /// sources, whatever the chat is on, including one that can't move a chat, which a client learns by being refused.
+    /// with no `account` reads as `None` too, so the next launch fills it in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_source: Option<AccountSource>,
     /// Prompts waiting for the agent to finish, oldest first, as [`QueuedPrompt`] says.
@@ -232,15 +231,15 @@ pub struct Session {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub needs_an_account: bool,
     /// How the person is talking with the agent now: typing, or out loud in conversation mode, with the device that has
-    /// the conversation. Typing from a hub that doesn't keep it.
+    /// the conversation.
     #[serde(default, skip_serializing_if = "super::super::Interaction::is_typing")]
     pub interaction: super::super::Interaction,
-    /// What's typed and attached in the chat's composer and not sent, as [`Draft`] says. Empty from a hub that doesn't
-    /// keep it, and once the chat is closed.
+    /// What's typed and attached in the chat's composer and not sent, as [`Draft`] says. Empty when nothing is, and
+    /// once the chat is closed.
     #[serde(default, skip_serializing_if = "Draft::is_empty")]
     pub draft: Draft,
     /// What's chosen and typed in answer to the request its agent is waiting on, as [`DecisionDraft`] says. One for a
-    /// request that has gone means nothing. `None` from a hub that doesn't keep it, and once the chat is closed.
+    /// request that has gone means nothing. `None` when nothing is chosen or typed, and once the chat is closed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision_draft: Option<DecisionDraft>,
     /// The approvals the agent is waiting on, oldest first, changed in the same commit as the event that changes them.
@@ -323,7 +322,8 @@ impl Session {
 
     /// When the person last worked in this chat, by the hub's clock: when they made it, or last sent its agent
     /// something, as `user_active_at_ms` says. Only what they did counts, so it doesn't move as the agent works or
-    /// replies. A hub too old to keep that keeps when the newest turn started, which a prompt mostly starts.
+    /// replies. For a chat last sent something before the hub kept that, it's when the newest turn started, which a
+    /// prompt mostly starts.
     pub fn last_active_at_ms(&self) -> i64 {
         let sent = self.user_active_at_ms.or(self.turn_started_at_ms);
         sent.map_or(self.created_at_ms, |sent| sent.max(self.created_at_ms))

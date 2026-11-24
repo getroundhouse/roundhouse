@@ -108,8 +108,8 @@ async fn one_being_made_is_forgotten_only_when_the_worker_says_something_else_is
     assert_eq!(left, [failing.id]);
 }
 
-/// A worker that can't say what's there, such as one that went, or one from before the question, changes nothing:
-/// taking that for nothing being there would record every worktree as removed.
+/// A worker that can't say what's there, such as one that went, changes nothing: taking that for nothing being there
+/// would record every worktree as removed.
 #[tokio::test]
 async fn a_worker_that_cant_say_what_s_there_settles_nothing() {
     let dir = tempfile::tempdir().unwrap();

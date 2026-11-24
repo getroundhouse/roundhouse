@@ -18,7 +18,7 @@ pub struct HubUpdate {
     #[serde(default)]
     pub problem: Option<String>,
     /// How the update a client last asked for is going, which the hub's reads of the feed leave as it is. `None` until
-    /// one asks, and from a hub from before it could update.
+    /// one asks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attempt: Option<UpdateAttempt>,
     #[serde(default)]

@@ -16,13 +16,13 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 pub(crate) struct Model {
-    /// What the agent the chat runs is called, as the hub describes it. `None` until it has, and from a hub that
-    /// doesn't.
+    /// What the agent the chat runs is called, as the hub describes it. `None` until it has, and for a kind it doesn't
+    /// describe or this build can't name.
     pub agent: Option<SharedString>,
     /// What the run going claims, as the session's record says.
     pub claims: Option<protocol::model::RunCapabilities>,
     /// What a run of the chat's kind claims unless it says otherwise, as the hub describes it. `None` until it has,
-    /// and from a hub from before claims.
+    /// and for a kind it doesn't describe or this build can't name.
     pub kind_claims: Option<protocol::capability::Capabilities>,
     pub folds: Folds,
     /// The images prompts carry, by attachment, from the first time a row drew each.
@@ -33,7 +33,7 @@ pub(crate) struct Model {
     pub retry_at: Option<Seq>,
     /// The approvals the session's record says its agent is waiting on, which a plan's card and the panel follow.
     pub approvals: RecordedApprovals,
-    /// Each subagent's record, as the hub keeps them. None from a hub that doesn't.
+    /// Each subagent's record, as the hub keeps them. None until the hub has sent them.
     pub subagents: SubagentRecords,
     /// The `seq` of the event each subagent's call was drawn in, by that call, so the row is measured again when its
     /// record changes, which may come after the row was drawn. A call's row is measured only once it's been drawn, so
@@ -115,8 +115,7 @@ impl SubagentRecords {
         self.by_id.get(self.started_by.get(call)?)
     }
 
-    /// The subagent `call` started, as its record names it. One whose record hasn't come is taken as named by its
-    /// call, as a subagent from a hub from before subagents had IDs of their own is, which keeps no records.
+    /// The subagent `call` started, as its record names it, or as its call names it until its record has come.
     pub(crate) fn subagent_started_by(&self, call: &ToolUseId) -> SubagentId {
         self.started_by.get(call).cloned().unwrap_or_else(|| SubagentId::of_call(call))
     }

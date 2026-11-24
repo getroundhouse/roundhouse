@@ -84,9 +84,9 @@ fn the_copy_holds_what_the_hubs_agents_offer_beside_its_records() {
 }
 
 #[test]
-fn a_hub_too_old_to_describe_its_agents_still_has_its_records_followed() {
+fn a_hub_that_refuses_to_describe_its_agents_still_has_its_records_followed() {
     let dir = tempfile::tempdir().unwrap();
-    let refused = ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "an older hub"));
+    let refused = ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "refused"));
 
     let feed = following(dir.path(), refused);
 

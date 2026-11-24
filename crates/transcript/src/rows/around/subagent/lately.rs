@@ -17,7 +17,7 @@ pub(super) struct Lately {
     pub(super) result: Option<ContentBlock>,
 }
 
-/// Oldest first. A record from a hub from before it kept its calls typed has nothing it reads.
+/// Oldest first. A subagent that hasn't done anything yet, or has ended, has nothing it reads.
 pub(super) fn lately(record: &Record) -> Vec<Lately> {
     let Some(work) = &record.lately else { return Vec::new() };
     let mut blocks = Vec::new();

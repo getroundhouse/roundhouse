@@ -66,8 +66,8 @@ impl GithubFeed {
     }
 
     /// The repository GitHub last showed the default none of, where `workspace`'s branch's pull requests are, as the hub
-    /// said, so what [`GithubFeed::pull_request`] says is only what was known before. `None` from
-    /// a hub from before it said.
+    /// said, so what [`GithubFeed::pull_request`] says is only what was known before. `None` until the hub has said,
+    /// and when there's none.
     pub fn unseen(&self, workspace: &Workspace) -> Option<RepositoryUnseen> {
         self.read(|observed| GithubHeld::unseen(&workspace.id, observed))
     }

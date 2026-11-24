@@ -9,7 +9,8 @@ use protocol::model::{AgentDescription, AgentKind, ModelName};
 
 impl NewWorkspaceDialog {
     /// What the hub says of the agent the first chat runs, with what it offers in the dialog's project for one that
-    /// discovers its models. `None` from a hub that doesn't describe it, and until the agent has said what it offers.
+    /// discovers its models. `None` when the hub refused to describe its agents or its reply couldn't be read, and
+    /// until the agent has said what it offers.
     pub(super) fn agent(&self) -> Option<AgentDescription> {
         self.model_lookup.description(self.base_agent()?, &self.offer.models.0)
     }
@@ -51,7 +52,8 @@ impl NewWorkspaceDialog {
     }
 
     /// The model and effort the first chat is to run: what was picked or kept, or else what its agent starts a chat
-    /// with. Either is `None` from a hub that doesn't say, until it's picked or kept, which leaves it to the hub.
+    /// with. Either is `None` until it's picked or kept, while the agent has no description or its description names no
+    /// model to start with, which leaves it to the hub.
     pub(super) fn to_run(&self) -> (Option<ModelName>, Option<Effort>) {
         let agent = self.agent();
         let model = self.model.clone().or_else(|| agent.as_ref().and_then(|a| a.defaults().model));
