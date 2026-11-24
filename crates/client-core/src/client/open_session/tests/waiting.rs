@@ -33,7 +33,7 @@ fn a_chat_opened_while_a_request_from_long_before_waits_fetches_that_request() {
         }
     });
     let waiting = vec![OpenApproval { seq: ASKED_AT, approval_id: "z".into() }];
-    let session = Session { open_approvals: Some(waiting), ..session() };
+    let session = Session { open_approvals: waiting, ..session() };
     let recorded = RecordedApprovals::of(&session);
 
     let client = Client::connect(&socket, "test").unwrap();

@@ -67,7 +67,7 @@ impl Hub {
                 interaction: protocol::model::Interaction::Typing,
                 draft: Draft::default(),
                 decision_draft: None,
-                open_approvals: Some(Vec::new()),
+                open_approvals: Vec::new(),
                 untaken: Some(Vec::new()),
                 agent_opened: Some(false),
                 rev: Rev::default(),

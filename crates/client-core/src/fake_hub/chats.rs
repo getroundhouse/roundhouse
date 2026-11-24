@@ -56,9 +56,9 @@ impl World {
     }
 
     /// Has each chat's record say which approvals its agent waits on, as a hub's does: each request in its log that no
-    /// answer after it has closed, oldest first. A record the world gave a list of its own keeps it.
+    /// answer after it has closed, oldest first.
     pub(super) fn record_open_approvals(&mut self) {
-        for session in self.sessions.iter_mut().filter(|session| session.open_approvals.is_none()) {
+        for session in &mut self.sessions {
             let mut open: Vec<OpenApproval> = Vec::new();
             for event in self.logs.get(&session.id).into_iter().flatten() {
                 match event.body.approval_change() {
@@ -73,7 +73,7 @@ impl World {
                     None => {}
                 }
             }
-            session.open_approvals = Some(open);
+            session.open_approvals = open;
         }
     }
 

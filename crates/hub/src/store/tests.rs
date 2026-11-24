@@ -33,7 +33,7 @@ pub(crate) fn idle_session(now: i64) -> StoredSession {
         session: Session {
             created_at_ms: now,
             updated_at_ms: now,
-            open_approvals: Some(Vec::new()),
+            open_approvals: Vec::new(),
             untaken: Some(Vec::new()),
             agent_opened: Some(false),
             ..protocol::fixtures::session("s")

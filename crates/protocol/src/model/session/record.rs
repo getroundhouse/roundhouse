@@ -243,12 +243,11 @@ pub struct Session {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision_draft: Option<DecisionDraft>,
     /// The approvals the agent is waiting on, oldest first, changed in the same commit as the event that changes them.
-    /// `None` only from a hub that couldn't read what it keeps of them, which a client takes as none.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub open_approvals: Option<Vec<OpenApproval>>,
+    pub open_approvals: Vec<OpenApproval>,
     /// The prompts the agent has yet to take or drop, oldest first, by where each is recorded, a compaction asked for
     /// included, changed in the same commit as the event that changes them. Until the agent has taken them all, the
-    /// queue doesn't send and a compaction is refused. `None` from a hub that doesn't say.
+    /// queue doesn't send and a compaction is refused. `None` where the hub can't read what it keeps of them, which
+    /// leaves whether a compaction waits for them to the hub, which has the last word.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub untaken: Option<Vec<Seq>>,
     /// Whether the agent has opened its conversation, so there's something to compact. `None` from a hub that doesn't
