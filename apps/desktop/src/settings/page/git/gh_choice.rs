@@ -25,13 +25,15 @@ pub(super) struct ChoosingPanel {
 
 impl ChoosingPanel {
     /// Who to offer `gh`'s login as, by its username: only one GitHub takes, and that none of the GitHub accounts of
-    /// `records` holds as `gh`'s already.
+    /// `records` holds as `gh`'s already. None while any account's username isn't known, since it can't tell.
     pub(super) fn offered<'a>(&'a self, records: &Snapshot) -> Option<&'a GithubUsername> {
         let Some(GhLogin::LoggedIn { username, works }) = &self.gh else { return None };
-        let held = records.github_accounts().iter().any(|account| {
-            account.held_login.is_some_and(|held| held.how == GithubLoginKind::Gh)
-                && records.github_username(account).as_str().eq_ignore_ascii_case(username.as_str())
-        });
+        let mut held = false;
+        for account in records.github_accounts() {
+            let name = records.github_username(account).known()?;
+            held |= account.held_login.is_some_and(|held| held.how == GithubLoginKind::Gh)
+                && name.as_str().eq_ignore_ascii_case(username.as_str());
+        }
         (*works != GhLoginWorks::Refused && !held).then_some(username)
     }
 

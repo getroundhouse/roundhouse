@@ -80,9 +80,13 @@ fn added_lists_the_default_first_then_those_held_then_those_disconnected_each_as
     let accounts = records.github_accounts();
     let ids = |listed: Vec<&GithubAccount>| listed.iter().map(|account| account.id.to_string()).collect::<Vec<_>>();
 
-    assert_eq!(ids(accounts.iter().collect()), ["g4", "g2", "g3", "g1"], "ada, bea, Cy and dee");
-    assert_eq!(ids(listed(accounts, Some(&"g1".into()))), ["g1", "g4", "g3", "g2"]);
-    assert_eq!(ids(listed(accounts, Some(&"g2".into()))), ["g2", "g4", "g3", "g1"], "a disconnected default too");
+    assert_eq!(ids(accounts.clone()), ["g4", "g2", "g3", "g1"], "ada, bea, Cy and dee");
+    assert_eq!(ids(listed(accounts.clone(), Some(&"g1".into()))), ["g1", "g4", "g3", "g2"]);
+    assert_eq!(
+        ids(listed(accounts.clone(), Some(&"g2".into()))),
+        ["g2", "g4", "g3", "g1"],
+        "a disconnected default too"
+    );
     assert_eq!(ids(listed(accounts, None)), ["g4", "g3", "g1", "g2"]);
 }
 

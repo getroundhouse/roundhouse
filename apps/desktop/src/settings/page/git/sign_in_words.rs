@@ -24,7 +24,7 @@ pub(super) enum Stands<'a> {
     },
     /// GitHub approved it, as the account called `name`, once its record is here, which is the default if `default`.
     Approved {
-        name: Option<&'a str>,
+        name: Option<String>,
         default: bool,
     },
     Refused,
@@ -60,7 +60,7 @@ impl<'a> Stands<'a> {
                 Stands::Waiting { code, address, until: look::time_of_day(*code_ends_at_ms, cx) }
             }
             GithubSignInStatus::Approved { account } => Stands::Approved {
-                name: records.github_account(account).map(|account| records.github_username(account).as_str()),
+                name: records.github_account(account).map(|account| records.github_username(account).to_string()),
                 default: github.is_some_and(|github| github.account.as_ref() == Some(account)),
             },
             GithubSignInStatus::Refused => Stands::Refused,

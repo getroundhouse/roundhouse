@@ -8,13 +8,13 @@ use protocol::model::{
     GithubAccount, GithubAccountId, GithubApp, GithubAppId, GithubReach, GithubSignIn, GithubSignInId, Reach, RepoId,
 };
 
-use super::Snapshot;
+use super::{GithubName, Snapshot};
 
 #[derive(Debug, Default)]
 pub(super) struct GithubListed {
-    /// By username, in any case, then by ID, since one GitHub user can be connected more than once.
-    accounts: Vec<GithubAccount>,
-    account_at: HashMap<GithubAccountId, usize>,
+    /// In no order, since they're shown by username, which a view reads apart from the record, as
+    /// [`Snapshot::github_username`] says.
+    accounts: HashMap<GithubAccountId, GithubAccount>,
     sign_ins: HashMap<GithubSignInId, GithubSignIn>,
     /// By name, in any case, then by number.
     apps: Vec<GithubApp>,
@@ -25,7 +25,7 @@ pub(super) struct GithubListed {
 
 impl GithubListed {
     pub(super) fn account(&mut self, account: &GithubAccount) {
-        self.accounts.push(account.clone());
+        self.accounts.insert(account.id.clone(), account.clone());
     }
 
     pub(super) fn sign_in(&mut self, sign_in: &GithubSignIn) {
@@ -40,25 +40,32 @@ impl GithubListed {
         self.reach.insert(reach.repo.clone(), reach.reach.clone());
     }
 
-    /// Puts each list in the order views show it, once every record is in.
+    /// Puts the apps in the order views show them, once every record is in.
     pub(super) fn order(&mut self) {
-        self.accounts.sort_by_cached_key(|account| (account.user.name.as_str().to_lowercase(), account.id.clone()));
-        self.account_at = self.accounts.iter().enumerate().map(|(at, account)| (account.id.clone(), at)).collect();
         self.apps.sort_by_cached_key(|app| (app.name.to_lowercase(), app.id.get()));
         self.app_at = self.apps.iter().enumerate().map(|(at, app)| (app.id, at)).collect();
     }
 }
 
 impl Snapshot {
-    /// Every GitHub account the hub holds, or held, a login for, by username, in any case. Empty until they've arrived,
-    /// and from a hub that keeps none, which its settings tell apart, as
+    /// Every GitHub account the hub holds, or held, a login for, by username, in any case, then by ID, since one GitHub
+    /// user can be connected more than once. One whose username isn't known comes after those named, by its user's
+    /// number. Empty until they've arrived, and from a hub that keeps none, which its settings tell apart, as
     /// [`HubSettings::github`](protocol::model::HubSettings::github) says.
-    pub fn github_accounts(&self) -> &[GithubAccount] {
-        &self.records.github.accounts
+    pub fn github_accounts(&self) -> Vec<&GithubAccount> {
+        let mut accounts: Vec<&GithubAccount> = self.records.github.accounts.values().collect();
+        accounts.sort_by_cached_key(|account| {
+            let name = match self.github_username(account) {
+                GithubName::Named(name) => Ok(name.as_str().to_lowercase()),
+                GithubName::NotKnown(number) => Err(number.get()),
+            };
+            (name, account.id.clone())
+        });
+        accounts
     }
 
     pub fn github_account(&self, id: &GithubAccountId) -> Option<&GithubAccount> {
-        self.records.github.account_at.get(id).map(|&at| &self.records.github.accounts[at])
+        self.records.github.accounts.get(id)
     }
 
     /// The record of the sign-in with GitHub `id`, as long as the hub keeps it: while it waits, and once it has ended,

@@ -235,5 +235,5 @@ fn waiting_line(said: impl Into<SharedString>, cx: &App) -> Div {
 fn lead(drawing: &Drawing<'_>, installed: Option<&GithubAccount>, bot: Option<&str>) -> String {
     let Some(account) = installed else { return app_words::lead(bot) };
     let on = account.installation.as_ref().map_or("GitHub", |installed| installed.on.name.as_str());
-    app_words::lead_installed(drawing.records.github_username(account).as_str(), on, drawing.is_default(account))
+    app_words::lead_installed(&drawing.records.github_username(account).to_string(), on, drawing.is_default(account))
 }

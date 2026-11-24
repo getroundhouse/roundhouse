@@ -241,7 +241,8 @@ fn what_a_hub_says_of_github_is_listed_in_the_order_views_show_it_and_found_by_i
     });
     let shown = held.snapshot();
 
-    assert_eq!(ids(shown.github_accounts(), |a| a.id.as_str()), ["g1", "g2", "g3"], "by name in any case, then ID");
+    let accounts: Vec<&str> = shown.github_accounts().iter().map(|a| a.id.as_str()).collect();
+    assert_eq!(accounts, ["g1", "g2", "g3"], "by name in any case, then ID");
     assert_eq!(shown.github_account(&"g3".into()).map(|a| a.user.name.as_str()), Some("bea"));
     assert_eq!(shown.github_sign_in(&"s".into()).map(|s| s.status.is_waiting()), Some(true));
     assert_eq!(shown.github_sign_ins().count(), 1);

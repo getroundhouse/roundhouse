@@ -21,5 +21,5 @@ pub(super) use by_session::SessionsListed;
 pub(super) use copies::Listed;
 pub use copies::{Changes, InWorkspace, Snapshot};
 pub(super) use observed::ObservationsListed;
-pub use of_accounts::AccountIdentity;
+pub use of_accounts::{AccountIdentity, GithubName};
 pub use of_models::ListOfModels;

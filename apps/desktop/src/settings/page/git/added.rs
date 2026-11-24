@@ -43,8 +43,10 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Div {
 
 /// The accounts in the order Added lists them: the default first, since it's the one used, then those the hub holds a
 /// login for, then those it doesn't, each by username, as client-core lists them.
-pub(super) fn listed<'a>(accounts: &'a [GithubAccount], default: Option<&GithubAccountId>) -> Vec<&'a GithubAccount> {
-    let mut listed: Vec<&GithubAccount> = accounts.iter().collect();
+pub(super) fn listed<'a>(
+    mut listed: Vec<&'a GithubAccount>,
+    default: Option<&GithubAccountId>,
+) -> Vec<&'a GithubAccount> {
     listed.sort_by_key(|account| (Some(&account.id) != default, account.held_login.is_none()));
     listed
 }
@@ -101,7 +103,7 @@ fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyE
     let (picture, detail, menu) = match &account.installation {
         Some(installed) => app_rows::installation_parts(drawing, account, installed, &standing, tone, cx),
         None => (
-            Picture::of(drawing.records.github_username(account).as_str()),
+            Picture::of(&drawing.records.github_username(account).to_string()),
             standing.said().map(|said| Detail::Said(said, tone)),
             Some(account_menu::menu(drawing, account, standing.works(), cx)),
         ),

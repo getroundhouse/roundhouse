@@ -195,8 +195,9 @@ pub(super) fn disconnect_says(default: bool) -> &'static str {
 }
 
 /// The name an app is first given: the username of the first account added that's someone's rather than an app's, in
-/// the order Added lists them, with `-roundhouse` after it, or nothing when there's none.
+/// the order Added lists them, with `-roundhouse` after it, or nothing when there's none, or its username isn't known.
 pub(super) fn default_name(records: &Snapshot, default: Option<&GithubAccountId>) -> String {
     let added = listed(records.github_accounts(), default).into_iter().find(|account| account.installation.is_none());
-    added.map_or_else(String::new, |account| format!("{}-roundhouse", records.github_username(account)))
+    let name = added.and_then(|account| records.github_username(account).known());
+    name.map_or_else(String::new, |name| format!("{name}-roundhouse"))
 }

@@ -67,8 +67,10 @@ fn until_stopped(page: &str) {
 
 /// The account that's the app's installation, once the app has it.
 fn installation(ui: &Ui<'_>) -> Option<GithubAccount> {
-    let accounts = ui.view().records().github_accounts().to_vec();
-    accounts.into_iter().find(|account| account.installation.is_some() && account.held_login.is_some())
+    let view = ui.view();
+    let records = view.records();
+    let installed = records.github_accounts().into_iter().find(|a| a.installation.is_some() && a.held_login.is_some());
+    installed.cloned()
 }
 
 /// Opens the panel for making an app, from Connect account.

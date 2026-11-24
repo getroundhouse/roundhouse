@@ -42,7 +42,7 @@ fn a_sign_ins_panel_offers_cancel_while_the_hub_may_wait_and_sign_in_again_where
     assert!(Stands::Starting.may_wait() && !Stands::Starting.may_try_again());
     assert!(ended.iter().all(|stands| stands.may_try_again() && !stands.may_wait()));
     assert!(neither.iter().all(|stands| !stands.may_try_again() && !stands.may_wait()));
-    assert_eq!(Stands::Approved { name: Some("ada"), default: false }.lead(None), "Signed in as ada.");
+    assert_eq!(Stands::Approved { name: Some("ada".into()), default: false }.lead(None), "Signed in as ada.");
     assert_eq!(Stands::Approved { name: None, default: true }.title(), "Signed in with GitHub");
     assert_eq!(Stands::Refused.title(), "Sign in with GitHub");
     assert_eq!(ended[2].lead(None), "GitHub said no.", "it says why, as the hub does");
