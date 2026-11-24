@@ -93,7 +93,6 @@ pub(super) async fn conversation(
         .event(
             EventBody::AgentInit {
                 // The worker says what the run claims as it starts it.
-                capabilities: None,
                 agent_session_id: Some(id.into()),
                 model: response["model"].as_str().map(str::to_owned),
                 cwd: Some(spec.cwd.clone()),

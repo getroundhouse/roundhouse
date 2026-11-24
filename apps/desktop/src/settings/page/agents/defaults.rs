@@ -7,7 +7,7 @@ use gpui_kit::{
 };
 use look::Lined as _;
 use look::Typeset as _;
-use protocol::model::{Account, AgentDescription};
+use protocol::model::{Account, AccountDefault, AgentDescription};
 
 use super::super::lists::{heading, list};
 use super::Drawing;
@@ -20,45 +20,52 @@ const AUTOMATIC_SAYS: &str = "Each new chat goes to the account with the most of
 /// How wide the picker's menu is, for an account's name and how much of its week is left beside it.
 const MENU_WIDTH: Pixels = px(240.);
 
-/// What Default accounts says above its rows, on a hub that keeps defaults.
+/// What Default accounts says above its rows.
 const INTRO: &str =
     "Choose which account new chats use across this hub. A chat stays on its account until you move it.";
 
 pub(super) fn section(drawing: &Drawing<'_>, accounts: &[&Account], cx: &App) -> Div {
     let colors = look::colors(cx);
-    // A hub that keeps no defaults puts no chat on an account.
-    let intro = if drawing.defaults.is_some() { INTRO } else { "Choose which account new chats use across this hub." };
-    let rows: Vec<Div> = drawing.agents.with_logins().map(|agent| row(drawing, agent, accounts, cx)).collect();
+    // Until the hub's settings have arrived, nothing says which account is any kind's default.
+    let rows: Vec<Div> = drawing.defaults.map_or_else(Vec::new, |defaults| {
+        drawing.agents.with_logins().map(|agent| row(drawing, defaults, agent, accounts, cx)).collect()
+    });
     // With no kind to choose for, as before the hub has described its agents, there's no line for rows to go under.
     let rows = (!rows.is_empty()).then(|| list(cx).children(rows));
     let error = drawing.kept.read(cx).choosing.error.as_ref().map(|said| {
         div().pt(look::Space::Medium).typeset(look::Type::Body).text_color(colors.error).child(said.clone())
     });
-    v_flex().child(heading("Default accounts", None, intro, None, cx)).children(rows).children(error)
+    v_flex().child(heading("Default accounts", None, INTRO, None, cx)).children(rows).children(error)
 }
 
-fn row(drawing: &Drawing<'_>, agent: &AgentDescription, accounts: &[&Account], cx: &App) -> Div {
-    let selected = drawing.defaults.and_then(|defaults| defaults.iter().find(|choice| choice.agent == agent.kind));
+/// The row of `agent`'s kind, whose default is the one of `defaults` chosen for it, or none.
+fn row(
+    drawing: &Drawing<'_>,
+    defaults: &[AccountDefault],
+    agent: &AgentDescription,
+    accounts: &[&Account],
+    cx: &App,
+) -> Div {
+    let selected = defaults.iter().find(|choice| choice.agent == agent.kind);
     let account = selected.and_then(|choice| accounts.iter().find(|account| account.id == choice.account).copied());
     let automatic = selected.is_some_and(|choice| choice.automatic);
-    let label = match (drawing.defaults, selected, account) {
-        (None, _, _) => "Unavailable on this hub".to_string(),
+    let label = match (selected, account) {
         _ if automatic => "Automatic".to_string(),
-        (_, None, _) => "Machine login".to_string(),
-        (_, Some(_), None) => "Loading account…".to_string(),
-        (_, _, Some(account)) => crate::names::called(drawing.records, account),
+        (None, _) => "Machine login".to_string(),
+        (Some(_), None) => "Loading account…".to_string(),
+        (_, Some(account)) => crate::names::called(drawing.records, account),
     };
     // Automatic leaves out an account whose login can't be used, so that one blocks nothing.
     let blocked = !automatic && account.is_some_and(|account| !account.works_for(agent.kind, drawing.now_ms));
-    let says = match (drawing.defaults, selected, account) {
+    let says = match (selected, account) {
         _ if automatic => Some(AUTOMATIC_SAYS),
         _ if blocked => Some(
             "Renew or reconnect it. Until then, chats on it can't start, nor can new chats unless you choose another.",
         ),
-        (Some(_), None, _) => Some("Used only while no default account has been added."),
-        (Some(_), Some(_), Some(_)) => Some("Chats already on another account stay there."),
-        // Nothing to say of a hub that keeps no defaults, or of one whose account is still loading.
-        _ => None,
+        (None, _) => Some("Used only while no default account has been added."),
+        (Some(_), Some(_)) => Some("Chats already on another account stay there."),
+        // Nothing to say of an account that's still loading.
+        (Some(_), None) => None,
     };
     let colors = look::colors(cx);
     let says = says.map(|says| {
@@ -70,11 +77,12 @@ fn row(drawing: &Drawing<'_>, agent: &AgentDescription, accounts: &[&Account], c
         .py(look::Space::Medium)
         .line_under(cx)
         .child(description)
-        .child(picker(drawing, agent, accounts, label, cx))
+        .child(picker(drawing, selected, agent, accounts, label, cx))
 }
 
 fn picker(
     drawing: &Drawing<'_>,
+    selected: Option<&AccountDefault>,
     agent: &AgentDescription,
     accounts: &[&Account],
     label: String,
@@ -89,13 +97,10 @@ fn picker(
         })
         .collect();
     let kept = drawing.kept.read(cx);
-    let disabled =
-        drawing.defaults.is_none() || !kept.can_ask() || kept.choosing.pending.is_some() || choices.is_empty();
+    let disabled = !kept.can_ask() || kept.choosing.pending.is_some() || choices.is_empty();
     let kept = drawing.kept.clone();
     let kind = agent.kind;
-    let selected = drawing
-        .defaults
-        .and_then(|defaults| defaults.iter().find(|choice| choice.agent == kind))
+    let selected = selected
         .map(|choice| if choice.automatic { Choice::Automatic } else { Choice::Account(choice.account.clone()) });
     look::button(
         SharedString::from(format!("account-default-{}", kind.as_str())),

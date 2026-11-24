@@ -149,9 +149,6 @@ impl WorkspacePane {
             }
             ReviewEvent::Counted(files) => this.tell_tab(|tab| tab.read(*files), cx),
             ReviewEvent::Loaded => {}
-            // A hub from before saving took the comment being written with it still has it, so it's told what's
-            // here now.
-            ReviewEvent::Saved => this.keep_writing(true, cx),
             ReviewEvent::NotSaved(saving) => this.give_back_writing(saving.clone(), cx),
         });
         let file_events = cx.subscribe(&file, |this, _, event: &FileDiffEvent, cx| match event {

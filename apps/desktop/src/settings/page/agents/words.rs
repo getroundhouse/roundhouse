@@ -24,14 +24,8 @@ pub(super) const ABOUT: &str = "The accounts agents run under: the logins found 
 pub(super) const NONE_ADDED: &str = "None yet. Connect an account to add its login to this hub.";
 
 /// What Added says of itself under its heading: the hub applies its selected defaults before machine credentials.
-pub(super) fn added_says(defaults: bool) -> String {
-    if defaults {
-        "Logins kept by this hub. The default for each agent takes priority over machine credentials."
-    } else {
-        "Logins kept by this hub. Update the hub to choose defaults that take priority over machine credentials."
-    }
-    .to_string()
-}
+pub(super) const ADDED_SAYS: &str =
+    "Logins kept by this hub. The default for each agent takes priority over machine credentials.";
 
 /// What disconnecting the account called `name` asks first.
 pub(super) fn disconnect_asks(name: &str) -> String {

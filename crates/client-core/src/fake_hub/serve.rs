@@ -14,7 +14,7 @@ use protocol::client::{
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
-use protocol::model::{CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, Seq, Session};
+use protocol::model::{CompactionLine, GitStatus, GithubSignIn, Place, Seq, Session};
 
 use super::base_pages::{opened, paged};
 use super::following::not_found;
@@ -120,9 +120,7 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             reply(C::Workspaces(workspaces::Workspaces { workspaces: world.workspaces_listed(include_archived) }))
         }
         R::WorkspaceStatus(_) => reply(C::GitStatus(GitStatus::default())),
-        R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => {
-            reply(C::GitDiff(world.diffs.get(&id).cloned().unwrap_or_else(GitDiff::default)))
-        }
+        R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => reply(C::GitDiff(world.whole_diff(&id))),
         R::WorkspaceSetupLog(workspaces::WorkspaceSetupLog { id }) => {
             reply(C::SetupLog(workspaces::SetupLog { text: world.setup_logs.get(&id).cloned().unwrap_or_default() }))
         }

@@ -49,17 +49,11 @@ impl Transcript {
     }
 }
 
-/// What each call did to `proposal`, by the call: each revision it wrote, and its withdrawal. A hub from before
-/// revisions sums none up, and its proposals have only their first, the newest.
+/// What each call did to `proposal`, by the call: each revision it wrote, and its withdrawal.
 fn calls_on(proposal: &Arc<Proposal>) -> Vec<(ToolUseId, ProposalCall)> {
     let did = |did| ProposalCall { proposal: Arc::clone(proposal), did };
-    let wrote: Vec<_> = if proposal.revisions.is_empty() {
-        let newest = proposal.current.call.clone().map(|call| (call, did(Did::Wrote(proposal.current.number))));
-        newest.into_iter().collect()
-    } else {
-        let wrote = |revision: &RevisionSummary| Some((revision.call.clone()?, did(Did::Wrote(revision.number))));
-        proposal.revisions.iter().filter_map(wrote).collect()
-    };
+    let wrote = |revision: &RevisionSummary| Some((revision.call.clone()?, did(Did::Wrote(revision.number))));
+    let wrote: Vec<_> = proposal.revisions.iter().filter_map(wrote).collect();
     let withdrew =
         proposal.withdrawn.as_ref().and_then(|withdrawal| Some((withdrawal.call.clone()?, did(Did::Withdrew))));
     wrote.into_iter().chain(withdrew).collect()

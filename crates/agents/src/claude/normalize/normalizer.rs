@@ -286,7 +286,6 @@ fn system(value: &Value) -> Parsed {
     match subtype {
         "init" => Parsed::Event(EventBody::AgentInit {
             // The worker says what the run claims as it starts it.
-            capabilities: None,
             agent_session_id: id_of(value, "session_id"),
             model: string_of(value, "model"),
             cwd: string_of(value, "cwd"),

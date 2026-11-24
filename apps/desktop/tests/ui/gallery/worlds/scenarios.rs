@@ -359,7 +359,7 @@ pub(in super::super) fn diff() -> World {
     finished_chat(&mut world, &focus);
     world.diffs.insert(
         focus.clone(),
-        GitDiff { base_commit: Some(CommitId::from(patch::BASE_COMMIT)), patch: patch::patch(), truncated: false },
+        GitDiff { base_commit: CommitId::from(patch::BASE_COMMIT), patch: patch::patch(), truncated: false },
     );
     // So the lines git left out of the file the screens open can be shown.
     world.base_files.insert(worktree::OPENED.to_string(), FileContents::Text { text: worktree::MODEL.to_string() });

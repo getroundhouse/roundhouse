@@ -122,7 +122,7 @@ pub(super) fn summarized(
         changes,
         rev: Rev::new(2),
     });
-    world.diffs.insert(workspace.clone(), GitDiff { base_commit: Some(base), patch: PATCH.into(), truncated: true });
+    world.diffs.insert(workspace.clone(), GitDiff { base_commit: base, patch: PATCH.into(), truncated: true });
     world.worker_reads.insert(workspace.clone(), reads);
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);

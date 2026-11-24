@@ -8,7 +8,6 @@ use protocol::frame;
 use protocol::model::{
     GithubRepositoryName, IssueNumber, LineCounts, Observation, Observed, Place, Records, ReferenceAsk, Rev, Seq,
 };
-use serde::Deserialize;
 
 use super::keeps_its_form;
 
@@ -134,23 +133,4 @@ fn workspace_listed() -> WorkspaceObservations {
     let lines = Observed::<LineCounts>::NotKnown;
     let observation = Observation::WorkspaceLines { workspace_id: "w".into(), lines, rev: Rev::new(3) };
     WorkspaceObservations { workspace_id: "w".into(), observations: vec![observation], rev: Rev::new(11) }
-}
-
-/// Where a level stands as a client from before workspaces had a level reads it.
-#[derive(Deserialize, Debug, PartialEq)]
-#[serde(tag = "level", rename_all = "snake_case")]
-enum ListedBefore {
-    Session {
-        session_id: String,
-    },
-    #[serde(other)]
-    Unknown,
-}
-
-/// A client from before workspaces had a level skips the list of one, as of a level it doesn't know.
-#[test]
-fn a_build_from_before_reads_a_workspace_s_list_as_unknown() {
-    let listed = serde_json::to_string(&Listed::Workspace(workspace_listed())).unwrap();
-
-    assert_eq!(serde_json::from_str::<ListedBefore>(&listed).unwrap(), ListedBefore::Unknown, "{listed}");
 }

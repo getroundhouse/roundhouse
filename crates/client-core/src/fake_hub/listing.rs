@@ -6,7 +6,7 @@ use std::cmp::Ordering;
 use protocol::model::{DiffComment, HubSettings, Records, Repo, Session, Workspace, WorkspaceId, WorkspaceStatus};
 
 use super::revisions::MADE;
-use super::world::{LoginSupport, World};
+use super::world::World;
 
 impl World {
     /// Everything, as one list.
@@ -18,7 +18,7 @@ impl World {
             comments: in_order(self.comments.values().flatten(), DiffComment::oldest_first),
             // As a hub starts out.
             hub_settings: Some(HubSettings {
-                account_defaults: (self.logins == LoginSupport::Defaults).then(|| self.account_defaults.clone()),
+                account_defaults: Some(self.account_defaults.clone()),
                 keep_awake: true,
                 allow_asked_in_full_access: Some(false),
                 github: self.github.clone(),

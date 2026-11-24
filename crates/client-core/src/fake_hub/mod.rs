@@ -33,4 +33,4 @@ pub use github::GithubSays;
 pub use serve::serve;
 pub use stand_in::{BUILD, BUILD_NUMBER};
 pub use worker_reads::WorkerReads;
-pub use world::{HOUR_MS, HubBuild, LoginSupport, NOW_MS, PairingWorld, TerminalShows, World};
+pub use world::{HOUR_MS, HubBuild, NOW_MS, PairingWorld, TerminalShows, World};

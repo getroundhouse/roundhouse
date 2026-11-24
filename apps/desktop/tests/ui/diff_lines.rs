@@ -58,7 +58,7 @@ fn changed_on_a_fake_hub<'a>(
     let mut world = World::default();
     let repo = world.repo("signals");
     let workspaces = ["ledger", "points"].map(|name| world.workspace(&repo, name));
-    let base_commit = Some(CommitId::from("3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5"));
+    let base_commit = CommitId::from("3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5");
     for workspace in &workspaces {
         world.chat(workspace, SessionStatus::Idle, Vec::new());
         let diff = GitDiff { base_commit: base_commit.clone(), patch: patch.to_string(), truncated: false };

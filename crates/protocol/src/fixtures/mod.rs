@@ -24,7 +24,7 @@ mod builders;
 pub use builders::{
     ApprovalRequest, account, allow_once, approval_request, approve_plan, asking, cancelled, child_worktree,
     claude_default, decided, deny, event, github_account, github_app, github_sign_in, github_user, plan, question,
-    request_failed, session, subagent, subagent_started, to_run, turn_ended, workspace,
+    request_failed, session, started_claiming, subagent, subagent_started, to_run, turn_ended, workspace,
 };
 
 pub mod observed;

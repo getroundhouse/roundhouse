@@ -76,7 +76,6 @@ async fn only_what_was_said_out_loud_in_the_mode_opens_a_wait_and_a_busy_agent_h
     let (_, _, time, _) = covering.opening(Seq::new(4), "Done?", true).unwrap();
     assert_eq!(time, THINKING, "it's done with its turn");
     covering.took_in(&heard(EventBody::AgentInit {
-        capabilities: None,
         agent_session_id: None,
         model: None,
         cwd: None,

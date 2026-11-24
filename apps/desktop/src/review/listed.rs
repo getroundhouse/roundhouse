@@ -68,9 +68,15 @@ impl Review {
         }
     }
 
+    /// The patch of the file the file tab shows, as [`Self::file`] has it, with the commit it was diffed against.
+    pub fn file_against(&self) -> Option<(&FilePatch, &CommitId)> {
+        let file = self.file()?;
+        Some((file, self.listed.as_ref()?.file.as_ref()?.base_commit()?))
+    }
+
     /// The commit the file the file tab shows was diffed against, which holds it as it was before the change, and what
     /// the diff leaves out of it is read from: the one file's diff's, or else the summary's. `None` until the changes
-    /// are listed, or from a worker too old to say.
+    /// are listed.
     pub fn base_commit(&self) -> Option<&CommitId> {
         let listed = self.listed.as_ref()?;
         let read = listed.file.as_ref().and_then(OneFile::base_commit);

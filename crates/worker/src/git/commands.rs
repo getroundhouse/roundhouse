@@ -259,10 +259,8 @@ fn parse_status(output: &str) -> GitStatus {
 pub async fn diff(given: &Environment, worktree_path: &str, base_ref: Option<&str>) -> Result<GitDiff, ApiError> {
     let worktree = Path::new(worktree_path);
     let tracked = async {
-        let base = diff_base(given, worktree, base_ref).await?;
-        // With no commit at HEAD, git refuses to diff from it, and so there's no diff.
-        let from = base.as_ref().map_or("HEAD", CommitId::as_str);
-        let patch = git_ok(given, worktree, &["diff", "--no-color", "--no-ext-diff", from]).await?;
+        let base = compared_base(given, worktree, base_ref).await?;
+        let patch = git_ok(given, worktree, &["diff", "--no-color", "--no-ext-diff", base.as_str()]).await?;
         Ok::<_, ApiError>((base, patch))
     };
     // Beside the diff of what git tracks, since neither changes anything. Its failure is taken first, whichever
@@ -285,7 +283,7 @@ pub async fn diff(given: &Environment, worktree_path: &str, base_ref: Option<&st
     Ok(GitDiff { base_commit: base, patch, truncated })
 }
 
-/// The commit a change summary, or one file's diff, is compared with, as [`diff_base`] finds it. Fails when HEAD has
+/// The commit a diff, a change summary, or one file's diff, is compared with, as [`diff_base`] finds it. Fails when HEAD has
 /// no commit yet, since there's nothing to compare with.
 pub(super) async fn compared_base(
     given: &Environment,

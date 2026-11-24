@@ -52,14 +52,7 @@ fn stopped() -> EventBody {
 
 /// What starts every turn, including one the agent starts by itself.
 fn init() -> EventBody {
-    EventBody::AgentInit {
-        capabilities: None,
-        agent_session_id: None,
-        model: None,
-        cwd: None,
-        mode: None,
-        agent_version: None,
-    }
+    EventBody::AgentInit { agent_session_id: None, model: None, cwd: None, mode: None, agent_version: None }
 }
 
 fn notified() -> EventBody {

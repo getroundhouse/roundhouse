@@ -2,7 +2,6 @@
 
 use protocol::capability::output::{CoverLine, CoverWait};
 use protocol::capability::{Capabilities, Claimed, Report};
-use protocol::event::EventBody;
 use protocol::model::{ClientDevice, SessionId};
 use protocol::prompt::Prompt;
 
@@ -43,14 +42,7 @@ async fn the_line_goes_with_the_mode_and_stays_when_the_conversation_moves() {
         a_turn(&hub, &asked, &chat.id, Prompt::new("look into it"), None).await;
         let mut claims = Capabilities::default();
         claims.output.cover_lines = Some(Claimed {});
-        let init = EventBody::AgentInit {
-            capabilities: Some(Box::new(claims)),
-            agent_session_id: None,
-            model: None,
-            cwd: None,
-            mode: None,
-            agent_version: None,
-        };
+        let init = protocol::fixtures::started_claiming(claims);
         the_agent_says(&hub, &asked, &chat.id, [init]).await;
         hub.session_conversation_start(chat.id.clone(), device("d1")).await.unwrap();
         let run = asked.launches(&chat.id).pop().unwrap().run;

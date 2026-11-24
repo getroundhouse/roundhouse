@@ -25,7 +25,7 @@ type Base = (CommitId, SharedString);
 pub(super) struct Shown {
     pub(super) file: FilePatch,
     pub(super) sides: Arc<Sides>,
-    /// `None` for a file the change adds, which wasn't there, or from a worker too old to name its commit.
+    /// `None` for a file the change adds, which wasn't there.
     base: Option<Base>,
     /// The file as it was, opened or being opened, and the task that hears when it has more to show.
     old: Option<(OpenFile, Task<()>)>,

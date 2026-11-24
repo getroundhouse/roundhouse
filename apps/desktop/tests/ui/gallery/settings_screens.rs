@@ -10,7 +10,7 @@ use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{accounts, automatic, conversation, none_found, reserves};
-use client_core::fake_hub::{LoginSupport, World};
+use client_core::fake_hub::World;
 
 /// What puts the cursor in Settings' search.
 const FIND: &str = "secondary-f";
@@ -69,13 +69,6 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "settings-agents-default-ended",
         spec: "settings.md",
         world: Some(default_ended),
-        frame: Frame::Layout,
-        steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS],
-    },
-    Screen {
-        name: "settings-agents-no-defaults",
-        spec: "settings.md",
-        world: Some(defaults_unkept),
         frame: Frame::Layout,
         steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS],
     },
@@ -246,11 +239,5 @@ pub(crate) const SCREENS: &[Screen] = &[
 fn default_ended() -> World {
     let mut world = accounts();
     world.account_defaults[0].account = "claude-login-0003".into();
-    world
-}
-
-fn defaults_unkept() -> World {
-    let mut world = accounts();
-    world.logins = LoginSupport::Accounts;
     world
 }

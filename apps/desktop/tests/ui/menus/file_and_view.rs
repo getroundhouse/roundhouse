@@ -58,7 +58,7 @@ fn with_a_repository_and_no_workspace_new_workspace_and_copy_can_be_chosen_and_t
 fn in_a_workspace_every_item_can_be_chosen_and_says_what_it_does_to_what_shows(cx: &mut TestAppContext) {
     let (_hub, mut ui) = in_a_workspace(cx, |world, workspace| {
         let patch = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1,2 @@\n one\n+two\n";
-        let base_commit = Some(CommitId::from("3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5"));
+        let base_commit = CommitId::from("3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5");
         world.diffs.insert(workspace.clone(), GitDiff { base_commit, patch: patch.to_string(), truncated: false });
         world.base_files.insert("a.txt".to_string(), FileContents::Text { text: "one\n".to_string() });
     });

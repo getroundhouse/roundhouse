@@ -1,11 +1,9 @@
 //! Whether the default GitHub account can push to each repository's repository on GitHub, spelled out, as the hub's
-//! level sends it, as an observation, and what a hub from before sent of it as a record of its own.
+//! level sends it, as an observation.
 
 use protocol::client::HubNotice;
 use protocol::frame;
-use protocol::model::{
-    GithubRepositoryName, InstalledApp, Observation, ObservationKey, Observed, Reach, RecordKey, Rev,
-};
+use protocol::model::{GithubRepositoryName, InstalledApp, Observation, ObservationKey, Observed, Reach, Rev};
 
 use super::keeps_its_form;
 
@@ -94,18 +92,6 @@ fn a_reach_from_a_newer_hub_reads_as_unknown_and_names_no_repository() {
 
     assert_eq!(read, reach(Reach::Unknown));
     assert_eq!(Reach::Unknown.repository(), None);
-}
-
-/// What a hub that spoke version 4 sent a client of it, a record of its own, reads as a notice and a record of a kind
-/// this build doesn't know, which a client skips.
-#[test]
-fn a_reach_as_a_hub_from_before_sent_it_reads_as_unknown() {
-    let record = r#"{"notice":"github_reach","repo":"r","reach":{"state":"not_on_github"},"answered_at_ms":null,"stale":false,"rev":3}"#;
-    let removed = r#"{"notice":"removed","record":{"kind":"github_reach","repo":"r"},"rev":4}"#;
-
-    assert_eq!(frame::decode::<HubNotice>(record.as_bytes()).unwrap(), HubNotice::Unknown);
-    let removed = frame::decode::<HubNotice>(removed.as_bytes()).unwrap();
-    assert_eq!(removed, HubNotice::Removed { record: RecordKey::Unknown, rev: Rev::new(4) });
 }
 
 /// Whether the default can push to a repository, as of a read, as a notice and as its removal.

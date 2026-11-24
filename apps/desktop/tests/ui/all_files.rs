@@ -12,7 +12,7 @@ use desktop::app::Connection;
 use desktop::file_view::FileView;
 use desktop::workspace_pane::{Opened, Showing};
 use gpui_kit::{AppContext as _, Entity, SharedString, TestAppContext};
-use protocol::model::{FileContents, GitDiff, SessionStatus, WorkspaceId, WorktreeFiles};
+use protocol::model::{CommitId, FileContents, GitDiff, SessionStatus, WorkspaceId, WorktreeFiles};
 
 use crate::support::{FakeHub, Stack, Ui};
 
@@ -80,7 +80,7 @@ fn browsing_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Workspac
     let workspaces = ["ledger", "points"].map(|name| world.workspace(&repo, name));
     for workspace in &workspaces {
         world.chat(workspace, SessionStatus::Idle, Vec::new());
-        let diff = GitDiff { base_commit: None, patch: PATCH.to_string(), truncated: false };
+        let diff = GitDiff { base_commit: CommitId::from("0000000"), patch: PATCH.to_string(), truncated: false };
         world.diffs.insert(workspace.clone(), diff);
     }
     world.worktree =

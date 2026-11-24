@@ -77,7 +77,7 @@ pub(super) fn taken(
     status: Option<ChangeStatus>,
     diff: FileDiff,
 ) -> Result<Taken, Unread> {
-    let base = Some(diff.base_commit);
+    let base = diff.base_commit;
     match diff.body {
         FileDiffBody::Patch { patch, .. } => {
             let files = patch::parse(&patch).map_err(|e| Unread::Unparsed(e.to_string()))?;

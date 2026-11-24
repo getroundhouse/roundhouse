@@ -8,20 +8,22 @@ use protocol::capability::calls::CallKind;
 use protocol::capability::{Capabilities, Claimed};
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
-use protocol::fixtures::{approval_request, asking, deny, question, to_run};
+use protocol::fixtures::{approval_request, asking, deny, question, started_claiming, to_run};
 use protocol::model::{RunCapabilities, RunId};
 use std::sync::Arc;
 
+/// `run` starts, claiming `claims`, and opens the conversation `conversation`.
 async fn initialized(live: &Arc<LiveSession>, run: RunId, conversation: &str, claims: Capabilities) {
-    let body = EventBody::AgentInit {
-        capabilities: Some(Box::new(claims)),
+    let init = EventBody::AgentInit {
         agent_session_id: Some(conversation.into()),
         model: None,
         cwd: None,
         mode: None,
         agent_version: None,
     };
-    live.send_item(Item::Event { run, body: Box::new(body), raw: None, attachments: Vec::new(), seq: None }).await;
+    for body in [started_claiming(claims), init] {
+        live.send_item(Item::Event { run, body: Box::new(body), raw: None, attachments: Vec::new(), seq: None }).await;
+    }
     flushed(live).await;
 }
 
@@ -71,8 +73,8 @@ async fn only_the_current_run_can_choose_the_resume_id_and_its_claims_survive_re
             .await
             .unwrap()
             .len(),
-        2,
-        "stale output remains in history"
+        4,
+        "stale output remains in history, each run's start and initialization"
     );
 }
 

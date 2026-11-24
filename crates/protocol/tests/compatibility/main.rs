@@ -214,18 +214,6 @@ fn a_turns_end_keeps_the_form_of_its_models_and_tokens() {
     assert_eq!(serde_json::to_vec(&event).unwrap(), stored, "and it's written the way it's read");
 }
 
-/// A hub from before sent a workspace's pull request on its record, in a form this client doesn't read, which it
-/// skips, rather than failing the record and every list it's in.
-#[test]
-fn a_workspace_from_a_hub_that_sent_its_pull_request_on_its_record_still_reads() {
-    let line = br#"{"notice":"workspace","id":"w","repo_id":"r","name":"n","branch":"n","base_ref":null,"path":null,"status":"ready","provider":"local","instance_id":"w","created_at_ms":1,"archived_at_ms":null,"setup":{"state":"succeeded"},"port_base":55000,"pull_request":{"number":7,"url":"u","title":"T","state":"OPEN","is_draft":false}}"#;
-
-    let notice: HubNotice = frame::decode(line).unwrap();
-
-    let HubNotice::Workspace(workspace) = notice else { panic!("{notice:?}") };
-    assert_eq!(workspace.id.as_str(), "w");
-}
-
 /// So a client sorting by when each workspace was last worked in puts one from a hub that doesn't keep it by when it was
 /// made.
 #[test]

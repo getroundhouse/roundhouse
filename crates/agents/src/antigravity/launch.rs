@@ -81,7 +81,6 @@ pub(super) async fn conversation(
         .run
         .event(
             EventBody::AgentInit {
-                capabilities: None,
                 agent_session_id: Some(id),
                 model: Some(model),
                 cwd: Some(spec.cwd.clone()),

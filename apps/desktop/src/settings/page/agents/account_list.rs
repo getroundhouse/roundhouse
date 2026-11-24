@@ -109,7 +109,7 @@ fn added_list(drawing: &Drawing<'_>, added: &[&Account], cx: &App) -> Div {
         .then(|| said_in_the_list("accounts-none-added", words::NONE_ADDED.into(), cx));
     let rows = added.iter().map(|account| row::row(drawing, account, cx));
     let list = list(cx).children(panel).children(said).children(rows);
-    v_flex().child(heading("Added", None, words::added_says(drawing.defaults.is_some()), Some(connect), cx)).child(list)
+    v_flex().child(heading("Added", None, words::ADDED_SAYS, Some(connect), cx)).child(list)
 }
 
 /// Connect account, which opens the panel for a new account of the one kind the hub can hold a login for, or a menu

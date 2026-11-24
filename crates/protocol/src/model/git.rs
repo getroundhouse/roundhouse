@@ -44,13 +44,12 @@ pub struct GitFile {
     pub status: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GitDiff {
     /// The commit the diff is taken from, which holds each file as it was before the change: the merge base with the
     /// workspace's base ref, or HEAD's commit when there's no base ref or git finds no merge base with it. Every diff
-    /// names it, since with no commit at HEAD there's no diff to take. `None` only from a worker older than this,
-    /// which took a diff with no merge base from HEAD without naming its commit.
-    pub base_commit: Option<CommitId>,
+    /// names it, since with no commit at HEAD there's no diff to take.
+    pub base_commit: CommitId,
     /// git's diff of what it tracks, then each untracked file's against nothing. So a file taken out of git's index and
     /// left in the worktree is in it twice, its deletion first, then the untracked file.
     pub patch: String,

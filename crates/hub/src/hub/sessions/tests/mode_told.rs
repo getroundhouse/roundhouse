@@ -4,7 +4,6 @@
 use std::sync::Arc;
 
 use protocol::capability::{Capabilities, Claimed, Control};
-use protocol::event::EventBody;
 use protocol::model::{ClientDevice, InteractionMode, SessionId};
 use protocol::prompt::Prompt;
 use protocol::worker::WorkerRequest;
@@ -35,14 +34,7 @@ async fn told_as(asked: &Asked, chat: &SessionId, modes: &[InteractionMode]) -> 
 async fn claims_cover_lines(hub: &Arc<Hub>, asked: &Asked, chat: &SessionId) {
     let mut claims = Capabilities::default();
     claims.output.cover_lines = Some(Claimed {});
-    let init = EventBody::AgentInit {
-        capabilities: Some(Box::new(claims)),
-        agent_session_id: None,
-        model: None,
-        cwd: None,
-        mode: None,
-        agent_version: None,
-    };
+    let init = protocol::fixtures::started_claiming(claims);
     the_agent_says(hub, asked, chat, [init]).await;
 }
 

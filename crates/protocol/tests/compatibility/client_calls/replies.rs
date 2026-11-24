@@ -249,7 +249,7 @@ fn every_reply_about_a_workspace_keeps_its_form() {
         ClientResponse::PullRequest(workspaces::PullRequestReply { pull_request: None }),
         r#"{"result":"pull_request","pull_request":null}"#,
     );
-    let diff = GitDiff { base_commit: Some("c1".into()), patch: String::new(), truncated: false };
+    let diff = GitDiff { base_commit: "c1".into(), patch: String::new(), truncated: false };
     answered(ClientResponse::GitDiff(diff), r#"{"result":"git_diff","base_commit":"c1","patch":"","truncated":false}"#);
     let comment = DiffComment {
         id: "c".into(),

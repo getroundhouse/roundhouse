@@ -97,7 +97,11 @@ fn a_session_takes_any_file_as_what_it_really_is() {
     assert_eq!(MediaType::Other.check(&[0, 1, 2]), Ok(()));
     assert_eq!(MediaType::Other.check(PNG), Ok(()), "anything can go as a file the agent opens");
     assert_eq!(MediaType::Svg.check(b"<svg/>"), Ok(()));
-    assert_eq!(MediaType::Text.check(b"<svg/>"), Ok(()), "a client from before drawings says one is text");
+    assert_eq!(
+        MediaType::Text.check(b"<svg/>"),
+        Err(AttachmentProblem::NotWhatItSays { said: MediaType::Text, found: MediaType::Svg }),
+        "a drawing is said to be one"
+    );
     assert_eq!(
         MediaType::Svg.check(b"plain words"),
         Err(AttachmentProblem::NotWhatItSays { said: MediaType::Svg, found: MediaType::Text })
