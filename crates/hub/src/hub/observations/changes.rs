@@ -269,7 +269,8 @@ impl Hub {
     /// queued under the lock too, so the file is written in the order the changes are made, and made after, so no list
     /// waits on the file. Fails only where the database gives no revision, and then changes nothing but whether
     /// something keeps it current. Then, outside the lock, moves the revision of the record that holds its old form, if
-    /// any, as [`Hub::old_form_moved`] says, so that record's newest copy holds what it says now.
+    /// any, as [`Hub::old_form_moved`] says, so that record's newest copy holds what it says now, once what it says
+    /// changes.
     async fn change_observation<K: Kind>(
         &self,
         of: K::Of,
@@ -295,8 +296,9 @@ impl Hub {
         Ok(())
     }
 
-    /// What [`Hub::change_observation_while`] does under the lock every change takes. Whether it changed what clients
-    /// are told.
+    /// What [`Hub::change_observation_while`] does under the lock every change takes. Whether it changed what the
+    /// observation says, as its kind compares it, or forgot it, which a record that holds its old form, with no
+    /// freshness of its own, is moved for, and not for one that's only current again or as of a time.
     async fn changed_observation<K: Kind>(
         &self,
         of: K::Of,
@@ -338,6 +340,13 @@ impl Hub {
             }
             Step::Changed(changed) => changed,
         };
+        let says_otherwise = match &changed {
+            Changed::Says(said) => {
+                let held = K::table(&mut observations.tables.lock()).value(&of).cloned();
+                held.is_none_or(|held| !K::says_the_same(&held, &said.value))
+            }
+            Changed::Gone => true,
+        };
         let rev = self.blocking(Store::next_rev).await?;
         let write = match &changed {
             Changed::Says(said) => Write::Says { value: said.value.clone(), read_at_ms: said.read_at_ms },
@@ -351,7 +360,7 @@ impl Hub {
         if let Some(record) = old_record {
             self.notify_old_form(record.into());
         }
-        Ok(true)
+        Ok(says_otherwise)
     }
 
     /// Tells clients of a change to an observation, the one place the hub sends an observation's notice. Which clients
