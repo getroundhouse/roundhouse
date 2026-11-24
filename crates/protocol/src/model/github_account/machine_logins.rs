@@ -1,19 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::super::{GithubUsername, ProviderName, Rev};
-
-/// Who a provider's machines' own `gh` was logged in to github.com as, as a record a hub from before Settings' Providers
-/// kept, keyed by the provider, which asked the first worker of each provider it linked to, as
-/// [`FindGithubLogin`](crate::worker::FindGithubLogin) says. A hub from since sends none, and says who its own
-/// machine's `gh` is logged in as when a client asks, with
-/// [`HubMachineLogins`](crate::client::github_accounts::HubMachineLogins). It never carries the token.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct FoundGithubLogin {
-    pub provider: ProviderName,
-    pub login: GhLogin,
-    #[serde(default)]
-    pub rev: Rev,
-}
+use super::super::GithubUsername;
 
 /// Who `gh` and the SSH key on the hub's own machine are on GitHub, as
 /// [`HubMachineLogins`](crate::client::github_accounts::HubMachineLogins) answers, so Settings' Providers shows them
@@ -43,7 +30,7 @@ pub enum SshLogin {
     Unknown,
 }
 
-/// What a machine's own `gh` is logged in to github.com with, as its worker found it, without the token. It's `gh`'s
+/// What the hub's machine's own `gh` is logged in to github.com with, as the hub found it, without the token. It's `gh`'s
 /// alone: git can push through a credential helper of its own, or with an SSH key, which this doesn't find.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "state", rename_all = "snake_case")]
@@ -52,7 +39,7 @@ pub enum GhLogin {
     /// runs, such as `GH_TOKEN`, which it uses over its own login.
     LoggedIn {
         username: GithubUsername,
-        /// Whether GitHub took its token when the provider was asked, which is once a hub start, so not since.
+        /// Whether GitHub took its token when the hub asked, as it reads `gh`.
         #[serde(default)]
         works: GhLoginWorks,
     },
@@ -65,10 +52,8 @@ pub enum GhLogin {
     Unknown,
 }
 
-/// Whether GitHub took a found login's token, by the HTTP status it answered the hub with when the hub asked whose the
-/// token is, with the token its worker handed it, as [`FindGithubLogin`](crate::worker::FindGithubLogin) says. A
-/// worker from before the hub asked said it from what GitHub answered `gh`. *Unconfirmed:* how it's said, and a success
-/// naming another user being one that can't be told.
+/// Whether GitHub took the token of `gh`'s login, by the HTTP status it answered the hub with when the hub asked whose
+/// the token is. *Unconfirmed:* how it's said, and a success naming another user being one that can't be told.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GhLoginWorks {
@@ -77,7 +62,7 @@ pub enum GhLoginWorks {
     /// GitHub refused the token, with 401, so `gh auth login` would log it in again.
     Refused,
     /// GitHub didn't answer, as when it can't be reached, or answered anything else, such as 403, a 5xx or another
-    /// user, refused a token `gh` renews by itself, whose time may only be up, or the worker had no token to give.
+    /// user, refused a token `gh` renews by itself, whose time may only be up, or `gh` printed no token.
     CouldntTell,
     /// From a newer peer, or one that didn't say.
     #[default]

@@ -106,7 +106,7 @@ fn where_each_level_stands_keeps_its_form() {
         concat!(
             r#"{"frame":"listed","subscription_id":3,"listed":{"level":"hub","repos":[],"workspaces":[],"sessions":[],"#,
             r#""comments":[],"hub_settings":null,"accounts":[],"new_workspace_draft":null,"github_accounts":[],"#,
-            r#""github_sign_ins":[],"found_github_logins":[],"github_apps":[],"rev":9}}"#
+            r#""github_sign_ins":[],"github_apps":[],"rev":9}}"#
         ),
     );
     keeps_its_form(

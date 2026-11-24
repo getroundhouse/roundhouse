@@ -247,8 +247,7 @@ async fn an_ask_this_hub_cant_read_is_refused() {
 }
 
 /// The worker answers the hello only once it has read the set too, so a hub that waited for the hello's answer before
-/// it queued the set would fail, and the hub's next call comes after the set, with nothing between, as a hub from
-/// before Settings' Providers asked who the machine's own `gh` was.
+/// it queued the set would fail, and the hub's next call comes after the set, with nothing between.
 #[tokio::test]
 async fn a_worker_is_set_the_hubs_git_credential_right_behind_its_hello_before_anything_else() {
     let dir = tempfile::tempdir().unwrap();

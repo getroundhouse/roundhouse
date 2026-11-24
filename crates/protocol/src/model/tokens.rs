@@ -38,9 +38,9 @@ mod tests {
     use crate::capability::conversation::Start;
     use crate::capability::settings::Settings;
     use crate::client::{ClientRequest, ClientResponse, accounts, devices, github_accounts, github_apps};
-    use crate::model::{AgentKind, AgentLogin, GhLogin, GhLoginWorks, GithubToken, LoginToken, RunId};
+    use crate::model::{AgentKind, AgentLogin, GithubToken, LoginToken, RunId};
     use crate::pairing::{DeviceToken, Fingerprint, Pairing, PairingCode, PairingLink};
-    use crate::worker::{self, GithubCredential, ToolsToken, WorkerRequest, WorkerResponse};
+    use crate::worker::{self, GithubCredential, ToolsToken, WorkerRequest};
 
     #[expect(
         unreachable_pub,
@@ -148,10 +148,6 @@ mod tests {
             token: GithubToken::new(SECRET),
             identity: None,
         });
-        let found = worker::GithubLoginReply {
-            login: GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes },
-            token: Some(worker::FoundToken { token: GithubToken::new(SECRET), renews: true }),
-        };
         vec![
             carrier("AgentLogin", &login()),
             carrier("AgentSpec", &WorkerRequest::AgentStart(launch())),
@@ -162,7 +158,6 @@ mod tests {
             ),
             carrier("GitCredential", &credential),
             carrier("GitCredentialSet", &WorkerRequest::GitCredentialSet(worker::GitCredentialSet { credential })),
-            carrier("GithubLoginReply", &WorkerResponse::GithubLogin(found)),
         ]
     }
 

@@ -119,7 +119,6 @@ fn a_list_of_every_record_reads_its_sign_ins_and_one_from_a_hub_that_cant_sign_i
 fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_before_says_none() {
     let reason = "The token of ada, the default account, has ended.";
     let forms = [
-        (SentCredential::MachineOwn, r#"{"kind":"machine_own"}"#.to_string()),
         (
             SentCredential::NoAccount { reason: "Connect one.".into() },
             r#"{"kind":"no_account","reason":"Connect one."}"#.to_string(),
@@ -182,24 +181,6 @@ fn the_providers_left_to_their_machines_keep_their_form_and_a_hub_from_before_le
     assert!(!settings.sets_up(&"local".into()) && settings.sets_up(&"vms".into()));
     assert!(older.sets_up(&"local".into()), "{older:?}");
     assert!(older.set_up.is_empty(), "{older:?}");
-}
-
-/// What a hub sends while it has no default, as an older client reads it: as one it can't tell, which says nothing of
-/// whether agents can push.
-#[test]
-fn no_account_is_one_an_older_client_cant_tell() {
-    #[derive(serde::Deserialize, Debug, PartialEq)]
-    #[serde(tag = "kind", rename_all = "snake_case")]
-    enum OlderSent {
-        MachineOwn,
-        Account,
-        #[serde(other)]
-        Unknown,
-    }
-
-    let read: OlderSent = serde_json::from_str(r#"{"kind":"no_account","reason":"Connect one."}"#).unwrap();
-
-    assert_eq!(read, OlderSent::Unknown);
 }
 
 /// What GitHub calls a GitHub account's user, which a hub sends at its own level to a client of a version that reads it

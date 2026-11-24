@@ -12,7 +12,6 @@ mod archived;
 mod ask;
 mod children;
 mod connection;
-mod found_login;
 mod frames;
 mod git_credential;
 mod one_off;
@@ -35,7 +34,6 @@ pub use ask::{
 };
 pub use children::{AddChildWorktree, ChildBranch, ChildWorktreeAdded, WatchChildBranches};
 pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, RunningAgentsReply, Stop};
-pub use found_login::{FindGithubLogin, FoundToken, GithubLoginReply};
 pub use frames::WorkerFrame;
 pub use git_credential::{GitCredential, GitCredentialSet, GitIdentity, GithubCredential};
 pub use one_off::{AccountFor, TitleFor, TitleReply};

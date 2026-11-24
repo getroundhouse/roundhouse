@@ -11,6 +11,7 @@ use protocol::client::{
 use protocol::event::{CompactedBy, SessionEvent};
 use protocol::find::Found;
 use protocol::fixtures;
+use protocol::frame;
 use protocol::model::{
     Account, CompactionLine, DiffComment, DiffSide, FileContents, FileOpened, FilePages, FileRange, GhLogin,
     GhLoginWorks, GitDiff, GitStatus, GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, HeldGithubLogin,
@@ -99,11 +100,28 @@ fn a_github_accounts_record_keeps_its_form_held_or_disconnected() {
 
 #[test]
 fn who_gh_on_the_hubs_machine_is_keeps_its_form() {
-    answered(
-        ClientResponse::GhLogin(GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes }),
-        r#"{"result":"gh_login","state":"logged_in","username":"ada","works":"yes"}"#,
-    );
+    let ada = |works| ClientResponse::GhLogin(GhLogin::LoggedIn { username: "ada".into(), works });
+    let logged_in =
+        |works| format!(r#"{{"result":"gh_login","state":"logged_in","username":"ada","works":"{works}"}}"#);
+
+    answered(ada(GhLoginWorks::Yes), &logged_in("yes"));
+    answered(ada(GhLoginWorks::Refused), &logged_in("refused"));
+    answered(ada(GhLoginWorks::CouldntTell), &logged_in("couldnt_tell"));
     answered(ClientResponse::GhLogin(GhLogin::LoggedOut), r#"{"result":"gh_login","state":"logged_out"}"#);
+    answered(ClientResponse::GhLogin(GhLogin::NotInstalled), r#"{"result":"gh_login","state":"not_installed"}"#);
+}
+
+/// From a newer hub, which may say who `gh` is, or whether its token works, in a way this build has no word for.
+#[test]
+fn who_gh_is_in_a_newer_way_reads_as_unknown() {
+    let read = |line: &str| frame::decode::<ClientResponse>(line.as_bytes()).unwrap();
+
+    let state = read(r#"{"result":"gh_login","state":"logged_in_twice","usernames":["ada","grace"]}"#);
+    let works = read(r#"{"result":"gh_login","state":"logged_in","username":"ada","works":"for_now"}"#);
+
+    assert_eq!(state, ClientResponse::GhLogin(GhLogin::Unknown));
+    let ada = GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Unknown };
+    assert_eq!(works, ClientResponse::GhLogin(ada));
 }
 
 /// Who `gh` and the SSH key on the hub's machine are, with `gh` left out when the hub couldn't tell.

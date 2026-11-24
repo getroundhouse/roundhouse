@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Stdio};
 
 use process::testing::WholeEnvironment;
-use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::model::GithubToken;
 use protocol::worker::{
@@ -206,20 +205,6 @@ fn sets_reach_git_in_a_process_started_before_them_in_the_order_sent() {
     assert!(applied.iter().all(|(_, answer)| *answer == WorkerOutcome::Response(WorkerResponse::Ok)), "{applied:?}");
     let (filled, _, _) = worker.git_said();
     assert!(filled.contains("username=ada\npassword=token-13\n"), "{filled}");
-}
-
-/// A `gh` that says it's logged in to github.com by the token in its environment, as the one the worker's own
-/// environment has, which it names as `the-machines-token`, and as `the-workers-credential` once it's given the
-/// worker's files, which it reads over any token, and that GitHub names the same for that token.
-/// As a hub from before Settings' Providers asks, which reads nothing of GitHub once it's refused.
-#[test]
-fn a_worker_refuses_to_find_its_machines_gh_login() {
-    let mut worker = Worker::start_with(|_| {});
-
-    worker.send(1, WorkerRequest::FindGithubLogin);
-    let replies = worker.replies(&[1]);
-
-    assert!(matches!(&replies[&1], WorkerOutcome::Error(e) if e.code == ErrorCode::Unsupported), "{replies:?}");
 }
 
 fn wait_for(path: &Path) {

@@ -166,7 +166,6 @@ fn a_hub_says_who_gh_and_the_ssh_key_on_its_machine_are_as_a_client_asks() {
 
     let gh = GhLogin::LoggedIn { username: LOGGED_IN_AS.into(), works: GhLoginWorks::Yes };
     assert_eq!(said, MachineLogins { gh: Some(gh), ssh: SshLogin::Key { username: LOGGED_IN_AS.into() } });
-    assert!(client.records().unwrap().found_github_logins.is_empty(), "nothing's kept of them");
 }
 
 /// Through the real worker of the local provider, which reads the address of its repository's `origin`, checked with

@@ -27,7 +27,6 @@ mod compactions;
 mod cover_lines;
 mod events;
 mod every_facet;
-mod found_github_logins;
 mod git_credentials;
 mod github_accounts;
 mod github_reach;

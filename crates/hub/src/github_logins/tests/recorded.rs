@@ -7,6 +7,7 @@ use super::credential::{reason, sent};
 use super::renewals::renewed;
 use super::sign_ins::{ada_signed_in, login_ending};
 use super::*;
+use crate::store::{BEFORE_GITHUB_SET_UP, older};
 
 const HOUR: i64 = 60 * 60 * 1000;
 
@@ -79,4 +80,21 @@ fn the_settings_say_why_a_default_blocks_as_workers_are_told() {
     assert_eq!(renewed, before_its_end, "connecting a token to it again has it sent again");
     let no_account = Some(SentCredential::NoAccount { reason: reason(sent(&logins)) });
     assert_eq!(disconnected, no_account, "a disconnected default leaves none, with the reason workers are told");
+}
+
+/// A hub from before Settings' Providers recorded each machine's own login as what workers are sent while it had no
+/// default, which reads as one from a newer hub, and is recorded again as the logins start, before any client can read
+/// the settings.
+#[test]
+fn what_a_hub_from_before_settings_providers_recorded_is_recorded_again_as_the_logins_start() {
+    let dir = tempfile::tempdir().unwrap();
+    let machine_own = r#"UPDATE hub_settings SET github_sent = '{"kind":"machine_own"}';"#;
+    let store = Arc::new(older::store_from_before(dir.path(), BEFORE_GITHUB_SET_UP, machine_own));
+    let stored = recorded(&store);
+
+    let _logins = logins_over(&store, dir.path(), 1000);
+
+    assert_eq!(stored, Some(SentCredential::Unknown));
+    let started = recorded(&store);
+    assert!(matches!(started, Some(SentCredential::NoAccount { .. })), "{started:?}");
 }

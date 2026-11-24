@@ -13,9 +13,6 @@ use super::super::GithubAccountId;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SentCredential {
-    /// Each machine's own login, which a hub from before the hub had an identity of its own sent while it had no
-    /// default.
-    MachineOwn,
     /// No default, so the hub reads nothing of GitHub, and the workers of the providers it sets up GitHub on are sent a
     /// block saying `reason`, which says to connect an account. *Unconfirmed.*
     NoAccount { reason: String },
@@ -30,12 +27,12 @@ pub enum SentCredential {
 }
 
 impl SentCredential {
-    /// Whether it was worked out for `default`, the default GitHub account, or each machine's own login with `None`.
+    /// Whether it was worked out for `default`, the default GitHub account, or for no default with `None`.
     /// The default and what's sent for it are written one after the other, so a copy of the settings read between
     /// has a default whose credential hasn't been worked out yet, and one from a newer hub can't be told.
     pub fn is_for(&self, default: Option<&GithubAccountId>) -> bool {
         match self {
-            SentCredential::MachineOwn | SentCredential::NoAccount { .. } => default.is_none(),
+            SentCredential::NoAccount { .. } => default.is_none(),
             SentCredential::Account { account } | SentCredential::Blocked { account, .. } => default == Some(account),
             SentCredential::Unknown => false,
         }

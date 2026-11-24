@@ -1,7 +1,7 @@
 use crate::model::{
-    Account, DiffComment, FoundGithubLogin, GithubAccount, GithubApp, GithubSignIn, HubSettings, HubUpdate, ModelList,
-    NewWorkspaceDraft, Observation, ObservationKey, Proposal, Record, RecordKey, ReplyHeard, Repo, Rev, Session,
-    Subagent, Terminal, Workspace,
+    Account, DiffComment, GithubAccount, GithubApp, GithubSignIn, HubSettings, HubUpdate, ModelList, NewWorkspaceDraft,
+    Observation, ObservationKey, Proposal, Record, RecordKey, ReplyHeard, Repo, Rev, Session, Subagent, Terminal,
+    Workspace,
 };
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +27,6 @@ pub enum HubNotice {
     Subagent(Subagent),
     GithubAccount(GithubAccount),
     GithubSignIn(GithubSignIn),
-    FoundGithubLogin(FoundGithubLogin),
     GithubApp(GithubApp),
     /// A terminal was opened, and a hub that kept its workers learned of it again as it started. One that ended or
     /// was closed is `Removed`.
@@ -109,7 +108,6 @@ impl TryFrom<HubNotice> for RecordNotice {
             HubNotice::Subagent(subagent) => Record::Subagent(subagent),
             HubNotice::GithubAccount(account) => Record::GithubAccount(account),
             HubNotice::GithubSignIn(sign_in) => Record::GithubSignIn(sign_in),
-            HubNotice::FoundGithubLogin(found) => Record::FoundGithubLogin(found),
             HubNotice::GithubApp(app) => Record::GithubApp(app),
             HubNotice::Terminal(terminal) => Record::Terminal(terminal),
             HubNotice::ModelList(list) => Record::ModelList(list),
@@ -139,7 +137,6 @@ impl From<Record> for HubNotice {
             Record::Subagent(subagent) => HubNotice::Subagent(subagent),
             Record::GithubAccount(account) => HubNotice::GithubAccount(account),
             Record::GithubSignIn(sign_in) => HubNotice::GithubSignIn(sign_in),
-            Record::FoundGithubLogin(found) => HubNotice::FoundGithubLogin(found),
             Record::GithubApp(app) => HubNotice::GithubApp(app),
             Record::Terminal(terminal) => HubNotice::Terminal(terminal),
             Record::ModelList(list) => HubNotice::ModelList(list),

@@ -105,9 +105,8 @@ impl Listed {
                     let its: &mut Vec<_> = terminals.entry(terminal.workspace_id.clone()).or_default();
                     its.push((terminal.clone(), taken));
                 }
-                // Held apart, as `HubRecords::apply_record` says, but for a found login, from a hub from before
-                // Settings' Providers, which no view shows.
-                Record::Subagent(_) | Record::Proposal(_) | Record::ReplyHeard(_) | Record::FoundGithubLogin(_) => {}
+                // Held apart, as `HubRecords::apply_record` says.
+                Record::Subagent(_) | Record::Proposal(_) | Record::ReplyHeard(_) => {}
             }
         }
         listed.repos.sort_by(Repo::by_name);

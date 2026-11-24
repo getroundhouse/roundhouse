@@ -51,8 +51,6 @@ impl Store {
             new_workspace_draft: Some(new_workspace_draft(&tx)?),
             github_accounts: github_accounts(&tx)?,
             github_sign_ins: github_sign_ins(&tx)?,
-            // A hub from before Settings' Providers found these, as `FoundGithubLogin` says. This one finds none.
-            found_github_logins: Vec::new(),
             github_apps: github_apps(&tx)?,
             // Kept in memory rather than here, as `Terminal`, `ModelList` and `HubUpdate` say, so the hub adds them.
             terminals: Vec::new(),

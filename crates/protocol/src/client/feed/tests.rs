@@ -1,7 +1,6 @@
 use crate::model::{
-    DiffComment, DiffSide, Ending, FoundGithubLogin, GithubAccount, GithubSignIn, HubSettings, Level, LineCounts,
-    NewWorkspaceDraft, Observation, ObservationKey, Observed, Record, RecordKey, ReplyHeard, Repo, Rev, SettledBy,
-    Subagent, Terminal,
+    DiffComment, DiffSide, Ending, GithubAccount, GithubSignIn, HubSettings, Level, LineCounts, NewWorkspaceDraft,
+    Observation, ObservationKey, Observed, Record, RecordKey, ReplyHeard, Repo, Rev, SettledBy, Subagent, Terminal,
 };
 
 use super::{HubNotice, ObservationNotice, RecordNotice};
@@ -57,14 +56,6 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
             HubNotice::GithubSignIn(GithubSignIn { rev: Rev::new(9), ..crate::fixtures::github_sign_in("s") }),
             RecordKey::GithubSignIn { id: "s".into() },
             Rev::new(9),
-        ),
-        (
-            HubNotice::FoundGithubLogin(FoundGithubLogin {
-                rev: Rev::new(10),
-                ..crate::fixtures::found_github_login("local")
-            }),
-            RecordKey::FoundGithubLogin { provider: "local".into() },
-            Rev::new(10),
         ),
     ]
 }

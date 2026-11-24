@@ -5,10 +5,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Account, AccountId, CommentId, DiffComment, FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp,
-    GithubAppId, GithubSignIn, GithubSignInId, HubSettings, HubUpdate, MessageId, ModelList, ModelListKey,
-    NewWorkspaceDraft, Observation, Proposal, ProposalId, ProviderName, ReplyHeard, Repo, RepoId, Rev, Session,
-    SessionId, Subagent, SubagentId, Terminal, TerminalId, Workspace, WorkspaceId,
+    Account, AccountId, CommentId, DiffComment, GithubAccount, GithubAccountId, GithubApp, GithubAppId, GithubSignIn,
+    GithubSignInId, HubSettings, HubUpdate, MessageId, ModelList, ModelListKey, NewWorkspaceDraft, Observation,
+    Proposal, ProposalId, ReplyHeard, Repo, RepoId, Rev, Session, SessionId, Subagent, SubagentId, Terminal,
+    TerminalId, Workspace, WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -50,11 +50,6 @@ pub enum RecordKey {
     /// Sent once it has gone, as [`GithubSignIn`] says.
     GithubSignIn {
         id: GithubSignInId,
-    },
-    /// A provider has at most one. The hub forgets them as it starts, rather than removing one while it runs, since its
-    /// providers are read as it starts, so this isn't sent, as [`FoundGithubLogin`] says.
-    FoundGithubLogin {
-        provider: ProviderName,
     },
     /// Sent once it has been removed, as [`GithubApp`] says.
     GithubApp {
@@ -101,7 +96,6 @@ pub enum Record {
     Subagent(Subagent),
     GithubAccount(GithubAccount),
     GithubSignIn(GithubSignIn),
-    FoundGithubLogin(FoundGithubLogin),
     GithubApp(GithubApp),
     Terminal(Terminal),
     ModelList(ModelList),
@@ -127,7 +121,6 @@ impl Record {
             }
             Record::GithubAccount(account) => RecordKey::GithubAccount { id: account.id.clone() },
             Record::GithubSignIn(sign_in) => RecordKey::GithubSignIn { id: sign_in.id.clone() },
-            Record::FoundGithubLogin(found) => RecordKey::FoundGithubLogin { provider: found.provider.clone() },
             Record::GithubApp(app) => RecordKey::GithubApp { id: app.id },
             Record::Terminal(terminal) => RecordKey::Terminal { id: terminal.id.clone() },
             Record::ModelList(list) => RecordKey::ModelList(list.key.clone()),
@@ -152,7 +145,6 @@ impl Record {
             Record::Subagent(subagent) => subagent.rev,
             Record::GithubAccount(account) => account.rev,
             Record::GithubSignIn(sign_in) => sign_in.rev,
-            Record::FoundGithubLogin(found) => found.rev,
             Record::GithubApp(app) => app.rev,
             Record::Terminal(terminal) => terminal.rev,
             Record::ModelList(list) => list.rev,
@@ -186,9 +178,6 @@ pub struct Records {
     /// Empty from a hub that keeps no GitHub accounts, or that can't sign in with GitHub.
     #[serde(default)]
     pub github_sign_ins: Vec<GithubSignIn>,
-    /// Only from a hub from before Settings' Providers, as [`FoundGithubLogin`] says, and empty from any other.
-    #[serde(default)]
-    pub found_github_logins: Vec<FoundGithubLogin>,
     /// Empty from a hub from before apps of your own.
     #[serde(default)]
     pub github_apps: Vec<GithubApp>,
@@ -227,7 +216,6 @@ impl Records {
             new_workspace_draft,
             github_accounts,
             github_sign_ins,
-            found_github_logins,
             github_apps,
             terminals,
             model_lists,
@@ -244,7 +232,6 @@ impl Records {
         let records = records.chain(new_workspace_draft.into_iter().map(Record::NewWorkspaceDraft));
         let records = records.chain(github_accounts.into_iter().map(Record::GithubAccount));
         let records = records.chain(github_sign_ins.into_iter().map(Record::GithubSignIn));
-        let records = records.chain(found_github_logins.into_iter().map(Record::FoundGithubLogin));
         let records = records.chain(github_apps.into_iter().map(Record::GithubApp));
         let records = records.chain(terminals.into_iter().map(Record::Terminal));
         let records = records.chain(model_lists.into_iter().map(Record::ModelList));
@@ -258,20 +245,18 @@ mod tests {
     use crate::fixtures;
 
     #[test]
-    fn a_list_gives_its_github_accounts_sign_ins_found_logins_and_apps_as_records() {
+    fn a_list_gives_its_github_accounts_sign_ins_and_apps_as_records() {
         let list = Records {
             github_accounts: vec![fixtures::github_account("g")],
             github_sign_ins: vec![fixtures::github_sign_in("s")],
-            found_github_logins: vec![fixtures::found_github_login("local")],
             github_apps: vec![fixtures::github_app(9)],
             ..Records::default()
         };
 
         let keys: Vec<RecordKey> = list.into_records().map(|record| record.key()).collect();
 
-        let found = RecordKey::FoundGithubLogin { provider: "local".into() };
         let signing_in = RecordKey::GithubSignIn { id: "s".into() };
         let app = RecordKey::GithubApp { id: GithubAppId::new(9) };
-        assert_eq!(keys, [RecordKey::GithubAccount { id: "g".into() }, signing_in, found, app]);
+        assert_eq!(keys, [RecordKey::GithubAccount { id: "g".into() }, signing_in, app]);
     }
 }
