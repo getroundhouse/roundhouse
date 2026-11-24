@@ -72,18 +72,16 @@ pub struct World {
     /// The records of the accounts the world's chats run under.
     pub accounts: Vec<Account>,
     pub account_defaults: Vec<protocol::model::AccountDefault>,
-    /// The hub is from before hubs kept settings, so it sends none.
-    pub keeps_no_settings: bool,
     pub logins: LoginSupport,
-    /// What the hub's settings say of GitHub: `None` for a hub that keeps no GitHub accounts.
+    /// What the hub's settings say of GitHub, or nothing, for a world whose screens don't show it.
     pub github: Option<GithubSettings>,
     pub github_accounts: Vec<GithubAccount>,
     pub github_sign_ins: Vec<GithubSignIn>,
-    /// Who `gh` on the hub's machine is logged in as, as the hub answers each time it's asked. `None` refuses it, as a hub
-    /// from before it read `gh` does.
+    /// Who `gh` on the hub's machine is logged in as, as the hub answers each time it's asked. `None` fails to say, as
+    /// a hub that couldn't read `gh` does.
     pub hub_gh_login: Option<protocol::model::GhLogin>,
-    /// Who `gh` and the SSH key on the hub's machine are, as the hub answers each time it's asked. `None` refuses it,
-    /// as a hub from before it read them does.
+    /// Who `gh` and the SSH key on the hub's machine are, as the hub answers each time it's asked. `None` fails to say,
+    /// as a hub that couldn't read them does.
     pub machine_logins: Option<protocol::model::MachineLogins>,
     /// Why the hub couldn't use `gh`'s login as an account's, as it answers each time it's asked. `None` refuses it, as the
     /// rest of what would change what the hub holds.
@@ -112,9 +110,6 @@ pub struct World {
     pub worker_reads: HashMap<WorkspaceId, super::WorkerReads>,
     /// What the feed tells of observations once a client follows their level, in order: what changed after the list.
     pub feed: Vec<protocol::client::ObservationNotice>,
-    /// Whether the hub takes a start at a workspace's level and sends nothing there, as a hub from before a workspace's
-    /// level had a list does.
-    pub lists_no_workspace_level: bool,
     /// The hub's newest revision, which its lists are at, as [`World::rev`] finds it once the world is served.
     pub(super) listed_at: Rev,
     records: i64,

@@ -60,30 +60,25 @@ fn a_followed_workspace_s_changed_files_are_held_until_it_s_followed_no_more() {
     waiting::thread::until(TIMEOUT, "elm's files to be let go of", || paths(&feed, &elm).is_none());
 }
 
-/// A workspace followed on a connection to a hub that lists a workspace's level, and then on one to a hub that takes
-/// the start and lists nothing, as a hub from before a workspace's level had a list does, reads that the hub sends
-/// none of its changed files, so the Changes tab reads the whole diff.
+/// A workspace followed on a connection to a hub that has it, and then on one to a hub that no longer does, which
+/// refuses to start following it, holds none of its changed files once the second hub has answered, as of a workspace
+/// nothing followed.
 #[test]
-fn a_hub_that_lists_no_workspace_level_sends_none_of_its_changed_files() {
-    let world = |lists_none| {
-        let mut world = World::default();
-        world.lists_no_workspace_level = lists_none;
-        let repo = world.repo("aspen");
-        let elm = world.workspace(&repo, "elm");
-        world.observations = vec![changes(&elm, vec![file("a.rs", ChangeStatus::Modified)], 2)];
-        (world, elm)
-    };
-    let (lists, elm) = world(false);
-    let (lists_none, _) = world(true);
-    let following = lists_none.following.clone();
-    let (_dir, client) = served(lists);
-    let (_older_dir, older) = served(lists_none);
+fn a_workspace_the_hub_refuses_to_follow_holds_none_of_what_was_held_before() {
+    let mut world = World::default();
+    let repo = world.repo("aspen");
+    let elm = world.workspace(&repo, "elm");
+    world.observations = vec![changes(&elm, vec![file("a.rs", ChangeStatus::Modified)], 2)];
+    let gone = World::default();
+    let following = gone.following.clone();
+    let (_dir, client) = served(world);
+    let (_gone_dir, without_it) = served(gone);
     let feed = RecordsFeed::start(&client);
     let _followed = feed.follow_workspace(&elm);
     waiting::thread::until(TIMEOUT, "elm's files", || paths(&feed, &elm).is_some());
 
-    feed.reconnect(&older);
+    feed.reconnect(&without_it);
 
-    waiting::thread::until(TIMEOUT, "the older hub to be followed", || following.any(|level| *level != Level::Hub));
+    waiting::thread::until(TIMEOUT, "the hub to be followed", || following.any(|level| *level == Level::Hub));
     waiting::thread::until(TIMEOUT, "elm's files to be let go of", || paths(&feed, &elm).is_none());
 }

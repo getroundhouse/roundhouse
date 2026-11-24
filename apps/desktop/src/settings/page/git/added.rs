@@ -27,18 +27,13 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Div {
             .on_click(move |_, _, cx| opening.update(cx, Kept::open_choosing));
     let panel = at_top.map(|panel| div().py(look::Space::Large).child(draw_panel(drawing, panel, cx)));
     let accounts = listed(drawing.records.github_accounts(), drawing.github.and_then(|github| github.account.as_ref()));
-    let said = if drawing.older {
-        Some(("git-older-hub", words::OLDER_HUB.to_string()))
-    } else {
-        (accounts.is_empty() && panel.is_none()).then(|| ("git-none-added", words::none_added()))
-    };
-    let said = said.map(|(id, said)| said_in_the_list(id, said.into(), cx));
+    let said = (accounts.is_empty() && panel.is_none())
+        .then(|| said_in_the_list("git-none-added", words::none_added().into(), cx));
     let rows = accounts.iter().map(|account| account_row(drawing, account, cx));
     let blocked = blocked(drawing, !accounts.is_empty(), cx);
     let list = rows_of(cx).children(panel).children(blocked).children(said).children(rows);
     let list = list.children(app_rows::not_installed(drawing, cx));
-    let says = if drawing.older { words::ADDED_SAYS_OLDER.to_string() } else { words::added_says() };
-    v_flex().child(heading("Added", None, says, Some(connect.into_any_element()), cx)).child(list)
+    v_flex().child(heading("Added", None, words::added_says(), Some(connect.into_any_element()), cx)).child(list)
 }
 
 /// The accounts in the order Added lists them: the default first, since it's the one used, then those the hub holds a

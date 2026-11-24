@@ -5,11 +5,11 @@
 use std::collections::HashMap;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::event::{EventBody, SessionEvent};
+use protocol::event::{ApprovalChange, EventBody, SessionEvent};
 use protocol::fixtures::observed;
 use protocol::model::{
-    CacheTtl, ContextUsage, ConversationCache, ModelName, Observation, ObservationKey, Observed, Place, PromptCache,
-    ReplyHeard, Seq, Session, SessionId, SessionStatus, Subagent, SubagentId, Title, WorkspaceId,
+    CacheTtl, ContextUsage, ConversationCache, ModelName, Observation, ObservationKey, Observed, OpenApproval, Place,
+    PromptCache, ReplyHeard, Seq, Session, SessionId, SessionStatus, Subagent, SubagentId, Title, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 
@@ -53,6 +53,28 @@ impl World {
         self.logs.insert(id.clone(), log);
         self.worked_in(&id, created_at_ms);
         id
+    }
+
+    /// Has each chat's record say which approvals its agent waits on, as a hub's does: each request in its log that no
+    /// answer after it has closed, oldest first. A record the world gave a list of its own keeps it.
+    pub(super) fn record_open_approvals(&mut self) {
+        for session in self.sessions.iter_mut().filter(|session| session.open_approvals.is_none()) {
+            let mut open: Vec<OpenApproval> = Vec::new();
+            for event in self.logs.get(&session.id).into_iter().flatten() {
+                match event.body.approval_change() {
+                    Some(ApprovalChange::Opens { approval_id, .. }) => {
+                        if !open.iter().any(|waiting| waiting.approval_id == *approval_id) {
+                            open.push(OpenApproval { seq: event.seq, approval_id: approval_id.clone() });
+                        }
+                    }
+                    Some(ApprovalChange::Closes(approval_id)) => {
+                        open.retain(|waiting| waiting.approval_id != *approval_id);
+                    }
+                    None => {}
+                }
+            }
+            session.open_approvals = Some(open);
+        }
     }
 
     /// Has the agent been working on the chat's turn for this long when the picture is taken.

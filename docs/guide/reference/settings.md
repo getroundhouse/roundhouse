@@ -176,8 +176,6 @@ If the default can't be used, because its token ended, it needs signing in again
 
 ![Git saying Roundhouse can't use its GitHub account, since the default's token ended](../../spec/screens/settings-git-default-ended.png)
 
-A hub from before hubs kept GitHub accounts can't connect one, and agents use each machine's own login. Update the hub to connect one.
-
 ## Providers
 
 Where agents run, and who they are on GitHub there.

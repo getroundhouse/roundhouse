@@ -244,7 +244,7 @@ pub struct Session {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision_draft: Option<DecisionDraft>,
     /// The approvals the agent is waiting on, oldest first, changed in the same commit as the event that changes them.
-    /// `None` from a hub that doesn't say, whose client finds them among the events it has loaded.
+    /// `None` only from a hub that couldn't read what it keeps of them, which a client takes as none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub open_approvals: Option<Vec<OpenApproval>>,
     /// The prompts the agent has yet to take or drop, oldest first, by where each is recorded, a compaction asked for

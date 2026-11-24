@@ -89,8 +89,7 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             draft: json_at(row, c.draft)?.unwrap_or_default(),
             // The same.
             decision_draft: json_at(row, c.decision_draft)?,
-            // Written only by this hub, as JSON. One it can't read says nothing, which leaves a client to look in the
-            // log, as one from an older hub does.
+            // Written only by this hub, as JSON. One it can't read says nothing, which a client takes as none.
             untaken: json_at(row, c.untaken)?,
             open_approvals: json_at(row, c.open_approvals)?,
             agent_opened: Some(row.at(c.agent_opened)?),

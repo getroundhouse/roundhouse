@@ -202,7 +202,7 @@ impl Transcript {
     /// The approvals waiting on an answer, newest last.
     pub fn open_approvals(&self) -> Vec<SessionEvent> {
         let m = self.model.borrow();
-        self.log.open_approvals(m.approvals.as_ref()).into_iter().cloned().collect()
+        self.log.open_approvals(&m.approvals).into_iter().cloned().collect()
     }
 
     pub fn loaded_events(&self) -> usize {

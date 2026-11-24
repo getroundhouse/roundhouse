@@ -79,8 +79,7 @@ impl RecordsFeed {
 
     /// Follows workspace `id` at its own level, as [`FollowedWorkspace`] says, until the handle this returns is dropped,
     /// and every other kept on it. A view that shows what only a workspace's own pane draws keeps one while it shows
-    /// it. One from a hub from before workspaces had a level of their own follows nothing, and what's read of the
-    /// workspace's changed files says the hub sends none.
+    /// it.
     pub fn follow_workspace(&self, id: &WorkspaceId) -> FollowedWorkspace {
         self.workspaces.follow(id)
     }

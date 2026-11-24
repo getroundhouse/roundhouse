@@ -40,15 +40,12 @@ pub(super) struct Drawing<'a> {
     pub(super) scroll: &'a ScrollHandle,
     /// The one moment every row says a time as of.
     pub(super) now_ms: i64,
-    /// What the hub's settings say of GitHub. `None` until they've arrived, and from a hub that keeps no GitHub
-    /// accounts, which `older` tells apart.
+    /// What the hub's settings say of GitHub. `None` until they've arrived.
     pub(super) github: Option<&'a GithubSettings>,
-    /// The hub's settings have arrived, and say nothing of GitHub, since it keeps no GitHub accounts.
-    pub(super) older: bool,
 }
 
 impl Drawing<'_> {
-    /// Whether the page can ask the hub to change something now: there's a hub, and it keeps GitHub accounts.
+    /// Whether the page can ask the hub to change something now: there's a hub, and its settings have arrived.
     pub(super) fn can_ask(&self, cx: &App) -> bool {
         self.github.is_some() && self.kept.read(cx).can_ask()
     }
@@ -78,19 +75,11 @@ impl RenderOnce for GitPage {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let kept = window.use_keyed_state("settings-git", cx, |_, _| Kept::default());
         let now_ms = look::now_ms(cx);
-        let settings = self.records.hub_settings();
-        let github = settings.and_then(|settings| settings.github.as_ref());
+        let github = self.records.hub_settings().and_then(|settings| settings.github.as_ref());
         let changes_at_ms = changes_at_ms(self.records.github_accounts(), now_ms);
         let focus = self.within.focus.clone();
         kept.update(cx, |kept, cx| kept.drawn(self.asking, focus, &self.records, changes_at_ms, cx));
-        let drawing = Drawing {
-            kept: &kept,
-            records: &self.records,
-            scroll: &self.within.scroll,
-            now_ms,
-            github,
-            older: settings.is_some() && github.is_none(),
-        };
+        let drawing = Drawing { kept: &kept, records: &self.records, scroll: &self.within.scroll, now_ms, github };
         v_flex()
             .w_full()
             .max_w(COLUMN_WIDTH)

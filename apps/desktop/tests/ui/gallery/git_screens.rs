@@ -1,5 +1,5 @@
 //! Git's screens in Settings, each of a state its rules in `settings.md` say: the accounts and logins in each state,
-//! connecting one, signing in, a row's menu, and a hub that keeps no GitHub accounts.
+//! connecting one, signing in, and a row's menu.
 
 #![cfg(test)]
 
@@ -9,8 +9,8 @@ use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::{
-    ada, conversation, github_accounts, github_default_ended, github_gh_default, github_gh_logged_out,
-    github_gh_offered, github_gh_other_user, github_gh_refused, github_gh_unread, github_no_default, github_signing_in,
+    ada, github_accounts, github_default_ended, github_gh_default, github_gh_logged_out, github_gh_offered,
+    github_gh_other_user, github_gh_refused, github_gh_unread, github_no_default, github_signing_in,
     github_signing_in_to, github_unnamed, no_github_accounts,
 };
 use client_core::fake_hub::World;
@@ -31,7 +31,6 @@ pub(crate) const SCREENS: &[Screen] = &[
     git("settings-git-unnamed", github_unnamed, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
     git("settings-git-default-ended", github_default_ended, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
     git("settings-git-no-default", github_no_default, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
-    git("settings-git-older-hub", conversation, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
     git(
         "settings-git-menu",
         github_accounts,

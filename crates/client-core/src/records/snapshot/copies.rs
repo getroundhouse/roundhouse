@@ -143,8 +143,7 @@ impl Snapshot {
         Snapshot { records, observations, subagents, proposals, replies_heard, agents }
     }
 
-    /// What each kind of agent the hub runs is called and offers. None until the hub has said, and for good from a hub
-    /// too old to say.
+    /// What each kind of agent the hub runs is called and offers. None until the hub has said.
     pub fn agents(&self) -> &Agents {
         &self.agents
     }
@@ -192,17 +191,17 @@ impl Snapshot {
         self.records.terminals.get(workspace).map_or(&[], |its| &its.items)
     }
 
-    /// The record of the account `id`. `None` until it's arrived, and from a hub from before it kept them.
+    /// The record of the account `id`. `None` until it's arrived.
     pub fn account(&self, id: &AccountId) -> Option<&Account> {
         self.records.accounts.get(id)
     }
 
-    /// Every account's record, in no order. Empty until they've arrived, and from a hub from before it kept them.
+    /// Every account's record, in no order. Empty until they've arrived.
     pub fn accounts(&self) -> impl Iterator<Item = &Account> {
         self.records.accounts.values()
     }
 
-    /// The hub's own settings. `None` until they've arrived, and for good from a hub from before it kept any.
+    /// The hub's own settings. `None` until they've arrived.
     pub fn hub_settings(&self) -> Option<&HubSettings> {
         self.records.hub_settings.as_ref()
     }
@@ -213,8 +212,7 @@ impl Snapshot {
         self.records.hub_update.as_ref()
     }
 
-    /// What's in the new-workspace dialog and not made yet, as the hub keeps it. `None` until it's arrived, and for good
-    /// from a hub from before it kept one.
+    /// What's in the new-workspace dialog and not made yet, as the hub keeps it. `None` until it's arrived.
     pub fn new_workspace_draft(&self) -> Option<&NewWorkspaceDraft> {
         self.records.new_workspace_draft.as_ref()
     }
