@@ -3,22 +3,22 @@
 //! yet. Its key and its installation's tokens are the hub's, so none is here.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::fixtures::github_app;
+use protocol::fixtures::{github_app, github_user, observed};
 use protocol::model::{
-    GithubAccount, GithubApp, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
+    GithubAccount, GithubAppId, GithubAppSaid, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
     GithubUserId, HeldGithubLogin, UnusableLogin,
 };
 
-use super::github::{blocking, github_accounts, sending};
+use super::github::{Named, add, blocking, github_accounts, sending};
 use client_core::fake_hub::{HOUR_MS, NOW_MS, World};
 
 /// [`github_accounts`], with the app installed on `adalabs`, made two days ago, whose installation is the default.
 pub(in crate::gallery) fn github_app_installed() -> World {
     let mut world = github_accounts();
     let bot = installation();
-    world.github = Some(sending(&bot));
-    world.github_accounts.push(bot);
-    world.github_apps = vec![app()];
+    world.github = Some(sending(&bot.account));
+    add(&mut world, bot);
+    made(&mut world);
     world
 }
 
@@ -30,14 +30,14 @@ pub(in crate::gallery) fn github_app_renewing() -> World {
                   Roundhouse is making another. Until it has, Roundhouse can't read pull requests, and agents on the \
                   providers it sets up can't push. It tries every minute until GitHub answers. If this goes on, check \
                   the app is still on GitHub, or choose another default.";
-    world.github = Some(blocking(&installation(), UnusableLogin::Renewing, reason));
+    world.github = Some(blocking(&installation().account, UnusableLogin::Renewing, reason));
     world
 }
 
 /// [`github_accounts`], with the app made, but installed nowhere yet.
 pub(in crate::gallery) fn github_app_not_installed() -> World {
     let mut world = github_accounts();
-    world.github_apps = vec![app()];
+    made(&mut world);
     world
 }
 
@@ -53,18 +53,26 @@ fn adalabs() -> GithubUser {
     GithubUser { id: GithubUserId::new(7), name: "adalabs".into() }
 }
 
-/// `ada-roundhouse`, under `adalabs`, as the panel names it by default for `ada`.
-fn app() -> GithubApp {
-    GithubApp { name: "ada-roundhouse".to_string(), owner: adalabs(), ..github_app(9) }
+/// Has the world's hub hold the app, `ada-roundhouse`, under `adalabs`, as the panel names it by default for `ada`, with
+/// what GitHub says of it and its bot.
+fn made(world: &mut World) {
+    world.github_apps = vec![github_app(9)];
+    let said = GithubAppSaid { slug: "ada-roundhouse".into(), name: "ada-roundhouse".to_string(), owner: adalabs() };
+    world.observe(observed::app_said(9, said));
+    world.observe(observed::app_bot(9, bot()));
+}
+
+/// The app's bot, as GitHub numbers it.
+fn bot() -> GithubUser {
+    GithubUser { id: GithubUserId::new(41), name: "ada-roundhouse[bot]".into() }
 }
 
 /// The app's installation on `adalabs`, as an account whose user is the app's bot, whose token the hub makes from the
 /// app's key, an hour at a time, so its record says no end, as the hub keeps it.
-fn installation() -> GithubAccount {
-    let bot = app().bot.unwrap();
-    GithubAccount {
+fn installation() -> Named {
+    let account = GithubAccount {
         id: "github-0004".into(),
-        user: bot,
+        user: github_user(bot().id.get()),
         held_login: Some(HeldGithubLogin {
             how: GithubLoginKind::App,
             connected_at_ms: NOW_MS - 48 * HOUR_MS,
@@ -74,8 +82,9 @@ fn installation() -> GithubAccount {
         installation: Some(GithubInstallation {
             app: GithubAppId::new(9),
             id: GithubInstallationId::new(50_001),
-            on: adalabs(),
+            on: github_user(adalabs().id.get()),
         }),
         rev: protocol::model::Rev::default(),
-    }
+    };
+    Named { account, username: "ada-roundhouse[bot]", on: Some("adalabs") }
 }

@@ -10,11 +10,12 @@ use protocol::client::accounts::AccountConnect;
 use protocol::client::sessions::SessionAssignAccount;
 use protocol::event::{EventBody, ExitReason, SessionEvent};
 use protocol::model::{
-    Account, AccountId, AgentKind, CacheRequest, CacheTtl, LoginToken, Seq, Session, SessionId, Workspace,
+    Account, AccountId, AgentKind, CacheRequest, CacheTtl, LoginToken, PromptCache, Seq, Session, SessionId, Workspace,
 };
 use protocol::prompt::Prompt;
 
 use crate::hub::Hub;
+use crate::hub::observations::SessionKey;
 use crate::hub::stand_in_workers::{Asked, TIMEOUT, a_chat, a_turn, hub_with_stand_in_workers, the_agent_says};
 
 /// A hub whose workspaces have stand-ins for their workers, and what those have been asked.
@@ -87,11 +88,16 @@ impl Chats {
         self.record(chat).hub_account().cloned()
     }
 
-    /// `chat`'s record, as a reply carries it.
+    /// `chat`'s record.
     pub(super) fn record(&self, chat: &SessionId) -> Session {
-        let mut session = self.hub.store.get_session(chat).unwrap().session;
-        self.hub.fill_old_forms(&mut session);
-        session
+        self.hub.store.get_session(chat).unwrap().session
+    }
+
+    /// What the API's cache holds of `chat`'s conversation, as the hub observes it.
+    pub(super) fn cache_held(&self, chat: &SessionId) -> Option<PromptCache> {
+        let session_id = chat.clone();
+        let of = SessionKey { workspace_id: self.record(chat).workspace_id, session_id };
+        self.hub.observations.value_of::<crate::hub::observations::SessionCache>(&of).and_then(|cache| cache.held)
     }
 
     pub(super) fn log(&self, chat: &SessionId) -> Vec<SessionEvent> {
@@ -145,7 +151,7 @@ impl TwoAccounts {
         let (work, personal) = (chats.connect("Work").await, chats.connect("Personal").await);
         let (workspace, chat) = a_chat(&chats.hub).await;
         assert_eq!(chats.token_in_turn(&chat.id, Some(cold())).await.as_deref(), Some("work-token"));
-        assert!(chats.record(&chat.id).prompt_cache.is_some(), "its first turn left something cached");
+        assert!(chats.cache_held(&chat.id).is_some(), "its first turn left something cached");
         Self { chats, workspace, work, personal, chat: chat.id }
     }
 

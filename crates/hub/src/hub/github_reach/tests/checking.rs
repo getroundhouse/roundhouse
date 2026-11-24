@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::github_apps::GithubManifestCode;
-use protocol::model::{GithubToken, InstalledApp, Reach};
+use protocol::model::{GithubToken, InstalledApp, Observation, Observed, Reach};
 use protocol::worker::PushRoute;
 use tokio::sync::watch;
 
@@ -30,6 +30,15 @@ async fn refusing() -> StandIn {
 /// Has a worker read that the checkout of the hub's repository, `r`, fetches from `cli/cli` on GitHub.
 async fn says_cli(hub: &Arc<Hub>) {
     reads(hub, "https://github.com/cli/cli.git").await;
+}
+
+/// What `hub` lists of the reach of its repository, `r`.
+async fn listed(hub: &Hub) -> Option<Observed<Reach>> {
+    let records = hub.records_list().await.unwrap();
+    records.observations.into_iter().find_map(|observation| {
+        let Observation::RepositoryReach { repo, reach, .. } = observation else { return None };
+        (repo.as_str() == "r").then_some(reach)
+    })
 }
 
 /// What the last run kept, as the hub starts, from the cache file.
@@ -58,9 +67,10 @@ async fn as_the_hub_starts_each_repository_the_last_run_recorded_is_checked_agai
     let _checking = checking(&hub, following);
     let reach = told(&mut feed).await;
 
-    assert_eq!((reach.repo.as_str(), &reach.reach), ("r", &refused_as("ada")));
-    assert!(!reach.stale && reach.answered_at_ms.is_some_and(|at| at >= started_ms), "{reach:?}");
-    assert_eq!(hub.records_list().await.unwrap().github_reach, [reach]);
+    assert_eq!((reach.repo.as_str(), &reach.observed), ("r", &Observed::Current { value: refused_as("ada") }));
+    let answered_at_ms = hub.observations.read_at::<RepositoryReach>(&"r".into());
+    assert!(answered_at_ms.is_some_and(|at| at >= started_ms), "{answered_at_ms:?}");
+    assert_eq!(listed(&hub).await, Some(reach.observed));
     assert!(github.asked()[0].starts_with("get /cli/cli.git/info/refs?service=git-receive-pack "));
 }
 
@@ -76,15 +86,13 @@ async fn a_check_github_doesnt_answer_keeps_what_it_last_answered_for_the_login(
     let _checking = checking(&hub, following);
 
     let told_nothing = tells_no_reach(&mut feed).await;
-    let kept = hub.records_list().await.unwrap().github_reach;
+    let kept = listed(&hub).await;
     credential.send_replace(account("grace", "g-token"));
     let unknown = told(&mut feed).await;
 
     assert!(told_nothing);
-    let [kept] = kept.as_slice() else { panic!("{kept:?}") };
-    assert_eq!((&kept.reach, kept.answered_at_ms, kept.stale), (&refused_as("ada"), Some(5), true));
-    assert!(matches!(unknown.reach, Reach::CouldntTell { .. }), "{unknown:?}");
-    assert_eq!((unknown.answered_at_ms, unknown.stale), (None, false));
+    assert_eq!(kept, Some(Observed::AsOf { value: refused_as("ada"), as_of_ms: 5 }));
+    assert!(matches!(unknown.observed, Observed::Current { value: Reach::CouldntTell { .. } }), "{unknown:?}");
 }
 
 /// A repository is checked once a worker reads its address, and every client is told, whatever the login.
@@ -102,8 +110,8 @@ async fn a_repository_is_checked_once_a_worker_reads_its_address_and_every_clien
     credential.send_replace(account("ada", "a-token"));
     let refused = told(&mut feed).await;
 
-    assert_eq!(none.reach, Reach::Blocked { repository: CLI, reason: "Connect one".into() });
-    assert_eq!(refused.reach, refused_as("ada"));
+    assert_eq!(none.reach(), Reach::Blocked { repository: CLI, reason: "Connect one".into() });
+    assert_eq!(refused.reach(), refused_as("ada"));
     assert_eq!(github.asked().len(), 1, "only the account's was asked of GitHub");
 }
 
@@ -125,8 +133,8 @@ async fn a_repository_is_checked_for_what_its_address_names_as_each_is_read() {
     reads(&hub, "git@github.com:cli/cli.git").await;
     let on_github = told(&mut feed).await;
 
-    assert_eq!(elsewhere.reach, Reach::NotOnGithub);
-    assert_eq!(on_github.reach, refused_as("ada"));
+    assert_eq!(elsewhere.reach(), Reach::NotOnGithub);
+    assert_eq!(on_github.reach(), refused_as("ada"));
     assert_eq!(github.asked().len(), 1, "only cli/cli was asked of GitHub");
 }
 
@@ -145,7 +153,7 @@ async fn a_repository_an_older_worker_says_pushes_round_the_credential_is_checke
     reads_pushing(&hub, "https://github.com/cli/cli.git", PushRoute::Around).await;
     let checked = told(&mut feed).await;
 
-    assert_eq!(checked.reach, refused_as("ada"));
+    assert_eq!(checked.reach(), refused_as("ada"));
     assert_eq!(github.asked().len(), 1);
 }
 
@@ -167,7 +175,7 @@ async fn a_new_default_or_a_renewed_login_has_every_repository_checked_again_wit
     credential.send_replace(account("grace", "g-renewed"));
     github.until_asked(3).await;
 
-    assert_eq!((ada.reach, grace.reach), (refused_as("ada"), refused_as("grace")));
+    assert_eq!((ada.reach(), grace.reach()), (refused_as("ada"), refused_as("grace")));
     // `grace:g-renewed`.
     assert!(github.asked()[2].contains("authorization: basic z3jhy2u6zy1yzw5ld2vk\r\n"), "{}", github.asked()[2]);
 }
@@ -193,9 +201,9 @@ async fn an_answer_for_a_login_that_has_since_changed_is_let_go_of() {
     credential.send_replace(account("grace", "g-token"));
     let grace = told(&mut feed).await;
 
-    assert_eq!(none.reach, Reach::Blocked { repository: CLI, reason: "Connect one".into() });
-    assert_eq!(grace.reach, Reach::Pushes { repository: CLI, username: "grace".into() });
-    assert_eq!(hub.records_list().await.unwrap().github_reach, [grace]);
+    assert_eq!(none.reach(), Reach::Blocked { repository: CLI, reason: "Connect one".into() });
+    assert_eq!(grace.reach(), Reach::Pushes { repository: CLI, username: "grace".into() });
+    assert_eq!(listed(&hub).await, Some(grace.observed));
 }
 
 /// What's recorded is changed behind the hub's back, so checking again changes it back, which the feed tells of. Time
@@ -215,7 +223,7 @@ async fn every_half_hour_each_repository_is_checked_again() {
     let started = tokio::time::Instant::now();
     let again = told_within(&mut feed, CHECKED_AGAIN_EVERY * 2).await;
 
-    assert_eq!(again.reach, Reach::Blocked { repository: CLI, reason: "Connect one".into() });
+    assert_eq!(again.reach(), Reach::Blocked { repository: CLI, reason: "Connect one".into() });
     assert!(started.elapsed() >= CHECKED_AGAIN_EVERY / 2, "checked again after {:?}", started.elapsed());
 }
 
@@ -239,7 +247,7 @@ async fn the_hub_checks_with_the_default_its_logins_work_out() {
     says_cli(&hub).await;
     let reach = told(&mut feed).await;
 
-    assert_eq!(reach.reach, Reach::Pushes { repository: CLI, username: "ada".into() });
+    assert_eq!(reach.reach(), Reach::Pushes { repository: CLI, username: "ada".into() });
 }
 
 /// An app of your own's installation on adalabs, which making the app makes the default, is refused `cli/cli`, which
@@ -268,7 +276,7 @@ async fn an_installation_the_default_refused_a_repository_is_named_as_its_bot() 
 
     let installation = Some(InstalledApp { slug: "ada-roundhouse".into(), on: "adalabs".into() });
     let username = "ada-roundhouse[bot]".into();
-    assert_eq!(reach.reach, Reach::Refused { repository: CLI, username, reason: denied.into(), installation });
+    assert_eq!(reach.reach(), Reach::Refused { repository: CLI, username, reason: denied.into(), installation });
 }
 
 /// No default, whose block says to connect one.

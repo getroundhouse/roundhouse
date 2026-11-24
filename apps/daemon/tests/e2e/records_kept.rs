@@ -9,9 +9,10 @@
 use protocol::event::EventBody;
 use protocol::model::{Records, Rev};
 
-use crate::accounts::{named_account, wait_for_adas_week};
+use crate::accounts::{limits_of, named_account, wait_for_adas_week};
 use crate::carrying_on::update;
 use crate::context::{after_prompts, wait_for_context};
+use crate::prompt_cache::cache_held;
 use crate::support::{Stack, wait_for_turn_end};
 
 /// A chat whose agent has had a turn, which said how full its context is, what's cached and what its account's limits
@@ -32,20 +33,25 @@ fn a_chats_record_its_accounts_and_every_other_are_as_they_were_once_the_hub_has
     client.session_mark_read(&session.id, replied.reply_seq).unwrap();
     let before = client.session_mark_unread(&session.id).unwrap();
     let account = named_account(&client, &session.id).expect("the chat names its account");
+    let limits = limits_of(&client, &account.id);
+    // Something cached, as the hub says.
+    cache_held(&client, &session.id);
     let all_before = client.records().unwrap();
 
     update(&mut stack);
     let client = stack.client();
     let after = client.session_get(&session.id).unwrap();
     let account_after = named_account(&client, &session.id);
+    let limits_after = limits_of(&client, &account.id);
     let all_after = client.records().unwrap();
     client.session_prompt(&session.id, "cold", None).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 2);
 
     assert!(before.unread(), "marked unread");
-    assert!(before.prompt_cache.is_some(), "something cached");
+    assert!(!limits.is_empty(), "its limits heard");
     assert_eq!(after, before, "the chat's record, its revision and all");
-    assert_eq!(account_after, Some(account), "the account's record, its limits and all");
+    assert_eq!(account_after, Some(account), "the account's record, its revision and all");
+    assert_eq!(limits_after, limits, "and its limits");
     assert_eq!(kept(all_after), kept(all_before), "every record the hub keeps, revisions and all");
     let expired = events.iter().filter(|e| matches!(e.body, EventBody::CacheExpired { .. }));
     assert_eq!(expired.count(), 1, "the hub that came back knows when the request before was sent");

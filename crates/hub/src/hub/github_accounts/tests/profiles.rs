@@ -48,13 +48,12 @@ async fn a_check_asks_github_who_an_account_is_and_clients_hear_of_its_new_usern
     assert_eq!(read_as_before, Err(ErrorCode::Worker), "no pull request is read as an account not named");
     let told: Vec<HubNotice> =
         std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect();
-    let [HubNotice::Observation(Observation::GithubUsername { username, .. }), HubNotice::GithubAccount(account)] =
+    let [HubNotice::Observation(Observation::GithubUsername { username, .. }), HubNotice::GithubAccount(_)] =
         told.as_slice()
     else {
         panic!("{told:?}")
     };
     assert!(matches!(username, Observed::AsOf { value, .. } if value.as_str() == "ada-lovelace"), "{username:?}");
-    assert_eq!(account.user.name.as_str(), "ada-lovelace");
     let GithubCredential::Account(credential) = hub.git_credential().borrow().for_workers() else { panic!() };
     let identity = GitIdentity { name: "Ada Lovelace".to_string(), email: "ada@example.com".to_string() };
     assert_eq!((credential.username.as_str(), credential.identity), ("ada-lovelace", Some(identity)));

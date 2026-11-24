@@ -1,5 +1,4 @@
-//! Who an agent's account is, which the hub keeps as an observation, and fills the account's record with for a client
-//! of a version from before it.
+//! Who an agent's account is, which the hub keeps as an observation.
 
 use protocol::model::{AccountId, AccountIdentity, AgentAccount, Observation, Observed};
 use rusqlite::Connection;
@@ -43,7 +42,7 @@ async fn listed(hub: &Hub, account: &str) -> (Option<Observed<AccountIdentity>>,
     (observed, records.accounts.into_iter().find(|record| record.id.as_str() == account))
 }
 
-/// A hub that starts again has who an account is as of the worker's read, and fills the account's record with it.
+/// A hub that starts again has who an account is as of the worker's read.
 #[tokio::test]
 async fn who_an_account_is_is_kept_across_a_restart_as_of_its_read() {
     let dir = tempfile::tempdir().unwrap();
@@ -56,7 +55,7 @@ async fn who_an_account_is_is_kept_across_a_restart_as_of_its_read() {
 
     let (observed, record) = listed(&again, "claude-ada").await;
     assert_eq!(observed, Some(Observed::AsOf { value: ada_is("Max"), as_of_ms: 1_000 }));
-    assert_eq!(record.unwrap().email.as_deref(), Some("ada@example.com"), "the record filled with it");
+    assert!(record.is_some());
 }
 
 /// A database from before who an account is left it opens with the columns gone and the record as it was but for
@@ -84,7 +83,7 @@ async fn an_account_from_before_opens_with_who_it_is_not_known() {
     let (observed, record) = listed(&hub, "claude-ada").await;
     let record = record.expect("the record kept");
     assert_eq!(observed, None, "not known");
-    assert_eq!((record.name.as_deref(), record.email, record.plan), (Some("Work"), None, None));
+    assert_eq!(record.name.as_deref(), Some("Work"));
 }
 
 /// Who an account is and what's left of its limits go with the account: a hub that starts on a database without the

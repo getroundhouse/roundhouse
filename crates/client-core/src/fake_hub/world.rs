@@ -104,8 +104,6 @@ pub struct World {
     pub pairing: Option<PairingWorld>,
     /// Saved remote hubs written to `settings.json` before the window opens.
     pub saved_hubs: Vec<(&'static str, &'static str)>,
-    /// What a push from each repository's workspaces would meet on GitHub, as the hub last checked.
-    pub github_reach: Vec<protocol::model::GithubReach>,
     /// Each open terminal, and what it shows.
     pub terminals: Vec<(Terminal, TerminalShows)>,
     /// What the hub found in the update feed, as a hub installed as a service does. `None` as from one that doesn't

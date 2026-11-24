@@ -7,7 +7,7 @@
 use client_core::fake_hub::events::{finished_turn, first_turn, text, thought, user_prompt};
 use client_core::fake_hub::{NOW_MS, World};
 use gpui_kit::TestAppContext;
-use protocol::fixtures::{account, claude_default, github_account};
+use protocol::fixtures::{account, claude_default, github_account, observed};
 use protocol::model::{Account, AgentKind, GithubAccount, GithubSettings, HeldLogin, SentCredential, SessionStatus};
 
 use super::agents::to_agents;
@@ -67,6 +67,7 @@ pub(super) fn with_ada(world: &mut World) -> GithubAccount {
         set_up: Vec::new(),
     });
     world.github_accounts = vec![ada.clone()];
+    world.observe(observed::username(ada.id.clone(), "ada"));
     ada
 }
 

@@ -4,7 +4,7 @@ use super::steps::{Screen, Step};
 use client_core::fake_hub::World;
 
 use protocol::capability::settings::Effort;
-use protocol::model::{AgentKind, ModelName};
+use protocol::model::{AgentKind, ModelName, Observation};
 
 const MODELS: [(&str, &str, Effort, bool); 8] = [
     ("gpt-6.1-sol", "GPT-6.1 Sol", Effort::Low, true),
@@ -47,9 +47,8 @@ fn models() -> protocol::capability::settings::ModelCatalog {
 /// The same, but for Codex's list in the project, whose lookup has answered and whose models haven't come yet.
 fn answered_unlisted() -> World {
     let mut world = offered();
-    for list in world.model_lists.iter_mut().filter(|list| list.key.agent == AgentKind::Codex) {
-        list.catalog = None;
-    }
+    let codexs = |observation: &Observation| matches!(observation, Observation::ModelCatalog { list, .. } if list.agent == AgentKind::Codex);
+    world.observations.retain(|observation| !codexs(observation));
     world
 }
 

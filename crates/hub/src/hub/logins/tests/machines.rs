@@ -59,6 +59,7 @@ async fn a_chat_whose_first_launch_found_nobody_logged_in_is_put_on_the_default_
     let asked_whose = || !chats.asked.requests(whose).is_empty();
     waiting::task::until(TIMEOUT, "the worker to be asked whose the machine's login is", asked_whose).await;
     let nobody = chats.record(&chat.id);
+    let cached = chats.cache_held(&chat.id);
 
     let work = chats.connect("Work").await;
     chats.crash(&chat.id).await;
@@ -66,7 +67,7 @@ async fn a_chat_whose_first_launch_found_nobody_logged_in_is_put_on_the_default_
 
     assert_eq!(first, None, "it was handed no login");
     assert_eq!((nobody.account_source, nobody.account), (None, None));
-    assert!(nobody.prompt_cache.is_some(), "its first turn left something cached");
+    assert!(cached.is_some(), "its first turn left something cached");
     assert_eq!(under_work.as_deref(), Some("work-token"));
     assert_eq!(chats.on(&chat.id), Some(work.id));
     assert_eq!(chats.found_expired(&chat.id), []);

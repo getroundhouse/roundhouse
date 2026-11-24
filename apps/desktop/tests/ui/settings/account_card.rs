@@ -10,7 +10,8 @@ use client_core::fake_hub::NOW_MS;
 use gpui_kit::test::{ElementSnapshot, TestQueryExt as _};
 use gpui_kit::{AppContext as _, ElementId, Role, TestAppContext};
 use look::Region;
-use protocol::model::{Account, AccountId, LimitWindow, UsageLimit};
+use protocol::fixtures::observed;
+use protocol::model::{Account, AccountId, LimitWindow, Observation, UsageLimit};
 
 use super::agents::{id, to_agents};
 use super::made_up::{DAY_MS, added, holding_logins};
@@ -41,16 +42,18 @@ fn limit(window: LimitWindow, used_percent: u8, resets_in_ms: i64) -> UsageLimit
     UsageLimit { window, model: None, used_percent, resets_at_ms: Some(NOW_MS + resets_in_ms), heard_at_ms: None }
 }
 
-/// Work, the default, which nobody has used yet, listed first, then Workstation, used an hour ago, whose agent heard
-/// its limits.
+/// Work, the default, which nobody has used yet, listed first, then Workstation, used an hour ago.
 fn work_and_workstation() -> (Account, Account) {
     let work = added("claude-login-0001", "Work", 200 * DAY_MS);
-    let workstation = Account {
-        used_at_ms: Some(NOW_MS - HOUR_MS),
-        limits: vec![limit(LimitWindow::FiveHours, 29, 2 * HOUR_MS), limit(LimitWindow::SevenDays, 4, 3 * DAY_MS)],
-        ..added("claude-login-0002", "Workstation", 300 * DAY_MS)
-    };
+    let workstation =
+        Account { used_at_ms: Some(NOW_MS - HOUR_MS), ..added("claude-login-0002", "Workstation", 300 * DAY_MS) };
     (work, workstation)
+}
+
+/// The limits Workstation's agent heard.
+fn workstations_limits() -> Observation {
+    let limits = vec![limit(LimitWindow::FiveHours, 29, 2 * HOUR_MS), limit(LimitWindow::SevenDays, 4, 3 * DAY_MS)];
+    observed::limits("claude-login-0002", limits)
 }
 
 /// One walk through one window: the card of a used account by the pointer, then the card of one nobody has used by
@@ -64,7 +67,9 @@ fn an_agent_accounts_card_shows_as_the_pointer_rests_on_its_row_or_at_once_as_th
         let ends_at_ms = account.held_login.as_ref().unwrap().ends_at_ms.unwrap();
         ui.cx.update(|cx| look::date(ends_at_ms, cx)).unwrap()
     };
-    let fake = FakeHub::holding(holding_logins(vec![work.clone(), used.clone()]));
+    let mut world = holding_logins(vec![work.clone(), used.clone()]);
+    world.observe(workstations_limits());
+    let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
     // Held still after it was used that day, so it was used today, whenever this runs.
     ui.cx.update(|cx| look::hold_still(NOW_MS, cx));

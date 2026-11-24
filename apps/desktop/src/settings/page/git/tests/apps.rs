@@ -6,28 +6,27 @@ use gpui_kit::TestAppContext;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
     GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
-    GithubUserId, Records, SentCredential, UnusableLogin,
+    GithubUserId, Observation, Records, SentCredential, UnusableLogin,
 };
 
 use super::super::app_words;
 use super::super::words::{self, Standing};
 use super::made_up::{NOW_MS, held, listed, named};
 
-/// `name`'s account, `id`, as an installation of the app 9 on adalabs.
-pub(super) fn installed(id: &str, name: &str) -> GithubAccount {
-    let on = GithubUser { id: GithubUserId::new(2), name: "adalabs".into() };
+/// `name`'s account, `id`, as an installation of the app 9 on GitHub's user 2, and what GitHub calls its user.
+pub(super) fn installed(id: &str, name: &str) -> (GithubAccount, Observation) {
+    let on = GithubUser { id: GithubUserId::new(2), name: "".into() };
     let installation = GithubInstallation { app: GithubAppId::new(9), id: GithubInstallationId::new(70), on };
-    GithubAccount {
-        held_login: Some(held(GithubLoginKind::App, None, false)),
-        installation: Some(installation),
-        ..named(id, name, false)
-    }
+    let (account, username) = named(id, name, false);
+    let held_login = Some(held(GithubLoginKind::App, None, false));
+    (GithubAccount { held_login, installation: Some(installation), ..account }, username)
 }
 
 #[test]
 fn an_app_is_first_named_after_someone_added() {
-    let named_for = |accounts, default: Option<&str>| {
-        let listing = Records { github_accounts: accounts, ..Records::default() };
+    let named_for = |accounts: Vec<(GithubAccount, Observation)>, default: Option<&str>| {
+        let (github_accounts, observations) = accounts.into_iter().unzip();
+        let listing = Records { github_accounts, observations, ..Records::default() };
         app_words::default_name(&listed(listing, default), default.map(GithubAccountId::from).as_ref())
     };
     let bot = installed("g0", "ada-roundhouse[bot]");

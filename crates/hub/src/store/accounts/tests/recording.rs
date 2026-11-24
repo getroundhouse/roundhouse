@@ -30,7 +30,7 @@ fn a_launch_names_its_account_on_the_session_and_makes_its_record() {
     let launched = store.launched_under(&"s".into(), &logged_in("ada@example.com", "Max")).unwrap();
 
     let account = launched.account.expect("a new record");
-    assert_eq!((account.id.as_str(), account.email), ("claude-ada@example.com", None));
+    assert_eq!(account.id.as_str(), "claude-ada@example.com");
     assert!(launched.session);
     assert_eq!(named(&store), Some(account.id.clone()));
     assert!(store.get_session(&"s".into()).unwrap().session.rev > before, "the feed has to announce it");

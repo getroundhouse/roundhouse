@@ -1,5 +1,4 @@
-//! What's left of an account's limits, which the hub keeps as an observation, and fills the account's record with for
-//! a client of a version from before it.
+//! What's left of an account's limits, which the hub keeps as an observation.
 
 use protocol::model::{Observation, Observed, UsageLimit};
 use rusqlite::Connection;
@@ -22,19 +21,17 @@ fn heard_at(limits: Vec<UsageLimit>, heard_at_ms: i64) -> Vec<UsageLimit> {
     limits.into_iter().map(|limit| UsageLimit { heard_at_ms: Some(heard_at_ms), ..limit }).collect()
 }
 
-/// What `hub` lists of what's left of `account`'s limits, and its record's.
-async fn listed(hub: &Hub, account: &str) -> (Option<Observed<Vec<UsageLimit>>>, Vec<UsageLimit>) {
+/// What `hub` lists of what's left of `account`'s limits.
+async fn listed(hub: &Hub, account: &str) -> Option<Observed<Vec<UsageLimit>>> {
     let records = hub.records_list().await.unwrap();
-    let observed = records.observations.into_iter().find_map(|observation| {
+    records.observations.into_iter().find_map(|observation| {
         let Observation::AccountLimits { account: of, limits, .. } = observation else { return None };
         (of.as_str() == account).then_some(limits)
-    });
-    let record = records.accounts.into_iter().find(|record| record.id.as_str() == account);
-    (observed, record.map_or_default(|record| record.limits))
+    })
 }
 
 /// A hub that starts again has what's left of an account's limits as of the newest hearing, each with when it was
-/// heard, and fills the account's record with them, which says nothing of when.
+/// heard.
 #[tokio::test]
 async fn an_account_s_limits_are_kept_across_a_restart_as_of_the_newest_hearing() {
     let dir = tempfile::tempdir().unwrap();
@@ -45,9 +42,8 @@ async fn an_account_s_limits_are_kept_across_a_restart_as_of_the_newest_hearing(
 
     let again = hub_in_again(dir.path());
 
-    let (observed, on_the_record) = listed(&again, "ada").await;
+    let observed = listed(&again, "ada").await;
     assert_eq!(observed, Some(Observed::AsOf { value: heard_at(the_week(), 1_000), as_of_ms: 1_000 }));
-    assert_eq!(on_the_record, the_week());
 }
 
 /// Hearing the same again tells no client and moves no revision, since only when it was heard is new, which the hub
@@ -66,7 +62,7 @@ async fn hearing_the_same_again_tells_nobody_and_is_kept_as_heard_later() {
     hub.observations_written().await;
     drop((hub, feed));
     let again = hub_in_again(dir.path());
-    let (observed, _) = listed(&again, "ada").await;
+    let observed = listed(&again, "ada").await;
     let Some(Observed::AsOf { value, .. }) = observed else { panic!("{observed:?}") };
     assert_eq!(value, heard_at(the_week(), 2_000), "the file keeps when it was heard");
 }
@@ -89,10 +85,11 @@ async fn an_account_from_before_opens_with_its_limits_not_known() {
         .query_row("SELECT count(*) FROM sqlite_schema WHERE name LIKE 'account_limits%'", [], OneValue::read)
         .unwrap();
     assert_eq!(table, 0, "the table and its triggers gone");
-    assert_eq!(listed(&hub, "ada").await, (None, Vec::new()), "not known");
+    assert_eq!(listed(&hub, "ada").await, None, "not known");
     let record = hub.store.account(&"ada".into()).unwrap().unwrap();
     assert_eq!(record.name.as_deref(), Some("Work"));
     let used_up = UsageLimit { used_percent: 100, ..week() };
     hub.hear_limits("ada".into(), vec![used_up.clone()], false, 2_000).await;
-    assert_eq!(listed(&hub, "ada").await.1, [used_up], "said again");
+    let said_again = Observed::AsOf { value: heard_at(vec![used_up], 2_000), as_of_ms: 2_000 };
+    assert_eq!(listed(&hub, "ada").await, Some(said_again));
 }

@@ -118,21 +118,20 @@ async fn the_agents_to_do_list_is_kept_as_an_observation_and_only_a_change_moves
         live.send_item(Item::Report { run, report: Report::Todos(said), seq: None }).await;
         flushed(&live).await;
         let id = live.id.clone();
-        let mut session = hub.blocking(move |store| store.get_session(&id)).await.unwrap().session;
-        hub.fill_old_forms(&mut session);
+        let session = hub.blocking(move |store| store.get_session(&id)).await.unwrap().session;
         let listed = hub.session_records(live.id.clone()).await.unwrap().observations;
         let kept = listed.into_iter().find_map(|observation| {
             let Observation::SessionTodos { todos, .. } = observation else { return None };
             known(todos)
         });
-        (kept, session.todos, session.rev)
+        (kept, session.rev)
     };
 
-    let (kept, filled, first) = recorded(todos(TodoStatus::InProgress)).await;
-    assert_eq!((kept, filled), (Some(todos(TodoStatus::InProgress)), Some(todos(TodoStatus::InProgress))));
-    assert_eq!(recorded(todos(TodoStatus::InProgress)).await.2, first, "the same list again");
-    let (kept, filled, done) = recorded(todos(TodoStatus::Done)).await;
-    assert_eq!((kept, filled), (Some(todos(TodoStatus::Done)), Some(todos(TodoStatus::Done))));
+    let (kept, first) = recorded(todos(TodoStatus::InProgress)).await;
+    assert_eq!(kept, Some(todos(TodoStatus::InProgress)));
+    assert_eq!(recorded(todos(TodoStatus::InProgress)).await.1, first, "the same list again");
+    let (kept, done) = recorded(todos(TodoStatus::Done)).await;
+    assert_eq!(kept, Some(todos(TodoStatus::Done)));
     assert!(done > first, "a change moves the record, for a client of version 4");
 }
 

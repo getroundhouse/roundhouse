@@ -35,6 +35,7 @@ async fn every_client_is_told_of_what_changed_a_github_accounts_record_and_the_d
     let mut feed = hub.subscribe_feed();
 
     let connected = hub.github_account_connect(asking("a-token")).await.unwrap();
+    let username = hub.observations.value_of::<crate::hub::GithubUsername>(&connected.id);
     let [told, made_default] = records_told(&mut feed).try_into().map(|told: [HubNotice; 2]| told.map(Ok)).unwrap();
     let again = hub.github_account_connect(asking(" a-token\n")).await.unwrap();
     let told_again = feed.try_recv().map(std::sync::Arc::unwrap_or_clone);
@@ -43,7 +44,7 @@ async fn every_client_is_told_of_what_changed_a_github_accounts_record_and_the_d
     let disconnected = hub.github_account_disconnect(connected.id.clone()).await.unwrap();
     let told_last = feed.try_recv().map(std::sync::Arc::unwrap_or_clone);
 
-    assert_eq!(connected.user.name.as_str(), "ada");
+    assert_eq!(username.as_ref().map(protocol::model::GithubUsername::as_str), Some("ada"));
     assert!(matches!(told, Ok(HubNotice::GithubAccount(record)) if record == connected));
     let default = |notice: Result<HubNotice, TryRecvError>| match notice {
         Ok(HubNotice::HubSettings(settings)) => settings.github.map(|github| github.account),

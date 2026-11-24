@@ -6,9 +6,10 @@ use std::collections::HashMap;
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, SessionEvent};
+use protocol::fixtures::observed;
 use protocol::model::{
-    CacheTtl, ContextUsage, ModelName, Place, PromptCache, ReplyHeard, Seq, Session, SessionId, SessionStatus,
-    Subagent, SubagentId, Title, WorkspaceId,
+    CacheTtl, ContextUsage, ConversationCache, ModelName, Observation, ObservationKey, Observed, Place, PromptCache,
+    ReplyHeard, Seq, Session, SessionId, SessionStatus, Subagent, SubagentId, Title, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 
@@ -91,9 +92,9 @@ impl World {
     }
 
     /// Has the turn a chat's log ends with end this many minutes before [`NOW_MS`], and three seconds after its agent's
-    /// newest request was sent to Opus 5.5 with a 1h cache, as the chat's record says, with its context holding 313,500
-    /// tokens unless it says otherwise. The turn takes as long as it did. It's the chat's newest reply, which has been
-    /// read.
+    /// newest request was sent to Opus 5.5 with a 1h cache, as the chat's cache says, with its context holding 313,500
+    /// tokens unless its agent has said otherwise. The turn takes as long as it did. It's the chat's newest reply, which
+    /// has been read.
     pub fn cached(&mut self, id: &SessionId, minutes_before_now: i64) {
         let used_at_ms = NOW_MS - minutes_before_now * MINUTE_MS;
         let ended = self.logs.get_mut(id).and_then(|log| log.last_mut()).unwrap();
@@ -105,15 +106,45 @@ impl World {
         let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
         session.turn_started_at_ms = session.turn_started_at_ms.map(|at| at + moved_ms);
         (session.reply_seq, session.read_seq) = (reply, reply);
-        let context = session.context.get_or_insert(ContextUsage {
-            used_tokens: 313_500,
-            max_tokens: 500_000,
-            model_tokens: None,
-            max_set_by: None,
-            parts: Vec::new(),
+        let context = self.context_said(id).unwrap_or_else(|| {
+            let context = ContextUsage {
+                used_tokens: 313_500,
+                max_tokens: 500_000,
+                model_tokens: None,
+                max_set_by: None,
+                parts: Vec::new(),
+            };
+            self.say_context(id, context.clone());
+            context
         });
-        let (model, tokens) = (Some(ModelName::named("claude-opus-5-5")), context.used_tokens);
-        session.prompt_cache = Some(PromptCache { used_at_ms, ttl: CacheTtl::OneHour, model, tokens });
+        let model = Some(ModelName::named("claude-opus-5-5"));
+        let held = PromptCache { used_at_ms, ttl: CacheTtl::OneHour, model, tokens: context.used_tokens };
+        self.observe(observed::cache(id.clone(), ConversationCache::worked_out(Some(held), Some(&context))));
+    }
+
+    /// Has the chat's agent say how full its context is, as the hub keeps it, and what's worth telling of the chat's
+    /// cache worked out from it again, as the hub works it out.
+    pub fn say_context(&mut self, id: &SessionId, context: ContextUsage) {
+        let held = match self.observed(&ObservationKey::SessionCache { session_id: id.clone() }) {
+            Some(Observation::SessionCache {
+                cache: Observed::AsOf { value, .. } | Observed::Current { value },
+                ..
+            }) => value.held.clone(),
+            _ => None,
+        };
+        self.observe(observed::cache(id.clone(), ConversationCache::worked_out(held, Some(&context))));
+        self.observe(observed::context(id.clone(), context));
+    }
+
+    /// How full the chat's agent's context is, as it last said.
+    fn context_said(&self, id: &SessionId) -> Option<ContextUsage> {
+        match self.observed(&ObservationKey::SessionContext { session_id: id.clone() }) {
+            Some(Observation::SessionContext {
+                context: Observed::AsOf { value, .. } | Observed::Current { value },
+                ..
+            }) => Some(value.clone()),
+            _ => None,
+        }
     }
 
     /// Has everything in a chat before its event `seq` happen `idle_ms` earlier, so it had been idle that long when

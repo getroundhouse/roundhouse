@@ -4,15 +4,13 @@
 #![cfg(test)]
 
 use look::Region;
-use protocol::model::{
-    GithubReach, GithubRepositoryName, InstalledApp, Reach, Rev, SessionStatus, SetupStatus, Title, WorkspaceStatus,
-};
+use protocol::model::{GithubRepositoryName, InstalledApp, Reach, SessionStatus, SetupStatus, Title, WorkspaceStatus};
 
 use super::frame::{Frame, Part, SIDEBAR, SIDEBAR_MENU};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::{conversation, sidebar, titled};
-use client_core::fake_hub::{NOW_MS, World};
+use client_core::fake_hub::World;
 
 /// What's typed into the dialog before Create, for a workspace the screen's hub never finishes making.
 const TASK: &str = "Keep the PR badge at its own width when the sidebar is narrow";
@@ -152,8 +150,7 @@ fn reaching(reach: Reach) -> World {
     let focus = sidebar(&mut world);
     world.chat(&focus, SessionStatus::Idle, Vec::new());
     let repo = world.workspace_mut(&focus).repo_id.clone();
-    let answered_at_ms = reach.answered_for().is_some().then_some(NOW_MS);
-    world.github_reach.push(GithubReach { repo, reach, answered_at_ms, stale: false, rev: Rev::default() });
+    world.observe(protocol::fixtures::observed::reach(repo, reach));
     world
 }
 

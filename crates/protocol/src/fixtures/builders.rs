@@ -127,11 +127,17 @@ pub fn claude_default(account: &AccountId) -> AccountDefault {
     AccountDefault { agent: AgentKind::Claude, account: account.clone(), automatic: false }
 }
 
-/// The GitHub account `id` of the user `ada`, whose number is 1, holding a token connected at 0 that doesn't end.
+/// GitHub's user `number`, as a GitHub account's record names it: by its number, as `#<number>`, since what GitHub
+/// calls it is an observation.
+pub fn github_user(number: u64) -> GithubUser {
+    GithubUser { id: GithubUserId::new(number), name: format!("#{number}").as_str().into() }
+}
+
+/// The GitHub account `id` of GitHub's user 1, holding a token connected at 0 that doesn't end.
 pub fn github_account(id: &str) -> GithubAccount {
     GithubAccount {
         id: id.into(),
-        user: GithubUser { id: GithubUserId::new(1), name: "ada".into() },
+        user: github_user(1),
         held_login: Some(HeldGithubLogin {
             how: GithubLoginKind::Token,
             connected_at_ms: 0,

@@ -4,11 +4,12 @@
 
 #![cfg(test)]
 
-use client_core::fake_hub::{NOW_MS, World};
+use client_core::fake_hub::World;
 use desktop::workspace_pane::{INSTALL_APP, OPEN_GIT};
 use gpui_kit::TestAppContext;
 use hub::{GithubAnswer, GithubScript};
-use protocol::model::{GithubReach, GithubRepositoryName, GithubToken, InstalledApp, Reach, Rev, SessionStatus};
+use protocol::fixtures::observed;
+use protocol::model::{GithubRepositoryName, GithubToken, InstalledApp, Reach, SessionStatus};
 
 use crate::support::{Stack, Ui, git, open_on_the_world};
 
@@ -56,13 +57,7 @@ fn a_workspace_says_why_agents_cant_push_and_its_line_opens_git(cx: &mut TestApp
     let repository = GithubRepositoryName::named("cli/cli");
     let reason = "Permission to cli/cli.git denied to ada.".to_string();
     let reach = Reach::Refused { repository, username: "ada".into(), reason, installation: None };
-    world.github_reach.push(GithubReach {
-        repo,
-        reach,
-        answered_at_ms: Some(NOW_MS),
-        stale: false,
-        rev: Rev::default(),
-    });
+    world.observe(observed::reach(repo, reach));
     let (_fake, mut ui) = open_on_the_world(cx, world);
 
     ui.wait("the line saying so", |ui| ui.has(OPEN_GIT));
@@ -89,13 +84,7 @@ fn an_installations_line_opens_where_its_app_is_installed(cx: &mut TestAppContex
     let reason = format!("Permission to adalabs/app.git denied to {bot}.");
     let repository = GithubRepositoryName::named("adalabs/app");
     let reach = Reach::Refused { repository, username: bot.into(), reason, installation };
-    world.github_reach.push(GithubReach {
-        repo,
-        reach,
-        answered_at_ms: Some(NOW_MS),
-        stale: false,
-        rev: Rev::default(),
-    });
+    world.observe(observed::reach(repo, reach));
     let (_fake, mut ui) = open_on_the_world(cx, world);
 
     ui.wait("the line saying so", |ui| ui.has(INSTALL_APP));

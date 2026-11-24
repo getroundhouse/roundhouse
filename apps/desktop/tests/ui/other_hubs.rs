@@ -246,8 +246,9 @@ fn restarting_a_hub_that_has_already_gone_still_connects(cx: &mut TestAppContext
 fn a_hub_that_found_an_update_offers_it_and_says_why_it_refused(cx: &mut TestAppContext) {
     let mut world = World::default();
     world.hub = Some(HubBuild { version: "0.9.0", number: fake_hub::BUILD_NUMBER - 1, on_demand: false });
+    world.observe(protocol::fixtures::observed::release_offered(Some(fake_hub::BUILD)));
     world.hub_update = Some(protocol::model::HubUpdate {
-        version: Some(fake_hub::BUILD.to_owned()),
+        version: None,
         looked_at_ms: 1,
         problem: None,
         attempt: None,

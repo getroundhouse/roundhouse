@@ -1,19 +1,17 @@
 //! When Connect account's panel offers `gh`'s login on the hub's machine, as the hub said who `gh` is.
 
 use client_core::records::HubRecords;
-use protocol::model::{GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, Records};
+use protocol::model::{GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, Observation, Records};
 
 use super::super::gh_choice::ChoosingPanel;
 use super::made_up::{held, named};
 
-fn offered(gh: Option<GhLogin>, accounts: &[GithubAccount]) -> Option<String> {
+fn offered(gh: Option<GhLogin>, accounts: &[(GithubAccount, Observation)]) -> Option<String> {
     let mut panel = ChoosingPanel::default();
     panel.gh = gh;
     let mut held = HubRecords::default();
-    held.apply_list(client_core::records::with_observations(Records {
-        github_accounts: accounts.to_vec(),
-        ..Records::default()
-    }));
+    let (github_accounts, observations) = accounts.iter().cloned().unzip();
+    held.apply_list(Records { github_accounts, observations, ..Records::default() });
     panel.offered(&held.snapshot()).map(ToString::to_string)
 }
 
@@ -23,7 +21,10 @@ fn logged_in(name: &str, works: GhLoginWorks) -> GhLogin {
 
 #[test]
 fn gh_s_login_is_offered_by_its_username_while_github_hasnt_refused_it_and_no_account_holds_it() {
-    let held_by = |how| GithubAccount { held_login: Some(held(how, None, false)), ..named("g1", "Ada", false) };
+    let held_by = |how| {
+        let (account, username) = named("g1", "Ada", false);
+        (GithubAccount { held_login: Some(held(how, None, false)), ..account }, username)
+    };
 
     let works = offered(Some(logged_in("ada", GhLoginWorks::Yes)), &[]);
     let couldnt_tell = offered(Some(logged_in("ada", GhLoginWorks::CouldntTell)), &[]);

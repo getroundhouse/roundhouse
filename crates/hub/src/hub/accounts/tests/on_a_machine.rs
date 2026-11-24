@@ -7,10 +7,11 @@ use parking_lot::Mutex;
 use protocol::capability::Report;
 use protocol::capability::account::Limit;
 use protocol::client::ApiError;
-use protocol::model::{Account, AgentAccount, LimitWindow, SessionId, UsageLimit, WorkspaceId};
+use protocol::model::{AccountId, AgentAccount, LimitWindow, SessionId, UsageLimit, WorkspaceId};
 use protocol::prompt::Prompt;
 
 use crate::hub::Hub;
+use crate::hub::observations::{AccountIdentity, AccountLimits};
 use crate::hub::stand_in_workers::{Asked, TIMEOUT, a_turn, logged_in, the_agent_reports};
 
 /// Who a machine's worker says is logged in to Claude's CLI there, or why it can't say, which a test can change.
@@ -50,14 +51,29 @@ pub(super) async fn a_turn_hearing(hub: &Arc<Hub>, asked: &Asked, chat: &Session
     }
 }
 
-/// The record of the account the chat names, once it names one that `holds` is true of.
-pub(super) async fn named(hub: &Hub, chat: &SessionId, holds: impl Fn(&Account) -> bool) -> Account {
+/// An account the hub has a record of, and what it observes of it.
+#[derive(Debug)]
+pub(super) struct Observed {
+    pub(super) id: AccountId,
+    /// Who it is, as a worker last read it, or none, while that isn't known.
+    pub(super) identity: protocol::model::AccountIdentity,
+    /// What's left of its limits, each as last heard, or none, while no agent under it has heard of one.
+    pub(super) limits: Vec<UsageLimit>,
+}
+
+/// What the hub observes of the account `id`.
+pub(super) fn observed(hub: &Hub, id: &AccountId) -> Observed {
+    let identity = hub.observations.value_of::<AccountIdentity>(id).unwrap_or_default();
+    let limits = hub.observations.value_of::<AccountLimits>(id).unwrap_or_default();
+    Observed { id: id.clone(), identity, limits }
+}
+
+/// What the hub observes of the account the chat names, once it names one with a record that `holds` is true of.
+pub(super) async fn named(hub: &Hub, chat: &SessionId, holds: impl Fn(&Observed) -> bool) -> Observed {
     let named = || {
         let named = hub.store.get_session(chat).unwrap().session.account;
-        let mut account = named.as_ref().and_then(|id| hub.store.account(id).unwrap());
-        if let Some(account) = &mut account {
-            hub.fill_old_forms(account);
-        }
+        let recorded = named.as_ref().filter(|id| hub.store.account(id).unwrap().is_some());
+        let account = recorded.map(|id| observed(hub, id));
         account.filter(&holds).ok_or_else(|| format!("the chat names {named:?}"))
     };
     waiting::task::until_ok(TIMEOUT, named).await

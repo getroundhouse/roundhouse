@@ -37,8 +37,8 @@ async fn listed(hub: &Hub, account: &str) -> (Option<Observed<GithubUsername>>, 
     (observed, records.github_accounts.into_iter().find(|record| record.id.as_str() == account))
 }
 
-/// A hub that starts again has what GitHub called the user as of the hub's read, fills the account's record with it,
-/// and has workers commit as her profile said, before it asks GitHub again.
+/// A hub that starts again has what GitHub called the user as of the hub's read, and has workers commit as her profile
+/// said, before it asks GitHub again.
 #[tokio::test]
 async fn a_username_and_a_profile_are_kept_across_a_restart_as_of_their_read() {
     let github = github_of_ada().await;
@@ -52,7 +52,7 @@ async fn a_username_and_a_profile_are_kept_across_a_restart_as_of_their_read() {
 
     let (observed, record) = listed(&again, account.id.as_str()).await;
     assert!(matches!(observed, Some(Observed::AsOf { value, .. }) if value.as_str() == "ada"));
-    assert_eq!(record.unwrap().user.name.as_str(), "ada", "the record filled with it");
+    assert!(record.is_some());
     let GithubCredential::Account(credential) = again.git_credential().borrow().for_workers() else { panic!() };
     let identity = GitIdentity { name: "Ada Lovelace".to_string(), email: "ada@example.com".to_string() };
     assert_eq!((credential.username.as_str(), credential.identity), ("ada", Some(identity)));
@@ -60,7 +60,7 @@ async fn a_username_and_a_profile_are_kept_across_a_restart_as_of_their_read() {
 }
 
 /// A database from before the username left it opens with the column and the profiles' table gone, and the record as
-/// it was but for its user's name, which is its number until the hub hears what GitHub calls it, as nothing is carried
+/// it was but for its user's name, which isn't known until the hub hears what GitHub calls it, as nothing is carried
 /// out of the database.
 #[tokio::test]
 async fn an_account_from_before_opens_with_its_username_not_known() {
@@ -83,7 +83,7 @@ async fn an_account_from_before_opens_with_its_username_not_known() {
     let (observed, record) = listed(&hub, "g").await;
     let record = record.expect("the record kept");
     assert_eq!(observed, None, "not known");
-    assert_eq!((record.user.id.get(), record.user.name.as_str()), (7, "#7"));
+    assert_eq!(record.user.id.get(), 7);
     let installed =
         record.installation.map(|installed| (installed.app.get(), installed.id.get(), installed.on.id.get()));
     assert_eq!(installed, Some((9, 70, 2)), "where it's installed, by number");

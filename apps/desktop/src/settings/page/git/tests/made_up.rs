@@ -2,10 +2,10 @@
 //! sign-in panels, each plainly made up.
 
 use client_core::records::{HubRecords, Snapshot};
-use protocol::fixtures::{github_account, github_sign_in};
+use protocol::fixtures::{github_account, github_sign_in, observed};
 use protocol::model::{
     GithubAccount, GithubAccountId, GithubLoginKind, GithubSettings, GithubSignIn, GithubSignInStatus, HeldGithubLogin,
-    HubSettings, Records, Rev,
+    HubSettings, Observation, Records, Rev,
 };
 
 use super::super::sign_in::SignInPanel;
@@ -22,18 +22,22 @@ pub(super) fn held(how: GithubLoginKind, ends_at_ms: Option<i64>, needs_sign_in:
     HeldGithubLogin { how, connected_at_ms: 0, ends_at_ms, needs_sign_in }
 }
 
-/// The account called `name`, `id`, whose login the hub holds unless it's disconnected.
-pub(super) fn named(id: &str, name: &str, disconnected: bool) -> GithubAccount {
-    let account = GithubAccount {
-        user: protocol::model::GithubUser { name: name.into(), ..github_account(id).user },
-        ..github_account(id)
-    };
-    if disconnected { GithubAccount { held_login: None, ..account } } else { account }
+/// The account `id`, whose login the hub holds unless it's disconnected, and what GitHub calls its user, `name`.
+pub(super) fn named(id: &str, name: &str, disconnected: bool) -> (GithubAccount, Observation) {
+    let account = github_account(id);
+    let account = if disconnected { GithubAccount { held_login: None, ..account } } else { account };
+    (account, observed::username(id, name))
 }
 
-/// The hub's records: `accounts`, `sign_ins`, and settings that make `default` the default.
-pub(super) fn records(accounts: Vec<GithubAccount>, sign_ins: Vec<GithubSignIn>, default: Option<&str>) -> Snapshot {
-    listed(Records { github_accounts: accounts, github_sign_ins: sign_ins, ..Records::default() }, default)
+/// The hub's records: `accounts`, with what GitHub calls each's user, `sign_ins`, and settings that make `default` the
+/// default.
+pub(super) fn records(
+    accounts: Vec<(GithubAccount, Observation)>,
+    sign_ins: Vec<GithubSignIn>,
+    default: Option<&str>,
+) -> Snapshot {
+    let (github_accounts, observations) = accounts.into_iter().unzip();
+    listed(Records { github_accounts, github_sign_ins: sign_ins, observations, ..Records::default() }, default)
 }
 
 /// `records`, with settings that make `default` the default, as the hub lists them.
@@ -52,7 +56,7 @@ pub(super) fn listed(records: Records, default: Option<&str>) -> Snapshot {
     };
     let mut held = HubRecords::default();
     let listed = Records { hub_settings: Some(settings), rev: Rev::new(1), ..records };
-    held.apply_list(client_core::records::with_observations(listed));
+    held.apply_list(listed);
     held.snapshot()
 }
 

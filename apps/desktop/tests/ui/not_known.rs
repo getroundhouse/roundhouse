@@ -7,10 +7,10 @@
 use client_core::fake_hub::{OLD_FORM, World};
 use gpui_kit::TestAppContext;
 use protocol::capability::settings::ModelCatalog;
-use protocol::fixtures::{account, github_account};
+use protocol::fixtures::{account, github_account, observed};
 use protocol::model::{
-    AgentKind, ContextUsage, GithubSettings, GithubUser, GithubUserId, Observation, Observed, Rev, SentCredential,
-    SessionStatus,
+    AccountIdentity, AgentKind, ContextUsage, GithubSettings, GithubUser, GithubUserId, Observation, Observed, Rev,
+    SentCredential, SessionStatus,
 };
 
 use crate::settings::open_settings;
@@ -20,10 +20,11 @@ use crate::support::{FakeHub, Ui, one_chat, open_on_the_chat};
 /// account that's the default and the update feed offering a release, each said as an observation.
 fn every_kind_said() -> (World, protocol::model::SessionId) {
     let (mut world, chat) = one_chat(SessionStatus::Idle, Vec::new());
-    let mut claude = account("claude-1");
-    (claude.plan, claude.email) = (Some("Max".into()), Some("ada@example.com".into()));
-    world.accounts = vec![claude];
+    world.accounts = vec![account("claude-1")];
+    let (plan, email) = (Some("Max".into()), Some("ada@example.com".into()));
+    world.observe(observed::identity("claude-1", AccountIdentity { plan, email, ..AccountIdentity::default() }));
     let ada = github_account("github-0001");
+    world.observe(observed::username(ada.id.clone(), "ada"));
     let sent = SentCredential::Account { account: ada.id.clone() };
     world.github = Some(GithubSettings {
         account: Some(ada.id.clone()),
@@ -32,14 +33,15 @@ fn every_kind_said() -> (World, protocol::model::SessionId) {
         set_up: Vec::new(),
     });
     world.github_accounts = vec![ada];
-    world.workspaces[0].worker_build = Some("0.9.0".into());
-    world.sessions[0].context = Some(ContextUsage {
+    world.observe(observed::worker_build(world.workspaces[0].id.clone(), Some("0.9.0")));
+    let context = ContextUsage {
         used_tokens: 16_000,
         max_tokens: 200_000,
         model_tokens: None,
         max_set_by: None,
         parts: Vec::new(),
-    });
+    };
+    world.observe(observed::context(chat.clone(), context));
     (world, chat)
 }
 
@@ -74,10 +76,11 @@ fn no_screen_shows_what_a_record_holds_in_place_of_an_observation(cx: &mut TestA
 fn a_github_account_whose_username_isnt_known_is_drawn_by_its_number(cx: &mut TestAppContext) {
     let (mut world, _) = one_chat(SessionStatus::Idle, Vec::new());
     let named = github_account("github-0001");
+    world.observe(observed::username(named.id.clone(), "ada"));
     let mut unnamed = github_account("github-0002");
-    unnamed.user = GithubUser { id: GithubUserId::new(7), name: "grace".into() };
+    unnamed.user = GithubUser { id: GithubUserId::new(7), ..unnamed.user };
     let username = Observed::NotKnown;
-    world.observations.push(Observation::GithubUsername { account: unnamed.id.clone(), username, rev: Rev::new(1) });
+    world.observe(Observation::GithubUsername { account: unnamed.id.clone(), username, rev: Rev::new(1) });
     world.github = Some(GithubSettings {
         account: Some(named.id.clone()),
         sent: None,
@@ -93,7 +96,7 @@ fn a_github_account_whose_username_isnt_known_is_drawn_by_its_number(cx: &mut Te
     ui.wait("both accounts", |ui| ui.has("git-account-github-0002") && ui.has("git-account-github-0001"));
 
     let shown = ui.texts_shown();
-    assert!(shown.contains("#7") && !shown.contains("grace"), "{shown}");
+    assert!(shown.contains("#7"), "{shown}");
     let view = ui.view();
     let records = view.records();
     let order: Vec<String> = records.github_accounts().iter().map(|a| a.id.to_string()).collect();
@@ -106,9 +109,7 @@ fn the_model_picker_waits_for_a_list_a_lookup_answered(cx: &mut TestAppContext) 
     let (mut world, _) = one_chat(SessionStatus::Idle, Vec::new());
     world.agents = Some(agents::descriptions());
     world.offer_models(AgentKind::Codex, &ModelCatalog::default());
-    for list in &mut world.model_lists {
-        list.catalog = None;
-    }
+    world.observations.retain(|observation| !matches!(observation, Observation::ModelCatalog { .. }));
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
 

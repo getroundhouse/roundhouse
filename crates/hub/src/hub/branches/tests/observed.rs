@@ -73,7 +73,6 @@ async fn branches_are_kept_across_a_restart_as_of_their_read() {
     let Some(Observed::AsOf { value, as_of_ms }) = listed(&again).await else { panic!("not as of a read") };
     assert_eq!(value, on("aspen"));
     assert!(as_of_ms >= before);
-    assert_eq!(again.workspace(&"w".into()).await.unwrap().branches, None, "not on the record the hub reads");
 }
 
 /// A database from before keeps its workspaces and their links, with their branches gone and not known, and with no

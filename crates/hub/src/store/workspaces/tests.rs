@@ -7,13 +7,13 @@ use super::super::tests::{idle_session, store_with_session, workspace_w};
 use super::super::{Ended, Made, Move, WorkspacePlacement, now_ms};
 use super::super::{Store, StoredSession, older, schema};
 
-/// The link to pull request #7 of `o/r`, read with `uncommitted` files uncommitted.
-fn link(uncommitted: u32) -> PullRequestLinked {
+/// The link to pull request #7 of `o/r`.
+fn link() -> PullRequestLinked {
     let link = PullRequestLink {
         repository: GithubRepositoryName::named("o/r"),
         number: IssueNumber::try_from(7).unwrap(),
         url: "https://github.com/o/r/pull/7".to_string(),
-        uncommitted,
+        uncommitted: 0,
     };
     PullRequestLinked { link: Some(link) }
 }
@@ -24,7 +24,7 @@ fn finding_the_same_pull_request_again_changes_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let id = WorkspaceId::from("w");
-    let (nothing, something) = (PullRequestLinked { link: None }, link(0));
+    let (nothing, something) = (PullRequestLinked { link: None }, link());
 
     let none = store.set_workspace_pull_request(&id, Some(&nothing), None).unwrap();
     let none_again = store.set_workspace_pull_request(&id, Some(&nothing), None).unwrap();
@@ -41,19 +41,18 @@ fn finding_the_same_pull_request_again_changes_nothing() {
     assert_eq!(store.get_workspace(&id).unwrap().rev, found.rev);
 }
 
-/// So a hub that starts again, after an update, still has every workspace's pull request to show. How many files were
-/// uncommitted as it was read is the observation `WorkspacePullRequest`'s, and isn't kept here.
+/// So a hub that starts again, after an update, still has every workspace's pull request to show.
 #[test]
 fn a_pull_request_found_is_kept_through_reopening() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.set_workspace_pull_request(&"w".into(), Some(&link(2)), None).unwrap();
+    store.set_workspace_pull_request(&"w".into(), Some(&link()), None).unwrap();
     drop(store);
 
     let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
 
     let listed = store.list_records().unwrap().workspaces;
-    assert_eq!(listed[0].pull_request_link, Some(link(0)));
+    assert_eq!(listed[0].pull_request_link, Some(link()));
 }
 
 /// What an older hub kept of each workspace's pull request comes to its link: none where it found none, the pull
@@ -77,15 +76,14 @@ fn a_workspace_from_before_records_kept_only_the_link_keeps_the_link_to_what_it_
     let store = older::store_from_before(dir.path(), schema::BEFORE_PULL_REQUEST_LINKS, &rows);
 
     let linked = |id: &str| store.get_workspace(&id.into()).unwrap().pull_request_link;
-    assert_eq!(linked("w"), Some(link(0)), "how many files were uncommitted leaves the database later");
+    assert_eq!(linked("w"), Some(link()), "what else was kept of it leaves the database later");
     assert_eq!(store.get_workspace(&"w".into()).unwrap().pull_request_branch, Some(BranchName::from("alder")));
     assert_eq!(linked("none"), Some(PullRequestLinked { link: None }));
     assert_eq!(linked("unlooked"), None);
     assert_eq!(linked("elsewhere"), None);
     let rev = |id: &str| store.get_workspace(&id.into()).unwrap().rev;
     assert!(rev("w") > rev("unlooked"), "a record that changed moves its revision");
-    let again =
-        store.set_workspace_pull_request(&"w".into(), Some(&link(2)), Some(&BranchName::from("alder"))).unwrap();
+    let again = store.set_workspace_pull_request(&"w".into(), Some(&link()), Some(&BranchName::from("alder"))).unwrap();
     assert_eq!(again, None, "a read that finds the same after the update changes nothing");
 }
 
@@ -137,7 +135,7 @@ fn finding_the_same_pull_request_on_another_branch_records_that_branch() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let id = WorkspaceId::from("w");
-    let found = link(0);
+    let found = link();
     let (aspen, header) = (BranchName::from("aspen"), BranchName::from("header"));
     store.set_workspace_pull_request(&id, Some(&found), Some(&aspen)).unwrap();
 
