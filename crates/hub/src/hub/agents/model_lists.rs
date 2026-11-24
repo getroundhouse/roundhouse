@@ -256,21 +256,24 @@ impl Hub {
     /// first, so the list's record, which holds it for a client of a version from before it, says it as it's told.
     /// That's before the lock a list's change takes, since listing every record takes that lock under the one an
     /// observation's change takes. So whether the list is still held is asked under the observation's lock, under
-    /// which [`Hub::forget_model_lists`] picks out what it lets go of.
+    /// which [`Hub::forget_model_lists`] picks out what it lets go of. An answer the hub couldn't keep, as when its
+    /// database gives no revision, records the list as failed, with why, rather than answered with no catalog to come,
+    /// so a client offers Retry.
     async fn settle_model_list(&self, key: &ModelListKey, asked: Rev, answer: Result<ModelCatalog, ApiError>) {
         let lists = &self.model_lists;
-        if let Ok(catalog) = &answer {
-            let still = || lists.asking_for(key, asked);
-            let read = self.observation_read_while::<observations::ModelCatalog>(
-                key.clone(),
-                catalog.clone(),
-                now_ms(),
-                still,
-            );
-            if let Err(e) = read.await {
-                warn!(list = %key, "keeping which models an agent offers: {}", e.message);
+        let answer = match answer {
+            Ok(catalog) => {
+                let still = || lists.asking_for(key, asked);
+                let read =
+                    self.observation_read_while::<observations::ModelCatalog>(key.clone(), catalog, now_ms(), still);
+                read.await.map_err(|e| {
+                    warn!(list = %key, "keeping which models an agent offers: {}", e.message);
+                    let message = format!("the hub couldn't keep which models the agent offers: {}", e.message);
+                    ApiError::new(e.code, message)
+                })
             }
-        }
+            Err(e) => Err(e),
+        };
         let _changing = lists.changing.lock().await;
         if !lists.asking_for(key, asked) {
             return;
@@ -286,7 +289,7 @@ impl Hub {
         };
         let answered = answer.is_ok();
         let list = match answer {
-            Ok(_) => ModelList { lookup: ModelLookup::Answered, rev, ..was },
+            Ok(()) => ModelList { lookup: ModelLookup::Answered, rev, ..was },
             Err(e) => ModelList { lookup: ModelLookup::Failed { message: e.message }, rev, ..was },
         };
         lists.set(list.clone(), answered);
