@@ -46,7 +46,6 @@ impl Folding {
 /// The records `response` carries. A list carries none, since it's of every record of a kind, or of a session, and a
 /// record missing from it is gone, which only the feed's own list can say, as only it is read at a revision. And an
 /// older hub's lists have no revisions, so one read on another thread could put an older copy in place of a newer.
-#[expect(clippy::too_many_lines, reason = "a flat match, with one short arm for each reply")]
 fn carried(response: &ClientResponse) -> Vec<Record> {
     match response {
         ClientResponse::HubSettings(settings) => vec![Record::HubSettings(settings.clone())],
@@ -66,13 +65,9 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         ClientResponse::Terminal(terminal) => vec![Record::Terminal(terminal.clone())],
         ClientResponse::Proposal(proposal) => vec![Record::Proposal(proposal.clone())],
         ClientResponse::Repos(_)
-        | ClientResponse::Records(_)
         | ClientResponse::Workspaces(_)
         | ClientResponse::Comments(_)
         | ClientResponse::Sessions(_)
-        | ClientResponse::Subagents(_)
-        | ClientResponse::Proposals(_)
-        | ClientResponse::RepliesHeard(_)
         // And what isn't a record.
         | ClientResponse::Subscribed(_)
         | ClientResponse::TerminalRows(_)
@@ -103,7 +98,6 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::PromptRecorded(_)
         | ClientResponse::Attachment(_)
         | ClientResponse::AttachmentData(_)
-        | ClientResponse::SessionAccount(_)
         | ClientResponse::GithubAppManifest(_)
         | ClientResponse::WorktreeFiles(_)
         | ClientResponse::FileContents(_)

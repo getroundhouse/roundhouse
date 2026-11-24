@@ -93,10 +93,10 @@ async fn a_report_its_run_doesnt_claim_is_dropped() {
     assert_eq!(reported(3).await, Some(3), "a run that claims it");
 }
 
-/// The newest to-do list the run reports is kept as the session's observation, which fills its record for a client of
-/// version 4, and the same list again moves neither, while a change moves the record's revision too.
+/// The newest to-do list the run reports is kept as the session's observation, and moves nothing of the session's
+/// record.
 #[tokio::test]
-async fn the_agents_to_do_list_is_kept_as_an_observation_and_only_a_change_moves_the_sessions_record() {
+async fn the_agents_to_do_list_is_kept_as_an_observation_and_moves_nothing_of_the_sessions_record() {
     use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker};
     use protocol::capability::output::{Todo, TodoList, TodoStatus};
     use protocol::capability::{Capabilities, Claimed, Report};
@@ -132,7 +132,7 @@ async fn the_agents_to_do_list_is_kept_as_an_observation_and_only_a_change_moves
     assert_eq!(recorded(todos(TodoStatus::InProgress)).await.1, first, "the same list again");
     let (kept, done) = recorded(todos(TodoStatus::Done)).await;
     assert_eq!(kept, Some(todos(TodoStatus::Done)));
-    assert!(done > first, "a change moves the record, for a client of version 4");
+    assert_eq!(done, first, "nor a change");
 }
 
 /// The mode the current run says it's in changes the session's record in the transaction that records the event, and

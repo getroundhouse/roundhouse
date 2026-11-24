@@ -25,7 +25,6 @@ fn revisions(frame: &HubFrame) -> Vec<(String, Rev)> {
         | HubFrame::Event { .. }
         | HubFrame::Tail { .. }
         | HubFrame::Delta { .. }
-        | HubFrame::Github { .. }
         | HubFrame::Terminal { .. }
         | HubFrame::TerminalPicture { .. } => Vec::new(),
     }
@@ -93,7 +92,6 @@ fn of_listed(listed: &Listed) -> Vec<(String, Rev)> {
 }
 
 /// Each revision a reply carries, of the records in it and of a list it is.
-#[expect(clippy::too_many_lines, reason = "a flat match over every reply, each arm a record, a list or nothing")]
 fn of_reply(response: &ClientResponse) -> Vec<(String, Rev)> {
     use ClientResponse as C;
     let each = |records: Vec<Record>| records.iter().map(record).collect();
@@ -105,7 +103,6 @@ fn of_reply(response: &ClientResponse) -> Vec<(String, Rev)> {
         }
         C::Repo(repo) => each(vec![Record::Repo(repo.clone())]),
         C::Repos(repos) => each(repos.repos.iter().cloned().map(Record::Repo).collect()),
-        C::Records(records) => of_records(records),
         C::ModelList(model_list) => each(vec![Record::ModelList(model_list.clone())]),
         C::Workspace(workspace) => each(vec![Record::Workspace(workspace.clone())]),
         C::Workspaces(workspaces) => each(workspaces.workspaces.iter().cloned().map(Record::Workspace).collect()),
@@ -113,21 +110,6 @@ fn of_reply(response: &ClientResponse) -> Vec<(String, Rev)> {
         C::Comments(comments) => each(comments.comments.iter().cloned().map(Record::Comment).collect()),
         C::Session(session) => each(vec![Record::Session(session.clone())]),
         C::Sessions(sessions) => each(sessions.sessions.iter().cloned().map(Record::Session).collect()),
-        C::Subagents(subagents) => {
-            let mut revisions = each(subagents.subagents.iter().cloned().map(Record::Subagent).collect());
-            revisions.push(list("a session's subagents", subagents.rev));
-            revisions
-        }
-        C::Proposals(proposals) => {
-            let mut revisions = each(proposals.proposals.iter().cloned().map(Record::Proposal).collect());
-            revisions.push(list("a session's proposals", proposals.rev));
-            revisions
-        }
-        C::RepliesHeard(heard) => {
-            let mut revisions = each(heard.replies.iter().cloned().map(Record::ReplyHeard).collect());
-            revisions.push(list("a session's replies heard", heard.rev));
-            revisions
-        }
         C::Proposal(proposal) => each(vec![Record::Proposal(proposal.clone())]),
         C::Account(account) => each(vec![Record::Account(account.clone())]),
         C::GithubAccount(account) => each(vec![Record::GithubAccount(account.clone())]),
@@ -158,7 +140,6 @@ fn of_reply(response: &ClientResponse) -> Vec<(String, Rev)> {
         | C::PromptRecorded(_)
         | C::Attachment(_)
         | C::AttachmentData(_)
-        | C::SessionAccount(_)
         | C::GhLogin(_)
         | C::MachineLogins(_)
         | C::GithubAppManifest(_)

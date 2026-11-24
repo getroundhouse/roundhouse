@@ -2,9 +2,9 @@
 //! client of another build finds a record by its kind's name and its key, and the request that finds one and its reply,
 //! since a worker can outlive the hub that started it.
 
-use protocol::client::{ClientResponse, HubNotice};
+use protocol::client::HubNotice;
 use protocol::frame;
-use protocol::model::{FoundGithubLogin, GhLogin, GhLoginWorks, GithubToken, RecordKey, Rev};
+use protocol::model::{FoundGithubLogin, GhLogin, GhLoginWorks, GithubToken, RecordKey, Records, Rev};
 use protocol::worker::{FoundToken, GithubLoginReply, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 
 use super::keeps_its_form;
@@ -54,10 +54,10 @@ fn a_found_logins_removal_names_its_provider() {
 
 #[test]
 fn a_list_of_every_record_reads_its_found_logins_and_one_from_a_hub_that_finds_none_has_none() {
-    let listed = r#"{"result":"records","repos":[],"workspaces":[],"sessions":[],"comments":[],"found_github_logins":[{"provider":"local","login":{"state":"logged_in","username":"ada","works":"yes"},"rev":3}],"rev":5}"#;
-    let older = r#"{"result":"records","repos":[],"workspaces":[],"sessions":[],"comments":[],"rev":5}"#;
+    let listed = r#"{"repos":[],"workspaces":[],"sessions":[],"comments":[],"found_github_logins":[{"provider":"local","login":{"state":"logged_in","username":"ada","works":"yes"},"rev":3}],"rev":5}"#;
+    let older = r#"{"repos":[],"workspaces":[],"sessions":[],"comments":[],"rev":5}"#;
     let read = |line: &str| {
-        let ClientResponse::Records(list) = frame::decode::<ClientResponse>(line.as_bytes()).unwrap() else { panic!() };
+        let list: Records = serde_json::from_str(line).unwrap();
         list.found_github_logins
     };
 

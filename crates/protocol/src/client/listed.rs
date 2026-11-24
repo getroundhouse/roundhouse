@@ -12,8 +12,8 @@ use crate::model::{Observation, Proposal, Records, ReferenceAsk, ReplyHeard, Rev
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "level", rename_all = "snake_case")]
 pub enum Listed {
-    /// Every record but those of one session, with the observations sent at the hub's level, as
-    /// [`RecordsList`](super::records::RecordsList) returns them. Boxed, since it's the largest by far.
+    /// Every record but those of one session, with the observations sent at the hub's level. Boxed, since it's the
+    /// largest by far.
     Hub(Box<Records>),
     /// The records of one session.
     Session(SessionRecords),
@@ -28,9 +28,8 @@ pub enum Listed {
     Unknown,
 }
 
-/// The records of one session, read in one transaction: what `SessionSubagents`, `SessionProposals` and
-/// `SessionRepliesHeard` each return, together, with every observation sent at the session's level, read at the same
-/// moment.
+/// The records of one session, read in one transaction: its subagents, its proposals and how each of its replies said
+/// out loud ended, with every observation sent at the session's level, read at the same moment.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionRecords {
     pub session_id: SessionId,

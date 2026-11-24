@@ -15,7 +15,7 @@ impl World {
         for repo in repos {
             let key = ModelListKey { agent, repo, provider: "local".into(), account: None, cli_version: None };
             self.observe(observed::catalog(key.clone(), catalog.clone()));
-            self.model_lists.push(ModelList { key, catalog: None, lookup: ModelLookup::Answered, rev: Rev::default() });
+            self.model_lists.push(ModelList { key, lookup: ModelLookup::Answered, rev: Rev::default() });
         }
     }
 

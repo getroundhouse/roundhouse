@@ -1,9 +1,8 @@
 use super::super::{
-    AccountId, AccountSource, ApprovalId, ContextUsage, DecisionDraft, Draft, ModelName, PromptCache, QueuedPrompt,
-    Rev, Seq, SessionId, Title, TitleSource, Wait, WorkspaceId,
+    AccountId, AccountSource, ApprovalId, DecisionDraft, Draft, ModelName, QueuedPrompt, Rev, Seq, SessionId, Title,
+    TitleSource, Wait, WorkspaceId,
 };
 use crate::capability::approvals::ApprovalMode;
-use crate::capability::output::TodoList;
 use crate::capability::settings::{Effort, Settings};
 use crate::event::{AgentTask, TaskKind, TurnOutcome};
 use serde::{Deserialize, Serialize};
@@ -193,22 +192,6 @@ pub struct Session {
     /// All open waits. None means an older hub; an empty list means this hub has none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waits: Option<Vec<Wait>>,
-    /// How full the agent's context is, as its newest report said. `None` until it has said, and from a hub that
-    /// doesn't keep it. It stays once the agent has gone, since the conversation it resumes is as full.
-    #[serde(default)]
-    pub context: Option<ContextUsage>,
-    /// What the API's cache holds of the conversation, as the agent's newest request left it. `None` before the agent
-    /// has asked its model anything, after it compacted, since what the cache held is no longer the conversation, and
-    /// from a hub that doesn't keep it. It moves with each of the agent's own requests, which the feed doesn't announce,
-    /// so a client has the newest once the turn has ended, when the record is announced. It stays once the agent has
-    /// gone, since the cache doesn't go with it.
-    #[serde(default)]
-    pub prompt_cache: Option<PromptCache>,
-    /// The agent's to-do list, as its newest report said, for an agent that reports one, as
-    /// [`output::Capability::Todos`](crate::capability::output::Capability::Todos) says. `None` until it has said, and
-    /// from a hub that doesn't keep it. It stays once the agent has gone, since the conversation it resumes holds it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub todos: Option<TodoList>,
     /// The account the chat's agent runs under, and the record of it says who that is and what's left of its limits.
     /// For a chat on a login the hub holds, as `account_source` says, it's the account the chat is on, which every
     /// launch runs under, from the launch that put it there or the move to it, so a moved chat names it before its

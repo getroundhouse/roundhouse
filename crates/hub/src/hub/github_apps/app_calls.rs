@@ -24,13 +24,12 @@ impl Hub {
         let made = self.github.make_app(&code).await?;
         let said = GithubAppSaid { slug: made.slug.clone(), name: made.name.clone(), owner: made.owner.clone() };
         let (logins, made_at_ms) = (Arc::clone(&self.github_logins), now_ms());
-        let AppChange { mut app, changed } = off_thread(move || logins.keep_app(&made, &code)).await?;
+        let AppChange { app, changed } = off_thread(move || logins.keep_app(&made, &code)).await?;
         if changed {
             // What GitHub said of it as it made it, as it would say asked as the app.
             if let Err(e) = self.observation_read::<Said>(app.id, said, made_at_ms).await {
                 warn!(app = %app.id, "couldn't keep what GitHub said of an app it made: {}", e.message);
             }
-            self.fill_old_forms(&mut app);
             self.notify(HubNotice::GithubApp(app.clone()));
         }
         match self.look_at_app(app.id, true).await {

@@ -54,8 +54,6 @@ impl Store {
             // A hub from before Settings' Providers found these, as `FoundGithubLogin` says. This one finds none.
             found_github_logins: Vec::new(),
             github_apps: github_apps(&tx)?,
-            // Made from what the hub observes, as `crate::hub::observations::OldForm` says, so the hub adds them.
-            github_reach: Vec::new(),
             // Kept in memory rather than here, as `Terminal`, `ModelList` and `HubUpdate` say, so the hub adds them.
             terminals: Vec::new(),
             model_lists: Vec::new(),

@@ -32,8 +32,6 @@ impl World {
             // As from a hub since Settings' Providers.
             found_github_logins: Vec::new(),
             github_apps: self.github_apps.clone(),
-            // As a hub sends a client of version 5, which reads what each held as an observation.
-            github_reach: Vec::new(),
             terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),
             model_lists: self.model_lists.clone(),
             hub_update: self.hub_update.clone(),

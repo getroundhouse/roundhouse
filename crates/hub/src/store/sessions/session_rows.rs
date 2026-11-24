@@ -82,15 +82,9 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
                 .map_or(Interaction::Typing, |device| Interaction::Conversation { device }),
             turn_started_at_ms: row.at(c.turn_started_at_ms)?,
             effort: text_at(row, c.effort)?,
-            // An observation, which `crate::hub::observations::OldForm` fills it with as it leaves the hub.
-            context: None,
             account: row.at::<Option<String>>(c.account_id)?.map(AccountId::from),
             account_source: maybe_text_at::<AccountSource>(row, c.account_source)?,
             user_active_at_ms: row.at(c.user_active_at_ms)?,
-            // An observation, as `context` is.
-            prompt_cache: None,
-            // The same.
-            todos: None,
             // Written only by this hub, as JSON. One it can't read is as good as nothing typed.
             draft: json_at(row, c.draft)?.unwrap_or_default(),
             // The same.

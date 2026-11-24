@@ -184,8 +184,8 @@ async fn the_device_with_the_conversation_says_how_each_reply_ended_once() {
     let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone))
         .filter_map(|notice| if let HubNotice::ReplyHeard(heard) = notice { Some(heard) } else { None })
         .collect();
-    let listed = hub.session_replies_heard(chat.id.clone()).await.unwrap();
-    let [heard] = &listed.replies[..] else { panic!("one reply: {listed:?}") };
+    let listed = hub.session_records(chat.id.clone()).await.unwrap();
+    let [heard] = &listed.replies_heard[..] else { panic!("one reply: {listed:?}") };
     assert_eq!((&heard.message, heard.ending), (&"m1".into(), cut));
-    assert_eq!(told, listed.replies, "told once, of the first");
+    assert_eq!(told, listed.replies_heard, "told once, of the first");
 }

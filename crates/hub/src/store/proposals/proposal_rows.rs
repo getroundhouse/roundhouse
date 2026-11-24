@@ -1,6 +1,6 @@
 use super::super::made::Made;
 use super::super::queue::{Queued, queue_on};
-use super::super::{Columns, OneValue, Store, StoreError, current_rev, lock};
+use super::super::{Columns, OneValue, Store, StoreError, lock};
 use super::proposal_reads::{
     PROPOSAL_WITH_NEWEST, RevisionColumns, proposal_columns, proposal_from_row, proposal_on, revision_from_row,
     with_summaries,
@@ -9,7 +9,7 @@ use protocol::attachment::Attachment;
 use protocol::event::LinkedImage;
 use protocol::model::{
     AnswerProblem, AskKey, ClientMessageId, ClientRequestId, Proposal, ProposalId, ProposalRevision, Proposed,
-    QueuedPrompt, Response, Rev, RevisionNumber, RevisionStanding, SessionId, ToolUseId, Withdrawal,
+    QueuedPrompt, Response, RevisionNumber, RevisionStanding, SessionId, ToolUseId, Withdrawal,
 };
 use protocol::prompt::{Prompt, PromptFrom};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -142,17 +142,6 @@ impl Store {
         let made = proposal_on(&tx, &proposal.id)?;
         tx.commit()?;
         Ok(Made::New(made))
-    }
-
-    /// The session's proposals, oldest first, each with its newest revision, read in one transaction with the revision
-    /// they're as of.
-    pub fn list_proposals(&self, session_id: &SessionId) -> Result<(Vec<Proposal>, Rev), StoreError> {
-        let mut conn = lock(&self.reader);
-        let tx = conn.transaction()?;
-        let proposals = proposals_of(&tx, session_id)?;
-        let rev = current_rev(&tx)?;
-        tx.commit()?;
-        Ok((proposals, rev))
     }
 
     /// Keeps the answer to the revision of the proposal `id` that `answer` names, and puts the prompt that tells its

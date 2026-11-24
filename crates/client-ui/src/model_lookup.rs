@@ -185,7 +185,7 @@ mod tests {
             account: None,
             cli_version: None,
         };
-        ModelList { key, catalog: None, lookup, rev: Rev::new(rev) }
+        ModelList { key, lookup, rev: Rev::new(rev) }
     }
 
     /// The reply names the list, and what it says is read from the records alone, which take the reply's copy in

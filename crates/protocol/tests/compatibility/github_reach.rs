@@ -1,11 +1,10 @@
-//! Whether the default GitHub account can push to each repository's repository on GitHub, spelled out: its records, as
-//! the feed and a list carry them, since a client of another build finds a record by its kind's name and its key, and
-//! the observation they're made from.
+//! Whether the default GitHub account can push to each repository's repository on GitHub, spelled out, as the hub's
+//! level sends it, as an observation, and what a hub from before sent of it as a record of its own.
 
-use protocol::client::{ClientResponse, HubNotice};
+use protocol::client::HubNotice;
 use protocol::frame;
 use protocol::model::{
-    GithubReach, GithubRepositoryName, InstalledApp, Observation, ObservationKey, Observed, Reach, RecordKey, Rev,
+    GithubRepositoryName, InstalledApp, Observation, ObservationKey, Observed, Reach, RecordKey, Rev,
 };
 
 use super::keeps_its_form;
@@ -15,8 +14,13 @@ const CLI: GithubRepositoryName = GithubRepositoryName::named("cli/cli");
 /// An app of your own's bot, as GitHub knows its installation.
 const BOT: &str = "ada-roundhouse[bot]";
 
-fn reach(reach: Reach) -> GithubReach {
-    GithubReach { repo: "r".into(), reach, answered_at_ms: None, stale: false, rev: Rev::new(3) }
+/// The repository `r`'s reach, as `reach` says, as the hub sends it while it checks it.
+fn reach(reach: Reach) -> HubNotice {
+    HubNotice::Observation(Observation::RepositoryReach {
+        repo: "r".into(),
+        reach: Observed::Current { value: reach },
+        rev: Rev::new(3),
+    })
 }
 
 fn on_adalabs() -> InstalledApp {
@@ -24,9 +28,8 @@ fn on_adalabs() -> InstalledApp {
 }
 
 #[test]
-fn a_notice_of_each_reach_keeps_its_form() {
-    let notice = |said| HubNotice::GithubReach(reach(said));
-    let start = r#"{"notice":"github_reach","repo":"r","reach":{"state":"#;
+fn each_reach_keeps_its_form() {
+    let start = r#"{"notice":"observation","kind":"repository_reach","repo":"r","reach":{"freshness":"current","value":{"state":"#;
     let forms = [
         (
             Reach::Pushes { repository: CLI, username: "ada".into() },
@@ -80,61 +83,34 @@ fn a_notice_of_each_reach_keeps_its_form() {
     ];
 
     for (said, form) in forms {
-        keeps_its_form(&notice(said), &format!(r#"{start}{form}}},"answered_at_ms":null,"stale":false,"rev":3}}"#));
+        keeps_its_form(&reach(said), &format!(r#"{start}{form}}}}},"rev":3}}"#));
     }
-}
-
-/// What GitHub answered, and when, which the hub's last run left and this one hasn't checked again.
-#[test]
-fn an_answer_the_last_run_left_says_when_github_gave_it() {
-    let refused = Reach::Refused {
-        repository: CLI,
-        username: "ada".into(),
-        reason: "Permission denied.".into(),
-        installation: None,
-    };
-    let left = GithubReach { answered_at_ms: Some(1_793_541_600_000), stale: true, ..reach(refused) };
-
-    keeps_its_form(
-        &HubNotice::GithubReach(left),
-        r#"{"notice":"github_reach","repo":"r","reach":{"state":"refused","repository":"cli/cli","username":"ada","reason":"Permission denied."},"answered_at_ms":1793541600000,"stale":true,"rev":3}"#,
-    );
-}
-
-/// Keyed by its repository, though the hub never removes one, as it never removes a repository.
-#[test]
-fn a_reachs_removal_names_its_repository() {
-    let removed = HubNotice::Removed { record: RecordKey::GithubReach { repo: "r".into() }, rev: Rev::new(5) };
-
-    keeps_its_form(&removed, r#"{"notice":"removed","record":{"kind":"github_reach","repo":"r"},"rev":5}"#);
-}
-
-#[test]
-fn a_list_of_every_record_reads_its_reach_and_one_from_a_hub_that_checks_none_has_none() {
-    let listed = r#"{"result":"records","repos":[],"workspaces":[],"sessions":[],"comments":[],"github_reach":[{"repo":"r","reach":{"state":"not_on_github"},"rev":3}],"rev":5}"#;
-    let older = r#"{"result":"records","repos":[],"workspaces":[],"sessions":[],"comments":[],"rev":5}"#;
-    let read = |line: &str| {
-        let ClientResponse::Records(list) = frame::decode::<ClientResponse>(line.as_bytes()).unwrap() else { panic!() };
-        list.github_reach
-    };
-
-    assert_eq!(read(listed), [reach(Reach::NotOnGithub)]);
-    assert_eq!(read(older), []);
 }
 
 /// From a newer hub, which may say what this build has no word for.
 #[test]
 fn a_reach_from_a_newer_hub_reads_as_unknown_and_names_no_repository() {
-    let newer = r#"{"notice":"github_reach","repo":"r","reach":{"state":"pushes_on_tuesdays","repository":"cli/cli"}}"#;
+    let newer = r#"{"notice":"observation","kind":"repository_reach","repo":"r","reach":{"freshness":"current","value":{"state":"pushes_on_tuesdays","repository":"cli/cli"}},"rev":3}"#;
 
-    let HubNotice::GithubReach(read) = frame::decode::<HubNotice>(newer.as_bytes()).unwrap() else { panic!() };
+    let read = frame::decode::<HubNotice>(newer.as_bytes()).unwrap();
 
-    assert_eq!((read.reach.repository(), read.rev), (None, Rev::default()));
-    assert_eq!(read.reach, Reach::Unknown);
+    assert_eq!(read, reach(Reach::Unknown));
+    assert_eq!(Reach::Unknown.repository(), None);
 }
 
-/// Whether the default can push to a repository, which a hub sends at its own level to a client of a version that
-/// reads it so, as a notice and as its removal.
+/// What a hub that spoke version 4 sent a client of it, a record of its own, reads as a notice and a record of a kind
+/// this build doesn't know, which a client skips.
+#[test]
+fn a_reach_as_a_hub_from_before_sent_it_reads_as_unknown() {
+    let record = r#"{"notice":"github_reach","repo":"r","reach":{"state":"not_on_github"},"answered_at_ms":null,"stale":false,"rev":3}"#;
+    let removed = r#"{"notice":"removed","record":{"kind":"github_reach","repo":"r"},"rev":4}"#;
+
+    assert_eq!(frame::decode::<HubNotice>(record.as_bytes()).unwrap(), HubNotice::Unknown);
+    let removed = frame::decode::<HubNotice>(removed.as_bytes()).unwrap();
+    assert_eq!(removed, HubNotice::Removed { record: RecordKey::Unknown, rev: Rev::new(4) });
+}
+
+/// Whether the default can push to a repository, as of a read, as a notice and as its removal.
 #[test]
 fn a_repositorys_reach_keeps_its_form_as_a_notice_and_a_removal() {
     let reach = Reach::Pushes { repository: GithubRepositoryName::named("cli/cli"), username: "ada".into() };

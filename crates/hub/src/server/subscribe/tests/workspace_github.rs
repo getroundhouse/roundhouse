@@ -1,13 +1,11 @@
-//! What GitHub says of a workspace's own pull request, sent in the one form each subscription reads: as observations at
-//! the hub's level and the workspace's to a start that reads GitHub so, and as `HubFrame::Github` to any other.
+//! What GitHub says of a workspace's own pull request, sent as observations at the hub's level and the workspace's.
 
 use std::sync::Arc;
 
 use github::{PullRequestState, PullRequests, StandIn};
 use protocol::client::listed::Listed;
-use protocol::client::records::RecordsList;
 use protocol::client::subscriptions::{Follow, Subscribe, Subscription};
-use protocol::client::{ClientResponse, HubFrame, HubNotice, ObservationNotice};
+use protocol::client::{CLIENT_PROTOCOL_VERSION, HubFrame, HubNotice, ObservationNotice};
 use protocol::model::{Observation, ObservationKey, Observed, OwnPullRequestSaid, PrState};
 
 use super::given::{ok, start};
@@ -24,14 +22,9 @@ async fn hub_with_a_pull_request(dir: &std::path::Path) -> (Arc<Hub>, PullReques
     (hub, pull_requests, github)
 }
 
-/// A start that reads GitHub as observations.
-fn observing(subscription_id: u64, follow: Follow) -> Subscription {
-    Subscription { github_observed: true, ..start(subscription_id, follow) }
-}
-
-/// A connection of version 4 that has started `starts` through one `Subscribe`.
+/// A connection that has started `starts` through one `Subscribe`.
 async fn following(hub: &Arc<Hub>, starts: Vec<Subscription>) -> Connection {
-    let mut connection = Connection::greeted(hub, 4).await;
+    let mut connection = Connection::greeted(hub, CLIENT_PROTOCOL_VERSION).await;
     ok(&mut connection, 1, Subscribe { stop: Vec::new(), start: starts }).await;
     connection
 }
@@ -80,15 +73,14 @@ fn has_the_rest(sent: &[HubFrame]) -> bool {
     sent.iter().any(|frame| matches!(frame, HubFrame::Notice { notice: HubNotice::Comment(_), .. }))
 }
 
-/// Two clients that follow the hub, and read GitHub as observations, are each sent how a workspace's pull request
-/// stands as GitHub changes it, under a revision newer than the one before and than their list, and neither is sent
-/// `HubFrame::Github`. The issue's "Done when".
+/// Two clients that follow the hub are each sent how a workspace's pull request stands as GitHub changes it, under a
+/// revision newer than the one before and than their list.
 #[tokio::test]
 async fn two_clients_that_follow_the_hub_are_both_sent_the_newer_summary_by_its_revision() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, pull_requests, _github) = hub_with_a_pull_request(dir.path()).await;
-    let mut one = following(&hub, vec![observing(1, Follow::Hub)]).await;
-    let mut two = following(&hub, vec![observing(1, Follow::Hub)]).await;
+    let mut one = following(&hub, vec![start(1, Follow::Hub)]).await;
+    let mut two = following(&hub, vec![start(1, Follow::Hub)]).await;
     for client in [&mut one, &mut two] {
         client.until("its list", |sent| sent.iter().any(|frame| listed_rev(frame).is_some())).await;
     }
@@ -104,7 +96,6 @@ async fn two_clients_that_follow_the_hub_are_both_sent_the_newer_summary_by_its_
         let [(PrState::Open, open), (PrState::Merged, merged)] = told.as_slice() else { panic!("{told:?}") };
         let list = client.sent.iter().find_map(listed_rev).unwrap();
         assert!(*merged > *open && *open > list, "{list}, {open}, {merged}");
-        assert!(!client.sent.iter().any(|frame| matches!(frame, HubFrame::Github { .. })));
     }
 }
 
@@ -115,9 +106,8 @@ async fn a_client_that_follows_the_hub_alone_is_sent_no_checks() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, _pull_requests, _github) = hub_with_a_pull_request(dir.path()).await;
     hub.workspace_pull_request("w".into()).await.unwrap();
-    let mut hub_alone = following(&hub, vec![observing(1, Follow::Hub)]).await;
-    let mut both =
-        following(&hub, vec![observing(1, Follow::Hub), observing(2, Follow::Workspace { id: "w".into() })]).await;
+    let mut hub_alone = following(&hub, vec![start(1, Follow::Hub)]).await;
+    let mut both = following(&hub, vec![start(1, Follow::Hub), start(2, Follow::Workspace { id: "w".into() })]).await;
 
     let detail = |frame: &HubFrame| {
         let HubFrame::Listed { listed: Listed::Workspace(workspace), .. } = frame else { return None };
@@ -136,36 +126,4 @@ async fn a_client_that_follows_the_hub_alone_is_sent_no_checks() {
     let sent_alone: Vec<_> = hub_alone.sent.iter().flat_map(observations).collect();
     assert!(sent_alone.contains(&ObservationKey::WorkspacePullRequest { workspace_id: "w".into() }), "{sent_alone:?}");
     assert!(!sent_alone.iter().any(|key| matches!(key, ObservationKey::WorkspacePullRequestDetail { .. })));
-    assert!(!hub_alone.sent.iter().any(|frame| matches!(frame, HubFrame::Github { .. })));
-}
-
-/// A start that doesn't read GitHub as observations, as every client from before them sends, is sent each
-/// workspace's pull request as `HubFrame::Github`, and none of GitHub's observations in any list or notice, at the
-/// hub's level or the workspace's. Nor does `RecordsList` list any.
-#[tokio::test]
-async fn a_start_that_doesn_t_read_github_so_is_sent_github_s_updates_and_none_of_its_observations() {
-    let dir = tempfile::tempdir().unwrap();
-    let (hub, pull_requests, _github) = hub_with_a_pull_request(dir.path()).await;
-    hub.workspace_pull_request("w".into()).await.unwrap();
-    let mut before = following(&hub, vec![start(1, Follow::Hub), start(2, Follow::Workspace { id: "w".into() })]).await;
-    before
-        .until("both lists", |sent| sent.iter().filter(|frame| matches!(frame, HubFrame::Listed { .. })).count() == 2)
-        .await;
-    // Sent the observations, so once it has the merge's, so has every subscription whatever it's sent of them.
-    let mut observing_client = following(&hub, vec![observing(1, Follow::Hub)]).await;
-
-    pull_requests.set(7, PullRequestState::Merged);
-    hub.workspace_pull_request("w".into()).await.unwrap();
-    let github = |frame: &HubFrame| matches!(frame, HubFrame::Github { subscription_id: 1, .. });
-    before.until("the pull request as an update", |sent| sent.iter().any(github)).await;
-    let merged = |sent: &[HubFrame]| sent.iter().filter_map(stands).any(|(state, _)| state == PrState::Merged);
-    observing_client.until("the pull request merged, as an observation", merged).await;
-    after_the_rest(&hub);
-    before.until("the notice after the rest", has_the_rest).await;
-
-    let sent: Vec<_> = before.sent.iter().flat_map(observations).collect();
-    assert!(!sent.iter().any(ObservationKey::is_github), "{sent:?}");
-    let ClientResponse::Records(records) = ok(&mut before, 2, RecordsList).await else { panic!("not records") };
-    let listed: Vec<_> = records.observations.iter().map(Observation::key).collect();
-    assert!(!listed.iter().any(ObservationKey::is_github), "{listed:?}");
 }

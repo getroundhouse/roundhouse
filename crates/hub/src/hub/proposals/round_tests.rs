@@ -72,7 +72,7 @@ async fn another_round_without_a_note_is_refused_and_nothing_is_kept() {
 
     assert_eq!(refused.code, ErrorCode::InvalidRequest);
     assert!(refused.message.contains("note"), "{}", refused.message);
-    assert_eq!(hub.session_proposals("s".into()).await.unwrap().proposals[0].current.response, None);
+    assert_eq!(hub.session_records("s".into()).await.unwrap().proposals[0].current.response, None);
 }
 
 /// The agent is told the person asks for another round, and reads what to change in the note with its tool, of the

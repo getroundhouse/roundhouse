@@ -4,7 +4,7 @@
 //! `origin` names, and what the hub sends every worker for the default.
 
 #[cfg(test)]
-use super::{GithubAccountId, GithubAppSlug, GithubSettings, GithubSignInId, GithubUserCode, GithubUsername, Rev};
+use super::{GithubAccountId, GithubSettings, GithubSignInId, GithubUserCode, Rev};
 
 #[cfg(test)]
 mod tests;
@@ -16,9 +16,9 @@ pub use found::{FoundGithubLogin, GhLogin, GhLoginWorks, MachineLogins, SshLogin
 mod numbers;
 pub use numbers::{GithubAppId, GithubInstallationId, GithubUserId};
 mod reach;
-pub use reach::{GithubReach, GithubRepositoryName, GithubRepositoryNameError, InstalledApp, Reach};
+pub use reach::{GithubRepositoryName, GithubRepositoryNameError, InstalledApp, Reach};
 mod record;
-pub use record::{GithubAccount, GithubLoginKind, GithubToken, GithubUser, HeldGithubLogin};
+pub use record::{GithubAccount, GithubLoginKind, GithubToken, GithubUser, GithubUserNumber, HeldGithubLogin};
 mod sent;
 pub use sent::{SentCredential, UnusableLogin};
 mod sign_in;

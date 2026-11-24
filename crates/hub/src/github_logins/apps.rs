@@ -58,16 +58,16 @@ impl GithubLogins {
         files: &Locked<'_, GithubLogin>,
         id: GithubAppId,
     ) -> Result<(GithubApp, GithubAppKey), ApiError> {
-        let (mut app, file) = self.store.github_app_key(id)?;
-        // Named as the hub last heard GitHub call it, for what's said of it.
-        self.observations.fill(&mut app);
+        let (app, file) = self.store.github_app_key(id)?;
         let read = file.map_or(Ok(Stored::Nothing), |file| files.read(&file));
-        let refused = |why: &str| Err(ApiError::new(ErrorCode::Conflict, format!("{why} the key of {}", app.slug)));
+        // Named as the hub last heard GitHub call it, for what's said of it.
+        let slug = self.slug_of(id);
+        let refused = |why: &str| Err(ApiError::new(ErrorCode::Conflict, format!("{why} the key of {slug}")));
         match read {
             Ok(Stored::Secret(GithubLogin::App(key))) => Ok((app, key)),
             Ok(Stored::Newer) => refused("only a newer Roundhouse can read"),
             Ok(Stored::Secret(_) | Stored::Nothing) => refused("Roundhouse can't find"),
-            Err(e) => Err(internal(format!("couldn't read the key of {}: {e}", app.slug))),
+            Err(e) => Err(internal(format!("couldn't read the key of {slug}: {e}"))),
         }
     }
 
@@ -78,9 +78,7 @@ impl GithubLogins {
     /// blocks. Refused with `NotFound` when the hub has no record of it.
     pub(crate) fn remove_app(&self, id: GithubAppId, now_ms: i64) -> Result<AppRemoved, ApiError> {
         self.changing(now_ms, |files| {
-            let (mut app, key) = self.store.github_app_key(id)?;
-            // As it last was, which is what's known of it, if anything, as the reply says.
-            self.observations.fill(&mut app);
+            let (app, key) = self.store.github_app_key(id)?;
             let mut accounts = Vec::new();
             for (account, file) in self.store.installation_accounts(id)? {
                 let Some(file) = file else { continue };

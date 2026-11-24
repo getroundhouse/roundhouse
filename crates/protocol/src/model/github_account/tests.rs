@@ -27,16 +27,11 @@ fn any_sign_in() -> impl Strategy<Value = GithubSignIn> {
     })
 }
 
-fn any_user() -> impl Strategy<Value = GithubUser> {
-    (any::<u64>(), "[a-z][a-z0-9-]{0,38}(\\[bot\\])?")
-        .prop_map(|(id, name)| GithubUser { id: GithubUserId::new(id), name: GithubUsername::from(name) })
-}
-
 fn any_installation() -> impl Strategy<Value = GithubInstallation> {
-    (any::<u64>(), any::<u64>(), any_user()).prop_map(|(app, id, on)| GithubInstallation {
+    (any::<u64>(), any::<u64>(), any::<u64>()).prop_map(|(app, id, on)| GithubInstallation {
         app: GithubAppId::new(app),
         id: GithubInstallationId::new(id),
-        on,
+        on: GithubUserNumber { id: GithubUserId::new(on) },
     })
 }
 
@@ -51,10 +46,10 @@ fn any_account() -> impl Strategy<Value = GithubAccount> {
         },
     );
     let installation = proptest::option::of(any_installation());
-    (any_user(), proptest::option::of(held_login), installation, any::<u64>()).prop_map(
+    (any::<u64>(), proptest::option::of(held_login), installation, any::<u64>()).prop_map(
         |(user, held_login, installation, rev)| GithubAccount {
             id: GithubAccountId::from("6f1c2a9e-made-up"),
-            user,
+            user: GithubUserNumber { id: GithubUserId::new(user) },
             held_login,
             installation,
             rev: Rev::new(rev),
@@ -63,17 +58,7 @@ fn any_account() -> impl Strategy<Value = GithubAccount> {
 }
 
 fn any_app() -> impl Strategy<Value = GithubApp> {
-    let slug = "[a-z][a-z0-9-]{0,33}".prop_map(GithubAppSlug::from);
-    (any::<u64>(), slug, ".{0,34}", any_user(), proptest::option::of(any_user()), any::<u64>()).prop_map(
-        |(id, slug, name, owner, bot, rev)| GithubApp {
-            id: GithubAppId::new(id),
-            slug,
-            name,
-            owner,
-            bot,
-            rev: Rev::new(rev),
-        },
-    )
+    (any::<u64>(), any::<u64>()).prop_map(|(id, rev)| GithubApp { id: GithubAppId::new(id), rev: Rev::new(rev) })
 }
 
 proptest! {
@@ -123,7 +108,7 @@ fn an_account_that_says_only_who_it_is_holds_no_login_and_one_that_says_no_end_n
     let disconnected: GithubAccount = serde_json::from_value(disconnected).unwrap();
     let held: GithubAccount = serde_json::from_value(held).unwrap();
 
-    assert_eq!((disconnected.user.id, disconnected.user.name.as_str()), (GithubUserId::new(7), "ada"));
+    assert_eq!(disconnected.user.id, GithubUserId::new(7));
     assert_eq!((disconnected.held_login, disconnected.rev), (None, Rev::default()));
     assert_eq!(held.held_login.and_then(|held| held.ends_at_ms), None);
     assert!(held.held_login.unwrap().works_at(i64::MAX));
@@ -185,12 +170,12 @@ fn a_repository_on_github_is_an_owner_and_a_name_of_githubs_letters() {
     assert_eq!(GithubRepositoryName::named("get-round_house/app.rs").owner(), "get-round_house");
 }
 
-/// So a name that isn't one fails only its record. One in a state from a newer hub is in the compatibility tests.
+/// So a name that isn't one fails only what it's in. One in a state from a newer hub is in the compatibility tests.
 #[test]
 fn a_reach_naming_no_repository_on_github_isnt_read() {
-    let not_one = json!({"repo": "r", "reach": {"state": "pushes", "repository": "cli", "username": "ada"}});
+    let not_one = json!({"state": "pushes", "repository": "cli", "username": "ada"});
 
-    assert!(serde_json::from_value::<GithubReach>(not_one).is_err());
+    assert!(serde_json::from_value::<Reach>(not_one).is_err());
 }
 
 /// So a client shows nothing of a newer hub's word as one this build knows, but the reason it gives, which says itself.

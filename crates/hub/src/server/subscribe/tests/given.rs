@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use protocol::client::github::GithubUpdate;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscription};
 use protocol::client::{ClientResponse, HubFrame, HubNotice, Outcome, Request};
@@ -86,7 +85,6 @@ pub(super) struct ByKind {
     pub(super) events: Vec<SessionEvent>,
     pub(super) tails: Vec<Tail>,
     pub(super) pictures: Vec<TerminalPicture>,
-    pub(super) github: Vec<GithubUpdate>,
     pub(super) listed: Vec<Listed>,
 }
 
@@ -99,7 +97,6 @@ impl ByKind {
                 HubFrame::Event { event, .. } => kinds.events.push(event),
                 HubFrame::Tail { tail, .. } => kinds.tails.push(tail),
                 HubFrame::TerminalPicture { picture, .. } => kinds.pictures.push(picture),
-                HubFrame::Github { update, .. } => kinds.github.push(update),
                 HubFrame::Listed { listed, .. } => kinds.listed.push(listed),
                 frame @ (HubFrame::Reply { .. } | HubFrame::Delta { .. } | HubFrame::Terminal { .. }) => {
                     panic!("not sent here: {frame:?}")
@@ -140,4 +137,14 @@ pub(super) fn comment_made(hub: &Hub, text: &str) -> HubNotice {
 pub(super) fn subagent_made(hub: &Hub) -> HubNotice {
     let rev = crate::hub::tests::store_of(hub).next_rev().unwrap();
     HubNotice::Subagent(protocol::model::Subagent { rev, ..protocol::fixtures::subagent("c") })
+}
+
+/// Waits until `client` is sent a notice `hub` tells after all it told before, so it has been sent everything before.
+pub(super) async fn mark(hub: &crate::hub::Hub, client: &mut Connection) {
+    let marker = comment_made(hub, "after");
+    hub.notify(marker.clone());
+    let at_the_marker = |sent: &[HubFrame]| {
+        sent.iter().any(|frame| matches!(frame, HubFrame::Notice { notice, .. } if *notice == marker))
+    };
+    client.until("the marker", at_the_marker).await;
 }

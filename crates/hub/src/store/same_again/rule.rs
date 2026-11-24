@@ -52,8 +52,8 @@ impl Said {
 /// Tables whose records have a revision, and no write that leaves it when it holds what the record holds, with why.
 const NONE_REPEATED: &[(&str, &str)] = &[(
     "github_apps",
-    "an app's record is made once and removed, and what GitHub says of it is an observation, which moves the record's \
-     revision only as it changes",
+    "an app's record is made once and removed, and what GitHub says of it is an observation, whose change changes \
+     nothing on the record",
 )];
 
 const ROWS: &[Row] = &[

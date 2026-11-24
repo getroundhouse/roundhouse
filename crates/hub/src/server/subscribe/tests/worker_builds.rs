@@ -1,35 +1,17 @@
-//! Which build a workspace's worker is, which a client of version 4 reads on the workspace's record, and a client of the
-//! version that reads every observation reads as an observation at the hub's level, kept in memory alone.
+//! Which build a workspace's worker is, an observation at the hub's level, kept in memory alone.
 
-use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
-use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
-use protocol::model::{Observation, ObservationKey, Observed, OtherBuild, Workspace};
+use protocol::client::{CLIENT_PROTOCOL_VERSION, HubFrame, HubNotice};
+use protocol::model::{Observation, ObservationKey, Observed, OtherBuild};
 use rusqlite::Connection as Database;
 
-use super::accounts::mark;
-use super::given::{ok, start};
+use super::given::{mark, ok, start};
 use crate::hub::tests::{hub_in, hub_in_again};
 use crate::server::tests::Connection;
 use crate::store::BEFORE_WORKER_BUILD_OBSERVED;
 use crate::store::columns::OneValue;
 use crate::store::older::store_from_before;
 use crate::worker_link::WorkerLink;
-
-/// What `client` was sent of `w`'s record, listed and then each copy, as which build its worker is.
-fn builds_sent(client: &Connection) -> Vec<Option<String>> {
-    let copies = client.sent.iter().flat_map(|frame| {
-        if let HubFrame::Listed { listed: Listed::Hub(records), .. } = frame {
-            return records.workspaces.clone();
-        }
-        let HubFrame::Notice { notice: HubNotice::Workspace(workspace), .. } = frame else { return Vec::new() };
-        vec![workspace.clone()]
-    });
-    copies
-        .filter(|workspace: &Workspace| workspace.id.as_str() == "w")
-        .map(|workspace| workspace.worker_build)
-        .collect()
-}
 
 /// What `client` was told of `w`'s worker's build as an observation: each copy, and `None` for its removal.
 fn observed_sent(client: &Connection) -> Vec<Option<Observed<OtherBuild>>> {
@@ -45,34 +27,23 @@ fn observed_sent(client: &Connection) -> Vec<Option<Observed<OtherBuild>>> {
     told.collect()
 }
 
-/// As the hub carries on with a worker of another build, a client of version 4 is sent the workspace's record with its
-/// build, and again without once it's gone, and one of the version that reads every observation is sent the
-/// observation, current, and its removal, and no copy of the record that moves only it. A worker too old to name its
-/// build is another all the same, which only the observation can say.
+/// As the hub carries on with a worker of another build, a client is sent the observation, current, and its removal
+/// once it's gone. A worker too old to name its build is another all the same.
 #[tokio::test]
-async fn which_build_a_worker_is_reaches_each_client_in_the_form_its_version_reads() {
+async fn which_build_a_worker_is_is_sent_as_an_observation_and_its_removal() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    let mut before = Connection::greeted(&hub, 4).await;
-    let mut observing = Connection::greeted(&hub, EVERY_OBSERVATION_FROM).await;
-    for client in [&mut before, &mut observing] {
-        ok(client, 1, Subscribe { stop: Vec::new(), start: vec![start(1, Follow::Hub)] }).await;
-        client.until("the list", |sent| sent.iter().any(|frame| matches!(frame, HubFrame::Listed { .. }))).await;
-    }
+    let mut client = Connection::greeted(&hub, CLIENT_PROTOCOL_VERSION).await;
+    ok(&mut client, 1, Subscribe { stop: Vec::new(), start: vec![start(1, Follow::Hub)] }).await;
+    client.until("the list", |sent| sent.iter().any(|frame| matches!(frame, HubFrame::Listed { .. }))).await;
 
     hub.worker_build_heard(&"w".into(), &WorkerLink::unconnected().of_build("0.9.0")).await;
     hub.worker_build_gone(&"w".into()).await;
     hub.worker_build_heard(&"w".into(), &WorkerLink::unconnected()).await;
-    for client in [&mut before, &mut observing] {
-        mark(&hub, client).await;
-    }
+    mark(&hub, &mut client).await;
 
-    // The last is the one too old to name its build, which this field can't tell from the hub's own.
-    assert_eq!(builds_sent(&before), [None, Some("0.9.0".into()), None, None]);
     let said = |said: Option<&str>| Some(Observed::Current { value: OtherBuild { said: said.map(str::to_string) } });
-    assert_eq!(observed_sent(&observing), [said(Some("0.9.0")), None, said(None)]);
-    assert_eq!(observed_sent(&before), [], "no observation to a client of version 4");
-    assert_eq!(builds_sent(&observing), [None], "listed, and no copy that moves only its build");
+    assert_eq!(observed_sent(&client), [said(Some("0.9.0")), None, said(None)]);
 }
 
 /// It's kept in memory alone, so a hub that starts again knows no worker's build until it carries on with one, and a
@@ -91,7 +62,7 @@ async fn which_build_a_worker_is_is_not_known_after_a_restart_nor_from_a_databas
     let listed = again.records_list().await.unwrap();
     assert!(!listed.observations.iter().any(|told| matches!(told, Observation::WorkspaceWorkerBuild { .. })));
     let [workspace] = listed.workspaces.as_slice() else { panic!("{:?}", listed.workspaces) };
-    assert_eq!((workspace.name.as_str(), workspace.worker_build.as_ref()), ("alder", None));
+    assert_eq!(workspace.name.as_str(), "alder");
     let columns: Vec<String> = {
         let db = Database::open(dir.path().join("hub.db")).unwrap();
         let mut statement = db.prepare("SELECT name FROM pragma_table_info('workspaces')").unwrap();

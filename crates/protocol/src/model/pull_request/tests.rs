@@ -228,7 +228,6 @@ fn which_pull_request_the_hub_found_reads_back_as_it_was() {
         repository: GithubRepositoryName::named("o/r"),
         number: IssueNumber::try_from(7).unwrap(),
         url: "https://github.com/o/r/pull/7".into(),
-        uncommitted: 2,
     };
     for linked in [None, Some(PullRequestLinked { link: None }), Some(PullRequestLinked { link: Some(link) })] {
         let workspace =

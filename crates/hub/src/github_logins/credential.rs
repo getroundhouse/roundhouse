@@ -163,7 +163,7 @@ impl GithubLogins {
             return DefaultCredential::NoAccount { reason: no_account(has_accounts) };
         };
         let blocked = |why, reason| DefaultCredential::Blocked { reason, account: Some(id.clone()), why };
-        let mut account = match self.store.github_account(&id) {
+        let account = match self.store.github_account(&id) {
             Ok(Some(account)) => account,
             Ok(None) => {
                 let why = "Roundhouse's default GitHub account is one it has no record of";
@@ -171,11 +171,13 @@ impl GithubLogins {
             }
             Err(e) => return blocked(UnusableLogin::Unreadable, unread(&e)),
         };
-        // Named as the hub last heard GitHub call its user, for what a block says.
-        self.observations.fill(&mut account);
         let token = match self.token_of(files, &account, now_ms) {
             Ok(Ok(token)) => token,
-            Ok(Err(unusable)) => return blocked(unusable.said(), lost(&account, &unusable)),
+            Ok(Err(unusable)) => {
+                // Named as the hub last heard GitHub call its user, for what the block says.
+                let on = account.installation.as_ref().map(|installation| self.installed_on(&account, installation));
+                return blocked(unusable.said(), lost(&self.named(&account), on.as_ref(), &unusable));
+            }
             Err(e) => return blocked(UnusableLogin::Unreadable, unread(&e.message)),
         };
         let Some(username) = self.observations.value_of::<Username>(&account.id) else {
@@ -183,14 +185,14 @@ impl GithubLogins {
         };
         let user = GithubUser { id: account.user.id, name: username };
         if let Some(installation) = &account.installation {
-            return match self.installed_app(installation) {
+            return match self.installed_app(&account, installation) {
                 Ok(Some(installed)) => installation_credential(account.id, user, installed, token),
                 // Removing an app forgets its installations' logins first, so only a store changed behind the hub's
                 // back has one whose login can be used without the app.
                 Ok(None) => {
                     let why = format!(
                         "Roundhouse has no record of the app its default GitHub account, {}, is an installation of",
-                        account.user.name,
+                        user.name,
                     );
                     blocked(UnusableLogin::Unreadable, reason(&why, "another is chosen", "Choose another default."))
                 }
@@ -205,13 +207,18 @@ impl GithubLogins {
         DefaultCredential::Account { account: account.id, credential, username: user.name, installation: None }
     }
 
-    /// Where `installation`'s app is installed, as a reach says of it, unless the hub has no record of the app, as
-    /// GitHub last said them, or named by their numbers while it hasn't, as a client of a version from before is sent
-    /// them, since they're only words a person reads.
-    fn installed_app(&self, installation: &GithubInstallation) -> Result<Option<InstalledApp>, StoreError> {
-        let Some(mut app) = self.store.github_app(installation.app)? else { return Ok(None) };
-        self.observations.fill(&mut app);
-        Ok(Some(InstalledApp { slug: app.slug, on: installation.on.name.clone() }))
+    /// Where `installation`, `account`'s, is installed, as a reach says of it, unless the hub has no record of its
+    /// app, as GitHub last said them, or named by their numbers while it hasn't, since they're only words a person
+    /// reads.
+    fn installed_app(
+        &self,
+        account: &GithubAccount,
+        installation: &GithubInstallation,
+    ) -> Result<Option<InstalledApp>, StoreError> {
+        if self.store.github_app(installation.app)?.is_none() {
+            return Ok(None);
+        }
+        Ok(Some(InstalledApp { slug: self.slug_of(installation.app), on: self.installed_on(account, installation) }))
     }
 }
 

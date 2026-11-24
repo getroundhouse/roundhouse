@@ -6,8 +6,8 @@ use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
 use protocol::model::{
-    Account, FoundGithubLogin, GhLogin, GhLoginWorks, GithubReach, GithubRepositoryName, HubSettings, HubUpdate,
-    NewWorkspaceDraft, Reach, Record, Session, SessionId, Title,
+    Account, FoundGithubLogin, GhLogin, GhLoginWorks, HubSettings, HubUpdate, NewWorkspaceDraft, Record, Session,
+    SessionId, Title,
 };
 
 use super::*;
@@ -161,14 +161,13 @@ struct Kind {
     shown: fn(&HubRecords, &RecordKey) -> Option<Record>,
 }
 
-fn kinds() -> [Kind; 6] {
+fn kinds() -> [Kind; 5] {
     [
         Kind {
             name: "what a hub found in the update feed",
             copy: |version, rev| {
                 let looked_at_ms = i64::from(version);
-                let update =
-                    HubUpdate { version: None, looked_at_ms, problem: None, attempt: None, rev: Rev::new(rev) };
+                let update = HubUpdate { looked_at_ms, problem: None, attempt: None, rev: Rev::new(rev) };
                 Record::HubUpdate(update)
             },
             other: None,
@@ -205,17 +204,6 @@ fn kinds() -> [Kind; 6] {
             other: Some(|rev| Record::FoundGithubLogin(found("incus", GhLogin::NotInstalled, rev))),
             shown: kept,
         },
-        // Held by its repository, though no view draws one yet.
-        Kind {
-            name: "a repository's reach",
-            copy: |version, rev| {
-                let cli = GithubRepositoryName::named("cli/cli");
-                let username = format!("user {version}").into();
-                Record::GithubReach(reach("r", Reach::Pushes { repository: cli, username }, rev))
-            },
-            other: Some(|rev| Record::GithubReach(reach("s", Reach::NotOnGithub, rev))),
-            shown: kept,
-        },
     ]
 }
 
@@ -240,7 +228,6 @@ fn listed(records: impl IntoIterator<Item = Record>, rev: u64) -> Records {
             Record::GithubSignIn(sign_in) => list.github_sign_ins.push(sign_in),
             Record::FoundGithubLogin(found) => list.found_github_logins.push(found),
             Record::GithubApp(app) => list.github_apps.push(app),
-            Record::GithubReach(reach) => list.github_reach.push(reach),
             Record::Terminal(terminal) => list.terminals.push(terminal),
             Record::ModelList(model_list) => list.model_lists.push(model_list),
             Record::Subagent(_) => panic!("a subagent is listed with its session, not in a list of everything"),
@@ -304,8 +291,4 @@ fn account(id: &str, used_at_ms: u8, rev: u64) -> Account {
 
 fn found(provider: &str, login: GhLogin, rev: u64) -> FoundGithubLogin {
     FoundGithubLogin { provider: provider.into(), login, rev: Rev::new(rev) }
-}
-
-fn reach(repo: &str, reach: Reach, rev: u64) -> GithubReach {
-    GithubReach { repo: repo.into(), reach, answered_at_ms: None, stale: false, rev: Rev::new(rev) }
 }

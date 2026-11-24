@@ -1,11 +1,11 @@
-//! What GitHub says of an issue or a pull request a chip follows, sent in the one form each subscription reads.
+//! What GitHub says of an issue or a pull request a chip follows.
 
 use std::sync::Arc;
 
 use github::References;
 use protocol::client::listed::Listed;
-use protocol::client::subscriptions::{Follow, Subscribe, Subscription};
-use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
+use protocol::client::subscriptions::{Follow, Subscribe};
+use protocol::client::{CLIENT_PROTOCOL_VERSION, HubFrame, HubNotice};
 use protocol::model::{
     About, GithubRepositoryName, Issue, IssueNumber, IssueState, IssueSummary, Observation, Observed, Read, Reference,
     ReferenceAsk, ReferenceSaid,
@@ -47,11 +47,6 @@ async fn hub_with_an_issue(dir: &std::path::Path) -> Arc<Hub> {
     hub
 }
 
-/// A start that reads GitHub as observations.
-fn observing(subscription_id: u64, follow: Follow) -> Subscription {
-    Subscription { github_observed: true, ..start(subscription_id, follow) }
-}
-
 /// What GitHub says of issue 12, if `frame` is a notice of its observation.
 fn said_of_twelve(frame: &HubFrame) -> Option<&Observed<ReferenceSaid>> {
     let HubFrame::Notice { notice: HubNotice::Observation(Observation::Reference { reference, said, .. }), .. } = frame
@@ -67,70 +62,30 @@ fn current_of_twelve(frame: &HubFrame) -> Option<&ReferenceSaid> {
     Some(value)
 }
 
-/// Whether `frame` is of GitHub's old form.
-fn github(frame: &HubFrame) -> bool {
-    matches!(frame, HubFrame::Github { .. })
-}
-
-/// A chip followed by a start that reads GitHub as observations is listed first, as not known before the hub has read
-/// it, and then sent what GitHub says of it, current from that read, and never `HubFrame::Github`. One followed by a
-/// start that doesn't, on the same connection, is sent `HubFrame::Github` alone, as before observations.
+/// A chip followed is listed first, as not known before the hub has read it, and then sent what GitHub says of it,
+/// current from that read.
 ///
 /// What the hub holds of a chip newly followed is sent at once, as of when it was read, and is current from the next
 /// read the hub keeps. So where the read the start asked for is kept before the hub has taken in that the start follows
 /// the chip, which a busy machine can make happen, the start is sent that read as of when it was made, and then as
 /// current.
 #[tokio::test]
-async fn a_chip_is_sent_as_an_observation_only_to_a_start_that_reads_github_so() {
+async fn a_chip_is_listed_and_then_sent_what_github_says_of_it() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_an_issue(dir.path()).await;
-    let mut client = Connection::greeted(&hub, 4).await;
-    let chip = Follow::Reference { reference: twelve() };
-
-    let starts = vec![observing(1, chip.clone()), start(2, chip)];
-    ok(&mut client, 1, Subscribe { stop: Vec::new(), start: starts }).await;
-
-    client
-        .until("the current observation and the update", |sent| {
-            sent.iter().any(|frame| current_of_twelve(frame).is_some())
-                && sent.iter().any(|frame| matches!(frame, HubFrame::Github { subscription_id: 2, .. }))
-        })
-        .await;
-    let listed = client.sent.iter().find_map(|frame| {
-        let HubFrame::Listed { subscription_id, listed: Listed::Reference(listed) } = frame else { return None };
-        Some((*subscription_id, listed))
-    });
-    let (1, listed) = listed.expect("listed first") else { panic!("listed to the start that doesn't read them") };
-    assert_eq!((&listed.reference, listed.observations.as_slice()), (&twelve(), &[][..]), "not read yet");
-    let said = client.sent.iter().find_map(current_of_twelve).unwrap();
-    let ReferenceSaid::Issue(issue) = said else { panic!("{said:?}") };
-    assert_eq!(issue.summary.about.title, "Decide");
-    let to = |frame: &HubFrame| match frame {
-        HubFrame::Notice { subscription_id, .. } | HubFrame::Github { subscription_id, .. } => Some(*subscription_id),
-        HubFrame::Reply { .. }
-        | HubFrame::Event { .. }
-        | HubFrame::Tail { .. }
-        | HubFrame::Delta { .. }
-        | HubFrame::Terminal { .. }
-        | HubFrame::TerminalPicture { .. }
-        | HubFrame::Listed { .. } => None,
-    };
-    assert!(client.sent.iter().filter(|frame| github(frame)).all(|frame| to(frame) == Some(2)));
-    assert!(client.sent.iter().filter(|frame| said_of_twelve(frame).is_some()).all(|frame| to(frame) == Some(1)));
-}
-
-/// A start on a connection of the version from which clients read every observation is sent what GitHub says of a chip
-/// as an observation, and never `HubFrame::Github`, though it doesn't say it reads GitHub so, since every client of that
-/// version does.
-#[tokio::test]
-async fn a_connection_that_reads_every_observation_is_sent_github_as_observations() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_an_issue(dir.path()).await;
-    let mut client = Connection::greeted(&hub, EVERY_OBSERVATION_FROM).await;
+    let mut client = Connection::greeted(&hub, CLIENT_PROTOCOL_VERSION).await;
 
     let starts = vec![start(1, Follow::Reference { reference: twelve() })];
     ok(&mut client, 1, Subscribe { stop: Vec::new(), start: starts }).await;
 
-    client.until("the observation", |sent| sent.iter().any(|frame| said_of_twelve(frame).is_some())).await;
-    assert!(!client.sent.iter().any(github), "{:?}", client.sent);
+    client.until("the current observation", |sent| sent.iter().any(|frame| current_of_twelve(frame).is_some())).await;
+    let listed = client.sent.iter().find_map(|frame| {
+        let HubFrame::Listed { listed: Listed::Reference(listed), .. } = frame else { return None };
+        Some(listed)
+    });
+    let listed = listed.expect("listed first");
+    assert_eq!((&listed.reference, listed.observations.as_slice()), (&twelve(), &[][..]), "not read yet");
+    let said = client.sent.iter().find_map(current_of_twelve).unwrap();
+    let ReferenceSaid::Issue(issue) = said else { panic!("{said:?}") };
+    assert_eq!(issue.summary.about.title, "Decide");
 }

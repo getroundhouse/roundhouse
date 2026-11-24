@@ -1,7 +1,7 @@
 use super::super::{Hub, new_id};
 use crate::store::{Made, NewRevision, Revising, Withdrawing, now_ms};
 use protocol::client::proposals::{ProposalRevisions, ProposalRevisionsRead};
-use protocol::client::{ApiError, ErrorCode, HubNotice, records};
+use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{Proposal, ProposalId, ProposalRevision, RevisionNumber, SessionId, Withdrawal, WorkspaceId};
 use protocol::worker::{ProposalRecord, Propose, ReadProposal, Revise, Withdraw};
 
@@ -142,15 +142,5 @@ impl Hub {
         let limit = limit.clamp(1, ProposalRevisionsRead::MOST);
         let (revisions, newest) = self.blocking(move |store| store.proposal_revisions(&id, from, limit)).await?;
         Ok(ProposalRevisions { revisions, newest })
-    }
-
-    /// The session's proposals, oldest first, each with its newest revision, with the revision they're as of.
-    pub(crate) async fn session_proposals(&self, id: SessionId) -> Result<records::Proposals, ApiError> {
-        self.blocking(move |store| {
-            store.get_session(&id)?;
-            let (proposals, rev) = store.list_proposals(&id)?;
-            Ok(records::Proposals { proposals, rev })
-        })
-        .await
     }
 }

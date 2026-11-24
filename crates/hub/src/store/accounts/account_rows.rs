@@ -33,8 +33,8 @@ columns! {
     struct AccountColumns { id, rev, name, used_at_ms, reserve_percent }
 }
 
-/// The record of `id`, with none of who it is or what's left of its limits, which are observations that
-/// `crate::hub::observations::OldForm` fills it with as it leaves the hub. `None` for an account with none.
+/// The record of `id`, with none of who it is or what's left of its limits, which are observations. `None` for an
+/// account with none.
 pub(in super::super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::Result<Option<Account>> {
     conn.query_row(
         &format!(
@@ -50,16 +50,11 @@ pub(in super::super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::
             let (id_from, held) = login_at(row, LoginColumns::at(AccountColumns::COUNT))?;
             Ok(Account {
                 id: row.at::<String>(c.id)?.into(),
-                model_provider: None,
-                plan: None,
-                login: None,
-                email: None,
                 name: row.at(c.name)?,
                 login_agent: match id_from {
                     IdFrom::Hub(agent) => Some(agent),
                     IdFrom::Adapter => None,
                 },
-                limits: Vec::new(),
                 held_login: held.map(|(_, held)| held),
                 used_at_ms: row.at(c.used_at_ms)?,
                 // Only a reserve the hub took is kept, so one it can't read is as good as none.
@@ -108,15 +103,6 @@ impl Store {
     /// The record of `id`. `None` for an account with none.
     pub fn account(&self, id: &AccountId) -> Result<Option<Account>, StoreError> {
         Ok(account(&lock(&self.reader), id)?)
-    }
-
-    /// Moves the revision of `id`'s record, since who the account is changed, which the record holds the old form of,
-    /// and returns the record. `None` for an account with none.
-    pub(in super::super) fn account_moved(&self, id: &AccountId) -> Result<Option<Account>, StoreError> {
-        let conn = lock(&self.writer);
-        // Moves the revision, as `accounts_rev_on_update` does for any update that doesn't.
-        conn.execute("UPDATE accounts SET id = id WHERE id = ?", [id.as_str()])?;
-        Ok(account(&conn, id)?)
     }
 }
 

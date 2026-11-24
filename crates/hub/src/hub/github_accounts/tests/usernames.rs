@@ -1,7 +1,5 @@
-//! What GitHub calls a GitHub account's user, and what its profile says, which the hub keeps as observations, and fills
-//! the account's record with for a client of a version from before: across a restart, from a database from before,
-//! and forgotten with the account. Asking GitHub again is in `profiles`, and what each version of client is sent in
-//! `crate::server::subscribe`.
+//! What GitHub calls a GitHub account's user, and what its profile says, which the hub keeps as observations: across a
+//! restart, from a database from before, and forgotten with the account. Asking GitHub again is in `profiles`.
 
 use protocol::model::{GithubAccount, GithubToken, GithubUsername, Observation, Observed};
 use protocol::worker::{GitIdentity, GithubCredential};

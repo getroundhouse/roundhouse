@@ -110,9 +110,7 @@ impl Source for GithubSource {
                 }
                 Ok(false)
             }
-            // Sent only to a client of version 4 that doesn't read GitHub as observations.
-            SubscriptionItem::Github(_)
-            | SubscriptionItem::Event(_)
+            SubscriptionItem::Event(_)
             | SubscriptionItem::Tail(_)
             | SubscriptionItem::Delta(_)
             | SubscriptionItem::Terminal(_)

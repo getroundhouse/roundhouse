@@ -12,7 +12,6 @@ use protocol::client::HubNotice;
 #[cfg(test)]
 use protocol::model::{RecordKey, Records, Rev};
 
-mod blanking;
 mod by_revision;
 #[cfg(test)]
 mod laws;

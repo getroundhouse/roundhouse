@@ -59,10 +59,7 @@ fn serve_requests(world: &World, connection: u64, stream: UnixStream) {
         let Ok(ClientFrame { id, request }) = frame::decode::<ClientFrame>(&line) else { return };
         world.asked.heard(&request);
         let (first, outcome, then) = match answer(world, connection, request) {
-            // With each old form filled, as a hub fills every reply.
-            Ok(Outcome::Reply { first, response, then }) => {
-                (first, ReplyOutcome::Response(super::old_forms::response_filled(response)), then)
-            }
+            Ok(Outcome::Reply { first, response, then }) => (first, ReplyOutcome::Response(response), then),
             Ok(Outcome::Never) => continue,
             Err(error) => (Vec::new(), ReplyOutcome::Error(error), Vec::new()),
         };
@@ -129,7 +126,9 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             reply(C::SetupLog(workspaces::SetupLog { text: world.setup_logs.get(&id).cloned().unwrap_or_default() }))
         }
         R::WorkspacePullRequest(workspaces::WorkspacePullRequest { id }) => {
-            reply(C::PullRequest(workspaces::PullRequestReply { pull_request: world.github_says.pull_requests.get(&id).cloned() }))
+            reply(C::PullRequest(workspaces::PullRequestReply {
+                pull_request: world.github_says.pull_requests.get(&id).cloned(),
+            }))
         }
         R::ReferencesRead(references::ReferencesRead { references, .. }) => {
             let references = references.iter().map(|ask| github::reference(world, ask)).collect();
@@ -345,19 +344,12 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             })),
             None => Ok(Outcome::Never),
         },
-        // The app reads whose account it is from the records, so a screen that asks some other way is wrong.
-        R::SessionAccount(_)
-        | R::Pair(_)
+        R::Pair(_)
         | R::Authenticate(_)
         | R::PairingStart
         | R::PairingWait(_)
         | R::DeviceList
         | R::DeviceRevoke(_)
-        // What only a client of version 3 sent, which listed the records itself, as a client of this build doesn't.
-        | R::RecordsList
-        | R::SessionSubagents(_)
-        | R::SessionProposals(_)
-        | R::SessionRepliesHeard(_)
         | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't know that request")),
         R::TerminalRows(rows) => super::terminals::rows(world, &rows),
         R::TerminalBounds(bounds) => super::terminals::bounds(world, &bounds),

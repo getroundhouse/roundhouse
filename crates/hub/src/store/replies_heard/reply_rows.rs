@@ -1,7 +1,5 @@
-use super::super::{
-    ByColumn, Columns, OneValue, Store, StoreError, columns, current_rev, lock, maybe_text_at, rev_of, text_of,
-};
-use protocol::model::{Ending, MessageId, ReplyHeard, Rev, SessionId, SettledBy};
+use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock, maybe_text_at, rev_of, text_of};
+use protocol::model::{Ending, MessageId, ReplyHeard, SessionId, SettledBy};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 columns! {
@@ -64,16 +62,6 @@ impl Store {
         )?;
         let unheard = statement.query_map([session_id.as_str()], OneValue::read::<String>)?;
         Ok(unheard.map(|message| message.map(MessageId::from)).collect::<rusqlite::Result<_>>()?)
-    }
-
-    /// How each of the session's replies said out loud ended, read in one transaction with the revision they're as of.
-    pub fn list_replies_heard(&self, session_id: &SessionId) -> Result<(Vec<ReplyHeard>, Rev), StoreError> {
-        let mut conn = lock(&self.reader);
-        let tx = conn.transaction()?;
-        let heard = replies_heard_of(&tx, session_id)?;
-        let rev = current_rev(&tx)?;
-        tx.commit()?;
-        Ok((heard, rev))
     }
 }
 

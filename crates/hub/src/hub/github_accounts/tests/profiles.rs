@@ -29,8 +29,7 @@ fn hub_with_ada(dir: &std::path::Path, github: &StandIn) -> Arc<Hub> {
 
 /// Ada has named herself on GitHub since, shows an email, and has renamed herself there. Until the check, the hub
 /// doesn't know what GitHub calls her, so workers are sent a block, and pull requests aren't read as her. The check
-/// asks GitHub, and clients hear of her username, a client of version 4 on her account's record, and workers are sent
-/// her name.
+/// asks GitHub, and clients hear of her username, and workers are sent her name.
 #[tokio::test]
 async fn a_check_asks_github_who_an_account_is_and_clients_hear_of_its_new_username_and_workers_of_its_name() {
     let renamed = Answer::user_with_profile(7, "ada-lovelace", Some("Ada Lovelace"), Some("ada@example.com"));
@@ -48,9 +47,7 @@ async fn a_check_asks_github_who_an_account_is_and_clients_hear_of_its_new_usern
     assert_eq!(read_as_before, Err(ErrorCode::Worker), "no pull request is read as an account not named");
     let told: Vec<HubNotice> =
         std::iter::from_fn(|| feed.try_recv().ok().map(std::sync::Arc::unwrap_or_clone)).collect();
-    let [HubNotice::Observation(Observation::GithubUsername { username, .. }), HubNotice::GithubAccount(_)] =
-        told.as_slice()
-    else {
+    let [HubNotice::Observation(Observation::GithubUsername { username, .. })] = told.as_slice() else {
         panic!("{told:?}")
     };
     assert!(matches!(username, Observed::AsOf { value, .. } if value.as_str() == "ada-lovelace"), "{username:?}");

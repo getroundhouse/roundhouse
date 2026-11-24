@@ -1,9 +1,7 @@
 //! The client side of the hub: connections, requests and subscriptions.
 
-mod github;
 mod in_order;
 mod pump;
-mod sends;
 mod subscribe;
 mod subscribing;
 mod terminals;

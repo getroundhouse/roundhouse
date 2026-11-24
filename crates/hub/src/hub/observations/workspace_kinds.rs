@@ -1,7 +1,7 @@
 //! The kinds of what a workspace's worker says of the workspace's worktrees, which branches each has, and of itself,
 //! which build it is.
 
-use protocol::model::{Branches, Observation, ObservationKey, Observed, OtherBuild, RecordKey, Rev, WorkspaceId};
+use protocol::model::{Branches, Observation, ObservationKey, Observed, OtherBuild, Rev, WorkspaceId};
 
 use super::kept::Table;
 use super::kinds::{Form, Kind};
@@ -10,7 +10,7 @@ use super::tables::Tables;
 
 /// A workspace's branches, as its worker last read them, sent at the workspace's level: current while its worker
 /// watches them, and as of when the watch ended otherwise. The hub works out from them which pull request is the
-/// workspace's. A client of a version from before it reads them on the workspace's record.
+/// workspace's.
 pub(crate) struct WorkspaceBranches;
 
 impl Kind for WorkspaceBranches {
@@ -29,16 +29,11 @@ impl Kind for WorkspaceBranches {
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.workspace_branches
     }
-
-    fn old_form_on(workspace_id: &WorkspaceId) -> Option<RecordKey> {
-        Some(RecordKey::Workspace { id: workspace_id.clone() })
-    }
 }
 
 /// That a workspace's worker is another build than the hub's, as its hello said, sent at the hub's level: current while
 /// that worker is connected, and gone once it isn't. Kept in memory alone, since only a worker the hub carries on with
-/// can be another build, and the hub hears that of each as it does. A client of a version from before it reads it on
-/// the workspace's record.
+/// can be another build, and the hub hears that of each as it does.
 pub(crate) struct WorkspaceWorkerBuild;
 
 impl Kind for WorkspaceWorkerBuild {
@@ -57,10 +52,6 @@ impl Kind for WorkspaceWorkerBuild {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.workspace_worker_build
-    }
-
-    fn old_form_on(workspace_id: &WorkspaceId) -> Option<RecordKey> {
-        Some(RecordKey::Workspace { id: workspace_id.clone() })
     }
 }
 

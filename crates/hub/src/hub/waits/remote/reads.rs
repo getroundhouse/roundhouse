@@ -76,7 +76,17 @@ impl Hub {
     /// `wait`, with what it last read in its watch, where it's open and the hub keeps that, for what the hub decides of
     /// it and what it tells the agent.
     pub(crate) fn as_read(&self, mut wait: Wait) -> Wait {
-        self.fill_old_forms(&mut wait);
+        if wait.ended.is_some() {
+            return wait;
+        }
+        let of = WaitKey {
+            workspace_id: wait.workspace_id.clone(),
+            session_id: wait.session_id.clone(),
+            wait: wait.id.clone(),
+        };
+        if let (Some(watch), Some(read)) = (wait.watch.as_mut(), self.observations.value_of::<WaitRead>(&of)) {
+            **watch = watch.recorded().with_read(read);
+        }
         wait
     }
 

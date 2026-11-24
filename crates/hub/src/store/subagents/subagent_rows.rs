@@ -1,9 +1,8 @@
 use super::super::{
-    ByColumn, Column, Columns, OneValue, Store, StoreError, columns, current_rev, json_at, lock, rev_of, text_at,
-    text_of,
+    ByColumn, Column, Columns, OneValue, Store, StoreError, columns, json_at, lock, rev_of, text_at, text_of,
 };
 use protocol::event::SessionEvent;
-use protocol::model::{ModelName, Rev, SessionId, Subagent, SubagentId, SubagentStatus, TouchedSubagents};
+use protocol::model::{ModelName, SessionId, Subagent, SubagentId, SubagentStatus, TouchedSubagents};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension, Row, ToSql, params};
 
@@ -16,16 +15,6 @@ columns! {
 }
 
 impl Store {
-    /// The session's subagents, oldest first, read in one transaction with the revision they're as of.
-    pub fn list_subagents(&self, session_id: &SessionId) -> Result<(Vec<Subagent>, Rev), StoreError> {
-        let mut conn = lock(&self.reader);
-        let tx = conn.transaction()?;
-        let subagents = subagents_of(&tx, session_id)?;
-        let rev = current_rev(&tx)?;
-        tx.commit()?;
-        Ok((subagents, rev))
-    }
-
     pub fn get_subagent(&self, session_id: &SessionId, subagent: &SubagentId) -> Result<Option<Subagent>, StoreError> {
         let conn = lock(&self.reader);
         let sql = format!("SELECT {} FROM subagents WHERE session_id = ? AND id = ?", SubagentColumns::LIST);

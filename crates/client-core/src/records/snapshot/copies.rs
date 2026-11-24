@@ -106,13 +106,8 @@ impl Listed {
                     its.push((terminal.clone(), taken));
                 }
                 // Held apart, as `HubRecords::apply_record` says, but for a found login, from a hub from before
-                // Settings' Providers, which no view shows, and a repository's reach, which a client of this version
-                // reads as an observation.
-                Record::Subagent(_)
-                | Record::Proposal(_)
-                | Record::ReplyHeard(_)
-                | Record::FoundGithubLogin(_)
-                | Record::GithubReach(_) => {}
+                // Settings' Providers, which no view shows.
+                Record::Subagent(_) | Record::Proposal(_) | Record::ReplyHeard(_) | Record::FoundGithubLogin(_) => {}
             }
         }
         listed.repos.sort_by(Repo::by_name);

@@ -315,7 +315,7 @@ mod tests {
         // sends it, beside the record.
         let found_with = |version: Option<&str>, problem: Option<&str>, attempt: Option<UpdateAttempt>| {
             let problem = problem.map(str::to_owned);
-            let update = HubUpdate { version: None, looked_at_ms: 1, problem, attempt, rev: Rev::default() };
+            let update = HubUpdate { looked_at_ms: 1, problem, attempt, rev: Rev::default() };
             (update, observed::release_offered(version))
         };
         let found = |version, problem| found_with(version, problem, None);

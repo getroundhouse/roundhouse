@@ -7,7 +7,7 @@
 
 use client_core::Client;
 use protocol::event::EventBody;
-use protocol::model::{Account, AccountId, AgentKind, LoginToken, UsageLimit};
+use protocol::model::{Account, AccountId, AgentKind, LoginToken};
 
 use crate::accounts::{limits_of, log_out};
 use crate::carrying_on::restart;
@@ -75,15 +75,9 @@ fn an_agent_on_another_machine_runs_under_the_login_the_hub_holds_and_its_chat_n
         client.session_get(&session.id).unwrap().account.as_ref() == Some(&connected.id)
             && !limits_of(&client, &connected.id).is_empty()
     });
-    // As a client from before accounts were records asks.
-    let as_older_clients_ask = client.session_account(&session.id).unwrap();
 
     assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=a-made-up-token"), "{text}");
     assert_eq!(client.records().unwrap().accounts.len(), 1, "no account but the login's");
-    assert_eq!(as_older_clients_ask.account.logged_in_as(), Some(&connected.id));
-    let unheard = |limit: &UsageLimit| UsageLimit { heard_at_ms: None, ..limit.clone() };
-    let older_clients_limits: Vec<UsageLimit> = as_older_clients_ask.limits.iter().map(unheard).collect();
-    assert_eq!(older_clients_limits, limits_of(&client, &connected.id));
     assert!(!asked_under_a_token(&stack), "nothing asked the CLI whose the token is");
 }
 

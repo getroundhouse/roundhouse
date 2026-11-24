@@ -32,7 +32,6 @@ mod made;
 #[cfg(any(test, feature = "testing"))]
 mod migrated;
 mod new_workspace_draft;
-mod old_forms;
 #[cfg(test)]
 pub(crate) mod older;
 mod prompts;

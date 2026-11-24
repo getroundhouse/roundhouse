@@ -3,8 +3,8 @@ use protocol::client::listed::SessionRecords;
 use protocol::fixtures::{github_account, github_app, github_sign_in, github_user};
 use protocol::model::{
     AgentKind, DiffComment, DiffSide, GithubAccount, GithubAppId, GithubAppSaid, GithubRepositoryName, GithubSettings,
-    HubSettings, ModelList, ModelListKey, ModelLookup, Observation, Observed, Proposal, Reach, Record, RecordKey,
-    Records, Repo, Rev, Session, Subagent, Terminal, Title, Workspace,
+    GithubUser, GithubUserId, HubSettings, ModelList, ModelListKey, ModelLookup, Observation, Observed, Proposal,
+    Reach, Record, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal, Title, Workspace,
 };
 
 use crate::records::HubRecords;
@@ -124,12 +124,7 @@ fn a_view_is_told_which_parts_changed_since_it_last_looked() {
         account: None,
         cli_version: None,
     };
-    held.apply_record(Record::ModelList(ModelList {
-        key,
-        catalog: None,
-        lookup: ModelLookup::Asking,
-        rev: Rev::new(11),
-    }));
+    held.apply_record(Record::ModelList(ModelList { key, lookup: ModelLookup::Asking, rev: Rev::new(11) }));
     assert!(held.snapshot().changes_since(&now).model_lists(), "one came");
 }
 
@@ -220,7 +215,11 @@ fn what_a_hub_says_of_github_is_listed_in_the_order_views_show_it_and_found_by_i
     let app_said = |id: u64, name: &str| Observation::GithubAppSaid {
         app: GithubAppId::new(id),
         said: Observed::Current {
-            value: GithubAppSaid { slug: name.into(), name: name.to_string(), owner: github_user(1) },
+            value: GithubAppSaid {
+                slug: name.into(),
+                name: name.to_string(),
+                owner: GithubUser { id: GithubUserId::new(1), name: "ada".into() },
+            },
         },
         rev: Rev::new(1),
     };

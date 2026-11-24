@@ -1,6 +1,6 @@
 use super::{
-    BranchName, Branches, CommentDraft, InstanceId, ProviderName, PullRequestLink, PullRequestLinked, RepoId, Rev,
-    Title, TitleSource, WorkspaceId, pull_request,
+    BranchName, CommentDraft, InstanceId, ProviderName, PullRequestLink, PullRequestLinked, RepoId, Rev, Title,
+    TitleSource, WorkspaceId, pull_request,
 };
 use serde::{Deserialize, Serialize};
 
@@ -68,22 +68,10 @@ pub struct Workspace {
     /// keep it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comment_draft: Option<CommentDraft>,
-    /// Its worktree's branches, as its worker last read them. `None` while the hub doesn't know them, as until its
-    /// worker next says them after the hub's cache is emptied, and from a hub too old to watch. A hub keeps them as the
-    /// observation `WorkspaceBranches`, and fills this from it for a client of a version from before it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub branches: Option<Branches>,
     /// The branch the worktree had checked out when the hub last looked for its pull request, which is the branch
     /// `pull_request` is. `None` before the hub kept it, when HEAD was detached, and while `pull_request_link` is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pull_request_branch: Option<BranchName>,
-    /// Which build its worker is, while that's another than the hub's: one an earlier hub left running, as after an
-    /// update, which the hub carries on with until nothing in the workspace is at work, and then replaces with its own.
-    /// `None` while its worker, or the next one, is the hub's own build, since every worker a hub starts is, from a hub
-    /// too old to say, and of a worker too old to name its build. A hub keeps it as the observation
-    /// `WorkspaceWorkerBuild`, and fills this from it for a client of a version from before it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub worker_build: Option<String>,
 }
 
 impl Workspace {

@@ -248,7 +248,6 @@ fn a_hub_that_found_an_update_offers_it_and_says_why_it_refused(cx: &mut TestApp
     world.hub = Some(HubBuild { version: "0.9.0", number: fake_hub::BUILD_NUMBER - 1, on_demand: false });
     world.observe(protocol::fixtures::observed::release_offered(Some(fake_hub::BUILD)));
     world.hub_update = Some(protocol::model::HubUpdate {
-        version: None,
         looked_at_ms: 1,
         problem: None,
         attempt: None,

@@ -150,7 +150,7 @@ fn named() -> World {
     pull_request.pull_request.summary.said.about.url.clone_from(&url);
     // Which pull request it's on is what ties a chip to it, as the hub keeps it.
     let (repository, number) = (repository("roundhouse"), IssueNumber::try_from(1162).unwrap());
-    let link = PullRequestLink { repository, number, url, uncommitted: 0 };
+    let link = PullRequestLink { repository, number, url };
     world.github_says.pull_requests.insert(birch.clone(), pull_request);
     world.workspace_mut(&birch).pull_request_link = Some(PullRequestLinked { link: Some(link) });
     world

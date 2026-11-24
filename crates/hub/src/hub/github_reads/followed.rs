@@ -4,12 +4,10 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use protocol::model::{GithubRepositoryName, IssueNumber, ReferenceAsk, ReferenceRead, WorkspaceId};
-use tokio::sync::broadcast;
+use protocol::model::{GithubRepositoryName, IssueNumber, ReferenceAsk, WorkspaceId};
 
 use super::super::Hub;
 use super::references::FRESH_FOR;
-use crate::github_cache::{Item, Told};
 
 impl Hub {
     /// Reads again the issues and pull requests clients follow, as chips show them, once what the cache has of each is
@@ -32,17 +30,6 @@ impl Hub {
                 self.read_forgotten_followed().await;
             }
         }
-    }
-
-    /// Tells of each read the cache keeps from now on, by the issues and pull requests it was of, and of what it
-    /// forgets, for a client's subscription to send what changed.
-    pub(crate) fn github_kept(&self) -> broadcast::Receiver<Told> {
-        self.github_cache.changes()
-    }
-
-    /// What the cache has of an issue or a pull request a chip shows, however old.
-    pub(crate) fn reference_kept(&self, ask: &ReferenceAsk) -> Option<ReferenceRead> {
-        self.github_cache.summary(&Item::new(&ask.repository, ask.number))
     }
 
     /// Reads what a subscription has newly followed, as a client asking for it would: the summaries of `references`

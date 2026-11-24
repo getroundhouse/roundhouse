@@ -3,32 +3,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use super::super::{GithubAppSlug, GithubUsername, RepoId, Rev};
-
-/// Whether agents can push as the default GitHub account to the repository on GitHub that a repository's address
-/// names, as the hub last checked, as a record of its own, keyed by the repository, so every workspace of it shows the
-/// same. Whether a push is taken is the repository's and the account's to say, not a workspace's, so it's checked once
-/// a repository and login: as the hub starts, as a worker reads the repository's address, as the default or its login
-/// changes, and every half hour, since what an account can do changes on GitHub too, as when an organization approves
-/// Roundhouse. It blocks nothing: agents push as they would anyway. A repository whose address no worker has read, and
-/// that the hub hasn't checked before, has none. What GitHub answered is a cache of
-/// GitHub's, so it says when GitHub answered, and one the hub's last run left says so until it's checked again.
-/// *Unconfirmed:* a record of its own, the half hour, and `answered_at_ms` and `stale` as the shape.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct GithubReach {
-    pub repo: RepoId,
-    pub reach: Reach,
-    /// When GitHub gave the answer `reach` is, by the hub's clock, in milliseconds since the Unix epoch. `None` for
-    /// what isn't GitHub's answer, which the hub says without asking it, and from a hub from before it said.
-    #[serde(default)]
-    pub answered_at_ms: Option<i64>,
-    /// The hub's last run left it, and this one hasn't checked it since it started, so it's as it was then. Checked
-    /// again, it's this run's. `false` from a hub from before it said.
-    #[serde(default)]
-    pub stale: bool,
-    #[serde(default)]
-    pub rev: Rev,
-}
+use super::super::{GithubAppSlug, GithubUsername};
 
 /// What a push from a repository's workspaces would meet, as the hub last checked, by GitHub's own answer to what
 /// `git push` asks before it sends anything. Each of GitHub's answers names the default by `username` as GitHub knows

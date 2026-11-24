@@ -66,12 +66,11 @@ struct Look {
 }
 
 impl Found {
-    /// The record every client follows, once the hub has read the feed. The release offered is filled from the
-    /// observation as the record leaves the hub, as `crate::hub::observations::OldForm` says.
+    /// The record every client follows, once the hub has read the feed. The release offered is the observation
+    /// `ReleaseOffered`.
     fn record(&self) -> Option<HubUpdate> {
         let look = self.look.as_ref()?;
         Some(HubUpdate {
-            version: None,
             looked_at_ms: look.looked_at_ms,
             problem: look.problem.clone(),
             attempt: self.attempt.clone(),

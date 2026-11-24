@@ -58,7 +58,7 @@ async fn a_revision_is_written_once_after_the_newest_and_the_record_sums_up_each
         panic!("{revised:?}")
     };
     assert_eq!((chosen_in_words(chosen), note.as_str()), ("B, In each client".to_string(), "Not quite"));
-    assert_eq!(hub.session_proposals("s".into()).await.unwrap().proposals, [revised], "and it's read back so");
+    assert_eq!(hub.session_records("s".into()).await.unwrap().proposals, [revised], "and it's read back so");
 }
 
 /// An answer to a revision the agent has since revised is refused, since the person hasn't read the newest.
@@ -96,7 +96,7 @@ async fn a_revision_without_what_changed_or_of_another_chats_proposal_is_refused
     let elsewhere = hub.revise(&"t".into(), revising(&made.id, "k3")).await.unwrap_err();
 
     assert_eq!((unsaid.code, elsewhere.code), (ErrorCode::InvalidRequest, ErrorCode::NotFound));
-    let listed = hub.session_proposals("s".into()).await.unwrap().proposals;
+    let listed = hub.session_records("s".into()).await.unwrap().proposals;
     assert_eq!(listed[0].current.number, RevisionNumber::FIRST, "nothing written");
 }
 

@@ -64,11 +64,8 @@ async fn a_check_renews_a_sign_in_thats_due_and_tells_every_client_of_its_record
     let [HubNotice::GithubAccount(account)] = told.as_slice() else { panic!("{told:?}") };
     let ends_at_ms = account.held_login.unwrap().ends_at_ms.unwrap();
     assert!(ends_at_ms >= checked_at_ms + 8 * HOUR_MS, "it ends 8 hours from when GitHub gave it, not {ends_at_ms}");
-    let mut kept = hub.store.github_account(&account.id).unwrap();
-    if let Some(kept) = kept.as_mut() {
-        hub.fill_old_forms(kept);
-    }
-    assert_eq!(kept.as_ref(), Some(account), "what's kept, named as the hub heard GitHub call her");
+    let kept = hub.store.github_account(&account.id).unwrap();
+    assert_eq!(kept.as_ref(), Some(account), "what's kept");
     assert_eq!(sent(&hub), as_ada("a-renewed-token"));
     let asked = github.asked();
     assert_eq!(asked.len(), 1, "GitHub was asked once, and the check waited for its answer");

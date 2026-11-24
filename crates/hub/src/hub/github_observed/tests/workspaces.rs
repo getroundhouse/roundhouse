@@ -186,7 +186,6 @@ async fn what_s_worked_out_of_a_pull_request_goes_with_its_link_and_its_workspac
         repository: GithubRepositoryName::named("example/project"),
         number: IssueNumber::try_from(9).unwrap(),
         url: "https://github.com/example/project/pull/9".into(),
-        uncommitted: 0,
     };
     let linked = PullRequestLinked { link: Some(link) };
 

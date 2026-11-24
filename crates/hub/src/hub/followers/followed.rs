@@ -19,19 +19,6 @@ pub(crate) enum Followed {
     Reference(ReferenceAsk),
 }
 
-impl Followed {
-    /// The level it's followed at.
-    pub(crate) fn level(&self) -> Level {
-        match self {
-            Followed::Hub => Level::Hub,
-            Followed::Workspace(id) => Level::Workspace { id: id.clone() },
-            Followed::Session(id) => Level::Session { id: id.clone() },
-            Followed::Terminal(id) => Level::Terminal { id: id.clone() },
-            Followed::Reference(reference) => Level::Reference { reference: reference.clone() },
-        }
-    }
-}
-
 impl TryFrom<&Level> for Followed {
     /// The level is from a newer client, so the hub doesn't know it.
     type Error = ();

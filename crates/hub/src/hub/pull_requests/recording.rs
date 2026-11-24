@@ -83,8 +83,6 @@ impl Found {
             repository: self.into.clone()?,
             number: IssueNumber::try_from(own.pull_request.number.get()).ok()?,
             url: own.pull_request.said().about.url.clone(),
-            // Kept apart, as `Hub::record` says.
-            uncommitted: 0,
         };
         Some(PullRequestLinked { link: Some(link) })
     }

@@ -124,12 +124,10 @@ impl Hub {
         }
     }
 
-    /// The app `id`'s record, with what GitHub says of it, as a reply carries it. Refused once it's gone.
+    /// The app `id`'s record. Refused once it's gone.
     pub(super) async fn app_record(&self, id: GithubAppId) -> Result<GithubApp, ApiError> {
         let found = self.blocking(move |store| store.github_app(id)).await?;
-        let mut app = found.ok_or_else(|| StoreError::NotFound { kind: "app of your own", id: id.to_string() })?;
-        self.fill_old_forms(&mut app);
-        Ok(app)
+        Ok(found.ok_or_else(|| StoreError::NotFound { kind: "app of your own", id: id.to_string() })?)
     }
 
     /// Makes `due`'s installation a new token, within GitHub's time limit, and has

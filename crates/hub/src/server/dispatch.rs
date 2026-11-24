@@ -1,33 +1,19 @@
 use super::Connection;
 use super::admit::Greeting;
-use super::sends::Sends;
 use crate::attachment_files::FileFor;
 use crate::hub::Hub;
 use crate::session::ReadingOn;
 use crate::store::AddedBy;
-use crate::versions;
 use protocol::client::{
     ApiError, ClientRequest, ClientResponse, ErrorCode, accounts, admin, agent, attachments, comments, conversation,
     drafts, files, github_accounts, github_apps, log, new_workspace, queue, records, references, sessions, waits,
     workspaces,
 };
-use protocol::model::{ByteRange, Level};
+use protocol::model::ByteRange;
 use std::sync::Arc;
-/// The reply to `request`, with each field of a record in it that holds an observation's old form filled from the
-/// observation, as `crate::hub::observations::OldForm` says.
-pub(super) async fn handle(
-    hub: &Arc<Hub>,
-    connection: &Arc<Connection>,
-    greeting: Greeting,
-    request: ClientRequest,
-) -> Result<ClientResponse, ApiError> {
-    let mut reply = answered(hub, connection, greeting, request).await?;
-    hub.fill_old_forms(&mut reply);
-    Ok(reply)
-}
-
+/// The reply to `request`.
 #[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
-async fn answered(
+pub(super) async fn handle(
     hub: &Arc<Hub>,
     connection: &Arc<Connection>,
     greeting: Greeting,
@@ -35,7 +21,7 @@ async fn answered(
 ) -> Result<ClientResponse, ApiError> {
     use ClientRequest as R;
     use ClientResponse as C;
-    let Greeting { device, version } = greeting;
+    let Greeting { device } = greeting;
     Ok(match request {
         R::Hello(_) => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
         R::Unknown => return Err(hub.unsupported(None)),
@@ -50,7 +36,7 @@ async fn answered(
         R::TerminalFit(fit) => hub.terminal_fit(fit).await?.await?,
         R::TerminalClose(close) => C::Terminal(hub.terminal_close(close).await?),
         // Taken in order as the connection reads it too, by `in_order`, and answered here only as typing is.
-        R::Subscribe(asked) => C::Subscribed(super::subscribe::subscribe(hub, connection, asked, version).await),
+        R::Subscribe(asked) => C::Subscribed(super::subscribe::subscribe(hub, connection, asked).await),
 
         R::PairingStart => C::Pairing(hub.pairing_start().await?),
         R::PairingWait(protocol::client::devices::PairingWait { code }) => {
@@ -89,11 +75,6 @@ async fn answered(
         R::HubConfigure(admin::HubConfigure { settings }) => C::HubSettings(hub.hub_configure(settings).await?),
         R::RepoAdd(records::RepoAdd { path }) => C::Repo(hub.repo_add(path).await?),
         R::RepoList => C::Repos(records::Repos { repos: hub.repo_list().await? }),
-        // In the forms a client of version 4 reads, as the hub's level sends them a start that doesn't read GitHub as
-        // observations, since only a client of version 3 asked, and no client of a version this hub speaks does.
-        R::RecordsList => {
-            C::Records(Sends::at(Level::Hub, false, versions::CLIENTS.oldest).records(hub.records_list().await?))
-        }
         R::ModelsFor(asked) => C::ModelList(hub.models_for(asked).await?),
         R::AgentList => C::Agents(admin::Agents { agents: hub.agent_list() }),
         R::WorkspaceCreate(workspaces::WorkspaceCreate { repo_id, name, base_ref, client_request_id }) => {
@@ -183,8 +164,6 @@ async fn answered(
         R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, include_raw }) => {
             C::PlacedEvents(hub.session_read_places(id, subagent, from_place, limit, max_bytes, include_raw).await?)
         }
-        R::SessionSubagents(records::SessionSubagents { id }) => C::Subagents(hub.session_subagents(id).await?),
-        R::SessionProposals(records::SessionProposals { id }) => C::Proposals(hub.session_proposals(id).await?),
         R::ProposalAnswer(answer) => C::Proposal(hub.answer_proposal(answer).await?),
         R::ProposalAnotherRound(round) => C::Proposal(hub.ask_another_round(round).await?),
         R::ProposalRevisionsRead(read) => C::ProposalRevisions(hub.proposal_revisions(read).await?),
@@ -225,7 +204,6 @@ async fn answered(
         R::NewWorkspaceCreate(new_workspace::NewWorkspaceCreate { made_of, client_request_id }) => {
             C::NewWorkspaceMade(Box::new(hub.new_workspace_create(made_of, client_request_id).await?))
         }
-        R::SessionAccount(sessions::SessionAccount { id }) => C::SessionAccount(hub.session_account(id).await?),
         R::AccountSetDefault(asked) => C::HubSettings(hub.account_set_default(asked).await?),
         R::AccountSetAutomatic(asked) => C::HubSettings(hub.account_set_automatic(asked).await?),
         R::SessionAssignAccount(asked) => C::Session(hub.session_assign_account(asked).await?),
@@ -288,9 +266,6 @@ async fn answered(
             let on = ReadingOn { connection: connection.id, closed: connection.closed.subscribe() };
             hub.session_speaking(id, device.as_ref(), on, through).await?;
             C::Ok
-        }
-        R::SessionRepliesHeard(records::SessionRepliesHeard { id }) => {
-            C::RepliesHeard(hub.session_replies_heard(id).await?)
         }
         R::SessionMarkRead(sessions::SessionMarkRead { id, through_seq }) => {
             C::Session(hub.session_mark_read(id, through_seq).await?)

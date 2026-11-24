@@ -1,5 +1,5 @@
-//! The test's hub, and an observation of each kind made on it, each saying the round it's made in, as `old_forms`
-//! reads it back from a record, so a copy made in one round can be told from one made in the other.
+//! The test's hub, and an observation of each kind made on it, each saying the round it's made in, so a copy made in
+//! one round can be told from one made in the other.
 
 use std::sync::Arc;
 
@@ -21,9 +21,9 @@ use crate::store::older::store_from_before;
 use crate::store::tests::idle_session;
 
 /// A hub with the workspaces [`v`] and `w`, whose session `s` has the open wait `a`, the app of your own [`APP`], whose
-/// installation is the GitHub account [`installation`], and the agent's account `claude-ada`, each a record that holds
-/// an observation's old form, made on a database from before the app's observations left it, as one from before can
-/// only be given rows. Its cache of GitHub has the chip's issue.
+/// installation is the GitHub account [`installation`], and the agent's account `claude-ada`, each a record an
+/// observation is of, made on a database from before the app's observations left it, as one from before can only be
+/// given rows. Its cache of GitHub has the chip's issue.
 pub(super) async fn hub_with_a_record_of_each(dir: &std::path::Path) -> Arc<Hub> {
     let rows = "INSERT INTO github_apps (id, slug, name, owner_id, owner, key_file, made_from)
                     VALUES (9, 'ada-roundhouse', 'Ada', 2, 'adalabs', 'a-file', 'a-code');
@@ -36,14 +36,13 @@ pub(super) async fn hub_with_a_record_of_each(dir: &std::path::Path) -> Arc<Hub>
     store.insert_session(&idle_session(crate::store::now_ms()), None).unwrap();
     drop(store);
     let hub = hub_in_again(dir);
-    // So a start that doesn't read GitHub as observations is sent what the cache has of the chip as it follows it.
     github_kept(&hub, &chip(), protocol::fixtures::issue("example/project", 12, "Decide"));
     hub.start_wait(Wait { call: None, ..protocol::fixtures::pull_request_wait("a") }).await.unwrap();
     hub
 }
 
-/// Makes the observation `kind` say `round`, as whatever hears it in the hub would, where that also tells clients of the
-/// record that holds its old form, and otherwise as the store's change of it alone.
+/// Makes the observation `kind` say `round`, as whatever hears it in the hub would, where that tells clients of more,
+/// and otherwise as the store's change of it alone.
 #[expect(clippy::too_many_lines, reason = "a flat match over every kind, each arm a change of one observation")]
 pub(super) async fn make(hub: &Hub, kind: &ObservationKey, round: u8) {
     use ObservationKey as K;
@@ -150,13 +149,7 @@ pub(super) async fn make(hub: &Hub, kind: &ObservationKey, round: u8) {
         K::ReleaseOffered => {
             read::<hub::ReleaseOffered>(hub, (), ReleaseOffer { version: Some(said) }, at).await;
             let rev = store_of(hub).next_rev().unwrap();
-            hub.notify(HubNotice::HubUpdate(HubUpdate {
-                version: None,
-                looked_at_ms: at,
-                problem: None,
-                attempt: None,
-                rev,
-            }));
+            hub.notify(HubNotice::HubUpdate(HubUpdate { looked_at_ms: at, problem: None, attempt: None, rev }));
         }
         K::Unknown => unreachable!("the hub makes no observation of a kind it doesn't know"),
     }

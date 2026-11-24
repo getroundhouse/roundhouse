@@ -3,7 +3,7 @@
 
 use std::io;
 
-use protocol::model::{GithubAccount, GithubUsername, UnusableLogin};
+use protocol::model::{GithubUsername, UnusableLogin};
 
 use super::gh_login::{HUB_MACHINE, NoGhLogin};
 
@@ -89,11 +89,10 @@ pub(super) fn unnamed() -> String {
     )
 }
 
-/// What the block for a default, `account`, whose login can't be used, as `unusable` says, says. An app's installation
-/// is named with where it's installed, and is connected again, and renewed, with the app.
-pub(super) fn lost(account: &GithubAccount, unusable: &Unusable) -> String {
-    let Some(installation) = &account.installation else { return lost_login(&account.user.name, unusable) };
-    let (name, on) = (&account.user.name, &installation.on.name);
+/// What the block for a default, `name`, whose login can't be used, as `unusable` says, says. An app's installation
+/// is named with where it's installed, `on`, and is connected again, and renewed, with the app.
+pub(super) fn lost(name: &GithubUsername, on: Option<&GithubUsername>, unusable: &Unusable) -> String {
+    let Some(on) = on else { return lost_login(name, unusable) };
     match unusable {
         Unusable::Disconnected => reason(
             &format!(

@@ -8,8 +8,7 @@ use super::tables::Tables;
 
 /// The release the update feed offers a hub installed as a service, as its last read of the feed found, sent at the
 /// hub's level: current while the hub's reads of the feed work, and as of the last that did otherwise. Kept in memory
-/// alone, since the hub reads the feed again as it starts. A client of a version from before it reads it on the record
-/// `HubUpdate`, which says how an update a person asked for is going, and why the hub's last read failed.
+/// alone, since the hub reads the feed again as it starts.
 pub(crate) struct ReleaseOffered;
 
 impl Kind for ReleaseOffered {

@@ -13,7 +13,6 @@ fn link() -> PullRequestLinked {
         repository: GithubRepositoryName::named("o/r"),
         number: IssueNumber::try_from(7).unwrap(),
         url: "https://github.com/o/r/pull/7".to_string(),
-        uncommitted: 0,
     };
     PullRequestLinked { link: Some(link) }
 }
@@ -144,22 +143,6 @@ fn finding_the_same_pull_request_on_another_branch_records_that_branch() {
 
     assert_eq!(same, None);
     assert_eq!(elsewhere.unwrap().pull_request_branch, Some(header));
-}
-
-/// As an observation whose old form it holds changes, so a client of a version from before it is sent it again.
-#[test]
-fn moving_a_workspace_for_its_old_forms_moves_its_revision_and_finds_none_that_is_gone() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = store_with_session(dir.path());
-    let id = WorkspaceId::from("w");
-    let before = store.get_workspace(&id).unwrap();
-
-    let moved = store.workspace_moved(&id).unwrap().unwrap();
-    let gone = store.workspace_moved(&"gone".into()).unwrap();
-
-    assert!(moved.rev > before.rev);
-    assert_eq!(Workspace { rev: before.rev, ..moved }, before, "nothing else moves");
-    assert_eq!(gone, None);
 }
 
 /// Starting is what keeps a second request from archiving or restoring it too, and putting it back leaves it as it was,

@@ -1,3 +1,4 @@
+use protocol::client::listed::SessionRecords;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{ClientDevice, Ending, Interaction, MessageId, ReplyPlace, SettledBy};
 
@@ -18,7 +19,7 @@ fn the_first_thing_said_of_a_reply_is_kept_and_listed_by_its_chat() {
         .keep_reply_heard(&"s".into(), &"m2".into(), Ending::NotReadOut, SettledBy::Device)
         .unwrap()
         .expect("kept");
-    let (listed, rev) = store.list_replies_heard(&"s".into()).unwrap();
+    let SessionRecords { replies_heard: listed, rev, .. } = store.list_session_records(&"s".into()).unwrap();
 
     assert_eq!(again, None);
     assert_eq!(first.ending, cut);

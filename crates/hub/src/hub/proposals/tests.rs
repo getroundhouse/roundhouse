@@ -51,7 +51,7 @@ async fn the_images_a_proposal_points_to_are_kept_with_it_once() {
     let kept = hub.file_read(FileFor::Session("s".into()), "a1".into()).await.unwrap();
     assert_eq!(kept.as_slice(), b"<svg/>");
     assert!(hub.file_read(FileFor::Session("s".into()), "a2".into()).await.is_err(), "nothing kept the second time");
-    let listed = hub.session_proposals("s".into()).await.unwrap().proposals;
+    let listed = hub.session_records("s".into()).await.unwrap().proposals;
     assert_eq!(listed[0].current.images, made.current.images, "and it's read back from the store");
 }
 
@@ -75,7 +75,7 @@ async fn a_proposal_is_made_once_for_its_ask_and_the_feed_is_told() {
         }
     });
     assert_eq!(told.await.unwrap(), made);
-    let listed = hub.session_proposals("s".into()).await.unwrap();
+    let listed = hub.session_records("s".into()).await.unwrap();
     assert_eq!(listed.proposals, [made]);
 }
 
@@ -90,7 +90,7 @@ async fn a_proposal_that_doesnt_check_is_refused_saying_why_and_nothing_is_kept(
 
     assert_eq!(refused.code, ErrorCode::InvalidRequest);
     assert!(refused.message.contains("questions"), "{}", refused.message);
-    assert!(hub.session_proposals("s".into()).await.unwrap().proposals.is_empty());
+    assert!(hub.session_records("s".into()).await.unwrap().proposals.is_empty());
 }
 
 /// An agent reads only what was proposed in its own chat.

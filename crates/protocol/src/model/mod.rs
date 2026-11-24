@@ -39,7 +39,7 @@ mod worktrees;
 pub use crate::prompt::PromptFrom;
 pub use account::{
     Account, AccountSource, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, ModelLabel, Reserve,
-    ReserveOutOfRange, SessionAccount, UsageLimit,
+    ReserveOutOfRange, UsageLimit,
 };
 pub use agent::{AgentDescription, LoginDescription, NotOffered, RunCapabilities};
 pub use branches::{Apart, Branch, Branches, Head, Upstream};
@@ -63,9 +63,9 @@ pub use files::{
 pub use git::{GitDiff, GitFile, GitStatus};
 pub use github_account::{
     FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubInstallation,
-    GithubInstallationId, GithubLoginKind, GithubReach, GithubRepositoryName, GithubRepositoryNameError, GithubSignIn,
-    GithubSignInStatus, GithubToken, GithubUser, GithubUserId, HeldGithubLogin, InstalledApp, MachineLogins, Reach,
-    SentCredential, SshLogin, UnusableLogin,
+    GithubInstallationId, GithubLoginKind, GithubRepositoryName, GithubRepositoryNameError, GithubSignIn,
+    GithubSignInStatus, GithubToken, GithubUser, GithubUserId, GithubUserNumber, HeldGithubLogin, InstalledApp,
+    MachineLogins, Reach, SentCredential, SshLogin, UnusableLogin,
 };
 pub use heard_limits::HeardLimits;
 pub use hub_settings::{AccountDefault, GithubSettings, HubSettings, HubSettingsChange};
@@ -76,7 +76,7 @@ pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
 pub use observation::{
     AccountIdentity, ConversationCache, GithubAppSaid, IssueSaid, Observation, ObservationKey, Observed, OtherBuild,
-    OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReadFrom, ReferenceSaid,
+    OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReferenceSaid,
     ReleaseOffer, WaitRead,
 };
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
@@ -86,7 +86,6 @@ pub use proposal::{
     ProposalQuestion, ProposalRevision, Proposed, Recommendation, Response, ResponseSummary, RevisionNumber,
     RevisionStanding, RevisionSummary, Round, Withdrawal, chosen_in_words,
 };
-pub(crate) use pull_request::deserialize_looked;
 pub use pull_request::{
     CheckCounts, CheckState, Checks, ChecksRollup, History, LeftQueue, Local, MergeState, Mergeability, ObservedCheck,
     OwnPullRequest, Phase, PrState, PullRequest, PullRequestFound, PullRequestLink, PullRequestLinked, QueueState,

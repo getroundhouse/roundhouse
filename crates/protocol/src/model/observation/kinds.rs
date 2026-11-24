@@ -42,28 +42,23 @@ pub enum Observation {
     /// A workspace's branches: what its worktree has checked out, and each branch it has had that still exists, as its
     /// worker last read them. Sent at the workspace's level, since only its pane draws them. It's current while its
     /// worker watches them, and otherwise as of when the watch ended. The hub works out from it which pull request is
-    /// the workspace's, which stays on its record. A client of a version from before it reads it on the workspace's
-    /// record, as [`ReadFrom::EveryObservation`] says.
+    /// the workspace's, which stays on its record.
     WorkspaceBranches { workspace_id: WorkspaceId, branches: Observed<Branches>, rev: Rev },
     /// That a workspace's worker is another build than the hub's, as its hello said, while it's connected. Sent at the
     /// hub's level, since the desktop app counts them for every workspace. Current while that worker is connected, and
-    /// gone once it isn't, as it's replaced with the hub's own. The hub forgets every one as it starts. A client of a
-    /// version from before it reads it on the workspace's record, as [`ReadFrom::EveryObservation`] says.
+    /// gone once it isn't, as it's replaced with the hub's own. The hub forgets every one as it starts.
     WorkspaceWorkerBuild { workspace_id: WorkspaceId, build: Observed<OtherBuild>, rev: Rev },
     /// Whether the default GitHub account can push to the repository on GitHub that a repository's address names, as
     /// GitHub last answered, or what the hub says of it without asking. Sent at the hub's level, since every workspace
-    /// of the repository draws it. It's current while the hub checks every repository again each half hour. A client
-    /// of a version from before it reads it as the record `GithubReach`, as [`ReadFrom::EveryObservation`] says.
+    /// of the repository draws it. It's current while the hub checks every repository again each half hour.
     RepositoryReach { repo: RepoId, reach: Observed<Reach>, rev: Rev },
     /// What GitHub calls a GitHub account's user now, its username, as the hub last asked GitHub. Sent at the hub's
     /// level, since every view of the account names it. It's current while the hub asks again each day. The user's
-    /// number stays on the account's record, as what links the two. A client of a version from before it reads it on
-    /// the account's record, as [`ReadFrom::EveryObservation`] says.
+    /// number stays on the account's record, as what links the two.
     GithubUsername { account: GithubAccountId, username: Observed<GithubUsername>, rev: Rev },
     /// What GitHub says of an app of your own: what it calls the app, its name and its owner, as the app last asked
     /// GitHub, with its key. Sent at the hub's level, since Settings draws every app. It's current while the hub asks
-    /// again each day. The app's number stays on its record, as what links the two. A client of a version from before
-    /// it reads it on the app's record, as [`ReadFrom::EveryObservation`] says.
+    /// again each day. The app's number stays on its record, as what links the two.
     GithubAppSaid { app: GithubAppId, said: Observed<GithubAppSaid>, rev: Rev },
     /// An app of your own's bot, `{slug}[bot]`, as GitHub last said it, which commits through the app are by. Sent at
     /// the hub's level, as [`Observation::GithubAppSaid`] is.
@@ -75,23 +70,19 @@ pub enum Observation {
     /// What an agent offers where a chat would launch, as its CLI last listed it, by the list's key, which says the
     /// agent, the project, the provider, the account and the CLI's version. Sent at the hub's level, since the new
     /// workspace dialog and every chat's picker draw it. Never current, since the hub asks again only when it's due.
-    /// Whether the hub is asking now, and how that went, is the record [`ModelList`](crate::model::ModelList)'s. A
-    /// client of a version from before it reads it on that record, as [`ReadFrom::EveryObservation`] says.
+    /// Whether the hub is asking now, and how that went, is the record [`ModelList`](crate::model::ModelList)'s.
     ModelCatalog { list: ModelListKey, catalog: Observed<ModelCatalog>, rev: Rev },
     /// Who an agent's account is, as a worker last read it from the agent's login, which it does after a launch on a
     /// login on the worker's machine. Sent at the hub's level, since every view of an account names it. Never current,
-    /// since nothing tells the hub when it changes. A client of a version from before it reads it on the account's
-    /// record, as [`ReadFrom::EveryObservation`] says.
+    /// since nothing tells the hub when it changes.
     AccountIdentity { account: AccountId, identity: Observed<AccountIdentity>, rev: Rev },
     /// What's left of an account's usage limits, as its agents last said them, each with when it was heard, shortest
     /// window first and models' weeks by their models. Sent at the hub's level, since a chat's card and Agents in
-    /// Settings draw every account's. Never current, since only a running agent says them, and each says only some. A
-    /// client of a version from before it reads it on the account's record, as [`ReadFrom::EveryObservation`] says.
+    /// Settings draw every account's. Never current, since only a running agent says them, and each says only some.
     AccountLimits { account: AccountId, limits: Observed<Vec<UsageLimit>>, rev: Rev },
     /// How full a chat's agent's context is, as the agent last said in a report outside the log, of its current run.
     /// Sent at the session's level, since only the chat's pane draws it. Never current, since only the agent says it,
-    /// as it works. A client of a version from before it reads it on the session's record, as
-    /// [`ReadFrom::EveryObservation`] says.
+    /// as it works.
     SessionContext { session_id: SessionId, context: Observed<ContextUsage>, rev: Rev },
     /// A chat's agent's to-do list, as the agent last said, of its current run. At the session's level, and never
     /// current, as [`Observation::SessionContext`] is.
@@ -104,15 +95,13 @@ pub enum Observation {
     SessionCache { session_id: SessionId, cache: Observed<ConversationCache>, rev: Rev },
     /// What an open wait last read of the pull requests it watches, worked out from GitHub's part of the hub's cache as
     /// each read of them ends. Sent at the wait's session's level, since only its chat draws the wait's line. Gone as
-    /// the wait ends, when its record takes the last read. Never current. A client of a version from before it reads
-    /// it in the wait's `watching`, on the session's record.
+    /// the wait ends, when its record takes the last read. Never current.
     WaitRead { session_id: SessionId, wait: WaitId, read: Observed<WaitRead>, rev: Rev },
     /// The release the update feed offers a hub installed as a service, as the hub last read the feed. Sent at the
     /// hub's level, since the sidebar's build line draws it. Current while the hub's reads of the feed work, and as of
     /// the last that did otherwise. A hub has at most one, and one that doesn't read the feed has none. How an update
     /// a person asked for is going, and why the hub's last read failed, are the record
-    /// [`HubUpdate`](crate::model::HubUpdate)'s. A client of a version from before it reads it on that record, as
-    /// [`ReadFrom::EveryObservation`] says.
+    /// [`HubUpdate`](crate::model::HubUpdate)'s.
     ReleaseOffered { offered: Observed<ReleaseOffer>, rev: Rev },
     #[serde(other)]
     Unknown,
@@ -306,53 +295,15 @@ impl ObservationKey {
         }
     }
 
-    /// Which subscriptions a hub sends it to: each whose client reads it as an observation, rather than in a form from
-    /// before it, so no client holds it in two forms. `None` for one of a kind this build doesn't know.
-    pub fn read_from(&self) -> Option<ReadFrom> {
-        match self {
-            ObservationKey::WorkspaceLines { .. } | ObservationKey::WorkspaceChanges { .. } => Some(ReadFrom::Every),
-            ObservationKey::WorkspacePullRequest { .. }
-            | ObservationKey::WorkspacePullRequestDetail { .. }
-            | ObservationKey::WorkspaceRepositoryUnseen { .. }
-            | ObservationKey::Reference { .. } => Some(ReadFrom::GithubObserved),
-            ObservationKey::WorkspaceBranches { .. }
-            | ObservationKey::WorkspaceWorkerBuild { .. }
-            | ObservationKey::RepositoryReach { .. }
-            | ObservationKey::GithubUsername { .. }
-            | ObservationKey::GithubAppSaid { .. }
-            | ObservationKey::GithubAppBot { .. }
-            | ObservationKey::InstalledOn { .. }
-            | ObservationKey::ModelCatalog { .. }
-            | ObservationKey::AccountIdentity { .. }
-            | ObservationKey::AccountLimits { .. }
-            | ObservationKey::SessionContext { .. }
-            | ObservationKey::SessionTodos { .. }
-            | ObservationKey::SessionCache { .. }
-            | ObservationKey::WaitRead { .. }
-            | ObservationKey::ReleaseOffered => Some(ReadFrom::EveryObservation),
-            ObservationKey::Unknown => None,
-        }
-    }
-
-    /// Whether it's of what GitHub says, which a hub sends as an observation only to a start that reads GitHub so, as
-    /// [`Subscription::github_observed`](crate::client::subscriptions::Subscription::github_observed) says. `false` for
-    /// one of a kind this build doesn't know.
+    /// Whether it's of what GitHub says of a pull request or an issue: a workspace's own, or one a chip shows. `false`
+    /// for one of a kind this build doesn't know.
     pub fn is_github(&self) -> bool {
-        self.read_from() == Some(ReadFrom::GithubObserved)
+        matches!(
+            self,
+            ObservationKey::WorkspacePullRequest { .. }
+                | ObservationKey::WorkspacePullRequestDetail { .. }
+                | ObservationKey::WorkspaceRepositoryUnseen { .. }
+                | ObservationKey::Reference { .. }
+        )
     }
-}
-
-/// Which subscriptions a hub sends an observation of a kind to, as [`ObservationKey::read_from`] says.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ReadFrom {
-    /// Every subscription at its level, since no client reads what it says in another form.
-    Every,
-    /// A start that says it reads what GitHub says as observations, as
-    /// [`Subscription::github_observed`](crate::client::subscriptions::Subscription::github_observed) does, and one of
-    /// [`EVERY_OBSERVATION_FROM`](crate::client::EVERY_OBSERVATION_FROM) or newer whatever it says, since a client
-    /// from before reads it as `HubFrame::Github`.
-    GithubObserved,
-    /// A subscription of [`EVERY_OBSERVATION_FROM`](crate::client::EVERY_OBSERVATION_FROM) or newer, since a client
-    /// from before reads it in the form it replaced, as a field of a record that the hub fills from it.
-    EveryObservation,
 }

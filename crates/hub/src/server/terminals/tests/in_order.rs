@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::terminals as client;
-use protocol::client::{CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, HubFrame, ReplyOutcome};
+use protocol::client::{ClientRequest, ClientResponse, HubFrame, ReplyOutcome};
 use protocol::terminal::{Numbering, TerminalFitReply, TerminalSize, Typed};
 use protocol::worker::{TerminalTyped, WorkerRequest, WorkerResponse};
 use tokio::sync::{mpsc, watch};
@@ -118,5 +118,5 @@ fn unread_connection() -> Arc<Connection> {
 
 /// What a hello from a client of this build, on no device, says.
 fn greeting() -> Greeting {
-    Greeting { device: None, version: CLIENT_PROTOCOL_VERSION }
+    Greeting { device: None }
 }

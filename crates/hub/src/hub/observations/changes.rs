@@ -2,14 +2,14 @@
 
 use std::collections::HashSet;
 
-use protocol::client::{ApiError, HubNotice, ObservationNotice};
+use protocol::client::{ApiError, ObservationNotice};
 use protocol::model::{GithubAccountId, GithubAppId, WorkspaceId};
 use tracing::warn;
 
 use super::file::Write;
 use super::kept::{Change, Changed, Step, Table};
 use super::kinds::{Kind, Owner, SessionKey};
-use super::tables::{Forgotten, Gone};
+use super::tables::Gone;
 use crate::hub::Hub;
 use crate::store::Store;
 
@@ -146,22 +146,11 @@ impl Hub {
     /// that asks after finds it isn't wanted. Stops at the first that fails, which only a database that gives no
     /// revision has.
     pub(crate) async fn observations_gone_where<K: Kind>(&self, gone: impl Fn(&K::Of) -> bool) -> Result<(), ApiError> {
-        let mut moved = Vec::new();
-        let forgot = async {
-            let _changing = self.observations.changing.lock().await;
-            for of in self.observations.kept_of::<K>().into_iter().filter(|of| gone(of)) {
-                let old_form_on = K::old_form_on(&of);
-                if self.changed_observation_held::<K>(of, |_| Change::Gone).await? {
-                    moved.extend(old_form_on);
-                }
-            }
-            Ok(())
-        };
-        let forgot = forgot.await;
-        for record in moved {
-            self.old_form_moved(record).await;
+        let _changing = self.observations.changing.lock().await;
+        for of in self.observations.kept_of::<K>().into_iter().filter(|of| gone(of)) {
+            self.changed_observation_held::<K>(of, |_| Change::Gone).await?;
         }
-        forgot
+        Ok(())
     }
 
     /// Forgets every observation of workspace `id`, and of its other worktrees and its sessions, of every kind, since the
@@ -247,14 +236,8 @@ impl Hub {
             return Ok(());
         }
         let rev = self.blocking(Store::next_rev).await?;
-        let forgotten = observations.tables.lock().forget_of(gone, &observations.writer);
-        for Forgotten { observation, old_record } in forgotten {
-            if let Some(observation) = observation {
-                self.tell_of_observation(ObservationNotice::Removed { observation, rev });
-            }
-            if let Some(record) = old_record {
-                self.notify_old_form(HubNotice::Removed { record, rev });
-            }
+        for observation in observations.tables.lock().forget_of(gone, &observations.writer) {
+            self.tell_of_observation(ObservationNotice::Removed { observation, rev });
         }
         Ok(())
     }
@@ -269,9 +252,7 @@ impl Hub {
     /// until clients are told, so a list of records has every change its revision takes in. Its write to the file is
     /// queued under the lock too, so the file is written in the order the changes are made, and made after, so no list
     /// waits on the file. Fails only where the database gives no revision, and then changes nothing but whether
-    /// something keeps it current. Then, outside the lock, moves the revision of the record that holds its old form, if
-    /// any, as [`Hub::old_form_moved`] says, so that record's newest copy holds what it says now, once what it says
-    /// changes.
+    /// something keeps it current.
     async fn change_observation<K: Kind>(
         &self,
         of: K::Of,
@@ -288,37 +269,19 @@ impl Hub {
         wanted: impl FnOnce() -> bool,
         change: impl FnOnce(&Table<K>) -> Change<K::Value>,
     ) -> Result<(), ApiError> {
-        let old_form_on = K::old_form_on(&of);
-        if self.changed_observation::<K>(of, wanted, change).await?
-            && let Some(record) = old_form_on
-        {
-            self.old_form_moved(record).await;
-        }
-        Ok(())
-    }
-
-    /// What [`Hub::change_observation_while`] does under the lock every change takes. Whether it changed what the
-    /// observation says, as its kind compares it, or forgot it, which a record that holds its old form, with no
-    /// freshness of its own, is moved for, and not for one that's only current again or as of a time.
-    async fn changed_observation<K: Kind>(
-        &self,
-        of: K::Of,
-        wanted: impl FnOnce() -> bool,
-        change: impl FnOnce(&Table<K>) -> Change<K::Value>,
-    ) -> Result<bool, ApiError> {
         let _changing = self.observations.changing.lock().await;
         if !wanted() {
-            return Ok(false);
+            return Ok(());
         }
         self.changed_observation_held::<K>(of, change).await
     }
 
-    /// What [`Hub::changed_observation`] does once it holds the lock every change takes, which the caller holds.
+    /// What [`Hub::change_observation_while`] does once it holds the lock every change takes, which the caller holds.
     async fn changed_observation_held<K: Kind>(
         &self,
         of: K::Of,
         change: impl FnOnce(&Table<K>) -> Change<K::Value>,
-    ) -> Result<bool, ApiError> {
+    ) -> Result<(), ApiError> {
         let observations = &self.observations;
         let step = {
             let mut tables = observations.tables.lock();
@@ -327,26 +290,19 @@ impl Hub {
             table.step(&of, change)
         };
         let changed = match step {
-            Step::Same => return Ok(false),
+            Step::Same => return Ok(()),
             Step::Reread(said) => {
                 observations.writer.write::<K>(of.clone(), Write::ReadAgain { read_at_ms: said.read_at_ms });
                 K::table(&mut observations.tables.lock()).reread(&of, said);
-                return Ok(false);
+                return Ok(());
             }
             Step::Reheard(said) => {
                 let write = Write::Says { value: said.value.clone(), read_at_ms: said.read_at_ms };
                 observations.writer.write::<K>(of.clone(), write);
                 K::table(&mut observations.tables.lock()).reread(&of, said);
-                return Ok(false);
+                return Ok(());
             }
             Step::Changed(changed) => changed,
-        };
-        let says_otherwise = match &changed {
-            Changed::Says(said) => {
-                let held = K::table(&mut observations.tables.lock()).value(&of).cloned();
-                held.is_none_or(|held| !K::says_the_same(&held, &said.value))
-            }
-            Changed::Gone => true,
         };
         let rev = self.blocking(Store::next_rev).await?;
         let write = match &changed {
@@ -354,18 +310,15 @@ impl Hub {
             Changed::Gone => Write::Gone,
         };
         observations.writer.write::<K>(of.clone(), write);
-        let (notice, old_record) = K::table(&mut observations.tables.lock()).change(&of, changed, rev);
+        let notice = K::table(&mut observations.tables.lock()).change(&of, changed, rev);
         if let Some(notice) = notice {
             self.tell_of_observation(notice);
         }
-        if let Some(record) = old_record {
-            self.notify_old_form(record.into());
-        }
-        Ok(says_otherwise)
+        Ok(())
     }
 
     /// Tells clients of a change to an observation, the one place the hub sends an observation's notice. Which clients
-    /// are sent it is decided where every notice's is, in `crate::server::sends`.
+    /// are sent it is decided where every notice's is, by its level, in `crate::server::subscribe`.
     fn tell_of_observation(&self, notice: ObservationNotice) {
         self.notify(notice.into());
     }

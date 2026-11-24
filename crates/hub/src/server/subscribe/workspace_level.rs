@@ -12,7 +12,6 @@ use tokio::sync::{mpsc, oneshot};
 use super::notices::{forward, send_listed};
 use super::starting::Feeding;
 use crate::hub::Hub;
-use crate::server::sends::Sends;
 use crate::server::{Closer, Outgoing};
 
 /// What feeds a subscription at workspace `id`'s level, and what says once its first list is queued, so one the hub
@@ -22,26 +21,25 @@ use crate::server::{Closer, Outgoing};
 pub(super) async fn feeding(
     hub: &Arc<Hub>,
     id: WorkspaceId,
-    sends: Sends,
     subscription_id: u64,
     frames: mpsc::Sender<Outgoing>,
     closer: Closer,
 ) -> Result<(Feeding, oneshot::Receiver<()>), ApiError> {
     hub.workspace(&id).await?;
     // Before the list, so nothing that changes after it is missed.
-    let feed = hub.subscribe_fed();
+    let feed = hub.subscribe_feed();
     let first = listed(hub, &id).await?;
     let (queued, is_queued) = oneshot::channel();
     let hub = hub.clone();
     let feeding: Feeding = Box::pin(async move {
-        let connected = send_listed(&frames, &sends, subscription_id, Listed::Workspace(first)).await;
+        let connected = send_listed(&frames, subscription_id, Listed::Workspace(first)).await;
         // An error only means nothing waits for it any more.
         let _ = queued.send(());
         if !connected {
             return;
         }
         let list = || async { Ok(Listed::Workspace(listed(&hub, &id).await?)) };
-        forward(feed, &sends, subscription_id, &frames, &closer, list, |_| {}).await;
+        forward(feed, &Level::Workspace { id: id.clone() }, subscription_id, &frames, &closer, list).await;
     });
     Ok((feeding, is_queued))
 }

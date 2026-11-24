@@ -5,7 +5,6 @@ use super::subscribing::Channels;
 use super::transport::{Closer, Transport};
 use super::{commands, lines, queueing};
 use parking_lot::Mutex;
-use protocol::client::github::GithubUpdate;
 use protocol::client::listed::Listed;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubNotice, Reply as _, Request,
@@ -97,9 +96,6 @@ pub enum SubscriptionItem {
     Listed(Box<Listed>),
     /// Only on a terminal's.
     Terminal(TerminalUpdate),
-    /// What GitHub says of an issue or a pull request followed, or of a workspace's own pull request, at the hub's
-    /// level.
-    Github(Box<GithubUpdate>),
     /// Only on a terminal's that watches it.
     TerminalPicture(Box<TerminalPicture>),
 }

@@ -57,13 +57,12 @@ fn a_chats_record_its_accounts_and_every_other_are_as_they_were_once_the_hub_has
     assert_eq!(expired.count(), 1, "the hub that came back knows when the request before was sent");
 }
 
-/// The records a hub keeps from one run to the next, which are all but two it asks again as it starts, each a change
-/// to its record: the login found on each provider's machines, which it forgets, and what each repository's account
-/// reaches on GitHub, which it marks as stale. Each is the record of an answer from outside, which may have changed
-/// while there was no hub, and which only asking again finds out, as the hub does once it's serving. So the hub's own
-/// revision moves too. The list's observations aren't records: the hub that comes back gives each a revision newer than
-/// any a client holds, and reads the workspace's lines again as it takes on its worker, as its own tests say.
+/// The records a hub keeps from one run to the next, which are all but the login found on each provider's machines,
+/// which it forgets as it starts: the record of an answer from outside, which may have changed while there was no hub,
+/// and which only asking again finds out, as the hub does once it's serving. So the hub's own revision moves too. The
+/// list's observations aren't records: the hub that comes back gives each a revision newer than any a client holds, and
+/// reads the workspace's lines again as it takes on its worker, as its own tests say.
 fn kept(records: Records) -> Records {
-    let (found_github_logins, github_reach, observations) = (Vec::new(), Vec::new(), Vec::new());
-    Records { found_github_logins, github_reach, observations, rev: Rev::default(), ..records }
+    let (found_github_logins, observations) = (Vec::new(), Vec::new());
+    Records { found_github_logins, observations, rev: Rev::default(), ..records }
 }

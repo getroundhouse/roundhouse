@@ -177,8 +177,7 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
                             SubscriptionItem::Notice(_)
                             | SubscriptionItem::Listed(_)
                             | SubscriptionItem::Terminal(_)
-                            | SubscriptionItem::TerminalPicture(_)
-                            | SubscriptionItem::Github(_) => {}
+                            | SubscriptionItem::TerminalPicture(_) => {}
                         }
                     }
                     let held: String = tail.messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect();
@@ -272,7 +271,6 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
             | HubFrame::Notice { .. }
             | HubFrame::Terminal { .. }
             | HubFrame::TerminalPicture { .. }
-            | HubFrame::Github { .. }
             | HubFrame::Listed { .. } => {}
         }
     }

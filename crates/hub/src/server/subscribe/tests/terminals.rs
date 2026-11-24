@@ -1,5 +1,6 @@
 //! What following a terminal has its worker do.
 
+use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::subscriptions::{Follow, Subscribe};
 
 use super::given::{Given, ok, start};
@@ -12,8 +13,10 @@ use crate::server::tests::{Connection, WAIT};
 async fn a_worker_stops_sending_a_terminals_screen_once_no_client_follows_it() {
     let dir = tempfile::tempdir().unwrap();
     let given = Given::new(dir.path()).await;
-    let (mut ending, mut stopping) =
-        (Connection::greeted(&given.hub, 4).await, Connection::greeted(&given.hub, 5).await);
+    let (mut ending, mut stopping) = (
+        Connection::greeted(&given.hub, CLIENT_PROTOCOL_VERSION).await,
+        Connection::greeted(&given.hub, CLIENT_PROTOCOL_VERSION).await,
+    );
     let follows = || Subscribe { stop: Vec::new(), start: vec![start(7, Follow::Terminal { id: "t".into() })] };
     ok(&mut ending, 1, follows()).await;
     ok(&mut stopping, 1, follows()).await;

@@ -2,7 +2,7 @@
 //! build finds a record by its kind's name and its key, what the settings say workers are sent for the default, and
 //! what GitHub calls an account's user, as an observation.
 
-use protocol::client::{ClientResponse, HubNotice};
+use protocol::client::HubNotice;
 use protocol::frame;
 use protocol::model::{
     GithubAccount, GithubAppId, GithubAppSaid, GithubLoginKind, GithubSettings, GithubSignIn, GithubSignInStatus,
@@ -12,14 +12,14 @@ use protocol::model::{
 
 use crate::keeps_its_form;
 
-const ACCOUNT: &str = r#""id":"g","user":{"id":7,"name":"ada"},"held_login":{"how":"token","connected_at_ms":1,"ends_at_ms":null,"needs_sign_in":false},"rev":2"#;
+const ACCOUNT: &str = r#""id":"g","user":{"id":7},"held_login":{"how":"token","connected_at_ms":1,"ends_at_ms":null,"needs_sign_in":false},"rev":2"#;
 
 const SIGN_IN: &str = r#""id":"s","status":{"state":"waiting","code":"WDJB-MJHT","address":"https://github.com/login/device","code_ends_at_ms":900000},"rev":3"#;
 
 fn account() -> GithubAccount {
     GithubAccount {
         id: "g".into(),
-        user: GithubUser { id: GithubUserId::new(7), name: "ada".into() },
+        user: protocol::fixtures::github_user(7),
         held_login: Some(HeldGithubLogin {
             how: GithubLoginKind::Token,
             connected_at_ms: 1,
@@ -35,9 +35,9 @@ fn sign_in() -> GithubSignIn {
     GithubSignIn { rev: Rev::new(3), ..protocol::fixtures::github_sign_in("s") }
 }
 
+/// The list of every record `line` is, as the hub's level lists them.
 fn listed(line: &str) -> Records {
-    let ClientResponse::Records(list) = frame::decode::<ClientResponse>(line.as_bytes()).unwrap() else { panic!() };
-    list
+    serde_json::from_str(line).unwrap()
 }
 
 #[test]
@@ -52,9 +52,9 @@ fn a_notice_of_a_github_account_reads_as_its_record() {
 #[test]
 fn a_list_of_every_record_reads_its_github_accounts_and_one_from_a_hub_that_keeps_none_has_none() {
     let line = format!(
-        r#"{{"result":"records","repos":[],"workspaces":[],"sessions":[],"comments":[],"github_accounts":[{{{ACCOUNT}}}],"rev":5}}"#
+        r#"{{"repos":[],"workspaces":[],"sessions":[],"comments":[],"github_accounts":[{{{ACCOUNT}}}],"rev":5}}"#
     );
-    let older = r#"{"result":"records","repos":[],"workspaces":[],"sessions":[],"comments":[],"rev":5}"#;
+    let older = r#"{"repos":[],"workspaces":[],"sessions":[],"comments":[],"rev":5}"#;
 
     assert_eq!(listed(&line).github_accounts, [account()]);
     assert_eq!(listed(older).github_accounts, []);
@@ -105,10 +105,9 @@ fn every_state_of_a_sign_in_keeps_its_form() {
 #[test]
 fn a_list_of_every_record_reads_its_sign_ins_and_one_from_a_hub_that_cant_sign_in_has_none() {
     let line = format!(
-        r#"{{"result":"records","repos":[],"workspaces":[],"sessions":[],"comments":[],"github_sign_ins":[{{{SIGN_IN}}}],"rev":5}}"#
+        r#"{{"repos":[],"workspaces":[],"sessions":[],"comments":[],"github_sign_ins":[{{{SIGN_IN}}}],"rev":5}}"#
     );
-    let older =
-        r#"{"result":"records","repos":[],"workspaces":[],"sessions":[],"comments":[],"github_accounts":[],"rev":5}"#;
+    let older = r#"{"repos":[],"workspaces":[],"sessions":[],"comments":[],"github_accounts":[],"rev":5}"#;
 
     assert_eq!(listed(&line).github_sign_ins, [sign_in()]);
     assert_eq!(listed(older).github_sign_ins, []);

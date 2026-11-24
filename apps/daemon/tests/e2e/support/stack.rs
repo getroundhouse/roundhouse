@@ -330,8 +330,7 @@ impl Follower {
             SubscriptionItem::Notice(_)
             | SubscriptionItem::Listed(_)
             | SubscriptionItem::Terminal(_)
-            | SubscriptionItem::TerminalPicture(_)
-            | SubscriptionItem::Github(_) => {}
+            | SubscriptionItem::TerminalPicture(_) => {}
         }
     }
 

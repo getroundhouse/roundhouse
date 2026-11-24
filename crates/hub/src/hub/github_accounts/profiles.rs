@@ -68,7 +68,7 @@ impl Hub {
         }
         let store = Arc::clone(&self.store);
         let settling = change.clone();
-        // Read again, since keeping what GitHub calls the user moved the record's revision.
+        // Read again, so the copy announced is the newest, whatever changed it meanwhile.
         let settled = move || {
             let account = store.github_account(&settling.account.id)?.unwrap_or_else(|| settling.account.clone());
             let read_again = GithubAccountChange { account, ..settling };
@@ -83,11 +83,9 @@ impl Hub {
         }
     }
 
-    /// Keeps what the hub `heard` of who a GitHub account is, as observations, each of which moves the account's
-    /// record's revision as it changes, so a client of a version from before is sent the record again, named anew, as
-    /// `crate::hub::observations::GithubUsername` says. One heard as the account was removed is forgotten with it. Then
-    /// works out what workers are sent again, since the default's is made from it, and the check of reach follows
-    /// that, so it reads nothing as an account whose username it didn't know.
+    /// Keeps what the hub `heard` of who a GitHub account is, as observations. One heard as the account was removed is
+    /// forgotten with it. Then works out what workers are sent again, since the default's is made from it, and the
+    /// check of reach follows that, so it reads nothing as an account whose username it didn't know.
     async fn github_user_heard(&self, heard: Heard) -> Result<(), ApiError> {
         let Heard { account, username, profile, at_ms } = heard;
         self.observation_read::<GithubUsername>(account.clone(), username, at_ms).await?;

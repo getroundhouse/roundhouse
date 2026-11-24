@@ -86,9 +86,8 @@ impl Source for WorkspacesSource {
     }
 
     /// Takes what a workspace's level sends into the copy of the hub's records, telling the GitHub feed what it took in
-    /// of what GitHub says, and hands it what's sent in the form from before observations, `GithubUpdate`. What's sent of
-    /// a workspace no longer followed, which was already on its way as it was let go of, is dropped, so nothing brings
-    /// back what letting go of it let go of.
+    /// of what GitHub says. What's sent of a workspace no longer followed, which was already on its way as it was let
+    /// go of, is dropped, so nothing brings back what letting go of it let go of.
     fn apply(&mut self, _: &Client, _: &Mutex<Wanted>, item: SubscriptionItem) -> Result<bool> {
         let Some(Level::Workspace { id }) = item.level() else { return Ok(false) };
         if !self.followed.contains(&id) {
@@ -117,9 +116,7 @@ impl Source for WorkspacesSource {
                     self.github.observed(&[key], changed.get());
                 }
             }
-            // Sent only to a client of version 4 that doesn't read GitHub as observations.
-            SubscriptionItem::Github(_)
-            | SubscriptionItem::Event(_)
+            SubscriptionItem::Event(_)
             | SubscriptionItem::Tail(_)
             | SubscriptionItem::Delta(_)
             | SubscriptionItem::Terminal(_)

@@ -1,6 +1,6 @@
 use super::{
     AccountIdentity, ConversationCache, GithubAppSaid, Observation, ObservationKey, Observed, OtherBuild,
-    OwnPullRequestDetail, OwnPullRequestSaid, ReadFrom, ReferenceSaid, ReleaseOffer, WaitRead,
+    OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid, ReleaseOffer, WaitRead,
 };
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
@@ -9,12 +9,12 @@ use crate::model::{
     LineCounts, ModelListKey, ReferenceAsk, Rev,
 };
 
-/// The level an observation is sent at, and which subscriptions are sent it.
-type Sent = (Option<Level>, Option<ReadFrom>);
+/// The level an observation is sent at.
+type Sent = Option<Level>;
 
 /// An observation of each kind, with the key and revision it's of, and how it's sent.
 fn of_each_kind() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
-    let unknown = (Observation::Unknown, ObservationKey::Unknown, Rev::default(), (None, None));
+    let unknown = (Observation::Unknown, ObservationKey::Unknown, Rev::default(), None);
     [
         of_a_workspace(),
         of_github(),
@@ -45,7 +45,7 @@ fn of_an_agent() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
         Observation::ModelCatalog { list: list.clone(), catalog, rev: Rev::new(12) },
         ObservationKey::ModelCatalog { list },
         Rev::new(12),
-        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+        Some(Level::Hub),
     )]
 }
 
@@ -58,13 +58,13 @@ fn of_a_workspace() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             Observation::WorkspaceLines { workspace_id: "w".into(), lines, rev: Rev::new(4) },
             ObservationKey::WorkspaceLines { workspace_id: "w".into() },
             Rev::new(4),
-            (Some(Level::Hub), Some(ReadFrom::Every)),
+            Some(Level::Hub),
         ),
         (
             Observation::WorkspaceChanges { workspace_id: "w".into(), changes, rev: Rev::new(5) },
             ObservationKey::WorkspaceChanges { workspace_id: "w".into() },
             Rev::new(5),
-            (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::Every)),
+            Some(Level::Workspace { id: "w".into() }),
         ),
     ]
 }
@@ -82,7 +82,7 @@ fn of_github() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             },
             ObservationKey::Reference { reference: reference.clone() },
             Rev::new(6),
-            (Some(Level::Reference { reference }), Some(ReadFrom::GithubObserved)),
+            Some(Level::Reference { reference }),
         ),
         (
             Observation::WorkspacePullRequest {
@@ -92,7 +92,7 @@ fn of_github() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             },
             ObservationKey::WorkspacePullRequest { workspace_id: "w".into() },
             Rev::new(7),
-            (Some(Level::Hub), Some(ReadFrom::GithubObserved)),
+            Some(Level::Hub),
         ),
         (
             Observation::WorkspacePullRequestDetail {
@@ -102,7 +102,7 @@ fn of_github() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             },
             ObservationKey::WorkspacePullRequestDetail { workspace_id: "w".into() },
             Rev::new(8),
-            (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::GithubObserved)),
+            Some(Level::Workspace { id: "w".into() }),
         ),
         (
             Observation::WorkspaceRepositoryUnseen {
@@ -112,7 +112,7 @@ fn of_github() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             },
             ObservationKey::WorkspaceRepositoryUnseen { workspace_id: "w".into() },
             Rev::new(9),
-            (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::GithubObserved)),
+            Some(Level::Workspace { id: "w".into() }),
         ),
     ]
 }
@@ -130,13 +130,13 @@ fn of_a_workspace_worker() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             },
             ObservationKey::WorkspaceBranches { workspace_id: "w".into() },
             Rev::new(14),
-            (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::EveryObservation)),
+            Some(Level::Workspace { id: "w".into() }),
         ),
         (
             Observation::WorkspaceWorkerBuild { workspace_id: "w".into(), build, rev: Rev::new(15) },
             ObservationKey::WorkspaceWorkerBuild { workspace_id: "w".into() },
             Rev::new(15),
-            (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+            Some(Level::Hub),
         ),
     ]
 }
@@ -151,7 +151,7 @@ fn of_a_repository() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
         },
         ObservationKey::RepositoryReach { repo: "r".into() },
         Rev::new(13),
-        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+        Some(Level::Hub),
     )]
 }
 
@@ -165,7 +165,7 @@ fn of_a_github_account() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
         },
         ObservationKey::GithubUsername { account: "g".into() },
         Rev::new(12),
-        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+        Some(Level::Hub),
     )]
 }
 
@@ -174,7 +174,7 @@ fn of_an_app() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
     let app = crate::model::GithubAppId::new(9);
     let bot = crate::model::GithubUser { id: crate::model::GithubUserId::new(41), name: "ada-roundhouse[bot]".into() };
     let said = GithubAppSaid { slug: "ada-roundhouse".into(), name: "Ada's".into(), owner: bot.clone() };
-    let at_the_hub = (Some(Level::Hub), Some(ReadFrom::EveryObservation));
+    let at_the_hub = Some(Level::Hub);
     vec![
         (
             Observation::GithubAppSaid { app, said: Observed::Current { value: said }, rev: Rev::new(14) },
@@ -212,13 +212,13 @@ fn of_an_account() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
             },
             ObservationKey::AccountIdentity { account: "a".into() },
             Rev::new(10),
-            (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+            Some(Level::Hub),
         ),
         (
             Observation::AccountLimits { account: "a".into(), limits: Observed::NotKnown, rev: Rev::new(11) },
             ObservationKey::AccountLimits { account: "a".into() },
             Rev::new(11),
-            (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+            Some(Level::Hub),
         ),
     ]
 }
@@ -240,7 +240,7 @@ fn session_context() -> (Observation, ObservationKey, Rev, Sent) {
         },
         ObservationKey::SessionContext { session_id: "s".into() },
         Rev::new(21),
-        (Some(Level::Session { id: "s".into() }), Some(ReadFrom::EveryObservation)),
+        Some(Level::Session { id: "s".into() }),
     )
 }
 
@@ -254,7 +254,7 @@ fn session_todos() -> (Observation, ObservationKey, Rev, Sent) {
         },
         ObservationKey::SessionTodos { session_id: "s".into() },
         Rev::new(12),
-        (Some(Level::Session { id: "s".into() }), Some(ReadFrom::EveryObservation)),
+        Some(Level::Session { id: "s".into() }),
     )
 }
 
@@ -269,7 +269,7 @@ fn session_cache() -> (Observation, ObservationKey, Rev, Sent) {
         },
         ObservationKey::SessionCache { session_id: "s".into() },
         Rev::new(13),
-        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+        Some(Level::Hub),
     )
 }
 
@@ -291,7 +291,7 @@ fn wait_read() -> (Observation, ObservationKey, Rev, Sent) {
         },
         ObservationKey::WaitRead { session_id: "s".into(), wait: "a".into() },
         Rev::new(14),
-        (Some(Level::Session { id: "s".into() }), Some(ReadFrom::EveryObservation)),
+        Some(Level::Session { id: "s".into() }),
     )
 }
 
@@ -317,14 +317,16 @@ fn of_the_hub() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
         Observation::ReleaseOffered { offered, rev: Rev::new(16) },
         ObservationKey::ReleaseOffered,
         Rev::new(16),
-        (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+        Some(Level::Hub),
     )]
 }
 
 #[test]
-fn an_observation_says_which_it_is_its_revision_the_level_it_is_sent_at_and_who_reads_it() {
+fn an_observation_says_which_it_is_its_revision_the_level_it_is_sent_at_and_whether_its_githubs() {
+    let github: Vec<ObservationKey> = of_github().into_iter().map(|(_, key, _, _)| key).collect();
     for (observation, key, rev, sent) in of_each_kind() {
         assert_eq!((observation.key(), observation.rev()), (key.clone(), rev), "{observation:?}");
-        assert_eq!((key.level(), key.read_from()), sent, "{key:?}");
+        assert_eq!(key.level(), sent, "{key:?}");
+        assert_eq!(key.is_github(), github.contains(&key), "{key:?}");
     }
 }

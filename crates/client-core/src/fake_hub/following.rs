@@ -11,11 +11,11 @@ use protocol::client::subscriptions::{Follow, LogFrom, Refused, Subscribe, Subsc
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubFrame, HubNotice, ObservationNotice};
 use protocol::model::{Level, Place, Seq, WorkspaceId};
 
+use super::github;
 use super::logs::{log_from, places_from};
 use super::serve::Outcome;
 use super::terminals;
 use super::world::World;
-use super::{github, old_forms};
 
 /// What each subscription of each connection follows now, which a test shares before the hub is given the world, to
 /// tell what a client follows and when.
@@ -49,8 +49,7 @@ pub(super) fn subscribe(world: &World, connection: u64, subscribe: Subscribe) ->
         following.remove(&(connection, subscription_id));
     }
     let (mut refused, mut first, mut then) = (Vec::new(), Vec::new(), Vec::new());
-    // A client of this version reads GitHub as observations whatever its start says.
-    for Subscription { subscription_id, follow, github_observed: _ } in start {
+    for Subscription { subscription_id, follow } in start {
         match stands(world, subscription_id, &follow) {
             Ok(sent) => {
                 following.insert((connection, subscription_id), follow.level());
@@ -112,10 +111,10 @@ fn stands(world: &World, subscription_id: u64, follow: &Follow) -> Result<Vec<Hu
     }
 }
 
-/// Every record, each old form filled as a hub fills it, and the hub's observations, with how every workspace's own
-/// pull request stands, then what the feed says of the hub's level.
+/// Every record and the hub's observations, with how every workspace's own pull request stands, then what the feed
+/// says of the hub's level.
 fn hub(world: &World, subscription_id: u64) -> Vec<HubFrame> {
-    let mut records = old_forms::records_filled(world.records());
+    let mut records = world.records();
     records.observations = world.observations_at(&Level::Hub);
     records.observations.extend(github::own_observed(world));
     let listed = HubFrame::Listed { subscription_id, listed: Listed::Hub(Box::new(records)) };

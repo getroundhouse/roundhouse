@@ -75,8 +75,7 @@ fn a_request_being_tried_again_is_in_the_tail_until_the_agent_answers() {
                 SubscriptionItem::Notice(_)
                 | SubscriptionItem::Listed(_)
                 | SubscriptionItem::Terminal(_)
-                | SubscriptionItem::TerminalPicture(_)
-                | SubscriptionItem::Github(_) => {}
+                | SubscriptionItem::TerminalPicture(_) => {}
             }
         }
     };

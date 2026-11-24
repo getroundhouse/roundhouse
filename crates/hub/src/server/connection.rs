@@ -237,7 +237,7 @@ async fn answer(
     let under_way = Counted::request(&hub);
     let answering = match read {
         Ok(ClientRequest::Subscribe(asked)) => {
-            return subscribes.queue(&connection, id, (asked, greeting.version), under_way).await;
+            return subscribes.queue(&connection, id, asked, under_way).await;
         }
         read => in_order(&hub, read).await,
     };

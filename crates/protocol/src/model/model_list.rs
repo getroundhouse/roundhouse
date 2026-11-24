@@ -3,7 +3,6 @@
 use serde::{Deserialize, Serialize};
 
 use super::{AccountId, AgentKind, ProviderName, RepoId, Rev};
-use crate::capability::settings::ModelCatalog;
 
 /// Where a list applies: one kind of agent, at one version of its CLI, in one project on one provider, under one
 /// login, since each of those can change what it offers. A chat's list and the new-workspace dialog's are one when
@@ -36,18 +35,15 @@ impl std::fmt::Display for CliVersion {
     }
 }
 
-/// What an agent that discovers its own models offers in one place. The hub keeps it in memory rather than storing
-/// it, with a revision from the counter every record's comes from, since the agent's CLI is what says it, and a list
-/// from before the hub started could be out of date. It asks the agent when a client or a check first needs the list,
-/// again when a client asks it to, and, where the machine's own CLI runs, once the list is old and something needs it,
-/// so every client shows the same list without starting the agent's CLI each time.
+/// How the hub's asking an agent that discovers its own models what it offers in one place stands. What the agent
+/// offered is the observation `ModelCatalog`. The hub keeps it in memory rather than storing it, with a revision from
+/// the counter every record's comes from. It asks the agent when a client or a check first needs the list, again when a
+/// client asks it to, and, where the machine's own CLI runs, once the list is old and something needs it, so every
+/// client shows the same list without starting the agent's CLI each time.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ModelList {
     #[serde(flatten)]
     pub key: ModelListKey,
-    /// The last list the agent gave, which is kept while it's asked again and after asking again fails. `None` until
-    /// it has answered once.
-    pub catalog: Option<ModelCatalog>,
     pub lookup: ModelLookup,
     pub rev: Rev,
 }

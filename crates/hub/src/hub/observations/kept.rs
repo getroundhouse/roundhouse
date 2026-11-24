@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use protocol::client::{ApiError, ObservationNotice, RecordNotice};
+use protocol::client::{ApiError, ObservationNotice};
 use protocol::model::{
     AccountId, ChildWorktreeId, GithubAccountId, GithubAppId, Level, Observation, Observed, RepoId, Rev, SessionId,
     WaitId, WorkspaceId,
@@ -219,25 +219,17 @@ impl<K: Kind> Table<K> {
     }
 
     /// Keeps what `changed` made of the observation of `of`, at `rev`, and returns what clients are to be told of it,
-    /// which is nothing for a kind sent nowhere, and of the record made from it for a client of a version from before
-    /// it, if any is, as [`Kind::old_record`] says.
-    pub(super) fn change(
-        &mut self,
-        of: &K::Of,
-        changed: Changed<K::Value>,
-        rev: Rev,
-    ) -> (Option<ObservationNotice>, Option<RecordNotice>) {
+    /// which is nothing for a kind sent nowhere.
+    pub(super) fn change(&mut self, of: &K::Of, changed: Changed<K::Value>, rev: Rev) -> Option<ObservationNotice> {
         match changed {
             Changed::Says(said) => {
                 let observation = K::observation(of, said.observed(), rev);
-                let old_record = K::old_record(of, said.observed(), said.read_at_ms, rev);
                 self.kept.insert(of.clone(), Kept { said, rev });
-                (observation.map(ObservationNotice::Copy), old_record.map(RecordNotice::Copy))
+                observation.map(ObservationNotice::Copy)
             }
             Changed::Gone => {
                 self.kept.remove(of);
-                let removed = K::key(of).map(|observation| ObservationNotice::Removed { observation, rev });
-                (removed, K::old_record_key(of).map(|record| RecordNotice::Removed { record, rev }))
+                K::key(of).map(|observation| ObservationNotice::Removed { observation, rev })
             }
         }
     }
@@ -339,12 +331,12 @@ impl Observations {
         K::table(&mut self.tables.lock()).kept.get(of).map(|kept| kept.said.read_at_ms)
     }
 
-    /// Keeps that the observation of kind `K` of `of` was read at `read_at_ms` and found `value`, as of then, under no
-    /// revision, telling nobody, for a test of what reads it that has no hub to keep it, as one of
-    /// `crate::github_logins`'s.
+    /// Keeps that the observation of kind `K` of `of` was read at `read_at_ms` and found `value`, as of then, under the
+    /// first revision, as if kept before anything else, telling nobody, for a test of what reads it that has no hub to
+    /// keep it, as one of `crate::github_logins`'s, or that sets up a hub before it's served.
     #[cfg(test)]
     pub(crate) fn keep_as_read<K: Kind>(&self, of: K::Of, value: K::Value, read_at_ms: i64) {
-        K::table(&mut self.tables.lock()).keep_loaded(of, value, read_at_ms, Rev::default());
+        K::table(&mut self.tables.lock()).keep_loaded(of, value, read_at_ms, Rev::new(1));
     }
 
     /// Forgets the observation of kind `K` of `of`, telling nobody, for a test of what reads it that has no hub, as

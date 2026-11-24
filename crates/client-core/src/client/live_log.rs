@@ -91,7 +91,6 @@ impl Source for LiveSource {
             SubscriptionItem::Listed(_)
             | SubscriptionItem::Notice(_)
             | SubscriptionItem::Terminal(_)
-            | SubscriptionItem::Github(_)
             | SubscriptionItem::TerminalPicture(_) => {
                 return Ok(false);
             }

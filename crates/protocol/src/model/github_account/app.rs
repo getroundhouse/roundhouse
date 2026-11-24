@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use super::super::{GithubAppSlug, Rev};
-use super::{GithubAppId, GithubInstallationId, GithubUser};
+use super::super::Rev;
+use super::{GithubAppId, GithubInstallationId, GithubUserNumber};
 
 /// An app of your own: a GitHub App the person made under their own GitHub account, or an organization's, through
 /// GitHub's manifest flow, whose private key the hub holds, as a record of its own, so every client shows the same of
@@ -10,37 +10,16 @@ use super::{GithubAppId, GithubInstallationId, GithubUser};
 /// says. It's private, as it's made, so only its owner can install it, and it has at most one installation, on its
 /// owner: the person makes one for each account or organization it's for. An app made public on GitHub later could
 /// have more, which the record takes as it is, though the hub connects only its owner's. The key is in a file of the
-/// hub's, and never on a record. *Unconfirmed:* an app as a record of its own, apart from its installations' accounts.
+/// hub's, and never on a record. What GitHub says of it, and its bot, are the observations `GithubAppSaid` and
+/// `GithubAppBot`. *Unconfirmed:* an app as a record of its own, apart from its installations' accounts.
 ///
 /// Removing it has the hub forget the key and every installation's token, and removes its record, as
 /// `HubNotice::Removed` says. The app stays on GitHub, installed where it was, until the person deletes it there.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubApp {
     pub id: GithubAppId,
-    /// What GitHub calls it in addresses, which it's installed from, at `https://github.com/apps/{slug}`. Empty where
-    /// it's left out, as this, the name and the owner each may be once no version a hub speaks reads them here, since
-    /// an observation says them.
-    #[serde(default = "no_slug")]
-    pub slug: GithubAppSlug,
-    /// What GitHub shows it as, as the person named it.
-    #[serde(default)]
-    pub name: String,
-    /// The user or organization it's under, as GitHub made it, which is the one it can be installed on. Left out, it's
-    /// [`GithubUser::nobody`].
-    #[serde(default = "GithubUser::nobody")]
-    pub owner: GithubUser,
-    /// Its bot, `{slug}[bot]`, which acts on GitHub through its installations, and which commits made through it are
-    /// by. `None` until the hub has asked GitHub its number, as it does as the app is made, and again each time it
-    /// looks for the app's installations until GitHub has said.
-    #[serde(default)]
-    pub bot: Option<GithubUser>,
     #[serde(default)]
     pub rev: Rev,
-}
-
-/// The slug of a [`GithubApp`] read with none.
-fn no_slug() -> GithubAppSlug {
-    GithubAppSlug::from("")
 }
 
 /// Where an app of your own is installed, as a GitHub account's record says of one that's an installation of it. Each
@@ -50,6 +29,7 @@ fn no_slug() -> GithubAppSlug {
 pub struct GithubInstallation {
     pub app: GithubAppId,
     pub id: GithubInstallationId,
-    /// The user or organization it's installed on, as GitHub numbers and names it.
-    pub on: GithubUser,
+    /// The user or organization it's installed on, by GitHub's number for it. What GitHub calls it is the observation
+    /// `InstalledOn`.
+    pub on: GithubUserNumber,
 }

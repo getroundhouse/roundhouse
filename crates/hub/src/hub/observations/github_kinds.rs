@@ -3,8 +3,7 @@
 //! its installations is.
 
 use protocol::model::{
-    GithubAccountId, GithubAppId, GithubReach, GithubUser, Observation, ObservationKey, Observed, Reach, Record,
-    RecordKey, RepoId, Rev,
+    GithubAccountId, GithubAppId, GithubUser, Observation, ObservationKey, Observed, Reach, RepoId, Rev,
 };
 
 use super::kept::Table;
@@ -12,8 +11,7 @@ use super::kinds::{Form, Kind};
 use super::tables::Tables;
 
 /// Whether the default GitHub account can push to a repository's repository on GitHub, as GitHub last answered the
-/// hub's check, or as the hub says without asking, sent at the hub's level. A client of a version from before it reads
-/// it as the record `GithubReach`, made from it.
+/// hub's check, or as the hub says without asking, sent at the hub's level.
 pub(crate) struct RepositoryReach;
 
 impl Kind for RepositoryReach {
@@ -32,28 +30,11 @@ impl Kind for RepositoryReach {
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.repository_reach
     }
-
-    /// GitHub's answer is as of when it was read, and what the hub says without asking it has no time. One that isn't
-    /// current is from before this run's checks, as one the cache file kept, which the record calls stale.
-    /// *Unconfirmed:* `answered_at_ms` only of the read that found what it says, not of each read since.
-    fn old_record(repo: &RepoId, said: Observed<Reach>, read_at_ms: i64, rev: Rev) -> Option<Record> {
-        let (reach, stale) = match said {
-            Observed::Current { value } => (value, false),
-            Observed::AsOf { value, .. } => (value, true),
-            Observed::NotKnown | Observed::Unknown => return None,
-        };
-        let answered_at_ms = reach.answered_for().is_some().then_some(read_at_ms);
-        Some(Record::GithubReach(GithubReach { repo: repo.clone(), reach, answered_at_ms, stale, rev }))
-    }
-
-    fn old_record_key(repo: &RepoId) -> Option<RecordKey> {
-        Some(RecordKey::GithubReach { repo: repo.clone() })
-    }
 }
 
 /// What GitHub calls a GitHub account's user now, as the hub last asked GitHub, sent at the hub's level: as the account
 /// is connected, and again each day, or for an app's installation, whose user is the app's bot, as its app's record
-/// says. A client of a version from before it reads it on the account's record.
+/// says.
 pub(crate) struct GithubUsername;
 
 impl Kind for GithubUsername {
@@ -72,15 +53,10 @@ impl Kind for GithubUsername {
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.github_username
     }
-
-    fn old_form_on(account: &GithubAccountId) -> Option<RecordKey> {
-        Some(RecordKey::GithubAccount { id: account.clone() })
-    }
 }
 
 /// What GitHub says of an app of your own, its slug, name and owner, as the app last asked GitHub with its key, or as
-/// GitHub said as it made it, sent at the hub's level. A client of a version from before it reads it on the app's
-/// record.
+/// GitHub said as it made it, sent at the hub's level.
 pub(crate) struct GithubAppSaid;
 
 impl Kind for GithubAppSaid {
@@ -99,15 +75,10 @@ impl Kind for GithubAppSaid {
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.github_app_said
     }
-
-    fn old_form_on(app: &GithubAppId) -> Option<RecordKey> {
-        Some(RecordKey::GithubApp { id: *app })
-    }
 }
 
 /// An app of your own's bot, as GitHub said it, asked as nobody by the app's slug, sent at the hub's level. Apart from
-/// [`GithubAppSaid`], since GitHub says it in another call, as of another time. A client of a version from before it
-/// reads it on the app's record.
+/// [`GithubAppSaid`], since GitHub says it in another call, as of another time.
 pub(crate) struct GithubAppBot;
 
 impl Kind for GithubAppBot {
@@ -126,15 +97,10 @@ impl Kind for GithubAppBot {
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.github_app_bot
     }
-
-    fn old_form_on(app: &GithubAppId) -> Option<RecordKey> {
-        Some(RecordKey::GithubApp { id: *app })
-    }
 }
 
 /// What GitHub calls the user or organization an app's installation, a GitHub account, is on, as the hub last listed
-/// the app's installations, sent at the hub's level. A client of a version from before it reads it on the account's
-/// record.
+/// the app's installations, sent at the hub's level.
 pub(crate) struct InstalledOn;
 
 impl Kind for InstalledOn {
@@ -152,10 +118,6 @@ impl Kind for InstalledOn {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.installed_on
-    }
-
-    fn old_form_on(account: &GithubAccountId) -> Option<RecordKey> {
-        Some(RecordKey::GithubAccount { id: account.clone() })
     }
 }
 

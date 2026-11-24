@@ -25,7 +25,7 @@ fn connecting_disconnecting_and_choosing_each_move_their_records_revision() {
     let cleared = store.clear_github_login(&id).unwrap().unwrap();
     let machines_own = store.set_github_default(None).unwrap();
 
-    assert_eq!(connected.account.user, GithubUser { id: GithubUserId::new(7), name: "#7".into() });
+    assert_eq!(connected.account.user.id, GithubUserId::new(7));
     let made_default = connected.settings.unwrap();
     assert!(made_default.rev > at_first, "{} isn't past {at_first}", made_default.rev);
     assert!(cleared.rev > connected.account.rev, "{} isn't past {}", cleared.rev, connected.account.rev);

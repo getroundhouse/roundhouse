@@ -3,9 +3,7 @@
 use std::sync::Arc;
 
 use protocol::client::{ApiError, HubNotice};
-use protocol::model::{
-    Account, AccountId, AgentAccount, AgentKind, SessionAccount, SessionId, UsageLimit, WorkspaceId,
-};
+use protocol::model::{AccountId, AgentAccount, AgentKind, SessionId, UsageLimit, WorkspaceId};
 use protocol::worker::AccountFor;
 use tracing::error;
 
@@ -28,37 +26,6 @@ impl Hub {
     ) -> Result<AgentAccount, ApiError> {
         let worktree = self.ready_worktree(workspace_id).await?;
         worktree.link().call(AccountFor { agent, login: None }).await
-    }
-
-    /// The account the session's agent runs under, and what's been heard of that account's limits, by any agent
-    /// under it. For clients from before accounts were records, which ask for it. An account whose login the hub gave
-    /// the agent is answered from the hub's own record, since the worker isn't told whose a token is.
-    pub(crate) async fn session_account(self: &Arc<Self>, id: SessionId) -> Result<SessionAccount, ApiError> {
-        let session = self.session_get(id).await?;
-        if let Some(held) = self.held_login_account(session.account).await? {
-            return Ok(held);
-        }
-        let account = self.account_of(&session.workspace_id, session.agent).await?;
-        let limits = match account.logged_in_as() {
-            Some(id) => self.observations.value_of::<AccountLimits>(id).unwrap_or_default(),
-            // A login that can't be told from another has no limits kept for it.
-            None => Vec::new(),
-        };
-        Ok(SessionAccount { account, limits })
-    }
-
-    /// The account `id` as a worker would say it, when it's one the hub chose the ID of for a login it was given,
-    /// with what's been heard of its limits.
-    async fn held_login_account(&self, id: Option<AccountId>) -> Result<Option<SessionAccount>, ApiError> {
-        let Some(id) = id else { return Ok(None) };
-        let Some(mut record) = self.blocking(move |store| store.account(&id)).await? else { return Ok(None) };
-        if record.login_agent.is_none() {
-            return Ok(None);
-        }
-        self.observations.fill(&mut record);
-        let Account { id, model_provider, plan, login, email, limits, .. } = record;
-        let account = AgentAccount { id: Some(id), logged_in: true, model_provider, plan, login, email };
-        Ok(Some(SessionAccount { account, limits }))
     }
 
     /// Keeps what an agent under `account` heard of its limits at `heard_at_ms`, which holds every model's own week the

@@ -78,39 +78,6 @@ fn a_level_or_a_place_from_a_newer_client_reads_as_unknown() {
     assert_eq!(starts, [start(1, Follow::Unknown), start(2, unknown_place)]);
 }
 
-/// A start as a hub from before `github_observed` reads one.
-#[derive(serde::Deserialize, Debug, PartialEq)]
-struct StartBefore {
-    subscription_id: u64,
-    #[serde(flatten)]
-    follow: Follow,
-}
-
-/// A start that reads what GitHub says as observations says so, and one that doesn't, as every client from before it,
-/// says nothing. A hub from before it reads the first as the start it was before.
-#[test]
-fn a_start_that_reads_github_as_observations_says_so() {
-    let reference =
-        ReferenceAsk { repository: GithubRepositoryName::named("o/r"), number: IssueNumber::try_from(41).unwrap() };
-    let observed =
-        Subscription { github_observed: true, ..start(3, Follow::Reference { reference: reference.clone() }) };
-    let line = concat!(
-        r#"{"method":"subscribe","start":[{"subscription_id":3,"level":"reference","#,
-        r#""reference":{"repository":"o/r","number":41},"github_observed":true}]}"#
-    );
-
-    keeps_its_form(&ClientRequest::Subscribe(Subscribe { stop: Vec::new(), start: vec![observed] }), line);
-
-    let before: StartBefore = serde_json::from_str(
-        r#"{"subscription_id":3,"level":"reference","reference":{"repository":"o/r","number":41},"github_observed":true}"#,
-    )
-    .unwrap();
-    assert_eq!(before, StartBefore { subscription_id: 3, follow: Follow::Reference { reference } });
-    let hub: StartBefore =
-        serde_json::from_str(r#"{"subscription_id":1,"level":"hub","github_observed":true}"#).unwrap();
-    assert_eq!(hub.follow, Follow::Hub);
-}
-
 #[test]
 fn the_reply_says_which_starts_were_refused() {
     let refused = Refused { subscription_id: 4, error: ApiError::new(ErrorCode::NotFound, "no workspace w") };
@@ -139,7 +106,7 @@ fn where_each_level_stands_keeps_its_form() {
         concat!(
             r#"{"frame":"listed","subscription_id":3,"listed":{"level":"hub","repos":[],"workspaces":[],"sessions":[],"#,
             r#""comments":[],"hub_settings":null,"accounts":[],"new_workspace_draft":null,"github_accounts":[],"#,
-            r#""github_sign_ins":[],"found_github_logins":[],"github_apps":[],"github_reach":[],"rev":9}}"#
+            r#""github_sign_ins":[],"found_github_logins":[],"github_apps":[],"rev":9}}"#
         ),
     );
     keeps_its_form(

@@ -6,14 +6,13 @@ use std::sync::Arc;
 use protocol::client::ApiError;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::LogFrom;
-use protocol::model::{Place, Seq, SessionId};
+use protocol::model::{Level, Place, Seq, SessionId};
 use tokio::sync::mpsc;
 
 use super::notices::{forward, send_listed};
 use super::starting::{Feeding, unknown};
 use crate::hub::Hub;
 use crate::server::pump::{Following, pump};
-use crate::server::sends::Sends;
 use crate::server::{Closer, Outgoing};
 
 /// What feeds a subscription at session `id`'s level, from `from`, once the hub has the session and its records, so
@@ -22,7 +21,6 @@ pub(super) async fn feeding(
     hub: &Arc<Hub>,
     id: SessionId,
     from: Option<LogFrom>,
-    sends: Sends,
     subscription_id: u64,
     frames: mpsc::Sender<Outgoing>,
     closer: Closer,
@@ -37,17 +35,18 @@ pub(super) async fn feeding(
     };
     let session = hub.live_session(&id).await?;
     // Before the list, so nothing that changes after it is missed.
-    let feed = hub.subscribe_fed();
+    let feed = hub.subscribe_feed();
     let records = hub.session_records(id.clone()).await?;
     let live = session.subscribe();
     let hub = hub.clone();
     Ok(Box::pin(async move {
         // First, so a chat has them before the events that draw them.
-        if !send_listed(&frames, &sends, subscription_id, Listed::Session(records)).await {
+        if !send_listed(&frames, subscription_id, Listed::Session(records)).await {
             return;
         }
         let list = || async { Ok(Listed::Session(hub.session_records(id.clone()).await?)) };
-        let records = forward(feed, &sends, subscription_id, &frames, &closer, list, |_| {});
+        let level = Level::Session { id: id.clone() };
+        let records = forward(feed, &level, subscription_id, &frames, &closer, list);
         let log = pump(hub.clone(), session, id.clone(), subscription_id, following, live, frames.clone());
         // The log's ends once its session has gone, and both once the connection has.
         tokio::select! {

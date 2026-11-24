@@ -24,12 +24,11 @@ pub(super) const CHECKED_AGAIN_EVERY: Duration = Duration::from_mins(30);
 
 impl Hub {
     /// Checks whether the default GitHub account can push to each repository's repository on GitHub, and keeps each
-    /// answer as the repository's observation, `RepositoryReach`, which a client of a version from before it reads as
-    /// the record `GithubReach`, until the hub stops: as it starts, as a
-    /// worker reads a repository's address, as `Hub::read_repo_urls` says, for one whose address then names another
-    /// repository on GitHub, as what workers give their processes for github.com changes, which it does as the
-    /// default, its login or its commit identity changes, and every [`CHECKED_AGAIN_EVERY`]. Once a repository and login, not a workspace, and each repository's checks side by
-    /// side, each within GitHub's time limit, never under the logins' lock.
+    /// answer as the repository's observation, `RepositoryReach`, until the hub stops: as it starts, as a worker reads
+    /// a repository's address, as `Hub::read_repo_urls` says, for one whose address then names another repository on
+    /// GitHub, as what workers give their processes for github.com changes, which it does as the default, its login or
+    /// its commit identity changes, and every [`CHECKED_AGAIN_EVERY`]. Once a repository and login, not a workspace,
+    /// and each repository's checks side by side, each within GitHub's time limit, never under the logins' lock.
     ///
     /// Which repository on GitHub a repository is, is the one its record's address names, as [`RepoUrl::on_github`]
     /// says, so one with no address, or an address elsewhere, isn't on GitHub. That's where its checkout fetches from,

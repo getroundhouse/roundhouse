@@ -1,12 +1,10 @@
-//! Every kind of observation, one of each, as the test makes them, from one exhaustive match, with where a client of
-//! version 5 is sent each, and what a client of version 4 is sent in its place.
+//! Every kind of observation, one of each, as the test makes them, from one exhaustive match, with where a client is
+//! sent each.
 
 use protocol::model::{
-    AgentKind, GithubAccountId, GithubAppId, GithubRepositoryName, IssueNumber, ModelListKey, ObservationKey, Record,
-    RecordKey, ReferenceAsk, SessionId, WorkspaceId,
+    AgentKind, GithubAccountId, GithubAppId, GithubRepositoryName, IssueNumber, ModelListKey, ObservationKey,
+    ReferenceAsk, SessionId, WorkspaceId,
 };
-
-use super::old_forms;
 
 /// The subscriptions' IDs: one that follows the hub, the workspace [`v`], the session `s`, and [`chip`].
 pub(super) const HUB: u64 = 1;
@@ -61,7 +59,7 @@ pub(super) fn every_kind() -> Vec<ObservationKey> {
 }
 
 /// The kind after `kind`, in a match that's exhaustive, so a kind added fails to compile here until the test makes one
-/// of it, as it does in `making` and [`sent`].
+/// of it, as it does in `making` and [`sent_at`].
 fn after(kind: &ObservationKey) -> Option<ObservationKey> {
     use ObservationKey as K;
     Some(match kind {
@@ -89,78 +87,30 @@ fn after(kind: &ObservationKey) -> Option<ObservationKey> {
     })
 }
 
-/// Where each client is sent a kind.
-pub(super) struct Sent {
-    /// The subscription a client of version 5 is sent it on, at its level, or `None` for a kind sent to no client.
-    pub(super) at: Option<u64>,
-    /// What a client of version 4 is sent in its place, on a start that doesn't say it reads GitHub as observations.
-    pub(super) before: Before,
-}
-
-/// What a client of version 4 is sent of a kind.
-pub(super) enum Before {
-    /// The observation itself, at the same level, since no client reads it in another form.
-    Itself,
-    /// `HubFrame::Github`, as GitHub's, on subscription `on`: the hub's, for a workspace's own pull request, and the
-    /// chip's, for its issue.
-    GithubUpdate { on: u64 },
-    /// A field of `record`, or the whole of it, made from the observation, which `says` reads, as each copy of it says
-    /// the round the test made it in, as `making` writes it.
-    Record { record: RecordKey, says: fn(&Record) -> Option<String> },
-}
-
-/// Where each client is sent `kind`.
-pub(super) fn sent(kind: &ObservationKey) -> Sent {
+/// The subscription a client is sent `kind` on, at its level, or `None` for a kind sent to no client.
+pub(super) fn sent_at(kind: &ObservationKey) -> Option<u64> {
     use ObservationKey as K;
-    let (at, before) = match kind {
-        K::WorkspaceLines { .. } => (HUB, Before::Itself),
-        K::WorkspaceChanges { .. } => (WORKSPACE, Before::Itself),
-        K::WorkspacePullRequest { .. } => (HUB, Before::GithubUpdate { on: HUB }),
-        K::WorkspacePullRequestDetail { .. } | K::WorkspaceRepositoryUnseen { .. } => {
-            (WORKSPACE, Before::GithubUpdate { on: HUB })
-        }
-        K::Reference { .. } => (CHIP, Before::GithubUpdate { on: CHIP }),
-        K::WorkspaceBranches { .. } => (WORKSPACE, on_workspace(old_forms::branches)),
-        K::WorkspaceWorkerBuild { .. } => (HUB, on_workspace(old_forms::worker_build)),
-        K::RepositoryReach { repo } => {
-            (HUB, Before::Record { record: RecordKey::GithubReach { repo: repo.clone() }, says: old_forms::reach })
-        }
-        K::GithubUsername { .. } => (HUB, on_installation(old_forms::username)),
-        K::InstalledOn { .. } => (HUB, on_installation(old_forms::installed_on)),
-        K::GithubAppSaid { .. } => (HUB, on_app(old_forms::app_name)),
-        K::GithubAppBot { .. } => (HUB, on_app(old_forms::app_bot)),
-        K::ModelCatalog { list } => {
-            (HUB, Before::Record { record: RecordKey::ModelList(list.clone()), says: old_forms::catalog })
-        }
-        K::AccountIdentity { account } => {
-            (HUB, Before::Record { record: RecordKey::Account { id: account.clone() }, says: old_forms::plan })
-        }
-        K::AccountLimits { account } => {
-            (HUB, Before::Record { record: RecordKey::Account { id: account.clone() }, says: old_forms::limits })
-        }
-        K::SessionContext { .. } => (SESSION, on_session(old_forms::context)),
-        K::SessionTodos { .. } => (SESSION, on_session(old_forms::todos)),
-        K::SessionCache { .. } => (HUB, on_session(old_forms::prompt_cache)),
-        K::WaitRead { .. } => (SESSION, on_session(old_forms::wait_read)),
-        K::ReleaseOffered => (HUB, Before::Record { record: RecordKey::HubUpdate, says: old_forms::release }),
+    Some(match kind {
+        K::WorkspaceLines { .. }
+        | K::WorkspacePullRequest { .. }
+        | K::WorkspaceWorkerBuild { .. }
+        | K::RepositoryReach { .. }
+        | K::GithubUsername { .. }
+        | K::InstalledOn { .. }
+        | K::GithubAppSaid { .. }
+        | K::GithubAppBot { .. }
+        | K::ModelCatalog { .. }
+        | K::AccountIdentity { .. }
+        | K::AccountLimits { .. }
+        | K::SessionCache { .. }
+        | K::ReleaseOffered => HUB,
+        K::WorkspaceChanges { .. }
+        | K::WorkspacePullRequestDetail { .. }
+        | K::WorkspaceRepositoryUnseen { .. }
+        | K::WorkspaceBranches { .. } => WORKSPACE,
+        K::Reference { .. } => CHIP,
+        K::SessionContext { .. } | K::SessionTodos { .. } | K::WaitRead { .. } => SESSION,
         // Of a kind this build doesn't know, which the hub never makes.
-        K::Unknown => return Sent { at: None, before: Before::Itself },
-    };
-    Sent { at: Some(at), before }
-}
-
-fn on_workspace(says: fn(&Record) -> Option<String>) -> Before {
-    Before::Record { record: RecordKey::Workspace { id: v() }, says }
-}
-
-fn on_installation(says: fn(&Record) -> Option<String>) -> Before {
-    Before::Record { record: RecordKey::GithubAccount { id: installation() }, says }
-}
-
-fn on_app(says: fn(&Record) -> Option<String>) -> Before {
-    Before::Record { record: RecordKey::GithubApp { id: APP }, says }
-}
-
-fn on_session(says: fn(&Record) -> Option<String>) -> Before {
-    Before::Record { record: RecordKey::Session { id: s() }, says }
+        K::Unknown => return None,
+    })
 }
