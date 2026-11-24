@@ -93,7 +93,7 @@ pub(in super::super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Worksp
         archived_at_ms: row.at(c.archived_at_ms)?,
         setup: json_at(row, c.setup)?.unwrap_or(SetupStatus::Unknown),
         port_base: row.at(c.port_base)?,
-        title: row.at::<Option<String>>(c.title)?.as_deref().and_then(Title::tidied),
+        title: row.at::<Option<String>>(c.title)?.map(Title::stored),
         title_source: text_at(row, c.title_source)?,
         // One that no longer reads, from a build whose idea of a link this one doesn't share, is looked for again.
         pull_request_link: json_at(row, c.pull_request_link)?,

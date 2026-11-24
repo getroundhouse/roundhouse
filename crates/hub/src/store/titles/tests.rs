@@ -1,8 +1,9 @@
 use protocol::model::Workspace;
 
 use super::*;
-use crate::store::WorkspacePlacement;
+use crate::store::schema::{self, BEFORE_TITLES_TIDIED};
 use crate::store::tests::{idle_session, store_with_session, workspace_w};
+use crate::store::{ByColumn, Columns, WorkspacePlacement, columns};
 
 fn title(text: &str) -> Title {
     Title::typed(text).unwrap()
@@ -128,20 +129,73 @@ fn a_regenerated_title_leaves_the_same_words_typed_by_hand_since() {
     assert_eq!(kept, (Some("Fix login redirect"), TitleSource::ByHand));
 }
 
-/// A record reads its title tidied, so that's the title a new one is asked over, however it's stored.
+columns! {
+    /// What [`titles_stored_before_they_were_tidied_are_tidied_once`] compares of a row: its title, byte for byte,
+    /// and its revision.
+    struct StoredTitle { kind = "typeof(title)", bytes = "quote(CAST(title AS BLOB))", rev }
+}
+
+/// A title an older build stored as it found it is stored as it reads, and one with nothing left once tidied is none.
+/// One already tidy, and one that isn't text, which no build wrote, are left as they were, revision and all. A title
+/// asked for over a tidied one replaces it.
 #[test]
-fn a_regenerated_title_replaces_one_stored_before_titles_were_tidied() {
+fn titles_stored_before_they_were_tidied_are_tidied_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let (path, backups) = (dir.path().join("hub.db"), dir.path().join("backups"));
+    let mode = serde_json::to_string(&idle_session(1).session.mode).unwrap();
+    let workspace =
+        "INSERT INTO workspaces (id, repo_id, name, branch, status, provider, instance_id, created_at_ms, title)";
+    let session = "INSERT INTO sessions (id, workspace_id, agent, model, mode, effort, status, created_at_ms,
+        updated_at_ms, title)";
+    let rows = format!(
+        "INSERT INTO repos (id, name, path, created_at_ms) VALUES ('r', 'repo', '/repo', 0);
+         {workspace} VALUES ('w', 'r', 'alder', 'alder', 'ready', 'local', 'w', 0, ' Login\tbug\u{202E} '),
+             ('tidy', 'r', 'birch', 'birch', 'ready', 'local', 'tidy', 0, 'Fix the login'),
+             ('blank', 'r', 'cedar', 'cedar', 'ready', 'local', 'blank', 0, ' \u{200B}\n'),
+             ('blob', 'r', 'elm', 'elm', 'ready', 'local', 'blob', 0, X'4c6f67696e'),
+             ('bytes', 'r', 'fir', 'fir', 'ready', 'local', 'bytes', 0, CAST(X'4c6f67696eff' AS TEXT));
+         UPDATE workspaces SET title_source = 'by_hand' WHERE id = 'w';
+         {session} VALUES ('s', 'w', 'claude', 'sonnet', '{mode}', 'high', 'idle', 0, 0, 'Fix the\n  login'),
+             ('t', 'w', 'claude', 'sonnet', '{mode}', 'high', 'idle', 0, 0, 'Fix the login');"
+    );
+    let left_alone = [("workspaces", "tidy"), ("workspaces", "blob"), ("workspaces", "bytes"), ("sessions", "t")];
+    let stored = |conn: &rusqlite::Connection, (table, id): (&str, &str)| -> (String, String, i64) {
+        let c = StoredTitle::at(0);
+        let read = format!("SELECT {} FROM {table} WHERE id = ?", StoredTitle::LIST);
+        conn.query_row(&read, [id], |row| Ok((row.at(c.kind)?, row.at(c.bytes)?, row.at(c.rev)?))).unwrap()
+    };
+    let as_left = {
+        let mut conn = schema::open_connection(&path).unwrap();
+        schema::migrate_to(&mut conn, &backups, BEFORE_TITLES_TIDIED).unwrap();
+        conn.execute_batch(&rows).unwrap();
+        left_alone.map(|row| stored(&conn, row))
+    };
+
+    let store = Store::open(&path, &backups).unwrap();
+
+    let workspace = store.get_workspace(&"w".into()).unwrap();
+    assert_eq!((workspace.title.as_deref(), workspace.title_source), (Some("Login bug"), TitleSource::ByHand));
+    assert_eq!(store.get_workspace(&"blank".into()).unwrap().title, None);
+    assert_eq!(store.get_session(&"s".into()).unwrap().session.title.as_deref(), Some("Fix the login"));
+    let conn = lock(&store.writer);
+    assert_eq!(stored(&conn, ("workspaces", "blank")).1, "NULL");
+    assert_eq!(left_alone.map(|row| stored(&conn, row)), as_left);
+    drop(conn);
+    let over = regenerated(workspace.title.as_ref(), TitleSource::ByHand);
+    assert!(store.retitle_workspace(&"w".into(), &title("Fix login redirect"), over).unwrap().changed);
+}
+
+/// A title reads as it's stored, with no tidying, so one a database changed by hand holds untidy reads as it is, for a
+/// client to tidy as it reads it off the wire.
+#[test]
+fn a_title_reads_as_its_stored() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let untidy = "UPDATE workspaces SET title = 'Login  bug ', title_source = 'by_hand' WHERE id = 'w'";
-    lock(&store.writer).execute(untidy, []).unwrap();
-    let read = store.get_workspace(&"w".into()).unwrap().title.unwrap();
+    lock(&store.writer).execute("UPDATE workspaces SET title = ' Login  bug' WHERE id = 'w'", []).unwrap();
 
-    let over = regenerated(Some(&read), TitleSource::ByHand);
-    let new = store.retitle_workspace(&"w".into(), &title("Fix login redirect"), over).unwrap();
+    let read = store.get_workspace(&"w".into()).unwrap();
 
-    assert_eq!(read.as_str(), "Login bug");
-    assert!(new.changed);
+    assert_eq!(read.title.as_deref(), Some(" Login  bug"));
 }
 
 #[test]

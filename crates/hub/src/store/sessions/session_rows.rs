@@ -63,7 +63,7 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             last_seq: seq_of(row, c.last_seq)?,
             created_at_ms: row.at(c.created_at_ms)?,
             updated_at_ms: row.at(c.updated_at_ms)?,
-            title: row.at::<Option<String>>(c.title)?.as_deref().and_then(Title::tidied),
+            title: row.at::<Option<String>>(c.title)?.map(Title::stored),
             closed_at_ms: row.at(c.closed_at_ms)?,
             reply_seq: seq_of(row, c.reply_seq)?,
             // An outcome this build doesn't know is `Unknown`, as any is.

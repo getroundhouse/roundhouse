@@ -55,3 +55,6 @@ pub(crate) const BEFORE_BRANCHES_OBSERVED: usize = 101;
 
 /// How many migrations there were before which build each workspace's worker is left the database, as an observation.
 pub(crate) const BEFORE_WORKER_BUILD_OBSERVED: usize = 102;
+
+/// How many migrations there were before each workspace's and chat's title was stored as it reads.
+pub(crate) const BEFORE_TITLES_TIDIED: usize = 105;

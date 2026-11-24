@@ -2,8 +2,8 @@ use crate::short_text::{one_line, start_of};
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// A title: one line of single spaces, never empty, with no control characters and none that hide or reorder text,
-/// so a sidebar row shows it as it reads. Every way to make one tidies the text first, including reading one back,
-/// so a title from before these rules still holds to them.
+/// so a sidebar row shows it as it reads. Every way to make one tidies the text first, including reading one sent by
+/// another process, but for the hub's reading of one it stored, which a title wrote.
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct Title(pub(super) String);
@@ -39,6 +39,15 @@ impl Title {
     pub fn tidied(text: &str) -> Option<Self> {
         let words = one_line(text, usize::MAX);
         (!words.is_empty()).then_some(Self(words))
+    }
+
+    /// A title as the hub stored it, which is as one was made, or as the migration that tidied stored titles left
+    /// it, so it isn't tidied again. Reading it by today's rule would make one stored under an older rule unreadable,
+    /// or change it, whenever the rule changes. One a database changed by hand holds untidy reads as it's stored, and a
+    /// client tidies it as it reads it off the wire, in `Title::deserialize_optional`. Only the hub's store calls
+    /// this.
+    pub fn stored(text: String) -> Self {
+        Self(text)
     }
 
     pub fn as_str(&self) -> &str {

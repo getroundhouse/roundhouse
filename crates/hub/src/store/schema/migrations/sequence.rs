@@ -82,4 +82,7 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     // When each wait's pull request last left the merge queue, and last had changes asked for, which nothing used, in
     // `waits`.
     Sql(super::waits::SEEN_DROPPED),
+    // Each workspace's and chat's title as it reads, so the hub reads one as it's stored, in `workspaces` and
+    // `sessions`.
+    Rust(super::titles::tidied),
 ];
