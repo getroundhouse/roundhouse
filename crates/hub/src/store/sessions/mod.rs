@@ -14,4 +14,4 @@ mod session_login;
 pub(crate) use session_login::SessionLogin;
 pub(super) use session_login::{on_the_hubs, session_login_of};
 mod session_rows;
-pub(super) use session_rows::{SessionColumns, draft_column, forget_cache_unless_under, session_from_row};
+pub(super) use session_rows::{SessionColumns, draft_column, forgets_cache, session_from_row};

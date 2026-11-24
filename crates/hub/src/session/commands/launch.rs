@@ -233,12 +233,9 @@ impl LiveSession {
         let (id, filed) = (self.id.clone(), account.clone());
         let placed = *placed;
         let recorded = hub.blocking(move |store| store.record_run_login(&id, asked, &filed, placed)).await?;
-        {
-            let mut state = self.state.lock();
-            state.login = recorded.on;
-            if recorded.forgot_cache {
-                state.prompt_cache = None;
-            }
+        self.state.lock().login = recorded.on;
+        if recorded.forgot_cache {
+            self.cache_forgotten().await;
         }
         if let Some(record) = recorded.account_changed {
             hub.notify(HubNotice::Account(record));

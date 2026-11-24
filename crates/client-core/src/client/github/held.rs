@@ -63,6 +63,7 @@ impl View {
             | ObservationKey::AccountLimits { .. }
             | ObservationKey::SessionContext { .. }
             | ObservationKey::SessionTodos { .. }
+            | ObservationKey::SessionCache { .. }
             | ObservationKey::Unknown => false,
         }
     }
@@ -156,6 +157,7 @@ impl GithubHeld {
                 | ObservationKey::AccountLimits { .. }
                 | ObservationKey::SessionContext { .. }
                 | ObservationKey::SessionTodos { .. }
+                | ObservationKey::SessionCache { .. }
                 | ObservationKey::Unknown => {}
             }
         }
@@ -236,6 +238,7 @@ impl GithubHeld {
             | ObservationKey::AccountLimits { .. }
             | ObservationKey::SessionContext { .. }
             | ObservationKey::SessionTodos { .. }
+            | ObservationKey::SessionCache { .. }
             | ObservationKey::Unknown => false,
         }
     }

@@ -55,6 +55,7 @@ impl ObservationsListed {
                 | Observation::AccountLimits { .. }
                 | Observation::SessionContext { .. }
                 | Observation::SessionTodos { .. }
+                | Observation::SessionCache { .. }
                 | Observation::Unknown => {}
             }
         }

@@ -5,9 +5,10 @@ use protocol::capability::output::TodoList;
 use protocol::client::listed::{Listed, ReferenceObservations, SessionRecords};
 use protocol::client::{HubFrame, HubNotice};
 use protocol::model::{
-    About, AccountIdentity, ChangeStatus, ChangeSummary, ChangedFile, ContextUsage, FileVersion, GithubRepositoryName,
-    IssueNumber, IssueSaid, IssueState, IssueSummary, LimitWindow, LineCounts, Observation, ObservationKey, Observed,
-    RecordKey, Records, ReferenceAsk, ReferenceSaid, Rev, UsageLimit,
+    About, AccountIdentity, CacheTtl, ChangeStatus, ChangeSummary, ChangedFile, ContextUsage, ConversationCache,
+    FileVersion, GithubRepositoryName, IssueNumber, IssueSaid, IssueState, IssueSummary, LimitWindow, LineCounts,
+    Observation, ObservationKey, Observed, PromptCache, RecordKey, Records, ReferenceAsk, ReferenceSaid, Rev,
+    UsageLimit,
 };
 use serde::Deserialize;
 
@@ -157,6 +158,38 @@ fn a_session_s_context_and_todos_keep_their_form_as_notices_and_in_its_list() {
             r#""proposals":[],"replies_heard":[],"observations":[{"kind":"session_todos","session_id":"s","#,
             r#""todos":{"freshness":"as_of","value":{"items":[],"note":"Nothing left"},"as_of_ms":1795230000000},"#,
             r#""rev":6}],"rev":8}}"#
+        ),
+    );
+}
+
+/// What the API's cache holds of a session's conversation, which a hub sends at its own level to a client of a version
+/// that reads it so, as a notice, and as a cache that holds none of it.
+#[test]
+fn what_a_session_s_cache_holds_keeps_its_form_as_a_notice() {
+    let held = PromptCache { used_at_ms: 1_795_230_000_000, ttl: CacheTtl::OneHour, model: None, tokens: 252_800 };
+    let cache =
+        |held| Observed::AsOf { value: ConversationCache { held, worth_telling: true }, as_of_ms: 1_795_230_000_000 };
+    let copy = |held| {
+        HubNotice::Observation(Observation::SessionCache {
+            session_id: "s".into(),
+            cache: cache(held),
+            rev: Rev::new(5),
+        })
+    };
+
+    keeps_its_form(
+        &copy(Some(held)),
+        concat!(
+            r#"{"notice":"observation","kind":"session_cache","session_id":"s","cache":{"freshness":"as_of","#,
+            r#""value":{"held":{"used_at_ms":1795230000000,"ttl":"one_hour","model":null,"tokens":252800},"#,
+            r#""worth_telling":true},"as_of_ms":1795230000000},"rev":5}"#
+        ),
+    );
+    keeps_its_form(
+        &copy(None),
+        concat!(
+            r#"{"notice":"observation","kind":"session_cache","session_id":"s","cache":{"freshness":"as_of","#,
+            r#""value":{"worth_telling":true},"as_of_ms":1795230000000},"rev":5}"#
         ),
     );
 }

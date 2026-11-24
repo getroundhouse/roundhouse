@@ -153,21 +153,12 @@ impl LiveSession {
         }
         if made.changed {
             hub.work_changed();
+            self.tell_cache_unless_working().await;
         }
         let by_the_person = appended.iter().any(|appended| appended.by_the_person);
-        // A prompt sent while the agent works changes no status, but it does change when the person was last active, and
-        // a question answered while another is open changes none either, but it takes any answer being typed to it. The
+        // A prompt sent while the agent works changes no status, but it does change when the person was last active. The
         // feed leaves out a copy whose revision didn't move, so one that took none costs only the read.
-        let answered =
-            appended.iter().any(|appended| matches!(appended.event.body, EventBody::ApprovalResolved { .. }));
-        // What the agent waits on and has yet to take are on the record too, and an event can change them with no
-        // change of status, as a prompt taken mid-turn does.
-        let waiting_changed =
-            appended.iter().any(|appended| appended.untaken.is_some() || appended.approvals.is_some());
-        let dequeued = appended.iter().any(|appended| appended.dequeued);
-        // A run's exit takes its claims off the record whatever else it changes, as when its session had moved on.
-        let claims_cleared = appended.iter().any(|appended| appended.claims_taken_off.is_some());
-        if (made.changed || dequeued || by_the_person || answered || waiting_changed || claims_cleared)
+        if (made.changed || by_the_person || changed_beside_status(&appended))
             && let Err(e) = self.announce(hub).await
         {
             error!(session = %self.id, "could not announce a change of status: {e}");
@@ -221,6 +212,20 @@ impl LiveSession {
             error!(session = %self.id, "could not record an event: {e}");
         }
     }
+}
+
+/// Whether `appended` changed the session's record beside its status. A question answered while another is open
+/// changes no status, but it takes any answer being typed to it. What the agent waits on and has yet to take are on the
+/// record too, and an event can change them with no change of status, as a prompt taken mid-turn does. A run's exit
+/// takes its claims off the record whatever else it changes, as when its session had moved on.
+fn changed_beside_status(appended: &[&Appended]) -> bool {
+    appended.iter().any(|appended| {
+        matches!(appended.event.body, EventBody::ApprovalResolved { .. })
+            || appended.untaken.is_some()
+            || appended.approvals.is_some()
+            || appended.dequeued
+            || appended.claims_taken_off.is_some()
+    })
 }
 
 /// What a commit's steps made of the session, besides its log, for [`LiveSession::after_commit`] to tell of.

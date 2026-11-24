@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{AccountIdentity, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
+use super::{AccountIdentity, ConversationCache, Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceSaid};
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
 use crate::model::{
@@ -59,6 +59,12 @@ pub enum Observation {
     /// A chat's agent's to-do list, as the agent last said, of its current run. At the session's level, and never
     /// current, as [`Observation::SessionContext`] is.
     SessionTodos { session_id: SessionId, todos: Observed<TodoList>, rev: Rev },
+    /// What the API's cache holds of a chat's conversation, and whether its context is big enough that writing it again
+    /// costs something. Sent at the hub's level, since the sidebar and Home draw the cache's clock for every chat. It
+    /// changes as the hub's record of the chat was announced when it was a field of it: as a request is made while the
+    /// agent isn't working, as a turn ends, and as something empties the cache, and not on every request. Never
+    /// current.
+    SessionCache { session_id: SessionId, cache: Observed<ConversationCache>, rev: Rev },
     #[serde(other)]
     Unknown,
 }
@@ -101,6 +107,9 @@ pub enum ObservationKey {
     SessionTodos {
         session_id: SessionId,
     },
+    SessionCache {
+        session_id: SessionId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -136,6 +145,9 @@ impl Observation {
             Observation::SessionTodos { session_id, .. } => {
                 ObservationKey::SessionTodos { session_id: session_id.clone() }
             }
+            Observation::SessionCache { session_id, .. } => {
+                ObservationKey::SessionCache { session_id: session_id.clone() }
+            }
             Observation::Unknown => ObservationKey::Unknown,
         }
     }
@@ -154,7 +166,8 @@ impl Observation {
             | Observation::AccountIdentity { rev, .. }
             | Observation::AccountLimits { rev, .. }
             | Observation::SessionContext { rev, .. }
-            | Observation::SessionTodos { rev, .. } => *rev,
+            | Observation::SessionTodos { rev, .. }
+            | Observation::SessionCache { rev, .. } => *rev,
             Observation::Unknown => Rev::default(),
         }
     }
@@ -173,7 +186,8 @@ impl ObservationKey {
             | ObservationKey::WorkspacePullRequest { .. }
             | ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
-            | ObservationKey::AccountLimits { .. } => Some(Level::Hub),
+            | ObservationKey::AccountLimits { .. }
+            | ObservationKey::SessionCache { .. } => Some(Level::Hub),
             ObservationKey::WorkspaceChanges { workspace_id }
             | ObservationKey::WorkspacePullRequestDetail { workspace_id }
             | ObservationKey::WorkspaceRepositoryUnseen { workspace_id } => {
@@ -200,7 +214,8 @@ impl ObservationKey {
             | ObservationKey::AccountIdentity { .. }
             | ObservationKey::AccountLimits { .. }
             | ObservationKey::SessionContext { .. }
-            | ObservationKey::SessionTodos { .. } => Some(ReadFrom::EveryObservation),
+            | ObservationKey::SessionTodos { .. }
+            | ObservationKey::SessionCache { .. } => Some(ReadFrom::EveryObservation),
             ObservationKey::Unknown => None,
         }
     }

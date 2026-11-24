@@ -9,6 +9,8 @@ use protocol::model::{CacheRequest, PromptCache};
 mod tests;
 
 mod expiration;
+mod telling;
+pub(crate) use telling::CacheHeld;
 
 #[cfg(test)]
 use expiration::{after, found_expired};

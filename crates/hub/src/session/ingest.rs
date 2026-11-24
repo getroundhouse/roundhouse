@@ -136,7 +136,7 @@ async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &Ev
         EventBody::AgentMode { mode } if current => session.note_mode(*mode).await,
         // What the cache held is no longer the conversation, and the next request writes the summary.
         EventBody::AgentCompacted { outcome: CompactionOutcome::Compacted { .. }, .. } if current => {
-            session.announce_cache(None).await;
+            session.cache_holds(None).await;
         }
         EventBody::AgentExited { .. } => {
             if current {

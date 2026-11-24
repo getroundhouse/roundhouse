@@ -10,6 +10,7 @@ mod kept;
 mod kinds;
 mod levels;
 mod old_form;
+mod subjects;
 mod tables;
 #[cfg(test)]
 mod tests;
@@ -19,6 +20,6 @@ pub(crate) use file::PART;
 pub(crate) use kept::Observations;
 pub(crate) use kinds::Kind;
 pub(crate) use kinds::{
-    AccountIdentity, AccountLimits, ModelCatalog, Referenced, SessionContext, SessionKey, SessionTodos,
+    AccountIdentity, AccountLimits, ModelCatalog, Referenced, SessionCache, SessionContext, SessionKey, SessionTodos,
     WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };

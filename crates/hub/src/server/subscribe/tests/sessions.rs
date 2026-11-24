@@ -1,14 +1,17 @@
-//! How full a session's agent's context is, which a client of version 4 reads on the session's record, at the hub's
-//! level, and a client of the version that reads every observation reads as an observation at the session's level.
+//! How full a session's agent's context is, and what the API's cache holds of it, which a client of version 4 reads on
+//! the session's record, at the hub's level, and a client of the version that reads every observation reads as
+//! observations, at the session's level and the hub's.
 
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{EVERY_OBSERVATION_FROM, HubFrame, HubNotice};
-use protocol::model::{ContextUsage, DiffComment, DiffSide, Observation, Observed, Rev, Session};
+use protocol::model::{
+    CacheTtl, ContextUsage, ConversationCache, DiffComment, DiffSide, Observation, Observed, PromptCache, Rev, Session,
+};
 
 use super::given::{ok, start};
 use crate::hub::tests::hub_in;
-use crate::hub::{SessionContext, SessionKey};
+use crate::hub::{SessionCache, SessionContext, SessionKey};
 use crate::server::tests::Connection;
 
 /// What `s`'s agent says of its context, with `used_tokens` in it.
@@ -58,12 +61,27 @@ fn contexts_observed(client: &Connection) -> Vec<Option<u64>> {
     copies.collect()
 }
 
+/// What the API's cache holds of `s`, by each observation of it `client` was told, in order.
+fn caches_observed(client: &Connection) -> Vec<ConversationCache> {
+    let told = client.sent.iter().filter_map(|frame| {
+        let HubFrame::Notice { notice: HubNotice::Observation(Observation::SessionCache { cache, .. }), .. } = frame
+        else {
+            return None;
+        };
+        let Observed::AsOf { value, .. } = cache else { return None };
+        Some(value.clone())
+    });
+    told.collect()
+}
+
 /// A hub whose session's context isn't known lists the session to a client of version 4 with none, and to one of the
 /// version that reads every observation with no observation of it at the session's level. Two reports from the
-/// session's agent, which the store keeps as `crate::session` does, then send the first the record twice, filled, each under a newer revision, and no observation, and
-/// the second the observation twice, at the session's level, and no copy of the record, which moved only for them.
+/// session's agent, which the store keeps as `crate::session` does, then send the first the record twice, filled,
+/// each under a newer revision, and no observation, and the second the observation twice, at the session's level, and
+/// no copy of the record, which moved only for them. What the API's cache holds, at the hub's level, goes the same
+/// way.
 #[tokio::test]
-async fn a_sessions_context_reaches_each_client_in_the_form_its_version_reads() {
+async fn a_sessions_context_and_cache_reach_each_client_in_the_form_its_version_reads() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     let mut before = Connection::greeted(&hub, 4).await;
@@ -83,6 +101,9 @@ async fn a_sessions_context_reaches_each_client_in_the_form_its_version_reads() 
     for (used_tokens, read_at_ms) in [(60_000, 1_000), (70_000, 2_000)] {
         hub.observation_read::<SessionContext>(s(), context(used_tokens), read_at_ms).await.unwrap();
     }
+    let held = PromptCache { used_at_ms: 3_000, ttl: CacheTtl::OneHour, model: None, tokens: 70_000 };
+    let cache = ConversationCache { held: Some(held.clone()), worth_telling: true };
+    hub.observation_worked_out::<SessionCache>(s(), cache.clone(), 3_000).await.unwrap();
     let marker = HubNotice::Comment(DiffComment {
         id: "c".into(),
         workspace_id: "w".into(),
@@ -105,10 +126,12 @@ async fn a_sessions_context_reaches_each_client_in_the_form_its_version_reads() 
     let copies = sessions_sent(&before);
     let told: Vec<Option<u64>> =
         copies.iter().map(|session| session.context.as_ref().map(|context| context.used_tokens)).collect();
-    assert_eq!(told, [None, Some(60_000), Some(70_000)]);
-    assert!(copies.iter().map(|session| session.rev).is_sorted(), "{copies:?}");
-    assert!(copies[1].rev > copies[0].rev, "the revision moved");
+    assert_eq!(told, [None, Some(60_000), Some(70_000), Some(70_000)]);
+    assert_eq!(copies.last().unwrap().prompt_cache, Some(held));
+    assert!(copies.windows(2).all(|pair| pair[0].rev < pair[1].rev), "the revision moved: {copies:?}");
     assert_eq!(contexts_observed(&before), [], "no observation to a client of version 4");
     assert_eq!(contexts_observed(&observing), [Some(60_000), Some(70_000)]);
-    assert_eq!(sessions_sent(&observing).len(), 1, "no copy that moves only how full the context is");
+    assert_eq!(caches_observed(&before), [], "no observation to a client of version 4");
+    assert_eq!(caches_observed(&observing), [cache], "at the hub's level");
+    assert_eq!(sessions_sent(&observing).len(), 1, "no copy that moves only those");
 }

@@ -87,8 +87,11 @@ impl Chats {
         self.record(chat).hub_account().cloned()
     }
 
+    /// `chat`'s record, as a reply carries it.
     pub(super) fn record(&self, chat: &SessionId) -> Session {
-        self.hub.store.get_session(chat).unwrap().session
+        let mut session = self.hub.store.get_session(chat).unwrap().session;
+        self.hub.fill_old_forms(&mut session);
+        session
     }
 
     pub(super) fn log(&self, chat: &SessionId) -> Vec<SessionEvent> {

@@ -59,4 +59,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     // How full each session's agent's context is, and its to-do list, which the hub keeps as observations, in
     // `sessions`.
     Sql(super::sessions::CONTEXT_OBSERVED),
+    // What the API's cache holds of each session's conversation, which the hub keeps as an observation, in `sessions`.
+    Sql(super::sessions::CACHE_OBSERVED),
 ];

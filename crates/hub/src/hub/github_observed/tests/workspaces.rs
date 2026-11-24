@@ -349,6 +349,7 @@ fn is_as_of(observation: &Observation) -> bool {
         | Observation::AccountLimits { .. }
         | Observation::SessionContext { .. }
         | Observation::SessionTodos { .. }
+        | Observation::SessionCache { .. }
         | Observation::Unknown => false,
     }
 }

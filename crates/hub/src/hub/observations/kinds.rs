@@ -1,18 +1,17 @@
 //! Each kind of observation the store keeps: what it's of, what it says, its table in the cache file and that table's
 //! version.
 
-use std::hash::Hash;
-
 use protocol::capability::output::TodoList;
 use protocol::model::{
-    AccountId, ChangeSummary, ContextUsage, LineCounts, ModelListKey, Observation, ObservationKey, Observed,
-    OwnPullRequestDetail, OwnPullRequestSaid, RecordKey, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, SessionId,
+    AccountId, ChangeSummary, ContextUsage, ConversationCache, LineCounts, ModelListKey, Observation, ObservationKey,
+    Observed, OwnPullRequestDetail, OwnPullRequestSaid, RecordKey, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev,
     UsageLimit, WorkspaceId,
 };
+use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
 
 use super::kept::Table;
+pub(crate) use super::subjects::{Owner, SessionKey, Subject};
 use super::tables::Tables;
 
 /// A kind of observation. A new kind is added to [`Observation`] and [`ObservationKey`] in `protocol`, gets a type
@@ -49,77 +48,6 @@ pub(crate) trait Kind: Sized + 'static {
     /// as a frame of its own.
     fn old_form_on(_of: &Self::Of) -> Option<RecordKey> {
         None
-    }
-}
-
-/// What an observation can be of, which says what owns it, if anything, so the store forgets it with what owns it
-/// whatever its kind, and a new kind of what's of a workspace, a session or an account needs nothing more to be
-/// forgotten with it.
-pub(crate) trait Subject: Clone + Eq + Hash + Serialize + DeserializeOwned + Send + Sync {
-    fn owner(&self) -> Option<Owner<'_>>;
-}
-
-/// What owns an observation, so it's forgotten once that's gone: as a workspace is removed, and as the hub starts on a
-/// database that lacks it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Owner<'a> {
-    Workspace(&'a WorkspaceId),
-    /// A session, which goes with its workspace too.
-    Session(&'a SessionKey),
-    Account(&'a AccountId),
-    /// The hub itself, for what's of no record, which is never gone, and goes only as the hub lets go of it.
-    Hub,
-}
-
-impl<'a> Owner<'a> {
-    /// The workspace it is, or goes with, if any.
-    pub(crate) fn workspace(self) -> Option<&'a WorkspaceId> {
-        match self {
-            Owner::Workspace(workspace) => Some(workspace),
-            Owner::Session(session) => Some(&session.workspace_id),
-            Owner::Account(_) | Owner::Hub => None,
-        }
-    }
-}
-
-impl Subject for WorkspaceId {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::Workspace(self))
-    }
-}
-
-/// A chip's issue or pull request, which nothing owns, since chips in any chat can name it.
-impl Subject for ReferenceAsk {
-    fn owner(&self) -> Option<Owner<'_>> {
-        None
-    }
-}
-
-/// A list of models, which the hub keeps for whichever agent, project, provider and account a chat would launch with,
-/// and lets go of itself, so it's the hub's.
-impl Subject for ModelListKey {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::Hub)
-    }
-}
-
-/// A session, as what's observed of it is kept by: with its workspace, which it never leaves, so it's forgotten with
-/// either.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub(crate) struct SessionKey {
-    pub(crate) workspace_id: WorkspaceId,
-    pub(crate) session_id: SessionId,
-}
-
-impl Subject for SessionKey {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::Session(self))
-    }
-}
-
-impl Subject for AccountId {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::Account(self))
     }
 }
 
@@ -389,6 +317,33 @@ impl Kind for SessionTodos {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.session_todos
+    }
+
+    fn old_form_on(of: &SessionKey) -> Option<RecordKey> {
+        Some(RecordKey::Session { id: of.session_id.clone() })
+    }
+}
+
+/// What the API's cache holds of a session's conversation, and whether its context is big enough to tell of, sent at
+/// the hub's level, as the session worked it out from its agent's requests and its [`SessionContext`]. A client of a
+/// version from before it reads what the cache holds on the session's record.
+pub(crate) struct SessionCache;
+
+impl Kind for SessionCache {
+    type Of = SessionKey;
+    type Value = ConversationCache;
+    const FORM: Form = Form { table: "session_cache", version: 1 };
+
+    fn observation(of: &SessionKey, cache: Observed<ConversationCache>, rev: Rev) -> Observation {
+        Observation::SessionCache { session_id: of.session_id.clone(), cache, rev }
+    }
+
+    fn key(of: &SessionKey) -> ObservationKey {
+        ObservationKey::SessionCache { session_id: of.session_id.clone() }
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.session_cache
     }
 
     fn old_form_on(of: &SessionKey) -> Option<RecordKey> {
