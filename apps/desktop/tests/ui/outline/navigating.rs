@@ -18,9 +18,9 @@ fn two_turns_the_first_long() -> Turns {
 
 #[gpui_kit::test]
 fn the_wheel_over_the_ticks_scrolls_the_chat_and_the_lit_tick_follows(cx: &mut TestAppContext) {
-    let (_fake, mut ui, _) = open_on_a_chat(cx, two_turns_the_first_long());
-    ui.wait("the outline", |ui| ui.has("outline"));
-    let [first, second] = prompt_rows(&ui)[..] else { panic!("two prompts: {:?}", prompt_rows(&ui)) };
+    let (_fake, mut ui, log) = open_on_a_chat(cx, two_turns_the_first_long());
+    let rows = loaded_prompt_rows(&mut ui, &log);
+    let [first, second] = rows[..] else { panic!("two prompts: {rows:?}") };
     ui.wait("the end of the chat", |ui| ui.transcript().is_some_and(|_| scrolled_to(ui) > first));
     assert!(selected(&mut ui, row_id("outline-tick", second)), "at the end, the last prompt is lit");
 
@@ -37,9 +37,8 @@ fn the_wheel_over_the_ticks_scrolls_the_chat_and_the_lit_tick_follows(cx: &mut T
 /// turns, which isn't asking for the list.
 #[gpui_kit::test]
 fn the_wheel_over_the_ticks_goes_on_scrolling_the_chat_rather_than_opening_the_list(cx: &mut TestAppContext) {
-    let (_fake, mut ui, _) = open_on_a_chat(cx, two_turns_the_first_long());
-    ui.wait("the outline", |ui| ui.has("outline"));
-    let first = prompt_rows(&ui)[0];
+    let (_fake, mut ui, log) = open_on_a_chat(cx, two_turns_the_first_long());
+    let first = loaded_prompt_rows(&mut ui, &log)[0];
     ui.wait("the end of the chat", |ui| scrolled_to(ui) > first);
     let end = scrolled_to_exactly(&ui);
     let up = ScrollDelta::Pixels(point(px(0.), px(300.)));
@@ -61,9 +60,8 @@ fn the_wheel_over_the_ticks_goes_on_scrolling_the_chat_rather_than_opening_the_l
 fn the_wheel_over_the_list_scrolls_the_list_and_not_the_chat(cx: &mut TestAppContext) {
     // More than the list has room for, and long enough that the chat can move.
     let turns = (0..16).fold(Turns::default(), |turns, turn| turns.prose(2, turn));
-    let (_fake, mut ui, _) = open_on_a_chat(cx, turns);
-    ui.wait("the outline", |ui| ui.has("outline"));
-    let first = row_id("outline-prompt", prompt_rows(&ui)[0]);
+    let (_fake, mut ui, log) = open_on_a_chat(cx, turns);
+    let first = row_id("outline-prompt", loaded_prompt_rows(&mut ui, &log)[0]);
     ui.wait("the end of the chat", |ui| scrolled_to(ui) > 0);
     open_the_list(&mut ui);
     let chat = scrolled_to(&ui);
@@ -120,9 +118,8 @@ fn a_prompt_or_a_compaction_recorded_while_the_chat_shows_joins_its_outline(cx: 
 fn the_list_opens_scrolled_to_the_prompt_being_read(cx: &mut TestAppContext) {
     // More than the list has room for.
     let turns = (0..16).fold(Turns::default(), |turns, turn| turns.turn(&[&format!("turn {turn}")]));
-    let (_fake, mut ui, _) = open_on_a_chat(cx, turns);
-    ui.wait("the outline", |ui| ui.has("outline"));
-    let rows = prompt_rows(&ui);
+    let (_fake, mut ui, log) = open_on_a_chat(cx, turns);
+    let rows = loaded_prompt_rows(&mut ui, &log);
     let (first, last) = (rows[0], rows[rows.len() - 1]);
 
     open_the_list(&mut ui);
@@ -187,9 +184,8 @@ fn a_list_left_open_in_a_chat_that_stopped_showing_is_closed_when_it_shows_again
 /// The list opens once the pointer moves over the ticks, so one tick alone would be a small place to find.
 #[gpui_kit::test]
 fn a_lone_tick_is_as_easy_to_rest_on_as_three(cx: &mut TestAppContext) {
-    let (_fake, mut ui, _) = open_on_a_chat(cx, Turns::default().turn(&["only"]));
-    ui.wait("the outline", |ui| ui.has("outline"));
-    let only = row_id("outline-tick", prompt_rows(&ui)[0]);
+    let (_fake, mut ui, log) = open_on_a_chat(cx, Turns::default().turn(&["only"]));
+    let only = row_id("outline-tick", loaded_prompt_rows(&mut ui, &log)[0]);
     let (ticks, tick) = (ui.bounds("outline"), ui.bounds(only));
     assert!(ticks.size.height >= tick.size.height * 3., "three ticks tall: {ticks:?} {tick:?}");
     assert!(!tick.contains(&ticks.center()), "so the middle, where the pointer goes, is past the tick: {ticks:?}");
@@ -234,6 +230,19 @@ pub(super) fn prompt_rows(ui: &Ui<'_>) -> Vec<usize> {
     };
     let prompts = rows.iter().filter(|(_, e)| matches!(e.body, EventBody::UserPrompt { .. }));
     prompts.map(|(row, e)| settled(e.seq).unwrap_or(*row)).collect()
+}
+
+/// Each prompt's row, as [`prompt_rows`] has them, once the outline shows and every event of `log` the chat follows
+/// is loaded. The outline shows as soon as it has a prompt, which can be before the rest of the chat has loaded.
+pub(super) fn loaded_prompt_rows(ui: &mut Ui<'_>, log: &[SessionEvent]) -> Vec<usize> {
+    let transcript = ui.transcript().unwrap();
+    let loaded = |ui: &mut Ui<'_>| {
+        ui.cx.read_entity(&transcript, |t, _| {
+            log.iter().all(|event| t.event_row(event).is_none_or(|row| t.event_at(row).is_some()))
+        })
+    };
+    ui.wait("the outline and every event of the chat", |ui| ui.has("outline") && loaded(ui));
+    prompt_rows(ui)
 }
 
 pub(super) fn row_id(part: &str, row: usize) -> ElementId {
