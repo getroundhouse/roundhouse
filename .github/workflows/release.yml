@@ -92,7 +92,7 @@ jobs:
       # post step.
       - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:
-          version: v0.19.0
+          version: v0.20.1
       - name: Build
         id: build
         env:
@@ -539,7 +539,7 @@ jobs:
           - arch: arm64
             runner: ubuntu-26.04-arm
     runs-on: ${{ matrix.runner }}
-    container: ubuntu:22.04@sha256:9abcaffc92a5279fff3a6a41635c0800ea33e528425fb389658806476e7defde
+    container: ubuntu:22.04@sha256:b000e69a50ff940390233025e7a337fb8469b509e2334fa4d018ac30f3e18cdb
     concurrency:
       group: release-build-linux-${{ matrix.arch }}-${{ github.ref }}
     timeout-minutes: 90
@@ -605,7 +605,7 @@ jobs:
       # As for the Mac.
       - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:
-          version: v0.19.0
+          version: v0.20.1
       - name: Build
         id: build
         env:

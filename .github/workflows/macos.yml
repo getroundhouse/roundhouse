@@ -35,7 +35,7 @@ env:
   CARGO_TERM_COLOR: always
   # The test runner, which Renovate raises, as in ci.yml.
   # renovate: datasource=crate depName=cargo-nextest
-  NEXTEST_VERSION: 0.9.151
+  NEXTEST_VERSION: 0.9.152
 
 jobs:
   # Clippy on a runner of its own, with a cache of what only it builds, so the tests' runners restore none of that and a
@@ -96,7 +96,7 @@ jobs:
         uses: ./.github/actions/zig
         with:
           cache-name: test-macos-arm64-macos-26
-      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
         with:
           tool: cargo-nextest@${{ env.NEXTEST_VERSION }}
       - id: cache
