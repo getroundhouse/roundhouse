@@ -1,5 +1,6 @@
 use super::super::Hub;
 use crate::error::internal;
+use crate::hub::SessionKey;
 use crate::session::{Command, LiveSession, ReadingOn};
 use crate::store::{Places, Reading, Store, StoreError};
 use protocol::capability::approvals::Decision;
@@ -10,7 +11,7 @@ use protocol::client::{ApiError, ErrorCode, HubNotice, log, records};
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::model::{
-    ApprovalId, AttachmentId, ClientDevice, ClientMessageId, CompactionLine, DecisionDraft, DraftToKeep, Ending,
+    ApprovalId, AttachmentId, ClientDevice, ClientMessageId, CompactionLine, DecisionDraft, DraftToKeep, Ending, Level,
     MessageId, Place, PromptLine, RecordKey, Seq, Session, SessionId, SpokenThrough, SubagentId, WorkspaceId,
 };
 use protocol::prompt::Prompt;
@@ -173,12 +174,16 @@ impl Hub {
     /// The session's subagents, oldest first, with the revision they're as of.
     /// The session's subagents, proposals and how its replies were heard, read in one transaction, for a client that
     /// begins to follow it, or has fallen behind.
+    /// The records of session `id`, with every observation of its level, read under the lock a change to one takes, so
+    /// the list's revision takes in none it lacks.
     pub(crate) async fn session_records(&self, id: SessionId) -> Result<SessionRecords, ApiError> {
-        self.blocking(move |store| {
+        let level = Level::Session { id: id.clone() };
+        let list = self.blocking(move |store| {
             store.get_session(&id)?;
             store.list_session_records(&id)
-        })
-        .await
+        });
+        let (records, observations) = self.observations.listed_with(&level, list).await;
+        Ok(SessionRecords { observations, ..records? })
     }
 
     pub(crate) async fn session_subagents(&self, id: SessionId) -> Result<records::Subagents, ApiError> {
@@ -241,6 +246,9 @@ impl Hub {
         if let Some(session) = forgotten {
             session.end().await;
         }
+        // After its agent's end, so nothing it said after is kept.
+        self.session_observations_gone(&SessionKey { workspace_id: was.workspace_id.clone(), session_id: id.clone() })
+            .await;
         // Gone whether or not its files are, so failing only leaves them on disk.
         if let Err(e) = self.attachment_files.remove_session(&id).await {
             warn!(session = %id, "{e}");

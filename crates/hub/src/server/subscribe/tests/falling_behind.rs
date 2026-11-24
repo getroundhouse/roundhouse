@@ -36,6 +36,7 @@ async fn a_subscription_that_falls_behind_is_sent_where_its_level_stands_again()
         subagents: Vec::new(),
         proposals: Vec::new(),
         replies_heard: Vec::new(),
+        observations: Vec::new(),
         rev: Rev::new(5),
     };
     // The feed holds 2, so it's left with 5 and 6 when it first reads.

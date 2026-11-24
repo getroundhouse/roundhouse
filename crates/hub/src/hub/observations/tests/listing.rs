@@ -33,7 +33,7 @@ async fn a_change_made_while_the_records_are_listed_is_told_after_the_list() {
                 gone_on.await.unwrap();
                 hub.store.list_records().unwrap().rev
             };
-            hub.observations.listed_with(list).await
+            hub.observations.listed_with(&protocol::model::Level::Hub, list).await
         }
     });
     began.await.unwrap();

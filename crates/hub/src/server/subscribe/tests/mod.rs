@@ -9,4 +9,5 @@ mod given;
 mod models;
 mod observations;
 mod rules;
+mod sessions;
 mod workspace_github;

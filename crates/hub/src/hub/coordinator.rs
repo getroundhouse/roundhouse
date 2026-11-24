@@ -28,7 +28,7 @@ use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, HubStart, HubStatus};
 use protocol::model::{
-    AgentDescription, AgentKind, ClientRequestId, GithubSignInId, ProviderName, Records, SessionId, Workspace,
+    AgentDescription, AgentKind, ClientRequestId, GithubSignInId, Level, ProviderName, Records, SessionId, Workspace,
     WorkspaceId,
 };
 use providers::Provider;
@@ -284,7 +284,7 @@ impl Hub {
         let listing = self.model_lists.listed_with(self.blocking(Store::list_records));
         let listing = self.updates.listed_with(self.terminals.listed_with(listing));
         let ((((listed, model_lists), terminals), hub_update), observations) =
-            self.observations.listed_with(listing).await;
+            self.observations.listed_with(&Level::Hub, listing).await;
         let mut records = Records { terminals, model_lists, hub_update, observations, ..listed? };
         // After the list, with what's kept then, which is never older than what the list's revision takes in. Newer is
         // only of a change whose record's revision moves after, so a client is sent the record again.

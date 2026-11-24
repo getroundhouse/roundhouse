@@ -48,7 +48,9 @@ mod run_logins;
 mod same_again;
 mod schema;
 #[cfg(test)]
-pub(crate) use schema::{BEFORE_ACCOUNT_IDENTITY_OBSERVED, BEFORE_ACCOUNT_LIMITS_OBSERVED};
+pub(crate) use schema::{
+    BEFORE_ACCOUNT_IDENTITY_OBSERVED, BEFORE_ACCOUNT_LIMITS_OBSERVED, BEFORE_SESSION_CONTEXT_OBSERVED,
+};
 mod sent;
 mod sessions;
 mod subagents;

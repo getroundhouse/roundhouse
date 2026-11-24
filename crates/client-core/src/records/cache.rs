@@ -205,7 +205,8 @@ impl HubRecords {
 
     /// Takes in where a session's own records stand, as its subscription lists them. Returns whether anything changed.
     pub(crate) fn apply_session_list(&mut self, listed: SessionRecords) -> bool {
-        let SessionRecords { session_id, subagents, proposals, replies_heard, rev } = listed;
+        // Its observations are sent only to a client of a version this one doesn't speak.
+        let SessionRecords { session_id, subagents, proposals, replies_heard, observations: _, rev } = listed;
         let subagents = self.subagents.apply_list(&session_id, subagents, rev);
         let proposals = self.proposals.apply_list(&session_id, proposals, rev);
         self.replies_heard.apply_list(&session_id, replies_heard, rev) || subagents || proposals

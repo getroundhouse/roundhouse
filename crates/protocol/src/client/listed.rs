@@ -29,7 +29,8 @@ pub enum Listed {
 }
 
 /// The records of one session, read in one transaction: what `SessionSubagents`, `SessionProposals` and
-/// `SessionRepliesHeard` each return, together.
+/// `SessionRepliesHeard` each return, together, with every observation sent at the session's level, read at the same
+/// moment.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionRecords {
     pub session_id: SessionId,
@@ -39,6 +40,10 @@ pub struct SessionRecords {
     pub proposals: Vec<Proposal>,
     /// In no order, since each is read by its reply.
     pub replies_heard: Vec<ReplyHeard>,
+    /// In no order. A kind it lacks is not known. Empty from a hub from before a session's level sent any, and to a
+    /// client of a version that reads none at it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observations: Vec<Observation>,
     /// The hub's newest revision when they were read.
     pub rev: Rev,
 }

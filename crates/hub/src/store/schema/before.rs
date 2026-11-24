@@ -25,3 +25,7 @@ pub(crate) const BEFORE_ACCOUNT_IDENTITY_OBSERVED: usize = 93;
 
 /// How many migrations there were before what's left of each account's limits left the database, as an observation.
 pub(crate) const BEFORE_ACCOUNT_LIMITS_OBSERVED: usize = 94;
+
+/// How many migrations there were before how full each session's agent's context is, and its to-do list, left the
+/// database, as observations.
+pub(crate) const BEFORE_SESSION_CONTEXT_OBSERVED: usize = 95;

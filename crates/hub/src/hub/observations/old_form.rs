@@ -7,11 +7,11 @@
 //! and one of a version that reads the observation itself doesn't read it.
 
 use protocol::client::ClientResponse;
-use protocol::model::{Account, ModelList, Record, RecordKey, Records, UsageLimit};
+use protocol::model::{Account, ModelList, Record, RecordKey, Records, Session, UsageLimit};
 use tracing::warn;
 
 use super::kept::Observations;
-use super::kinds::{AccountIdentity, AccountLimits, Kind, ModelCatalog};
+use super::kinds::{AccountIdentity, AccountLimits, Kind, ModelCatalog, SessionContext, SessionKey, SessionTodos};
 use super::tables::Tables;
 use crate::hub::Hub;
 
@@ -39,15 +39,24 @@ impl OldForm for ModelList {
     }
 }
 
+/// How full its agent's context is, and its to-do list, on a session's record, each `None` while it isn't known.
+impl OldForm for Session {
+    fn fill(&mut self, tables: &mut Tables) {
+        let of = SessionKey { workspace_id: self.workspace_id.clone(), session_id: self.id.clone() };
+        self.context = SessionContext::table(tables).value(&of).cloned();
+        self.todos = SessionTodos::table(tables).value(&of).cloned();
+    }
+}
+
 impl OldForm for Record {
     fn fill(&mut self, tables: &mut Tables) {
         match self {
             Record::Account(account) => account.fill(tables),
             Record::ModelList(list) => list.fill(tables),
+            Record::Session(session) => session.fill(tables),
             // Hold no observation's old form.
             Record::Repo(_)
             | Record::Workspace(_)
-            | Record::Session(_)
             | Record::Comment(_)
             | Record::HubSettings(_)
             | Record::NewWorkspaceDraft(_)
@@ -74,23 +83,86 @@ impl OldForm for Records {
         for list in &mut self.model_lists {
             list.fill(tables);
         }
+        for session in &mut self.sessions {
+            session.fill(tables);
+        }
     }
 }
 
-/// The replies that carry a record holding an observation's old form: an account's, and a list of models'. Those that
-/// carry every record are filled as they're listed, and the hub reads a `SessionAccount` from an account's record it
-/// fills.
+/// The replies that carry a record holding an observation's old form: an account's, a list of models', and a session's,
+/// alone, in a list of a workspace's, or as a new workspace's first. Every reply is named, so a new one that carries such a record is
+/// filled. Those that carry every record are filled as they're listed, and the hub reads a `SessionAccount` from an
+/// account's record it fills.
 impl OldForm for ClientResponse {
-    #[expect(
-        clippy::wildcard_enum_match_arm,
-        reason = "picks out the replies that carry an account's record or a list of models', and leaves every other \
-                  reply as it is"
-    )]
+    #[expect(clippy::too_many_lines, reason = "a flat match over every reply, each arm a call or nothing")]
     fn fill(&mut self, tables: &mut Tables) {
+        use ClientResponse as C;
         match self {
-            ClientResponse::Account(account) => account.fill(tables),
-            ClientResponse::ModelList(list) => list.fill(tables),
-            _ => {}
+            C::Account(account) => account.fill(tables),
+            C::Session(session) => session.fill(tables),
+            C::Sessions(sessions) => {
+                for session in &mut sessions.sessions {
+                    session.fill(tables);
+                }
+            }
+            C::ModelList(list) => list.fill(tables),
+            C::NewWorkspaceMade(made) => made.session.fill(tables),
+            // Hold no record that holds an observation's old form, or are filled as they're listed.
+            C::Paired(_)
+            | C::Devices(_)
+            | C::Pairing(_)
+            | C::Device(_)
+            | C::Hello(_)
+            | C::Ok
+            | C::HubStatus(_)
+            | C::HubSettings(_)
+            | C::NewWorkspaceDraft(_)
+            | C::Repo(_)
+            | C::Repos(_)
+            | C::Records(_)
+            | C::Agents(_)
+            | C::Workspace(_)
+            | C::Workspaces(_)
+            | C::GitStatus(_)
+            | C::GitDiff(_)
+            | C::ChangedFilesPage(_)
+            | C::FileDiff(_)
+            | C::SetupLog(_)
+            | C::PullRequest(_)
+            | C::Comment(_)
+            | C::Comments(_)
+            | C::Events(_)
+            | C::Subagents(_)
+            | C::Proposals(_)
+            | C::RepliesHeard(_)
+            | C::References(_)
+            | C::Proposal(_)
+            | C::ProposalRevisions(_)
+            | C::PlacedEvents(_)
+            | C::Prompts(_)
+            | C::Compactions(_)
+            | C::Found(_)
+            | C::PromptRecorded(_)
+            | C::Attachment(_)
+            | C::AttachmentData(_)
+            | C::SessionAccount(_)
+            | C::GithubAccount(_)
+            | C::GithubSignIn(_)
+            | C::GhLogin(_)
+            | C::MachineLogins(_)
+            | C::GithubApp(_)
+            | C::GithubAppManifest(_)
+            | C::WorktreeFiles(_)
+            | C::FileContents(_)
+            | C::FileOpened(_)
+            | C::FilePages(_)
+            | C::FileRange(_)
+            | C::Terminal(_)
+            | C::TerminalRows(_)
+            | C::TerminalBounds(_)
+            | C::TerminalText(_)
+            | C::TerminalFit(_)
+            | C::Subscribed(_) => {}
         }
     }
 }

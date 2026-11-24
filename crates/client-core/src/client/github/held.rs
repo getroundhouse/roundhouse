@@ -61,6 +61,8 @@ impl View {
             | ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
             | ObservationKey::AccountLimits { .. }
+            | ObservationKey::SessionContext { .. }
+            | ObservationKey::SessionTodos { .. }
             | ObservationKey::Unknown => false,
         }
     }
@@ -152,6 +154,8 @@ impl GithubHeld {
                 | ObservationKey::ModelCatalog { .. }
                 | ObservationKey::AccountIdentity { .. }
                 | ObservationKey::AccountLimits { .. }
+                | ObservationKey::SessionContext { .. }
+                | ObservationKey::SessionTodos { .. }
                 | ObservationKey::Unknown => {}
             }
         }
@@ -230,6 +234,8 @@ impl GithubHeld {
             | ObservationKey::ModelCatalog { .. }
             | ObservationKey::AccountIdentity { .. }
             | ObservationKey::AccountLimits { .. }
+            | ObservationKey::SessionContext { .. }
+            | ObservationKey::SessionTodos { .. }
             | ObservationKey::Unknown => false,
         }
     }

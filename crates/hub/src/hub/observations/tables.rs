@@ -5,8 +5,8 @@ use protocol::model::{Level, Observation, ObservationKey, Rev};
 use super::file::{self, Row, Write};
 use super::kept::Table;
 use super::kinds::{
-    AccountIdentity, AccountLimits, Form, Kind, ModelCatalog, Owner, Referenced, Subject, WorkspaceChanges,
-    WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
+    AccountIdentity, AccountLimits, Form, Kind, ModelCatalog, Owner, Referenced, SessionContext, SessionTodos, Subject,
+    WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
 use super::writer::Writer;
 use crate::cache_file::CacheFile;
@@ -23,6 +23,8 @@ pub(crate) struct Tables {
     pub(super) model_catalog: Table<ModelCatalog>,
     pub(super) account_identity: Table<AccountIdentity>,
     pub(super) account_limits: Table<AccountLimits>,
+    pub(super) session_context: Table<SessionContext>,
+    pub(super) session_todos: Table<SessionTodos>,
 }
 
 /// Which owners' observations are to be forgotten, since they're gone.
@@ -76,7 +78,7 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 9] {
+    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 11] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -87,6 +89,8 @@ impl Tables {
             model_catalog,
             account_identity,
             account_limits,
+            session_context,
+            session_todos,
         } = self;
         [
             workspace_lines,
@@ -98,6 +102,8 @@ impl Tables {
             model_catalog,
             account_identity,
             account_limits,
+            session_context,
+            session_todos,
         ]
     }
 

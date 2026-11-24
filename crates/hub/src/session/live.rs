@@ -12,13 +12,11 @@ use ingest::run_ingest;
 use messages::{Command, Item};
 use parking_lot::Mutex;
 use progress::Progress;
-use protocol::capability::output::TodoList;
 use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentKind, AgentSessionId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId, SessionStatus, SubagentId,
-    WorkspaceId,
+    AgentKind, AgentSessionId, PromptCache, RunId, Seq, Session, SessionId, SessionStatus, SubagentId, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::Delivery;
@@ -84,12 +82,8 @@ pub(super) struct LiveState {
     pub(super) progress: Progress,
     pub(super) tail: Tail,
     pub(super) version: u64,
-    /// How full the agent's context is, as the session's record says, so only a report that differs changes it.
-    pub(super) context: Option<ContextUsage>,
     /// What the API's cache holds of the conversation, as the session's record says.
     pub(super) prompt_cache: Option<PromptCache>,
-    /// The agent's to-do list, as the session's record says, so only a report that differs changes it.
-    pub(super) todos: Option<TodoList>,
     /// Which account a launch of the agent runs under, learnt as it launches, for filing what it hears.
     pub(super) hearing: Option<(RunId, limits::Hearing)>,
     /// The agent running, or being started. Events from any other run are leftovers from one that has
@@ -196,9 +190,7 @@ impl LiveSession {
                 progress,
                 tail: Tail::default(),
                 version: 0,
-                context: stored.session.context.clone(),
                 prompt_cache: stored.session.prompt_cache.clone(),
-                todos: stored.session.todos.clone(),
                 hearing: None,
                 agent,
                 recorded,

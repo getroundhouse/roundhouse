@@ -4,13 +4,11 @@ use std::sync::Arc;
 
 use protocol::capability::Report;
 use protocol::capability::account::Limit;
-use protocol::capability::output::TodoList;
-use protocol::model::{ContextUsage, RunId, SessionId};
+use protocol::model::RunId;
 use tracing::{debug, error};
 
 use super::LiveSession;
-use super::live::LiveState;
-use crate::store::{Store, StoreError};
+use crate::hub::{Kind, SessionContext, SessionKey, SessionTodos};
 
 impl LiveSession {
     /// Keeps what the agent of `run` reported, unless the run doesn't claim what it needs. Only the run going speaks
@@ -23,15 +21,9 @@ impl LiveSession {
         }
         match report {
             Report::Context { context } => {
-                let write =
-                    |store: &Store, id: &SessionId, context: &ContextUsage| store.set_session_context(id, context);
-                self.keep_on_record(run, context, |state| &mut state.context, write, "how full the agent's context is")
-                    .await;
+                self.agent_said::<SessionContext>(run, context, "how full the agent's context is").await;
             }
-            Report::Todos(todos) => {
-                let write = |store: &Store, id: &SessionId, todos: &TodoList| store.set_session_todos(id, todos);
-                self.keep_on_record(run, todos, |state| &mut state.todos, write, "the agent's to-do list").await;
-            }
+            Report::Todos(todos) => self.agent_said::<SessionTodos>(run, todos, "the agent's to-do list").await,
             // Sent when the hub took it, by the hub's clock, less how long the model took to start answering.
             Report::Cache { request } => self.note_cache(run, request, crate::store::now_ms()).await,
             // Heard when the hub took it, by the hub's clock, as an event the agent said it in is timed.
@@ -78,44 +70,33 @@ impl LiveSession {
         }
     }
 
-    /// Keeps `said`, which the agent of `run` reported, on the session's record, where `kept` finds it in the session's
-    /// state and `write` records it, and announces it. Only the current run speaks for the session, and only a change is
-    /// kept and announced, so the feed isn't told what it knows.
-    async fn keep_on_record<T: PartialEq + Clone + Send + Sync + 'static>(
-        &self,
-        run: RunId,
-        said: T,
-        kept: impl Fn(&mut LiveState) -> &mut Option<T>,
-        write: impl FnOnce(&Store, &SessionId, &T) -> Result<(), StoreError> + Send + 'static,
-        what: &str,
-    ) {
+    /// Keeps `said`, which the agent of `run` reported, as the session's observation of kind `K`, as of now, by the
+    /// hub's clock. Only the current run speaks for the session, and the store tells clients only of a change, so the
+    /// feed isn't told what it knows.
+    async fn agent_said<K: Kind<Of = SessionKey>>(&self, run: RunId, said: K::Value, what: &str) {
         let Ok(hub) = self.hub() else { return };
-        {
-            let mut state = self.state.lock();
-            let current = state.agent.map(|agent| agent.run);
-            if !says_something_new(current, kept(&mut state).as_ref(), run, &said) {
-                return;
-            }
-        }
-        let (id, recorded) = (self.id.clone(), said.clone());
-        if let Err(e) = hub.blocking(move |store| write(store, &id, &recorded)).await {
-            error!(session = %self.id, "could not record {what}: {e}");
+        if !speaks_for_the_session(self.state.lock().agent.map(|agent| agent.run), run) {
             return;
         }
-        *kept(&mut self.state.lock()) = Some(said);
-        if let Err(e) = self.announce(&hub).await {
-            error!(session = %self.id, "could not announce {what}: {e}");
+        // Held from the change until the session's revision has moved for its old form, so no copy of the session's
+        // record that events announce is read between the two and filled with what the agent said, which would tell a
+        // client of version 4 the same twice.
+        let _in_order = self.recording.lock().await;
+        if let Err(e) = hub.observation_read::<K>(self.observed_as(), said, crate::store::now_ms()).await {
+            error!(session = %self.id, "could not keep {what}: {}", e.message);
         }
     }
 }
 
-/// Whether what `run` said changes what the session's record says. A run that isn't the one going is one that's been
-/// replaced or has exited, and what it says is of a conversation the session has moved on from.
-pub(super) fn says_something_new<T: PartialEq>(
-    current: Option<RunId>,
-    known: Option<&T>,
-    run: RunId,
-    said: &T,
-) -> bool {
-    current == Some(run) && known != Some(said)
+impl LiveSession {
+    /// What the hub keeps what it observes of the session by.
+    pub(crate) fn observed_as(&self) -> SessionKey {
+        SessionKey { workspace_id: self.workspace_id.clone(), session_id: self.id.clone() }
+    }
+}
+
+/// Whether what `run` says speaks for the session, whose agent's run is `current`. A run that isn't the one going is
+/// one that's been replaced or has exited, and what it says is of a conversation the session has moved on from.
+pub(super) fn speaks_for_the_session(current: Option<RunId>, run: RunId) -> bool {
+    current == Some(run)
 }

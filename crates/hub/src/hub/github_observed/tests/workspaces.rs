@@ -347,6 +347,8 @@ fn is_as_of(observation: &Observation) -> bool {
         | Observation::ModelCatalog { .. }
         | Observation::AccountIdentity { .. }
         | Observation::AccountLimits { .. }
+        | Observation::SessionContext { .. }
+        | Observation::SessionTodos { .. }
         | Observation::Unknown => false,
     }
 }

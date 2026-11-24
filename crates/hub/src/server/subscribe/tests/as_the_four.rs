@@ -41,6 +41,7 @@ async fn listed_by_four(four: &mut Connection) -> [Listed; 2] {
         subagents: subagents.subagents,
         proposals: proposals.proposals,
         replies_heard: heard.replies,
+        observations: Vec::new(),
         rev: Rev::default(),
     };
     [Listed::Hub(Box::new(Records { rev: Rev::default(), ..records })), Listed::Session(session)]

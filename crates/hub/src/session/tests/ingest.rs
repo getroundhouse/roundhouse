@@ -2,7 +2,7 @@
 //! hub answers for the person.
 
 use super::super::ingest::{heard_before, the_hub_allows};
-use super::super::reports::says_something_new;
+use super::super::reports::speaks_for_the_session;
 use super::super::*;
 
 fn context(used_tokens: u64) -> ContextUsage {
@@ -10,17 +10,12 @@ fn context(used_tokens: u64) -> ContextUsage {
 }
 
 #[test]
-fn only_the_run_going_says_how_full_the_context_is_and_only_a_change_counts() {
+fn only_the_run_going_speaks_for_the_session() {
     let (going, replaced) = (RunId::new(2), RunId::new(1));
 
-    assert!(says_something_new(Some(going), None, going, &context(1)), "the first report");
-    assert!(says_something_new(Some(going), Some(&context(1)), going, &context(2)));
-    assert!(
-        !says_something_new(Some(going), Some(&context(1)), going, &context(1)),
-        "the feed isn't told what it knows"
-    );
-    assert!(!says_something_new(Some(going), Some(&context(1)), replaced, &context(2)), "a replaced run's");
-    assert!(!says_something_new(None, Some(&context(1)), going, &context(2)), "a run that has exited");
+    assert!(speaks_for_the_session(Some(going), going));
+    assert!(!speaks_for_the_session(Some(going), replaced), "a replaced run's");
+    assert!(!speaks_for_the_session(None, going), "a run that has exited");
 }
 
 /// As a worker sends a hub that connects to it what it sent the last hub, which may have recorded some of it.
@@ -58,12 +53,20 @@ fn the_hub_allows_only_a_tools_use_asked_about_with_full_access_and_only_when_se
     }
 }
 
+/// What `observed` says, if it's known.
+fn known<T>(observed: protocol::model::Observed<T>) -> Option<T> {
+    match observed {
+        protocol::model::Observed::Current { value } | protocol::model::Observed::AsOf { value, .. } => Some(value),
+        protocol::model::Observed::NotKnown | protocol::model::Observed::Unknown => None,
+    }
+}
+
 /// A report is dropped unless its run claims what it needs.
 #[tokio::test]
 async fn a_report_its_run_doesnt_claim_is_dropped() {
     use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker};
     use protocol::capability::{Capabilities, Claimed, Report};
-    use protocol::model::RunCapabilities;
+    use protocol::model::{Observation, RunCapabilities};
 
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
@@ -75,7 +78,11 @@ async fn a_report_its_run_doesnt_claim_is_dropped() {
         let report = Report::Context { context: context(used_tokens) };
         live.send_item(Item::Report { run, report, seq: None }).await;
         flushed(&live).await;
-        live.state.lock().context.as_ref().map(|context| context.used_tokens)
+        let listed = hub.session_records(live.id.clone()).await.unwrap().observations;
+        listed.into_iter().find_map(|observation| {
+            let Observation::SessionContext { context, .. } = observation else { return None };
+            known(context).map(|context| context.used_tokens)
+        })
     };
 
     held(Capabilities::default());
@@ -86,14 +93,14 @@ async fn a_report_its_run_doesnt_claim_is_dropped() {
     assert_eq!(reported(3).await, Some(3), "a run that claims it");
 }
 
-/// The newest to-do list the run reports is kept on the session's record, which a hub that starts again reads, and the
-/// same list again leaves the record as it was.
+/// The newest to-do list the run reports is kept as the session's observation, which fills its record for a client of
+/// version 4, and the same list again moves neither, while a change moves the record's revision too.
 #[tokio::test]
-async fn the_agents_to_do_list_is_kept_on_the_sessions_record_and_only_a_change_moves_it() {
+async fn the_agents_to_do_list_is_kept_as_an_observation_and_only_a_change_moves_the_sessions_record() {
     use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker};
     use protocol::capability::output::{Todo, TodoList, TodoStatus};
     use protocol::capability::{Capabilities, Claimed, Report};
-    use protocol::model::RunCapabilities;
+    use protocol::model::{Observation, RunCapabilities};
 
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
@@ -111,13 +118,20 @@ async fn the_agents_to_do_list_is_kept_on_the_sessions_record_and_only_a_change_
         live.send_item(Item::Report { run, report: Report::Todos(said), seq: None }).await;
         flushed(&live).await;
         let id = live.id.clone();
-        hub.blocking(move |store| store.get_session(&id)).await.unwrap().session
+        let mut session = hub.blocking(move |store| store.get_session(&id)).await.unwrap().session;
+        hub.fill_old_forms(&mut session);
+        let listed = hub.session_records(live.id.clone()).await.unwrap().observations;
+        let kept = listed.into_iter().find_map(|observation| {
+            let Observation::SessionTodos { todos, .. } = observation else { return None };
+            known(todos)
+        });
+        (kept, session.todos, session.rev)
     };
 
-    let first = recorded(todos(TodoStatus::InProgress)).await;
-    assert_eq!(first.todos, Some(todos(TodoStatus::InProgress)));
-    assert_eq!(recorded(todos(TodoStatus::InProgress)).await.rev, first.rev, "the same list again");
-    let done = recorded(todos(TodoStatus::Done)).await;
-    assert_eq!(done.todos, Some(todos(TodoStatus::Done)));
-    assert_ne!(done.rev, first.rev, "a change moves the record");
+    let (kept, filled, first) = recorded(todos(TodoStatus::InProgress)).await;
+    assert_eq!((kept, filled), (Some(todos(TodoStatus::InProgress)), Some(todos(TodoStatus::InProgress))));
+    assert_eq!(recorded(todos(TodoStatus::InProgress)).await.2, first, "the same list again");
+    let (kept, filled, done) = recorded(todos(TodoStatus::Done)).await;
+    assert_eq!((kept, filled), (Some(todos(TodoStatus::Done)), Some(todos(TodoStatus::Done))));
+    assert!(done > first, "a change moves the record, for a client of version 4");
 }

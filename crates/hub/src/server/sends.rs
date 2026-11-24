@@ -5,7 +5,7 @@
 //! client protocol the subscription's connection chose, and whether its start reads GitHub as observations, whatever
 //! request started the subscription. So what decides which clients still read an old form changes in one place.
 
-use protocol::client::listed::{Listed, ReferenceObservations, WorkspaceObservations};
+use protocol::client::listed::{Listed, ReferenceObservations, SessionRecords, WorkspaceObservations};
 use protocol::client::{EVERY_OBSERVATION_FROM, HubNotice};
 use protocol::model::{Level, Observation, ObservationKey, ReadFrom, Records};
 
@@ -73,7 +73,10 @@ impl Sends {
             Listed::Reference(ReferenceObservations { reference, observations, rev }) => {
                 Listed::Reference(ReferenceObservations { reference, observations: self.kept(observations), rev })
             }
-            listed @ (Listed::Session(_) | Listed::Unknown) => listed,
+            Listed::Session(records) => {
+                Listed::Session(SessionRecords { observations: self.kept(records.observations), ..records })
+            }
+            listed @ Listed::Unknown => listed,
         }
     }
 
