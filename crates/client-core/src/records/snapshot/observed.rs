@@ -52,6 +52,7 @@ impl ObservationsListed {
                 // Never held, as `Revised` says.
                 Observation::WorkspaceBranches { .. }
                 | Observation::WorkspaceWorkerBuild { .. }
+                | Observation::ReleaseOffered { .. }
                 | Observation::RepositoryReach { .. }
                 | Observation::GithubUsername { .. }
                 | Observation::GithubAppSaid { .. }

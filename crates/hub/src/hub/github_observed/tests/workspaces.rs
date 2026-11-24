@@ -335,31 +335,14 @@ async fn a_hub_that_starts_again_keeps_a_repository_unseen_through_a_read_that_f
     assert_eq!(again.store.get_workspace(&"w".into()).unwrap().pull_request_link, None, "no none recorded");
 }
 
-/// Whether `observation` says it's as of a read.
+/// Whether `observation` is one of a workspace's pull request that says it's as of a read.
 fn is_as_of(observation: &Observation) -> bool {
-    match observation {
-        Observation::WorkspacePullRequest { pull_request, .. } => matches!(pull_request, Observed::AsOf { .. }),
-        Observation::WorkspacePullRequestDetail { detail, .. } => matches!(detail, Observed::AsOf { .. }),
-        Observation::WorkspaceRepositoryUnseen { unseen, .. } => matches!(unseen, Observed::AsOf { .. }),
-        Observation::WorkspaceLines { .. }
-        | Observation::WorkspaceChanges { .. }
-        | Observation::Reference { .. }
-        | Observation::WorkspaceBranches { .. }
-        | Observation::WorkspaceWorkerBuild { .. }
-        | Observation::RepositoryReach { .. }
-        | Observation::GithubUsername { .. }
-        | Observation::GithubAppSaid { .. }
-        | Observation::GithubAppBot { .. }
-        | Observation::InstalledOn { .. }
-        | Observation::ModelCatalog { .. }
-        | Observation::AccountIdentity { .. }
-        | Observation::AccountLimits { .. }
-        | Observation::SessionContext { .. }
-        | Observation::SessionTodos { .. }
-        | Observation::SessionCache { .. }
-        | Observation::WaitRead { .. }
-        | Observation::Unknown => false,
-    }
+    matches!(
+        observation,
+        Observation::WorkspacePullRequest { pull_request: Observed::AsOf { .. }, .. }
+            | Observation::WorkspacePullRequestDetail { detail: Observed::AsOf { .. }, .. }
+            | Observation::WorkspaceRepositoryUnseen { unseen: Observed::AsOf { .. }, .. }
+    )
 }
 
 /// The repository the hub's test workspace is on.

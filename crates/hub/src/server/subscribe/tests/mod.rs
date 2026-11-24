@@ -11,6 +11,7 @@ mod github_reach;
 mod given;
 mod models;
 mod observations;
+mod release_offered;
 mod rules;
 mod sessions;
 mod worker_builds;

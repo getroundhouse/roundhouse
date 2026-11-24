@@ -77,7 +77,7 @@ pub use model_name::{ModelName, ModelNameError};
 pub use observation::{
     AccountIdentity, ConversationCache, GithubAppSaid, IssueSaid, Observation, ObservationKey, Observed, OtherBuild,
     OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestSaid, ReadFrom, ReferenceSaid,
-    WaitRead,
+    ReleaseOffer, WaitRead,
 };
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
 pub use proposal::{

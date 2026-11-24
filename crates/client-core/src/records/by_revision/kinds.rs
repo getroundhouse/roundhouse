@@ -38,6 +38,7 @@ impl Revised for Observation {
             // that came would be drawn as one this client can't.
             Observation::WorkspaceBranches { .. }
             | Observation::WorkspaceWorkerBuild { .. }
+            | Observation::ReleaseOffered { .. }
             | Observation::RepositoryReach { .. }
             | Observation::GithubUsername { .. }
             | Observation::GithubAppSaid { .. }

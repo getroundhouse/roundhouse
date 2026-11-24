@@ -10,6 +10,7 @@ mod github;
 mod github_app;
 mod kinds;
 mod observed;
+mod release;
 mod session;
 mod wait;
 mod workspace;
@@ -20,6 +21,7 @@ pub use github::{
 pub use github_app::GithubAppSaid;
 pub use kinds::{Observation, ObservationKey, ReadFrom};
 pub use observed::Observed;
+pub use release::ReleaseOffer;
 pub use session::ConversationCache;
 pub use wait::WaitRead;
 pub use workspace::OtherBuild;

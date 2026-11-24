@@ -112,6 +112,13 @@ impl Subject for WaitKey {
     }
 }
 
+/// What a hub has at most one of, such as the release the update feed offers it, which is the hub's.
+impl Subject for () {
+    fn owner(&self) -> Option<Owner<'_>> {
+        Some(Owner::Hub)
+    }
+}
+
 impl Subject for AccountId {
     fn owner(&self) -> Option<Owner<'_>> {
         Some(Owner::Account(self))

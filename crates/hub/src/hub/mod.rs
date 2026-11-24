@@ -69,7 +69,7 @@ pub(crate) use observations::{
     SessionCache, SessionContext, SessionKey, SessionTodos,
 };
 #[cfg(test)]
-pub(crate) use observations::{WaitKey, WaitRead, WorkspaceChanges, WorkspaceLines};
+pub(crate) use observations::{ReleaseOffered, WaitKey, WaitRead, WorkspaceChanges, WorkspaceLines};
 
 mod devices;
 mod dirs;

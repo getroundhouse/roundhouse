@@ -4,6 +4,7 @@ use protocol::model::{Level, Observation, ObservationKey, RecordKey, Rev};
 
 use super::file::{self, Row, Write};
 use super::github_kinds::{GithubAppBot, GithubAppSaid, GithubProfile, GithubUsername, InstalledOn, RepositoryReach};
+use super::hub_kinds::ReleaseOffered;
 use super::kept::Table;
 use super::kinds::{
     AccountIdentity, AccountLimits, Form, Kind, ModelCatalog, Owner, Referenced, SessionCache, SessionContext,
@@ -37,6 +38,7 @@ pub(crate) struct Tables {
     pub(super) session_todos: Table<SessionTodos>,
     pub(super) session_cache: Table<SessionCache>,
     pub(super) wait_read: Table<WaitRead>,
+    pub(super) release_offered: Table<ReleaseOffered>,
     pub(super) child_worktree_branches: Table<ChildWorktreeBranches>,
     pub(super) github_profile: Table<GithubProfile>,
 }
@@ -106,7 +108,7 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 22] {
+    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 23] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -128,6 +130,7 @@ impl Tables {
             session_todos,
             session_cache,
             wait_read,
+            release_offered,
             child_worktree_branches,
             github_profile,
         } = self;
@@ -152,6 +155,7 @@ impl Tables {
             session_todos,
             session_cache,
             wait_read,
+            release_offered,
             child_worktree_branches,
             github_profile,
         ]

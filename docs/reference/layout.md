@@ -152,13 +152,13 @@ A table named here is in the hub's database, except `facets`, `observed_workspac
 | Paired devices: name, when paired and when last seen | Roundhouse's, and what it holds | `devices` | `DeviceList` |
 | A workspace's open terminals | A person opened each. Kept while its shell runs | The hub's memory | The hub's level |
 | Whether the hub is asking an agent which models it offers, and how that went | The hub's own work, which lasts only as long as the hub | The hub's memory, on the list of models' `ModelList` record | The hub's level, and `ModelsFor` |
-| How an update a person asked for is going, on a hub installed as a service | The hub's own work, which lasts only as long as the hub | The hub's memory, on its `HubUpdate` record | The hub's level |
+| How an update a person asked for is going, on a hub installed as a service, and when the hub last read the update feed and why that failed | The hub's own work, which lasts only as long as the hub | The hub's memory, on its `HubUpdate` record | The hub's level |
 
 A hub of this build lists no `FoundGithubLogin`, which `client-core` reads only from an older hub.
 
 ### Observations
 
-*Not built:* any observation but a workspace's lines added and removed, its changed files, its branches, which build its worker is, what GitHub says of a chip's issue or pull request and of a workspace's own, what an agent offers, who an agent's account is, an account's usage limits, how full an agent's context is and its todos, what the API's cache holds of a conversation, and what each open wait last read, so each of the others is kept as its row says: as a record or a field of one, in GitHub's cache, which reaches a client with no revision, or not at all.
+*Not built:* any observation but a workspace's lines added and removed, its changed files, its branches, which build its worker is, the release a hub would update to, what GitHub says of a chip's issue or pull request and of a workspace's own, what an agent offers, who an agent's account is, an account's usage limits, how full an agent's context is and its todos, what the API's cache holds of a conversation, and what each open wait last read, so each of the others is kept as its row says: as a record or a field of one, in GitHub's cache, which reaches a client with no revision, or not at all.
 
 | What | Whose | Kept in | Sent by |
 |---|---|---|---|
@@ -181,7 +181,7 @@ A hub of this build lists no `FoundGithubLogin`, which `client-core` reads only 
 | An account's usage limits | The provider's, said by an agent in a report, which says only some at a time | The hub's memory and `observed_account_limits`, each limit with when it was heard, merged with what's kept as each report comes, and as of the newest. Forgotten with its account | The hub's level, as an observation, to a connection of version 5, and otherwise on the account's record, filled from the observation as the record is sent |
 | How full an agent's context is, and its todos | The agent's, said in a report of the session's current run | The hub's memory, and `observed_session_context` and `observed_session_todos`, as of the report. Forgotten with its session | The session's level, as an observation, to a connection of version 5, and otherwise on the session's record at the hub's level, filled from the observation as the record is sent |
 | What the API's cache holds of a conversation | The provider's, said by an agent of each of its requests, and told as a request is made while the agent isn't working, as a turn ends, and as something empties it | The hub's memory, and `observed_session_cache`, as of the request, with whether the context is big enough to tell of. Forgotten with its session | The hub's level, as an observation, to a connection of version 5, and otherwise on the session's record, filled from the observation as the record is sent |
-| The release a hub installed as a service would update to | The update feed's | The hub's memory, on its `HubUpdate` record | The hub's level |
+| The release a hub installed as a service would update to | The update feed's, as the hub reads it as it starts and every 10 minutes after | The hub's memory alone, current while its reads of the feed work, with the archive it updates from beside it | The hub's level, as an observation, to a connection of version 5, and otherwise on its `HubUpdate` record, filled from the observation as the record is sent |
 | GitHub's limit on each token | GitHub's | The hub's memory | No client |
 
 ### Read on request, and not kept
