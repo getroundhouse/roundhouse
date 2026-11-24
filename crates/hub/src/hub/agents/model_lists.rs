@@ -303,7 +303,7 @@ impl Hub {
     /// Has the list at `key` answered `catalog`.
     pub(crate) async fn model_list_answered(&self, key: &ModelListKey, catalog: ModelCatalog) {
         let asked = self.model_list_asking(key).await;
-        self.model_list_settled(key, asked, catalog).await;
+        self.model_list_settled(key, asked, Ok(catalog)).await;
     }
 
     /// Holds the list at `key` as asking, as a lookup begins, under the revision this returns.
@@ -313,9 +313,20 @@ impl Hub {
         rev
     }
 
-    /// Has the lookup that began asking for the list at `key` under revision `asked` answer `catalog`.
-    pub(crate) async fn model_list_settled(&self, key: &ModelListKey, asked: Rev, catalog: ModelCatalog) {
-        self.settle_model_list(key, asked, Ok(catalog)).await;
+    /// Has the lookup that began asking for the list at `key` under revision `asked` answer `catalog`, or fail.
+    pub(crate) async fn model_list_settled(&self, key: &ModelListKey, asked: Rev, catalog: Result<ModelCatalog, &str>) {
+        let answer = catalog.map_err(|message| ApiError::new(ErrorCode::Unavailable, message));
+        self.settle_model_list(key, asked, answer).await;
+    }
+
+    /// Has a lookup's job about the list at `key` run until the sender this returns is used or dropped, as a lookup's
+    /// job does for a moment after the lookup has said what it found.
+    pub(crate) fn model_lookup_ending(&self, key: &ModelListKey) -> tokio::sync::oneshot::Sender<()> {
+        let (end, ended) = tokio::sync::oneshot::channel::<()>();
+        let work = async move { drop(ended.await) };
+        let started = self.model_lists.lookups.start(JobKind::LookUpModels, key.clone(), LOOKUP, work, |_| async {});
+        assert_eq!(started, Ok(()), "a lookup's job about {key}");
+        end
     }
 
     /// The list the hub holds at `key`, if it holds one.
