@@ -16,7 +16,7 @@ use super::super::events::{subagent_ended, subagent_started, taken, task, text, 
 use super::super::{Following, World};
 use super::served::served;
 use crate::session_log::Row;
-use crate::{Client, ClientError, OpenSession, RecordsFeed, SubscriptionItem};
+use crate::{Client, ClientError, OpenSession, RecordsFeed, SubscriptionItem, View};
 
 #[test]
 fn a_client_reads_what_the_world_holds_and_is_refused_a_change() {
@@ -317,7 +317,7 @@ fn a_session_s_records_go_into_the_copy_its_view_is_handed() {
     let elsewhere = Client::connect(&dir.path().join("hub"), "test").unwrap();
     let feed = RecordsFeed::start(&elsewhere);
 
-    let _open = OpenSession::start(&client, &feed, &session);
+    let _open = OpenSession::start(&client, &feed, &session, View::Own);
 
     let held = || feed.snapshot().subagents(&chat).len();
     waiting::thread::until(Duration::from_secs(10), "the chat's subagent to be held", || held() == 1);
@@ -338,8 +338,10 @@ fn a_client_that_stops_following_a_session_lets_go_of_its_records() {
     let (_dir, client) = served(world);
     let feed = RecordsFeed::start(&client);
     let held = |feed: &RecordsFeed| feed.snapshot().subagents(&chat).len();
-    let (chat_open, subagent_tab) =
-        (OpenSession::start(&client, &feed, &session), OpenSession::start(&client, &feed, &session));
+    let (chat_open, subagent_tab) = (
+        OpenSession::start(&client, &feed, &session, View::Own),
+        OpenSession::start(&client, &feed, &session, View::Own),
+    );
     waiting::thread::until(Duration::from_secs(10), "the chat's subagent to be held", || held(&feed) == 1);
     // Each says it keeps the session's records once the hub has answered its follow, which is after the hub counts it
     // as following, and takes in what the subscription sends after that: the records, then the session's one event.

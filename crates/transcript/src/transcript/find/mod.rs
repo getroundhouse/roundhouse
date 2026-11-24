@@ -5,7 +5,7 @@
 //!
 //! A row is counted from what draws it: one the log holds from the log, as it's drawn, and one it doesn't from the
 //! stretch of the chat read around it, until it loads. Events are known by their position in the log, which is their
-//! place among the agent's own, or their `seq` in a log of every event, from a hub too old to find.
+//! place among the agent's own.
 
 mod bar;
 mod count;

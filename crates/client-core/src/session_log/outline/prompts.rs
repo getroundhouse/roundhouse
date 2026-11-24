@@ -1,4 +1,4 @@
-use super::super::{By, Position, SessionLog};
+use super::super::{Position, SessionLog};
 use protocol::event::SessionEvent;
 use protocol::model::{CompactionLine, Place, PromptLine, Seq};
 use std::collections::BTreeMap;
@@ -84,15 +84,6 @@ impl Outline {
         self.compactions_listing.retry_failed();
     }
 
-    /// The log's rows now go by something else, so each prompt and compaction is in another row, and a hub that reads
-    /// by place, after one that couldn't, is asked for the lists again, since the old one gave no places.
-    pub(in super::super) fn moved(&mut self, by: By) {
-        self.changes += 1;
-        if by == By::Place {
-            self.list_again();
-        }
-    }
-
     /// Asks the hub for both lists again, keeping each line until another replaces it.
     pub(in super::super) fn list_again(&mut self) {
         self.listing = Listing::Wanted;
@@ -173,28 +164,17 @@ impl SessionLog {
     /// The row a prompt is drawn in, as [`SessionLog::row_drawing`] says, or for one in its own row that isn't
     /// loaded, as [`SessionLog::row_at`] says.
     pub fn prompt_row(&self, line: &PromptLine) -> usize {
-        self.row_drawing(line.seq()).unwrap_or_else(|| self.row_at(line.seq(), line.place()))
+        self.row_drawing(line.seq()).unwrap_or_else(|| Self::row_at(line.place()))
     }
 
     /// The row a compaction is drawn in, as [`SessionLog::row_at`] says.
     pub fn compaction_row(&self, line: &CompactionLine) -> usize {
-        self.row_at(line.seq, line.place)
+        Self::row_at(line.place)
     }
 
-    /// The row of the event recorded at `seq` and `place`, from a line the hub listed. A hub that lists lines without
-    /// their places, as one between reading by place and listing places did, leaves the event where it is if it's
-    /// loaded, and otherwise by its `seq`, which is as near as the log can tell. A hub numbers events from 1, so one it
-    /// numbers 0 goes in the first row.
-    pub(in super::super) fn row_at(&self, seq: Seq, place: Place) -> usize {
-        let position = match self.by {
-            By::Seq => Position::of_seq(seq),
-            By::Place if place != Place::default() => Position::of_place(place),
-            // Its `seq` stands in for its place, which is never later, since a `seq` counts every agent's events.
-            By::Place => match self.row_of(seq) {
-                Some(row) => return row,
-                None => Position::of_seq(seq).min(self.last),
-            },
-        };
-        position.row().unwrap_or(0)
+    /// The row of the event at `place`, from a line the hub listed. A hub places events from 1, so one at 0, which no
+    /// hub lists, goes in the first row.
+    pub(in super::super) fn row_at(place: Place) -> usize {
+        Position::of_place(place).row().unwrap_or(0)
     }
 }

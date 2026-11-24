@@ -1,7 +1,6 @@
 //! Finding events near another in the log, for what drawing it needs from other rows, such as a call's result. An
 //! event's row is the log's to say, since a log of the agent's own events or one subagent's holds only some `seq`s.
 
-use client_core::calls::Recorded;
 use client_core::session_log::{Row, SessionLog};
 use protocol::capability::approvals::ApprovalMode;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
@@ -27,17 +26,12 @@ pub(super) fn events_before(log: &SessionLog, seq: Seq, reach: usize) -> impl It
     (row.saturating_sub(reach)..row).rev().filter_map(|ix| event_in(log, ix))
 }
 
-/// The call `id`, among the events as far as `reach` rows before the one at `seq`: the seq of the event it's in,
-/// and whether it hands work to a subagent.
-pub(super) fn call_before(log: &SessionLog, seq: Seq, id: &ToolUseId, reach: usize) -> Option<(Seq, bool)> {
+/// The call `id`, among the events as far as `reach` rows before the one at `seq`: the seq of the event it's in.
+pub(super) fn call_before(log: &SessionLog, seq: Seq, id: &ToolUseId, reach: usize) -> Option<Seq> {
     events_before(log, seq, reach).find_map(|event| {
         let EventBody::Assistant { blocks, .. } = &event.body else { return None };
-        blocks.iter().find_map(|block| {
-            let ContentBlock::Call { id: made, .. } = block else {
-                return None;
-            };
-            (made == id).then(|| (event.seq, Recorded::of(block).is_some_and(|call| call.hands_off())))
-        })
+        let made = |block: &ContentBlock| matches!(block, ContentBlock::Call { id: made, .. } if made == id);
+        blocks.iter().any(made).then_some(event.seq)
     })
 }
 
@@ -62,11 +56,6 @@ pub(super) fn mode_before(log: &SessionLog, seq: Seq) -> Option<ApprovalMode> {
 /// The event at `seq`, if it's loaded.
 pub(super) fn event_at(log: &SessionLog, seq: Seq) -> Option<&SessionEvent> {
     log.row_of(seq).and_then(|row| event_in(log, row))
-}
-
-/// Whether the event at `seq` is loaded, so its row is drawn.
-pub(super) fn is_loaded(log: &SessionLog, seq: Seq) -> bool {
-    log.row_of(seq).is_some_and(|row| event_in(log, row).is_some())
 }
 
 fn event_in(log: &SessionLog, ix: usize) -> Option<&SessionEvent> {
@@ -134,11 +123,7 @@ mod tests {
             event(Seq::new(3), result("c")),
         ]);
 
-        assert_eq!(
-            call_before(&log, Seq::new(3), &"c".into(), 5),
-            Some((Seq::new(2), false)),
-            "a command, which hands nothing off"
-        );
+        assert_eq!(call_before(&log, Seq::new(3), &"c".into(), 5), Some(Seq::new(2)));
         assert_eq!(call_before(&log, Seq::new(3), &"a".into(), 1), None, "further back than it looks");
         assert_eq!(call_before(&log, Seq::new(3), &"d".into(), 5), None);
     }

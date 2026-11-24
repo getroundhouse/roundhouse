@@ -10,8 +10,8 @@ use crate::selection::Selection;
 use crate::texts::{Of, TextAt, Texts};
 use crate::transcript::{Model, Transcript};
 use crate::{attachments, find};
-use around::{Around, Closes, asks_questions, denied, drawn_in_its_call, drawn_in_row};
-use client_core::session_log::{By, Row, SessionLog};
+use around::{Around, Closes, asks_questions, denied, drawn_in_row};
+use client_core::session_log::{Row, SessionLog};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
@@ -88,16 +88,15 @@ pub(crate) fn list_row_of(of: Of, tail: usize) -> Option<usize> {
 /// What a row shows, from the version of the log the frame is drawn from.
 #[expect(clippy::large_enum_variant, reason = "made for a row, and drawn at once")]
 enum Shown<'a> {
-    /// With how the log is read, which says whether the subagents' work is kept apart, in the subagent tab, and the
-    /// prompts the agent hasn't read yet.
-    Tail(&'a Tail, By, Vec<Waiting>),
+    /// With the prompts the agent hasn't read yet.
+    Tail(&'a Tail, Vec<Waiting>),
     /// The place in the log of the row's own event, which its texts are placed by, and the event it draws, which for a
     /// prompt is the one the row's event settled.
     Event(Seq, &'a SessionEvent, Around),
     Unloaded,
-    /// Drawn elsewhere, so its own row is empty: a subagent's event, which its call draws, in the subagent tab, its
-    /// last words, which its report says, or a prompt, drawn where the agent took it or at the end.
-    InCall(Seq),
+    /// Drawn elsewhere, so its own row is empty: in the subagent tab, its last words, which its report says, or a
+    /// prompt, drawn where the agent took it or at the end.
+    Elsewhere(Seq),
 }
 
 /// Draws the list's row `item`, as [`render_row`] says.
@@ -112,7 +111,7 @@ fn render_row_inner(
     let find = model.borrow().find.clone();
     let shown = {
         let m = model.borrow();
-        if ix >= tail { Shown::Tail(log.tail(), log.by(), tail::waiting(log, &m)) } else { Shown::of(log, &m, ix) }
+        if ix >= tail { Shown::Tail(log.tail(), tail::waiting(log, &m)) } else { Shown::of(log, &m, ix) }
     };
     render_shown(model, shared, &find, shown, cx)
 }
@@ -121,12 +120,10 @@ impl<'a> Shown<'a> {
     /// What the log's row `row` shows: its event, with what's around it, or nothing, for an event drawn elsewhere.
     fn of(log: &'a SessionLog, m: &Model, row: usize) -> Self {
         match log.row(row) {
-            Row::Event(event) if drawn_in_its_call(log, m, event) || alone::repeats_report(log, m, row) => {
-                Shown::InCall(event.seq)
-            }
+            Row::Event(event) if alone::repeats_report(log, m, row) => Shown::Elsewhere(event.seq),
             Row::Event(event) => match drawn_in_row(log, event) {
                 Some(drawn) => Shown::Event(event.seq, drawn, Around::read(log, m, drawn.seq, &drawn.body)),
-                None => Shown::InCall(event.seq),
+                None => Shown::Elsewhere(event.seq),
             },
             Row::Unloaded => Shown::Unloaded,
         }
@@ -142,16 +139,16 @@ fn render_shown(
     cx: &mut App,
 ) -> Option<AnyElement> {
     Some(match shown {
-        Shown::Tail(tail, by, waiting) => {
+        Shown::Tail(tail, waiting) => {
             for prompt in &waiting {
                 if let Waiting::Recorded(event, around) = prompt {
                     attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
                 }
             }
             let m = model.borrow();
-            let (at_work, folds, alone, heard) = (&m.at_work, &m.folds, m.alone.is_some(), &m.heard);
-            let end = EndOfChat { tail, waiting: &waiting, at_work, folds, alone, heard };
-            shared.texts.drawing(Of::Tail, || render_tail(&end, shared, by, cx))
+            let (at_work, folds, heard) = (&m.at_work, &m.folds, &m.heard);
+            let end = EndOfChat { tail, waiting: &waiting, at_work, folds, heard };
+            shared.texts.drawing(Of::Tail, || render_tail(&end, shared, cx))
         }
         // Each text an event's row no longer draws is hidden, such as one in a fold that's been closed, or all of
         // them once it's drawn elsewhere.
@@ -160,7 +157,7 @@ fn render_shown(
             let prompt_at = TextAt::only(row, 0);
             shared.texts.drawing(Of::Event(row), || render_event(event, &around, prompt_at, shared, find, cx))
         }
-        Shown::InCall(seq) => shared.texts.drawing(Of::Event(seq), empty),
+        Shown::Elsewhere(seq) => shared.texts.drawing(Of::Event(seq), empty),
         Shown::Unloaded => return None,
     })
 }

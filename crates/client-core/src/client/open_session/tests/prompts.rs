@@ -9,7 +9,7 @@ use parking_lot::Mutex;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, log, subscriptions};
 use protocol::model::{PromptLine, Seq, Session};
 
-use super::super::{FollowError, OpenSession};
+use super::super::{FollowError, OpenSession, View};
 use super::{
     answered_simply, follows_session, refused, requests_until_unsubscribed, session, start_hub_answering, until,
 };
@@ -63,7 +63,7 @@ fn a_hub_too_old_to_list_prompts_is_followed_without_them_and_not_asked_again() 
     let client = Client::connect(&socket, "test").unwrap();
 
     let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start(&client, &feed, &session());
+    let open = OpenSession::start(&client, &feed, &session(), View::Own);
     until("answered", || open.read(|log| !log.wants_prompt_list()));
     open.want(0..1, Some(0));
     let errors = open.take_errors();
@@ -90,7 +90,7 @@ fn a_hub_that_fails_to_list_prompts_goes_on_being_followed_and_is_asked_again_on
     let heard = start_hub(&socket, lists);
     let client = Client::connect(&socket, "test").unwrap();
     let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start(&client, &feed, &session());
+    let open = OpenSession::start(&client, &feed, &session(), View::Own);
     let mut errors = Vec::new();
 
     until("told of the failure", || {
@@ -125,7 +125,7 @@ fn a_session_thats_been_deleted_is_let_go_of_rather_than_reported() {
     let client = Client::connect(&socket, "test").unwrap();
 
     let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start(&client, &feed, &Session { id: GONE.into(), ..session() });
+    let open = OpenSession::start(&client, &feed, &Session { id: GONE.into(), ..session() }, View::Own);
 
     open.follow.changed.recv_timeout(Duration::from_secs(10)).expect("never heard back");
     let mut requests = std::iter::from_fn(|| heard.recv_timeout(Duration::from_secs(10)).ok());

@@ -12,7 +12,7 @@
 mod tests;
 
 mod collecting;
+pub(in crate::rows) use collecting::Gather;
 #[cfg(test)]
 pub(crate) use collecting::count;
 pub(crate) use collecting::{Found, of_row, rows_drawing, rows_to_count};
-pub(in crate::rows) use collecting::{Gather, of_block};

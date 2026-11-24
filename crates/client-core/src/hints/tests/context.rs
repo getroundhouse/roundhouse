@@ -4,7 +4,7 @@ use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Read;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::fixtures;
-use protocol::model::{Records, Repo, Rev, Seq};
+use protocol::model::{Place, Records, Repo, Rev, Seq};
 
 use crate::hints::HintWord;
 use crate::records::{HubRecords, InWorkspace};
@@ -22,7 +22,7 @@ pub(super) fn sample_workspace() -> InWorkspace {
 }
 
 pub(super) fn sample_log() -> SessionLog {
-    let mut log = SessionLog::new(Seq::new(0));
+    let mut log = SessionLog::new(Place::default());
     log.apply_event(fixtures::event(
         Seq::new(1),
         EventBody::Assistant {

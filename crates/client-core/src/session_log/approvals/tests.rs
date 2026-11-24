@@ -1,5 +1,6 @@
 use protocol::event::NoticeLevel;
 use protocol::fixtures::{self, allow_once, decided, event};
+use protocol::model::Place;
 
 use super::*;
 
@@ -27,7 +28,7 @@ fn seqs(open: &[&SessionEvent]) -> Vec<Seq> {
 /// What's loaded can't say whether an answer is in a page that isn't, and the record can.
 #[test]
 fn the_record_says_which_are_open_whatever_is_loaded() {
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.apply_event(asked(Seq::new(1), "a"));
     log.apply_event(asked(Seq::new(2), "b"));
     log.apply_event(later(Seq::new(4)));
@@ -49,7 +50,7 @@ fn the_record_says_which_are_open_whatever_is_loaded() {
 /// Until the feed brings a newer copy of the record, which says the same.
 #[test]
 fn what_is_loaded_after_the_record_was_read_says_what_has_changed_since() {
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.apply_event(asked(Seq::new(1), "a"));
     let read_then = recorded(&[(Seq::new(1), "a")], Seq::new(1));
 
@@ -65,7 +66,7 @@ fn what_is_loaded_after_the_record_was_read_says_what_has_changed_since() {
 #[test]
 fn a_waiting_request_no_page_holds_is_fetched_on_its_own_once_and_let_go_once_answered() {
     let (z, last) = (Seq::new(9), Seq::new(600));
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.apply_event(later(last));
     let waiting = recorded(&[(z, "z")], last);
     log.waiting_on(Some(&waiting));
@@ -87,7 +88,7 @@ fn a_waiting_request_no_page_holds_is_fetched_on_its_own_once_and_let_go_once_an
 #[test]
 fn a_waiting_request_that_couldnt_be_fetched_waits_for_the_next_connection() {
     let (z, y, last) = (Seq::new(9), Seq::new(10), Seq::new(600));
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.apply_event(later(last));
     log.waiting_on(Some(&recorded(&[(z, "z"), (y, "y")], last)));
 
@@ -114,12 +115,12 @@ fn a_waiting_request_that_couldnt_be_fetched_waits_for_the_next_connection() {
 #[test]
 fn a_waiting_request_whose_page_is_let_go_of_is_kept() {
     let last = 15_000;
-    let mut log = SessionLog::new(Seq::new(last));
+    let mut log = SessionLog::new(Place::new(last));
     let waiting = recorded(&[(Seq::FIRST, "a")], Seq::new(last));
     log.waiting_on(Some(&waiting));
     for start in (1..last).step_by(250) {
         let at = |seq| if seq == 1 { asked(Seq::FIRST, "a") } else { later(Seq::new(seq)) };
-        let position = Position::of_seq(Seq::new(start));
+        let position = Position::of_place(Place::new(start));
         log.focus_on(position.row().unwrap()..position.row().unwrap() + 1, Some(position.row().unwrap()));
         log.install_page(position, (start..start + 250).map(at).collect());
     }

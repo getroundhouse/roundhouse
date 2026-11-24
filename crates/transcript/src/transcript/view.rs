@@ -70,8 +70,7 @@ impl EventEmitter<TranscriptEvent> for Transcript {}
 
 impl Transcript {
     /// A chat: the agent's own events, with each subagent's call drawn from its record, which `records`, the copy of
-    /// the hub's records it's from, keeps, as it does the chat's other records while this shows it. From a hub that
-    /// can't read them apart, every event, with each subagent's work gathered into its call.
+    /// the hub's records it's from, keeps, as it does the chat's other records while this shows it.
     pub fn new(client: Client, records: &RecordsFeed, session: &Session, cx: &mut Context<Self>) -> Self {
         let at_work = AtWork::of(&records.snapshot(), session);
         Self::start(client, records, session, View::Own, at_work, cx)
@@ -103,9 +102,9 @@ impl Transcript {
     ) -> Self {
         let list_id = match &view {
             View::Subagent(call) => format!("{}-{call}", session.id),
-            View::Whole | View::Own => session.id.to_string(),
+            View::Own => session.id.to_string(),
         };
-        let open = OpenSession::start_view(&client, records, session, view);
+        let open = OpenSession::start(&client, records, session, view);
         let log = open.version();
         let (rows, loaded) = rows_and_loaded(&log);
         let this = cx.weak_entity();

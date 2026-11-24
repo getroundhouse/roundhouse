@@ -14,7 +14,6 @@ pub(super) use heard::Heard;
 pub(super) use reply::{Answer, Outcome, Reply};
 pub(super) use settled::{AnswerTo, Settled};
 pub(super) use subagent::{Names, Subagent};
-pub(crate) use subagent::{REACH, SubagentCalls, drawn_in_its_call, its_call};
 
 #[cfg(test)]
 mod tests;

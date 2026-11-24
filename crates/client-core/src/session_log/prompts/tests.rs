@@ -18,7 +18,7 @@ fn notice() -> EventBody {
 
 /// A log of these bodies, from seq 1, all loaded.
 fn log(bodies: Vec<EventBody>) -> SessionLog {
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     for (at, body) in (1..).zip(bodies) {
         log.apply_event(event(Seq::new(at), body));
     }
@@ -70,7 +70,7 @@ fn only_what_the_log_says_about_the_prompt_settles_it() {
 
 #[test]
 fn a_prompt_far_behind_what_is_loaded_was_settled_long_ago() {
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.apply_event(event(Seq::new(1), prompt()));
     log.apply_event(event(Seq::new(3), notice()));
 
@@ -178,26 +178,6 @@ fn a_prompt_sent_during_the_last_reply_waits_at_the_end_until_its_taken() {
     assert_eq!(log.prompt_at(Seq::new(3)), PromptAt::Settled(5), "after the turn's end");
 }
 
-/// A newer hub reads by place where the one before it couldn't, so where a prompt was taken arrives again, at its
-/// place.
-#[test]
-fn a_prompt_is_drawn_where_it_was_taken_after_the_log_starts_again_by_place() {
-    let mut log = log(vec![prompt(), taken(Seq::new(1))]);
-    log.read_by_place();
-    log.reaches(Place::new(2));
-
-    for (seq, body) in [(1, prompt()), (2, taken(Seq::new(1)))] {
-        log.apply_event(SessionEvent { place: Place::new(seq), ..event(Seq::new(seq), body) });
-    }
-
-    assert_eq!(log.prompt_at(Seq::new(1)), PromptAt::Settled(1));
-    assert_eq!(
-        log.prompt_settled_in(at(&log, Seq::new(2))).map(|prompt| prompt.seq),
-        Some(Seq::new(1)),
-        "and the row that took it draws it"
-    );
-}
-
 /// The hub's list can say where a prompt was taken before the event that took it arrives, and until then it stays at
 /// the end, rather than in a row there isn't yet.
 #[test]
@@ -221,7 +201,7 @@ fn a_prompt_the_hub_lists_as_taken_stays_at_the_end_until_the_event_that_took_it
 /// The hub's list says which way each prompt was settled, so one whose event isn't loaded isn't taken for taken.
 #[test]
 fn a_prompt_whose_settling_isnt_loaded_stands_as_the_hubs_list_says() {
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.apply_event(event(Seq::new(1), prompt()));
     log.apply_event(event(Seq::new(3), notice()));
     assert_eq!(log.prompt_state(Seq::new(1)), PromptState::Taken, "guessed, as from a hub that doesn't say");
@@ -234,7 +214,7 @@ fn a_prompt_whose_settling_isnt_loaded_stands_as_the_hubs_list_says() {
 
 #[test]
 fn a_prompt_far_behind_what_is_loaded_is_drawn_in_its_own_row() {
-    let mut log = SessionLog::new(Seq::default());
+    let mut log = SessionLog::new(Place::default());
     log.apply_event(event(Seq::new(1), prompt()));
     log.apply_event(event(Seq::new(3), notice()));
 
@@ -252,7 +232,7 @@ fn a_prompt_that_moves_changes_the_rows_it_leaves_and_goes_to() {
     log.apply_event(event(Seq::new(5), taken(Seq::new(3))));
     assert_eq!(log.take_changes().rows, Some(2..6), "its own row, where it's drawn now, and the tail it left");
     // By place, with the prompt far enough back not to be loaded, so its own row says nothing.
-    let mut dropped = SessionLog::by_place(Place::default());
+    let mut dropped = SessionLog::new(Place::default());
     let placed = |place, seq, body| SessionEvent { place: Place::new(place), ..event(seq, body) };
     for (place, body) in [(1, notice()), (2, EventBody::PromptDropped { prompt: Seq::new(5) }), (3, notice())] {
         dropped.apply_event(placed(place, Seq::new(place + 9), body));
@@ -264,17 +244,17 @@ fn a_prompt_that_moves_changes_the_rows_it_leaves_and_goes_to() {
 
 #[test]
 fn a_page_that_brings_a_prompt_or_where_it_was_taken_changes_the_other_row_too() {
-    let mut log = SessionLog::new(Seq::new(600));
+    let mut log = SessionLog::new(Place::new(600));
     let page = |range: std::ops::Range<u64>| range.map(|seq| event(Seq::new(seq), notice())).collect::<Vec<_>>();
     let mut later = page(251..501);
     later[1] = event(Seq::new(252), taken(Seq::new(250)));
     log.focus_on(260..261, Some(260));
-    log.install_page(Position::of_seq(Seq::new(251)), later);
+    log.install_page(Position::of_place(Place::new(251)), later);
     let _ = log.take_changes();
     let mut earlier = page(1..251);
     earlier[249] = event(Seq::new(250), prompt());
 
-    log.install_page(Position::of_seq(Seq::new(1)), earlier);
+    log.install_page(Position::of_place(Place::new(1)), earlier);
 
     assert_eq!(log.take_changes().rows, Some(0..252), "the page, and the row that took the prompt in it");
     assert_eq!(log.prompt_at(Seq::new(250)), PromptAt::Settled(251));

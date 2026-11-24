@@ -14,7 +14,7 @@ fn at_rows(rows: &[usize]) -> Vec<Line> {
     rows.iter().zip(1..).map(|(row, number)| prompt_at(*row, number)).collect()
 }
 
-/// The `seq` of the event in `row`, in a chat that holds every event.
+/// The `seq` of the event in `row`, in a chat no subagent has worked in, where each event's place is its `seq`.
 fn seq_in(row: usize) -> Seq {
     Seq::new(u64::try_from(row).unwrap() + 1)
 }

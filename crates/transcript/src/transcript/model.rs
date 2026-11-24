@@ -4,7 +4,6 @@ use super::record::AtWork;
 use crate::attachments::Picture;
 use crate::find::FindLook;
 use crate::folds::Folds;
-use crate::rows::SubagentCalls;
 use client_core::session_log::RecordedApprovals;
 use gpui_kit::SharedString;
 use protocol::model::{
@@ -28,8 +27,6 @@ pub(crate) struct Model {
     pub folds: Folds,
     /// The images prompts carry, by attachment, from the first time a row drew each.
     pub pictures: HashMap<AttachmentId, Picture>,
-    /// Where the calls that started subagents are, as rows have looked for them.
-    pub subagent_calls: RefCell<SubagentCalls>,
     /// What the agent is at, as the session's record says, which the transcript's last row draws.
     pub at_work: AtWork,
     /// The failed request whose card offers Retry, as [`crate::rows::retry_at`] says, as of the last look.
@@ -79,7 +76,6 @@ impl Model {
             kind_claims: None,
             folds: Folds::default(),
             pictures: HashMap::new(),
-            subagent_calls: RefCell::default(),
             at_work,
             retry_at: None,
             approvals: None,

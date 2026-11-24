@@ -54,11 +54,6 @@ impl Apart {
         }
     }
 
-    /// The same requests waiting, with none fetched, for a log that starts again.
-    pub(in super::super) fn again(self) -> Self {
-        Self { wanted: self.wanted, ..Self::default() }
-    }
-
     /// Fetches again each request fetched, keeping it until it comes.
     pub(in super::super) fn read_again(&mut self) {
         self.stale = self.fetched.keys().copied().collect();

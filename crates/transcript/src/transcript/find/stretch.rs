@@ -62,7 +62,7 @@ pub(super) fn counted_in(
     known: Known,
 ) -> Vec<(usize, usize)> {
     let Known { records, settled } = known;
-    let mut log = SessionLog::by_place(Place::default()).knowing(settled);
+    let mut log = SessionLog::new(Place::default()).knowing(settled);
     for event in events {
         log.apply_event(event);
     }
@@ -70,7 +70,7 @@ pub(super) fn counted_in(
     // says how a turn's card reads, which isn't found.
     let mut m = Model::with(AtWork::default());
     m.subagents = records;
-    let rows: BTreeSet<usize> = holding.iter().flat_map(|position| rows_to_count(&log, &m, *position)).collect();
+    let rows: BTreeSet<usize> = holding.iter().flat_map(|position| rows_to_count(&log, *position)).collect();
     rows.into_iter()
         .map(|row| (row, found_in_row(&log, &m, needle, row).iter().map(|found| found.matches).sum()))
         .collect()

@@ -54,7 +54,6 @@ mod kinds_of_text;
 mod lines;
 mod long_chats;
 mod mark_states;
-mod nested;
 mod own_turn_chats;
 mod patch;
 mod pictures;

@@ -1,27 +1,21 @@
 //! Fetches and follows the hub's history for the view an open session requests.
 
 use super::super::follow::{Reach, Source};
-use super::super::{Client, Result, Subscription, SubscriptionItem};
+use super::super::{Client, ClientError, Result, Subscription, SubscriptionItem};
 use super::View;
 use crate::records::HubRecords;
-use crate::session_log::{By, Position, SessionLog};
+use crate::session_log::{Position, SessionLog};
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, LogFrom};
 use protocol::event::SessionEvent;
-use protocol::model::{Place, Seq, SessionId, SubagentId};
+use protocol::model::{Place, SessionId, SubagentId};
 use std::sync::Arc;
 
 pub(super) struct SessionSource {
     pub(super) session_id: SessionId,
-    /// The view asked for.
-    pub(super) wanted: View,
-    /// The view followed, which is every event when the hub can't read the agent's own apart.
     pub(super) view: View,
-    /// How far the whole log went when the session was opened, for following it from a hub that can't read by
-    /// place.
-    pub(super) last_seq: Seq,
-    /// The hub has said how far the events by place go.
+    /// The hub has said how far the events go.
     pub(super) placed: bool,
     /// The build of the hub its events were read from, as the hub's hello said.
     pub(super) read_from: String,
@@ -37,9 +31,9 @@ impl SessionSource {
 
     /// Reads the log again on a hub of another build than the one its events were read from, since a migration can
     /// have rewritten them, and catching up from one past the last would leave them as they were. It's read again as
-    /// far as the hub's events go, which [`SessionSource::place`] has learned by then for a log by place, since the agent
-    /// can have gone on while the hub restarted. Builds that no install or package stamped all say the same, so the log
-    /// isn't read again between two of them.
+    /// far as the hub's events go, which [`SessionSource::place`] has learned by then, since the agent can have gone on
+    /// while the hub restarted. Builds that no install or package stamped all say the same, so the log isn't read again
+    /// between two of them.
     ///
     /// The build is what every hello already says, so the hub keeps nothing of its migrations for a client to compare.
     /// The cost is that every update reads each open chat's window again, once, though few updates rewrite an event.
@@ -51,30 +45,13 @@ impl SessionSource {
         }
     }
 
-    /// Asks how far the events by place go, the first time on each connection. A hub that can't read the agent's own
-    /// events apart is followed for every event instead, and one that can, after one that couldn't, by place again.
+    /// Asks how far the events go, the first time on each connection.
     pub(super) fn place(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<()> {
-        if self.view == View::Whole || self.placed {
+        if self.placed {
             return Ok(());
         }
-        match client.session_read_places(&self.session_id, self.subagent(), Place::new(1), 1) {
-            Ok((_, last)) => {
-                let mut log = change(held);
-                if log.by() == By::Seq {
-                    log.read_by_place();
-                }
-                log.reaches(last);
-            }
-            Err(e) if e.is_unsupported() && self.view == View::Own => {
-                self.view = View::Whole;
-                // One already by `seq`, from such a hub before, carries on from where it got to.
-                let mut log = change(held);
-                if log.by() == By::Place {
-                    log.read_whole(self.last_seq);
-                }
-            }
-            Err(e) => return Err(e),
-        }
+        let (_, last) = client.session_read_places(&self.session_id, self.subagent(), Place::new(1), 1)?;
+        change(held).reaches(last);
         self.placed = true;
         Ok(())
     }
@@ -84,7 +61,6 @@ impl Source for SessionSource {
     type Held = Arc<SessionLog>;
 
     fn reconnected(&mut self) {
-        self.view = self.wanted.clone();
         self.placed = false;
     }
 
@@ -93,11 +69,8 @@ impl Source for SessionSource {
         self.read_again_on_another_build(client, held);
         // Events arrive in order with no gaps, so carrying on from one past the last misses nothing, whatever
         // was fetched meanwhile.
-        let from = held.lock().received().next();
-        let from = match &self.view {
-            View::Whole => LogFrom::Seq { seq: from.seq() },
-            View::Own | View::Subagent(_) => LogFrom::Place { subagent: self.subagent().cloned(), place: from.place() },
-        };
+        let place = held.lock().received().next().place();
+        let from = LogFrom::Place { subagent: self.subagent().cloned(), place };
         let subscription = client.follow(Follow::Session { id: self.session_id.clone(), from: Some(from) })?;
         change(held).retry_failed();
         Ok(subscription)
@@ -122,7 +95,7 @@ impl Source for SessionSource {
                 false
             }
             SubscriptionItem::Event(event) => {
-                log.apply_event(*event);
+                log.apply_event(placed(*event)?);
                 true
             }
             SubscriptionItem::Tail(tail) => {
@@ -228,8 +201,8 @@ fn change(held: &Mutex<Arc<SessionLog>>) -> MappedMutexGuard<'_, SessionLog> {
     MutexGuard::map(held.lock(), Arc::make_mut)
 }
 
-/// The events of `view` at these positions, which are its `seq`s in the whole log and its places in the rest. A size
-/// limit can cut a read short, so this keeps going until the range is complete.
+/// The events of `view` at these positions. A size limit can cut a read short, so this keeps going until the range is
+/// complete.
 pub(super) fn read_range(
     client: &Client,
     session_id: &SessionId,
@@ -242,23 +215,22 @@ pub(super) fn read_range(
         // As many as there are rows from here to the end. 0, where no event is, has no row, so it adds none.
         let rows = from.row().unwrap_or(0)..range.end.row().unwrap_or(0);
         let limit = u32::try_from(rows.len()).unwrap_or(u32::MAX);
-        let (page, last) = match view {
-            View::Whole => {
-                let page = client.session_read(session_id, from.seq(), limit, false)?.0;
-                let last = page.last().map(|e| Position::of_seq(e.seq));
-                (page, last)
-            }
-            View::Own | View::Subagent(_) => {
-                let page = client.session_read_places(session_id, view.subagent(), from.place(), limit)?.0;
-                let last = page.last().map(|e| Position::of_place(e.place));
-                (page, last)
-            }
-        };
-        let Some(last) = last else { break };
+        let page = client.session_read_places(session_id, view.subagent(), from.place(), limit)?.0;
+        let page = page.into_iter().map(placed).collect::<Result<Vec<_>>>()?;
+        let Some(last) = page.last().map(Position::of) else { break };
         events.extend(page);
         from = last.next();
     }
     Ok(events)
+}
+
+/// `event`, which the hub sent with its place among the events from its agent or subagent, as it records every event
+/// with one. A log is held by place, so one with none is refused, rather than left out without a word.
+fn placed(event: SessionEvent) -> Result<SessionEvent> {
+    if event.place == Place::default() {
+        return Err(ClientError::Unexpected(format!("event {} of {} has no place", event.seq, event.session_id)));
+    }
+    Ok(event)
 }
 
 /// Lets go of the session's own records once nothing it follows of the session is left, as a view that closes its chat

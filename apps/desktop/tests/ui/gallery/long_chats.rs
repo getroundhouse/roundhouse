@@ -85,7 +85,7 @@ fn the_fourteenth_prompt_is_in_the_row_named() {
         world.events_from(&chat, Seq::new(1)).filter(|event| matches!(event.body, EventBody::UserPrompt { .. }));
     let fourteenth = PromptLine::of(prompts.nth(13).unwrap()).unwrap();
     // The agent's own events, as the chat follows them.
-    let mut log = SessionLog::by_place(Place::default());
+    let mut log = SessionLog::new(Place::default());
     for event in world.placed_from(&chat, None, Place::new(1)) {
         log.apply_event(event.clone());
     }

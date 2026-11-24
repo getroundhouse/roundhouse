@@ -90,9 +90,6 @@ fn stands(world: &World, subscription_id: u64, follow: &Follow) -> Result<Vec<Hu
             let log = match from {
                 None => log_from(world, id, Seq::new(1), subscription_id),
                 Some(LogFrom::Seq { seq }) => log_from(world, id, *seq, subscription_id),
-                Some(LogFrom::Place { .. }) if world.reads_every_event_together => {
-                    return Err(ApiError::new(ErrorCode::Unsupported, "a hub that can't read the agent's own apart"));
-                }
                 Some(LogFrom::Place { subagent, place }) => {
                     let subagent = world.subagent_named(id, subagent.as_ref());
                     places_from(world, id, subagent.as_ref(), (*place).max(Place::new(1)), subscription_id)

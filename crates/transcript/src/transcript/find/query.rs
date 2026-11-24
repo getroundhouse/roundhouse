@@ -2,7 +2,7 @@ use super::super::{Model, Transcript, TranscriptEvent};
 use super::{bar, count, stretch};
 use crate::find::FindLook;
 use crate::reveal::Wanted;
-use crate::rows::{NEAR, REACH, found_in_row, rows_drawing, rows_to_count};
+use crate::rows::{NEAR, found_in_row, rows_drawing, rows_to_count};
 use bar::Bar;
 use client_core::session_log::{Position, Row, SessionLog};
 use client_core::{Client, Search, Searched};
@@ -155,10 +155,7 @@ impl Transcript {
         finding.query = needle.clone().map(|needle| Query::new(needle, &self.client, &self.session));
         self.model.borrow_mut().find = Rc::new(FindLook::new(needle.clone(), None, reveal.clone(), look::colors(cx)));
         if let Some(needle) = needle {
-            let (found, rows) = {
-                let m = self.model.borrow();
-                held_to_count(&self.log, &m, &needle)
-            };
+            let (found, rows) = held_to_count(&self.log, &needle);
             if let Some(query) = self.query_mut() {
                 query.candidates.extend(found);
             }
@@ -195,13 +192,10 @@ impl Transcript {
 
     /// Follows what changed in the log's `changed` rows. Each event there that holds the needle, and each row there
     /// with matches, is counted again from what's held now, and so is each row there that draws an event after them,
-    /// such as a call whose result has just come, or a subagent's work.
+    /// such as a call whose result has just come.
     pub(crate) fn find_in_changes(&mut self, changed: Range<usize>, cx: &mut Context<Self>) {
         let Some(query) = self.query() else { return };
-        let (found, rows) = {
-            let m = self.model.borrow();
-            changed_to_count(&self.log, &m, (&query.needle, &query.candidates, &query.counts), changed)
-        };
+        let (found, rows) = changed_to_count(&self.log, (&query.needle, &query.candidates, &query.counts), changed);
         if let Some(query) = self.query_mut() {
             query.candidates.extend(found);
         }
@@ -260,20 +254,18 @@ impl Transcript {
 
 /// Where the events the log holds that hold the needle are, and the rows that draw them, to count when something's
 /// typed.
-pub(super) fn held_to_count(log: &SessionLog, m: &Model, needle: &Needle) -> (Vec<Position>, BTreeSet<usize>) {
+pub(super) fn held_to_count(log: &SessionLog, needle: &Needle) -> (Vec<Position>, BTreeSet<usize>) {
     let holding = log.loaded().filter(|event| needle.is_in_event(&event.body));
-    let found: Vec<Position> = holding.map(|event| log.position(event)).collect();
-    let rows = found.iter().flat_map(|position| rows_to_count(log, m, *position)).collect();
+    let found: Vec<Position> = holding.map(Position::of).collect();
+    let rows = found.iter().flat_map(|position| rows_to_count(log, *position)).collect();
     (found, rows)
 }
 
 /// What to count again once the log's `changed` rows have changed: the events there that hold the needle, and the rows
 /// to count. Those are the rows there with matches, the rows that draw the events there that hold it, and the rows of
-/// any events after them that hold it and are drawn in a row there, such as a subagent's work in the call that started
-/// it.
+/// any events after them that hold it and are drawn in a row there, such as a call's result in the call's row.
 pub(super) fn changed_to_count(
     log: &SessionLog,
-    m: &Model,
     (needle, candidates, counts): (&Needle, &BTreeSet<Position>, &Counts),
     changed: Range<usize>,
 ) -> (Vec<Position>, BTreeSet<usize>) {
@@ -281,17 +273,17 @@ pub(super) fn changed_to_count(
     let mut found = Vec::new();
     for ix in changed.start..changed.end.min(log.row_count()) {
         let Row::Event(event) = log.row(ix) else { continue };
-        let position = log.position(event);
+        let position = Position::of(event);
         if candidates.contains(&position) || needle.is_in_event(&event.body) {
             found.push(position);
-            rows.extend(rows_to_count(log, m, position));
+            rows.extend(rows_to_count(log, position));
         }
     }
-    let after = Position::of_rows(changed.end..changed.end + REACH);
+    let after = Position::of_rows(changed.end..changed.end + NEAR);
     for &position in candidates.range(after) {
-        let drawn_here = || rows_drawing(log, m, position).iter().any(|row| changed.contains(row));
+        let drawn_here = || rows_drawing(log, position).iter().any(|row| changed.contains(row));
         if position.row().is_some_and(|row| is_loaded(log, row)) && drawn_here() {
-            rows.extend(rows_to_count(log, m, position));
+            rows.extend(rows_to_count(log, position));
         }
     }
     (found, rows)

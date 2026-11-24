@@ -6,8 +6,7 @@
 //! is asked again on a new connection, as a page is, while the log follows the session either way. A hub can be new
 //! enough to list prompts and too old to list compactions, so each list goes its own way.
 //!
-//! A chat's rows go by the agent's own events, so a prompt or a compaction is drawn at its place among them. A hub that
-//! can't read by place gives the whole log, and there each is at its `seq`.
+//! A chat's rows go by the agent's own events, so a prompt or a compaction is drawn at its place among them.
 
 #[cfg(test)]
 use super::{Position, SessionLog};

@@ -8,7 +8,6 @@
 #![cfg(test)]
 
 use client_core::fake_hub::events::{finished_turn, first_turn, launched, subagent, user_prompt};
-use client_core::session_log::SessionLog;
 use desktop::workspace_pane::Showing;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
@@ -217,8 +216,9 @@ fn a_long_title_gives_way_to_the_button_a_prompt_after_is_in_the_outline_at_its_
     let (row, seq) = row.expect("the row that took the second prompt");
     let tick = |row: usize| SharedString::from(format!("outline-tick/{row}"));
 
-    let in_the_whole_log = SessionLog::new(seq).row_of(seq).unwrap();
-    assert!(row < in_the_whole_log, "row {row}, and {in_the_whole_log} in the whole log");
+    // Before the row of its `seq`, since the subagent's events come before it in the whole log.
+    let by_seq = usize::try_from(seq.get()).unwrap() - 1;
+    assert!(row < by_seq, "row {row}, and {by_seq} by its seq");
     ui.wait("the outline", |ui| ui.has("outline"));
     assert!(ui.has(tick(row)), "its tick is at the row it's drawn in");
     let workspace = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.workspace().id.clone());

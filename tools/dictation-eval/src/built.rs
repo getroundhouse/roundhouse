@@ -7,7 +7,7 @@ use client_core::session_log::SessionLog;
 use protocol::capability::asking::{Choose, Question, QuestionOption, TypedAnswer};
 use protocol::event::{ContentBlock, EventBody};
 use protocol::fixtures;
-use protocol::model::{ProposalOption, ProposalQuestion, Proposed, PullRequest, Records, Repo, Rev, Seq};
+use protocol::model::{Place, ProposalOption, ProposalQuestion, Proposed, PullRequest, Records, Repo, Rev, Seq};
 use protocol::prompt::{Prompt, PromptFrom};
 
 use crate::case::{Case, ChatEntry, FieldKind, Invalid, ProposalCase, QuestionCase, WorkspaceCase};
@@ -111,7 +111,7 @@ fn pull_request(title: &str) -> PullRequest {
 }
 
 fn chat(entries: &[ChatEntry]) -> SessionLog {
-    let mut log = SessionLog::new(Seq::new(0));
+    let mut log = SessionLog::new(Place::default());
     for (seq, entry) in (1..).zip(entries) {
         let body = match entry {
             ChatEntry::Person(text) => EventBody::UserPrompt {

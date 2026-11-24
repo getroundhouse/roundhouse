@@ -10,7 +10,7 @@ use crate::item_key::ItemKey;
 use crate::texts::{Style, TextAt, Written};
 use crate::transcript::{AtWork, Model};
 use crate::{attachments, find};
-use client_core::session_log::{By, SessionLog};
+use client_core::session_log::SessionLog;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -33,8 +33,6 @@ pub(in super::super) struct EndOfChat<'a> {
     /// What's open, which says how a thought still being written shows, and which lines for several background tasks
     /// have theirs under them.
     pub(in super::super) folds: &'a Folds,
-    /// It's the subagent tab's, whose tail the hub sends with only what its subagent is writing.
-    pub(in super::super) alone: bool,
     /// How each of the agent's replies read out loud ended, as the hub records it, which dims what of one still being
     /// written wasn't heard.
     pub(in super::super) heard: &'a HashMap<MessageId, Arc<ReplyHeard>>,
@@ -63,19 +61,18 @@ pub(in super::super) fn waiting(log: &SessionLog, m: &Model) -> Vec<Waiting> {
 /// Text the agent is still writing, then the prompts it hasn't read yet, then the working line while it works, then
 /// what it's running in the background, then its wait on the pull request. A thought shows its latest line, or all of
 /// it when thinking starts open, the way it will once it's recorded. A call shows once it's recorded: until then it isn't
-/// running, and the working line says the agent is at work. A subagent's line opens the subagent tab when the log is
-/// read `by` place, which keeps its work apart, since only then can the tab read it. Nothing's found at the end of the
-/// chat, since it isn't counted, so nothing's marked there either.
-pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx: &App) -> AnyElement {
-    let EndOfChat { tail, waiting, at_work, folds, alone, heard } = *end;
-    let (written, placed) = still_writing(tail, alone, heard, shared, folds.thinking_open(), cx);
+/// running, and the working line says the agent is at work. A subagent's line opens the subagent tab. Nothing's found
+/// at the end of the chat, since it isn't counted, so nothing's marked there either.
+pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, cx: &App) -> AnyElement {
+    let EndOfChat { tail, waiting, at_work, folds, heard } = *end;
+    let (written, placed) = still_writing(tail, heard, shared, folds.thinking_open(), cx);
     let mut after: Vec<AnyElement> = Vec::new();
     if at_work.working {
         let line = working_line(at_work.turn_started_at_ms, tail, shared, cx);
         after.push(line.into_any_element());
     }
     // Left going by a turn, or started during one.
-    after.extend(background::lines(&at_work.background, folds, by, shared, cx));
+    after.extend(background::lines(&at_work.background, folds, shared, cx));
     let wait = at_work.waits.iter().map(|open| background::wait_line(open, shared, cx));
     after.extend(wait.map(IntoElement::into_any_element));
     if waiting.is_empty() {
@@ -98,19 +95,17 @@ pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx
 /// What the agent is still writing, or in the subagent tab, its subagent, block by block, and how many texts that is,
 /// each at the next place at the end of the chat. Each is known as it will be once it's recorded, and the agent's own
 /// text is dimmed where it wasn't heard, read out loud, as it will be, since the device can read a reply as it's
-/// written. A chat's tail from a hub too old to keep a subagent's work apart holds what its subagents are writing too,
-/// which shows in the call that started each, once it's recorded. The tab's holds only its subagent's, which is all it
-/// shows.
+/// written. The hub sends the chat's tail with only what the agent is writing, and the tab's with only what its
+/// subagent is.
 fn still_writing(
     tail: &Tail,
-    alone: bool,
     heard: &HashMap<MessageId, Arc<ReplyHeard>>,
     shared: &Shared,
     thinking_open: bool,
     cx: &App,
 ) -> (Vec<AnyElement>, usize) {
     let (mut out, mut placed) = (Vec::new(), 0);
-    for message in tail.messages.iter().filter(|m| alone || m.subagent.is_none()) {
+    for message in &tail.messages {
         let recorded = heard.get(&message.message_id).map(Arc::as_ref);
         let read_out =
             Heard::of(&message.message_id, tail.speaking.as_ref(), recorded).filter(|_| message.subagent.is_none());

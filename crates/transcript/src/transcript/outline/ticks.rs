@@ -44,7 +44,7 @@ const LIST_ABOVE: Pixels = px(4.);
 const PRIORITY: usize = 1;
 
 /// A prompt or a compaction, and the row of the chat it's drawn in, which the log says, since the chat's rows go by the
-/// agent's own events, or from a hub that can't read them apart, by every event.
+/// agent's own events.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Line {
     pub(super) kind: Kind,

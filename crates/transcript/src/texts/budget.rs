@@ -17,8 +17,8 @@ impl Store {
     /// last look.
     pub(super) fn frame_started(&mut self) {
         // Before the frame is counted, so what the one just ended drew isn't put away. A row can draw more short texts
-        // than are kept, as a call does with a long subagent's work gathered into it, and it draws them all again in
-        // the next frame, which would parse them again, and so on each frame after.
+        // than are kept, and it draws them all again in the next frame, which would parse them again, and so on each
+        // frame after.
         if self.parses > 0 {
             self.parses = 0;
             self.keep_fewer_blocks();
@@ -106,8 +106,8 @@ mod tests {
         assert!(again, "and one drawn again is parsed again");
     }
 
-    /// One row can draw more short texts than are kept, as a call does with a long subagent's work gathered into it,
-    /// and draws them all again each frame. They're parsed once, not again each frame.
+    /// One row can draw more short texts than are kept, and draws them all again each frame. They're parsed once, not
+    /// again each frame.
     #[test]
     fn what_one_frame_drew_is_not_put_away_as_the_next_starts() {
         let texts = Texts::alone();

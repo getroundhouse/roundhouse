@@ -1,7 +1,7 @@
 //! What only tests read of a transcript: how much of it is loaded, what's at a row and which row has what, and what its
 //! texts show.
 
-use client_core::session_log::{By, PromptState, Row, SessionLog};
+use client_core::session_log::{Position, PromptState, Row, SessionLog};
 use gpui_kit::{Bounds, Context, Pixels, Window};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{PromptLine, Seq};
@@ -22,15 +22,11 @@ impl Transcript {
         event(&self.log, row)
     }
 
-    /// The row `event` is in, whether it's loaded or not, as its position in the log says, or `None` for one the
-    /// transcript doesn't follow. A log by `seq` follows every event, and one by place follows the agent's own in a
-    /// chat, and in the subagent tab, the subagent's.
+    /// The row `event` is in, whether it's loaded or not, as its place says, or `None` for one the transcript doesn't
+    /// follow. A chat follows the agent's own events, and the subagent tab its subagent's.
     pub fn event_row(&self, event: &SessionEvent) -> Option<usize> {
         let followed = event.subagent == self.model.borrow().alone;
-        self.session.read(|log| match log.by() {
-            By::Place if !followed => None,
-            By::Seq | By::Place => log.position(event).row(),
-        })
+        followed.then(|| Position::of(event).row()).flatten()
     }
 
     /// The row the outline puts the prompt `line` in, as the log says.
