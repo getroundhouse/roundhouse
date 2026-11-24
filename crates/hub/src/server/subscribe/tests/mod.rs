@@ -13,5 +13,6 @@ mod models;
 mod observations;
 mod rules;
 mod sessions;
+mod worker_builds;
 mod workspace_branches;
 mod workspace_github;

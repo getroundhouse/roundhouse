@@ -37,6 +37,7 @@ impl Revised for Observation {
             // Read from a version of the client protocol this client doesn't speak, so its hub sends it none, and one
             // that came would be drawn as one this client can't.
             Observation::WorkspaceBranches { .. }
+            | Observation::WorkspaceWorkerBuild { .. }
             | Observation::RepositoryReach { .. }
             | Observation::GithubUsername { .. }
             | Observation::GithubAppSaid { .. }

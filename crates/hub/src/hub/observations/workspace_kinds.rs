@@ -1,6 +1,7 @@
-//! The kinds of what a workspace's worker says of the workspace's worktrees: which branches each has.
+//! The kinds of what a workspace's worker says of the workspace's worktrees, which branches each has, and of itself,
+//! which build it is.
 
-use protocol::model::{Branches, Observation, ObservationKey, Observed, RecordKey, Rev, WorkspaceId};
+use protocol::model::{Branches, Observation, ObservationKey, Observed, OtherBuild, RecordKey, Rev, WorkspaceId};
 
 use super::kept::Table;
 use super::kinds::{Form, Kind};
@@ -27,6 +28,35 @@ impl Kind for WorkspaceBranches {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.workspace_branches
+    }
+
+    fn old_form_on(workspace_id: &WorkspaceId) -> Option<RecordKey> {
+        Some(RecordKey::Workspace { id: workspace_id.clone() })
+    }
+}
+
+/// That a workspace's worker is another build than the hub's, as its hello said, sent at the hub's level: current while
+/// that worker is connected, and gone once it isn't. Kept in memory alone, since only a worker the hub carries on with
+/// can be another build, and the hub hears that of each as it does. A client of a version from before it reads it on
+/// the workspace's record.
+pub(crate) struct WorkspaceWorkerBuild;
+
+impl Kind for WorkspaceWorkerBuild {
+    type Of = WorkspaceId;
+    type Value = OtherBuild;
+    const FORM: Form = Form { table: "workspace_worker_build", version: 1 };
+    const IN_MEMORY_ALONE: bool = true;
+
+    fn observation(workspace_id: &WorkspaceId, build: Observed<OtherBuild>, rev: Rev) -> Option<Observation> {
+        Some(Observation::WorkspaceWorkerBuild { workspace_id: workspace_id.clone(), build, rev })
+    }
+
+    fn key(workspace_id: &WorkspaceId) -> Option<ObservationKey> {
+        Some(ObservationKey::WorkspaceWorkerBuild { workspace_id: workspace_id.clone() })
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.workspace_worker_build
     }
 
     fn old_form_on(workspace_id: &WorkspaceId) -> Option<RecordKey> {

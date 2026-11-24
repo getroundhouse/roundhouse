@@ -19,7 +19,7 @@ use super::kinds::{
     WaitKey, WaitRead, WorkspacePullRequest,
 };
 use super::tables::Tables;
-use super::workspace_kinds::WorkspaceBranches;
+use super::workspace_kinds::{WorkspaceBranches, WorkspaceWorkerBuild};
 use crate::hub::Hub;
 
 /// A record, or what holds records, with a field a client of a version from before an observation reads it in.
@@ -28,11 +28,15 @@ pub(crate) trait OldForm {
     fn fill(&mut self, tables: &mut Tables);
 }
 
-/// The workspace's branches, on its record, `None` while they aren't known, and how many files were uncommitted as its
-/// pull request was read, on its link, which no client reads, 0 where what's kept of its pull request is of another.
+/// The workspace's branches, on its record, `None` while they aren't known, which build its worker is, and how many
+/// files were uncommitted as its pull request was read, on its link, which no client reads, 0 where what's kept of its
+/// pull request is of another.
 impl OldForm for Workspace {
     fn fill(&mut self, tables: &mut Tables) {
         self.branches = WorkspaceBranches::table(tables).value(&self.id).cloned();
+        // A worker too old to name its build is another all the same, which this field can't say, so it reads as the
+        // hub's own, as it did.
+        self.worker_build = WorkspaceWorkerBuild::table(tables).value(&self.id).and_then(|build| build.said.clone());
         if let Some(link) = self.pull_request_link.as_mut().and_then(|linked| linked.link.as_mut()) {
             let own = WorkspacePullRequest::table(tables).value(&self.id).and_then(|said| said.pull_request.as_ref());
             let of_the_link = own.filter(|own| own.pull_request.summary.about.url == link.url);

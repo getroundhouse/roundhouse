@@ -1,15 +1,16 @@
 use super::super::Hub;
+use crate::hub::observations::WorkspaceWorkerBuild;
+use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
-use protocol::client::HubNotice;
-use protocol::model::WorkspaceId;
+use protocol::model::{OtherBuild, WorkspaceId};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use tracing::{debug, info, warn};
 
 impl Hub {
     /// Replaces `link`, the workspace's worker, which is another build, once two looks in a row find nothing in the
-    /// workspace at work. Gives up once the worker has gone, or been replaced, or the hub is stopping. Its workspace's
-    /// record says which build it is until then, as [`Hub::record_worker_build`] has it say.
+    /// workspace at work. Gives up once the worker has gone, or been replaced, or the hub is stopping. Which build it
+    /// is is known until then, as [`Hub::worker_build_heard`] keeps it.
     #[expect(
         clippy::disallowed_methods,
         reason = "how often a worker of another build is looked at, to replace it once nothing in its workspace is at work"
@@ -34,22 +35,32 @@ impl Hub {
                 }
                 idle_before = idle;
             }
-            // The next worker is the hub's own build. A hub that's stopping leaves the record to the next hub, which
-            // forgets it as it starts.
+            // The next worker is the hub's own build. A hub that's stopping leaves it, as it keeps it in memory alone.
             if !hub.shutting_down.load(Ordering::SeqCst) {
-                hub.record_worker_build(&workspace_id, None).await;
+                hub.worker_build_gone(&workspace_id).await;
             }
         });
     }
 
-    /// Records which build the workspace's worker is, `None` once it's the hub's own, and announces the workspace if
-    /// that changed it, so every client can say which build its agents are on.
-    pub(in super::super) async fn record_worker_build(&self, workspace_id: &WorkspaceId, build: Option<&str>) {
-        let (id, build) = (workspace_id.clone(), build.map(str::to_string));
-        match self.blocking(move |store| store.set_workspace_worker_build(&id, build.as_deref())).await {
-            Ok(Some(workspace)) => self.notify(HubNotice::Workspace(workspace)),
-            Ok(None) => {}
-            Err(e) => warn!(%workspace_id, "recording which build its worker is: {}", e.message),
+    /// Keeps that the workspace's worker, `link`, which the hub carries on with, is another build than the hub's, as its
+    /// hello said, current while it's connected, so every client can say which build its agents are on. One too old to
+    /// name its build is another all the same.
+    pub(crate) async fn worker_build_heard(&self, workspace_id: &WorkspaceId, link: &WorkerLink) {
+        let build = OtherBuild { said: link.said_build().map(str::to_string) };
+        let id = workspace_id.clone();
+        let kept = async {
+            self.observation_kept_current::<WorkspaceWorkerBuild>(id.clone()).await?;
+            self.observation_read::<WorkspaceWorkerBuild>(id, build, now_ms()).await
+        };
+        if let Err(e) = kept.await {
+            warn!(%workspace_id, "keeping which build its worker is: {}", e.message);
+        }
+    }
+
+    /// Forgets which build the workspace's worker was, once it's gone, since the next is the hub's own.
+    pub(crate) async fn worker_build_gone(&self, workspace_id: &WorkspaceId) {
+        if let Err(e) = self.observation_gone::<WorkspaceWorkerBuild>(workspace_id.clone()).await {
+            warn!(%workspace_id, "forgetting which build its worker was: {}", e.message);
         }
     }
 

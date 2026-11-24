@@ -31,4 +31,4 @@ pub(crate) use kinds::{
     WorkspaceRepositoryUnseen,
 };
 pub(crate) use subjects::ChildWorktreeKey;
-pub(crate) use workspace_kinds::{ChildWorktreeBranches, WorkspaceBranches};
+pub(crate) use workspace_kinds::{ChildWorktreeBranches, WorkspaceBranches, WorkspaceWorkerBuild};

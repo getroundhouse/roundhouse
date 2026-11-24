@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AccountIdentity, ConversationCache, GithubAppSaid, Observed, OwnPullRequestDetail, OwnPullRequestSaid,
+    AccountIdentity, ConversationCache, GithubAppSaid, Observed, OtherBuild, OwnPullRequestDetail, OwnPullRequestSaid,
     ReferenceSaid, WaitRead,
 };
 use crate::capability::output::TodoList;
@@ -45,6 +45,11 @@ pub enum Observation {
     /// the workspace's, which stays on its record. A client of a version from before it reads it on the workspace's
     /// record, as [`ReadFrom::EveryObservation`] says.
     WorkspaceBranches { workspace_id: WorkspaceId, branches: Observed<Branches>, rev: Rev },
+    /// That a workspace's worker is another build than the hub's, as its hello said, while it's connected. Sent at the
+    /// hub's level, since the desktop app counts them for every workspace. Current while that worker is connected, and
+    /// gone once it isn't, as it's replaced with the hub's own. The hub forgets every one as it starts. A client of a
+    /// version from before it reads it on the workspace's record, as [`ReadFrom::EveryObservation`] says.
+    WorkspaceWorkerBuild { workspace_id: WorkspaceId, build: Observed<OtherBuild>, rev: Rev },
     /// Whether the default GitHub account can push to the repository on GitHub that a repository's address names, as
     /// GitHub last answered, or what the hub says of it without asking. Sent at the hub's level, since every workspace
     /// of the repository draws it. It's current while the hub checks every repository again each half hour. A client
@@ -132,6 +137,9 @@ pub enum ObservationKey {
     WorkspaceBranches {
         workspace_id: WorkspaceId,
     },
+    WorkspaceWorkerBuild {
+        workspace_id: WorkspaceId,
+    },
     RepositoryReach {
         repo: RepoId,
     },
@@ -196,6 +204,9 @@ impl Observation {
             Observation::WorkspaceBranches { workspace_id, .. } => {
                 ObservationKey::WorkspaceBranches { workspace_id: workspace_id.clone() }
             }
+            Observation::WorkspaceWorkerBuild { workspace_id, .. } => {
+                ObservationKey::WorkspaceWorkerBuild { workspace_id: workspace_id.clone() }
+            }
             Observation::RepositoryReach { repo, .. } => ObservationKey::RepositoryReach { repo: repo.clone() },
             Observation::GithubUsername { account, .. } => ObservationKey::GithubUsername { account: account.clone() },
             Observation::GithubAppSaid { app, .. } => ObservationKey::GithubAppSaid { app: *app },
@@ -233,6 +244,7 @@ impl Observation {
             | Observation::WorkspaceRepositoryUnseen { rev, .. }
             | Observation::Reference { rev, .. }
             | Observation::WorkspaceBranches { rev, .. }
+            | Observation::WorkspaceWorkerBuild { rev, .. }
             | Observation::RepositoryReach { rev, .. }
             | Observation::GithubUsername { rev, .. }
             | Observation::GithubAppSaid { rev, .. }
@@ -261,6 +273,7 @@ impl ObservationKey {
         match self {
             ObservationKey::WorkspaceLines { .. }
             | ObservationKey::WorkspacePullRequest { .. }
+            | ObservationKey::WorkspaceWorkerBuild { .. }
             | ObservationKey::RepositoryReach { .. }
             | ObservationKey::GithubUsername { .. }
             | ObservationKey::GithubAppSaid { .. }
@@ -292,6 +305,7 @@ impl ObservationKey {
             | ObservationKey::WorkspaceRepositoryUnseen { .. }
             | ObservationKey::Reference { .. } => Some(ReadFrom::GithubObserved),
             ObservationKey::WorkspaceBranches { .. }
+            | ObservationKey::WorkspaceWorkerBuild { .. }
             | ObservationKey::RepositoryReach { .. }
             | ObservationKey::GithubUsername { .. }
             | ObservationKey::GithubAppSaid { .. }

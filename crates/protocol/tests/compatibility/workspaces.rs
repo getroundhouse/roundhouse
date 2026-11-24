@@ -1,10 +1,11 @@
-//! A workspace's status, which a hub keeps in its database in the form it sends, and its branches, which a hub sends
-//! as an observation.
+//! A workspace's status, which a hub keeps in its database in the form it sends, and its branches and its worker's
+//! build, which a hub sends as observations.
 
 use protocol::client::HubNotice;
 use protocol::frame;
 use protocol::model::{
-    Branch, BranchName, Branches, CommitId, Head, Observation, ObservationKey, Observed, Rev, WorkspaceStatus,
+    Branch, BranchName, Branches, CommitId, Head, Observation, ObservationKey, Observed, OtherBuild, Rev,
+    WorkspaceStatus,
 };
 
 use crate::keeps_its_form;
@@ -51,5 +52,36 @@ fn a_workspaces_branches_keep_their_form_as_a_notice_and_a_removal() {
     keeps_its_form(
         &gone,
         r#"{"notice":"observation_removed","observation":{"kind":"workspace_branches","workspace_id":"w"},"rev":6}"#,
+    );
+}
+
+/// That a workspace's worker is another build, which a hub sends at its own level to a client of a version that reads it
+/// so, as a notice, of a worker that named its build and one too old to, and as its removal.
+#[test]
+fn a_workspaces_worker_build_keeps_its_form_as_a_notice_and_a_removal() {
+    let build = |said: Option<&str>| Observed::Current { value: OtherBuild { said: said.map(str::to_string) } };
+    let copy = |said| {
+        HubNotice::Observation(Observation::WorkspaceWorkerBuild {
+            workspace_id: "w".into(),
+            build: build(said),
+            rev: Rev::new(5),
+        })
+    };
+    let gone = HubNotice::ObservationRemoved {
+        observation: ObservationKey::WorkspaceWorkerBuild { workspace_id: "w".into() },
+        rev: Rev::new(6),
+    };
+
+    keeps_its_form(
+        &copy(Some("0.9.0")),
+        r#"{"notice":"observation","kind":"workspace_worker_build","workspace_id":"w","build":{"freshness":"current","value":{"said":"0.9.0"}},"rev":5}"#,
+    );
+    keeps_its_form(
+        &copy(None),
+        r#"{"notice":"observation","kind":"workspace_worker_build","workspace_id":"w","build":{"freshness":"current","value":{}},"rev":5}"#,
+    );
+    keeps_its_form(
+        &gone,
+        r#"{"notice":"observation_removed","observation":{"kind":"workspace_worker_build","workspace_id":"w"},"rev":6}"#,
     );
 }

@@ -58,8 +58,6 @@ const NONE_REPEATED: &[(&str, &str)] = &[(
 
 const ROWS: &[Row] = &[
     row("repos", "its address, read", nothing, workspaces::read_address, workspaces::repo),
-    row("workspaces", "another build", nothing, workspaces::older_build, workspaces::workspace),
-    row("workspaces", "the hub's build", workspaces::on_older_build, workspaces::own_build, workspaces::workspace),
     row("workspaces", "its setup", nothing, workspaces::setup, workspaces::workspace),
     row("workspaces", "its branch", nothing, workspaces::branch, workspaces::workspace),
     row("diff_comments", "its text, edited", workspaces::commented, workspaces::edit, workspaces::comment),

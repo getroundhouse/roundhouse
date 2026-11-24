@@ -74,4 +74,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::github_accounts::APPS_OBSERVED),
     // Each workspace's branches, and its other worktrees', which the hub keeps as observations, in `workspaces`.
     Sql(workspaces::BRANCHES_OBSERVED),
+    // Which build each workspace's worker is, which the hub keeps as an observation in memory alone, in `workspaces`.
+    Sql(workspaces::WORKER_BUILD_OBSERVED),
 ];

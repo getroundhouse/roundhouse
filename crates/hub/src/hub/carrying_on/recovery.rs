@@ -163,7 +163,7 @@ impl Hub {
                 Err(e) => debug!(%workspace_id, "watching the branches of a worker carried on with: {}", e.message),
             }
             if link.is_another_build(self.build) {
-                self.record_worker_build(&workspace_id, link.said_build()).await;
+                self.worker_build_heard(&workspace_id, &link).await;
                 self.replace_once_idle(workspace_id, link);
             }
         } else if being_moved {

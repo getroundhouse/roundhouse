@@ -1,6 +1,6 @@
 use super::{
-    AccountIdentity, ConversationCache, GithubAppSaid, Observation, ObservationKey, Observed, OwnPullRequestDetail,
-    OwnPullRequestSaid, ReadFrom, ReferenceSaid, WaitRead,
+    AccountIdentity, ConversationCache, GithubAppSaid, Observation, ObservationKey, Observed, OtherBuild,
+    OwnPullRequestDetail, OwnPullRequestSaid, ReadFrom, ReferenceSaid, WaitRead,
 };
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
@@ -116,19 +116,28 @@ fn of_github() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
     ]
 }
 
-/// Of each kind of what a workspace's worker says of its worktree.
+/// Of each kind of what a workspace's worker says of its worktree, and of itself.
 fn of_a_workspace_worker() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
     let branches = Branches { head: Head::Branch { name: BranchName::from("aspen") }, had: Vec::new() };
-    vec![(
-        Observation::WorkspaceBranches {
-            workspace_id: "w".into(),
-            branches: Observed::Current { value: branches },
-            rev: Rev::new(14),
-        },
-        ObservationKey::WorkspaceBranches { workspace_id: "w".into() },
-        Rev::new(14),
-        (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::EveryObservation)),
-    )]
+    let build = Observed::Current { value: OtherBuild { said: Some("0.9.0".into()) } };
+    vec![
+        (
+            Observation::WorkspaceBranches {
+                workspace_id: "w".into(),
+                branches: Observed::Current { value: branches },
+                rev: Rev::new(14),
+            },
+            ObservationKey::WorkspaceBranches { workspace_id: "w".into() },
+            Rev::new(14),
+            (Some(Level::Workspace { id: "w".into() }), Some(ReadFrom::EveryObservation)),
+        ),
+        (
+            Observation::WorkspaceWorkerBuild { workspace_id: "w".into(), build, rev: Rev::new(15) },
+            ObservationKey::WorkspaceWorkerBuild { workspace_id: "w".into() },
+            Rev::new(15),
+            (Some(Level::Hub), Some(ReadFrom::EveryObservation)),
+        ),
+    ]
 }
 
 /// Of each kind of what GitHub says of a repository.

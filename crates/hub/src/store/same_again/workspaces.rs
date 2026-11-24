@@ -19,18 +19,6 @@ pub(super) fn workspace(store: &Store) -> Rev {
     store.get_workspace(&"w".into()).unwrap().rev
 }
 
-pub(super) fn older_build(store: &Store) -> Said {
-    Said::Changed(store.set_workspace_worker_build(&"w".into(), Some("0.9.0")).unwrap().is_some())
-}
-
-pub(super) fn on_older_build(store: &Store) {
-    older_build(store);
-}
-
-pub(super) fn own_build(store: &Store) -> Said {
-    Said::Changed(store.set_workspace_worker_build(&"w".into(), None).unwrap().is_some())
-}
-
 pub(super) fn setup(store: &Store) -> Said {
     Said::record(&store.set_workspace_setup(&"w".into(), SetupStatus::Running).unwrap())
 }

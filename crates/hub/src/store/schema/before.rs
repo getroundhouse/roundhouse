@@ -52,3 +52,6 @@ pub(crate) const BEFORE_APPS_OBSERVED: usize = 100;
 /// How many migrations there were before each workspace's branches, and each of its other worktrees', left the
 /// database, as observations.
 pub(crate) const BEFORE_BRANCHES_OBSERVED: usize = 101;
+
+/// How many migrations there were before which build each workspace's worker is left the database, as an observation.
+pub(crate) const BEFORE_WORKER_BUILD_OBSERVED: usize = 102;

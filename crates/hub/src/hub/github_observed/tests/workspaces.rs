@@ -345,6 +345,7 @@ fn is_as_of(observation: &Observation) -> bool {
         | Observation::WorkspaceChanges { .. }
         | Observation::Reference { .. }
         | Observation::WorkspaceBranches { .. }
+        | Observation::WorkspaceWorkerBuild { .. }
         | Observation::RepositoryReach { .. }
         | Observation::GithubUsername { .. }
         | Observation::GithubAppSaid { .. }

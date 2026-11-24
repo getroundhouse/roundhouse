@@ -107,3 +107,19 @@ pub(super) const BRANCHES_OBSERVED: &str = r"
         UPDATE workspaces SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ";
+
+/// Which build each workspace's worker is, which the hub keeps as an observation in memory alone, and forgot as it
+/// started anyway. The workspaces' trigger names the columns left.
+pub(super) const WORKER_BUILD_OBSERVED: &str = r"
+    DROP TRIGGER workspaces_rev_on_update;
+    ALTER TABLE workspaces DROP COLUMN worker_build;
+    CREATE TRIGGER workspaces_rev_on_update
+        AFTER UPDATE OF repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms,
+            archived_at_ms, setup, port_base, title, title_source, pull_request_link, user_active_at_ms, comment_draft,
+            pull_request_branch
+        ON workspaces
+        WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE workspaces SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+";
