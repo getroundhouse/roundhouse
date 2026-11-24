@@ -11,9 +11,7 @@ use protocol::capability::settings::Settings;
 use protocol::client::HubStart;
 use protocol::model::{AgentKind, WorkspaceStatus};
 
-use crate::support::{
-    Stack, commit_settings, install_executable, terminate, wait_for_setup, wait_for_turn_end, wait_until,
-};
+use crate::support::{Stack, commit_settings, terminate, wait_for_setup, wait_for_turn_end, wait_until};
 
 /// The desktop app starts a hub from a background thread with every signal blocked, and that carries
 /// across exec. Blocking `SIGCHLD` alone is enough to make the first `git` hang.
@@ -140,9 +138,9 @@ fn a_hub_started_through_a_link_stays_on_its_version_when_the_link_moves() {
     let (old, new, current) = (stack.path("old"), stack.path("new"), stack.path("current"));
     std::fs::create_dir_all(&old).unwrap();
     std::fs::create_dir_all(&new).unwrap();
-    install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &old.join("roundhoused"));
+    process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &old.join("roundhoused")).unwrap();
     std::fs::write(stack.path("broken"), "#!/bin/sh\nexit 1\n").unwrap();
-    install_executable(&stack.path("broken"), &new.join("roundhoused"));
+    process::testing::install_program(&stack.path("broken"), &new.join("roundhoused")).unwrap();
     symlink(&old, &current).unwrap();
     stack.hub = Some(stack.command_at(&current.join("roundhoused")).spawn().unwrap().into());
     wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
@@ -165,7 +163,7 @@ fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone()
     stack.kill_hub();
     let app = stack.path("app");
     std::fs::create_dir_all(&app).unwrap();
-    install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &app.join("roundhoused"));
+    process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &app.join("roundhoused")).unwrap();
     // The version this daemon gives, which its copy is checked against.
     let build = StampedBuild::new(protocol::this_build!().version(), 1).unwrap();
     let mut daemon = stack.daemon(app.join("roundhoused"));
@@ -184,7 +182,7 @@ fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone()
     wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
     // The update, with a daemon that can run neither a hub nor a worker.
     std::fs::write(stack.path("broken"), "#!/bin/sh\nexit 1\n").unwrap();
-    install_executable(&stack.path("broken"), &app.join("roundhoused"));
+    process::testing::install_program(&stack.path("broken"), &app.join("roundhoused")).unwrap();
     // This is the first thing since the update to need a worker.
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
@@ -214,8 +212,7 @@ fn nothing_in_a_workspace_inherits_which_hub_this_is() {
     commit_settings(&stack, "[scripts]\nsetup = \"env > setup-env.txt\"\n");
     // Git runs this while the worker adds a worktree, and any command the worker runs can do the same.
     let hook = stack.repo().join(".git/hooks/post-checkout");
-    std::fs::write(&hook, "#!/bin/sh\nenv > hook-env.txt\n").unwrap();
-    std::fs::set_permissions(&hook, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    process::testing::write_program(&hook, "#!/bin/sh\nenv > hook-env.txt\n").unwrap();
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
     wait_for_setup(&client, &workspace.id);

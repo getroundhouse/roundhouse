@@ -30,8 +30,11 @@ fn adapter(dir: &Path, name: &str) -> PathBuf {
     let reply = frame::encode(&ProviderFrame::Reply { id: 1, outcome: ProviderOutcome::Response(hello) }).unwrap();
     let path = dir.join(name);
     let reply = String::from_utf8(reply).unwrap();
-    std::fs::write(&path, format!("#!/bin/sh\nread -r hello\nprintf '%s' '{reply}'\ncat > /dev/null\n")).unwrap();
-    std::fs::set_permissions(&path, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    process::testing::write_program(
+        &path,
+        format!("#!/bin/sh\nread -r hello\nprintf '%s' '{reply}'\ncat > /dev/null\n"),
+    )
+    .unwrap();
     path
 }
 

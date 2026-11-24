@@ -14,7 +14,8 @@ use super::connection::{self, Closing, Ended};
 use super::{Config, Worker};
 
 /// Serves hubs on a socket at `socket`, one at a time, until a hub asks the worker to stop, or a hub goes that didn't
-/// ask it to keep running without one, or it has had no hub for `idle_limit`. Then it stops every agent and terminal,
+/// ask it to keep running without one, or it has had no hub for `idle_limit`, or `stops_with` has returned while it has
+/// none, as a test's worker's does once the test has gone. Then it stops every agent and terminal,
 /// after sending the last hub, if it's still there, what they said as they stopped. A hub that connects while another
 /// is connected is refused, so a hub that asks twice for its connection learns there's one already. The caller holds
 /// the instance's claim, so a socket already there is one a worker left behind.
@@ -22,8 +23,14 @@ use super::{Config, Worker};
     clippy::disallowed_methods,
     reason = "the pause after a connection that couldn't be accepted, and the time a worker with no hub waits for one"
 )]
-pub async fn listen(socket: &Path, config: Config, idle_limit: Duration) -> io::Result<()> {
+pub async fn listen(
+    socket: &Path,
+    config: Config,
+    idle_limit: Duration,
+    stops_with: impl Future<Output = ()>,
+) -> io::Result<()> {
     let listener = bind(socket)?;
+    let mut stops_with = std::pin::pin!(stops_with);
     let worker = Worker::new(config);
     let mut serving: Option<JoinHandle<Closing>> = None;
     let mut alone_since = Instant::now();
@@ -64,6 +71,11 @@ pub async fn listen(socket: &Path, config: Config, idle_limit: Duration) -> io::
             },
             () = tokio::time::sleep_until(alone_since + idle_limit), if serving.is_none() => {
                 info!("no hub has connected for {idle_limit:?}, stopping agents");
+                break None;
+            }
+            // A hub that's connected stops the worker itself as it goes, as a test's hub does.
+            () = &mut stops_with, if serving.is_none() => {
+                info!("the test this worker is for has gone, stopping agents");
                 break None;
             }
         }

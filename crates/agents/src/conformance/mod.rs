@@ -21,4 +21,4 @@ pub mod stand_in;
 pub mod trial;
 
 mod program;
-pub use program::{executable, quoted};
+pub use program::quoted;

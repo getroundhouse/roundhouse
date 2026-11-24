@@ -232,7 +232,6 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn each_sentence_comes_from_a_spare_of_its_own() {
-        use std::os::unix::fs::PermissionsExt as _;
         let dir = tempfile::tempdir().unwrap();
         let bin = dir.path().join("claude");
         let script = r#"#!/bin/sh
@@ -240,8 +239,7 @@ read line
 asked=$(printf '%s' "$line" | sed 's/.*"text":"\([a-z]*\).*/\1/')
 printf '{"type":"result","is_error":false,"result":"Hold on, %s."}\n' "$asked"
 "#;
-        std::fs::write(&bin, script).unwrap();
-        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        process::testing::write_program(&bin, script).unwrap();
         let stand_in = Mutex::new(StandIn::new(Starting { bin, login: None, environment: Environment::NONE }));
         stand_in.lock().warm();
 

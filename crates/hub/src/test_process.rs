@@ -8,8 +8,10 @@ use protocol::paths::ENV_TEST_PROCESS;
 
 /// The process of the test a hub was started for, which the hub stops with once it has gone, as a signal stops it:
 /// with its workers and their agents. A test's hub runs apart from the test, as any a client starts does, so nothing
-/// else ends it when the test dies before stopping it, as one that's killed, interrupted or timed out does. Only a hub
-/// built with the `testing` feature has one, as only that one takes a test's [`Timers`](crate::Timers).
+/// else ends it when the test dies before stopping it, as one that's killed, interrupted or timed out does. A worker
+/// that can outlive its hub is given the same, from its hub's environment, and stops with its agents once the test has
+/// gone while it has no hub, since a hub killed before its test could stop it, or start the next, leaves it running.
+/// Only a hub built with the `testing` feature has one, as only that one takes a test's [`Timers`](crate::Timers).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TestProcess(ProcessRecord);
 
@@ -25,8 +27,8 @@ impl TestProcess {
         None
     }
 
-    /// The process whose PID `var` gives as [`ENV_TEST_PROCESS`], as it is when this is read, which is as the hub
-    /// starts, while the test that started it is running, so a PID used again later isn't taken for it. One that's gone
+    /// The process whose PID `var` gives as [`ENV_TEST_PROCESS`], as it is when this is read, which is as the hub or
+    /// the worker starts, while the test that started it is running, so a PID used again later isn't taken for it. One that's gone
     /// by then is gone at once.
     ///
     /// # Panics
@@ -39,9 +41,17 @@ impl TestProcess {
         Some(Self(ProcessRecord { pid, started: process::start_time(pid).unwrap_or_default() }))
     }
 
+    /// Returns once `test` has gone, and never for a process with none, as the product's hub and workers are.
+    pub async fn until_gone(test: Option<&Self>) {
+        match test {
+            Some(test) => test.gone().await,
+            None => std::future::pending().await,
+        }
+    }
+
     /// Returns once the test process has gone.
     #[expect(clippy::disallowed_methods, reason = "the pace a test's hub looks whether its test has gone")]
-    pub(crate) async fn gone(&self) {
+    async fn gone(&self) {
         while self.0.is_running() {
             tokio::time::sleep(LOOK_EVERY).await;
         }
@@ -75,6 +85,8 @@ mod tests {
         let running = given(std::process::id()).unwrap();
         let looked = tokio::time::timeout(LOOK_EVERY * 10, running.gone()).await;
         assert!(looked.is_err(), "it's this process, which is running");
+        let none = tokio::time::timeout(LOOK_EVERY * 10, TestProcess::until_gone(None)).await;
+        assert!(none.is_err(), "there's none to go");
     }
 
     #[tokio::test(start_paused = true)]

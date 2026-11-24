@@ -16,7 +16,7 @@ use crate::conformance::http::Server;
 use crate::conformance::json_rpc::{self, JsonRpcAgent, Options};
 use crate::conformance::scenario::{Against, Failed, Scenario};
 use crate::conformance::trial::{Live, Report};
-use crate::conformance::{executable, quoted, replay as replayer};
+use crate::conformance::{quoted, replay as replayer};
 use crate::jsonrpc::Dialect;
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess, BinaryLookup};
 
@@ -145,7 +145,8 @@ fn sandboxed(room: &Path, options: &Options, model: &Server) -> std::io::Result<
     let profile = room.join("sandbox.sb");
     std::fs::write(&profile, sandbox)?;
     let body = format!("#!/bin/sh\nexec /usr/bin/sandbox-exec -f {} {} \"$@\"{args}\n", quoted(&profile), quoted(&cli));
-    let bin = executable(room, "codex", &body)?;
+    let bin = room.join("codex");
+    process::testing::write_program(&bin, body)?;
     Ok((
         bin,
         vec![

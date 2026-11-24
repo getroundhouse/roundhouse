@@ -9,28 +9,24 @@ use std::time::Duration;
 use client_core::Client;
 use hub::Timers;
 
-use crate::support::{
-    Stack, TIMEOUT, assistant_text, install_executable, patient_with_workers, signal, wait_for_turn_end, wait_until,
-};
+use crate::support::{Stack, TIMEOUT, assistant_text, patient_with_workers, signal, wait_for_turn_end, wait_until};
 
 /// Runs the hub from a copy of its binary, so a test can replace what it starts next.
 fn hub_from_copy(stack: &mut Stack) -> PathBuf {
     stack.kill_hub();
     let exe = stack.path("roundhoused-copy");
-    install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &exe);
+    process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &exe).unwrap();
     stack.hub = Some(stack.command_at(&exe).spawn().unwrap().into());
     wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
     exe
 }
 
 fn restore_real_worker(exe: &Path) {
-    install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), exe);
+    process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), exe).unwrap();
 }
 
 fn replace_with_script(exe: &Path, body: &str) {
-    let source = exe.with_extension("source");
-    std::fs::write(&source, format!("#!/bin/sh\n{body}\n")).unwrap();
-    install_executable(&source, exe);
+    process::testing::write_program(exe, format!("#!/bin/sh\n{body}\n")).unwrap();
 }
 
 /// What the hub runs to reach each of its workers, which is a worker whose binary a test replaced.

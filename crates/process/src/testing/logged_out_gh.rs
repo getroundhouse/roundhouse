@@ -3,7 +3,6 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::OnceLock;
 
 /// `gh` as it is before `gh auth login`, which is what the person's own printed in a home of the tests' own: it names
@@ -22,12 +21,11 @@ exit 4
 /// its own ahead of this one.
 ///
 /// It's [`kept`](super::kept) beside the test binary, so every process of a build shares it, and finds all of it or
-/// none. It's put in the folder by `install`, so this multithreaded process never has it open for writing, which a
-/// child another thread forks would inherit, and Linux then refuses to run it, as "text file busy".
+/// none.
 ///
 /// # Panics
 ///
-/// If there's nowhere beside the test binary to keep it, or `install` can't put it there.
+/// If there's nowhere beside the test binary to keep it, or it can't be written there.
 pub fn logged_out_gh() -> &'static Path {
     static BIN: OnceLock<PathBuf> = OnceLock::new();
     BIN.get_or_init(|| {
@@ -39,18 +37,14 @@ pub fn logged_out_gh() -> &'static Path {
 /// Makes the folder at `bin`, with the stand-in in it as `gh`.
 fn make(bin: &Path) -> io::Result<()> {
     fs::create_dir(bin)?;
-    let script = bin.join("gh.sh");
-    fs::write(&script, LOGGED_OUT_GH)?;
-    let status = Command::new("install").args(["-m", "755"]).arg(&script).arg(bin.join("gh")).status()?;
-    if !status.success() {
-        return Err(io::Error::other(format!("install exited with {status}")));
-    }
-    fs::remove_file(script)
+    super::write_program(&bin.join("gh"), LOGGED_OUT_GH)
 }
 
 // The stand-in is a shell script, which only a Unix runs, as only a Unix has the hubs and workers that find it.
 #[cfg(all(test, unix))]
 mod tests {
+    use std::process::Command;
+
     use super::*;
 
     #[test]

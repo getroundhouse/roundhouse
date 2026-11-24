@@ -375,15 +375,6 @@ pub(crate) fn wait_for_setup(client: &Client, id: &WorkspaceId) -> protocol::mod
     status
 }
 
-/// Through `install`, because writing an executable from this multithreaded process can break running
-/// it on Linux. A fork in another test briefly inherits the open file, and `exec` then fails with
-/// "text file busy". This way, this process never has the file open for writing.
-pub(crate) fn install_executable(source: &Path, target: &Path) {
-    let _ = std::fs::remove_file(target);
-    let status = Command::new("install").args(["-m", "755"]).arg(source).arg(target).status().unwrap();
-    assert!(status.success());
-}
-
 /// The records of the session `id`, its subagents, proposals and replies heard, as following it lists them first.
 pub(crate) fn session_records(client: &Client, id: &SessionId) -> SessionRecords {
     let followed = client.follow_session(id, Seq::new(1)).unwrap();

@@ -18,7 +18,6 @@ use github::{Answer, StandIn};
 /// A stand-in for `gh` in `dir`'s `bin`, logged in as nobody until [`log_in`] says. Given `GH_TOKEN`, it uses that
 /// over its own login, as `gh` does, and says it's whoever [`GH_TOKEN_OWNER`] names, as `gh` says who GitHub named.
 fn gh(dir: &Path) {
-    use std::os::unix::fs::PermissionsExt as _;
     let bin = dir.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     let (status, token) = (dir.join("gh-status").display().to_string(), dir.join("gh-token").display().to_string());
@@ -42,8 +41,7 @@ case "$1 $2" in
 esac
 "#
     );
-    std::fs::write(bin.join("gh"), script).unwrap();
-    std::fs::set_permissions(bin.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    process::testing::write_program(&bin.join("gh"), script).unwrap();
     log_out(dir);
 }
 

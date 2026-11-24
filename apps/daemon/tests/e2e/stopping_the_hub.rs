@@ -106,3 +106,32 @@ fn a_tests_hub_stops_once_the_test_has_gone() {
     assert!(log.contains("the test this hub is for has gone"), "{log}");
     assert!(log.contains("hub stopped"), "{log}");
 }
+
+/// A test's hub that's killed leaves its workers running for a next hub, as any hub does. A run that's killed before
+/// the test starts that hub, or stops them, leaves them with neither, so a test's worker stops with its agents once the
+/// test has gone.
+#[test]
+fn a_tests_worker_left_without_a_hub_stops_once_the_test_has_gone() {
+    // Standing in for the test, as above.
+    let mut test = Command::new("cat").stdin(Stdio::piped()).stdout(Stdio::null()).spawn().unwrap();
+    let mut stack = Stack::start_with(vec![(protocol::paths::ENV_TEST_PROCESS, test.id().to_string())]);
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    // Until the turn is stopped. An agent whose input closes finishes its turn first, so it never exits by itself.
+    client.session_prompt(&session.id, "hang", None).unwrap();
+    let mut agent = None;
+    wait_until("the agent to start", || {
+        agent = latest_started_pid(&read_all(&client, &session.id));
+        agent.is_some()
+    });
+    let agent = agent.unwrap();
+    let worker = parent_of(agent);
+    stack.kill_hub();
+    assert!(is_alive(worker), "the worker carries on for a next hub");
+
+    test.kill().unwrap();
+    test.wait().unwrap();
+
+    wait_until("the worker to stop", || !is_alive(worker));
+    wait_until("the agent to stop", || !is_alive(agent));
+}

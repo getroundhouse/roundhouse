@@ -1,4 +1,4 @@
-use super::{PathBuf, Stack, install_executable};
+use super::{PathBuf, Stack};
 
 /// Who it says it's logged in to github.com as, for `gh auth status`, in the form `gh` 2.103 prints, with only what's
 /// read of it.
@@ -20,12 +20,8 @@ impl StandInGh {
         stack.kill_hub();
         let gh = Self { bin: stack.path("bin") };
         std::fs::create_dir_all(&gh.bin).unwrap();
-        let source = stack.path("gh.source");
-        std::fs::write(&source, Self::script()).unwrap();
-        install_executable(&source, &gh.bin.join("gh"));
-        let source = stack.path("ssh.source");
-        std::fs::write(&source, Self::ssh_script()).unwrap();
-        install_executable(&source, &gh.bin.join("ssh"));
+        process::testing::write_program(&gh.bin.join("gh"), Self::script()).unwrap();
+        process::testing::write_program(&gh.bin.join("ssh"), Self::ssh_script()).unwrap();
         // Workers get the hub's PATH, since the stack's hubs have no login shell to ask for one.
         stack.env.put_first_on_path(&gh.bin);
         stack.start_hub();

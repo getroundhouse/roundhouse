@@ -156,9 +156,9 @@ fn main() -> anyhow::Result<ExitCode> {
     let claude_bin = std::env::var_os(worker::ENV_CLAUDE_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
     let antigravity_bin =
         std::env::var_os(worker::ENV_ANTIGRAVITY_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
-    // Before the hub's variables are forgotten, since a test gives its workers their timers beside its hub's own. A
-    // build without `testing`, as the product's is, takes the defaults whatever the environment says.
-    let worker_timers = worker::Timers::from_env(|name| std::env::var(name).ok());
+    // Before the hub's variables are forgotten, since a test gives its workers their timers, and the test to stop with,
+    // beside its hub's own.
+    let for_tests = worker_role::ForTests::from_env();
     // The command that reaches a worker runs nothing in a workspace, and passes them on to the worker it starts, which
     // forgets them itself.
     if matches!(args.role, Role::Worker { attach: false, .. } | Role::Preflight { .. }) {
@@ -201,7 +201,7 @@ fn main() -> anyhow::Result<ExitCode> {
                     claude_bin,
                     codex_bin,
                     antigravity_bin,
-                    timers: worker_timers,
+                    for_tests,
                 },
             )
         }

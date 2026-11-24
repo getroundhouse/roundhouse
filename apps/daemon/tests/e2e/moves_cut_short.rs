@@ -13,7 +13,7 @@ use process::ProcessRecord;
 use protocol::model::{SetupStatus, Workspace, WorkspaceId, WorkspaceStatus};
 use protocol::paths::WORKER_RECORD_FILE;
 
-use crate::support::{Gate, Stack, commit_settings, install_executable, wait_for_setup, wait_for_turn_end};
+use crate::support::{Gate, Stack, commit_settings, wait_for_setup, wait_for_turn_end};
 use crate::support::{assistant_text, wait_until, workspace};
 
 /// A shell line that says it has started, by making `started`, and then waits for `go` to be opened.
@@ -85,9 +85,8 @@ fn a_restore_cut_short_is_settled_once_the_worker_has_finished_putting_the_workt
 
     // Git runs this as it checks the worktree out, so the worker is still putting it back when the hub goes.
     let (started, go) = (stack.path("checkout-started"), Gate::new(&stack, "checkout-go"));
-    let hook = stack.path("post-checkout");
-    std::fs::write(&hook, format!("#!/bin/sh\n{}\n", held(&started, &go))).unwrap();
-    install_executable(&hook, &stack.repo().join(".git/hooks/post-checkout"));
+    let hook = stack.repo().join(".git/hooks/post-checkout");
+    process::testing::write_program(&hook, format!("#!/bin/sh\n{}\n", held(&started, &go))).unwrap();
     let (asking, restored) = (stack.client(), made.id.clone());
     thread::spawn(move || {
         let _ = asking.workspace_restore(&restored);
