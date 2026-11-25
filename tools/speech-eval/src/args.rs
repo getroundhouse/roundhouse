@@ -62,12 +62,41 @@ pub(crate) enum Command {
         #[arg(long, default_value = BASELINE)]
         baseline: PathBuf,
     },
+    /// Hears dictations someone chose to keep, and sets what's written of them against what was. Nothing from it goes in
+    /// the repository.
+    Kept {
+        #[command(subcommand)]
+        command: KeptCommand,
+    },
     /// Makes a run the baseline.
     Accept {
         run: PathBuf,
         #[arg(long, default_value = BASELINE)]
         baseline: PathBuf,
     },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum KeptCommand {
+    /// Hears each recording in a folder with the hint words, boost and language it was heard with, or with those
+    /// given here, into a run's folder, going on from where a run in it stopped.
+    Hear {
+        /// The folder the app keeps recordings in, `recordings` in its data directory.
+        recordings: PathBuf,
+        /// The run's folder, outside the repository.
+        #[arg(long)]
+        out: PathBuf,
+        /// The hint boost, rather than the one each was heard with.
+        #[arg(long)]
+        boost: Option<f32>,
+        /// Hears each with no hint words.
+        #[arg(long)]
+        no_hints: bool,
+        #[command(flatten)]
+        model: ModelArgs,
+    },
+    /// Lists the recordings a run wrote differently from another run, or from what the app wrote as they were dictated.
+    Compare { run: PathBuf, other: Option<PathBuf> },
 }
 
 /// Where the model and the datasets are.

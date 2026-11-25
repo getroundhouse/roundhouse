@@ -55,6 +55,15 @@ fn a_16_khz_wav_is_heard_as_it_is() {
 }
 
 #[test]
+fn a_wav_of_floats_is_heard_as_it_is() {
+    let samples = [0.0, 0.5, -0.25, f32::MIN_POSITIVE];
+    let data: Vec<u8> = samples.iter().flat_map(|sample: &f32| sample.to_le_bytes()).collect();
+    let header = kept_recordings::header(SAMPLE_RATE, u32::try_from(data.len()).unwrap());
+
+    assert_eq!(decode(&[&header[..], &data].concat()).unwrap(), samples);
+}
+
+#[test]
 fn neither_flac_nor_wav_is_refused() {
     assert!(decode(b"ID3 an MP3").is_err());
 }

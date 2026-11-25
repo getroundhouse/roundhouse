@@ -1,10 +1,14 @@
 //! A recording's file, as the samples the model hears: one channel at 16 kHz. Tech-Sentences has 48 kHz FLAC and
-//! 16 kHz WAV, and `LibriSpeech` 16 kHz FLAC. Audio at another rate is converted as the microphone's is, so it reaches
+//! 16 kHz WAV, and `LibriSpeech` 16 kHz FLAC, and the app keeps 16 kHz WAV of floats, as the model took them. Audio at another rate is converted as the microphone's is, so it reaches
 //! the model as a recording in the app does.
 
 use anyhow::{Context as _, bail, ensure};
 use dictation::SAMPLE_RATE;
 use sound::Resampler;
+
+/// A WAV's formats: whole numbers, and floats, which the app keeps its recordings as.
+const PCM: u16 = 1;
+const IEEE_FLOAT: u16 = 3;
 
 /// The samples of a FLAC or WAV file, at [`SAMPLE_RATE`] in one channel.
 pub(crate) fn decode(bytes: &[u8]) -> anyhow::Result<Vec<f32>> {
@@ -45,15 +49,21 @@ fn wav(bytes: &[u8]) -> anyhow::Result<Decoded> {
         match id {
             b"fmt " => {
                 ensure!(body.len() >= 16, "a WAV file whose format is cut short");
-                let pcm = u16::from_le_bytes([body[0], body[1]]);
-                ensure!(pcm == 1, "a WAV file that isn't PCM");
+                let kind = u16::from_le_bytes([body[0], body[1]]);
                 let channels = u16::from_le_bytes([body[2], body[3]]);
                 let rate = u32::from_le_bytes(body[4..8].try_into()?);
                 let bits = u16::from_le_bytes([body[14], body[15]]);
-                format = Some((channels, rate, bits));
+                format = Some((kind, channels, rate, bits));
             }
             b"data" => {
-                let Some((channels, rate, bits)) = format else { bail!("a WAV file with its audio before its format") };
+                let Some((kind, channels, rate, bits)) = format else {
+                    bail!("a WAV file with its audio before its format")
+                };
+                if (kind, bits) == (IEEE_FLOAT, 32) {
+                    let samples = body.as_chunks().0.iter().map(|sample| f32::from_le_bytes(*sample)).collect();
+                    return Ok((samples, rate, channels));
+                }
+                ensure!(kind == PCM, "a WAV file that's neither PCM nor 32-bit floats");
                 // 8-bit WAV is unsigned, unlike the rest.
                 ensure!(bits >= 16, "a WAV file of {bits}-bit samples");
                 let scale = full_scale(u32::from(bits))?;
