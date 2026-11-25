@@ -365,3 +365,12 @@ The app's own settings, and where they're shown.
 
   ![This Mac, then incus, whose GitHub Roundhouse sets up](screens/settings-providers-managed.png)
 - **Another provider left to its machines says Roundhouse hands agents there nothing for GitHub, so they use git and `gh` as those machines have them set up, and has no rows, since the hub reads only its own machine's.** *Unconfirmed.*
+
+## MCP servers
+
+- **MCP servers lists the servers the hub has of its own, each a row in the design of Git's: its name, its address, and what else there is to say.** Every agent in every project has them, whichever machine it's on, beside the ones its own CLI has. A row says only what isn't plain: `Key` for a server a key is sent to, and `Needs you to sign in`, in red, for one whose sign-in is missing or no longer works. Whether a server can be reached depends on the machine an agent is on, so a chat says that and this page doesn't. *Not built.*
+- **Each server has one sign-in, so a second account at the same server is a second server,** with a name of its own, such as `Linear (Northwind)`. *Not built.*
+- **Adding a server asks first how it knows who you are, as Connect account does: a sign-in, a key, or neither.** Each choice then asks for the server's URL and a name, which is what agents call it too, and a key also for its header, `Authorization` unless changed. A URL that's already there says so, and which server it is. *Not built.* *Unconfirmed:* what Neither asks for.
+- **Signing in opens the server's page in the browser on this device, and the panel waits, with a button that opens it again.** Nothing is added until it's approved. A server that turns out to have no way to sign in says so, with a button to use a key instead. *Not built.*
+- **A server's menu has Sign in again, Rename and Remove.** Remove forgets its sign-in or its key. *Not built.* *Unconfirmed.*
+- **The iPhone app has no MCP servers page and no signing in to one.** *Not built.*

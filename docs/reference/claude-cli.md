@@ -76,6 +76,17 @@ All of the following was observed on CLI 2.1.319 with Haiku, except where a row 
 | A one-off call started ahead | At `--effort low`, started and left waiting, it answers in 0.6 to 0.9 s, against 1.6 s when started on demand. Closing its stdin unasked ends it within a second, asking the model nothing. Haiku promised the agent's next step, such as "I'll check the docs right after", until told to end by asking them to wait. Read on 2.1.329 | How the cover line is written, in `agents::claude::process::covering`. Each line comes from a CLI started ahead and asked once, so what it's told never piles up. One is kept ready only while conversation mode is on. A worker that dies leaves none behind, since its stdin closes |
 | Resources | An idle `claude` process used about 305 MB, against 11 MB for the hub and 8 MB for a worker (debug builds) | An idle agent costs far more memory than the hub and worker together |
 
+## Which MCP servers an agent gets
+
+Observed on 2.1.330, with servers that say which config they came from, a config directory of the trial's own and no prompt sent. Roundhouse's launch flags were left out, but for the streams and `--permission-prompt-tool stdio`.
+
+- **A worktree gets the servers of its repository's main checkout.** Servers added to the user, local and project scopes all connected in a worktree made afterwards, the local one having been added from the main checkout. A server in a committed `.mcp.json` connected without being approved.
+- **A server in `--mcp-config` replaces one of the same name on disk, whole.** It did so over the user, local and project scopes at once. Without it, the local server was used over the project's and the user's, and the project's over the user's.
+- **Two names for one URL are two servers.** One in the user scope and one in `--mcp-config` both connected.
+- **`--strict-mcp-config` leaves only the servers in `--mcp-config`.**
+- **`mcp_set_servers`, a control request, adds servers to a running agent.** It connected a new one, and replaced the one of the same name that `--mcp-config` gave.
+- **A server that refuses its configured `Authorization` header with 401 is `failed`.** The CLI doesn't try OAuth, as the table above says.
+
 ## Sources
 
 - [Claude Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview)
