@@ -183,8 +183,9 @@ impl WorkspacePane {
     ) -> Self {
         let (composer, on_enter) = composer::new_input(window, cx);
         let (hints, on_event) = (Self::composer_hints, Self::dictation_event);
+        let place = dictation_ui::Place::Composer;
         let (dictation, [dictated, live]) =
-            dictation_ui::Field::attach(&composer, look::Corner::Card, true, hints, on_event, window, cx);
+            dictation_ui::Field::attach(&composer, place, true, hints, on_event, window, cx);
         let on_settings = crate::settings::observe(cx, |this, cx| {
             for transcript in this.every_transcript() {
                 transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));

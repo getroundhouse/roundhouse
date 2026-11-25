@@ -48,6 +48,17 @@ pub(super) enum Failure {
     Prepare(EngineError),
 }
 
+impl Failure {
+    /// The step that failed, as the log says it.
+    fn step(&self) -> &'static str {
+        match self {
+            Failure::Download(_) => "download",
+            Failure::Start(_) => "start",
+            Failure::Prepare(_) => "prepare",
+        }
+    }
+}
+
 /// Where the model's files are kept, where they come from, and how it's loaded from them: the real model, or a test's.
 pub(super) struct Model {
     files: ModelFiles,
@@ -152,7 +163,7 @@ fn prepare(cx: &mut App) {
     }
     let told = match downloading::download(model.files, model.dir.clone(), model.from.clone()) {
         Ok(told) => told,
-        Err(e) => return set(Readiness::Failed(Failure::Start(e)), None, cx),
+        Err(e) => return set(failed(Failure::Start(e)), None, cx),
     };
     let following = cx.spawn(async move |cx: &mut AsyncApp| {
         while let Ok(said) = told.recv_async().await {
@@ -170,7 +181,7 @@ fn downloaded(said: Downloaded, cx: &mut App) {
             reread_whats_on_disk(cx);
             match ended {
                 Ok(()) => load(cx),
-                Err(e) => set(Readiness::Failed(Failure::Download(e)), None, cx),
+                Err(e) => set(failed(Failure::Download(e)), None, cx),
             }
         }
     }
@@ -182,7 +193,7 @@ fn load(cx: &mut App) {
     let (load, dir) = (model.load.clone(), model.files.dir(&model.dir));
     let dictation = match Dictation::start(move || load(&dir), KEEP_FOR) {
         Ok(dictation) => dictation,
-        Err(e) => return set(Readiness::Failed(Failure::Start(e)), None, cx),
+        Err(e) => return set(failed(Failure::Start(e)), None, cx),
     };
     let prepared = dictation.prepare();
     let following = cx.spawn(async move |cx: &mut AsyncApp| {
@@ -198,7 +209,7 @@ fn prepared(prepared: Result<(), EngineError>, cx: &mut App) {
     let dictating = dictating_mut(cx);
     dictating.readiness = match (std::mem::replace(&mut dictating.readiness, Readiness::Off), prepared) {
         (Readiness::Preparing(hearing), Ok(())) => Readiness::Ready(hearing),
-        (Readiness::Preparing(_), Err(e)) => Readiness::Failed(Failure::Prepare(e)),
+        (Readiness::Preparing(_), Err(e)) => failed(Failure::Prepare(e)),
         (readiness, _) => readiness,
     };
 }
@@ -210,6 +221,13 @@ fn turn_off(cx: &mut App) {
     dictation_ui::unavailable(cx);
     set(Readiness::Off, None, cx);
     reread_whats_on_disk(cx);
+}
+
+/// That dictation couldn't be made ready, and why, which the log says.
+fn failed(failure: Failure) -> Readiness {
+    let error = super::words::why(&failure);
+    tracing::warn!(name: "dictation.unready", step = failure.step(), error, "Dictation couldn't be made ready");
+    Readiness::Failed(failure)
 }
 
 /// Changes the readiness, and what follows it: dropping what followed the last one stops a download. How far a

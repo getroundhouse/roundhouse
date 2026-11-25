@@ -155,9 +155,9 @@ impl NewWorkspaceDialog {
                 dictation_ui::Event::Ended { submit: false } | dictation_ui::Event::Started => {}
                 dictation_ui::Event::Error(message) => cx.emit(DialogEvent::Error(message.clone())),
             };
-        let corner = look::Corner::Card;
+        let place = dictation_ui::Place::NewWorkspace;
         let (dictation, [dictated, live]) =
-            dictation_ui::Field::attach(&prompt, corner, true, Self::dictation_hints, on_event, window, cx);
+            dictation_ui::Field::attach(&prompt, place, true, Self::dictation_hints, on_event, window, cx);
         let readiness = crate::dictating::observe(cx, |_, cx| cx.notify());
         let (model, effort, mode, attached) = (None, None, None, Attachments::default());
         Self {

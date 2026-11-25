@@ -72,7 +72,8 @@ impl ProposalView {
         let on_event = |view: &mut Self, event: &dictation_ui::Event, _: &mut Window, cx: &mut Context<Self>| {
             view.dictation_event(event, cx);
         };
-        dictation_ui::Field::attach(input, look::Corner::Card, self.dictates(), Self::hints, on_event, window, cx)
+        let place = dictation_ui::Place::ProposalNote;
+        dictation_ui::Field::attach(input, place, self.dictates(), Self::hints, on_event, window, cx)
     }
 
     /// The words to favour in the note: what's typed in it, the proposal's, then what the app adds.

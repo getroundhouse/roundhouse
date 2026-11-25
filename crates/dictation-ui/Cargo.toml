@@ -16,6 +16,8 @@ gpui-kit.workspace = true
 look.workspace = true
 # The microphone's permission, and quieting what's playing.
 sound.workspace = true
+tracing.workspace = true
+uuid.workspace = true
 
 # Whether Space is down, by the system's word.
 [target.'cfg(target_os = "macos")'.dependencies]

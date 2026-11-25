@@ -52,8 +52,8 @@ impl QuestionPanel {
                     panel.dictation_event(q, event, window, cx);
                 };
             let enabled = self.dictation_enabled && q == self.showing;
-            let corner = look::Corner::Control;
-            let (field, dictated) = dictation_ui::Field::attach(input, corner, enabled, hints, on_event, window, cx);
+            let place = dictation_ui::Place::Answer;
+            let (field, dictated) = dictation_ui::Field::attach(input, place, enabled, hints, on_event, window, cx);
             events.extend(dictated);
             Some(field)
         } else {
