@@ -175,17 +175,17 @@ pub(in crate::codex) async fn complete(shared: &Shared, subagent: &SubagentId, t
 pub(in crate::codex) async fn tasks(shared: &Shared) {
     let (mut tasks, idle) = {
         let state = shared.state.lock();
-        let tasks: Vec<_> = state
-            .subagents
-            .runs
+        let runs = &state.subagents.runs;
+        let at_work = |subagent: &SubagentId| runs.get(subagent).is_some_and(|run| !run.ended);
+        let tasks: Vec<_> = runs
             .iter()
             .filter(|(_, run)| !run.ended)
             .map(|(subagent, run)| AgentTask {
-                id: run.call.to_string().into(),
                 description: run.details.description.clone(),
-                kind: TaskKind::Subagent,
                 call: Some(run.call.clone()),
                 subagent: Some(subagent.clone()),
+                part_of: run.parent.clone().filter(at_work),
+                ..AgentTask::new(run.call.to_string(), TaskKind::Subagent)
             })
             .collect();
         let idle = state.turn.is_none();

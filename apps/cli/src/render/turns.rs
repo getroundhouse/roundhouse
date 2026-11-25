@@ -1,8 +1,9 @@
 //! What the command line says of why a turn started and how it failed: that the agent picked up by itself, and a
 //! failed request, with how many times in a row it has failed.
 
+use client_core::tasks::Says;
 use client_core::waits::{watched, why_it_ended};
-use protocol::event::{Again, EndedTask, RequestFailure, TaskKind};
+use protocol::event::{Again, AgentTask, EndedTask, RequestFailure, TaskKind};
 
 use super::printer::how_it_ended;
 
@@ -18,7 +19,7 @@ pub(super) fn own_turn(ended: &[EndedTask]) -> String {
             };
             return format!("waited on {what} ({why})");
         }
-        let what = ended.task.description.as_deref().unwrap_or(ended.task.id.as_str());
+        let what = named(&ended.task);
         format!("{what} {}", how_it_ended(ended.outcome))
     });
     let each: Vec<String> = each.collect();
@@ -34,4 +35,9 @@ pub(super) fn request_failed(failure: &RequestFailure, again: Option<Again>) -> 
         Some(again) => format!("request failed again, {} times in a row: {}", again.times, failure.message),
         None => format!("request failed: {}", failure.message),
     }
+}
+
+/// What a background task is called: what it's for, or the command it runs, or failing both, its ID.
+pub(super) fn named(task: &AgentTask) -> String {
+    Says::of(task).map_or_else(|| task.id.to_string(), Says::into_words)
 }

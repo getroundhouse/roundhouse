@@ -2,7 +2,7 @@ use protocol::event::{AgentTask, EventBody, TaskChange, TaskKind};
 use protocol::model::TaskId;
 use serde_json::{Value, json};
 
-use super::super::{Normalizer, Parsed, parse_line};
+use super::super::super::{Normalizer, Parsed, parse_line};
 
 #[test]
 fn background_tasks_are_listed_whole_each_time_they_change() {
@@ -10,20 +10,8 @@ fn background_tasks_are_listed_whole_each_time_they_change() {
         {"task_id":"b1","run_id":"r1","task_type":"local_bash","description":"Run the tests"},
         {"task_id":"a2","run_id":"r2","task_type":"local_agent","subagent_type":"Explore"}]});
     let tasks = vec![
-        AgentTask {
-            id: "b1".into(),
-            description: Some("Run the tests".into()),
-            kind: TaskKind::Command,
-            call: None,
-            subagent: None,
-        },
-        AgentTask {
-            id: "a2".into(),
-            description: None,
-            kind: TaskKind::Subagent,
-            call: None,
-            subagent: Some("a2".into()),
-        },
+        AgentTask { description: Some("Run the tests".into()), ..AgentTask::new("b1", TaskKind::Command) },
+        AgentTask { subagent: Some("a2".into()), ..AgentTask::new("a2", TaskKind::Subagent) },
     ];
     assert_eq!(parse_line(&line.to_string()), Parsed::Event(EventBody::AgentTasks { tasks, stopped: vec![] }));
     let done = json!({"type":"system","subtype":"background_tasks_changed","tasks":[]}).to_string();
@@ -317,7 +305,7 @@ fn a_subagent_in_the_foreground_is_forgotten_as_it_ends() {
     assert!(normalizer.tasks.foreground.is_empty());
 }
 
-fn event(parsed: Parsed) -> EventBody {
+pub(super) fn event(parsed: Parsed) -> EventBody {
     let Parsed::Event(body) = parsed else { panic!("{parsed:?}") };
     body
 }

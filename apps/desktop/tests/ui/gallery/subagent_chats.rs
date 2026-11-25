@@ -6,7 +6,7 @@
 use protocol::capability::calls::call::{MessageSubagent, Read, Runs, StartSubagent, StopSubagent};
 use protocol::capability::calls::output::Ended;
 use protocol::capability::calls::{Call, CallOutput};
-use protocol::event::EventBody;
+use protocol::event::{EventBody, TaskKind};
 use protocol::fixtures::{command_output, typed_command};
 use protocol::model::{ModelName, SessionStatus};
 
@@ -15,7 +15,8 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::chat_world;
 use client_core::fake_hub::events::{
-    first_turn, on, replied, subagent_ended, text, typed_call, typed_result, user_prompt, within,
+    command, first_turn, on, part_of, printed, replied, subagent_ended, task, text, typed_call, typed_result,
+    undescribed, user_prompt, within,
 };
 use spec_screens::subagent_chats::subagents;
 
@@ -73,7 +74,32 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::MoveAway,
         ],
     },
+    Screen {
+        name: "subagent-tab-background",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Running, reviewing_in_the_background())),
+        frame: TABS_AND_CHAT,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Open("Review the change"),
+            Step::Click("open-subagent/toolu-3"),
+            Step::MoveAway,
+        ],
+    },
 ];
+
+/// The second subagent at work on the review, with a command of its own in the background.
+fn reviewing_in_the_background() -> Vec<EventBody> {
+    let mut events = subagents(true);
+    let tests = part_of("toolu-3", undescribed("toolu-s7", "cargo test -p depot -- --include-ignored"));
+    let listed = vec![task(TaskKind::Subagent, "toolu-3", "Review the change"), tests];
+    events.extend([
+        within("toolu-3", command("sub-12", "toolu-s7", "cargo test -p depot -- --include-ignored", None)),
+        EventBody::AgentTasks { tasks: listed, stopped: Vec::new() },
+        within("toolu-3", printed("toolu-s7", "Command running in background.")),
+    ]);
+    events
+}
 
 /// The task path Codex names its subagent by, which is all it says of what the subagent is for.
 const REVIEWER: &str = "/root/reviewer";

@@ -1,8 +1,9 @@
 use super::super::calls::OpenCalls;
+use super::super::subagents::Subagents;
 use super::super::{Parsed, id_of, other, str_of, string_of};
 use crate::claude::TOOLS_SERVER;
 use protocol::event::{AgentTask, EventBody, TaskChange, TaskKind, TaskOutcome};
-use protocol::model::{TaskId, ToolUseId};
+use protocol::model::{SubagentId, TaskId, ToolUseId};
 use protocol::worker::{WAIT_TOOL, WAITS_TOOL};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -36,7 +37,7 @@ fn task(value: &Value) -> Option<AgentTask> {
     let id: TaskId = id_of(value, "task_id")?;
     // A subagent is named by the task it runs as, as `super::super::subagents::Subagents` names it.
     let subagent = (kind == TaskKind::Subagent).then(|| id.as_str().into());
-    Some(AgentTask { id, description: string_of(value, "description"), kind, call: None, subagent })
+    Some(AgentTask { description: string_of(value, "description"), subagent, ..AgentTask::new(id, kind) })
 }
 
 /// Whether an MCP task is a wait on the pull request, which the CLI says by describing it as the tool whose call
@@ -54,18 +55,12 @@ pub(in super::super) struct Tasks {
     /// Those the CLI has said it stopped, whether the agent stopped them or they went with it, until a list leaves
     /// them out. It says so before the list.
     pub(super) stopped: BTreeSet<TaskId>,
-    /// The tasks a `Monitor` call started, each until a list that held it leaves it out. Its `task_notification`
-    /// doesn't end it, since the CLI can list a task once more after saying it ended.
-    pub(super) monitors: BTreeSet<TaskId>,
-    /// The tasks a subagent's call started, each until a list that held it leaves it out, as for a monitor. The CLI lists
-    /// them with the agent's own, but tells the subagent how each ends while it works, and seldom the agent once it has
-    /// ended.
-    pub(super) subagents: BTreeSet<TaskId>,
-    /// The call that started each task, from its `task_started`, until a list that held it leaves it out, as for a
-    /// monitor, since the CLI can list a task once more after saying it ended. A task that ends unlisted, as a command
-    /// or a subagent in the foreground does, is forgotten as it ends. [`super::super::subagents::Subagents`] keeps a
-    /// subagent's call by its task too, but only until it ends, which is when it has to say which subagent ended.
-    pub(super) calls: BTreeMap<TaskId, ToolUseId>,
+    /// What each task's `task_started` said of it, until a list that held it leaves it out. Its `task_notification`
+    /// doesn't end it, since the CLI can list a task once more after saying it ended. A task that ends unlisted, as a
+    /// command or a subagent in the foreground does, is forgotten as it ends.
+    /// [`super::super::subagents::Subagents`] keeps a subagent's call by its task too, but only until it ends, which is
+    /// when it has to say which subagent ended.
+    pub(super) started: BTreeMap<TaskId, Started>,
     /// The newest list, to say again once `task_started` says more of one of its tasks that changes what's shown.
     pub(super) newest: Vec<AgentTask>,
     /// The tasks running in the foreground, as every command the agent runs is, from its `task_started` until its
@@ -74,12 +69,26 @@ pub(in super::super) struct Tasks {
     pub(super) foreground: BTreeSet<TaskId>,
 }
 
+/// What the call that started a task says of it, which is open as its `task_started` comes.
+#[derive(Debug)]
+pub(super) struct Started {
+    call: ToolUseId,
+    /// It's a `Monitor` call's.
+    monitor: bool,
+    /// The subagent whose call it is, rather than the agent's. The CLI lists its tasks with the agent's own, but tells
+    /// the subagent how each ends while it works, and seldom the agent once it has ended.
+    by: Option<SubagentId>,
+    /// The command it runs, if its caller didn't say what it's for, which the CLI then describes it as.
+    command: Option<String>,
+}
+
 impl Tasks {
     /// Notes what this line says of a task. The CLI lists a task that starts in the background one line before
     /// `task_started` names the call that started it, so that line is the first to say which call that was, and
-    /// whether it's a monitor. For a monitor, and for a subagent, whose line shows its button once its call is known,
-    /// this returns the newest list to say again. A command's call changes nothing shown, so it waits for the next
-    /// list.
+    /// whether it's a monitor, a subagent's, or a command nobody described. For each of those, and for a subagent,
+    /// whose line shows its button once its call is known, this returns the newest list to say again. Any other
+    /// command's call changes nothing shown, so it waits for the next list. As a subagent starts or ends, what it has
+    /// in the background becomes part of its work, or is left with the agent, so the list is said again then too.
     /// [`Tasks::listed`] gives a list its calls and kinds. `task_started` comes before its call's result, so the call
     /// is still among `calls`.
     pub(in super::super) fn note(&mut self, value: &Value, calls: &OpenCalls) -> Option<EventBody> {
@@ -87,33 +96,57 @@ impl Tasks {
             (Some("system"), Some("task_started")) => return self.note_started(value, calls),
             (Some("system"), Some("task_notification")) => {
                 let id = id_of::<TaskId>(value, "task_id")?;
-                if !self.newest.iter().any(|task| task.id == id) {
-                    self.calls.remove(&id);
-                    self.subagents.remove(&id);
+                let part_of_it = |task: &AgentTask| task.part_of.as_ref().is_some_and(|of| of.as_str() == id.as_str());
+                let again = self.newest.iter().any(part_of_it).then(|| self.again());
+                if !self.lists(&id) {
+                    self.started.remove(&id);
                 }
                 if str_of(value, "status") == Some("stopped") {
                     self.stopped.insert(id);
                 }
+                return again;
             }
             _ => {}
         }
         None
     }
 
+    /// The newest list, to say again.
+    fn again(&self) -> EventBody {
+        EventBody::AgentTasks { tasks: self.newest.clone(), stopped: Vec::new() }
+    }
+
+    /// Whether the newest list holds the task `id`.
+    fn lists(&self, id: &TaskId) -> bool {
+        self.newest.iter().any(|task| task.id == *id)
+    }
+
+    /// Whether the newest list holds a task that the subagent running as the task `id` started. It's named by that
+    /// task, as `super::super::subagents::Subagents` names it.
+    fn has_tasks(&self, id: &TaskId) -> bool {
+        let of_it = |started: &Started| started.by.as_ref().is_some_and(|by| by.as_str() == id.as_str());
+        self.newest.iter().any(|task| self.started.get(&task.id).is_some_and(of_it))
+    }
+
     pub(super) fn note_started(&mut self, value: &Value, calls: &OpenCalls) -> Option<EventBody> {
         let call: ToolUseId = id_of(value, "tool_use_id")?;
         let id: TaskId = id_of(value, "task_id")?;
-        let monitor = calls.tool(&call) == Some(MONITOR);
-        if monitor {
-            self.monitors.insert(id.clone());
-        }
-        if calls.by_a_subagent(&call) {
-            self.subagents.insert(id.clone());
-        }
-        let shown = monitor || str_of(value, "task_type") == Some(SUBAGENT);
-        let already_listed = self.newest.iter().any(|task| task.id == id);
-        self.calls.insert(id, call);
-        (shown && already_listed).then(|| EventBody::AgentTasks { tasks: self.newest.clone(), stopped: Vec::new() })
+        let known = self.started.remove(&id);
+        let started = match (calls.tool(&call), known) {
+            // Started again under a call that's been answered, which says nothing more.
+            (None, Some(known)) => Started { call, ..known },
+            (tool, _) => Started {
+                monitor: tool == Some(MONITOR),
+                by: calls.by(&call).cloned(),
+                command: calls.undescribed_command(&call).map(str::to_string),
+                call,
+            },
+        };
+        let is_subagent = str_of(value, "task_type") == Some(SUBAGENT);
+        let shown = is_subagent || started.monitor || started.by.is_some() || started.command.is_some();
+        let again = (shown && self.lists(&id)) || self.has_tasks(&id);
+        self.started.insert(id, started);
+        again.then(|| self.again())
     }
 
     /// Whether this line is about a task in the foreground, noting what it says of which are: one whose `task_started`
@@ -153,21 +186,24 @@ impl Tasks {
 
     /// Whether a subagent's call started the task `id`, so the agent doesn't hear how it ends, or seldom does.
     pub(in super::super) fn a_subagents(&self, id: &TaskId) -> bool {
-        self.subagents.contains(id)
+        self.started.get(id).is_some_and(|started| started.by.is_some())
     }
 
-    /// Says which call started each of a list's tasks and which are monitors, and returns those the CLI said it
-    /// stopped that the list leaves out, which it then forgets.
-    pub(in super::super) fn listed(&mut self, tasks: &mut [AgentTask]) -> Vec<TaskId> {
+    /// Says what the call that started each of a list's tasks says of it, and which are part of the work of one of
+    /// `subagents`, and returns those the CLI said it stopped that the list leaves out, which it then forgets.
+    pub(in super::super) fn listed(&mut self, tasks: &mut [AgentTask], subagents: &Subagents) -> Vec<TaskId> {
         let left = |id: &TaskId| self.newest.iter().any(|t| t.id == *id) && tasks.iter().all(|t| t.id != *id);
-        self.monitors.retain(|id| !left(id));
-        self.subagents.retain(|id| !left(id));
-        self.calls.retain(|id, _| !left(id));
+        self.started.retain(|id, _| !left(id));
         for task in tasks.iter_mut() {
-            if self.monitors.contains(&task.id) {
+            let Some(started) = self.started.get(&task.id) else { continue };
+            if started.monitor {
                 task.kind = TaskKind::Monitor;
             }
-            task.call = self.calls.get(&task.id).cloned();
+            task.call = Some(started.call.clone());
+            task.part_of = started.by.clone().filter(|by| subagents.at_work(by));
+            if let Some(command) = &started.command {
+                (task.description, task.command) = (None, Some(command.clone()));
+            }
         }
         self.newest = tasks.to_vec();
         let (gone, still_listed): (BTreeSet<_>, _) =

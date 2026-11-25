@@ -31,6 +31,7 @@ pub mod records;
 pub mod refusals;
 pub mod session_log;
 pub mod standing;
+pub mod tasks;
 pub mod this_device;
 pub mod waits;
 pub mod workspace_lines;

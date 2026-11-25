@@ -10,6 +10,7 @@
 
 use client_core::calls::agent::{self, Agent};
 use client_core::calls::count;
+use client_core::tasks::Says;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -129,6 +130,11 @@ impl Opens {
         }
         task.subagent.clone().map(Opens::Subagent).or_else(|| task.call.clone().map(Opens::StartedBy))
     }
+}
+
+/// What the subagent tab is named for the subagent the task `task` is, until its record comes.
+pub(in crate::rows) fn tab_title(task: &AgentTask) -> String {
+    Says::of(task).map_or_else(|| agent::UNTITLED.to_string(), Says::into_words)
 }
 
 /// The button that asks for the work of the subagent `opens` names in the subagent tab, which is named `title` until
@@ -309,11 +315,9 @@ mod tests {
     #[test]
     fn a_subagent_s_task_opens_the_subagent_it_names_or_else_the_one_its_call_started() {
         let task = |kind, call: Option<&str>, subagent: Option<&str>| AgentTask {
-            id: "t".into(),
-            description: None,
-            kind,
             call: call.map(Into::into),
             subagent: subagent.map(Into::into),
+            ..AgentTask::new("t", kind)
         };
 
         let carried_on = task(TaskKind::Subagent, Some("send"), Some("a1"));

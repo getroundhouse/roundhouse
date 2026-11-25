@@ -155,7 +155,7 @@ async fn a_chat_whose_record_lists_only_a_wait_isnt_counted_as_running() {
     for (kind, running) in [(TaskKind::Wait, 0), (TaskKind::Command, 1)] {
         let dir = tempfile::tempdir().unwrap();
         let hub = hub_with_worktree(dir.path());
-        let task = AgentTask { id: "t".into(), description: None, kind, call: None, subagent: None };
+        let task = AgentTask::new("t", kind);
         let listed = EventBody::AgentTasks { tasks: vec![task.clone()], stopped: vec![] };
         let status = StatusChange { background_tasks: Some(vec![task]), ..SessionStatus::Background.into() };
         let change = SessionChange { status: Some(status), ..SessionChange::default() };

@@ -10,7 +10,7 @@ use protocol::event::{
     AgentRunState, AgentTask, EndedTask, EventBody, ExitReason, SessionEvent, TaskKind, TaskOutcome, TurnOutcome,
 };
 use protocol::fixtures;
-use protocol::model::{ApprovalId, RunId, Seq, TaskId, ToolUseId};
+use protocol::model::{ApprovalId, RunId, Seq, ToolUseId};
 use protocol::prompt::{Prompt, PromptFrom};
 use serde_json::{Value, json};
 
@@ -129,11 +129,9 @@ async fn agy_1_5_12_streams_idle_wakeup_and_settles_own_turn_without_drain_promp
     let claims = super::super::claims::claims();
     assert_eq!(laws::check(&events, |_| &claims), []);
     let task = AgentTask {
-        id: TaskId::from("bg-1"),
         description: Some("Unit test".into()),
-        kind: TaskKind::Command,
         call: Some(ToolUseId::from("bg-1")),
-        subagent: None,
+        ..AgentTask::new("bg-1", TaskKind::Command)
     };
     let ended = EndedTask { task, outcome: TaskOutcome::Finished, wait: None };
     assert!(events.iter().any(|e| e.body == EventBody::OwnTurn(OwnTurn::TaskEnded { ended: vec![ended.clone()] })));

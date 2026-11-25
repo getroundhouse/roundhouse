@@ -317,12 +317,20 @@ pub fn subagent_started(call: &str, kind: &str, description: &str, prompt: &str)
 /// that call.
 pub fn task(kind: TaskKind, call: &str, description: &str) -> AgentTask {
     AgentTask {
-        id: format!("task-{call}").into(),
         description: Some(description.to_string()),
-        kind,
         call: Some(ToolUseId::from(call)),
-        subagent: None,
+        ..AgentTask::new(format!("task-{call}"), kind)
     }
+}
+
+/// A command in the background as the hub lists it when the agent didn't say what it's for, by the call that started it.
+pub fn undescribed(call: &str, command: &str) -> AgentTask {
+    AgentTask { description: None, command: Some(command.to_string()), ..task(TaskKind::Command, call, "") }
+}
+
+/// `task` as part of the work of the subagent started by the call `parent`.
+pub fn part_of(parent: &str, task: AgentTask) -> AgentTask {
+    AgentTask { part_of: Some(SubagentId::from(parent)), ..task }
 }
 
 /// The subagents working in the background, each by the call that started it and what it's for, as the hub records

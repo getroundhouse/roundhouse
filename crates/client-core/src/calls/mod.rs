@@ -16,7 +16,7 @@ pub mod subagents;
 pub mod web;
 
 pub use agent::Agent;
-pub use command::{Command, Only};
+pub use command::{Command, Only, UNDESCRIBED};
 pub use failure::{Ending, Failure, ResultForm};
 pub use files::{EditFile, ReadFile, WriteFile};
 pub use other::Other;

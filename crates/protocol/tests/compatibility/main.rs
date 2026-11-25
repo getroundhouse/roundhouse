@@ -256,19 +256,22 @@ fn a_background_task_of_a_kind_this_build_doesnt_know_is_a_command() {
         (kind("subagent"), kind("monitor"), kind("wait"), kind("command")),
         (TaskKind::Subagent, TaskKind::Monitor, TaskKind::Wait, TaskKind::Command)
     );
-    let monitor = AgentTask { id: "t1".into(), description: None, kind: TaskKind::Monitor, call: None, subagent: None };
+    let monitor = AgentTask::new("t1", TaskKind::Monitor);
     assert_eq!(serde_json::to_string(&monitor).unwrap(), r#"{"id":"t1","description":null,"kind":"monitor"}"#);
 }
 
 /// A list the hub stored before it kept which call started each task names none, as does a task whose agent doesn't
-/// say, so a subagent's line has no button to its tab. One that names a call keeps it.
+/// say, so a subagent's line has no button to its tab. Nor does one from before tasks said their command and whose work
+/// they're part of say either. One that says them keeps them.
 #[test]
-fn a_background_task_that_names_no_call_has_none() {
+fn a_background_task_that_names_no_call_no_command_and_no_subagent_has_none() {
     let unnamed: AgentTask = serde_json::from_str(r#"{"id":"t1","description":null,"kind":"subagent"}"#).unwrap();
-    let newer = r#"{"id":"t1","description":null,"kind":"subagent","call":"toolu_1"}"#;
+    let newer = r#"{"id":"t1","description":null,"command":"ls","kind":"command","call":"toolu_1","part_of":"a1"}"#;
     let task: AgentTask = serde_json::from_str(newer).unwrap();
 
-    assert_eq!((unnamed.call, task.call.clone()), (None, Some("toolu_1".into())));
+    assert_eq!((unnamed.call, unnamed.command, unnamed.part_of), (None, None, None));
+    assert_eq!((&task.call, task.command.as_deref()), (&Some("toolu_1".into()), Some("ls")));
+    assert_eq!(task.part_of, Some("a1".into()));
     assert_eq!(serde_json::to_string(&task).unwrap(), newer);
 }
 

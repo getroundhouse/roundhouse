@@ -9,7 +9,7 @@ use crate::model::{EndedWait, WaitEnd, WaitEnded, WaitUntil, Watching};
 /// with it, whatever it listed. Anything else leaves it as it was, the turn's end and the agent's state included.
 #[test]
 fn what_runs_in_the_background_is_the_newest_list_until_the_agent_starts_or_exits() {
-    let task = AgentTask { id: "t".into(), description: None, kind: TaskKind::Command, call: None, subagent: None };
+    let task = AgentTask::new("t", TaskKind::Command);
     let listed = EventBody::AgentTasks { tasks: vec![task.clone()], stopped: Vec::new() };
     let started =
         EventBody::AgentStarted { pid: 1, resumed: true, build: None, previous_build: None, capabilities: None };
@@ -63,9 +63,16 @@ fn ended_task() -> impl Strategy<Value = EndedTask> {
     let kind = prop::sample::select(vec![TaskKind::Subagent, TaskKind::Monitor, TaskKind::Wait, TaskKind::Command]);
     let outcome = prop::sample::select(vec![TaskOutcome::Finished, TaskOutcome::Failed, TaskOutcome::Stopped]);
     let words = prop::option::of("[a-z ]{0,12}");
-    (kind, words.clone(), prop::option::of("toolu_[0-9]{1,3}"), outcome, prop::option::of(wait())).prop_map(
-        |(kind, description, call, outcome, wait)| EndedTask {
-            task: AgentTask { id: "t".into(), description, kind, call: call.map(Into::into), subagent: None },
+    let of = (words.clone(), words.clone(), prop::option::of("a[0-9]{1,3}"));
+    (kind, of, prop::option::of("toolu_[0-9]{1,3}"), outcome, prop::option::of(wait())).prop_map(
+        |(kind, (description, command, part_of), call, outcome, wait)| EndedTask {
+            task: AgentTask {
+                description,
+                command,
+                call: call.map(Into::into),
+                part_of: part_of.map(Into::into),
+                ..AgentTask::new("t", kind)
+            },
             outcome,
             wait,
         },

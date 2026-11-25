@@ -7,7 +7,7 @@ use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Command;
 use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
 use protocol::fixtures::{self, ApprovalRequest, approval_request};
-use protocol::model::{MessageId, TaskId, ToolUseId};
+use protocol::model::{MessageId, ToolUseId};
 use protocol::prompt::Prompt;
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
@@ -55,22 +55,18 @@ pub fn started_in_background() -> Vec<EventBody> {
     let mut events = looked_around();
     events.push(in_background("msg-3", "toolu-3", "cargo test --workspace", "Run the full test suite"));
     let suite = AgentTask {
-        id: TaskId::from("b1"),
         description: Some("Run the full test suite".to_string()),
-        kind: TaskKind::Command,
         call: Some("toolu-3".into()),
-        subagent: None,
+        ..AgentTask::new("b1", TaskKind::Command)
     };
     events.push(EventBody::AgentTasks { tasks: vec![suite.clone()], stopped: Vec::new() });
     events.push(printed("toolu-3", "Command running in background with ID: b1"));
     let watch = "tail -f target/test.log | grep --line-buffered FAILED";
     events.push(monitor("msg-4", "toolu-4", watch, "Watch the run for failures", Some(600_000)));
     let watcher = AgentTask {
-        id: TaskId::from("b2"),
         description: Some("Watch the run for failures".to_string()),
-        kind: TaskKind::Monitor,
         call: Some("toolu-4".into()),
-        subagent: None,
+        ..AgentTask::new("b2", TaskKind::Monitor)
     };
     events.push(EventBody::AgentTasks { tasks: vec![suite, watcher], stopped: Vec::new() });
     events.push(said("toolu-4", "Monitor started (task b2). You will be notified on each event."));
@@ -83,11 +79,9 @@ pub fn waiting() -> Vec<EventBody> {
     let reply = "I've opened #182. I'm waiting on its checks in the background, and I'll add it to the merge queue once \
                  they pass.";
     let wait = AgentTask {
-        id: TaskId::from("w1"),
         description: Some("roundhouse/wait_for_pull_requests".to_string()),
-        kind: TaskKind::Wait,
         call: Some("toolu-1".into()),
-        subagent: None,
+        ..AgentTask::new("w1", TaskKind::Wait)
     };
     first_turn(
         user_prompt("Open a PR for this, and queue it once its checks pass."),

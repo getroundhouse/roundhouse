@@ -11,7 +11,7 @@ use crate::hub::stand_in_workers::{a_chat, a_turn, hub_with_stand_in_workers, th
 
 /// A task of the kind `kind`, named `id`, and the call that started it, once the agent has said.
 fn task(id: &str, kind: TaskKind, call: Option<&str>) -> AgentTask {
-    AgentTask { id: id.into(), description: None, kind, call: call.map(ToolUseId::from), subagent: None }
+    AgentTask { call: call.map(ToolUseId::from), ..AgentTask::new(id, kind) }
 }
 
 fn listed(tasks: Vec<AgentTask>) -> EventBody {

@@ -2,6 +2,8 @@
 //! subagent's robot and the button its call's line has, and past what there's room for, one for each group with
 //! several, which opens to its tasks, as `crate::task_lines` says. Then one for each open wait on pull requests, with Stop.
 
+use client_core::calls::UNDESCRIBED;
+use client_core::tasks::Says;
 use client_core::waits;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -17,11 +19,10 @@ use super::{clipped, tail_line};
 use crate::folds::{Fold, Folds};
 use crate::rows::Shared;
 use crate::rows::line::{START_CHARS, lead, opening};
-use crate::rows::tools::agent::{Opens, open_tab};
+use crate::rows::tools::agent::{Opens, open_tab, tab_title};
 use crate::task_lines::{TaskGroup, TaskLine, task_lines};
 use crate::transcript::OpenWait;
 use crate::transcript::Transcript;
-use client_core::calls::agent;
 
 /// The lines for the tasks the agent runs in the background, as `crate::task_lines` lists them.
 pub(super) fn lines(tasks: &[AgentTask], folds: &Folds, shared: &Shared, cx: &App) -> Vec<AnyElement> {
@@ -73,29 +74,30 @@ fn several(group: TaskGroup, tasks: &[&AgentTask], open: bool, shared: &Shared, 
 /// What each of `tasks` is for, one after another, as far as a line could have room for.
 fn what_for(tasks: &[&AgentTask]) -> String {
     let mut said = String::new();
-    for what in tasks.iter().filter_map(|task| task.description.as_deref()) {
+    for what in tasks.iter().filter_map(|task| Says::of(task)).map(Says::into_words) {
         if said.len() >= START_CHARS {
             break;
         }
         if !said.is_empty() {
             said.push_str(" \u{b7} ");
         }
-        said.push_str(what);
+        said.push_str(&what);
     }
     said
 }
 
-/// A background task's line: its group's mark, and what the agent said it's for. A subagent has the robot its call's
+/// A background task's line: its group's mark, and what the agent said it's for, or else the command it runs, as that
+/// command's own line says it. A subagent has the robot its call's
 /// line has, so its line reads as that call, and it ends with the button that opens the subagent tab, as its call's
 /// line does, once the agent has said which subagent it is, or which call started it.
 fn going(group: TaskGroup, task: &AgentTask, shared: &Shared, cx: &App) -> Div {
     let (mark, pointed_at) = mark(group, shared, cx);
-    let text = task.description.clone().unwrap_or_else(|| group.one().to_string());
     let open = Opens::task(task).map(|opens| {
         let id = ElementId::Name(format!("background-open/{}", task.id).into());
-        open_tab(id, opens, task.description.as_deref().unwrap_or(agent::UNTITLED), &shared.this)
+        open_tab(id, opens, &tab_title(task), &shared.this)
     });
-    in_the_background(("background", task.id.as_str()), mark, text, pointed_at, open, cx)
+    let says = Says::of(task).unwrap_or_else(|| Says::For(group.one().to_string()));
+    in_the_background(("background", task.id.as_str()), mark, says, pointed_at, open, cx)
 }
 
 /// The agent's wait on pull requests, as the hub keeps it: the ring a monitor has, held still, since nothing runs for
@@ -105,7 +107,8 @@ pub(super) fn wait_line(open: &OpenWait, shared: &Shared, cx: &App) -> Div {
     let (text, pointed_at) = wait_words(open);
     let wait = &open.wait;
     let stop = stop_waiting(&wait.id, &shared.this);
-    in_the_background(("wait", wait.id.as_str()), ring(TaskRing::Watching, cx), text, pointed_at, Some(stop), cx)
+    let mark = ring(TaskRing::Watching, cx);
+    in_the_background(("wait", wait.id.as_str()), mark, Says::For(text), pointed_at, Some(stop), cx)
 }
 
 /// What a wait's line says, and what pointing at it says: what it waits on, and where its pull requests stand, from
@@ -151,11 +154,21 @@ fn stop_waiting(wait: &WaitId, this: &WeakEntity<Transcript>) -> AnyElement {
 fn in_the_background(
     (kind, key): (&str, &str),
     lead: AnyElement,
-    text: String,
+    says: Says,
     pointed_at: &'static str,
     button: Option<AnyElement>,
     cx: &App,
 ) -> Div {
+    let words = match &says {
+        Says::For(what) => clipped(what.clone()),
+        Says::Runs(command) => div()
+            .flex()
+            .items_center()
+            .min_w_0()
+            .gap(look::Space::Small)
+            .child(div().flex_none().child(UNDESCRIBED))
+            .child(look::pill(look::PillKind::Plain, command.clone())),
+    };
     let described = div()
         .id(ElementId::Name(format!("{kind}-{key}").into()))
         .flex()
@@ -165,10 +178,7 @@ fn in_the_background(
         .gap(look::Space::Small)
         .child(lead)
         .child(
-            clipped(text.clone())
-                .id(ElementId::Name(format!("{kind}-text/{key}").into()))
-                .aria_label(text)
-                .test_support(),
+            words.id(ElementId::Name(format!("{kind}-text/{key}").into())).aria_label(says.into_words()).test_support(),
         )
         .says(pointed_at, cx)
         .test_support();

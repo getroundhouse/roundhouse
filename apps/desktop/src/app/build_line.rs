@@ -284,7 +284,7 @@ mod tests {
     }
 
     fn task(kind: TaskKind) -> AgentTask {
-        AgentTask { id: "t".into(), description: None, kind, call: None, subagent: None }
+        AgentTask::new("t", kind)
     }
 
     /// An agent that asked something holds an update up as much as one that's working, and only you can move it on.

@@ -93,6 +93,32 @@ async fn nested_agents_and_foreign_threads_cannot_change_the_root_turn() {
 }
 
 #[tokio::test]
+async fn a_nested_agent_is_part_of_its_parents_work_until_that_ends() {
+    let output = play(vec![
+        turn("thread", "root-turn", "inProgress"),
+        activity("thread", "root-turn", "child", "spawn", "started", true),
+        turn("child", "child-turn", "inProgress"),
+        activity("child", "child-turn", "nested", "nested-spawn", "started", true),
+        turn("nested", "nested-turn", "inProgress"),
+        turn("child", "child-turn", "completed"),
+        turn("nested", "nested-turn", "completed"),
+        turn("thread", "root-turn", "completed"),
+    ])
+    .await;
+
+    let events = bodies(&output);
+    let part_of = |task: &str| {
+        let listed = events.iter().filter_map(|body| body.sets_background()).flatten();
+        let named = listed.filter(|listed| listed.subagent == Some(task.into()));
+        let mut part_of: Vec<_> = named.map(|task| task.part_of.clone()).collect();
+        part_of.dedup();
+        part_of
+    };
+    assert_eq!(part_of("child"), [None], "the agent's own");
+    assert_eq!(part_of("nested"), [Some("child".into()), None]);
+}
+
+#[tokio::test]
 async fn a_subagents_tokens_are_an_event_about_it_and_not_the_agents_own_context() {
     let tokens = json!({"method":"thread/tokenUsage/updated","params":{"threadId":"child","turnId":"child-turn",
         "tokenUsage":{"last":{"totalTokens":4321},"total":{"totalTokens":9999},"modelContextWindow":258_400}}});

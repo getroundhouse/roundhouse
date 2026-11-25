@@ -5,7 +5,7 @@ use crate::capability::{Capabilities, Capability, approvals, asking, background,
 use crate::event::{AgentTask, TokenUsage, TurnOutcome};
 use crate::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, TaskKind};
 use crate::fixtures::{approval_request, subagent_started, turn_ended};
-use crate::model::{RunId, Seq, TaskId};
+use crate::model::{RunId, Seq};
 
 use super::log::*;
 
@@ -28,7 +28,7 @@ fn what_a_run_records_needs_only_what_it_claims_and_the_hubs_own_records_are_its
 }
 
 fn task(kind: TaskKind) -> AgentTask {
-    AgentTask { id: TaskId::from("t"), description: None, kind, call: None, subagent: None }
+    AgentTask::new("t", kind)
 }
 
 #[test]
