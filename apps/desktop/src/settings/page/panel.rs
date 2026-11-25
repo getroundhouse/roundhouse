@@ -110,6 +110,15 @@ pub(super) fn buttons() -> Div {
     h_flex().justify_end().gap(look::Space::Small)
 }
 
+/// That a panel waits, beside a still circle.
+pub(super) fn waiting_line(said: impl Into<SharedString>, cx: &App) -> Div {
+    h_flex()
+        .gap(look::Space::Small)
+        .text_color(look::colors(cx).text_muted)
+        .child(Icon::new(Lucide::LoaderCircle).sized(look::IconSize::Regular).flex_none())
+        .child(said.into())
+}
+
 /// One of a panel's buttons, known to tests by `id`: its main one when it's `primary`, which can be `off`.
 pub(super) fn button(
     id: &'static str,

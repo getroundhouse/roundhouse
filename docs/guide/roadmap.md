@@ -21,7 +21,7 @@ These are part of the design, and the app is built to take them. None is built.
 
 - **More agents,** beyond Claude, Codex and Antigravity.
 - **Codex and Antigravity logins managed by the hub,** rather than their worker machine’s native sign-ins.
-- **Signing in to an MCP server** you add in [Settings](reference/settings.md#mcp-servers), rather than giving it a key.
+- **Signing in to an MCP server from a chat,** and seeing which a chat has. It's in [Settings](reference/settings.md#mcp-servers) alone.
 - **A hub on your own server, or in the cloud,** with workspaces in VMs or sandboxes rather than on your machine.
 
 ## Smaller things that aren't built

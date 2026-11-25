@@ -381,9 +381,9 @@ The app's own settings, and where they're shown.
 
 ## MCP servers
 
-- **MCP servers lists the servers the hub has of its own, in a list, Added, each a row in the design of Git's: its name, its address, and what else there is to say.** Every agent in every project has them, whichever machine it's on, beside the ones its own CLI has. The address is the host in its URL, with the port if it has one. A row says only what isn't plain: `Key` for a server a key is sent to, and `Needs you to sign in`, in red, for one whose sign-in is missing or no longer works. *Not built:* `Needs you to sign in`. Whether a server can be reached depends on the machine an agent is on, so a chat says that and this page doesn't. A hub too old to have servers of its own says it has to be updated as one is added. *Unconfirmed:* the address being the host, and what a hub that's too old says.
+- **MCP servers lists the servers the hub has of its own, in a list, Added, each a row in the design of Git's: its name, its address, and what else there is to say.** Every agent in every project has them, whichever machine it's on, beside the ones its own CLI has. The address is the host in its URL, with the port if it has one. A row says only what isn't plain: `Key` for a server a key is sent to, and `Needs you to sign in`, in red, for one whose sign-in is missing or no longer works. Whether a server can be reached depends on the machine an agent is on, so a chat says that and this page doesn't. A hub too old to have servers of its own says it has to be updated as one is added. *Unconfirmed:* the address being the host, and what a hub that's too old says.
 
-  **MCP servers, with two accounts at one server, one server anyone can use, and one of a company's own.** *Unconfirmed.*
+  **MCP servers, with two accounts at one server, one of which needs you to sign in, one server anyone can use, and one of a company's own.** *Unconfirmed.*
 
   ![MCP servers, with four added](screens/settings-mcp.png)
 
@@ -391,8 +391,8 @@ The app's own settings, and where they're shown.
 
   ![MCP servers with none added](screens/settings-mcp-none.png)
 
-- **Each server has one sign-in, so a second account at the same server is a second server,** with a name of its own, such as `Linear (Northwind)`. A server's key is its own in the same way. *Not built:* a sign-in.
-- **Adding a server asks first how it knows who you are, as Connect account does: a sign-in, a key, or neither.** *Not built:* a sign-in, which is first. Each choice then asks for the server's URL and a name, and a key also for its header, `Authorization` unless changed. A URL that's already there says so, and which server it is, the first by name where there are two, and stops nothing. What the hub refuses is said in red in the panel, which stays open. The key shows only as dots, and what's typed there is dropped as it's sent, so after a refusal it's typed again. Adding a server asks nothing of it. *Unconfirmed:* what Neither asks for, and which of two servers is said.
+- **Each server has one sign-in, so a second account at the same server is a second server,** with a name of its own, such as `Linear (Northwind)`. A server's key is its own in the same way.
+- **Adding a server asks first how it knows who you are, as Connect account does: a sign-in, a key, or neither.** Each choice then asks for the server's URL and a name, and a key also for its header, `Authorization` unless changed. A URL that's already there says so, and which server it is, the first by name where there are two, and stops nothing. What the hub refuses is said in red in the panel, which stays open. The key shows only as dots, and what's typed there is dropped as it's sent, so after a refusal it's typed again. Adding a server with a key or with neither asks nothing of it. *Unconfirmed:* what Neither asks for, and which of two servers is said.
 - **A key for `Authorization` with no space in it is sent as `Bearer` and the key,** since a server gives out a key alone and the header holds its scheme too. One with a space has its scheme already, such as `Basic`, and is sent as it is, as a key in any other header is. *Unconfirmed.*
 
   **Add server, open, with the ways a server can know you.** *Unconfirmed.*
@@ -403,7 +403,11 @@ The app's own settings, and where they're shown.
 
   ![Adding an MCP server with a key](screens/settings-mcp-key.png)
 
-  **Adding a second account at a server that's already there.** *Unconfirmed.*
+  **Signing in to a server, as it's added.** *Unconfirmed.*
+
+  ![Signing in to an MCP server as it's added](screens/settings-mcp-sign-in.png)
+
+  **Signing in with a second account at a server that's already there.** *Unconfirmed.*
 
   ![Adding an MCP server whose URL is already there](screens/settings-mcp-second.png)
 
@@ -412,10 +416,31 @@ The app's own settings, and where they're shown.
   ![Adding an MCP server, refused in red in the panel](screens/settings-mcp-refused.png)
 
 - **A server's name can be whatever you like, up to 64 characters on one line, and the app always shows it as you typed it.** Agents call the server by a name Roundhouse makes from it, which every agent's CLI takes: its ASCII letters, digits and `-` as they are, with each run of anything else as one `_`, and no `_` or `-` at either end, so `Linear (Northwind)` is `Linear_Northwind`. That name is at most 32 characters, and `server` when nothing is left. A name whose agents' name another server has, in any case, is refused, saying which server, and that agents would call both the same where the names differ, and so is one that agents would call `roundhouse`, which Roundhouse's own tools are. *Unconfirmed:* the 32 characters, `server`, and refusing a name that agents would call the same.
-- **Signing in opens the server's page in the browser on this device, and the panel waits, with a button that opens it again.** Nothing is added until it's approved. A server that turns out to have no way to sign in says so, with a button to use a key instead. A server that anyone can use, and that has a sign-in too, is signed in to when you choose to sign in to it. *Not built.* *Unconfirmed:* signing in to a server that anyone can use.
-- **A server's menu has Sign in again and Remove.** Remove asks first, as disconnecting a GitHub account does, and then the hub forgets the server with its sign-in or its key, which isn't revoked at the server. What the hub couldn't do is said under the row, in red. *Not built:* Sign in again. *Unconfirmed.*
+- **Signing in opens the server's page in the browser on this device, and the panel waits, with a button that opens it again.** Nothing is added until it's approved. It works for a hub on another machine too, since the browser sends you back to this device, at a port the app listens on only while it waits. The hub first asks the server how it's signed in to, which can take half a minute, and the panel says so. A server that turns out to have no way to sign in says why, with a button to use a key instead, which keeps the URL and the name. A server that anyone can use, and that has a sign-in too, is signed in to when you choose to sign in to it. *Unconfirmed:* signing in to a server that anyone can use.
+- **What the browser is sent back with goes to the hub alone,** and the app keeps none of it once the hub has answered. Only the first redirect with the sign-in's own state counts, and any other is dropped, with the sign-in still waiting. The browser's page says whether you approved it and to go back to Roundhouse. The app opens only a page on the web. *Unconfirmed.*
 
-  **A server's menu.** *Unconfirmed.*
+  **Waiting for a sign-in to be approved in the browser.** *Unconfirmed.*
+
+  ![Waiting for a sign-in to an MCP server](screens/settings-mcp-waiting.png)
+
+  **A server with no way to sign in, with the offer of a key.** *Unconfirmed.*
+
+  ![An MCP server that can't be signed in to](screens/settings-mcp-no-sign-in.png)
+
+- **A sign-in that comes to nothing says why, in red, with a way to try again,** whether it was refused, it failed, nobody approved it within 15 minutes, the hub no longer has it, or its server's name was taken meanwhile. For a new server that's the panel it was started from, with what was typed still in it. For one there is, it's the sign-in's own, with Try again. *Unconfirmed.*
+- **The app has one sign-in to a hub's servers at a time, and it goes on with Settings closed.** MCP servers shows it wherever it was started. Starting another cancels it, and so does Cancel, after which nothing listens. If the connection to the hub is lost once you've approved it, it's finished when the connection is back. *Unconfirmed.*
+
+  **A sign-in refused, in the panel it was started from.** *Unconfirmed.*
+
+  ![A sign-in to a new MCP server, refused in red in the panel](screens/settings-mcp-sign-in-refused.png)
+
+  **Signing in again, refused.** *Unconfirmed.*
+
+  ![Signing in to an MCP server again, refused, with Try again](screens/settings-mcp-again-refused.png)
+
+- **A server's menu has Sign in again, where it's signed in to, and Remove.** Sign in again signs in to that server as adding it did, and changes nothing until it's approved. Remove asks first, as disconnecting a GitHub account does, and then the hub forgets the server with its sign-in or its key, which isn't revoked at the server. What the hub couldn't do is said under the row, in red. *Unconfirmed.*
+
+  **The menu of a server that's signed in to.** *Unconfirmed.*
 
   ![An MCP server's menu](screens/settings-mcp-menu.png)
 

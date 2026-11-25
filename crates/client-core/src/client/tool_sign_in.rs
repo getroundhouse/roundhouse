@@ -1,6 +1,5 @@
-//! The calls that sign in to a tool server: starting a sign-in, finishing it and cancelling it. No client makes them:
-//! "MCP servers" in `docs/spec/settings.md` plans the panels that will. What a start comes to with no page, and what a
-//! refusal means, are worded by [`crate::tool_sign_ins`].
+//! The calls that sign in to a tool server: starting a sign-in, finishing it and cancelling it. What a start
+//! comes to with no page, and what a refusal means, are worded by [`crate::tool_sign_ins`].
 
 use protocol::client::tool_sign_ins::{
     ToolSignInBegun, ToolSignInCancel, ToolSignInFinish, ToolSignInReturned, ToolSignInStart, ToolSignInTo,

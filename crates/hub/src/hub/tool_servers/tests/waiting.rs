@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use protocol::client::ErrorCode;
-use protocol::client::tool_sign_ins::ToolSignInTo;
+use protocol::client::tool_sign_ins::{SIGN_IN_WAITS, ToolSignInTo};
 use protocol::model::ToolSignInId;
 
-use super::super::waiting::{MOST_WAITING, WAITS, Waiting};
+use super::super::waiting::{MOST_WAITING, Waiting};
 use crate::store::later_ms;
 use crate::store::tests::open_in;
 use crate::tool_servers::{SigningIn, ToolServers};
@@ -30,7 +30,7 @@ fn as_many_wait_as_may_and_one_that_ends_is_cancelled_or_has_waited_long_enough_
         waiting.begin(&id(number), to(), 0).unwrap();
     }
     let over = || waiting.begin(&id(MOST_WAITING), to(), 1).map(|_| ());
-    let late_ms = later_ms(0, WAITS);
+    let late_ms = later_ms(0, SIGN_IN_WAITS);
 
     assert_eq!(over().unwrap_err().code, ErrorCode::Unavailable);
     let first = waiting.begin(&id(0), to(), 1).unwrap();
@@ -54,7 +54,7 @@ fn one_being_kept_is_neither_cancelled_nor_forgotten_until_it_ends() {
 
     waiting.cancel(&id(0));
 
-    assert!(waiting.get(&id(0), later_ms(0, WAITS)).is_some());
+    assert!(waiting.get(&id(0), later_ms(0, SIGN_IN_WAITS)).is_some());
     waiting.end(&id(0), &sign_in);
     assert!(waiting.get(&id(0), 0).is_none());
 }

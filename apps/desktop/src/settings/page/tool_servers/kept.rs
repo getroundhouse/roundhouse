@@ -1,8 +1,8 @@
 //! What MCP servers keeps from one frame to the next while it shows: the panel that's open, and what the hub last
-//! couldn't do. What a server is called, where it is and how it knows the person are never kept here: each frame reads
-//! them from the hub's records, as client-core keeps them.
+//! couldn't do. How a sign-in stands is the window's, which the page follows. What a server is called, where it is and
+//! how it knows the person are never kept here: each frame reads them from the hub's records, as client-core keeps them.
 
-use gpui_kit::{Bounds, Context, FocusHandle, Pixels, ScrollHandle, Window};
+use gpui_kit::{Bounds, Context, Entity, FocusHandle, Pixels, ScrollHandle, Window};
 use protocol::model::{ToolServer, ToolServerId};
 
 use super::super::panel::Place;
@@ -10,11 +10,13 @@ use super::Asking;
 use super::adding::AddPanel;
 use super::words;
 use crate::asking::{self, Question};
+use crate::tool_sign_in::ToolSigningIn;
 
 /// The page's state, kept only while it shows, so a key half pasted goes with it, and so does the wait for what the hub
 /// answers.
-#[derive(Default)]
 pub(super) struct Kept {
+    /// The sign-in there is, if there's one, which the page follows.
+    pub(super) signing_in: Entity<ToolSigningIn>,
     /// The hub to ask, as of the page's last frame. `None` while there's no hub to ask.
     pub(super) asking: Option<Asking>,
     /// Settings' focus, as of the page's last frame, where focus goes back to as a panel goes while it has it, so keys
@@ -35,9 +37,20 @@ pub(super) enum Shows {
     /// Add server, choosing how the server knows the person.
     Choosing,
     Adding(Box<AddPanel>),
+    /// The sign-in there is, as it stands.
+    SigningIn,
 }
 
 impl Kept {
+    /// The state of a page that shows, following `signing_in`.
+    pub(super) fn new(signing_in: Entity<ToolSigningIn>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        cx.observe_in(&signing_in, window, |kept, _, window, cx| kept.follow_sign_in(window, cx)).detach();
+        // One may have been started, or ended, before the page showed. This is while the window draws, so it's shown
+        // once that's done.
+        cx.defer_in(window, Self::follow_sign_in);
+        Self { signing_in, asking: None, settings_focus: None, panel: None, failed: None }
+    }
+
     /// What the page was drawn with: the hub to ask, and Settings' focus.
     pub(super) fn drawn(&mut self, asking: Option<Asking>, settings_focus: FocusHandle) {
         (self.asking, self.settings_focus) = (asking, Some(settings_focus));
@@ -68,6 +81,13 @@ impl Kept {
             panel.place.give_focus(settings, window, cx);
         }
         cx.notify();
+    }
+
+    /// Gives the panel itself the focus, when something in it had it, as what had it goes, so keys still reach Settings.
+    pub(super) fn focus_the_panel(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(panel) = &self.panel {
+            panel.place.keep_focus(window, cx);
+        }
     }
 
     /// The panel was laid out at `bounds`, on Settings' `scroll`, as [`Place::laid_out`] says.

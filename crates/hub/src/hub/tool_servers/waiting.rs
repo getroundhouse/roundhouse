@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 
 use parking_lot::Mutex;
-use protocol::client::tool_sign_ins::ToolSignInPage;
+use protocol::client::tool_sign_ins::{SIGN_IN_WAITS, ToolSignInPage};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::ToolSignInId;
 use tokio::sync::Mutex as AsyncMutex;
@@ -11,10 +10,6 @@ use tool_sign_in::Pending;
 
 use crate::store::later_ms;
 use crate::tool_servers::SigningIn;
-
-/// How long a sign-in waits, from when it's started, which is as long as GitHub's codes last, and enough for someone to
-/// find a password first. *Unconfirmed.*
-pub(super) const WAITS: Duration = Duration::from_mins(15);
 
 /// How many sign-ins can wait at once. One person signs in to one server at a time, so a few let others beside them, and
 /// keep a client that starts them without end from having the hub hold many. *Unconfirmed.*
@@ -72,7 +67,7 @@ impl Waiting {
             return Err(ApiError::new(ErrorCode::Unavailable, message));
         }
         let sign_in = Arc::new(WaitingSignIn { to, stage: AsyncMutex::new(Stage::Finding) });
-        let entry = Entry { sign_in: Arc::clone(&sign_in), until_ms: later_ms(now_ms, WAITS), keeping: false };
+        let entry = Entry { sign_in: Arc::clone(&sign_in), until_ms: later_ms(now_ms, SIGN_IN_WAITS), keeping: false };
         by_id.insert(id.clone(), entry);
         Ok(sign_in)
     }

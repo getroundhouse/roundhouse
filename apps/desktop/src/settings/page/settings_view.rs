@@ -2,6 +2,7 @@ use super::{agents, general, git, notifications, permissions, providers, rows, s
 use crate::FindSetting;
 use crate::app::TOP_STRIP;
 use crate::status_box::StatusBox;
+use crate::tool_sign_in::ToolSigningIn;
 use client_core::records::Snapshot;
 use client_core::{Client, RecordsFeed};
 use gpui_kit::assets::IconName as Lucide;
@@ -30,6 +31,8 @@ pub(crate) struct OfHub {
     pub(crate) records: Snapshot,
     /// `None` while there's no hub to ask.
     pub(crate) asking: Option<Asking>,
+    /// Signing in to one of its MCP servers.
+    pub(crate) tool_sign_in: Entity<ToolSigningIn>,
 }
 
 /// The hub to ask, and client-core's copy of its records, which has taken in the record an answer carries by the time

@@ -3,7 +3,7 @@
 use gpui_kit::{AnyElement, App, IntoElement, Window};
 
 use super::super::panel;
-pub(super) use super::super::panel::{Framed, button, buttons, choice, choices};
+pub(super) use super::super::panel::{Framed, button, buttons, choice, choices, waiting_line};
 use super::Drawing;
 use super::kept::Panel;
 

@@ -1,16 +1,8 @@
-//! What a browser and GitHub do with the listener, for tests: fetch one of its pages, read the form the first posts to
-//! GitHub, and send the person back as GitHub would once they've made the app, with a code and the form's `state`.
+//! What GitHub does with the listener's pages, for tests: read the form the first posts to it, and send the person back
+//! once they've made the app, with a code and the form's `state`.
 #![expect(clippy::unwrap_used, reason = "only tests use it, so failing loudly is what it should do")]
 
-use std::io::{Read as _, Write as _};
-use std::net::TcpStream;
-
-/// What a page answered with.
-#[derive(Debug)]
-pub struct Fetched {
-    pub status: u16,
-    pub body: String,
-}
+use crate::loopback::browsing::{Fetched, fetch};
 
 /// The form the listener's page posts to GitHub.
 #[derive(Debug)]
@@ -25,19 +17,6 @@ impl Form {
     pub fn state(&self) -> &str {
         self.action.split_once("?state=").unwrap().1
     }
-}
-
-/// What `url`, an `http` address on `127.0.0.1`, answers a `GET` with, read whole, as a browser asks.
-pub fn fetch(url: &str) -> Fetched {
-    let (address, target) = url.strip_prefix("http://").unwrap().split_once('/').unwrap();
-    let mut stream = TcpStream::connect(address).unwrap();
-    let asked = format!("GET /{target} HTTP/1.1\r\nHost: {address}\r\nAccept: text/html\r\nConnection: close\r\n\r\n");
-    stream.write_all(asked.as_bytes()).unwrap();
-    let mut answer = String::new();
-    stream.read_to_string(&mut answer).unwrap();
-    let (head, body) = answer.split_once("\r\n\r\n").unwrap();
-    let status = head.split(' ').nth(1).unwrap().parse().unwrap();
-    Fetched { status, body: body.to_string() }
 }
 
 /// The form `page` posts, as a browser reads it.

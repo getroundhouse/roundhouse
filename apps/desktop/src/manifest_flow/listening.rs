@@ -1,20 +1,17 @@
-//! Listening on `127.0.0.1` for GitHub to send the person back: bound first, so the hub can be told where GitHub is to
-//! send them in the manifest it writes, then serving the page that posts that manifest, until the code comes, the
-//! listener is let go of, or its time limit passes, whichever is first.
+//! Listening for GitHub to send the person back: bound first, so the hub can be told where GitHub is to send them in the
+//! manifest it writes, then serving the page that posts that manifest, at its path with the right `state`, until GitHub
+//! sends the person back with a code, at its own, with the same `state`. Every other path and `state` is refused.
 
 use std::io;
-use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
 use std::time::Duration;
 
 use protocol::client::github_apps::GithubManifestCode;
 use ring::rand::{SecureRandom as _, SystemRandom};
 
-use super::answering::Serving;
 use super::page;
 use super::under::Under;
+use crate::loopback::page::{Status, said};
+use crate::loopback::{self, Answer, Asked};
 
 protocol::tokens!(
     /// What the page sends GitHub with the manifest, and GitHub sends back with the code, which no one else knows, so
@@ -23,62 +20,44 @@ protocol::tokens!(
 );
 
 /// Where the page that posts the manifest is, which the browser opens on, with the `state` after it.
-pub(super) const MAKING: &str = "/make";
+const MAKING: &str = "/make";
 /// Where GitHub sends the person back, with the code and the `state` after it.
-pub(super) const MADE: &str = "/made";
+const MADE: &str = "/made";
 
-/// A listener bound to `127.0.0.1`, on a port the system picked, not serving yet.
+/// A listener bound, on a port the system picked, not serving yet.
 pub(crate) struct Bound {
-    listener: TcpListener,
-    address: SocketAddr,
+    bound: loopback::Bound,
     state: ManifestState,
 }
 
 /// A listener serving the page, until it stops. Letting go of it stops it.
 pub(crate) struct Listening {
     page_url: String,
-    heard: flume::Receiver<Heard>,
-    stop: flume::Sender<()>,
+    listening: loopback::Listening<GithubManifestCode>,
 }
 
-/// What the listener heard, once, before it stopped by itself.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Heard {
-    /// GitHub sent the person back with this code, with the right `state`.
-    Code(GithubManifestCode),
-    /// Its time limit passed first.
-    TimedOut,
-}
+/// How a listener stopped by itself: with the code GitHub sent the person back with, or as its time limit passed.
+pub(crate) type Ended = loopback::Ended<GithubManifestCode>;
 
 impl Bound {
-    /// Binds to `127.0.0.1` only, on a port the system picks, with a `state` of its own.
+    /// Binds, with a `state` of its own.
     pub(crate) fn new() -> io::Result<Bound> {
-        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
-        let address = listener.local_addr()?;
-        Ok(Bound { listener, address, state: new_state()? })
+        Ok(Bound { bound: loopback::Bound::new()?, state: new_state()? })
     }
 
     /// Where GitHub is to send the person back once they've made the app, for the hub's manifest to say.
     pub(crate) fn redirect_url(&self) -> String {
-        format!("http://{}{MADE}", self.address)
+        format!("http://{}{MADE}", self.bound.address())
     }
 
     /// Serves the page that posts `manifest` to GitHub's form for making an app `under` the account or organization
     /// chosen, and takes GitHub's redirect back, until it has the code, it's let go of, or `limit` has passed.
     pub(crate) fn serve(self, manifest: &serde_json::Value, under: &Under, limit: Duration) -> io::Result<Listening> {
-        let Bound { listener, address, state } = self;
-        let page_url = format!("http://{address}{MAKING}?state={}", state.as_str());
-        let (heard_tx, heard) = flume::bounded(1);
-        let (stop, stopped) = flume::bounded(1);
-        let page = page::making(manifest, &under.form(), &state);
-        let serving =
-            Arc::new(Serving { state, page, ended: AtomicBool::new(false), heard: heard_tx, stop: stop.clone() });
-        let accepting = Arc::clone(&serving);
-        thread::Builder::new().name("github-app-listener".to_string()).spawn(move || accept(&listener, &accepting))?;
-        thread::Builder::new()
-            .name("github-app-listener-limit".to_string())
-            .spawn(move || watch(&stopped, limit, &serving, address))?;
-        Ok(Listening { page_url, heard, stop })
+        let Bound { bound, state } = self;
+        let page_url = format!("http://{}{MAKING}?state={}", bound.address(), state.as_str());
+        let making = page::making(manifest, &under.form(), &state);
+        let listening = bound.serve(move |asked| answer(asked, &state, &making), limit)?;
+        Ok(Listening { page_url, listening })
     }
 }
 
@@ -88,43 +67,29 @@ impl Listening {
         &self.page_url
     }
 
-    /// Where what it hears comes, for a task to wait on. Nothing comes once it's been let go of.
-    pub(crate) fn heard(&self) -> flume::Receiver<Heard> {
-        self.heard.clone()
+    /// Where how it ended comes, for a task to wait on. Nothing comes once it's been let go of.
+    pub(crate) fn ended(&self) -> flume::Receiver<Ended> {
+        self.listening.ended()
     }
 }
 
-impl Drop for Listening {
-    fn drop(&mut self) {
-        // Full only once the code has stopped it already.
-        let _ = self.stop.try_send(());
+/// What `asked` is answered with, by the flow whose `state` it is, which serves the page `making`.
+fn answer(asked: &Asked, state: &ManifestState, making: &str) -> Answer<GithubManifestCode> {
+    let ours = || asked.query.value("state").as_deref() == Some(state.as_str());
+    let not_ours = || Answer::Page(Status::BadRequest, said(page::NOT_OURS));
+    match asked.path.as_str() {
+        MAKING if ours() => Answer::Page(Status::Ok, making.to_string()),
+        MADE if ours() => match asked.query.value("code") {
+            Some(code) => Answer::Heard {
+                heard: GithubManifestCode::new(code),
+                taken: said(page::BACK),
+                late: said(page::STOPPED),
+            },
+            None => not_ours(),
+        },
+        MAKING | MADE => not_ours(),
+        _ => Answer::nothing_here(),
     }
-}
-
-/// Answers each connection on a thread of its own, so one the browser opens ahead and sends nothing on holds up none
-/// of the others, until the listener has ended, then stops listening.
-fn accept(listener: &TcpListener, serving: &Arc<Serving>) {
-    for stream in listener.incoming() {
-        if serving.ended.load(Ordering::SeqCst) {
-            return;
-        }
-        let Ok(stream) = stream else { continue };
-        let serving = Arc::clone(serving);
-        // One that can't be answered is let go of, as a browser would see a busy server do.
-        let _ =
-            thread::Builder::new().name("github-app-listener-answer".to_string()).spawn(move || serving.answer(stream));
-    }
-}
-
-/// Ends the listener once it's stopped, or once `limit` has passed, saying it timed out unless something ended it
-/// first, then wakes the listener at `address` so it sees it has ended.
-fn watch(stopped: &flume::Receiver<()>, limit: Duration, serving: &Serving, address: SocketAddr) {
-    let timed_out = matches!(stopped.recv_timeout(limit), Err(flume::RecvTimeoutError::Timeout));
-    if !serving.ended.swap(true, Ordering::SeqCst) && timed_out {
-        let _ = serving.heard.try_send(Heard::TimedOut);
-    }
-    // Refused once the listener has gone, which is fine, since there's nothing left to wake.
-    let _ = TcpStream::connect(address);
 }
 
 /// The digits a state is written in.

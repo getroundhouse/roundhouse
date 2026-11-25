@@ -11,7 +11,7 @@ use protocol::model::GithubAppId;
 use super::super::field::Field;
 use super::app_words;
 use super::kept::{Kept, Shows};
-use crate::manifest_flow::{Bound, Heard, Organization, Under};
+use crate::manifest_flow::{Bound, Ended, Organization, Under};
 use crate::timers::Timers;
 
 pub(super) struct AppPanel {
@@ -170,12 +170,12 @@ impl Kept {
             Err(e) => return self.choose_again(&chosen, Some(app_words::couldnt_listen(&e)), window, cx),
         };
         cx.open_url(listening.page_url());
-        let (page_url, heard) = (listening.page_url().to_string(), listening.heard());
+        let (page_url, ended) = (listening.page_url().to_string(), listening.ended());
         let task = cx.spawn_in(window, async move |this, cx| {
-            let heard = heard.recv_async().await;
+            let ended = ended.recv_async().await;
             // Held until GitHub has sent the person back, the limit has passed, or the panel's gone.
             drop(listening);
-            let _ = cx.update(|window, cx| this.update(cx, |this, cx| this.heard(heard.ok(), window, cx)));
+            let _ = cx.update(|window, cx| this.update(cx, |this, cx| this.listened(ended.ok(), window, cx)));
         });
         let until_ms = look::now_ms(cx) + i64::try_from(limit.as_millis()).unwrap_or(i64::MAX);
         let Some(app) = self.app_panel_mut() else { return };
@@ -184,16 +184,16 @@ impl Kept {
         cx.notify();
     }
 
-    /// Takes in what the listener heard: the code, which the hub is given, or that its limit passed.
-    fn heard(&mut self, heard: Option<Heard>, window: &mut Window, cx: &mut Context<Self>) {
+    /// Takes in how the listener ended: with the code, which the hub is given, or as its limit passed.
+    fn listened(&mut self, ended: Option<Ended>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(AppStep::OnGithub { stands, .. }) = self.app_panel_mut().map(|app| &mut app.step) else { return };
-        match heard {
-            Some(Heard::Code(code)) => {
+        match ended {
+            Some(Ended::Heard(code)) => {
                 *stands = OnGithub::Making { code, failed: None };
                 self.make(window, cx);
             }
             // Nothing heard is the listener let go of, which only the panel going does, with this wait.
-            Some(Heard::TimedOut) | None => {
+            Some(Ended::TimedOut) | None => {
                 *stands = OnGithub::StoppedWaiting;
                 cx.notify();
             }

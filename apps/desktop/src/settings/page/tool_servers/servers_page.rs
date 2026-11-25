@@ -9,14 +9,16 @@ use gpui_kit::{App, Entity, IntoElement, ParentElement as _, RenderOnce, ScrollH
 use super::super::account_row::{COLUMN_WIDTH, Columns};
 use super::kept::Kept;
 use super::{Asking, Body, OfHub, Page, PageId, Within, added, words};
+use crate::tool_sign_in::ToolSigningIn;
 
 /// How wide a row's middle columns are: the server's address, and what else there is to say, such as `Key`.
 pub(super) const COLUMNS: Columns = Columns { how: px(190.), detail: px(190.) };
 
 pub(in super::super) fn page(hub: &OfHub) -> Page {
-    let (records, asking) = (hub.records.clone(), hub.asking.clone());
+    let (records, asking, signing_in) = (hub.records.clone(), hub.asking.clone(), hub.tool_sign_in.clone());
     let draw = Box::new(move |within: &Within| {
-        ServersPage { records: records.clone(), asking: asking.clone(), within: within.clone() }.into_any_element()
+        let (records, asking, signing_in) = (records.clone(), asking.clone(), signing_in.clone());
+        ServersPage { records, asking, signing_in, within: within.clone() }.into_any_element()
     });
     let body = Body::Own { about: words::ABOUT, draw };
     Page { id: PageId::ToolServers, name: "MCP servers", icon: Lucide::Plug, body }
@@ -27,6 +29,7 @@ pub(in super::super) fn page(hub: &OfHub) -> Page {
 struct ServersPage {
     records: Snapshot,
     asking: Option<Asking>,
+    signing_in: Entity<ToolSigningIn>,
     within: Within,
 }
 
@@ -52,7 +55,9 @@ impl Drawing<'_> {
 
 impl RenderOnce for ServersPage {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let kept = window.use_keyed_state("settings-mcp", cx, |_, _| Kept::default());
+        // By the hub's sign-in, so it's never the state of a page of another hub's.
+        let (of_hub, signing_in) = (("settings-mcp", self.signing_in.entity_id()), self.signing_in);
+        let kept = window.use_keyed_state(of_hub, cx, |window, cx| Kept::new(signing_in, window, cx));
         let focus = self.within.focus.clone();
         kept.update(cx, |kept, _| kept.drawn(self.asking, focus));
         let drawing = Drawing { kept: &kept, records: &self.records, scroll: &self.within.scroll };

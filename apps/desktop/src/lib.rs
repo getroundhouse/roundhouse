@@ -28,6 +28,7 @@ pub mod image_diff;
 mod keys;
 mod limits;
 mod log;
+mod loopback;
 pub mod lost_release;
 mod machine;
 mod manifest_flow;
@@ -53,6 +54,7 @@ mod sides;
 mod sounds;
 mod status_box;
 mod timers;
+mod tool_sign_in;
 pub mod updates;
 mod warnings;
 pub mod why_quit;
@@ -97,7 +99,11 @@ pub use permissions::{
     set_standing as set_permission,
 };
 
-/// What a browser and GitHub do with the page the app serves while an app of your own is made, for a test to do.
+/// What a browser does with a page the app serves as it waits for it to be sent back, for a test to do.
+#[cfg(any(test, feature = "testing"))]
+pub use loopback::browsing;
+
+/// What GitHub does with the page the app serves while an app of your own is made, for a test to do.
 #[cfg(any(test, feature = "testing"))]
 pub use manifest_flow::browsing as github_app_browsing;
 

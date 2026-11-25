@@ -186,19 +186,20 @@ Where agents run, and who they are on GitHub there.
 
 ## MCP servers
 
-The MCP servers the hub has of its own, each with a key or with none. Every agent has them, Claude, Codex or Antigravity, in every project and on whichever machine it's on, beside the ones its own CLI has, which Roundhouse neither copies nor changes.
+The MCP servers the hub has of its own, each signed in to, with a key or with neither. Every agent has them, Claude, Codex or Antigravity, in every project and on whichever machine it's on, beside the ones its own CLI has, which Roundhouse neither copies nor changes.
 
 ![MCP servers, with four added](../../spec/screens/settings-mcp.png)
 
-- **Each row** has the server's name and its address, and `Key` if a key is sent to it.
+- **Each row** has the server's name and its address, `Key` if a key is sent to it, and **Needs you to sign in**, in red, if its sign-in no longer works. See [Sign in again](#sign-in-again).
 - **They're the hub's,** so every app connected to it shows the same ones, and they're still there after it restarts.
 
 ### Add a server
 
-1. Click **Add server**, then **Paste a key** if the server gave you one, or **Add it** if anyone who can reach the server can use it.
+1. Click **Add server**, then **Sign in**. If the server gave you a key, click **Paste a key** instead, or **Add it** if anyone who can reach the server can use it.
 2. Paste the server's URL, which its own page has, and give it a name.
 3. With a key, paste it, and change the header it's sent in if the server wants another than `Authorization`.
-4. Click **Add**.
+4. Click **Sign in**, or **Add**.
+5. Signing in, approve Roundhouse on the page your browser opens, and go back to the app. The server is added then.
 
 ![Adding an MCP server with a key](../../spec/screens/settings-mcp-key.png)
 
@@ -212,6 +213,30 @@ The name is whatever you like, up to 64 characters. Agents call the server by a 
 
 For a second account at the same server, add it again under another name. The panel says which server already has the URL, and lets you go on.
 
+### Sign in
+
+When you click **Sign in**, the hub asks the server how it's signed in to, which can take half a minute. Your browser then opens on the page of the service that knows you, on the machine you're at, wherever the hub is. Your password goes there, and Roundhouse never sees it.
+
+![Waiting for a sign-in to an MCP server](../../spec/screens/settings-mcp-waiting.png)
+
+- **Roundhouse asks for what the server says it needs,** and to stay signed in, if the service has that, so that the hub can renew the sign-in by itself. Where the server says nothing, the service decides both. The page in your browser says what you're approving.
+- **If you closed the page,** click **Open it again**. **Cancel** ends the sign-in, and adds nothing.
+- **You have 15 minutes.** After that, or if you refuse it, the panel says so, and you can try again.
+- **You can close Settings meanwhile.** Only one sign-in is under way at a time, so starting another cancels it.
+- **The browser sends you back to the app,** which listens on `127.0.0.1` alone, for that one sign-in, and stops as it ends. It hands what it's sent to the hub, and keeps none of it once the hub has it.
+
+The hub keeps the sign-in in its own data, and renews it, as [Where data is kept](where-data-is-kept.md) says. No agent is given it: its calls go through Roundhouse on its machine, which adds the token of the moment.
+
+Some servers can't be signed in to. Roundhouse says who it is by [a document on its site](https://getroundhouse.dev/oauth/client.json), and registers with no service, so one that takes only apps registered with it can't be. Nor can one that doesn't keep a sign-in safe with PKCE, or that doesn't say where to sign in. The panel says which it is, and **Use a key** goes on with the URL and the name you typed, if the server takes one. A server over plain HTTP can be signed in to only on the hub's machine or a private network.
+
+### Sign in again
+
+The hub renews a sign-in by itself, until the service no longer lets it, such as once you've taken Roundhouse off your account there. The server's row then says **Needs you to sign in**, and its tools fail in every chat.
+
+Choose **Sign in again** in the row's **…** menu, and approve it as before. The server keeps its name, so agents go on calling it what they did.
+
+### When a server refuses a call
+
 If the server refuses its key, an agent gets an error in place of its tools, or of what a call was to answer, such as `Linear refused the key Roundhouse sent it (401)`. A Codex chat shows it as a notice as it starts. To give the server another key, remove it and add it again. One that can't be reached from an agent's machine says so in the same way.
 
 ### Where an agent's CLI has a server of the same name
@@ -220,9 +245,9 @@ Its CLI decides. Claude uses the one you added here, in place of its own. Antigr
 
 ### Remove
 
-**Remove,** in the row's **…** menu, has the hub forget the server and its key, and asks first. An agent already running can't use the server's tools from then on. It doesn't revoke the key, which still works wherever else you've kept it.
+**Remove,** in the row's **…** menu, has the hub forget the server with its sign-in or its key, and asks first. An agent already running can't use the server's tools from then on. It revokes neither: a key still works wherever else you've kept it, and the service may go on listing Roundhouse until you take it off there.
 
-![An MCP server's menu, with Remove](../../spec/screens/settings-mcp-menu.png)
+![An MCP server's menu, with Sign in again and Remove](../../spec/screens/settings-mcp-menu.png)
 
 ## Whose setting it is
 
