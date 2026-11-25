@@ -122,29 +122,37 @@ fn opening_a_workspace_from_home_brings_back_its_projects_workspaces(cx: &mut Te
     assert!(ui.has(row(&last)) && ui.has(row(&third)), "so the workspace showing has its row");
 }
 
-/// The one in its place is the top of what the sidebar shows, not of a collapsed project above it, and with every
-/// project collapsed, the top of what it lists.
+/// The one in its place is the first of its project, which stays collapsed if it is. `last_workspace` has a project with
+/// none left beside one that shows.
 #[gpui_kit::test]
-fn once_the_workspace_showing_has_gone_the_one_in_its_place_is_the_top_of_what_shows_or_else_of_what_is_listed(
+fn once_the_workspace_showing_has_gone_the_first_of_its_project_is_in_its_place_or_else_the_first_of_another(
     cx: &mut TestAppContext,
 ) {
     let stack = Stack::new();
-    let (mut ui, [first, second], [_, _, third, last]) = two_projects(cx, &stack);
+    let (mut ui, [first, second], [upper, lower, third, last]) = two_projects(cx, &stack);
     ui.click(row(&third));
-    ui.click(project_row(&first));
 
     stack.client().workspace_archive(&third, false).unwrap();
 
-    ui.wait("one project collapsed: the one archived to go", |ui| ui.view().selected() != Some(&third));
-    assert_eq!(ui.view().selected(), Some(&last), "one project collapsed: the top of what shows");
+    ui.wait("the one archived to go", |ui| ui.view().selected() != Some(&third));
+    assert_eq!(ui.view().selected(), Some(&last), "the first of its project, not the top of the sidebar");
+
+    ui.click(row(&lower));
+    ui.click(project_row(&first));
+    stack.client().workspace_archive(&lower, false).unwrap();
+
+    ui.wait("its project collapsed: the one archived to go", |ui| ui.view().selected() != Some(&lower));
+    assert_eq!(ui.view().selected(), Some(&upper), "its project collapsed: the first of it all the same");
+    assert!(!ui.has(row(&upper)) && ui.has(row(&last)), "its project is still collapsed");
 
     ui.click(project_row(&second));
-    stack.client().workspace_archive(&last, false).unwrap();
+    stack.client().workspace_archive(&upper, false).unwrap();
 
-    ui.wait("every project collapsed: the one archived to go", |ui| ui.view().selected() != Some(&last));
-    assert!(
-        ui.view().selected().is_some(),
-        "every project collapsed: the top of what it lists, since the sidebar shows none"
+    ui.wait("none left in its project: the one archived to go", |ui| ui.view().selected() != Some(&upper));
+    assert_eq!(
+        ui.view().selected(),
+        Some(&last),
+        "none left in its project: the top of what's listed, since the sidebar shows none"
     );
 }
 

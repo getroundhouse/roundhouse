@@ -71,13 +71,9 @@ impl Preferences {
         Self { kept: Kept::default(), saver: None }
     }
 
-    /// The workspace to open on: the one the app was left on, on `hub`, if `can_show` says the app can still show it.
-    pub fn workspace_to_open(
-        &self,
-        hub: Option<&Fingerprint>,
-        can_show: impl FnOnce(&WorkspaceId) -> bool,
-    ) -> Option<&WorkspaceId> {
-        self.kept.last_workspaces.on(hub).filter(|id| can_show(id))
+    /// The workspace the app was left on, on `hub`, which may have been archived since.
+    pub fn last_workspace(&self, hub: Option<&Fingerprint>) -> Option<&WorkspaceId> {
+        self.kept.last_workspaces.on(hub)
     }
 
     /// Keeps `workspace` as the one the app is on, on `hub`, or with none, forgets the one it was.
@@ -122,11 +118,11 @@ mod tests {
     }
 
     #[test]
-    fn each_hub_opens_on_its_own_once_the_app_opens_again_while_it_can_be_shown() {
+    fn each_hub_has_its_own_once_the_app_opens_again() {
         let (dir, paired) = (tempfile::tempdir().unwrap(), paired_hub());
         let (here, there) = (WorkspaceId::from("here"), WorkspaceId::from("there"));
         let mut preferences = kept_in(dir.path());
-        assert_eq!(preferences.workspace_to_open(None, |_| true), None, "never left on one");
+        assert_eq!(preferences.last_workspace(None), None, "never left on one");
 
         preferences.left_on(None, Some(&"before".into()));
         preferences.left_on(Some(&paired), Some(&there));
@@ -134,18 +130,13 @@ mod tests {
         preferences.saved().recv_timeout(TIMEOUT).unwrap();
 
         let again = kept_in(dir.path());
-        assert_eq!(again.workspace_to_open(None, |_| true), Some(&here));
-        assert_eq!(again.workspace_to_open(Some(&paired), |_| true), Some(&there));
-        assert_eq!(
-            again.workspace_to_open(Some(&Fingerprint::of_sha256([2; 32])), |_| true),
-            None,
-            "a hub never shown"
-        );
-        assert_eq!(again.workspace_to_open(None, |id| *id != here), None, "one that can't be shown any more");
+        assert_eq!(again.last_workspace(None), Some(&here));
+        assert_eq!(again.last_workspace(Some(&paired)), Some(&there));
+        assert_eq!(again.last_workspace(Some(&Fingerprint::of_sha256([2; 32]))), None, "a hub never shown");
     }
 
     #[test]
-    fn one_forgotten_isnt_opened_again_and_the_others_are() {
+    fn one_forgotten_isnt_kept_and_the_others_are() {
         let (dir, paired) = (tempfile::tempdir().unwrap(), paired_hub());
         let mut preferences = kept_in(dir.path());
         preferences.left_on(None, Some(&"here".into()));
@@ -155,8 +146,8 @@ mod tests {
         preferences.saved().recv_timeout(TIMEOUT).unwrap();
 
         let again = kept_in(dir.path());
-        assert_eq!(again.workspace_to_open(Some(&paired), |_| true), None);
-        assert_eq!(again.workspace_to_open(None, |_| true), Some(&"here".into()));
+        assert_eq!(again.last_workspace(Some(&paired)), None);
+        assert_eq!(again.last_workspace(None), Some(&"here".into()));
     }
 
     #[test]
@@ -168,7 +159,7 @@ mod tests {
         let preferences = Preferences::in_dir(dir.path(), move |failure| drop(said.send(failure)));
 
         assert!(failed.try_recv().is_ok());
-        assert_eq!(preferences.workspace_to_open(None, |_| true), None);
+        assert_eq!(preferences.last_workspace(None), None);
     }
 
     #[test]
@@ -192,7 +183,7 @@ mod tests {
 
         preferences.left_on(None, Some(&"here".into()));
 
-        assert_eq!(preferences.workspace_to_open(None, |_| true), Some(&"here".into()));
+        assert_eq!(preferences.last_workspace(None), Some(&"here".into()));
         assert_eq!(preferences.saved().recv_timeout(TIMEOUT), Err(flume::RecvTimeoutError::Disconnected));
     }
 }

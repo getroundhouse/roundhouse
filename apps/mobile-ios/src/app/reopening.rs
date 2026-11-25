@@ -20,7 +20,8 @@ impl MobileApp {
             return;
         }
         let can_show = |id: &WorkspaceId| records.workspace(id).is_some_and(listed);
-        match self.preferences.workspace_to_open(Some(&link.hub().fingerprint), can_show).cloned() {
+        let last = self.preferences.last_workspace(Some(&link.hub().fingerprint)).cloned();
+        match last.filter(can_show) {
             Some(workspace) => self.open_workspace(&workspace, window, cx),
             None => self.left_on(None, cx),
         }

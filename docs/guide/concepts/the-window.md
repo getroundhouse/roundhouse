@@ -22,7 +22,7 @@ A button at the window's top left, or `Cmd-B`, hides the sidebar and shows it ag
 
 ## The workspace
 
-In the middle, the workspace that's selected. The app opens on the one it was left on, or on the one at the top of the sidebar if that's been archived since.
+In the middle, the workspace that's selected. The app opens on the one it was left on, or if that's been archived since, on the first in its project, or with none left there, the one at the top of the sidebar.
 
 | Part | What it is |
 |---|---|

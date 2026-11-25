@@ -198,6 +198,11 @@ pub(crate) fn listed(app: &AppView, cx: &App) -> Vec<WorkspaceId> {
     in_order(app, cx, |_| true)
 }
 
+/// The project's first workspace in the sidebar's order, whether or not the project is collapsed.
+pub(crate) fn first_in(app: &AppView, project: &RepoId, cx: &App) -> Option<WorkspaceId> {
+    in_order(app, cx, |repo| repo == project).into_iter().next()
+}
+
 /// The workspaces of the projects that `shows` says for, in the sidebar's order.
 fn in_order(app: &AppView, cx: &App, shows: impl Fn(&RepoId) -> bool) -> Vec<WorkspaceId> {
     let workspaces = app.records().workspaces();

@@ -13,7 +13,7 @@ Any of these archives a workspace:
 
 ![Pointing at a row shows the button that archives it](../../spec/screens/archive-button.png)
 
-The row says `Archiving…` until it has gone.
+The row says `Archiving…` until it has gone. If it was the workspace showing, the window then shows the first one in the same project, or with none left there, the one at the top of the sidebar.
 
 ## What it keeps, and what goes
 
