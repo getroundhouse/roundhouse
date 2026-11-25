@@ -2,6 +2,14 @@
 
 What a test runs in, which is its clocks and its environment, and how a test is written. Where each kind of test goes, and the hub it runs on, is in `docs/standards/test-levels.md`, the commands are in `docs/reference/commands.md`, and what a person has to judge by hand is in `docs/standards/manual-checks.md`. Known gaps are GitHub issues.
 
+## What a test needs
+
+**A test gets what it needs from the product's own design first, then from the tests, and only then from code for tests in the product.**
+
+- **The product's own design** is a part made easier to configure, watch or stop in a way that makes sense for the product. A test can be the reason it's built now, if the product is likely to use it later. For example, a setting for GitHub's address lets a test use a stand-in, and reading GitHub Enterprise would need it. Something only a test is likely to use is code for tests, whatever it's called.
+- **The tests** do the rest from outside, with a stand-in program, an environment of their own or cleaning up after themselves.
+- **Code for tests in the product** is for where the others don't work or are much more complicated, and a comment says why. Code that only lets a test read something is cheap. Code that makes a build for tests run differently needs the strongest reason. The part that decides takes a plain value, and only what starts it knows the value is a test's.
+
 ## Waiting
 
 - **A test waits with the `waiting` crate** until what it waits for holds, failing at a time limit, or, to see that something doesn't happen, for a bound in which it could. `clippy.toml` refuses a sleep anywhere else, so one the product, a stand-in or a paused clock needs `#[expect]`s the lint and says why.
