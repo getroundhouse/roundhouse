@@ -1,6 +1,8 @@
 use super::super::error::BackupError;
 use crate::lasting;
 use rusqlite::Connection;
+#[cfg(any(test, feature = "testing"))]
+use rusqlite::OpenFlags;
 use std::cmp::Reverse;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -105,6 +107,14 @@ fn copy_file(file: &Path, unfinished: &Path) -> Result<(), BackupError> {
         .map_err(|e| BackupError::io(format!("syncing {UNFINISHED}"), e))
 }
 
+/// Copies the database at `path`, with what's still in its WAL, into a file made at `into`, for a tool that reads what a
+/// hub holds. It only reads the database, whether or not a hub has it open.
+#[cfg(any(test, feature = "testing"))]
+pub fn copy(path: &Path, into: &Path) -> Result<(), BackupError> {
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(BackupError::Open)?;
+    vacuum_into(&conn, into)
+}
+
 /// Copies through `conn`, which reads the whole database, what's in the WAL included, and writes every row again.
 fn vacuum_into(conn: &Connection, unfinished: &Path) -> Result<(), BackupError> {
     // Only this user can read it, like the database. SQLite would make a file others can read, but
@@ -113,14 +123,14 @@ fn vacuum_into(conn: &Connection, unfinished: &Path) -> Result<(), BackupError> 
         .write(true)
         .create_new(true)
         .open(unfinished)
-        .map_err(|e| BackupError::io(format!("creating {UNFINISHED}"), e))?;
+        .map_err(|e| BackupError::io(format!("creating {}", unfinished.display()), e))?;
     let target = unfinished.to_str().ok_or_else(|| {
         BackupError::io("giving SQLite the path", io::Error::new(io::ErrorKind::InvalidFilename, "it isn't UTF-8"))
     })?;
     conn.execute("VACUUM INTO ?1", [target]).map_err(BackupError::Vacuum)?;
     // SQLite syncs the copy as `synchronous` says, which on macOS is an `fsync` that can leave it in the
     // drive's cache. `sync_all` is `F_FULLFSYNC` there, so the copy is on disk before anything migrates.
-    file.sync_all().map_err(|e| BackupError::io(format!("syncing {UNFINISHED}"), e))
+    file.sync_all().map_err(|e| BackupError::io(format!("syncing {}", unfinished.display()), e))
 }
 
 /// Keeps the newest copy of each of the [`KEPT`] versions copied most recently, and removes the rest. Each

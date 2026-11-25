@@ -15,6 +15,8 @@ mod tests;
 
 mod copies;
 pub(crate) use copies::back_up;
+#[cfg(any(test, feature = "testing"))]
+pub use copies::copy;
 #[cfg(test)]
 pub(crate) use copies::files_in;
 #[cfg(test)]

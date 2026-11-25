@@ -12,6 +12,12 @@ pub(super) struct Recording {
 }
 
 impl Recording {
+    /// One with no audio, for a test of what isn't heard.
+    #[cfg(test)]
+    pub(super) fn of(kept: Kept) -> Self {
+        Self { kept, dir: PathBuf::new() }
+    }
+
     /// Its audio, at the model's rate.
     pub(super) fn audio(&self) -> anyhow::Result<Vec<f32>> {
         let path = self.dir.join(AUDIO);

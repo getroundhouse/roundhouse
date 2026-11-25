@@ -6,6 +6,7 @@ mod comparing;
 mod hearing;
 mod recordings;
 mod sending;
+mod words;
 
 pub(crate) use comparing::compare;
 pub(crate) use hearing::{Settings, hear};

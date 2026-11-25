@@ -175,3 +175,20 @@ fn only_its_owner_can_read_a_backup_however_its_copied() {
     }
     assert_eq!(fs::metadata(&backups).unwrap().permissions().mode() & 0o777, 0o700, "nor list what's kept");
 }
+
+#[test]
+fn a_copy_for_reading_has_whats_in_the_wal_and_leaves_the_database_as_it_was() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hub.db");
+    let (_conn, _reading) = held_back(&path);
+    let before = fs::read(&path).unwrap();
+
+    let into = dir.path().join("copy.db");
+    copy(&path, &into).unwrap();
+
+    assert_eq!(notes(&into), ["read", "written since"]);
+    assert_eq!(fs::read(&path).unwrap(), before);
+    #[cfg(unix)]
+    assert_eq!(fs::metadata(&into).unwrap().permissions().mode() & 0o077, 0);
+    assert!(matches!(copy(&dir.path().join("none.db"), &into), Err(BackupError::Open(_))));
+}
