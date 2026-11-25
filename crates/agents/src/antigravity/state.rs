@@ -310,18 +310,15 @@ impl Conversation {
             })
             .filter_map(|(id, open)| {
                 let Call::Command(cmd) = &open.call else { return None };
-                let description =
-                    cmd.description.clone().or_else(|| (!cmd.command.is_empty()).then(|| cmd.command.clone()));
-                Some((
-                    open.order,
-                    AgentTask {
-                        id: TaskId::from(id.as_str()),
-                        description,
-                        kind: TaskKind::Command,
-                        call: Some(id.clone()),
-                        subagent: None,
-                    },
-                ))
+                let described = cmd.described().map(str::to_string);
+                let command = (described.is_none() && !cmd.command.is_empty()).then(|| cmd.command.clone());
+                let task = AgentTask {
+                    description: described,
+                    command,
+                    call: Some(id.clone()),
+                    ..AgentTask::new(id.as_str(), TaskKind::Command)
+                };
+                Some((open.order, task))
             })
             .collect();
         if pending.is_empty() {

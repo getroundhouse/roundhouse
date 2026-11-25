@@ -54,11 +54,10 @@ fn init() -> String {
 /// A task as the agent heard it ended. A subagent's names the subagent, which is the task it runs as.
 fn task(id: &str, kind: TaskKind, description: &str, call: &str, outcome: TaskOutcome) -> EndedTask {
     let task = AgentTask {
-        id: id.into(),
         description: Some(description.into()),
-        kind,
         call: Some(call.into()),
         subagent: (kind == TaskKind::Subagent).then(|| id.into()),
+        ..AgentTask::new(id, kind)
     };
     EndedTask { task, outcome, wait: None }
 }

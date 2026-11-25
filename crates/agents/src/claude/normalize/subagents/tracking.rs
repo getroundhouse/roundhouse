@@ -28,6 +28,11 @@ impl Subagents {
         self.in_background.contains(subagent)
     }
 
+    /// Whether `subagent` has started and not said it ended, in the background or not.
+    pub(in super::super) fn at_work(&self, subagent: &SubagentId) -> bool {
+        self.by_task.values().any(|working| working == subagent)
+    }
+
     /// The subagent whose request for approval this line is, or `None` for the agent's own. A request names the task
     /// its subagent runs as, as `agent_id`, which is the subagent's ID, and nothing else of it.
     pub(in super::super) fn asked_by(value: &Value) -> Option<SubagentId> {

@@ -39,6 +39,18 @@
 
   ![Work in the background](screens/background.png)
 
+- **A command the agent didn't describe shows `Run`, then its first line on a pill,** as its own line in the chat does, so the two read as one command. A task's line is never more than one line tall, whatever it's called.
+
+  **Two commands left going in the background that the agent didn't describe, the second a script on several lines.** *Unconfirmed.*
+
+  ![Two commands in the background the agent didn't describe](screens/background-undescribed.png)
+
+- **What a subagent has in the background shows at the end of its tab, and not in the chat,** which lists only the agent's own work. Once the subagent has ended, what it left going has its lines in the chat, so a chat still at work always says with what. Its monitors and the subagents it started show as its commands do.
+
+  **The subagent tab on a subagent at work, with a command it left going in the background.** *Unconfirmed.*
+
+  ![The subagent tab, ending with the subagent's command in the background](screens/subagent-tab-background.png)
+
 - **A ring's light goes round while its task runs, and a monitor's ring holds still with its hub lit,** since a monitor does nothing until what it's watching for happens. A command runs, and a light sweeps across a subagent's robot instead. *Unconfirmed.*
 - **Up to four tasks have a line each, in the order the agent started them,** since what each is for is the reason to look. Each wait on pull requests has a line after theirs, in the order it started, drawn from the hub's waits. *Unconfirmed.*
 - **With more than four tasks, each kind with several has one line,** such as "6 subagents", so the lines never take the conversation's place however many tasks there are. There's at most one for subagents, one for commands and one for monitors, in that order, and a kind with a single task keeps that task's own line. The line starts with the mark each of its tasks' lines would, so it says as much about whether anything is running. After how many there are, it says what each is for, fainter, as far as it has room. *Unconfirmed:* four.
@@ -69,7 +81,7 @@
 
   ![Waiting on stacks](screens/waiting-on-stacks.png)
 
-- **When the agent picks up by itself, the chat says what it picked up after:** a line for each of its tasks in the background it heard had ended, before what it did about them, so a turn nobody asked for doesn't start without a reason. Each has the icon the task's call has, what the agent said the task is for, how it ended and when the agent heard. A wait's line has a pull request's icon instead, since its call's plug says nothing of what it waited on, and says which pull requests it waited on, in the words its line had while it waited, as "Waited on #7 for required checks", and why it ended, from the hub's record of it, since the agent hears only that its tool answered. A subagent's line ends with the Open button its call's line has. A turn the agent starts by itself for another reason has no lines: one that what a monitor watches for happening starts, since nothing before it says why, and one a message from another chat starts, since that isn't told apart from a prompt yet. A turn refused before it did anything, as by a usage limit, has its lines in the failed request's card instead, as the rule on failures in a row says. *Unconfirmed.*
+- **When the agent picks up by itself, the chat says what it picked up after:** a line for each of its tasks in the background it heard had ended, before what it did about them, so a turn nobody asked for doesn't start without a reason. Each has the icon the task's call has, what the agent said the task is for, or `Run` and its first line for a command it didn't describe, how it ended and when the agent heard. A wait's line has a pull request's icon instead, since its call's plug says nothing of what it waited on, and says which pull requests it waited on, in the words its line had while it waited, as "Waited on #7 for required checks", and why it ended, from the hub's record of it, since the agent hears only that its tool answered. A subagent's line ends with the Open button its call's line has. A turn the agent starts by itself for another reason has no lines: one that what a monitor watches for happening starts, since nothing before it says why, and one a message from another chat starts, since that isn't told apart from a prompt yet. A turn refused before it did anything, as by a usage limit, has its lines in the failed request's card instead, as the rule on failures in a row says. *Unconfirmed.*
 
   **The agent picked up by itself twice: as the review it gave a subagent finished, and as its wait on #7's checks ended.** *Unconfirmed.*
 

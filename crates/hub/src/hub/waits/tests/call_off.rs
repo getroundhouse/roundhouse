@@ -12,7 +12,7 @@ fn kept_across_a_restart(hub: &Hub, wait: &Wait) -> Session {
 /// The same, with its queue held or not as `held` says, or as it was.
 fn kept_with_its_queue(hub: &Hub, wait: &Wait, held: Option<bool>) -> Session {
     hub.store.start_wait(wait).unwrap();
-    let task = AgentTask { id: "t".into(), description: None, kind: TaskKind::Wait, call: None, subagent: None };
+    let task = AgentTask::new("t", TaskKind::Wait);
     let listed = EventBody::AgentTasks { tasks: vec![task.clone()], stopped: vec![] };
     let status = StatusChange { background_tasks: Some(vec![task]), ..SessionStatus::Background.into() };
     let change = SessionChange { status: Some(status), queue_held: held, ..SessionChange::default() };

@@ -21,10 +21,13 @@ pub enum Only<'a> {
     Searches(Search<'a>),
 }
 
+/// What a command's line says it does when the agent didn't say, wherever the command has one, before the command.
+pub const UNDESCRIBED: &str = "Run";
+
 impl<'a> Command<'a> {
     /// What its line says it does: the agent's own words when it gave them.
     pub fn title(&self) -> &'a str {
-        self.description.unwrap_or("Run")
+        self.description.unwrap_or(UNDESCRIBED)
     }
 
     /// What the agent said it's doing, if it said, which is the title then.

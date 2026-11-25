@@ -22,7 +22,7 @@ use protocol::event::{
     TurnOutcome,
 };
 use protocol::fixtures;
-use protocol::model::{AgentSessionId, ApprovalId, RunId, Seq, TaskId, ToolUseId};
+use protocol::model::{AgentSessionId, ApprovalId, RunId, Seq, ToolUseId};
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};
 
@@ -201,11 +201,9 @@ async fn background_command_lists_task_drains_wakeup_into_own_turn_cancels_befor
     agent.prompt(p1, &Prompt::new("run tests")).await.unwrap();
     let turn1 = ledger.collect_turn(&mut h).await;
     let expected_task = AgentTask {
-        id: TaskId::from("bg-1"),
         description: Some("Unit test execution".into()),
-        kind: TaskKind::Command,
         call: Some(ToolUseId::from("bg-1")),
-        subagent: None,
+        ..AgentTask::new("bg-1", TaskKind::Command)
     };
     assert!(turn1.contains(&EventBody::AgentTasks { tasks: vec![expected_task.clone()], stopped: Vec::new() }));
 

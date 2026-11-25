@@ -77,8 +77,8 @@ impl Transcript {
     }
 
     /// The work of `subagent`, alone, for the subagent tab, with the chat's records kept in `records`, as
-    /// [`Transcript::new`] says. Whether it's at work is its record's to say, once [`Transcript::set_subagents`] passes
-    /// it on.
+    /// [`Transcript::new`] says. Whether it's at work is its record's to say, and what it has in the background the
+    /// chat's, once [`Transcript::records_changed`] passes them on.
     pub fn subagent(
         client: Client,
         records: &RecordsFeed,

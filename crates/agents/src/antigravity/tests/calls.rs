@@ -239,3 +239,36 @@ fn invoke_subagent_populates_explicit_model_and_leaves_inherit_or_absent_unset()
     assert_eq!(model_of(json!({ "Prompt": "go", "Model": "" })), None);
     assert_eq!(model_of(json!({ "Prompt": "go" })), None);
 }
+
+/// A command left going that the agent gave no description, or a blank one, is listed by what it runs.
+#[test]
+fn a_command_left_going_is_listed_by_its_description_or_else_by_what_it_runs() {
+    use super::super::state::{Conversation, OpenCall};
+    use protocol::capability::calls::call::{Call, Command, Runs};
+    use protocol::capability::settings::Effort;
+    use protocol::event::{AgentTask, TaskKind};
+    use protocol::model::{ModelName, ToolUseId};
+
+    let model = ModelName::named("gemini-4-carbon");
+    let mut conv = Conversation::new(model, super::super::claims::full_access(), Effort::Medium, true, true);
+    for (order, description) in [(1, Some("Test it")), (2, Some(" ")), (3, None)] {
+        let command = Command {
+            command: "cargo test".into(),
+            cwd: None,
+            description: description.map(str::to_string),
+            timeout_ms: None,
+            runs: Runs::default(),
+            parts: Vec::new(),
+            unsandboxed: None,
+        };
+        let open = OpenCall { call: Call::Command(command), order, outlives_turn: true };
+        conv.calls.insert(ToolUseId::from(format!("c{order}").as_str()), open);
+    }
+
+    let listed = conv.list_surviving_commands().unwrap();
+
+    let says = |task: &AgentTask| (task.kind, task.description.clone(), task.command.clone());
+    let by_command = (TaskKind::Command, None, Some("cargo test".to_string()));
+    let described = (TaskKind::Command, Some("Test it".to_string()), None);
+    assert_eq!(listed.iter().map(says).collect::<Vec<_>>(), [described, by_command.clone(), by_command]);
+}

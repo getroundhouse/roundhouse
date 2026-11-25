@@ -18,7 +18,7 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
         Call::Command(command) => ToolCall::Command(Command {
             command: &command.command,
             // What says nothing of what it's for isn't its title.
-            description: command.description.as_deref().map(str::trim).filter(|said| !said.is_empty()),
+            description: command.described(),
             only: only(command),
         }),
         Call::Read(file) => ToolCall::Read(ReadFile { path: &file.path, lines: file.lines.as_ref() }),

@@ -17,13 +17,7 @@ use crate::store::TurnEdge;
 use protocol::prompt::PromptFrom;
 
 fn progress(status: SessionStatus, tasks: usize) -> Progress {
-    let task = |i: usize| AgentTask {
-        id: format!("t{i}").into(),
-        description: None,
-        kind: TaskKind::Command,
-        call: None,
-        subagent: None,
-    };
+    let task = |i: usize| AgentTask::new(format!("t{i}"), TaskKind::Command);
     Progress {
         status,
         approvals: HashMap::new(),
@@ -103,7 +97,7 @@ fn the_agent_going_away_mid_turn_ends_its_work_and_holds_the_queue_in_one_change
 /// on anything else is cut off.
 #[test]
 fn an_agent_that_goes_with_the_hub_cuts_off_nothing_but_its_work_besides_a_wait() {
-    let wait = AgentTask { id: "w".into(), description: None, kind: TaskKind::Wait, call: None, subagent: None };
+    let wait = AgentTask::new("w", TaskKind::Wait);
     let gone = |outlives: bool, tasks: Vec<AgentTask>| {
         let mut progress = progress(SessionStatus::Background, 0);
         progress.background_tasks = tasks;

@@ -12,7 +12,7 @@ use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use std::collections::HashMap;
 use std::io::Write;
 
-use super::turns::{own_turn, request_failed};
+use super::turns::{named, own_turn, request_failed};
 
 /// How much of a tool's result to show. The full text stays in the log.
 const RESULT_PREVIEW_LINES: usize = 6;
@@ -175,8 +175,7 @@ impl Printer {
 
     /// The line for a list of background tasks, unless it says what the last one did.
     pub(super) fn newly_running(&mut self, tasks: &[AgentTask]) -> Option<String> {
-        let what: Vec<&str> =
-            tasks.iter().map(|task| task.description.as_deref().unwrap_or(task.id.as_str())).collect();
+        let what: Vec<String> = tasks.iter().map(named).collect();
         let running = if what.is_empty() { "nothing".to_string() } else { what.join(", ") };
         let line = format!("running in the background: {running}");
         (self.background.as_ref() != Some(&line)).then(|| self.background.insert(line).clone())

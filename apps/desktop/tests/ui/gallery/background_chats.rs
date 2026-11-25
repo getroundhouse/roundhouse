@@ -13,8 +13,8 @@ use super::steps::{Screen, Step};
 use super::worlds::chat_world;
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{
-    first_turn, in_background, launched, monitor, printed, replied, said, subagent, subagent_started, task, text,
-    user_prompt,
+    command, first_turn, in_background, launched, monitor, printed, replied, said, subagent, subagent_started, task,
+    text, undescribed, user_prompt,
 };
 
 /// Several tasks' lines, from the first of them to the last, without the calls above that started them.
@@ -26,6 +26,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "background-five",
         spec: "chats.md",
         world: Some(|| left_going(&[(TaskKind::Subagent, 3), (TaskKind::Command, 1), (TaskKind::Monitor, 1)])),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "background-undescribed",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Background, left_undescribed())),
         frame: CHAT,
         steps: &[Step::Select(FOCUS)],
     },
@@ -117,6 +124,32 @@ fn started(kinds: &[(TaskKind, usize)]) -> Vec<EventBody> {
     }
     events.push(EventBody::AgentTasks { tasks, stopped: Vec::new() });
     events
+}
+
+/// A script the agent runs without saying what it's for, over several lines, the first longer than a line has room for.
+const SCRIPT: &str = "cd /workspaces/aspen && cargo test -p signals -p depot -p timetable -p trains -p points \
+                      -p platforms -- --include-ignored && python3 - <<'EOF'\nfrom pathlib import Path\n\
+                      p = Path('crates/depot/src/points.rs')\np.write_text(p.read_text().replace('Stop', 'Caution'))\nEOF";
+
+/// A turn that's over with two commands still going that the agent didn't say anything of.
+fn left_undescribed() -> Vec<EventBody> {
+    let reply = "Both are going. I'll pick up again as each one finishes.";
+    let run = |call: &str, ran: &str| command("msg-1", call, ran, None);
+    first_turn(
+        user_prompt("Run the tests, then swap the aspects in the points."),
+        [
+            run("toolu-1", "cargo test --workspace"),
+            printed("toolu-1", "Command running in background."),
+            run("toolu-2", SCRIPT),
+            printed("toolu-2", "Command running in background."),
+            EventBody::AgentTasks {
+                tasks: vec![undescribed("toolu-1", "cargo test --workspace"), undescribed("toolu-2", SCRIPT)],
+                stopped: Vec::new(),
+            },
+            text("msg-2", reply),
+            replied(reply, 12, 0.08),
+        ],
+    )
 }
 
 /// A turn that's over with `kinds` still going in the background.

@@ -29,6 +29,13 @@ pub struct Command {
     pub unsandboxed: Option<String>,
 }
 
+impl Command {
+    /// What the agent said it's for, if that says anything.
+    pub fn described(&self) -> Option<&str> {
+        self.description.as_deref().map(str::trim).filter(|said| !said.is_empty())
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Runs {

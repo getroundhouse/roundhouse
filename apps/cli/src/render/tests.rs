@@ -13,7 +13,7 @@ use serde_json::json;
 use super::{Printer, called, came_back, denial, own_turn, prompted, request_failed, started};
 
 fn task(id: &str, kind: TaskKind) -> AgentTask {
-    AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None, subagent: None }
+    AgentTask { description: Some(format!("Do {id}")), ..AgentTask::new(id, kind) }
 }
 
 #[test]
@@ -121,13 +121,7 @@ fn a_denied_call_says_so_with_what_the_person_said_rather_than_failing() {
 #[test]
 fn a_turn_the_agent_started_by_itself_says_which_tasks_it_heard_had_ended() {
     let ended = |id: &str, description: Option<&str>, outcome| EndedTask {
-        task: AgentTask {
-            id: id.into(),
-            description: description.map(String::from),
-            kind: TaskKind::Command,
-            call: None,
-            subagent: None,
-        },
+        task: AgentTask { description: description.map(String::from), ..AgentTask::new(id, TaskKind::Command) },
         outcome,
         wait: None,
     };

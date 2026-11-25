@@ -36,11 +36,9 @@ const WAIT_TOOL: &str = "roundhouse/wait_for_pull_requests";
 fn picked_up() -> Vec<EventBody> {
     let reply = "Both are going. I'll pick up as each one reports.";
     let wait_task = AgentTask {
-        id: "w1".into(),
         description: Some(WAIT_TOOL.into()),
-        kind: TaskKind::Wait,
         call: Some("toolu-2".into()),
-        subagent: None,
+        ..AgentTask::new("w1", TaskKind::Wait)
     };
     let found = "The depot releases a train as soon as its route is set, before the signal clears.";
     let fixing = "The review found that the depot lets a train go before its signal clears. I'll fix that once #7 is in the queue.";

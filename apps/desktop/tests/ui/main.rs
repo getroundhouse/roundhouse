@@ -11,6 +11,7 @@ mod agent_selection;
 mod all_files;
 mod attachments;
 mod back_and_forward;
+mod background;
 mod cached_transcript;
 mod changes;
 mod changes_summary;

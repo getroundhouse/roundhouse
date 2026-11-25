@@ -11,7 +11,9 @@ use client_core::prompt_cache::{cache_worth_telling, idle_cache};
 use client_core::records::{Snapshot, subagent_named};
 use gpui_kit::{Context, SharedString, Task};
 use protocol::event::AgentTask;
-use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, Wait, WaitRead};
+use protocol::model::{
+    AgentDescription, PromptCache, Seq, Session, Subagent, SubagentId, SubagentStatus, Wait, WaitRead,
+};
 
 use super::{Transcript, TranscriptEvent};
 use crate::rows::Opens;
@@ -29,8 +31,9 @@ pub(crate) struct AtWork {
     pub(crate) working: bool,
     /// When the newest turn started, by the hub's clock. `None` until one has.
     pub(crate) turn_started_at_ms: Option<i64>,
-    /// What it's running in the background, in the order it started them. Its waits on the pull request are among
-    /// them, and have no line, since `wait` is the hub's own of the one it has open.
+    /// What it's running in the background, in the order it started them, but for what's part of the work of a subagent
+    /// at work, which that subagent's tab shows. Its waits on the pull request are among them, and have no line, since
+    /// `wait` is the hub's own of the one it has open.
     pub(crate) background: Vec<AgentTask>,
     /// The wait it has open on the pull request, as the hub keeps it, which the CLI's list of tasks only has a copy of,
     /// which can still list one that has ended.
@@ -70,7 +73,7 @@ impl AtWork {
         AtWork {
             working: session.status.is_working(),
             turn_started_at_ms: session.turn_started_at_ms,
-            background: session.background_tasks.clone(),
+            background: part_of(None, session),
             waits: session.waits.iter().map(open).collect(),
             reply_seq: session.reply_seq,
             failed: session.turn_failed(),
@@ -81,18 +84,24 @@ impl AtWork {
         }
     }
 
-    /// A subagent at work, for the subagent tab, which ends with the working line while it is.
-    fn of_subagent(subagent: &Subagent) -> Self {
+    /// A subagent at work, for the subagent tab, which ends with the working line while it is, then what's part of its
+    /// work in the background, as `session`'s record says.
+    fn of_subagent(subagent: &Subagent, session: Option<&Session>) -> Self {
         AtWork {
             working: subagent.status == SubagentStatus::Working,
             turn_started_at_ms: Some(subagent.started_at_ms),
-            background: Vec::new(),
+            background: session.map_or_else(Vec::new, |session| part_of(Some(&subagent.id), session)),
             waits: Vec::new(),
             reply_seq: Seq::default(),
             failed: false,
             cache: None,
         }
     }
+}
+
+/// What `session` has in the background that's part of `subagent`'s work, or of no subagent's, as the chat's own is.
+fn part_of(subagent: Option<&SubagentId>, session: &Session) -> Vec<AgentTask> {
+    session.background_tasks.iter().filter(|task| task.part_of.as_ref() == subagent).cloned().collect()
 }
 
 impl Transcript {
@@ -116,15 +125,18 @@ impl Transcript {
     /// Takes what the client holds now of the chat's records: its session's, its subagents', its proposals' and how its
     /// replies read out loud ended. Each is taken only if it changed, so a client can call this whenever its records
     /// do. The client has all but the session's only while it follows the chat's. The subagent tab's transcript takes
-    /// whether it's at work from its subagent's record, not the chat's.
+    /// whether it's at work from its subagent's record, not the chat's, and what that has in the background from the
+    /// chat's.
     pub fn records_changed(&mut self, records: &Snapshot, cx: &mut Context<Self>) {
         let id = self.session_id.clone();
+        let session = records.session(&id);
         if self.model.borrow().alone.is_none()
-            && let Some(session) = records.session(&id)
+            && let Some(session) = session
         {
             self.set_session(records, session, cx);
         }
         self.set_subagents(records.subagents(&id), cx);
+        self.follow_the_subagent(session, cx);
         self.set_proposals(records.proposals(&id), cx);
         self.set_replies_heard(records.replies_heard(&id), cx);
     }
@@ -202,7 +214,7 @@ impl Transcript {
 
     /// Follows the records of the session's subagents, as client-core's snapshot shares them, and measures again each
     /// row that draws one that changed. A copy that's shared already is the one held.
-    pub fn set_subagents(&mut self, subagents: &[Arc<Subagent>], cx: &mut Context<Self>) {
+    fn set_subagents(&mut self, subagents: &[Arc<Subagent>], cx: &mut Context<Self>) {
         let (rows, shown) = {
             let mut m = self.model.borrow_mut();
             // A tab opened on the subagent a call started, before its record came, names it by that call, and the hub
@@ -222,18 +234,11 @@ impl Transcript {
             let drawn = m.subagent_rows.borrow();
             let rows: Vec<_> = changed.iter().filter_map(|subagent| drawn.get(&subagent.call).copied()).collect();
             drop(drawn);
-            let shown = changed.iter().find(|subagent| m.alone.as_ref() == Some(&subagent.id)).copied();
-            if let Some(subagent) = shown {
-                let at_work = AtWork::of_subagent(subagent);
-                if m.at_work.working != at_work.working {
-                    self.ticking = tick(&at_work, cx);
-                }
-                m.at_work = at_work;
-            }
+            let shown = changed.iter().any(|subagent| m.alone.as_ref() == Some(&subagent.id));
             for subagent in changed {
                 m.subagents.insert(Arc::clone(subagent));
             }
-            (rows, shown.is_some())
+            (rows, shown)
         };
         for seq in rows {
             self.remeasure(seq, cx);
@@ -255,6 +260,26 @@ impl Transcript {
                 self.list.out_of_date(row..row + 1);
             }
         }
+        cx.notify();
+    }
+
+    /// In the subagent tab, follows whether its subagent is at work, as that one's record says, and what it has in the
+    /// background, as `session`'s does.
+    fn follow_the_subagent(&mut self, session: Option<&Session>, cx: &mut Context<Self>) {
+        {
+            let mut m = self.model.borrow_mut();
+            let Some(subagent) = m.alone.as_ref().and_then(|alone| m.subagents.get(alone)) else { return };
+            let at_work = AtWork::of_subagent(subagent, session);
+            if m.at_work == at_work {
+                return;
+            }
+            if m.at_work.working != at_work.working {
+                self.ticking = tick(&at_work, cx);
+            }
+            task_lines::forget_gone(&at_work.background, &mut m.folds);
+            m.at_work = at_work;
+        }
+        self.redraw_end();
         cx.notify();
     }
 }

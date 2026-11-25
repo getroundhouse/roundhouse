@@ -30,8 +30,8 @@ pub struct Normalized {
     pub dropped: Vec<ToolUseId>,
     pub parsed: Parsed,
     /// What the line shows without saying, which goes in the log after what it says, with no raw line, since the line
-    /// is that: the list of background tasks again, once a subagent's start, which is what the line says, names the call
-    /// that started a listed task, or why the agent starts a turn by itself, after the turn's `init`.
+    /// is that: the list of background tasks again, once a subagent's start or end, which is what the line says, changes
+    /// what the list says of a task, or why the agent starts a turn by itself, after the turn's `init`.
     pub after: Option<EventBody>,
 }
 
@@ -93,7 +93,7 @@ impl Normalizer {
         let Some(value) = value_of(line) else {
             return Normalized { dropped: Vec::new(), parsed: unparsed(), after: None };
         };
-        let answered = self.calls.note(&value);
+        let answered = self.calls.note(&value, self.subagents.of_line(&value).as_ref());
         let dropped = self.pending_calls.note(&value);
         let own_turn = self.own_turns.note(&value, &self.tasks);
         let noted = self.tasks.note(&value, &self.calls);
@@ -184,7 +184,7 @@ impl Normalizer {
     /// Gives a list of background tasks what the lines before it said of them.
     pub(super) fn list(&mut self, body: &mut EventBody) {
         if let EventBody::AgentTasks { tasks, stopped } = body {
-            *stopped = self.tasks.listed(tasks);
+            *stopped = self.tasks.listed(tasks, &self.subagents);
         }
     }
 }

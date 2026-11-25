@@ -10,7 +10,7 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use serde_json::json;
 
-use crate::turn::{Turn, message_id};
+use crate::turn::Turn;
 use crate::{Config, Input, Out, Prompt, emit};
 
 /// How often a task looks for its file, and for SIGTERM.
@@ -53,18 +53,16 @@ impl Call {
 )]
 pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
     let command = format!("until [ -e {file} ]; do sleep 0.05; done");
+    let description = format!("Wait for {file}");
     let tool_use_id = match call {
-        Call::Command => turn.tool_use(&command),
-        Call::Monitor => {
-            let message = message_id();
-            let tool_use_id = format!("toolu_{message}");
-            let input = json!({"command":command,"description":format!("Wait for {file}")});
-            turn.finish_message(&message, json!({"type":"tool_use","id":tool_use_id,"name":"Monitor","input":input}));
-            tool_use_id
+        Call::Command => {
+            let input = json!({"command":command,"description":description,"run_in_background":true});
+            turn.named_tool_use("Bash", input)
         }
+        Call::Monitor => turn.named_tool_use("Monitor", json!({"command":command,"description":description})),
     };
     let id = format!("task_{tool_use_id}");
-    started(turn.config, turn.out, &id, "local_bash", &tool_use_id, &format!("Wait for {file}"));
+    started(turn.config, turn.out, &id, "local_bash", &tool_use_id, &description);
     turn.tool_result(&tool_use_id, &format!("Command running in background with ID: {id}"), false);
     watch_for_sigterm(turn.config, turn.out);
     let (config, out, file) = (turn.config.clone(), turn.out.clone(), PathBuf::from(file));

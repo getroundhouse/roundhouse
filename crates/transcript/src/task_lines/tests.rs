@@ -7,13 +7,7 @@ use super::*;
 use TaskKind::{Command, Monitor, Subagent, Wait};
 
 fn tasks(kinds: &[TaskKind]) -> Vec<AgentTask> {
-    let task = |(at, kind): (usize, &TaskKind)| AgentTask {
-        id: at.to_string().as_str().into(),
-        description: None,
-        kind: *kind,
-        call: None,
-        subagent: None,
-    };
+    let task = |(at, kind): (usize, &TaskKind)| AgentTask::new(at.to_string(), *kind);
     kinds.iter().enumerate().map(task).collect()
 }
 

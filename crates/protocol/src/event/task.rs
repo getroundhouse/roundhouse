@@ -10,9 +10,14 @@ use crate::model::{EndedWait, SubagentId, TaskId, ToolUseId};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AgentTask {
     pub id: TaskId,
-    /// What the agent said it's for.
+    /// What the agent said it's for, in its own words. In a list recorded before tasks said their `command`, it can be
+    /// the whole of the command a task runs, which Claude's CLI gives in place of a description its agent left out.
     #[serde(default)]
     pub description: Option<String>,
+    /// The command it runs, whole, where the agent didn't say what that's for, so it can be named by the command. None
+    /// where the agent said, and where the command isn't known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
     pub kind: TaskKind,
     /// The call that started it, or that started it again, once the agent has said. None from an agent that doesn't
     /// say, and in a list recorded before calls were kept.
@@ -23,6 +28,17 @@ pub struct AgentTask {
     /// their subagents, whose line opens the tab on the subagent its `call` started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent: Option<SubagentId>,
+    /// The subagent at work whose work it's part of, since that subagent's call started it. None for the agent's own,
+    /// for one whose subagent has ended, which is then left with the agent, and from an agent that doesn't say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part_of: Option<SubagentId>,
+}
+
+impl AgentTask {
+    /// One its agent has said nothing of but its ID and its kind.
+    pub fn new(id: impl Into<TaskId>, kind: TaskKind) -> Self {
+        Self { id: id.into(), description: None, command: None, kind, call: None, subagent: None, part_of: None }
+    }
 }
 
 /// What a background task is, which says whether it's the agent's own work and whether it's doing anything.

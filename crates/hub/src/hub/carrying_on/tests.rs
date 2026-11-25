@@ -19,7 +19,7 @@ fn a_session_whose_agent_has_gone_is_interrupted_as_it_is_with_the_hub_there() {
     let started = StatusChange { status: SessionStatus::Running, turn: TurnEdge::Starts, background_tasks: None };
     let prompted = store.append(&id, None, &prompt, None, None, Some(started.into())).unwrap();
     let asking: EventBody = fixtures::approval_request("a", fixtures::to_run("ls")).into();
-    let task = AgentTask { id: "t".into(), description: None, kind: TaskKind::Command, call: None, subagent: None };
+    let task = AgentTask::new("t", TaskKind::Command);
     let waiting = StatusChange {
         status: SessionStatus::WaitingApproval,
         turn: TurnEdge::Neither,
@@ -48,7 +48,7 @@ fn a_session_whose_agent_has_gone_is_interrupted_as_it_is_with_the_hub_there() {
 /// doesn't have open.
 #[test]
 fn a_chat_that_only_waited_is_left_waiting_and_one_at_work_is_interrupted() {
-    let task = |id: &str, kind| AgentTask { id: id.into(), description: None, kind, call: None, subagent: None };
+    let task = |id: &str, kind| AgentTask::new(id, kind);
     let (waiting, command) = (task("t", TaskKind::Wait), task("u", TaskKind::Command));
     let in_the_background = |tasks: &[AgentTask]| StatusChange {
         background_tasks: Some(tasks.to_vec()),
