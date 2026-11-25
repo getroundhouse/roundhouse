@@ -8,7 +8,6 @@ use std::time::Instant;
 
 use process::ProcessRecord;
 use process::testing::WholeEnvironment;
-use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::paths::{WORKER_RECORD_FILE, WORKER_SOCKET_FILE};
 use protocol::worker::{
@@ -83,34 +82,20 @@ impl Attached {
     }
 
     pub(crate) fn hello(&mut self, keep_running_without_hub: bool) {
-        let answer = self.say_hello(keep_running_without_hub);
-        assert!(matches!(answer, WorkerOutcome::Response(WorkerResponse::Hello(_))), "{answer:?}");
-    }
-
-    /// As the next hub reaches the worker whose state directory is `state_dir`, once the worker has let go of the hub
-    /// before. A hub that was killed holds on to its worker until its own `worker --attach` has noticed it went, and
-    /// till then the worker refuses another hub's hello.
-    pub(crate) fn next_hub(workspaces_root: &Path, state_dir: &Path) -> Self {
-        let mut next = None;
-        wait_until("the worker to let go of the hub before", || {
-            let mut attached = Self::start_in(workspaces_root, state_dir);
-            match attached.say_hello(true) {
-                WorkerOutcome::Response(WorkerResponse::Hello(_)) => next = Some(attached),
-                WorkerOutcome::Error(e) if e.code == ErrorCode::Conflict => attached.close(),
-                other => panic!("{other:?}"),
-            }
-            next.is_some()
-        });
-        next.unwrap()
-    }
-
-    fn say_hello(&mut self, keep_running_without_hub: bool) -> WorkerOutcome {
         let hello = WorkerRequest::Hello(Hello {
             protocol_version: WORKER_PROTOCOL_VERSION,
             oldest_protocol_version: None,
             keep_running_without_hub,
         });
-        self.call(1, hello)
+        let answer = self.call(1, hello);
+        assert!(matches!(answer, WorkerOutcome::Response(WorkerResponse::Hello(_))), "{answer:?}");
+    }
+
+    /// As the next hub reaches the worker whose state directory is `state_dir`.
+    pub(crate) fn next_hub(workspaces_root: &Path, state_dir: &Path) -> Self {
+        let mut next = Self::start_in(workspaces_root, state_dir);
+        next.hello(true);
+        next
     }
 
     /// As a hub that goes does, and returns once the command has exited.
