@@ -96,6 +96,15 @@ Observed on 2.1.330 with Roundhouse's streaming flags, a home and a config direc
 - **`status` is `connected`, `needs-auth`, `failed`, `pending` or `disabled`.** One over HTTP with no header that answers 401 with OAuth's metadata is `needs-auth`. One that refuses its header, answers 500, can't be reached or can't be run is `failed`. The first `init` came 31 s after the prompt, once every server but one had settled, and one that hadn't answered by then was `pending` there and `failed` in the next. One in the project's `disabledMcpServers` is `disabled`. The CLI's source has `cached` too, which wasn't seen.
 - **`tools` lists every tool the agent has, by name, those deferred until `ToolSearch` loads them included.** A server's are named `mcp__<server>__<tool>`, with a `_` for anything in the server's name but an ASCII letter or digit, `-` or `_`. So `a.b` and `a b` give the same prefix, and `a`'s starts the names of `a__b`'s. A name that starts `claude.ai ` also has each run of `_` made one, and none at its ends, as read from the CLI's source.
 
+## The hub's tool servers, through the worker
+
+Observed on 2.1.330 with stand-in servers on 127.0.0.1 given an `Authorization` header in `--mcp-config`, a config directory of the trial's own and no prompt sent, but where it says otherwise.
+
+- **It asks such a server for no OAuth metadata,** whether the server connects or fails.
+- **A server that answers `server/discover` and `initialize` with a JSON-RPC error is `failed`, and `mcp_status` gives the error's message as it came.** So the worker's words for a key that was refused reach whoever reads the status.
+- **A server that doesn't take `server/discover` gets `initialize` on `2025-11-25`, and once that's done, a GET for its stream,** to which 405 is taken as having none.
+- **What `CLAUDE_AUTO_BACKGROUND_TASKS` changes for a server that takes MCP's tasks wasn't seen,** and needs a call to Anthropic's own API. Against a model standing in on 127.0.0.1, 2.1.330 called such a server's tool and offered it no tasks, with the variable set or not, so it answered within the call. As read from 2.1.330's code, and not run, whether a call offers tasks is the variable's to say, for every server over HTTP alike, and a feature flag's, whose default depends on which API is used. So each of the hub's servers may be offered tasks as the worker's own is, and one that answers with a task is then asked after with `tasks/get` at the same URL. A call to any of them that takes 120 s is moved to the background with the variable set, as the table above says.
+
 ## Computer use
 
 Claude Code has an MCP server of its own, `computer-use`, that sees the screen and moves the mouse and types. It's on a Mac only, and off until it's turned on for a project with `/mcp`. Roundhouse's agents don't get it. Read on 2.1.330, where no prompt was sent and no computer-use tool was called.

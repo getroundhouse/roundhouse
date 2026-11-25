@@ -1,8 +1,8 @@
-//! Telling the CLI where the worker's tools are, in a file given to `--mcp-config`, which keeps the token off its
+//! Telling the CLI where its worker's tool servers are, in a file given to `--mcp-config`, which keeps the token off its
 //! command line, where any process on the machine can read it.
 
 #[cfg(test)]
-use crate::ToolServer;
+use crate::{HubToolServer, ToolServers};
 #[cfg(test)]
 use std::fs::File;
 

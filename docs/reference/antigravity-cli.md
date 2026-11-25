@@ -92,6 +92,13 @@ Observed on 1.5.14 through `session/new`, with a `HOME` of the trial's own, a st
 
 **`agy acp` says nothing of its servers,** as observed on 1.5.16 with a stand-in for the Gemini API and servers that connected, needed OAuth, answered 500 and couldn't be reached, on disk and in `mcpServers`. Neither the reply to `session/new` nor any notification before, during or after a turn named one, its state or its tools, and `mcp/status`, `mcp/list` and `session/mcp_servers` are refused with `-32601`. So the adapter doesn't claim to report them. There, `session/new` needs `authenticate` with `gemini-api-key` first, or fails with `-32000`, "Authentication required", though `GEMINI_API_KEY` is set.
 
+## The hub's tool servers, through the worker
+
+Observed on 1.5.16 as above, with stand-in servers given an `Authorization` header.
+
+- **It asks for OAuth metadata even so:** `/.well-known/oauth-protected-resource`, under the server's path and at the root, without the header, whether the server connects or answers `initialize` with a JSON-RPC error. A 404 to each didn't stop the server connecting.
+- **`session/new` succeeds where a server answers `initialize` with a JSON-RPC error,** and says nothing of it.
+
 ## Resume, accounts, titles and local state
 
 - **Resume:** `agy` stores conversation state under `~/.gemini/antigravity-cli/` (`conversations/<sessionId>.db`, `annotations/<sessionId>.pbtxt` and `brain/<sessionId>/`). `session/resume` of a conversation whose `.db` file is gone, unreadable or corrupt, or that never existed, fails with `-32603` and `Failed to read session <id>; retry, or load it with session/load` in each case, on 1.5.9. So the adapter falls back to `session/new`, with a warning, only when that file is gone from the home it was given, and otherwise lets the launch fail rather than lose a conversation that may still be there. When a resumed conversation sends its next Gemini request, `agy` 1.5.9 appends a trailing `role: "user"` `<SYSTEM_MESSAGE>` notice (reporting that subagents and background tasks stopped across server restart) after the prompt's `<USER_REQUEST>` entry.

@@ -44,6 +44,7 @@ A map for finding your way before reading code: the parts and what connects them
  │ git and the worktree, setup and archive scripts, files and diffs     │
  │ terminals, and agent adapters, such as `agents::claude`              │
  │ its agents' tools, over MCP on 127.0.0.1, answered by asking the hub │
+ │ the hub's tool servers beside them, whose calls it passes on         │
  └──────────────────────────────────┬───────────────────────────────────┘
                                     │  stream-json or JSON-RPC over stdio
                                     ▼

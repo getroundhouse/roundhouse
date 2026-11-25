@@ -1,6 +1,7 @@
 #![cfg(test)]
 use super::harness::Harness;
-use crate::AgentOutput;
+use crate::{AgentOutput, AgentProcess, HubToolServer, ToolServers};
+use protocol::worker::ToolsToken;
 use serde_json::json;
 
 #[tokio::test]
@@ -37,8 +38,30 @@ async fn abandoning_initialization_kills_the_process_group_and_removes_its_recor
 }
 
 #[tokio::test]
+async fn a_thread_is_started_with_each_tool_server_under_a_key_of_its_own() {
+    let servers = ToolServers {
+        tools_url: "http://127.0.0.1:50123/mcp".into(),
+        hubs: vec![HubToolServer { name: "linear".into(), url: "http://127.0.0.1:50123/tool-servers/t-1".into() }],
+        token: ToolsToken::new("token-s"),
+        config: "/no/file".into(),
+    };
+    let mut h = Harness::with_tools(&json!([]), Some(servers));
+
+    let agent = h.started().await;
+    let started = h.request("thread/start").await;
+
+    let headers = json!({ "Authorization": "Bearer token-s" });
+    let config = &started["params"]["config"];
+    let tools = json!({ "url": "http://127.0.0.1:50123/mcp", "http_headers": headers });
+    assert_eq!(config["mcp_servers.roundhouse"], tools);
+    let linear = json!({ "url": "http://127.0.0.1:50123/tool-servers/t-1", "http_headers": headers });
+    assert_eq!(config["mcp_servers.linear"], linear);
+    agent.stop().await;
+}
+
+#[tokio::test]
 async fn cancelling_an_account_call_stops_its_native_process() {
-    use crate::{AgentOptions, AgentProcess, BinaryLookup};
+    use crate::{AgentOptions, BinaryLookup};
     let mut h = Harness::new(&json!([{"on":"account/read","actions":["account-ready"]}]));
     h.started().await.stop().await;
     let room = h.room.path().to_owned();

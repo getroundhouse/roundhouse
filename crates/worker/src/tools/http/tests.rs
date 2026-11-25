@@ -128,7 +128,7 @@ async fn only_posts_to_its_one_path_are_taken() {
 async fn a_body_too_large_is_refused() {
     let tools = tools();
 
-    let (status, _) = post(&tools, &sent(), Bytes::from(vec![b' '; MAX_BODY_BYTES + 1])).await;
+    let (status, _) = post(&tools, &sent(), Bytes::from(vec![b' '; Route::Tools.max_body_bytes() + 1])).await;
 
     assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
 }

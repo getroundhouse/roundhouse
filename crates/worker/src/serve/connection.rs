@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame::{self, Call};
-use protocol::worker::{GitCredentialSet, Hello, ToWorker, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::worker::{
+    GitCredentialSet, Hello, ToWorker, ToolServersSet, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
+};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -95,6 +97,11 @@ where
             Ok(WorkerRequest::GitCredentialSet(GitCredentialSet { credential })) => {
                 let answer = worker.state.credentials.set(credential).await;
                 let _ = frames.send(reply(answer.map(|()| WorkerResponse::Ok))).await;
+            }
+            // As above, so an agent started after one has its servers.
+            Ok(WorkerRequest::ToolServersSet(ToolServersSet { servers })) => {
+                worker.state.tools.proxy.set(servers);
+                let _ = frames.send(reply(Ok(WorkerResponse::Ok))).await;
             }
             request => {
                 let Some(request) = hand_to_terminal(worker, &frames, reply, request).await else { continue };

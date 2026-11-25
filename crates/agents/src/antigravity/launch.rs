@@ -4,7 +4,7 @@ use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::conversation::Start;
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::AgentSessionId;
-use protocol::worker::{AgentSpec, TOOLS_SERVER};
+use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 
 use super::files::{ConversationFiles, effective_home};
@@ -127,7 +127,7 @@ pub(super) async fn resume_after_swap(
 
 fn session_servers(purpose: Purpose, options: &AgentOptions) -> Vec<Value> {
     match (purpose, &options.tools) {
-        (Purpose::Agent, Some(tools)) => vec![acp::mcp_http_server(TOOLS_SERVER, tools)],
+        (Purpose::Agent, Some(tools)) => acp::mcp_http_servers(tools),
         _ => Vec::new(),
     }
 }

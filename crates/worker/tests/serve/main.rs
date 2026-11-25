@@ -7,6 +7,7 @@ mod hellos;
 mod logins;
 #[cfg(unix)]
 mod terminals;
+mod tool_servers;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

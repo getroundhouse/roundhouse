@@ -1,6 +1,6 @@
 use protocol::capability::conversation::Start;
 use protocol::event::EventBody;
-use protocol::worker::{AgentSpec, TOOLS_SERVER};
+use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 
 use super::running::Shared;
@@ -114,8 +114,10 @@ fn configuration(spec: &AgentSpec, settings: &Launch, options: &AgentOptions, in
         config["model_reasoning_effort"] = json!(level);
     }
     if let Some(tools) = &options.tools {
-        config[format!("mcp_servers.{TOOLS_SERVER}")] = json!({"url":tools.url,
-            "http_headers":{"Authorization":format!("Bearer {}", tools.token.as_str())}});
+        for (name, url) in tools.named() {
+            config[format!("mcp_servers.{name}")] =
+                json!({"url":url,"http_headers":{"Authorization":tools.authorization()}});
+        }
     }
     json!({"cwd":spec.cwd,"model":settings.model.as_str(),
         "approvalPolicy":if plan { "on-request" } else { "never" },

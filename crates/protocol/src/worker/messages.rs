@@ -1,6 +1,6 @@
 use super::{
-    agents, archived, children, connection, git_credential, one_off, previous, repo_url, terminals, tools, workspaces,
-    worktree,
+    agents, archived, children, connection, git_credential, one_off, previous, repo_url, terminals, tool_servers,
+    tools, workspaces, worktree,
 };
 use crate::client::Outcome;
 use crate::model;
@@ -25,6 +25,7 @@ use terminals::{
     RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalRows, TerminalStart, TerminalStop, TerminalText,
     TerminalTyped, TerminalWatch,
 };
+use tool_servers::ToolServersSet;
 use tools::{ServeTools, ToolsServing};
 #[cfg(test)]
 use workspaces::CancelSetup;
@@ -125,6 +126,7 @@ pub enum WorkerRequest {
     AccountFor(AccountFor),
     ServeTools(ServeTools),
     GitCredentialSet(GitCredentialSet),
+    ToolServersSet(ToolServersSet),
     ReadRepoUrl(ReadRepoUrl),
     TerminalStart(TerminalStart),
     TerminalTyped(TerminalTyped),

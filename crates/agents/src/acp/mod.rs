@@ -13,8 +13,8 @@ pub(crate) use elicitation::{
     permission_cancelled, permission_selected,
 };
 pub(crate) use session::{
-    ConfigOption, config_offers_value, initialize_params, mcp_http_server, parse_agent_version, parse_session_response,
-    prompt_blocks,
+    ConfigOption, config_offers_value, initialize_params, mcp_http_servers, parse_agent_version,
+    parse_session_response, prompt_blocks,
 };
 pub(crate) use updates::{
     SessionUpdate, StopReason, ToolCallWire, ToolKindWire, ToolStatusWire, parse_prompt_response, parse_session_update,

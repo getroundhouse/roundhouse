@@ -38,7 +38,10 @@ mod tests {
     use crate::capability::conversation::Start;
     use crate::capability::settings::Settings;
     use crate::client::{ClientRequest, ClientResponse, accounts, devices, github_accounts, github_apps, tool_servers};
-    use crate::model::{AgentKind, AgentLogin, GithubToken, LoginToken, RunId, ToolServerAuthGiven, ToolServerKey};
+    use crate::model::{
+        AgentKind, AgentLogin, GithubToken, LoginToken, RunId, ToolServerAuthGiven, ToolServerHeader, ToolServerKey,
+        ToolServerName, ToolServerUrl,
+    };
     use crate::pairing::{DeviceToken, Fingerprint, Pairing, PairingCode, PairingLink};
     use crate::worker::{self, GithubCredential, ToolsToken, WorkerRequest};
 
@@ -151,6 +154,16 @@ mod tests {
             token: GithubToken::new(SECRET),
             identity: None,
         });
+        let server = worker::ProxiedServer {
+            id: "t".into(),
+            name: "linear".into(),
+            label: ToolServerName::typed("Linear").unwrap(),
+            url: ToolServerUrl::typed("https://mcp.example.com/mcp").unwrap(),
+            header: Some(worker::ServerHeader {
+                name: ToolServerHeader::typed("Authorization").unwrap(),
+                value: worker::ServerHeaderValue::new(SECRET),
+            }),
+        };
         vec![
             carrier("AgentLogin", &login()),
             carrier("AgentSpec", &WorkerRequest::AgentStart(launch())),
@@ -161,6 +174,7 @@ mod tests {
             ),
             carrier("GitCredential", &credential),
             carrier("GitCredentialSet", &WorkerRequest::GitCredentialSet(worker::GitCredentialSet { credential })),
+            carrier("ToolServersSet", &WorkerRequest::ToolServersSet(worker::ToolServersSet { servers: vec![server] })),
         ]
     }
 

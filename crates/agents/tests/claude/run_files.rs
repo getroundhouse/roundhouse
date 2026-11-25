@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use agents::claude::spawn_at;
-use agents::{AgentError, AgentOptions, Instructions, ToolServer};
+use agents::{AgentError, AgentOptions, HubToolServer, Instructions, ToolServers};
 use protocol::capability::conversation::Start;
 use protocol::worker::ToolsToken;
 use tokio::sync::mpsc;
@@ -33,8 +33,9 @@ async fn the_pid_file_records_the_process_and_goes_away_with_it() {
 
 /// Options that tell the agent of the worker's tools in `config`.
 fn with_tools(config: &Path) -> AgentOptions {
-    let tools = ToolServer {
-        url: "http://127.0.0.1:50123/mcp".into(),
+    let tools = ToolServers {
+        tools_url: "http://127.0.0.1:50123/mcp".into(),
+        hubs: vec![HubToolServer { name: "linear".into(), url: "http://127.0.0.1:50123/tool-servers/t-1".into() }],
         token: ToolsToken::new("token-s"),
         config: config.to_path_buf(),
     };

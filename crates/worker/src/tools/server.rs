@@ -1,7 +1,9 @@
 use super::http;
+use super::proxy::Proxy;
 use crate::asks::Asks;
 use parking_lot::Mutex;
 use protocol::Build;
+use protocol::capability::setup::ServerName;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::SessionId;
 use protocol::worker::ToolsToken;
@@ -25,15 +27,27 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(1);
 /// Long enough for a connection that failed to be taken, such as for want of file descriptors, to free what it needs.
 const ACCEPT_PAUSE: Duration = Duration::from_millis(100);
 
-/// Far more than a workspace's agents keep open, each of which keeps one or two. More would only use up descriptors
-/// that the agents, git and scripts need too.
-const MAX_CONNECTIONS: usize = 64;
+/// More than a workspace's agents keep open. Each keeps one or two to the worker's own tools, and to each of the hub's
+/// servers one for a call under way and one for its stream of events, if it has one, so four agents with ten servers
+/// keep 88. More would use up descriptors that the agents, git and scripts need too: a connection to one of the hub's
+/// servers takes a second for the worker's own to it, so this many take 192, of the 256 a Mac gives a process it starts
+/// that doesn't ask for more.
+const MAX_CONNECTIONS: usize = 96;
 
 /// Whose a call is: the agent in a session, which works in a worktree, where what it writes points to images.
 #[derive(Debug)]
 pub(crate) struct Caller {
     pub(crate) session_id: SessionId,
     pub(crate) worktree: PathBuf,
+}
+
+/// Where an agent reaches what the worker serves.
+#[derive(Debug)]
+pub(crate) struct Addresses {
+    /// The worker's own tools.
+    pub(crate) tools: String,
+    /// Each of the hub's tool servers, by the name an agent is given it.
+    pub(crate) servers: Vec<(ServerName, String)>,
 }
 
 pub(crate) struct Tools {
@@ -44,6 +58,8 @@ pub(crate) struct Tools {
     pub(super) wait_poll: Duration,
     /// Whose each token is, as each agent starts. Kept while the worker runs, since a session's token doesn't change.
     pub(super) tokens: Mutex<HashMap<ToolsToken, Arc<Caller>>>,
+    /// The hub's tool servers, which calls are passed on to.
+    pub(crate) proxy: Proxy,
     /// Held while it starts serving, so two agents starting at once can't start two servers, and one can't start once
     /// the worker is stopping.
     pub(super) serving: tokio::sync::Mutex<Serving>,
@@ -62,7 +78,7 @@ pub(super) enum Serving {
 impl Tools {
     pub(crate) fn new(asks: Arc<Asks>, build: Build, wait_poll: Duration) -> Self {
         let (tokens, serving) = (Mutex::new(HashMap::new()), tokio::sync::Mutex::new(Serving::NotYet));
-        Self { asks, build, wait_poll, tokens, serving }
+        Self { asks, build, wait_poll, tokens, proxy: Proxy::default(), serving }
     }
 
     /// Lets calls carrying `token` through, as `caller`'s.
@@ -70,12 +86,15 @@ impl Tools {
         self.tokens.lock().insert(token, Arc::new(caller));
     }
 
-    /// Where they're served, once they are.
-    pub(crate) async fn url(&self) -> Option<String> {
-        match *self.serving.lock().await {
-            Serving::On { port, .. } => Some(format!("http://{}:{port}{PATH}", Ipv4Addr::LOCALHOST)),
-            Serving::NotYet | Serving::Stopped => None,
-        }
+    /// Where they're served, and the hub's tool servers as it last set them, once they are.
+    pub(crate) async fn addresses(&self) -> Option<Addresses> {
+        let port = match *self.serving.lock().await {
+            Serving::On { port, .. } => port,
+            Serving::NotYet | Serving::Stopped => return None,
+        };
+        let at = |path: &str| format!("http://{}:{port}{path}", Ipv4Addr::LOCALHOST);
+        let servers = self.proxy.paths().into_iter().map(|(name, path)| (name, at(&path))).collect();
+        Some(Addresses { tools: at(PATH), servers })
     }
 
     pub(super) fn caller_for(&self, token: &ToolsToken) -> Option<Arc<Caller>> {
