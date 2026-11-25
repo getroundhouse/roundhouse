@@ -1,4 +1,5 @@
-//! A run's `heard.jsonl`: a line for each thing heard, as it's heard, so a run stopped partway goes on from there.
+//! Files of JSON lines: a run's `heard.jsonl`, a line for each thing heard, as it's heard, so a run stopped partway goes
+//! on from there, and what the app keeps of what was sent.
 
 use std::fs::OpenOptions;
 use std::io::Write as _;
@@ -12,11 +13,15 @@ fn path(dir: &Path) -> PathBuf {
     dir.join("heard.jsonl")
 }
 
-/// What's been heard in the run in `dir`. A line is whole once its newline is written, so one without was cut short as a
-/// run stopped, and is left out, to be heard again.
+/// What's been heard in the run in `dir`. A line cut short as it stopped is left out, to be heard again.
 pub(crate) fn read<T: DeserializeOwned>(dir: &Path) -> anyhow::Result<Vec<T>> {
-    let path = path(dir);
-    let text = match std::fs::read_to_string(&path) {
+    read_file(&path(dir))
+}
+
+/// Every line of the file at `path`, or none where there's no file. A line is whole once its newline is written, so one
+/// without was cut short as it was, and is left out.
+pub(crate) fn read_file<T: DeserializeOwned>(path: &Path) -> anyhow::Result<Vec<T>> {
+    let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e).with_context(|| format!("couldn't read {}", path.display())),

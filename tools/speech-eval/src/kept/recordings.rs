@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
-use kept_recordings::{AUDIO, FILE, How, Kept, Text};
+use kept_recordings::{AUDIO, FILE, How, Kept, Said, Text};
 
 /// One recording, and the folder it's in.
 pub(super) struct Recording {
@@ -26,21 +26,17 @@ impl Recording {
             How::Heard | How::NothingHeard => true,
             How::Cancelled | How::FieldGone | How::Failed => false,
         });
-        whole.then(|| finals(&self.kept))
+        whole.then(|| self.finals())
     }
-}
 
-/// The final texts of `kept`, one after another.
-fn finals(kept: &Kept) -> String {
-    let finals: Vec<&str> = kept
-        .said
-        .iter()
-        .filter_map(|said| match &said.text {
-            Text::Final(text) => Some(text.as_str()),
+    /// What the app wrote of it, final, however it ended.
+    pub(super) fn finals(&self) -> String {
+        let text = |said: &Said| match &said.text {
+            Text::Final(text) => Some(text.clone()),
             Text::Live(_) => None,
-        })
-        .collect();
-    finals.join(" ")
+        };
+        self.kept.said.iter().filter_map(text).collect::<Vec<_>>().join(" ")
+    }
 }
 
 /// Every recording in `folder`, in the order they were dictated. What else is in it, such as what was sent, isn't one.

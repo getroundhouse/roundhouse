@@ -107,7 +107,7 @@ pub(crate) fn diff(said: &str, written: &str) -> String {
 }
 
 /// Where something is in a text, in bytes.
-type Span = std::ops::Range<usize>;
+pub(crate) type Span = std::ops::Range<usize>;
 
 fn distinct<'a>(words: impl Iterator<Item = &'a str>) -> Vec<&'a str> {
     let mut seen: Vec<&str> = words.collect();
@@ -165,7 +165,7 @@ fn unsaid(text: &str, said: &str, word: &str, cased: bool) -> Vec<Span> {
 
 /// Where `phrase` is in `text` with no letter or digit either side, with its own case where `cased`, and where `counts`
 /// takes where it begins.
-fn found(text: &str, phrase: &str, cased: bool, counts: impl Fn(usize) -> bool) -> Vec<Span> {
+pub(crate) fn found(text: &str, phrase: &str, cased: bool, counts: impl Fn(usize) -> bool) -> Vec<Span> {
     if phrase.is_empty() {
         return Vec::new();
     }
@@ -204,18 +204,18 @@ fn is_word_char(c: char) -> bool {
 }
 
 /// `text` with curly apostrophes made straight, since the model writes either.
-fn apostrophes(text: &str) -> String {
+pub(crate) fn apostrophes(text: &str) -> String {
     text.replace('’', "'")
 }
 
 /// A word of a text, made lower case, and where it is.
-struct Word {
-    text: String,
-    span: Span,
+pub(crate) struct Word {
+    pub(crate) text: String,
+    pub(crate) span: Span,
 }
 
 /// `text`'s words, with marks left out but for apostrophes inside a word.
-fn words(text: &str) -> Vec<Word> {
+pub(crate) fn words(text: &str) -> Vec<Word> {
     let mut words = Vec::new();
     let mut start = None;
     for (at, c) in text.char_indices().chain([(text.len(), ' ')]) {

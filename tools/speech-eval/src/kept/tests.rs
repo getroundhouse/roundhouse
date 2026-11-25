@@ -5,11 +5,12 @@ use std::path::Path;
 use dictation::fake::FakeEngine;
 use dictation::{AudioIn, Dictation, Engine, Hint, Hints, Language, SAMPLE_RATE, Update};
 use hint_words::HintWord;
-use kept_recordings::{AUDIO, Ended, FILE, Field, How, Kept, Said, Text, VERSION};
+use kept_recordings::{AUDIO, Ended, FILE, Field, How, Kept, SENT, SENT_VERSION, Said, Sent, SentFrom, Text, VERSION};
 
 use super::comparing::compare;
 use super::hearing::{Run, Settings, Stamp, hear_all};
 use super::recordings;
+use super::sending::sent;
 use crate::hearing::Hearer;
 
 const SCRIPT: &[&str] = &["fix", "the", "test", "run", "it"];
@@ -201,4 +202,68 @@ fn one_the_app_went_before_the_end_of_is_heard_as_far_as_it_got() {
     hear(&folder, &out, Settings::default(), &engine);
 
     assert_eq!(Run::read(&out).unwrap().heard[0].final_text, "Fix the test.");
+}
+
+/// Writes what was sent into `folder` as the app does, each with when, and the chat it was sent from.
+fn write_sent(folder: &Path, all: &[(u64, &str, &str)]) {
+    let line = |&(sent_at_ms, chat, text): &(u64, &str, &str)| {
+        let chat = Some(chat.to_string());
+        let from = SentFrom { field: Field::Composer, workspace: None, chat, said_out_loud: false };
+        let sent = Sent { version: SENT_VERSION, sent_at_ms, from, text: text.to_string() };
+        serde_json::to_string(&sent).unwrap() + "\n"
+    };
+    std::fs::write(folder.join(SENT), all.iter().map(line).collect::<String>()).unwrap();
+}
+
+#[test]
+fn what_became_of_each_recording_is_in_the_next_thing_sent_from_where_it_was_dictated() {
+    let data = tempfile::tempdir().unwrap();
+    let folder = data.path();
+    let dictated = |id: &str, at: u64, chat: &str, text: &str| {
+        let finals = if text.is_empty() { Vec::new() } else { vec![text.to_string()] };
+        write(folder, &Kept { chat: Some(chat.to_string()), ..kept(id, at, &finals) }, &[]);
+    };
+    dictated("typed-around", 10, "s1", "Fix the test.");
+    dictated("second", 11, "s1", "Then run it all.");
+    dictated("other-chat", 12, "s2", "Fix the test.");
+    dictated("changed", 30, "s1", "Look at the work trees.");
+    dictated("deleted", 31, "s1", "Never mind about that one.");
+    dictated("marks", 32, "s1", "and run cargo test");
+    dictated("nothing", 33, "s1", "");
+    dictated("later", 60, "s1", "Fix the test.");
+    write_sent(
+        folder,
+        &[
+            (50, "s1", "Look at the worktrees. And run cargo test."),
+            (20, "s1", "Please Fix the test. Then run it all. Thanks"),
+            (70, "s2", "Fix the tests."),
+        ],
+    );
+
+    let listed = sent(folder).unwrap();
+
+    let counts = "2 were sent as they were written, 1 with other capitals or marks, 2 changed, and 1 weren't in what was \
+                  sent. Nothing has been sent since 1, and nothing was written of 1.";
+    assert!(listed.starts_with(counts), "{listed}");
+    let changed = "\nchanged\n  wrote: Look at the work trees.\n  sent: Look at the worktrees\n  look at the";
+    assert!(listed.contains(changed), "{listed}");
+    assert!(listed.contains("\nmarks\n  wrote: and run cargo test\n  sent: And run cargo test\n"), "{listed}");
+    assert!(listed.contains("\ndeleted\n  wrote: Never mind about that one.\n  not in what was sent\n"), "{listed}");
+    assert!(listed.contains("\nother-chat\n  wrote: Fix the test.\n  sent: Fix the tests\n"), "{listed}");
+    assert!(!listed.contains("second") && !listed.contains("typed-around"), "{listed}");
+}
+
+#[test]
+fn a_line_of_what_was_sent_cut_short_as_the_app_went_is_left_out() {
+    let data = tempfile::tempdir().unwrap();
+    let folder = data.path();
+    write(folder, &Kept { chat: Some("s1".to_string()), ..kept("r1", 1, &["Fix it.".to_string()]) }, &[]);
+    write_sent(folder, &[(2, "s1", "Fix it.")]);
+    let path = folder.join(SENT);
+    std::fs::write(&path, std::fs::read_to_string(&path).unwrap() + "{\"version\": 1").unwrap();
+
+    assert!(sent(folder).unwrap().starts_with("1 were sent as they were written,"));
+
+    std::fs::remove_file(&path).unwrap();
+    assert!(sent(folder).unwrap().contains("Nothing has been sent since 1,"));
 }
