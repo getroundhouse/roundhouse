@@ -124,7 +124,12 @@ async fn create_bundle(
                 ),
             ));
         }
-        warn!(bytes = size, limit = max_bundle_bytes, "dropping oversized archive bundle on force archive");
+        warn!(
+            name: "archive.bundle_dropped",
+            bytes = size,
+            limit = max_bundle_bytes,
+            "Dropping an oversized bundle on a forced archive"
+        );
         return Ok((None, true));
     }
     let bytes = off_thread(temp.path().to_path_buf(), |path| std::fs::read(&path))
@@ -171,16 +176,22 @@ async fn restore_branch_if_absent(given: &Environment, repo: &Path, branch: &Arc
     reject_option_like(branch.commit.as_str(), "a commit ID")?;
     let ref_name = format!("refs/heads/{}", branch.name);
     let Some(resolved) = commit_of(given, repo, branch.commit.as_str()).await? else {
-        warn!(branch = %branch.name, commit = %branch.commit, "skipping archived branch whose commit isn't in the clone");
+        warn!(
+            name: "archive.branch_skipped",
+            branch = %branch.name,
+            commit = %branch.commit,
+            "Skipping an archived branch whose commit isn't in the clone"
+        );
         return Ok(());
     };
     if let Some(existing) = commit_of(given, repo, &ref_name).await? {
         if existing != resolved {
             warn!(
+                name: "archive.branch_left",
                 branch = %branch.name,
                 existing = %existing,
                 archived = %resolved,
-                "leaving existing branch untouched during archive restore"
+                "Leaving a branch that's there as it is while restoring an archive"
             );
         }
         return Ok(());
@@ -207,10 +218,11 @@ async fn ensure_target_branch_after_omitted_bundle(
     };
     if let Some((from, commit)) = fallback {
         warn!(
+            name: "archive.restored_from_fallback",
             branch = %target_branch,
             %from,
             %commit,
-            "restoring force-archived workspace whose oversized bundle was omitted from fallback ref"
+            "Restoring a workspace from another ref, since its oversized bundle was dropped"
         );
         git_ok(given, repo, &["update-ref", &ref_name, commit.as_str(), ""]).await?;
     }

@@ -34,7 +34,12 @@ impl FromTheTop {
         match Self::watching(heard, each_top_folder) {
             Ok(watching) => Some(watching),
             Err(e) => {
-                warn!(worktree = %heard.root.display(), "the OS can't watch the worktree, so it's read on a timer: {e}");
+                warn!(
+                    name: "changes.watch_failed",
+                    worktree = %heard.root.display(),
+                    error = %e,
+                    "The OS can't watch a worktree, so it's read on a timer"
+                );
                 None
             }
         }

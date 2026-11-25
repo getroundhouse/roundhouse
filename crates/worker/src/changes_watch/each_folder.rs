@@ -9,7 +9,7 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher as _};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{info, warn};
 
 /// Where Linux says how many inotify watches each user may hold, all their processes together. Only Linux reads it,
 /// where the rest of this module also builds for every platform's tests.
@@ -41,28 +41,45 @@ impl EachFolder {
     /// more than `most` folders or the OS won't, when it holds none of them.
     pub(super) fn start(heard: &Arc<Heard>, most: usize) -> Option<Self> {
         let Some(folders) = folders_of(heard, most) else {
-            warn!(
+            info!(
+                name: "changes.watch_too_big",
                 worktree = %heard.root.display(),
-                "the worktree has more folders to watch than the {most} it may, so it's read on a timer"
+                most,
+                "A worktree has more folders than its watch may hold, so it's read on a timer"
             );
             return None;
         };
         let mut watcher = match os_watcher(heard) {
             Ok(watcher) => watcher,
             Err(e) => {
-                warn!(worktree = %heard.root.display(), "the OS can't watch the worktree, so it's read on a timer: {e}");
+                warn!(
+                    name: "changes.watch_failed",
+                    worktree = %heard.root.display(),
+                    error = %e,
+                    "The OS can't watch a worktree, so it's read on a timer"
+                );
                 return None;
             }
         };
         let mut paths = watcher.paths_mut();
         for folder in &folders {
             if let Err(e) = paths.add(folder, RecursiveMode::NonRecursive) {
-                warn!(worktree = %heard.root.display(), "watching the worktree's folders, so it's read on a timer: {e}");
+                warn!(
+                    name: "changes.watch_failed",
+                    worktree = %heard.root.display(),
+                    error = %e,
+                    "The OS can't watch a worktree's folders, so it's read on a timer"
+                );
                 return None;
             }
         }
         if let Err(e) = paths.commit() {
-            warn!(worktree = %heard.root.display(), "watching the worktree's folders, so it's read on a timer: {e}");
+            warn!(
+                name: "changes.watch_failed",
+                worktree = %heard.root.display(),
+                error = %e,
+                "The OS can't watch a worktree's folders, so it's read on a timer"
+            );
             return None;
         }
         Some(Self { watcher, watched: folders.into_iter().collect(), most })

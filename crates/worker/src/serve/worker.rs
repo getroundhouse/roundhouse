@@ -194,7 +194,7 @@ where
     let refused = config.refused.clone();
     let worker = Worker::new(config);
     let last = connection::serve(&worker, reader, writer, refused).await;
-    info!("hub stream closed, stopping agents");
+    info!(name: "hub.stream_closed", "The hub's stream closed, so agents are stopped");
     worker.stop(Some(last)).await;
 }
 

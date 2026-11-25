@@ -138,6 +138,14 @@ impl Visit for Fields {
         self.set(field, value);
     }
 
+    /// As a number where one can have it, as a time in milliseconds can, rather than as text.
+    fn record_u128(&mut self, field: &Field, value: u128) {
+        match u64::try_from(value) {
+            Ok(value) => self.set(field, value),
+            Err(_) => self.set(field, value.to_string()),
+        }
+    }
+
     fn record_f64(&mut self, field: &Field, value: f64) {
         self.set(field, value);
     }

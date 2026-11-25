@@ -138,6 +138,24 @@ pub enum AskReply {
     Proposal(ProposalRecord),
 }
 
+impl AskReply {
+    /// Which kind it is, as a log says it, without what's in it, which can be what someone wrote.
+    #[must_use]
+    pub fn kind(&self) -> &'static str {
+        match self {
+            AskReply::PullRequest(_) => "pull_request",
+            AskReply::PullRequests(_) => "pull_requests",
+            AskReply::Wait(_) => "wait",
+            AskReply::WorktreeCreated(_) => "worktree_created",
+            AskReply::WorktreeRemoved(_) => "worktree_removed",
+            AskReply::WouldLose(_) => "would_lose",
+            AskReply::Worktrees(_) => "worktrees",
+            AskReply::DiffComments(_) => "diff_comments",
+            AskReply::Proposal(_) => "proposal",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

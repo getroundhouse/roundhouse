@@ -31,13 +31,30 @@ impl Deleter {
             Ok(mut deleting) => drop(tokio::spawn(async move {
                 match deleting.wait().await {
                     Ok(status) if !status.success() => {
-                        warn!(%status, "deleting worktrees moved aside failed, and the next archive beside them retries");
+                        warn!(
+                            name: "worktree.undeleted",
+                            %status,
+                            "Couldn't delete worktrees moved aside, which the next archive beside them retries"
+                        );
                     }
                     Ok(_) => {}
-                    Err(e) => warn!("waiting for worktrees moved aside to be deleted: {e}"),
+                    Err(e) => {
+                        warn!(
+                            name: "worktree.delete_unheard",
+                            error = %e,
+                            "Couldn't wait for worktrees moved aside to be deleted"
+                        );
+                    }
                 }
             })),
-            Err(e) => warn!(program = %self.program.display(), "couldn't start deleting worktrees moved aside: {e}"),
+            Err(e) => {
+                warn!(
+                    name: "worktree.delete_unstarted",
+                    program = %self.program.display(),
+                    error = %e,
+                    "Couldn't start deleting worktrees moved aside"
+                );
+            }
         }
     }
 }

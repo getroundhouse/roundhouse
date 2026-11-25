@@ -15,7 +15,14 @@ impl Shell {
         match mirror.typed(typed) {
             // Its writer has gone only once its program has, and the hub hears that next.
             Ok(bytes) => drop(self.to_program.send(bytes)),
-            Err(e) => warn!("couldn't say what terminal {} reads for {typed:?}: {e}", self.terminal),
+            Err(e) => {
+                warn!(
+                    name: "terminal.typed_unread",
+                    terminal = %self.terminal,
+                    error = %e,
+                    "Couldn't say what a terminal reads for what was typed"
+                );
+            }
         }
     }
 
@@ -26,13 +33,23 @@ impl Shell {
             return;
         }
         if let Err(e) = mirror.resize(size) {
-            warn!("couldn't resize the copy of terminal {}: {e}", self.terminal);
+            warn!(
+                name: "terminal.copy_unresized",
+                terminal = %self.terminal,
+                error = %e,
+                "Couldn't resize the copy of a terminal"
+            );
             return;
         }
         if let Err(e) = self.master.resize(pty_size(size)) {
-            warn!("couldn't resize terminal {}: {e}", self.terminal);
+            warn!(name: "terminal.unresized", terminal = %self.terminal, error = %e, "Couldn't resize a terminal");
             if let Err(e) = mirror.resize(self.size) {
-                warn!("couldn't put the copy of terminal {} back to its size: {e}", self.terminal);
+                warn!(
+                    name: "terminal.copy_not_put_back",
+                    terminal = %self.terminal,
+                    error = %e,
+                    "Couldn't put the copy of a terminal back to its size"
+                );
             }
             // Its rows are in a new numbering, which a picture says.
             self.watching.changed(mirror);

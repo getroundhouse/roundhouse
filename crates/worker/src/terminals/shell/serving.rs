@@ -183,7 +183,12 @@ impl Shell {
         match mirror {
             Ok(mut mirror) => self.until_ended(&mut mirror, &mut read, &mut told, &mut exit).await,
             Err(e) => {
-                warn!("couldn't keep what terminal {} shows, so its shell is ended: {e}", self.terminal);
+                warn!(
+                    name: "terminal.copy_unmade",
+                    terminal = %self.terminal,
+                    error = %e,
+                    "Couldn't keep what a terminal shows, so its shell is ended"
+                );
                 self.kill();
             }
         }

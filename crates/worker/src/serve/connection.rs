@@ -8,7 +8,7 @@ use protocol::worker::{GitCredentialSet, Hello, ToWorker, WorkerFrame, WorkerOut
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 use super::scripts::setup_requested;
 use super::{Outgoing, Worker, handle, hello};
@@ -175,17 +175,24 @@ async fn next_line<R: AsyncRead + Unpin>(reader: &mut BufReader<R>, line: &mut V
             Ok(0) => return None,
             Ok(_) => {}
             Err(e) => {
-                error!("reading from the hub failed: {e}");
+                warn!(name: "hub.unread", error = %e, "Couldn't read from the hub");
                 return None;
             }
         }
         if line.len() > frame::MAX_FRAME_BYTES {
-            error!("frame from the hub is too large");
+            error!(name: "hub.frame_too_large", "A frame from the hub is too large");
             return None;
         }
         match ToWorker::decode(line) {
             Ok(read) => return Some(read),
-            Err(e) => warn!("ignoring a frame that didn't parse: {e}"),
+            Err(e) => {
+                warn!(
+                    name: "hub.frame_unread",
+                    kind = ?e.classify(),
+                    column = e.column(),
+                    "Ignoring a frame that didn't parse"
+                );
+            }
         }
     }
 }
@@ -196,13 +203,13 @@ async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Re
         let line = match frame::encode(item.as_ref()) {
             Ok(line) => line,
             Err(e) => {
-                error!("could not encode a frame: {e}");
+                error!(name: "hub.frame_unencoded", error = %e, "Couldn't encode a frame");
                 continue;
             }
         };
         if let Err(e) = writer.write_all(&line).await.and(writer.flush().await) {
             // The hub is gone. Keep draining, so agents stop cleanly rather than blocking on us.
-            warn!("writing to the hub failed: {e}");
+            debug!(name: "hub.unwritten", error = %e, "Couldn't write to the hub");
         }
         drop(written);
     }

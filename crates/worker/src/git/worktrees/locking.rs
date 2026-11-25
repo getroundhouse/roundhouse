@@ -86,7 +86,14 @@ pub(in crate::git) async fn held(path: &Path, how: Hold, waiting: &'static str) 
     };
     match tried {
         Ok(()) => return Ok(file),
-        Err(TryLockError::WouldBlock) => info!(lock = %path.display(), "{waiting}"),
+        Err(TryLockError::WouldBlock) => {
+            info!(
+                name: "git.lock_waited_for",
+                lock = %path.display(),
+                waiting,
+                "Waiting for a lock that's held elsewhere"
+            );
+        }
         Err(TryLockError::Error(e)) => return Err(e),
     }
     // Off the runtime's threads, since it blocks for as long as whatever holds it elsewhere takes.

@@ -45,7 +45,7 @@ impl Clones {
         }
         // What a worker that was stopped as it made it left there.
         cleared(&making).await?;
-        info!(url, "cloning the repository");
+        info!(name: "clone.started", url, "Cloning a repository");
         let placed = match tokio::time::timeout(CLONE_TIMEOUT, clone(given, url, &making)).await {
             Ok(Ok(())) => rename(&making, &whole).await,
             Ok(Err(e)) => Err(e),
@@ -57,7 +57,7 @@ impl Clones {
             && let Err(e) = cleared(&making).await
         {
             // The next worker to make it clears it first, as it does what a stop left.
-            warn!(url, "couldn't clear the clone that failed: {}", e.message);
+            warn!(name: "clone.uncleared", url, error = e.message, "Couldn't clear a clone that failed");
         }
         placed.map(|()| whole)
     }
@@ -83,7 +83,7 @@ async fn clone(given: &Environment, url: &str, making: &Path) -> Result<(), ApiE
     if !head.status.success() {
         // A workspace's base is `origin`'s `HEAD` only by default, and then `origin/main` or `origin/master`, so a clone
         // of a remote with none, as an empty one is, is whole without it.
-        warn!(url, "cloned the repository without origin's HEAD: {}", head.stderr);
+        info!(name: "clone.without_head", url, stderr = head.stderr, "Cloned a repository without origin's HEAD");
     }
     Ok(())
 }

@@ -49,13 +49,17 @@ impl Asks {
 
     /// Asks the hub, for the agent in `session_id`, and waits for its answer, as what the ask is answered with. An
     /// answer of another kind fails here, so whoever asked has only the answer it asked for to handle. Only a hub
-    /// that's wrong sends one, so what it was goes to the log, and the agent hears only that it came.
+    /// that's wrong sends one, so which kind it was goes to the log, and the agent hears only that it came.
     pub(crate) async fn ask<A: Ask>(&self, session_id: SessionId, ask: A) -> Result<A::Answer, ApiError> {
         let reply = self.reply_to(session_id, ask.into_ask()).await?;
         A::Answer::read(reply).map_err(|reply| {
-            let wrong = "the hub answered with another kind of answer than was asked for";
-            warn!(?reply, "{wrong}");
-            ApiError::new(ErrorCode::Internal, wrong)
+            warn!(
+                name: "ask.answered_otherwise",
+                asked_for = std::any::type_name::<A::Answer>(),
+                answered = reply.kind(),
+                "The hub answered with another kind of answer than was asked for"
+            );
+            ApiError::new(ErrorCode::Internal, "the hub answered with another kind of answer than was asked for")
         })
     }
 

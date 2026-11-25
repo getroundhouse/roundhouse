@@ -43,8 +43,9 @@ pub(crate) async fn open_at(
     } else {
         FileOpened::NotText
     };
-    let said = || format!("opened {path} at {commit}, of {} bytes and {lines} lines", blob.bytes);
-    logged(!whole, &said, streamed, started);
+    let read =
+        Read { path, commit, file_bytes: Some(blob.bytes), lines: Some(lines), asked: None, sent: None, last: None };
+    logged(!whole, &read, &streamed, started);
     Ok(opened)
 }
 
@@ -69,21 +70,42 @@ pub(crate) async fn pages(
     let mut paging = Paging::new(Wanted::Pages(pages.to_vec()), Reads::AsFarAsNeeded, page_lines, limits);
     let streamed = blob.stream(worktree, |chunk| paging.feed(chunk)).await?;
     let read = paging.finish(&streamed);
-    let (sent, last) = (read.pages.len(), pages.iter().max().copied().unwrap_or(0));
-    let said = || format!("read {sent} of {} pages of {path} at {commit}, up to page {last}", pages.len());
-    logged(true, &said, streamed, started);
+    let (asked, sent, last) = (Some(pages.len()), Some(read.pages.len()), pages.iter().max().copied());
+    let of = Read { path, commit, file_bytes: None, lines: None, asked, sent, last };
+    logged(true, &of, &streamed, started);
     Ok(FilePages { pages: read.pages })
+}
+
+/// What one read was: opening a file, which has its size and how many lines it has, or reading pages, which has how
+/// many were asked for, how many were sent and the last asked for.
+struct Read<'a> {
+    path: &'a str,
+    commit: &'a CommitId,
+    file_bytes: Option<u64>,
+    lines: Option<u32>,
+    asked: Option<usize>,
+    sent: Option<usize>,
+    last: Option<u32>,
 }
 
 /// Says what a read did, and how long it took: where it's seen without asking for more when it's of a file too big to
 /// send whole, which is what's read in pages, or when it was slow, and otherwise only when asked for.
-fn logged(big: bool, what: &dyn Fn() -> String, streamed: Streamed, started: Instant) {
+fn logged(big: bool, read: &Read<'_>, streamed: &Streamed, started: Instant) {
+    let Read { path, commit, file_bytes, lines, asked, sent, last } = *read;
     let ms = started.elapsed().as_millis();
     let (bytes, stopped) = (streamed.bytes, streamed.stopped);
     if big || started.elapsed() >= SLOW {
-        info!(ms, streamed = bytes, stopped_early = stopped, "{}", what());
+        info!(
+            name: "file.paged",
+            path, %commit, file_bytes, lines, asked, sent, last, ms, streamed = bytes, stopped_early = stopped,
+            "Read a file in pages"
+        );
     } else {
-        debug!(ms, streamed = bytes, stopped_early = stopped, "{}", what());
+        debug!(
+            name: "file.paged",
+            path, %commit, file_bytes, lines, asked, sent, last, ms, streamed = bytes, stopped_early = stopped,
+            "Read a file in pages"
+        );
     }
 }
 

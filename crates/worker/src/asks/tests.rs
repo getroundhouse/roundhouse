@@ -1,3 +1,4 @@
+use logging::testing::Logs;
 use protocol::fixtures;
 use protocol::model::WorkName;
 use protocol::worker::{
@@ -41,19 +42,35 @@ async fn an_answer_reaches_the_ask_it_names() {
     assert_eq!(second.unwrap_err().code, ErrorCode::NotFound);
 }
 
-/// So a tool has only the answer it asked for to handle.
+/// So a tool has only the answer it asked for to handle. The log says which kind came, but not what was in it, which can
+/// be what someone wrote.
 #[tokio::test]
-async fn an_answer_of_another_kind_than_the_ask_names_fails_where_its_read() {
+async fn an_answer_of_another_kind_than_the_ask_names_fails_where_its_read_and_is_logged_by_its_kind() {
+    let logs = Logs::capture();
     let (asks, mut sent) = asks();
     let waiting = asks.ask("s".into(), ReadWait { wait: "w".into() });
+    let created = WorktreeCreated {
+        worktree: fixtures::child_worktree("x"),
+        commit: "abc".into(),
+        copied: vec![],
+        warnings: vec!["couldn't copy quokka.env".to_string()],
+    };
     let answering = async {
         let id = asked(&mut sent).await;
-        asks.answer(AskAnswer { answer: id, outcome: none() });
+        let outcome = AskOutcome::Response(AskReply::WorktreeCreated(created));
+        asks.answer(AskAnswer { answer: id, outcome });
     };
 
     let (waiting, ()) = tokio::join!(waiting, answering);
 
     assert_eq!(waiting.unwrap_err().code, ErrorCode::Internal);
+    let events = logs.events();
+    let [event] = events.as_slice() else { panic!("{events:#?}") };
+    assert_eq!(
+        (&event["event"], &event["fields"]["answered"]),
+        (&"ask.answered_otherwise".into(), &"worktree_created".into())
+    );
+    assert!(!logs.text().contains("quokka"), "{}", logs.text());
 }
 
 #[tokio::test]
