@@ -31,17 +31,17 @@ pub(crate) struct Given {
 /// takes: it has the defaults, and no test to stop with, whatever the environment says.
 pub(crate) struct ForTests {
     pub timers: worker::Timers,
-    /// The test this worker stops with once it has gone while it has no hub, as `hub::TestProcess` says, which only a
+    /// The test this worker stops with once it has gone while it has no hub, as `process::TestProcess` says, which only a
     /// worker that can outlive its hub has.
     #[cfg_attr(windows, expect(dead_code, reason = "only a worker that can outlive its hub stops with its test"))]
-    pub stops_with: Option<hub::TestProcess>,
+    pub stops_with: Option<process::TestProcess>,
 }
 
 impl ForTests {
     /// As this process's environment says, which has to be read before the hub's variables are forgotten.
     pub(crate) fn from_env() -> Self {
         let var = |name: &str| std::env::var(name).ok();
-        Self { timers: worker::Timers::from_env(var), stops_with: hub::TestProcess::from_env(var) }
+        Self { timers: worker::Timers::from_env(var), stops_with: process::TestProcess::from_env(var) }
     }
 }
 

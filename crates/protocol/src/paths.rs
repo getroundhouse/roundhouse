@@ -23,8 +23,8 @@ pub const ENV_TEST_WORKER_TIMERS: &str = "ROUNDHOUSE_TEST_WORKER_TIMERS";
 /// Where a test's hub calls GitHub, both its API and its device flow, such as a stand-in's address, which only a hub
 /// built for tests reads, as `hub::GithubConfig::from_env` says.
 pub const ENV_TEST_GITHUB_API: &str = "ROUNDHOUSE_TEST_GITHUB_API";
-/// The PID of the test a process was started for, which a hub built for tests stops with once it has gone, as
-/// `hub::TestProcess` says.
+/// The PID of the test a process was started for, which a daemon built for tests stops with once it has gone,
+/// as `process::TestProcess` says.
 pub const ENV_TEST_PROCESS: &str = "ROUNDHOUSE_TEST_PROCESS";
 
 /// The binary that runs as a hub or a worker. It gives this name in `--version` too.
