@@ -44,7 +44,12 @@ where
         let Call { id, request } = match frame::read_call::<ProviderRequest>(&line) {
             Ok(call) => call,
             Err(e) => {
-                warn!("ignoring a request that didn't parse: {e}");
+                warn!(
+                    name: "provider.request_unread",
+                    kind = ?e.classify(),
+                    column = e.column(),
+                    "Ignoring a request that didn't parse"
+                );
                 continue;
             }
         };
@@ -105,7 +110,7 @@ async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Re
         let line = match frame::encode(&frame) {
             Ok(line) => line,
             Err(e) => {
-                warn!("a reply didn't encode: {e}");
+                warn!(name: "provider.reply_unencoded", error = %e, "A reply didn't encode");
                 continue;
             }
         };

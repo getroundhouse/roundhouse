@@ -43,7 +43,14 @@ impl Launched {
         if let Some(path) = pid_file
             && let Err(error) = process::ProcessRecord::write(path, pid)
         {
-            warn!("could not record {peer} {pid} in {}: {error}", path.display());
+            warn!(
+                name: "agent.process_unrecorded",
+                peer,
+                pid,
+                path = %path.display(),
+                %error,
+                "Couldn't record a process, so it's left running if the worker is killed"
+            );
         }
         let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
         else {

@@ -177,7 +177,11 @@ fn owner(answer: Answered) -> Result<TokenOwner, ApiError> {
     let ends_at_ms = expiration.and_then(|said| {
         let read = ends_at_ms(&said);
         if read.is_none() {
-            warn!(said, "couldn't read when GitHub says a token ends, so its record says it doesn't");
+            warn!(
+                name: "github.token_end_unread",
+                said,
+                "Couldn't read when GitHub says a token ends, so its record says it doesn't"
+            );
         }
         read
     });

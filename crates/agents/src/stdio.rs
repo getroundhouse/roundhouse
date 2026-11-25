@@ -22,7 +22,7 @@ pub(crate) async fn next_line<R: AsyncBufRead + Unpin>(reader: &mut R, buffer: &
         Ok(0) => None,
         Ok(_) => Some(String::from_utf8_lossy(buffer).trim_end_matches(['\n', '\r']).to_string()),
         Err(e) => {
-            warn!("reading agent output failed: {e}");
+            warn!(name: "agent.output_unread", error = %e, "Couldn't read an agent's output");
             None
         }
     }
@@ -82,7 +82,13 @@ impl GroupGuard {
         if let Some(path) = &pid_file
             && let Err(error) = process::ProcessRecord::write(path, pid)
         {
-            warn!("could not record {pid} in {}: {error}", path.display());
+            warn!(
+                name: "agent.process_unrecorded",
+                pid,
+                path = %path.display(),
+                %error,
+                "Couldn't record a process, so it's left running if the worker is killed"
+            );
         }
         Self { pid, pid_file, finished: false }
     }

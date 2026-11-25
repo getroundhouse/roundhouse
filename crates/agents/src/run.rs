@@ -135,7 +135,12 @@ pub(crate) async fn stop_group(pid: impl Fn() -> u32, mut exited: watch::Receive
         let pid = pid();
         // A pid of 0 is a CLI that has been reaped, whose output is still being read, so it ignored nothing.
         if pid != 0 {
-            warn!("CLI {pid} hadn't exited {STOP_GRACE:?} after SIGTERM, so its group is killed");
+            warn!(
+                name: "agent.process_not_stopped",
+                pid,
+                grace = ?STOP_GRACE,
+                "A CLI hadn't exited after SIGTERM, so its group is killed"
+            );
             process::signal_group(pid, process::Signal::Kill);
         }
         let _ = exited.wait_for(|done| *done).await;

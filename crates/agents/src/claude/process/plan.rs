@@ -35,7 +35,11 @@ pub(super) async fn start_in(
     if let Err(e) = write_to(shared.tap.as_ref(), stdin, &asked.line).await {
         shared.pending_controls.lock().remove(&asked.request_id);
         shared.entering_plan.store(false, Ordering::SeqCst);
-        debug!("could not ask the CLI into plan mode, since it has gone: {e:#}");
+        debug!(
+            name: "claude.plan_mode_unasked",
+            error = format!("{e:#}"),
+            "Couldn't ask a CLI into plan mode, since it has gone"
+        );
         return;
     }
     let (shared, output) = (shared.clone(), output.clone());
@@ -67,7 +71,7 @@ pub(super) async fn passed_on(shared: &Shared, output: &mpsc::Sender<AgentOutput
 }
 
 async fn stop(shared: &Shared, output: &mpsc::Sender<AgentOutput>, why: &str) {
-    warn!("the CLI didn't go into plan mode, so it's being stopped: {why}");
+    warn!(name: "claude.plan_mode_refused", why, "A CLI didn't go into plan mode, so it's being stopped");
     let message = format!("Claude didn't go into plan mode, so it was stopped: {why}");
     // Before it's stopped, so this comes before its exit.
     let notice = EventBody::Notice { level: NoticeLevel::Error, message, subagent: None };

@@ -13,7 +13,7 @@ use super::workspace::workspace;
 const LOGGING: &[&str] = &["error", "warn", "info", "debug", "trace"];
 
 /// The crates whose calls are from before the rule, whose directories these are. One leaves as its calls move.
-const NOT_MOVED: &[&str] = &["crates/agents", "crates/github", "crates/hub", "crates/providers", "crates/worker"];
+const NOT_MOVED: &[&str] = &["crates/hub", "crates/worker"];
 
 /// The events logged in `code`, which is a file's tokens, that don't keep the rule, each as it's written.
 fn loose_events(code: TokenStream) -> Vec<String> {
