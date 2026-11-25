@@ -67,7 +67,15 @@ impl Hub {
     /// `None` when it couldn't be read, which the log says.
     pub(crate) async fn hub_machine_logins(&self) -> MachineLogins {
         let (gh, ssh) = tokio::join!(self.gh_login(GhTokens::AsAgentsHaveThem), self.ssh.read());
-        let gh = gh.inspect_err(|e| warn!("couldn't read gh's login on this machine: {}", e.message)).ok();
+        let gh = gh
+            .inspect_err(|e| {
+                warn!(
+                    name: "github.gh_unread",
+                    error = e.message,
+                    "Couldn't read gh's login on this machine"
+                );
+            })
+            .ok();
         MachineLogins { gh, ssh }
     }
 
@@ -101,11 +109,15 @@ impl Hub {
             Err(e) => GhSaid::Unread { why: e.message },
         };
         if let GhSaid::Unread { why } = &said {
-            warn!("couldn't read gh's login on this machine, which an account uses: {why}");
+            warn!(
+                name: "github.gh_unread",
+                error = why,
+                "Couldn't read gh's login on this machine, which an account uses"
+            );
         }
         let logins = Arc::clone(&self.github_logins);
         if let Err(e) = off_thread(move || logins.gh_read(said, now_ms())).await {
-            warn!("couldn't keep what reading gh's login came to: {}", e.message);
+            warn!(name: "github.gh_unkept", error = e.message, "Couldn't keep what reading gh's login came to");
         }
     }
 

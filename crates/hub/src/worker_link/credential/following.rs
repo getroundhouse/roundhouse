@@ -75,7 +75,12 @@ impl Following {
             // One that's closing, as when the hub stops it or leaves it to the next hub, has had its last set.
             let link = &self.link;
             if link.is_open() {
-                warn!("ending {link}, which failed its git credential: {}", e.message);
+                warn!(
+                    name: "worker.credential_failed",
+                    link = %link,
+                    error = e.message,
+                    "Ending a worker's link, which failed its git credential"
+                );
                 link.kill();
             }
             return;
@@ -93,7 +98,12 @@ impl Following {
         let message = &refused.message;
         match refused.code {
             ErrorCode::Unavailable => {
-                warn!("{link} couldn't apply its git credential, so what it starts uses its machine's own: {message}");
+                warn!(
+                    name: "worker.credential_unapplied",
+                    link = %link,
+                    error = message,
+                    "A worker couldn't apply its git credential, so what it starts uses its machine's own"
+                );
                 Ok(())
             }
             // Nothing a worker that applies sets answers, so nothing says what it has applied.

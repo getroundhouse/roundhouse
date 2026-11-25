@@ -12,7 +12,12 @@ impl LiveSession {
     /// Asks for the run to be told the mode, after whatever was asked of it before, as [`Command::TellTheMode`] says.
     pub(super) fn wake_the_mode(&self) {
         if let Err(e) = self.commands.try_send(Command::TellTheMode) {
-            warn!(session = %self.id, "couldn't ask for the agent to be told the mode: {e}");
+            warn!(
+                name: "session.mode_unasked",
+                session_id = %self.id,
+                error = %e,
+                "Couldn't ask for the agent to be told the mode"
+            );
         }
     }
 
@@ -36,7 +41,15 @@ impl LiveSession {
                 }
             }
             Ok(Delivery::AgentNotRunning) => {}
-            Err(e) => warn!(session = %self.id, %run, "couldn't tell the agent the mode: {e}"),
+            Err(e) => {
+                warn!(
+                    name: "session.mode_untold",
+                    session_id = %self.id,
+                    %run,
+                    error = %e,
+                    "Couldn't tell the agent the mode"
+                );
+            }
         }
     }
 }

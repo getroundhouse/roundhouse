@@ -271,7 +271,13 @@ impl Hub {
             Ok(Found { read, .. }) => Went::Same(read.pull_request.as_ref()),
             Err(unread) => {
                 let e = unread.error();
-                debug!(%id, code = ?e.code, "the pull request couldn't be read: {}", e.message);
+                debug!(
+                    name: "pull_requests.unread",
+                    workspace_id = %id,
+                    code = ?e.code,
+                    error = e.message,
+                    "The pull request couldn't be read"
+                );
                 Went::Failed
             }
         };
@@ -329,7 +335,12 @@ impl Hub {
         tokio::spawn(async move {
             let read = hub.read_pull_request(&id, asked, when).await;
             if let Err(e) = read.and_then(Answer::or_known) {
-                debug!(%id, "reading the pull request as it may have changed: {}", e.message);
+                debug!(
+                    name: "pull_requests.reread_failed",
+                    workspace_id = %id,
+                    error = e.message,
+                    "Couldn't read the pull request as it may have changed"
+                );
             }
         });
     }

@@ -12,9 +12,6 @@ use super::workspace::workspace;
 /// The macros that log an event.
 const LOGGING: &[&str] = &["error", "warn", "info", "debug", "trace"];
 
-/// The crates whose calls are from before the rule, whose directories these are. One leaves as its calls move.
-const NOT_MOVED: &[&str] = &["crates/hub"];
-
 /// The events logged in `code`, which is a file's tokens, that don't keep the rule, each as it's written.
 fn loose_events(code: TokenStream) -> Vec<String> {
     let tokens: Vec<TokenTree> = code.into_iter().collect();
@@ -95,28 +92,20 @@ fn an_event_keeps_the_rule_with_a_name_a_fixed_message_and_its_values_as_fields(
     assert_eq!(loose(r#"warn!(name: "a.b", "Couldn't", {warn!("inside")});"#), 2, "one in another");
 }
 
-/// Each covered crate's loose events, for the crates that have any, by its directory from the repo root.
 #[test]
 fn every_event_has_a_name_a_fixed_message_and_its_values_as_fields() {
     let metadata = workspace();
     let root = Path::new(metadata["workspace_root"].as_str().unwrap());
-    let mut not_moved = BTreeSet::new();
     let mut loose = Vec::new();
     let crates = covered_crates(&metadata);
     assert!(crates.len() > 10, "found only {} crates, so this isn't looking in the right place", crates.len());
     for dir in crates {
-        let from_root = dir.strip_prefix(root).unwrap().display().to_string().replace('\\', "/");
         let mut files = Vec::new();
         add_rust_files(&dir, &mut files);
         for file in files.iter().filter(|file| !is_a_test(file.strip_prefix(&dir).unwrap())) {
             let code: TokenStream = std::fs::read_to_string(file).unwrap().parse().unwrap();
             let found = loose_events(code);
-            if found.is_empty() {
-                continue;
-            }
-            if NOT_MOVED.contains(&from_root.as_str()) {
-                not_moved.insert(from_root.clone());
-            } else {
+            if !found.is_empty() {
                 loose.push(format!("{}: {found:#?}", file.strip_prefix(root).unwrap().display()));
             }
         }
@@ -125,8 +114,6 @@ fn every_event_has_a_name_a_fixed_message_and_its_values_as_fields() {
         loose.is_empty(),
         "give each event a name, a message with no value in it, and its values as fields: {loose:#?}"
     );
-    let stale: Vec<_> = NOT_MOVED.iter().filter(|dir| !not_moved.contains(**dir)).collect();
-    assert!(stale.is_empty(), "moved now, so take these off `NOT_MOVED`: {stale:?}");
 }
 
 /// Whether the file at `path`, in its crate, is a test's, which can log what it likes.

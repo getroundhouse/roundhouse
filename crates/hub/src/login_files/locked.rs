@@ -68,7 +68,15 @@ impl<S: LoginSecret> Locked<'_, S> {
             match self.read(&file) {
                 Ok(Stored::Secret(read)) if read == *secret => return Some(id),
                 Ok(_) => {}
-                Err(e) => warn!(account = %id, %dir, "couldn't read the secret of the hub's login for an account: {e}"),
+                Err(e) => {
+                    warn!(
+                        name: "login.secret_unread",
+                        account = %id,
+                        %dir,
+                        error = %e,
+                        "Couldn't read the secret of the hub's login for an account"
+                    );
+                }
             }
         }
         None
@@ -151,15 +159,31 @@ impl<S: LoginSecret> Locked<'_, S> {
                     kept.insert(file);
                 }
                 (Some(file), Ok(Stored::Newer)) => {
-                    info!(account = %id, %dir, "kept the hub's login for an account, in a form a newer build wrote");
+                    info!(
+                        name: "login.newer_kept",
+                        account = %id,
+                        %dir,
+                        "Kept the hub's login for an account, in a form a newer build wrote"
+                    );
                     kept.insert(file);
                 }
                 (Some(file), Err(e)) => {
-                    warn!(account = %id, %dir, "couldn't read the secret of the hub's login for an account: {e}");
+                    warn!(
+                        name: "login.secret_unread",
+                        account = %id,
+                        %dir,
+                        error = %e,
+                        "Couldn't read the secret of the hub's login for an account"
+                    );
                     kept.insert(file);
                 }
                 (None, _) | (Some(_), Ok(Stored::Nothing)) => {
-                    info!(account = %id, %dir, "the secret of the hub's login for an account is gone, so it holds none");
+                    info!(
+                        name: "login.secret_gone",
+                        account = %id,
+                        %dir,
+                        "The secret of the hub's login for an account is gone, so it holds none"
+                    );
                     clear_row(&id)?;
                 }
             }
@@ -197,7 +221,12 @@ impl<S: LoginSecret> Locked<'_, S> {
     fn let_go(&self, file: &LoginFile) {
         if let Err(e) = self.remove(file) {
             let dir = self.dir().display();
-            warn!(%dir, "couldn't let go of a login's file no account names, which goes as the hub next starts: {e}");
+            warn!(
+                name: "login.not_let_go",
+                %dir,
+                error = %e,
+                "Couldn't let go of a login's file no account names, which goes as the hub next starts"
+            );
         }
     }
 

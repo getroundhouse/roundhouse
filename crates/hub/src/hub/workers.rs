@@ -152,7 +152,15 @@ impl Hub {
     async fn let_go(&self, workspace_id: &WorkspaceId, link: Option<Arc<WorkerLink>>, doing: &str) {
         let workspace = match self.workspace(workspace_id).await {
             Ok(workspace) => workspace,
-            Err(e) => return warn!(%workspace_id, "{doing}: {}", e.message),
+            Err(e) => {
+                return warn!(
+                    name: "worker.workspace_unread",
+                    %workspace_id,
+                    doing,
+                    error = e.message,
+                    "Couldn't read a workspace to let go of its worker"
+                );
+            }
         };
         match link {
             Some(link) => self.stop_worker_unwanted(&workspace, &link).await,
@@ -165,7 +173,14 @@ impl Hub {
     async fn clear_unclaimed_instance(&self, workspace: &Workspace) {
         let provider = match self.provider(&workspace.provider) {
             Ok(provider) => provider,
-            Err(e) => return warn!(id = %workspace.id, "clearing an instance: {}", e.message),
+            Err(e) => {
+                return warn!(
+                    name: "instance.uncleared",
+                    workspace_id = %workspace.id,
+                    error = e.message,
+                    "Couldn't clear an instance"
+                );
+            }
         };
         jobs::step("waiting for its turn to clear the workspace's instance");
         let gate = self.worker_gate(&workspace.id);
@@ -211,7 +226,13 @@ impl Hub {
         *cleared = match self.provider(&workspace.provider) {
             Ok(provider) => clear_instance(provider.as_ref(), &workspace.instance_id).await,
             Err(e) => {
-                warn!(id = %workspace.id, "{doing}: {}", e.message);
+                warn!(
+                    name: "instance.uncleared",
+                    workspace_id = %workspace.id,
+                    doing,
+                    error = e.message,
+                    "Couldn't clear an instance"
+                );
                 false
             }
         };
@@ -275,7 +296,7 @@ impl Hub {
         if tokio::time::timeout(self.timers.shutdown_grace, link.wait_closed()).await.is_ok() {
             return;
         }
-        warn!(instance_id = %workspace.instance_id, "a worker didn't stop in time");
+        warn!(name: "worker.not_stopped", instance_id = %workspace.instance_id, "A worker didn't stop in time");
         self.end_stuck_worker(workspace, link, provider).await;
     }
 
@@ -284,7 +305,12 @@ impl Hub {
         match self.workspace(id).await.and_then(|workspace| Ok((self.provider(&workspace.provider)?, workspace))) {
             Ok((provider, workspace)) => self.end_stuck_worker(&workspace, link, provider.as_ref()).await,
             Err(e) => {
-                warn!(%id, "ending a stuck worker without its workspace: {}", e.message);
+                warn!(
+                    name: "worker.stuck_unended",
+                    workspace_id = %id,
+                    error = e.message,
+                    "Couldn't end a stuck worker without its workspace"
+                );
                 link.kill();
             }
         }
@@ -299,7 +325,7 @@ impl Hub {
         link.kill();
         let replaced = self.workers.lock().get(&workspace.id).is_some_and(|current| current.is_open());
         if !replaced && let Err(e) = provider.kill_worker(instance_id).await {
-            warn!(%instance_id, "ending a stuck worker failed: {}", error_chain(&e));
+            warn!(name: "worker.stuck_unended", %instance_id, error = error_chain(&e), "Couldn't end a stuck worker");
             *cleared = false;
         }
     }
@@ -311,7 +337,12 @@ async fn clear_instance(provider: &dyn Provider, instance_id: &InstanceId) -> bo
     match provider.end_worker(instance_id).await {
         Ok(()) => true,
         Err(e) => {
-            warn!(%instance_id, "ending the worker on an instance failed: {}", error_chain(&e));
+            warn!(
+                name: "worker.unended",
+                %instance_id,
+                error = error_chain(&e),
+                "Couldn't end the worker on an instance"
+            );
             false
         }
     }

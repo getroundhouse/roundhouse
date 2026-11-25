@@ -183,7 +183,12 @@ impl LiveSession {
         if (made.changed || by_the_person || changed_beside_status(&appended))
             && let Err(e) = self.announce(hub).await
         {
-            error!(session = %self.id, "could not announce a change of status: {e}");
+            error!(
+                name: "session.status_untold",
+                session_id = %self.id,
+                error = %e,
+                "Couldn't announce a change of status"
+            );
         }
         if by_the_person {
             hub.announce_workspace(&self.workspace_id).await;
@@ -191,15 +196,25 @@ impl LiveSession {
         for account in appended.iter().filter_map(|appended| appended.account.clone()) {
             hub.notify(HubNotice::Account(account));
         }
+        self.tell_subagents(hub, &appended).await;
+        if made.turn_ended {
+            hub.read_pull_request_after_turn(&self.workspace_id);
+            hub.read_lines_after_turn(&self.workspace_id);
+        }
+    }
+
+    /// Tells everyone following the feed what the subagents `appended` changed are now.
+    async fn tell_subagents(&self, hub: &Hub, appended: &[&Appended]) {
         let subagents: Vec<SubagentId> = appended.iter().flat_map(|appended| appended.subagents.clone()).collect();
         if !subagents.is_empty()
             && let Err(e) = self.announce_subagents(hub, subagents).await
         {
-            error!(session = %self.id, "could not announce a change to a subagent: {e}");
-        }
-        if made.turn_ended {
-            hub.read_pull_request_after_turn(&self.workspace_id);
-            hub.read_lines_after_turn(&self.workspace_id);
+            error!(
+                name: "session.subagent_untold",
+                session_id = %self.id,
+                error = %e,
+                "Couldn't announce a change to a subagent"
+            );
         }
     }
 
@@ -231,7 +246,7 @@ impl LiveSession {
     /// For where nobody is waiting to hear that recording failed.
     pub(crate) async fn record_or_log(&self, origin: Origin, body: EventBody) {
         if let Err(e) = self.record(origin, body, None).await {
-            error!(session = %self.id, "could not record an event: {e}");
+            error!(name: "session.event_unrecorded", session_id = %self.id, error = %e, "Couldn't record an event");
         }
     }
 }

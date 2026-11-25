@@ -28,14 +28,24 @@ impl Hub {
         if changed {
             // What GitHub said of it as it made it, as it would say asked as the app.
             if let Err(e) = self.observation_read::<Said>(app.id, said, made_at_ms).await {
-                warn!(app = %app.id, "couldn't keep what GitHub said of an app it made: {}", e.message);
+                warn!(
+                    name: "github.app_unkept",
+                    app = %app.id,
+                    error = e.message,
+                    "Couldn't keep what GitHub said of an app it made"
+                );
             }
             self.notify(HubNotice::GithubApp(app.clone()));
         }
         match self.look_at_app(app.id, true).await {
             Ok(looked) => Ok(looked),
             Err(e) => {
-                warn!(app = %app.id, "made the app, but couldn't look for where it's installed: {}", e.message);
+                warn!(
+                    name: "github.app_not_looked_for",
+                    app = %app.id,
+                    error = e.message,
+                    "Made the app, but couldn't look for where it's installed"
+                );
                 Ok(app)
             }
         }

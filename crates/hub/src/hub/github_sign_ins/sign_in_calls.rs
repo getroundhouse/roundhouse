@@ -78,7 +78,14 @@ impl Hub {
             Ok(change) => {
                 self.announce_sign_in(change);
             }
-            Err(e) => error!(sign_in = %id, "couldn't record how a sign-in with GitHub ended: {}", e.message),
+            Err(e) => {
+                error!(
+                    name: "github.sign_in_unrecorded",
+                    sign_in = %id,
+                    error = e.message,
+                    "Couldn't record how a sign-in with GitHub ended"
+                );
+            }
         }
     }
 

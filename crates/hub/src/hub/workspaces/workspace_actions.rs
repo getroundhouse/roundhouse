@@ -173,7 +173,12 @@ impl Hub {
         };
         let WorkspaceReady { path, branch, base_ref, warnings, branches } = reply;
         for warning in &warnings {
-            warn!(workspace = workspace.name, "{warning}");
+            warn!(
+                name: "workspace.made_with_warning",
+                workspace_id = %workspace.id,
+                warning,
+                "A workspace was made with a warning"
+            );
         }
         let id = workspace.id.clone();
         // Before it's ready on the record, since the reads nobody asks for start at once on a ready one with no schedule.
@@ -200,13 +205,25 @@ impl Hub {
             self.close_worker(workspace, &link, provider).await;
         }
         if let Err(e) = self.destroy_instance(provider, &workspace.instance_id).await {
-            warn!(%id, "cleaning up a failed workspace: {e}");
+            warn!(
+                name: "workspace.failed_uncleaned",
+                workspace_id = %id,
+                error = %e,
+                "Couldn't clean up a failed workspace"
+            );
         }
         let owned = id.clone();
         match self.blocking(move |store| store.delete_workspace(&owned)).await {
             Ok(Some(rev)) => self.notify(HubNotice::Removed { record: RecordKey::Workspace { id: id.clone() }, rev }),
             Ok(None) => {}
-            Err(e) => return error!(%id, "removing a failed workspace: {e}"),
+            Err(e) => {
+                return error!(
+                    name: "workspace.failed_unremoved",
+                    workspace_id = %id,
+                    error = %e,
+                    "Couldn't remove a failed workspace"
+                );
+            }
         }
         self.workspace_observations_gone(id).await;
     }
@@ -231,7 +248,14 @@ impl Hub {
     pub(crate) async fn announce_workspace(&self, id: &WorkspaceId) {
         match self.workspace(id).await {
             Ok(workspace) => self.notify(HubNotice::Workspace(workspace)),
-            Err(e) => error!(%id, "could not announce a change to a workspace: {e}"),
+            Err(e) => {
+                error!(
+                    name: "workspace.change_untold",
+                    workspace_id = %id,
+                    error = %e,
+                    "Couldn't announce a change to a workspace"
+                );
+            }
         }
     }
 

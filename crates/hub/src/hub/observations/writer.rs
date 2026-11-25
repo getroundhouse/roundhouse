@@ -33,7 +33,13 @@ impl Writer {
             }
         });
         let writing = thread
-            .inspect_err(|error| warn!("keeping observations in memory alone, with no thread to write them: {error}"))
+            .inspect_err(|error| {
+                warn!(
+                    name: "observation.writer_unstarted",
+                    %error,
+                    "Keeping observations in memory alone, with no thread to write them"
+                );
+            })
             .ok()
             .map(|thread| (queue, thread));
         Self { writing }
@@ -62,7 +68,10 @@ impl Writer {
     fn queue(&self, write: Queued) {
         let Some((queue, _)) = &self.writing else { return };
         if queue.send(write).is_err() {
-            warn!("keeping an observation in memory alone, since the thread that writes the cache file has ended");
+            warn!(
+                name: "observation.writer_ended",
+                "Keeping an observation in memory alone, since the thread that writes the cache's file has ended"
+            );
         }
     }
 }
@@ -73,7 +82,7 @@ impl Drop for Writer {
         // Ends the thread once it has made every write queued.
         drop(queue);
         if thread.join().is_err() {
-            warn!("the thread that writes the cache file's observations panicked");
+            warn!(name: "observation.writer_panicked", "The thread that writes the cache file's observations panicked");
         }
     }
 }

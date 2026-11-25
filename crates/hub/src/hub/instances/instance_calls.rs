@@ -19,10 +19,22 @@ impl Hub {
                 Err(e) => Err(e),
             };
             match destroyed {
-                Ok(()) => info!(instance_id = %instance.id, "destroyed an instance the last run left part way"),
+                Ok(()) => {
+                    info!(
+                        name: "instance.destroyed",
+                        instance_id = %instance.id,
+                        "Destroyed an instance the last run left part way"
+                    );
+                }
                 Err(e) => {
                     let provider = &instance.provider;
-                    warn!(instance_id = %instance.id, %provider, "an instance the last run left part way is still there: {e}");
+                    warn!(
+                        name: "instance.left",
+                        instance_id = %instance.id,
+                        %provider,
+                        error = %e,
+                        "An instance the last run left part way is still there"
+                    );
                 }
             }
         }

@@ -1,4 +1,5 @@
 use super::super::WorkerLink;
+use crate::error::JsonProblem;
 use crate::frames::FrameReader;
 use crate::hub::Hub;
 use crate::session::Item;
@@ -13,7 +14,10 @@ use std::sync::atomic::Ordering;
 use tracing::{debug, warn};
 
 fn unreadable_reply(error: &serde_json::Error) -> ApiError {
-    ApiError::new(ErrorCode::Worker, format!("a reply from the worker this hub can't read: {error}"))
+    ApiError::new(
+        ErrorCode::Worker,
+        format!("a reply from the worker this hub can't read: {}", JsonProblem::from(error)),
+    )
 }
 
 /// Answers what the worker asked on a task of its own, since answering can take a call to the worker, whose reply
@@ -54,7 +58,7 @@ pub(in super::super) async fn read_frames(
             Ok(Some(bytes)) => bytes,
             Ok(None) => break,
             Err(e) => {
-                warn!("reading from a worker failed: {}", error_chain(&e));
+                warn!(name: "worker.unread", error = error_chain(&e), "Couldn't read from a worker");
                 break;
             }
         };
@@ -68,7 +72,12 @@ pub(in super::super) async fn read_frames(
                 } else if let Some(id) = AskId::of_unreadable(bytes) {
                     refuse_unreadable(&hub, &link, id, &e);
                 } else {
-                    warn!("ignoring a worker frame that didn't parse: {e}");
+                    warn!(
+                        name: "worker.frame_unread",
+                        kind = ?e.classify(),
+                        column = e.column(),
+                        "Ignoring a worker's frame that didn't parse"
+                    );
                 }
                 continue;
             }
@@ -100,7 +109,7 @@ pub(in super::super) async fn read_frames(
             None => route(&hub, &link, parsed).await,
         }
     }
-    debug!(%instance_id, "worker connection ended");
+    debug!(name: "worker.connection_ended", %instance_id, "Worker connection ended");
     // Wakes each waiting call with an error.
     link.calls.end();
     // A worker the hub left running has gone on to the next hub, and nothing of it has gone.

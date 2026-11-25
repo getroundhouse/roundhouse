@@ -77,7 +77,12 @@ impl Hub {
                     hub.announce_sign_in(change);
                 }
                 Err(e) => {
-                    error!(sign_in = %id, "couldn't keep what GitHub gave a sign-in: {}", e.message);
+                    error!(
+                        name: "github.sign_in_unkept",
+                        sign_in = %id,
+                        error = e.message,
+                        "Couldn't keep what GitHub gave a sign-in"
+                    );
                     let message = format!("the hub couldn't keep what GitHub gave: {}", e.message);
                     hub.end_sign_in_alone(id, SignInEnd::Failed(message)).await;
                 }

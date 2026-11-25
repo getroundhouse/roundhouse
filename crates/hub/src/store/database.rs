@@ -1,5 +1,6 @@
 use super::columns::{At, ByColumn, Column, OneValue};
 use super::{error, schema};
+use crate::error::JsonProblem;
 use error::StoreError;
 use parking_lot::{Mutex, MutexGuard};
 use protocol::event::SessionEvent;
@@ -127,7 +128,11 @@ impl Store {
         // it needs to, so what was written still counts.
         let fullfsync = conn.pragma_update(None, "fullfsync", false);
         if let Err(e) = fullfsync.and(conn.pragma_update(None, "synchronous", "NORMAL")) {
-            warn!("couldn't have the database sync as it usually does after a write that had to last: {e}");
+            warn!(
+                name: "database.sync_not_put_back",
+                error = %e,
+                "Couldn't have the database sync as it usually does after a write that had to last"
+            );
         }
         Ok(written?)
     }
@@ -194,7 +199,8 @@ pub(super) fn required_json_at<T: DeserializeOwned>(row: &Row<'_>, column: impl 
 
 /// What `json`, from `column`, holds, so one it can't read is an error that names the column.
 pub(super) fn json_from<T: DeserializeOwned>(column: impl At, json: &str) -> rusqlite::Result<T> {
-    serde_json::from_str(json).map_err(|e| column.unreadable(rusqlite::types::Type::Text, Box::new(e)))
+    serde_json::from_str(json)
+        .map_err(|e| column.unreadable(rusqlite::types::Type::Text, Box::new(JsonProblem::from(e))))
 }
 
 /// What a column holds as JSON, which only a hub writes, or `None` when it holds nothing, or what this build can't

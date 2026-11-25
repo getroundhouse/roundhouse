@@ -14,10 +14,20 @@ impl Hub {
     /// same read. A failure to keep either is only logged, as what was kept of it stays as it was.
     pub(crate) async fn changes_read(&self, id: &WorkspaceId, summary: ChangeSummary, read_at_ms: i64) {
         if let Err(e) = self.observation_read::<WorkspaceLines>(id.clone(), summary.lines, read_at_ms).await {
-            warn!(%id, "keeping the lines the workspace adds and removes: {}", e.message);
+            warn!(
+                name: "changes.lines_unkept",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't keep the lines the workspace adds and removes"
+            );
         }
         if let Err(e) = self.observation_read::<WorkspaceChanges>(id.clone(), summary, read_at_ms).await {
-            warn!(%id, "keeping the files the workspace changes: {}", e.message);
+            warn!(
+                name: "changes.files_unkept",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't keep the files the workspace changes"
+            );
         }
         // Removed or archived while it was read, after that forgot what was kept, so what this kept goes too. One
         // removed or archived after this looks forgets it after this read kept it.
@@ -33,10 +43,20 @@ impl Hub {
     /// branches. What GitHub says of it stays, since Home draws an archived workspace's pull request.
     pub(crate) async fn changes_forgotten(&self, id: &WorkspaceId) {
         if let Err(e) = self.observation_gone::<WorkspaceLines>(id.clone()).await {
-            warn!(%id, "forgetting the lines a workspace added and removed: {}", e.message);
+            warn!(
+                name: "changes.lines_unforgotten",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't forget the lines a workspace added and removed"
+            );
         }
         if let Err(e) = self.observation_gone::<WorkspaceChanges>(id.clone()).await {
-            warn!(%id, "forgetting the files a workspace changed: {}", e.message);
+            warn!(
+                name: "changes.files_unforgotten",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't forget the files a workspace changed"
+            );
         }
     }
 }

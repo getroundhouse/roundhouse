@@ -113,7 +113,12 @@ impl LiveSession {
                 Ok(account) => break (account, crate::store::now_ms()),
                 Err(e) => e,
             };
-            debug!(session = %self.id, "could not learn which account the agent runs under: {e}");
+            debug!(
+                name: "session.account_unknown",
+                session_id = %self.id,
+                error = %e,
+                "Couldn't learn which account the agent runs under"
+            );
             let Some(wait) = retries.next() else {
                 self.stop_asking(run);
                 return;
@@ -155,7 +160,12 @@ impl LiveSession {
             let filed = match hub.blocking(move |store| store.file_run_login(&id, run)).await {
                 Ok(filed) => filed,
                 Err(e) => {
-                    error!(session = %self.id, "could not read which login the agent was launched under: {}", e.message);
+                    error!(
+                        name: "session.login_unread",
+                        session_id = %self.id,
+                        error = e.message,
+                        "Couldn't read which login the agent was launched under"
+                    );
                     self.stop_asking(run);
                     return Filing::Done;
                 }
@@ -163,7 +173,12 @@ impl LiveSession {
             if filed.session_changed
                 && let Err(e) = self.announce(hub).await
             {
-                error!(session = %self.id, "could not announce which account the agent runs under: {e}");
+                error!(
+                    name: "session.account_untold",
+                    session_id = %self.id,
+                    error = %e,
+                    "Couldn't announce which account the agent runs under"
+                );
             }
             let Some(account) = filed.account else { return Filing::AskTheWorker };
             let Some(waiting) = self.known(run, Some(account.clone())) else { return Filing::Done };
@@ -208,10 +223,22 @@ impl LiveSession {
                 if launched.session
                     && let Err(e) = self.announce(hub).await
                 {
-                    error!(session = %self.id, "could not announce which account the agent runs under: {e}");
+                    error!(
+                        name: "session.account_untold",
+                        session_id = %self.id,
+                        error = %e,
+                        "Couldn't announce which account the agent runs under"
+                    );
                 }
             }
-            Err(e) => error!(session = %self.id, "could not record which account the agent runs under: {e}"),
+            Err(e) => {
+                error!(
+                    name: "session.account_unrecorded",
+                    session_id = %self.id,
+                    error = %e,
+                    "Couldn't record which account the agent runs under"
+                );
+            }
         }
     }
 }

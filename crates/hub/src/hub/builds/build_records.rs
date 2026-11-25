@@ -28,7 +28,12 @@ impl Hub {
                 if !idle {
                     // `other_builds` in the daemon's e2e tests counts these, to know two looks have kept it.
                     let build = link.build();
-                    debug!(%workspace_id, build, "keeping a worker from another build, with something at work");
+                    debug!(
+                        name: "worker.other_build_kept",
+                        %workspace_id,
+                        build,
+                        "Keeping a worker from another build, with something at work"
+                    );
                 }
                 if idle && idle_before && hub.replace_if_idle(&workspace_id, &link).await {
                     break;
@@ -53,14 +58,24 @@ impl Hub {
             self.observation_read::<WorkspaceWorkerBuild>(id, build, now_ms()).await
         };
         if let Err(e) = kept.await {
-            warn!(%workspace_id, "keeping which build its worker is: {}", e.message);
+            warn!(
+                name: "worker.build_unkept",
+                %workspace_id,
+                error = e.message,
+                "Couldn't keep which build its worker is"
+            );
         }
     }
 
     /// Forgets which build the workspace's worker was, once it's gone, since the next is the hub's own.
     pub(crate) async fn worker_build_gone(&self, workspace_id: &WorkspaceId) {
         if let Err(e) = self.observation_gone::<WorkspaceWorkerBuild>(workspace_id.clone()).await {
-            warn!(%workspace_id, "forgetting which build its worker was: {}", e.message);
+            warn!(
+                name: "worker.build_unforgotten",
+                %workspace_id,
+                error = e.message,
+                "Couldn't forget which build its worker was"
+            );
         }
     }
 
@@ -76,7 +91,12 @@ impl Hub {
             Ok(workspace) => workspace,
             // Looked at again.
             Err(e) => {
-                warn!(%workspace_id, "replacing a worker from another build: {}", e.message);
+                warn!(
+                    name: "worker.other_build_unreplaced",
+                    %workspace_id,
+                    error = e.message,
+                    "Couldn't replace a worker from another build"
+                );
                 return false;
             }
         };
@@ -98,7 +118,12 @@ impl Hub {
         for session in self.sessions.lock().live.values().filter(|session| &session.workspace_id == workspace_id) {
             session.let_go_of_agent_on(link.id);
         }
-        info!(%workspace_id, build = link.build(), "stopping a worker from another build, with nothing at work");
+        info!(
+            name: "worker.other_build_stopped",
+            %workspace_id,
+            build = link.build(),
+            "Stopping a worker from another build, with nothing at work"
+        );
         self.stop_and_clear(&workspace, link, &mut cleared, "replacing a worker from another build").await;
         true
     }

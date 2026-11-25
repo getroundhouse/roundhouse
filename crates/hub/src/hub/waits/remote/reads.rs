@@ -29,7 +29,11 @@ impl Hub {
         let waits = match changed {
             Ok(waits) => waits,
             Err(e) => {
-                warn!("judging waits on what was read of their pull requests: {}", e.message);
+                warn!(
+                    name: "wait.unjudged",
+                    error = e.message,
+                    "Couldn't judge waits on what was read of their pull requests"
+                );
                 return Vec::new();
             }
         };
@@ -62,7 +66,7 @@ impl Hub {
             self.observation_worked_out::<WaitRead>(of, read, as_of_ms).await
         };
         if let Err(e) = kept {
-            warn!(wait = %wait.id, "keeping what a wait read: {}", e.message);
+            warn!(name: "wait.unkept", wait = %wait.id, error = e.message, "Couldn't keep what a wait read");
         }
     }
 
@@ -97,7 +101,13 @@ impl Hub {
         let _judging = self.waits_judged.lock().await;
         let open = match self.blocking(Store::open_wait_ids).await {
             Ok(open) => open,
-            Err(e) => return warn!("listing the open waits to settle what ended ones read: {}", e.message),
+            Err(e) => {
+                return warn!(
+                    name: "wait.open_unlisted",
+                    error = e.message,
+                    "Couldn't list the open waits to settle what ended ones read"
+                );
+            }
         };
         for of in self.observations.kept_of::<WaitRead>() {
             if open.contains(&of.wait) {
@@ -106,11 +116,16 @@ impl Hub {
             if let Some(read) = self.observations.value_of::<WaitRead>(&of) {
                 let id = of.wait.clone();
                 if let Err(e) = self.blocking(move |store| store.freeze_wait_read(&id, &read)).await {
-                    warn!(wait = %of.wait, "keeping what an ended wait last read: {}", e.message);
+                    warn!(
+                        name: "wait.ended_unkept",
+                        wait = %of.wait,
+                        error = e.message,
+                        "Couldn't keep what an ended wait last read"
+                    );
                 }
             }
             if let Err(e) = self.observation_gone::<WaitRead>(of).await {
-                warn!("forgetting what an ended wait read: {}", e.message);
+                warn!(name: "wait.ended_unforgotten", error = e.message, "Couldn't forget what an ended wait read");
             }
         }
     }

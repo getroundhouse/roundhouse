@@ -77,7 +77,12 @@ impl LiveSession {
     /// done.
     pub(crate) fn wake_agent(&self) {
         if let Err(e) = self.commands.try_send(Command::WakeAgent) {
-            warn!(session = %self.id, "couldn't ask for the agent to be started: {e}");
+            warn!(
+                name: "session.start_unasked",
+                session_id = %self.id,
+                error = %e,
+                "Couldn't ask for the agent to be started"
+            );
         }
     }
 
@@ -97,12 +102,22 @@ impl LiveSession {
         }
         if !waiting_on_nothing || self.can_be_asked(&hub).await.is_err() {
             if let Err(e) = self.unlist_waits().await {
-                warn!(session = %self.id, "couldn't take a wait that's over off the chat's list: {e}");
+                warn!(
+                    name: "session.wait_not_cleared",
+                    session_id = %self.id,
+                    error = %e,
+                    "Couldn't take a wait that's over off the chat's list"
+                );
             }
             return;
         }
         if let Err(e) = self.ensure_agent().await {
-            warn!(session = %self.id, "couldn't start the agent to hear how its wait ended: {e}");
+            warn!(
+                name: "session.start_failed",
+                session_id = %self.id,
+                error = %e,
+                "Couldn't start the agent to hear how its wait ended"
+            );
             self.record_start_failed(&e).await;
         }
     }
@@ -243,7 +258,12 @@ impl LiveSession {
         if recorded.session_changed
             && let Err(e) = self.announce(hub).await
         {
-            error!(session = %self.id, "could not announce which login the chat is on: {e}");
+            error!(
+                name: "session.login_untold",
+                session_id = %self.id,
+                error = %e,
+                "Couldn't announce which login the chat is on"
+            );
         }
         Ok(())
     }
@@ -262,7 +282,12 @@ impl LiveSession {
     async fn forget_other_run_logins(&self, hub: &Hub, run: RunId) {
         let id = self.id.clone();
         if let Err(e) = hub.blocking(move |store| store.forget_other_run_logins(&id, run)).await {
-            warn!(session = %self.id, "couldn't forget the logins earlier launches were given: {}", e.message);
+            warn!(
+                name: "session.logins_unforgotten",
+                session_id = %self.id,
+                error = e.message,
+                "Couldn't forget the logins earlier launches were given"
+            );
         }
     }
 
@@ -273,11 +298,21 @@ impl LiveSession {
         if unmet.is_empty() {
             return Ok(());
         }
-        warn!(session = %self.id, ?unmet, "refusing a run that claims what needs claims it doesn't make");
+        warn!(
+            name: "session.run_refused",
+            session_id = %self.id,
+            ?unmet,
+            "Refusing a run that claims what needs claims it doesn't make"
+        );
         // Only said, since the launch fails either way, and the run isn't made current, so nothing it says is taken as
         // the session's.
         if let Err(e) = link.call(AgentStop { session_id: self.id.clone() }).await {
-            warn!(session = %self.id, "couldn't stop a run whose claims it can't be held to: {}", e.message);
+            warn!(
+                name: "session.run_not_stopped",
+                session_id = %self.id,
+                error = e.message,
+                "Couldn't stop a run whose claims it can't be held to"
+            );
         }
         let message = "the agent said it can do things that need others it didn't say it can do, so it was stopped";
         Err(ApiError::new(ErrorCode::Worker, message))
@@ -299,12 +334,22 @@ impl LiveSession {
             // The record held them already, as when a hub carried on with the run.
             Ok(false) => return,
             Err(e) => {
-                warn!(session = %self.id, "couldn't record what a run found running claims: {}", e.message);
+                warn!(
+                    name: "session.claims_unrecorded",
+                    session_id = %self.id,
+                    error = e.message,
+                    "Couldn't record what a run found running claims"
+                );
                 return;
             }
         }
         if let Err(e) = self.announce(hub).await {
-            warn!(session = %self.id, "couldn't say what a run found running claims: {}", e.message);
+            warn!(
+                name: "session.claims_unsaid",
+                session_id = %self.id,
+                error = e.message,
+                "Couldn't say what a run found running claims"
+            );
         }
     }
 
@@ -315,7 +360,12 @@ impl LiveSession {
         match hub.blocking(move |store| store.last_agent_build(&id)).await {
             Ok(last) => last.filter(|last| last != build),
             Err(e) => {
-                warn!(session = %self.id, "couldn't read which build the agent last ran on: {}", e.message);
+                warn!(
+                    name: "session.build_unread",
+                    session_id = %self.id,
+                    error = e.message,
+                    "Couldn't read which build the agent last ran on"
+                );
                 None
             }
         }

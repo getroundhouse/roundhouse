@@ -8,9 +8,8 @@ use std::sync::Arc;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{BranchName, Workspace, WorkspaceId};
 use protocol::worker::{ArchiveScript, CancelSetup, GitStatus, RemoveWorkspace, RestoreWorkspace};
-use protocol::worker::{WorktreeThere, WorktreeThereReply};
 use tokio::sync::oneshot;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 
 use super::ephemeral::uses_ephemeral_clone;
 
@@ -112,11 +111,7 @@ impl Hub {
         self.call_off_waits_of(id).await?;
         let env = workspace_env_for(workspace, &placement);
         let script = ArchiveScript { source: placement.source.clone(), path: path.clone(), env };
-        match link.call(script).await {
-            Ok(()) => {}
-            Err(e) if !force => return Err(e),
-            Err(e) => warn!(workspace = workspace.name, "the archive script failed: {}", e.message),
-        }
+        run_archive_script(&link, id, script, force).await?;
 
         self.stop_workspace_agents(id).await?;
         // Again, now that none can start one, since an agent still running as the script ran could have, and marking the
@@ -159,7 +154,12 @@ impl Hub {
             if !live.agent_running() {
                 // Its waits were called off as archiving started. Archiving goes on whether or not they come off its list.
                 if let Err(e) = live.unlist_waits().await {
-                    warn!(session = %session.id, "couldn't take an archived chat's waits off its list: {e}");
+                    warn!(
+                        name: "archive.waits_not_cleared",
+                        session_id = %session.id,
+                        error = %e,
+                        "Couldn't take an archived chat's waits off its list"
+                    );
                 }
                 continue;
             }
@@ -246,9 +246,15 @@ impl Hub {
 
     /// Puts the workspace back as it was before it was being archived or restored, which was refused or failed for
     /// `why`, as [`Hub::end_move_put_back`] does. Returns `why`.
-    async fn put_back(self: &Arc<Self>, id: &WorkspaceId, moving: Move, why: ApiError) -> ApiError {
+    pub(super) async fn put_back(self: &Arc<Self>, id: &WorkspaceId, moving: Move, why: ApiError) -> ApiError {
         if let Err(e) = self.end_move_put_back(id, moving).await {
-            error!(%id, ?moving, "putting back a workspace: {}", e.message);
+            error!(
+                name: "archive.not_put_back",
+                workspace_id = %id,
+                ?moving,
+                error = e.message,
+                "Couldn't put back a workspace"
+            );
         }
         why
     }
@@ -275,80 +281,6 @@ impl Hub {
         self.changes_watching(id).await;
         announced
     }
-
-    /// Settles each workspace an earlier hub left part way through being archived or restored, once this one is
-    /// serving, so a worker that's slow to answer keeps no client waiting. Until then its record says it's being
-    /// archived or restored, as it did, and nothing else can be asked of it. Once every move has settled, tidies any
-    /// stale archive bundles.
-    pub(crate) async fn settle_moves(self: Arc<Self>, left: Vec<(WorkspaceId, Move)>) {
-        for (id, moving) in left {
-            match self.settle_move(&id, moving).await {
-                Ok(workspace) => {
-                    let status = workspace.status;
-                    info!(workspace = workspace.name, ?status, "settled a workspace the last run was moving");
-                }
-                Err(e) => {
-                    warn!(%id, ?moving, "couldn't tell how far the last run got, so putting it back: {}", e.message);
-                    self.put_back(&id, moving, e).await;
-                }
-            }
-            self.worker_once_settled(&id, moving).await;
-        }
-        self.tidy_bundles().await;
-    }
-
-    /// What becomes of the worker the workspace was settled with, which the hub kept as it started, or started to
-    /// ask: an archived workspace has none, and a ready one's is as any the hub carries on with, its branches watched
-    /// from now, and replaced once it's idle if it's another build. A restore ends ready only by being recorded as done,
-    /// which has the worker watch the branches as it's recorded, as one that wasn't cut short does, so it isn't asked
-    /// again here.
-    async fn worker_once_settled(self: &Arc<Self>, id: &WorkspaceId, moving: Move) {
-        let Some(link) = self.existing_worker(id) else { return };
-        let workspace = match self.workspace(id).await {
-            Ok(workspace) => workspace,
-            Err(e) => return warn!(%id, "reading a workspace that was settled: {}", e.message),
-        };
-        match ReadyWorkspace::new(workspace.clone()) {
-            Ok(ready) => {
-                match moving {
-                    Move::Archive => self.watch_branches(&ready, &link).await,
-                    Move::Restore => {}
-                }
-                // One with a session carried on is being replaced already.
-                let carried_on = self.sessions.lock().live.values().any(|session| session.workspace_id == *id);
-                if !carried_on && link.is_another_build(self.build) {
-                    self.replace_once_idle(id.clone(), link);
-                }
-            }
-            Err(_) => match self.provider(&workspace.provider) {
-                Ok(provider) => self.close_worker(&workspace, &link, provider.as_ref()).await,
-                Err(e) => warn!(%id, "stopping the worker of a workspace settled as archived: {}", e.message),
-            },
-        }
-    }
-
-    /// Records what the workspace's worker finds: a worktree that's there is a ready workspace's, and one that isn't
-    /// is an archived one's, whichever the earlier hub was doing. Fails if the worker can't say, such as one that's
-    /// gone.
-    async fn settle_move(self: &Arc<Self>, id: &WorkspaceId, moving: Move) -> Result<Workspace, ApiError> {
-        let workspace = self.workspace(id).await?;
-        let path = workspace.path.clone().ok_or_else(|| internal("a workspace being moved has no path"))?;
-        let placement = self.workspace_placement(id).await?;
-        if uses_ephemeral_clone(&placement) {
-            return self.settle_ephemeral_move(&workspace, path, placement, moving).await;
-        }
-        let link = self.ensure_worker(id).await?;
-        let WorktreeThereReply { there } = link.call(WorktreeThere { path }).await?;
-        match (moving, there) {
-            // It got no further than the worktree, so the workspace is as it was before.
-            (Move::Archive, true) | (Move::Restore, false) => self.end_move_put_back(id, moving).await,
-            (Move::Archive, false) => {
-                // The worktree can't say which branch it was on any more. What its worker last read of it can.
-                self.record_archived(id, self.checked_out_branch(id)).await
-            }
-            (Move::Restore, true) => self.record_restored(id, &link).await,
-        }
-    }
 }
 
 impl Hub {
@@ -357,5 +289,27 @@ impl Hub {
     /// emptied, or HEAD was detached, which leaves the branch its record has.
     pub(super) fn checked_out_branch(&self, id: &WorkspaceId) -> Option<BranchName> {
         self.branches_of(id).and_then(|branches| branches.checked_out().map(|branch| branch.name.clone()))
+    }
+}
+
+/// Runs a workspace's archive script, whose failing stops the archive unless it's forced.
+async fn run_archive_script(
+    link: &WorkerLink,
+    id: &WorkspaceId,
+    script: ArchiveScript,
+    force: bool,
+) -> Result<(), ApiError> {
+    match link.call(script).await {
+        Ok(()) => Ok(()),
+        Err(e) if !force => Err(e),
+        Err(e) => {
+            warn!(
+                name: "archive.script_failed",
+                workspace_id = %id,
+                error = e.message,
+                "The archive script failed"
+            );
+            Ok(())
+        }
     }
 }

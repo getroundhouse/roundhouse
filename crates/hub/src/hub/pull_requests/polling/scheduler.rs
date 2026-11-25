@@ -2,14 +2,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::Workspace;
+use protocol::model::{PullRequestFound, Workspace};
 use tokio::time::Instant;
 use tracing::debug;
 
 use crate::hub::Followed;
 use crate::hub::github_observed::{Heard, ReadWent};
 use crate::hub::pull_requests::own::WorkspaceRead;
-use crate::hub::pull_requests::reading::{Taking, couldnt_read};
+use crate::hub::pull_requests::reading::{ReadsHeld, Taking, couldnt_read};
 use crate::hub::pull_requests::remote::{ReadsAs, waited};
 use crate::hub::pull_requests::{Asked, Hub, schedule};
 use crate::jobs::{self, Ended, JobKind, Limits};
@@ -140,7 +140,7 @@ impl Hub {
             }
         };
         if let Err(not) = self.own_reads.start(JobKind::ReadOwnPullRequests, reads_as, limits, work, after) {
-            debug!(?not, "a read of workspaces' pull requests didn't start");
+            debug!(name: "pull_requests.read_unstarted", ?not, "A read of workspaces' pull requests didn't start");
         }
     }
 
@@ -149,22 +149,7 @@ impl Hub {
     /// needs GitHub, then each workspace's turn, reading what its record says then.
     async fn read_own_in_turn(self: &Arc<Self>, reads_as: &ReadsAs, workspaces: Vec<Workspace>, listed_at: Instant) {
         let token = self.asking(workspaces.clone()).await.first_asked().map(|_| self.token_of(reads_as));
-        let mut reading = Vec::new();
-        for listed in workspaces {
-            let gate = self.pull_requests.gates.lock().entry(listed.id.clone()).or_default().clone();
-            let Ok(held) = gate.try_lock_owned() else { continue };
-            let schedule = self.pull_requests.schedules.lock().get(&listed.id).copied();
-            if schedule.is_some_and(|schedule| schedule.read_at > listed_at) {
-                continue;
-            }
-            match self.workspace(&listed.id).await {
-                // What's known before the read, which keeps what it finds where that's known.
-                Ok(workspace) => reading.push((self.known_of(&workspace), workspace, held)),
-                Err(e) => {
-                    debug!(id = %listed.id, "reading a workspace's record to read its pull request: {}", e.message);
-                }
-            }
-        }
+        let reading = self.turns_of(workspaces, listed_at).await;
         let read_at = Instant::now();
         let last: HashMap<_, _> = {
             let mut schedules = self.pull_requests.schedules.lock();
@@ -184,7 +169,12 @@ impl Hub {
                 read.found
             }
             Some(Err(e)) => {
-                debug!(%reads_as, "no token to read workspaces' pull requests with: {}", e.message);
+                debug!(
+                    name: "pull_requests.no_token",
+                    %reads_as,
+                    error = e.message,
+                    "No token to read workspaces' pull requests with"
+                );
                 asking.failed(&e)
             }
             // One pushed since it was listed waits for the next read, rather than this one fetching a token while it
@@ -199,11 +189,46 @@ impl Hub {
                 let last = last.get(&workspace.id).copied().flatten();
                 let taking = Taking { workspace, known, last, read_at, asked: Asked::InTurn, _held: held };
                 if let Err(e) = hub.clone().take_answer(taking, answer).await {
-                    debug!("recording a workspace's pull request read in turn: {}", e.message);
+                    debug!(
+                        name: "pull_requests.unrecorded",
+                        error = e.message,
+                        "Couldn't record a workspace's pull request read in turn"
+                    );
                 }
             }
         })
         .await;
+    }
+
+    /// Takes each workspace's turn to be read, but for one being read, or read since `listed_at`, with what's known of
+    /// it and what its record says now.
+    async fn turns_of(
+        &self,
+        workspaces: Vec<Workspace>,
+        listed_at: Instant,
+    ) -> Vec<(Option<PullRequestFound>, Workspace, ReadsHeld)> {
+        let mut reading = Vec::new();
+        for listed in workspaces {
+            let gate = self.pull_requests.gates.lock().entry(listed.id.clone()).or_default().clone();
+            let Ok(held) = gate.try_lock_owned() else { continue };
+            let schedule = self.pull_requests.schedules.lock().get(&listed.id).copied();
+            if schedule.is_some_and(|schedule| schedule.read_at > listed_at) {
+                continue;
+            }
+            match self.workspace(&listed.id).await {
+                // What's known before the read, which keeps what it finds where that's known.
+                Ok(workspace) => reading.push((self.known_of(&workspace), workspace, held)),
+                Err(e) => {
+                    debug!(
+                        name: "pull_requests.workspace_unread",
+                        workspace_id = %listed.id,
+                        error = e.message,
+                        "Couldn't read a workspace's record to read its pull request"
+                    );
+                }
+            }
+        }
+        reading
     }
 }
 

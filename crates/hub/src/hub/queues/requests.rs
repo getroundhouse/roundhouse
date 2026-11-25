@@ -57,11 +57,16 @@ impl Hub {
     pub(crate) async fn start_queues(self: &Arc<Self>) {
         let ids = match self.blocking(Store::sessions_with_queues).await {
             Ok(ids) => ids,
-            Err(e) => return tracing::error!("couldn't read the queues: {e}"),
+            Err(e) => return tracing::error!(name: "queue.unread", error = %e, "Couldn't read the queues"),
         };
         for id in ids {
             if let Err(e) = self.live_session(&id).await {
-                tracing::error!(session = %id, "couldn't start a session with a queue: {e}");
+                tracing::error!(
+                    name: "queue.session_unstarted",
+                    session_id = %id,
+                    error = %e,
+                    "Couldn't start a session with a queue"
+                );
             }
         }
     }

@@ -64,19 +64,30 @@ impl CacheFile {
             Err(error) => error,
         };
         match error.failure() {
-            Failure::Broken => warn!("making {} again, since it couldn't be read: {error}", path.display()),
+            Failure::Broken => {
+                warn!(
+                    name: "cache.file_remade",
+                    path = %path.display(),
+                    %error,
+                    "Making the cache's file again, since it couldn't be read"
+                );
+            }
             Failure::Busy => {
                 warn!(
-                    "leaving {} unread and unwritten until the hub starts again, since another holds it: {error}",
-                    path.display()
+                    name: "cache.file_held",
+                    path = %path.display(),
+                    %error,
+                    "Leaving the cache's file unread and unwritten until the hub starts again, since another holds it"
                 );
                 return Self::in_memory_alone();
             }
             Failure::Unusable | Failure::Other => {
                 warn!(
-                    "leaving {} as it is, unread and unwritten until the hub starts again, since it couldn't be \
-                     opened: {error}",
-                    path.display()
+                    name: "cache.file_unopened",
+                    path = %path.display(),
+                    %error,
+                    "Leaving the cache's file as it is, unread and unwritten until the hub starts again, since it \
+                     couldn't be opened"
                 );
                 return Self::in_memory_alone();
             }
@@ -85,15 +96,17 @@ impl CacheFile {
             if let Err(error) = std::fs::remove_file(&path)
                 && error.kind() != std::io::ErrorKind::NotFound
             {
-                warn!("removing {}: {error}", path.display());
+                warn!(name: "cache.file_unremoved", path = %path.display(), %error, "Couldn't remove a cache's file");
             }
         }
         match opened(path, parts, busy_timeout) {
             Ok(opened) => Self::of(opened),
             Err(error) => {
                 warn!(
-                    "keeping in memory alone what {} would keep, since it can't be made again: {error}",
-                    path.display()
+                    name: "cache.file_in_memory",
+                    path = %path.display(),
+                    %error,
+                    "Keeping in memory alone what a cache's file would keep, since it can't be made again"
                 );
                 Self::in_memory_alone()
             }
@@ -147,17 +160,26 @@ fn opened(path: &Path, parts: &[&Part], busy_timeout: Duration) -> Result<(Conne
         match Failure::of(&error) {
             // What a part can't read or write, the others can't either.
             Failure::Broken | Failure::Unusable => return Err(error.into()),
-            Failure::Busy => warn!(
-                "leaving {} in {} unread and unwritten until the hub starts again, since another holds the file: \
-                 {error}",
-                part.name,
-                path.display()
-            ),
-            Failure::Other => warn!(
-                "leaving {} in {} unread and unwritten, since its tables can't be made even once emptied: {error}",
-                part.name,
-                path.display()
-            ),
+            Failure::Busy => {
+                warn!(
+                    name: "cache.part_held",
+                    part = part.name,
+                    path = %path.display(),
+                    %error,
+                    "Leaving a part of the cache's file unread and unwritten until the hub starts again, since \
+                     another holds the file"
+                );
+            }
+            Failure::Other => {
+                warn!(
+                    name: "cache.part_unmade",
+                    part = part.name,
+                    path = %path.display(),
+                    %error,
+                    "Leaving a part of the cache's file unread and unwritten, since its tables can't be made even \
+                     once emptied"
+                );
+            }
         }
     }
     Ok((conn, prepared))

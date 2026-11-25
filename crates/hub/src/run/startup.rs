@@ -69,7 +69,11 @@ pub(super) fn recover(store: &Store) -> Result<LeftHalfDone, StoreError> {
     store.end_waiting_github_sign_ins()?;
     let moves = store.moves_left()?;
     for workspace in store.take_unfinished_workspaces()? {
-        warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");
+        warn!(
+            name: "workspace.half_made_discarded",
+            workspace_id = %workspace.id,
+            "Discarding a workspace left half-made by the last run"
+        );
     }
     Ok(LeftHalfDone { instances: store.take_unfinished_instances()?, moves })
 }
@@ -181,7 +185,7 @@ pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
     // The lock is held, so nothing else is serving here.
     let listener =
         Listener::bind(&paths.socket).map_err(|e| HubError::io(format!("binding {}", paths.socket.display()), e))?;
-    info!(socket = %paths.socket.display(), pid = std::process::id(), "hub listening");
+    info!(name: "hub.listening", socket = %paths.socket.display(), pid = std::process::id(), "Hub listening");
     tokio::spawn(hub.clone().settle_providers(unfinished.instances));
     tokio::spawn(hub.clone().settle_moves(unfinished.moves));
 
@@ -206,7 +210,7 @@ pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
         awake.abort();
     }
     let_go(&hub, lock).await;
-    info!("hub stopped");
+    info!(name: "hub.stopped", "Hub stopped");
     Ok(ended)
 }
 
@@ -260,7 +264,13 @@ fn watch_while_serving(hub: &Arc<Hub>, serving: &mut JoinSet<()>) {
 fn read_update_feed(hub: &Hub, update_feed: Option<UpdateFeed>, build: Build) {
     match update_feed {
         Some(feed) if update_feed::is_release(build.version()) => hub.updates.read_from(feed, build.version()),
-        Some(_) => info!(build = build.version(), "not reading the update feed, since this build isn't a release"),
+        Some(_) => {
+            info!(
+                name: "hub.updates_off",
+                build = build.version(),
+                "Not reading the update feed, since this build isn't a release"
+            );
+        }
         None => {}
     }
 }
@@ -271,19 +281,19 @@ fn read_update_feed(hub: &Hub, update_feed: Option<UpdateFeed>, build: Build) {
 async fn asked_to_go(hub: &Hub, terminate: &mut Terminate, stops_with: Option<&TestProcess>) -> bool {
     tokio::select! {
         () = hub.shutdown.notified() => {
-            info!("shutdown requested");
+            info!(name: "hub.shutdown_requested", "Shutdown requested");
             false
         }
         _ = tokio::signal::ctrl_c() => {
-            info!("interrupted");
+            info!(name: "hub.interrupted", "Interrupted");
             true
         }
         () = terminate.asked() => {
-            info!("terminated");
+            info!(name: "hub.terminated", "Terminated");
             true
         }
         () = TestProcess::until_gone(stops_with) => {
-            info!("the test this hub is for has gone");
+            info!(name: "hub.test_gone", "The test this hub is for has gone");
             true
         }
     }

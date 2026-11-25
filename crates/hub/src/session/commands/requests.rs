@@ -221,7 +221,12 @@ impl LiveSession {
         if self.is_closed() {
             return;
         }
-        warn!(session = %self.id, "could not deliver what was asked of the agent: {e}");
+        warn!(
+            name: "session.request_undelivered",
+            session_id = %self.id,
+            error = %e,
+            "Couldn't deliver what was asked of the agent"
+        );
         if self.agent_running() {
             self.record_or_log(
                 Origin::Hub,

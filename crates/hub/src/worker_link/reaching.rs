@@ -60,7 +60,12 @@ pub(super) async fn reach(
         && opening == Opening::Started
         && let Err(e) = provider.kill_worker(instance_id).await
     {
-        warn!(%instance_id, "ending a worker whose stream couldn't be opened: {}", error_chain(&e));
+        warn!(
+            name: "worker.unopened_unended",
+            %instance_id,
+            error = error_chain(&e),
+            "Couldn't end a worker whose stream couldn't be opened"
+        );
     }
     spawned
 }

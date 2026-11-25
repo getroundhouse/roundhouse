@@ -8,7 +8,7 @@ use protocol::model::{GithubRepositoryName, GithubUsername, Reach, RepoId};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::{Instant, MissedTickBehavior};
-use tracing::{error, warn};
+use tracing::warn;
 
 use super::super::Hub;
 use crate::github_logins::DefaultCredential;
@@ -112,7 +112,13 @@ impl Checks {
                     Some(checked) = self.under_way.join_next() => match checked {
                         Ok(checked) => self.keep(checked).await,
                         Err(e) if e.is_cancelled() => {}
-                        Err(e) => error!("checking whether the default can push to a repository failed: {e}"),
+                        Err(e) => {
+                            warn!(
+                                name: "github.reach_unchecked",
+                                error = %e,
+                                "Couldn't check whether the default can push to a repository"
+                            );
+                        }
                     },
                 }
             }
@@ -131,7 +137,11 @@ impl Checks {
         let (repos, to_read) = match self.hub.blocking(read).await {
             Ok(recorded) => recorded,
             Err(e) => {
-                warn!("couldn't read which repositories to check the default can push to: {}", e.message);
+                warn!(
+                    name: "github.reach_repositories_unread",
+                    error = e.message,
+                    "Couldn't read which repositories to check the default can push to"
+                );
                 return None;
             }
         };
@@ -162,7 +172,13 @@ impl Checks {
     async fn read_addresses_left(&self) {
         let to_read = match self.hub.blocking(Store::repos_to_read).await {
             Ok(to_read) => to_read,
-            Err(e) => return warn!("couldn't read which repositories' addresses are to be read: {}", e.message),
+            Err(e) => {
+                return warn!(
+                    name: "github.reach_addresses_unread",
+                    error = e.message,
+                    "Couldn't read which repositories' addresses are to be read"
+                );
+            }
         };
         if to_read.iter().any(|repo| !self.pushes_to.contains_key(&repo.id)) {
             self.hub.read_repo_urls_here().await;
@@ -232,7 +248,11 @@ impl Checks {
             None => self.hub.observation_worked_out::<RepositoryReach>(repo, reach, now_ms()).await,
         };
         if let Err(e) = kept {
-            warn!("couldn't keep whether the default can push to a repository: {}", e.message);
+            warn!(
+                name: "github.reach_unkept",
+                error = e.message,
+                "Couldn't keep whether the default can push to a repository"
+            );
         }
     }
 }

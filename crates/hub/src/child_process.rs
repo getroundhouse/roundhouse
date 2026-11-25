@@ -66,7 +66,7 @@ pub(crate) fn spawn(
     let (Some(writer), Some(reader)) = (child.stdin.take(), child.stdout.take()) else {
         return Err(io::Error::other(format!("{program} started without its pipes")));
     };
-    info!(pid = child.id(), program, "started a child of the hub");
+    info!(name: "child.started", pid = child.id(), program, "Started a child of the hub");
     let kill = Arc::new(Notify::new());
     let (exited_tx, exited) = watch::channel(false);
     tokio::spawn(watch_child(child, kill.clone(), exited_tx));
@@ -101,7 +101,11 @@ impl ChildProcess {
     pub(crate) async fn end(&self, grace: Duration) {
         let mut exited = self.exited.clone();
         if tokio::time::timeout(grace, exited.wait_for(|done| *done)).await.is_err() {
-            warn!(program = self.program, "it didn't stop in time, so it's being killed");
+            warn!(
+                name: "child.not_stopped",
+                program = self.program,
+                "A child of the hub didn't stop in time, so it's being killed"
+            );
             self.kill();
             let _ = exited.wait_for(|done| *done).await;
         }

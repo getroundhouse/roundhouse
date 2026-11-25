@@ -26,10 +26,32 @@ impl HubError {
     }
 }
 
+/// What's wrong with JSON that can't be read or written, without `serde_json`'s own words, which quote what the JSON
+/// holds, such as a prompt. The log takes the error it's in, and no log holds what a person or an agent wrote.
+#[derive(Debug, thiserror::Error)]
+#[error("{:?} error at line {line}, column {column}", .category)]
+pub struct JsonProblem {
+    category: serde_json::error::Category,
+    line: usize,
+    column: usize,
+}
+
+impl From<serde_json::Error> for JsonProblem {
+    fn from(error: serde_json::Error) -> Self {
+        Self::from(&error)
+    }
+}
+
+impl From<&serde_json::Error> for JsonProblem {
+    fn from(error: &serde_json::Error) -> Self {
+        Self { category: error.classify(), line: error.line(), column: error.column() }
+    }
+}
+
 /// Something that shouldn't happen. The client only gets text, so it's logged here.
 pub(crate) fn internal(message: impl Into<String>) -> ApiError {
     let message = message.into();
-    error!("{message}");
+    error!(name: "hub.internal_error", error = message, "Something happened that shouldn't");
     ApiError::new(ErrorCode::Internal, message)
 }
 

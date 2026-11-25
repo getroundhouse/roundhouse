@@ -119,7 +119,12 @@ impl Hub {
             Err(e) => {
                 drop(changing);
                 if let Err(stop) = end_shell(link, id).await {
-                    warn!(terminal = %id, "ending a shell given no record: {}", stop.message);
+                    warn!(
+                        name: "terminal.unended",
+                        terminal = %id,
+                        error = stop.message,
+                        "Couldn't end a shell given no record"
+                    );
                 }
                 return Err(e);
             }

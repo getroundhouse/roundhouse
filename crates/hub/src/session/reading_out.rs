@@ -124,7 +124,12 @@ impl LiveSession {
             && let Err(e) =
                 self.keep(&hub, through.message, Ending::Stopped { through: through.through }, SettledBy::Hub).await
         {
-            error!(session = %self.id, "could not settle the reply being read out as its connection closed: {e}");
+            error!(
+                name: "session.reading_out_unsettled",
+                session_id = %self.id,
+                error = %e,
+                "Couldn't settle the reply being read out as its connection closed"
+            );
         }
     }
 
@@ -134,7 +139,12 @@ impl LiveSession {
     pub(super) async fn settle_hearing(&self, hub: &Hub) {
         let _settling = self.settling.lock().await;
         if let Err(e) = self.settle_each(hub).await {
-            error!(session = %self.id, "could not settle the replies the conversation hadn't read out: {e}");
+            error!(
+                name: "session.reading_out_unsettled",
+                session_id = %self.id,
+                error = %e,
+                "Couldn't settle the replies the conversation hadn't read out"
+            );
         }
     }
 

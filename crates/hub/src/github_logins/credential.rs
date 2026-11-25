@@ -131,7 +131,13 @@ impl GithubLogins {
                 self.recorded.send_replace(Some(settings));
             }
             Ok(None) => {}
-            Err(e) => error!("couldn't record what workers are sent for github.com on the hub's settings: {e}"),
+            Err(e) => {
+                error!(
+                    name: "github.sent_unrecorded",
+                    error = %e,
+                    "Couldn't record what workers are sent for github.com on the hub's settings"
+                );
+            }
         }
     }
 

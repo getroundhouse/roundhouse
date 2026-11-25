@@ -29,7 +29,15 @@ pub(super) fn with_checksums(entries: Vec<WorkerEntry>) -> Vec<WorkerBinary> {
             Ok(sha256) => {
                 builds.push(WorkerBinary { target, path: path.to_string_lossy().into_owned(), sha256 });
             }
-            Err(e) => error!(%target, path = %path.display(), "leaving out a worker build that can't be read: {e}"),
+            Err(e) => {
+                error!(
+                    name: "worker.build_unreadable",
+                    %target,
+                    path = %path.display(),
+                    error = %e,
+                    "Leaving out a worker build that can't be read"
+                );
+            }
         }
     }
     builds

@@ -43,7 +43,12 @@ impl Hub {
         // A read cut short leaves what's kept as it was, as one that fails does.
         let after = |_| std::future::ready(());
         if let Err(not) = self.line_reads.start(JobKind::ReadWorkspaceChanges, id.clone(), READ, work, after) {
-            debug!(%id, ?not, "a read of the workspace's changes didn't start");
+            debug!(
+                name: "changes.read_unstarted",
+                workspace_id = %id,
+                ?not,
+                "A read of the workspace's changes didn't start"
+            );
         }
     }
 
@@ -60,9 +65,21 @@ impl Hub {
             Ok(summary) => summary,
             // A worker from before the request, which the hub replaces once nothing in its workspace is at work.
             Err(e) if e.code == ErrorCode::Unsupported => {
-                return debug!(%id, "the worker can't sum up its changes: {}", e.message);
+                return debug!(
+                    name: "changes.unsupported",
+                    workspace_id = %id,
+                    error = e.message,
+                    "The worker can't sum up its changes"
+                );
             }
-            Err(e) => return warn!(%id, "reading the lines the workspace adds and removes: {}", e.message),
+            Err(e) => {
+                return warn!(
+                    name: "changes.lines_unread",
+                    workspace_id = %id,
+                    error = e.message,
+                    "Couldn't read the lines the workspace adds and removes"
+                );
+            }
         };
         let (hub, id) = (self.clone(), id.clone());
         uncut(async move { hub.changes_read(&id, summary, read_at_ms).await }).await;

@@ -31,7 +31,7 @@ impl Hub {
         else {
             return Ok(());
         };
-        info!(from = source.running, to = %version, "updating the hub, as a client asked");
+        info!(name: "update.started", from = source.running, to = %version, "Updating the hub, as a client asked");
         tokio::spawn(Arc::clone(self).update(source, version, archive));
         Ok(())
     }

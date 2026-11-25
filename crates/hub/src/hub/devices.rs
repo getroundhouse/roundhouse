@@ -30,10 +30,20 @@ impl Hub {
             Ok(false) => {}
             Ok(true) => {
                 if let Err(e) = self.remote.listen(self).await {
-                    warn!("not listening for paired devices: {e}");
+                    warn!(
+                        name: "device.not_listening",
+                        error = %e,
+                        "Not listening for paired devices, since the port couldn't be opened"
+                    );
                 }
             }
-            Err(e) => warn!("not listening for paired devices, because they couldn't be read: {e}"),
+            Err(e) => {
+                warn!(
+                    name: "device.not_listening",
+                    error = %e,
+                    "Not listening for paired devices, because they couldn't be read"
+                );
+            }
         }
     }
 
@@ -94,7 +104,7 @@ impl Hub {
         let changing = self.remote.changing.lock().await;
         let removing = id.clone();
         if self.blocking(move |store| store.remove_device(&removing)).await? {
-            info!(device = %id, "revoked a device");
+            info!(name: "device.revoked", device = %id, "Revoked a device");
         }
         self.remote.close_all(&id);
         self.stop_listening_if_unneeded(&changing).await
@@ -130,7 +140,7 @@ impl Hub {
         };
         let (saving, hash) = (device.clone(), TokenHash::of(&token));
         self.blocking(move |store| store.add_device(&saving, &hash)).await?;
-        info!(device = %device.id, name = device.name, "paired a device");
+        info!(name: "device.paired", device = %device.id, "Paired a device");
         let link = self.remote.connected(&device, revoke);
         self.remote.codes.lock().paired(code, device);
         self.remote.paired.notify_waiters();
@@ -158,7 +168,12 @@ impl Hub {
         self.remote.disconnected(link);
         let (id, now) = (link.device_id.clone(), now_ms());
         if let Err(e) = self.blocking(move |store| store.device_seen(&id, now)).await {
-            warn!(device = %link.device_id, "noting when a device was last seen failed: {e}");
+            warn!(
+                name: "device.last_seen_unkept",
+                device = %link.device_id,
+                error = %e,
+                "Couldn't note when a device was last seen"
+            );
         }
     }
 
@@ -166,7 +181,11 @@ impl Hub {
         let changing = self.remote.changing.lock().await;
         self.remote.codes.lock().forget_expired(Instant::now());
         if let Err(e) = self.stop_listening_if_unneeded(&changing).await {
-            warn!("checking whether to keep listening for devices failed: {e}");
+            warn!(
+                name: "device.listening_unchecked",
+                error = %e,
+                "Couldn't check whether to keep listening for devices"
+            );
         }
     }
 

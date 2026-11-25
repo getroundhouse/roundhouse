@@ -121,7 +121,12 @@ impl WorkerLink {
             && failure.code != ErrorCode::Conflict
             && let Err(e) = provider.kill_worker(&instance_id).await
         {
-            warn!(%instance_id, "ending a worker that failed to start: {}", error_chain(&e));
+            warn!(
+                name: "worker.failed_start_ended",
+                %instance_id,
+                error = error_chain(&e),
+                "Couldn't end a worker that failed to start"
+            );
         }
         Err(failure)
     }
@@ -160,7 +165,9 @@ impl WorkerLink {
     pub(super) async fn answer(&self, answer: AskAnswer) {
         match self.calls.write(&answer).await {
             Ok(()) | Err(NotSent::Closed) => {}
-            Err(NotSent::Encoding(e)) => warn!("could not encode an answer for a worker: {e}"),
+            Err(NotSent::Encoding(e)) => {
+                warn!(name: "worker.answer_unencoded", error = %e, "Couldn't encode an answer for a worker");
+            }
         }
     }
 
@@ -248,8 +255,19 @@ impl WorkerLink {
         self.left.store(true, Ordering::SeqCst);
         match tokio::time::timeout_at(deadline, self.acks.tell_and_wait(hub, self)).await {
             Ok(Ok(())) => {}
-            Ok(Err(e)) => warn!("telling a worker what was recorded as this hub leaves it: {}", e.message),
-            Err(_) => warn!("a worker didn't say in time that it had let go of what this hub recorded"),
+            Ok(Err(e)) => {
+                warn!(
+                    name: "worker.recorded_untold",
+                    error = e.message,
+                    "Couldn't tell a worker what was recorded as this hub leaves it"
+                );
+            }
+            Err(_) => {
+                warn!(
+                    name: "worker.recorded_unheard",
+                    "A worker didn't say in time that it had let go of what this hub recorded"
+                );
+            }
         }
         self.calls.close();
     }

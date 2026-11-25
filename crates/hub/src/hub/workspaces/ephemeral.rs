@@ -191,7 +191,12 @@ impl Hub {
 
     async fn destroy_instance_best_effort(&self, provider: &dyn Provider, id: &InstanceId) {
         if let Err(e) = self.destroy_instance(provider, id).await {
-            warn!(instance_id = %id, "destroying ephemeral instance failed; will retry on restart or restore: {}", e.message);
+            warn!(
+                name: "instance.undestroyed",
+                instance_id = %id,
+                error = e.message,
+                "Couldn't destroy an ephemeral instance, so it's tried again on a restart or a restore"
+            );
         }
     }
 }

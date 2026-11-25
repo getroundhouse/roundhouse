@@ -3,6 +3,7 @@
 mod archiving;
 mod ephemeral;
 mod naming;
+mod settling;
 #[cfg(test)]
 mod tests;
 

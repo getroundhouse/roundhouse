@@ -16,7 +16,13 @@ impl LiveSession {
     /// it doesn't know is.
     pub(super) async fn take_report(self: &Arc<Self>, run: RunId, report: Report) {
         if !self.state.lock().run_claims().is_some_and(|claims| report.allowed(claims)) {
-            debug!(session = %self.id, %run, "dropping a report its run doesn't claim: {report:?}");
+            debug!(
+                name: "session.report_unclaimed",
+                session_id = %self.id,
+                %run,
+                needs = ?report.needs(),
+                "Dropping a report its run doesn't claim"
+            );
             return;
         }
         match report {
@@ -67,8 +73,20 @@ impl LiveSession {
             | Report::Hook(_)
             | Report::Credits(_)
             | Report::Outside { .. }
-            | Report::Unknown => debug!(session = %self.id, "dropping a report this hub keeps nowhere: {report:?}"),
+            | Report::Unknown => self.kept_nowhere(&report),
         }
+    }
+
+    /// Says in the log that `report` is dropped, by what it needs, since the report itself can hold what the agent
+    /// said.
+    fn kept_nowhere(&self, report: &Report) {
+        let needs = report.needs();
+        debug!(
+            name: "session.report_kept_nowhere",
+            session_id = %self.id,
+            ?needs,
+            "Dropping a report this hub keeps nowhere"
+        );
     }
 
     /// Keeps `said`, which the agent of `run` reported, as the session's observation of kind `K`, as of now, by the
@@ -80,7 +98,13 @@ impl LiveSession {
             return;
         }
         if let Err(e) = hub.observation_read::<K>(self.observed_as(), said, crate::store::now_ms()).await {
-            error!(session = %self.id, "could not keep {what}: {}", e.message);
+            error!(
+                name: "session.report_unkept",
+                session_id = %self.id,
+                what,
+                error = e.message,
+                "Couldn't keep what an agent reported"
+            );
         }
     }
 }

@@ -129,7 +129,7 @@ impl<O> Calls<O> {
 async fn write_lines(mut writer: Box<dyn AsyncWrite + Send + Unpin>, mut lines: mpsc::Receiver<Vec<u8>>) {
     while let Some(line) = lines.recv().await {
         if let Err(e) = writer.write_all(&line).await.and(writer.flush().await) {
-            warn!("writing a call failed: {e}");
+            warn!(name: "call.unwritten", error = %e, "Couldn't write a call");
             break;
         }
     }

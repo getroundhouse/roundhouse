@@ -41,7 +41,13 @@ fn fresh<T>(read: &Read<T>, fresh_for: Duration, now_ms: i64) -> bool {
 /// `facet` of `item`, `said`, read at `read_at_ms`, as the file keeps it.
 fn row<T: Serialize>(item: &Item, facet: Facet, said: &T, read_at_ms: i64) -> Option<Row> {
     let said = serde_json::to_string(said)
-        .inspect_err(|error| warn!("writing a pull request's facet for the cache's file: {error}"))
+        .inspect_err(|error| {
+            warn!(
+                name: "github_cache.facet_unencoded",
+                %error,
+                "Couldn't write a pull request's facet for the cache's file"
+            );
+        })
         .ok()?;
     Some(Row { subject: Subject::Item(item.clone()), facet, said, read_at_ms })
 }

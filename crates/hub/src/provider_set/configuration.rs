@@ -1,3 +1,4 @@
+use crate::error::JsonProblem;
 use crate::machine_environment::MachineEnvironment;
 use crate::provider_link;
 use crate::provider_link::{ADAPTER_GRACE, AdapterCommand, AdapterProvider};
@@ -126,14 +127,20 @@ impl ProviderSet {
         let mut set = Self::only(local);
         set.left_to_machine.insert(local_name);
         let parsed = match std::fs::read(file) {
-            Ok(bytes) => serde_json::from_slice::<ProvidersFile>(&bytes).map_err(|e| format!("it didn't parse: {e}")),
+            Ok(bytes) => serde_json::from_slice::<ProvidersFile>(&bytes)
+                .map_err(|e| format!("it didn't parse: {}", JsonProblem::from(e))),
             Err(e) if e.kind() == io::ErrorKind::NotFound => return set,
             Err(e) => Err(format!("it couldn't be read: {e}")),
         };
         let parsed = match parsed {
             Ok(parsed) => parsed,
             Err(why) => {
-                error!(file = %file.display(), "the providers aren't set up, so no new workspace can be made: {why}");
+                error!(
+                    name: "provider.unconfigured",
+                    file = %file.display(),
+                    error = why,
+                    "The providers aren't set up, so no new workspace can be made"
+                );
                 set.default = Err(format!("{} names the providers, and {why}", file.display()));
                 return set;
             }
@@ -141,7 +148,11 @@ impl ProviderSet {
         set.workers = with_checksums(parsed.workers);
         for entry in parsed.providers {
             if set.by_name.contains_key(&entry.name) {
-                warn!(provider = %entry.name, "leaving out a second provider of the same name");
+                error!(
+                    name: "provider.name_taken",
+                    provider = %entry.name,
+                    "Leaving out a second provider of the same name"
+                );
                 continue;
             }
             if !entry.set_up_github {
@@ -156,11 +167,15 @@ impl ProviderSet {
         }
         if let Some(default) = parsed.default {
             if !set.by_name.contains_key(&default) {
-                error!(provider = %default, "new workspaces go to a provider that isn't set up, so none can be made");
+                error!(
+                    name: "provider.default_missing",
+                    provider = %default,
+                    "New workspaces go to a provider that isn't set up, so none can be made"
+                );
             }
             set.default = Ok(default);
         }
-        info!(default = ?set.default, "new workspaces go to this provider");
+        info!(name: "provider.default_set", default = ?set.default, "New workspaces go to this provider");
         set
     }
 
@@ -171,7 +186,12 @@ impl ProviderSet {
             let adapter = adapter.clone();
             hellos.spawn(async move {
                 if let Err(e) = adapter.say_hello().await {
-                    warn!(provider = adapter.name(), "a provider's adapter didn't say hello: {}", error_chain(&e));
+                    warn!(
+                        name: "provider.no_hello",
+                        provider = adapter.name(),
+                        error = error_chain(&e),
+                        "A provider's adapter didn't say hello"
+                    );
                 }
             });
         }

@@ -192,7 +192,7 @@ impl LiveSession {
     /// there, so asking when it's no longer ready, or twice, does nothing.
     pub(in super::super) fn wake_queue(&self) {
         if let Err(e) = self.commands.try_send(Command::SendQueued) {
-            warn!(session = %self.id, "couldn't ask for the queue to be sent: {e}");
+            warn!(name: "queue.unasked", session_id = %self.id, error = %e, "Couldn't ask for the queue to be sent");
         }
     }
 
@@ -208,11 +208,25 @@ impl LiveSession {
             let next = match hub.blocking(move |store| store.first_queued(&id)).await {
                 Ok(Some(next)) => next,
                 Ok(None) => return,
-                Err(e) => return error!(session = %self.id, "couldn't read the queue: {e}"),
+                Err(e) => {
+                    return error!(
+                        name: "queue.unread",
+                        session_id = %self.id,
+                        error = %e,
+                        "Couldn't read the queue"
+                    );
+                }
             };
             match self.send_from_queue(&hub, next).await {
                 Ok(to_deliver) => to_deliver,
-                Err(e) => return warn!(session = %self.id, "couldn't send a queued prompt: {}", e.message),
+                Err(e) => {
+                    return warn!(
+                        name: "queue.prompt_unsent",
+                        session_id = %self.id,
+                        error = e.message,
+                        "Couldn't send a queued prompt"
+                    );
+                }
             }
         };
         if let Some((seq, prompt)) = to_deliver {

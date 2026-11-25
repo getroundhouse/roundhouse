@@ -119,7 +119,12 @@ impl LiveSession {
     /// says.
     pub(in super::super) fn wake_after_the_turn(&self) {
         if let Err(e) = self.commands.try_send(Command::SendAfterTheTurn) {
-            warn!(session = %self.id, "couldn't ask for what waited for the turn's end to be sent: {e}");
+            warn!(
+                name: "session.waiting_unasked",
+                session_id = %self.id,
+                error = %e,
+                "Couldn't ask for what waited for the turn's end to be sent"
+            );
         }
     }
 

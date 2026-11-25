@@ -55,7 +55,7 @@ impl Hub {
             let marked = id.clone();
             match hub.blocking(move |store| store.set_workspace_setup(&marked, outcome)).await {
                 Ok(workspace) => hub.notify(HubNotice::Workspace(workspace)),
-                Err(e) => warn!(workspace = %id, "recording setup: {e}"),
+                Err(e) => warn!(name: "setup.unrecorded", workspace_id = %id, error = %e, "Couldn't record setup"),
             }
             hub.setup_gates.lock().remove(&id);
             hub.work_changed();
@@ -76,7 +76,7 @@ impl Hub {
         let (placement, link) = match started.await {
             Ok(started) => started,
             Err(e) => {
-                warn!(workspace = workspace.name, "setup couldn't start: {}", e.message);
+                warn!(name: "setup.unstarted", workspace_id = %workspace.id, error = e.message, "Setup couldn't start");
                 return SetupStatus::Failed { code: None };
             }
         };
@@ -97,7 +97,7 @@ impl Hub {
             Ok(SetupDone { code: Some(0) }) => SetupStatus::Succeeded,
             Ok(SetupDone { code }) => SetupStatus::Failed { code },
             Err(e) => {
-                warn!(workspace = workspace.name, "setup failed: {}", e.message);
+                warn!(name: "setup.failed", workspace_id = %workspace.id, error = e.message, "Setup failed");
                 SetupStatus::Failed { code: None }
             }
         }

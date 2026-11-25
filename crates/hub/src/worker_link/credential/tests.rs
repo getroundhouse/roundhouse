@@ -173,7 +173,7 @@ async fn a_worker_that_doesnt_apply_a_set_is_said_and_used_on_and_no_token_is_lo
 
     let logged = logs.text();
     assert!(cant.is_open());
-    assert_eq!(logged.matches("couldn't apply its git credential").count(), 2, "{logged}");
+    assert_eq!(logged.matches("worker.credential_unapplied").count(), 2, "{logged}");
     assert!(logged.contains("its git is older than 2.31"), "{logged}");
     let sent = |event: &serde_json::Value| event["fields"]["sent"].as_str().unwrap_or_default().to_owned();
     let told: Vec<String> =

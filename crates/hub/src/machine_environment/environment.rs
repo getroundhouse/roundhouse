@@ -31,13 +31,16 @@ impl MachineEnvironment {
     /// as before the hub read the profile, and the hub's log says why.
     pub(crate) async fn read(login: Option<&LoginShell<'_>>, printer: &Path, hubs_path: Option<&str>) -> Self {
         let Some(login) = login.filter(|_| ASKS_A_LOGIN_SHELL) else {
-            debug!("there's no login shell to ask, so what the hub starts has what the hub was started with");
+            debug!(
+                name: "environment.no_login_shell",
+                "There's no login shell to ask, so what the hub starts has what the hub was started with"
+            );
             return Self::new(merged(Vars::new(), hubs_path));
         };
         let until = deadline();
         let vars = match login.environment(printer, until).await {
             Ok(vars) => {
-                debug!(shell = login.shell, "read the environment the profile gives");
+                debug!(name: "environment.read", shell = login.shell, "Read the environment the profile gives");
                 vars
             }
             Err(why) => {
@@ -50,10 +53,12 @@ impl MachineEnvironment {
                     Unread::Unstarted(_) | Unread::TimedOut => None,
                 };
                 warn!(
+                    name: "environment.unread",
                     shell = login.shell,
                     has_its_path = path.is_some(),
-                    "couldn't read the environment the profile gives, since {why}, so what the hub starts has what \
-                     the hub was started with, and the login shell's PATH if it said it"
+                    why = %why,
+                    "Couldn't read the environment the profile gives, so what the hub starts has the hub's own, and \
+                     the login shell's PATH if it said it"
                 );
                 path.map(|path| ("PATH".to_string(), path)).into_iter().collect()
             }

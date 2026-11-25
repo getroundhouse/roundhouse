@@ -247,7 +247,7 @@ impl LiveSession {
 
     pub(crate) async fn send_item(&self, item: Item) {
         if self.ingest.send(item).await.is_err() {
-            warn!(session = %self.id, "dropped worker output for a stopped session");
+            warn!(name: "session.output_dropped", session_id = %self.id, "Dropped worker output for a stopped session");
         }
     }
 
@@ -361,7 +361,12 @@ impl LiveSession {
             hub.let_go_of_bytes(&FileFor::Session(self.id.clone()), &let_go_of).await;
             // Closing it ended its waits. It's closed whether or not they come off its list.
             if let Err(e) = self.unlist_waits_holding(&starts).await {
-                warn!(session = %self.id, "couldn't take a closed chat's waits off its list: {e}");
+                warn!(
+                    name: "session.waits_not_cleared",
+                    session_id = %self.id,
+                    error = %e,
+                    "Couldn't take a closed chat's waits off its list"
+                );
             }
         }
         // Past anything in the queue, so a prompt waiting on setup can't outlive this. It's closed whether

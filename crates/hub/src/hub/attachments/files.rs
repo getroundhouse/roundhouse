@@ -101,13 +101,25 @@ impl Hub {
         for NewAttachment { attachment: Attachment { id, name, media_type, .. }, data } in attachments {
             if !media_type.is_shown_in_transcript() {
                 let kind = media_type.mime();
-                warn!(session = %session_id, attachment = %id, "the agent sent {kind}, which the transcript doesn't show");
+                warn!(
+                    name: "attachment.kind_not_shown",
+                    session_id = %session_id,
+                    attachment = %id,
+                    kind,
+                    "An agent sent a kind of file the transcript doesn't show"
+                );
                 continue;
             }
             let kept_for = FileFor::Session(session_id.clone());
             let added = self.file_add(kept_for, id.clone(), name, media_type, data, AddedBy::Agent);
             if let Err(e) = added.await {
-                warn!(session = %session_id, attachment = %id, "couldn't keep a file from the agent: {e}");
+                warn!(
+                    name: "attachment.unkept",
+                    session_id = %session_id,
+                    attachment = %id,
+                    error = %e,
+                    "Couldn't keep a file from the agent"
+                );
             }
         }
     }
@@ -175,7 +187,13 @@ impl Hub {
     pub(crate) async fn let_go_of_bytes(&self, kept_for: &FileFor, files: &[AttachmentId]) {
         for id in files {
             if let Err(e) = self.attachment_files.remove(kept_for, id).await {
-                warn!(?kept_for, attachment = %id, "couldn't let go of a file nothing will send: {e}");
+                warn!(
+                    name: "attachment.not_let_go",
+                    ?kept_for,
+                    attachment = %id,
+                    error = %e,
+                    "Couldn't let go of a file nothing will send"
+                );
             }
         }
     }
@@ -225,7 +243,12 @@ impl Hub {
         if !attachment.media_type.is_bitmap()
             && let Err(e) = self.attachment_files.remove(&kept_for, &attachment.id).await
         {
-            warn!(attachment = %attachment.id, "couldn't let go of a sent attachment: {e}");
+            warn!(
+                name: "attachment.sent_not_let_go",
+                attachment = %attachment.id,
+                error = %e,
+                "Couldn't let go of a sent attachment"
+            );
         }
         Ok(path)
     }

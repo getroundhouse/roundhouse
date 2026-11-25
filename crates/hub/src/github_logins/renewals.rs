@@ -96,7 +96,11 @@ impl GithubLogins {
     ) -> Result<Option<GithubAccountChange>, ApiError> {
         self.changing(renewed_at_ms, |files| {
             let Some(file) = self.holding_still(files, due)? else {
-                info!(account = %due.account, "let go of what renewing a sign-in came to, as it holds another now");
+                info!(
+                    name: "github.renewal_let_go",
+                    account = %due.account,
+                    "Let go of what renewing a sign-in came to, as it holds another now"
+                );
                 return Ok(None);
             };
             let account = match renewal {
@@ -104,7 +108,12 @@ impl GithubLogins {
                     self.keep_renewed(files, due, &file, SignedIn::given(granted, renewed_at_ms))?
                 }
                 Renewal::Refused(said) => {
-                    warn!(account = %due.account, "GitHub refused what renews a sign-in's token: {said}");
+                    warn!(
+                        name: "github.renewal_refused",
+                        account = %due.account,
+                        said,
+                        "GitHub refused what renews a sign-in's token"
+                    );
                     self.store.github_login_needs_sign_in(&due.account)?
                 }
             };
@@ -123,7 +132,12 @@ impl GithubLogins {
     ) -> Result<Option<GithubAccount>, ApiError> {
         let ends_at_ms = renewed.token_ends_at_ms;
         if let Err(e) = files.replace(file, &GithubLogin::SignIn(renewed)) {
-            error!(account = %due.account, "couldn't keep a sign-in's renewed tokens, so it needs signing in: {e}");
+            error!(
+                name: "github.renewal_unkept",
+                account = %due.account,
+                error = %e,
+                "Couldn't keep a sign-in's renewed tokens, so it needs signing in"
+            );
             return Ok(self.store.github_login_needs_sign_in(&due.account)?);
         }
         Ok(self.store.renew_github_sign_in(&due.account, ends_at_ms)?)

@@ -21,7 +21,12 @@ pub(super) fn tidied(tx: &Transaction<'_>) -> Result<(), StoreError> {
     for table in ["workspaces", "sessions"] {
         let left = tidy(tx, table)?;
         if left > 0 {
-            warn!(table, left, "left titles that aren't text as they were, which no record can read");
+            warn!(
+                name: "database.titles_left",
+                table,
+                left,
+                "Left titles that aren't text as they were, which no record can read"
+            );
         }
     }
     Ok(())

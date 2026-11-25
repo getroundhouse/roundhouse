@@ -302,7 +302,14 @@ impl Hub {
     pub(crate) async fn route(self: &Arc<Self>, session_id: &SessionId, item: Item) {
         match self.live_session(session_id).await {
             Ok(session) => session.send_item(item).await,
-            Err(e) => warn!(%session_id, "dropping output for an unknown session: {e}"),
+            Err(e) => {
+                warn!(
+                    name: "session.unknown_output",
+                    %session_id,
+                    error = %e,
+                    "Dropping output for an unknown session"
+                );
+            }
         }
     }
 

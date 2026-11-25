@@ -31,7 +31,11 @@ impl Hub {
         let before = now_ms().saturating_sub(i64::try_from(UNNAMED_FOR.as_millis()).unwrap_or(i64::MAX));
         let unnamed = self.blocking(move |store| store.let_go_of_unnamed_new_workspace_draft_files(before)).await;
         let unnamed = unnamed.unwrap_or_else(|e| {
-            warn!("couldn't let go of the new-workspace dialog's files nothing names: {e}");
+            warn!(
+                name: "new_workspace.files_not_let_go",
+                error = %e,
+                "Couldn't let go of the new-workspace dialog's files nothing names"
+            );
             Vec::new()
         });
         self.let_go_of_bytes(&FileFor::NewWorkspace, &unnamed).await;
@@ -46,7 +50,7 @@ impl Hub {
             Err(e) => Err(e),
         };
         if let Err(e) = tidied {
-            warn!("couldn't tidy the new-workspace dialog's files: {e}");
+            warn!(name: "new_workspace.files_untidied", error = %e, "Couldn't tidy the new-workspace dialog's files");
         }
     }
 }

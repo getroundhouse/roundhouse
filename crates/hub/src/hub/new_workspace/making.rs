@@ -155,7 +155,12 @@ impl Hub {
         match self.session_draft(session.id.clone(), draft, None).await {
             Ok(kept) => (kept, Some(UnsentPrompt { error, in_composer: true }), true),
             Err(e) => {
-                warn!(session = %session.id, "couldn't keep a new workspace's first prompt in its composer: {e}");
+                warn!(
+                    name: "new_workspace.prompt_unkept",
+                    session_id = %session.id,
+                    error = %e,
+                    "Couldn't keep a new workspace's first prompt in its composer"
+                );
                 (session, Some(UnsentPrompt { error, in_composer: false }), false)
             }
         }
@@ -193,11 +198,18 @@ impl Hub {
         match self.blocking(move |store| store.replace_new_workspace_draft(&now, &emptied)).await {
             Ok((kept, true)) => self.notify(HubNotice::NewWorkspaceDraft(kept)),
             Ok((_, false)) => {}
-            Err(e) => warn!("couldn't empty the new-workspace dialog: {e}"),
+            Err(e) => {
+                warn!(name: "new_workspace.dialog_unemptied", error = %e, "Couldn't empty the new-workspace dialog");
+            }
         }
         for id in &made_of.files {
             if let Err(e) = self.file_remove(FileFor::NewWorkspace, id.clone()).await {
-                warn!(attachment = %id, "couldn't let go of a file of the new-workspace dialog's: {e}");
+                warn!(
+                    name: "new_workspace.file_not_let_go",
+                    attachment = %id,
+                    error = %e,
+                    "Couldn't let go of a file of the new-workspace dialog's"
+                );
             }
         }
     }

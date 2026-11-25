@@ -40,7 +40,12 @@ impl Feed {
             Ok(of) => {
                 let (newest, rev) = (sent.entry(of.key()).or_default(), of.rev());
                 if rev <= *newest {
-                    trace!(rev = rev.get(), newest = newest.get(), "left out a copy no newer than one told of");
+                    trace!(
+                        name: "feed.copy_left_out",
+                        rev = rev.get(),
+                        newest = newest.get(),
+                        "Left out a copy no newer than one told of"
+                    );
                     return;
                 }
                 *newest = rev;

@@ -230,7 +230,12 @@ pub(super) async fn add(making: &Making<'_>, child: &ChildWorktree) -> Result<Ch
 /// Has the worker watch the branches of `child`, as it does the workspace's own.
 pub(super) async fn watch_child(link: &WorkerLink, child: &ChildWorktree) {
     if let Err(e) = link.send(WatchChildBranches { path: child.path.clone() }).await {
-        debug!(path = child.path, "asking the worker to watch the branches: {}", e.message);
+        debug!(
+            name: "branches.watch_unasked",
+            path = child.path,
+            error = e.message,
+            "Couldn't ask the worker to watch the branches"
+        );
     }
 }
 
