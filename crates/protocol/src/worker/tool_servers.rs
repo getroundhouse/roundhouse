@@ -38,9 +38,42 @@ pub struct ProxiedServer {
     /// What the person calls it, such as `Linear (Northwind)`, for what an agent is told when a call fails.
     pub label: ToolServerName,
     pub url: ToolServerUrl,
-    /// What each request to it carries. `None` for a server that needs no key.
+    /// What each request to it carries. `None` for a server that needs no key, and for one that needs signing in to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub header: Option<ServerHeader>,
+    /// How its sign-in stands. `None` for a server that isn't signed in to. A worker that doesn't know of it sends what
+    /// the header says, and passes on as a refusal what the server makes of that.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sign_in: Option<ServerSignIn>,
+}
+
+/// How a server's sign-in stands, for the worker that passes calls on to it.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum ServerSignIn {
+    /// The server's header carries its access token `token`. A worker whose server refuses it asks for another, as
+    /// [`RenewToolServer`](super::RenewToolServer) says.
+    Works { token: TokenNumber },
+    /// The person has to sign in, so the worker answers each call itself, and says so.
+    NeedsSignIn,
+    /// What a newer hub says. Calls go with the header, if there's one, and no other is asked for.
+    #[serde(other)]
+    Unknown,
+}
+
+/// Which of a server's access tokens one is. Each its sign-in is given has a higher one, through signing in to it again
+/// too, so it also says whether what the hub has is what it had.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(transparent)]
+pub struct TokenNumber(u64);
+
+impl TokenNumber {
+    pub const FIRST: TokenNumber = TokenNumber(1);
+
+    #[must_use]
+    pub fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
 }
 
 /// A header by which a server knows the person, such as `Authorization`, and all of its value.
@@ -80,9 +113,13 @@ mod tests {
             label: ToolServerName::typed("Linear (Northwind)").unwrap(),
             url: ToolServerUrl::typed("https://mcp.example.com/mcp").unwrap(),
             header: Some(header),
+            sign_in: None,
         };
         let keyless = ProxiedServer { header: None, ..server.clone() };
-        let set = ToolServersSet { servers: vec![server, keyless] }.into_request();
+        let works = Some(ServerSignIn::Works { token: TokenNumber::FIRST });
+        let signed_in = ProxiedServer { sign_in: works, ..server.clone() };
+        let needs = ProxiedServer { header: None, sign_in: Some(ServerSignIn::NeedsSignIn), ..server.clone() };
+        let set = ToolServersSet { servers: vec![server, keyless, signed_in, needs] }.into_request();
 
         let written = serde_json::to_string(&set).unwrap();
 

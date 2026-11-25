@@ -55,6 +55,7 @@ mod terminal_rows;
 mod terminal_text;
 mod terminal_typed;
 mod terminals;
+mod tool_servers;
 mod waits;
 mod worker;
 mod worker_calls;

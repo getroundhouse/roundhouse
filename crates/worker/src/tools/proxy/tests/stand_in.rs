@@ -73,6 +73,7 @@ impl StandIn {
             label: ToolServerName::typed("Linear (Northwind)").unwrap(),
             url: url(&format!("http://127.0.0.1:{}/mcp?query=made-up-query", self.port)),
             header: Some(ServerHeader { name: header("Authorization"), value: ServerHeaderValue::new(KEY) }),
+            sign_in: None,
         }
     }
 }

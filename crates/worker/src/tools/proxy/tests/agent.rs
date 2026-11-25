@@ -7,7 +7,7 @@ use hyper::header::{HOST, HeaderMap, HeaderName, HeaderValue};
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use protocol::Build;
-use protocol::worker::{ProxiedServer, ToolsToken};
+use protocol::worker::{AskAnswer, AskOutcome, ProxiedServer, ToolsToken, WorkerAsk, WorkerFrame};
 use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
@@ -25,13 +25,29 @@ pub(super) struct Agent {
 
 impl Agent {
     pub(super) async fn with(servers: Vec<ProxiedServer>) -> Self {
-        let (frames, _) = mpsc::channel(8);
+        Self::whose_hub(servers, |ask| panic!("{ask:?}")).await
+    }
+
+    /// One whose worker's hub answers what the worker asks as `answer` says.
+    pub(super) async fn whose_hub(
+        servers: Vec<ProxiedServer>,
+        mut answer: impl FnMut(WorkerAsk) -> AskOutcome + Send + 'static,
+    ) -> Self {
+        let (frames, mut sent) = mpsc::channel(8);
         let tools = Tools::new(Arc::new(Asks::new(frames)), Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll);
         let caller = Caller { session_id: "s".into(), worktree: "/no/worktree".into() };
         tools.admit(ToolsToken::new("token-s"), caller);
         tools.proxy.set(servers);
         let tools = Arc::new(tools);
         let port = tools.serve(None).await.unwrap();
+        let asks = Arc::clone(&tools.asks);
+        tokio::spawn(async move {
+            while let Some(frame) = sent.recv().await {
+                let WorkerFrame::Ask { id, session_id, ask } = frame else { panic!("{frame:?}") };
+                assert_eq!(session_id.as_str(), "s");
+                asks.answer(AskAnswer { answer: id, outcome: answer(ask) });
+            }
+        });
         Self { tools, port }
     }
 

@@ -43,6 +43,7 @@ async fn an_agent_is_launched_with_the_servers_set_before_it_and_reaches_one_wit
             name: ToolServerHeader::typed("X-Key").unwrap(),
             value: ServerHeaderValue::new("made-up-key"),
         }),
+        sign_in: None,
     };
     let Worker { read: hub_read, write: mut hub_write, running } =
         start_worker(config(dir.path(), Some(cli(dir.path(), KEEPS_ITS_MCP_CONFIG))));

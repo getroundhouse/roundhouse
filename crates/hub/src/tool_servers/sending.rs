@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use protocol::model::{ToolServer, ToolServerAuth, ToolServerId};
-use protocol::worker::{ProxiedServer, ServerHeader, ServerHeaderValue, ToolServersSet};
+use protocol::worker::{ProxiedServer, ServerHeader, ServerHeaderValue, ServerSignIn, ToolServersSet};
 use tokio::sync::watch;
 use tracing::{error, warn};
 
@@ -38,8 +38,6 @@ enum LeftOut {
     Newer,
     /// Its key or its sign-in is gone.
     Gone,
-    /// Its sign-in needs the person to sign in again.
-    NeedsSignIn,
     /// Its file can't be read.
     Unreadable(std::io::ErrorKind),
 }
@@ -50,7 +48,6 @@ impl fmt::Display for LeftOut {
             LeftOut::UnknownAuth => f.write_str("only a newer build knows how it knows the person"),
             LeftOut::Newer => f.write_str("only a newer build can read its key or its sign-in"),
             LeftOut::Gone => f.write_str("its key or its sign-in is gone"),
-            LeftOut::NeedsSignIn => f.write_str("it needs signing in to"),
             LeftOut::Unreadable(kind) => write!(f, "its file can't be read: {kind}"),
         }
     }
@@ -62,6 +59,11 @@ impl ToolServers {
     /// task of its own, so nothing is sent to a worker under the lock, and no change waits on a worker.
     pub(crate) fn sent(&self) -> watch::Receiver<SentToolServers> {
         self.sent.subscribe()
+    }
+
+    /// The server `id` as workers are sent it, or `None` when they aren't, or the hub hasn't it.
+    pub(crate) fn sent_server(&self, id: &ToolServerId) -> Option<ProxiedServer> {
+        self.sent.borrow().sent.iter().find(|server| server.id == *id).cloned()
     }
 
     /// Runs `change` under the servers' lock, then, still under it, works out what workers are to be sent, whether
@@ -108,8 +110,8 @@ impl ToolServers {
         let mut worked_out = SentToolServers::default();
         for server in self.store.tool_servers()? {
             let file = secrets.get(&server.id).and_then(Option::as_ref);
-            match header(&server.auth, files, file) {
-                Ok(header) => worked_out.sent.push(proxied(server, header)),
+            match knows_by(&server.auth, files, file) {
+                Ok(known) => worked_out.sent.push(proxied(server, known)),
                 Err(why) => worked_out.left_out.push((server.id, why)),
             }
         }
@@ -117,25 +119,37 @@ impl ToolServers {
     }
 }
 
-/// What each request to a server that knows the person by `auth` carries, with the key or the access token
-/// `file` holds.
-fn header(
+/// What a server knows the person by, as workers are sent it.
+enum Known {
+    Not,
+    By(ServerHeader),
+    /// With its access token, unless it needs signing in to.
+    SignedIn(Option<ServerHeader>, ServerSignIn),
+}
+
+/// What a server that knows the person by `auth` knows them by, with the key or the access token `file` holds.
+fn knows_by(
     auth: &ToolServerAuth,
     files: &Locked<'_, ToolServerSecret>,
     file: Option<&LoginFile>,
-) -> Result<Option<ServerHeader>, LeftOut> {
+) -> Result<Known, LeftOut> {
     match auth {
         ToolServerAuth::Key { header } => {
             let ToolServerSecret::Key(key) = secret(files, file)? else { return Err(LeftOut::Gone) };
-            Ok(Some(ServerHeader { name: header.clone(), value: ServerHeaderValue::new(key.as_str()) }))
+            Ok(Known::By(ServerHeader { name: header.clone(), value: ServerHeaderValue::new(key.as_str()) }))
         }
         // Its file says how it stands, and its record says what the file does.
         ToolServerAuth::SignIn { status: _ } => {
             let ToolServerSecret::SignIn(kept) = secret(files, file)? else { return Err(LeftOut::Gone) };
-            let tokens = kept.tokens.ok_or(LeftOut::NeedsSignIn)?;
-            Ok(Some(ServerHeader::bearer(tokens.access.as_str())))
+            Ok(match kept.tokens {
+                Some(tokens) => {
+                    let header = ServerHeader::bearer(tokens.access.as_str());
+                    Known::SignedIn(Some(header), ServerSignIn::Works { token: kept.number })
+                }
+                None => Known::SignedIn(None, ServerSignIn::NeedsSignIn),
+            })
         }
-        ToolServerAuth::Neither => Ok(None),
+        ToolServerAuth::Neither => Ok(Known::Not),
         ToolServerAuth::Unknown => Err(LeftOut::UnknownAuth),
     }
 }
@@ -149,7 +163,12 @@ fn secret(files: &Locked<'_, ToolServerSecret>, file: Option<&LoginFile>) -> Res
     }
 }
 
-fn proxied(server: ToolServer, header: Option<ServerHeader>) -> ProxiedServer {
+fn proxied(server: ToolServer, known: Known) -> ProxiedServer {
+    let (header, sign_in) = match known {
+        Known::Not => (None, None),
+        Known::By(header) => (Some(header), None),
+        Known::SignedIn(header, sign_in) => (header, Some(sign_in)),
+    };
     let ToolServer { id, name, url, auth: _, rev: _ } = server;
-    ProxiedServer { id, name: name.for_agents(), label: name, url, header }
+    ProxiedServer { id, name: name.for_agents(), label: name, url, header, sign_in }
 }

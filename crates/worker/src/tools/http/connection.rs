@@ -108,7 +108,10 @@ where
     };
     match route {
         Route::Tools => call(tools, &caller, headers, &body).await,
-        Route::Server(id) => tools.proxy.forward(&id, proxy::Asked { method, headers, body }).await,
+        Route::Server(id) => {
+            let (session_id, asks) = (&caller.session_id, &*tools.asks);
+            tools.proxy.forward(&id, proxy::Asked { method, headers, body, session_id, asks }).await
+        }
     }
 }
 
