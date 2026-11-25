@@ -225,7 +225,7 @@ fn of_an_account() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
 
 /// Of each kind of what an agent says of its chat.
 fn of_a_session() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
-    vec![session_context(), session_todos(), session_cache(), wait_read()]
+    vec![session_context(), session_todos(), session_tool_servers(), session_cache(), wait_read()]
 }
 
 /// How full a session's context is, with its key and revision, and how it's sent.
@@ -254,6 +254,20 @@ fn session_todos() -> (Observation, ObservationKey, Rev, Sent) {
         },
         ObservationKey::SessionTodos { session_id: "s".into() },
         Rev::new(12),
+        Some(Level::Session { id: "s".into() }),
+    )
+}
+
+/// A session's tool servers, with their key and revision, and how they're sent.
+fn session_tool_servers() -> (Observation, ObservationKey, Rev, Sent) {
+    (
+        Observation::SessionToolServers {
+            session_id: "s".into(),
+            servers: Observed::AsOf { value: Vec::new(), as_of_ms: 1_000 },
+            rev: Rev::new(22),
+        },
+        ObservationKey::SessionToolServers { session_id: "s".into() },
+        Rev::new(22),
         Some(Level::Session { id: "s".into() }),
     )
 }

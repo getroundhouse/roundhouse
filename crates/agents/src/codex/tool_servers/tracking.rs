@@ -1,0 +1,190 @@
+//! The tool servers of the agent's own thread, as Codex says each starts, and what it answers of each.
+
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use protocol::capability::Report;
+use protocol::capability::setup::{ServerName, ServerState, ToolServerState};
+use serde_json::{Value, json};
+use tracing::debug;
+
+use super::why::why;
+use crate::AgentOutput;
+use crate::codex::{running::Shared, subagents::Scope};
+
+/// The name the adapter gives the server of the worker's tools, which isn't one of the agent's, so it's never reported.
+pub(in crate::codex) const TOOLS_SERVER: &str = "roundhouse";
+
+/// What Codex last said of each server, in order of their names, so two reports of the same are equal. Held while what
+/// it says is reported too, so a report never follows a newer one.
+#[derive(Default)]
+pub(in crate::codex) struct ToolServers {
+    servers: BTreeMap<ServerName, Server>,
+    /// How many times Codex has said one's startup moved.
+    moves: u64,
+}
+
+struct Server {
+    state: ServerState,
+    error: Option<String>,
+    tools: Option<u32>,
+    /// Which of [`ToolServers::moves`] it's as of.
+    moved: u64,
+}
+
+impl ToolServers {
+    /// Takes what `params`, a startup's, say of the server `name`, and returns which move that was, if Codex can say
+    /// more of it.
+    fn moved(&mut self, name: &ServerName, params: &Value) -> Option<u64> {
+        self.moves += 1;
+        let (state, more) = match (params["status"].as_str(), params["failureReason"].as_str()) {
+            (Some("starting"), _) => (ServerState::Starting, false),
+            (Some("ready"), _) => (ServerState::Connected, true),
+            (Some("failed"), Some("reauthenticationRequired")) => (ServerState::NeedsSignIn, false),
+            // Also of one that has never been signed in to, which only its runtime status tells from the rest.
+            (Some("failed"), _) => (ServerState::Failed, true),
+            // Its startup was stopped, so the agent doesn't have it.
+            (Some("cancelled"), _) => (ServerState::Failed, false),
+            _ => (ServerState::Unknown, false),
+        };
+        let error = params["error"].as_str().filter(|_| state == ServerState::Failed).and_then(why);
+        self.servers.insert(name.clone(), Server { state, error, tools: None, moved: self.moves });
+        more.then_some(self.moves)
+    }
+
+    /// Takes what Codex answered of the server `name`, `status`, unless its startup has moved since `moved`. Returns
+    /// whether that says more than it had said.
+    fn answered(&mut self, name: &ServerName, moved: u64, status: &Value) -> bool {
+        let Some(server) = self.servers.get_mut(name).filter(|server| server.moved == moved) else { return false };
+        match status["runtimeStatus"].as_str() {
+            Some("connected") if status["toolsError"].is_null() => {
+                server.tools = status["tools"].as_object().and_then(|tools| u32::try_from(tools.len()).ok());
+                true
+            }
+            Some("authenticationRequired") => {
+                server.state = ServerState::NeedsSignIn;
+                server.error = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn report(&self) -> AgentOutput {
+        let servers = self.servers.iter().map(|(name, server)| ToolServerState {
+            name: name.clone(),
+            state: server.state,
+            error: server.error.clone(),
+            tools: server.tools,
+        });
+        AgentOutput::Report(Report::ToolServers { servers: servers.collect() })
+    }
+}
+
+/// `mcpServer/startupStatus/updated`: one of the thread's servers starting, ready, stopped or failed, which is reported
+/// with the rest, and again once Codex has answered what it doesn't say here. A subagent's thread starts the servers
+/// again for itself, which says nothing of the agent's.
+pub(in crate::codex) async fn moved(shared: &Arc<Shared>, params: &Value, scope: &Scope) {
+    let Some(name) = params["name"].as_str().filter(|name| scope.parent.is_none() && *name != TOOLS_SERVER) else {
+        return;
+    };
+    let name = ServerName::from(name);
+    let mut servers = shared.tool_servers.lock().await;
+    let more = servers.moved(&name, params);
+    shared.run.emit(servers.report()).await;
+    drop(servers);
+    if let (Some(moved), Some(thread)) = (more, params["threadId"].as_str()) {
+        // On a task of its own, since the answer comes through the loop that calls this.
+        tokio::spawn(ask(shared.clone(), thread.to_owned(), name, moved));
+    }
+}
+
+/// Reports the servers as a turn of the agent's own starts, whole, with none where it has none. The hub drops what a
+/// run says before its launch is answered, and forgets it where it lost the worker's connection meanwhile, and Codex
+/// says each server's startup only once.
+pub(in crate::codex) async fn turn_started(shared: &Shared) {
+    let servers = shared.tool_servers.lock().await;
+    shared.run.emit(servers.report()).await;
+}
+
+/// Asks how many tools the server `name` has, and whether it needs signing in to. Codex answers of one server of a
+/// thread from the connection the thread has. Asked of all of them, it connects to each again.
+async fn ask(shared: Arc<Shared>, thread: String, name: ServerName, moved: u64) {
+    let params = json!({"threadId":thread,"serverName":name,"detail":"toolsAndAuthOnly"});
+    let Ok(answer) = shared.rpc.ask("mcpServerStatus/list", params).await else {
+        // Without Codex's words, which can hold what `why` takes out.
+        return debug!(name: "codex.tool_server_unsaid", server = %name, "Codex didn't say more of a tool server");
+    };
+    let Some(status) = answer["data"].as_array().and_then(|all| all.iter().find(|one| one["name"] == name.as_str()))
+    else {
+        return;
+    };
+    let mut servers = shared.tool_servers.lock().await;
+    if servers.answered(&name, moved, status) {
+        shared.run.emit(servers.report()).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What's kept of the server `docs`, which was just said to be `status`, for `reason` where that's said.
+    fn after(status: &str, reason: Option<&str>) -> (ToolServers, Option<u64>) {
+        let mut servers = ToolServers::default();
+        let more = servers.moved(&"docs".into(), &json!({"status":status,"failureReason":reason,"error":"refused"}));
+        (servers, more)
+    }
+
+    fn kept(servers: &ToolServers) -> (ServerState, Option<&str>, Option<u32>) {
+        let server = &servers.servers[&ServerName::from("docs")];
+        (server.state, server.error.as_deref(), server.tools)
+    }
+
+    #[test]
+    fn each_startup_is_a_state_and_only_a_failed_one_has_why() {
+        let cases = [
+            ("starting", None, (ServerState::Starting, None), false),
+            ("ready", None, (ServerState::Connected, None), true),
+            ("failed", None, (ServerState::Failed, Some("refused")), true),
+            ("failed", Some("reauthenticationRequired"), (ServerState::NeedsSignIn, None), false),
+            ("cancelled", None, (ServerState::Failed, Some("refused")), false),
+            ("resting", None, (ServerState::Unknown, None), false),
+        ];
+
+        for (status, reason, (state, why), more) in cases {
+            let (servers, asked) = after(status, reason);
+            assert_eq!((kept(&servers), asked.is_some()), ((state, why, None), more), "{status} {reason:?}");
+        }
+    }
+
+    #[test]
+    fn an_answer_says_the_tools_of_one_thats_connected_and_whether_one_that_failed_needs_signing_in_to() {
+        let answered = |status, answer: Value| {
+            let (mut servers, asked) = after(status, None);
+            servers.answered(&"docs".into(), asked.unwrap(), &answer);
+            let (state, why, tools) = kept(&servers);
+            (state, why.map(str::to_owned), tools)
+        };
+
+        let connected = json!({"runtimeStatus":"connected","tools":{"find":{},"read":{}}});
+        assert_eq!(answered("ready", connected), (ServerState::Connected, None, Some(2)));
+        let unlisted = json!({"runtimeStatus":"connected","tools":{},"toolsError":"refused"});
+        assert_eq!(answered("ready", unlisted), (ServerState::Connected, None, None), "not none, but not known");
+        let sign_in = json!({"runtimeStatus":"authenticationRequired","tools":{}});
+        assert_eq!(answered("failed", sign_in), (ServerState::NeedsSignIn, None, None));
+        let failed = json!({"runtimeStatus":"failed","tools":{}});
+        assert_eq!(answered("failed", failed), (ServerState::Failed, Some("refused".into()), None));
+    }
+
+    #[test]
+    fn an_answer_of_before_the_server_moved_again_is_dropped() {
+        let (mut servers, asked) = after("ready", None);
+        servers.moved(&"docs".into(), &json!({"status":"starting"}));
+
+        let connected = json!({"runtimeStatus":"connected","tools":{"find":{}}});
+        assert!(!servers.answered(&"docs".into(), asked.unwrap(), &connected));
+
+        assert_eq!(kept(&servers), (ServerState::Starting, None, None));
+    }
+}

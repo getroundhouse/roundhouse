@@ -21,7 +21,7 @@ pub(super) type Asked = Arc<Mutex<Vec<Value>>>;
 
 /// A stand-in for `w`'s worker, whose launch claims `claims`, and finds `found` running if it's given, and which takes
 /// everything else it's asked.
-fn worker(hub: &Hub, found: Option<RunId>, claims: Capabilities) -> (Arc<WorkerLink>, Asked) {
+pub(super) fn worker(hub: &Hub, found: Option<RunId>, claims: Capabilities) -> (Arc<WorkerLink>, Asked) {
     let asked = Asked::default();
     let kept = asked.clone();
     let link = WorkerLink::answering(move |request| {
@@ -60,7 +60,7 @@ async fn session_rev(hub: &Arc<Hub>) -> Rev {
     hub.blocking(|store| store.get_session(&"s".into())).await.unwrap().session.rev
 }
 
-fn current_run(live: &LiveSession) -> RunId {
+pub(super) fn current_run(live: &LiveSession) -> RunId {
     live.state.lock().agent.expect("a run is current").run
 }
 
@@ -284,7 +284,7 @@ async fn a_run_found_running_that_has_exited_since_gets_no_claims_on_the_record(
     assert_eq!(on_record(&hub).await, None);
 }
 
-fn exited() -> EventBody {
+pub(super) fn exited() -> EventBody {
     EventBody::AgentExited {
         reason: protocol::event::ExitReason::Unexpected,
         code: None,

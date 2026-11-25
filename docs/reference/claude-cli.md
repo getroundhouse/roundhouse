@@ -87,6 +87,14 @@ Observed on 2.1.330, with servers that say which config they came from, a config
 - **`mcp_set_servers`, a control request, adds servers to a running agent.** It connected a new one, and replaced the one of the same name that `--mcp-config` gave.
 - **A server that refuses its configured `Authorization` header with 401 is `failed`.** The CLI doesn't try OAuth, as the table above says.
 
+### What `init` says of them
+
+Observed on 2.1.330 with Roundhouse's streaming flags, a home and a config directory of the trial's own, a stand-in for the Messages API, and stand-in servers.
+
+- **`init` is sent again as each turn starts,** and `mcp_servers` lists each server's `name`, `status` and `source`, as it is then. It has no URL, no header and nothing of why one failed.
+- **`status` is `connected`, `needs-auth`, `failed`, `pending` or `disabled`.** One over HTTP with no header that answers 401 with OAuth's metadata is `needs-auth`. One that refuses its header, answers 500, can't be reached or can't be run is `failed`. The first `init` came 31 s after the prompt, once every server but one had settled, and one that hadn't answered by then was `pending` there and `failed` in the next. One in the project's `disabledMcpServers` is `disabled`. The CLI's source has `cached` too, which wasn't seen.
+- **`tools` lists every tool the agent has, by name, those deferred until `ToolSearch` loads them included.** A server's are named `mcp__<server>__<tool>`, with a `_` for anything in the server's name but an ASCII letter or digit, `-` or `_`. So `a.b` and `a b` give the same prefix, and `a`'s starts the names of `a__b`'s. A name that starts `claude.ai ` also has each run of `_` made one, and none at its ends, as read from the CLI's source.
+
 ## Computer use
 
 Claude Code has an MCP server of its own, `computer-use`, that sees the screen and moves the mouse and types. It's on a Mac only, and off until it's turned on for a project with `/mcp`. Roundhouse's agents don't get it. Read on 2.1.330, where no prompt was sent and no computer-use tool was called.

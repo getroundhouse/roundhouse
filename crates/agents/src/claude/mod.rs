@@ -15,6 +15,7 @@ mod normalize;
 mod one_off;
 mod process;
 mod title;
+mod tool_servers;
 mod typed;
 mod usage;
 

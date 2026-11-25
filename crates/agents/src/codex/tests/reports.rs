@@ -31,7 +31,9 @@ async fn codexs_plan_is_reported_as_its_to_do_list() {
         todo("Say done", TodoStatus::InProgress),
         todo("Rest", TodoStatus::Pending),
     ];
-    assert_eq!(reports(&output), [&Report::Todos(TodoList { items, note: Some("Two steps".into()) })]);
+    let todos = Report::Todos(TodoList { items, note: Some("Two steps".into()) });
+    let servers = Report::ToolServers { servers: Vec::new() };
+    assert_eq!(reports(&output), [&servers, &todos]);
 }
 
 /// So none of them is read, or kept as a line the adapter doesn't understand, and a Codex that sends one anyway has it

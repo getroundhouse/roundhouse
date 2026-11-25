@@ -80,7 +80,8 @@ fn after(kind: &ObservationKey) -> Option<ObservationKey> {
         K::AccountIdentity { .. } => K::AccountLimits { account: "claude-ada".into() },
         K::AccountLimits { .. } => K::SessionContext { session_id: s() },
         K::SessionContext { .. } => K::SessionTodos { session_id: s() },
-        K::SessionTodos { .. } => K::SessionCache { session_id: s() },
+        K::SessionTodos { .. } => K::SessionToolServers { session_id: s() },
+        K::SessionToolServers { .. } => K::SessionCache { session_id: s() },
         K::SessionCache { .. } => K::WaitRead { session_id: s(), wait: "a".into() },
         K::WaitRead { .. } => K::ReleaseOffered,
         K::ReleaseOffered | K::Unknown => return None,
@@ -109,7 +110,9 @@ pub(super) fn sent_at(kind: &ObservationKey) -> Option<u64> {
         | K::WorkspaceRepositoryUnseen { .. }
         | K::WorkspaceBranches { .. } => WORKSPACE,
         K::Reference { .. } => CHIP,
-        K::SessionContext { .. } | K::SessionTodos { .. } | K::WaitRead { .. } => SESSION,
+        K::SessionContext { .. } | K::SessionTodos { .. } | K::SessionToolServers { .. } | K::WaitRead { .. } => {
+            SESSION
+        }
         // Of a kind this build doesn't know, which the hub never makes.
         K::Unknown => return None,
     })

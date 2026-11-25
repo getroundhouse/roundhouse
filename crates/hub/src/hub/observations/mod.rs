@@ -28,8 +28,8 @@ pub(crate) use kept::Observations;
 pub(crate) use kinds::Kind;
 pub(crate) use kinds::{
     AccountIdentity, AccountLimits, ModelCatalog, Referenced, SessionCache, SessionContext, SessionKey, SessionTodos,
-    WaitKey, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail,
-    WorkspaceRepositoryUnseen,
+    SessionToolServers, WaitKey, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
+    WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
 pub(crate) use subjects::ChildWorktreeKey;
 pub(crate) use workspace_kinds::{ChildWorktreeBranches, WorkspaceBranches, WorkspaceWorkerBuild};

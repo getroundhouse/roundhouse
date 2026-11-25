@@ -18,8 +18,8 @@ area! { "the agent's setup";
     /// as it loads more, and the hub keeps the newest on the session's record.
     InstructionFiles => instruction_files: Claimed,
     /// Each tool server the agent has is reported with its state, such as connected, needing sign-in or failed, whole
-    /// whenever one changes, and the hub keeps the newest on the session's record. One that failed can be connected
-    /// again without starting the agent again.
+    /// whenever the agent says one changed, and the hub keeps the newest as an observation, the run's alone. The
+    /// worker's own, as [`Capability::ToolServer`] has it, is left out, since it's part of Roundhouse.
     ToolServers => tool_servers: Claimed,
     /// A tool server that needs signing in to can be signed in to from a client, as all three agents do with MCP's
     /// sign-in: the page to open comes as the server's request, as [`super::asking`] has it, and the server's state
@@ -43,7 +43,8 @@ ids!(
 pub struct ToolServerState {
     pub name: ServerName,
     pub state: ServerState,
-    /// Why, in the agent's words, for one that failed.
+    /// Why, in the agent's words, for one that failed, on one line, without the secrets an agent's words can hold, such
+    /// as a server's URL past its origin, which its adapter takes out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// How many tools it offers, once connected.

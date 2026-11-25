@@ -8,7 +8,7 @@ use super::hub_kinds::ReleaseOffered;
 use super::kept::Table;
 use super::kinds::{
     AccountIdentity, AccountLimits, Form, Kind, ModelCatalog, Owner, Referenced, SessionCache, SessionContext,
-    SessionTodos, Subject, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
+    SessionTodos, SessionToolServers, Subject, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
     WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
 use super::workspace_kinds::{ChildWorktreeBranches, WorkspaceBranches, WorkspaceWorkerBuild};
@@ -36,6 +36,7 @@ pub(crate) struct Tables {
     pub(super) account_limits: Table<AccountLimits>,
     pub(super) session_context: Table<SessionContext>,
     pub(super) session_todos: Table<SessionTodos>,
+    pub(super) session_tool_servers: Table<SessionToolServers>,
     pub(super) session_cache: Table<SessionCache>,
     pub(super) wait_read: Table<WaitRead>,
     pub(super) release_offered: Table<ReleaseOffered>,
@@ -100,7 +101,7 @@ impl<K: Kind> AnyTable for Table<K> {
 
 impl Tables {
     /// Each kind's table, the one list of every kind the store keeps.
-    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 23] {
+    pub(super) fn each(&mut self) -> [&mut dyn AnyTable; 24] {
         let Tables {
             workspace_lines,
             workspace_changes,
@@ -120,6 +121,7 @@ impl Tables {
             account_limits,
             session_context,
             session_todos,
+            session_tool_servers,
             session_cache,
             wait_read,
             release_offered,
@@ -145,6 +147,7 @@ impl Tables {
             account_limits,
             session_context,
             session_todos,
+            session_tool_servers,
             session_cache,
             wait_read,
             release_offered,

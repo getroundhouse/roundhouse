@@ -12,5 +12,6 @@ mod reports;
 mod script;
 mod subagents;
 mod thinking;
+mod tool_servers;
 mod transitions;
 mod usage;

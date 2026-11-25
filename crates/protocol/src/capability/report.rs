@@ -178,7 +178,8 @@ pub enum Progress {
 pub enum Keeper {
     /// It's an event in the session's log, so every client sees it, and so does a client that comes later.
     Log,
-    /// Only the newest matters, which the hub keeps on the session's record, and announces when it changes.
+    /// Only the newest matters, which the hub keeps for the session, as an observation or on its record, and announces
+    /// when it changes.
     Session,
     /// Only the newest matters, which the hub keeps on the account's record, since agents in any workspace can run
     /// under the account.

@@ -114,7 +114,7 @@ fn configuration(spec: &AgentSpec, settings: &Launch, options: &AgentOptions, in
         config["model_reasoning_effort"] = json!(level);
     }
     if let Some(tools) = &options.tools {
-        config["mcp_servers.roundhouse"] = json!({"url":tools.url,
+        config[format!("mcp_servers.{}", super::tool_servers::TOOLS_SERVER)] = json!({"url":tools.url,
             "http_headers":{"Authorization":format!("Bearer {}", tools.token.as_str())}});
     }
     json!({"cwd":spec.cwd,"model":settings.model.as_str(),

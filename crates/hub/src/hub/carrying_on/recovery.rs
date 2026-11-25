@@ -1,5 +1,6 @@
 use super::super::Hub;
 use crate::error::provider_failed;
+use crate::hub::SessionToolServers;
 use crate::session::{CarriedOver, Item, LiveSession, Progress, Starting};
 use crate::spans;
 use crate::store::{Store, StoreError, cancelled_approval};
@@ -64,8 +65,13 @@ impl Hub {
             self.write(move |store| interrupt(store, &id, prompts)).await;
         }
         carrying.join_all().await;
-        // Every agent still running has been carried on with, so whatever the rest claimed is gone with them.
+        // Every agent still running has been carried on with, so whatever the rest claimed, and the tool servers they
+        // had, are gone with them.
         let running: Vec<SessionId> = self.sessions.lock().live.keys().cloned().collect();
+        if let Err(e) = self.observations_gone_where::<SessionToolServers>(|of| !running.contains(&of.session_id)).await
+        {
+            warn!(name: "carrying_on.tool_servers_kept", error = e.message, "Couldn't forget gone agents' tool servers");
+        }
         self.write(move |store| store.clear_claims_but(&running)).await;
         // A session that wasn't at work, and whose agent isn't running, never will take these.
         let untaken = std::mem::take(&mut *untaken.lock());

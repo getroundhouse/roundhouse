@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use crate::claude::login_check::Output;
+use crate::claude::tool_servers;
 use protocol::capability::Report;
 use protocol::event::{ApprovalChange, EventBody};
 use protocol::model::CacheRequest;
@@ -68,13 +69,38 @@ pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output:
                 AgentOutput::event(body, Some(line))
             }
         };
-        let opened = matches!(&item, AgentOutput::Event { body, .. } if opens(body));
-        if opened && !confirm(&shared, &output).await {
+        if !deliver_said(&shared, &output, item, after).await {
             return;
         }
-        if !deliver(&shared, &output, item).await || !deliver_shown(&shared, &output, after).await {
-            return;
-        }
+    }
+}
+
+/// Sends on `item`, what a line said, and then what it showed without saying, `after`, and the tool servers it lists.
+/// What was held goes first, once it shows the CLI has opened the conversation. False once nobody is reading.
+async fn deliver_said(
+    shared: &Shared,
+    output: &mpsc::Sender<AgentOutput>,
+    item: AgentOutput,
+    after: Option<EventBody>,
+) -> bool {
+    let opened = matches!(&item, AgentOutput::Event { body, .. } if opens(body));
+    if opened && !confirm(shared, output).await {
+        return false;
+    }
+    let servers = match &item {
+        AgentOutput::Event { body, raw: Some(line), .. } => tool_servers::said(body, line),
+        AgentOutput::Event { raw: None, .. }
+        | AgentOutput::Delta(_)
+        | AgentOutput::Retrying(_)
+        | AgentOutput::Report(_)
+        | AgentOutput::Exited { .. } => None,
+    };
+    if !deliver(shared, output, item).await || !deliver_shown(shared, output, after).await {
+        return false;
+    }
+    match servers {
+        Some(servers) => deliver(shared, output, AgentOutput::Report(servers)).await,
+        None => true,
     }
 }
 

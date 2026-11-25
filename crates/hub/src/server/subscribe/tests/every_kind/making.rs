@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use protocol::capability::output::TodoList;
 use protocol::capability::settings::ModelCatalog;
+use protocol::capability::setup::{ServerState, ToolServerState};
 use protocol::client::HubNotice;
 use protocol::model::{
     AccountIdentity, BranchName, Branches, CacheTtl, ContextUsage, ConversationCache, GithubAppSaid,
@@ -133,6 +134,10 @@ pub(super) async fn make(hub: &Hub, kind: &ObservationKey, round: u8) {
         }
         K::SessionTodos { .. } => {
             read::<hub::SessionTodos>(hub, session, TodoList { items: Vec::new(), note: Some(said) }, at).await;
+        }
+        K::SessionToolServers { .. } => {
+            let server = ToolServerState { name: said.into(), state: ServerState::Connected, error: None, tools: None };
+            read::<hub::SessionToolServers>(hub, session, vec![server], at).await;
         }
         K::SessionCache { .. } => {
             let held = PromptCache { used_at_ms: at, ttl: CacheTtl::OneHour, model: None, tokens: round.into() };
