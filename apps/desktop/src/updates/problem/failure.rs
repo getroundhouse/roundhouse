@@ -103,6 +103,8 @@ pub(in super::super) struct Shown {
     pub(in super::super) checking: bool,
     /// The version of the update that's downloaded, which installs when the app restarts or quits.
     pub(in super::super) ready: Option<String>,
+    /// The last look that worked found nothing newer than this version.
+    pub(in super::super) nothing_newer: bool,
     /// What a check someone asked for found, for a few seconds, when nothing else here says it.
     pub(in super::super) answer: Option<Answer>,
     /// How many answers there have been, so the end of one answer's few seconds doesn't clear a later one.

@@ -26,6 +26,8 @@ pub(super) enum Hub {
     NeverAnswers,
     /// Paired with a hub the phone can't reach, as off its network.
     Unreachable,
+    /// Paired with a hub that's older than the app, across a protocol break.
+    Older,
 }
 
 /// Something to do in the app once it has opened, each done once the one before it has finished.
@@ -76,6 +78,7 @@ pub(super) const SCREENS: &[Screen] = &[
     Screen { name: "workspaces-none", spec: SPEC, hub: Hub::Holds(worlds::empty), steps: &[] },
     Screen { name: "connecting", spec: SPEC, hub: Hub::NeverAnswers, steps: &[] },
     Screen { name: "unreachable", spec: SPEC, hub: Hub::Unreachable, steps: &[] },
+    Screen { name: "hub-older", spec: SPEC, hub: Hub::Older, steps: &[Step::Tap("hub")] },
     Screen { name: "hub-lost", spec: SPEC, hub: Hub::Holds(worlds::hub), steps: &[Step::LoseTheHub] },
     Screen { name: "chat", spec: SPEC, hub: Hub::Holds(worlds::hub), steps: &[Step::OpenChat(worlds::FOCUS_ROW)] },
     Screen {

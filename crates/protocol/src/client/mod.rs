@@ -33,7 +33,7 @@ pub mod waits;
 pub mod workspaces;
 
 pub use feed::{HubNotice, ObservationNotice, RecordNotice};
-pub use hello::{Hello, HelloReply};
+pub use hello::{Hello, HelloReply, HubRefusing};
 pub use request::ClientRequest;
 
 mod errors;

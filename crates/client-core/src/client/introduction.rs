@@ -3,8 +3,9 @@
 use std::path::Path;
 use std::time::Instant;
 
-use protocol::client::{ApiError, CLIENT_PROTOCOL_VERSION, ErrorCode, Hello, HelloReply};
+use protocol::client::{ApiError, CLIENT_PROTOCOL_VERSION, Hello, HelloReply, HubRefusing};
 use protocol::model::ClientDevice;
+use protocol::versions::Versions;
 
 use super::{Client, Result};
 
@@ -61,7 +62,8 @@ impl Client {
         if protocol_version != CLIENT_PROTOCOL_VERSION {
             let message =
                 format!("the hub chose protocol {protocol_version}, and this client speaks {CLIENT_PROTOCOL_VERSION}");
-            return Err(ApiError::new(ErrorCode::VersionMismatch, message).into());
+            let hub = HubRefusing { version: hub_version, speaks: Versions::only(protocol_version) };
+            return Err(ApiError::versions_differ(message, hub).into());
         }
         let _ = self.inner.hub_version.set(hub_version);
         Ok(())

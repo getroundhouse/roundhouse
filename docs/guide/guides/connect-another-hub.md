@@ -17,9 +17,14 @@ Choose **Create new link** if the link expired before a device connected. Each l
 
 ## When it cannot connect
 
-The selected hub shows **Offline**, **Access revoked**, **Key changed** or **Update required** in the switcher, and explains why in place of the workspace when none is open. The app tries again by itself, at once and then after longer and longer waits, up to 30 seconds, without closing a workspace that's open. Only **Access revoked**, **Key changed** and **Update required** wait for you. Check that the other machine is awake, its hub is running, and the network allows the port: 7867 in installed builds, or 7868 in development builds. `ROUNDHOUSE_LISTEN` on the hub's machine chooses another port or a specific address. There is no relay that connects machines across otherwise unreachable networks.
+The selected hub shows **Offline**, **Access revoked**, **Key changed** or **Update required** in the switcher, and explains why in place of the workspace when none is open. The app tries again by itself, at once and then after longer and longer waits, up to 30 seconds, without closing a workspace that's open. Only **Access revoked** and **Key changed** wait for you, and **Update required** does when it's this app that needs updating. Check that the other machine is awake, its hub is running, and the network allows the port: 7867 in installed builds, or 7868 in development builds. `ROUNDHOUSE_LISTEN` on the hub's machine chooses another port or a specific address. There is no relay that connects machines across otherwise unreachable networks.
 
-If the hub reports a different key, check that you are connecting to the intended machine before choosing **Pair again…**. An expired, used or revoked credential also offers **Pair again…** to paste a fresh pairing link. A protocol mismatch requires updating the app or hub; a remote desktop cannot restart the other machine's hub.
+If the hub reports a different key, check that you are connecting to the intended machine before choosing **Pair again…**. An expired, used or revoked credential also offers **Pair again…** to paste a fresh pairing link. **Update required** means this app and the hub's Roundhouse are too far apart to connect, and the app says which one to update:
+
+- **The other machine needs updating.** Update Roundhouse there. If its app is open, choose **Restart to update**. If its hub is [installed as a service](../reference/updates.md#a-hub-on-a-machine-of-its-own), run `roundhouse hub update` on that machine, more than once if it's several updates behind. This app reconnects by itself.
+- **This app needs updating.** Choose **Restart to update**, or **Check for updates** if nothing is downloaded yet.
+
+You can't restart another machine's hub from here.
 
 Pairing again with the same hub key replaces its saved authorization and reconnects the existing view, including drafts waiting to be saved. A different key creates a separate saved hub.
 

@@ -8,6 +8,7 @@ use gpui_kit::Pixels;
 
 use super::frame::Frame;
 use crate::support::Cells;
+use client_core::OlderSide;
 use client_core::fake_hub::World;
 
 pub(crate) struct Screen {
@@ -101,6 +102,8 @@ pub(crate) enum Step {
     UpdateChecking,
     /// Has the app show a check as having found nothing newer.
     UpToDate,
+    /// Has the app show a paired hub as across a protocol break, with which side is older.
+    AcrossABreak(fn() -> OlderSide),
     /// Chooses About Roundhouse, as from the Help menu.
     About,
     /// Opens Settings, as its menu item does.

@@ -28,6 +28,8 @@ enum Then {
     Handles,
     /// Refuses it with this code, saying this in its message.
     Refuses(ErrorCode, String),
+    /// Refuses a hello that names no version it speaks, saying which it does.
+    RefusesVersions,
     /// Closes the connection without a reply.
     Closes,
 }
@@ -52,6 +54,10 @@ impl Then {
                 (Then::Refuses(code, says), ReplyOutcome::Error(error)) => {
                     error.code == *code && error.message.contains(says.as_str())
                 }
+                (Then::RefusesVersions, ReplyOutcome::Error(error)) => {
+                    error.code == ErrorCode::VersionMismatch
+                        && error.hub.as_ref().is_some_and(|hub| !hub.version.is_empty() && hub.speaks == HUB_SPEAKS)
+                }
                 _ => false,
             }
     }
@@ -68,12 +74,11 @@ fn calls(requests: Vec<(&str, Then)>) -> Vec<Step> {
 /// Hellos at versions spelled out, whatever this hub speaks next, each from a client that says only its own: 3 and 4,
 /// which it stopped speaking, 6, which its clients speak, and 7, which it doesn't speak.
 fn spelled_out() -> Vec<(&'static str, Vec<Step>)> {
-    let refused = || Then::Refuses(ErrorCode::VersionMismatch, String::new());
     vec![
-        ("a hello at version 3", calls(vec![(&hello(3, None), refused()), (STATUS, Then::Closes)])),
-        ("a hello at version 4", calls(vec![(&hello(4, None), refused()), (STATUS, Then::Closes)])),
+        ("a hello at version 3", calls(vec![(&hello(3, None), Then::RefusesVersions), (STATUS, Then::Closes)])),
+        ("a hello at version 4", calls(vec![(&hello(4, None), Then::RefusesVersions), (STATUS, Then::Closes)])),
         ("a hello at version 6", calls(vec![(&hello(6, None), Then::Greets(6)), (STATUS, Then::ShowsStatus)])),
-        ("a hello at version 7", calls(vec![(&hello(7, None), refused()), (STATUS, Then::Closes)])),
+        ("a hello at version 7", calls(vec![(&hello(7, None), Then::RefusesVersions), (STATUS, Then::Closes)])),
     ]
 }
 

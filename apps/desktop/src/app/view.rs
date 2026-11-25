@@ -10,7 +10,7 @@ use look::Typeset as _;
 use protocol::client::{HubStart, HubStatus};
 
 use super::restarts::restart_note;
-use super::{AppView, Connection, ConnectionFailure, corner, hub_source, hubs, pairing, title_bar, window_buttons};
+use super::{AppView, Connection, ConnectionFailure, corner, hub_source, hubs, title_bar, window_buttons};
 use crate::menus::System;
 use crate::names::{MACHINE, THIS_MACHINE};
 use crate::sides::{self, AtTheTop, Side};
@@ -124,23 +124,6 @@ impl AppView {
         )
     }
 
-    fn remote_failed(&self, failure: &ConnectionFailure, cx: &mut Context<Self>) -> AnyElement {
-        let hub_name = self.hub.remote.as_ref().map_or("the hub", |hub| hub.hub_name.as_str());
-        let (heading, body, pair_again) = remote_failure_words(hub_name, failure);
-        let primary = if pair_again {
-            let data_dir = self.hub.paths.data_dir.clone();
-            look::button("pair-hub-again", look::ButtonKind::Main, look::ControlSize::Large, "Pair again…")
-                .on_click(move |_, window, cx| pairing::open(data_dir.clone(), window, cx))
-        } else {
-            try_again(cx)
-        };
-        look::empty(look::EmptyKind::Failed, heading)
-            .says(body)
-            .answer(switch_to_local("failed-switch-local"))
-            .answer(primary)
-            .into_any_element()
-    }
-
     /// The workspace to draw: the selected one, which stays on screen while the app connects to a hub again, such as
     /// one it's restarting to finish an update, or a remote hub temporarily out of reach. Otherwise what's typed for
     /// that moment would go nowhere. Unlike `selected_pane`, which is for acting on one, and so only gives one with a
@@ -194,52 +177,13 @@ fn error_bar(error: String, cx: &mut Context<AppView>) -> impl IntoElement {
         )
 }
 
-fn remote_failure_words(hub_name: &str, failure: &ConnectionFailure) -> (String, String, bool) {
-    match failure {
-        ConnectionFailure::Unreachable { hosts } => {
-            let at = if hosts.is_empty() { String::new() } else { format!(" at {}", hosts.join(" or ")) };
-            (
-                format!("Can’t reach {hub_name}"),
-                format!(
-                    "Couldn’t connect{at}. Retrying automatically — check that {hub_name} is awake and on the same \
-                     network or VPN."
-                ),
-                false,
-            )
-        }
-        ConnectionFailure::Revoked => (
-            format!("Access to {hub_name} was revoked"),
-            format!(
-                "This computer’s device credential is no longer accepted by {hub_name}. Create a new pairing link \
-                 there to reconnect."
-            ),
-            true,
-        ),
-        ConnectionFailure::KeyChanged { host } => (
-            format!("{hub_name} presented a different key"),
-            format!(
-                "{host} no longer matches its saved key. Check that you’re reaching {hub_name} before pairing again."
-            ),
-            true,
-        ),
-        ConnectionFailure::RemoteProtocolBreak(detail) => (
-            format!("{hub_name} is on another protocol version"),
-            format!("{detail}. Update Roundhouse on the older machine to reconnect."),
-            false,
-        ),
-        ConnectionFailure::RemoteOther(detail) | ConnectionFailure::Local(detail) => {
-            (format!("Couldn’t connect to {hub_name}"), detail.clone(), false)
-        }
-    }
-}
-
-fn switch_to_local(id: &'static str) -> look::Button {
+pub(super) fn switch_to_local(id: &'static str) -> look::Button {
     look::button(id, look::ButtonKind::Outlined, look::ControlSize::Large, format!("Switch to {THIS_MACHINE}"))
         .on_click(|_, window, cx| hubs::select(None, window, cx))
 }
 
 /// Tries the hub again, as the main action.
-fn try_again(cx: &mut Context<AppView>) -> look::Button {
+pub(super) fn try_again(cx: &mut Context<AppView>) -> look::Button {
     look::button("try-hub-again", look::ButtonKind::Main, look::ControlSize::Large, "Try again")
         .on_click(cx.listener(|t, _, _, cx| t.connect(cx)))
 }

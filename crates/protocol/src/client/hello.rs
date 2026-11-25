@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
+use crate::versions::Versions;
 
 /// Must come first on a connection. It names the newest version of the protocol the client speaks, and the oldest,
 /// which a client from before ranges leaves out, since it speaks only the one, and which device the client runs on,
@@ -25,6 +26,16 @@ impl Request for Hello {
     fn into_request(self) -> ClientRequest {
         ClientRequest::Hello(self)
     }
+}
+
+/// What a hub says of itself as it refuses a hello that names no version it speaks, so the client can say which of the
+/// two is older. It never changes form, as the hellos don't, since it's read across a break.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct HubRefusing {
+    /// Its release, as [`HelloReply`] says it.
+    pub version: String,
+    /// The versions of the protocol it speaks.
+    pub speaks: Versions,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

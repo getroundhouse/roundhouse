@@ -50,10 +50,6 @@ pub(super) fn connect_failure(link: &PairingLink, error: &ClientError) -> (Strin
             format!("That pairing link has expired or was already used. Create a new link on {hub} and paste it here."),
             true,
         ),
-        ClientError::Api(api) if error.is_version_mismatch() => (
-            format!("{hub} is on another protocol version ({}). Update Roundhouse on the older machine.", api.message),
-            false,
-        ),
         ClientError::Api(api) => (format!("Couldn’t connect to {hub}: {}", api.message), false),
         ClientError::Unexpected(detail) => (format!("Couldn’t connect to {hub}: {detail}"), false),
     }

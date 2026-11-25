@@ -15,7 +15,7 @@ impl MobileApp {
         let link = followed.link.read(cx);
         let hub = link.hub();
         let why = match link.state() {
-            LinkState::Unreachable(why) | LinkState::Refused(why) => Some(why.clone()),
+            LinkState::Unreachable(why) | LinkState::HubOlder(why) | LinkState::Refused(why) => Some(why.clone()),
             LinkState::Connecting | LinkState::Ready => None,
         };
         let muted = look::colors(cx).text_muted;

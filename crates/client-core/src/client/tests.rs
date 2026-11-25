@@ -5,7 +5,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use protocol::client::{
-    CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice, ReplyOutcome,
+    CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, HelloReply, HubFrame, HubNotice, ReplyOutcome,
     subscriptions,
 };
 use protocol::terminal::Typed;
@@ -88,11 +88,9 @@ fn a_hub_that_chose_another_version_is_refused() {
 
     let connected = Client::connect(&socket, "test");
 
-    assert!(
-        matches!(&connected, Err(ClientError::Api(e)) if e.code == ErrorCode::VersionMismatch),
-        "{:?}",
-        connected.err()
-    );
+    let error = connected.err().unwrap();
+    assert!(error.is_version_mismatch(), "{error:?}");
+    assert_eq!(error.older_side(), Some(OlderSide::Client { hub_version: "a".into() }));
 }
 
 /// A hub that takes the request to stop and goes before its reply gets out did what was asked, so stopping it is done,

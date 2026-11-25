@@ -24,3 +24,18 @@ impl Answer {
         }
     }
 }
+
+/// How the app's own update stands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OwnUpdate<'a> {
+    /// Downloaded, as this version.
+    Ready(&'a str),
+    /// Someone checked, and the look that answers them hasn't finished.
+    Checking,
+    /// The last look that worked found nothing newer.
+    NothingNewer,
+    /// No look has worked yet.
+    NotFound,
+    /// This build doesn't update itself, or can't where it is.
+    Never,
+}
