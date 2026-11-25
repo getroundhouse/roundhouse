@@ -182,8 +182,9 @@ impl QuestionPanel {
         if self.answered || answered.iter().all(Option::is_none) {
             return;
         }
-        let answers = answered.into_iter().map(Option::unwrap_or_default).collect();
-        if let Some(decision) = self.asks.decision(answers) {
+        let answers: Vec<_> = answered.into_iter().map(Option::unwrap_or_default).collect();
+        if let Some(decision) = self.asks.decision(answers.clone()) {
+            self.typed_sent(&answers, cx);
             self.answer(decision, cx);
         }
     }

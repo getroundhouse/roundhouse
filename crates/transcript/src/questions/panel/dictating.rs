@@ -4,9 +4,10 @@
 use client_core::hints::{Around, Field};
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::{App, Context, Entity, Window};
+use protocol::capability::asking::QuestionAnswer;
 
 use super::QuestionPanel;
-use crate::TranscriptEvent;
+use crate::{Transcript, TranscriptEvent};
 
 #[derive(Clone, Copy)]
 pub(super) enum Then {
@@ -42,17 +43,27 @@ impl QuestionPanel {
         self.after_dictation.wait(&field, content, then, cx)
     }
 
-    /// What's dictated into question `q`'s typed answer, `typed`, is about, with the words to favour: what's typed there, the question, then the
-    /// workspace's and the chat's.
+    /// What's dictated into question `q`'s typed answer, `typed`, is about, with the words to favour: what's typed
+    /// there, the question, then the workspace's and the chat's.
     pub(super) fn answer_about(&self, q: usize, typed: &Entity<TextareaState>, cx: &App) -> dictation_ui::About {
         let Some(asked) = self.asked.get(q) else { return dictation_ui::About::default() };
         let typed = typed.read(cx).text().to_string();
         let transcript = self.transcript.upgrade();
         let around = transcript.as_ref().map_or_else(Around::default, |t| t.read(cx).dictation_around(cx));
-        let workspace = around.workspace.as_ref().map(|workspace| workspace.shown.workspace().id.to_string());
-        let chat = transcript.as_ref().map(|t| t.read(cx).session_id().to_string());
+        let within = within(transcript.as_ref(), &around, cx);
         let picked = Field::Answer { typed: &typed, question: &asked.question, around }.picked();
-        dictation_ui::About { workspace, chat, ..picked.into() }
+        dictation_ui::About::new(within, picked)
+    }
+
+    /// Says that what's typed in `answers` was sent, for what's kept of dictation. The questions are answered at once,
+    /// so it's one thing sent.
+    pub(super) fn typed_sent(&self, answers: &[QuestionAnswer], cx: &mut Context<Self>) {
+        let Some(field) = self.asked.iter().find_map(|asked| asked.other.as_ref()?.dictation.clone()) else { return };
+        let typed: Vec<&str> = answers.iter().filter_map(|answer| answer.typed.as_deref()).collect();
+        let transcript = self.transcript.upgrade();
+        let around = transcript.as_ref().map_or_else(Around::default, |t| t.read(cx).dictation_around(cx));
+        let within = within(transcript.as_ref(), &around, cx);
+        field.update(cx, |field, cx| field.sent(within, typed.join("\n\n"), cx));
     }
 
     pub(super) fn dictation_event(
@@ -81,5 +92,14 @@ impl QuestionPanel {
             }
         }
         cx.notify();
+    }
+}
+
+/// Where an answer in `transcript`, with `around` it, is.
+fn within(transcript: Option<&Entity<Transcript>>, around: &Around<'_>, cx: &App) -> dictation_ui::Within {
+    dictation_ui::Within {
+        workspace: around.workspace.as_ref().map(|workspace| workspace.shown.workspace().id.to_string()),
+        chat: transcript.map(|t| t.read(cx).session_id().to_string()),
+        said_out_loud: false,
     }
 }

@@ -96,6 +96,7 @@ impl WorkspacePane {
     /// and ending what's being dictated, which leaves nothing for Esc to put back.
     pub(super) fn emptied_by_sending(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.end_dictation(cx);
+        self.sent_from_composer(self.composer.read(cx).text().to_string(), false, cx);
         self.composer.update(cx, |c, cx| c.set_value("", window, cx));
         self.keep_typed(true, cx);
     }

@@ -4,7 +4,7 @@ use dictation::{Hints, Recording, Update};
 use gpui_kit::{App, Context, Global, WeakEntity};
 use sound::Quieting;
 
-use crate::{About, Field, Keeping, Taken};
+use crate::{About, Field, Keeping, Sent, Taken};
 
 type Record = fn(Hints, &App) -> Option<Listening>;
 
@@ -26,6 +26,8 @@ pub struct Source {
     pub quiets: fn(Quieting, &App) -> bool,
     /// Keeps a recording the app took what's kept of.
     pub keep: fn(Keeping, &mut App),
+    /// Hears of what's sent from a field, whether or not any of it was dictated.
+    pub sent: fn(Sent, &mut App),
 }
 
 impl Global for Source {}
@@ -76,6 +78,12 @@ pub(crate) fn record(about: About, cx: &App) -> Option<Recorded> {
 pub(crate) fn keep(keeping: Keeping, cx: &mut App) {
     if let Some(source) = cx.try_global::<Source>() {
         (source.keep)(keeping, cx);
+    }
+}
+
+pub(crate) fn sent(sent: Sent, cx: &mut App) {
+    if let Some(source) = cx.try_global::<Source>() {
+        (source.sent)(sent, cx);
     }
 }
 

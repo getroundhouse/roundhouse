@@ -196,7 +196,7 @@ impl ProposalView {
     }
 
     /// What's written in the note, trimmed.
-    fn noted(&self, cx: &App) -> String {
+    pub(super) fn noted(&self, cx: &App) -> String {
         let note = self.answering.note.as_ref().map(|note| note.input.read(cx).text().to_string());
         note.unwrap_or_default().trim().to_string()
     }
@@ -248,6 +248,7 @@ impl ProposalView {
         }
         self.answering.request = Some(request.clone());
         self.answering.sending = Sending::Going;
+        self.note_sent(cx);
         self.follow_dictation(cx);
         request.send(&self.client, cx.weak_entity(), cx);
         cx.notify();

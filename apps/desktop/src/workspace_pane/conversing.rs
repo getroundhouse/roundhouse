@@ -112,12 +112,13 @@ impl WorkspacePane {
         let now = self.composer.read(cx).text().to_string();
         let said = said_since(&before, &now).trim().to_string();
         let transcript = self.transcript().filter(|_| !said.is_empty());
-        let sent =
-            transcript.is_some_and(|t| t.update(cx, |t, cx| t.send_prompt_with(Prompt::new(said).said_out_loud(), cx)));
+        let sent = transcript
+            .is_some_and(|t| t.update(cx, |t, cx| t.send_prompt_with(Prompt::new(said.clone()).said_out_loud(), cx)));
         if let Some(conversation) = self.conversation_here(cx) {
             conversation.let_go(sent);
         }
         if sent {
+            self.sent_from_composer(said, true, cx);
             self.composer.update(cx, |composer, cx| composer.set_value(before, window, cx));
             self.keep_typed(true, cx);
         }

@@ -79,12 +79,19 @@ impl WorkspacePane {
         let open_file = self.diff.as_ref().and_then(|diff| diff.tab.as_ref()).map(|tab| tab.path.as_ref());
         let chat = self.transcript().map(|transcript| transcript.read(cx).log());
         let around = Around { workspace: Some(self.workspace_around(cx)), chat };
-        dictation_ui::About {
-            workspace: Some(self.shown.workspace().id.to_string()),
-            chat: self.active.as_ref().map(ToString::to_string),
-            said_out_loud: self.conversation_is_here(cx),
-            ..Field::Composer { typed: &typed, attached: &attached, open_file, around }.picked().into()
-        }
+        let picked = Field::Composer { typed: &typed, attached: &attached, open_file, around }.picked();
+        dictation_ui::About::new(self.composer_within(self.conversation_is_here(cx)), picked)
+    }
+
+    fn composer_within(&self, said_out_loud: bool) -> dictation_ui::Within {
+        let workspace = Some(self.shown.workspace().id.to_string());
+        dictation_ui::Within { workspace, chat: self.active.as_ref().map(ToString::to_string), said_out_loud }
+    }
+
+    /// Says that `text` was sent from the composer, for what's kept of dictation.
+    pub(super) fn sent_from_composer(&self, text: String, said_out_loud: bool, cx: &mut Context<Self>) {
+        let within = self.composer_within(said_out_loud);
+        self.dictation.update(cx, |field, cx| field.sent(within, text, cx));
     }
 
     pub(super) fn attach_transcript_hints(

@@ -125,7 +125,7 @@ impl NewWorkspaceDialog {
         let chosen_repo = self.offer.repos.iter().find(|(id, _)| id == &self.repo).map(|(_, name)| name.as_str());
         let repos = self.offer.repos.iter().map(|(_, name)| name.as_str()).collect();
         let field = Field::NewWorkspace { typed: &typed, attached: &attached, chosen_repo, repos };
-        field.picked().into()
+        dictation_ui::About::new(dictation_ui::Within::default(), field.picked())
     }
 
     pub(crate) fn new(
@@ -219,6 +219,7 @@ impl NewWorkspaceDialog {
         let made_of = self.to_keep(cx);
         let kept = self.kept_once_flushed();
         let text = self.prompt.read(cx).text().to_string();
+        self.dictation.update(cx, |field, cx| field.sent(dictation_ui::Within::default(), text.clone(), cx));
         self.prompt.update(cx, |field, cx| field.set_value("", window, cx));
         let (repo, (model, effort)) = (self.repo.clone(), self.to_run());
         let mode = self.mode.take();

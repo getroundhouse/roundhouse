@@ -24,10 +24,8 @@ impl FileDiff {
             let listing = review.listing();
             let changed =
                 listing.into_iter().flat_map(|listing| listing.rows.iter()).map(|file| file.path.as_ref()).collect();
-            dictation_ui::About {
-                workspace: Some(review.workspace_id().to_string()),
-                ..Field::DiffComment { typed: &typed, path: &path, changed }.picked().into()
-            }
+            let picked = Field::DiffComment { typed: &typed, path: &path, changed }.picked();
+            dictation_ui::About::new(diff.dictated_within(cx), picked)
         };
         let on_event =
             |this: &mut Self, event: &dictation_ui::Event, window: &mut Window, cx: &mut Context<Self>| match event {
@@ -40,6 +38,11 @@ impl FileDiff {
         // Its live words change the comment's height, so the rows are laid out again.
         let laid_out = cx.observe(&field, |this, _, cx| this.lay_out_again(cx));
         (field, attached.into_iter().chain([laid_out]).collect())
+    }
+
+    pub(super) fn dictated_within(&self, cx: &App) -> dictation_ui::Within {
+        let workspace = Some(self.review.read(cx).workspace_id().to_string());
+        dictation_ui::Within { workspace, ..dictation_ui::Within::default() }
     }
 
     pub fn set_dictation_enabled(&mut self, enabled: bool, cx: &mut Context<Self>) {

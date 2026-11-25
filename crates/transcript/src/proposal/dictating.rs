@@ -81,11 +81,23 @@ impl ProposalView {
         let typed = self.answering.note.as_ref().map(|note| note.input.read(cx).text().to_string());
         let around = self.dictation_hints.as_ref().map_or_else(Around::default, |hints| hints(cx));
         let proposal = &self.proposal.current.proposed;
-        dictation_ui::About {
+        let picked = Field::ProposalNote { typed: typed.as_deref(), proposal, around }.picked();
+        dictation_ui::About::new(self.dictated_within(), picked)
+    }
+
+    fn dictated_within(&self) -> dictation_ui::Within {
+        dictation_ui::Within {
             workspace: Some(self.proposal.workspace_id.to_string()),
             chat: Some(self.proposal.session_id.to_string()),
-            ..Field::ProposalNote { typed: typed.as_deref(), proposal, around }.picked().into()
+            said_out_loud: false,
         }
+    }
+
+    /// Says that the note was sent, for what's kept of dictation.
+    pub(super) fn note_sent(&self, cx: &mut Context<Self>) {
+        let Some(note) = &self.answering.note else { return };
+        let (within, text) = (self.dictated_within(), self.noted(cx));
+        note.dictation.update(cx, |field, cx| field.sent(within, text, cx));
     }
 
     /// Whether the note is being dictated into.

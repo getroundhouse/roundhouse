@@ -13,6 +13,8 @@ use dictation_ui::{How, Said};
 use flume::{Receiver, Selector};
 use kept_recordings::{AUDIO, Device, Ended, FILE, Kept, Text};
 
+use super::files::{gone_already, replace};
+
 /// What a recording's thread reads.
 pub(super) struct Source {
     pub(super) audio: Receiver<Vec<f32>>,
@@ -112,18 +114,9 @@ impl Writer {
         Ok(self.data_bytes + std::fs::metadata(self.dir.join(FILE))?.len())
     }
 
-    /// Replaces its file all at once, so the app going as it's written leaves the last one whole.
     fn write_file(&self) -> io::Result<()> {
-        let file = self.dir.join(FILE);
-        let partial = file.with_extension("json.partial");
-        let mut written = private_files::file_options().create(true).truncate(true).write(true).open(&partial)?;
-        written.write_all(&serde_json::to_vec_pretty(&self.kept)?)?;
-        std::fs::rename(&partial, &file)
+        replace(&self.dir.join(FILE), &serde_json::to_vec_pretty(&self.kept)?)
     }
-}
-
-fn gone_already(error: io::Error) -> io::Result<()> {
-    if error.kind() == io::ErrorKind::NotFound { Ok(()) } else { Err(error) }
 }
 
 fn kept_how(how: How) -> kept_recordings::How {
