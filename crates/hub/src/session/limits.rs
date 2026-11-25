@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::model::{AccountId, AgentAccount, RunId, UsageLimit};
-use tracing::{debug, error};
+use tracing::{Instrument as _, debug, error};
 
 use super::LiveSession;
 use crate::hub::Hub;
@@ -59,7 +59,7 @@ impl LiveSession {
             }
             state.hearing = Some((run, Hearing::Asking(None)));
         }
-        tokio::spawn(self.clone().learn_account(run));
+        tokio::spawn(self.clone().learn_account(run).instrument(self.span()));
     }
 
     /// The agent of `run` heard of its account's limits, at `heard_at_ms`. Only the agent going speaks for the
@@ -88,13 +88,13 @@ impl LiveSession {
                 // Nothing is known of this launch's account, whatever was of the last one's.
                 Some(_) | None => {
                     state.hearing = Some((run, Hearing::Asking(Some(heard))));
-                    tokio::spawn(self.clone().learn_account(run));
+                    tokio::spawn(self.clone().learn_account(run).instrument(self.span()));
                     return;
                 }
             }
         };
         let (Some(account), Ok(hub)) = (account, self.hub()) else { return };
-        tokio::spawn(async move { heard.keep(&hub, account).await });
+        tokio::spawn(async move { heard.keep(&hub, account).await }.instrument(self.span()));
     }
 
     /// Learns which account the agent of `run` runs under, files it on the account's record and the session's, and

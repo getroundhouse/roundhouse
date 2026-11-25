@@ -12,7 +12,7 @@ use protocol::worker::AgentSpec;
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::mpsc;
 use tokio::task::{JoinHandle, JoinSet};
-use tracing::warn;
+use tracing::{Instrument as _, warn};
 
 use super::output::read_stdout;
 use super::run_files::RunFiles;
@@ -36,7 +36,7 @@ pub(super) async fn supervise(
     output: mpsc::Sender<AgentOutput>,
 ) {
     let (status, stderr_tail) = loop {
-        let out_task = tokio::spawn(read_stdout(stdout, shared.clone(), output.clone()));
+        let out_task = tokio::spawn(read_stdout(stdout, shared.clone(), output.clone()).in_current_span());
         let err_task = stderr;
         let status = child.wait().await;
         // No stop may signal a reaped PID while a replacement is being verified.

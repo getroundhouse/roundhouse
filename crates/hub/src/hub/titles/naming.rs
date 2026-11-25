@@ -10,7 +10,7 @@ use protocol::short_text::start_of;
 use protocol::worker::TitleFor;
 use std::fmt::Write as _;
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{Instrument as _, warn};
 
 /// Enough of a prompt to say what it's about. Past this it's usually a pasted log, which only costs more to send and
 /// to ask about.
@@ -106,7 +106,7 @@ impl Hub {
         };
         if titled.session.is_some() || titled.workspace.is_some() {
             let asked = start_of(&prompt.text, MOST_PROMPT_CHARS).0.to_owned();
-            tokio::spawn(self.clone().generate_title(workspace.clone(), titled, asked, images));
+            tokio::spawn(self.clone().generate_title(workspace.clone(), titled, asked, images).in_current_span());
         }
     }
 

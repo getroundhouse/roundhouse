@@ -13,6 +13,8 @@ use super::counted::Counted;
 use super::subscribe::subscribe;
 use crate::error::internal;
 use crate::hub::{Hub, Queued};
+use crate::spans;
+use tracing::Instrument as _;
 
 /// How a request the connection read is answered.
 pub(super) enum Answering {
@@ -57,7 +59,8 @@ impl Subscribes {
         let (hub, connection) = (hub.clone(), connection.clone());
         tokio::spawn(async move {
             while let Some(InTurn { id, subscribe: asked, under_way }) = queued.recv().await {
-                let subscribed = subscribe(&hub, &connection, asked).await;
+                let span = spans::request(connection.id, id);
+                let subscribed = subscribe(&hub, &connection, asked).instrument(span).await;
                 drop(under_way);
                 let outcome = ReplyOutcome::Response(ClientResponse::Subscribed(subscribed));
                 // An error only means the connection has gone.

@@ -16,6 +16,7 @@ use super::super::Shared;
 use super::lately::Lately;
 use super::stand_in::{StandIn, Starting};
 use crate::AgentOutput;
+use tracing::Instrument as _;
 
 /// How long a busy agent has to answer before its line is said, and one that's only thinking about what was said,
 /// whose answer usually comes by then, as the spec's cover-line rule says.
@@ -148,22 +149,26 @@ impl Covering {
     pub(in super::super) fn sent(shared: &Arc<Shared>, prompt: Seq, text: &str, spoken: bool) {
         let Some((number, asked, wait, closed)) = shared.covering.opening(prompt, text, spoken) else { return };
         let shared = shared.clone();
-        tokio::spawn(async move {
-            let due = tokio::time::Instant::now() + wait;
-            if let Some(closed) = closed {
-                shared.covering.say(&shared, closed).await;
+        let span = shared.run.span();
+        tokio::spawn(
+            async move {
+                let due = tokio::time::Instant::now() + wait;
+                if let Some(closed) = closed {
+                    shared.covering.say(&shared, closed).await;
+                }
+                let line = StandIn::line(&shared.covering.stand_in, asked).await;
+                #[expect(clippy::disallowed_methods, reason = "the agent's time to answer before its line is said")]
+                tokio::time::sleep_until(due).await;
+                let Some(text) = line else { return };
+                let _saying = shared.covering.saying.lock().await;
+                if let Some(said) = shared.covering.unanswered(number, text)
+                    && let Some(output) = shared.covering.output.upgrade()
+                {
+                    super::super::output::send_on(&shared, &output, AgentOutput::Report(said)).await;
+                }
             }
-            let line = StandIn::line(&shared.covering.stand_in, asked).await;
-            #[expect(clippy::disallowed_methods, reason = "the agent's time to answer before its line is said")]
-            tokio::time::sleep_until(due).await;
-            let Some(text) = line else { return };
-            let _saying = shared.covering.saying.lock().await;
-            if let Some(said) = shared.covering.unanswered(number, text)
-                && let Some(output) = shared.covering.output.upgrade()
-            {
-                super::super::output::send_on(&shared, &output, AgentOutput::Report(said)).await;
-            }
-        });
+            .instrument(span),
+        );
     }
 
     /// Notes that the prompt at `prompt`, which says `text`, was sent, and for one said out loud while the mode is on,

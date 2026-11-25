@@ -2,6 +2,7 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use tracing::Instrument as _;
 
 use protocol::Build;
 use protocol::capability::Capabilities;
@@ -376,4 +377,15 @@ pub(crate) fn changes(added: u64, removed: u64) -> protocol::model::ChangeSummar
         name_not_utf8: false,
     };
     ChangeSummary::new("base".into(), vec![file])
+}
+
+/// On a thread of its own, which has none of the spans of the task it's for unless it's given them.
+#[tokio::test]
+async fn what_runs_off_the_async_threads_is_in_the_spans_its_asked_for_in() {
+    let _logs = logging::testing::Logs::capture();
+    let named = || Ok::<_, ApiError>(tracing::Span::current().metadata().map(tracing::Metadata::name));
+
+    let within = super::coordinator::off_thread(named).instrument(crate::spans::request(1, 2)).await.unwrap();
+
+    assert_eq!(within, Some("request"));
 }

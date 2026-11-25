@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use tracing::{error, info, warn};
+use tracing::{Instrument as _, error, error_span, info, warn};
 
 use super::running::Table;
 use super::{Ended, JobKind, Limits, Progress};
@@ -46,9 +46,10 @@ impl Asked {
     }
 
     /// Begins the work, on a task of its own.
-    pub(super) fn begin(self) -> Run {
+    pub(super) fn begin(self, key: &impl Display) -> Run {
         let progress = Progress::default();
-        let work = tokio::spawn(progress.scope(self.work));
+        let span = error_span!(parent: None, "job", kind = %self.kind, %key);
+        let work = tokio::spawn(progress.scope(self.work).instrument(span));
         let called_off = Arc::new(Notify::new());
         Run { kind: self.kind, limits: self.limits, progress, work, called_off, after: self.after }
     }
@@ -160,7 +161,7 @@ pub(super) struct Leaves<K: Eq + Hash> {
     left: bool,
 }
 
-impl<K: Eq + Hash> Leaves<K> {
+impl<K: Eq + Hash + Display> Leaves<K> {
     pub(super) fn new(running: Table<K>, key: K) -> Self {
         Self { running, key, left: false }
     }
@@ -175,7 +176,7 @@ impl<K: Eq + Hash> Leaves<K> {
             self.left = true;
             return None;
         };
-        let run = asked.begin();
+        let run = asked.begin(&self.key);
         (entry.work, entry.called_off) = (run.work.abort_handle(), run.called_off.clone());
         Some(run)
     }

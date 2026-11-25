@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use protocol::event::EventBody;
 use tokio::sync::{mpsc, watch};
-use tracing::warn;
+use tracing::{Span, warn};
 
 use crate::AgentOutput;
 
@@ -27,6 +27,8 @@ pub(crate) struct Run {
     exited: watch::Sender<bool>,
     pid_file: Option<PathBuf>,
     output: tokio::sync::Mutex<Option<mpsc::Sender<AgentOutput>>>,
+    /// The span it was launched in, which says whose it is, for a task begun for it outside any of its own.
+    span: Span,
 }
 
 impl Run {
@@ -39,7 +41,13 @@ impl Run {
             exited: watch::channel(false).0,
             pid_file,
             output: tokio::sync::Mutex::new(Some(output)),
+            span: Span::current(),
         }
+    }
+
+    /// What the log has of the run, for a task begun for it.
+    pub(crate) fn span(&self) -> Span {
+        self.span.clone()
     }
 
     pub(crate) fn pid(&self) -> u32 {
@@ -150,8 +158,22 @@ pub(crate) async fn stop_group(pid: impl Fn() -> u32, mut exited: watch::Receive
 #[cfg(test)]
 mod tests {
     use protocol::event::AgentRunState;
+    use tracing::error_span;
 
     use super::*;
+
+    #[test]
+    fn a_runs_span_is_the_one_it_was_launched_in_wherever_its_asked_for() {
+        let logs = logging::testing::Logs::capture();
+        let launched = error_span!("agent", session_id = "s");
+        let run = launched.in_scope(|| Run::new(1, None, mpsc::channel(1).0));
+
+        error_span!("another", session_id = "another").in_scope(|| {
+            run.span().in_scope(|| warn!(name: "a.run", "A task of the run's"));
+        });
+
+        assert_eq!(logs.events()[0]["context"]["session_id"], "s");
+    }
 
     #[tokio::test]
     async fn a_run_that_exits_says_so_once_forgets_its_record_and_signals_nothing_after() {

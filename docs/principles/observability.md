@@ -8,7 +8,7 @@ These rules say what Roundhouse records about its own running: how each part log
 - **A log is a line of JSON for each event,** so a program or an agent can search it by field. A line has the time, level, target, event name, message, the event's fields, and the context it happened in. A hub or a worker run from a terminal writes text there instead, and the app writes text to stderr as well.
 - **A reader of a log skips a line that isn't JSON,** since a log can hold some: what a process prints before its log starts or as it panics, and what a worker of an older build wrote.
 - **An event has a name, a fixed message and its values as fields:** `warn!(name: "github.read.failed", %workspace_id, %error, "Couldn't read pull requests")`. The name says what happened and doesn't change when the wording does, and a value is never in the message. A policy test holds every crate to it.
-- **Context that many lines share is on a `tracing` span around the work,** such as the workspace's and the session's IDs, so each line has it. That's all a `tracing` span is for, since traces use OpenTelemetry's own. *Not built.*
+- **Context that many lines share is on a `tracing` span around the work,** such as the workspace's and the session's IDs, so each line has it. That's all a `tracing` span is for, since traces use OpenTelemetry's own. *Not built:* the workspace's and the session's on the lines of a client's request, which have the request's.
 - **The level says who should care.**
   - `error`: something is lost or stays broken until a person acts.
   - `warn`: something failed that shouldn't have, and the product went on without it.

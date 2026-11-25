@@ -8,6 +8,7 @@ use tokio::sync::{mpsc, watch};
 use super::{launch, rpc::Rpc, state::Conversation, supervise};
 use crate::run::Run;
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
+use tracing::Instrument as _;
 
 pub(super) struct Shared {
     pub(super) rpc: Rpc,
@@ -105,7 +106,9 @@ pub(super) async fn transport(
         turn_done: watch::channel(None).0,
         tap,
     });
-    tokio::spawn(supervise::supervise(launched.child, launched.stdout, launched.stderr, shared.clone()));
+    tokio::spawn(
+        supervise::supervise(launched.child, launched.stdout, launched.stderr, shared.clone()).in_current_span(),
+    );
     let process = Arc::new(CodexProcess { shared });
     if let Err(error) = launch::initialize(&process.shared).await {
         process.shared.run.stop().await;

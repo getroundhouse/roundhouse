@@ -11,6 +11,7 @@ use super::recovery::Recovery;
 use crate::claude::login_check::{self, Output};
 use crate::stdio::GroupGuard;
 use crate::{AgentError, AgentOptions, AgentOutput};
+use tracing::Instrument as _;
 
 pub(super) struct Launched {
     pub(super) child: Child,
@@ -35,7 +36,7 @@ pub(super) async fn launch(
     loop {
         let raw = super::launch::launch(bin, spec, resume, options, tap)?;
         let mut stderr = JoinSet::new();
-        stderr.spawn(crate::stdio::read_stderr(raw.stderr));
+        stderr.spawn(crate::stdio::read_stderr(raw.stderr).in_current_span());
         let mut launched = Launched {
             child: raw.child,
             pid: raw.pid,

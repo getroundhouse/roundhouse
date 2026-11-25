@@ -6,7 +6,7 @@ use std::sync::Arc;
 use protocol::client::{ApiError, HubNotice};
 use protocol::model::{ClientDevice, Ending, MessageId, SettledBy, SpokenThrough};
 use tokio::sync::watch;
-use tracing::error;
+use tracing::{Instrument as _, error};
 
 use super::conversation::has_the_conversation;
 use super::{LiveItem, LiveSession, LiveState, publish};
@@ -84,14 +84,18 @@ impl LiveSession {
         };
         if watch {
             let session = Arc::downgrade(self);
+            let span = self.span();
             let ReadingOn { connection, mut closed } = on;
-            tokio::spawn(async move {
-                // A connection that's gone without saying so is closed as well.
-                let _ = closed.wait_for(|closed| *closed).await;
-                if let Some(session) = session.upgrade() {
-                    session.connection_closed(connection).await;
+            tokio::spawn(
+                async move {
+                    // A connection that's gone without saying so is closed as well.
+                    let _ = closed.wait_for(|closed| *closed).await;
+                    if let Some(session) = session.upgrade() {
+                        session.connection_closed(connection).await;
+                    }
                 }
-            });
+                .instrument(span),
+            );
         }
         Ok(())
     }

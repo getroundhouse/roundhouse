@@ -7,5 +7,6 @@ mod capabilities;
 mod cover_lines;
 mod failing;
 mod ingest;
+mod logged;
 mod own_turns;
 mod status;

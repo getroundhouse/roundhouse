@@ -6,6 +6,7 @@ use super::token_limits::TokenLimits;
 use super::unseen::OwnUnread;
 use crate::hub::github_observed::{Heard, ReadWent};
 use crate::jobs;
+use crate::spans;
 use crate::store::now_ms;
 use github::{Leaving, Unread};
 use parking_lot::Mutex;
@@ -17,7 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tokio::time::Instant;
-use tracing::debug;
+use tracing::{Instrument as _, debug};
 
 /// Who a read is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -332,17 +333,21 @@ impl Hub {
     /// For something that may have changed it, on its own, so whatever saw it doesn't wait on GitHub.
     fn read_pull_request_soon(self: &Arc<Self>, id: &WorkspaceId, asked: Asked, when: When) {
         let (hub, id) = (self.clone(), id.clone());
-        tokio::spawn(async move {
-            let read = hub.read_pull_request(&id, asked, when).await;
-            if let Err(e) = read.and_then(Answer::or_known) {
-                debug!(
-                    name: "pull_requests.reread_failed",
-                    workspace_id = %id,
-                    error = e.message,
-                    "Couldn't read the pull request as it may have changed"
-                );
+        let span = spans::workspace(&id);
+        tokio::spawn(
+            async move {
+                let read = hub.read_pull_request(&id, asked, when).await;
+                if let Err(e) = read.and_then(Answer::or_known) {
+                    debug!(
+                        name: "pull_requests.reread_failed",
+                        workspace_id = %id,
+                        error = e.message,
+                        "Couldn't read the pull request as it may have changed"
+                    );
+                }
             }
-        });
+            .instrument(span),
+        );
     }
 }
 

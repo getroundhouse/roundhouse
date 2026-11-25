@@ -9,7 +9,7 @@ use protocol::model::{RecordKey, Terminal, TerminalId, WorkspaceId};
 use protocol::terminal::TerminalUpdate;
 use protocol::worker::{self, Request, RunningTerminal};
 use tokio::sync::MutexGuard as AsyncMutexGuard;
-use tracing::warn;
+use tracing::{Instrument as _, warn};
 
 use crate::hub::Hub;
 use crate::store::Store;
@@ -66,7 +66,7 @@ impl Hub {
         // On a task of its own, since this is called as the worker's frames are read, and taking the record away waits
         // for `changing`, which a list of the hub's records holds while it reads the database.
         let (hub, link) = (self.clone(), link.id);
-        tokio::spawn(async move { hub.terminal_ended(&id, link).await });
+        tokio::spawn(async move { hub.terminal_ended(&id, link).await }.in_current_span());
     }
 
     /// Removes the record of a terminal whose shell has ended, run by the worker on link `link`, and announces that.

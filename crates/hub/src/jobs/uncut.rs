@@ -1,4 +1,5 @@
 use super::Progress;
+use tracing::Instrument as _;
 
 /// Runs `work` to its end on a task of its own, and waits for it, so stopping the job this is in doesn't cut it off. For
 /// what mustn't stop partway once it has begun, such as recording what a worker answered and saying so. A job stopped
@@ -10,11 +11,14 @@ where
     F::Output: Send + 'static,
 {
     let held = Progress::uncut_begins();
-    let running = tokio::spawn(async move {
-        let output = work.await;
-        drop(held);
-        output
-    });
+    let running = tokio::spawn(
+        async move {
+            let output = work.await;
+            drop(held);
+            output
+        }
+        .in_current_span(),
+    );
     match running.await {
         Ok(output) => output,
         // On to whatever waits, as if `work` had run here.

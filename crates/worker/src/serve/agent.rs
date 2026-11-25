@@ -14,7 +14,7 @@ use protocol::prompt::Prompt;
 use protocol::worker::{AgentSpec, AgentStarted, TitleReply, WorkerFrame, WorkerResponse};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
-use tracing::{info, warn};
+use tracing::{Instrument as _, error_span, info, warn};
 
 use super::{RunningAgent, State};
 use crate::context_dir::Folder;
@@ -109,12 +109,13 @@ pub(crate) async fn start_agent(
         login: spec.login.take(),
         environment: (*state.credentials.given()).clone(),
     };
-    let process = agents::spawn(spec, tx, options).await?;
+    let span = error_span!(parent: None, "agent", %session_id, %run);
+    let process = agents::spawn(spec, tx, options).instrument(span.clone()).await?;
     let (pid, capabilities) = (process.pid(), Box::new(process.capabilities()));
     info!(name: "agent.started", pid, %session_id, %run, "Started an agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
-    forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, worktree, rx));
+    forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, worktree, rx).instrument(span));
     Ok(WorkerResponse::AgentStarted(AgentStarted { pid, run, already_running: false, capabilities }))
 }
 

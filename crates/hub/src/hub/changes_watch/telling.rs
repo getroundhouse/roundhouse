@@ -3,10 +3,11 @@
 
 use std::sync::Arc;
 
+use crate::spans;
 use protocol::client::ErrorCode;
 use protocol::model::WorkspaceId;
 use protocol::worker::{WatchChanges, WorkerFrame};
-use tracing::{debug, warn};
+use tracing::{Instrument as _, debug, warn};
 
 use super::watches::{Answer, Told, Turn};
 use crate::hub::observations::{WorkspaceChanges, WorkspaceLines};
@@ -34,10 +35,14 @@ impl Hub {
         let Ok(runtime) = tokio::runtime::Handle::try_current() else { return };
         let Some(asked) = self.changes_watches.asked(id) else { return };
         let (hub, id) = (self.clone(), id.clone());
-        runtime.spawn(async move {
-            let told = hub.changes_watches.asked_turn(&id, asked).await;
-            hub.tell_watching(&id, told).await;
-        });
+        let span = spans::workspace(&id);
+        runtime.spawn(
+            async move {
+                let told = hub.changes_watches.asked_turn(&id, asked).await;
+                hub.tell_watching(&id, told).await;
+            }
+            .instrument(span),
+        );
     }
 
     /// Tells the worker, as [`Hub::changes_watching`] says, in the workspace's turn `told`.

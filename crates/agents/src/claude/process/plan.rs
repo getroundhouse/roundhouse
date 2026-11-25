@@ -11,7 +11,7 @@ use protocol::event::{EventBody, NoticeLevel};
 use serde_json::json;
 use tokio::process::ChildStdin;
 use tokio::sync::mpsc;
-use tracing::{debug, warn};
+use tracing::{Instrument as _, debug, warn};
 
 use super::output::deliver;
 use super::{Shared, ask, write_to};
@@ -45,13 +45,17 @@ pub(super) async fn start_in(
     let (shared, output) = (shared.clone(), output.clone());
     // However long it takes, since a CLI that's starting runs the user's hooks first. A turn it starts meanwhile is
     // caught by `passed_on`.
-    tokio::spawn(async move {
-        if let Ok(Err(refusal)) = asked.answer.await
-            && shared.entering_plan.swap(false, Ordering::SeqCst)
-        {
-            stop(&shared, &output, &refusal).await;
+    let span = shared.run.span();
+    tokio::spawn(
+        async move {
+            if let Ok(Err(refusal)) = asked.answer.await
+                && shared.entering_plan.swap(false, Ordering::SeqCst)
+            {
+                stop(&shared, &output, &refusal).await;
+            }
         }
-    });
+        .instrument(span),
+    );
 }
 
 /// Whether `event` goes on to whoever started the agent, while it's being asked into plan mode. Its report of going

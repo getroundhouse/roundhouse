@@ -39,6 +39,7 @@ hyper-util = { workspace = true, optional = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 agents = { workspace = true, features = ["testing"] }
+logging = { workspace = true, features = ["testing"] }
 protocol = { workspace = true, features = ["testing"] }
 
 [lints]

@@ -5,6 +5,7 @@ use crate::calls::{Calls, NotSent};
 use crate::child_process::{ChildProcess, Spawned};
 use crate::error::internal;
 use crate::hub::Hub;
+use crate::spans;
 use acks::Acks;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, error_chain};
@@ -21,7 +22,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, watch};
 use tokio::time::Instant;
-use tracing::warn;
+use tracing::{Instrument as _, warn};
 
 /// How long a worker gets to stop its agents after its stdin closes. Agents get 3 s each.
 pub(crate) const STOP_GRACE: Duration = Duration::from_secs(10);
@@ -93,23 +94,26 @@ impl WorkerLink {
             build: OnceLock::new(),
             version: OnceLock::new(),
         });
-        let within = hub.timers.hello_within;
         let left_to_machine = hub.leaves_github_to_machine(&ProviderName::from(provider.name()));
         let following = Following::new(link.clone(), (!left_to_machine).then(|| hub.git_credential()));
-        tokio::spawn(acks::acknowledge(hub.clone(), link.clone()));
-        tokio::spawn(reading::read_frames(
-            hub.clone(),
-            provider.clone(),
-            link.clone(),
-            workspace_id.clone(),
-            instance_id.clone(),
-            reader,
-        ));
+        let span = spans::worker(&workspace_id, &instance_id);
+        tokio::spawn(acks::acknowledge(hub.clone(), link.clone()).instrument(span.clone()));
+        tokio::spawn(
+            reading::read_frames(
+                hub.clone(),
+                provider.clone(),
+                link.clone(),
+                workspace_id.clone(),
+                instance_id.clone(),
+                reader,
+            )
+            .instrument(span.clone()),
+        );
 
-        let failure = match link.greet(within, following).await {
+        let failure = match link.greet(hub.timers.hello_within, following).await {
             Ok(following) => {
-                tokio::spawn(following.follow());
-                tokio::spawn(Arc::clone(&hub).read_repo_urls(workspace_id, Arc::clone(&link)));
+                tokio::spawn(following.follow().instrument(span.clone()));
+                tokio::spawn(Arc::clone(&hub).read_repo_urls(workspace_id, Arc::clone(&link)).instrument(span));
                 return Ok(link);
             }
             Err(failure) => failure,

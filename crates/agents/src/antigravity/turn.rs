@@ -8,6 +8,7 @@ use super::state::{Ending, InFlightPrompt};
 use super::{approvals, notifications, running::Shared};
 use crate::acp::{self, StopReason};
 use crate::jsonrpc::RpcReply;
+use tracing::Instrument as _;
 
 pub(super) async fn prompt_finished(shared: &Arc<Shared>, rpc_id: u64, reply: RpcReply, raw: String) {
     let transcript = read_turn_transcript(shared).await;
@@ -304,10 +305,14 @@ fn schedule_pending_mode_swap(shared: &Arc<Shared>) {
         return;
     }
     let shared = shared.clone();
-    tokio::spawn(async move {
-        let _ordered = shared.controls.lock().await;
-        let _ = super::swap::ensure_mode_process(&shared).await;
-    });
+    let span = shared.run.span();
+    tokio::spawn(
+        async move {
+            let _ordered = shared.controls.lock().await;
+            let _ = super::swap::ensure_mode_process(&shared).await;
+        }
+        .instrument(span),
+    );
 }
 
 pub(super) async fn settle_replaced_child(shared: &Shared) {
