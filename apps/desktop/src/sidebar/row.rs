@@ -67,8 +67,7 @@ pub(super) fn workspace_row(
                 .gap(MARK_GAP)
                 .when(needs_a_look, look::Typeset::emphasis)
                 // Rows with nothing to look at recede, so those with a reply or a question stand out. Selecting a row
-                // only changes its background: font smoothing thickens brighter text, so a name that brightened would
-                // look heavier too.
+                // only changes its background, since a name that brightened would read as news.
                 .when(!needs_a_look, |d| d.text_color(muted))
                 .child(look::mark(mark, work, look::Size::Row, cx))
                 // The right end keeps the room between the name and it, so that room can come and go with it.

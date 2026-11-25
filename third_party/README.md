@@ -115,6 +115,7 @@ They're copied whole and changed in place, rather than patched as the kit is, si
 | An input that reports neither its editable range nor its length still says how much of an unbounded range it holds | `gpui-pre-ios` | `src/ios/text_input.rs` | gpui-kit's input reports neither, and with no document range iOS never shows the keyboard | Not offered yet |
 | `core-text` 22 and the `core-graphics` 0.25 it takes, rather than 21 and 0.24 | `gpui-pre-apple`, `zed-font-kit` | `Cargo.toml` | CoreText gives a font's trait that's zero as a boolean on iOS, as macOS Ventura does for some fonts, and 21 panics reading it. 22 reads it as 0 or 1 | Zed's Renovate update to 22 waits for approval |
 | A trait CoreText gives as a boolean counts as read | `gpui-pre-apple` | `src/text_system.rs` | The text system skipped any face whose traits weren't all numbers, to avoid 21's panic. Every face of Menlo has one on iOS, so none loaded, and with no font found GPUI stopped the app | Not offered yet |
+| Letters aren't thickened | `gpui-pre-apple` | `src/text_system.rs` | macOS thickens the letters it draws, and light ones most, so text was heavier than its weight, and by more the lighter its colour, as `docs/spec/look.md` says it isn't | Not for upstream: Zed draws as a Mac's other apps do |
 
 ## libvpx
 
