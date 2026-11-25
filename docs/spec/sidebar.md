@@ -52,7 +52,7 @@
 ## Order
 
 - **Each project's workspaces are listed last active first,** unless oldest first is chosen instead. *Unconfirmed:* oldest first.
-- **The order is chosen from a button at the heading, before Add project.** The button shows only while the pointer is on the heading, as a row's archive button does, so the list stays quiet, and its menu ticks the order chosen, which lasts once the app quits. The projects keep their order, and `Cmd-Option-Up` and `Cmd-Option-Down` go in the order shown. *Unconfirmed.*
+- **The order is chosen from a button at the heading, before Add project.** The button shows only while the pointer is on the heading, as a row's archive button does, or the keyboard's focus is on it, so the list stays quiet, and its menu ticks the order chosen, which lasts once the app quits. The projects keep their order, and `Cmd-Option-Up` and `Cmd-Option-Down` go in the order shown. *Unconfirmed.*
 
   **The menu of orders, opened from the button at the heading, with the one chosen ticked.** *Unconfirmed.*
 

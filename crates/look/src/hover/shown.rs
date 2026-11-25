@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use gpui_kit::{
     App, Bounds, Context, DismissEvent, Entity, EntityId, EventEmitter, FocusHandle, Pixels, Point, Subscription, Task,
-    WeakEntity, Window,
+    WeakEntity, WeakFocusHandle, Window,
 };
 
 use super::card::OpenChange;
@@ -62,7 +62,7 @@ pub(super) struct Shown {
     on: On,
     /// What takes the keyboard's focus for a card that shows on it, made the first time it's drawn so, with what says
     /// when the focus comes and goes.
-    pub(super) focus: Option<(FocusHandle, [Subscription; 2])>,
+    pub(super) focus: Option<(Focus, [Subscription; 4])>,
     /// Where what it's for was last drawn, for a card that flips to fit.
     pub(super) trigger_at: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// What holds it open. It only closes once nothing does.
@@ -71,13 +71,28 @@ pub(super) struct Shown {
     pub(super) opening: usize,
 }
 
+/// What takes the keyboard's focus, for a card that shows on it.
+#[derive(Clone)]
+pub(super) struct Focus {
+    /// What the card is for.
+    pub(super) trigger: FocusHandle,
+    /// The card, which anything in it that has the focus is in.
+    pub(super) card: FocusHandle,
+}
+
 /// Which of what keeps a card open, but a hold, it's on: the pointer on what it's for, the pointer on the card, and the
-/// keyboard's focus on what it's for, put there from the keyboard.
+/// keyboard's focus on what it's for, put there from the keyboard, or on something in the card.
 #[derive(Clone, Copy, Default)]
 struct On {
     trigger: bool,
     card: bool,
-    focus: bool,
+    focus: Option<Focused>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Focused {
+    Trigger,
+    InCard,
 }
 
 impl Shown {
@@ -95,7 +110,8 @@ impl Shown {
     /// Whether something keeps it open: the pointer, on the card or what it's for, the keyboard's focus, or what holds
     /// it.
     pub(super) fn stays(&self) -> bool {
-        self.on.trigger || self.on.card || self.on.focus || !self.holders.is_empty()
+        let On { trigger, card, focus } = self.on;
+        trigger || card || focus.is_some() || !self.holders.is_empty()
     }
 
     /// Has it go after its delay, unless something keeps it open.
@@ -155,28 +171,73 @@ impl Shown {
     }
 
     /// What takes the keyboard's focus for it, made the first time it's asked for.
-    pub(super) fn focus(&mut self, window: &mut Window, cx: &mut Context<Self>) -> FocusHandle {
+    pub(super) fn focus(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Focus {
         if let Some((focus, _)) = &self.focus {
             return focus.clone();
         }
-        let focus = cx.focus_handle().tab_stop(true);
+        let focus = Focus { trigger: cx.focus_handle().tab_stop(true), card: cx.focus_handle() };
         // Only from the keyboard, since a click is the pointer's, which shows it once it has rested.
-        let came = cx.on_focus_in(&focus, window, |shown, window, cx| {
-            shown.focused(window.last_input_was_keyboard(), window, cx);
+        let came = cx.on_focus_in(&focus.trigger, window, |shown, window, cx| {
+            if window.last_input_was_keyboard() {
+                shown.focused(window, cx);
+            }
         });
-        let went = cx.on_focus_out(&focus, window, |shown, _, window, cx| shown.focused(false, window, cx));
-        self.focus = Some((focus.clone(), [came, went]));
+        let went = cx.on_focus_out(&focus.trigger, window, |shown, _, window, cx| {
+            shown.focus_left(Focused::Trigger, window, cx);
+        });
+        let came_in = cx.on_focus_in(&focus.card, window, |shown, _, _| shown.on.focus = Some(Focused::InCard));
+        let went_out = cx.on_focus_out(&focus.card, window, |shown, left, window, cx| {
+            shown.focus_left_card(&left.blurred, window, cx);
+        });
+        self.focus = Some((focus.clone(), [came, went, came_in, went_out]));
         focus
     }
 
-    pub(super) fn focused(&mut self, focused: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.on.focus = focused;
-        if focused {
-            self.timer = None;
-            self.set_open(true, window, cx);
-        } else {
-            self.close_unless_kept(window, cx);
+    /// Tab, with the focus on what it's for, or in the card: to the card's next stop, and past its last, to what comes
+    /// after what it's for.
+    pub(super) fn tab_on(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((Focus { trigger, card }, _)) = &self.focus else { return };
+        if trigger.is_focused(window) {
+            window.focus(card, cx);
         }
+        window.focus_next(cx);
+        if !card.contains_focused(window, cx) {
+            window.focus(trigger, cx);
+            window.focus_next(cx);
+        }
+    }
+
+    /// Shift-Tab, with the focus in the card: to the card's stop before, and from its first, to what it's for.
+    pub(super) fn tab_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((Focus { trigger, card }, _)) = &self.focus else { return };
+        window.focus_prev(cx);
+        if !card.contains_focused(window, cx) {
+            window.focus(trigger, cx);
+        }
+    }
+
+    /// The focus is no longer in the card, where `left` had it. If `left` still has it, it's no longer drawn, as a button
+    /// isn't once what it did shows in its place, or the window is no longer in front, so the focus goes to what the card
+    /// is for.
+    fn focus_left_card(&mut self, left: &WeakFocusHandle, window: &mut Window, cx: &mut Context<Self>) {
+        let went_with_it = window.focused(cx).is_none_or(|now| *left == now);
+        if let Some((focus, _)) = self.focus.as_ref().filter(|_| went_with_it) {
+            window.focus(&focus.trigger, cx);
+        }
+        self.focus_left(Focused::InCard, window, cx);
+    }
+
+    /// The keyboard's focus has come to what it's for.
+    fn focused(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.on.focus = Some(Focused::Trigger);
+        self.timer = None;
+        self.set_open(true, window, cx);
+    }
+
+    /// The focus is no longer on `left`. It can be on the other already, since either is said first.
+    fn focus_left(&mut self, left: Focused, window: &mut Window, cx: &mut Context<Self>) {
+        self.on.focus.take_if(|focus| *focus == left);
+        self.close_unless_kept(window, cx);
     }
 
     /// `holder` no longer holds it open, being dismissed or gone, if it still did.

@@ -128,7 +128,9 @@ pub(crate) fn set(cx: &mut App) {
         key("secondary-shift-g", FindPrevious, None, cx),
     ];
     cx.bind_keys(bindings);
-    for bind in [bind_selecting, bind_scrolling, dictation_ui::bind_keys, terminal_view::bind_keys] {
+    for bind in
+        [bind_selecting, bind_scrolling, look::bind_hover_card_keys, dictation_ui::bind_keys, terminal_view::bind_keys]
+    {
         bind(cx);
     }
 }

@@ -269,6 +269,8 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 - **Every tooltip is `look`'s,** as the owner decided, so none is drawn in the kit's own look.
 - **Only a pointer shows tooltips.** Under touch nothing takes their place, as Apple asks, and what one says is its control's label for VoiceOver, as the owner decided.
 - **Under touch, a hover card opens on a tap on what it's about,** such as a turn's time, in a sheet in a compact layout, as the owner decided. A tap anywhere but the card puts it away, and so does another on what it's about. *Not built:* the sheet, since nothing yet tells a compact layout, so the card opens over what it's about, as at a desk.
+- **A hover card that shows on the keyboard's focus stays while the focus is on what it's about or in the card.** Tab goes from what it's about to the card's buttons, then on to what comes after it, and Shift-Tab comes back. A button that goes as it's pressed leaves the focus on what the card is about. A press on the card leaves the focus where it was.
+- **A button shown only while something is pointed at shows while the keyboard's focus is on it too,** and is one of Tab's stops. Under touch it always shows.
 - **A hover card that says what a tooltip has no room for is a card over the rest, of the small width,** as the owner decided, with what it's about in body text and stronger, then what it says in muted detail text, or a path in code's type, wrapped, with the button that copies it: what went wrong updating, what the version says of another hub, and where a checkout's build was made and keeps its data.
 
 **Every tooltip: words, words with their key, Escape, and words that run past its widest and wrap.**

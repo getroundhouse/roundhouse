@@ -12,8 +12,8 @@ use gpui_kit::{
 
 use super::{HoldOpen, HoverCard};
 
-const OPENS: Duration = Duration::from_millis(100);
-const CLOSES: Duration = Duration::from_millis(50);
+pub(super) const OPENS: Duration = Duration::from_millis(100);
+pub(super) const CLOSES: Duration = Duration::from_millis(50);
 
 /// A 20 px square 200 px in from the window's corner, so the pointer can be off it on every side, with a card over it
 /// that holds a 10 px square. It keeps the card's hold, as a menu opened from the card would. Its card shows on the
@@ -70,14 +70,14 @@ fn harness_that(
 
 /// Moves the keyboard's focus on to the next of Tab's stops, as a press of Tab does, after a key, which tells the
 /// window the keyboard is in use.
-fn tab(cx: &mut VisualTestContext) {
+pub(super) fn tab(cx: &mut VisualTestContext) {
     cx.simulate_keystrokes("a");
     cx.update(Window::focus_next);
     settle(cx, Duration::ZERO);
 }
 
 /// Lets `after` go by, and draws what that left.
-fn settle(cx: &mut VisualTestContext, after: Duration) {
+pub(super) fn settle(cx: &mut VisualTestContext, after: Duration) {
     cx.executor().advance_clock(after);
     cx.run_until_parked();
     cx.update(|window, cx| {
@@ -87,12 +87,12 @@ fn settle(cx: &mut VisualTestContext, after: Duration) {
 }
 
 /// Moves the pointer to `(x, y)`, then lets `after` go by.
-fn move_to(cx: &mut VisualTestContext, x: f32, y: f32, after: Duration) {
+pub(super) fn move_to(cx: &mut VisualTestContext, x: f32, y: f32, after: Duration) {
     cx.simulate_mouse_move(point(px(x), px(y)), None, Modifiers::default());
     settle(cx, after);
 }
 
-fn showing(cx: &mut VisualTestContext) -> bool {
+pub(super) fn showing(cx: &mut VisualTestContext) -> bool {
     cx.debug_bounds("card").is_some()
 }
 
