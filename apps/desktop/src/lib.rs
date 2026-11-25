@@ -29,6 +29,7 @@ mod keys;
 mod limits;
 mod log;
 pub mod lost_release;
+mod machine;
 mod manifest_flow;
 mod menus;
 mod names;
@@ -51,6 +52,7 @@ pub mod sidebar_tabs;
 mod sides;
 mod sounds;
 mod status_box;
+mod timers;
 pub mod updates;
 mod warnings;
 pub mod why_quit;
@@ -66,6 +68,7 @@ pub use permissions::{Permission, Standing};
 
 use checkout::Checkout;
 use gpui_kit::{AnyWindowHandle, App, AppContext, Entity, TitlebarOptions, WindowOptions, actions, point};
+pub use timers::Timers;
 pub use window_place::Opens;
 
 /// How long a list's order holds still after the pointer last moved over it, the sidebar's or Home's, which a test can
@@ -198,11 +201,16 @@ pub fn run(build: protocol::Build, checkout: Option<Checkout>) {
     tracing::info!(name: "app.started", version = build.version(), pid = std::process::id(), "Started");
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
-        // Only the app as it runs plays sounds, shows a badge on the Dock, and opens a file in another app, so a test
-        // or a picture of the app is quiet, leaves the Dock alone and keeps to itself.
+        // Only the app as it runs plays sounds, shows a badge on the Dock, opens a file in another app, and asks the
+        // system for permissions and about the keyboard, so a test or a picture of the app is quiet, leaves the Dock
+        // alone and keeps to itself.
         cx.set_global(sounds::Speaker);
         cx.set_global(dock::Tile);
         cx.set_global(file_view::SystemOpens);
+        cx.set_global(permissions::System::THIS_MACHINES);
+        dictation_ui::watch_keyboard(cx);
+        cx.set_global(machine::Machine::this_one());
+        cx.set_global(Timers::DEFAULT);
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         why_quit::say(checkout.as_ref(), cx);

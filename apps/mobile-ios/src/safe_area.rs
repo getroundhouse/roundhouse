@@ -3,7 +3,9 @@
 
 use gpui_kit::{App, Window, WindowInsets};
 
-/// A phone's safe area, given to a test's window, which has none of its own.
+/// A phone's safe area, given to a test's window, which has none of its own. GPUI's test window can be given
+/// one, but only by GPUI's own tests, since what reaches it is private to GPUI. Every screen reads it from here, so this
+/// is all that stands in for the window's.
 #[cfg(feature = "testing")]
 struct Given(gpui_kit::Edges<gpui_kit::Pixels>);
 

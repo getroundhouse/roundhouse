@@ -24,6 +24,8 @@ pub(super) fn ready(ui: &mut Ui) -> FakeEngine {
 pub(super) fn ready_with(ui: &mut Ui, engine: FakeEngine) -> FakeEngine {
     let ready = engine.clone();
     ui.cx.update(|cx| desktop::dictating::use_engine(ready, cx));
+    // A keyboard nobody is holding, until the test says otherwise.
+    on_the_keyboard(ui, false);
     ui.wait("dictation to be ready", |ui| ui.cx.update(|cx| desktop::dictating::is_ready(cx)));
     engine
 }

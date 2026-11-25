@@ -50,16 +50,11 @@ pub(super) type First<C> = Box<dyn FnOnce(&mut C) -> Result<(), <C as Connect>::
 impl<C: Connect> Link<C> {
     /// Starts connecting with `connect`, by the waits [every client](Waits::EVERY_CLIENT) has.
     pub fn start(connect: C) -> Link<C> {
-        Link::start_with(connect, Waits::EVERY_CLIENT)
+        Link::start_waiting(connect, Waits::EVERY_CLIENT)
     }
 
-    /// Starts connecting with `connect`, waiting as `waits` says, for a test.
-    #[cfg(any(test, feature = "testing"))]
+    /// Starts connecting with `connect`, waiting as `waits` says.
     pub fn start_waiting(connect: C, waits: Waits) -> Link<C> {
-        Link::start_with(connect, waits)
-    }
-
-    fn start_with(connect: C, waits: Waits) -> Link<C> {
         let (signal, changed) = flume::bounded(1);
         let (asks, asked) = flume::unbounded();
         let shared = Arc::new(Shared {

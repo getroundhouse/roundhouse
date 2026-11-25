@@ -14,7 +14,9 @@ use protocol::model::GithubAccount;
 use super::super::field::labelled;
 use super::Drawing;
 use super::app_made::installation;
-use super::app_panel::{AppPanel, AppStep, Choosing, OnGithub, listens_for};
+use crate::timers::Timers;
+
+use super::app_panel::{AppPanel, AppStep, Choosing, OnGithub};
 use super::app_words;
 use super::kept::{Kept, Panel};
 use super::panel::{Framed, button, buttons, framed, refusal};
@@ -166,7 +168,7 @@ fn on_github(drawing: &Drawing<'_>, stands: &OnGithub, cx: &App) -> AnyElement {
             let again = button("git-open-github", "Open GitHub again", true, off, move |window, cx| {
                 kept.update(cx, |kept, cx| kept.open_github_from_the_start(window, cx));
             });
-            let minutes = listens_for(cx).as_secs() / 60;
+            let minutes = Timers::of(cx).github_sends_back.as_secs() / 60;
             v_flex()
                 .gap(look::Space::Large)
                 .child(refusal(app_words::stopped_waiting(minutes), cx))

@@ -9,6 +9,7 @@ use gpui_kit::{
 };
 
 use super::AppView;
+use crate::machine::Machine;
 use crate::sides::WindowButtons;
 
 /// How tall the strip is: a regular bar's, since the bars along the top of the window's panes fill it, the workspace's header,
@@ -28,13 +29,13 @@ pub enum TitleBar {
 }
 
 impl TitleBar {
-    const OF_THE_SYSTEM: Self = if cfg!(target_os = "windows") { Self::Windows } else { Self::App };
+    pub(crate) const OF_THE_SYSTEM: Self = if cfg!(target_os = "windows") { Self::Windows } else { Self::App };
 }
 
 /// Where the window's buttons are in the frame the window is starting to draw. In full screen the system puts them
 /// away.
 pub(super) fn buttons_in_this_frame(window: &Window, cx: &App) -> WindowButtons {
-    match title_bar(cx) {
+    match Machine::of(cx).title_bar {
         _ if window.is_fullscreen() => WindowButtons::Absent,
         TitleBar::Windows => WindowButtons::AtTheEnd,
         TitleBar::App if cfg!(target_os = "macos") => WindowButtons::InTheCorner,
@@ -42,36 +43,18 @@ pub(super) fn buttons_in_this_frame(window: &Window, cx: &App) -> WindowButtons 
     }
 }
 
-/// The window's, as the system has it, or as a test says in its place.
-#[cfg(any(test, feature = "testing"))]
-fn title_bar(cx: &App) -> TitleBar {
-    cx.try_global::<StandIn>().map_or(TitleBar::OF_THE_SYSTEM, |StandIn(title_bar)| *title_bar)
-}
-
-#[cfg(not(any(test, feature = "testing")))]
-fn title_bar(_: &App) -> TitleBar {
-    TitleBar::OF_THE_SYSTEM
-}
-
-/// What a test says of the title bar, in place of the system.
-#[cfg(any(test, feature = "testing"))]
-struct StandIn(TitleBar);
-
-#[cfg(any(test, feature = "testing"))]
-impl gpui_kit::Global for StandIn {}
-
 /// Says the window's title bar is `title_bar` from the next frame on, whatever the system has, so a test can stand in
 /// for Windows, where the tests mostly don't build.
 #[cfg(any(test, feature = "testing"))]
 pub fn the_title_bar_is(title_bar: TitleBar, cx: &mut App) {
-    cx.set_global(StandIn(title_bar));
+    crate::machine::given(cx).title_bar = title_bar;
 }
 
 /// `root`, the whole window, with the strip along its top. It goes in before what the window shows, so it's under
 /// all of it, and what hides what's under it from the pointer hides the strip too: the kit's resize handle on a
 /// sidebar's edge, a dialog's backdrop, and Home's search.
 pub(super) fn stands_in(root: Stateful<Div>, cx: &mut Context<AppView>) -> Stateful<Div> {
-    let title_bar = title_bar(cx);
+    let title_bar = Machine::of(cx).title_bar;
     let strip = div().absolute().top_0().left_0().w_full().h(TOP_STRIP.height()).on_mouse_down(
         MouseButton::Left,
         cx.listener(move |t, event: &MouseDownEvent, window, cx| t.pressed_the_strip(title_bar, event, window, cx)),

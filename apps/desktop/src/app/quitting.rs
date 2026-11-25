@@ -5,46 +5,15 @@
 //! what's on its way to the hub, then asks about whatever quitting would still lose. A quit macOS starts, such as from
 //! the Dock, can't be held back.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use client_core::{Client, Commands, Drafts};
 use gpui_kit::{App, AppContext as _, Context, Global, WeakEntity, Window};
 
 use super::{AppView, restarts};
 use crate::asking::{self, Question};
+use crate::timers::Timers;
 use crate::window_place;
-
-/// The longest quitting, or restarting to update, waits for what's on its way to the hub, such as a file attached just
-/// before, before asking about whatever it would still lose. GPUI gives the app's own wait as it quits a tenth of this.
-/// *Unconfirmed.*
-pub(super) const KEEPING_WAIT: Duration = Duration::from_secs(2);
-
-/// How long quitting, or restarting to update, waits for what's on its way to the hub: [`KEEPING_WAIT`], unless a test
-/// has said otherwise.
-#[cfg(any(test, feature = "testing"))]
-fn keeping_wait(cx: &App) -> Duration {
-    cx.try_global::<StandIn>().map_or(KEEPING_WAIT, |StandIn(wait)| *wait)
-}
-
-#[cfg(not(any(test, feature = "testing")))]
-fn keeping_wait(_: &App) -> Duration {
-    KEEPING_WAIT
-}
-
-/// What a test has quitting wait in place of [`KEEPING_WAIT`].
-#[cfg(any(test, feature = "testing"))]
-struct StandIn(Duration);
-
-#[cfg(any(test, feature = "testing"))]
-impl Global for StandIn {}
-
-/// Has quitting, and restarting to update, wait at most `wait` from now on, for a test whose hub is held still until
-/// they've given up on it. The wait is by the system's clock rather than a GPUI timer, so a test can't move it, and would
-/// otherwise sit through all of [`KEEPING_WAIT`].
-#[cfg(any(test, feature = "testing"))]
-pub fn the_keeping_wait_is(wait: Duration, cx: &mut App) {
-    cx.set_global(StandIn(wait));
-}
 
 /// How far quitting has got.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -113,7 +82,7 @@ impl AppView {
         false
     }
 
-    /// Waits, at most [`KEEPING_WAIT`], for what's been typed and attached to reach the hub, and for prompts and other
+    /// Waits, at most [`Timers::keeping`], for what's been typed and attached to reach the hub, and for prompts and other
     /// calls on their way there, then hands `then` how many chats and comments still have something that going ahead
     /// would lose. With nothing on its way, there's no wait. One waits at a time, so pressing Quit or Restart to update
     /// again meanwhile changes nothing.
@@ -129,7 +98,7 @@ impl AppView {
         let pending: Vec<_> = cx.try_global::<Started>().map_or_else(Vec::new, |started| {
             started.0.values().map(|(commands, drafts)| (drafts.flushed(), commands.finished())).collect()
         });
-        let wait = keeping_wait(cx);
+        let wait = Timers::of(cx).keeping;
         cx.spawn(async move |this, cx| {
             // On one of the executor's threads rather than racing a timer, since a test's timers only move when the
             // test moves its clock.

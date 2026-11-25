@@ -5,24 +5,29 @@ use std::collections::HashMap;
 
 use gpui_kit::{App, Global, Task};
 
-use super::super::{Badges, Permission, Standing};
+use super::System;
+use crate::permissions::{Badges, Permission, Standing};
 
 #[derive(Default)]
-struct System {
+struct Said {
     standings: HashMap<Permission, Standing>,
     asked: Vec<Permission>,
     opened: Vec<Permission>,
 }
 
-impl Global for System {}
+impl Global for Said {}
 
-fn system(cx: &mut App) -> &mut System {
-    cx.default_global::<System>()
+/// What the test has the system say, which the app asks in place of any other from the first time this is called.
+fn said(cx: &mut App) -> &mut Said {
+    if !cx.has_global::<Said>() {
+        cx.set_global(System { read, ask, open_settings, ask_for_badges });
+    }
+    cx.default_global::<Said>()
 }
 
 /// Has the system say `permission` stands as `standing`, from the next read on.
 pub fn set_standing(permission: Permission, standing: Standing, cx: &mut App) {
-    system(cx).standings.insert(permission, standing);
+    said(cx).standings.insert(permission, standing);
 }
 
 /// Has the app read every permission again, as it does when its window comes in front.
@@ -32,30 +37,30 @@ pub fn read_again(cx: &mut App) {
 
 /// The permissions the app has had the system ask the person for, in order.
 pub fn asked_for(cx: &App) -> Vec<Permission> {
-    cx.try_global::<System>().map_or_else(Vec::new, |system| system.asked.clone())
+    cx.try_global::<Said>().map_or_else(Vec::new, |said| said.asked.clone())
 }
 
 /// The permissions whose place in System Settings the app has opened, in order.
 pub fn opened_for(cx: &App) -> Vec<Permission> {
-    cx.try_global::<System>().map_or_else(Vec::new, |system| system.opened.clone())
+    cx.try_global::<Said>().map_or_else(Vec::new, |said| said.opened.clone())
 }
 
-pub(in crate::permissions) fn read(cx: &mut App) -> Task<HashMap<Permission, Standing>> {
-    let set = &system(cx).standings;
+fn read(cx: &mut App) -> Task<HashMap<Permission, Standing>> {
+    let set = &said(cx).standings;
     let read = Permission::ALL.into_iter().map(|p| (p, set.get(&p).copied().unwrap_or(Standing::Unknown))).collect();
     Task::ready(read)
 }
 
-pub(in crate::permissions) fn ask(permission: Permission, cx: &mut App) -> Task<()> {
-    system(cx).asked.push(permission);
+fn ask(permission: Permission, cx: &mut App) -> Task<()> {
+    said(cx).asked.push(permission);
     Task::ready(())
 }
 
-pub(in crate::permissions) fn open_settings(permission: Permission, cx: &mut App) {
-    system(cx).opened.push(permission);
+fn open_settings(permission: Permission, cx: &mut App) {
+    said(cx).opened.push(permission);
 }
 
 /// Nothing, since a test has no Dock.
-pub(in crate::permissions) fn ask_for_badges(_: &mut App) -> Task<Badges> {
+fn ask_for_badges(_: &mut App) -> Task<Badges> {
     Task::ready(Badges::Settled)
 }

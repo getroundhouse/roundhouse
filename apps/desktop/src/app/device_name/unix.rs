@@ -1,6 +1,6 @@
 use std::process::Command;
 
-pub(super) fn computer_name() -> String {
+pub(crate) fn computer_name() -> String {
     if cfg!(target_os = "macos")
         && let Ok(output) = Command::new("scutil").args(["--get", "ComputerName"]).output()
         && output.status.success()

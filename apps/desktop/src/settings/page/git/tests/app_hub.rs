@@ -13,10 +13,11 @@ use protocol::fixtures::github_app;
 use protocol::model::GithubAppId;
 
 use super::super::super::stand_in_hub::until;
-use super::super::app_panel::{AppStep, Chosen, LISTENS_FOR, ListensFor, OnGithub};
+use super::super::app_panel::{AppStep, Chosen, OnGithub};
 use super::super::kept::Kept;
 use super::stand_in::WithStandIn;
 use crate::manifest_flow::Under;
+use crate::timers::Timers;
 
 /// Why the hub couldn't make the app, and whether the panel offers the same code again, once it says.
 fn not_made(kept: &Kept) -> Option<(String, bool)> {
@@ -77,14 +78,14 @@ fn a_panel_that_stopped_waiting_for_github_opens_its_form_again_through_a_new_li
         let written = GithubAppManifest { manifest: serde_json::json!({ "name": write.name }) };
         Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::GithubAppManifest(written))))
     });
-    cx.update(|cx| cx.set_global(ListensFor(Duration::from_millis(50))));
+    cx.update(|cx| cx.set_global(Timers { github_sends_back: Duration::from_millis(50), ..Timers::DEFAULT }));
     page.act(cx, |kept, window, cx| {
         kept.open_app("ada-roundhouse", window, cx);
         kept.make_on_github(window, cx);
     });
     let stopped = |kept: &Kept| matches!(on_github(kept), Some(OnGithub::StoppedWaiting));
     until(cx, "it to stop waiting", |cx| page.kept.read_with(cx, |kept, _| stopped(kept)));
-    cx.update(|cx| cx.set_global(ListensFor(LISTENS_FOR)));
+    cx.update(|cx| cx.set_global(Timers::DEFAULT));
 
     page.act(cx, Kept::open_github_from_the_start);
 

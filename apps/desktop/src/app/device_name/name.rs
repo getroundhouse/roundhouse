@@ -3,28 +3,15 @@
 use gpui_kit::{App, AppContext as _, Task};
 use protocol::pairing::clean_device_name;
 
+use crate::machine::Machine;
+
 const FALLBACK: &str = "Roundhouse desktop";
-
-#[cfg(any(test, feature = "testing"))]
-struct StandIn(String);
-
-#[cfg(any(test, feature = "testing"))]
-impl gpui_kit::Global for StandIn {}
 
 /// Gives pictures and tests a fixed computer name, so no machine's own name enters a screenshot or fixture.
 #[cfg(any(test, feature = "testing"))]
 pub fn the_device_name_is(name: impl Into<String>, cx: &mut App) {
-    cx.set_global(StandIn(name.into()));
-}
-
-#[cfg(any(test, feature = "testing"))]
-fn override_name(cx: &App) -> Option<String> {
-    cx.try_global::<StandIn>().map(|StandIn(name)| name.clone())
-}
-
-#[cfg(not(any(test, feature = "testing")))]
-fn override_name(_: &App) -> Option<String> {
-    None
+    let name = name.into();
+    crate::machine::given(cx).name = std::sync::Arc::new(move || name.clone());
 }
 
 /// This computer's name, read now, as it's shown. On a Mac `scutil` runs a child process, so it's called off the main
@@ -35,11 +22,8 @@ pub(crate) fn read_now() -> String {
 
 /// Reads this computer's name off the main thread, since on a Mac `scutil` runs a child process.
 pub(crate) fn read_in_background(cx: &App) -> Task<String> {
-    let fixed = override_name(cx);
-    cx.background_spawn(async move {
-        let raw = fixed.unwrap_or_else(super::system::computer_name);
-        clean_device_name(&raw, FALLBACK)
-    })
+    let name = Machine::of(cx).name;
+    cx.background_spawn(async move { clean_device_name(&name(), FALLBACK) })
 }
 
 #[cfg(test)]

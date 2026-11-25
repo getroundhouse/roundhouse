@@ -67,7 +67,9 @@ pub struct Daemon {
     /// workspaces are. Only a test gives one, through [`Daemon::in_environment`], and a hub otherwise inherits this
     /// process's.
     pub(super) environment: Option<Vec<(OsString, OsString)>>,
-    /// Where each hub started from it is kept, for the test that gave it to stop, through [`Daemon::recording`]. Only
+    /// Where each hub started from it is kept, for the test that gave it to stop, through [`Daemon::recording`]. The
+    /// product leaves a hub running on purpose, and has nothing to keep it for. A test looking for its hubs from outside
+    /// could miss one the app starts as it looks, which this can't, since closing it refuses any later one. Only
     /// in a build for tests, unlike `environment`, since it has a type of its own, which the product needn't build.
     #[cfg(any(test, feature = "testing"))]
     pub(super) started: Option<StartedHubs>,
