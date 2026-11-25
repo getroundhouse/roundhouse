@@ -170,6 +170,8 @@ impl LiveSession {
         };
         let starting = AgentRun { link: link.id, run: asked };
         self.state.lock().agent = Some(starting);
+        // Now, rather than once it has started, so it's never what the new run said that goes.
+        self.tool_servers_of_no_run_gone(hub).await;
         let launched = self.launch(link, spec).await;
         let AgentStarted { pid, run, already_running, capabilities } = launched.inspect_err(|_| {
             let mut state = self.state.lock();

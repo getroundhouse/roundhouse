@@ -58,6 +58,7 @@ impl View {
             | ObservationKey::AccountLimits { .. }
             | ObservationKey::SessionContext { .. }
             | ObservationKey::SessionTodos { .. }
+            | ObservationKey::SessionToolServers { .. }
             | ObservationKey::SessionCache { .. }
             | ObservationKey::WaitRead { .. }
             | ObservationKey::Unknown => false,

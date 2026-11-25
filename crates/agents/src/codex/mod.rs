@@ -16,6 +16,7 @@ mod state;
 mod subagents;
 mod supervise;
 mod terminals;
+mod tool_servers;
 mod turn;
 mod turn_reports;
 mod usage;

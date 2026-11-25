@@ -6,7 +6,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use super::state::{Ended, ThreadId, TurnId};
-use super::{approvals, control, items, notices, running::Shared, subagents, turn_reports, usage};
+use super::{approvals, control, items, notices, running::Shared, subagents, tool_servers, turn_reports, usage};
 use crate::{AgentError, AgentOutput};
 
 pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, String)>) {
@@ -34,7 +34,7 @@ pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, 
     }
 }
 
-async fn notification(shared: &Shared, value: &Value, raw: String) -> Result<(), AgentError> {
+async fn notification(shared: &Arc<Shared>, value: &Value, raw: String) -> Result<(), AgentError> {
     let method = value["method"].as_str().unwrap_or_default();
     let params = &value["params"];
     // app-server also emits its older event protocol. The v2 item stream is authoritative.
@@ -94,7 +94,7 @@ pub(super) const UNUSED: [&str; 11] = [
 ];
 
 async fn dispatch(
-    shared: &Shared,
+    shared: &Arc<Shared>,
     method: &str,
     params: &Value,
     scope: &subagents::Scope,
@@ -119,6 +119,7 @@ async fn dispatch(
                 })
             };
             shared.run.event(EventBody::AgentState { state: AgentRunState::Running }, Some(raw)).await;
+            tool_servers::turn_started(shared).await;
             if let Some(prompt) = compacting {
                 shared.run.event(EventBody::PromptTaken { prompt }, None).await;
             }
@@ -140,7 +141,10 @@ async fn dispatch(
         "thread/tokenUsage/updated" => usage::tokens(shared, params, scope, raw).await,
         "account/rateLimits/updated" => usage::limits(shared, params, scope, raw).await,
         "warning" => notices::warning(shared, params, scope, raw).await,
-        "mcpServer/startupStatus/updated" => notices::mcp_server(shared, params, scope, raw).await,
+        "mcpServer/startupStatus/updated" => {
+            tool_servers::moved(shared, params, scope).await;
+            notices::mcp_server(shared, params, scope, raw).await;
+        }
         "error" => notices::error(shared, params, scope, raw).await,
         "turn/plan/updated" => turn_reports::plan(shared, params, scope).await?,
         // From a Codex that sends them though it was asked not to.

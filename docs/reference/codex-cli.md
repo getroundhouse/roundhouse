@@ -199,6 +199,16 @@ Observed on 0.171.0 through `thread/start`, with a `CODEX_HOME` of the trial's o
 
 `config/mcpServer/reload` and `mcpServer/oauth/login` are in the generated schema, and weren't tried.
 
+### What it says of them
+
+Observed on 0.171.0, with a `HOME` and a `CODEX_HOME` of the trial's own and stand-in servers.
+
+- **`mcpServer/startupStatus/updated` comes as a thread starts, for each server that's enabled:** `starting` just after `thread/start` answers, and `ready` or `failed` as that settles. None came with a later turn. It says nothing of one with `enabled = false`.
+- **One that needs signing in to for the first time is `failed`, with no `failureReason`,** and an `error` of "The tickets MCP server is not logged in. Run `codex mcp login tickets`." Only `mcpServerStatus/list` says which it is, in `runtimeStatus`: `authenticationRequired`, with an `authStatus` of `notLoggedIn`. One that refuses its header is `failed` in both, with an `authStatus` of `bearerToken`.
+- **`mcpServerStatus/list` with a `threadId` and a `serverName` answers from the thread's own connection, in 0.04 s or less,** and sent an HTTP server only a `GET` and requests for OAuth's metadata. Without a `serverName`, it connects to every server again, which took 6 s with one that didn't answer. Without a `threadId`, `runtimeStatus` is null. `runtimeStatus` is also `connected`, `failed` or `disabled`, and the schema has `notStarted`, `starting` and `cancelled`.
+- **A connected server's `tools` has each by its name.** `toolsError` says why where there's no list.
+- **`error` and `toolsError` can hold secrets.** Of one it can't reach, they hold its URL with its query, and of a reply it can't use, the status and the reply's body. Each says so twice, among the names of Rust types. The adapter keeps a URL's origin and a reply's status.
+
 ## Compacting when asked
 
 Read from 0.170.0 against a scripted model, with the isolation of the conformance binding's scripted trials. `thread/compact/start` takes only `threadId`, so there's nothing to say what to keep, and answers `{}`. Codex then compacts in a turn of its own: `turn/started`, a `contextCompaction` item started and completed, and `turn/completed`, with no `userMessage` item and no `thread/compacted`, which the schema calls deprecated in favor of the item. A `turn/steer` sent once that turn had ended was refused as `no active turn to steer`, as any is between turns.

@@ -164,6 +164,7 @@ impl LiveSession {
         if left {
             self.settle_hearing(hub).await;
         }
+        self.after_an_exit(hub, &appended).await;
         if turn_ended {
             self.wake_after_the_turn();
         }
@@ -215,6 +216,13 @@ impl LiveSession {
                 error = %e,
                 "Couldn't announce a change to a subagent"
             );
+        }
+    }
+
+    /// Forgets what was only the run's that ended, if `appended` says one did.
+    async fn after_an_exit(&self, hub: &Hub, appended: &[&Appended]) {
+        if appended.iter().any(|appended| matches!(appended.event.body, EventBody::AgentExited { .. })) {
+            self.tool_servers_of_no_run_gone(hub).await;
         }
     }
 

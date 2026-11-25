@@ -1,7 +1,9 @@
-//! What a hub observes of a chat, spelled out: how full its context is and its to-do list, what the API's cache holds
-//! of it, and what each of its waits last read, as a hub sends each to a client of a version that reads it so.
+//! What a hub observes of a chat, spelled out: how full its context is and its to-do list, its tool servers, what the
+//! API's cache holds of it, and what each of its waits last read, as a hub sends each to a client of a version that reads
+//! it so.
 
 use protocol::capability::output::TodoList;
+use protocol::capability::setup::{ServerState, ToolServerState};
 use protocol::client::listed::{Listed, SessionRecords};
 use protocol::client::{HubFrame, HubNotice};
 use protocol::model::{
@@ -68,6 +70,41 @@ fn a_session_s_context_and_todos_keep_their_form_as_notices_and_in_its_list() {
             r#""todos":{"freshness":"as_of","value":{"items":[],"note":"Nothing left"},"as_of_ms":1795230000000},"#,
             r#""rev":6}],"rev":8}}"#
         ),
+    );
+}
+
+/// A session's tool servers, which a hub sends at the session's level to a client of a version that reads them, as a
+/// notice and as a removal.
+#[test]
+fn a_session_s_tool_servers_keep_their_form_as_a_notice_and_a_removal() {
+    let docs = ToolServerState { name: "docs".into(), state: ServerState::Connected, error: None, tools: Some(2) };
+    let gone = ToolServerState {
+        name: "gone".into(),
+        state: ServerState::Failed,
+        error: Some("connection refused".into()),
+        tools: None,
+    };
+    let copy = Observation::SessionToolServers {
+        session_id: "s".into(),
+        servers: Observed::AsOf { value: vec![docs, gone], as_of_ms: 1_795_230_000_000 },
+        rev: Rev::new(5),
+    };
+    let removed = HubNotice::ObservationRemoved {
+        observation: ObservationKey::SessionToolServers { session_id: "s".into() },
+        rev: Rev::new(6),
+    };
+
+    keeps_its_form(
+        &HubNotice::Observation(copy),
+        concat!(
+            r#"{"notice":"observation","kind":"session_tool_servers","session_id":"s","servers":{"freshness":"as_of","#,
+            r#""value":[{"name":"docs","state":"connected","tools":2},{"name":"gone","state":"failed","#,
+            r#""error":"connection refused"}],"as_of_ms":1795230000000},"rev":5}"#
+        ),
+    );
+    keeps_its_form(
+        &removed,
+        r#"{"notice":"observation_removed","observation":{"kind":"session_tool_servers","session_id":"s"},"rev":6}"#,
     );
 }
 

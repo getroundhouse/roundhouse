@@ -84,6 +84,7 @@ pub enum Control {
     ReadTaskOutput {
         task: TaskId,
     },
+    /// Connect to a tool server that failed again. Nothing sends it, and every adapter refuses it.
     Reconnect {
         server: ServerName,
     },

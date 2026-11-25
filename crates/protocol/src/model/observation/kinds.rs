@@ -8,6 +8,7 @@ use super::{
 };
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
+use crate::capability::setup::ToolServerState;
 use crate::model::{
     AccountId, Branches, ChangeSummary, ContextUsage, GithubAccountId, GithubAppId, GithubUser, GithubUsername, Level,
     LineCounts, ModelListKey, Reach, ReferenceAsk, RepoId, RepositoryUnseen, Rev, SessionId, UsageLimit, WaitId,
@@ -87,6 +88,10 @@ pub enum Observation {
     /// A chat's agent's to-do list, as the agent last said, of its current run. At the session's level, and never
     /// current, as [`Observation::SessionContext`] is.
     SessionTodos { session_id: SessionId, todos: Observed<TodoList>, rev: Rev },
+    /// The tool servers a chat's agent has, whole, as the agent last said, of its current run, and gone as that run ends
+    /// and as another starts, since the next starts each again. At the session's level, and never current, as
+    /// [`Observation::SessionContext`] is.
+    SessionToolServers { session_id: SessionId, servers: Observed<Vec<ToolServerState>>, rev: Rev },
     /// What the API's cache holds of a chat's conversation, and whether its context is big enough that writing it again
     /// costs something. Sent at the hub's level, since the sidebar and Home draw the cache's clock for every chat. It
     /// changes as the hub's record of the chat was announced when it was a field of it: as a request is made while the
@@ -166,6 +171,9 @@ pub enum ObservationKey {
     SessionTodos {
         session_id: SessionId,
     },
+    SessionToolServers {
+        session_id: SessionId,
+    },
     SessionCache {
         session_id: SessionId,
     },
@@ -220,6 +228,9 @@ impl Observation {
             Observation::SessionTodos { session_id, .. } => {
                 ObservationKey::SessionTodos { session_id: session_id.clone() }
             }
+            Observation::SessionToolServers { session_id, .. } => {
+                ObservationKey::SessionToolServers { session_id: session_id.clone() }
+            }
             Observation::SessionCache { session_id, .. } => {
                 ObservationKey::SessionCache { session_id: session_id.clone() }
             }
@@ -253,6 +264,7 @@ impl Observation {
             | Observation::AccountLimits { rev, .. }
             | Observation::SessionContext { rev, .. }
             | Observation::SessionTodos { rev, .. }
+            | Observation::SessionToolServers { rev, .. }
             | Observation::SessionCache { rev, .. }
             | Observation::WaitRead { rev, .. }
             | Observation::ReleaseOffered { rev, .. } => *rev,
@@ -290,6 +302,7 @@ impl ObservationKey {
             ObservationKey::Reference { reference } => Some(Level::Reference { reference: reference.clone() }),
             ObservationKey::SessionContext { session_id }
             | ObservationKey::SessionTodos { session_id }
+            | ObservationKey::SessionToolServers { session_id }
             | ObservationKey::WaitRead { session_id, .. } => Some(Level::Session { id: session_id.clone() }),
             ObservationKey::Unknown => None,
         }

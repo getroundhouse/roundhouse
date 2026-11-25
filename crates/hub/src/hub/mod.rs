@@ -69,7 +69,7 @@ pub(crate) use observations::{
 };
 pub(crate) use observations::{
     GithubAppBot, GithubAppSaid, GithubProfile, GithubUsername, InstalledOn, Kind, Observations, RepositoryReach,
-    SessionCache, SessionContext, SessionKey, SessionTodos,
+    SessionCache, SessionContext, SessionKey, SessionTodos, SessionToolServers,
 };
 
 mod devices;

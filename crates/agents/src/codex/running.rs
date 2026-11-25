@@ -13,6 +13,7 @@ use tracing::Instrument as _;
 pub(super) struct Shared {
     pub(super) rpc: Rpc,
     pub(super) state: Mutex<Conversation>,
+    pub(super) tool_servers: tokio::sync::Mutex<super::tool_servers::ToolServers>,
     pub(super) controls: tokio::sync::Mutex<()>,
     pub(super) run: Run,
     pub(super) turn_done: watch::Sender<Option<super::state::TurnId>>,
@@ -102,6 +103,7 @@ pub(super) async fn transport(
     let shared = Arc::new(Shared {
         rpc: Rpc::new(launched.stdin, super::rpc::Dialect::Bare, "Codex", tap.clone()),
         state: Mutex::new(Conversation::new(settings)),
+        tool_servers: tokio::sync::Mutex::default(),
         controls: tokio::sync::Mutex::new(()),
         run: Run::new(launched.pid, options.pid_file.clone(), output),
         turn_done: watch::channel(None).0,

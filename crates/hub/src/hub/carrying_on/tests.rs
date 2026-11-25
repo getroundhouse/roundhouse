@@ -6,6 +6,7 @@ use protocol::model::{SessionStatus, Wait, WaitUntil};
 use protocol::prompt::Prompt;
 
 use super::*;
+use crate::hub::{SessionKey, SessionToolServers};
 use crate::store::tests::store_with_session;
 use crate::store::{SessionChange, StatusChange, TurnEdge};
 use protocol::prompt::PromptFrom;
@@ -94,9 +95,15 @@ fn wait() -> Wait {
     }
 }
 
-/// Its agent went with the machine, say, and left no exit, so nothing else would take its claims off.
+/// What the hub keeps the tool servers of the chat `s`'s agent by.
+fn servers_of_s() -> SessionKey {
+    SessionKey { workspace_id: "w".into(), session_id: "s".into() }
+}
+
+/// Its agent went with the machine, say, and left no exit, so nothing else would take its claims off, or forget its tool
+/// servers.
 #[tokio::test]
-async fn a_starting_hub_takes_the_claims_off_every_chat_whose_agent_it_didnt_find() {
+async fn a_starting_hub_takes_the_claims_and_tool_servers_off_every_chat_whose_agent_it_didnt_find() {
     use protocol::capability::{Capabilities, Claimed};
     use protocol::model::RunCapabilities;
 
@@ -111,10 +118,12 @@ async fn a_starting_hub_takes_the_claims_off_every_chat_whose_agent_it_didnt_fin
     let change = SessionChange { claims: Some(claimed), ..SessionChange::default() };
     hub.store.append(&id, Some(RunId::new(1)), &started, None, None, Some(change)).unwrap();
     assert!(hub.store.get_session(&id).unwrap().session.agent_capabilities.is_some());
+    hub.observation_read::<SessionToolServers>(servers_of_s(), Vec::new(), 1).await.unwrap();
 
     hub.carry_on(LeftAtWork::read(&hub.store).unwrap()).await;
 
     assert!(hub.store.get_session(&id).unwrap().session.agent_capabilities.is_none());
+    assert!(!hub.observations.keeps::<SessionToolServers>(&servers_of_s()));
 }
 
 /// Its worker says what the run it kept claims, which the record holds from then on, whatever it held before. It says
@@ -140,9 +149,10 @@ async fn a_starting_hub_holds_a_run_it_carries_on_with_to_what_its_worker_says_i
     assert_eq!(on_record(), Some(said));
 }
 
-/// Its agent is running, which carrying on with it found, so its claims stay, as every other chat's go.
+/// Its agent is running, which carrying on with it found, so its claims and its tool servers stay, as every other chat's
+/// go.
 #[tokio::test]
-async fn a_starting_hub_leaves_the_claims_of_a_chat_it_carried_on_with() {
+async fn a_starting_hub_leaves_the_claims_and_tool_servers_of_a_chat_it_carried_on_with() {
     use crate::hub::tests::{carried_on, claimed, hub_in, stand_in_worker};
     use protocol::model::RunCapabilities;
 
@@ -152,9 +162,11 @@ async fn a_starting_hub_leaves_the_claims_of_a_chat_it_carried_on_with() {
     let (id, run) = (SessionId::from("s"), RunId::new(1));
     let held = RunCapabilities::new(run, claimed());
     hub.store.set_claims(&id, &held).unwrap();
+    hub.observation_read::<SessionToolServers>(servers_of_s(), Vec::new(), 1).await.unwrap();
     carried_on(&hub, &link, run);
 
     hub.carry_on(LeftAtWork::read(&hub.store).unwrap()).await;
 
     assert_eq!(hub.store.get_session(&id).unwrap().session.agent_capabilities, Some(held));
+    assert!(hub.observations.keeps::<SessionToolServers>(&servers_of_s()));
 }

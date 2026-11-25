@@ -154,7 +154,7 @@ fn a_list_that_holds_no_observation_leaves_them_out() {
 }
 
 /// What a newer hub may send: a kind of observation, a kind of key, or a freshness this build doesn't know, each read as
-/// unknown rather than failing the notice.
+/// unknown rather than failing the notice, or the list.
 #[test]
 fn a_newer_kind_or_freshness_reads_as_unknown() {
     let kind: HubNotice =
@@ -163,10 +163,16 @@ fn a_newer_kind_or_freshness_reads_as_unknown() {
         r#"{"notice":"observation_removed","observation":{"kind":"weather","station":"s"},"rev":6}"#,
     )
     .unwrap();
+    let frame: HubFrame = serde_json::from_str(
+        r#"{"frame":"listed","subscription_id":2,"listed":{"level":"session","session_id":"s","subagents":[],"proposals":[],"replies_heard":[],"observations":[{"kind":"weather","station":"s","rev":5}],"rev":8}}"#,
+    )
+    .unwrap();
     let freshness: Observed<LineCounts> = serde_json::from_str(r#"{"freshness":"stale","value":{"added":1}}"#).unwrap();
 
     assert_eq!(kind, HubNotice::Observation(Observation::Unknown));
     assert_eq!(key, HubNotice::ObservationRemoved { observation: ObservationKey::Unknown, rev: Rev::new(6) });
+    let HubFrame::Listed { listed: Listed::Session(listed), .. } = frame else { panic!("not a session's list") };
+    assert_eq!(listed.observations, [Observation::Unknown]);
     assert_eq!(freshness, Observed::Unknown);
 }
 

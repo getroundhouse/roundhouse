@@ -2,6 +2,7 @@
 //! it says, its table in the cache file and that table's version, as [`Kind`] has a kind say them.
 
 use protocol::capability::output::TodoList;
+use protocol::capability::setup::ToolServerState;
 use protocol::model::{
     AccountId, ChangeSummary, ContextUsage, ConversationCache, LineCounts, ModelListKey, Observation, ObservationKey,
     Observed, OwnPullRequestDetail, OwnPullRequestSaid, ReferenceAsk, ReferenceSaid, RepositoryUnseen, Rev, UsageLimit,
@@ -269,6 +270,28 @@ impl Kind for SessionTodos {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.session_todos
+    }
+}
+
+/// The tool servers a session's agent has, as the agent of its current run last said, sent at the session's level, and
+/// gone as that run ends and as another starts, as `crate::session` sees to.
+pub(crate) struct SessionToolServers;
+
+impl Kind for SessionToolServers {
+    type Of = SessionKey;
+    type Value = Vec<ToolServerState>;
+    const FORM: Form = Form { table: "session_tool_servers", version: 1 };
+
+    fn observation(of: &SessionKey, servers: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
+        Some(Observation::SessionToolServers { session_id: of.session_id.clone(), servers, rev })
+    }
+
+    fn key(of: &SessionKey) -> Option<ObservationKey> {
+        Some(ObservationKey::SessionToolServers { session_id: of.session_id.clone() })
+    }
+
+    fn table(tables: &mut Tables) -> &mut Table<Self> {
+        &mut tables.session_tool_servers
     }
 }
 
