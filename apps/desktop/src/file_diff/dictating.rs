@@ -24,14 +24,9 @@ impl FileDiff {
             let listing = review.listing();
             let changed =
                 listing.into_iter().flat_map(|listing| listing.rows.iter()).map(|file| file.path.as_ref()).collect();
-            let words = Field::DiffComment { typed: &typed, path: &path, changed }.hint_words();
-            let hints = dictation_ui::Hints::new(
-                words.into_iter().map(|word| dictation_ui::Hint { text: word.text, spelled: word.spelled }),
-            );
             dictation_ui::About {
-                hints,
                 workspace: Some(review.workspace_id().to_string()),
-                ..dictation_ui::About::default()
+                ..Field::DiffComment { typed: &typed, path: &path, changed }.picked().into()
             }
         };
         let on_event =

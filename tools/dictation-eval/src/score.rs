@@ -28,7 +28,7 @@ impl Case {
     pub fn score(&self) -> Result<Score, Invalid> {
         self.check()?;
         let built = Built::new(self);
-        let words = built.field()?.hint_words();
+        let words = built.field()?.picked().words;
         let hints = Hints::new(words.into_iter().map(|word| Hint { text: word.text, spelled: word.spelled }));
         Ok(Score::of(&self.terms, &hints))
     }

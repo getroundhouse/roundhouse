@@ -19,6 +19,8 @@ webpki.workspace = true
 parking_lot.workspace = true
 protocol.workspace = true
 flume.workspace = true
+# What a field's hint words are, and what they were picked from, as a kept recording says.
+hint-words.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 terminal-state = { workspace = true, optional = true }

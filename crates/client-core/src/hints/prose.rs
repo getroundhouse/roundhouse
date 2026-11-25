@@ -1,7 +1,7 @@
 //! Pulling code spans, file paths, identifiers, mid-sentence proper nouns and lowercase words English rarely uses out
 //! of Markdown prose and commands.
 
-use super::HintCollector;
+use super::collect::HintCollector;
 use super::english::{is_common_word, is_rare_lowercase};
 
 impl HintCollector {

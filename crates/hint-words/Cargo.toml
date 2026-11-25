@@ -1,0 +1,13 @@
+[package]
+name = "hint-words"
+description = "The words a dictation is biased toward, and what they were picked from. Client-core picks them, dictation's UI takes them, and a kept recording's file has them. No UI and none of the workspace's other crates."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[lints]
+workspace = true

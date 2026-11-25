@@ -65,6 +65,12 @@ fn a_recording_is_kept_whole_with_what_it_was_heard_with_and_what_was_written(cx
         kept.hints.iter().map(|hint| dictation::Hint { text: hint.text.clone(), spelled: hint.spelled }),
     );
     assert_eq!(again, engine.last_hints(), "it can be heard again with the same hints");
+    let from = kept.picked_from.as_ref().unwrap();
+    assert_eq!(from.typed, "Ask WombatService to ");
+    assert!(from.workspace.is_some(), "{from:?}");
+    let words = client_core::hints::pick(from, None).into_iter();
+    let picked_again = dictation::Hints::new(words.map(|w| dictation::Hint { text: w.text, spelled: w.spelled }));
+    assert_eq!(picked_again, again, "what its hints were picked from gives them again, in a chat with no messages yet");
     assert_eq!(kept.chat, Some(ui.active_chat().to_string()));
     assert!(kept.workspace.is_some() && !kept.said_out_loud);
     let finals: Vec<&Text> = kept.said.iter().map(|said| &said.text).filter(|t| matches!(t, Text::Final(_))).collect();

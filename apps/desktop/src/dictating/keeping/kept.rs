@@ -7,7 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use dictation_ui::{About, Keeping, Place};
 use gpui_kit::{App, AppContext as _, Context, Global, Subscription, Task};
-use kept_recordings::{Field, Hint, Kept, VERSION};
+use hint_words::HintWord;
+use kept_recordings::{Field, Kept, VERSION};
 
 use super::writer::{self, Source};
 
@@ -154,8 +155,8 @@ impl Recordings {
 
 /// What's known of a recording as it begins.
 fn starting(keeping: &Keeping, build: &str, revision: &str) -> Kept {
-    let About { hints, workspace, chat, said_out_loud } = &keeping.about;
-    let hint = |hint: dictation_ui::Hint| Hint { text: hint.text, spelled: hint.spelled };
+    let About { hints, picked_from, workspace, chat, said_out_loud } = &keeping.about;
+    let hint = |hint: dictation_ui::Hint| HintWord { text: hint.text, spelled: hint.spelled };
     let since = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
     Kept {
         version: VERSION,
@@ -166,6 +167,7 @@ fn starting(keeping: &Keeping, build: &str, revision: &str) -> Kept {
         language: keeping.taken.language.code().to_string(),
         hint_boost: dictation::nemotron::HINT_BOOST,
         hints: hints.kept().map(hint).collect(),
+        picked_from: Some(picked_from.clone()),
         field: match keeping.place {
             Place::Composer => Field::Composer,
             Place::NewWorkspace => Field::NewWorkspace,

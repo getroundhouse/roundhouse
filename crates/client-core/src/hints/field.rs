@@ -1,10 +1,11 @@
-//! Which words each field that can be dictated into hints, and in what order: what's typed in it, then what it's
-//! about, such as its question, then the workspace and the chat it's in.
+//! What each field that can be dictated into picks its hint words from: what's typed in it, what it's about, such as
+//! its question, and the workspace and the chat it's in.
 
+use hint_words::{Picked, PickedFrom};
 use protocol::capability::asking::Question;
 use protocol::model::{Proposed, PullRequest};
 
-use super::HintCollector;
+use super::{pick, picked_from};
 use crate::records::InWorkspace;
 use crate::session_log::SessionLog;
 
@@ -23,16 +24,6 @@ pub enum Field<'a> {
     DiffComment { typed: &'a str, path: &'a str, changed: Vec<&'a str> },
 }
 
-/// A word or phrase a field favours, most immediate first, as `dictation`'s `Hint` takes it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct HintWord {
-    pub text: String,
-    /// Whether it's written as it's hinted where it's hyphenated and its words are heard spaced or joined, as a
-    /// package's name is. The workspace's own names, its branches', repositories' and files', aren't, since a person
-    /// says their words in prose too, such as "the stale reports" on a branch `stale-reports`.
-    pub spelled: bool,
-}
-
 /// The workspace and the chat a field is in, as far as they're known.
 #[derive(Default)]
 pub struct Around<'a> {
@@ -48,63 +39,51 @@ pub struct Workspace<'a> {
 }
 
 impl Field<'_> {
-    /// The words to favour, most immediate first.
-    pub fn hint_words(&self) -> Vec<HintWord> {
-        let mut collector = HintCollector::new();
+    /// The words to favour, with what they were picked from.
+    pub fn picked(&self) -> Picked {
+        let from = self.picked_from();
+        Picked { words: pick(&from, self.chat()), from }
+    }
+
+    fn picked_from(&self) -> PickedFrom {
         match self {
-            Self::Composer { typed, attached, open_file, around } => {
-                collector.add_prose(typed);
-                collector.add_paths(attached.iter().map(String::as_str));
-                collector.add_paths(*open_file);
-                collector.add_around(around);
-            }
-            Self::Answer { typed, question, around } => {
-                collector.add_prose(typed);
-                collector.add_question(question);
-                collector.add_around(around);
-            }
-            Self::ProposalNote { typed, proposal, around } => {
-                if let Some(typed) = typed {
-                    collector.add_prose(typed);
-                }
-                collector.add_proposal(proposal);
-                collector.add_around(around);
-            }
-            Self::NewWorkspace { typed, attached, chosen_repo, repos } => {
-                collector.add_prose(typed);
-                collector.add_paths(attached.iter().map(String::as_str));
-                for name in chosen_repo.iter().chain(repos) {
-                    collector.add_own_name(name);
-                }
-            }
-            Self::DiffComment { typed, path, changed } => {
-                collector.add_prose(typed);
-                collector.add_path(path);
-                collector.add_paths(changed.iter().copied());
-            }
-        }
-        collector.finish()
-    }
-}
-
-impl HintCollector {
-    fn add_paths<'a>(&mut self, paths: impl IntoIterator<Item = &'a str>) {
-        for path in paths {
-            self.add_path(path);
+            Self::Composer { typed, attached, open_file, around } => PickedFrom {
+                typed: (*typed).to_string(),
+                attached: attached.to_vec(),
+                open_file: open_file.map(str::to_string),
+                ..picked_from::around(around)
+            },
+            Self::Answer { typed, question, around } => PickedFrom {
+                typed: (*typed).to_string(),
+                question: Some(picked_from::question(question)),
+                ..picked_from::around(around)
+            },
+            Self::ProposalNote { typed, proposal, around } => PickedFrom {
+                typed: typed.unwrap_or_default().to_string(),
+                proposal: Some(picked_from::proposal(proposal)),
+                ..picked_from::around(around)
+            },
+            Self::NewWorkspace { typed, attached, chosen_repo, repos } => PickedFrom {
+                typed: (*typed).to_string(),
+                attached: attached.to_vec(),
+                repos: chosen_repo.iter().chain(repos).map(ToString::to_string).collect(),
+                ..PickedFrom::default()
+            },
+            Self::DiffComment { typed, path, changed } => PickedFrom {
+                typed: (*typed).to_string(),
+                comment_on: Some((*path).to_string()),
+                changed: picked_from::paths(changed),
+                ..PickedFrom::default()
+            },
         }
     }
 
-    /// The workspace's words, then the chat's.
-    fn add_around(&mut self, around: &Around<'_>) {
-        if let Some(workspace) = &around.workspace {
-            self.add_workspace(workspace.shown);
-            if let Some(pull_request) = workspace.pull_request {
-                self.add_pull_request(pull_request);
+    fn chat(&self) -> Option<&SessionLog> {
+        match self {
+            Self::Composer { around, .. } | Self::Answer { around, .. } | Self::ProposalNote { around, .. } => {
+                around.chat
             }
-            self.add_paths(workspace.changed.iter().copied());
-        }
-        if let Some(chat) = around.chat {
-            self.add_session_log(chat);
+            Self::NewWorkspace { .. } | Self::DiffComment { .. } => None,
         }
     }
 }

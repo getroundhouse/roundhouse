@@ -3,14 +3,11 @@
 
 use std::collections::HashMap;
 
-use protocol::capability::asking::Question;
+use hint_words::{Asked, HintWord, PickedFrom, Proposal, Workspace};
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{Proposed, PullRequest};
 
-use super::HintWord;
 use super::english::{all_common_english, is_boilerplate};
 use crate::calls::{EditFile, ReadFile, Recorded, ToSubagents, ToolCall, WriteFile};
-use crate::records::InWorkspace;
 use crate::session_log::{Row, SessionLog};
 
 const MAX_HINTS: usize = 160;
@@ -19,6 +16,32 @@ const MAX_TOOL_EVENTS: usize = 30;
 const MAX_PATH_PARENTS: usize = 2;
 /// A proposal's Markdown can be long, so it gives at most this many, leaving room for the names around it.
 const MAX_PROPOSAL_MARKDOWN_HINTS: usize = 40;
+
+/// The words to favour, most immediate first: what's typed, what the field is about, the workspace's, then those of
+/// `chat`, which `from` says what was loaded of. What's kept of a dictation is `from`, so nothing else goes into them.
+pub fn pick(from: &PickedFrom, chat: Option<&SessionLog>) -> Vec<HintWord> {
+    let mut collector = HintCollector::default();
+    collector.add_prose(&from.typed);
+    collector.add_paths(from.attached.iter().chain(&from.open_file));
+    if let Some(question) = &from.question {
+        collector.add_asked(question);
+    }
+    if let Some(proposal) = &from.proposal {
+        collector.add_proposal(proposal);
+    }
+    collector.add_paths(&from.comment_on);
+    for name in &from.repos {
+        collector.add_own_name(name);
+    }
+    if let Some(workspace) = &from.workspace {
+        collector.add_workspace(workspace);
+    }
+    collector.add_paths(&from.changed);
+    if let Some(chat) = chat {
+        collector.add_session_log(chat);
+    }
+    collector.out
+}
 
 /// Accumulates candidate hint phrases, most immediate first, deduplicating case-insensitively, each written as it's
 /// hinted unless only the workspace's own names gave it.
@@ -37,12 +60,8 @@ impl Default for HintCollector {
 }
 
 impl HintCollector {
-    pub(super) fn new() -> Self {
-        Self::default()
-    }
-
     /// Adds one of the workspace's own names, already vetted, such as a repository's.
-    pub(super) fn add_own_name(&mut self, raw: &str) {
+    fn add_own_name(&mut self, raw: &str) {
         self.insert(raw, true, Whose::Own);
     }
 
@@ -78,47 +97,39 @@ impl HintCollector {
         }
     }
 
-    /// Adds a question's header, short option labels, and code spans or identifiers in its text and descriptions.
-    pub(super) fn add_question(&mut self, question: &Question) {
-        let options = question.options.iter().map(|option| (option.label.as_str(), option.description.as_deref()));
-        self.add_asked(question.header.as_deref(), options, &question.text);
-    }
-
-    /// Adds a proposal's title, then each of its questions as [`Self::add_question`] does, then code spans or
-    /// identifiers in its Markdown, which is longer and less likely said, up to [`MAX_PROPOSAL_MARKDOWN_HINTS`].
-    pub(super) fn add_proposal(&mut self, proposed: &Proposed) {
-        self.add_prose(&proposed.title);
-        for question in &proposed.questions {
-            let options =
-                question.options.iter().map(|option| (option.label.as_str(), Some(option.description.as_str())));
-            self.add_asked(Some(&question.header), options, &question.text);
+    /// Adds a proposal's title, then each of its questions as [`Self::add_asked`] does, then code spans or identifiers
+    /// in its Markdown, which is longer and less likely said, up to [`MAX_PROPOSAL_MARKDOWN_HINTS`].
+    fn add_proposal(&mut self, proposal: &Proposal) {
+        self.add_prose(&proposal.title);
+        for question in &proposal.questions {
+            self.add_asked(question);
         }
         let limit = std::mem::replace(&mut self.limit, (self.out.len() + MAX_PROPOSAL_MARKDOWN_HINTS).min(MAX_HINTS));
-        for markdown in proposed.markdown() {
+        for markdown in &proposal.markdown {
             self.add_prose(markdown);
         }
         self.limit = limit;
     }
 
-    /// What's asked, as a question or a proposal's question asks it: its header, each option's label and description,
-    /// then its text.
-    fn add_asked<'a>(
-        &mut self,
-        header: Option<&str>,
-        options: impl Iterator<Item = (&'a str, Option<&'a str>)>,
-        text: &str,
-    ) {
-        if let Some(header) = header {
+    /// Adds a question's header, short option labels, and code spans or identifiers in its options, then in its text.
+    fn add_asked(&mut self, asked: &Asked) {
+        if let Some(header) = &asked.header {
             self.add_short_label(header);
         }
-        for (label, description) in options {
-            self.add_short_label(label);
-            self.add_prose(label);
-            if let Some(description) = description {
+        for option in &asked.options {
+            self.add_short_label(&option.label);
+            self.add_prose(&option.label);
+            if let Some(description) = &option.description {
                 self.add_prose(description);
             }
         }
-        self.add_prose(text);
+        self.add_prose(&asked.text);
+    }
+
+    fn add_paths<'a>(&mut self, paths: impl IntoIterator<Item = &'a String>) {
+        for path in paths {
+            self.add_path(path);
+        }
     }
 
     /// Adds the leaf file stem and up to [`MAX_PATH_PARENTS`] meaningful parent segments of `path`, leaf first.
@@ -143,35 +154,24 @@ impl HintCollector {
         }
     }
 
-    /// Adds the workspace's name, branches, repository name and commented diff paths.
-    pub(super) fn add_workspace(&mut self, shown: &InWorkspace) {
-        let workspace = shown.workspace();
+    /// Adds the workspace's name, branches, repository name, commented diff paths and pull request's title.
+    fn add_workspace(&mut self, workspace: &Workspace) {
         self.add_own_name(&workspace.name);
-        self.add_branch(workspace.branch.as_str());
-        if let Some(branches) = shown.all().workspace_branches(workspace) {
-            if let Some(checked_out) = branches.checked_out() {
-                self.add_branch(checked_out.name.as_str());
-            }
-            for branch in &branches.had {
-                self.add_branch(branch.name.as_str());
-            }
+        for branch in &workspace.branches {
+            self.add_branch(branch);
         }
-        if let Some(repo) = shown.all().repo(&workspace.repo_id) {
-            self.add_own_name(&repo.name);
+        if let Some(repo) = &workspace.repo {
+            self.add_own_name(repo);
         }
-        for comment in shown.comments().iter().rev() {
-            self.add_path(&comment.path);
+        self.add_paths(&workspace.commented);
+        if let Some(title) = &workspace.pull_request {
+            self.add_prose(title);
         }
-    }
-
-    /// The workspace's pull request, by its title.
-    pub(super) fn add_pull_request(&mut self, pull_request: &PullRequest) {
-        self.add_prose(&pull_request.said().about.title);
     }
 
     /// Walks `log` newest-first with separate budgets for conversation messages and tool calls, so a turn with dozens
     /// of tool calls doesn't crowd out the names discussed a turn or two earlier.
-    pub(super) fn add_session_log(&mut self, log: &SessionLog) {
+    fn add_session_log(&mut self, log: &SessionLog) {
         let mut text_messages = 0;
         let mut tool_events = 0;
         for index in (0..log.row_count()).rev() {
@@ -181,10 +181,6 @@ impl HintCollector {
             let Row::Event(event) = log.row(index) else { continue };
             self.add_event(&event.body, &mut text_messages, &mut tool_events);
         }
-    }
-
-    pub(super) fn finish(self) -> Vec<HintWord> {
-        self.out
     }
 
     fn add_short_label(&mut self, label: &str) {

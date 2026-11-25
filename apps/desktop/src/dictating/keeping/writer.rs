@@ -158,6 +158,7 @@ mod tests {
             language: "auto".to_string(),
             hint_boost: 2.0,
             hints: Vec::new(),
+            picked_from: None,
             field: Field::Composer,
             workspace: None,
             chat: None,

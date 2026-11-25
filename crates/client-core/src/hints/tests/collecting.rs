@@ -1,5 +1,6 @@
 //! What the collector keeps from each source, and what it leaves out.
 
+use hint_words::PickedFrom;
 use protocol::capability::asking::{Choose, Question, QuestionOption, TypedAnswer};
 use protocol::event::EventBody;
 use protocol::fixtures;
@@ -8,8 +9,8 @@ use protocol::model::{
 };
 use protocol::prompt::{Prompt, PromptFrom};
 
-use super::context::{sample_log, sample_workspace, texts};
-use crate::hints::HintCollector;
+use super::context::{sample_log, sample_workspace, texts, workspace};
+use crate::hints::{Around, Field, pick};
 use crate::session_log::SessionLog;
 
 #[test]
@@ -31,11 +32,8 @@ fn collects_jargon_and_proper_nouns_across_tool_heavy_turns_while_skipping_commo
         typed: TypedAnswer::Yes,
     };
 
-    let mut collector = HintCollector::new();
-    collector.add_question(&question);
-    collector.add_workspace(&in_ws);
-    collector.add_session_log(&log);
-    let hints = texts(collector.finish());
+    let around = Around { workspace: Some(workspace(&in_ws)), chat: Some(&log) };
+    let hints = texts(Field::Answer { typed: "", question: &question, around }.picked().words);
 
     for expected in [
         "Database",
@@ -66,11 +64,13 @@ fn collects_jargon_and_proper_nouns_across_tool_heavy_turns_while_skipping_commo
 fn only_names_from_outside_the_workspace_s_own_are_spelled_as_hinted() {
     let in_ws = sample_workspace();
 
-    let mut collector = HintCollector::new();
-    collector.add_workspace(&in_ws);
-    collector.add_path("crates/stale-reports/src/due-dates.rs");
-    collector.add_prose("Load `sqlite-vec` here, and keep `dictation-hints` apart.");
-    let hints = collector.finish();
+    let field = Field::Composer {
+        typed: "Load `sqlite-vec` here, and keep `dictation-hints` apart.",
+        attached: &[],
+        open_file: Some("crates/stale-reports/src/due-dates.rs"),
+        around: Around { workspace: Some(workspace(&in_ws)), chat: None },
+    };
+    let hints = field.picked().words;
 
     let spelled = |text: &str| hints.iter().find(|hint| hint.text == text).map(|hint| hint.spelled);
     for own in ["entrecampos", "roundhouse", "due-dates", "stale-reports"] {
@@ -93,9 +93,7 @@ fn a_prompt_the_hub_wrote_gives_no_hints() {
     let person = EventBody::UserPrompt { client_msg_id: None, prompt: said, from: PromptFrom::Person };
     log.apply_event(fixtures::event(Seq::new(2), person));
 
-    let mut collector = HintCollector::new();
-    collector.add_session_log(&log);
-    let hints = texts(collector.finish());
+    let hints = texts(pick(&PickedFrom::default(), Some(&log)));
 
     assert!(hints.iter().any(|h| h == "Wollstonecraft"), "the person's words: {hints:?}");
     assert!(!hints.iter().any(|h| h.contains("Kesslerbahn")), "not the hub's: {hints:?}");
@@ -125,9 +123,8 @@ fn a_proposal_gives_its_names_and_the_code_its_markdown_names() {
         }],
     };
 
-    let mut collector = HintCollector::new();
-    collector.add_proposal(&proposed);
-    let hints = texts(collector.finish());
+    let field = Field::ProposalNote { typed: None, proposal: &proposed, around: Around::default() };
+    let hints = texts(field.picked().words);
 
     for expected in ["Dwell", "Kesslerbahn", "Wollstonecraft", "dwell_ms", "SignalBox", "signal_state", "hub_restart"] {
         assert!(hints.iter().any(|h| h == expected), "missing {expected:?} in {hints:?}");
@@ -153,12 +150,15 @@ fn a_long_proposal_leaves_room_for_what_comes_after_it() {
         }],
     };
 
-    let mut collector = HintCollector::new();
-    collector.add_proposal(&proposed);
-    collector.add_proper_noun("Wollstonecraft");
-    let hints = texts(collector.finish());
+    let shown = sample_workspace();
+    let field = Field::ProposalNote {
+        typed: None,
+        proposal: &proposed,
+        around: Around { workspace: Some(workspace(&shown)), chat: None },
+    };
+    let hints = texts(field.picked().words);
 
-    assert!(hints.iter().any(|h| h == "Wollstonecraft"), "room after it: {} hints", hints.len());
+    assert!(hints.iter().any(|h| h == "entrecampos"), "room after it: {} hints", hints.len());
     assert!(hints.iter().filter(|h| h.starts_with("zeta_")).count() <= 40, "{hints:?}");
 }
 
@@ -166,12 +166,9 @@ fn a_long_proposal_leaves_room_for_what_comes_after_it() {
 /// not when it's an everyday word, a contraction, or a compound of everyday words.
 #[test]
 fn prose_hints_a_lowercase_word_english_rarely_uses() {
-    let mut collector = HintCollector::new();
-    collector.add_prose(
-        "we'll keep tokio for now, and the long-running jobs don't need kustomize or ingress-nginx, \
-         just a built-in timer and ntfy.sh",
-    );
-    let hints = texts(collector.finish());
+    let typed = "we'll keep tokio for now, and the long-running jobs don't need kustomize or ingress-nginx, \
+                 just a built-in timer and ntfy.sh";
+    let hints = texts(pick(&PickedFrom { typed: typed.into(), ..PickedFrom::default() }, None));
 
     for expected in ["tokio", "kustomize", "ingress-nginx", "ntfy.sh"] {
         assert!(hints.iter().any(|h| h == expected), "missing {expected:?} in {hints:?}");

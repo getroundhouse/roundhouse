@@ -75,9 +75,10 @@ pub(super) fn quieting(how: Quieting) -> Setting {
 pub(super) fn keeping() -> Setting {
     Setting {
         name: "Keep recordings",
-        does: "Keep what you dictate on this Mac: its audio, the words it was heard with and what was written, so \
-               dictation can be tried again on what you really say. Nothing is sent anywhere. Turning it off keeps \
-               what's there until you delete it.",
+        does: "Keep what you dictate on this Mac: its audio, what was written, the words it was heard with, and what \
+               those were picked from, such as what you'd typed and your changed files' names. Dictation can then be \
+               tried again on what you really say. Nothing is sent anywhere. Turning it off keeps what's there until \
+               you delete it.",
         control: Control::Switch {
             is_on: Box::new(|cx| Some(get(cx).keep_recordings)),
             set: Rc::new(|on, cx| change(cx, |settings| settings.keep_recordings = on)),

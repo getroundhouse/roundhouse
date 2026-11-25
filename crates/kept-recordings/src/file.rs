@@ -1,5 +1,6 @@
 //! What a kept dictation's JSON file says.
 
+use hint_words::{HintWord, PickedFrom};
 use serde::{Deserialize, Serialize};
 
 /// The audio, in a dictation's folder.
@@ -8,8 +9,9 @@ pub const AUDIO: &str = "audio.wav";
 /// What's said of it, in its folder.
 pub const FILE: &str = "recording.json";
 
-/// The form this build writes. A later build reads an earlier one's, which it knows by this.
-pub const VERSION: u32 = 1;
+/// The form this build writes. A later build reads an earlier one's, which it knows by this. Version 1 didn't have
+/// [`Kept::picked_from`].
+pub const VERSION: u32 = 2;
 
 /// A dictation someone chose to keep. It's written as the dictation starts, and again as it ends.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -28,7 +30,9 @@ pub struct Kept {
     /// How strongly its hints were favoured.
     pub hint_boost: f32,
     /// The words it was biased toward, in order.
-    pub hints: Vec<Hint>,
+    pub hints: Vec<HintWord>,
+    /// What they were picked from, unless version 1 wrote it.
+    pub picked_from: Option<PickedFrom>,
     pub field: Field,
     /// The workspace it was in, by its ID, unless it was for one not made yet.
     pub workspace: Option<String>,
@@ -44,14 +48,6 @@ pub struct Kept {
     pub stopped_ms: Option<u64>,
     /// How it ended, or `None` if the app went before it did.
     pub ended: Option<Ended>,
-}
-
-/// A word or phrase it was biased toward.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Hint {
-    pub text: String,
-    /// Whether, if it's hyphenated, it's written as it's hinted, which its final text depends on.
-    pub spelled: bool,
 }
 
 /// The field it was dictated into.
@@ -112,22 +108,64 @@ pub enum How {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use super::Kept;
 
     /// What version 1 wrote, which every later build reads.
     #[test]
     fn version_1_is_read() {
-        let written = json!({
+        let kept: Kept = serde_json::from_value(version_1()).unwrap();
+        assert_eq!(kept.picked_from, None);
+        assert_eq!(
+            without_version_2(serde_json::to_value(&kept).unwrap()),
+            version_1(),
+            "the rest is as it was written"
+        );
+    }
+
+    /// What version 2 writes, which every later build reads.
+    #[test]
+    fn version_2_is_read() {
+        let written = version_2();
+        let kept: Kept = serde_json::from_value(written.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&kept).unwrap(), written);
+    }
+
+    fn version_1() -> Value {
+        json!({
             "version": 1, "id": "r1", "started_at_ms": 1_795_600_000_000_u64, "build": "0.1.500", "model": "bd13ddde",
             "language": "en", "hint_boost": 2.0, "hints": [{"text": "sqlite-vec", "spelled": true}],
             "field": "composer", "workspace": "w1", "chat": "s1", "said_out_loud": false,
             "device": {"name": "MacBook Pro Microphone", "sample_rate": 48000, "channels": 1},
             "said": [{"at_ms": 900, "text": {"live": "fix the"}}, {"at_ms": 1800, "text": {"final": "Fix the test."}}],
             "stopped_ms": 1500, "ended": {"at_ms": 1900, "how": "heard", "error": null}
+        })
+    }
+
+    /// Version 1's, with what version 2 added.
+    fn version_2() -> Value {
+        let asked = json!({
+            "header": "Pooling", "text": "Keep idle links?",
+            "options": [{"label": "Keep them", "description": "Uses `idle_ms`."}, {"label": "Drop", "description": null}]
         });
-        let kept: Kept = serde_json::from_value(written.clone()).unwrap();
-        assert_eq!(serde_json::to_value(&kept).unwrap(), written);
+        let mut written = version_1();
+        written["version"] = json!(2);
+        written["picked_from"] = json!({
+            "typed": "Ask about", "attached": ["notes.md"], "open_file": "src/relay.rs", "question": asked,
+            "proposal": {"title": "Holding links", "questions": [asked], "markdown": ["`LinkKeeper` drops it."]},
+            "comment_on": "src/tunnel.rs", "repos": ["signalbox"],
+            "workspace": {
+                "name": "Bindery", "branches": ["anselm/bindery"], "repo": "signalbox", "commented": ["src/relay.rs"],
+                "pull_request": "Keep the relay up"
+            },
+            "changed": ["src/relay.rs"], "chat": [{"first": 1, "last": 200}, {"first": 301, "last": 412}]
+        });
+        written
+    }
+
+    fn without_version_2(mut written: Value) -> Value {
+        written.as_object_mut().unwrap().remove("picked_from");
+        written
     }
 }

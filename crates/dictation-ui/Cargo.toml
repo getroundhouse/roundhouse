@@ -13,6 +13,8 @@ testing = ["dictation/testing"]
 dictation.workspace = true
 flume.workspace = true
 gpui-kit.workspace = true
+# The words a field favours, and what they were picked from, as its host gives them.
+hint-words.workspace = true
 look.workspace = true
 # The microphone's permission, and quieting what's playing.
 sound.workspace = true

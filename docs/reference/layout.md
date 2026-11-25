@@ -73,6 +73,7 @@ crates/
   client-core/     A client's connection, its copy of each hub's state, and what an app keeps on its device
   local-hub/       Starting a hub on this machine, for the desktop app and the CLI
   logging/         How every process logs: JSON lines, levels, panics, and keeping a log short
+  hint-words/      The words a dictation is biased toward, and what they were picked from
   kept-recordings/ The files a dictation someone chose to keep is written as
   transcript/      A chat's history and live snapshot, in GPUI
   client-ui/       What every app draws of workspaces and chats but the transcript, such as their marks, in GPUI

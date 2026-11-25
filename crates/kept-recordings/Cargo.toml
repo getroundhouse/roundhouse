@@ -7,6 +7,8 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+# The words a recording was biased toward, and what they were picked from.
+hint-words.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
