@@ -3,7 +3,8 @@
 //! and with them among unrelated words, as a field gets them. What's written, final and live, is scored for the terms
 //! spelled right, the hinted words written that weren't said, and the errors in everything else. `compare` sets a run
 //! against the baseline checked in beside this crate, so a change to the hints, their boost or the model shows what it
-//! gained and lost, and `hear` hears files given by hand. `docs/reference/commands.md` says how to run it.
+//! gained and lost, and `hear` hears files given by hand. `kept` hears the dictations
+//! someone chose to keep, as they were heard or with other settings, and lists those that come out differently. `docs/reference/commands.md` says how to run it.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
@@ -15,6 +16,8 @@ mod compare;
 mod hear_all;
 mod hear_files;
 mod hearing;
+mod kept;
+mod lines;
 mod model;
 mod results;
 mod running;
@@ -28,7 +31,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 
-use crate::args::{Cli, Command, ModelArgs};
+use crate::args::{Cli, Command, KeptCommand, ModelArgs};
 use crate::cache::Cache;
 use crate::clip::Set;
 use crate::results::{Baseline, Run};
@@ -60,6 +63,15 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Command::Compare { run, baseline } => {
             print!("{}", compare::compare(&Run::read(&run)?, &Baseline::read(&baseline)?));
+            Ok(())
+        }
+        Command::Kept { command: KeptCommand::Hear { recordings, out, boost, no_hints, model } } => {
+            let (files, _cache) = model_and_cache(model)?;
+            let as_heard = kept::Settings { boost, no_hints };
+            kept::hear(&recordings, &out, as_heard, &files)
+        }
+        Command::Kept { command: KeptCommand::Compare { run, other } } => {
+            print!("{}", kept::compare(&run, other.as_deref())?);
             Ok(())
         }
         Command::Accept { run, baseline } => Run::read(&run)?.baseline().write(&baseline),

@@ -1,6 +1,6 @@
 [package]
 name = "speech-eval"
-description = "Scores dictation's model on real recordings, by hand on a Mac: how it writes the terms said with no hint words, with only those terms, and with them among unrelated ones, so a change to hints, their boost or the model shows what it gained and lost."
+description = "Scores dictation's model on real recordings, by hand on a Mac: how it writes the terms said with no hint words, with only those terms, and with them among unrelated ones, so a change to hints, their boost or the model shows what it gained and lost. It also hears again the dictations someone chose to keep."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -17,6 +17,9 @@ flume.workspace = true
 dictation = { workspace = true, features = ["testing"] }
 # The datasets' indexes and LibriSpeech's archive, checked against their SHA-256, and Tech-Sentences' clips by range.
 fetching.workspace = true
+# The files of the dictations someone chose to keep, and the words each was heard with.
+hint-words.workspace = true
+kept-recordings.workspace = true
 # The model's files, downloaded into the eval's cache if they aren't there.
 models = { workspace = true, features = ["download"] }
 parking_lot.workspace = true

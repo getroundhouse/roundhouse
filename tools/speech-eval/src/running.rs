@@ -73,7 +73,7 @@ pub(crate) fn run(
 /// The code a run is heard with: the commit, and the tree of every file in the checkout as it is, changes and new
 /// files too, so a run resumed after a change refuses to mix the two. The tree is written with an index of its own in
 /// `out`, so the checkout's index isn't touched.
-fn code(out: &Path) -> anyhow::Result<String> {
+pub(crate) fn code(out: &Path) -> anyhow::Result<String> {
     std::fs::create_dir_all(out).with_context(|| format!("couldn't make {}", out.display()))?;
     let index = out.join(".tree-index");
     let checkout_index = git(&["rev-parse", "--path-format=absolute", "--git-path", "index"], None)?;
@@ -115,7 +115,7 @@ fn git(args: &[&str], index: Option<&Path>) -> anyhow::Result<String> {
 }
 
 /// The Mac and its system, which say where the times are from.
-fn machine() -> String {
+pub(crate) fn machine() -> String {
     let output = |program: &str, args: &[&str]| {
         Command::new(program)
             .args(args)

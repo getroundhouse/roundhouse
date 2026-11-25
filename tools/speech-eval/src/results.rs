@@ -7,8 +7,6 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::fs::OpenOptions;
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, ensure};
@@ -16,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::clip::{Clip, Condition, Set, Source};
 use crate::hearing::Written;
+use crate::lines;
 use crate::score::{Counts, diff, score};
 
 /// What a run was run with, and on.
@@ -151,7 +150,7 @@ impl Run {
                 run.stamp.code,
                 stamp.code
             );
-            run.cut_to_last_line()?;
+            lines::cut_to_last_whole(dir)?;
             return Ok(run);
         }
         let json = serde_json::to_string_pretty(&stamp)?;
@@ -162,27 +161,7 @@ impl Run {
     /// The run in `dir`, as far as it got.
     pub(crate) fn read(dir: &Path) -> anyhow::Result<Self> {
         let stamp = read_json(&dir.join("run.json"))?;
-        let path = dir.join("heard.jsonl");
-        let text = match std::fs::read_to_string(&path) {
-            Ok(text) => text,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(e) => return Err(e).with_context(|| format!("couldn't read {}", path.display())),
-        };
-        let lines: Vec<&str> = text.lines().collect();
-        let mut heard = Vec::new();
-        for (i, line) in lines.iter().enumerate() {
-            // A line is whole once its newline is written, so one without was cut short as a run stopped, and is
-            // heard again.
-            if i + 1 == lines.len() && !text.ends_with('\n') {
-                break;
-            }
-            match serde_json::from_str::<Hearing>(line) {
-                Ok(one) => heard.push(one.rescored()),
-                Err(e) => {
-                    return Err(e).with_context(|| format!("{}:{} isn't what it should be", path.display(), i + 1));
-                }
-            }
-        }
+        let heard = lines::read::<Hearing>(dir)?.into_iter().map(Hearing::rescored).collect();
         Ok(Self { dir: dir.to_path_buf(), stamp, heard })
     }
 
@@ -190,26 +169,10 @@ impl Run {
         self.heard.iter().any(|heard| heard.clip == clip && heard.condition == condition)
     }
 
-    /// Adds `heard`, written at once, and in one write, so a run that stops keeps it, or a line cut short.
+    /// Adds `heard`, written at once.
     pub(crate) fn add(&mut self, heard: Hearing) -> anyhow::Result<()> {
-        let path = self.dir.join("heard.jsonl");
-        let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
-        let line = serde_json::to_string(&heard)? + "\n";
-        file.write_all(line.as_bytes()).with_context(|| format!("couldn't write {}", path.display()))?;
+        lines::add(&self.dir, &heard)?;
         self.heard.push(heard);
-        Ok(())
-    }
-
-    /// Cuts off a line cut short as a run stopped as it wrote, which [`Run::read`] left out, so the next line starts
-    /// a line of its own.
-    fn cut_to_last_line(&self) -> anyhow::Result<()> {
-        let path = self.dir.join("heard.jsonl");
-        let Ok(text) = std::fs::read(&path) else { return Ok(()) };
-        let whole = text.iter().rposition(|&byte| byte == b'\n').map_or(0, |at| at + 1);
-        if whole < text.len() {
-            let file = OpenOptions::new().write(true).open(&path)?;
-            file.set_len(u64::try_from(whole)?).with_context(|| format!("couldn't cut {}", path.display()))?;
-        }
         Ok(())
     }
 
@@ -311,7 +274,7 @@ impl Baseline {
     }
 }
 
-fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> anyhow::Result<T> {
+pub(crate) fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> anyhow::Result<T> {
     let text = std::fs::read_to_string(path).with_context(|| format!("couldn't read {}", path.display()))?;
     serde_json::from_str(&text).with_context(|| format!("{} isn't what it should be", path.display()))
 }
