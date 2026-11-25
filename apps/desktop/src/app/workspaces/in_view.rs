@@ -18,8 +18,8 @@ impl InView {
     /// workspace and back is still being where they were, while another workspace, Home or Settings in view in its
     /// place, or the workspace in view in place of Home, is somewhere else. The first workspace is selected as it's
     /// listed, since there's nothing else, so its being selected isn't. The app can't tell a selection it made itself
-    /// from one the person made, so the top of the sidebar selected in place of a workspace archived from elsewhere
-    /// counts as going elsewhere too.
+    /// from one the person made, so a workspace selected in place of one archived from elsewhere counts as
+    /// going elsewhere too.
     pub(super) fn still(&self, now: &InView, made: &WorkspaceId) -> bool {
         let selected = now.selected == self.selected || now.selected.as_ref() == Some(made);
         selected && now.main == self.main && now.settings == self.settings

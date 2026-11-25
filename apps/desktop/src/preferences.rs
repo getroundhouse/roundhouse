@@ -24,14 +24,10 @@ pub(crate) fn load(opens: Opens, data_dir: &Path, cx: &mut App) {
     saved_before_quitting(|Kept(preferences)| preferences.saved(), cx);
 }
 
-/// The workspace the app was left on, on the paired hub that's `hub` or on this machine's, if `can_show` says it can
-/// still show it.
-pub(crate) fn workspace_to_open(
-    hub: Option<&Fingerprint>,
-    can_show: impl FnOnce(&WorkspaceId) -> bool,
-    cx: &App,
-) -> Option<WorkspaceId> {
-    cx.try_global::<Kept>()?.0.workspace_to_open(hub, can_show).cloned()
+/// The workspace the app was left on, on the paired hub that's `hub` or on this machine's, which may have been archived
+/// since.
+pub(crate) fn last_workspace(hub: Option<&Fingerprint>, cx: &App) -> Option<WorkspaceId> {
+    cx.try_global::<Kept>()?.0.last_workspace(hub).cloned()
 }
 
 /// Keeps `workspace` as the one the app is on, on the paired hub that's `hub` or on this machine's.

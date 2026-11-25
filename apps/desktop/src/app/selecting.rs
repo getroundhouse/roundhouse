@@ -22,13 +22,19 @@ impl AppView {
         self.show_selection(cx);
     }
 
-    /// Selects a workspace in place of one that can't show any more, or as the app opens: the one the app was left on,
-    /// on this hub, if the sidebar lists it, or else the top of the sidebar, or of what it lists if every project is
-    /// collapsed. A collapsed project stays collapsed, since nobody asked for its workspace now.
+    /// Selects a workspace in place of one that can't show any more, or as the app opens: the one the window was on, if
+    /// the sidebar lists it, or else the first of its project, or else the top of the sidebar, or of what it lists if
+    /// every project is collapsed. A collapsed project stays collapsed, since nobody asked for its workspace now.
     pub(super) fn select_a_fall_back(&mut self, cx: &App) {
-        let last = preferences::workspace_to_open(self.hub.fingerprint(), listed_in(&self.records), cx);
-        let top = || crate::sidebar::shown(self, cx).into_iter().next();
-        let instead = last.or_else(top).or_else(|| crate::sidebar::listed(self, cx).into_iter().next());
+        let left_on = || preferences::last_workspace(self.hub.fingerprint(), cx);
+        let last = self.selected().cloned().or_else(left_on);
+        let project = last.as_ref().and_then(|id| self.records.workspace(id)).map(|workspace| &workspace.repo_id);
+        let instead = last
+            .clone()
+            .filter(listed_in(&self.records))
+            .or_else(|| crate::sidebar::first_in(self, project?, cx))
+            .or_else(|| crate::sidebar::shown(self, cx).into_iter().next())
+            .or_else(|| crate::sidebar::listed(self, cx).into_iter().next());
         self.selection.fall_back(instead);
     }
 

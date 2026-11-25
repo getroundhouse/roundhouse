@@ -33,7 +33,7 @@ fn left_on(workspace: &Workspace, vault: &MemoryVault, dir: &Path) -> Preference
 
 /// Waits until the phone keeps `workspace` as where it was left on `hub`, or the list, with none.
 fn wait_until_kept(phone: &mut Phone, hub: &Fingerprint, dir: &Path, workspace: Option<&WorkspaceId>) {
-    phone.wait("where it was left to be kept", |_| kept_in(dir).workspace_to_open(Some(hub), |_| true) == workspace);
+    phone.wait("where it was left to be kept", |_| kept_in(dir).last_workspace(Some(hub)) == workspace);
 }
 
 /// Each test app has its own memory, so each time the app opens it has only what was kept.
