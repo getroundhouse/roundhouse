@@ -130,7 +130,13 @@ fn record(
     // This guard releases capture on an engine error as well. Stop and cancellation wake capture directly even
     // while this thread is blocked in the model.
     let _microphone = match audio {
-        AudioIn::Microphone => Some(Capture::start(input.clone(), capture.clone())?),
+        AudioIn::Microphone => {
+            let (capture, device) = Capture::start(input.clone(), capture.clone())?;
+            if let Some(device) = device {
+                cancelled.send_unless_set(&updates, Update::Opened(device));
+            }
+            Some(capture)
+        }
         #[cfg(any(test, feature = "testing"))]
         AudioIn::Fed => None,
     };

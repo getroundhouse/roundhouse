@@ -14,6 +14,7 @@ use gpui_kit::{App, AsyncApp, Context, Global, Subscription, Task};
 use models::{DownloadError, ModelFiles};
 
 use super::downloading::{self, Downloaded, ModelDownload};
+use super::loading::{Load, timed};
 use crate::settings::Choice;
 
 /// How long the model stays loaded with nothing dictated, after which the next recording loads it again, which takes
@@ -69,8 +70,6 @@ pub(super) struct Model {
     /// Whether this Mac can run it.
     runs_here: fn() -> bool,
 }
-
-type Load = Arc<dyn Fn(&Path) -> Result<Box<dyn Engine>, EngineError> + Send + Sync>;
 
 /// What the app holds of dictation.
 pub(super) struct Dictating {
@@ -191,7 +190,7 @@ fn downloaded(said: Downloaded, cx: &mut App) {
 fn load(cx: &mut App) {
     let model = &dictating(cx).model;
     let (load, dir) = (model.load.clone(), model.files.dir(&model.dir));
-    let dictation = match Dictation::start(move || load(&dir), KEEP_FOR) {
+    let dictation = match Dictation::start(move || timed(&load, &dir), KEEP_FOR) {
         Ok(dictation) => dictation,
         Err(e) => return set(failed(Failure::Start(e)), None, cx),
     };

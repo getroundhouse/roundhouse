@@ -103,7 +103,7 @@ impl Hearer {
         loop {
             match updates.recv_timeout(STUCK).context("the recording didn't end")? {
                 Update::Final(text) => final_text.push(text),
-                Update::Hearing(_) => {}
+                Update::Opened(_) | Update::Hearing(_) => {}
                 Update::Ended(_) => break,
                 Update::Failed(error) => return Err(error).context("the recording failed"),
             }
@@ -123,7 +123,7 @@ fn take(updates: &flume::Receiver<Update>, final_text: &mut Vec<String>) -> anyh
     for update in updates.try_iter() {
         match update {
             Update::Final(text) => final_text.push(text),
-            Update::Hearing(_) => {}
+            Update::Opened(_) | Update::Hearing(_) => {}
             Update::Ended(_) => bail!("the recording ended before it was stopped"),
             Update::Failed(error) => return Err(error).context("the recording failed"),
         }

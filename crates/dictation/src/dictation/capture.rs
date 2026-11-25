@@ -4,34 +4,41 @@
 use std::any::Any;
 use std::sync::Arc;
 
-use sound::{Microphone, MicrophoneError};
+use sound::{InputDevice, Microphone, MicrophoneError};
 
 use super::buffer::Buffer;
 use super::recording::Input;
 use crate::{DictationError, SAMPLE_RATE};
 
-/// Opens a capture resource on its owning thread. Its concrete type matters only to its destructor. Tests supply
-/// a watched resource through the same path, without opening the person's microphone.
-pub(super) type Open = Arc<dyn Fn(Buffer) -> Result<Box<dyn Any>, DictationError> + Send + Sync>;
+/// Opens a capture resource on its owning thread. Tests supply a watched resource through the same path, without
+/// opening the person's microphone.
+pub(super) type Open = Arc<dyn Fn(Buffer) -> Result<Opened, DictationError> + Send + Sync>;
+
+/// What capture opened. Its concrete type matters only to its destructor.
+pub(super) struct Opened {
+    pub(super) resource: Box<dyn Any>,
+    pub(super) device: InputDevice,
+}
 
 pub(super) struct Capture(Buffer);
 
 impl Capture {
-    pub(super) fn start(buffer: Buffer, open: Open) -> Result<Self, DictationError> {
+    /// Starts capture, and gives the device it hears, unless the recording had ended before it opened one.
+    pub(super) fn start(buffer: Buffer, open: Open) -> Result<(Self, Option<InputDevice>), DictationError> {
         let (started, ready) = flume::bounded(1);
         let capture = buffer.clone();
         std::thread::Builder::new()
             .name("dictation-microphone".to_string())
             .spawn(move || {
                 if !capture.accepting() {
-                    let _ = started.send(Ok(()));
+                    let _ = started.send(Ok(None));
                     return;
                 }
                 match open(capture.clone()) {
-                    Ok(microphone) => {
-                        let _ = started.send(Ok(()));
+                    Ok(Opened { resource, device }) => {
+                        let _ = started.send(Ok(Some(device)));
                         let _ = capture.closed().recv();
-                        drop(microphone);
+                        drop(resource);
                     }
                     Err(error) => {
                         let _ = started.send(Err(error));
@@ -39,8 +46,9 @@ impl Capture {
                 }
             })
             .map_err(|error| MicrophoneError::Failed(error.to_string()))?;
-        ready.recv().map_err(|_| MicrophoneError::Failed("capture stopped while opening".to_string()))??;
-        Ok(Self(buffer))
+        let device =
+            ready.recv().map_err(|_| MicrophoneError::Failed("capture stopped while opening".to_string()))??;
+        Ok((Self(buffer), device))
     }
 }
 
@@ -50,13 +58,13 @@ impl Drop for Capture {
     }
 }
 
-pub(super) fn microphone(buffer: Buffer) -> Result<Box<dyn Any>, DictationError> {
+pub(super) fn microphone(buffer: Buffer) -> Result<Opened, DictationError> {
     let failed = buffer.clone();
-    Microphone::open(
+    let microphone = Microphone::open(
         SAMPLE_RATE,
         move |audio| buffer.audio(audio),
         move |error| failed.end(Input::Failed(error.into())),
-    )
-    .map(|microphone| Box::new(microphone) as Box<dyn Any>)
-    .map_err(DictationError::from)
+    )?;
+    let device = microphone.device().clone();
+    Ok(Opened { resource: Box::new(microphone), device })
 }

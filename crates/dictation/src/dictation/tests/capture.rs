@@ -2,12 +2,12 @@
 
 use std::sync::Arc;
 
-use sound::MicrophoneError;
+use sound::{InputDevice, MicrophoneError};
 
 use super::support::{KEEP, SCRIPT, TIMEOUT, final_text, the_rest};
 use super::watched::{Gate, Watch, Watched};
 use crate::dictation::buffer::{Buffer, MAX_SAMPLES};
-use crate::dictation::capture::{Capture, Open};
+use crate::dictation::capture::{Capture, Open, Opened};
 use crate::dictation::recording::Input;
 use crate::fake::FakeEngine;
 use crate::{AudioIn, Dictation, DictationError, Ending, Engine, EngineError, Hints, Update};
@@ -25,9 +25,29 @@ fn capture() -> (Open, flume::Receiver<Buffer>, flume::Receiver<()>) {
     let (closed, gone) = flume::bounded(1);
     let open: Open = Arc::new(move |buffer| {
         started.send(buffer).unwrap();
-        Ok(Box::new(Microphone(closed.clone())))
+        Ok(Opened { resource: Box::new(Microphone(closed.clone())), device: device() })
     });
     (open, audio, gone)
+}
+
+fn device() -> InputDevice {
+    InputDevice { name: Some("Studio Display Microphone".to_string()), sample_rate: 48_000, channels: 1 }
+}
+
+#[test]
+fn a_recording_says_which_device_it_hears_first() {
+    let engine = FakeEngine::new(SCRIPT);
+    let words = engine.saying("fix the test");
+    let (capture, audio, _gone) = capture();
+    let dictation =
+        Dictation::with_capture(move || Ok(Box::new(engine.clone()) as Box<dyn Engine>), KEEP, capture).unwrap();
+    let (recording, updates) = dictation.record(AudioIn::Microphone, Hints::default(), crate::Language::Auto);
+    audio.recv_timeout(TIMEOUT).unwrap().audio(words);
+    recording.stop();
+
+    let updates = the_rest(&updates);
+    assert_eq!(updates.first(), Some(&Update::Opened(device())));
+    assert_eq!(updates.iter().filter(|u| matches!(u, Update::Opened(_))).count(), 1);
 }
 
 #[test]
@@ -68,7 +88,7 @@ fn stop_and_drop_release_capture_while_the_model_is_loading() {
             );
             assert_eq!(updates.last(), Some(&Update::Ended(Ending::Heard)));
         } else {
-            assert!(updates.is_empty(), "cancelled audio is not recognized: {updates:?}");
+            assert_eq!(updates, [Update::Opened(device())], "cancelled audio is not recognized");
         }
     }
 }
@@ -145,7 +165,7 @@ fn overflow_and_device_failure_release_capture_while_the_model_is_blocked() {
 
         gone.recv_timeout(TIMEOUT).expect("failed capture doesn't wait for the model");
         drop(release);
-        assert_eq!(the_rest(&updates), [Update::Failed(expected)]);
+        assert_eq!(the_rest(&updates), [Update::Opened(device()), Update::Failed(expected)]);
     }
 }
 
@@ -184,7 +204,8 @@ fn a_recording_ended_before_capture_starts_never_opens_the_microphone() {
         let buffer = Buffer::new();
         buffer.end(ending);
 
-        let _capture =
+        let (_capture, device) =
             Capture::start(buffer, Arc::new(|_| panic!("an ended recording must not open capture"))).unwrap();
+        assert_eq!(device, None);
     }
 }
