@@ -6,8 +6,14 @@
 #
 # It takes every process running the daemon as the tests', by either of its names, `roundhoused` or `Roundhouse Hub`,
 # a build's copy, which a hub a stamped build starts runs from, wherever it runs from. That's only so on a runner, where
-# nothing else runs it, so this is for CI, and not for a developer's machine.
+# nothing else runs it. On a developer's machine it would stop the installed app's hub, and its workers with their
+# agents, so it runs only in CI.
 set -euo pipefail
+
+if [ "${GITHUB_ACTIONS:-}" != true ]; then
+  echo "error: this stops every Roundhouse hub and worker on the machine, so it runs only on a GitHub runner" >&2
+  exit 1
+fi
 
 # Each process running the daemon, by PID. Either name is started by its whole path, which can have spaces in it.
 running() {
