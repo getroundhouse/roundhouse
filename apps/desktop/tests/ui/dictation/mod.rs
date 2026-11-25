@@ -15,6 +15,7 @@ mod hints;
 mod holding_space;
 mod key;
 mod language;
+mod logged;
 mod proposals;
 mod quieting;
 mod support;

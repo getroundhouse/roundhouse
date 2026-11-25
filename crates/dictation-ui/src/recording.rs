@@ -6,6 +6,8 @@ use gpui_kit::{Context, Task, Window};
 use sound::{MicrophoneError, Permission, Quieting};
 
 use crate::fine_line::FineLine;
+use crate::logged::{self, Logged};
+use crate::source::Recorded;
 use crate::text::Before;
 use crate::{Event, Field, keyboard, source};
 
@@ -20,6 +22,7 @@ pub(crate) struct Underway {
     before: Before,
     pub(crate) submit: bool,
     pub(crate) recording: Recording,
+    logged: Logged,
     _hearing: Task<()>,
 }
 
@@ -40,19 +43,21 @@ impl Field {
             match sound::microphone_permission() {
                 Permission::Allowed => {}
                 Permission::NotAsked => return sound::ask_for_microphone(|_| {}),
-                Permission::Denied => return cx.emit(Event::Error(ALLOW_THE_MICROPHONE.to_string())),
+                Permission::Denied => {
+                    logged::microphone_denied(self.place);
+                    return cx.emit(Event::Error(ALLOW_THE_MICROPHONE.to_string()));
+                }
             }
         }
         let hints = self.current_hints(cx);
-        if let Some((recording, updates)) = source::record(hints, cx) {
-            self.start_with(recording, updates, started, window, cx);
+        if let Some(recorded) = source::record(hints, cx) {
+            self.start_with(recorded, started, window, cx);
         }
     }
 
     pub(crate) fn start_with(
         &mut self,
-        recording: Recording,
-        updates: flume::Receiver<Update>,
+        recorded: Recorded,
         started: Started,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -60,6 +65,8 @@ impl Field {
         if self.underway.is_some() || !self.can_dictate(cx) {
             return;
         }
+        let Recorded { recording, updates, hinted } = recorded;
+        let logged = Logged::start(self.place, hinted);
         let before = Before::of(self.input.read(cx));
         // Only now, rather than as held Space starts to listen, so a press let go of before it dictates doesn't cut
         // what's playing.
@@ -94,6 +101,7 @@ impl Field {
             before,
             submit: false,
             recording,
+            logged,
             _hearing: hearing,
         });
         cx.notify();
@@ -104,6 +112,7 @@ impl Field {
             underway.stopping = true;
             self.line.update(cx, FineLine::settle);
             underway.recording.stop();
+            underway.logged.stopped();
             cx.notify();
         }
     }
@@ -119,7 +128,8 @@ impl Field {
 
     pub fn cancel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.space_down = None;
-        let Some(underway) = self.underway.take() else { return };
+        let Some(mut underway) = self.underway.take() else { return };
+        underway.logged.cancelled();
         self.line.update(cx, FineLine::hide);
         self.put_back(&underway.before, window, cx);
         cx.emit(Event::Ended { submit: false });
@@ -131,10 +141,15 @@ impl Field {
         match update {
             Update::Hearing(text) => underway.live = text,
             Update::Final(text) => self.put_in(&text, window, cx),
-            Update::Ended(Ending::Heard) => {}
-            Update::Ended(Ending::NothingHeard) => cx.emit(Event::Error(NOTHING_HEARD.to_string())),
+            Update::Ended(ending) => {
+                underway.logged.ended(ending);
+                if ending == Ending::NothingHeard {
+                    cx.emit(Event::Error(NOTHING_HEARD.to_string()));
+                }
+            }
             Update::Failed(error) => {
                 underway.submit = false;
+                underway.logged.failed(&error);
                 cx.emit(Event::Error(failure(&error)));
             }
         }

@@ -7,11 +7,13 @@ use gpui_kit::{AnyWindowHandle, App, AppContext as _, Context, Entity, EventEmit
 
 use crate::fine_line::FineLine;
 use crate::holding::SpaceDown;
+use crate::place::Place;
 use crate::recording::Underway;
 
 type HintsFn = Box<dyn Fn(&App) -> Hints>;
 
 pub struct Field {
+    pub(crate) place: Place,
     pub(crate) line: Entity<FineLine>,
     pub(crate) input: Entity<TextareaState>,
     pub(crate) window: AnyWindowHandle,
@@ -40,11 +42,11 @@ impl EventEmitter<Event> for Field {}
 impl Field {
     /// Dictation over `input`, for the host view `cx` is of, which is drawn again as the field's live words and
     /// controls change, and which `on_event` tells of what happens to it. `hints` gives the host's words to favour, as
-    /// each recording starts, and `enabled` whether the input shows now, as [`Self::set_enabled`] says. `corner` is the
-    /// one of what the fine line runs along. The host keeps the subscriptions as long as the field.
+    /// each recording starts, and `enabled` whether the input shows now, as [`Self::set_enabled`] says. The host keeps
+    /// the subscriptions as long as the field.
     pub fn attach<V: 'static>(
         input: &Entity<TextareaState>,
-        corner: look::Corner,
+        place: Place,
         enabled: bool,
         hints: impl Fn(&V, &App) -> Hints + 'static,
         on_event: impl Fn(&mut V, &Event, &mut Window, &mut Context<V>) + 'static,
@@ -53,7 +55,7 @@ impl Field {
     ) -> (Entity<Self>, [Subscription; 2]) {
         let host = cx.weak_entity();
         let field = cx.new(|cx| {
-            let mut field = Self::new(input.clone(), corner, window, cx);
+            let mut field = Self::new(input.clone(), place, window, cx);
             field.hints =
                 Some(Box::new(move |cx| host.upgrade().map_or_else(Hints::default, |host| hints(host.read(cx), cx))));
             field.enabled = enabled;
@@ -65,7 +67,7 @@ impl Field {
         (field, [events, changed])
     }
 
-    fn new(input: Entity<TextareaState>, corner: look::Corner, window: &Window, cx: &mut Context<Self>) -> Self {
+    fn new(input: Entity<TextareaState>, place: Place, window: &Window, cx: &mut Context<Self>) -> Self {
         let keys = cx.observe_keystrokes(|this, event, _, _| this.key_pressed(&event.keystroke));
         // The input is blurred as its window goes behind another app's too, which `keys` decides for itself.
         let changed = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, _| {
@@ -73,8 +75,9 @@ impl Field {
                 this.space_down = None;
             }
         });
-        let line = cx.new(|cx| FineLine::new(corner, cx));
+        let line = cx.new(|cx| FineLine::new(place.corner(), cx));
         Self {
+            place,
             line,
             input,
             window: window.window_handle(),

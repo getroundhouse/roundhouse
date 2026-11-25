@@ -52,8 +52,17 @@ pub(crate) fn quiets(how: Quieting, cx: &App) -> bool {
     cx.try_global::<Source>().is_some_and(|source| (source.quiets)(how, cx))
 }
 
-pub(crate) fn record(hints: Hints, cx: &App) -> Option<(Recording, flume::Receiver<Update>)> {
-    (cx.try_global::<Source>()?.record)(hints, cx)
+/// A recording, with what's heard of it, and how many words it's biased toward.
+pub(crate) struct Recorded {
+    pub(crate) recording: Recording,
+    pub(crate) updates: flume::Receiver<Update>,
+    pub(crate) hinted: usize,
+}
+
+pub(crate) fn record(hints: Hints, cx: &App) -> Option<Recorded> {
+    let hinted = hints.words().len();
+    let (recording, updates) = (cx.try_global::<Source>()?.record)(hints, cx)?;
+    Some(Recorded { recording, updates, hinted })
 }
 
 /// Ends an old target before asking the engine for another recording, including one still listening towards a held

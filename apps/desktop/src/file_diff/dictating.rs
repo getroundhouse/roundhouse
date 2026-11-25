@@ -34,8 +34,8 @@ impl FileDiff {
                 dictation_ui::Event::Ended { submit: false } | dictation_ui::Event::Started => {}
                 dictation_ui::Event::Error(message) => cx.emit(FileDiffEvent::Error(message.clone())),
             };
-        let corner = look::Corner::Control;
-        let (field, attached) = dictation_ui::Field::attach(input, corner, enabled, hints, on_event, window, cx);
+        let place = dictation_ui::Place::DiffComment;
+        let (field, attached) = dictation_ui::Field::attach(input, place, enabled, hints, on_event, window, cx);
         // Its live words change the comment's height, so the rows are laid out again.
         let laid_out = cx.observe(&field, |this, _, cx| this.lay_out_again(cx));
         (field, attached.into_iter().chain([laid_out]).collect())

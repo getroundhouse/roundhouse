@@ -2094,6 +2094,8 @@ dependencies = [
  "objc2-core-graphics",
  "objc2-io-kit",
  "sound",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

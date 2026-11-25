@@ -3,7 +3,8 @@
 
 use std::time::Duration;
 
-use dictation::{Recording, Update};
+#[cfg(any(test, feature = "testing"))]
+use dictation::Recording;
 use gpui_kit::component::input::Rope;
 use gpui_kit::{Context, Focusable as _, KeyDownEvent, Keystroke, Task, Window};
 use sound::Permission;
@@ -23,7 +24,7 @@ pub const SPACE_TALKS_AFTER: Duration = SPACE_LISTENS_AFTER;
 pub(crate) struct SpaceDown {
     before: Before,
     typed: Option<Rope>,
-    listening: Option<(Recording, flume::Receiver<Update>)>,
+    listening: Option<source::Recorded>,
     _timing: Task<()>,
 }
 
@@ -85,14 +86,14 @@ impl Field {
             self.put_back(&down.before, window, cx);
         }
         match down.listening {
-            Some((recording, updates)) => self.start_with(recording, updates, Started::Key, window, cx),
+            Some(recorded) => self.start_with(recorded, Started::Key, window, cx),
             None => self.start(Started::Key, window, cx),
         }
     }
 
     #[cfg(any(test, feature = "testing"))]
     pub(crate) fn space_listening(&self) -> Option<&Recording> {
-        self.space_down.as_ref()?.listening.as_ref().map(|(recording, _)| recording)
+        self.space_down.as_ref()?.listening.as_ref().map(|recorded| &recorded.recording)
     }
 }
 
