@@ -10,7 +10,7 @@ mod name;
 mod record;
 mod url;
 
-pub use auth::{ToolServerAuth, ToolServerAuthGiven, ToolServerKey};
+pub use auth::{ToolServerAuth, ToolServerAuthGiven, ToolServerKey, ToolSignInStatus};
 pub use header::{ToolServerHeader, ToolServerHeaderError};
 pub use name::{ToolServerName, ToolServerNameError};
 pub use record::ToolServer;

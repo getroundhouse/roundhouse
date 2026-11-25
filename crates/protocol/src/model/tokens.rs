@@ -37,7 +37,9 @@ mod tests {
 
     use crate::capability::conversation::Start;
     use crate::capability::settings::Settings;
-    use crate::client::{ClientRequest, ClientResponse, accounts, devices, github_accounts, github_apps, tool_servers};
+    use crate::client::{
+        ClientRequest, ClientResponse, accounts, devices, github_accounts, github_apps, tool_servers, tool_sign_ins,
+    };
     use crate::model::{
         AgentKind, AgentLogin, GithubToken, LoginToken, RunId, ToolServerAuthGiven, ToolServerHeader, ToolServerKey,
         ToolServerName, ToolServerUrl,
@@ -122,6 +124,9 @@ mod tests {
         let make = github_apps::GithubAppMake { code: github_apps::GithubManifestCode::new(SECRET) };
         let auth = ToolServerAuthGiven::Key { header: "X-Key".into(), key: ToolServerKey::new(SECRET) };
         let add = tool_servers::ToolServerAdd { id: "t".into(), name: "Docs".into(), url: "u".into(), auth };
+        let begun = tool_sign_ins::ToolSignInBegun::Page { page: tool_sign_ins::ToolSignInPage::new(SECRET) };
+        let returned = tool_sign_ins::ToolSignInReturned::new(SECRET);
+        let finish = tool_sign_ins::ToolSignInFinish { id: "i".into(), returned };
         let pair = devices::Pair { code: PairingCode::from(SECRET), device_name: "phone".into() };
         let paired = devices::Paired { device_id: "d".into(), token: DeviceToken::from(SECRET) };
         let pairing = Pairing { link: link(), code: PairingCode::from(SECRET), expires_at_ms: 1 };
@@ -130,6 +135,8 @@ mod tests {
             carrier("GithubAccountConnect", &ClientRequest::GithubAccountConnect(github)),
             carrier("GithubAppMake", &ClientRequest::GithubAppMake(make)),
             carrier("ToolServerAdd", &ClientRequest::ToolServerAdd(add)),
+            carrier("ToolSignInBegun", &ClientResponse::ToolSignInBegun(begun)),
+            carrier("ToolSignInFinish", &ClientRequest::ToolSignInFinish(finish)),
             carrier("Pair", &ClientRequest::Pair(pair)),
             carrier(
                 "Authenticate",

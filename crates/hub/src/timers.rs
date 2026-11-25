@@ -46,6 +46,9 @@ pub struct Timers {
     /// token has ended, and which sign-ins to renew and installations to make a token for, as
     /// `Hub::watch_github_logins` says.
     pub check_github_logins_every: Duration,
+    /// How often the hub checks its sign-ins to tool servers by the wall clock, for which to renew, after the check as it
+    /// starts.
+    pub check_tool_sign_ins_every: Duration,
     /// How often a hub installed as a service reads the update feed, after the read as it starts.
     pub look_for_updates_every: Duration,
 }
@@ -90,6 +93,8 @@ impl Timers {
         // minute of waking. Until then, a push fails at GitHub, which says the token is bad, rather than with the
         // block, which says what to do. *Unconfirmed:* a minute.
         check_github_logins_every: Duration::from_secs(60),
+        // As its GitHub logins are, for the same reason.
+        check_tool_sign_ins_every: Duration::from_secs(60),
         // As often as the app looks for its own.
         look_for_updates_every: Duration::from_mins(10),
     };
@@ -150,7 +155,7 @@ mod tests {
         #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
 
         #[test]
-        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform13(duration())) {
+        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform14(duration())) {
             let [
                 agent_spacing,
                 picks_up_within,
@@ -164,6 +169,7 @@ mod tests {
                 read_forgotten_again,
                 sign_in_pace,
                 check_github_logins_every,
+                check_tool_sign_ins_every,
                 look_for_updates_every,
             ] = times;
             let given = Timers {
@@ -179,6 +185,7 @@ mod tests {
                 read_forgotten_again,
                 sign_in_pace,
                 check_github_logins_every,
+                check_tool_sign_ins_every,
                 look_for_updates_every,
             };
             let (name, value) = given.env();

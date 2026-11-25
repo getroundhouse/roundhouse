@@ -50,14 +50,11 @@ impl Said {
 }
 
 /// Tables whose records have a revision, and no write that leaves it when it holds what the record holds, with why.
-const NONE_REPEATED: &[(&str, &str)] = &[
-    (
-        "github_apps",
-        "an app's record is made once and removed, and what GitHub says of it is an observation, whose change changes \
-         nothing on the record",
-    ),
-    ("tool_servers", "a server's record is made once and removed"),
-];
+const NONE_REPEATED: &[(&str, &str)] = &[(
+    "github_apps",
+    "an app's record is made once and removed, and what GitHub says of it is an observation, whose change changes \
+     nothing on the record",
+)];
 
 const ROWS: &[Row] = &[
     row("repos", "its address, read", nothing, workspaces::read_address, workspaces::repo),
@@ -85,6 +82,7 @@ const ROWS: &[Row] = &[
     row("github_accounts", "its login cleared", github::by_token, github::clear, github::account),
     row("github_accounts", "signing in again", github::signed_in, github::needs, github::account),
     row("github_sign_ins", "where it's got to", github::waiting, github::refused, github::sign_in),
+    row("tool_servers", "how it knows the person", hub::tool_server, hub::needs_sign_in, hub::tool_server_rev),
     row("proposals", "made again by its ask", nothing, proposals::propose, proposals::proposal),
     row("proposals", "answered again by its request", proposals::proposed, proposals::answer, proposals::proposal),
     row("proposals", "revised again by its ask", proposals::proposed, proposals::revise, proposals::proposal),

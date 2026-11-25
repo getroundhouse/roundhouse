@@ -97,6 +97,7 @@ fn of_reply(response: &ClientResponse) -> Vec<(String, Rev)> {
 }
 
 /// The records a reply is, or holds.
+#[expect(clippy::too_many_lines, reason = "a flat match over every reply, so a new one has to have an arm")]
 fn records_in(response: &ClientResponse) -> Vec<Record> {
     use ClientResponse as C;
     match response {
@@ -122,7 +123,8 @@ fn records_in(response: &ClientResponse) -> Vec<Record> {
         C::ToolServer(server) => vec![Record::ToolServer(server.clone())],
         C::Terminal(terminal) => vec![Record::Terminal(terminal.clone())],
         // What isn't a record, or holds none.
-        C::Paired(_)
+        C::ToolSignInBegun(_)
+        | C::Paired(_)
         | C::Devices(_)
         | C::Pairing(_)
         | C::Device(_)

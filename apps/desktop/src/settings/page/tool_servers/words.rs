@@ -47,8 +47,9 @@ pub(super) fn name_says(there: Option<&ToolServerName>) -> SharedString {
 pub(super) fn known_by(auth: &ToolServerAuth) -> Option<&'static str> {
     match auth {
         ToolServerAuth::Key { .. } => Some("Key"),
-        // `Unknown` is a way only a newer hub has, which this app has no word for.
-        ToolServerAuth::Neither | ToolServerAuth::Unknown => None,
+        // `Unknown` is a way only a newer hub has, which this app has no word for. It signs in to no server, so it has
+        // none for one that's signed in to either.
+        ToolServerAuth::Neither | ToolServerAuth::SignIn { .. } | ToolServerAuth::Unknown => None,
     }
 }
 
@@ -64,7 +65,7 @@ pub(super) fn remove_says(auth: &ToolServerAuth) -> &'static str {
             "Roundhouse forgets the server and its key, so using it again takes adding it again. The key isn't revoked \
              at the server, so it still works wherever else it's kept."
         }
-        ToolServerAuth::Neither | ToolServerAuth::Unknown => {
+        ToolServerAuth::Neither | ToolServerAuth::SignIn { .. } | ToolServerAuth::Unknown => {
             "Roundhouse forgets the server, so using it again takes adding it again."
         }
     }

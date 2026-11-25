@@ -3,6 +3,7 @@ use super::agents::ModelLists;
 use super::followers::Followers;
 use super::observations::{self, Observations};
 use super::terminals::Terminals;
+use super::tool_servers::ToolSignIns;
 use super::updates::Updates;
 use super::{awake, changes_watch, feed, github_observed, github_reads, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
@@ -40,6 +41,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tokio::sync::{Mutex as AsyncMutex, Notify, watch};
+use tool_sign_in::{CLIENT_DOCUMENT, ToolSignIn};
 use tracing::{Span, warn};
 
 /// Whether a restart leaves the hub's workers running. On Windows the local provider's workers run on the hub's pipes,
@@ -57,6 +59,7 @@ pub(crate) struct Hub {
     pub(super) logins: Arc<Logins>,
     pub(super) github_logins: Arc<GithubLogins>,
     pub(super) tool_servers: Arc<ToolServers>,
+    pub(super) tool_sign_ins: ToolSignIns,
     /// What the hub asks GitHub, such as whose a token is.
     pub(super) github: Github,
     /// `gh` on the hub's own machine, whose login an account can use.
@@ -172,6 +175,7 @@ impl Hub {
             logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
             github_logins: Arc::new(GithubLogins::new(store.clone(), Arc::clone(&observations), &dirs.data, now_ms())),
             tool_servers: Arc::new(ToolServers::new(store.clone(), &dirs.data)),
+            tool_sign_ins: ToolSignIns::new(ToolSignIn::new(CLIENT_DOCUMENT)),
             github,
             ssh: Ssh::new(machine.clone()),
             gh: Gh::new(machine.clone(), dirs.data.clone()),

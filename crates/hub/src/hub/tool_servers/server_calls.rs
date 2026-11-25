@@ -16,7 +16,7 @@ impl Hub {
         Ok(self.announce_tool_server(off_thread(move || servers.add(asked)).await?))
     }
 
-    /// Forgets a tool server and its key, as `ToolServerRemove` says, and tells every client it's gone.
+    /// Forgets a tool server and its key or its sign-in, as `ToolServerRemove` says, and tells every client it's gone.
     pub(crate) async fn tool_server_remove(&self, id: ToolServerId) -> Result<ToolServer, ApiError> {
         let servers = Arc::clone(&self.tool_servers);
         let ToolServerRemoved { server, rev } = off_thread(move || servers.remove(&id)).await?;
@@ -43,7 +43,7 @@ impl Hub {
         self.tool_servers.sent()
     }
 
-    fn announce_tool_server(&self, ToolServerChange { server, changed }: ToolServerChange) -> ToolServer {
+    pub(super) fn announce_tool_server(&self, ToolServerChange { server, changed }: ToolServerChange) -> ToolServer {
         if changed {
             self.notify(HubNotice::ToolServer(server.clone()));
         }

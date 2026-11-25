@@ -1,9 +1,12 @@
-//! The rule's rows for what the hub keeps for every workspace: its settings, the accounts agents run under, and the
-//! new workspace's draft.
+//! The rule's rows for what the hub keeps for every workspace: its settings, the accounts agents run under, the
+//! new workspace's draft, and its tool servers.
 
-use protocol::model::{HubSettingsChange, NewWorkspaceDraftToKeep, Reserve, Rev, SentCredential};
+use protocol::model::{
+    HubSettingsChange, NewWorkspaceDraftToKeep, Reserve, Rev, SentCredential, ToolServer, ToolServerAuth,
+    ToolSignInStatus,
+};
 
-use super::super::Store;
+use super::super::{AddingToolServer, Store};
 use super::rule::Said;
 
 pub(super) fn settings(store: &Store) -> Rev {
@@ -57,4 +60,20 @@ pub(super) fn new_draft(store: &Store) -> Said {
         ..NewWorkspaceDraftToKeep::default()
     };
     Said::Changed(store.set_new_workspace_draft(&typed).unwrap().1)
+}
+
+/// The tool server `t`.
+pub(super) fn tool_server(store: &Store) {
+    let ToolServer { id, name, url, auth, .. } = protocol::fixtures::tool_server("t");
+    let adding = AddingToolServer { id: &id, name: &name, url: &url, auth: &auth, secret: None };
+    store.add_tool_server(&adding).unwrap();
+}
+
+pub(super) fn needs_sign_in(store: &Store) -> Said {
+    let auth = ToolServerAuth::SignIn { status: ToolSignInStatus::NeedsSignIn };
+    Said::Changed(store.set_tool_server_auth(&"t".into(), &auth).unwrap().is_some())
+}
+
+pub(super) fn tool_server_rev(store: &Store) -> Rev {
+    store.tool_server(&"t".into()).unwrap().unwrap().0.rev
 }

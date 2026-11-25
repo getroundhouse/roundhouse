@@ -2,8 +2,10 @@
 
 use logging::testing::Logs;
 use protocol::model::{ToolServerAuth, ToolServerName, ToolServerUrl};
+use tool_sign_in::{OauthError, Renewal};
 
 use super::super::ToolServers;
+use super::sign_ins::{GIVEN_AT_MS, again, granted, signed_in};
 use super::support::{servers_in, with_key, with_neither};
 use crate::store::AddingToolServer;
 
@@ -30,6 +32,29 @@ fn a_hub_that_starts_again_has_workers_sent_the_servers_it_had_with_their_keys()
 
     let expected = [("n".to_string(), None), ("k".to_string(), Some("Authorization: Bearer made-up".to_string()))];
     assert_eq!(sent(&again), expected);
+}
+
+/// Through a change to the sign-in, and to what the hub has of it, as much as to the server.
+#[test]
+fn a_signed_in_server_is_sent_with_its_access_token_and_each_new_one_until_the_last_is_forgotten() {
+    let dir = tempfile::tempdir().unwrap();
+    let (servers, _) = servers_in(dir.path());
+    let due = |now_ms| servers.check_sign_ins(now_ms).unwrap().due.remove(0);
+    let sent_token = || sent(&servers).pop().and_then(|(_, header)| header);
+
+    signed_in(&servers, "t", "Linear");
+    assert_eq!(sent_token().as_deref(), Some("Authorization: Bearer made-up-t"));
+
+    let ends_at_ms = GIVEN_AT_MS + 3_600_000;
+    servers.renewed(&due(ends_at_ms), Renewal::Renewed(granted("made-up-renewed")), ends_at_ms).unwrap();
+    assert_eq!(sent_token().as_deref(), Some("Authorization: Bearer made-up-renewed"));
+
+    again(&servers, "t").unwrap();
+    assert_eq!(sent_token().as_deref(), Some("Authorization: Bearer made-up-again"));
+
+    let refused = Renewal::SignInAgain(OauthError::new("invalid_grant"));
+    servers.renewed(&due(ends_at_ms), refused, ends_at_ms).unwrap();
+    assert_eq!(sent(&servers), []);
 }
 
 /// Each is kept, and the rest are sent, and the log says which and why, with no key, and no name or URL.
@@ -69,10 +94,10 @@ fn a_server_whose_key_cant_be_read_or_whose_way_of_knowing_the_person_isnt_known
     let mut said: Vec<String> = logs.events().iter().filter_map(left_out).collect();
     said.sort();
     let expected = [
-        "gone: its key is gone",
-        "newer: only a newer build can read its key",
+        "gone: its key or its sign-in is gone",
+        "newer: only a newer build can read its key or its sign-in",
         "unknown: only a newer build knows how it knows the person",
-        "unreadable: its key's file can't be read: is a directory",
+        "unreadable: its file can't be read: is a directory",
     ];
     assert_eq!(said, expected);
     for private in ["secret", "Figma", "example.com"] {

@@ -33,6 +33,7 @@ pub mod session_log;
 pub mod standing;
 pub mod tasks;
 pub mod this_device;
+pub mod tool_sign_ins;
 pub mod waits;
 pub mod workspace_lines;
 pub mod workspace_order;
@@ -61,7 +62,8 @@ pub use client::{
     Introduction, LiveItem, LiveLog, OlderSide, OpenFile, OpenSession, OpenTerminal, Opening, PairingWait, Pointer,
     RecordsFeed, Reply, Restart, Result, Search, Searched, SelectBy, ShownOfGithub, Stretch, Subscription,
     SubscriptionItem, View, hub_is_missing, new_attachment_id, new_device_id, new_github_sign_in_id, new_message_id,
-    new_request_id, new_terminal_id, new_tool_server_id, restart_hub, stop_hub, stop_hub_if_idle, stop_hub_if_still,
+    new_request_id, new_terminal_id, new_tool_server_id, new_tool_sign_in_id, restart_hub, stop_hub, stop_hub_if_idle,
+    stop_hub_if_still,
 };
 
 #[cfg(any(test, feature = "testing"))]

@@ -3039,6 +3039,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "waiting",
 ]
 
 [[package]]
@@ -4379,6 +4380,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tokio-rustls",
+ "tool-sign-in",
  "tracing",
  "update-feed",
  "uuid",

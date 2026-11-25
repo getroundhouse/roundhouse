@@ -7,7 +7,7 @@ license.workspace = true
 
 [features]
 # What tests of the hub from outside it need: a stand-in for GitHub, and a hub pointed at it from the environment.
-testing = ["dep:parking_lot", "protocol/testing"]
+testing = ["dep:parking_lot", "dep:waiting", "protocol/testing"]
 
 [dependencies]
 base64.workspace = true
@@ -21,12 +21,14 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 parking_lot = { workspace = true, optional = true }
+waiting = { workspace = true, optional = true }
 
 [dev-dependencies]
 # For an address where nothing listens.
 fetching = { workspace = true, features = ["testing"] }
 # What the `testing` feature brings in, which the tests have without it.
 parking_lot.workspace = true
+waiting.workspace = true
 # A pull request with every facet, to set what the stand-in answers with.
 protocol = { workspace = true, features = ["testing"] }
 # For tests that pause time, so a timeout passes without being waited for.

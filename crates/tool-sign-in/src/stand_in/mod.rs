@@ -4,6 +4,7 @@
 //! answers as the test says, which the test can change as it goes, and keeps what it was asked.
 #![expect(clippy::unwrap_used, reason = "only tests use it, so failing loudly is what it should do")]
 
+pub use waiting::Gate;
 mod asked;
 pub use asked::Asked;
 mod authorization;

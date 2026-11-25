@@ -56,8 +56,8 @@ pub enum Failure {
 /// The most shown of an address that a server says is its own, longer than any is.
 const LONGEST_SHOWN: usize = 200;
 
-/// `said`, as a person is told it.
-pub(crate) fn shown(said: &str) -> String {
+/// `said`, as a person is told it, such as an address that a server says is its own, cut short.
+pub fn shown(said: &str) -> String {
     said.chars().take(LONGEST_SHOWN).collect()
 }
 
@@ -70,7 +70,8 @@ pub struct OauthError(String);
 const LONGEST: usize = 64;
 
 impl OauthError {
-    pub(crate) fn new(said: &str) -> Self {
+    /// What's `said`, where it could be one of OAuth's.
+    pub fn new(said: &str) -> Self {
         let named = !said.is_empty() && said.len() <= LONGEST;
         let named = named && said.bytes().all(|b| b.is_ascii_lowercase() || b == b'_');
         Self(if named { said } else { "an error it didn't name" }.to_string())

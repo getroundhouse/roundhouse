@@ -10,6 +10,7 @@ mod replies;
 mod requests;
 mod session_requests;
 mod tool_servers;
+mod tool_sign_ins;
 
 mod round_trip;
 use round_trip::{answered, asked};

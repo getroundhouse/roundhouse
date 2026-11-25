@@ -4,6 +4,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{ToolServerAuth, ToolServerAuthGiven, ToolServerHeader, ToolServerKey};
 use serde::{Deserialize, Serialize};
 
+use super::kept::KeptSignIn;
 use crate::login_files::{LoginSecret, Stored};
 
 /// What a tool server knows the person by, in a file of its own.
@@ -11,6 +12,7 @@ use crate::login_files::{LoginSecret, Stored};
 pub(super) enum ToolServerSecret {
     /// A key the person gave a client.
     Key(ToolServerKey),
+    SignIn(Box<KeptSignIn>),
 }
 
 /// How a file holds what it holds: a JSON object whose `format` says which form it's in. A form only a newer build knows
@@ -22,6 +24,7 @@ enum Form {
     Key {
         key: ToolServerKey,
     },
+    SignIn(Box<KeptSignIn>),
     #[serde(other)]
     Newer,
 }
@@ -30,14 +33,18 @@ impl LoginSecret for ToolServerSecret {
     const DIR: &'static str = protocol::paths::TOOL_SERVERS_DIR;
 
     fn to_bytes(&self) -> io::Result<Vec<u8>> {
-        let ToolServerSecret::Key(key) = self;
-        Ok(serde_json::to_vec(&Form::Key { key: key.clone() })?)
+        let form = match self {
+            ToolServerSecret::Key(key) => Form::Key { key: key.clone() },
+            ToolServerSecret::SignIn(kept) => Form::SignIn(kept.clone()),
+        };
+        Ok(serde_json::to_vec(&form)?)
     }
 
     /// What isn't one of the forms, such as one cut short, holds none.
     fn from_bytes(bytes: Vec<u8>) -> Stored<Self> {
         match serde_json::from_slice(&bytes) {
             Ok(Form::Key { key }) => Stored::Secret(ToolServerSecret::Key(key)),
+            Ok(Form::SignIn(kept)) => Stored::Secret(ToolServerSecret::SignIn(kept)),
             Ok(Form::Newer) => Stored::Newer,
             Err(_) => Stored::Nothing,
         }
@@ -74,14 +81,11 @@ pub(super) fn read(given: ToolServerAuthGiven) -> Result<(ToolServerAuth, Option
     }
 }
 
-/// The header whose key is a scheme, a space, and what the scheme is given, as HTTP has it.
-const AUTHORIZATION: &str = "Authorization";
-
 /// What `header` is to hold for `key`, as a person gave it, which is what's kept. Servers give out a key alone, to be
 /// sent as a bearer token, so one in `Authorization` with no space in it is one without its scheme. Any other header
 /// holds what its server says it does, so a key in one is kept as it is.
 fn as_sent(header: &ToolServerHeader, key: &str) -> ToolServerKey {
-    if header.as_str().eq_ignore_ascii_case(AUTHORIZATION) && !key.contains(' ') {
+    if header.is_authorization() && !key.contains(' ') {
         return ToolServerKey::new(format!("Bearer {key}"));
     }
     ToolServerKey::new(key)

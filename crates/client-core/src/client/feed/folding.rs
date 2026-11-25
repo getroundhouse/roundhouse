@@ -100,6 +100,7 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::Attachment(_)
         | ClientResponse::AttachmentData(_)
         | ClientResponse::GithubAppManifest(_)
+        | ClientResponse::ToolSignInBegun(_)
         | ClientResponse::WorktreeFiles(_)
         | ClientResponse::FileContents(_)
         | ClientResponse::FileOpened(_)

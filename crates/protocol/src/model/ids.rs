@@ -110,6 +110,9 @@ ids!(
     /// A tool server the hub has of its own, chosen by the client that adds it, as a UUID, so adding it again, as after a
     /// reply that was lost, is the same server.
     ToolServerId,
+    /// A sign-in to a tool server, chosen by the client that starts it, as a UUID, so starting it again, as after a reply
+    /// that was lost, is the same sign-in.
+    ToolSignInId,
     /// What GitHub calls a GitHub App in its addresses, such as `ada-roundhouse`, which its bot is named for, as
     /// `ada-roundhouse[bot]`. GitHub gives it as the app is made, from the name the person chose.
     GithubAppSlug,

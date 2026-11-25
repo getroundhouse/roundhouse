@@ -46,8 +46,8 @@ impl Reply for ToolServer {
     }
 }
 
-/// Has the hub forget a tool server, and its key, and answers with its record as it last was, while the feed says it's
-/// gone. It doesn't revoke the key at the server. Sending it again is refused with `NotFound`, as is removing one the
+/// Has the hub forget a tool server, and its key or its sign-in, and answers with its record as it last was, while the
+/// feed says it's gone. It revokes neither at the server. Sending it again is refused with `NotFound`, as is removing one the
 /// hub has no record of.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ToolServerRemove {

@@ -1,0 +1,15 @@
+{
+  "client_id": "https://getroundhouse.dev/oauth/client.json",
+  "client_name": "Roundhouse",
+  "client_uri": "https://getroundhouse.dev",
+  "application_type": "native",
+  "redirect_uris": [
+    "http://127.0.0.1/callback",
+    "http://127.0.0.1:17867/callback",
+    "http://127.0.0.1:17868/callback",
+    "http://127.0.0.1:17869/callback"
+  ],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none"
+}

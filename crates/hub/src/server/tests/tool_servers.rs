@@ -7,10 +7,15 @@ use std::sync::Arc;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe, Subscription};
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerRemove};
-use protocol::client::{
-    CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, HubFrame, HubNotice, ReplyOutcome, Request,
+use protocol::client::tool_sign_ins::{
+    REDIRECT_PORTS, ToolSignInBegun, ToolSignInCancel, ToolSignInFinish, ToolSignInReturned, ToolSignInStart,
+    ToolSignInTo, redirect,
 };
-use protocol::model::{RecordKey, ToolServer, ToolServerAuthGiven, ToolServerKey};
+use protocol::client::{
+    CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, Request,
+};
+use protocol::model::{RecordKey, ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerKey, ToolSignInStatus};
+use tool_sign_in::{AuthorizationPage, Script, StandIn};
 
 use super::Connection;
 use crate::hub::Hub;
@@ -79,6 +84,35 @@ async fn a_server_one_client_adds_and_removes_reaches_another() {
 
     assert_eq!(listed, []);
     assert_eq!(removed, added);
+}
+
+/// How it's waited for, finished and refused is tested in `crate::hub`.
+#[tokio::test]
+async fn a_server_one_client_signs_in_to_reaches_another_and_a_cancelled_sign_in_is_gone() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, stand_in) = (hub_in(dir.path()), StandIn::with(Script::default()).await);
+    let mut signs_in = client(&hub).await;
+    let (mut second, _) = following(&hub).await;
+    let start = |id: &str, server: &str| {
+        let url = stand_in.server().as_str().to_string();
+        let to = ToolSignInTo::New { id: server.into(), name: server.into(), url };
+        ToolSignInStart { id: id.into(), to, redirect: redirect(REDIRECT_PORTS[0]) }
+    };
+
+    let begun = signs_in.reply(2, &start("i", "linear").into_request()).await;
+    let ReplyOutcome::Response(ClientResponse::ToolSignInBegun(ToolSignInBegun::Page { page })) = begun else {
+        panic!("{begun:?}")
+    };
+    let returned = ToolSignInReturned::new(stand_in.visit(&AuthorizationPage::new(page.as_str())));
+    let server = ask(&mut signs_in, 3, ToolSignInFinish { id: "i".into(), returned: returned.clone() }).await;
+    told(&mut second, &HubNotice::ToolServer(server.clone())).await;
+    signs_in.reply(4, &start("cancelled", "docs").into_request()).await;
+    let cancelled = signs_in.reply(5, &ToolSignInCancel { id: "cancelled".into() }.into_request()).await;
+    let finished = signs_in.reply(6, &ToolSignInFinish { id: "cancelled".into(), returned }.into_request()).await;
+
+    assert_eq!(server.auth, ToolServerAuth::SignIn { status: ToolSignInStatus::Works });
+    assert!(matches!(cancelled, ReplyOutcome::Response(ClientResponse::Ok)), "{cancelled:?}");
+    assert!(matches!(&finished, ReplyOutcome::Error(e) if e.code == ErrorCode::NotFound), "{finished:?}");
 }
 
 #[tokio::test]

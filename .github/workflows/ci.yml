@@ -1,6 +1,7 @@
 # docs/standards/merging.md's full checks and publish.py's tests, on Linux, for every PR and the queue. The gallery compiles only on
-# macOS, and macos.yml runs there. Changes to only Markdown and the site skip them, and a change to what the guide
-# is made of builds the guide, whatever else it changes. A change to the copy of gpui-kit also runs the kit's own checks.
+# macOS, and macos.yml runs there. Changes to only Markdown and the site skip them, but for site/oauth, which a test
+# reads, and a change to what the guide is made of builds the guide, whatever else it changes. A change to the copy of
+# gpui-kit also runs the kit's own checks.
 name: CI
 
 on:
@@ -41,9 +42,9 @@ env:
 # The ruleset requires only `checks`. `changes` does the skipping, since a required check whose workflow never runs
 # stays pending. Actions are pinned to full commits.
 jobs:
-  # Skips the checks when only Markdown and the site differ from the base, or when the queue would check a tree a PR's
-  # run already passed. Says apart whether to build the guide, which is Markdown the checks don't read, and whether to
-  # run the kit's own checks, which only a change to the copy needs.
+  # Skips the checks when only Markdown and the site, but for site/oauth, differ from the base, or when the queue would
+  # check a tree a PR's run already passed. Says apart whether to build the guide, which is Markdown the checks don't
+  # read, and whether to run the kit's own checks, which only a change to the copy needs.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -94,7 +95,8 @@ jobs:
             steps=false
           fi
           if $based &&
-            git diff --quiet FETCH_HEAD HEAD -- ':(exclude)*.md' ':(exclude)site' ':(exclude)tools/site'; then
+            git diff --quiet FETCH_HEAD HEAD -- ':(exclude)*.md' ':(exclude)site' ':(exclude)tools/site' &&
+            git diff --quiet FETCH_HEAD HEAD -- site/oauth; then
             run=false
           # gh prints an error's body, so check `passed` is a run ID. A run that passed built the guide if it had to.
           elif [ "$GITHUB_EVENT_NAME" = merge_group ] &&

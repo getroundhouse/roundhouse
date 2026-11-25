@@ -127,7 +127,13 @@ impl State {
         let script = self.script.lock().clone();
         match asked.line.as_str() {
             "POST /mcp" => self.mcp(&asked, &script),
-            "POST /token" => self.tokens.lock().answer(&asked, &script),
+            "POST /token" => {
+                let reply = self.tokens.lock().answer(&asked, &script);
+                if let Some(gate) = &script.answers_after {
+                    gate.opened().await;
+                }
+                reply
+            }
             _ => metadata::at(&path, &script, &self.at).await.unwrap_or_else(|| status(404)),
         }
     }

@@ -53,7 +53,19 @@ const RESERVED: [&str; 18] = [
 /// lowercase.
 const FOR_A_PROXY: &str = "proxy-";
 
+const AUTHORIZATION: &str = "Authorization";
+
 impl ToolServerHeader {
+    /// `Authorization`, which a signed-in server's access token is sent in.
+    pub fn authorization() -> Self {
+        Self(AUTHORIZATION.into())
+    }
+
+    /// Whether it's that one, however it's spelled, whose value is a scheme, a space, and what the scheme is given.
+    pub fn is_authorization(&self) -> bool {
+        self.0.eq_ignore_ascii_case(AUTHORIZATION)
+    }
+
     /// Longer than the name of any header a server reads a key from.
     pub const MOST_BYTES: usize = 128;
 
