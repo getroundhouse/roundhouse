@@ -4,10 +4,11 @@
 mod collect;
 mod english;
 mod field;
+mod picked_from;
 mod prose;
 
-use collect::HintCollector;
-pub use field::{Around, Field, HintWord, Workspace};
+pub use collect::pick;
+pub use field::{Around, Field, Workspace};
 
 #[cfg(test)]
 mod tests;

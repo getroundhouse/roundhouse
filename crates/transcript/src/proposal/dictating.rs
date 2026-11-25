@@ -81,15 +81,10 @@ impl ProposalView {
         let typed = self.answering.note.as_ref().map(|note| note.input.read(cx).text().to_string());
         let around = self.dictation_hints.as_ref().map_or_else(Around::default, |hints| hints(cx));
         let proposal = &self.proposal.current.proposed;
-        let words = Field::ProposalNote { typed: typed.as_deref(), proposal, around }.hint_words();
-        let hints = dictation_ui::Hints::new(
-            words.into_iter().map(|word| dictation_ui::Hint { text: word.text, spelled: word.spelled }),
-        );
         dictation_ui::About {
-            hints,
             workspace: Some(self.proposal.workspace_id.to_string()),
             chat: Some(self.proposal.session_id.to_string()),
-            said_out_loud: false,
+            ..Field::ProposalNote { typed: typed.as_deref(), proposal, around }.picked().into()
         }
     }
 

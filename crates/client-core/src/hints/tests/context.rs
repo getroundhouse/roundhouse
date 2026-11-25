@@ -1,12 +1,13 @@
 //! A made-up workspace and chat that the hints tests share, and reading what's hinted.
 
+use hint_words::HintWord;
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Read;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::fixtures;
 use protocol::model::{Place, Records, Repo, Rev, Seq};
 
-use crate::hints::HintWord;
+use crate::hints::Workspace;
 use crate::records::{HubRecords, InWorkspace};
 use crate::session_log::SessionLog;
 
@@ -19,6 +20,11 @@ pub(super) fn sample_workspace() -> InWorkspace {
     let repo = Repo { name: "roundhouse".into(), rev: Rev::new(1), ..fixtures::repo("r1") };
     records.apply_list(Records { repos: vec![repo], workspaces: vec![ws], ..Records::default() });
     records.snapshot().in_workspace(&"w1".into()).unwrap()
+}
+
+/// `shown`, with no pull request and no changed files.
+pub(super) fn workspace(shown: &InWorkspace) -> Workspace<'_> {
+    Workspace { shown, pull_request: None, changed: Vec::new() }
 }
 
 pub(super) fn sample_log() -> SessionLog {

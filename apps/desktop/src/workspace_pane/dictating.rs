@@ -79,15 +79,11 @@ impl WorkspacePane {
         let open_file = self.diff.as_ref().and_then(|diff| diff.tab.as_ref()).map(|tab| tab.path.as_ref());
         let chat = self.transcript().map(|transcript| transcript.read(cx).log());
         let around = Around { workspace: Some(self.workspace_around(cx)), chat };
-        let words = Field::Composer { typed: &typed, attached: &attached, open_file, around }.hint_words();
-        let hints = dictation_ui::Hints::new(
-            words.into_iter().map(|word| dictation_ui::Hint { text: word.text, spelled: word.spelled }),
-        );
         dictation_ui::About {
-            hints,
             workspace: Some(self.shown.workspace().id.to_string()),
             chat: self.active.as_ref().map(ToString::to_string),
             said_out_loud: self.conversation_is_here(cx),
+            ..Field::Composer { typed: &typed, attached: &attached, open_file, around }.picked().into()
         }
     }
 

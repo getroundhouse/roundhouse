@@ -6,5 +6,5 @@
 mod file;
 mod wav;
 
-pub use file::{AUDIO, Device, Ended, FILE, Field, Hint, How, Kept, Said, Text, VERSION};
+pub use file::{AUDIO, Device, Ended, FILE, Field, How, Kept, Said, Text, VERSION};
 pub use wav::{HEADER_BYTES, MAX_DATA_BYTES, header};

@@ -51,11 +51,8 @@ impl QuestionPanel {
         let around = transcript.as_ref().map_or_else(Around::default, |t| t.read(cx).dictation_around(cx));
         let workspace = around.workspace.as_ref().map(|workspace| workspace.shown.workspace().id.to_string());
         let chat = transcript.as_ref().map(|t| t.read(cx).session_id().to_string());
-        let words = Field::Answer { typed: &typed, question: &asked.question, around }.hint_words();
-        let hints = dictation_ui::Hints::new(
-            words.into_iter().map(|word| dictation_ui::Hint { text: word.text, spelled: word.spelled }),
-        );
-        dictation_ui::About { hints, workspace, chat, said_out_loud: false }
+        let picked = Field::Answer { typed: &typed, question: &asked.question, around }.picked();
+        dictation_ui::About { workspace, chat, ..picked.into() }
     }
 
     pub(super) fn dictation_event(

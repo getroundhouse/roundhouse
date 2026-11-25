@@ -1251,6 +1251,7 @@ name = "client-core"
 version = "0.1.0"
 dependencies = [
  "flume",
+ "hint-words",
  "libc",
  "parking_lot",
  "proptest",
@@ -2007,6 +2008,7 @@ dependencies = [
  "flume",
  "gpui-kit",
  "gpui-pre-apple",
+ "hint-words",
  "hub",
  "image",
  "kept-recordings",
@@ -2093,6 +2095,7 @@ dependencies = [
  "dictation",
  "flume",
  "gpui-kit",
+ "hint-words",
  "logging",
  "look",
  "objc2-core-graphics",
@@ -4213,6 +4216,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hint-words"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "hkdf"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4992,6 +5002,7 @@ dependencies = [
 name = "kept-recordings"
 version = "0.1.0"
 dependencies = [
+ "hint-words",
  "serde",
  "serde_json",
 ]

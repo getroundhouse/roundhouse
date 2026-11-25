@@ -125,11 +125,7 @@ impl NewWorkspaceDialog {
         let chosen_repo = self.offer.repos.iter().find(|(id, _)| id == &self.repo).map(|(_, name)| name.as_str());
         let repos = self.offer.repos.iter().map(|(_, name)| name.as_str()).collect();
         let field = Field::NewWorkspace { typed: &typed, attached: &attached, chosen_repo, repos };
-        let words = field.hint_words();
-        let hints = dictation_ui::Hints::new(
-            words.into_iter().map(|word| dictation_ui::Hint { text: word.text, spelled: word.spelled }),
-        );
-        dictation_ui::About { hints, ..dictation_ui::About::default() }
+        field.picked().into()
     }
 
     pub(crate) fn new(

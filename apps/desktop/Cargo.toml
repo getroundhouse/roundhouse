@@ -23,6 +23,8 @@ testing = ["conversation/testing", "dictation/testing", "dictation-ui/testing"]
 [dependencies]
 protocol.workspace = true
 client-core.workspace = true
+# The words a kept recording was biased toward, as its file has them.
+hint-words.workspace = true
 kept-recordings.workspace = true
 local-hub.workspace = true
 logging.workspace = true
