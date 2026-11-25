@@ -42,7 +42,7 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/standards/manual-checks.md` | What a person has to judge by hand |
 | `docs/principles/parts.md` | Which process does which job: hubs, workers, providers and clients |
 | `docs/principles/layers.md` | Which crate can depend on which, how code is layered, and how an error crosses the layers |
-| `docs/principles/state.md` | Who owns a piece of state, and how what the hub stores changes form |
+| `docs/principles/state.md` | Who owns a piece of state, what an app keeps on its device, and how what the hub stores changes form |
 | `docs/principles/serving.md` | The four kinds of thing a hub serves, how a client gets them, and what the hub keeps current |
 | `docs/principles/events.md` | What an event is, how the hub records one, and how a client reads a session's log |
 | `docs/principles/records.md` | What a record is, how one changes, and how a client keeps its copy |

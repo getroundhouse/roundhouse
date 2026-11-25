@@ -1,6 +1,6 @@
 # Who owns each piece of state
 
-These rules say who owns a piece of state, and how what the hub stores changes form. Decide who owns the state before choosing where a change goes. `docs/principles/serving.md` says which kind of thing it then is, and each kind has a doc of its own.
+These rules say who owns a piece of state, what an app keeps on its device, and how what the hub stores changes form. Decide who owns the state before choosing where a change goes. `docs/principles/serving.md` says which kind of thing it then is, and each kind has a doc of its own.
 
 ## Owners
 
@@ -10,6 +10,20 @@ These rules say who owns a piece of state, and how what the hub stores changes f
 - **State that's one person's is kept for that person, on the hub.** How far a chat is read, and what's typed and not sent, belong to whoever read or typed, not to the chat. *Not built:* a hub has one user, so these are on the session's and the workspace's records. *Unconfirmed.*
 - **A client reads a fact from the record or event that states it, and never infers it from the events it has loaded.** A client holds a session's log in pages, so the event that settles a question can be in a page it hasn't loaded. For example, a session's record lists the approvals the agent is waiting on, so a client doesn't search its loaded events for a request with no answer.
 - **State is keyed on the thing it describes.** Whether the default GitHub account can push to a repository is keyed on the repository, not on its project or a workspace, so it still holds when a project has more than one repository. A pull request belongs to its branch on GitHub, so two workspaces on the same branch have the same pull request.
+
+## What an app keeps on its device
+
+- **Each kind of thing an app keeps on its device has a type of its own, named for what it is, and what uses it never sees how it's stored.** Each kind needs something different, so one store for files, or for everything, would fit none of them. *Unconfirmed:* what each needs.
+
+  | Kind | What it is | What it needs |
+  |---|---|---|
+  | Settings | What a person chooses in Settings | Shows as it changes, and says when it can't be saved |
+  | Preferences | What the app remembers from how it's used, such as the workspace it was left on | Saved quietly, since they change often and losing one costs little |
+  | Paired hubs | The hubs this device paired with | Never lost, and forgetting one forgets its secret |
+  | Secrets | The token a paired hub gave this device | Encrypted, and for this device only |
+  | Downloads | Such as the model dictation hears with | Left out of backups, since they can be downloaded again |
+
+- **A kind has a trait only where platforms store it differently, which is only secrets.** Any other is one type that every app with that kind uses, given where to keep it, since a trait would have one implementation. *Not built:* that trait, and one type for paired hubs. The desktop app keeps its paired hubs in its settings, with a few preferences, such as which projects are collapsed, and the iPhone app keeps its one hub its own way. *Unconfirmed.*
 
 ## What's stored
 

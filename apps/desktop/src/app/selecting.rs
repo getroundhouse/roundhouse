@@ -8,6 +8,7 @@ use protocol::model::WorkspaceId;
 use super::AppView;
 use super::selection::Way;
 use super::wrapped_step;
+use crate::preferences;
 
 impl AppView {
     /// The workspace selected, which shows unless Home or Settings is in its place.
@@ -19,6 +20,23 @@ impl AppView {
     pub fn select(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
         self.selection.choose(id);
         self.show_selection(cx);
+    }
+
+    /// Selects a workspace in place of one that can't show any more, or as the app opens: the one the app was left on,
+    /// on this hub, if the sidebar lists it, or else the top of the sidebar, or of what it lists if every project is
+    /// collapsed. A collapsed project stays collapsed, since nobody asked for its workspace now.
+    pub(super) fn select_a_fall_back(&mut self, cx: &App) {
+        let last = preferences::workspace_to_open(self.hub.fingerprint(), listed_in(&self.records), cx);
+        let top = || crate::sidebar::shown(self, cx).into_iter().next();
+        let instead = last.or_else(top).or_else(|| crate::sidebar::listed(self, cx).into_iter().next());
+        self.selection.fall_back(instead);
+    }
+
+    /// Has the app open on the workspace selected, the next time it opens on this hub.
+    pub(super) fn keep_selected(&self, cx: &mut App) {
+        if let Some(id) = self.selected() {
+            preferences::left_on(self.hub.fingerprint(), id, cx);
+        }
     }
 
     /// Shows the workspace before or after the one selected in this window's history, as a browser's Back and Forward
@@ -45,6 +63,7 @@ impl AppView {
         if let Some(id) = self.selected().cloned() {
             self.show_in_sidebar(&id, cx);
         }
+        self.keep_selected(cx);
         self.close_home();
         self.show_selected(cx);
         self.say_what_shows();

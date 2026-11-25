@@ -29,6 +29,7 @@ In it:
 | `daemons/` | A copy of the hub's program, `Roundhouse Hub`, for each version that has started a hub, which that version's hub and its workers run from. Once the app, or the command line, starts a hub, it removes each copy that nothing runs from anymore and that's more than a day old, except its own version's. A workspace still at work on the version before keeps that version's copy until it [moves to the new one](updates.md#what-an-update-does). On Windows the hub itself runs from `daemons\Roundhouse Hub.exe`, whichever version it is, so Windows Firewall asks once whether a paired phone may reach it, not after every update |
 | `settings.json` | The app's [settings](settings.md) |
 | `window.json` | Where the app's window was left, so it opens there again |
+| `preferences.json` | What the app remembers from how you use it: which workspace it was left on, for each hub it has shown, so it opens on it again |
 | `updates/` | On Linux, the updates the app has downloaded |
 | `dictation/` | The model that hears what you dictate, 2.4 GB, once you turn dictation on, in a folder for the version it is. Time Machine leaves it out, since it can be downloaded again. Turning dictation off keeps it, and Delete the model, under Dictation in [Settings](settings.md), frees the room |
 | `speaking/` | The voice conversation mode speaks with, about 65 MB, downloaded once speech is on, in a folder for the version it is. Time Machine leaves it out, since it can be fetched again |

@@ -3,7 +3,7 @@
 //! has a file of its own in the app's data directory.
 
 #[cfg(test)]
-use crate::saving::write_json;
+use client_core::this_device::write_json;
 #[cfg(test)]
 use gpui_kit::{Bounds, DisplayId, Pixels, WindowBounds, point, px, size};
 

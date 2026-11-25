@@ -1,5 +1,5 @@
 use super::system;
-use crate::saving::{Saver, write_json};
+use client_core::this_device::{Saver, read_json, write_json};
 use gpui_kit::{
     AnyWindowHandle, App, Bounds, Context, DisplayId, Global, Pixels, Task, Window, WindowBounds, point, px, size,
 };
@@ -21,12 +21,14 @@ const USUAL_SIZE: (f32, f32) = (1320., 860.);
 /// after a display gets smaller.
 const WITHIN_REACH: Pixels = px(40.);
 
-/// Where the main window opens.
+/// Where the main window opens, and on which workspace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Opens {
-    /// Where it was when the app last ran, which the app goes on keeping, in its data directory.
+    /// Where it was when the app last ran, on the workspace it was left on, both of which the app goes on keeping, in
+    /// its data directory.
     WhereItWasLeft,
-    /// In its usual place every time, for a picture of the app, and nothing is kept.
+    /// In its usual place every time, on the workspace at the top of the sidebar, for a picture of the app, and nothing
+    /// is kept.
     InItsUsualPlace,
 }
 
@@ -200,15 +202,10 @@ fn attached(cx: &App) -> Vec<Attached> {
 
 /// What's saved, or `None` when nothing is, or what is can't be read.
 pub(super) fn read(path: &Path) -> Option<Place> {
-    let text = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&text)
-        .map_err(|e| {
-            eprintln!(
-                "couldn't read where the window was left, in {}, so it opens in its usual place: {e}",
-                path.display()
-            );
-        })
-        .ok()
+    read_json(path).unwrap_or_else(|e| {
+        eprintln!("couldn't read where the window was left, so it opens in its usual place: {e}");
+        None
+    })
 }
 
 /// Where the window is, and what saves that.
@@ -259,16 +256,11 @@ fn load(data_dir: &Path, cx: &mut App) -> Option<Opening> {
         cx.global_mut::<Kept>().in_usual_place = in_usual_place;
         return opening;
     }
-    let (saver, failed) = Saver::start(move |place| write_json(&path, place));
+    // Nobody is told, since the only cost is the window opening somewhere else next time.
+    let failed = |e| eprintln!("couldn't save where the window is: {e}");
+    let saver = Saver::start(move |place| write_json(&path, place), failed);
     let (opened_at, window, last_seen, settling) = (None, None, None, None);
     cx.set_global(Kept { saver, saved: left, in_usual_place, opened_at, window, last_seen, settling });
-    // Nobody is told, since the only cost is the window opening somewhere else next time.
-    cx.spawn(async move |_| {
-        while let Ok(failure) = failed.recv_async().await {
-            eprintln!("couldn't save where the window is: {failure}");
-        }
-    })
-    .detach();
     // Quitting doesn't give the wait for the window to settle its turn, so this saves where it is now.
     cx.on_app_quit(|cx| {
         let all_saved = cx.has_global::<Kept>().then(|| {
