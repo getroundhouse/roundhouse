@@ -5,6 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use logging::testing::Logs;
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{GithubAccountId, GithubToken, GithubUser, GithubUserId, UnusableLogin};
@@ -13,7 +14,6 @@ use tokio::sync::watch;
 
 use super::{Following, SET_WITHIN};
 use crate::github_logins::{Connect, DefaultCredential, GithubLogins};
-use crate::logged::Logs;
 use crate::store::tests::store_with_session;
 use crate::worker_link::WorkerLink;
 use github::GithubProfile;
@@ -156,7 +156,7 @@ async fn a_worker_that_never_answers_holds_up_no_other_link_nor_a_change_and_is_
     assert!(answering.is_open());
 }
 
-/// A worker that can't apply a set is said each time, with why, and used on. Nothing logs a token, neither as what
+/// A worker that can't apply a set is said each time, with why, and used on. Nothing logs a token, nor who an account is, neither as what
 /// workers are sent changes, nor as a link takes an answer.
 #[tokio::test(start_paused = true)]
 async fn a_worker_that_doesnt_apply_a_set_is_said_and_used_on_and_no_token_is_logged() {
@@ -175,6 +175,13 @@ async fn a_worker_that_doesnt_apply_a_set_is_said_and_used_on_and_no_token_is_lo
     assert!(cant.is_open());
     assert_eq!(logged.matches("couldn't apply its git credential").count(), 2, "{logged}");
     assert!(logged.contains("its git is older than 2.31"), "{logged}");
-    assert!(logged.contains("what workers give their processes for github.com from now on"), "{logged}");
+    let sent = |event: &serde_json::Value| event["fields"]["sent"].as_str().unwrap_or_default().to_owned();
+    let told: Vec<String> =
+        logs.events().iter().filter(|event| event["event"] == "github.credential.changed").map(sent).collect();
+    assert!(told.last().unwrap().contains(&id.to_string()), "{logged}");
+    // Ada's username, which is her name too, and her email. "ada" alone is in other words, such as "unreadable".
+    for who in ["\"ada", "7+ada"] {
+        assert!(!logged.contains(who), "an account is logged by its ID alone: {logged}");
+    }
     assert!(!logged.contains("secret"), "{logged}");
 }

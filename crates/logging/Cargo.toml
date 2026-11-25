@@ -1,0 +1,26 @@
+[package]
+name = "logging"
+description = "How every process logs: a line of JSON for each event, at the levels each part logs at. No UI, no async runtime and none of the workspace's other crates."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[features]
+# Capturing what a test's thread logs.
+testing = ["dep:parking_lot"]
+
+[dependencies]
+parking_lot = { workspace = true, optional = true }
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+log.workspace = true
+parking_lot.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -72,6 +72,7 @@ crates/
   private-files/   Files and sockets only their user can open
   client-core/     A client's connection, its copy of each hub's state, and what an app keeps on its device
   local-hub/       Starting a hub on this machine, for the desktop app and the CLI
+  logging/         How every process logs: JSON lines, levels, panics, and keeping a log short
   transcript/      A chat's history and live snapshot, in GPUI
   client-ui/       What every app draws of workspaces and chats but the transcript, such as their marks, in GPUI
   terminal-state/  The worker's copy of each terminal, on Ghostty's terminal core

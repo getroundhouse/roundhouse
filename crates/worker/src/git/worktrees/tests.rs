@@ -1,14 +1,10 @@
 use super::locking::{Changing, Hold, WAITING, Worktrees};
 use crate::git::tests::{new_repo, prepare, run};
 use crate::testing::given;
-use std::cell::RefCell;
+use logging::testing::Logs;
 use std::fmt::Debug;
 use std::fs::{OpenOptions, TryLockError};
-use std::io;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
-use std::sync::Once;
 use std::time::Duration;
 
 /// Long enough for git on a busy machine.
@@ -57,7 +53,7 @@ pub(crate) fn while_one_is_made<T: Debug>(repo: &Path, work: impl Future<Output 
         let logs = Logs::capture();
         tokio::select! {
             biased;
-            () = logs.until(WAITING) => {}
+            () = until_logged(&logs, WAITING) => {}
             ended = &mut work => panic!("it never waited for the worktree being made, and ended with {ended:?}"),
         }
         being_made.done();
@@ -65,62 +61,9 @@ pub(crate) fn while_one_is_made<T: Debug>(repo: &Path, work: impl Future<Output 
     }
 }
 
-type Buffer = Rc<RefCell<Vec<u8>>>;
-
-thread_local! {
-    static CAPTURED: RefCell<Option<Buffer>> = const { RefCell::new(None) };
-}
-
-/// What's logged on this thread, as it's logged, for as long as this is held. A `#[tokio::test]` runs everything it
-/// awaits on its own thread.
-pub(crate) struct Logs {
-    written: Buffer,
-}
-
-struct Writing(Option<Buffer>);
-
-impl Write for Writing {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if let Some(written) = &self.0 {
-            written.borrow_mut().extend_from_slice(buf);
-        }
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl Logs {
-    pub(crate) fn capture() -> Self {
-        // With a thread-local subscriber, another test can first reach a callsite without one and cache that
-        // nobody wants it. Keep one global subscriber, and route its writes to the capture on this thread only.
-        static SUBSCRIBER: Once = Once::new();
-        SUBSCRIBER.call_once(|| {
-            let subscriber = tracing_subscriber::fmt()
-                .with_ansi(false)
-                .with_writer(|| Writing(CAPTURED.with(|written| written.borrow().clone())))
-                .finish();
-            tracing::subscriber::set_global_default(subscriber).unwrap();
-        });
-        let written = Rc::new(RefCell::new(Vec::new()));
-        CAPTURED.with(|captured| assert!(captured.replace(Some(written.clone())).is_none(), "already capturing"));
-        Self { written }
-    }
-
-    pub(crate) async fn until(&self, line: &str) {
-        waiting::task::until(TIMEOUT, format!("nothing logged {line:?}"), || {
-            String::from_utf8_lossy(&self.written.borrow()).contains(line)
-        })
-        .await;
-    }
-}
-
-impl Drop for Logs {
-    fn drop(&mut self) {
-        CAPTURED.with(RefCell::take);
-    }
+/// Waits until `logs` has a line that says `message`.
+pub(crate) async fn until_logged(logs: &Logs, message: &str) {
+    waiting::task::until(TIMEOUT, format!("nothing logged {message:?}"), || logs.text().contains(message)).await;
 }
 
 /// Whether the lock's file could be held now, as `how` says, by something other than this test.
@@ -187,19 +130,4 @@ async fn a_repository_and_its_worktrees_share_one_lock_and_another_repository_ha
     let ours = Worktrees::of(&given(), &repo).await.unwrap().lock;
     assert_eq!(Worktrees::of(&given(), Path::new(&workspace.path)).await.unwrap().lock, ours);
     assert_ne!(Worktrees::of(&given(), &new_repo(other.path())).await.unwrap().lock, ours);
-}
-
-/// A callsite can first be reached on another test's thread, which has no thread-local subscriber.
-#[tokio::test]
-async fn logs_are_captured_even_when_another_thread_logs_first() {
-    fn log() {
-        tracing::info!("a captured worktree log");
-    }
-    let logs = Logs::capture();
-
-    std::thread::spawn(log).join().unwrap();
-    assert!(logs.written.borrow().is_empty(), "captured another thread's log");
-    log();
-
-    logs.until("a captured worktree log").await;
 }

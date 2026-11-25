@@ -321,7 +321,7 @@ pub(crate) fn restart_to_update(cx: &mut App) {
 /// Silently, since nobody is there to answer it, and without relaunching, since quitting was asked for.
 fn install(cx: &mut App) {
     if let Some(Err(e)) = apply(false, cx) {
-        eprintln!("couldn't install the update: {e}");
+        tracing::error!(name: "update.uninstalled", error = %e, "Couldn't install the update");
     }
 }
 

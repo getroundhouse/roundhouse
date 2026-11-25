@@ -24,6 +24,8 @@ testing = ["conversation/testing", "dictation/testing", "dictation-ui/testing"]
 protocol.workspace = true
 client-core.workspace = true
 local-hub.workspace = true
+logging.workspace = true
+private-files.workspace = true
 transcript.workspace = true
 client-ui.workspace = true
 # What an MP4 or a QuickTime file says of its video, which the file tab shows, and the system's player plays.
@@ -51,6 +53,7 @@ parking_lot.workspace = true
 ring.workspace = true
 # The copy of a video from another machine that the system's player opens, which goes once it's done with.
 tempfile.workspace = true
+tracing.workspace = true
 # Turns a pasted image an agent can't be given, such as a TIFF, into a PNG, and decodes the images the file tab draws
 # and compares. GPUI already builds these.
 image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }

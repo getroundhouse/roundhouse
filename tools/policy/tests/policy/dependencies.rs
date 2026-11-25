@@ -193,6 +193,12 @@ fn phonon_needs_none_of_our_other_crates_but_models_no_async_runtime_and_no_ui()
     needs_none_of_ours_no_async_runtime_and_no_ui("phonon", &["models", "fetching"]);
 }
 
+/// Every process logs with `logging`, so it's free of the rest, and can be in any of them.
+#[test]
+fn logging_needs_none_of_our_other_crates_no_async_runtime_and_no_ui() {
+    needs_none_of_ours_no_async_runtime_and_no_ui("logging", &[]);
+}
+
 /// A model's files know nothing of what the model does, and are downloaded on the caller's thread, so any client on any
 /// device can keep a model with them.
 #[test]

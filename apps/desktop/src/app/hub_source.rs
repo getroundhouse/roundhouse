@@ -79,9 +79,13 @@ impl HubSource {
         self.remote.as_ref().map(|hub| &hub.fingerprint)
     }
 
-    /// The default hub for this user, with the daemon next to this binary, for an app that's `build`.
-    pub fn default_local(build: Build) -> anyhow::Result<Self> {
-        let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
+    /// Where this user's hub keeps everything, and the app beside it.
+    pub fn paths() -> anyhow::Result<Paths> {
+        protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)
+    }
+
+    /// The hub at `paths`, with the daemon next to this binary, for an app that's `build`.
+    pub fn local(paths: Paths, build: Build) -> anyhow::Result<Self> {
         let named = std::env::var_os(protocol::paths::ENV_DAEMON_BIN).map(PathBuf::from);
         let daemon = Daemon::find(named, build).context("finding the daemon next to this binary")?;
         Ok(Self { paths, remote: None, daemon, build_number: build.number(), build_version: build.version() })

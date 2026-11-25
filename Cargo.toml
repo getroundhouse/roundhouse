@@ -11,6 +11,7 @@ members = [
     "crates/hub",
     "crates/client-core",
     "crates/local-hub",
+    "crates/logging",
     "apps/daemon",
     "apps/cli",
     "apps/desktop",
@@ -64,6 +65,7 @@ default-members = [
     "crates/hub",
     "crates/client-core",
     "crates/local-hub",
+    "crates/logging",
     "apps/daemon",
     "apps/cli",
     "crates/terminal-state",
@@ -124,6 +126,7 @@ github = { path = "crates/github" }
 hub = { path = "crates/hub" }
 client-core = { path = "crates/client-core" }
 local-hub = { path = "crates/local-hub" }
+logging = { path = "crates/logging" }
 transcript = { path = "crates/transcript" }
 client-ui = { path = "crates/client-ui" }
 look = { path = "crates/look" }
@@ -192,6 +195,8 @@ hyper-util = { version = "0.1.21", features = ["tokio"] }
 # Says when something happened in the local time zone, and reads the times services write.
 jiff = "1.0.1"
 libc = "0.2.191"
+# Already under tracing-subscriber, which hears what's logged with it, such as by GPUI.
+log = "0.4.35"
 # Ghostty's terminal core, through bindings pinned to the commit that builds its 1.0.1, which isn't on crates.io yet.
 # Its build script builds Ghostty with Zig 0.17, which has to be on the PATH, and fetches Ghostty's source as it builds.
 libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "483ea3d5247b214060da58ef6037a95f30ae89fb" }

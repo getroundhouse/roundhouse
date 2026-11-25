@@ -134,8 +134,12 @@ impl SettingsFile {
 
     /// What's saved, or every setting as nobody has chosen when nothing is, or what is can't be read.
     pub(super) fn read(&self) -> Settings {
-        let read = read_json(&self.path).unwrap_or_else(|e| {
-            eprintln!("couldn't read the settings, so they start as nobody has chosen: {e}");
+        let read = read_json(&self.path).unwrap_or_else(|error| {
+            tracing::warn!(
+                name: "settings.unread",
+                %error,
+                "Couldn't read the settings, so they start as nobody has chosen"
+            );
             None
         });
         read.unwrap_or_default()
