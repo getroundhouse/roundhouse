@@ -3,10 +3,11 @@ use std::sync::Arc;
 use protocol::client::tool_servers::ToolServerAdd;
 use protocol::client::{ApiError, HubNotice};
 use protocol::model::{RecordKey, ToolServer, ToolServerId};
+use tokio::sync::watch;
 use tracing::error;
 
 use super::super::{Hub, off_thread};
-use crate::tool_servers::{ToolServerChange, ToolServerRemoved};
+use crate::tool_servers::{SentToolServers, ToolServerChange, ToolServerRemoved};
 
 impl Hub {
     /// Adds a tool server, as `ToolServerAdd` says, and tells every client of its record.
@@ -34,6 +35,12 @@ impl Hub {
                 "Couldn't make the tool servers' files and the tool servers agree"
             );
         }
+    }
+
+    /// The tool servers each worker's link sets on its worker, as
+    /// [`ToolServers::sent`](crate::tool_servers::ToolServers::sent) says.
+    pub(crate) fn sent_tool_servers(&self) -> watch::Receiver<SentToolServers> {
+        self.tool_servers.sent()
     }
 
     fn announce_tool_server(&self, ToolServerChange { server, changed }: ToolServerChange) -> ToolServer {

@@ -6,29 +6,10 @@ use protocol::client::ErrorCode;
 use protocol::client::tool_servers::ToolServerAdd;
 use protocol::model::{ToolServerAuth, ToolServerAuthGiven, ToolServerKey};
 
-use super::secret::ToolServerSecret;
-use super::*;
+use super::super::ToolServerChange;
+use super::super::secret::ToolServerSecret;
+use super::support::{servers_in, with_key, with_neither};
 use crate::login_files::{LoginFile, LoginSecret as _, Stored};
-use crate::store::Store;
-use crate::store::tests::open_in;
-use std::sync::Arc;
-
-/// The tool servers of a hub whose data directory is `dir`, and its store.
-fn servers_in(dir: &Path) -> (ToolServers, Arc<Store>) {
-    let store = Arc::new(open_in(dir));
-    (ToolServers::new(store.clone(), dir), store)
-}
-
-/// Adding `name` as `id`, with the key `key` in `Authorization`.
-fn with_key(id: &str, name: &str, key: &str) -> ToolServerAdd {
-    let auth = ToolServerAuthGiven::Key { header: "Authorization".into(), key: ToolServerKey::new(key) };
-    ToolServerAdd { auth, ..with_neither(id, name) }
-}
-
-fn with_neither(id: &str, name: &str) -> ToolServerAdd {
-    let url = "https://mcp.example.com/mcp".into();
-    ToolServerAdd { id: id.into(), name: name.into(), url, auth: ToolServerAuthGiven::Neither }
-}
 
 fn refused<T: std::fmt::Debug>(done: Result<T, protocol::client::ApiError>) -> ErrorCode {
     done.unwrap_err().code

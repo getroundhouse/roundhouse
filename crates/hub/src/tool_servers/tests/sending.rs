@@ -1,0 +1,99 @@
+//! Which servers workers are sent, and what the log says of the rest.
+
+use logging::testing::Logs;
+use protocol::model::{ToolServerAuth, ToolServerName, ToolServerUrl};
+
+use super::super::ToolServers;
+use super::support::{servers_in, with_key, with_neither};
+use crate::store::AddingToolServer;
+
+/// The servers workers are sent, by ID, and what each request to each carries.
+fn sent(servers: &ToolServers) -> Vec<(String, Option<String>)> {
+    let set = servers.sent().borrow().set();
+    let carried = |server: protocol::worker::ProxiedServer| {
+        let header = server.header.map(|header| format!("{}: {}", header.name.as_str(), header.value.as_str()));
+        (server.id.to_string(), header)
+    };
+    set.servers.into_iter().map(carried).collect()
+}
+
+/// Before any link can follow them, and with no change made.
+#[test]
+fn a_hub_that_starts_again_has_workers_sent_the_servers_it_had_with_their_keys() {
+    let dir = tempfile::tempdir().unwrap();
+    let (servers, _) = servers_in(dir.path());
+    servers.add(with_key("k", "Linear", "Bearer made-up")).unwrap();
+    servers.add(with_neither("n", "Docs")).unwrap();
+    drop(servers);
+
+    let (again, _) = servers_in(dir.path());
+
+    let expected = [("n".to_string(), None), ("k".to_string(), Some("Authorization: Bearer made-up".to_string()))];
+    assert_eq!(sent(&again), expected);
+}
+
+/// Each is kept, and the rest are sent, and the log says which and why, with no key, and no name or URL.
+#[test]
+fn a_server_whose_key_cant_be_read_or_whose_way_of_knowing_the_person_isnt_known_is_left_out() {
+    let logs = Logs::capture();
+    let dir = tempfile::tempdir().unwrap();
+    let (servers, store) = servers_in(dir.path());
+    for id in ["kept", "newer", "gone", "unreadable"] {
+        servers.add(with_key(id, id, &format!("Bearer secret-{id}"))).unwrap();
+    }
+    let path = |id: &str| {
+        let file = store.tool_server(&id.into()).unwrap().unwrap().1.unwrap();
+        dir.path().join("tool-servers").join(file.as_str())
+    };
+    std::fs::write(path("newer"), r#"{"format":"made_up_by_a_newer_build","key":"secret-newer"}"#).unwrap();
+    std::fs::remove_file(path("gone")).unwrap();
+    std::fs::remove_file(path("unreadable")).unwrap();
+    std::fs::create_dir(path("unreadable")).unwrap();
+    let unknown = AddingToolServer {
+        id: &"unknown".into(),
+        name: &ToolServerName::typed("Figma").unwrap(),
+        url: &ToolServerUrl::typed("https://figma.example.com/mcp").unwrap(),
+        auth: &ToolServerAuth::Unknown,
+        secret: None,
+    };
+    store.add_tool_server(&unknown).unwrap();
+
+    servers.add(with_neither("neither", "neither")).unwrap();
+
+    let kept = ("kept".to_string(), Some("Authorization: Bearer secret-kept".to_string()));
+    assert_eq!(sent(&servers), [kept, ("neither".to_string(), None)]);
+    let left_out = |event: &serde_json::Value| {
+        let field = |name: &str| event["fields"][name].as_str().unwrap_or_default().to_string();
+        (event["event"] == "tool_servers.left_out").then(|| format!("{}: {}", field("id"), field("why")))
+    };
+    let mut said: Vec<String> = logs.events().iter().filter_map(left_out).collect();
+    said.sort();
+    let expected = [
+        "gone: its key is gone",
+        "newer: only a newer build can read its key",
+        "unknown: only a newer build knows how it knows the person",
+        "unreadable: its key's file can't be read: is a directory",
+    ];
+    assert_eq!(said, expected);
+    for private in ["secret", "Figma", "example.com"] {
+        assert!(!logs.text().contains(private), "{}", logs.text());
+    }
+}
+
+#[test]
+fn a_change_that_changes_nothing_workers_are_sent_has_them_sent_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let (servers, _) = servers_in(dir.path());
+    servers.add(with_key("k", "Linear", "Bearer made-up")).unwrap();
+    let mut following = servers.sent();
+    following.borrow_and_update();
+
+    servers.add(with_key("k", "Linear", "Bearer made-up")).unwrap();
+    servers.add(with_key("k2", "linear", "another")).unwrap_err();
+    servers.tidy().unwrap();
+
+    assert!(!following.has_changed().unwrap());
+    servers.remove(&"k".into()).unwrap();
+    assert!(following.has_changed().unwrap());
+    assert_eq!(sent(&servers), []);
+}

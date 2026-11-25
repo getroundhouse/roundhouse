@@ -4,16 +4,21 @@ use std::sync::Arc;
 use protocol::client::tool_servers::ToolServerAdd;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{Rev, ToolServer, ToolServerId, ToolServerName, ToolServerUrl};
+use tokio::sync::watch;
 
+use super::SentToolServers;
 use super::secret::{ToolServerSecret, read};
-use crate::login_files::LoginFiles;
+use crate::login_files::{Locked, LoginFiles};
 use crate::store::{AddingToolServer, Store, StoreError};
 
 /// Adds, removes and tidies one at a time, under its files' lock, so none finds another half done, and no two
-/// servers are given names agents would call the same. Synchronous, and only called off the async threads.
+/// servers are given names agents would call the same, and has workers sent what each leaves. Synchronous, and only
+/// called off the async threads.
 pub(crate) struct ToolServers {
-    store: Arc<Store>,
-    files: LoginFiles<ToolServerSecret>,
+    pub(super) store: Arc<Store>,
+    pub(super) files: LoginFiles<ToolServerSecret>,
+    /// What workers are sent. The keys are in memory only while the hub runs, and in no log.
+    pub(super) sent: watch::Sender<SentToolServers>,
 }
 
 /// A tool server's record after a change, and whether that changed it, so the hub announces only what did.
@@ -31,9 +36,13 @@ pub(crate) struct ToolServerRemoved {
 }
 
 impl ToolServers {
-    /// The tool servers of a hub whose data directory is `data_dir`.
+    /// The tool servers of a hub whose data directory is `data_dir`, with what workers are to be sent, before any link
+    /// can follow it.
     pub(crate) fn new(store: Arc<Store>, data_dir: &Path) -> Self {
-        Self { store, files: LoginFiles::new(data_dir) }
+        let servers =
+            Self { store, files: LoginFiles::new(data_dir), sent: watch::Sender::new(SentToolServers::default()) };
+        servers.publish(&servers.files.lock());
+        servers
     }
 
     /// Adds a server, as `ToolServerAdd` says. One of its ID is that server again, whatever else is asked, so it's
@@ -41,7 +50,10 @@ impl ToolServers {
     /// [`Locked::connect`](crate::login_files::Locked::connect) says, so a hub that stops between leaves a file no row
     /// names, which tidying removes as the next starts, and no server.
     pub(crate) fn add(&self, asked: ToolServerAdd) -> Result<ToolServerChange, ApiError> {
-        let files = self.files.lock();
+        self.changing(|files| self.add_to(files, asked))
+    }
+
+    fn add_to(&self, files: &Locked<'_, ToolServerSecret>, asked: ToolServerAdd) -> Result<ToolServerChange, ApiError> {
         let ToolServerAdd { id, name, url, auth } = asked;
         if let Some((server, _)) = self.store.tool_server(&id)? {
             return Ok(ToolServerChange { server, changed: false });
@@ -65,24 +77,26 @@ impl ToolServers {
     /// [`Locked::disconnect`](crate::login_files::Locked::disconnect) says, so a hub that stops between leaves a server
     /// whose key is gone, which tidying removes as the next starts, and never a key that was to be forgotten.
     pub(crate) fn remove(&self, id: &ToolServerId) -> Result<ToolServerRemoved, ApiError> {
-        let files = self.files.lock();
-        let (server, secret) = self.store.tool_server(id)?.ok_or_else(|| gone(id))?;
-        let remove = || Ok(self.store.remove_tool_server(id)?.ok_or_else(|| gone(id))?);
-        let rev = match secret {
-            Some(file) => files.disconnect(&file, remove)?,
-            None => remove()?,
-        };
-        Ok(ToolServerRemoved { server, rev })
+        self.changing(|files| {
+            let (server, secret) = self.store.tool_server(id)?.ok_or_else(|| gone(id))?;
+            let remove = || Ok(self.store.remove_tool_server(id)?.ok_or_else(|| gone(id))?);
+            let rev = match secret {
+                Some(file) => files.disconnect(&file, remove)?,
+                None => remove()?,
+            };
+            Ok(ToolServerRemoved { server, rev })
+        })
     }
 
     /// Makes the secrets' files and the servers' rows agree, as the hub starts, as
     /// [`Locked::tidy`](crate::login_files::Locked::tidy) says. A server whose secret is gone is removed, as removing it
     /// would have, had the hub not stopped between letting go of its file and its row.
     pub(crate) fn tidy(&self) -> Result<(), ApiError> {
-        let files = self.files.lock();
-        files.tidy(self.store.tool_server_secrets()?, |id| {
-            self.store.remove_tool_server(id)?;
-            Ok(())
+        self.changing(|files| {
+            files.tidy(self.store.tool_server_secrets()?, |id| {
+                self.store.remove_tool_server(id)?;
+                Ok(())
+            })
         })
     }
 

@@ -1,5 +1,5 @@
 use super::WorkerLinkId;
-use super::credential::Following;
+use super::greeting::Followings;
 use super::{acks, reaching, reading};
 use crate::calls::{Calls, NotSent};
 use crate::child_process::{ChildProcess, Spawned};
@@ -9,7 +9,7 @@ use crate::spans;
 use acks::Acks;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, error_chain};
-use protocol::model::{InstanceId, ProviderName, RunId, SessionId, WorkspaceId};
+use protocol::model::{InstanceId, RunId, SessionId, WorkspaceId};
 use protocol::worker::{
     AskAnswer, Reply, Request, RunningAgent, RunningAgents, Stop, WorkerCall, WorkerFrame, WorkerResponse,
 };
@@ -59,11 +59,11 @@ fn unexpected(reply: &WorkerResponse) -> ApiError {
 }
 
 impl WorkerLink {
-    /// Starts the instance's worker, says hello and sets the hub's git credential, as [`WorkerLink::greet`] says, and
-    /// from then on sets each the hub has, as [`Following::follow`] says. Then, on a worker on the hub's machine, asks
+    /// Starts the instance's worker, says hello and sets the hub's git credential and its tool servers, as
+    /// [`WorkerLink::greet`] says, and from then on sets each the hub has, as
+    /// [`Following::follow`](super::following::Following::follow) says. Then, on a worker on the hub's machine, asks
     /// where each repository's checkout whose address is to be read fetches from, as [`Hub::read_repo_urls`] says,
-    /// without waiting for the answer. On failure nothing is left
-    /// running, so the next attempt starts clean.
+    /// without waiting for the answer. On failure nothing is left running, so the next attempt starts clean.
     pub(crate) async fn open(
         hub: Arc<Hub>,
         provider: Arc<dyn Provider>,
@@ -94,8 +94,7 @@ impl WorkerLink {
             build: OnceLock::new(),
             version: OnceLock::new(),
         });
-        let left_to_machine = hub.leaves_github_to_machine(&ProviderName::from(provider.name()));
-        let following = Following::new(link.clone(), (!left_to_machine).then(|| hub.git_credential()));
+        let followings = Followings::of(&link, &hub, provider.as_ref());
         let span = spans::worker(&workspace_id, &instance_id);
         tokio::spawn(acks::acknowledge(hub.clone(), link.clone()).instrument(span.clone()));
         tokio::spawn(
@@ -110,9 +109,10 @@ impl WorkerLink {
             .instrument(span.clone()),
         );
 
-        let failure = match link.greet(hub.timers.hello_within, following).await {
-            Ok(following) => {
-                tokio::spawn(following.follow().instrument(span.clone()));
+        let failure = match link.greet(hub.timers.hello_within, followings).await {
+            Ok(Followings { credential, tool_servers }) => {
+                tokio::spawn(credential.follow().instrument(span.clone()));
+                tokio::spawn(tool_servers.follow().instrument(span.clone()));
                 tokio::spawn(Arc::clone(&hub).read_repo_urls(workspace_id, Arc::clone(&link)).instrument(span));
                 return Ok(link);
             }
