@@ -5,12 +5,13 @@ use tokio::sync::mpsc;
 
 use super::{notifications, running::Shared};
 use crate::stdio;
+use tracing::Instrument as _;
 
 pub(super) async fn supervise(mut child: Child, stdout: ChildStdout, stderr: ChildStderr, shared: Arc<Shared>) {
     let (tx, rx) = mpsc::channel(256);
-    let out = tokio::spawn(stdio::read_json_lines(stdout, shared.tap.clone(), tx));
-    let events = tokio::spawn(notifications::read(shared.clone(), rx));
-    let err = tokio::spawn(stdio::read_stderr(stderr));
+    let out = tokio::spawn(stdio::read_json_lines(stdout, shared.tap.clone(), tx).in_current_span());
+    let events = tokio::spawn(notifications::read(shared.clone(), rx).in_current_span());
+    let err = tokio::spawn(stdio::read_stderr(stderr).in_current_span());
     let status = child.wait().await;
     shared.run.reaped();
     shared.run.mark_gone();

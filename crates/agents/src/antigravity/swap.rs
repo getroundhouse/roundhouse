@@ -17,6 +17,7 @@ use crate::AgentError;
 use crate::jsonrpc::{Dialect, Rpc};
 use crate::run::stop_group;
 use crate::starting::start_piped;
+use tracing::Instrument as _;
 
 /// Restarts the underlying `agy acp` child via `session/resume` once idle so `--dangerously-skip-permissions` matches
 /// `state.mode`. Callers hold `shared.controls`.
@@ -71,18 +72,22 @@ async fn spawn_swapped_child(
     shared.run.replaced(launched.pid);
     *shared.rpc_slot.lock() = rpc.clone();
     *shared.child.lock() = ChildSlot { replacing: replacing.clone(), exited: exited_rx };
-    tokio::spawn(supervise::supervise(
-        supervise::ChildPipes {
-            child: launched.child,
-            stdout: launched.stdout,
-            stderr: launched.stderr,
-            rpc,
-            replacing,
-            child_gone,
-            exited_tx,
-        },
-        shared.clone(),
-    ));
+    let span = shared.run.span();
+    tokio::spawn(
+        supervise::supervise(
+            supervise::ChildPipes {
+                child: launched.child,
+                stdout: launched.stdout,
+                stderr: launched.stderr,
+                rpc,
+                replacing,
+                child_gone,
+                exited_tx,
+            },
+            shared.clone(),
+        )
+        .instrument(span),
+    );
     let setup = match launch::initialize(shared).await {
         Ok(_) => launch::resume_after_swap(shared, session_id, target_mode).await,
         Err(error) => Err(error),

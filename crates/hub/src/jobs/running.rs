@@ -145,7 +145,7 @@ impl<K: Clone + Eq + Hash + Display + Send + Sync + 'static> Jobs<K> {
         if !Self::kind_has_room(running, kind) {
             return Err(NotStarted::KindBusy);
         }
-        let run = asked.begin();
+        let run = asked.begin(&key);
         let (work, called_off) = (run.work.abort_handle(), run.called_off.clone());
         // The supervisor takes the key off the table as it ends, which it can't before this lock is let go of, so the
         // key is always on the table first.

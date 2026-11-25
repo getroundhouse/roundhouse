@@ -2,7 +2,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use logging::testing::Logs;
+use serde_json::json;
 use tokio::sync::mpsc;
+use tracing::info;
 
 use super::*;
 
@@ -308,4 +311,22 @@ async fn a_job_asked_for_again_while_one_about_its_key_runs_runs_once_more_after
     drop(ends);
     assert_eq!(ended.recv().await, None, "nothing else ran");
     assert_eq!(*happened.lock(), ["the first's after-step", "asked 3"]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn what_a_job_logs_says_which_it_is_and_so_does_what_it_runs_uncut() {
+    let logs = Logs::capture();
+    let jobs = Jobs::new();
+    let (ends, mut ended) = mpsc::unbounded_channel();
+
+    let work = async {
+        info!(name: "a.job", "Its work");
+        uncut(async { info!(name: "a.job", "What it runs uncut") }).await;
+    };
+    jobs.start(KIND, "w", LIMITS, work, telling(&ends)).unwrap();
+    next(&mut ended).await;
+
+    let job = json!({ "kind": KIND.to_string(), "key": "w" });
+    let contexts: Vec<_> = logs.events().into_iter().map(|event| event["context"].clone()).collect();
+    assert_eq!(contexts, [job.clone(), job]);
 }

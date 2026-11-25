@@ -11,7 +11,7 @@ use providers::Provider;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use tracing::{debug, warn};
+use tracing::{Instrument as _, debug, error_span, warn};
 
 fn unreadable_reply(error: &serde_json::Error) -> ApiError {
     ApiError::new(
@@ -31,17 +31,21 @@ fn start_answering(
     ask: WorkerAsk,
 ) {
     let (hub, link, workspace_id) = (hub.clone(), link.clone(), workspace_id.clone());
-    tokio::spawn(async move {
-        let outcome = hub.answer_ask(&workspace_id, &link, session_id, ask).await.into();
-        link.answer(AskAnswer { answer: id, outcome }).await;
-    });
+    let asked = error_span!("ask", %session_id);
+    tokio::spawn(
+        async move {
+            let outcome = hub.answer_ask(&workspace_id, &link, session_id, ask).await.into();
+            link.answer(AskAnswer { answer: id, outcome }).await;
+        }
+        .instrument(asked),
+    );
 }
 
 /// Refuses an ask, as a call this hub can't read is refused, so the agent that called the tool hears why at once.
 fn refuse_unreadable(hub: &Hub, link: &Arc<WorkerLink>, id: AskId, error: &serde_json::Error) {
     let outcome = Outcome::Error(hub.unsupported(Some(error)));
     let link = link.clone();
-    tokio::spawn(async move { link.answer(AskAnswer { answer: id, outcome }).await });
+    tokio::spawn(async move { link.answer(AskAnswer { answer: id, outcome }).await }.in_current_span());
 }
 
 pub(in super::super) async fn read_frames(

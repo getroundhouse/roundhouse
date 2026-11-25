@@ -3,13 +3,14 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use crate::spans;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::event::ExitReason;
 use protocol::model::{InstanceId, Workspace, WorkspaceId};
 use protocol::worker::RunningAgent;
 use providers::Provider;
 use tokio::sync::Mutex as AsyncMutex;
-use tracing::warn;
+use tracing::{Instrument as _, warn};
 
 use super::Hub;
 use super::ready::ReadyWorkspace;
@@ -143,7 +144,11 @@ impl Hub {
     /// wanted meanwhile starts once it's done.
     pub(super) fn end_left_running(self: &Arc<Self>, workspace_id: WorkspaceId, link: Option<Arc<WorkerLink>>) {
         let hub = self.clone();
-        tokio::spawn(async move { hub.let_go(&workspace_id, link, "ending a worker an earlier hub left").await });
+        let span = spans::workspace(&workspace_id);
+        tokio::spawn(
+            async move { hub.let_go(&workspace_id, link, "ending a worker an earlier hub left").await }
+                .instrument(span),
+        );
     }
 
     /// Lets go of `link`, the workspace's worker, which is stopped if nothing has wanted it, as

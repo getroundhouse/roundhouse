@@ -14,6 +14,7 @@ use super::{launch, supervise};
 use crate::jsonrpc::{Dialect, Rpc};
 use crate::run::Run;
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess, acp};
+use tracing::Instrument as _;
 
 pub(super) struct LaunchContext {
     pub(super) bin: PathBuf,
@@ -173,18 +174,21 @@ async fn transport(
         turn_done: watch::channel(0).0,
         tap,
     });
-    tokio::spawn(supervise::supervise(
-        supervise::ChildPipes {
-            child: launched.child,
-            stdout: launched.stdout,
-            stderr: launched.stderr,
-            rpc,
-            replacing,
-            child_gone,
-            exited_tx,
-        },
-        shared.clone(),
-    ));
+    tokio::spawn(
+        supervise::supervise(
+            supervise::ChildPipes {
+                child: launched.child,
+                stdout: launched.stdout,
+                stderr: launched.stderr,
+                rpc,
+                replacing,
+                child_gone,
+                exited_tx,
+            },
+            shared.clone(),
+        )
+        .in_current_span(),
+    );
     let process = Arc::new(AntigravityProcess { shared });
     let agent_version = match launch::initialize(&process.shared).await {
         Ok(version) => version,

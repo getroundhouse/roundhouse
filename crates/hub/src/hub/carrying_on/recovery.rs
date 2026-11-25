@@ -1,6 +1,7 @@
 use super::super::Hub;
 use crate::error::provider_failed;
 use crate::session::{CarriedOver, Item, LiveSession, Progress, Starting};
+use crate::spans;
 use crate::store::{Store, StoreError, cancelled_approval};
 use crate::worker_link::{WorkerLink, WorkerLinkId};
 use parking_lot::Mutex;
@@ -13,7 +14,7 @@ use protocol::worker::RunningAgent;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::task::JoinSet;
-use tracing::{debug, info, warn};
+use tracing::{Instrument as _, debug, info, warn};
 
 /// What an earlier hub left at work: its sessions at work, by workspace, every workspace that isn't archived, for
 /// finding the workers it left running, and the prompts each session's agent hadn't taken.
@@ -54,7 +55,9 @@ impl Hub {
         for workspace_id in self.with_workers_running(&workspaces).await {
             let at_work = sessions.remove(&workspace_id).unwrap_or_default();
             let being_moved = being_moved.contains(&workspace_id);
-            carrying.spawn(self.clone().carry_on_in(workspace_id, at_work, being_moved, untaken.clone()));
+            let span = spans::workspace(&workspace_id);
+            carrying
+                .spawn(self.clone().carry_on_in(workspace_id, at_work, being_moved, untaken.clone()).instrument(span));
         }
         for id in sessions.into_values().flatten() {
             let prompts = untaken.lock().remove(&id).unwrap_or_default();

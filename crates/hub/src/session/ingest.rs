@@ -8,7 +8,7 @@ use protocol::event::{CompactionOutcome, EventBody, ExitReason};
 use protocol::model::{ApprovalId, RunId};
 use protocol::tail::{Retrying, StreamDelta, Tail};
 use tokio::sync::mpsc;
-use tracing::{error, warn};
+use tracing::{Instrument as _, error, warn};
 
 use super::{Item, LiveItem, LiveSession, Origin, publish};
 use crate::store::cancelled_approval;
@@ -121,16 +121,19 @@ async fn allow(
         return;
     }
     let session = session.clone();
-    tokio::spawn(async move {
-        if let Err(e) = session.pass_on(approval_id, allowed).await {
-            warn!(
-                name: "session.allowed_undelivered",
-                session_id = %session.id,
-                error = %e,
-                "Couldn't pass on a tool's use the hub allowed"
-            );
+    tokio::spawn(
+        async move {
+            if let Err(e) = session.pass_on(approval_id, allowed).await {
+                warn!(
+                    name: "session.allowed_undelivered",
+                    session_id = %session.id,
+                    error = %e,
+                    "Couldn't pass on a tool's use the hub allowed"
+                );
+            }
         }
-    });
+        .in_current_span(),
+    );
 }
 
 /// What the session does about an event from the agent of `run` before it's recorded, `current` if that's the agent

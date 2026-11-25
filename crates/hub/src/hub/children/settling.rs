@@ -3,10 +3,11 @@
 
 use std::sync::Arc;
 
+use crate::spans;
 use protocol::client::ErrorCode;
 use protocol::model::{ChildStatus, ChildWorktree, WorkspaceId};
 use protocol::worker::{WorktreeThere, WorktreeThereReply};
-use tracing::{debug, info};
+use tracing::{Instrument as _, debug, info};
 
 use super::{Making, add, watch_child};
 use crate::hub::Hub;
@@ -17,7 +18,8 @@ impl Hub {
     /// workspace's gate, which archiving holds while it starts a worker.
     pub(in crate::hub) fn settle_children_later(self: &Arc<Self>, id: &WorkspaceId, link: &Arc<WorkerLink>) {
         let (hub, id, link) = (self.clone(), id.clone(), link.clone());
-        tokio::spawn(async move { hub.settle_children(&id, &link).await });
+        let span = spans::workspace(&id);
+        tokio::spawn(async move { hub.settle_children(&id, &link).await }.instrument(span));
     }
 
     /// Settles each of the workspace's other worktrees with `link`, the worker the workspace has now, and has it

@@ -7,7 +7,7 @@ use protocol::capability::Report;
 use protocol::event::EventBody;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
-use tracing::debug;
+use tracing::{Instrument as _, debug};
 
 use super::asking::{Over, Work, work};
 use super::{Shared, control};
@@ -110,15 +110,19 @@ pub(super) fn after(shared: &Arc<Shared>, body: &EventBody, output: &mpsc::Sende
         return;
     }
     let (shared, output) = (shared.clone(), output.clone());
-    tokio::spawn(async move {
-        loop {
-            let answer = control(&shared, json!({"subtype": "get_context_usage"})).await;
-            report(&shared, &output, answer);
-            if !shared.context.lock().finish() {
-                break;
+    let span = shared.run.span();
+    tokio::spawn(
+        async move {
+            loop {
+                let answer = control(&shared, json!({"subtype": "get_context_usage"})).await;
+                report(&shared, &output, answer);
+                if !shared.context.lock().finish() {
+                    break;
+                }
             }
         }
-    });
+        .instrument(span),
+    );
 }
 
 /// Reports what the CLI answered. It's sent under the lock, without waiting, so it can't come after the process's

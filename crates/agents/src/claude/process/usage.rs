@@ -11,7 +11,7 @@ use protocol::event::EventBody;
 use protocol::model::UsageLimit;
 use serde_json::json;
 use tokio::sync::mpsc;
-use tracing::debug;
+use tracing::{Instrument as _, debug};
 
 use super::asking::{Over, Work, work};
 use super::{Shared, control};
@@ -100,11 +100,15 @@ pub(super) fn after(shared: &Arc<Shared>, body: &EventBody, output: &mpsc::Sende
         return;
     }
     let (shared, output) = (shared.clone(), output.clone());
-    tokio::spawn(async move {
-        let answer = control(&shared, json!({"subtype": "get_usage"})).await;
-        let every_models_week = answer.as_ref().is_ok_and(lists_every_models_week);
-        report(&shared, &output, answer.map(|reply| usage_limits(&reply)), every_models_week);
-    });
+    let span = shared.run.span();
+    tokio::spawn(
+        async move {
+            let answer = control(&shared, json!({"subtype": "get_usage"})).await;
+            let every_models_week = answer.as_ref().is_ok_and(lists_every_models_week);
+            report(&shared, &output, answer.map(|reply| usage_limits(&reply)), every_models_week);
+        }
+        .instrument(span),
+    );
 }
 
 /// Whether `work` is a reason to ask, if it's due, and if so whether a turn ended. Anything the agent or one of its

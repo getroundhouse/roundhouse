@@ -16,11 +16,12 @@ use parking_lot::Mutex;
 use protocol::client::{ClientRequest, HubFrame, ReplyOutcome};
 use protocol::frame;
 
+use crate::spans;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{Notify, OwnedSemaphorePermit, mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
-use tracing::{debug, warn};
+use tracing::{Instrument as _, debug, warn};
 
 use admit::{Admit, Gate, Greeting};
 
@@ -240,27 +241,31 @@ async fn answer(
     // Then held by the request's task, so the count comes down however the request ends, even if the connection stops
     // reading before the task starts, as it can while typing waits for room at its worker.
     let under_way = Counted::request(&hub);
+    let span = spans::request(connection.id, id);
     let answering = match read {
         Ok(ClientRequest::Subscribe(asked)) => {
             return subscribes.queue(&connection, id, asked, under_way).await;
         }
-        read => in_order(&hub, read).await,
+        read => in_order(&hub, read).instrument(span.clone()).await,
     };
     // On a task of its own, which outlasts the connection, so a request the hub has read is carried out whether or not
     // its client is still there, as a prompt sent just before a client quits is.
-    tokio::spawn(async move {
-        let answered = match answering {
-            Answering::Queued(queued) => queued.await,
-            Answering::OnATask(Ok(request)) => dispatch::handle(&hub, &connection, greeting, request).await,
-            Answering::OnATask(Err(error)) => Err(hub.unsupported(Some(&error))),
-        };
-        let outcome = match answered {
-            Ok(response) => ReplyOutcome::Response(response),
-            Err(error) => ReplyOutcome::Error(error),
-        };
-        drop(under_way);
-        let _ = connection.frames.send(HubFrame::Reply { id, outcome }.into()).await;
-    });
+    tokio::spawn(
+        async move {
+            let answered = match answering {
+                Answering::Queued(queued) => queued.await,
+                Answering::OnATask(Ok(request)) => dispatch::handle(&hub, &connection, greeting, request).await,
+                Answering::OnATask(Err(error)) => Err(hub.unsupported(Some(&error))),
+            };
+            let outcome = match answered {
+                Ok(response) => ReplyOutcome::Response(response),
+                Err(error) => ReplyOutcome::Error(error),
+            };
+            drop(under_way);
+            let _ = connection.frames.send(HubFrame::Reply { id, outcome }.into()).await;
+        }
+        .instrument(span),
+    );
 }
 
 /// Reads one line into `line`. False once there's nothing more to read: the connection closed or failed, the line

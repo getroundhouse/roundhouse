@@ -2,11 +2,12 @@
 
 use std::sync::Arc;
 
+use crate::spans;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{SetupStatus, Workspace, WorkspaceId};
 use protocol::worker::{CancelSetup, SetupDone, SetupLog, SetupWorkspace};
 use tokio::sync::watch;
-use tracing::warn;
+use tracing::{Instrument as _, warn};
 
 use super::Hub;
 use super::ready::ReadyWorkspace;
@@ -50,17 +51,21 @@ impl Hub {
         self.notify(HubNotice::Workspace(running.clone()));
         let hub = self.clone();
         let id = ready.id().clone();
-        tokio::spawn(async move {
-            let outcome = hub.run_setup(&ready, stopped).await;
-            let marked = id.clone();
-            match hub.blocking(move |store| store.set_workspace_setup(&marked, outcome)).await {
-                Ok(workspace) => hub.notify(HubNotice::Workspace(workspace)),
-                Err(e) => warn!(name: "setup.unrecorded", workspace_id = %id, error = %e, "Couldn't record setup"),
+        let span = spans::workspace(&id);
+        tokio::spawn(
+            async move {
+                let outcome = hub.run_setup(&ready, stopped).await;
+                let marked = id.clone();
+                match hub.blocking(move |store| store.set_workspace_setup(&marked, outcome)).await {
+                    Ok(workspace) => hub.notify(HubNotice::Workspace(workspace)),
+                    Err(e) => warn!(name: "setup.unrecorded", workspace_id = %id, error = %e, "Couldn't record setup"),
+                }
+                hub.setup_gates.lock().remove(&id);
+                hub.work_changed();
+                done.send_replace(true);
             }
-            hub.setup_gates.lock().remove(&id);
-            hub.work_changed();
-            done.send_replace(true);
-        });
+            .instrument(span),
+        );
         Ok(running)
     }
 

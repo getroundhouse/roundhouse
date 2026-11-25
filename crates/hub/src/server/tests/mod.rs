@@ -2,6 +2,7 @@
 
 mod connection;
 mod greeting;
+mod logged;
 mod revised;
 
 pub(super) use connection::{Connection, WAIT};

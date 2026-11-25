@@ -17,6 +17,7 @@ use super::usage::UsageWatch;
 use super::{Tap, launch, plan, supervise};
 use crate::run::Run;
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
+use tracing::Instrument as _;
 
 pub(super) async fn begin(
     bin: PathBuf,
@@ -61,18 +62,21 @@ pub(super) async fn begin(
     launched.group.finished();
     let mode = crate::registry::launch(&spec)?.mode;
     plan::start_in(mode, &shared, &mut *shared.stdin.lock().await, &output).await;
-    tokio::spawn(supervise(
-        bin,
-        spec,
-        mode,
-        options,
-        files,
-        recovery,
-        launched.child,
-        launched.stdout,
-        launched.stderr,
-        shared.clone(),
-        output,
-    ));
+    tokio::spawn(
+        supervise(
+            bin,
+            spec,
+            mode,
+            options,
+            files,
+            recovery,
+            launched.child,
+            launched.stdout,
+            launched.stderr,
+            shared.clone(),
+            output,
+        )
+        .in_current_span(),
+    );
     Ok(Arc::new(ClaudeProcess { shared }))
 }

@@ -23,7 +23,7 @@ use protocol::worker::Delivery;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
-use tracing::warn;
+use tracing::{Instrument as _, warn};
 
 const LIVE_CAPACITY: usize = 4096;
 
@@ -212,8 +212,8 @@ impl LiveSession {
             configuring: tokio::sync::Mutex::new(()),
             settling: tokio::sync::Mutex::new(()),
         });
-        tokio::spawn(run_commands(session.clone(), commands_rx));
-        tokio::spawn(run_ingest(session.clone(), ingest_rx));
+        tokio::spawn(run_commands(session.clone(), commands_rx).instrument(session.span()));
+        tokio::spawn(run_ingest(session.clone(), ingest_rx).instrument(session.span()));
         // So what the agent hears of its account's limits is filed under the account, as for one this hub launched.
         if let Some(agent) = agent {
             session.launched(agent.run);

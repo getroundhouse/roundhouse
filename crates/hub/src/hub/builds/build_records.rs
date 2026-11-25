@@ -1,11 +1,12 @@
 use super::super::Hub;
 use crate::hub::observations::WorkspaceWorkerBuild;
+use crate::spans;
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
 use protocol::model::{OtherBuild, WorkspaceId};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use tracing::{debug, info, warn};
+use tracing::{Instrument as _, debug, info, warn};
 
 impl Hub {
     /// Replaces `link`, the workspace's worker, which is another build, once two looks in a row find nothing in the
@@ -17,34 +18,39 @@ impl Hub {
     )]
     pub(in super::super) fn replace_once_idle(self: &Arc<Self>, workspace_id: WorkspaceId, link: Arc<WorkerLink>) {
         let hub = self.clone();
-        tokio::spawn(async move {
-            let mut idle_before = false;
-            loop {
-                tokio::select! {
-                    () = tokio::time::sleep(hub.timers.look_every) => {}
-                    () = link.wait_closed() => break,
+        let span = spans::workspace(&workspace_id);
+        tokio::spawn(
+            async move {
+                let mut idle_before = false;
+                loop {
+                    tokio::select! {
+                        () = tokio::time::sleep(hub.timers.look_every) => {}
+                        () = link.wait_closed() => break,
+                    }
+                    let idle = hub.nothing_at_work_in(&workspace_id, &link);
+                    if !idle {
+                        // `other_builds` in the daemon's e2e tests counts these, to know two looks have kept it.
+                        let build = link.build();
+                        debug!(
+                            name: "worker.other_build_kept",
+                            %workspace_id,
+                            build,
+                            "Keeping a worker from another build, with something at work"
+                        );
+                    }
+                    if idle && idle_before && hub.replace_if_idle(&workspace_id, &link).await {
+                        break;
+                    }
+                    idle_before = idle;
                 }
-                let idle = hub.nothing_at_work_in(&workspace_id, &link);
-                if !idle {
-                    // `other_builds` in the daemon's e2e tests counts these, to know two looks have kept it.
-                    let build = link.build();
-                    debug!(
-                        name: "worker.other_build_kept",
-                        %workspace_id,
-                        build,
-                        "Keeping a worker from another build, with something at work"
-                    );
+                // The next worker is the hub's own build. A hub that's stopping leaves it, as it keeps it in memory
+                // alone.
+                if !hub.shutting_down.load(Ordering::SeqCst) {
+                    hub.worker_build_gone(&workspace_id).await;
                 }
-                if idle && idle_before && hub.replace_if_idle(&workspace_id, &link).await {
-                    break;
-                }
-                idle_before = idle;
             }
-            // The next worker is the hub's own build. A hub that's stopping leaves it, as it keeps it in memory alone.
-            if !hub.shutting_down.load(Ordering::SeqCst) {
-                hub.worker_build_gone(&workspace_id).await;
-            }
-        });
+            .instrument(span),
+        );
     }
 
     /// Keeps that the workspace's worker, `link`, which the hub carries on with, is another build than the hub's, as its

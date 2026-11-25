@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::oneshot;
-use tracing::debug;
+use tracing::{Instrument as _, debug};
 
 use super::super::start;
 use crate::AgentError;
@@ -147,21 +147,24 @@ struct Ready {
 impl Ready {
     fn start(starting: Starting) -> Self {
         let (ask, asked) = oneshot::channel::<Question>();
-        let task = tokio::spawn(async move {
-            let spare = match Spare::start(&starting).await {
-                Ok(spare) => spare,
-                Err(e) => {
-                    return debug!(
-                        name: "claude.stand_in_unstarted",
-                        error = format!("{e:#}"),
-                        "A stand-in didn't start"
-                    );
+        let task = tokio::spawn(
+            async move {
+                let spare = match Spare::start(&starting).await {
+                    Ok(spare) => spare,
+                    Err(e) => {
+                        return debug!(
+                            name: "claude.stand_in_unstarted",
+                            error = format!("{e:#}"),
+                            "A stand-in didn't start"
+                        );
+                    }
+                };
+                if let Ok((question, answer)) = asked.await {
+                    let _ = answer.send(spare.answer(&question).await);
                 }
-            };
-            if let Ok((question, answer)) = asked.await {
-                let _ = answer.send(spare.answer(&question).await);
             }
-        });
+            .in_current_span(),
+        );
         Self { ask: Some(ask), task }
     }
 

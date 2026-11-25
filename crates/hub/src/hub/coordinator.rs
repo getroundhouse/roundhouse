@@ -39,7 +39,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tokio::sync::{Mutex as AsyncMutex, Notify, watch};
-use tracing::warn;
+use tracing::{Span, warn};
 
 /// Whether a restart leaves the hub's workers running. On Windows the local provider's workers run on the hub's pipes,
 /// since there are no Unix sockets there to serve them on, so they stop with it.
@@ -373,7 +373,9 @@ where
     T: Send + 'static,
     E: Into<ApiError> + Send + 'static,
 {
-    tokio::task::spawn_blocking(f).await.map_err(|e| internal(e.to_string()))?.map_err(Into::into)
+    let span = Span::current();
+    let ran = tokio::task::spawn_blocking(move || span.in_scope(f)).await;
+    ran.map_err(|e| internal(e.to_string()))?.map_err(Into::into)
 }
 
 pub(super) fn new_id() -> String {

@@ -9,6 +9,7 @@ use tokio::sync::{mpsc, watch};
 use super::{notifications, running::Shared};
 use crate::jsonrpc::Rpc;
 use crate::stdio;
+use tracing::Instrument as _;
 
 pub(super) struct ChildPipes {
     pub(super) child: Child,
@@ -25,10 +26,10 @@ pub(super) struct ChildPipes {
 pub(super) async fn supervise(pipes: ChildPipes, shared: Arc<Shared>) {
     let ChildPipes { mut child, stdout, stderr, rpc, replacing, child_gone, exited_tx } = pipes;
     let (tx, rx) = mpsc::channel(256);
-    let out = tokio::spawn(stdio::read_json_lines(stdout, shared.tap.clone(), tx));
-    let events = tokio::spawn(notifications::read(shared.clone(), rx));
-    let err = tokio::spawn(stdio::read_stderr(stderr));
-    let wakeup = tokio::spawn(super::wakeup::watch(shared.clone(), child_gone.clone()));
+    let out = tokio::spawn(stdio::read_json_lines(stdout, shared.tap.clone(), tx).in_current_span());
+    let events = tokio::spawn(notifications::read(shared.clone(), rx).in_current_span());
+    let err = tokio::spawn(stdio::read_stderr(stderr).in_current_span());
+    let wakeup = tokio::spawn(super::wakeup::watch(shared.clone(), child_gone.clone()).in_current_span());
     let status = child.wait().await;
     shared.run.reaped();
     child_gone.store(true, Ordering::SeqCst);
