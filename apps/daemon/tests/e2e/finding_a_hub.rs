@@ -2,6 +2,8 @@
 
 #![cfg(test)]
 
+use std::fs::File;
+use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -110,6 +112,29 @@ fn a_hub_its_service_manager_started_says_so() {
     let status = HubAdmin::connect(&stack.socket()).unwrap().status().unwrap();
     assert_eq!(status.start(), HubStart::AsService);
     assert!(!status.on_demand, "so a client doesn't restart it");
+}
+
+/// Only a hub of a service does it, since whoever starts any other opens its log. The service manager opens the log of
+/// this one as what the hub writes to, as it does each time it starts it.
+#[test]
+fn a_hub_of_a_service_moves_its_log_aside_once_its_long_and_goes_on_to_a_new_one() {
+    const LONG: u64 = 11 * 1024 * 1024;
+    let mut stack = Stack::start();
+    HubAdmin::connect(&stack.socket()).unwrap().stop().unwrap();
+    stack.hub.take().unwrap().wait().unwrap();
+    let log = stack.paths().log;
+    let aside = log.with_file_name("hub.log.1");
+    let opened = || File::options().create(true).append(true).open(&log).unwrap();
+    opened().set_len(LONG).unwrap();
+    let mut command = stack.command();
+    command.arg("--service").stdout(opened()).stderr(opened());
+
+    stack.hub = Some(command.spawn().unwrap().into());
+
+    wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
+    assert_eq!(std::fs::metadata(&aside).unwrap().len(), LONG, "nothing more is written to the one moved aside");
+    assert_eq!(std::fs::metadata(&log).unwrap().permissions().mode() & 0o777, 0o600);
+    assert!(std::fs::read_to_string(&log).unwrap().contains("hub.listening"), "its lines are in the new one");
 }
 
 /// The service starts the hub again after it fails, and not after it succeeds, so a hub that leaves its workers for

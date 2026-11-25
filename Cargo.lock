@@ -1823,6 +1823,7 @@ dependencies = [
  "libc",
  "local-hub",
  "logging",
+ "private-files",
  "process",
  "protocol",
  "serde_json",

@@ -23,7 +23,7 @@ In it:
 | `bundles/` | Unpushed commits saved when archiving workspaces whose provider destroys clones on archive, removed once restored |
 | `logins/` | The tokens of the logins you've added in [Settings](settings.md#agents), a file each, which only you can open. Disconnecting one removes its file |
 | `github-logins/` | The tokens of the GitHub accounts you've added in [Settings](settings.md#git), and the key of each app of your own, a file each, which only you can open. For `gh`'s login, only which GitHub user it's for, since the hub reads its token from `gh`. Disconnecting an account, or removing an app, removes its file |
-| `hub.log` | The hub's log, a line of JSON for each thing it says. Once it's over 10 MB, the hub next starts a new one, and keeps the last as `hub.log.1`, unless it runs as a service |
+| `hub.log` | The hub's log, a line of JSON for each thing it says. Once it's over 10 MB, the hub next starts a new one, and keeps the last as `hub.log.1` |
 | `app.log` | The app's log, kept the same way |
 | `worker-logs/` | Each workspace's worker's log, kept the same way |
 | `instances/` | A directory for each workspace's worker, with the workspace's setup log, which its archive script adds to. While an agent or the setup script runs, the directory also holds a record of it, so it can be stopped if the worker is killed, and while a Claude agent runs, the files its CLI reads, such as the one that tells it where Roundhouse's tools are |

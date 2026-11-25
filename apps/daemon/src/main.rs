@@ -5,6 +5,7 @@ mod hub_role;
 mod preflight;
 mod runtime;
 mod service_builds;
+mod service_log;
 mod signals;
 mod worker_role;
 
@@ -174,6 +175,11 @@ fn main() -> anyhow::Result<ExitCode> {
     // as it starts, so it goes on unmarked and leaves the rest to that.
     let _running_from = std::env::current_exe().and_then(|program| process::RunningFrom::mark(&program)).ok();
     let args = Args::parse();
+    if let Role::Hub { service: true, .. } = args.role
+        && let Ok(paths) = protocol::paths::resolve(|name| std::env::var(name).ok())
+    {
+        service_log::begin_anew_if_long(&paths.log);
+    }
     start_log(&args.role)?;
     let codex_bin = std::env::var_os(worker::ENV_CODEX_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
     let claude_bin = std::env::var_os(worker::ENV_CLAUDE_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);

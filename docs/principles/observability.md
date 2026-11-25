@@ -26,7 +26,7 @@ These rules say what Roundhouse records about its own running: how each part log
 ## Where logs go
 
 - **A log is a file on the machine it's about, in the data directory, that only its user can read:** `hub.log`, `app.log`, and a file in `worker-logs/` for each worker. Whoever opens the file gives it to the process, so a worker's is its stderr, kept by its hub wherever it runs.
-- **Whoever opens a log for a process it starts moves it aside first when it's over 10 MB, keeping one from before,** so a log doesn't grow without end. A process writes to one file for as long as it runs. *Not built:* for a hub run as a service, whose log its service manager opens.
+- **Whoever opens a log for a process it starts moves it aside first when it's over 10 MB, keeping one from before,** so a log doesn't grow without end. A hub run as a service, whose log its service manager opens, does it for itself as it starts. From then on, a process writes to one file for as long as it runs.
 - **Nothing is sent anywhere unless someone sets it up.** With OpenTelemetry's standard `OTEL_*` variables set, a hub and its workers also export their logs over OTLP, to where those say. *Not built.*
 
 ## Metrics and traces
