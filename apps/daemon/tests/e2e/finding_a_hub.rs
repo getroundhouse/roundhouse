@@ -4,7 +4,7 @@
 
 use std::fs::File;
 use std::os::unix::fs::PermissionsExt as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use client_core::{Client, HubAdmin};
@@ -89,7 +89,7 @@ fn a_client_can_start_a_new_hub_as_soon_as_stopping_the_last_one_returns() {
 
     HubAdmin::connect(&stack.socket()).unwrap().stop().unwrap();
 
-    let daemon = stack.daemon(env!("CARGO_BIN_EXE_roundhoused"));
+    let daemon = stack.daemon(crate::support::daemon());
     let client = local_hub::connect_or_start(&stack.paths(), &daemon, "test").unwrap();
     let status = client.hub_status().unwrap();
     // First, because nothing else would stop this hub if an assertion failed.
@@ -163,7 +163,7 @@ fn a_hub_started_through_a_link_stays_on_its_version_when_the_link_moves() {
     let (old, new, current) = (stack.path("old"), stack.path("new"), stack.path("current"));
     std::fs::create_dir_all(&old).unwrap();
     std::fs::create_dir_all(&new).unwrap();
-    process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &old.join("roundhoused")).unwrap();
+    process::testing::install_program(crate::support::daemon(), &old.join("roundhoused")).unwrap();
     std::fs::write(stack.path("broken"), "#!/bin/sh\nexit 1\n").unwrap();
     process::testing::install_program(&stack.path("broken"), &new.join("roundhoused")).unwrap();
     symlink(&old, &current).unwrap();
@@ -188,7 +188,7 @@ fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone()
     stack.kill_hub();
     let app = stack.path("app");
     std::fs::create_dir_all(&app).unwrap();
-    process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &app.join("roundhoused")).unwrap();
+    process::testing::install_program(crate::support::daemon(), &app.join("roundhoused")).unwrap();
     // The version this daemon gives, which its copy is checked against.
     let build = StampedBuild::new(protocol::this_build!().version(), 1).unwrap();
     let mut daemon = stack.daemon(app.join("roundhoused"));
@@ -284,7 +284,7 @@ fn replaces_a_hub_that_drops_the_connection(reads_hello_first: bool) {
         drop(connection);
     });
 
-    let daemon = stack.daemon(env!("CARGO_BIN_EXE_roundhoused"));
+    let daemon = stack.daemon(crate::support::daemon());
     let client = local_hub::connect_or_start(&stack.paths(), &daemon, "test").unwrap();
     hub_going_away.join().unwrap();
     assert!(client.hub_status().is_ok());

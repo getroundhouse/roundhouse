@@ -19,14 +19,14 @@ const KEPT: &str = "worker.other_build_kept";
 /// As an update has it: the hub restarts as a newer build than the workers it leaves, and every worker the next hub
 /// starts is its own build.
 fn update(stack: &mut Stack) {
-    stack.env.remove(worker::TEST_BUILD);
+    stack.env.remove(protocol::testing::ENV_TEST_BUILD);
     restart(stack);
     stack.start_hub();
 }
 
 #[test]
 fn a_worker_from_another_build_is_replaced_once_nothing_in_its_workspace_is_at_work() {
-    let mut stack = Stack::start_with(vec![(worker::TEST_BUILD, "older".to_string())]);
+    let mut stack = Stack::start_with(vec![(protocol::testing::ENV_TEST_BUILD, "older".to_string())]);
     let client = stack.client();
     let (made, session) = stack.workspace(&client);
     let done = stack.path("done");

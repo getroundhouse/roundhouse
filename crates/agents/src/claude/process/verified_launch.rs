@@ -57,7 +57,7 @@ pub(super) async fn launch(
         };
         drop(launched.group);
         let _ = launched.child.wait().await;
-        let stderr = super::supervise::drain_errors(launched.stderr).await;
+        let stderr = super::supervise::drain_errors(launched.stderr, options.drain_grace).await;
         if let Some(corrected) = recovery.correct(&stderr, output).await {
             resume = corrected;
             continue;

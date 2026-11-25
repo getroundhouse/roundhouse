@@ -7,7 +7,7 @@ license.workspace = true
 
 [features]
 # What tests of the hub from outside it need: a stand-in for GitHub, and a hub pointed at it from the environment.
-testing = ["dep:parking_lot"]
+testing = ["dep:parking_lot", "protocol/testing"]
 
 [dependencies]
 base64.workspace = true

@@ -1,9 +1,6 @@
 //! Where the hub calls GitHub, and the OAuth App it signs people in with GitHub through: GitHub's own, or for a test's
 //! hub, a stand-in.
 
-#[cfg(any(test, feature = "testing"))]
-use protocol::paths::ENV_TEST_GITHUB_API;
-
 /// GitHub's own API.
 const GITHUB_API: &str = "https://api.github.com";
 
@@ -17,9 +14,9 @@ const GITHUB_GIT: &str = "https://github.com";
 /// client secret, so the ID is all a hub has of the app, and it's no secret.
 const ROUNDHOUSE_APP: &str = "Ov23liWtqywYN3M2m6EU";
 
-/// Where the hub calls GitHub, and the OAuth App people sign in with GitHub through, as `main` gives them to the hub's
-/// `HubConfig` from [`GithubConfig::from_env`]. Given to the hub rather than known to its calls, so a hub can be pointed
-/// at a stand-in, as the hub's own tests point theirs.
+/// Where the hub calls GitHub, and the OAuth App people sign in with GitHub through, as the daemon gives them to the
+/// hub's `HubConfig`. Given to the hub rather than known to its calls, so a hub can be pointed at a stand-in, as the
+/// hub's own tests point theirs.
 #[derive(Clone, Debug)]
 pub struct GithubConfig {
     /// GitHub's API, such as `https://api.github.com`, which the hub asks whose a token is.
@@ -49,20 +46,18 @@ impl GithubClientId {
 }
 
 impl GithubConfig {
-    /// GitHub's own, through Roundhouse's app, whatever `var` says, since only a build with the `testing` feature takes
-    /// another, and the product is never built with it.
-    #[cfg(not(any(test, feature = "testing")))]
-    pub fn from_env(_var: impl Fn(&str) -> Option<String>) -> Self {
+    /// GitHub's own, through Roundhouse's app.
+    pub fn github() -> Self {
         Self::of(GITHUB_API.to_string(), GITHUB_LOGIN.to_string(), GITHUB_GIT.to_string())
     }
 
-    /// GitHub's API, its device flow and its repositories all at what `var` gives for [`ENV_TEST_GITHUB_API`], such as
+    /// GitHub's API, its device flow and its repositories all at what `var` gives for `protocol::testing::ENV_TEST_GITHUB_API`, such as
     /// a stand-in's address, which serves them all, and otherwise GitHub's own, through Roundhouse's app.
     #[cfg(any(test, feature = "testing"))]
     pub fn from_env(var: impl Fn(&str) -> Option<String>) -> Self {
-        match var(ENV_TEST_GITHUB_API) {
+        match var(protocol::testing::ENV_TEST_GITHUB_API) {
             Some(address) => Self::of(address.clone(), address.clone(), address),
-            None => Self::of(GITHUB_API.to_string(), GITHUB_LOGIN.to_string(), GITHUB_GIT.to_string()),
+            None => Self::github(),
         }
     }
 

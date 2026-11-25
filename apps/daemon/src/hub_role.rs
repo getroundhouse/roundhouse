@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use anyhow::Context;
 use protocol::client::HubStart;
 
-use super::BUILD;
+use crate::Config;
 use crate::runtime::run_to_end;
 
 /// What a hub exits with once it has left its workers for the next hub, as for an update: `EX_TEMPFAIL`, a failure the
@@ -16,15 +16,15 @@ const RESTARTING: u8 = 75;
 
 /// Runs a hub until it's asked to stop, saying what started it, and says by how it exits whether it stopped or left
 /// its workers for the next hub.
-pub(crate) fn run(start: HubStart) -> anyhow::Result<ExitCode> {
+pub(crate) fn run(start: HubStart, given: Config) -> anyhow::Result<ExitCode> {
     let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
-    if let (HubStart::AsService, Some(build)) = (start, BUILD.stamped()) {
+    if let (HubStart::AsService, Some(build)) = (start, given.build.stamped()) {
         crate::service_builds::remove_unused(&paths, &build);
     }
     // Follows symlinks, so moving an install's `current` link can't change what later workers run.
     let running =
         std::env::current_exe().and_then(std::fs::canonicalize).context("finding this binary to run workers")?;
-    let (worker_exe, _marked) = workers_from(&paths, BUILD.stamped(), running);
+    let (worker_exe, _marked) = workers_from(&paths, given.build.stamped(), running);
     // The user's own home and login shell when whatever started the hub didn't say, as a service manager or a
     // container may not.
     let users = process::home_and_shell();
@@ -34,19 +34,13 @@ pub(crate) fn run(start: HubStart) -> anyhow::Result<ExitCode> {
     let path = std::env::var("PATH").ok();
     // The hub doesn't depend on the adapters, so it's told what each kind of agent offers from here.
     let agents = agents::descriptions();
-    // A build without `testing`, as the product's is, takes the defaults whatever the environment says.
-    let timers = hub::Timers::from_env(|name| std::env::var(name).ok());
-    // GitHub's own, whatever the environment says, in a build without `testing`, as the product's is.
-    let github = hub::GithubConfig::from_env(|name| std::env::var(name).ok());
-    // None, whatever the environment says, in a build without `testing`, as the product's is.
-    let stops_with = process::TestProcess::from_env(|name| std::env::var(name).ok());
     let network_address =
         protocol::paths::listen_address(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
     // Only a hub installed as a service updates as a client says, so only that one reads the feed.
     let update_feed = if start == HubStart::AsService { hub::UpdateFeed::published() } else { None };
     let config = hub::HubConfig {
         network_address,
-        build: BUILD,
+        build: given.build,
         paths,
         worker_exe,
         shell,
@@ -54,11 +48,11 @@ pub(crate) fn run(start: HubStart) -> anyhow::Result<ExitCode> {
         path,
         start,
         agents,
-        timers,
-        github,
+        timers: given.hub_timers,
+        github: given.github,
         update_feed,
     };
-    Ok(match run_to_end(hub::run(config, process::TestProcess::until_gone(stops_with)))?? {
+    Ok(match run_to_end(hub::run(config, given.stops_with))?? {
         hub::Ended::Stopped => ExitCode::SUCCESS,
         hub::Ended::Restarting => ExitCode::from(RESTARTING),
     })

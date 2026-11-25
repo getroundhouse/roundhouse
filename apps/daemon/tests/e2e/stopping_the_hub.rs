@@ -90,7 +90,7 @@ fn a_hub_stop_ends_the_agents_of_a_worker_that_doesnt_stop() {
 fn a_tests_hub_stops_once_the_test_has_gone() {
     // Standing in for the test, which can be killed before it stops its hub. It runs until it's killed.
     let mut test = Command::new("cat").stdin(Stdio::piped()).stdout(Stdio::null()).spawn().unwrap();
-    let mut stack = Stack::start_with(vec![(protocol::paths::ENV_TEST_PROCESS, test.id().to_string())]);
+    let mut stack = Stack::start_with(vec![(protocol::testing::ENV_TEST_PROCESS, test.id().to_string())]);
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
     client.workspace_status(&workspace.id).unwrap();
@@ -114,7 +114,7 @@ fn a_tests_hub_stops_once_the_test_has_gone() {
 fn a_tests_worker_left_without_a_hub_stops_once_the_test_has_gone() {
     // Standing in for the test, as above.
     let mut test = Command::new("cat").stdin(Stdio::piped()).stdout(Stdio::null()).spawn().unwrap();
-    let mut stack = Stack::start_with(vec![(protocol::paths::ENV_TEST_PROCESS, test.id().to_string())]);
+    let mut stack = Stack::start_with(vec![(protocol::testing::ENV_TEST_PROCESS, test.id().to_string())]);
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     // Until the turn is stopped. An agent whose input closes finishes its turn first, so it never exits by itself.

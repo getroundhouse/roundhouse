@@ -49,21 +49,20 @@ pub fn once_per_run(dir: &Path, name: &str, build: impl FnOnce()) {
     std::fs::write(last_run, run).unwrap_or_else(|e| failed("say which run built it", e));
 }
 
-/// Builds the hub and `examples` with [`workspace_build`], once per run as [`once_per_run`] says, and answers the folder
-/// Cargo says it put the hub in, with the examples in its `examples`. Naming the examples in the same build is what
-/// gives the hub the whole workspace's features, as `docs/standards/testing.md` says. Where Cargo keeps a test binary, and so what's
-/// near it, isn't something it promises, and 1.100 moved it. `dir` and `name` are as [`once_per_run`] takes them.
+/// Builds `examples` with [`workspace_build`], once per run as [`once_per_run`] says, and answers the folder Cargo says it
+/// put them in. Where Cargo keeps a test binary, and so what's near it, isn't something it promises, and 1.100 moved it.
+/// `dir` and `name` are as [`once_per_run`] takes them.
 ///
 /// # Panics
 ///
-/// If the build fails or doesn't say where it put the hub, or if what it said can't be kept in `dir` and read back.
-pub fn the_hub_and_examples(dir: &Path, name: &str, examples: &[&str]) -> PathBuf {
+/// If the build fails or doesn't say where it put the examples, or if what it said can't be kept in `dir` and read back.
+pub fn the_examples(dir: &Path, name: &str, examples: &[&str]) -> PathBuf {
     let failed = |doing: &str, e: &dyn std::fmt::Display| -> ! { panic!("couldn't {doing}: {e}") };
     // The build says the folder here, for the tests a nextest run starts after it, which don't build.
     let said = dir.join(format!("{name}.dir"));
     once_per_run(dir, name, || {
         let mut build = workspace_build();
-        build.args(["--bin", "roundhoused", "--message-format=json-render-diagnostics"]);
+        build.arg("--message-format=json-render-diagnostics");
         for example in examples {
             build.args(["--example", example]);
         }
@@ -71,9 +70,10 @@ pub fn the_hub_and_examples(dir: &Path, name: &str, examples: &[&str]) -> PathBu
         assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
         let folder = (output.stdout.split(|&byte| byte == b'\n'))
             .filter_map(|line| serde_json::from_slice::<serde_json::Value>(line).ok())
-            .find(|message| message["reason"] == "compiler-artifact" && message["target"]["name"] == "roundhoused")
-            .and_then(|message| Some(PathBuf::from(message["executable"].as_str()?).parent()?.to_path_buf()))
-            .unwrap_or_else(|| failed("find where Cargo built the hub", &"it didn't say"));
+            .filter(|message| message["reason"] == "compiler-artifact")
+            .filter(|message| examples.iter().any(|example| message["target"]["name"] == *example))
+            .find_map(|message| Some(PathBuf::from(message["executable"].as_str()?).parent()?.to_path_buf()))
+            .unwrap_or_else(|| failed("find where Cargo built the examples", &"it didn't say"));
         std::fs::write(&said, folder.as_os_str().as_encoded_bytes()).unwrap_or_else(|e| failed("keep the folder", &e));
     });
     PathBuf::from(std::fs::read_to_string(&said).unwrap_or_else(|e| failed("read the folder", &e)))

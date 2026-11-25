@@ -40,9 +40,9 @@ pub(super) async fn supervise(pipes: ChildPipes, shared: Arc<Shared>) {
     wakeup.abort();
     let _ = wakeup.await;
     rpc.close().await;
-    stdio::drain(out).await;
-    stdio::drain(events).await;
-    let stderr_tail = stdio::drain(err).await.unwrap_or_default();
+    stdio::drain(out, shared.context.options.drain_grace).await;
+    stdio::drain(events, shared.context.options.drain_grace).await;
+    let stderr_tail = stdio::drain(err, shared.context.options.drain_grace).await.unwrap_or_default();
     let (code, signal) = status.map_or((None, None), |status| (status.code(), stdio::signal_of(status)));
     if replaced {
         super::turn::settle_replaced_child(&shared).await;

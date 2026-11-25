@@ -20,7 +20,7 @@ fn binaries() -> &'static PathBuf {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
         let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
-        process::testing::the_hub_and_examples(tmp, "phone-binaries", &["fake_claude"])
+        process::testing::the_examples(tmp, "phone-binaries", &["daemon_for_tests", "fake_claude"])
     })
 }
 
@@ -74,7 +74,7 @@ impl Stack {
             .set(ENV_WORKSPACES, &self.paths.workspaces_root)
             // Only on loopback, so no firewall asks.
             .set(ENV_LISTEN, format!("127.0.0.1:{port}"))
-            .command(binaries().join("roundhoused"))
+            .command(binaries().join("daemon_for_tests"))
             .arg("hub")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -132,7 +132,7 @@ fn environment(root: &Path) -> WholeEnvironment {
     let mut environment = WholeEnvironment::for_a_test(&root.join("user-home"));
     environment
         .put_first_on_path(process::testing::logged_out_gh())
-        .set("ROUNDHOUSE_CLAUDE_BIN", binaries().join("examples/fake_claude"))
+        .set("ROUNDHOUSE_CLAUDE_BIN", binaries().join("fake_claude"))
         .set("FAKE_CLAUDE_STATE", root.join("agent-state"))
         // So a test waits out only the time limits it's about. The hub passes the workers' on to them.
         .set(timers, short)

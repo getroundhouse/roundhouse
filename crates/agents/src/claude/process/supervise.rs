@@ -11,15 +11,15 @@ use protocol::event::EventBody;
 use protocol::worker::AgentSpec;
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::mpsc;
-use tokio::task::{JoinHandle, JoinSet};
+use tokio::task::JoinSet;
 use tracing::{Instrument as _, warn};
 
 use super::output::read_stdout;
 use super::run_files::RunFiles;
 use super::verified_launch::launch;
-use super::{Shared, drain_grace, plan, write_to};
-use crate::stdio::signal_of;
-use crate::{AgentOptions, AgentOutput};
+use super::{Shared, plan, write_to};
+use crate::stdio::{self, signal_of};
+use crate::{AgentOptions, AgentOutput, DrainGrace};
 
 #[expect(clippy::too_many_arguments, reason = "its one caller hands over the parts of the process it just started")]
 pub(super) async fn supervise(
@@ -46,8 +46,8 @@ pub(super) async fn supervise(
         if shared.confirmed.load(Ordering::SeqCst) {
             shared.run.mark_gone();
         }
-        drain(out_task).await;
-        let stderr_tail = drain_errors(err_task).await;
+        stdio::drain(out_task, options.drain_grace).await;
+        let stderr_tail = drain_errors(err_task, options.drain_grace).await;
 
         // The hub decides between --session-id and --resume from its own records, and those can
         // disagree with the CLI's: a launch can crash right after the CLI saved the conversation,
@@ -157,18 +157,9 @@ async fn finish(
     shared.run.exit(code, signal, stderr_tail, requested).await;
 }
 
-async fn drain<T>(mut task: JoinHandle<T>) -> Option<T> {
-    if let Ok(result) = tokio::time::timeout(drain_grace(), &mut task).await {
-        result.ok()
-    } else {
-        task.abort();
-        None
-    }
-}
-
 /// Dropping the set aborts its reader, including when startup verification is cancelled.
-pub(super) async fn drain_errors(mut tasks: JoinSet<Vec<String>>) -> Vec<String> {
-    match tokio::time::timeout(drain_grace(), tasks.join_next()).await {
+pub(super) async fn drain_errors(mut tasks: JoinSet<Vec<String>>, DrainGrace(grace): DrainGrace) -> Vec<String> {
+    match tokio::time::timeout(grace, tasks.join_next()).await {
         Ok(Some(Ok(tail))) => tail,
         _ => Vec::new(),
     }

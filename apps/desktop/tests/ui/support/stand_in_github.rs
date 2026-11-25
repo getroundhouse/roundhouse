@@ -27,7 +27,7 @@ impl Stack {
     pub(crate) fn start_hub_with_stand_in_github(&self, script: GithubScript) -> StandInGithub {
         let serving = tokio::runtime::Runtime::new().unwrap();
         let github = serving.block_on(GithubStandIn::with(script));
-        let hub = self.start_hub_ahead(hub_environment().set(protocol::paths::ENV_TEST_GITHUB_API, github.api()));
+        let hub = self.start_hub_ahead(hub_environment().set(protocol::testing::ENV_TEST_GITHUB_API, github.api()));
         StandInGithub { _hub: hub, _github: github, _serving: serving }
     }
 }
@@ -58,7 +58,7 @@ impl Stack {
         let logged_in = r#"[ "$1 $2" = 'auth status' ] && exec echo '{"hosts":{"github.com":[{"state":"success","active":true,"login":"ada"}]}}'
 [ "$1 $2" = 'auth token' ] && exec echo 'gho_made_up_for_ada'"#;
         let mut environment = hub_environment();
-        environment.set(protocol::paths::ENV_TEST_GITHUB_API, github.api());
+        environment.set(protocol::testing::ENV_TEST_GITHUB_API, github.api());
         let gh = self.start_hub_with_gh(&mut environment, logged_in);
         self.client().github_account_connect(GithubToken::new(TOKEN), None).unwrap();
         ReadingStandInGithub { _gh: gh, pull_requests, _github: github, _serving: serving }

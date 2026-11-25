@@ -17,6 +17,7 @@ pub(super) struct Shared {
     pub(super) run: Run,
     pub(super) turn_done: watch::Sender<Option<super::state::TurnId>>,
     pub(super) tap: Option<crate::tap::Tap>,
+    pub(super) drain_grace: crate::DrainGrace,
 }
 
 pub(super) struct CodexProcess {
@@ -105,6 +106,7 @@ pub(super) async fn transport(
         run: Run::new(launched.pid, options.pid_file.clone(), output),
         turn_done: watch::channel(None).0,
         tap,
+        drain_grace: options.drain_grace,
     });
     tokio::spawn(
         supervise::supervise(launched.child, launched.stdout, launched.stderr, shared.clone()).in_current_span(),

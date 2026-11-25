@@ -31,19 +31,6 @@ use usage::UsageWatch;
 /// A CLI that's still starting runs the user's hooks first, which can take a while.
 const CONTROL_REPLY_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// How long to wait for buffered output after the process has exited. A tool that outlives the CLI
-/// can hold the pipe open forever.
-const DRAIN_GRACE: Duration = Duration::from_secs(5);
-
-/// [`DRAIN_GRACE`], unless a test has set `ENV_DRAIN_GRACE_MS`, which only a `testing` build reads.
-pub(super) fn drain_grace() -> Duration {
-    #[cfg(any(test, feature = "testing"))]
-    if let Some(ms) = std::env::var(crate::ENV_DRAIN_GRACE_MS).ok().and_then(|ms| ms.parse().ok()) {
-        return Duration::from_millis(ms);
-    }
-    DRAIN_GRACE
-}
-
 pub(super) struct Shared {
     /// Also held while a prompt is noted and written, and while a relaunch swaps this and replays.
     /// Either a prompt is on the list before the swap or it's written after, never both.

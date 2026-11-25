@@ -8,7 +8,7 @@ license.workspace = true
 [features]
 # What tests of the hub from outside it need, such as the names it picks from, shorter timers, a stand-in for GitHub,
 # and a database every migration has run on, which is kept as tests of processes keep what they share.
-testing = ["github/testing", "process/testing"]
+testing = ["github/testing", "process/testing", "protocol/testing"]
 
 [dependencies]
 base64.workspace = true

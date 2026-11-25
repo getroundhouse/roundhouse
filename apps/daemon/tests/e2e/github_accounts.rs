@@ -16,7 +16,7 @@ use protocol::model::{
     GhLogin, GhLoginWorks, GithubRepositoryName, GithubToken, MachineLogins, Observation, Observed, Reach, SetupStatus,
     SshLogin,
 };
-use protocol::paths::ENV_TEST_GITHUB_API;
+use protocol::testing::ENV_TEST_GITHUB_API;
 
 use crate::carrying_on::update;
 use crate::support::gh::{LOGGED_IN_AS, LOGGED_IN_WITH, StandInGh};

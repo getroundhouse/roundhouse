@@ -15,14 +15,14 @@ use crate::support::{Stack, TIMEOUT, assistant_text, patient_with_workers, signa
 fn hub_from_copy(stack: &mut Stack) -> PathBuf {
     stack.kill_hub();
     let exe = stack.path("roundhoused-copy");
-    process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &exe).unwrap();
+    process::testing::install_program(crate::support::daemon(), &exe).unwrap();
     stack.hub = Some(stack.command_at(&exe).spawn().unwrap().into());
     wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
     exe
 }
 
 fn restore_real_worker(exe: &Path) {
-    process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), exe).unwrap();
+    process::testing::install_program(crate::support::daemon(), exe).unwrap();
 }
 
 fn replace_with_script(exe: &Path, body: &str) {

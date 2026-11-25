@@ -16,9 +16,9 @@ pub(super) async fn supervise(mut child: Child, stdout: ChildStdout, stderr: Chi
     shared.run.reaped();
     shared.run.mark_gone();
     shared.rpc.close().await;
-    stdio::drain(out).await;
-    stdio::drain(events).await;
-    let stderr_tail = stdio::drain(err).await.unwrap_or_default();
+    stdio::drain(out, shared.drain_grace).await;
+    stdio::drain(events, shared.drain_grace).await;
+    let stderr_tail = stdio::drain(err, shared.drain_grace).await.unwrap_or_default();
     shared.state.lock().sending = None;
     super::control::settle(&shared, None).await;
     let children: Vec<_> = shared.state.lock().subagents.runs.keys().cloned().collect();

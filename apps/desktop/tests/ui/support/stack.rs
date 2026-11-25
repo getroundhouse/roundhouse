@@ -54,7 +54,7 @@ impl Stack {
         // nothing, which no test here is about. Its data directory is made as the app makes it to start one.
         hub::store::give_a_migrated_database(&paths);
         let started = StartedHubs::default();
-        let daemon = Daemon::in_place(binaries().join("roundhoused")).in_environment(environment.vars());
+        let daemon = Daemon::in_place(binaries().join("daemon_for_tests")).in_environment(environment.vars());
         let hub = HubSource {
             remote: None,
             paths,

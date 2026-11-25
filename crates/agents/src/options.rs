@@ -3,6 +3,7 @@ use protocol::model::AgentLogin;
 use protocol::worker::ToolsToken;
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::time::Duration;
 
 /// Where to look for an agent's CLI. `main` reads these from the environment.
 #[derive(Clone, Debug, Default)]
@@ -33,6 +34,24 @@ pub struct AgentOptions {
     /// What its worker gives every process it starts, such as the git credential its hub set, which goes on the CLI
     /// last as it starts.
     pub environment: Environment,
+    /// How long the CLI has to let go of its output once it has exited.
+    pub drain_grace: DrainGrace,
+}
+
+/// How long an agent's CLI that has exited has to let go of its output before its run ends without the rest. Something
+/// it started can hold its output open for good.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DrainGrace(pub Duration);
+
+impl DrainGrace {
+    /// Long enough for what the CLI printed as it exited to be read.
+    pub const DEFAULT: Self = Self(Duration::from_secs(5));
+}
+
+impl Default for DrainGrace {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 /// Where an agent reaches the worker's tools, over MCP.

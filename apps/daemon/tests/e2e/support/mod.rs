@@ -3,6 +3,7 @@
 #![cfg(test)]
 
 pub(crate) use approvals::{approve_plan, pending_approval, wait_for_approval};
+pub(crate) use examples::daemon;
 pub(crate) use feed::{next_notice, next_notice_of, session_of, workspace_of};
 pub(crate) use gate::Gate;
 pub(crate) use observed::{Observing, at_the_hub, branches_once, known};

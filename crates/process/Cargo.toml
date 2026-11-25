@@ -8,7 +8,7 @@ license.workspace = true
 [features]
 # What tests of the crates that start processes share. Cargo says in JSON where it built the hub, and `protocol` names
 # the variable that says which process is the test.
-testing = ["dep:protocol", "dep:serde_json", "dep:tempfile", "dep:tokio"]
+testing = ["dep:protocol", "protocol/testing", "dep:serde_json", "dep:tempfile", "dep:tokio"]
 
 [dependencies]
 protocol = { workspace = true, optional = true }
@@ -31,7 +31,7 @@ windows-sys = { workspace = true, features = [
 
 [dev-dependencies]
 # What the `testing` feature brings in, which the tests have without it.
-protocol.workspace = true
+protocol = { workspace = true, features = ["testing"] }
 serde_json.workspace = true
 tempfile.workspace = true
 # With a paused clock, for how it looks whether a test has gone.

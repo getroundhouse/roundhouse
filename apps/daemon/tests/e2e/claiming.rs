@@ -12,7 +12,7 @@ use protocol::worker::{Hello, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequ
 
 fn worker(dir: &Path) -> Child {
     WholeEnvironment::for_a_test(&dir.join("home"))
-        .command(env!("CARGO_BIN_EXE_roundhoused"))
+        .command(crate::support::daemon())
         .args(["worker", "--stdio", "--workspaces-root"])
         .arg(dir.join("workspaces"))
         .arg("--state-dir")

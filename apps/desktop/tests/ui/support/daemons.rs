@@ -10,7 +10,7 @@ pub(crate) fn binaries() -> &'static PathBuf {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
         let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
-        process::testing::the_hub_and_examples(tmp, "ui-binaries", &["fake_claude", "stand_in_hub"])
+        process::testing::the_examples(tmp, "ui-binaries", &["daemon_for_tests", "fake_claude", "stand_in_hub"])
     })
 }
 
@@ -28,7 +28,7 @@ pub(crate) fn hub_environment() -> WholeEnvironment {
     environment
         // Ahead of the person's own. A test that has `gh` answer puts its own ahead of this one.
         .put_first_on_path(process::testing::logged_out_gh())
-        .set("ROUNDHOUSE_CLAUDE_BIN", binaries().join("examples/fake_claude"))
+        .set("ROUNDHOUSE_CLAUDE_BIN", binaries().join("fake_claude"))
         // So a test waits out only the time limits it's about. The hub passes the workers' on to them.
         .set(timers, short)
         .set(worker_timers, worker_short)

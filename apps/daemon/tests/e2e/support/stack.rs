@@ -94,7 +94,7 @@ impl Stack {
     }
 
     pub(crate) fn command(&self) -> Command {
-        self.command_at(Path::new(env!("CARGO_BIN_EXE_roundhoused")))
+        self.command_at(crate::support::daemon())
     }
 
     /// A hub from `exe`, in the stack's environment, logging where [`Stack::hub_log`] says.

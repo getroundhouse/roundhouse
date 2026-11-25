@@ -1,40 +1,29 @@
 //! The test a test's hub and workers stop with.
 
-#[cfg(any(test, feature = "testing"))]
 use std::time::Duration;
 
-#[cfg(any(test, feature = "testing"))]
-use protocol::paths::ENV_TEST_PROCESS;
+use protocol::testing::ENV_TEST_PROCESS;
 
 use crate::ProcessRecord;
 
-/// The process of the test a hub or a worker was started for, which the daemon has it stop with once that has gone: a
-/// hub as a signal stops it, with its workers and their agents, and a worker that can outlive its hub, with its agents,
-/// while it has no hub. Each runs apart from the test, as any a client starts does, so nothing else ends it when the
-/// test dies before stopping it, as one that's killed, interrupted or timed out does. Only a build with the `testing`
-/// feature has one.
+/// The process of the test a hub or a worker was started for, which the daemon for tests has it stop with once that has
+/// gone: a hub as a signal stops it, with its workers and their agents, and a worker that can outlive its hub, with its
+/// agents, while it has no hub. Each runs apart from the test, as any a client starts does, so nothing else ends it when
+/// the test dies before stopping it, as one that's killed, interrupted or timed out does.
 ///
-/// It's in the daemon because neither the product's own ways to stop nor a process of the tests' does as well. A signal
-/// needs something left to send it, a worker waits ten minutes for a next hub, and a hub has no such limit, since it
-/// outlives its clients on purpose. A process that watches the test and stops what it left was tried, and worked on a
-/// Mac and on Linux, but took several times this code, with its own way on each system to find what's running, and a
-/// file left in place of each directory to keep a hub that's slow to start from making it again.
+/// It's in the daemon for tests because neither the product's own ways to stop nor another process of the tests' does as
+/// well. A signal needs something left to send it, a worker waits ten minutes for a next hub, and a hub has no such
+/// limit, since it outlives its clients on purpose. A process that watches the test and stops what it left was tried, and
+/// worked on a Mac and on Linux, but took several times this code, with its own way on each system to find what's
+/// running, and a file left in place of each directory to keep a hub that's slow to start from making it again.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TestProcess(ProcessRecord);
 
 /// How often a test's hub or worker looks whether its test has gone. A look reads one process's start time, which costs
 /// little. Stopping takes longer, as long as its workers or agents take to stop.
-#[cfg(any(test, feature = "testing"))]
 const LOOK_EVERY: Duration = Duration::from_millis(100);
 
 impl TestProcess {
-    /// None, whatever `var` says, since only a build with the `testing` feature has one, and the product is never built
-    /// with it.
-    #[cfg(not(any(test, feature = "testing")))]
-    pub fn from_env(_var: impl Fn(&str) -> Option<String>) -> Option<Self> {
-        None
-    }
-
     /// The process whose PID `var` gives as [`ENV_TEST_PROCESS`], as it is when this is read, which is as the hub or
     /// the worker starts, while the test that started it is running, so a PID used again later isn't taken for it. One
     /// that's gone by then is gone at once.
@@ -42,21 +31,13 @@ impl TestProcess {
     /// # Panics
     ///
     /// On a value that isn't a PID, which only a mistake in a test gives it.
-    #[cfg(any(test, feature = "testing"))]
     #[expect(clippy::expect_used, reason = "only a test sets it, to a PID, so one that isn't is a mistake in the test")]
     pub fn from_env(var: impl Fn(&str) -> Option<String>) -> Option<Self> {
         let pid = var(ENV_TEST_PROCESS)?.parse().expect("a test process's PID");
         Some(Self(ProcessRecord { pid, started: crate::start_time(pid).unwrap_or_default() }))
     }
 
-    /// Never returns, since only a build with the `testing` feature has a test to stop with.
-    #[cfg(not(any(test, feature = "testing")))]
-    pub async fn until_gone(_test: Option<Self>) {
-        std::future::pending::<()>().await;
-    }
-
     /// Returns once `test` has gone, and never with none, as a test's hub or worker can be started with.
-    #[cfg(any(test, feature = "testing"))]
     #[expect(clippy::disallowed_methods, reason = "the pace a test's hub or worker looks whether its test has gone")]
     pub async fn until_gone(test: Option<Self>) {
         let Some(test) = test else { return std::future::pending().await };

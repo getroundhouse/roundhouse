@@ -3,7 +3,6 @@
 #![cfg(test)]
 
 use std::fs::File;
-use std::path::Path;
 use std::process::Stdio;
 use std::time::{Duration, SystemTime};
 
@@ -19,7 +18,7 @@ fn starting_a_hub_removes_the_copies_nothing_runs_from_but_not_a_worker_s() {
     stack.kill_hub();
     let app = stack.path("app");
     std::fs::create_dir_all(&app).unwrap();
-    process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &app.join("roundhoused")).unwrap();
+    process::testing::install_program(crate::support::daemon(), &app.join("roundhoused")).unwrap();
     // The version this daemon gives, which a copy is checked against.
     let build = |number| StampedBuild::new(protocol::this_build!().version(), number).unwrap();
     let paths = stack.paths();
@@ -27,7 +26,7 @@ fn starting_a_hub_removes_the_copies_nothing_runs_from_but_not_a_worker_s() {
     for (number, ago) in [(1, 48), (2, 48), (3, 1)] {
         let copy = paths.hub_copy(&build(number));
         std::fs::create_dir_all(copy.parent().unwrap()).unwrap();
-        process::testing::install_program(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &copy).unwrap();
+        process::testing::install_program(crate::support::daemon(), &copy).unwrap();
         let made = SystemTime::now() - Duration::from_hours(ago);
         File::options().write(true).open(&copy).unwrap().set_modified(made).unwrap();
     }

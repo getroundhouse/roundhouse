@@ -12,6 +12,7 @@ mod login_shell;
 mod program;
 mod repository;
 mod running;
+mod test_process;
 #[cfg(unix)]
 mod tmp_dir;
 mod whole_environment;
@@ -25,7 +26,8 @@ pub use login_shell::login_shell;
 pub use program::{install_program, write_program};
 pub use repository::repository_with_a_commit;
 pub use running::is_running;
+pub use test_process::TestProcess;
 #[cfg(unix)]
 pub use tmp_dir::tmp_dir;
 pub use whole_environment::WholeEnvironment;
-pub use workspace_build::{once_per_run, the_hub_and_examples, workspace_build};
+pub use workspace_build::{once_per_run, the_examples, workspace_build};

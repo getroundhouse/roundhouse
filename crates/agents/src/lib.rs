@@ -29,11 +29,7 @@ mod title;
 
 pub use error::{AgentError, CallFailed, NoAccount, NoTitle};
 pub use interface::AgentProcess;
-pub use options::{AgentOptions, BinaryLookup, Instructions, ToolServer};
+pub use options::{AgentOptions, BinaryLookup, DrainGrace, Instructions, ToolServer};
 pub use output::AgentOutput;
 pub use protocol::paths::{ENV_ANTIGRAVITY_BIN, ENV_CLAUDE_BIN, ENV_CODEX_BIN};
 pub use registry::{account, descriptions, spawn, title_for};
-
-/// Overrides the output-drain deadline in test builds.
-#[cfg(any(test, feature = "testing"))]
-pub const ENV_DRAIN_GRACE_MS: &str = "ROUNDHOUSE_DRAIN_GRACE_MS";
