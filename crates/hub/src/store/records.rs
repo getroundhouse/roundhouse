@@ -17,15 +17,13 @@ use super::replies_heard::replies_heard_of;
 use super::repos::{RepoColumns, repo_from_row};
 use super::sessions::{SessionColumns, session_from_row};
 use super::subagents::subagents_of;
+use super::tool_servers::tool_servers;
 use super::workspaces::{WorkspaceColumns, workspace_from_row};
 use super::{Columns, Store, StoreError, current_rev, lock};
 
 impl Store {
-    /// Read in one transaction, so it's everything as of one revision. Repositories, workspaces, sessions and comments
-    /// are each in the order `protocol` lists them in, as [`Repo::by_name`] and the `oldest_first` of each of the others
-    /// say.
-    ///
-    /// [`Repo::by_name`]: protocol::model::Repo::by_name
+    /// Read in one transaction, so it's everything as of one revision. Repositories, workspaces, sessions, comments
+    /// and tool servers are each in the order `protocol` lists them in, as the `by_name` or `oldest_first` of each says.
     pub fn list_records(&self) -> Result<Records, StoreError> {
         let mut conn = lock(&self.reader);
         let tx = conn.transaction()?;
@@ -52,6 +50,7 @@ impl Store {
             github_accounts: github_accounts(&tx)?,
             github_sign_ins: github_sign_ins(&tx)?,
             github_apps: github_apps(&tx)?,
+            tool_servers: tool_servers(&tx)?,
             // Kept in memory rather than here, as `Terminal`, `ModelList` and `HubUpdate` say, so the hub adds them.
             terminals: Vec::new(),
             model_lists: Vec::new(),

@@ -3,7 +3,9 @@
 
 use std::cmp::Ordering;
 
-use protocol::model::{DiffComment, HubSettings, Records, Repo, Session, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{
+    DiffComment, HubSettings, Records, Repo, Session, ToolServer, Workspace, WorkspaceId, WorkspaceStatus,
+};
 
 use super::revisions::MADE;
 use super::world::World;
@@ -30,6 +32,7 @@ impl World {
             github_accounts: self.github_accounts.clone(),
             github_sign_ins: self.github_sign_ins.clone(),
             github_apps: self.github_apps.clone(),
+            tool_servers: in_order(&self.tool_servers, ToolServer::by_name),
             terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),
             model_lists: self.model_lists.clone(),
             hub_update: self.hub_update.clone(),

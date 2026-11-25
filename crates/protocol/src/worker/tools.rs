@@ -43,6 +43,10 @@ crate::tokens!(
     ToolsToken,
 );
 
+/// What every adapter calls the server of the worker's tools in its CLI's config, which the CLI puts in the name of each
+/// of them, such as `mcp__roundhouse__get_pull_requests`, so none of the hub's own tool servers is called it.
+pub const TOOLS_SERVER: &str = "roundhouse";
+
 /// The worker's tool that waits on explicit pull requests, by which an adapter tells a wait from the agent's other
 /// work in the background.
 pub const WAITS_TOOL: &str = "wait_for_pull_requests";

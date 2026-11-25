@@ -4,5 +4,6 @@ mod connection;
 mod greeting;
 mod logged;
 mod revised;
+mod tool_servers;
 
 pub(super) use connection::{Connection, WAIT};

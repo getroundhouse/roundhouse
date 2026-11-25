@@ -28,9 +28,6 @@ pub use process::{PARENT_SESSION_ENV, build_args, spawn, spawn_at};
 pub use title::title_for;
 pub use usage::{lists_every_models_week, usage_limits};
 
-mod server_name;
-use server_name::TOOLS_SERVER;
-
 #[cfg(all(any(test, feature = "testing"), unix))]
 pub mod conformance;
 

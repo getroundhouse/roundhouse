@@ -107,6 +107,9 @@ ids!(
     /// The code GitHub gives a sign-in for the person to type where it says, such as `WDJB-MJHT`. It's shown to them,
     /// so it's no secret, and it's good only for approving its own sign-in, until the sign-in's code ends.
     GithubUserCode,
+    /// A tool server the hub has of its own, chosen by the client that adds it, as a UUID, so adding it again, as after a
+    /// reply that was lost, is the same server.
+    ToolServerId,
     /// What GitHub calls a GitHub App in its addresses, such as `ada-roundhouse`, which its bot is named for, as
     /// `ada-roundhouse[bot]`. GitHub gives it as the app is made, from the name the person chose.
     GithubAppSlug,

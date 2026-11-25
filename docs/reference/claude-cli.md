@@ -85,6 +85,7 @@ Observed on 2.1.330, with servers that say which config they came from, a config
 - **Two names for one URL are two servers.** One in the user scope and one in `--mcp-config` both connected.
 - **`--strict-mcp-config` leaves only the servers in `--mcp-config`.**
 - **`mcp_set_servers`, a control request, adds servers to a running agent.** It connected a new one, and replaced the one of the same name that `--mcp-config` gave.
+- **A server in `--mcp-config` can have any name, and its tools' names aren't always its own.** Servers named `Linear (Northwind)`, `Café.docs` and `linear_dash-1` all connected. A tool's name is made from its server's, with what can't be in a tool's name as underscores. Of two servers whose names become a prefix of each other, `Linear (Northwind)` and `Linear  Northwind`, `mcp_status` listed one's tools under both.
 - **A server that refuses its configured `Authorization` header with 401 is `failed`.** The CLI doesn't try OAuth, as the table above says.
 
 ### What `init` says of them

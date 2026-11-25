@@ -25,6 +25,7 @@ These rules keep a client's copy of a hub's state correct through lag, reconnect
   | Ask key | The worker, as a UUID or the agent's ID for the tool call | A session |
   | Message, tool use, approval | The agent | A session. An agent may reuse one elsewhere, so it's never a key outside its session |
   | `client_request_id`, sign-in with GitHub | A client | A hub |
+  | Tool server | A client, as a UUID. Agents know one by what the protocol makes of its name | A hub |
   | Subscription | A client | A connection |
   | Account | The agent's adapter, from the login, the same in every build. The hub, for a login it holds that doesn't say whose it is | An agent's kind. Each ID starts with the kind's name |
   | GitHub user | GitHub: a number that never changes, and a username that can. The hub tells users apart by the number | GitHub |

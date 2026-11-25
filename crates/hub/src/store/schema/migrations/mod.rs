@@ -14,6 +14,7 @@ mod sessions;
 mod tasks;
 mod titles;
 mod todos;
+mod tool_servers;
 mod waits;
 mod workspaces;
 

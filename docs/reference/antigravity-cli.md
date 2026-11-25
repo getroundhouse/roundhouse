@@ -87,7 +87,8 @@ Observed on 1.5.14 through `session/new`, with a `HOME` of the trial's own, a st
 
 - **A server in `~/.gemini/config/mcp_config.json` is used over one of the same name in `mcpServers`.** `session/new` succeeded, with no error, and the one in `mcpServers` was never contacted. Under another name, or with none on disk, it was.
 - **`.mcp.json`, `.agents/mcp_config.json` and `.gemini/mcp_config.json` in the working directory started no server.** Whether they would in a directory the person has trusted wasn't tried.
-- **A server given no `Authorization` header is asked for `/.well-known/oauth-protected-resource`,** at the root and under the server's path, though it took every request.
+- **A server in `mcpServers` can have any name.** On 1.5.16, servers named `Linear (Northwind)`, `Café.docs` and `linear_dash-1` all connected.
+- **A server is asked for `/.well-known/oauth-protected-resource`,** at the root and under the server's path, though it took every request. It's asked when it's given an `Authorization` header too, as 1.5.16 was.
 
 **`agy acp` says nothing of its servers,** as observed on 1.5.16 with a stand-in for the Gemini API and servers that connected, needed OAuth, answered 500 and couldn't be reached, on disk and in `mcpServers`. Neither the reply to `session/new` nor any notification before, during or after a turn named one, its state or its tools, and `mcp/status`, `mcp/list` and `session/mcp_servers` are refused with `-32601`. So the adapter doesn't claim to report them. There, `session/new` needs `authenticate` with `gemini-api-key` first, or fails with `-32000`, "Authentication required", though `GEMINI_API_KEY` is set.
 

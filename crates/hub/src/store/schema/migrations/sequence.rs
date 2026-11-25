@@ -89,4 +89,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::waits::UNWATCHED_CALLED_OFF),
     // Each background task stored with no kind, given `command`, in `agent_tasks` events and in `sessions`.
     Rust(super::tasks::kinds_given),
+    // The tool servers the hub has of its own, in `tool_servers`.
+    Sql(super::tool_servers::TOOL_SERVERS),
 ];

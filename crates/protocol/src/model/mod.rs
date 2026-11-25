@@ -33,6 +33,7 @@ mod session;
 mod subagent;
 mod terminal;
 mod title;
+mod tool_server;
 mod wait;
 mod worktrees;
 
@@ -102,6 +103,10 @@ pub use session::{AgentKind, OpenApproval, Session, SessionStatus};
 pub use subagent::{Lately, LatelyCall, LatelyResult, Said, Subagent, SubagentStatus, TouchedSubagents};
 pub use terminal::Terminal;
 pub use title::{Title, TitleError, TitleSource};
+pub use tool_server::{
+    ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerHeader, ToolServerHeaderError, ToolServerKey,
+    ToolServerName, ToolServerNameError, ToolServerUrl, ToolServerUrlError,
+};
 pub use wait::{EndedWait, Wait, WaitEnd, WaitEnded, WaitUntil, Watching};
 pub use worktrees::{CHILDREN, ChildStatus, ChildWorktree, MadeBy, WorkName, WorkNameError};
 
@@ -112,7 +117,7 @@ pub use ids::{
     AccountId, AgentSessionId, ApprovalId, AskKey, AttachmentId, BranchName, ChildWorktreeId, ClientMessageId,
     ClientRequestId, CommentId, CommitId, DeviceId, GithubAccountId, GithubAppSlug, GithubSignInId, GithubUserCode,
     GithubUsername, HubId, InstanceId, MessageId, ProposalId, ProviderName, RemoteName, RepoId, SessionId, SubagentId,
-    TaskId, TerminalId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
+    TaskId, TerminalId, ToolServerId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
 };
 mod repo;
 pub use repo::{Repo, RepoOrigin, RepoUrl, RepoUrlError};

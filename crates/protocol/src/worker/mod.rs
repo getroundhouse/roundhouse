@@ -43,7 +43,7 @@ pub use terminals::{
     RunningTerminal, RunningTerminals, RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalRows, TerminalStart,
     TerminalStop, TerminalText, TerminalTyped, TerminalWatch,
 };
-pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};
+pub use tools::{ServeTools, TOOLS_SERVER, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};
 pub use workspaces::{
     ArchiveScript, CancelSetup, NamesGitHas, NamesGitHasReply, PrepareWorkspace, RemoveWorkspace, RestoreWorkspace,
     SetupDone, SetupLog, SetupLogReply, SetupWorkspace, WorkspaceReady, WorktreeThere, WorktreeThereReply,

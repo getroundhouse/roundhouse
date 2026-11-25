@@ -37,8 +37,8 @@ mod tests {
 
     use crate::capability::conversation::Start;
     use crate::capability::settings::Settings;
-    use crate::client::{ClientRequest, ClientResponse, accounts, devices, github_accounts, github_apps};
-    use crate::model::{AgentKind, AgentLogin, GithubToken, LoginToken, RunId};
+    use crate::client::{ClientRequest, ClientResponse, accounts, devices, github_accounts, github_apps, tool_servers};
+    use crate::model::{AgentKind, AgentLogin, GithubToken, LoginToken, RunId, ToolServerAuthGiven, ToolServerKey};
     use crate::pairing::{DeviceToken, Fingerprint, Pairing, PairingCode, PairingLink};
     use crate::worker::{self, GithubCredential, ToolsToken, WorkerRequest};
 
@@ -117,6 +117,8 @@ mod tests {
         };
         let github = github_accounts::GithubAccountConnect { token: GithubToken::new(SECRET), id: None };
         let make = github_apps::GithubAppMake { code: github_apps::GithubManifestCode::new(SECRET) };
+        let auth = ToolServerAuthGiven::Key { header: "X-Key".into(), key: ToolServerKey::new(SECRET) };
+        let add = tool_servers::ToolServerAdd { id: "t".into(), name: "Docs".into(), url: "u".into(), auth };
         let pair = devices::Pair { code: PairingCode::from(SECRET), device_name: "phone".into() };
         let paired = devices::Paired { device_id: "d".into(), token: DeviceToken::from(SECRET) };
         let pairing = Pairing { link: link(), code: PairingCode::from(SECRET), expires_at_ms: 1 };
@@ -124,6 +126,7 @@ mod tests {
             carrier("AccountConnect", &ClientRequest::AccountConnect(connect)),
             carrier("GithubAccountConnect", &ClientRequest::GithubAccountConnect(github)),
             carrier("GithubAppMake", &ClientRequest::GithubAppMake(make)),
+            carrier("ToolServerAdd", &ClientRequest::ToolServerAdd(add)),
             carrier("Pair", &ClientRequest::Pair(pair)),
             carrier(
                 "Authenticate",

@@ -5,15 +5,13 @@ use std::sync::Arc;
 
 use protocol::capability::Report;
 use protocol::capability::setup::{ServerName, ServerState, ToolServerState};
+use protocol::worker::TOOLS_SERVER;
 use serde_json::{Value, json};
 use tracing::debug;
 
 use super::why::why;
 use crate::AgentOutput;
 use crate::codex::{running::Shared, subagents::Scope};
-
-/// The name the adapter gives the server of the worker's tools, which isn't one of the agent's, so it's never reported.
-pub(in crate::codex) const TOOLS_SERVER: &str = "roundhouse";
 
 /// What Codex last said of each server, in order of their names, so two reports of the same are equal. Held while what
 /// it says is reported too, so a report never follows a newer one.

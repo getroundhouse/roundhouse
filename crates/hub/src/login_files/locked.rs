@@ -71,10 +71,10 @@ impl<S: LoginSecret> Locked<'_, S> {
                 Err(e) => {
                     warn!(
                         name: "login.secret_unread",
-                        account = %id,
+                        %id,
                         %dir,
                         error = %e,
-                        "Couldn't read the secret of the hub's login for an account"
+                        "Couldn't read a secret the hub holds"
                     );
                 }
             }
@@ -95,7 +95,7 @@ impl<S: LoginSecret> Locked<'_, S> {
         let file = LoginFile::new();
         self.write(&file, secret).map_err(|e| {
             self.let_go(&file);
-            internal(format!("couldn't keep the login's secret: {e}"))
+            internal(format!("couldn't keep the secret: {e}"))
         })?;
         let (written, replaced) = write_row(&file).inspect_err(|_| self.let_go(&file))?;
         if let Some(replaced) = replaced {
@@ -132,7 +132,7 @@ impl<S: LoginSecret> Locked<'_, S> {
         file: &LoginFile,
         clear_row: impl FnOnce() -> Result<T, ApiError>,
     ) -> Result<T, ApiError> {
-        self.remove(file).map_err(|e| internal(format!("couldn't forget the login's secret: {e}")))?;
+        self.remove(file).map_err(|e| internal(format!("couldn't forget the secret: {e}")))?;
         clear_row()
     }
 
@@ -161,34 +161,34 @@ impl<S: LoginSecret> Locked<'_, S> {
                 (Some(file), Ok(Stored::Newer)) => {
                     info!(
                         name: "login.newer_kept",
-                        account = %id,
+                        %id,
                         %dir,
-                        "Kept the hub's login for an account, in a form a newer build wrote"
+                        "Kept a secret the hub holds, in a form a newer build wrote"
                     );
                     kept.insert(file);
                 }
                 (Some(file), Err(e)) => {
                     warn!(
                         name: "login.secret_unread",
-                        account = %id,
+                        %id,
                         %dir,
                         error = %e,
-                        "Couldn't read the secret of the hub's login for an account"
+                        "Couldn't read a secret the hub holds"
                     );
                     kept.insert(file);
                 }
                 (None, _) | (Some(_), Ok(Stored::Nothing)) => {
                     info!(
                         name: "login.secret_gone",
-                        account = %id,
+                        %id,
                         %dir,
-                        "The secret of the hub's login for an account is gone, so it holds none"
+                        "A secret the hub held is gone"
                     );
                     clear_row(&id)?;
                 }
             }
         }
-        self.remove_all_but(&kept).map_err(|e| internal(format!("couldn't let go of the logins' files in {dir}: {e}")))
+        self.remove_all_but(&kept).map_err(|e| internal(format!("couldn't let go of the files in {dir}: {e}")))
     }
 
     fn dir(&self) -> &Path {
@@ -225,7 +225,7 @@ impl<S: LoginSecret> Locked<'_, S> {
                 name: "login.not_let_go",
                 %dir,
                 error = %e,
-                "Couldn't let go of a login's file no account names, which goes as the hub next starts"
+                "Couldn't let go of a secret's file no row names, which goes as the hub next starts"
             );
         }
     }

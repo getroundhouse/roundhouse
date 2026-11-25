@@ -93,29 +93,34 @@ fn of_listed(listed: &Listed) -> Vec<(String, Rev)> {
 
 /// Each revision a reply carries, of the records in it and of a list it is.
 fn of_reply(response: &ClientResponse) -> Vec<(String, Rev)> {
+    records_in(response).iter().map(record).collect()
+}
+
+/// The records a reply is, or holds.
+fn records_in(response: &ClientResponse) -> Vec<Record> {
     use ClientResponse as C;
-    let each = |records: Vec<Record>| records.iter().map(record).collect();
     match response {
-        C::HubSettings(settings) => each(vec![Record::HubSettings(settings.clone())]),
-        C::NewWorkspaceDraft(draft) => each(vec![Record::NewWorkspaceDraft(draft.clone())]),
+        C::HubSettings(settings) => vec![Record::HubSettings(settings.clone())],
+        C::NewWorkspaceDraft(draft) => vec![Record::NewWorkspaceDraft(draft.clone())],
         C::NewWorkspaceMade(made) => {
-            each(vec![Record::Workspace(made.workspace.clone()), Record::Session(made.session.clone())])
+            vec![Record::Workspace(made.workspace.clone()), Record::Session(made.session.clone())]
         }
-        C::Repo(repo) => each(vec![Record::Repo(repo.clone())]),
-        C::Repos(repos) => each(repos.repos.iter().cloned().map(Record::Repo).collect()),
-        C::ModelList(model_list) => each(vec![Record::ModelList(model_list.clone())]),
-        C::Workspace(workspace) => each(vec![Record::Workspace(workspace.clone())]),
-        C::Workspaces(workspaces) => each(workspaces.workspaces.iter().cloned().map(Record::Workspace).collect()),
-        C::Comment(comment) => each(vec![Record::Comment(comment.clone())]),
-        C::Comments(comments) => each(comments.comments.iter().cloned().map(Record::Comment).collect()),
-        C::Session(session) => each(vec![Record::Session(session.clone())]),
-        C::Sessions(sessions) => each(sessions.sessions.iter().cloned().map(Record::Session).collect()),
-        C::Proposal(proposal) => each(vec![Record::Proposal(proposal.clone())]),
-        C::Account(account) => each(vec![Record::Account(account.clone())]),
-        C::GithubAccount(account) => each(vec![Record::GithubAccount(account.clone())]),
-        C::GithubSignIn(sign_in) => each(vec![Record::GithubSignIn(sign_in.clone())]),
-        C::GithubApp(app) => each(vec![Record::GithubApp(app.clone())]),
-        C::Terminal(terminal) => each(vec![Record::Terminal(terminal.clone())]),
+        C::Repo(repo) => vec![Record::Repo(repo.clone())],
+        C::Repos(repos) => repos.repos.iter().cloned().map(Record::Repo).collect(),
+        C::ModelList(model_list) => vec![Record::ModelList(model_list.clone())],
+        C::Workspace(workspace) => vec![Record::Workspace(workspace.clone())],
+        C::Workspaces(workspaces) => workspaces.workspaces.iter().cloned().map(Record::Workspace).collect(),
+        C::Comment(comment) => vec![Record::Comment(comment.clone())],
+        C::Comments(comments) => comments.comments.iter().cloned().map(Record::Comment).collect(),
+        C::Session(session) => vec![Record::Session(session.clone())],
+        C::Sessions(sessions) => sessions.sessions.iter().cloned().map(Record::Session).collect(),
+        C::Proposal(proposal) => vec![Record::Proposal(proposal.clone())],
+        C::Account(account) => vec![Record::Account(account.clone())],
+        C::GithubAccount(account) => vec![Record::GithubAccount(account.clone())],
+        C::GithubSignIn(sign_in) => vec![Record::GithubSignIn(sign_in.clone())],
+        C::GithubApp(app) => vec![Record::GithubApp(app.clone())],
+        C::ToolServer(server) => vec![Record::ToolServer(server.clone())],
+        C::Terminal(terminal) => vec![Record::Terminal(terminal.clone())],
         // What isn't a record, or holds none.
         C::Paired(_)
         | C::Devices(_)

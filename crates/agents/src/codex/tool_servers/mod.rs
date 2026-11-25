@@ -3,4 +3,4 @@
 mod tracking;
 mod why;
 
-pub(super) use tracking::{TOOLS_SERVER, ToolServers, moved, turn_started};
+pub(super) use tracking::{ToolServers, moved, turn_started};

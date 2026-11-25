@@ -31,6 +31,7 @@ mod ssh;
 pub mod store;
 mod terminate;
 mod timers;
+mod tool_servers;
 mod versions;
 mod worker_link;
 

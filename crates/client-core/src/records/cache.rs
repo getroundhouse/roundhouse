@@ -107,6 +107,7 @@ impl HubRecords {
             | Record::GithubAccount(_)
             | Record::GithubSignIn(_)
             | Record::GithubApp(_)
+            | Record::ToolServer(_)
             | Record::Terminal(_)
             | Record::ModelList(_)) => self.apply_listed(listed),
         }
@@ -140,6 +141,7 @@ impl HubRecords {
             | RecordKey::GithubAccount { .. }
             | RecordKey::GithubSignIn { .. }
             | RecordKey::GithubApp { .. }
+            | RecordKey::ToolServer { .. }
             | RecordKey::Terminal { .. }
             | RecordKey::ModelList(_)
             | RecordKey::HubUpdate

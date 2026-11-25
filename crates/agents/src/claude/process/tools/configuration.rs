@@ -1,5 +1,5 @@
 use crate::ToolServer;
-use crate::claude::TOOLS_SERVER;
+use protocol::worker::TOOLS_SERVER;
 use serde_json::json;
 use std::ffi::OsString;
 use std::fs::File;

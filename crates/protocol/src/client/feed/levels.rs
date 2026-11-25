@@ -31,6 +31,7 @@ impl HubNotice {
                 | RecordKey::GithubAccount { .. }
                 | RecordKey::GithubSignIn { .. }
                 | RecordKey::GithubApp { .. }
+                | RecordKey::ToolServer { .. }
                 | RecordKey::Terminal { .. }
                 | RecordKey::ModelList(_)
                 | RecordKey::HubUpdate => Some(Level::Hub),
@@ -47,6 +48,7 @@ impl HubNotice {
             | HubNotice::GithubAccount(_)
             | HubNotice::GithubSignIn(_)
             | HubNotice::GithubApp(_)
+            | HubNotice::ToolServer(_)
             | HubNotice::Terminal(_)
             | HubNotice::ModelList(_)
             | HubNotice::HubUpdate(_) => Some(Level::Hub),

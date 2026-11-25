@@ -9,7 +9,7 @@ use protocol::event::SessionEvent;
 use protocol::model::{
     Account, AttachmentId, DiffComment, FileContents, GitDiff, GithubAccount, GithubApp, GithubSettings, GithubSignIn,
     GithubSignInStatus, InstanceId, PORTS_PER_WORKSPACE, Proposal, ReplyHeard, Repo, RepoId, RepoOrigin, Rev, Session,
-    SessionId, Subagent, Terminal, TerminalId, Workspace, WorkspaceId, WorktreeFiles,
+    SessionId, Subagent, Terminal, TerminalId, ToolServer, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::tail::Tail;
 use protocol::terminal::TerminalSize;
@@ -90,6 +90,8 @@ pub struct World {
     pub sign_in_answer: Option<GithubSignInStatus>,
     /// The apps of your own the hub has made.
     pub github_apps: Vec<GithubApp>,
+    /// The tool servers the hub has of its own.
+    pub tool_servers: Vec<ToolServer>,
     /// Why the hub couldn't look for where an app of your own is installed, as it answers each time it's asked. `None`
     /// refuses it, as the rest of what would change what the hub holds.
     pub app_look_refused: Option<ApiError>,

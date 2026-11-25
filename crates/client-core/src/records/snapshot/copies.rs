@@ -6,7 +6,7 @@ use crate::Agents;
 use protocol::model::{
     Account, AccountId, DiffComment, HubSettings, HubUpdate, MessageId, ModelList, ModelListKey, NewWorkspaceDraft,
     Proposal, ProposalId, Reach, Record, ReplyHeard, Repo, RepoId, Session, SessionId, Subagent, SubagentId, Terminal,
-    Workspace, WorkspaceId,
+    ToolServer, Workspace, WorkspaceId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -44,6 +44,8 @@ pub(in super::super) struct Listed {
     pub(super) hub_update: Option<HubUpdate>,
     pub(super) new_workspace_draft: Option<NewWorkspaceDraft>,
     pub(super) github: GithubListed,
+    /// By name.
+    pub(super) tool_servers: Vec<ToolServer>,
 }
 
 /// Some records that go together, such as a workspace's sessions, and which copies of them these are.
@@ -101,6 +103,7 @@ impl Listed {
                 Record::GithubAccount(account) => listed.github.account(account),
                 Record::GithubSignIn(sign_in) => listed.github.sign_in(sign_in),
                 Record::GithubApp(app) => listed.github.app(app),
+                Record::ToolServer(server) => listed.tool_servers.push(server.clone()),
                 Record::Terminal(terminal) => {
                     let its: &mut Vec<_> = terminals.entry(terminal.workspace_id.clone()).or_default();
                     its.push((terminal.clone(), taken));
@@ -110,6 +113,7 @@ impl Listed {
             }
         }
         listed.repos.sort_by(Repo::by_name);
+        listed.tool_servers.sort_by(ToolServer::by_name);
         listed.repo_at = listed.repos.iter().enumerate().map(|(at, repo)| (repo.id.clone(), at)).collect();
         workspaces.sort_by(|(a, _), (b, _)| a.oldest_first(b));
         listed.workspace_at = workspaces

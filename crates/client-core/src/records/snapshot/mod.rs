@@ -17,6 +17,7 @@ mod of_accounts;
 mod of_chats;
 mod of_models;
 mod of_workspaces;
+mod tool_servers;
 pub(super) use by_session::SessionsListed;
 pub(super) use copies::Listed;
 pub use copies::{Changes, InWorkspace, Snapshot};
