@@ -44,8 +44,8 @@ pub struct HubConfig {
     /// Where a hub installed as a service reads the update feed, for the release it would update to. `None` for any
     /// other hub, which updates as whoever runs it says.
     pub update_feed: Option<UpdateFeed>,
-    /// Where the hub calls GitHub, and as which app it signs people in, as [`GithubConfig::from_env`] gives it. Given
-    /// rather than known here, so a hub can be pointed at a stand-in, as the hub's own tests point theirs.
+    /// Where the hub calls GitHub, and as which app it signs people in. Given rather than known
+    /// here, so a hub can be pointed at a stand-in, as the hub's own tests point theirs.
     pub github: GithubConfig,
 }
 

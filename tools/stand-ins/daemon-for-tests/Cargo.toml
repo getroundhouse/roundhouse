@@ -1,0 +1,20 @@
+[package]
+name = "daemon-for-tests"
+description = "The daemon with a main of its own for tests, as the example daemon_for_tests."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# Dev-dependencies, whose features only a build that names an example, test or bench takes in, so a build of the
+# product's code across the workspace, such as `cargo clippy --workspace --locked`, is as it ships.
+[dev-dependencies]
+anyhow.workspace = true
+daemon.workspace = true
+hub = { workspace = true, features = ["testing"] }
+process = { workspace = true, features = ["testing"] }
+protocol = { workspace = true, features = ["testing"] }
+worker = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

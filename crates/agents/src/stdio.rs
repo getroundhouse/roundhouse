@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::process::ExitStatus;
-use std::time::Duration;
 
 use serde_json::Value;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
@@ -10,9 +9,9 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
+use crate::DrainGrace;
+
 const STDERR_TAIL_LINES: usize = 20;
-/// A descendant may keep its parent's pipes open after the CLI exits.
-const DRAIN_GRACE: Duration = Duration::from_secs(5);
 
 /// Reads bytes rather than text: one line of invalid UTF-8 mustn't end the whole stream, which would
 /// leave the agent blocked and the session stuck.
@@ -46,8 +45,8 @@ pub(crate) async fn read_json_lines(
     }
 }
 
-pub(crate) async fn drain<T>(mut task: JoinHandle<T>) -> Option<T> {
-    if let Ok(result) = tokio::time::timeout(DRAIN_GRACE, &mut task).await {
+pub(crate) async fn drain<T>(mut task: JoinHandle<T>, DrainGrace(grace): DrainGrace) -> Option<T> {
+    if let Ok(result) = tokio::time::timeout(grace, &mut task).await {
         result.ok()
     } else {
         task.abort();

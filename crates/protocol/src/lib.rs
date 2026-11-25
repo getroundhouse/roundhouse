@@ -32,6 +32,8 @@ mod service_builds;
 pub mod short_text;
 pub mod tail;
 pub mod terminal;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 pub mod versions;
 pub mod worker;
 

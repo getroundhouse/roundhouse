@@ -51,7 +51,7 @@ fn start_listening(exe: &Path, given: &Given) -> std::io::Result<()> {
     Ok(())
 }
 
-pub(crate) fn listen(given: Given) -> anyhow::Result<()> {
+pub(crate) fn listen(mut given: Given) -> anyhow::Result<()> {
     move_into(&given.state_dir)?;
     let socket = Path::new(protocol::paths::WORKER_SOCKET_FILE);
     // Held until this process exits.
@@ -59,10 +59,9 @@ pub(crate) fn listen(given: Given) -> anyhow::Result<()> {
         tracing::info!(name: "worker.instance_taken", "Another worker, started at the same time, has the instance");
         return Ok(());
     };
-    let stops_with = given.for_tests.stops_with.clone();
+    let stops_with = std::mem::replace(&mut given.config.stops_with, Box::pin(std::future::pending()));
     let config = config(given, None)?;
-    let test_gone = process::TestProcess::until_gone(stops_with);
-    run_to_end(worker::listen(socket, config, WITHOUT_A_HUB, test_gone))??;
+    run_to_end(worker::listen(socket, config, WITHOUT_A_HUB, stops_with))??;
     Ok(())
 }
 

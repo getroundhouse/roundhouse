@@ -51,7 +51,7 @@ impl Worker {
         environment.set("GIT_CONFIG_NOSYSTEM", "1").set("GIT_TERMINAL_PROMPT", "0");
         change(&mut environment);
         let mut child = environment
-            .command(env!("CARGO_BIN_EXE_roundhoused"))
+            .command(crate::support::daemon())
             .args(["worker", "--stdio", "--workspaces-root"])
             .arg(dir.path().join("workspaces"))
             .arg("--state-dir")

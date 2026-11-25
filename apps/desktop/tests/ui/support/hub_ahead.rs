@@ -23,7 +23,7 @@ impl Stack {
     /// listen. Workers get the hub's own `PATH`, as `environment` sets it, since it has no login shell to ask.
     pub(crate) fn start_hub_ahead(&self, environment: &WholeEnvironment) -> HubAhead {
         let hub = environment
-            .command(binaries().join("roundhoused"))
+            .command(binaries().join("daemon_for_tests"))
             .args(["hub", "--on-demand"])
             .env(protocol::paths::ENV_HOME, &self.hub.paths.data_dir)
             .env(protocol::paths::ENV_WORKSPACES, &self.hub.paths.workspaces_root)

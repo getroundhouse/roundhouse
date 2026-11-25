@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::Environment;
-use protocol::paths::ENV_TEST_PROCESS;
+use protocol::testing::ENV_TEST_PROCESS;
 
 /// What a process a test starts keeps of the test's own environment, by name: where to find the programs it runs,
 /// where to keep temporary files, and on Windows what any process there needs to start. Nothing else, so nothing of

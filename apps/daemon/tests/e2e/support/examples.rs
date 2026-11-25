@@ -11,6 +11,12 @@ pub(super) fn fake_agent() -> &'static Path {
     FAKE.get_or_init(|| example("fake_claude"))
 }
 
+/// The daemon every stack's hub and workers are, which takes what a test gives it.
+pub(crate) fn daemon() -> &'static Path {
+    static DAEMON: OnceLock<PathBuf> = OnceLock::new();
+    DAEMON.get_or_init(|| example("daemon_for_tests"))
+}
+
 /// What [`Stack::make_through_an_adapter`] runs.
 fn recording_adapter() -> &'static Path {
     static ADAPTER: OnceLock<PathBuf> = OnceLock::new();
@@ -64,7 +70,7 @@ impl Stack {
         let path = |name: &str| self.path(name).to_str().unwrap().to_string();
         let mut args = vec![
             "--worker".into(),
-            env!("CARGO_BIN_EXE_roundhoused").into(),
+            daemon().to_str().unwrap().into(),
             "--instances".into(),
             path("adapter-instances"),
             "--workspaces-root".into(),

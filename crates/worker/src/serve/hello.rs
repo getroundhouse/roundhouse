@@ -13,19 +13,5 @@ pub(super) fn hello(build: Build, newest: u32, oldest: Option<u32>) -> Result<Wo
         let message = format!("the hub speaks {hub}, and this worker speaks {ours}");
         return Err(ApiError::new(ErrorCode::VersionMismatch, message));
     };
-    Ok(WorkerResponse::Hello(HelloReply { protocol_version: chosen, build: Some(said(build)) }))
+    Ok(WorkerResponse::Hello(HelloReply { protocol_version: chosen, build: Some(build.version().to_string()) }))
 }
-
-/// Which build this worker is, as its hello says. A test can have it say another, with [`TEST_BUILD`], as a worker an
-/// earlier hub left would.
-fn said(build: Build) -> String {
-    #[cfg(any(test, feature = "testing"))]
-    if let Ok(build) = std::env::var(TEST_BUILD) {
-        return build;
-    }
-    build.version().to_string()
-}
-
-/// The variable that names the build a worker says it is, in tests.
-#[cfg(any(test, feature = "testing"))]
-pub const TEST_BUILD: &str = "ROUNDHOUSE_TEST_WORKER_BUILD";

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use agents::{AgentOptions, AgentOutput, BinaryLookup, Instructions, ToolServer};
+use agents::{AgentOptions, AgentOutput, BinaryLookup, DrainGrace, Instructions, ToolServer};
 use protocol::attachment::NewAttachment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{AgentKind, AgentLogin, RunId, SessionId};
@@ -44,6 +44,7 @@ fn one_off(state: &State, agent: AgentKind, what: &str, login: Option<AgentLogin
         instructions: None,
         login,
         environment: (*state.credentials.given()).clone(),
+        drain_grace: DrainGrace(state.config.timers.agent_drain),
     }
 }
 
@@ -108,6 +109,7 @@ pub(crate) async fn start_agent(
         // started again with, which goes when the agent does.
         login: spec.login.take(),
         environment: (*state.credentials.given()).clone(),
+        drain_grace: DrainGrace(state.config.timers.agent_drain),
     };
     let span = error_span!(parent: None, "agent", %session_id, %run);
     let process = agents::spawn(spec, tx, options).instrument(span.clone()).await?;

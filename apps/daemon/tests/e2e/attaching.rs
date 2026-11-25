@@ -32,7 +32,7 @@ impl Attached {
     /// To the worker whose state directory is `state_dir`, starting one if none is serving it.
     fn start_in(workspaces_root: &Path, state_dir: &Path) -> Self {
         let mut command = WholeEnvironment::for_a_test(&state_dir.with_file_name("home"))
-            .command(env!("CARGO_BIN_EXE_roundhoused"))
+            .command(crate::support::daemon())
             .args(["worker", "--attach", "--workspaces-root"])
             .arg(workspaces_root)
             .arg("--state-dir")

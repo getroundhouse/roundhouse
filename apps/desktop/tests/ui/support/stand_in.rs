@@ -51,7 +51,7 @@ impl Stack {
     /// A hub of another build, run with these arguments.
     pub(crate) fn start_stand_in_hub(&self, args: &[&str]) -> StandInHub {
         let hub = hub_environment()
-            .command(binaries().join("examples/stand_in_hub"))
+            .command(binaries().join("stand_in_hub"))
             .args(args)
             .env(protocol::paths::ENV_HOME, &self.hub.paths.data_dir)
             .env(protocol::paths::ENV_WORKSPACES, &self.hub.paths.workspaces_root)

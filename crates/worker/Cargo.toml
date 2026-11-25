@@ -7,7 +7,7 @@ license.workspace = true
 
 [features]
 # What only tests use: a worker that says it's another build, as one an earlier hub left would, and shorter timers.
-testing = []
+testing = ["protocol/testing"]
 
 [dependencies]
 process.workspace = true

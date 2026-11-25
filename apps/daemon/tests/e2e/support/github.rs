@@ -5,7 +5,7 @@ use client_core::Client;
 use hub::{GithubAnswer, GithubPullRequestState, GithubPullRequests, GithubScript, GithubStandIn};
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::model::{GithubToken, Session, Workspace};
-use protocol::paths::ENV_TEST_GITHUB_API;
+use protocol::testing::ENV_TEST_GITHUB_API;
 
 use super::gh::{LOGGED_IN_AS, LOGGED_IN_WITH, StandInGh};
 use super::{Stack, git, wait_until};

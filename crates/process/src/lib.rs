@@ -19,7 +19,6 @@ mod record;
 mod running_from;
 mod running_in;
 mod stdio;
-mod test_process;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 #[cfg(unix)]
@@ -47,6 +46,5 @@ pub use record::{ProcessRecord, start_time};
 pub use running_from::{Claimed, RunningFrom, claim_unused};
 pub use running_in::{RunningProgram, running_in};
 pub use stdio::keep_stdio_from_children;
-pub use test_process::TestProcess;
 pub use unused_builds::{ABANDONED_AFTER, Builds};
 pub use window::without_window;

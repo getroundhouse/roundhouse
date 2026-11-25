@@ -45,6 +45,7 @@ members = [
     "tools/dictation-eval",
     "tools/speech-eval",
     "tools/iphone",
+    "tools/stand-ins/daemon-for-tests",
     "tools/stand-ins/environment-printer",
     "tools/stand-ins/fake-claude",
     "tools/stand-ins/login-standin",
@@ -90,6 +91,7 @@ default-members = [
     "tools/update-steps",
     "tools/dictation-eval",
     "tools/speech-eval",
+    "tools/stand-ins/daemon-for-tests",
     "tools/stand-ins/environment-printer",
     "tools/stand-ins/fake-claude",
     "tools/stand-ins/login-standin",
@@ -124,6 +126,7 @@ providers = { path = "crates/providers" }
 worker = { path = "crates/worker" }
 github = { path = "crates/github" }
 hub = { path = "crates/hub" }
+daemon = { path = "apps/daemon" }
 client-core = { path = "crates/client-core" }
 local-hub = { path = "crates/local-hub" }
 logging = { path = "crates/logging" }

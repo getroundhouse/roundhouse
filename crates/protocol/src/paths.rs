@@ -16,16 +16,6 @@ pub const ENV_CLAUDE_BIN: &str = "ROUNDHOUSE_CLAUDE_BIN";
 pub const ENV_CODEX_BIN: &str = "ROUNDHOUSE_CODEX_BIN";
 pub const ENV_ANTIGRAVITY_BIN: &str = "ROUNDHOUSE_ANTIGRAVITY_BIN";
 pub const ENV_LOG: &str = "ROUNDHOUSE_LOG";
-/// Shorter timers for a test's hub, which only a hub built for tests reads, as `hub::Timers` says.
-pub const ENV_TEST_HUB_TIMERS: &str = "ROUNDHOUSE_TEST_HUB_TIMERS";
-/// Shorter timers for a test's workers, which only a worker built for tests reads, as `worker::Timers` says.
-pub const ENV_TEST_WORKER_TIMERS: &str = "ROUNDHOUSE_TEST_WORKER_TIMERS";
-/// Where a test's hub calls GitHub, both its API and its device flow, such as a stand-in's address, which only a hub
-/// built for tests reads, as `hub::GithubConfig::from_env` says.
-pub const ENV_TEST_GITHUB_API: &str = "ROUNDHOUSE_TEST_GITHUB_API";
-/// The PID of the test a process was started for, which a daemon built for tests stops with once it has gone,
-/// as `process::TestProcess` says.
-pub const ENV_TEST_PROCESS: &str = "ROUNDHOUSE_TEST_PROCESS";
 
 /// The binary that runs as a hub or a worker. It gives this name in `--version` too.
 pub const DAEMON_NAME: &str = "roundhoused";
@@ -96,23 +86,10 @@ pub(crate) fn program_file(name: &str) -> String {
 /// The variable that names the user's home directory.
 pub const HOME_VAR: &str = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
 
-/// Which hub this is, what it runs, and what a test gives it and its workers: timers, GitHub, and the test process to
-/// stop with. Nothing a worker starts in a workspace gets these, because the code there can be another build of
-/// Roundhouse, and its commands would otherwise reach this hub, or start a hub with this one's timers or GitHub.
-pub const HUB_ONLY_ENV: [&str; 12] = [
-    ENV_HOME,
-    ENV_WORKSPACES,
-    ENV_DAEMON_BIN,
-    ENV_CLAUDE_BIN,
-    ENV_CODEX_BIN,
-    ENV_ANTIGRAVITY_BIN,
-    ENV_LOG,
-    ENV_TEST_HUB_TIMERS,
-    ENV_TEST_WORKER_TIMERS,
-    ENV_TEST_GITHUB_API,
-    ENV_TEST_PROCESS,
-    ENV_LISTEN,
-];
+/// Which hub this is, and what it runs. Nothing a worker starts in a workspace gets these, because the code there can
+/// be another build of Roundhouse, and its commands would otherwise reach this hub.
+pub const HUB_ONLY_ENV: [&str; 8] =
+    [ENV_HOME, ENV_WORKSPACES, ENV_DAEMON_BIN, ENV_CLAUDE_BIN, ENV_CODEX_BIN, ENV_ANTIGRAVITY_BIN, ENV_LOG, ENV_LISTEN];
 
 const fn dir_name(debug_build: bool) -> &'static str {
     if debug_build { "roundhouse-dev" } else { "roundhouse" }

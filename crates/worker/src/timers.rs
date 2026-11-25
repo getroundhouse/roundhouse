@@ -3,11 +3,11 @@
 //! without waiting.
 
 #[cfg(any(test, feature = "testing"))]
-use protocol::paths::ENV_TEST_WORKER_TIMERS;
+use protocol::testing::ENV_TEST_WORKER_TIMERS;
 use std::time::Duration;
 
 /// How long the worker has others wait by the clock, where a test of it from outside would otherwise wait as long. A
-/// worker runs with [`Timers::DEFAULT`], and only a test's takes others, as [`Timers::from_env`] says.
+/// worker runs with [`Timers::DEFAULT`], and only a test's daemon gives it others.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(any(test, feature = "testing"), derive(serde::Serialize, serde::Deserialize))]
 pub struct Timers {
@@ -17,6 +17,8 @@ pub struct Timers {
     pub terminal_stop_grace: Duration,
     /// How often a terminal looks at which job its shell runs in front, to record it.
     pub look_in_front_every: Duration,
+    /// How long an agent that has exited has to let go of its output, as `agents::DrainGrace` says.
+    pub agent_drain: Duration,
 }
 
 impl Timers {
@@ -32,21 +34,17 @@ impl Timers {
         // is recorded within a second of starting, and what it's left unrecorded for, if the worker is killed that
         // soon, is that second.
         look_in_front_every: Duration::from_secs(1),
+        agent_drain: agents::DrainGrace::DEFAULT.0,
     };
+}
 
-    /// [`Timers::DEFAULT`], whatever `var` says, since only a build with the `testing` feature takes others, and the
-    /// product is never built with it.
-    #[cfg(not(any(test, feature = "testing")))]
-    pub fn from_env(_var: impl Fn(&str) -> Option<String>) -> Self {
-        Self::DEFAULT
-    }
-
+#[cfg(any(test, feature = "testing"))]
+impl Timers {
     /// What `var` gives for the variable [`Timers::env`] names, as it wrote them, and otherwise [`Timers::DEFAULT`].
     ///
     /// # Panics
     ///
     /// On a value [`Timers::env`] didn't write, which only a mistake in a test gives it.
-    #[cfg(any(test, feature = "testing"))]
     #[expect(
         clippy::expect_used,
         reason = "only a test sets it, through `Timers::env`, so one that doesn't parse is a mistake in the test"
@@ -55,10 +53,7 @@ impl Timers {
         var(ENV_TEST_WORKER_TIMERS)
             .map_or(Self::DEFAULT, |given| serde_json::from_str(&given).expect("timers as `Timers::env` writes them"))
     }
-}
 
-#[cfg(any(test, feature = "testing"))]
-impl Timers {
     /// What a test's worker runs with: a wait asked after every quarter of a second, the most often the Claude CLI
     /// takes, and so the fake agent too, and a terminal's job in front looked at twenty times a second. A terminal's
     /// stop grace is the worker's own, since it's a limit, which guards against a process being slow, as one on a busy
@@ -89,11 +84,13 @@ mod tests {
             (secs, nanos) in (any::<u64>(), 0..1_000_000_000u32),
             (grace_secs, grace_nanos) in (any::<u64>(), 0..1_000_000_000u32),
             (look_secs, look_nanos) in (any::<u64>(), 0..1_000_000_000u32),
+            (drain_secs, drain_nanos) in (any::<u64>(), 0..1_000_000_000u32),
         ) {
             let given = Timers {
                 wait_poll: Duration::new(secs, nanos),
                 terminal_stop_grace: Duration::new(grace_secs, grace_nanos),
                 look_in_front_every: Duration::new(look_secs, look_nanos),
+                agent_drain: Duration::new(drain_secs, drain_nanos),
             };
             let (name, value) = given.env();
 

@@ -39,7 +39,7 @@ impl Running {
             update_feed: None,
             agents: Vec::new(),
             timers: hub::Timers::DEFAULT,
-            github: hub::GithubConfig::from_env(|_| Some("http://127.0.0.1:9".into())),
+            github: hub::GithubConfig::at("http://127.0.0.1:9".into()),
         };
         let task = std::thread::spawn(move || {
             let runtime = tokio::runtime::Runtime::new().unwrap();

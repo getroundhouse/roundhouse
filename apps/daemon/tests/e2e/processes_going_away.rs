@@ -188,13 +188,18 @@ fn killing_the_hub_and_worker_together_cannot_lead_to_two_agents() {
     assert!(!is_alive(agent_pid), "the old agent must be gone before a new one runs on its conversation");
 }
 
+/// A worker's timers that have it wait a minute for an agent's last output, for a test that ends the wait itself.
+fn patient_with_output() -> worker::Timers {
+    worker::Timers { agent_drain: Duration::from_mins(1), ..worker::Timers::FOR_TESTS }
+}
+
 #[test]
 fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
     // The worker waits a minute for its agent's last output, so it's still stopping when the next hub starts. The next
     // hub gives a worker ten minutes to say hello, so one that waited for it to stop would hold the hub up far longer
     // than the test waits for it to serve, however slow the machine.
     let hellos = Timers { hello_within: Duration::from_mins(10), ..Timers::FOR_TESTS };
-    let mut stack = Stack::start_with(vec![(agents::ENV_DRAIN_GRACE_MS, "60000".into()), hellos.env()]);
+    let mut stack = Stack::start_with(vec![patient_with_output().env(), hellos.env()]);
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
     let go = stack.path("late-output");
@@ -230,7 +235,7 @@ fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
 fn an_exit_reported_late_cannot_be_mistaken_for_the_agent_that_replaced_it() {
     // The worker waits a minute for the old agent's last output, rather than a few seconds, so it's this
     // test that ends the wait, however slowly it gets there.
-    let stack = Stack::start_with(vec![(agents::ENV_DRAIN_GRACE_MS, "60000".into())]);
+    let stack = Stack::start_with(vec![patient_with_output().env()]);
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
 

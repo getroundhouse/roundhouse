@@ -3,11 +3,11 @@
 //! The hub's own tests pause tokio's clock instead, which checks each timer's rules without waiting.
 
 #[cfg(any(test, feature = "testing"))]
-use protocol::paths::ENV_TEST_HUB_TIMERS;
+use protocol::testing::ENV_TEST_HUB_TIMERS;
 use std::time::Duration;
 
 /// How long the hub waits by the clock, where a test of it from outside would otherwise wait as long. A hub runs with
-/// [`Timers::DEFAULT`], and only a test's takes others, as [`Timers::from_env`] says.
+/// [`Timers::DEFAULT`], and only a test's daemon gives it others.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(any(test, feature = "testing"), derive(serde::Serialize, serde::Deserialize))]
 pub struct Timers {
@@ -93,20 +93,15 @@ impl Timers {
         // As often as the app looks for its own.
         look_for_updates_every: Duration::from_mins(10),
     };
+}
 
-    /// [`Timers::DEFAULT`], whatever `var` says, since only a build with the `testing` feature takes others, and the
-    /// product is never built with it.
-    #[cfg(not(any(test, feature = "testing")))]
-    pub fn from_env(_var: impl Fn(&str) -> Option<String>) -> Self {
-        Self::DEFAULT
-    }
-
+#[cfg(any(test, feature = "testing"))]
+impl Timers {
     /// What `var` gives for the variable [`Timers::env`] names, as it wrote them, and otherwise [`Timers::DEFAULT`].
     ///
     /// # Panics
     ///
     /// On a value [`Timers::env`] didn't write, which only a mistake in a test gives it.
-    #[cfg(any(test, feature = "testing"))]
     #[expect(
         clippy::expect_used,
         reason = "only a test sets it, through `Timers::env`, so one that doesn't parse is a mistake in the test"
@@ -115,10 +110,7 @@ impl Timers {
         var(ENV_TEST_HUB_TIMERS)
             .map_or(Self::DEFAULT, |given| serde_json::from_str(&given).expect("timers as `Timers::env` writes them"))
     }
-}
 
-#[cfg(any(test, feature = "testing"))]
-impl Timers {
     /// What a test's hub runs with, unless the test is about one of them: the timers that only make a test wait
     /// shortened, as is how long a client's ask takes what a read just before found, which a test would otherwise wait
     /// out to see a change, and the time limits as they are, since they guard against a process being slow, which one

@@ -41,7 +41,7 @@ mod running;
 pub(super) use running::ClaudeProcess;
 #[cfg(test)]
 use running::refused;
-use running::{Shared, ask, control, drain_grace, write_line, write_to};
+use running::{Shared, ask, control, write_line, write_to};
 pub use running::{spawn, spawn_at};
 
 use crate::tap::{self, Tap};
