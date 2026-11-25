@@ -20,7 +20,10 @@ use crate::support::made_up_model::{made_up, put};
 use crate::support::{FakeHub, Stack, Ui};
 
 /// Has dictation ready, speech on with a voice that reads nothing, and the mode turned on in the chat showing.
-fn in_conversation_mode<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, dictation::fake::FakeEngine) {
+pub(super) fn in_conversation_mode<'a>(
+    cx: &'a mut TestAppContext,
+    stack: &Stack,
+) -> (Ui<'a>, dictation::fake::FakeEngine) {
     in_conversation_mode_with(cx, stack, &[])
 }
 
@@ -88,7 +91,7 @@ fn space_held_briefly_talks_and_a_brush_of_it_does_not(cx: &mut TestAppContext) 
 }
 
 /// What was said, said out loud.
-fn spoken(ui: &Ui) -> Option<String> {
+pub(super) fn spoken(ui: &Ui) -> Option<String> {
     ui.events().iter().find_map(|e| match &e.body {
         EventBody::UserPrompt { prompt, .. } if prompt.spoken => Some(prompt.text.clone()),
         _ => None,

@@ -23,12 +23,12 @@ mod source;
 mod text;
 mod view;
 
-pub use about::About;
+pub use about::{About, Within};
 pub use controls::{CANCEL, STOP};
 pub use dictation::{Hint, Hints};
 pub use field::{Event, Field};
 pub use holding::{SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER, SPACE_TALKS_AFTER};
-pub use keeping::{How, Keeping, Said, Taken};
+pub use keeping::{How, Keeping, Said, Sent, Taken};
 #[cfg(target_os = "macos")]
 pub use keyboard::monitoring::input_monitoring;
 #[cfg(all(target_os = "macos", not(any(test, feature = "testing"))))]

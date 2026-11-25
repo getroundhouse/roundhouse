@@ -20,7 +20,7 @@ fn quiets(how: sound::Quieting, cx: &App) -> bool {
 
 /// What fields dictate with: this app's model, as it stands, and the person's choices.
 pub(crate) fn source() -> dictation_ui::Source {
-    dictation_ui::Source { ready, record, uses_microphone: hears_the_microphone, quiets, keep }
+    dictation_ui::Source { ready, record, uses_microphone: hears_the_microphone, quiets, keep, sent: keeping::sent }
 }
 
 /// Starts a recording biased toward `hints`, in the language chosen, once dictation is ready, and gives it and what's

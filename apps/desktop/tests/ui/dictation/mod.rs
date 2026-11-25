@@ -19,6 +19,7 @@ mod language;
 mod logged;
 mod proposals;
 mod quieting;
+mod sent;
 mod support;
 mod turning_on;
 mod what_goes_in;

@@ -12,7 +12,7 @@ use crate::support::{Stack, Ui};
 use crate::tools::in_a_new_workspace;
 
 /// Opens the proposal the agent makes in its tab, chooses its first option, and puts the keys in its note. The view.
-fn in_the_note(ui: &mut Ui<'_>) -> Entity<ProposalView> {
+pub(super) fn in_the_note(ui: &mut Ui<'_>) -> Entity<ProposalView> {
     let open = a_proposal(ui);
     ui.click(open);
     ui.wait("the proposal tab", |ui| showing(ui) == Showing::Proposal);

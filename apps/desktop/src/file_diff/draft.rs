@@ -152,6 +152,10 @@ impl FileDiff {
             }
         }
         let Some(saving) = self.writing(cx).filter(|writing| !writing.text.trim().is_empty()) else { return };
+        if let Some(draft) = &self.draft {
+            let within = self.dictated_within(cx);
+            draft.dictation.update(cx, |field, cx| field.sent(within, saving.text.clone(), cx));
+        }
         self.put_away_draft(Away::Saved, window, cx);
         cx.emit(FileDiffEvent::Save(saving));
     }

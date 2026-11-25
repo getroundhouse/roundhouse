@@ -31,7 +31,7 @@ fn id(name: &str, prompt: &QueuedPrompt) -> ElementId {
 }
 
 /// A window with a new workspace whose agent is at work until the gate it returns is opened.
-fn at_work<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Gate) {
+pub(crate) fn at_work<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Gate) {
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, stack);
     let done = working(&mut ui, stack);

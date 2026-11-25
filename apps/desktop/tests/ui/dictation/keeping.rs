@@ -13,7 +13,7 @@ use crate::support::{Stack, Ui};
 
 const KEEP: &str = "Keep recordings";
 
-fn folder(stack: &Stack) -> PathBuf {
+pub(super) fn folder(stack: &Stack) -> PathBuf {
     stack.hub.paths.data_dir.join("recordings")
 }
 

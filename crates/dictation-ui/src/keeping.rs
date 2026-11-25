@@ -1,11 +1,12 @@
-//! A recording the person chose to keep, as it goes to what keeps it. Nothing here writes it: the app does.
+//! A recording the person chose to keep, and what's sent from a field, as they go to what keeps them. Nothing here
+//! writes them: the app does.
 
 use std::time::Duration;
 
 use dictation::Language;
 use sound::InputDevice;
 
-use crate::{About, Place};
+use crate::{About, Place, Within};
 
 /// What the app takes of a recording to keep, from as it starts to listen. It's let go of unseen if the recording ends
 /// before it dictates, as a press of Space too short to dictate does.
@@ -25,6 +26,14 @@ pub struct Keeping {
     pub taken: Taken,
     /// What's said of it, each with when, from when it began to dictate. [`Said::Ended`] is the last.
     pub said: flume::Receiver<(Duration, Said)>,
+}
+
+/// What was sent from a field that can be dictated into, for the app to keep beside what was dictated into it, if the
+/// person chose to keep that.
+pub struct Sent {
+    pub place: Place,
+    pub within: Within,
+    pub text: String,
 }
 
 /// What's said of a recording as it goes.

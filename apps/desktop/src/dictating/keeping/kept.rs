@@ -10,6 +10,7 @@ use gpui_kit::{App, AppContext as _, Context, Global, Subscription, Task};
 use hint_words::HintWord;
 use kept_recordings::{Field, Kept, VERSION};
 
+use super::sent::{Unsent, sent_from};
 use super::writer::{self, Source};
 
 /// The app's recordings.
@@ -20,6 +21,7 @@ pub(super) struct Recordings {
     /// How much room they take, as of the last time the app changed that, so nothing reads the disk to draw it.
     pub(super) room_bytes: u64,
     being_written: Vec<BeingWritten>,
+    pub(super) unsent: Unsent,
     /// Deletes them, until it's done.
     pub(super) deleting: Option<Task<()>>,
     /// Finds how much room they take, as the app starts.
@@ -49,6 +51,7 @@ pub(in crate::dictating) fn start(data_dir: &Path, build: &'static str, cx: &mut
     });
     let following = crate::settings::observe_in_app(cx, follow_the_choice);
     cx.set_global(Recordings {
+        unsent: Unsent::read(&folder),
         folder,
         build,
         room_bytes: 0,
@@ -77,10 +80,12 @@ pub fn recordings_take(bytes: u64, cx: &mut App) {
     cx.global_mut::<Recordings>().room_bytes = bytes;
 }
 
-/// Drops what's being written once the person turns it off.
+/// Drops what's being written once the person turns it off, and keeps nothing sent from then on.
 fn follow_the_choice(cx: &mut App) {
     if !keeps(cx) {
-        cx.global::<Recordings>().drop_whats_being_written();
+        let recordings = cx.global_mut::<Recordings>();
+        recordings.drop_whats_being_written();
+        recordings.unsent.forget();
     }
 }
 
@@ -91,7 +96,8 @@ pub(in crate::dictating) fn keep(keeping: Keeping, revision: &str, cx: &mut App)
         return;
     }
     let kept = starting(&keeping, cx.global::<Recordings>().build, revision);
-    let Keeping { id, taken, said, .. } = keeping;
+    let Keeping { id, place, about, taken, said } = keeping;
+    let from = sent_from(place, about.within);
     let dropped = Arc::new(AtomicBool::new(false));
     let source = Source { audio: taken.audio, said, dropped: dropped.clone() };
     let folder = cx.global::<Recordings>().folder.clone();
@@ -111,7 +117,9 @@ pub(in crate::dictating) fn keep(keeping: Keeping, revision: &str, cx: &mut App)
         tracing::warn!(name: "dictation.not_kept", recording_id = id, %error, "Couldn't keep a recording");
         return;
     }
-    cx.global_mut::<Recordings>().being_written.push(BeingWritten { id: id.clone(), dropped, ended });
+    let recordings = cx.global_mut::<Recordings>();
+    recordings.being_written.push(BeingWritten { id: id.clone(), dropped, ended });
+    recordings.unsent.recorded(from);
     cx.spawn(async move |cx| {
         let room_bytes = written.recv_async().await.unwrap_or(0);
         cx.update(|cx| {
@@ -135,7 +143,8 @@ pub(crate) fn observe<V: 'static>(cx: &mut Context<V>, showing: impl Fn(&V) -> b
 impl Recordings {
     /// Closes once everything being written is.
     fn written(&self) -> flume::Receiver<()> {
-        let ending: Vec<_> = self.being_written.iter().map(|writing| writing.ended.clone()).collect();
+        let mut ending: Vec<_> = self.being_written.iter().map(|writing| writing.ended.clone()).collect();
+        ending.push(self.unsent.saved());
         let (ends, ended) = flume::bounded(0);
         std::thread::spawn(move || {
             for writing in ending {
@@ -155,32 +164,41 @@ impl Recordings {
 
 /// What's known of a recording as it begins.
 fn starting(keeping: &Keeping, build: &str, revision: &str) -> Kept {
-    let About { hints, picked_from, workspace, chat, said_out_loud } = &keeping.about;
+    let About { hints, picked_from, within } = &keeping.about;
     let hint = |hint: dictation_ui::Hint| HintWord { text: hint.text, spelled: hint.spelled };
-    let since = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
     Kept {
         version: VERSION,
         id: keeping.id.clone(),
-        started_at_ms: u64::try_from(since.as_millis()).unwrap_or(u64::MAX),
+        started_at_ms: now_ms(),
         build: build.to_string(),
         model: revision.to_string(),
         language: keeping.taken.language.code().to_string(),
         hint_boost: dictation::nemotron::HINT_BOOST,
         hints: hints.kept().map(hint).collect(),
         picked_from: Some(picked_from.clone()),
-        field: match keeping.place {
-            Place::Composer => Field::Composer,
-            Place::NewWorkspace => Field::NewWorkspace,
-            Place::DiffComment => Field::DiffComment,
-            Place::Answer => Field::Answer,
-            Place::ProposalNote => Field::ProposalNote,
-        },
-        workspace: workspace.clone(),
-        chat: chat.clone(),
-        said_out_loud: *said_out_loud,
+        field: field(keeping.place),
+        workspace: within.workspace.clone(),
+        chat: within.chat.clone(),
+        said_out_loud: within.said_out_loud,
         device: None,
         said: Vec::new(),
         stopped_ms: None,
         ended: None,
     }
+}
+
+pub(super) fn field(place: Place) -> Field {
+    match place {
+        Place::Composer => Field::Composer,
+        Place::NewWorkspace => Field::NewWorkspace,
+        Place::DiffComment => Field::DiffComment,
+        Place::Answer => Field::Answer,
+        Place::ProposalNote => Field::ProposalNote,
+    }
+}
+
+/// Now, in milliseconds since 1970.
+pub(super) fn now_ms() -> u64 {
+    let since = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
 }

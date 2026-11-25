@@ -42,7 +42,9 @@ fn ask_to_delete(cx: &mut App) {
     let asked = Question {
         id: DELETE,
         title: "Delete recordings?".into(),
-        says: "Every recording kept on this Mac is deleted, and can't be had back.".into(),
+        says: "Every recording kept on this Mac is deleted, with what you sent from where you dictated, and can't be \
+               had back."
+            .into(),
         keep: "Cancel",
         act: "Delete",
         removes: true,
@@ -51,13 +53,17 @@ fn ask_to_delete(cx: &mut App) {
 }
 
 fn delete(cx: &mut App) {
-    let recordings = cx.global::<Recordings>();
+    let recordings = cx.global_mut::<Recordings>();
     if recordings.deleting.is_some() {
         return;
     }
     recordings.drop_whats_being_written();
+    recordings.unsent.forget();
+    let saved = recordings.unsent.saved();
     let (folder, gone_from) = (recordings.folder.clone(), recordings.folder.clone());
     let deleting = cx.spawn(async move |cx| {
+        // What was sent before now is written before it's deleted, rather than after.
+        let _ = saved.recv_async().await;
         let gone = cx.background_spawn(async move { std::fs::remove_dir_all(&folder) }).await;
         let left_bytes = cx.background_spawn(async move { models::bytes_on_disk(&gone_from) }).await;
         cx.update(|cx| deleted(&gone, left_bytes, cx));
@@ -69,6 +75,8 @@ fn delete(cx: &mut App) {
 fn deleted(gone: &io::Result<()>, left_bytes: u64, cx: &mut App) {
     let recordings = cx.global_mut::<Recordings>();
     recordings.deleting = None;
+    // One recorded meanwhile may have been deleted too.
+    recordings.unsent.forget();
     recordings.room_bytes = left_bytes;
     if let Err(error) = gone
         && error.kind() != io::ErrorKind::NotFound

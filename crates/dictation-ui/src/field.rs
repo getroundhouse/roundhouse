@@ -4,11 +4,11 @@
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{AnyWindowHandle, App, AppContext as _, Context, Entity, EventEmitter, Subscription, Window};
 
-use crate::About;
 use crate::fine_line::FineLine;
 use crate::holding::SpaceDown;
 use crate::place::Place;
 use crate::recording::Underway;
+use crate::{About, Sent, Within};
 
 type AboutFn = Box<dyn Fn(&App) -> About>;
 
@@ -104,6 +104,12 @@ impl Field {
 
     pub fn can_dictate(&self, cx: &App) -> bool {
         self.enabled && crate::source::ready(cx)
+    }
+
+    /// Says that `text` was sent from this field, `within` there, as its host sends it, so it can be kept beside what
+    /// was dictated into it. The host says only what the person wrote here.
+    pub fn sent(&self, within: Within, text: String, cx: &mut Context<Self>) {
+        crate::source::sent(Sent { place: self.place, within, text }, cx);
     }
 
     pub fn is_dictating(&self) -> bool {
