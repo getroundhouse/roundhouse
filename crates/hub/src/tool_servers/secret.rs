@@ -51,7 +51,8 @@ const MAX_KEY_BYTES: usize = 4096;
 /// client `given` both. The key is trimmed, since what's pasted often ends in a line break. Refused with
 /// `InvalidRequest` when the header can't be one, and when the key is empty, very long, or can't be sent in a header,
 /// as one with a line break inside can't, which could end the header and start another. A key can have a space inside,
-/// as one with its scheme, such as `Bearer`, has.
+/// as one with its scheme, such as `Bearer`, has. One in `Authorization` with no scheme is given one, as [`as_sent`]
+/// says.
 pub(super) fn read(given: ToolServerAuthGiven) -> Result<(ToolServerAuth, Option<ToolServerSecret>), ApiError> {
     let refused = |message: &str| Err(ApiError::new(ErrorCode::InvalidRequest, message));
     match given {
@@ -64,11 +65,24 @@ pub(super) fn read(given: ToolServerAuthGiven) -> Result<(ToolServerAuth, Option
             if !key.chars().all(|c| c == ' ' || c.is_ascii_graphic()) {
                 return refused("the key has a line break inside, or another character that can't be sent in a header");
             }
-            let secret = ToolServerSecret::Key(ToolServerKey::new(key));
+            let secret = ToolServerSecret::Key(as_sent(&header, key));
             Ok((ToolServerAuth::Key { header }, Some(secret)))
         }
         ToolServerAuthGiven::Neither => Ok((ToolServerAuth::Neither, None)),
         // Not `Unsupported`, which says the hub has no tool servers of its own at all.
         ToolServerAuthGiven::Unknown => refused("this hub doesn't know that way for an MCP server to know who you are"),
     }
+}
+
+/// The header whose key is a scheme, a space, and what the scheme is given, as HTTP has it.
+const AUTHORIZATION: &str = "Authorization";
+
+/// What `header` is to hold for `key`, as a person gave it, which is what's kept. Servers give out a key alone, to be
+/// sent as a bearer token, so one in `Authorization` with no space in it is one without its scheme. Any other header
+/// holds what its server says it does, so a key in one is kept as it is.
+fn as_sent(header: &ToolServerHeader, key: &str) -> ToolServerKey {
+    if header.as_str().eq_ignore_ascii_case(AUTHORIZATION) && !key.contains(' ') {
+        return ToolServerKey::new(format!("Bearer {key}"));
+    }
+    ToolServerKey::new(key)
 }

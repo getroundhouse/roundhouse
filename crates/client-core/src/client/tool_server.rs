@@ -1,6 +1,5 @@
-//! The calls about the tool servers a hub has of its own: adding one and removing it. No client makes them: "MCP
-//! servers" in `docs/spec/settings.md` plans the page that will. A refusal is worded as any other is, by
-//! [`crate::refusals`], since the hub's message says what's wrong with what the person typed.
+//! The calls about the tool servers a hub has of its own: adding one and removing it. A refusal is worded as any other
+//! is, by [`crate::refusals`], since the hub's message says what's wrong with what the person typed.
 
 use protocol::client::tool_servers;
 use protocol::model::{ToolServer, ToolServerAuthGiven, ToolServerId};

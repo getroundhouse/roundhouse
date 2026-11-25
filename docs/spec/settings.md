@@ -12,7 +12,7 @@ The app's own settings, and where they're shown.
   ![Settings](screens/settings.png)
 
 - **The pages are listed under small muted headings, each page with an icon before its name.** Personal holds the pages about how the app and its hub work for you, rather than about a project. A page's row is a regular row, 36px tall, as the sidebar's are, and the one showing is filled. *Unconfirmed.*
-- **A search at the sidebar's top finds a setting by what it's called or what it does, in any case, as it's typed.** Only the settings that match are left, with the pages they're on and those pages' headings, and a page that draws what's on it itself, such as Agents, is left whole when what it's called or what it's about matches, such as `accounts`, `login` or `token` for Agents, and `github`, `push` or `gh` for Git. The page says so when nothing matches. While it's empty the search says Search settings, in faint text, and it always shows `⌘F`, which puts the cursor in it with what's typed selected, so what's typed next replaces it, as a Mac's search fields do. Escape and `Cmd-W` go back from the search too, and Settings opens again with nothing in it, on its first page, since a search is for finding one setting now. It's 28px tall, on the pane's colour, with an edge lighter than a line, since it's something to type in. *Unconfirmed.*
+- **A search at the sidebar's top finds a setting by what it's called or what it does, in any case, as it's typed.** Only the settings that match are left, with the pages they're on and those pages' headings, and a page that draws what's on it itself, such as Agents, is left whole when what it's called or what it's about matches, such as `accounts`, `login` or `token` for Agents, `github`, `push` or `gh` for Git, and `tools` or `key` for MCP servers. The page says so when nothing matches. While it's empty the search says Search settings, in faint text, and it always shows `⌘F`, which puts the cursor in it with what's typed selected, so what's typed next replaces it, as a Mac's search fields do. Escape and `Cmd-W` go back from the search too, and Settings opens again with nothing in it, on its first page, since a search is for finding one setting now. It's 28px tall, on the pane's colour, with an edge lighter than a line, since it's something to type in. *Unconfirmed.*
 
   **A search, leaving the settings that match, with their pages and headings.** *Unconfirmed.*
 
@@ -381,10 +381,42 @@ The app's own settings, and where they're shown.
 
 ## MCP servers
 
-- **MCP servers lists the servers the hub has of its own, each a row in the design of Git's: its name, its address, and what else there is to say.** Every agent in every project has them, whichever machine it's on, beside the ones its own CLI has. A row says only what isn't plain: `Key` for a server a key is sent to, and `Needs you to sign in`, in red, for one whose sign-in is missing or no longer works. Whether a server can be reached depends on the machine an agent is on, so a chat says that and this page doesn't. *Not built:* the page.
-- **Each server has one sign-in, so a second account at the same server is a second server,** with a name of its own, such as `Linear (Northwind)`. *Not built.*
-- **Adding a server asks first how it knows who you are, as Connect account does: a sign-in, a key, or neither.** Each choice then asks for the server's URL and a name, and a key also for its header, `Authorization` unless changed. A URL that's already there says so, and which server it is. *Not built.* *Unconfirmed:* what Neither asks for.
-- **A server's name can be whatever you like, up to 64 characters on one line, and the app always shows it as you typed it.** Agents call the server by a name Roundhouse makes from it, which every agent's CLI takes: its ASCII letters, digits and `-` as they are, with each run of anything else as one `_`, and no `_` or `-` at either end, so `Linear (Northwind)` is `Linear_Northwind`. That name is at most 32 characters, and `server` when nothing is left. A name whose agents' name another server has, in any case, is refused, saying which server, and that agents would call both the same where the names differ, and so is one that agents would call `roundhouse`, which Roundhouse's own tools are. *Not built:* the page. *Unconfirmed:* the 32 characters, `server`, and refusing a name that agents would call the same.
+- **MCP servers lists the servers the hub has of its own, in a list, Added, each a row in the design of Git's: its name, its address, and what else there is to say.** Every agent in every project has them, whichever machine it's on, beside the ones its own CLI has. The address is the host in its URL, with the port if it has one. A row says only what isn't plain: `Key` for a server a key is sent to, and `Needs you to sign in`, in red, for one whose sign-in is missing or no longer works. *Not built:* `Needs you to sign in`. Whether a server can be reached depends on the machine an agent is on, so a chat says that and this page doesn't. A hub too old to have servers of its own says it has to be updated as one is added. *Unconfirmed:* the address being the host, and what a hub that's too old says.
+
+  **MCP servers, with two accounts at one server, one server anyone can use, and one of a company's own.** *Unconfirmed.*
+
+  ![MCP servers, with four added](screens/settings-mcp.png)
+
+  **MCP servers on a hub with none.** *Unconfirmed.*
+
+  ![MCP servers with none added](screens/settings-mcp-none.png)
+
+- **Each server has one sign-in, so a second account at the same server is a second server,** with a name of its own, such as `Linear (Northwind)`. A server's key is its own in the same way. *Not built:* a sign-in.
+- **Adding a server asks first how it knows who you are, as Connect account does: a sign-in, a key, or neither.** *Not built:* a sign-in, which is first. Each choice then asks for the server's URL and a name, and a key also for its header, `Authorization` unless changed. A URL that's already there says so, and which server it is, the first by name where there are two, and stops nothing. What the hub refuses is said in red in the panel, which stays open. The key shows only as dots, and what's typed there is dropped as it's sent, so after a refusal it's typed again. Adding a server asks nothing of it. *Unconfirmed:* what Neither asks for, and which of two servers is said.
+- **A key for `Authorization` with no space in it is sent as `Bearer` and the key,** since a server gives out a key alone and the header holds its scheme too. One with a space has its scheme already, such as `Basic`, and is sent as it is, as a key in any other header is. *Unconfirmed.*
+
+  **Add server, open, with the ways a server can know you.** *Unconfirmed.*
+
+  ![Choosing how an MCP server knows who you are](screens/settings-mcp-choosing.png)
+
+  **Adding a server a key is sent to.** *Unconfirmed.*
+
+  ![Adding an MCP server with a key](screens/settings-mcp-key.png)
+
+  **Adding a second account at a server that's already there.** *Unconfirmed.*
+
+  ![Adding an MCP server whose URL is already there](screens/settings-mcp-second.png)
+
+  **Adding a server with neither, refused, since its name is taken.** *Unconfirmed.*
+
+  ![Adding an MCP server, refused in red in the panel](screens/settings-mcp-refused.png)
+
+- **A server's name can be whatever you like, up to 64 characters on one line, and the app always shows it as you typed it.** Agents call the server by a name Roundhouse makes from it, which every agent's CLI takes: its ASCII letters, digits and `-` as they are, with each run of anything else as one `_`, and no `_` or `-` at either end, so `Linear (Northwind)` is `Linear_Northwind`. That name is at most 32 characters, and `server` when nothing is left. A name whose agents' name another server has, in any case, is refused, saying which server, and that agents would call both the same where the names differ, and so is one that agents would call `roundhouse`, which Roundhouse's own tools are. *Unconfirmed:* the 32 characters, `server`, and refusing a name that agents would call the same.
 - **Signing in opens the server's page in the browser on this device, and the panel waits, with a button that opens it again.** Nothing is added until it's approved. A server that turns out to have no way to sign in says so, with a button to use a key instead. *Not built.*
-- **A server's menu has Sign in again, Rename and Remove.** Remove forgets its sign-in or its key. *Not built.* *Unconfirmed.*
+- **A server's menu has Sign in again and Remove.** Remove asks first, as disconnecting a GitHub account does, and then the hub forgets the server with its sign-in or its key, which isn't revoked at the server. What the hub couldn't do is said under the row, in red. *Not built:* Sign in again. *Unconfirmed.*
+
+  **A server's menu.** *Unconfirmed.*
+
+  ![An MCP server's menu](screens/settings-mcp-menu.png)
+
 - **The iPhone app has no MCP servers page and no signing in to one.** *Not built.*

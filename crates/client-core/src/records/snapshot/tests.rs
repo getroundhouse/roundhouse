@@ -1,10 +1,11 @@
 use protocol::client::HubNotice;
 use protocol::client::listed::SessionRecords;
-use protocol::fixtures::{github_account, github_app, github_sign_in, github_user};
+use protocol::fixtures::{github_account, github_app, github_sign_in, github_user, tool_server};
 use protocol::model::{
     AgentKind, DiffComment, DiffSide, GithubAccount, GithubAppId, GithubAppSaid, GithubRepositoryName, GithubSettings,
     GithubUser, GithubUserId, HubSettings, ModelList, ModelListKey, ModelLookup, Observation, Observed, Proposal,
-    Reach, Record, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal, Title, Workspace,
+    Reach, Record, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal, Title, ToolServer, ToolServerName,
+    ToolServerUrl, Workspace,
 };
 
 use crate::records::HubRecords;
@@ -327,4 +328,26 @@ fn a_sessions_proposals_are_followed_with_its_subagents_and_their_changes_told_a
     assert!(held.forget_session(&"s".into()));
     assert!(held.snapshot().proposals(&"s".into()).is_empty());
     assert!(!held.apply_notice(HubNotice::Proposal(proposal(3))), "let go of, so nothing of it is kept");
+}
+
+#[test]
+fn a_url_someone_types_finds_the_first_tool_server_by_name_thats_at_it() {
+    let at = |id: &str, name: &str, url: &str| ToolServer {
+        name: ToolServerName::stored(name.to_owned()),
+        url: ToolServerUrl::stored(url.to_owned()),
+        ..tool_server(id)
+    };
+    let url = "https://mcp.example.com/mcp";
+    let mut held = HubRecords::default();
+    let second = at("a", "Linear (Northwind)", url);
+    let other = at("c", "Docs", "https://docs.example.com/mcp");
+    held.apply_list(Records { tool_servers: vec![second, at("b", "Linear", url), other], ..Records::default() });
+    let shown = held.snapshot();
+
+    let found = |typed: &str| shown.tool_server_at(typed).map(|server| server.id.as_str());
+
+    assert_eq!(found(&format!(" {url}\n")), Some("b"));
+    assert_eq!(found("https://docs.example.com/mcp"), Some("c"));
+    assert_eq!(found("https://mcp.example.com/"), None);
+    assert_eq!(found("mcp"), None);
 }

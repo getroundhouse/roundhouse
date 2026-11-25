@@ -4,19 +4,17 @@
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{Icon, h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window,
 };
-use look::Lined as _;
-use look::{Hand as _, IconSizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _};
 
 use super::super::field::labelled;
 use super::Drawing;
 use super::gh_choice::ChoosingPanel;
 use super::kept::{Kept, Panel};
-use super::panel::{Framed, button, buttons, framed};
+use super::panel::{Framed, button, buttons, choice, choices, framed};
 use super::token::TokenPanel;
 use super::{app_words, words};
 
@@ -50,37 +48,31 @@ pub(super) fn choosing(drawing: &Drawing<'_>, panel: &Panel, choosing: &Choosing
             button("git-use-gh", words::use_gh(username), false, off || choosing.connecting(), move |window, cx| {
                 using.update(cx, |kept, cx| kept.use_gh(window, cx));
             });
-        choice(Lucide::SquareTerminal, ["Use gh's login", AS_YOU], words::gh_choice_says(username), act, cx)
+        choice(Lucide::SquareTerminal, "Use gh's login", Some(AS_YOU), words::gh_choice_says(username), act, cx)
     });
-    let choices = [
+    let ways = [
         choice(
             Lucide::Github,
-            ["Sign in with GitHub", AS_YOU],
+            "Sign in with GitHub",
+            Some(AS_YOU),
             "Enter a code on GitHub, and the hub renews the login by itself. An organization that limits which apps \
-             can reach it has to approve Roundhouse first."
-                .into(),
+             can reach it has to approve Roundhouse first.",
             sign_in,
             cx,
         ),
         choice(
             Lucide::KeyRound,
-            ["Use a token", AS_YOU],
+            "Use a token",
+            Some(AS_YOU),
             "A fine-grained one reaches only the repositories you choose, of one owner, and ends when you say. A \
-             classic one reaches everything you can."
-                .into(),
+             classic one reaches everything you can.",
             token,
             cx,
         ),
-        choice(
-            Lucide::Bot,
-            ["Make an app of your own", "Agents act as its bot"],
-            app_words::CHOICE_SAYS.into(),
-            app,
-            cx,
-        ),
+        choice(Lucide::Bot, "Make an app of your own", Some("Agents act as its bot"), app_words::CHOICE_SAYS, app, cx),
     ];
-    let rows = gh.into_iter().chain(choices).enumerate().map(|(at, row)| row.when(at > 0, |row| row.line_over(cx)));
-    let body = v_flex().gap(look::Space::Small).child(h_flex().child(which(cx))).child(v_flex().children(rows));
+    let offered = choices(gh.into_iter().chain(ways), cx);
+    let body = v_flex().gap(look::Space::Small).child(h_flex().child(which(cx))).child(offered);
     let framed_as = Framed {
         title: "Connect a GitHub account".into(),
         lead: "Who agents are on GitHub when they push, open pull requests and comment: you, or an app of your own."
@@ -90,28 +82,6 @@ pub(super) fn choosing(drawing: &Drawing<'_>, panel: &Panel, choosing: &Choosing
         buttons: buttons().child(cancel(drawing.kept)),
     };
     framed(drawing, panel, framed_as, cx)
-}
-
-/// A way to connect an account: its icon, its name, beside who agents act as, what it takes, and its button.
-fn choice(icon: Lucide, [name, acts_as]: [&'static str; 2], says: SharedString, act: look::Button, cx: &App) -> Div {
-    let colors = look::colors(cx);
-    let icon = Icon::new(icon).sized(look::IconSize::Large).text_color(colors.text_muted);
-    let acts_as = div().typeset(look::Type::Detail).text_color(colors.text_faint).child(acts_as);
-    let name = h_flex().items_baseline().gap(look::Space::Small).child(div().emphasis().child(name)).child(acts_as);
-    h_flex()
-        .items_start()
-        .gap(look::Space::Large)
-        .py(look::Space::Large)
-        .child(div().flex_none().child(icon))
-        .child(
-            v_flex()
-                .flex_1()
-                .min_w_0()
-                .gap(look::Space::XSmall)
-                .child(name)
-                .child(div().text_color(colors.text_muted).child(says)),
-        )
-        .child(h_flex().flex_none().justify_end().child(act))
 }
 
 /// The link to the guide's page on which way to choose.

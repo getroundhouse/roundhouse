@@ -34,19 +34,27 @@ impl Failure {
         match self {
             Failure::Removed => "This tool server was removed from Roundhouse, so its tools can't be used.".into(),
             Failure::Unusable => {
-                format!("Roundhouse can't use the URL or the header {label} has. Change it in Settings › MCP servers.")
+                format!(
+                    "Roundhouse can't use the URL or the header {label} has. Add it again in Settings › MCP servers."
+                )
             }
             Failure::Refused { with_key: true, status } => {
                 let status = status.as_u16();
-                format!("{label} refused the key Roundhouse sent it ({status}). Change it in Settings › MCP servers.")
+                format!(
+                    "{label} refused the key Roundhouse sent it ({status}). Add it again with another in Settings › MCP \
+                     servers."
+                )
             }
             Failure::Refused { with_key: false, status } => {
                 let status = status.as_u16();
-                format!("{label} refused a request without a key ({status}). Give it one in Settings › MCP servers.")
+                format!(
+                    "{label} refused a request without a key ({status}). Add it again with one in Settings › MCP \
+                     servers."
+                )
             }
             Failure::Redirected => format!(
-                "{label} redirected the request to another address, which Roundhouse doesn't follow. Change its URL in \
-                 Settings › MCP servers."
+                "{label} redirected the request to another address, which Roundhouse doesn't follow. Add it again \
+                 with its new URL in Settings › MCP servers."
             ),
             Failure::Unreachable => format!("{label} couldn't be reached from this machine."),
             Failure::Lost => format!(

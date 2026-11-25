@@ -24,7 +24,8 @@ pub enum ToolServerAuth {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ToolServerAuthGiven {
-    /// Both are as the person typed them, for the hub to check.
+    /// Both are as the person typed them, for the hub to check. The key is all the header is to hold, its scheme
+    /// included, though the hub gives one in `Authorization` with no space in it, so with no scheme, `Bearer`.
     Key {
         header: String,
         key: ToolServerKey,

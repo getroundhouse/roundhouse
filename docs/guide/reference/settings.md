@@ -184,6 +184,46 @@ Where agents run, and who they are on GitHub there.
 
 ![Providers, with gh and the SSH key on this Mac both ada's](../../spec/screens/settings-providers.png)
 
+## MCP servers
+
+The MCP servers the hub has of its own, each with a key or with none. Every agent has them, Claude, Codex or Antigravity, in every project and on whichever machine it's on, beside the ones its own CLI has, which Roundhouse neither copies nor changes.
+
+![MCP servers, with four added](../../spec/screens/settings-mcp.png)
+
+- **Each row** has the server's name and its address, and `Key` if a key is sent to it.
+- **They're the hub's,** so every app connected to it shows the same ones, and they're still there after it restarts.
+
+### Add a server
+
+1. Click **Add server**, then **Paste a key** if the server gave you one, or **Add it** if anyone who can reach the server can use it.
+2. Paste the server's URL, which its own page has, and give it a name.
+3. With a key, paste it, and change the header it's sent in if the server wants another than `Authorization`.
+4. Click **Add**.
+
+![Adding an MCP server with a key](../../spec/screens/settings-mcp-key.png)
+
+An agent has the server from its next start, so one already running goes on without it.
+
+In `Authorization`, a key on its own is sent as `Bearer` and the key. One that names its scheme, such as `Basic`, is sent as it is, and so is a key in any other header.
+
+The app hands the key to the hub, which keeps it in its own data, as [Where data is kept](where-data-is-kept.md) says. The app writes it nowhere, and forgets it as it's sent, so if the hub refuses to add the server, you paste the key again. No agent is given the key: its calls go through Roundhouse on its machine, which adds it.
+
+The name is whatever you like, up to 64 characters. Agents call the server by a name made from it, such as `Linear_Northwind` for `Linear (Northwind)`, so two servers can't have names that come to the same. The panel says so if they do, and which server has it.
+
+For a second account at the same server, add it again under another name. The panel says which server already has the URL, and lets you go on.
+
+If the server refuses its key, an agent gets an error in place of its tools, or of what a call was to answer, such as `Linear refused the key Roundhouse sent it (401)`. A Codex chat shows it as a notice as it starts. To give the server another key, remove it and add it again. One that can't be reached from an agent's machine says so in the same way.
+
+### Where an agent's CLI has a server of the same name
+
+Its CLI decides. Claude uses the one you added here, in place of its own. Antigravity uses its own. Codex merges the two: it uses the one here, but leaves it off if its own is turned off, and starts no chat if its own is a command to run rather than a URL. The name that counts is the one agents call it, so to have both, remove yours and add it again under another name.
+
+### Remove
+
+**Remove,** in the row's **…** menu, has the hub forget the server and its key, and asks first. An agent already running can't use the server's tools from then on. It doesn't revoke the key, which still works wherever else you've kept it.
+
+![An MCP server's menu, with Remove](../../spec/screens/settings-mcp-menu.png)
+
 ## Whose setting it is
 
 A setting belongs to whatever carries it out:

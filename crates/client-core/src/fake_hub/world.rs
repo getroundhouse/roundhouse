@@ -92,6 +92,9 @@ pub struct World {
     pub github_apps: Vec<GithubApp>,
     /// The tool servers the hub has of its own.
     pub tool_servers: Vec<ToolServer>,
+    /// Why the hub couldn't add a tool server, as it answers each time it's asked. `None` refuses it, as the rest of
+    /// what would change what the hub holds.
+    pub tool_server_add_refused: Option<ApiError>,
     /// Why the hub couldn't look for where an app of your own is installed, as it answers each time it's asked. `None`
     /// refuses it, as the rest of what would change what the hub holds.
     pub app_look_refused: Option<ApiError>,

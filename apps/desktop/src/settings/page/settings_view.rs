@@ -1,4 +1,4 @@
-use super::{agents, general, git, notifications, permissions, providers, rows, sidebar, voice};
+use super::{agents, general, git, notifications, permissions, providers, rows, sidebar, tool_servers, voice};
 use crate::FindSetting;
 use crate::app::TOP_STRIP;
 use crate::status_box::StatusBox;
@@ -189,6 +189,7 @@ pub(crate) enum PageId {
     Agents,
     Git,
     Providers,
+    ToolServers,
 }
 
 impl PageId {
@@ -202,6 +203,7 @@ impl PageId {
             PageId::Agents => "settings-page-agents",
             PageId::Git => "settings-page-git",
             PageId::Providers => "settings-page-providers",
+            PageId::ToolServers => "settings-page-mcp",
         }
     }
 }
@@ -258,7 +260,7 @@ pub(super) fn sections(hub: &OfHub) -> Vec<Section> {
     pages.extend(voice::page());
     pages.push(notifications::page());
     pages.extend(permissions::page());
-    pages.extend([agents::page(hub), git::page(hub), providers::page(hub)]);
+    pages.extend([agents::page(hub), git::page(hub), providers::page(hub), tool_servers::page(hub)]);
     vec![Section { heading: "Personal", pages }]
 }
 
