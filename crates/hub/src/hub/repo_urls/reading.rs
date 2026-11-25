@@ -69,7 +69,13 @@ impl Hub {
     async fn read_repo_urls_by(&self, link: &WorkerLink) {
         let to_read = match self.blocking(Store::repos_to_read).await {
             Ok(to_read) => to_read,
-            Err(e) => return warn!("finding which repositories' addresses to read: {}", e.message),
+            Err(e) => {
+                return warn!(
+                    name: "repo.urls_unfound",
+                    error = e.message,
+                    "Couldn't find which repositories' addresses to read"
+                );
+            }
         };
         for repo in to_read {
             self.read_repo_url(link, repo).await;
@@ -81,11 +87,25 @@ impl Hub {
         let url = match tokio::time::timeout(READ_WITHIN, link.call(ReadRepoUrl { path: checkout.clone() })).await {
             Ok(Ok(RepoUrlReply { url })) => url,
             Ok(Err(e)) => {
-                warn!(repo = name, "{link} couldn't read where {checkout} fetches from: {}", e.message);
+                warn!(
+                    name: "repo.url_unread",
+                    repo = name,
+                    link = %link,
+                    checkout = %checkout,
+                    error = e.message,
+                    "A worker couldn't read where a checkout fetches from"
+                );
                 return;
             }
             Err(_) => {
-                warn!(repo = name, "{link} didn't say where {checkout} fetches from within {READ_WITHIN:?}");
+                warn!(
+                    name: "repo.url_unsaid",
+                    repo = name,
+                    link = %link,
+                    checkout = %checkout,
+                    within = ?READ_WITHIN,
+                    "A worker didn't say in time where a checkout fetches from"
+                );
                 return;
             }
         };
@@ -93,12 +113,26 @@ impl Hub {
         match self.blocking(move |store| store.read_repo_url(&id, &checkout, url.as_ref())).await {
             Ok(changed) => {
                 if let Some(repo) = changed {
-                    info!(repo = name, "{link} read that its checkout fetches from {said}");
+                    info!(
+                        name: "repo.url_read",
+                        repo = name,
+                        link = %link,
+                        said,
+                        "A worker read where a checkout fetches from"
+                    );
                     self.notify(HubNotice::Repo(repo));
                 }
                 self.addresses_read.notify_one();
             }
-            Err(e) => warn!(repo = name, "keeping the address {link} read: {}", e.message),
+            Err(e) => {
+                warn!(
+                    name: "repo.url_unkept",
+                    repo = name,
+                    link = %link,
+                    error = e.message,
+                    "Couldn't keep the address a worker read"
+                );
+            }
         }
     }
 }

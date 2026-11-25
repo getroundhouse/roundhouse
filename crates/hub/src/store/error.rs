@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use tracing::error;
 
+use crate::error::JsonProblem;
+
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
     #[error("no {kind} {id}")]
@@ -21,11 +23,17 @@ pub enum StoreError {
     Backup { dir: PathBuf, source: BackupError },
     #[error("the database failed")]
     Database(#[from] rusqlite::Error),
-    #[error("a stored value couldn't be encoded")]
-    Encoding(#[from] serde_json::Error),
+    #[error("a stored value couldn't be read or written")]
+    Encoding(#[source] JsonProblem),
     /// A change to a chat's draft typed before the one the hub has, which stays, as `SessionDraft` says.
     #[error("the chat's draft was changed after this was typed, and that change is kept")]
     TypedEarlier,
+}
+
+impl From<serde_json::Error> for StoreError {
+    fn from(error: serde_json::Error) -> Self {
+        Self::Encoding(error.into())
+    }
 }
 
 /// Why a copy of the database couldn't be saved.
@@ -57,7 +65,7 @@ impl From<StoreError> for ApiError {
             | StoreError::Backup { .. }
             | StoreError::Database(_)
             | StoreError::Encoding(_) => {
-                error!("{message}");
+                error!(name: "database.failed", error = message, "The database failed");
                 ApiError::new(ErrorCode::Internal, message)
             }
         }
@@ -69,6 +77,8 @@ mod tests {
     use logging::testing::Logs;
 
     use super::*;
+    use crate::store::columns::OneValue;
+    use crate::store::database::json_from;
 
     /// The API error it becomes, and what that logged.
     fn convert(failure: StoreError) -> (ApiError, String) {
@@ -93,6 +103,22 @@ mod tests {
 
         assert_eq!(api_error.code, ErrorCode::Conflict, "a client takes the hub's draft in place of its own");
         assert_eq!(logged, "");
+    }
+
+    /// Read as a column's JSON, and as JSON read some other way.
+    #[test]
+    fn what_a_stored_value_holds_isnt_logged() {
+        let held = r#""a prompt someone wrote""#;
+        let in_a_column = json_from::<u32>(OneValue, held).unwrap_err();
+        let elsewhere = serde_json::from_str::<u32>(held).unwrap_err();
+
+        for failure in [StoreError::from(in_a_column), StoreError::from(elsewhere)] {
+            let (api_error, logged) = convert(failure);
+
+            assert_eq!(api_error.code, ErrorCode::Internal);
+            assert!(logged.contains("Data error at line 1, column 24"), "got {logged}");
+            assert!(!logged.contains("someone wrote"), "got {logged}");
+        }
     }
 
     #[test]

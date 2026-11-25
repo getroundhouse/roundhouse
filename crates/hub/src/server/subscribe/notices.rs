@@ -42,8 +42,10 @@ pub(super) async fn forward<F: Future<Output = Result<Listed, ApiError>>>(
                 Err(error) => {
                     let message = error.message;
                     warn!(
+                        name: "client.fell_behind",
                         ?level,
-                        "closing the connection of a subscriber that fell behind and can't be listed again: {message}"
+                        error = message,
+                        "Closing the connection of a subscriber that fell behind and can't be listed again"
                     );
                     closer.close();
                     return;

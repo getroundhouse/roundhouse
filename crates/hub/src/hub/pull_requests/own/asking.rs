@@ -87,7 +87,7 @@ impl Hub {
     /// branches as the hub knows them, and those its waits watch.
     pub(in crate::hub::pull_requests) async fn asking(&self, workspaces: Vec<Workspace>) -> Asking {
         let waits = self.blocking(Store::remote_waits).await.unwrap_or_else(|e| {
-            warn!("reading which waits to read the pull requests of: {}", e.message);
+            warn!(name: "wait.unread", error = e.message, "Couldn't read which waits to read the pull requests of");
             Vec::new()
         });
         // With what each last read, whose stack names the lower pull requests it watches too.

@@ -100,7 +100,7 @@ impl Hub {
         let titled = match titled {
             Ok(titled) => titled,
             Err(e) => {
-                warn!("could not title a chat or workspace from its prompt: {e}");
+                warn!(name: "title.unmade", error = %e, "Couldn't title a chat or workspace from its prompt");
                 return;
             }
         };
@@ -166,13 +166,17 @@ impl Hub {
     ) {
         let images = self.read_images(images).await;
         if images.is_empty() && Title::from_first_line(&prompt).is_none() {
-            warn!(%workspace, "could not generate a title: the hub no longer has the images of a prompt with no words");
+            warn!(
+                name: "title.images_gone",
+                workspace_id = %workspace,
+                "Couldn't generate a title, as the hub no longer has the images of a prompt with no words"
+            );
             return;
         }
         let title = match self.title_for(&workspace, titled.agent, titled.on, prompt, images).await {
             Ok(title) => title,
             Err(e) => {
-                warn!(%workspace, "could not generate a title: {e}");
+                warn!(name: "title.ungenerated", workspace_id = %workspace, error = %e, "Couldn't generate a title");
                 return;
             }
         };
@@ -199,7 +203,9 @@ impl Hub {
                     self.notify(HubNotice::Session(chat.record));
                 }
             }
-            Err(e) => warn!(%workspace, "could not save a generated title: {e}"),
+            Err(e) => {
+                warn!(name: "title.unsaved", workspace_id = %workspace, error = %e, "Couldn't save a generated title");
+            }
         }
     }
 
@@ -228,7 +234,15 @@ impl Hub {
             match self.attachment_files.read(&FileFor::Session(session.clone()), &attachment.id).await {
                 Ok(Some(bytes)) => images.push(NewAttachment { attachment, data: AttachmentBytes::new(bytes) }),
                 Ok(None) => {}
-                Err(e) => warn!(%session, attachment = %attachment.id, "could not read an image to title from: {e}"),
+                Err(e) => {
+                    warn!(
+                        name: "title.image_unread",
+                        session_id = %session,
+                        attachment = %attachment.id,
+                        error = %e,
+                        "Couldn't read an image to title from"
+                    );
+                }
             }
         }
         images

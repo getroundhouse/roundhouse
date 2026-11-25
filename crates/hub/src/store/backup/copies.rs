@@ -134,7 +134,12 @@ fn prune(dir: &Path, mut names: Vec<Name>) {
         if versions.len() < KEPT && !versions.contains(&name.version) {
             versions.push(name.version);
         } else if let Err(e) = fs::remove_file(dir.join(name.to_string())) {
-            warn!(backup = %name, "couldn't remove an old copy of the database: {e}");
+            warn!(
+                name: "database.copy_unremoved",
+                backup = %name,
+                error = %e,
+                "Couldn't remove an old copy of the database"
+            );
         }
     }
 }

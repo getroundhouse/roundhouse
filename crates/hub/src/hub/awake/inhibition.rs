@@ -195,7 +195,12 @@ impl Trouble {
     pub(super) fn say(&mut self, stimulant: &Stimulant, problem: &dyn fmt::Display) {
         if !std::mem::replace(&mut self.said, true) {
             let program = stimulant.program.display();
-            warn!("{program} isn't keeping this machine awake, and will be started again: {problem}");
+            warn!(
+                name: "awake.failed",
+                program = %program,
+                error = %problem,
+                "What keeps this machine awake isn't, and will be started again"
+            );
         }
     }
 }

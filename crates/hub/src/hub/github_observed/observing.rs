@@ -28,7 +28,10 @@ impl Hub {
         let mut followers = self.followers.changes();
         let mut feed = self.subscribe_feed();
         let Some(mut reads) = self.github_reads_ended.take() else {
-            return warn!("a second task to work out GitHub's observations wasn't started, as one runs already");
+            return warn!(
+                name: "github.observing_twice",
+                "A second task to work out GitHub's observations wasn't started, as one runs already"
+            );
         };
         let mut observing = Observing::default();
         observing.all_again(&self).await;
@@ -115,6 +118,6 @@ impl Observing {
 /// as it was until what it's worked out from changes again.
 pub(super) fn logged(changed: Result<(), ApiError>) {
     if let Err(error) = changed {
-        warn!("keeping an observation of GitHub: {}", error.message);
+        warn!(name: "github.observation_unkept", error = error.message, "Couldn't keep an observation of GitHub");
     }
 }

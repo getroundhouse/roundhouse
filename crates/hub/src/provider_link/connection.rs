@@ -129,7 +129,7 @@ impl AdapterProvider {
             let chose = format!("the adapter chose protocol {protocol_version}, and this hub speaks {speaks}");
             return Err(failed(io::Error::other(chose)));
         }
-        info!(provider = self.name, adapter, build, "a provider's adapter said hello");
+        info!(name: "provider.said_hello", provider = self.name, adapter, build, "A provider's adapter said hello");
         *self.capabilities.lock() = capabilities;
         *self.environment.lock() = environment;
         *current = Some(connection.clone());
@@ -152,7 +152,11 @@ impl AdapterProvider {
                 }
                 Some(ProviderOutcome::Error(e)) => return Err(ProviderError::Adapter(e)),
                 None if !asked_again => {
-                    warn!(provider = self.name, "a provider's adapter exited before answering, so asking a new one");
+                    warn!(
+                        name: "provider.exited_unanswered",
+                        provider = self.name,
+                        "A provider's adapter exited before answering, so asking a new one"
+                    );
                     asked_again = true;
                 }
                 None => return Err(failed(exited())),
@@ -203,7 +207,7 @@ impl Connection {
             tokio::spawn(async move {
                 exited.await;
                 if let Some(connection) = connection.upgrade().filter(|c| c.calls.is_open()) {
-                    warn!("a provider's adapter exited");
+                    warn!(name: "provider.exited", "A provider's adapter exited");
                     connection.calls.end();
                 }
             });
@@ -251,7 +255,7 @@ async fn read_frames(connection: Weak<Connection>, reader: Box<dyn AsyncRead + S
             Ok(Some(line)) => line,
             Ok(None) => break,
             Err(e) => {
-                warn!("reading from a provider's adapter failed: {}", error_chain(&e));
+                warn!(name: "provider.unread", error = error_chain(&e), "Couldn't read from a provider's adapter");
                 break;
             }
         };
@@ -264,7 +268,12 @@ async fn read_frames(connection: Weak<Connection>, reader: Box<dyn AsyncRead + S
                     let message = format!("a reply from the provider's adapter this hub can't read: {e}");
                     connection.calls.reply(id, ProviderOutcome::Error(ApiError::new(ErrorCode::Worker, message)));
                 } else {
-                    warn!("ignoring a frame from a provider's adapter that didn't parse: {e}");
+                    warn!(
+                        name: "provider.frame_unread",
+                        kind = ?e.classify(),
+                        column = e.column(),
+                        "Ignoring a frame from a provider's adapter that didn't parse"
+                    );
                 }
             }
         }
@@ -278,9 +287,11 @@ async fn read_frames(connection: Weak<Connection>, reader: Box<dyn AsyncRead + S
 fn heard(event: &ProviderEvent) {
     match event {
         ProviderEvent::InstanceEnding { instance_id, reason, .. } => {
-            warn!(%instance_id, reason, "an instance is ending");
+            info!(name: "instance.ending", %instance_id, reason, "An instance is ending");
         }
-        ProviderEvent::InstanceLost { instance_id, reason } => warn!(%instance_id, reason, "an instance was lost"),
+        ProviderEvent::InstanceLost { instance_id, reason } => {
+            warn!(name: "instance.lost", %instance_id, reason, "An instance was lost");
+        }
         ProviderEvent::Unknown => {}
     }
 }

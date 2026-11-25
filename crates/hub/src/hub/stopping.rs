@@ -89,7 +89,7 @@ impl Hub {
         let mut stuck = JoinSet::new();
         for (workspace_id, link) in links {
             if tokio::time::timeout_at(deadline, link.wait_closed()).await.is_err() {
-                warn!(%workspace_id, "a worker didn't stop in time");
+                warn!(name: "worker.not_stopped", %workspace_id, "A worker didn't stop in time");
                 // The hub's exit would end the worker, but not its agents, which would run on unwatched.
                 let hub = self.clone();
                 stuck.spawn(async move { hub.end_stuck_worker_of(&workspace_id, &link).await });
@@ -112,7 +112,7 @@ impl Hub {
         }
         for link in &links {
             if tokio::time::timeout_at(deadline, link.wait_closed()).await.is_err() {
-                warn!("a worker didn't let this hub go in time");
+                warn!(name: "worker.not_let_go", "A worker didn't let this hub go in time");
                 break;
             }
         }

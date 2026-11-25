@@ -66,18 +66,33 @@ impl Hub {
             // A worker from before the request, which the hub replaces once nothing in its workspace is at work, and
             // whose summary is read once now instead, and as each turn ends.
             Ok(Err(e)) if e.code == ErrorCode::Unsupported => {
-                debug!(%id, "the worker can't watch its worktree: {}", e.message);
+                debug!(
+                    name: "changes.watch_unsupported",
+                    workspace_id = %id,
+                    error = e.message,
+                    "A worker can't watch its worktree"
+                );
                 *told = Some(Told { link: link.id, base_ref, answer: Answer::Refused });
                 self.changes_let_go(id).await;
                 self.read_lines(id, &link);
             }
             Ok(Err(e)) => {
-                warn!(%id, "asking the worker to watch its worktree: {}", e.message);
+                warn!(
+                    name: "changes.watch_refused",
+                    workspace_id = %id,
+                    error = e.message,
+                    "Couldn't ask a worker to watch its worktree"
+                );
                 *told = None;
                 self.changes_let_go(id).await;
             }
             Err(late) => {
-                warn!(%id, "asking the worker to watch its worktree: {late}");
+                warn!(
+                    name: "changes.watch_late",
+                    workspace_id = %id,
+                    error = %late,
+                    "A worker asked to watch its worktree answered too late"
+                );
                 *told = Some(Told { link: link.id, base_ref, answer: Answer::Late });
                 self.changes_let_go(id).await;
             }
@@ -125,7 +140,14 @@ impl Hub {
         match link.call_at_once(stop).await.unwrap_or_else(|late| Err(late.into())) {
             Ok(()) => {}
             Err(e) if e.code == ErrorCode::NotFound => {}
-            Err(e) => debug!(%id, "telling the worker to stop watching its worktree: {}", e.message),
+            Err(e) => {
+                debug!(
+                    name: "changes.unwatch_untold",
+                    workspace_id = %id,
+                    error = e.message,
+                    "Couldn't tell the worker to stop watching its worktree"
+                );
+            }
         }
     }
 
@@ -133,10 +155,20 @@ impl Hub {
     /// now on: its lines, and its changed files.
     async fn changes_kept_current(&self, id: &WorkspaceId) {
         if let Err(e) = self.observation_kept_current::<WorkspaceLines>(id.clone()).await {
-            warn!(%id, "keeping that the workspace's lines are watched: {}", e.message);
+            warn!(
+                name: "changes.lines_watch_unkept",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't keep that the workspace's lines are watched"
+            );
         }
         if let Err(e) = self.observation_kept_current::<WorkspaceChanges>(id.clone()).await {
-            warn!(%id, "keeping that the workspace's changed files are watched: {}", e.message);
+            warn!(
+                name: "changes.files_watch_unkept",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't keep that the workspace's changed files are watched"
+            );
         }
     }
 
@@ -146,10 +178,20 @@ impl Hub {
     async fn changes_let_go(&self, id: &WorkspaceId) {
         let as_of_ms = now_ms();
         if let Err(e) = self.observation_let_go::<WorkspaceLines>(id.clone(), as_of_ms).await {
-            warn!(%id, "keeping that the workspace's lines are no longer watched: {}", e.message);
+            warn!(
+                name: "changes.lines_watch_unkept",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't keep that the workspace's lines are no longer watched"
+            );
         }
         if let Err(e) = self.observation_let_go::<WorkspaceChanges>(id.clone(), as_of_ms).await {
-            warn!(%id, "keeping that the workspace's changed files are no longer watched: {}", e.message);
+            warn!(
+                name: "changes.files_watch_unkept",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't keep that the workspace's changed files are no longer watched"
+            );
         }
     }
 }

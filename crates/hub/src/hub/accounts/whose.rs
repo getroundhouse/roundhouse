@@ -43,12 +43,24 @@ impl Hub {
         match self.blocking(move |store| store.account_made(&kept)).await {
             Ok(Some(made)) => self.notify(HubNotice::Account(made)),
             Ok(None) => {}
-            Err(e) => return error!(%account, "could not keep what an agent heard of its account's limits: {e}"),
+            Err(e) => {
+                return error!(
+                    name: "account.limits_unkept",
+                    %account,
+                    error = %e,
+                    "Couldn't keep what an agent heard of its account's limits"
+                );
+            }
         }
         let merge =
             |held: Option<&Vec<UsageLimit>>| merged(held.map(Vec::as_slice), &limits, every_models_week, heard_at_ms);
         if let Err(e) = self.observation_updated::<AccountLimits>(account.clone(), heard_at_ms, merge).await {
-            error!(%account, "could not keep what an agent heard of its account's limits: {}", e.message);
+            error!(
+                name: "account.limits_unkept",
+                %account,
+                error = e.message,
+                "Couldn't keep what an agent heard of its account's limits"
+            );
         }
     }
 

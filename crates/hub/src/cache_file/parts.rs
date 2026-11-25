@@ -30,7 +30,14 @@ pub(crate) fn prepared_or_emptied(
     let Err(error) = prepare(conn) else { return Ok(()) };
     match Failure::of(&error) {
         Failure::Busy | Failure::Broken | Failure::Unusable => return Err(error),
-        Failure::Other => warn!("emptying {what} in the cache file, since its tables couldn't be made: {error}"),
+        Failure::Other => {
+            warn!(
+                name: "cache.part_emptied",
+                part = what,
+                %error,
+                "Emptying a part of the cache's file, since its tables couldn't be made"
+            );
+        }
     }
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     empty(&tx)?;

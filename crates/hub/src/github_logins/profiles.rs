@@ -157,17 +157,31 @@ impl GithubLogins {
                 profile: Some(owner.profile),
                 at_ms: asked_at_ms,
             })),
-            Ok(owner) => {
-                warn!(account = %due.account, "GitHub said its token is another user's, {}", owner.user.name);
+            Ok(_) => {
+                warn!(
+                    name: "github.token_of_another",
+                    account = %due.account,
+                    "GitHub said an account's token is another user's"
+                );
                 Ok(None)
             }
             Err(e) if e.code == ErrorCode::InvalidRequest => {
-                warn!(account = %due.account, "GitHub didn't take its token, asked who it is: {}", e.message);
+                warn!(
+                    name: "github.token_refused",
+                    account = %due.account,
+                    error = e.message,
+                    "GitHub didn't take an account's token, asked who it is"
+                );
                 self.refused.lock().insert(due.account.clone(), asked_at_ms);
                 Ok(None)
             }
             Err(e) => {
-                warn!(account = %due.account, "couldn't ask GitHub who it is, so the next check will: {}", e.message);
+                warn!(
+                    name: "github.profile_unasked",
+                    account = %due.account,
+                    error = e.message,
+                    "Couldn't ask GitHub who an account is, so the next check will"
+                );
                 Ok(None)
             }
         }

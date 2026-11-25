@@ -56,7 +56,11 @@ pub(crate) fn load_or_create(certificate: &Path, key: &Path) -> Result<Identity,
         write_private(key, &key_der)?;
         write_private(certificate, &certificate_der)?;
         let identity = identity(certificate_der, key_der)?;
-        info!(fingerprint = %identity.fingerprint, "made a certificate for paired devices");
+        info!(
+            name: "device.certificate_made",
+            fingerprint = %identity.fingerprint,
+            "Made a certificate for paired devices"
+        );
         return Ok(identity);
     };
     let unusable =
@@ -69,7 +73,10 @@ pub(crate) fn load_or_create(certificate: &Path, key: &Path) -> Result<Identity,
         // writing the two files leaves this.
         let certificate_der = certify(&key_pair)?;
         write_private(certificate, &certificate_der)?;
-        warn!("made a new certificate for the hub's key, which devices already pinned");
+        warn!(
+            name: "device.certificate_remade",
+            "Made a new certificate for the hub's key, which devices already pinned"
+        );
         certificate_der
     };
     // The key read, so what's wrong is the certificate, or that it's for another key.

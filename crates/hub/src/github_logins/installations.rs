@@ -65,7 +65,11 @@ impl GithubLogins {
                 let listed = |id| found.iter().any(|installation| installation.id == id);
                 let (Some(installation), Some(file)) = (&account.installation, file) else { continue };
                 if !listed(installation.id) {
-                    info!(account = %account.id, "forgot an installation's login, as GitHub no longer lists it");
+                    info!(
+                        name: "github.installation_forgotten",
+                        account = %account.id,
+                        "Forgot an installation's login, as GitHub no longer lists it"
+                    );
                     looked.forgot.extend(files.disconnect(file, || Ok(self.store.clear_github_login(&account.id)?))?);
                 }
             }
@@ -153,7 +157,14 @@ impl GithubLogins {
             }
             let key = keys.entry(installation.app).or_insert_with(|| {
                 self.app_key_in(files, installation.app)
-                    .inspect_err(|e| warn!(app = %installation.app, "can't make installations' tokens: {}", e.message))
+                    .inspect_err(|e| {
+                        warn!(
+                            name: "github.installation_tokens_unmade",
+                            app = %installation.app,
+                            error = e.message,
+                            "Couldn't make installations' tokens"
+                        );
+                    })
                     .ok()
                     .map(|(_, key)| key)
             });
@@ -185,13 +196,21 @@ impl GithubLogins {
                 Minted::Token { token, ends_at_ms } => {
                     let made = GithubLogin::Installation(InstallationToken { token, token_ends_at_ms: ends_at_ms });
                     if let Err(e) = files.replace(&file, &made) {
-                        let why = "couldn't keep an installation's new token, so the next check makes another";
-                        warn!(account = %due.account, "{why}: {e}");
+                        warn!(
+                            name: "github.installation_token_unkept",
+                            account = %due.account,
+                            error = %e,
+                            "Couldn't keep an installation's new token, so the next check makes another"
+                        );
                     }
                     Ok(None)
                 }
                 Minted::Gone => {
-                    info!(account = %due.account, "forgot an installation's login, as GitHub has no such installation");
+                    info!(
+                        name: "github.installation_gone",
+                        account = %due.account,
+                        "Forgot an installation's login, as GitHub has no such installation"
+                    );
                     let forgot = files.disconnect(&file, || Ok(self.store.clear_github_login(&due.account)?))?;
                     Ok(forgot.map(|account| GithubAccountChange { account, changed: true, settings: None }))
                 }

@@ -72,7 +72,7 @@ async fn ingest_event(
         None
     };
     if let Err(e) = session.record(origin, body, raw).await {
-        error!(session = %session.id, "could not record agent output: {e}");
+        error!(name: "session.output_unrecorded", session_id = %session.id, error = %e, "Couldn't record agent output");
     }
     if let Some(approval_id) = stale_approval {
         session.record_or_log(Origin::Hub, cancelled_approval(approval_id)).await;
@@ -112,13 +112,23 @@ async fn allow(
         by_setting: true,
     };
     if let Err(e) = session.record_answered(origin, asked, answer).await {
-        error!(session = %session.id, "could not record a tool's use the hub allowed: {e}");
+        error!(
+            name: "session.allowed_unrecorded",
+            session_id = %session.id,
+            error = %e,
+            "Couldn't record a tool's use the hub allowed"
+        );
         return;
     }
     let session = session.clone();
     tokio::spawn(async move {
         if let Err(e) = session.pass_on(approval_id, allowed).await {
-            warn!(session = %session.id, "could not pass on a tool's use the hub allowed: {e}");
+            warn!(
+                name: "session.allowed_undelivered",
+                session_id = %session.id,
+                error = %e,
+                "Couldn't pass on a tool's use the hub allowed"
+            );
         }
     });
 }

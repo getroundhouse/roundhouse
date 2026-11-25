@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use protocol::client::ErrorCode;
-use protocol::model::{ChildStatus, WorkspaceId};
+use protocol::model::{ChildStatus, ChildWorktree, WorkspaceId};
 use protocol::worker::{WorktreeThere, WorktreeThereReply};
 use tracing::{debug, info};
 
@@ -36,11 +36,25 @@ impl Hub {
         let children = match self.blocking(move |store| store.children_of(&owned)).await {
             Ok(children) if children.is_empty() => return,
             Ok(children) => children,
-            Err(e) => return debug!(%id, "finding the worktrees to settle: {}", e.message),
+            Err(e) => {
+                return debug!(
+                    name: "child.worktrees_unfound",
+                    workspace_id = %id,
+                    error = e.message,
+                    "Couldn't find the worktrees to settle"
+                );
+            }
         };
         let source = match self.workspace_placement(ready.id()).await {
             Ok(placement) => placement.source,
-            Err(e) => return debug!(%id, "reading the placement of the worktrees to settle: {}", e.message),
+            Err(e) => {
+                return debug!(
+                    name: "child.placement_unread",
+                    workspace_id = %id,
+                    error = e.message,
+                    "Couldn't read the placement of the worktrees to settle"
+                );
+            }
         };
         // As an existing branch, so the worker answers with what's there, and makes nothing new.
         let making = Making { link, source, own: ready.path(), base: None };
@@ -48,32 +62,53 @@ impl Hub {
             let there = match link.call(WorktreeThere { path: child.path.clone() }).await {
                 Ok(WorktreeThereReply { there }) => there,
                 // The worker can't say, such as one that's gone. Left for the next.
-                Err(e) => return debug!(%id, "asking whether a worktree is there: {}", e.message),
-            };
-            let settled = match (&child.status, there) {
-                (ChildStatus::Ready, true) => {
-                    watch_child(link, &child).await;
-                    Ok(())
+                Err(e) => {
+                    return debug!(
+                        name: "child.unasked",
+                        workspace_id = %id,
+                        error = e.message,
+                        "Couldn't ask whether a worktree is there"
+                    );
                 }
-                (ChildStatus::Ready, false) => {
-                    info!(path = child.path, "a worktree recorded as there has gone, so it's recorded as removed");
-                    let id = child.id.clone();
-                    self.blocking(move |store| store.child_removed(&id)).await.map(drop)
-                }
-                // The worker makes it again if git was stopped part way through it. Only its saying that something
-                // else is there forgets the record: after any other error the worktree may be this one, and the next
-                // worker to connect is asked again.
-                (ChildStatus::Creating, true) => match add(&making, &child).await {
-                    Ok(added) => self.made(link, &child, added).await.map(drop),
-                    Err(e) if e.code == ErrorCode::NameTaken => self.discard(&child).await,
-                    Err(e) => Err(e),
-                },
-                (ChildStatus::Creating, false) => self.discard(&child).await,
-                (ChildStatus::Removed { .. } | ChildStatus::Unknown, _) => Ok(()),
             };
-            if let Err(e) = settled {
-                debug!(path = child.path, "settling a worktree's record: {}", e.message);
+            self.settle_child(&making, &child, there).await;
+        }
+    }
+
+    /// Settles `child`'s record, which its worker says is `there` or isn't.
+    async fn settle_child(&self, making: &Making<'_>, child: &ChildWorktree, there: bool) {
+        let settled = match (&child.status, there) {
+            (ChildStatus::Ready, true) => {
+                watch_child(making.link, child).await;
+                Ok(())
             }
+            (ChildStatus::Ready, false) => {
+                info!(
+                    name: "child.gone",
+                    path = child.path,
+                    "A worktree recorded as there has gone, so it's recorded as removed"
+                );
+                let id = child.id.clone();
+                self.blocking(move |store| store.child_removed(&id)).await.map(drop)
+            }
+            // The worker makes it again if git was stopped part way through it. Only its saying that something
+            // else is there forgets the record: after any other error the worktree may be this one, and the next
+            // worker to connect is asked again.
+            (ChildStatus::Creating, true) => match add(making, child).await {
+                Ok(added) => self.made(making.link, child, added).await.map(drop),
+                Err(e) if e.code == ErrorCode::NameTaken => self.discard(child).await,
+                Err(e) => Err(e),
+            },
+            (ChildStatus::Creating, false) => self.discard(child).await,
+            (ChildStatus::Removed { .. } | ChildStatus::Unknown, _) => Ok(()),
+        };
+        if let Err(e) = settled {
+            debug!(
+                name: "child.unsettled",
+                path = child.path,
+                error = e.message,
+                "Couldn't settle a worktree's record"
+            );
         }
     }
 }

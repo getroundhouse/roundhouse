@@ -103,8 +103,8 @@ fn a_tests_hub_stops_once_the_test_has_gone() {
     wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
     assert!(hub.try_wait().unwrap().unwrap().success(), "it stopped, rather than failing");
     let log = std::fs::read_to_string(stack.hub_log()).unwrap();
-    assert!(log.contains("the test this hub is for has gone"), "{log}");
-    assert!(log.contains("hub stopped"), "{log}");
+    assert!(log.contains("hub.test_gone"), "{log}");
+    assert!(log.contains("hub.stopped"), "{log}");
 }
 
 /// A test's hub that's killed leaves its workers running for a next hub, as any hub does. A run that's killed before

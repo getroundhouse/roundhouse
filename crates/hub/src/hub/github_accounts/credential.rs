@@ -10,7 +10,7 @@ use protocol::client::HubNotice;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::MissedTickBehavior;
-use tracing::error;
+use tracing::warn;
 
 use super::super::Hub;
 use crate::github_logins::DefaultCredential;
@@ -82,7 +82,7 @@ impl Hub {
     pub(crate) async fn stop_checking_github_logins(&self, watching: JoinHandle<()>) {
         self.github_checks_stopped.send_replace(true);
         if let Err(e) = watching.await {
-            error!("checking the GitHub logins failed as the hub stopped: {e}");
+            warn!(name: "github.logins_unchecked", error = %e, "Couldn't check the GitHub logins as the hub stopped");
         }
     }
 }

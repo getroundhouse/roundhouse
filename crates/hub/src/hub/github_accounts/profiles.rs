@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use protocol::client::ApiError;
 use protocol::model::GithubUser;
-use tracing::{error, warn};
+use tracing::warn;
 
 use super::super::{Hub, off_thread};
 use crate::github_logins::{GithubAccountChange, Heard, ProfileDue, ReadFrom};
@@ -27,7 +27,13 @@ impl Hub {
                 let logins = Arc::clone(&self.github_logins);
                 match off_thread(move || logins.profile_read(&due, read, asked_at_ms)).await {
                     Ok(heard) => heard,
-                    Err(e) => return error!("couldn't keep who GitHub says an account is: {}", e.message),
+                    Err(e) => {
+                        return warn!(
+                            name: "github.profile_unkept",
+                            error = e.message,
+                            "Couldn't keep who GitHub says an account is"
+                        );
+                    }
                 }
             }
             ReadFrom::Nobody => {
@@ -36,7 +42,13 @@ impl Hub {
                 let logins = Arc::clone(&self.github_logins);
                 match off_thread(move || logins.nobody_read(&due, read, asked_at_ms)).await {
                     Ok(heard) => heard,
-                    Err(e) => return error!("couldn't keep who GitHub says an account is: {}", e.message),
+                    Err(e) => {
+                        return warn!(
+                            name: "github.profile_unkept",
+                            error = e.message,
+                            "Couldn't keep who GitHub says an account is"
+                        );
+                    }
                 }
             }
             ReadFrom::Bot(bot) => {
@@ -46,7 +58,7 @@ impl Hub {
         if let Some(heard) = heard
             && let Err(e) = self.github_user_heard(heard).await
         {
-            error!("couldn't keep who GitHub says an account is: {}", e.message);
+            warn!(name: "github.profile_unkept", error = e.message, "Couldn't keep who GitHub says an account is");
         }
     }
 
@@ -64,7 +76,11 @@ impl Hub {
     ) -> GithubAccountChange {
         let heard = Heard { account: change.account.id.clone(), username: user.name, profile, at_ms };
         if let Err(e) = self.github_user_heard(heard).await {
-            warn!("couldn't keep who GitHub says a connected account is, so the next check asks: {}", e.message);
+            warn!(
+                name: "github.profile_unkept",
+                error = e.message,
+                "Couldn't keep who GitHub says a connected account is, so the next check asks"
+            );
         }
         let store = Arc::clone(&self.store);
         let settling = change.clone();
@@ -77,7 +93,11 @@ impl Hub {
         match off_thread(settled).await {
             Ok(settled) => settled,
             Err(e) => {
-                warn!("reading the settings a connected account changed: {}", e.message);
+                warn!(
+                    name: "github.settings_unread",
+                    error = e.message,
+                    "Couldn't read the settings a connected account changed"
+                );
                 change
             }
         }

@@ -24,7 +24,7 @@ impl LiveSession {
             let starts = self.configuring.lock().await;
             let (id, at_ms) = (self.id.clone(), now_ms());
             if let Some(wait) = hub.blocking(move |store| store.call_off_session_wait(&id, &wait, at_ms)).await? {
-                info!(%wait, session = %self.id, "the person called off a wait");
+                info!(name: "wait.called_off", %wait, session_id = %self.id, "The person called off a wait");
                 hub.wait_reads_settled().await;
             }
             self.unlist_waits_holding(&starts).await?;
@@ -69,7 +69,14 @@ impl LiveSession {
             let (Some(hub), TaskKind::Wait) = (&hub, ended.task.kind) else { continue };
             match hub.started_by(&self.id, ended.task.call.as_ref()).await {
                 Ok(wait) => ended.wait = wait.as_ref().map(EndedWait::from),
-                Err(e) => warn!(session = %self.id, "could not read a wait the agent heard had ended: {e}"),
+                Err(e) => {
+                    warn!(
+                        name: "wait.ended_unread",
+                        session_id = %self.id,
+                        error = %e,
+                        "Couldn't read a wait the agent heard had ended"
+                    );
+                }
             }
         }
         body

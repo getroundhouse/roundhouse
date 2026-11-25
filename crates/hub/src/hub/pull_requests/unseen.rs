@@ -80,7 +80,11 @@ impl Hub {
         let login = match record {
             Ok(record) => record.and_then(|record| record.held_login).map_or(GithubLoginKind::Unknown, |held| held.how),
             Err(e) => {
-                warn!("reading how the default's login is held: {}", e.message);
+                warn!(
+                    name: "github.default_login_unread",
+                    error = e.message,
+                    "Couldn't read how the default's login is held"
+                );
                 GithubLoginKind::Unknown
             }
         };

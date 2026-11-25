@@ -79,18 +79,31 @@ impl GithubLogins {
         let owner = match read {
             Ok(owner) => owner,
             Err(NotRead::Limited) => {
-                warn!(account = %due.account, "GitHub is limiting calls with no login, so none is made for an hour");
+                warn!(
+                    name: "github.nobody_limited",
+                    account = %due.account,
+                    "GitHub is limiting calls with no login, so none is made for an hour"
+                );
                 let limited_for = i64::try_from(LIMITED_FOR.as_millis()).unwrap_or(i64::MAX);
                 self.nobody.lock().limited_until_ms = Some(asked_at_ms.saturating_add(limited_for));
                 return Ok(None);
             }
             Err(NotRead::NoSuchUser) => {
-                warn!(account = %due.account, "GitHub says it has no such user, so it's asked again a day on");
+                warn!(
+                    name: "github.nobody_unknown_user",
+                    account = %due.account,
+                    "GitHub says it has no such user as an account's, so it's asked again a day on"
+                );
                 self.nobody.lock().no_such_user.insert(due.account.clone(), asked_at_ms);
                 return Ok(None);
             }
             Err(NotRead::Failed(e)) => {
-                warn!(account = %due.account, "couldn't ask GitHub who it is with no login: {}", e.message);
+                warn!(
+                    name: "github.nobody_unasked",
+                    account = %due.account,
+                    error = e.message,
+                    "Couldn't ask GitHub who an account is with no login"
+                );
                 return Ok(None);
             }
         };

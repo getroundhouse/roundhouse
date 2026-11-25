@@ -78,7 +78,11 @@ impl Hub {
         let hub = self.clone();
         tokio::spawn(async move {
             if let Err(error) = hub.read_forgotten_now(&links).await {
-                tracing::debug!("reading pull requests the cache had forgotten: {}", error.message);
+                tracing::debug!(
+                    name: "github.forgotten_unread",
+                    error = error.message,
+                    "Couldn't read pull requests the cache had forgotten"
+                );
             }
         });
     }

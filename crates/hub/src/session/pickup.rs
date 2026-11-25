@@ -44,14 +44,25 @@ impl LiveSession {
         };
         match self.record_unless(Origin::Hub, idle, None, ended).await {
             Ok(_) => {
-                warn!(session = %self.id, "the agent didn't pick up again by itself after its work in the background");
+                warn!(
+                    name: "session.not_picked_up",
+                    session_id = %self.id,
+                    "The agent didn't pick up again by itself after its work in the background"
+                );
             }
             Err(e) if e.code == ErrorCode::Conflict => {
                 if held_off {
                     self.wait_for_pickup();
                 }
             }
-            Err(e) => error!(session = %self.id, "could not record the agent as idle: {e}"),
+            Err(e) => {
+                error!(
+                    name: "session.idle_unrecorded",
+                    session_id = %self.id,
+                    error = %e,
+                    "Couldn't record the agent as idle"
+                );
+            }
         }
     }
 }

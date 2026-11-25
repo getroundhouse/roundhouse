@@ -12,8 +12,9 @@ use crate::support::{
     wait_for_turn_end, wait_until,
 };
 
-/// What the hub logs as a look at the workspace keeps its worker from another build, since something there is at work.
-const KEPT: &str = "keeping a worker from another build, with something at work";
+/// The event the hub logs as a look at the workspace keeps its worker from another build, since something there is at
+/// work.
+const KEPT: &str = "worker.other_build_kept";
 
 /// As an update has it: the hub restarts as a newer build than the workers it leaves, and every worker the next hub
 /// starts is its own build.

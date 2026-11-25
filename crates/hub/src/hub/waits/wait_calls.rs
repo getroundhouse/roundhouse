@@ -35,7 +35,7 @@ impl Hub {
             let (id, ended) = (wait.id.clone(), WaitEnded { at_ms: now_ms(), how: WaitEnd::Cancelled });
             match self.blocking(move |store| store.end_wait(&id, ended)).await? {
                 Some(cancelled) => {
-                    info!(wait = %cancelled.id, "an agent cancelled its wait");
+                    info!(name: "wait.cancelled", wait = %cancelled.id, "An agent cancelled its wait");
                     self.wait_reads_settled().await;
                     self.announce_chat_of(&cancelled).await;
                     wait = self.own_wait(session_id, cancelled.id).await?;
@@ -64,7 +64,12 @@ impl Hub {
         let called_off = self.blocking(move |store| store.call_off_workspace_waits(&id, at_ms)).await?;
         self.wait_reads_settled().await;
         for wait in called_off {
-            info!(wait = %wait.id, workspace = %workspace_id, "archiving its workspace called off a wait");
+            info!(
+                name: "wait.called_off_by_archive",
+                wait = %wait.id,
+                workspace_id = %workspace_id,
+                "Archiving its workspace called off a wait"
+            );
             self.announce_chat_of(&wait).await;
         }
         Ok(())
@@ -84,7 +89,14 @@ impl Hub {
         let id = wait.session_id.clone();
         match self.blocking(move |store| store.get_session(&id)).await {
             Ok(stored) => self.notify(HubNotice::Session(stored.session)),
-            Err(e) => error!(session = %wait.session_id, "could not announce a change to a chat's wait: {e}"),
+            Err(e) => {
+                error!(
+                    name: "wait.change_untold",
+                    session_id = %wait.session_id,
+                    error = %e,
+                    "Couldn't announce a change to a chat's wait"
+                );
+            }
         }
     }
 
@@ -107,7 +119,14 @@ impl Hub {
         let _kept = self.existing_worker(&wait.workspace_id);
         match self.live_session(&wait.session_id).await {
             Ok(session) => session.wake_agent(),
-            Err(e) => warn!(session = %wait.session_id, "couldn't wake the agent whose wait ended: {}", e.message),
+            Err(e) => {
+                warn!(
+                    name: "wait.agent_not_woken",
+                    session_id = %wait.session_id,
+                    error = e.message,
+                    "Couldn't wake the agent whose wait ended"
+                );
+            }
         }
     }
 }

@@ -217,7 +217,14 @@ impl Hub {
         for key in gone {
             match self.blocking(Store::next_rev).await {
                 Ok(rev) => self.notify(HubNotice::Removed { record: RecordKey::ModelList(key), rev }),
-                Err(e) => warn!(list = %key, "letting go of a list of models: {}", e.message),
+                Err(e) => {
+                    warn!(
+                        name: "models.list_not_let_go",
+                        list = %key,
+                        error = e.message,
+                        "Couldn't let go of a list of models"
+                    );
+                }
             }
         }
         drop(changing);
@@ -225,7 +232,7 @@ impl Hub {
         // list's change takes, as `settle_model_list` says, and picked out under the observation's, so an answer that
         // found its list still held is forgotten too, and one that asks from now finds it gone.
         if let Err(e) = self.observations_gone_where::<observations::ModelCatalog>(&is_gone).await {
-            warn!("letting go of which models agents offer: {}", e.message);
+            warn!(name: "models.not_let_go", error = e.message, "Couldn't let go of which models agents offer");
         }
     }
 
@@ -266,7 +273,12 @@ impl Hub {
                 let read =
                     self.observation_read_while::<observations::ModelCatalog>(key.clone(), catalog, now_ms(), still);
                 read.await.map_err(|e| {
-                    warn!(list = %key, "keeping which models an agent offers: {}", e.message);
+                    warn!(
+                        name: "models.unkept",
+                        list = %key,
+                        error = e.message,
+                        "Couldn't keep which models an agent offers"
+                    );
                     let message = format!("the hub couldn't keep which models the agent offers: {}", e.message);
                     ApiError::new(e.code, message)
                 })
@@ -282,7 +294,12 @@ impl Hub {
         let rev = match self.blocking(Store::next_rev).await {
             Ok(rev) => rev,
             Err(e) => {
-                warn!(list = %key, "recording which models an agent offers: {}", e.message);
+                warn!(
+                    name: "models.unrecorded",
+                    list = %key,
+                    error = e.message,
+                    "Couldn't record which models an agent offers"
+                );
                 was.rev
             }
         };

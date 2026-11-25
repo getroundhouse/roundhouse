@@ -137,7 +137,7 @@ impl Hub {
             })
             .await;
         if let Err(e) = recorded {
-            warn!("recording what the update feed says: {}", e.message);
+            warn!(name: "update.unrecorded", error = e.message, "Couldn't record what the update feed says");
         }
     }
 
@@ -155,7 +155,7 @@ impl Hub {
             Err(_) => self.observation_no_longer_read_again::<ReleaseOffered>(()).await,
         };
         if let Err(e) = kept {
-            warn!("keeping the release the update feed offers: {}", e.message);
+            warn!(name: "update.unkept", error = e.message, "Couldn't keep the release the update feed offers");
         }
     }
 
@@ -202,7 +202,7 @@ impl FoundNow<'_> {
         let (archive, problem) = match read {
             Ok(newer) => (newer, None),
             Err(problem) => {
-                warn!("reading the update feed: {problem}");
+                warn!(name: "update.feed_unread", error = problem, "Couldn't read the update feed");
                 (before, Some(problem))
             }
         };
@@ -246,7 +246,7 @@ impl FoundNow<'_> {
     /// Says the update under way failed, and why, which leaves the release the hub would update to as it was, to try
     /// again.
     pub(super) fn failed(&mut self, why: String) {
-        warn!("updating the hub: {why}");
+        warn!(name: "update.failed", error = why, "Couldn't update the hub");
         if let Some(UpdateAttempt::UnderWay { to }) = self.found.attempt.take() {
             self.found.attempt = Some(UpdateAttempt::Failed { to, why });
         }

@@ -114,7 +114,7 @@ impl Remote {
         let port = listener.local_addr().map_err(|e| internal(format!("reading the port listened on: {e}")))?.port();
         let accept = tokio::spawn(crate::server::accept_devices(hub.clone(), listener, identity.acceptor.clone()));
         *self.listening.lock() = Some(Listening { port, accept });
-        info!(port, "listening for paired devices");
+        info!(name: "device.listening", port, "Listening for paired devices");
         Ok(port)
     }
 
@@ -126,7 +126,7 @@ impl Remote {
         listening.accept.abort();
         // Finishes once the task, and the listener it owns, have been dropped.
         let _ = listening.accept.await;
-        info!(port = listening.port, "stopped listening for devices");
+        info!(name: "device.listening_stopped", port = listening.port, "Stopped listening for devices");
     }
 
     /// The hosts a pairing link offers, without ports: the one IP the hub listens on, if it was given one, and

@@ -116,7 +116,12 @@ pub(super) enum Write<V> {
 /// are told, goes on as it is, and a hub that starts again has what the file kept before.
 pub(super) fn write<K: Kind>(file: &CacheFile, of: &K::Of, write: Write<K::Value>) {
     if let Err(error) = written::<K>(file, of, write) {
-        warn!(table = K::FORM.table, "keeping an observation in the cache's file: {error}");
+        warn!(
+            name: "observation.unkept",
+            table = K::FORM.table,
+            %error,
+            "Couldn't keep an observation in the cache's file"
+        );
     }
 }
 

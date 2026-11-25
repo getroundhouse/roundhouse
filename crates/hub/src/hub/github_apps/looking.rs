@@ -51,7 +51,12 @@ impl Hub {
                 let account = change.account.id.clone();
                 let change = self.github_user_connected(change, bot.clone(), None, connected_at_ms).await;
                 if let Err(e) = self.observation_read::<InstalledOn>(account, on, connected_at_ms).await {
-                    warn!(app = %id, "couldn't keep where a connected installation is: {}", e.message);
+                    warn!(
+                        name: "github.installation_place_unkept",
+                        app = %id,
+                        error = e.message,
+                        "Couldn't keep where a connected installation is"
+                    );
                 }
                 self.workers_sent_again(id).await;
                 self.announce_github_account(change);
@@ -75,7 +80,12 @@ impl Hub {
         match self.github.app(id, key).await {
             Ok(said) => self.observation_read::<GithubAppSaid>(id, said, asked_at_ms).await,
             Err(e) if read_at_ms.is_some() => {
-                warn!(app = %id, "couldn't ask GitHub what it says of an app, so what it said before stands: {}", e.message);
+                warn!(
+                    name: "github.app_unasked",
+                    app = %id,
+                    error = e.message,
+                    "Couldn't ask GitHub what it says of an app, so what it said before stands"
+                );
                 Ok(())
             }
             Err(e) => Err(e),
@@ -102,14 +112,26 @@ impl Hub {
     async fn installations_named(&self, id: GithubAppId, found: &[Installation]) {
         let accounts = match self.blocking(move |store| store.installation_accounts(id)).await {
             Ok(accounts) => accounts,
-            Err(e) => return warn!(app = %id, "couldn't read an app's installations' accounts: {}", e.message),
+            Err(e) => {
+                return warn!(
+                    name: "github.installation_accounts_unread",
+                    app = %id,
+                    error = e.message,
+                    "Couldn't read an app's installations' accounts"
+                );
+            }
         };
         let read_at_ms = now_ms();
         for (account, _) in accounts {
             let Some(installed) = &account.installation else { continue };
             let Some(listed) = found.iter().find(|listed| listed.on.id == installed.on.id) else { continue };
             if let Err(e) = self.observation_read::<InstalledOn>(account.id, listed.on.name.clone(), read_at_ms).await {
-                warn!(app = %id, "couldn't keep where an installation is: {}", e.message);
+                warn!(
+                    name: "github.installation_place_unkept",
+                    app = %id,
+                    error = e.message,
+                    "Couldn't keep where an installation is"
+                );
             }
         }
         self.workers_sent_again(id).await;
@@ -120,7 +142,12 @@ impl Hub {
     async fn workers_sent_again(&self, id: GithubAppId) {
         let logins = Arc::clone(&self.github_logins);
         if let Err(e) = off_thread(move || logins.heard_of(now_ms())).await {
-            warn!(app = %id, "couldn't work out what workers are sent again: {}", e.message);
+            warn!(
+                name: "github.sent_not_worked_out",
+                app = %id,
+                error = e.message,
+                "Couldn't work out what workers are sent again"
+            );
         }
     }
 
@@ -139,8 +166,12 @@ impl Hub {
         let minted = match self.github.installation_token(due.app, &due.key, due.installation).await {
             Ok(minted) => minted,
             Err(e) => {
-                let why = "couldn't make an installation's token, so the next check will";
-                warn!(account = %due.account, "{why}: {}", e.message);
+                warn!(
+                    name: "github.installation_token_unmade",
+                    account = %due.account,
+                    error = e.message,
+                    "Couldn't make an installation's token, so the next check will"
+                );
                 return;
             }
         };
@@ -150,7 +181,13 @@ impl Hub {
                 self.announce_github_account(change);
             }
             Ok(None) => {}
-            Err(e) => error!("couldn't keep an installation's new token: {}", e.message),
+            Err(e) => {
+                error!(
+                    name: "github.installation_token_unkept",
+                    error = e.message,
+                    "Couldn't keep an installation's new token"
+                );
+            }
         }
     }
 
@@ -159,7 +196,12 @@ impl Hub {
     /// client asks.
     pub(in super::super) async fn look_by_itself(&self, id: GithubAppId) {
         if let Err(e) = self.look_at_app(id, false).await {
-            warn!(app = %id, "couldn't look for where an app of your own is installed: {}", e.message);
+            warn!(
+                name: "github.app_not_looked_for",
+                app = %id,
+                error = e.message,
+                "Couldn't look for where an app of your own is installed"
+            );
         }
     }
 }

@@ -196,11 +196,18 @@ fn said_device(request: &ClientRequest) -> Option<ClientDevice> {
             Some(ClientDevice { id: device.id.clone(), name: name.to_string() })
         }
         Ok(_) => {
-            warn!("a client said it's on a device with no ID, so it's taken to be on none");
+            warn!(
+                name: "client.device_without_id",
+                "A client said it's on a device with no ID, so it's taken to be on none"
+            );
             None
         }
         Err(e) => {
-            warn!("a client said it's on a device whose name can't be shown, so it's taken to be on none: {e}");
+            warn!(
+                name: "client.device_name_refused",
+                error = %e,
+                "A client said it's on a device whose name can't be shown, so it's taken to be on none"
+            );
             None
         }
     }
@@ -341,7 +348,7 @@ fn local_only(request: &ClientRequest) -> bool {
 fn hello(hub: &Hub, request: &ClientRequest) -> Result<HelloReply, ApiError> {
     match super::hello::hello(hub.build(), Some(request)).0 {
         ReplyOutcome::Response(ClientResponse::Hello(reply)) => Ok(reply),
-        ReplyOutcome::Response(other) => Err(internal(format!("a hello answered with {other:?}"))),
+        ReplyOutcome::Response(_) => Err(internal("a hello was answered with another request's reply")),
         ReplyOutcome::Error(error) => Err(error),
     }
 }

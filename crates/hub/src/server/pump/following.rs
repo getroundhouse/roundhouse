@@ -52,7 +52,12 @@ impl Following {
                 std::mem::replace(named, found) != *named
             }
             Err(e) => {
-                warn!(session = %id, "finding the subagent a subscriber follows failed: {e}");
+                warn!(
+                    name: "client.subagent_unfound",
+                    session_id = %id,
+                    error = %e,
+                    "Couldn't find the subagent a subscriber follows"
+                );
                 false
             }
         }
@@ -158,7 +163,14 @@ async fn send_through(
                 hub.read_places_page(id.clone(), subagent.clone(), *next, through).await
             }
         };
-        let page = page.map_err(|e| warn!(session = %id, "reading the log for a subscriber failed: {e}"))?;
+        let page = page.map_err(|e| {
+            warn!(
+                name: "client.log_unread",
+                session_id = %id,
+                error = %e,
+                "Couldn't read the log for a subscriber"
+            );
+        })?;
         if page.is_empty() {
             return Ok(());
         }

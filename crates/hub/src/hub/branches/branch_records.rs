@@ -33,7 +33,12 @@ impl Hub {
         self.branches_kept_current(ready.id()).await;
         let path = ready.path().to_owned();
         if let Err(e) = link.send(WatchBranches { path }).await {
-            debug!(id = %ready.id(), "asking the worker to watch the branches: {}", e.message);
+            debug!(
+                name: "branches.watch_unasked",
+                workspace_id = %ready.id(),
+                error = e.message,
+                "Couldn't ask the worker to watch the branches"
+            );
         }
         self.settle_children_later(ready.id(), link);
         self.changes_watching_soon(ready.id());
@@ -54,8 +59,22 @@ impl Hub {
         let id = ready.id();
         match first {
             Ok(Ok(())) => {}
-            Ok(Err(e)) => debug!(%id, "asking the worker to watch the branches: {}", e.message),
-            Err(_) => warn!(%id, "the worker didn't read the branches within {FIRST_READ_TIMEOUT:?}"),
+            Ok(Err(e)) => {
+                debug!(
+                    name: "branches.watch_unasked",
+                    workspace_id = %id,
+                    error = e.message,
+                    "Couldn't ask the worker to watch the branches"
+                );
+            }
+            Err(_) => {
+                warn!(
+                    name: "branches.first_read_late",
+                    workspace_id = %id,
+                    within = ?FIRST_READ_TIMEOUT,
+                    "A worker didn't read the branches in time"
+                );
+            }
         }
     }
 
@@ -95,7 +114,14 @@ impl Hub {
             Ok(Some(child)) => child,
             // Removed meanwhile, which leaves what was read of it before.
             Ok(None) => return,
-            Err(e) => return debug!(%id, "finding the worktree whose branches were read: {}", e.message),
+            Err(e) => {
+                return debug!(
+                    name: "branches.worktree_unfound",
+                    workspace_id = %id,
+                    error = e.message,
+                    "Couldn't find the worktree whose branches were read"
+                );
+            }
         };
         self.child_branches_known(id, child.id, branches).await;
     }
@@ -109,7 +135,12 @@ impl Hub {
     ) {
         let of = ChildWorktreeKey { workspace_id: id.clone(), id: child };
         if let Err(e) = self.observation_read::<ChildWorktreeBranches>(of, branches, now_ms()).await {
-            debug!(%id, "keeping another worktree's branches: {}", e.message);
+            debug!(
+                name: "branches.other_unkept",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't keep another worktree's branches"
+            );
         }
     }
 
@@ -139,7 +170,12 @@ impl Hub {
     /// Keeps `branches` as what the workspace's own worktree has, as of now, or current while its worker watches them.
     pub(crate) async fn branches_known(&self, id: &WorkspaceId, branches: Branches) {
         if let Err(e) = self.observation_read::<WorkspaceBranches>(id.clone(), branches, now_ms()).await {
-            warn!(%id, "keeping the workspace's branches: {}", e.message);
+            warn!(
+                name: "branches.unkept",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't keep the workspace's branches"
+            );
         }
     }
 
@@ -159,7 +195,12 @@ impl Hub {
     /// Keeps that the workspace's worker watches its branches from now on, so what it reads of them is current.
     async fn branches_kept_current(&self, id: &WorkspaceId) {
         if let Err(e) = self.observation_kept_current::<WorkspaceBranches>(id.clone()).await {
-            warn!(%id, "keeping that the workspace's branches are watched: {}", e.message);
+            warn!(
+                name: "branches.watch_unkept",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't keep that the workspace's branches are watched"
+            );
         }
     }
 
@@ -167,7 +208,12 @@ impl Hub {
     /// the worker would have said of any change until then.
     pub(in super::super) async fn branches_let_go(&self, id: &WorkspaceId) {
         if let Err(e) = self.observation_let_go::<WorkspaceBranches>(id.clone(), now_ms()).await {
-            warn!(%id, "keeping that the workspace's branches are no longer watched: {}", e.message);
+            warn!(
+                name: "branches.watch_unkept",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't keep that the workspace's branches are no longer watched"
+            );
         }
     }
 
@@ -176,7 +222,12 @@ impl Hub {
     /// had is still the workspace's, as `crate::hub::children` reads it.
     pub(in super::super) async fn branches_forgotten(&self, id: &WorkspaceId) {
         if let Err(e) = self.observation_gone::<WorkspaceBranches>(id.clone()).await {
-            warn!(%id, "forgetting the workspace's branches: {}", e.message);
+            warn!(
+                name: "branches.unforgotten",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't forget the workspace's branches"
+            );
         }
     }
 }

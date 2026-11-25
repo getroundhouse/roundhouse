@@ -249,12 +249,21 @@ impl Observations {
                 for table in tables.each() {
                     if let Err(error) = table.load(&file, rev) {
                         let table = table.form().map(|form| form.table);
-                        warn!(table, "reading observations from the cache's file: {error}");
+                        warn!(
+                            name: "observation.unread",
+                            table,
+                            %error,
+                            "Couldn't read observations from the cache's file"
+                        );
                     }
                 }
             }
             Err(error) => {
-                warn!("leaving the observations in the cache's file unread, with no revision for them: {error}");
+                warn!(
+                    name: "observation.revision_unread",
+                    %error,
+                    "Leaving the observations in the cache's file unread, with no revision for them"
+                );
             }
         }
         let writer = Writer::new(file);
@@ -276,7 +285,13 @@ impl Observations {
             }
             // The task that works out GitHub's observations forgets those of workspaces, and their sessions', as it
             // starts.
-            Err(error) => warn!("keeping observations of what the database may not have: {error}"),
+            Err(error) => {
+                warn!(
+                    name: "observation.database_unsure",
+                    %error,
+                    "Keeping observations of what the database may not have"
+                );
+            }
         }
         Self { changing: AsyncMutex::new(()), tables: Mutex::new(tables), writer }
     }

@@ -46,7 +46,7 @@ pub(crate) async fn accept_loop(hub: Arc<Hub>, mut listener: Listener) {
                 tokio::spawn(serve_connection(hub.clone(), read, write, Gate::local(&hub)));
             }
             Err(e) => {
-                warn!("accepting a connection failed: {e}");
+                warn!(name: "client.connection_failed", error = %e, "Couldn't accept a connection");
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
         }
@@ -194,7 +194,12 @@ where
         let request = match frame::read_call::<ClientRequest>(&line) {
             Ok(request) => request,
             Err(e) => {
-                debug!("closing a connection that sent a bad frame: {e}");
+                debug!(
+                    name: "client.frame_unread",
+                    kind = ?e.classify(),
+                    column = e.column(),
+                    "Closing a connection that sent a bad frame"
+                );
                 return Ending::Closed;
             }
         };

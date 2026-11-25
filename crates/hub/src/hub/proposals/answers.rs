@@ -74,7 +74,12 @@ impl Hub {
             // The agent's to have it at its next chance, steering it as the person's own prompt would, and only a held
             // queue keeps it there. It's queued first, with the answer, so it's sent even if this hub goes away now.
             if let Err(e) = session.send_now_unless_held(queued_as).await {
-                warn!(session = %proposal.session_id, "couldn't send the answer to a proposal now: {}", e.message);
+                warn!(
+                    name: "proposal.answer_unsent",
+                    session_id = %proposal.session_id,
+                    error = e.message,
+                    "Couldn't send the answer to a proposal now"
+                );
             }
         }
         Ok(proposal)

@@ -64,7 +64,13 @@ impl KeptRules {
                 Ok(said) => {
                     rows.push(Row { subject: Subject::Branch(branch.clone()), facet: Facet::Rules, said, read_at_ms });
                 }
-                Err(error) => warn!("writing a branch's rules for the cache's file: {error}"),
+                Err(error) => {
+                    warn!(
+                        name: "github_cache.rules_unencoded",
+                        %error,
+                        "Couldn't write a branch's rules for the cache's file"
+                    );
+                }
             }
             kept.insert(branch, KeptRule { rules, read_at_ms, asked_at_ms: now_ms });
         }

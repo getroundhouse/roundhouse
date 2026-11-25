@@ -118,7 +118,11 @@ impl Hub {
         }
         for of in self.observations.kept_of::<K>() {
             if let Err(e) = self.change_observation::<K>(of, |_| Change::NoLongerReadAgain).await {
-                warn!("saying an observation is as of its last read: {}", e.message);
+                warn!(
+                    name: "observation.read_unsaid",
+                    error = e.message,
+                    "Couldn't say an observation is as of its last read"
+                );
             }
         }
     }
@@ -161,7 +165,12 @@ impl Hub {
     pub(crate) async fn workspace_observations_gone(&self, id: &WorkspaceId) {
         let _changing = self.observations.changing.lock().await;
         if let Err(e) = self.forget_observations_of(&|owner| owner.workspace() == Some(id)).await {
-            warn!(%id, "forgetting the observations of a workspace that's gone: {}", e.message);
+            warn!(
+                name: "observation.workspace_unforgotten",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't forget the observations of a workspace that's gone"
+            );
         }
     }
 
@@ -172,7 +181,12 @@ impl Hub {
     pub(crate) async fn github_account_observations_gone(&self, id: &GithubAccountId) {
         let _changing = self.observations.changing.lock().await;
         if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::GithubAccount(id)).await {
-            warn!(%id, "forgetting the observations of a GitHub account that's gone: {}", e.message);
+            warn!(
+                name: "observation.account_unforgotten",
+                account = %id,
+                error = e.message,
+                "Couldn't forget the observations of a GitHub account that's gone"
+            );
         }
     }
 
@@ -182,7 +196,12 @@ impl Hub {
     pub(crate) async fn app_observations_gone(&self, id: GithubAppId) {
         let _changing = self.observations.changing.lock().await;
         if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::App(&id)).await {
-            warn!(%id, "forgetting the observations of an app of your own that's gone: {}", e.message);
+            warn!(
+                name: "observation.app_unforgotten",
+                app = %id,
+                error = e.message,
+                "Couldn't forget the observations of an app of your own that's gone"
+            );
         }
     }
 
@@ -193,11 +212,21 @@ impl Hub {
         let _changing = self.observations.changing.lock().await;
         let have = match self.blocking(Store::github_account_ids).await {
             Ok(have) => have,
-            Err(e) => return warn!("listing GitHub accounts to forget the observations of those gone: {}", e.message),
+            Err(e) => {
+                return warn!(
+                    name: "observation.accounts_unlisted",
+                    error = e.message,
+                    "Couldn't list GitHub accounts to forget the observations of those gone"
+                );
+            }
         };
         let gone = |owner: Owner<'_>| matches!(owner, Owner::GithubAccount(id) if !have.contains(id));
         if let Err(e) = self.forget_observations_of(&gone).await {
-            warn!("forgetting the observations of GitHub accounts that are gone: {}", e.message);
+            warn!(
+                name: "observation.accounts_unforgotten",
+                error = e.message,
+                "Couldn't forget the observations of GitHub accounts that are gone"
+            );
         }
     }
 
@@ -209,12 +238,22 @@ impl Hub {
         let _changing = self.observations.changing.lock().await;
         let workspaces = match self.workspace_list(true).await {
             Ok(workspaces) => workspaces,
-            Err(e) => return warn!("listing workspaces to forget the observations of those gone: {}", e.message),
+            Err(e) => {
+                return warn!(
+                    name: "observation.workspaces_unlisted",
+                    error = e.message,
+                    "Couldn't list workspaces to forget the observations of those gone"
+                );
+            }
         };
         let have: HashSet<WorkspaceId> = workspaces.into_iter().map(|workspace| workspace.id).collect();
         let gone = |owner: Owner<'_>| owner.workspace().is_some_and(|id| !have.contains(id));
         if let Err(e) = self.forget_observations_of(&gone).await {
-            warn!("forgetting the observations of workspaces that are gone: {}", e.message);
+            warn!(
+                name: "observation.workspaces_unforgotten",
+                error = e.message,
+                "Couldn't forget the observations of workspaces that are gone"
+            );
         }
     }
 
@@ -223,7 +262,12 @@ impl Hub {
     pub(crate) async fn session_observations_gone(&self, key: &SessionKey) {
         let _changing = self.observations.changing.lock().await;
         if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::Session(key)).await {
-            warn!(session = %key.session_id, "forgetting the observations of a session that's gone: {}", e.message);
+            warn!(
+                name: "observation.session_unforgotten",
+                session_id = %key.session_id,
+                error = e.message,
+                "Couldn't forget the observations of a session that's gone"
+            );
         }
     }
 

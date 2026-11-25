@@ -50,7 +50,11 @@ impl Hub {
     /// workspace.
     pub(crate) async fn tidy_logins(&self) {
         if let Err(e) = self.on_logins(Logins::tidy).await {
-            error!("couldn't make the logins' files and the accounts agree: {}", e.message);
+            error!(
+                name: "login.files_disagree",
+                error = e.message,
+                "Couldn't make the logins' files and the accounts agree"
+            );
         }
         self.tidy_github_logins().await;
     }

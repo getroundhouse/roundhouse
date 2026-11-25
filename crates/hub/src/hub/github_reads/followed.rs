@@ -48,7 +48,12 @@ impl Hub {
             let hub = self.clone();
             tokio::spawn(async move {
                 if let Err(error) = hub.workspace_pull_request(workspace.clone()).await {
-                    tracing::debug!(%workspace, "reading a pull request followed: {error}");
+                    tracing::debug!(
+                        name: "github.followed_unread",
+                        workspace_id = %workspace,
+                        %error,
+                        "Couldn't read a pull request followed"
+                    );
                 }
             });
         }

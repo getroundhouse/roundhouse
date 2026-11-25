@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use super::{Hub, new_id, off_thread};
-use crate::error::internal;
+use crate::error::{JsonProblem, internal};
 use crate::lasting;
 
 #[derive(Serialize, Deserialize)]
@@ -100,7 +100,12 @@ impl Hub {
         })
         .await;
         if let Err(e) = removed {
-            warn!(%id, "{}", e.message);
+            warn!(
+                name: "bundle.unremoved",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't remove an archived workspace's bundle"
+            );
         }
     }
 
@@ -122,7 +127,13 @@ impl Hub {
                 })
                 .map(|w| w.id.to_string())
                 .collect(),
-            Err(e) => return warn!("skipping archive bundle tidy: {}", e.message),
+            Err(e) => {
+                return warn!(
+                    name: "bundle.tidy_skipped",
+                    error = e.message,
+                    "Skipping a tidy of the archive bundles"
+                );
+            }
         };
         let dir = self.bundles_dir.clone();
         let result = off_thread(move || {
@@ -131,7 +142,7 @@ impl Hub {
         })
         .await;
         if let Err(e) = result {
-            warn!("{}", e.message);
+            warn!(name: "bundle.untidied", error = e.message, "Couldn't tidy the archive bundles");
         }
     }
 }
@@ -142,8 +153,8 @@ fn load_stored(id: &WorkspaceId, meta_path: &Path, bundle_path: &Path) -> Result
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(internal(format!("reading archive metadata for {id}: {e}"))),
     };
-    let stored: StoredArchive =
-        serde_json::from_slice(&raw_meta).map_err(|e| internal(format!("decoding archive metadata for {id}: {e}")))?;
+    let stored: StoredArchive = serde_json::from_slice(&raw_meta)
+        .map_err(|e| internal(format!("decoding archive metadata for {id}: {}", JsonProblem::from(e))))?;
     let bundle = if stored.has_bundle {
         let bytes =
             std::fs::read(bundle_path).map_err(|e| internal(format!("reading archive bundle for {id}: {e}")))?;
@@ -200,7 +211,12 @@ fn remove_stale_bundles(dir: &Path, keep: &HashSet<String>, started_at: SystemTi
         let keep_file =
             text.strip_suffix(".json").or_else(|| text.strip_suffix(".bundle")).is_some_and(|id| keep.contains(id));
         if !keep_file && let Err(e) = std::fs::remove_file(entry.path()) {
-            warn!(path = %entry.path().display(), "removing stale archive file: {e}");
+            warn!(
+                name: "bundle.stale_unremoved",
+                path = %entry.path().display(),
+                error = %e,
+                "Couldn't remove a stale archive file"
+            );
         }
     }
     Ok(())

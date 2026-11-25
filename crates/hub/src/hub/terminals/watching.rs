@@ -96,7 +96,12 @@ impl Hub {
         let (hub, id) = (self.clone(), id.clone());
         runtime.spawn(async move {
             if let Err(e) = hub.terminal_watching(&id).await {
-                warn!(terminal = %id, "telling a worker whether a client watches: {}", e.message);
+                warn!(
+                    name: "terminal.watching_untold",
+                    terminal = %id,
+                    error = e.message,
+                    "Couldn't tell a worker whether a client watches"
+                );
             }
         });
     }
@@ -109,7 +114,11 @@ impl Hub {
             return;
         };
         if watch.copy.lock().take(picture).is_err() {
-            warn!(terminal = %id, "a picture lacked rows the hub didn't have, so its worker is asked to begin again");
+            warn!(
+                name: "terminal.picture_lacked_rows",
+                terminal = %id,
+                "A picture lacked rows the hub didn't have, so its worker is asked to begin again"
+            );
             self.terminal_watching_soon(id);
         }
     }

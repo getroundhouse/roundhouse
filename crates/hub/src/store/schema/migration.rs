@@ -81,7 +81,12 @@ pub(super) fn migrate_through(
     if (1..known).contains(&version) {
         let backup = back_up(conn, version, backups_dir)
             .map_err(|source| StoreError::Backup { dir: backups_dir.to_path_buf(), source })?;
-        info!(backup = %backup.display(), version, "saved a copy of the database before migrating it");
+        info!(
+            name: "database.copy_saved",
+            backup = %backup.display(),
+            version,
+            "Saved a copy of the database before migrating it"
+        );
     }
     if version == 0 {
         let tx = conn.transaction()?;

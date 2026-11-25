@@ -87,7 +87,13 @@ impl Said {
     /// It, as the cache's file keeps `item`'s summary, read at `read_at_ms`.
     fn row(&self, item: &Item, read_at_ms: i64) -> Option<Row> {
         let said = serde_json::to_string(self)
-            .inspect_err(|error| warn!("writing what GitHub said for the cache's file: {error}"))
+            .inspect_err(|error| {
+                warn!(
+                    name: "github_cache.unencoded",
+                    %error,
+                    "Couldn't write what GitHub said for the cache's file"
+                );
+            })
             .ok()?;
         Some(Row { subject: Subject::Item(item.clone()), facet: Facet::Summary, said, read_at_ms })
     }
@@ -124,7 +130,11 @@ impl GithubCache {
         let file = GithubFile::new(file);
         let since_ms = now_ms().saturating_sub(millis(KEPT_FOR));
         let rows = file.load(since_ms).unwrap_or_else(|error| {
-            warn!("reading what was last read from GitHub from the cache's file: {error}");
+            warn!(
+                name: "github_cache.unread",
+                %error,
+                "Couldn't read what was last read from GitHub from the cache's file"
+            );
             Vec::new()
         });
         let (mut items, rules, pulls) = (HashMap::new(), KeptRules::default(), KeptPulls::default());
@@ -213,7 +223,7 @@ impl GithubCache {
     /// Forgets `forgotten` in the file, and writes `rows` to it, at once.
     fn write(&self, forgotten: &[(Subject, Facet)], rows: &[Row]) {
         if let Err(error) = self.file.keep(forgotten, rows) {
-            warn!("keeping what was read from GitHub in the cache's file: {error}");
+            warn!(name: "github_cache.unkept", %error, "Couldn't keep what was read from GitHub in the cache's file");
         }
     }
 

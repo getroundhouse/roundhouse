@@ -240,7 +240,7 @@ impl Hub {
             .await;
         // Gone whether or not its files are, so failing only leaves them on disk.
         if let Err(e) = self.attachment_files.remove_session(&id).await {
-            warn!(session = %id, "{e}");
+            warn!(name: "session.files_unremoved", session_id = %id, error = %e, "Couldn't remove a session's files");
         }
         Ok(was)
     }

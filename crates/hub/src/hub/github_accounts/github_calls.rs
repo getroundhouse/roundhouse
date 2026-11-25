@@ -62,7 +62,11 @@ impl Hub {
     pub(in super::super) async fn tidy_github_logins(&self) {
         let logins = Arc::clone(&self.github_logins);
         if let Err(e) = off_thread(move || logins.tidy(now_ms())).await {
-            error!("couldn't make the GitHub logins' files and the GitHub accounts agree: {}", e.message);
+            error!(
+                name: "github.files_disagree",
+                error = e.message,
+                "Couldn't make the GitHub logins' files and the GitHub accounts agree"
+            );
         }
         // Of each account tidying removed.
         self.observations_of_no_github_account_gone().await;
@@ -70,7 +74,13 @@ impl Hub {
         match off_thread(move || logins.holds_gh()).await {
             Ok(true) => self.read_gh().await,
             Ok(false) => {}
-            Err(e) => error!("couldn't tell whether an account holds gh's login: {}", e.message),
+            Err(e) => {
+                error!(
+                    name: "github.gh_holder_unread",
+                    error = e.message,
+                    "Couldn't tell whether an account holds gh's login"
+                );
+            }
         }
     }
 

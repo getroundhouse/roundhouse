@@ -86,26 +86,19 @@ async fn watch<K: Display>(key: &K, run: Run) -> Watched {
     };
     let (ended, stopping) = match ran {
         Some(Ok(Ok(()))) => (Ended::Finished, None),
-        Some(Ok(Err(e))) if e.is_panic() => {
-            let at = progress.last();
-            error!(%key, %at, "a job of the hub's panicked: {kind}");
-            (Ended::Panicked { at }, None)
-        }
+        Some(Ok(Err(e))) if e.is_panic() => (Ended::Panicked { at: progress.last() }, None),
         // Stopped, as the hub stops, which ends this task too.
         Some(Ok(Err(_))) => return Watched::Stopped,
         Some(Err(_)) => {
-            let at = progress.last();
-            warn!(%key, %at, limit = ?limits.work, "a job of the hub's didn't finish in time, so it was stopped: {kind}");
             work.abort();
-            (Ended::Overran { at, began_uncut: false }, Some(work))
+            (Ended::Overran { at: progress.last(), began_uncut: false }, Some(work))
         }
         None => {
-            let at = progress.last();
-            info!(%key, %at, "a job of the hub's was called off: {kind}");
             work.abort();
-            (Ended::CalledOff { at, began_uncut: false }, Some(work))
+            (Ended::CalledOff { at: progress.last(), began_uncut: false }, Some(work))
         }
     };
+    log_ended(key, kind, limits, &ended);
     let afterwards = async {
         // Once a stopped job's work is gone, so what it held is let go of before the after-step puts things back.
         if let Some(work) = stopping {
@@ -126,9 +119,37 @@ async fn watch<K: Display>(key: &K, run: Run) -> Watched {
     let afterwards = progress.scope(afterwards);
     if tokio::time::timeout(limits.after, afterwards).await.is_err() {
         let at = progress.last();
-        warn!(%key, %at, limit = ?limits.after, "a job of the hub's didn't finish putting things back in time: {kind}");
+        warn!(
+            name: "job.after_overran",
+            %key,
+            %at,
+            kind = %kind,
+            limit = ?limits.after,
+            "A job of the hub's didn't finish putting things back in time"
+        );
     }
     Watched::Ended
+}
+
+/// Says in the log how a job's work ended, unless it finished.
+fn log_ended<K: Display>(key: &K, kind: JobKind, limits: Limits, ended: &Ended) {
+    match ended {
+        Ended::Finished => {}
+        Ended::Panicked { at } => error!(name: "job.panicked", %key, at, kind = %kind, "A job of the hub's panicked"),
+        Ended::Overran { at, .. } => {
+            warn!(
+                name: "job.overran",
+                %key,
+                at,
+                kind = %kind,
+                limit = ?limits.work,
+                "A job of the hub's didn't finish in time, so it was stopped"
+            );
+        }
+        Ended::CalledOff { at, .. } => {
+            info!(name: "job.called_off", %key, at, kind = %kind, "A job of the hub's was called off");
+        }
+    }
 }
 
 /// Takes a job's key off the table, as its last run ends, however its supervisor ends.

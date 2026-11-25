@@ -2,7 +2,7 @@ use super::super::Hub;
 use crate::error::provider_failed;
 use crate::session::{CarriedOver, Item, LiveSession, Progress, Starting};
 use crate::store::{Store, StoreError, cancelled_approval};
-use crate::worker_link::WorkerLinkId;
+use crate::worker_link::{WorkerLink, WorkerLinkId};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
@@ -93,7 +93,12 @@ impl Hub {
                     .map(|instance| instance.instance_id)
                     .collect(),
                 Err(e) => {
-                    warn!(provider = %name, "listing the instances an earlier hub left: {}", e.message);
+                    warn!(
+                        name: "recovery.instances_unlisted",
+                        provider = %name,
+                        error = e.message,
+                        "Couldn't list the instances an earlier hub left"
+                    );
                     continue;
                 }
             };
@@ -115,7 +120,12 @@ impl Hub {
         let (link, running) = match self.worker_left_running(&workspace_id).await {
             Ok(reached) => reached,
             Err(e) => {
-                warn!(%workspace_id, "the worker an earlier hub left couldn't be reached: {}", e.message);
+                warn!(
+                    name: "recovery.worker_unreached",
+                    %workspace_id,
+                    error = e.message,
+                    "The worker an earlier hub left couldn't be reached"
+                );
                 for id in at_work {
                     let prompts = take(&id);
                     self.write(move |store| interrupt(store, &id, prompts)).await;
@@ -152,15 +162,41 @@ impl Hub {
             self.route(&id, Item::AgentLost { link: link.id, reason: ExitReason::HubRestart }).await;
         }
         let (agents, build) = (running.len(), link.build());
-        info!(%workspace_id, agents, terminals, build, "connected again to the worker an earlier hub left");
+        info!(
+            name: "recovery.worker_connected",
+            %workspace_id,
+            agents,
+            terminals,
+            build,
+            "Connected again to the worker an earlier hub left"
+        );
+        self.keep_or_end(workspace_id, link, terminals > 0, being_moved).await;
+    }
+
+    /// Keeps `link`, to the worker an earlier hub left, while its workspace has a session, or it has a terminal, as
+    /// `has_terminals` says, or while the earlier hub was moving the workspace. Otherwise it's ended.
+    async fn keep_or_end(
+        self: Arc<Self>,
+        workspace_id: WorkspaceId,
+        link: Arc<WorkerLink>,
+        has_terminals: bool,
+        being_moved: bool,
+    ) {
         let has_sessions = self.sessions.lock().live.values().any(|session| session.workspace_id == workspace_id);
-        if has_sessions || terminals > 0 {
+        if has_sessions || has_terminals {
             link.keep();
             // Its watch of the branches goes on from the earlier hub, but sends only what changes, and what it sent
             // while there was no hub is lost, so asking again has it send what they are now.
             match self.ready_workspace(&workspace_id).await {
                 Ok(ready) => self.watch_branches(&ready, &link).await,
-                Err(e) => debug!(%workspace_id, "watching the branches of a worker carried on with: {}", e.message),
+                Err(e) => {
+                    debug!(
+                        name: "recovery.branches_unwatched",
+                        %workspace_id,
+                        error = e.message,
+                        "Couldn't watch the branches of a worker carried on with"
+                    );
+                }
             }
             if link.is_another_build(self.build) {
                 self.worker_build_heard(&workspace_id, &link).await;
@@ -201,14 +237,19 @@ impl Hub {
             self.sessions.lock().keep(id, || LiveSession::start(self, starting, Some(carried)))
         });
         if let Err(e) = started {
-            warn!(session = %id, "carrying on with a session: {}", e.message);
+            warn!(
+                name: "recovery.session_failed",
+                session_id = %id,
+                error = e.message,
+                "Couldn't carry on with a session"
+            );
         }
     }
 
     /// Something only the store has to know, which is logged if it fails, for the next hub to try again.
     pub(super) async fn write(&self, change: impl FnOnce(&Store) -> Result<(), StoreError> + Send + 'static) {
         if let Err(e) = self.blocking(change).await {
-            warn!("recording what an earlier hub left: {}", e.message);
+            warn!(name: "recovery.unrecorded", error = e.message, "Couldn't record what an earlier hub left");
         }
     }
 }

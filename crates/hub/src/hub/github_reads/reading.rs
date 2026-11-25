@@ -71,7 +71,7 @@ impl Hub {
             }
         });
         if let Err(error) = kept.await {
-            tracing::warn!("keeping what was read of pull requests: {error}");
+            tracing::warn!(name: "github.pull_requests_unkept", %error, "Couldn't keep what was read of pull requests");
         }
         read
     }
@@ -97,7 +97,7 @@ impl Hub {
         }
         let cache = self.github_cache.clone();
         if let Err(error) = tokio::task::spawn_blocking(move || cache.keep(read, began_ms)).await {
-            tracing::warn!("keeping what was read from GitHub: {error}");
+            tracing::warn!(name: "github.reads_unkept", %error, "Couldn't keep what was read from GitHub");
         }
     }
 

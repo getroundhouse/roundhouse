@@ -109,7 +109,7 @@ impl Hub {
         // Told once `changing` is let go, as an open that can't give its terminal a record tells its worker.
         for terminal in unrecorded {
             if let Err(e) = end_shell(link, &terminal).await {
-                warn!(%terminal, "ending a shell given no record: {}", e.message);
+                warn!(name: "terminal.unended", %terminal, error = e.message, "Couldn't end a shell given no record");
             }
         }
         carried_on
@@ -127,7 +127,12 @@ impl Hub {
         let running = match answered {
             Ok(reply) => reply.terminals,
             Err(e) => {
-                warn!(%workspace_id, "asking the worker an earlier hub left for its terminals: {}", e.message);
+                warn!(
+                    name: "terminal.recovery_unasked",
+                    %workspace_id,
+                    error = e.message,
+                    "Couldn't ask the worker an earlier hub left for its terminals"
+                );
                 return (0, Vec::new());
             }
         };
@@ -138,7 +143,12 @@ impl Hub {
             let rev = match self.blocking(Store::next_rev).await {
                 Ok(rev) => rev,
                 Err(e) => {
-                    warn!(%terminal, "carrying on with a terminal, so it's ended: {}", e.message);
+                    warn!(
+                        name: "terminal.recovery_failed",
+                        %terminal,
+                        error = e.message,
+                        "Couldn't carry on with a terminal, so it's ended"
+                    );
                     unrecorded.push(terminal);
                     continue;
                 }
@@ -174,7 +184,14 @@ impl Hub {
             match self.blocking(Store::next_rev).await {
                 Ok(rev) => self.notify(HubNotice::Removed { record: RecordKey::Terminal { id: record.id }, rev }),
                 // Clients that miss it drop the terminal once it's not on the next list, or once it ends.
-                Err(e) => warn!(terminal = %record.id, "announcing a terminal's removal: {}", e.message),
+                Err(e) => {
+                    warn!(
+                        name: "terminal.removal_untold",
+                        terminal = %record.id,
+                        error = e.message,
+                        "Couldn't announce a terminal's removal"
+                    );
+                }
             }
         }
     }

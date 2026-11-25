@@ -67,7 +67,14 @@ impl Hub {
         for child in children {
             match self.remove_one(source, link, own, child, force).await {
                 Ok(_) => {}
-                Err(e) if force => warn!(path = child.path, "couldn't remove another worktree: {}", e.message),
+                Err(e) if force => {
+                    warn!(
+                        name: "child.unremoved",
+                        path = child.path,
+                        error = e.message,
+                        "Couldn't remove another worktree"
+                    );
+                }
                 Err(e) => {
                     let left = format!("it couldn't be removed ({}). Archiving with force leaves it there", e.message);
                     let why = if e.code == ErrorCode::NeedsForce { &e.message } else { &left };

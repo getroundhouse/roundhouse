@@ -54,13 +54,21 @@ pub(crate) fn accept_devices(
                     // One that finds no room is closed at once, so connections that never authenticate can't use up
                     // the descriptors the hub's socket and workers need too.
                     let Ok(unproven) = hub.remote.unauthenticated.clone().try_acquire_owned() else {
-                        debug!(%peer, "closed a connection, because too many haven't authenticated yet");
+                        debug!(
+                            name: "client.too_many_unauthenticated",
+                            %peer,
+                            "Closed a connection, because too many haven't authenticated yet"
+                        );
                         continue;
                     };
                     tokio::spawn(serve_device(hub.clone(), tls.clone(), stream, peer, deadline, unproven));
                 }
                 Err(e) => {
-                    warn!("accepting a connection from the network failed: {e}");
+                    warn!(
+                        name: "client.network_connection_failed",
+                        error = %e,
+                        "Couldn't accept a connection from the network"
+                    );
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
@@ -77,7 +85,12 @@ async fn serve_device(
     unproven: OwnedSemaphorePermit,
 ) {
     if let Err(e) = ready(&stream) {
-        debug!(%peer, "setting up a connection from the network failed: {e}");
+        debug!(
+            name: "client.network_connection_unready",
+            %peer,
+            error = %e,
+            "Couldn't set up a connection from the network"
+        );
         return;
     }
     match tokio::time::timeout_at(deadline, tls.accept(stream)).await {
@@ -85,8 +98,8 @@ async fn serve_device(
             let (read, write) = tokio::io::split(stream);
             serve_connection(hub, read, write, Gate::network(deadline, unproven)).await;
         }
-        Ok(Err(e)) => debug!(%peer, "a TLS handshake failed: {e}"),
-        Err(_) => debug!(%peer, "a TLS handshake took too long"),
+        Ok(Err(e)) => debug!(name: "client.tls_failed", %peer, error = %e, "A TLS handshake failed"),
+        Err(_) => debug!(name: "client.tls_late", %peer, "A TLS handshake took too long"),
     }
 }
 

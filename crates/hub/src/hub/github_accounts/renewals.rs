@@ -31,7 +31,7 @@ impl Hub {
         {
             Ok(checked) => checked,
             Err(e) => {
-                error!("couldn't check the GitHub logins: {}", e.message);
+                warn!(name: "github.logins_unchecked", error = e.message, "Couldn't check the GitHub logins");
                 return;
             }
         };
@@ -89,7 +89,12 @@ impl Hub {
             Ok(renewal) => renewal,
             Err(e) => {
                 let why = e.message;
-                warn!(account = %due.account, "couldn't renew a sign-in with GitHub, so the next check will: {why}");
+                warn!(
+                    name: "github.unrenewed",
+                    account = %due.account,
+                    error = why,
+                    "Couldn't renew a sign-in with GitHub, so the next check will"
+                );
                 return;
             }
         };
@@ -99,7 +104,13 @@ impl Hub {
                 self.announce_github_account(change);
             }
             Ok(None) => {}
-            Err(e) => error!("couldn't keep what renewing a sign-in with GitHub came to: {}", e.message),
+            Err(e) => {
+                error!(
+                    name: "github.renewal_unkept",
+                    error = e.message,
+                    "Couldn't keep what renewing a sign-in with GitHub came to"
+                );
+            }
         }
     }
 }
@@ -108,7 +119,7 @@ impl Hub {
 async fn joined(tasks: &mut JoinSet<()>, what: &str) {
     while let Some(ended) = tasks.join_next().await {
         if let Err(e) = ended {
-            error!("{what} failed: {e}");
+            error!(name: "github.task_failed", task = what, error = %e, "A task about GitHub failed");
         }
     }
 }
