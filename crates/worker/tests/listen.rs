@@ -40,6 +40,20 @@ impl Listening {
 
     /// Stopping with a test once `test_gone` returns, as a test's worker does.
     fn stopping_with(idle_limit: Duration, test_gone: impl Future<Output = ()> + Send + 'static) -> Self {
+        Self::start_with(idle_limit, test_gone, worker::Timers::DEFAULT)
+    }
+
+    /// Giving the hub connected `within` to go once another connects.
+    fn with_hubs_going_within(within: Duration) -> Self {
+        let timers = worker::Timers { hub_goes_within: within, ..worker::Timers::DEFAULT };
+        Self::start_with(WAIT, std::future::pending(), timers)
+    }
+
+    fn start_with(
+        idle_limit: Duration,
+        test_gone: impl Future<Output = ()> + Send + 'static,
+        timers: worker::Timers,
+    ) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let cli = dir.path().join("fake-cli");
         process::testing::write_program(&cli, "#!/bin/sh\nwhile [ ! -e done ]; do sleep 0.02; done\n").unwrap();
@@ -60,7 +74,7 @@ impl Listening {
             credential_helper: CredentialHelper::new("/bin/false", ["--"]),
             machine: process::testing::git_environment().given(),
             refused: None,
-            timers: worker::Timers::DEFAULT,
+            timers,
         };
         let socket = dir.path().join("worker.sock");
         let path = socket.clone();
@@ -106,21 +120,26 @@ impl Hub {
         Self { calls, frames: BufReader::new(frames).lines(), next_id: 1 }
     }
 
-    /// Connects, says hello, and returns whatever the worker sent after its reply to that, up to its reply to a call
-    /// that lists its agents, with that list.
+    /// Connects, and says hello, as [`Hub::say_hello`] does.
     async fn greet(socket: &Path, keep_running_without_hub: bool) -> (Self, Vec<WorkerFrame>, Vec<RunningAgent>) {
-        let mut hub = Self::connect(socket).await;
+        Self::connect(socket).await.say_hello(keep_running_without_hub).await
+    }
+
+    /// Says hello, and returns whatever the worker sent after its reply to that, up to its reply to a call that lists
+    /// its agents, with that list.
+    async fn say_hello(mut self, keep_running_without_hub: bool) -> (Self, Vec<WorkerFrame>, Vec<RunningAgent>) {
         let hello = WorkerRequest::Hello(Hello {
             protocol_version: WORKER_PROTOCOL_VERSION,
             oldest_protocol_version: None,
             keep_running_without_hub,
         });
-        assert!(matches!(hub.call(hello).await.0, WorkerOutcome::Response(WorkerResponse::Hello(_))));
-        let (listed, before) = hub.call(WorkerRequest::RunningAgents).await;
+        let (greeted, _) = self.call(hello).await;
+        assert!(matches!(greeted, WorkerOutcome::Response(WorkerResponse::Hello(_))), "{greeted:?}");
+        let (listed, before) = self.call(WorkerRequest::RunningAgents).await;
         let WorkerOutcome::Response(WorkerResponse::RunningAgents(RunningAgentsReply { agents })) = listed else {
             panic!("{listed:?}")
         };
-        (hub, before, agents)
+        (self, before, agents)
     }
 
     /// The worker's reply to `request`, and what it sent before it.
@@ -235,7 +254,7 @@ async fn only_this_user_can_connect_to_the_worker() {
 /// from itself.
 #[tokio::test]
 async fn a_second_hub_is_refused_while_one_is_connected() {
-    let worker = Listening::start(WAIT);
+    let worker = Listening::with_hubs_going_within(Duration::from_millis(100));
     let (mut first, _, _) = Hub::greet(&worker.socket, true).await;
     let mut second = Hub::connect(&worker.socket).await;
 
@@ -246,6 +265,31 @@ async fn a_second_hub_is_refused_while_one_is_connected() {
     assert!(matches!(still, WorkerOutcome::Response(WorkerResponse::RunningAgents(_))), "{still:?}");
     first.call(WorkerRequest::Stop).await;
     first.go().await;
+    worker.stopped().await;
+}
+
+/// The worker can notice that a hub crashed only after the next has connected, and the next would end a worker that
+/// refused it, with its agents.
+#[tokio::test]
+async fn a_hub_that_connects_before_the_last_is_noticed_to_have_gone_carries_on_with_its_agents() {
+    let worker = Listening::with_hubs_going_within(Duration::from_mins(10));
+    let (mut first, _, _) = Hub::greet(&worker.socket, true).await;
+    let (started, _) = first.call(worker.start_spec()).await;
+    assert!(matches!(started, WorkerOutcome::Response(WorkerResponse::AgentStarted(_))), "{started:?}");
+
+    // Only the last to connect waits, so its reply to the one before it says the worker has taken both, with the first
+    // still connected.
+    let mut crashed = Hub::connect(&worker.socket).await;
+    let next = Hub::connect(&worker.socket).await;
+    let (refused, _) = crashed.call(WorkerRequest::RunningAgents).await;
+    first.go().await;
+    let (mut next, _, agents) = next.say_hello(true).await;
+
+    assert!(matches!(&refused, WorkerOutcome::Error(e) if e.code == ErrorCode::Conflict), "{refused:?}");
+    assert_eq!(agents.len(), 1, "{agents:?}");
+    assert_eq!((&agents[0].session_id, agents[0].run), (&"s".into(), RunId::new(4)));
+    next.call(WorkerRequest::Stop).await;
+    next.go().await;
     worker.stopped().await;
 }
 
