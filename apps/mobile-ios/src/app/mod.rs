@@ -6,6 +6,7 @@ mod mobile_app;
 mod new_workspace;
 mod open;
 mod pairing;
+mod reopening;
 mod workspace_menu;
 mod workspaces;
 

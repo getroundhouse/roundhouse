@@ -1,6 +1,7 @@
-use crate::saving::{Failure, Saver, write_json};
+use crate::saving::saved_before_quitting;
 use crate::settings::Choice;
 use crate::sounds::Sound;
+use client_core::this_device::{NotKept, Saver, read_json, write_json};
 use client_core::workspace_order::Sort;
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use protocol::model::RepoId;
@@ -133,14 +134,14 @@ impl SettingsFile {
 
     /// What's saved, or every setting as nobody has chosen when nothing is, or what is can't be read.
     pub(super) fn read(&self) -> Settings {
-        let Ok(text) = std::fs::read_to_string(&self.path) else { return Settings::default() };
-        serde_json::from_str(&text).unwrap_or_else(|e| {
-            eprintln!("couldn't read the settings in {}, so they start as nobody has chosen: {e}", self.path.display());
-            Settings::default()
-        })
+        let read = read_json(&self.path).unwrap_or_else(|e| {
+            eprintln!("couldn't read the settings, so they start as nobody has chosen: {e}");
+            None
+        });
+        read.unwrap_or_default()
     }
 
-    pub(super) fn write(&self, settings: &Settings) -> Result<(), Failure> {
+    pub(super) fn write(&self, settings: &Settings) -> Result<(), NotKept> {
         write_json(&self.path, settings)
     }
 }
@@ -161,7 +162,8 @@ pub(crate) fn load(data_dir: &Path, cx: &mut App) {
     }
     let file = SettingsFile::in_dir(data_dir);
     let settings = file.read();
-    let (saver, failed) = Saver::start(move |settings| file.write(settings));
+    let (failures, failed) = flume::unbounded();
+    let saver = Saver::start(move |settings| file.write(settings), move |failure| drop(failures.send(failure)));
     cx.set_global(Current { settings, saver });
     cx.spawn(async move |cx| {
         while let Ok(failure) = failed.recv_async().await {
@@ -170,16 +172,7 @@ pub(crate) fn load(data_dir: &Path, cx: &mut App) {
         }
     })
     .detach();
-    // Quitting gives this a moment, so a change made just before is saved.
-    cx.on_app_quit(|cx| {
-        let all_saved = cx.try_global::<Current>().map(|current| current.saver.saved());
-        async move {
-            if let Some(all_saved) = all_saved {
-                let _ = all_saved.recv_async().await;
-            }
-        }
-    })
-    .detach();
+    saved_before_quitting(|current: &Current| current.saver.saved(), cx);
 }
 
 /// The settings in force. Every setting is as nobody has chosen until they're loaded.

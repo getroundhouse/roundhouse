@@ -5,4 +5,5 @@ mod chat;
 mod flows;
 #[cfg(target_os = "macos")]
 mod gallery;
+mod reopening;
 mod support;

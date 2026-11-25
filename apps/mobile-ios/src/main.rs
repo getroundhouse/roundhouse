@@ -5,11 +5,13 @@ fn main() {
     use std::path::PathBuf;
     use std::sync::Arc;
 
+    use client_core::this_device::Preferences;
     use mobile::{Assets, DeviceVault};
 
     // The app's container. iOS gives every app its own, and backs this directory up.
     let data_dir = std::env::var_os("HOME").map_or_default(PathBuf::from).join("Library/Application Support");
     let vault = Arc::new(DeviceVault::new(&data_dir));
+    let preferences = Preferences::in_dir(&data_dir, |e| eprintln!("couldn't keep the app's preferences: {e}"));
     let (links, opened) = flume::unbounded();
     let application = gpui_kit::Application::with_platform(gpui_ios::current_platform(false)).with_assets(Assets);
     application.on_open_urls(move |urls| {
@@ -20,7 +22,7 @@ fn main() {
     application.run(move |cx| {
         gpui_kit::init(cx);
         gpui_ios::ios::set_status_bar_style(gpui_ios::StatusBarContentStyle::Light);
-        if let Err(e) = mobile::open_window(vault, opened, gpui_kit::WindowOptions::default(), cx) {
+        if let Err(e) = mobile::open_window(vault, preferences, opened, gpui_kit::WindowOptions::default(), cx) {
             eprintln!("couldn't open the window: {e:#}");
         }
     });

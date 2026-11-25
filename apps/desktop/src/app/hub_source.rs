@@ -9,6 +9,7 @@ use gpui_kit::Result;
 use local_hub::Daemon;
 use protocol::Build;
 use protocol::client::HubStatus;
+use protocol::pairing::Fingerprint;
 use protocol::paths::Paths;
 
 use super::{ConnectionFailure, Unconnected};
@@ -73,6 +74,11 @@ pub(super) fn runs_older_workers(hub: &HubStatus) -> bool {
 }
 
 impl HubSource {
+    /// Which paired hub it is, or `None` for this machine's.
+    pub(crate) fn fingerprint(&self) -> Option<&Fingerprint> {
+        self.remote.as_ref().map(|hub| &hub.fingerprint)
+    }
+
     /// The default hub for this user, with the daemon next to this binary, for an app that's `build`.
     pub fn default_local(build: Build) -> anyhow::Result<Self> {
         let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;

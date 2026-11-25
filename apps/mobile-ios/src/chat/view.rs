@@ -169,6 +169,11 @@ impl ChatView {
         }
     }
 
+    /// The workspace whose chat it is.
+    pub(crate) fn workspace(&self) -> &WorkspaceId {
+        &self.workspace.id
+    }
+
     /// What its header names it: the workspace, as its record last did.
     pub(crate) fn title(&self) -> &str {
         self.workspace.label()

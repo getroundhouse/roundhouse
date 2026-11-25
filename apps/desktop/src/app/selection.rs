@@ -1,7 +1,8 @@
 //! Which workspace the window shows, and where it has been: those shown before it, and those Back has come back from,
 //! for Back and Forward to go through, as a browser's do. One type holds both, so nothing can show a workspace without
 //! the history knowing. The window keeps it until the app quits, as it keeps which sidebars show, since it's where this
-//! window has been rather than anything about the workspaces.
+//! window has been rather than anything about the workspaces. Only the workspace showing outlasts that, as a
+//! preference.
 
 use protocol::model::WorkspaceId;
 

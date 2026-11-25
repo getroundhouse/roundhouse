@@ -23,7 +23,7 @@ pub(crate) use choice::Choice;
 use client_core::workspace_order::Sort;
 pub(crate) use page::{Asking, FIND_KEY, KEY_CONTEXT, OfHub, PageId, page};
 
-mod preferences;
+mod app_settings;
 #[cfg(test)]
-use preferences::SettingsFile;
-pub(crate) use preferences::{Settings, change, get, load, observe, observe_in_app};
+use app_settings::SettingsFile;
+pub(crate) use app_settings::{Settings, change, get, load, observe, observe_in_app};

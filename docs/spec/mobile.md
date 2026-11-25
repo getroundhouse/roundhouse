@@ -24,7 +24,7 @@ One hub's workspaces and chats, on a phone, for keeping work moving away from th
 
   ![The app saying it can't reach the hub](screens/phone/unreachable.png)
 
-- **What the phone keeps is enough to connect again, and no more.** The token the hub gave it is in the Keychain, for this phone only, so no backup carries it to another, and the hub's name, addresses and key are in the app's own files. Removing the phone on the hub, with `roundhouse phone revoke`, closes its connections and stops the token working. *Unconfirmed.*
+- **What the phone keeps is enough to connect again and open where it was left, and no more.** The token the hub gave it is in the Keychain, for this phone only, so no backup carries it to another, and the hub's name, addresses and key, and which workspace the app was left on, are in the app's own files. Forgetting the hub, or replacing it, forgets them. Removing the phone on the hub, with `roundhouse phone revoke`, closes its connections and stops the token working. *Unconfirmed.*
 - **A lost connection comes back without asking, unless only a person can bring it back,** by the rule every client follows, in `hubs.md`, and the app says it's trying. A hub that refuses the phone's token, answers with another key, or is ahead of this app across a protocol break isn't tried again until the app comes back to the front, and the hub screen says why. Coming back to the app after 20 seconds away connects again at once, since a phone that slept may hold a connection that's gone without a word. What's typed and what's shown stay as they were. *Unconfirmed.*
 
   **Connecting, before the hub has answered.** *Unconfirmed.*
@@ -48,7 +48,7 @@ One hub's workspaces and chats, on a phone, for keeping work moving away from th
 
 ## Workspaces
 
-- **The first screen lists the hub's workspaces, grouped by repository,** each repository's last active first, the order the desktop's sidebar lists them in until another is chosen there. Each workspace has the status mark the desktop's sidebar shows, in its pull request's colour as the hub sends it, what the sidebar calls it, which is its title or its name until it has one, and its branch where that isn't the same again. Only workspaces that are ready are listed, since one still being made or archived has nothing to open. *Unconfirmed.*
+- **The list, which Back from a chat goes to, has the hub's workspaces, grouped by repository,** each repository's last active first, the order the desktop's sidebar lists them in until another is chosen there. Each workspace has the status mark the desktop's sidebar shows, in its pull request's colour as the hub sends it, what the sidebar calls it, which is its title or its name until it has one, and its branch where that isn't the same again. Only workspaces that are ready are listed, since one still being made or archived has nothing to open. *Unconfirmed.*
 - **A workspace's name is muted until it needs a look, then at full brightness in medium weight,** as in the desktop's sidebar, as `sidebar.md` says: one of its open chats has a reply nobody has read, or waits on an answer or an approval. *Unconfirmed.*
 
   **A hub's workspaces, with one waiting on an answer.** *Unconfirmed.*
@@ -59,6 +59,7 @@ One hub's workspaces and chats, on a phone, for keeping work moving away from th
 
   ![A hub with no workspace](screens/phone/workspaces-none.png)
 
+- **The app opens again on the workspace it was left on, with Back going to the list,** as the owner decided, since iOS can end the app in the background, so someone coming back to it hasn't always left the chat they had open. It opens on its chat, as tapping it does, once the phone has the hub's workspaces. *Unconfirmed:* it opens on the list once someone has gone back to it, or once the workspace is no longer listed. It stays on what was opened before the hub was reached, such as the hub screen, whose way back is the list, and the next time it opens on that workspace again, since nobody went back from it.
 - **Tapping a workspace opens its chat:** the one last worked in, as the desktop opens it on, or with none open, the one the hub finds or starts, on the agent the hub would start a chat on. *Unconfirmed.*
 - **A long press on a workspace's row opens its menu, as a right-click on its row in the desktop's sidebar does:** Mark as read, or Mark as unread, as the desktop's would mark it, then Rename… and Regenerate title, and Archive last, in red, after a line. The row lifts over the dimmed list with its menu under it, as `components.md` says. *Unconfirmed.*
 

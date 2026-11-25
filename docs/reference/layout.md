@@ -70,7 +70,7 @@ crates/
   providers/       The trait a provider implements, and the local provider
   process/         Starting, signalling and recording processes
   private-files/   Files and sockets only their user can open
-  client-core/     A client's connection, and its copy of each hub's state
+  client-core/     A client's connection, its copy of each hub's state, and what an app keeps on its device
   local-hub/       Starting a hub on this machine, for the desktop app and the CLI
   transcript/      A chat's history and live snapshot, in GPUI
   client-ui/       What every app draws of workspaces and chats but the transcript, such as their marks, in GPUI
@@ -106,7 +106,7 @@ third_party/       Copies of other projects' code, as `third_party/README.md` sa
 | The hub | Sessions and their logs, workspaces, comments, proposals, waits, drafts, what's read, its settings, and which instances it asked for |
 | A workspace's worker, and its machine | Running agents and terminals, and the worktree's files |
 | A provider | Whether an instance exists, and whether it's running |
-| A client | What's open and scrolled where, the app's settings, the window's place, and dictation |
+| A client | What's open and scrolled where, the app's settings and preferences, the window's place, and dictation |
 | Git and GitHub | Code, pull requests and CI |
 
 ## Which kind each thing a hub holds is

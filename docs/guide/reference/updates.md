@@ -27,7 +27,7 @@ An update leaves the prompt cache as it was, so a chat moved to a new version wr
 
 ## What's kept through a restart
 
-Restarting to update loses nothing that's reached the hub: what's typed and attached in every composer, an answer being typed to a question, a comment being written, and what's in the new-workspace dialog.
+Restarting to update loses nothing that's reached the hub: what's typed and attached in every composer, an answer being typed to a question, a comment being written, and what's in the new-workspace dialog. The app opens again on the workspace it was left on.
 
 If something hasn't reached the hub yet, such as a prompt still on its way, the card asks first: `Restart to update?`, with `Keep working` and `Restart`.
 

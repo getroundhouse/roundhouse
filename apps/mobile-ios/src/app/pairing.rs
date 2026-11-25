@@ -21,30 +21,30 @@ const DEVICE_NAME: &str = "iPhone";
 impl MobileApp {
     /// Pairs with the hub a link names, and follows it once paired. A phone already paired asks first, since the new
     /// hub replaces the old one.
-    pub(super) fn pair(&mut self, url: &str, cx: &mut Context<Self>) {
+    pub(super) fn pair(&mut self, url: &str, window: &mut Window, cx: &mut Context<Self>) {
         // A code works once, and the first link is already using it.
         if matches!(self.pairing, Pairing::Busy { .. }) {
             return;
         }
         match PairingLink::parse(url.trim()) {
             Ok(link) if self.followed.is_some() => self.pairing = Pairing::Confirm(link),
-            Ok(link) => self.start_pairing(link, cx),
+            Ok(link) => self.start_pairing(link, window, cx),
             Err(e) => self.pairing = Pairing::Failed(format!("That isn't a pairing link: {e}").into()),
         }
         cx.notify();
     }
 
-    fn start_pairing(&mut self, link: PairingLink, cx: &mut Context<Self>) {
+    fn start_pairing(&mut self, link: PairingLink, window: &mut Window, cx: &mut Context<Self>) {
         let hub = link.hub_name.clone().into();
-        let task = cx.spawn(async move |this, cx| {
+        let task = cx.spawn_in(window, async move |this, cx| {
             let paired = cx.background_spawn(async move { client_core::pair(&link, DEVICE_NAME) }).await;
-            let _ = this.update(cx, |app, cx| {
+            let _ = this.update_in(cx, |app, window, cx| {
                 match paired {
                     Ok(hub) => {
                         // Still followed for now if it can't be kept, and paired again next launch.
                         app.error = app.vault.save(&hub).err().map(|e| e.to_string().into());
                         app.pairing = Pairing::Idle;
-                        app.follow(hub, cx);
+                        app.follow(hub, window, cx);
                     }
                     Err(e) => app.pairing = Pairing::Failed(format!("Couldn't pair: {e}").into()),
                 }
@@ -94,9 +94,9 @@ impl MobileApp {
         let pair = look::button("pair", ButtonKind::Main, TAPPED, if busy { "Pairing…" } else { "Pair" })
             .full_width()
             .waiting(busy)
-            .on_click(cx.listener(|app, _, _, cx| {
+            .on_click(cx.listener(|app, _, window, cx| {
                 let url = app.link_input.read(cx).value().to_string();
-                app.pair(&url, cx);
+                app.pair(&url, window, cx);
             }));
         let command = div()
             .px(Space::Medium)
@@ -131,9 +131,9 @@ impl MobileApp {
         let muted = look::colors(cx).text_muted;
         let confirm = look::button("confirm-pair", ButtonKind::Main, TAPPED, format!("Pair with {new}"))
             .full_width()
-            .on_click(cx.listener(|app, _, _, cx| {
+            .on_click(cx.listener(|app, _, window, cx| {
                 if let Pairing::Confirm(link) = std::mem::replace(&mut app.pairing, Pairing::Idle) {
-                    app.start_pairing(link, cx);
+                    app.start_pairing(link, window, cx);
                 }
             }));
         let keep = look::button("keep-hub", ButtonKind::Borderless, TAPPED, format!("Keep {old}"))

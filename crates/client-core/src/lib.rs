@@ -13,6 +13,8 @@
 //! returns. [`Approval`] says what an approval asks, and how to answer it, however old its request, [`calls`] what each
 //! tool call in a session's history is, [`refusals`] what the hub not doing what was asked means, and [`workspace_order`]
 //! the orders workspaces can be listed in, each the same for every client.
+//!
+//! [`this_device`] is what an app keeps on the device it runs on, such as its preferences.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
@@ -29,6 +31,7 @@ pub mod records;
 pub mod refusals;
 pub mod session_log;
 pub mod standing;
+pub mod this_device;
 pub mod waits;
 pub mod workspace_lines;
 pub mod workspace_order;

@@ -7,5 +7,5 @@
 mod phone;
 mod stack;
 
-pub(crate) use phone::{Phone, id};
+pub(crate) use phone::{Phone, TIMEOUT, id, paired_vault};
 pub(crate) use stack::Stack;

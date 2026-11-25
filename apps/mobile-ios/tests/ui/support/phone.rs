@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use client_core::link::Waits;
+use client_core::this_device::Preferences;
 use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{
     AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, GestureTuning, InputEvent as _, Pixels, Point,
@@ -40,21 +41,28 @@ pub(crate) struct Phone<'a> {
     seen_approval: Seq,
 }
 
+/// What a phone already paired with the stack's hub keeps of it.
+pub(crate) fn paired_vault(stack: &Stack) -> Arc<MemoryVault> {
+    let vault = Arc::new(MemoryVault::default());
+    let link = PairingLink::parse(&stack.pairing_link()).unwrap();
+    vault.save(&client_core::pair(&link, "phone").unwrap()).unwrap();
+    vault
+}
+
 impl<'a> Phone<'a> {
     /// The app on a phone that has never paired.
     pub(crate) fn unpaired(cx: &'a mut TestAppContext) -> Phone<'a> {
-        Phone::open(cx, Arc::new(MemoryVault::default()))
+        Phone::open(cx, Arc::new(MemoryVault::default()), Preferences::in_memory())
     }
 
-    /// The app on a phone already paired with the stack's hub.
+    /// The app on a phone already paired with the stack's hub, and never left anywhere.
     pub(crate) fn paired(cx: &'a mut TestAppContext, stack: &Stack) -> Phone<'a> {
-        let vault = Arc::new(MemoryVault::default());
-        let link = PairingLink::parse(&stack.pairing_link()).unwrap();
-        vault.save(&client_core::pair(&link, "phone").unwrap()).unwrap();
-        Phone::open(cx, vault)
+        Phone::open(cx, paired_vault(stack), Preferences::in_memory())
     }
 
-    fn open(cx: &'a mut TestAppContext, vault: Arc<MemoryVault>) -> Phone<'a> {
+    /// The app as it opens on a phone that keeps the hub it's paired with in `vault`, and where it was left in
+    /// `preferences`.
+    pub(crate) fn open(cx: &'a mut TestAppContext, vault: Arc<MemoryVault>, preferences: Preferences) -> Phone<'a> {
         // A real hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
         cx.executor().allow_parking();
         cx.update(gpui_kit::init);
@@ -64,7 +72,8 @@ impl<'a> Phone<'a> {
         // An iPhone's screen, in points.
         let screen = Bounds::new(point(px(0.), px(0.)), size(px(402.), px(874.)));
         let options = WindowOptions { window_bounds: Some(WindowBounds::Windowed(screen)), ..Default::default() };
-        let (handle, app) = cx.update(|cx| mobile::open_window(vault.clone(), opened, options, cx)).unwrap();
+        let (handle, app) =
+            cx.update(|cx| mobile::open_window(vault.clone(), preferences, opened, options, cx)).unwrap();
         // In front, as an app the person just opened is.
         cx.update_window(handle, |_, window, _| window.activate_window()).unwrap();
         Phone { cx, handle, app, vault, links, seen_approval: Seq::default() }

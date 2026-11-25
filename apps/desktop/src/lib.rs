@@ -35,6 +35,7 @@ pub mod new_workspace;
 mod notifications;
 pub mod patch;
 mod permissions;
+mod preferences;
 mod prompt_cache;
 pub mod pull_request;
 mod rename;
@@ -151,6 +152,7 @@ pub fn open_main_window(
     // Before any notification, which Windows shows only for an app that has said what it's called.
     cx.set_app_identity(notifications::APP_ID, "Roundhouse");
     settings::load(&hub.paths.data_dir, cx);
+    preferences::load(opens, &hub.paths.data_dir, cx);
     accessibility_focus::install();
     keys::set(cx);
     dictation_ui::install(dictating::source(), cx);

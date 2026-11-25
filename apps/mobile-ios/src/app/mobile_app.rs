@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use client_core::RemoteHub;
+use client_core::this_device::Preferences;
 use gpui_kit::component::input::InputState;
 use gpui_kit::{
     AnyElement, AnyWindowHandle, App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render,
@@ -23,19 +24,21 @@ use crate::vault::Vault;
 /// one.
 const AWAY_BEFORE_RECONNECT: Duration = Duration::from_secs(20);
 
-/// Opens the app's one window, after `gpui_kit::init`, on the hub `vault` keeps. On a phone the window fills the
-/// screen whatever `options` asks. `links` carries pairing links the phone opens, such as from the Camera app.
+/// Opens the app's one window, after `gpui_kit::init`, on the hub `vault` keeps, where `preferences` says the app was
+/// left. On a phone the window fills the screen whatever `options` asks. `links` carries pairing links the phone opens,
+/// such as from the Camera app.
 pub fn open_window(
     vault: Arc<dyn Vault>,
+    preferences: Preferences,
     links: flume::Receiver<String>,
     options: WindowOptions,
     cx: &mut App,
 ) -> anyhow::Result<(AnyWindowHandle, Entity<MobileApp>)> {
-    open(vault, links, hub_link::over_the_network(), options, cx)
+    open(vault, preferences, links, hub_link::over_the_network(), options, cx)
 }
 
-/// As [`open_window`], connecting to the hub it's paired with as `connect` does, such as to a test's own hub on a
-/// socket, rather than over the network.
+/// As [`open_window`], on an app never left anywhere, connecting to the hub it's paired with as `connect` does, such as
+/// to a test's own hub on a socket, rather than over the network.
 #[cfg(feature = "testing")]
 pub fn open_window_connecting(
     vault: Arc<dyn Vault>,
@@ -44,18 +47,21 @@ pub fn open_window_connecting(
     options: WindowOptions,
     cx: &mut App,
 ) -> anyhow::Result<(AnyWindowHandle, Entity<MobileApp>)> {
-    open(vault, links, Arc::new(connect), options, cx)
+    open(vault, Preferences::in_memory(), links, Arc::new(connect), options, cx)
 }
 
 fn open(
     vault: Arc<dyn Vault>,
+    preferences: Preferences,
     links: flume::Receiver<String>,
     connect: ConnectTo,
     options: WindowOptions,
     cx: &mut App,
 ) -> anyhow::Result<(AnyWindowHandle, Entity<MobileApp>)> {
     init(cx);
-    gpui_kit::open_window(options, cx, move |window, cx| cx.new(|cx| MobileApp::new(vault, links, connect, window, cx)))
+    gpui_kit::open_window(options, cx, move |window, cx| {
+        cx.new(|cx| MobileApp::new(vault, preferences, links, connect, window, cx))
+    })
 }
 
 /// The app's look, for a device held in the hand and pressed by touch, as "Each client" in `docs/spec/look.md` says.
@@ -82,6 +88,8 @@ pub(super) enum Pairing {
 /// connection. All of it goes with the hub.
 pub(super) struct Followed {
     pub(super) link: Entity<HubLink>,
+    /// The app is still to open where it was left, once it has the hub's records.
+    pub(super) reopens: bool,
     pub(super) creating: Option<Creating>,
     /// What's asked before it's done to one of its workspaces, over the screen.
     pub(super) asking: Option<Asking>,
@@ -102,6 +110,8 @@ pub(super) struct Creating {
 
 pub struct MobileApp {
     pub(super) vault: Arc<dyn Vault>,
+    /// What the phone remembers from how it's used, such as the workspace whose chat is open, to open on again.
+    pub(super) preferences: Preferences,
     connect: ConnectTo,
     pub(super) followed: Option<Followed>,
     pub(super) open: Open,
@@ -117,15 +127,16 @@ pub struct MobileApp {
 impl MobileApp {
     fn new(
         vault: Arc<dyn Vault>,
+        preferences: Preferences,
         links: flume::Receiver<String>,
         connect: ConnectTo,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let link_input = cx.new(|cx| InputState::new(window, cx).placeholder("Pairing link"));
-        let opened = cx.spawn(async move |this, cx| {
+        let opened = cx.spawn_in(window, async move |this, cx| {
             while let Ok(url) = links.recv_async().await {
-                if this.update(cx, |app, cx| app.pair(&url, cx)).is_err() {
+                if this.update_in(cx, |app, window, cx| app.pair(&url, window, cx)).is_err() {
                     return;
                 }
             }
@@ -133,6 +144,7 @@ impl MobileApp {
         let activation = cx.observe_window_activation(window, Self::activation);
         let mut app = MobileApp {
             vault,
+            preferences,
             connect,
             followed: None,
             open: Open::default(),
@@ -144,17 +156,21 @@ impl MobileApp {
             _links: opened,
         };
         if let Some(hub) = app.vault.load() {
-            app.follow(hub, cx);
+            app.follow(hub, window, cx);
         }
         app
     }
 
-    /// Starts following a hub, in place of any before it, with nothing of the last one open.
-    pub(super) fn follow(&mut self, hub: RemoteHub, cx: &mut Context<Self>) {
+    /// Starts following a hub, in place of any before it, with nothing of the last one open, nor kept of where the app
+    /// was left on it.
+    pub(super) fn follow(&mut self, hub: RemoteHub, window: &mut Window, cx: &mut Context<Self>) {
+        if self.link().is_some_and(|link| link.read(cx).hub().fingerprint != hub.fingerprint) {
+            self.left_on(None, cx);
+        }
         let connect = self.connect.clone();
         let link = cx.new(|cx| HubLink::new(hub, connect, cx));
         let events = [
-            cx.observe(&link, |app, link, cx| {
+            cx.observe_in(&link, window, |app, link, window, cx| {
                 let (records, hub_here) = (link.read(cx).snapshot(), link.read(cx).client().is_some());
                 if let (Some(open), Some(records)) = (&app.open.chat, records) {
                     open.chat.update(cx, |chat, cx| {
@@ -162,6 +178,7 @@ impl MobileApp {
                         chat.records_changed(&records, cx);
                     });
                 }
+                app.reopen(window, cx);
                 cx.notify();
             }),
             cx.subscribe(&link, |app, _, Reconnected(client), cx| {
@@ -172,6 +189,7 @@ impl MobileApp {
         ];
         let followed = Followed {
             link,
+            reopens: true,
             creating: None,
             asking: None,
             renaming: None,
@@ -192,6 +210,7 @@ impl MobileApp {
             cx.notify();
             return;
         }
+        self.left_on(None, cx);
         self.error = None;
         self.followed = None;
         self.open = Open::default();
@@ -239,10 +258,12 @@ impl MobileApp {
         let events = cx.subscribe_in(&chat, window, |app, _, event: &ChatEvent, window, cx| match event {
             ChatEvent::Back => {
                 app.open.chat = None;
+                app.left_on(None, cx);
                 cx.notify();
             }
             ChatEvent::GoToWorkspace(workspace) => app.open_workspace(workspace, window, cx),
         });
+        self.left_on(Some(chat.read(cx).workspace()), cx);
         // The chat that was open goes, and lets go of what it followed of its session as it does.
         self.open = Open { chat: Some(OpenChat { chat, _events: events }), panel: None };
         self.error = None;
