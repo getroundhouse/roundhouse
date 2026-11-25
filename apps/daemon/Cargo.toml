@@ -26,6 +26,7 @@ worker.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
+private-files.workspace = true
 
 [dev-dependencies]
 agents = { workspace = true, features = ["testing"] }
