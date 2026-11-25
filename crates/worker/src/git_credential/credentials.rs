@@ -115,7 +115,7 @@ impl GitCredentials {
     pub(crate) fn remove(&self) {
         self.given.send_replace(self.machine.clone());
         if let Err(e) = self.files.remove() {
-            warn!("couldn't remove the git credential's files: {e}");
+            warn!(name: "git_credential.files_unremoved", error = %e, "Couldn't remove the git credential's files");
         }
     }
 }

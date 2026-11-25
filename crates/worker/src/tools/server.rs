@@ -95,7 +95,12 @@ impl Tools {
             Some(port) => match listen_again(port).await {
                 Ok(listener) => Ok(listener),
                 Err(e) => {
-                    info!(port, "the worker's tools go on another port, since they can't have theirs again: {e}");
+                    info!(
+                        name: "tools.port_moved",
+                        port,
+                        error = %e,
+                        "The worker's tools go on another port, since they can't have theirs again"
+                    );
                     listen(0, false)
                 }
             },
@@ -159,7 +164,11 @@ async fn accept(listener: TcpListener, tools: Arc<Tools>, port: u16) {
         tokio::select! {
             accepted = listener.accept() => match accepted {
                 Ok((stream, _)) if connections.len() >= MAX_CONNECTIONS => {
-                    warn!("the worker's tools turned a connection away, with {MAX_CONNECTIONS} open already");
+                    warn!(
+                        name: "tools.connection_refused",
+                        open = MAX_CONNECTIONS,
+                        "The worker's tools turned a connection away, with as many open as they take"
+                    );
                     drop(stream);
                 }
                 Ok((stream, _)) => {
@@ -167,7 +176,7 @@ async fn accept(listener: TcpListener, tools: Arc<Tools>, port: u16) {
                 }
                 Err(e) => {
                     // Such as running out of file descriptors, which a moment can free.
-                    warn!("the worker's tools couldn't take a connection: {e}");
+                    warn!(name: "tools.connection_failed", error = %e, "The worker's tools couldn't take a connection");
                     tokio::time::sleep(ACCEPT_PAUSE).await;
                 }
             },

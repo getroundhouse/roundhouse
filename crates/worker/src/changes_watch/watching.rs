@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Semaphore, watch};
 use tokio::time::Instant;
-use tracing::{debug, warn};
+use tracing::{debug, info};
 
 /// How the watch waits: until writes have stopped for 100 ms, as a save or a checkout writes several files one after
 /// another, or for a second of writes that don't stop, as a long run of edits makes, and at least every five minutes.
@@ -80,7 +80,14 @@ pub(crate) async fn watch(
                 last = Some(summary);
             }
             Ok(_) => {}
-            Err(e) => debug!(worktree = %worktree.display(), "summing up the worktree's changes: {}", e.message),
+            Err(e) => {
+                debug!(
+                    name: "changes.unread",
+                    worktree = %worktree.display(),
+                    error = e.message,
+                    "Couldn't sum up a worktree's changes"
+                );
+            }
         }
         let took = began.elapsed();
         match settling(os.as_deref()).wait(&heard.wake, &mut stopping).await {
@@ -117,7 +124,12 @@ pub(super) async fn heard_of(given: &Environment, worktree: &Path) -> Arc<Heard>
     let git_dir = match git::ignored::git_dir(given, worktree).await {
         Ok(git_dir) => Some(named(git_dir)),
         Err(e) => {
-            debug!(worktree = %worktree.display(), "finding the worktree's git directory: {}", e.message);
+            debug!(
+                name: "changes.git_directory_unfound",
+                worktree = %worktree.display(),
+                error = e.message,
+                "Couldn't find a worktree's git directory"
+            );
             None
         }
     };
@@ -129,7 +141,12 @@ async fn ignored(given: &Environment, worktree: &Path) -> Ignored {
     match git::ignored::ignored(given, worktree).await {
         Ok(listed) => Ignored::listed(&listed),
         Err(e) => {
-            debug!(worktree = %worktree.display(), "listing what git ignores: {}", e.message);
+            debug!(
+                name: "changes.ignored_unlisted",
+                worktree = %worktree.display(),
+                error = e.message,
+                "Couldn't list what git ignores"
+            );
             Ignored::default()
         }
     }
@@ -163,7 +180,11 @@ pub(super) async fn take_in(
     while !level.is_empty() {
         let kept = not_ignored(given, worktree, heard, level).await;
         if watching.add(&kept).is_err() {
-            warn!(worktree = %worktree.display(), "the worktree has more folders than its watch may hold, so it's read on a timer");
+            info!(
+                name: "changes.watch_too_big",
+                worktree = %worktree.display(),
+                "A worktree has more folders than its watch may hold, so it's read on a timer"
+            );
             *os = None;
             return;
         }
@@ -183,7 +204,12 @@ async fn not_ignored(given: &Environment, worktree: &Path, heard: &Heard, folder
         Ok(ignored) => ignored.iter().map(|path| path_from_git(path)).collect(),
         // Watched, then, which costs only what it hears.
         Err(e) => {
-            debug!(worktree = %worktree.display(), "asking git which new folders it ignores: {}", e.message);
+            debug!(
+                name: "changes.ignored_folders_unread",
+                worktree = %worktree.display(),
+                error = e.message,
+                "Couldn't ask git which new folders it ignores"
+            );
             Vec::new()
         }
     };

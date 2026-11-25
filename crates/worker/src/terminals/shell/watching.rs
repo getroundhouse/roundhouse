@@ -107,7 +107,12 @@ impl Watching {
         let picture = match mirror.shown() {
             Ok(now) => self.sending.next(now, |number| mirror.history_row(number)),
             Err(e) => {
-                warn!("couldn't say what terminal {} shows: {e}", self.terminal);
+                warn!(
+                    name: "terminal.picture_failed",
+                    terminal = %self.terminal,
+                    error = %e,
+                    "Couldn't say what a terminal shows"
+                );
                 None
             }
         };

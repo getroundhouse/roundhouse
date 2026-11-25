@@ -67,7 +67,12 @@ async fn remove(
             // The folder it was in has gone too, and with it anything waiting.
             Err(e) if e.kind() == io::ErrorKind::NotFound => None,
             Err(e) => {
-                warn!(path = %deleting.display(), "couldn't lock it, so not deleting what's waiting there: {e}");
+                warn!(
+                    name: "worktree.deleting_unlocked",
+                    path = %deleting.display(),
+                    error = %e,
+                    "Couldn't lock where worktrees wait to be deleted, so they aren't deleted"
+                );
                 None
             }
         };
@@ -209,7 +214,13 @@ pub(super) async fn forget(
             kept.display()
         ))),
         Err(also) => {
-            error!(path = %moved.display(), "a worktree git refused to remove couldn't be put back ({e}) or kept: {also}");
+            error!(
+                name: "worktree.not_put_back",
+                path = %moved.display(),
+                error = %e,
+                also = %also,
+                "A worktree git refused to remove couldn't be put back or kept"
+            );
             Err(git_error(format!("{}, and it couldn't go back to {path} ({e})", refused.message)))
         }
     }
@@ -275,10 +286,16 @@ impl Deleting {
         match listed {
             Ok(waiting) if waiting.is_empty() => {}
             Ok(waiting) => {
-                info!(count = waiting.len(), "deleting worktrees moved aside");
+                info!(name: "worktree.deleting", count = waiting.len(), "Deleting worktrees moved aside");
                 deleter.start(given, &waiting);
             }
-            Err(e) => warn!("couldn't list worktrees moved aside to delete them: {e}"),
+            Err(e) => {
+                warn!(
+                    name: "worktree.waiting_unlisted",
+                    error = %e,
+                    "Couldn't list the worktrees moved aside to delete them"
+                );
+            }
         }
     }
 }

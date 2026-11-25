@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio::net::UnixListener;
 use tokio::task::{JoinError, JoinHandle};
 use tokio::time::Instant;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use super::connection::{self, Closing, Ended};
 use super::{Config, Worker};
@@ -43,11 +43,11 @@ pub async fn listen(
                 match closing {
                     Ok(closing) if closing.ended == Ended::Stop => break Some(closing),
                     Ok(closing) => {
-                        info!("the hub went, and asked this worker to keep running without it");
+                        info!(name: "hub.went", "The hub went, and asked this worker to keep running without it");
                         without_hub(&worker).await;
                         closing.abandon();
                     }
-                    Err(e) => error!("serving a hub failed: {e}"),
+                    Err(e) => warn!(name: "hub.serving_failed", error = %e, "Serving a hub failed"),
                 }
                 alone_since = Instant::now();
             }
@@ -65,17 +65,21 @@ pub async fn listen(
                 }
                 Err(e) => {
                     // Such as for running out of file descriptors, which may pass.
-                    warn!("a hub's connection couldn't be accepted: {e}");
+                    warn!(name: "hub.connection_failed", error = %e, "A hub's connection couldn't be accepted");
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             },
             () = tokio::time::sleep_until(alone_since + idle_limit), if serving.is_none() => {
-                info!("no hub has connected for {idle_limit:?}, stopping agents");
+                info!(
+                    name: "hub.none_connected",
+                    idle_limit = ?idle_limit,
+                    "No hub has connected in a while, so agents are stopped"
+                );
                 break None;
             }
             // A hub that's connected stops the worker itself as it goes, as a test's hub does.
             () = &mut stops_with, if serving.is_none() => {
-                info!("the test this worker is for has gone, stopping agents");
+                info!(name: "hub.test_gone", "The test this worker is for has gone, so agents are stopped");
                 break None;
             }
         }

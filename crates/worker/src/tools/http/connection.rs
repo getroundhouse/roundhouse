@@ -41,7 +41,7 @@ pub(in super::super) async fn serve_connection(stream: TcpStream, tools: Arc<Too
     let mut http = http1::Builder::new();
     http.timer(TokioTimer::new()).header_read_timeout(HEADERS_TIMEOUT);
     if let Err(e) = http.serve_connection(TokioIo::new(stream), service).await {
-        debug!("a connection to the worker's tools ended: {e}");
+        debug!(name: "tools.connection_ended", error = %e, "A connection to the worker's tools ended");
     }
 }
 

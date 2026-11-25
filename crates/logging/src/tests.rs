@@ -20,7 +20,14 @@ fn an_event_is_a_line_with_its_name_its_message_its_fields_and_what_its_in() {
     let outer = info_span!("workspace", workspace_id = "w1", session_id = "outer").entered();
     let inner = info_span!("session", session_id = "s1", turn = tracing::field::Empty).entered();
     inner.record("turn", 3);
-    warn!(name: "github.read.failed", tries = 2, again = true, error = %"line one\nline two", "Couldn't read");
+    warn!(
+        name: "github.read.failed",
+        tries = 2,
+        ms = 2_u128,
+        again = true,
+        error = %"line one\nline two",
+        "Couldn't read"
+    );
     drop((inner, outer));
     info!("Unnamed, in nothing");
 
@@ -33,7 +40,7 @@ fn an_event_is_a_line_with_its_name_its_message_its_fields_and_what_its_in() {
                 "target": "logging::tests",
                 "event": "github.read.failed",
                 "message": "Couldn't read",
-                "fields": { "tries": 2, "again": true, "error": "line one\nline two" },
+                "fields": { "tries": 2, "ms": 2, "again": true, "error": "line one\nline two" },
                 "context": { "workspace_id": "w1", "session_id": "s1", "turn": 3 },
             }),
             json!({ "level": "INFO", "target": "logging::tests", "message": "Unnamed, in nothing" }),

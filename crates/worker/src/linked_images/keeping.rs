@@ -97,7 +97,7 @@ fn read_one(worktree: &Path, address: &str, left: &mut u64) -> Option<NewAttachm
     let path = addresses::path(address)?;
     // What's left of what one event can carry, which a file bigger than is read no further than that.
     let (media_type, bytes) = crate::images::read(worktree, &path, *left)
-        .inspect_err(|e| debug!(path, "not keeping what the agent's text points to: {e}"))
+        .inspect_err(|e| debug!(name: "image.not_kept", path, error = %e, "Not keeping what an agent's text points to"))
         .ok()?;
     let size_bytes = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
     *left = left.saturating_sub(size_bytes);

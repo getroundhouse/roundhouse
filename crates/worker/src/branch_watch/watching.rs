@@ -98,7 +98,14 @@ async fn repository(
         let given = given.borrow().clone();
         match branches::places(&given, worktree).await {
             Ok(places) => return Some(places),
-            Err(e) => debug!(worktree = %worktree.display(), "finding the worktree's repository: {}", e.message),
+            Err(e) => {
+                debug!(
+                    name: "branches.repository_unfound",
+                    worktree = %worktree.display(),
+                    error = e.message,
+                    "Couldn't find a worktree's repository"
+                );
+            }
         }
         if let Some(first) = first.take() {
             let _ = first.send(());
@@ -124,13 +131,23 @@ pub(super) fn start(wakes: &Arc<Wakes>) -> Option<Box<dyn Watcher + Send>> {
     let own = notify::recommended_watcher(heard.clone()).and_then(|watcher| watching(watcher, &wakes.places));
     match own {
         Ok(watcher) => return Some(Box::new(watcher)),
-        Err(e) => warn!("the OS can't say when git changes the branches, so they're looked at instead: {e}"),
+        Err(e) => {
+            warn!(
+                name: "branches.watch_by_looking",
+                error = %e,
+                "The OS can't say when git changes the branches, so they're looked at instead"
+            );
+        }
     }
     let config = notify::Config::default().with_poll_interval(POLL_EVERY);
     match PollWatcher::new(heard, config).and_then(|watcher| watching(watcher, &wakes.places)) {
         Ok(watcher) => Some(Box::new(watcher)),
         Err(e) => {
-            warn!("the branches can't be watched, so they're read every few minutes: {e}");
+            warn!(
+                name: "branches.watch_failed",
+                error = %e,
+                "The branches can't be watched, so they're read every few minutes"
+            );
             None
         }
     }
@@ -162,7 +179,12 @@ async fn read_and_send(given: &Environment, worktree: &Path, whose: Whose, wakes
     let read = match branches::read(given, worktree, &wakes.places).await {
         Ok(read) => read,
         Err(e) => {
-            debug!(worktree = %worktree.display(), "reading the branches: {}", e.message);
+            debug!(
+                name: "branches.unread",
+                worktree = %worktree.display(),
+                error = e.message,
+                "Couldn't read the branches"
+            );
             return;
         }
     };

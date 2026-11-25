@@ -111,7 +111,7 @@ pub(crate) async fn start_agent(
     };
     let process = agents::spawn(spec, tx, options).await?;
     let (pid, capabilities) = (process.pid(), Box::new(process.capabilities()));
-    info!(pid, %session_id, %run, "started agent");
+    info!(name: "agent.started", pid, %session_id, %run, "Started an agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
     forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, worktree, rx));
@@ -141,7 +141,13 @@ async fn make_context_folder(session_id: &SessionId, worktree: &Path) {
         .await
         .unwrap_or_else(|e| Err(std::io::Error::other(e)));
     if let Err(e) = made {
-        warn!(%session_id, worktree = %worktree.display(), "couldn't make the worktree's .context folder: {e}");
+        warn!(
+            name: "worktree.context_unmade",
+            %session_id,
+            worktree = %worktree.display(),
+            error = %e,
+            "Couldn't make a worktree's .context folder"
+        );
     }
 }
 

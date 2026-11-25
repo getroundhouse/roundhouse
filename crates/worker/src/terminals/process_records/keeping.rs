@@ -72,13 +72,25 @@ impl Drop for ProcessRecords {
 
 fn write(path: &Path, pid: u32) {
     if let Err(e) = ProcessRecord::write(path, pid) {
-        warn!("couldn't record {}, so the provider can't stop it if the worker is killed: {e}", path.display());
+        warn!(
+            name: "terminal.process_unrecorded",
+            path = %path.display(),
+            error = %e,
+            "Couldn't record a process, so the provider can't stop it if the worker is killed"
+        );
     }
 }
 
 fn remove(path: &Path) {
     match std::fs::remove_file(path) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => warn!("couldn't remove {}: {e}", path.display()),
+        Err(e) if e.kind() != io::ErrorKind::NotFound => {
+            warn!(
+                name: "terminal.record_unremoved",
+                path = %path.display(),
+                error = %e,
+                "Couldn't remove the record of a process"
+            );
+        }
         _ => {}
     }
 }

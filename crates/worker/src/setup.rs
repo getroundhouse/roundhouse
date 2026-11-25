@@ -165,7 +165,7 @@ pub fn append_log(log: &Path, line: &str) {
     if let Err(e) =
         std::fs::OpenOptions::new().create(true).append(true).open(log).and_then(|mut f| writeln!(f, "{line}"))
     {
-        warn!("couldn't write to {}: {e}", log.display());
+        warn!(name: "setup.log_unwritten", path = %log.display(), error = %e, "Couldn't write to the setup log");
     }
 }
 
