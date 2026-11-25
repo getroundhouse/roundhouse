@@ -74,6 +74,10 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             print!("{}", kept::compare(&run, other.as_deref())?);
             Ok(())
         }
+        Command::Kept { command: KeptCommand::Sent { recordings } } => {
+            print!("{}", kept::sent(&recordings)?);
+            Ok(())
+        }
         Command::Accept { run, baseline } => Run::read(&run)?.baseline().write(&baseline),
     }
 }

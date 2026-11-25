@@ -97,6 +97,11 @@ pub(crate) enum KeptCommand {
     },
     /// Lists the recordings a run wrote differently from another run, or from what the app wrote as they were dictated.
     Compare { run: PathBuf, other: Option<PathBuf> },
+    /// Sets what was sent against the recordings it came from, and lists those whose text was changed or left out.
+    Sent {
+        /// The folder the app keeps recordings in.
+        recordings: PathBuf,
+    },
 }
 
 /// Where the model and the datasets are.
