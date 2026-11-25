@@ -5,6 +5,7 @@
 #![cfg(test)]
 
 mod dependencies;
+mod design;
 mod design_system;
 mod docs;
 mod environments;

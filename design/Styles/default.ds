@@ -1,0 +1,195 @@
+ds:v1
+// Roundhouse's foundations, by the names `look` has them by, as docs/spec/look.md says. A test in `look` holds each
+// value here to `look`'s.
+inherits: none
+
+// Palettes. The greys are the stops of `look`'s ramp that something is, from the darkest, pinned at their exact values.
+// The middle one is the colour it's made from.
+grey: boldness(color(#231e1b))
+grey.hint { $default: #140f0c }
+grey.faint { $default: #17120f }
+grey.subtle { $default: #1a1512 }
+grey.soft { $default: #201b18 }
+grey.firm { $default: #26211e }
+grey.bold { $default: #2a2421 }
+grey.strong { $default: #2d2724 }
+grey.intense { $default: #332d2a }
+// The brand's hue, from the palest. Only the pinned steps and the middle one are the app's.
+copper: boldness(color(#d08a5c))
+copper.faint { $default: #d8c2b3 }
+copper.subtle { $default: #e8b896 }
+copper.soft { $default: #dba27c }
+copper.intense { $default: #36251a }
+
+// Colours of their own, with no steps.
+amber: color(#e9b24c)
+green: color(#6cc488)
+red: color(#ee6f64)
+
+// Surfaces.
+color.surface.pane: grey.hint
+color.surface.sidebar: grey.faint
+color.surface.inset: grey.soft
+color.surface.raised: grey.firm
+color.surface.prompt: copper.intense
+color.surface.icon_tile_top: #211d1b
+
+// Under the pointer, pressed or chosen.
+color.pointer.row_hover: grey.soft
+color.pointer.line_hover: grey.subtle
+color.pointer.menu_hover: grey.bold
+color.pointer.raised_hover: grey.strong
+color.pointer.raised_pressed: grey.intense
+
+// Edges and the shadow.
+color.edge: grey.strong
+color.edge.control_edge: grey.intense
+color.edge.shadow: #000000
+
+// Text.
+color.text: #eee6e1
+color.text.muted: #b8b1ac
+color.text.faint: #7c7671
+
+// Buttons.
+color.button: grey.soft
+color.button.main: #f2eee9
+color.button.main_hover: #ffffff
+color.button.main_pressed: #ddd8d2
+color.button.on_main: grey.subtle
+
+// The brand.
+color.brand: copper.mid
+color.brand.current: copper.faint
+color.brand.link: copper.soft
+color.brand.link_hover: copper.subtle
+
+// What happened.
+color.status.needs_you: amber
+color.status.warning: amber
+color.status.done: green
+color.status.stopped: red
+color.status.error: red
+color.status.added: green
+color.status.removed: red
+color.status.modified: amber
+// The plan card's: `needs_you` at `look`'s strength for a card.
+color.status.needs_you_wash: #e9b24c17
+
+// A pull request.
+color.PR.open: #3fb950
+color.PR.merged: #a371f7
+color.PR.closed: #b9605a
+color.PR.draft: #8b949e
+color.PR.queued: #d29922
+
+// The window.
+color.window.dim: #00000099
+color.window.scroll_thumb: #ffffff1f
+color.window.scroll_thumb_hover: #ffffff33
+color.window.windows_close: #c42b1c
+color.window.on_windows_close: #ffffff
+
+// `look::Space`'s steps: XSmall is `xs`, and so on to XXLarge, `2xl`.
+spacing: tshirt(number([4, 8, 12, 16, 24, 32]), min: { none: 0 }, transforms: none)
+
+// The room at each end of a control, by its size.
+spacing.control.Small: spacing.sm
+spacing.control.Regular: spacing.md
+spacing.control.Large: spacing.lg
+
+// Lengths that aren't steps of `look::Space`: a chip's inside, and between a list's items, which is 0.25 of their text.
+spacing.Chip: 6
+spacing.ListItem: 3.5
+// A part's edge takes room in the app, and a stroke takes none here, so what has an edge is inset a pixel more.
+spacing.Edged: 17
+spacing.ChipStart: 7
+spacing.ChipEnd: 9
+
+// `look::Corner`'s, by its names. They aren't a scale, because Brilliant adds steps of its own to one.
+radius.Glyph: 2
+radius.InlineControl: 4
+radius.Control: 6
+radius.Card: 10
+
+// Lines: an edge, a quote's rule, the line under the tab that's showing, and a kit icon's at each of an icon's sizes.
+stroke.width.Edge: 1
+stroke.width.QuoteRule: 2
+stroke.width.TabLine: 2
+stroke.width.icon.Small: 1
+stroke.width.icon.Regular: 1.1667
+stroke.width.icon.Large: 1.3333
+
+// How big an icon is, and how tall a control, a bar and a row are, at a desk, by `look`'s names for each. A bar's has
+// the edge under it. The room at a control's ends is with the spaces.
+size.icon.Small: 12
+size.icon.Regular: 14
+size.icon.Large: 16
+size.control.Small: 24
+size.control.Regular: 28
+size.control.Large: 32
+size.bar.Small: 32
+size.bar.Regular: 40
+size.row.Small: 28
+size.row.Regular: 36
+size.row.Large: 44
+
+// How long what moves takes, in milliseconds. A film's are numbers of its own, since it takes no token.
+motion.Panel: 200
+motion.Fade: 200
+motion.Scroll: 300
+
+// The one shadow, under what opens over the rest. A blur is twice the app's number for it, since GPUI measures one as
+// half of what's drawn here.
+shadow.Raised: [
+  drop(y: 8, blur: 24, color: rgba(0, 0, 0, 0.225)),
+  drop(y: 2, blur: 6, color: rgba(0, 0, 0, 0.15)),
+]
+
+// Type. SF Pro Text is macOS's own system font at body's and heading's sizes, and SF Pro Display is at a page title's,
+// 24px, as their widths were measured.
+font.family: "SF Pro Text"
+font.family.title: "SF Pro Display"
+font.family.code: Menlo
+font.weight.regular: 400
+font.weight.emphasis: 500
+font.weight.strong: 600
+
+// `look::Type`'s sizes, and inline code's in body text: `look::INLINE_CODE` of it.
+font.size.PageTitle: 24
+font.size.Heading: 16
+font.size.Body: 14
+font.size.Detail: 12
+font.size.Code: 12
+font.size.Key: 10
+font.size.KeyHeld: 7.5
+font.size.InlineCode: 12.25
+
+// How far apart lines are, over the size of their text: body text's is the golden ratio of its size, to the nearest
+// device pixel, 22.5; code's is `look::CodeLines`'; and what a key says and what's held with it are as tall as the key.
+font.lineHeight.Body: 1.6071
+font.lineHeight.CodeFile: 1.6667
+font.lineHeight.CodeChat: 1.4167
+font.lineHeight.Key: 1
+font.lineHeight.KeyHeld: 1.3333
+
+// Over the size of the text, as macOS spaces its own system font, measured at each of its sizes.
+font.letterSpacing.PageTitle: 0.0135
+font.letterSpacing.Heading: -0.0194
+font.letterSpacing.Body: -0.0107
+font.letterSpacing.Detail: 0
+font.letterSpacing.Code: 0
+font.letterSpacing.Key: 0.0117
+font.letterSpacing.KeyHeld: 0.0293
+
+// `look::Type`'s kinds, in its order, then what body text is when it stands out, and inline code.
+typography.PageTitle: { fontFamily: font.family.title, fontSize: font.size.PageTitle, fontWeight: font.weight.emphasis, letterSpacing: font.letterSpacing.PageTitle }
+typography.Heading: { fontFamily: font.family, fontSize: font.size.Heading, fontWeight: font.weight.emphasis, letterSpacing: font.letterSpacing.Heading }
+typography.Body: { fontFamily: font.family, fontSize: font.size.Body, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.Body, lineHeight: font.lineHeight.Body }
+typography.Detail: { fontFamily: font.family, fontSize: font.size.Detail, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.Detail }
+typography.Code: { fontFamily: font.family.code, fontSize: font.size.Code, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.Code }
+typography.Key: { fontFamily: font.family, fontSize: font.size.Key, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.Key, lineHeight: font.lineHeight.Key }
+typography.KeyHeld: { fontFamily: font.family, fontSize: font.size.KeyHeld, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.KeyHeld, lineHeight: font.lineHeight.KeyHeld }
+typography.Emphasis: { fontFamily: font.family, fontSize: font.size.Body, fontWeight: font.weight.emphasis, letterSpacing: font.letterSpacing.Body, lineHeight: font.lineHeight.Body }
+typography.Strong: { fontFamily: font.family, fontSize: font.size.Body, fontWeight: font.weight.strong, letterSpacing: font.letterSpacing.Body, lineHeight: font.lineHeight.Body }
+typography.InlineCode: { fontFamily: font.family.code, fontSize: font.size.InlineCode, fontWeight: font.weight.regular }

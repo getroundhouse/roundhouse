@@ -1,0 +1,7 @@
+[scripts]
+# Brilliant names a project by its folder, so every workspace's is "design". A folder named after the workspace shows
+# in its list of files which one it is. Git ignores it.
+setup = '''
+folder="design/@ $CONDUCTOR_WORKSPACE_NAME"
+mkdir -p "$folder" && printf 'bp:v1\n---\n' > "$folder/Workspace.bl"
+'''

@@ -1,0 +1,7 @@
+.brilliant/
+Styles/.gen/
+**/.thumbs/
+Exports/
+.brilliant/trash/
+# The workspace's own, as .conductor/settings.toml makes it.
+/@*/

@@ -19,6 +19,7 @@ How Brilliant, the design tool, behaves where the design depends on it, as found
 - A project is a folder. A canvas is a `.bl` file, a design system a `.ds` in `Styles/`, and a film a `.bm` in `Motion/`, all text.
 - A row of a `.bl` is one element, led by an ID it keeps. A copy of a component is one row naming its master, but for a copy on a canvas edited since its master changed, which also holds the master's layout and children.
 - A row holds what was measured, such as `s(360,hug:132)`, and a token's value beside its name, such as `tok(color.primary,#0080FF)`. Changing a token or a master doesn't rewrite the canvases that use it until each is next edited.
+- A project is named by its folder, so each workspace's is "design". A name in `.brilliant/settings.json` is ignored, a symlink to the folder is followed to it, and links inside a project aren't. Opening the whole worktree takes the worktree's name, but writes a design system and a `.gitignore` there, and components' paths no longer resolve. So the setup script in `.conductor/settings.toml` makes a folder such as `@ sants-2` in `design/`, which is first in Brilliant's list of files, and which git ignores.
 - `.brilliant/`, `Styles/.gen/` and each `Assets/.thumbs/` are made again. A thumbnail changes with every edit, and conflicts in a merge.
 
 ## The design system's pages

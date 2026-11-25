@@ -17,7 +17,7 @@ use crate::typography::Typeset as _;
 
 /// The room at a chip's start and between its parts, a chip's own rather than a space, as the owner chose from
 /// pictures: more than the smallest space, which crowded its mark and its name, and less than the next.
-const INSIDE: Pixels = px(6.);
+pub(crate) const INSIDE: Pixels = px(6.);
 
 /// A chip of `kind` and `size` for what `names` names: a file's or a folder's path, of which it shows the last part, a
 /// subagent's words, a server's name, a site's host, a proposal's title, or an issue's or a pull request's number.

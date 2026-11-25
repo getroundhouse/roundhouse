@@ -32,6 +32,11 @@ pub(super) const EMPHASIS: FontWeight = MEDIUM_AS_FOUND;
 /// a step past the app's own emphasis, so a line its writer meant to stand out does among the app's quieter titles.
 pub const STRONG: FontWeight = FontWeight::SEMIBOLD;
 
+/// How big inline code is, such as a path in a reply, as a share of the size of the text around it.
+pub const INLINE_CODE: f32 = 0.875;
+/// How far apart the items of a list someone wrote are, as a share of the size of its text: less than paragraphs are.
+pub const LIST_ITEM_GAP: f32 = 0.25;
+
 /// Medium, as the text system finds it. On a Mac, font-kit, which GPUI finds fonts with, reads the system font's Medium
 /// face as a little under 530, where CSS puts medium at 500, and finds a face for 500 among those at or below it, which
 /// is Regular. Asking for a little over 500 finds the first face at or above it, which is Medium. Elsewhere medium is
@@ -129,6 +134,13 @@ impl Type {
     #[cfg(test)]
     pub(crate) fn size_at(self, reach: Reach, rem: Pixels) -> Pixels {
         self.set_at(reach).size.to_pixels(rem)
+    }
+
+    /// How far apart its lines are at a desk, in a window whose rem is `rem`, if it has lines of its own.
+    #[cfg(test)]
+    pub(crate) fn line(self, rem: Pixels) -> Option<Pixels> {
+        let set = self.set_at(Reach::Desk);
+        set.line.map(|line| line.to_pixels(set.size, rem))
     }
 
     /// How the spec's table writes it: its name, its font, its size at a desk, at the app's rem there, its weight, and

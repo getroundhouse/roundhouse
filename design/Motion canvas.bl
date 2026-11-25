@@ -1,0 +1,21 @@
+bp:v1
+canvas:
+  backgroundEnabled: false
+---
+155400b383710424 fr p(0,0) s(400,220) f[(4cbc3d7f98d7b5e4,tok(color.surface.pane,#140F0C))] clip "01 Closed"
+  8f9165f17ee44a6e al(v,g(12:$spacing.md),pad(12:$spacing.md)) p(16,16) s(368,46.5) f[(65af110f9cd3936b,solid(tok(color.status.needs_you_wash,#E9B24C),o(0.09)))] rd(10:$radius.Card) clip "Card"
+    5ca05072a2242f07 al(h,y(c),g(8:$spacing.sm)) p(12,12) s(fill,22.5) ext(344,) f[] "Head"
+      567a2889aa496150 t("Plan",SF Pro Text,14,m,align(l),lh(1.6071),ls(-0.15px)) p(0,0) s(fill,hug:22.5) ext(250.88,) f[(e0588a217325b3fc,tok(color.status.needs_you,#E9B24C))] $typography.Emphasis "Title"
+      d6e608bd205fc197 t("Waiting for you",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) p(258.88,4.25) s(hug:85.12,hug:14) f[(9de2f3d550486799,tok(color.text.faint,#7C7671))] $typography.Detail "State"
+    60c000fd28b40233 t("Show each workspace's PR state",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.15px)) p(12,46.5) s(hug:212.55,hug:22.5) f[(f3a4e5f20f6370f0,tok(color.text,#EEE6E1))] $typography.Body "Line 0"
+    b14fea324d8e63ed t("Send it with the workspace's notice",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.15px)) p(12,81) s(hug:228.85,hug:22.5) f[(965079a65c01bd50,tok(color.text,#EEE6E1))] $typography.Body "Line 1"
+    0e601561edb1b4fc t("Draw each state in the gallery",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.15px)) p(12,115.5) s(hug:191.05,hug:22.5) f[(91f008f1d0c875e3,tok(color.text,#EEE6E1))] $typography.Body "Line 2"
+8c17353256eb17e0 fr p(440,0) s(400,220) f[(8c15f42579844dc0,tok(color.surface.pane,#140F0C))] clip "02 Open"
+  172f827ba05d6a8b al(v,g(12:$spacing.md),pad(12:$spacing.md)) p(16,16) s(368,188) f[(80f2f3a0b98e8bb2,solid(tok(color.status.needs_you_wash,#E9B24C),o(0.09)))] rd(10:$radius.Card) clip "Card"
+    2f485c2a8d780245 al(h,y(c),g(8:$spacing.sm)) p(12,12) s(fill,22.5) ext(344,) f[] "Head"
+      bf8171f82623b747 t("Plan",SF Pro Text,14,m,align(l),lh(1.6071),ls(-0.15px)) p(0,0) s(fill,hug:22.5) ext(250.88,) f[(281fd8313ba32d6f,tok(color.status.needs_you,#E9B24C))] $typography.Emphasis "Title"
+      21f8c79d2f7ced83 t("Waiting for you",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) p(258.88,4.25) s(hug:85.12,hug:14) f[(cf20526bc53fe757,tok(color.text.faint,#7C7671))] $typography.Detail "State"
+    f048319ab46b6c4a t("Show each workspace's PR state",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.15px)) p(12,46.5) s(hug:212.55,hug:22.5) f[(e7136bec695922a9,tok(color.text,#EEE6E1))] $typography.Body "Line 0"
+    932bd816d2c12109 t("Send it with the workspace's notice",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.15px)) p(12,81) s(hug:228.85,hug:22.5) f[(4b5db3f39e333933,tok(color.text,#EEE6E1))] $typography.Body "Line 1"
+    a0b8e3d013c53f03 t("Draw each state in the gallery",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.15px)) p(12,115.5) s(hug:191.05,hug:22.5) f[(8e0691fb0df6d84c,tok(color.text,#EEE6E1))] $typography.Body "Line 2"
+bp:end

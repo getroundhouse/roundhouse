@@ -9,6 +9,8 @@ mod chip;
 mod kinds;
 mod sizes;
 mod states;
+#[cfg(test)]
+pub(crate) use chip::INSIDE;
 pub use chip::{Chip, chip};
 pub use kinds::ChipKind;
 pub use sizes::ChipSize;
