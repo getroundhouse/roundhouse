@@ -33,6 +33,7 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [hub-package.md](hub-package.md) | A hub on a machine of its own is installed from an archive as a service, and a client updates it. Partly built |
 | [no-strong-copyleft.md](no-strong-copyleft.md) | Nothing that ships is under GPL, AGPL or LGPL |
 | [webm-through-libvpx.md](webm-through-libvpx.md) | The videos agents make are WebM, decoded by libvpx built from its source at a pinned commit |
+| [designed-in-brilliant.md](designed-in-brilliant.md) | The product is designed in Brilliant, in files in the repo, before it's built. Not built |
 | [gpui-not-web-view.md](gpui-not-web-view.md) | The desktop app is native Rust on GPUI, not a web view |
 | [gpui-kit.md](gpui-kit.md) | The apps are built on gpui-kit, Longbridge's component kit for GPUI |
 | [gpui-kit-copy.md](gpui-kit-copy.md) | gpui-kit and three parts of GPUI are built from copies in the repo |
