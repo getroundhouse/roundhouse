@@ -185,6 +185,20 @@ Codex 0.169.0 initializes an HTTP MCP server with protocol `2025-06-18`, then se
 
 The [2025 lifecycle](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle) defines initialization and version negotiation; its [HTTP transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) defines the subsequent version header. No MCP session record is needed for these ordinary stateless tools.
 
+## Which MCP servers an agent gets
+
+Observed on 0.171.0 through `thread/start`, with a `CODEX_HOME` of the trial's own, servers that say which config they came from, and no turn started. `config` is the thread's, as the adapter passes the worker's tools.
+
+- **A server in `config` is merged, field by field, into one of the same name on disk.**
+  - Over a stdio server, a `url` fails `thread/start` with `-32600`, "url is not supported for stdio", so there's no thread.
+  - Over an HTTP server, the `url` in `config` is used, and the `http_headers` on disk are sent to it along with those in `config`.
+  - A server with `enabled = false` on disk stays disabled.
+- **`mcp_servers.<name>.enabled` as `false` in `config` disables the one on disk.** With that, the same URL under another name connected.
+- **A trusted project's `.codex/config.toml` adds its servers,** and its `url` is used over the user's for the same name.
+- **A server that refuses its `Authorization` header with 401 fails to start,** as `mcpServer/startupStatus/updated` says. The thread starts without it.
+
+`config/mcpServer/reload` and `mcpServer/oauth/login` are in the generated schema, and weren't tried.
+
 ## Compacting when asked
 
 Read from 0.170.0 against a scripted model, with the isolation of the conformance binding's scripted trials. `thread/compact/start` takes only `threadId`, so there's nothing to say what to keep, and answers `{}`. Codex then compacts in a turn of its own: `turn/started`, a `contextCompaction` item started and completed, and `turn/completed`, with no `userMessage` item and no `thread/compacted`, which the schema calls deprecated in favor of the item. A `turn/steer` sent once that turn had ended was refused as `no active turn to steer`, as any is between turns.

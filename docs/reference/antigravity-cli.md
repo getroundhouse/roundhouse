@@ -81,6 +81,14 @@ Start a fresh conversation with `session/new`, or continue an existing one with 
 
 When `agy` exposes an MCP tool to its model, it names the tool `mcp_<server>_<tool>` in `name`, sets `title` to `<server>: <tool>`, and injects a `toolSummary` argument into the schema. The adapter uses `title` when it matches `mcp_<server>_<tool>` so server names containing underscores or hyphens stay intact (falling back to the first `_` after `mcp_`), and strips `toolSummary` from translated `Call::Mcp` inputs.
 
+## Which MCP servers an agent gets
+
+Observed on 1.5.14 through `session/new`, with a `HOME` of the trial's own, a stand-in API key, servers that say which config they came from, and no prompt sent.
+
+- **A server in `~/.gemini/config/mcp_config.json` is used over one of the same name in `mcpServers`.** `session/new` succeeded, with no error, and the one in `mcpServers` was never contacted. Under another name, or with none on disk, it was.
+- **`.mcp.json`, `.agents/mcp_config.json` and `.gemini/mcp_config.json` in the working directory started no server.** Whether they would in a directory the person has trusted wasn't tried.
+- **A server given no `Authorization` header is asked for `/.well-known/oauth-protected-resource`,** at the root and under the server's path, though it took every request.
+
 ## Resume, accounts, titles and local state
 
 - **Resume:** `agy` stores conversation state under `~/.gemini/antigravity-cli/` (`conversations/<sessionId>.db`, `annotations/<sessionId>.pbtxt` and `brain/<sessionId>/`). `session/resume` of a conversation whose `.db` file is gone, unreadable or corrupt, or that never existed, fails with `-32603` and `Failed to read session <id>; retry, or load it with session/load` in each case, on 1.5.9. So the adapter falls back to `session/new`, with a warning, only when that file is gone from the home it was given, and otherwise lets the launch fail rather than lose a conversation that may still be there. When a resumed conversation sends its next Gemini request, `agy` 1.5.9 appends a trailing `role: "user"` `<SYSTEM_MESSAGE>` notice (reporting that subagents and background tasks stopped across server restart) after the prompt's `<USER_REQUEST>` entry.

@@ -865,6 +865,9 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
 - **How full a context is belongs to its chat's record,** so every client shows the same ring, and it's still there once the agent has gone or the hub has restarted, since the conversation the agent resumes is as full. It isn't in the chat's history: only the newest matters, and it answers the app's own question rather than being something the agent said. *Unconfirmed.*
 
+- **A plug before the limits' bars opens a card of the chat's MCP servers while the pointer rests on it:** the hub's, then the ones the agent's CLI has of its own, under a rule. Each says how many tools it has, where the agent says, or that it can't be reached. One of the hub's that needs you to sign in to it has a Sign in button, which signs in for every chat. An agent that can't take a server while it runs has it from its next start, and the card says so. One of the CLI's own that needs signing in to says to do it from its CLI. *Not built.*
+- **The plug is amber while one of the hub's servers needs you to sign in, and otherwise as quiet as the ring.** No line above the composer says so, since every chat has every server, and most don't use most of them. One of the CLI's own never turns it amber, since it can't be signed in to from the app. *Not built.*
+
 ## Compacting
 
 - **A compaction is a rule across the chat,** where the agent swapped what it held for a summary. In its middle, faint: `Compacted`, or `Compacted automatically` when the agent did it by itself as its context filled, then how many tokens the context went from and to, such as `226k → 9k tokens`, and how long it took.
