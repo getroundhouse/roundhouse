@@ -19,7 +19,7 @@ These rules say what Roundhouse records about its own running: how each part log
 ## What a log may hold
 
 - **No log holds what a person or an agent wrote or said,** at any level: a prompt, a reply, a file's contents, what was dictated, or the words it was hinted.
-- **No log holds a secret, or an email address.** It names an account by Roundhouse's ID for it. A type that holds one of these has a `Debug` that leaves it out, as `GitIdentity`'s does. *Not built:* a check of every type that holds one.
+- **No log holds a secret,** such as a token. A type that holds one has a `Debug` that leaves it out. A log may name an account, by its name or its email address, since it stays on the machine it's about unless someone sends it on.
 - **A log may hold a path,** since a failure to read a file says little without it.
 - **A panic is logged with its message, where it happened and a backtrace,** since the message is often the quickest way to see what went wrong. It's the one exception to the first rule: a message can quote what the code was working on, as slicing a string where it can't be sliced quotes the string, and it's exported with the rest once exporting is set up.
 
