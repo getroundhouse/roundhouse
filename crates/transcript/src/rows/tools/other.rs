@@ -4,7 +4,7 @@
 use client_core::calls::Other;
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement};
+use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement, SharedString};
 use serde_json::Value;
 
 use super::line::{Line, Part};
@@ -14,14 +14,21 @@ use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::rows::shown::Gather;
 
-pub(super) fn draw(other: &Other, input: &Value, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    let icon = if other.server.is_some() { IconName::Plug } else { IconName::Wrench };
+/// A call to a tool of the MCP server shown as `server`, or of none.
+pub(super) fn draw(
+    other: &Other,
+    server: Option<&SharedString>,
+    input: &Value,
+    answer: Option<&Answer>,
+    toggle: &Toggle,
+    cx: &App,
+) -> AnyElement {
+    let icon = if server.is_some() { IconName::Plug } else { IconName::Wrench };
     let detail = other.detail.clone().filter(|_| !toggle.open);
     let line = Line::new(icon, other.title.clone())
         .part(
-            other
-                .server
-                .clone()
+            server
+                .cloned()
                 .map(|server| Part::Chip(look::chip(look::ChipKind::Server, look::ChipSize::Regular, server))),
         )
         .part(other.tool.clone().map(|tool| Part::Note(tool.into())))

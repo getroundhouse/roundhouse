@@ -1,8 +1,10 @@
-use protocol::event::{AgentTask, EventBody, TaskChange, TaskKind};
+use protocol::event::{AgentTask, EventBody, TaskChange, TaskKind, TaskTool};
 use protocol::model::TaskId;
+use protocol::worker::ToolsToken;
 use serde_json::{Value, json};
 
 use super::super::super::{Normalizer, Parsed, parse_line};
+use crate::{HubToolServer, ToolServers};
 
 #[test]
 fn background_tasks_are_listed_whole_each_time_they_change() {
@@ -35,6 +37,43 @@ fn an_mcp_task_of_the_worker_tool_that_waits_is_a_wait() {
     assert_eq!(kind("mcp_task", "roundhouse/get_pull_request"), TaskKind::Command);
     assert_eq!(kind("mcp_task", "elsewhere/wait_for_pull_request"), TaskKind::Command);
     assert_eq!(kind("local_bash", "roundhouse/wait_for_pull_request"), TaskKind::Command);
+}
+
+/// By the servers the CLI was launched with until its `init` lists them, since a resumed one lists its tasks first.
+#[test]
+fn an_mcp_task_names_its_server_and_tool_and_no_other_task_does() {
+    let launched = ToolServers {
+        tools_url: String::new(),
+        hubs: vec![HubToolServer { name: "Linear_Northwind".into(), url: String::new() }],
+        token: ToolsToken::new("token"),
+        config: std::path::PathBuf::new(),
+    };
+    let mut normalizer = Normalizer::launched_with(Some(&launched));
+    let mut tool = |task_type: &str, description: &str| {
+        let task = json!({"task_id":"k1","task_type":task_type,"description":description});
+        let line = json!({"type":"system","subtype":"background_tasks_changed","tasks":[task]}).to_string();
+        let Parsed::Event(EventBody::AgentTasks { tasks, .. }) = normalizer.line(&line).parsed else {
+            panic!("not a list")
+        };
+        assert_eq!(tasks[0].description.as_deref(), Some(description));
+        tasks[0].tool.clone().map(|tool| (tool.server.to_string(), tool.tool))
+    };
+    let of = |server: &str, tool: &str| Some((server.to_string(), tool.to_string()));
+
+    assert_eq!(tool("mcp_task", "Linear_Northwind/issues/export"), of("Linear_Northwind", "issues/export"));
+    assert_eq!(tool("mcp_task", "docs/find"), of("docs", "find"));
+    assert_eq!(tool("local_bash", "docs/find"), None);
+    assert_eq!(tool("local_agent", "docs/find"), None);
+
+    let servers = json!([{"name":"Linear_Northwind","status":"connected"},{"name":"team/docs","status":"connected"}]);
+    normalizer.line(&json!({"type":"system","subtype":"init","session_id":"c","mcp_servers":servers}).to_string());
+    let listed = json!({"type":"system","subtype":"background_tasks_changed","tasks":[
+        {"task_id":"k2","task_type":"mcp_task","description":"team/docs/find"}]});
+    let Parsed::Event(EventBody::AgentTasks { tasks, .. }) = normalizer.line(&listed.to_string()).parsed else {
+        panic!("not a list")
+    };
+    let find = TaskTool { server: "team/docs".into(), tool: "find".into() };
+    assert_eq!(tasks[0].tool, Some(find), "a server with a slash in its name");
 }
 
 #[test]

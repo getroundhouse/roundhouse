@@ -8,11 +8,11 @@ use protocol::event::EventBody;
 use protocol::worker::TOOLS_SERVER;
 use serde_json::Value;
 
-use super::normalize::value_of;
+use super::super::normalize::value_of;
 
 /// What `body`, which the CLI said in `line`, says of the agent's tool servers, or `None` unless it's an `init` that
 /// lists them.
-pub(super) fn said(body: &EventBody, line: &str) -> Option<Report> {
+pub(in crate::claude) fn said(body: &EventBody, line: &str) -> Option<Report> {
     let EventBody::AgentInit { .. } = body else { return None };
     let init = value_of(line)?;
     let listed: Vec<(&str, &Value)> = init["mcp_servers"]
@@ -77,10 +77,19 @@ impl ToolCounts {
     }
 }
 
-/// What the CLI starts the name of each of the server `name`'s tools with: anything but a letter, digit, `-` or `_` of
-/// ASCII is a `_`, one for each of its UTF-16 units, since the CLI's regular expression reads those. The names of
-/// claude.ai's connectors have each run of `_` made one, and none at either end.
-fn prefix(name: &str) -> String {
+/// What the CLI starts the name of each of the server `name`'s tools with. The names of claude.ai's connectors have
+/// each run of `_` made one, and none at either end.
+pub(super) fn prefix(name: &str) -> String {
+    let mut spelled = spelled(name);
+    if name.starts_with("claude.ai ") {
+        spelled = spelled.split('_').filter(|part| !part.is_empty()).collect::<Vec<_>>().join("_");
+    }
+    format!("mcp__{spelled}__")
+}
+
+/// `name`, a server's or a tool's, as the CLI has it in a tool's name: anything but a letter, digit, `-` or `_` of
+/// ASCII is a `_`, one for each of its UTF-16 units, since the CLI's regular expression reads those.
+pub(super) fn spelled(name: &str) -> String {
     let mut spelled = String::new();
     for c in name.chars() {
         if c.is_ascii_alphanumeric() || matches!(c, '-' | '_') {
@@ -89,10 +98,7 @@ fn prefix(name: &str) -> String {
             spelled.extend(std::iter::repeat_n('_', c.len_utf16()));
         }
     }
-    if name.starts_with("claude.ai ") {
-        spelled = spelled.split('_').filter(|part| !part.is_empty()).collect::<Vec<_>>().join("_");
-    }
-    format!("mcp__{spelled}__")
+    spelled
 }
 
 #[cfg(test)]

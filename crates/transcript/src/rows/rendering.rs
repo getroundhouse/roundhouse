@@ -147,7 +147,7 @@ fn render_shown(
             }
             let m = model.borrow();
             let (at_work, folds, heard) = (&m.at_work, &m.folds, &m.heard);
-            let end = EndOfChat { tail, waiting: &waiting, at_work, folds, heard };
+            let end = EndOfChat { tail, waiting: &waiting, at_work, folds, heard, tool_servers: &m.tool_servers };
             shared.texts.drawing(Of::Tail, || render_tail(&end, shared, cx))
         }
         // Each text an event's row no longer draws is hidden, such as one in a fold that's been closed, or all of
@@ -260,7 +260,7 @@ pub(super) fn render_event(
         EventBody::AgentMode { mode } => muted_line(mode::mode_change(around.mode_before, *mode), cx),
         EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(seq, *reason, stderr_tail, find, cx),
         EventBody::Notice { level, message, .. } => notice(seq, *level, message, shared, find, cx),
-        EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) => own_turn::lines(event, ended, shared, cx),
+        EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) => own_turn::lines(event, ended, around, shared, cx),
         // These tell the hub things, and there's nothing here for a person. An agent's start says something only when
         // it's on another build than the chat's agent last was, above.
         EventBody::PromptTaken { .. }

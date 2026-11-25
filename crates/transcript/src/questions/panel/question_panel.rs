@@ -10,6 +10,7 @@ use gpui_kit::{
 use look::{InRegion as _, Region, Shaped as _};
 use protocol::capability::approvals::Decision;
 use protocol::capability::asking::{Question, QuestionAnswer};
+use protocol::capability::setup::ServerName;
 use protocol::model::{ApprovalId, SubagentId};
 use std::time::{Duration, Instant};
 use typing::Other;
@@ -26,10 +27,7 @@ pub struct QuestionPanel {
     pub(super) asks: Asks,
     /// The subagent that asks, or `None` for the agent itself.
     pub(super) asked_by: Option<SubagentId>,
-    /// What that subagent is for, as its record says, which the transcript passes on as the record comes or changes.
-    pub(super) asker: Option<String>,
-    /// How many more requests wait behind this one, to be asked in turn.
-    pub(super) more_waiting: usize,
+    pub(super) around: AroundRequest,
     pub(super) asked: Vec<Asked>,
     pub(super) showing: usize,
     pub(super) focus: FocusHandle,
@@ -40,6 +38,17 @@ pub struct QuestionPanel {
     pub(super) answered: bool,
     pub(super) dictation_enabled: bool,
     pub(super) after_dictation: dictation_ui::Pending<super::dictating::Then>,
+}
+
+/// What's around a request, all of which can change while it waits, so the transcript passes each on as it does.
+#[derive(Default, PartialEq, Eq)]
+pub(crate) struct AroundRequest {
+    /// The MCP server the tool asked about is from, as the person calls it.
+    pub(crate) server: Option<String>,
+    /// What the subagent that asks is for, as its record says.
+    pub(crate) asker: Option<String>,
+    /// How many more requests wait behind this one, to be asked in turn.
+    pub(crate) more_waiting: usize,
 }
 
 /// One of the questions, and what's been chosen on it.
@@ -80,8 +89,7 @@ impl QuestionPanel {
             approval_id,
             asks,
             asked_by,
-            asker: None,
-            more_waiting: 0,
+            around: AroundRequest::default(),
             asked,
             showing: 0,
             focus: cx.focus_handle(),
@@ -101,11 +109,14 @@ impl QuestionPanel {
         self.asked_by.as_ref()
     }
 
-    /// Says what's around the request: what the subagent that asks is for, and how many more requests wait behind
-    /// this one.
-    pub(crate) fn set_around(&mut self, asker: Option<String>, more_waiting: usize, cx: &mut Context<Self>) {
-        if self.asker != asker || self.more_waiting != more_waiting {
-            (self.asker, self.more_waiting) = (asker, more_waiting);
+    /// The MCP server the tool asked about is from, as its agent calls it.
+    pub(crate) fn server(&self) -> Option<&ServerName> {
+        self.asks.server()
+    }
+
+    pub(crate) fn set_around(&mut self, around: AroundRequest, cx: &mut Context<Self>) {
+        if self.around != around {
+            self.around = around;
             cx.notify();
         }
     }
@@ -270,7 +281,7 @@ impl Render for QuestionPanel {
         let question = self.asked.get(q).map(|asked| asked.question.clone());
         let heading = heading::heading(self, question.as_ref(), cx);
         let detail = self.asks.detail(cx);
-        let pager = pager::pager(self, &answered, cx).or_else(|| pager::more_waiting(self.more_waiting, cx));
+        let pager = pager::pager(self, &answered, cx).or_else(|| pager::more_waiting(self.around.more_waiting, cx));
         let options = question.map(|question| {
             let other = self.other(q, window, cx);
             options::list(self, &question, &other, cx)

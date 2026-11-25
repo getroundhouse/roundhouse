@@ -6,6 +6,7 @@ use other::Other;
 use protocol::capability::approvals::Asks;
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{GenerateImage, NotebookEdit, Patch};
+use protocol::capability::setup::ServerName;
 use protocol::event::{ContentBlock, EventBody};
 use search::Search;
 use serde_json::Value;
@@ -82,6 +83,15 @@ impl<'a> Recorded<'a> {
         match *self {
             Self::Typed(Call::Mcp { input, .. } | Call::Other { input, .. }) => input,
             Self::Typed(_) => &Value::Null,
+        }
+    }
+
+    /// The MCP server its tool is from, as its agent calls it, which [`crate::tool_servers::ToolServerNames`] says how to
+    /// show. `None` for a tool from none.
+    pub fn server(&self) -> Option<&'a ServerName> {
+        match *self {
+            Self::Typed(Call::Mcp { server, .. }) => Some(server),
+            Self::Typed(_) => None,
         }
     }
 

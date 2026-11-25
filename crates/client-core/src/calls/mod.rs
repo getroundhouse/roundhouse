@@ -20,6 +20,7 @@ pub use command::{Command, Only, UNDESCRIBED};
 pub use failure::{Ending, Failure, ResultForm};
 pub use files::{EditFile, ReadFile, WriteFile};
 pub use other::Other;
+pub(crate) use other::tool_name;
 pub use returned::{Returned, in_the_background};
 pub use search::{FileLines, Found, Looks, Search};
 pub use subagents::ToSubagents;

@@ -15,5 +15,6 @@ mod typing;
 pub(crate) use asks::Asks;
 
 mod question_panel;
+pub(crate) use question_panel::AroundRequest;
 pub use question_panel::QuestionPanel;
 pub(crate) use question_panel::SETTLE;

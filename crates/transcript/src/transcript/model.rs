@@ -5,6 +5,7 @@ use crate::attachments::Picture;
 use crate::find::FindLook;
 use crate::folds::Folds;
 use client_core::session_log::RecordedApprovals;
+use client_core::tool_servers::ToolServerNames;
 use gpui_kit::SharedString;
 use protocol::model::{
     AttachmentId, MessageId, Proposal, ProposalId, ReplyHeard, RevisionNumber, RunId, Seq, Subagent, SubagentId,
@@ -48,6 +49,8 @@ pub(crate) struct Model {
     /// How each of the agent's replies read out loud ended, by the reply, as the hub records it, shared with
     /// client-core's snapshot. A reply that isn't here was heard to its end, or wasn't read out, or hasn't ended.
     pub heard: HashMap<MessageId, Arc<ReplyHeard>>,
+    /// What the person calls each of the hub's tool servers, which a call to one of its tools shows.
+    pub(crate) tool_servers: ToolServerNames,
     /// In the subagent tab, the subagent it shows, alone.
     pub alone: Option<SubagentId>,
     /// What's being found in the chat, for rows to draw.
@@ -83,6 +86,7 @@ impl Model {
             proposals: HashMap::new(),
             proposals_by_id: HashMap::new(),
             heard: HashMap::new(),
+            tool_servers: ToolServerNames::default(),
             alone: None,
             find: Rc::default(),
         }

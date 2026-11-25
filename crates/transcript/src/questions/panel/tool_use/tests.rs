@@ -57,6 +57,8 @@ fn what_nobody_described_still_asks_something() {
     let fetch = Call::Fetch(Fetch { url: "https://example.com".into(), asking: None });
     let fetch = asked(fetch, None);
     let bare = asked(Call::Other { tool: "Ask".into(), input: json!({}) }, None);
+    let input = json!({ "title": "Signals" });
+    let mcp = asked(Call::Mcp { server: "team".into(), tool: "create_issue".into(), input }, None);
 
     assert_eq!(command(None).question.text, "Run this command?");
     assert_eq!((plain.question.text.as_str(), given(&plain)), ("Make this edit?", Some("src/lib.rs")));
@@ -65,6 +67,7 @@ fn what_nobody_described_still_asks_something() {
     assert_eq!((fetch.question.text.as_str(), given(&fetch)), ("https://example.com", None), "said once");
     assert_eq!(plain.question.options[0].description.as_deref(), Some("This once"), "nothing runs");
     assert_eq!((bare.question.text.as_str(), given(&bare), bare.reason.as_deref()), ("Use this tool?", None, None));
+    assert_eq!((mcp.question.text.as_str(), given(&mcp)), ("Use this tool?", Some("{\n  \"title\": \"Signals\"\n}")));
 }
 
 /// A patch is asked about as what it would change, as an edit is: a patch of one file by that file, and one of several

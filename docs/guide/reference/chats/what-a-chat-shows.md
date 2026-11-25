@@ -38,7 +38,7 @@ Each call is a line: what it is, and what it's about. Click it to open it.
 | A web search | What it looked for, and how many pages it found, where its agent says which | The pages, which open in the browser, then what was made of them |
 | A fetch | The site | The address, what was asked of it, and the answer |
 | Making an image, as Codex can | What it was asked for, once it's made | All of what it was asked for, then the image |
-| Any other tool | Its name made readable, and the MCP server it's from | Its input, then what came back |
+| Any other tool | Its name made readable, and the MCP server it's from, by the name you gave it if it's one of Roundhouse's | Its input, then what came back |
 
 ![Commands, one opened with its output](../../../spec/screens/tool-commands.png)
 
@@ -119,7 +119,7 @@ The agent withdraws a proposal it won't use, such as when you decide another way
 
 ## Work in the background
 
-A turn can end with work still going: a command, a subagent, or a monitor watching for something. Up to four tasks have a line each where the chat ends, saying what each is for.
+A turn can end with work still going: a command, a subagent, a call to an MCP server's tool, or a monitor watching for something. Up to four tasks have a line each where the chat ends, saying what each is for. A call to an MCP server's tool says the server, by the name you gave it if it's one of Roundhouse's, and the tool, such as `GitHub (Northwind): Create issue`.
 
 ![A turn that ended with the test suite running in the background](../../../spec/screens/background.png)
 

@@ -10,7 +10,7 @@
 mod choice;
 mod panel;
 
-pub(crate) use panel::Asks;
 pub use panel::QuestionPanel;
 #[cfg(any(test, feature = "testing"))]
 pub(crate) use panel::SETTLE;
+pub(crate) use panel::{AroundRequest, Asks};

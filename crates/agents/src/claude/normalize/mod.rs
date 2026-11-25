@@ -27,6 +27,7 @@ mod request;
 mod result_text;
 mod retrying;
 mod said;
+mod streaming;
 mod subagents;
 mod surrogates;
 mod tasks;

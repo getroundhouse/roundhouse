@@ -40,7 +40,7 @@ impl ChangeAsked {
                 .into_iter()
                 .map(|(label, path, sections)| FileAsked { label, path: path.into(), sections })
                 .collect(),
-            Given::Command(_) | Given::MainInput(_) => return None,
+            Given::Command(_) | Given::Input(_) | Given::MainInput(_) => return None,
         };
         let path = match files.as_slice() {
             [file] => file.label.clone(),

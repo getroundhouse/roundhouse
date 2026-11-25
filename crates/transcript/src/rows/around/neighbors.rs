@@ -8,6 +8,7 @@ use crate::item_key::ItemKey;
 use crate::transcript::{AtWork, IdleCache, Model, ProposalCall};
 use client_core::calls::Recorded;
 use client_core::session_log::{PromptAt, PromptState, SessionLog};
+use client_core::tool_servers::ToolServerNames;
 use client_core::{Approval, ToolUseAsked};
 use gpui_kit::SharedString;
 use protocol::capability::approvals::ApprovalMode;
@@ -57,6 +58,8 @@ pub(in super::super) struct Around {
     /// For the agent's own message: how the reply it's part of was heard, read out loud. For a turn's end: how the
     /// reply it ended on was, which its line says. `None` for one drawn as written.
     pub(in super::super) heard: Option<Heard>,
+    /// What the person calls each of the hub's tool servers, which a background task that ended says.
+    pub(in super::super) tool_servers: ToolServerNames,
 }
 
 /// The proposal a prompt the hub wrote tells the agent the answer to, and which revision of it was answered.
@@ -139,6 +142,8 @@ pub(in super::super) struct BlockAround {
     pub(in super::super) subagent: Option<Subagent>,
     /// For a call to subagents at work: the subagents it names.
     pub(in super::super) names: Option<Names>,
+    /// For a call to an MCP server's tool: the server, by the person's own name for it where it's one of the hub's.
+    pub(in super::super) server: Option<SharedString>,
     /// For a call that proposed a decision, or revised or withdrew one: what it did, once the record has come.
     pub(in super::super) proposal: Option<ProposalCall>,
     /// For a result: whether it's drawn with its call instead.
@@ -197,6 +202,7 @@ impl Around {
             retry: m.retry_at == Some(seq),
             failures: Failures::read(log, &m.folds, seq, body),
             heard,
+            tool_servers: m.tool_servers.clone(),
         };
         if let EventBody::AgentMode { .. } = body {
             around.mode_before = nearby::mode_before(log, seq);
@@ -262,6 +268,8 @@ impl BlockAround {
         // Drawn with its call when the call is close enough before it to have found it.
         let with_call = matches!(block, ContentBlock::CallResult { tool_use_id, .. }
             if nearby::call_before(log, seq, tool_use_id, NEAR).is_some());
+        let server = Recorded::of(block).and_then(|call| call.server());
+        let server = server.map(|server| SharedString::from(m.tool_servers.shown(server).to_string()));
         let (reply, subagent, names, proposal) = match block {
             ContentBlock::Call { id, .. } => {
                 let recorded = Recorded::of(block);
@@ -277,7 +285,7 @@ impl BlockAround {
             | ContentBlock::Image { .. }
             | ContentBlock::Unknown => (Reply::Nothing, None, None, None),
         };
-        Self { key, fold, open, reply, subagent, names, proposal, with_call, unheard_from: None }
+        Self { key, fold, open, reply, subagent, names, server, proposal, with_call, unheard_from: None }
     }
 }
 

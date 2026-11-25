@@ -1,5 +1,6 @@
 //! A tool with no kind of its own, such as one from an MCP server. Its line is the agent's description of the call if
-//! it gave one, or the tool's name made readable, then the server it's from and the input that matters most.
+//! it gave one, or the tool's name made readable, then the server it's from, which [`super::Recorded::server`] says, and
+//! the input that matters most.
 
 use serde_json::Value;
 
@@ -13,8 +14,6 @@ pub(super) const UNKNOWN_TOOL: &str = "Unknown tool";
 
 pub struct Other {
     pub title: String,
-    /// The MCP server it's from.
-    pub server: Option<String>,
     /// The tool's name made readable, when the title is the agent's description instead.
     pub tool: Option<String>,
     /// The input that matters most, on one line.
@@ -30,15 +29,13 @@ impl Other {
         self.tool.as_deref().unwrap_or(&self.title)
     }
 
-    /// A call to `tool`, from the MCP server `server` if it's one's, as its agent typed it. A tool with no name, which
-    /// an agent shouldn't send, is named as one this build doesn't know.
-    pub(super) fn typed(server: Option<&str>, tool: &str, input: &Value) -> Self {
-        let tool = Some(readable(tool)).filter(|tool| !tool.is_empty()).unwrap_or_else(|| UNKNOWN_TOOL.to_string());
-        Self::named(server.map(str::to_string), tool, input)
+    /// A call to `tool`, as its agent typed it.
+    pub(super) fn typed(tool: &str, input: &Value) -> Self {
+        Self::named(tool_name(tool), input)
     }
 
-    /// A call to `tool`, its name made readable, from `server`, with `input`.
-    fn named(server: Option<String>, tool: String, input: &Value) -> Self {
+    /// A call to `tool`, its name made readable, with `input`.
+    fn named(tool: String, input: &Value) -> Self {
         let described = description(input);
         let (title, tool) = match described {
             Some(description) => (description.to_string(), Some(tool)),
@@ -47,8 +44,14 @@ impl Other {
         let usual = main_input(input).map(line);
         let detail = usual.clone().or_else(|| first_input(input));
         let summary = usual.or_else(|| described.map(str::to_string)).or_else(|| detail.clone());
-        Self { title, server, tool, detail, summary }
+        Self { title, tool, detail, summary }
     }
+}
+
+/// The name of `tool`, as its agent names it, made readable. A tool with no name, which an agent shouldn't send, is
+/// named as one this build doesn't know.
+pub(crate) fn tool_name(tool: &str) -> String {
+    Some(readable(tool)).filter(|tool| !tool.is_empty()).unwrap_or_else(|| UNKNOWN_TOOL.to_string())
 }
 
 /// `GetWorkspaceDiff`, `get_workspace_diff` and `get-workspace-diff` all read "Get workspace diff". A word in
@@ -114,6 +117,7 @@ fn first_input(input: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use protocol::capability::calls::Call;
+    use protocol::capability::setup::ServerName;
     use serde_json::{Value, json};
 
     use super::{Other, readable};
@@ -167,12 +171,15 @@ mod tests {
         };
         let input = json!({ "title": "Signals" });
 
-        let mcp = read(&Call::Mcp { server: "github".into(), tool: "create_issue".into(), input });
-        let named = (mcp.title.as_str(), mcp.server.as_deref(), mcp.detail.as_deref());
+        let server = |call| Recorded::Typed(call).server().map(ServerName::as_str);
+        let from_github = Call::Mcp { server: "github".into(), tool: "create_issue".into(), input };
+        let mcp = read(&from_github);
+        let named = (mcp.title.as_str(), server(&from_github), mcp.detail.as_deref());
         assert_eq!(named, ("Create issue", Some("github"), Some("title: \"Signals\"")));
-        let other = read(&Call::Other { tool: "list_open_PR".into(), input: json!({ "query": "signals" }) });
+        let from_none = Call::Other { tool: "list_open_PR".into(), input: json!({ "query": "signals" }) };
+        let other = read(&from_none);
         assert_eq!(
-            (other.title.as_str(), other.server, other.summary.as_deref()),
+            (other.title.as_str(), server(&from_none), other.summary.as_deref()),
             ("List open PR", None, Some("signals"))
         );
         assert_eq!(read(&Call::Other { tool: " ".into(), input: json!({}) }).title, "Unknown tool");

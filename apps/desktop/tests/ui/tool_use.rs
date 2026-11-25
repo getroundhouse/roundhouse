@@ -4,16 +4,20 @@
 
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{command, first_turn, user_prompt};
+use client_core::records::HubRecords;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ClipboardItem, TestAppContext, point, px};
 use protocol::capability::approvals::{Asks, Decision};
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Command;
 use protocol::event::EventBody;
-use protocol::fixtures::{ApprovalRequest, allow_once, approval_request, deny, typed_command};
-use protocol::model::SessionStatus;
+use protocol::fixtures::{
+    ApprovalRequest, allow_once, approval_request, deny, tool_server, typed_command, typed_request,
+};
+use protocol::model::{Records, SessionStatus, ToolServer, ToolServerName};
+use serde_json::json;
 
-use crate::support::{FakeHub, Stack, Ui, id};
+use crate::support::{FakeHub, Stack, Ui, id, one_chat, open_on_the_chat};
 
 /// A removal the agent asks about even with full access, since what it removes is only known once it runs.
 const REMOVAL: &str = r#"rm -rf "$(cat gone-path)""#;
@@ -130,6 +134,37 @@ fn the_command_asked_about_can_be_selected_and_copied_while_the_typing_row_has_f
 
     let copied = ui.cx.read_from_clipboard().and_then(|item| item.text());
     assert_eq!(copied.as_deref(), Some(REMOVAL));
+}
+
+/// The server is named as the hub has it now, so one removed while the request waits, or added again under another
+/// name, shows so. The panel stays the one it was, with what's chosen and typed in it.
+#[gpui_kit::test]
+fn a_request_to_use_a_servers_tool_names_it_as_the_person_does_and_follows_the_hubs_servers(cx: &mut TestAppContext) {
+    let input = json!({ "title": "Signals should say why a train stopped" });
+    let call = Call::Mcp { server: "GitHub_Northwind".into(), tool: "create_issue".into(), input };
+    let events = first_turn(user_prompt("File it."), [typed_request("approval-1", "mcp-1", call)]);
+    let (mut world, chat) = one_chat(SessionStatus::WaitingApproval, events);
+    let named = |id: &str, name: &str| ToolServer { name: ToolServerName::stored(name.into()), ..tool_server(id) };
+    world.tool_servers.push(named("github", "GitHub (Northwind)"));
+    let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
+
+    let whole = "{\n  \"title\": \"Signals should say why a train stopped\"\n}";
+    ui.wait("the request", |ui| ui.shows_label("question-given", whole));
+    assert!(ui.shows_label("question-header", "Create issue · GitHub (Northwind)"));
+    assert!(ui.shows_label("question-text", "Use this tool?"));
+
+    let transcript = ui.transcript().unwrap();
+    let panel = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.question().unwrap().entity_id());
+    let before = panel(&ui);
+    let mut follow = |tool_servers: Vec<ToolServer>, shown: &str| {
+        let mut held = HubRecords::default();
+        held.apply_list(Records { tool_servers, ..Records::default() });
+        ui.cx.update_entity(&transcript, |t, cx| t.records_changed(&held.snapshot(), cx));
+        assert!(ui.shows_label("question-header", shown), "{shown}");
+    };
+    follow(vec![named("github-2", "GitHub, Northwind")], "Create issue · GitHub, Northwind");
+    follow(Vec::new(), "Create issue · GitHub_Northwind");
+    assert_eq!(panel(&ui), before);
 }
 
 /// A chat held by a fake hub whose agent asks to run [`REMOVAL`], as the hub records it from Claude, open with the

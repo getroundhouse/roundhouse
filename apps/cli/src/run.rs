@@ -229,7 +229,7 @@ fn admin_command(paths: &Paths, command: Admin) -> anyhow::Result<()> {
 }
 
 /// A copy of the hub's records as `list` has them, to read them as every client does.
-fn held(list: Records) -> Snapshot {
+pub(crate) fn held(list: Records) -> Snapshot {
     let mut held = HubRecords::default();
     held.apply_list(list);
     held.snapshot()

@@ -11,6 +11,7 @@
 use client_core::calls::agent::{self, Agent};
 use client_core::calls::count;
 use client_core::tasks::Says;
+use client_core::tool_servers::ToolServerNames;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -133,8 +134,8 @@ impl Opens {
 }
 
 /// What the subagent tab is named for the subagent the task `task` is, until its record comes.
-pub(in crate::rows) fn tab_title(task: &AgentTask) -> String {
-    Says::of(task).map_or_else(|| agent::UNTITLED.to_string(), Says::into_words)
+pub(in crate::rows) fn tab_title(task: &AgentTask, servers: &ToolServerNames) -> String {
+    Says::of(task, servers).map_or_else(|| agent::UNTITLED.to_string(), Says::into_words)
 }
 
 /// The button that asks for the work of the subagent `opens` names in the subagent tab, which is named `title` until

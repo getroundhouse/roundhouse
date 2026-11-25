@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use client_core::prompt_cache::{cache_worth_telling, idle_cache};
 use client_core::records::{Snapshot, subagent_named};
+use client_core::tool_servers::ToolServerNames;
 use gpui_kit::{Context, SharedString, Task};
 use protocol::event::AgentTask;
 use protocol::model::{
@@ -122,11 +123,11 @@ impl Transcript {
         }
     }
 
-    /// Takes what the client holds now of the chat's records: its session's, its subagents', its proposals' and how its
-    /// replies read out loud ended. Each is taken only if it changed, so a client can call this whenever its records
-    /// do. The client has all but the session's only while it follows the chat's. The subagent tab's transcript takes
-    /// whether it's at work from its subagent's record, not the chat's, and what that has in the background from the
-    /// chat's.
+    /// Takes what the client holds now of the chat's records, its session's, its subagents', its proposals' and how its
+    /// replies read out loud ended, and of the hub's tool servers. Each is taken only if it changed, so a client can
+    /// call this whenever its records do. The client has all but the session's and the hub's only while it follows the
+    /// chat's. The subagent tab's transcript takes whether it's at work from its subagent's record, not the chat's, and
+    /// what that has in the background from the chat's.
     pub fn records_changed(&mut self, records: &Snapshot, cx: &mut Context<Self>) {
         let id = self.session_id.clone();
         let session = records.session(&id);
@@ -139,6 +140,20 @@ impl Transcript {
         self.follow_the_subagent(session, cx);
         self.set_proposals(records.proposals(&id), cx);
         self.set_replies_heard(records.replies_heard(&id), cx);
+        self.set_tool_servers(records.tool_server_names(), cx);
+    }
+
+    /// Takes what the person calls each of the hub's tool servers, and draws every row again if that changed, which only
+    /// adding or removing one does.
+    fn set_tool_servers(&mut self, names: &ToolServerNames, cx: &mut Context<Self>) {
+        if self.model.borrow().tool_servers == *names {
+            return;
+        }
+        self.model.borrow_mut().tool_servers.clone_from(names);
+        // What's asked in the composer's place names the server its tool is from.
+        self.tell_the_panel(cx);
+        self.list.all_out_of_date();
+        cx.notify();
     }
 
     /// Follows the session's record, as `records`, the copy it's from, reads it.

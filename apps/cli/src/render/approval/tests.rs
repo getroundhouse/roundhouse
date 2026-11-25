@@ -1,3 +1,4 @@
+use client_core::tool_servers::ToolServerNames;
 use client_core::{Answered, Approval};
 use protocol::capability::approvals::{Asks, Decision};
 use protocol::capability::asking::{Question, QuestionAnswer, QuestionOption};
@@ -5,7 +6,8 @@ use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{Command, Edit, FilePatch, Patch, PatchChange, PatchHunk, Replace, Replaces};
 use protocol::event::{HunkLine, LineMark, SessionEvent};
 use protocol::fixtures::{ApprovalRequest, allow_once, approval_request, deny, question, typed_command, typed_request};
-use protocol::model::Seq;
+use protocol::model::{Records, Seq, ToolServer, ToolServerName};
+use serde_json::json;
 
 use super::{requested, resolved};
 
@@ -19,7 +21,11 @@ fn asked_to(call: Call) -> ApprovalRequest {
 }
 
 fn lines(event: &SessionEvent) -> Vec<String> {
-    requested(event, &Approval::of(&event.body).unwrap())
+    lines_naming(event, &ToolServerNames::default())
+}
+
+fn lines_naming(event: &SessionEvent, servers: &ToolServerNames) -> Vec<String> {
+    requested(event, &Approval::of(&event.body).unwrap(), servers)
 }
 
 fn colors() -> Question {
@@ -95,6 +101,36 @@ fn an_edit_prints_its_file_and_what_it_takes_out_and_puts_in() {
     let change = ["  - let a = 1;", "  + let a = 2;", "  + let b = 3;", "  roundhouse approve s req_1"];
     assert_eq!(plain[0], "APPROVAL NEEDED: Edit: src/lib.rs", "its file said once");
     assert_eq!(plain[1..], change);
+}
+
+#[test]
+fn a_tool_with_no_kind_of_its_own_prints_its_server_as_the_person_calls_it_and_its_whole_input() {
+    let names = {
+        let name = ToolServerName::stored("GitHub (Northwind)".into());
+        let northwind = ToolServer { name, ..protocol::fixtures::tool_server("t") };
+        crate::run::held(Records { tool_servers: vec![northwind], ..Records::default() }).tool_server_names().clone()
+    };
+    let printed = |call| lines_naming(&protocol::fixtures::event(Seq::new(7), asked_to(call).into()), &names);
+    let mcp = |server: &str, input| Call::Mcp { server: server.into(), tool: "create_issue".into(), input };
+
+    let filing = printed(mcp("GitHub_Northwind", json!({ "labels": ["kind/feature"] })));
+
+    assert_eq!(
+        filing,
+        [
+            "APPROVAL NEEDED: Create issue · GitHub (Northwind)",
+            "  {",
+            "    \"labels\": [",
+            "      \"kind/feature\"",
+            "    ]",
+            "  }",
+            "  roundhouse approve s req_1",
+        ]
+    );
+    let approve = "  roundhouse approve s req_1";
+    assert_eq!(printed(mcp("sentry", json!({}))), ["APPROVAL NEEDED: Create issue · sentry", approve], "the CLI's own");
+    let of_none = printed(Call::Other { tool: "seek".into(), input: json!({}) });
+    assert_eq!(of_none, ["APPROVAL NEEDED: Seek", approve]);
 }
 
 /// A patch prints each file it changes and what it does to each, as an edit's lines are printed, and a patch of one

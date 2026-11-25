@@ -257,30 +257,35 @@ const WEB_WORDS: &str = "A flashing yellow is a preliminary caution on most rail
 /// The page the fetch sent back.
 const PAGE: &str = "Signal aspects\n\nStop, caution, preliminary caution and clear.";
 
-/// Calls to the tools of two MCP servers, as Codex's adapter types them: a search of Sentry's issues, then filing one on
-/// GitHub, which says what it made.
+/// Calls to the tools of two MCP servers, as Codex's adapter types them: a search of Sentry's issues, from a server of
+/// its CLI's own, then filing one on GitHub, from the hub's `GitHub (Northwind)`, which says what it made.
 pub(crate) fn mcp_tools() -> Vec<EventBody> {
-    let mcp = |server: &str, tool: &str, input| Call::Mcp { server: server.into(), tool: tool.into(), input };
     let said = |text: &str| CallOutput::Mcp { content: vec![McpContent::Text { text: text.into() }], structured: None };
     let search = json!({ "query": "signal stopped without a reason", "project": "signals" });
-    let issue = json!({
-        "title": "Signals should say why a train stopped",
-        "body": "A train that stops at a signal logs \"stop\", but not which signal or why.",
-        "labels": ["kind/feature"],
-    });
+    let search = Call::Mcp { server: "sentry".into(), tool: "search_issues".into(), input: search };
     let reply = "Filed as #271.";
     first_turn(
         user_prompt("File the idea about saying why a train stopped."),
         [
             text("msg-1", "I'll look for an existing issue first, then file one."),
-            typed_call("msg-2", "mcp-1", mcp("sentry", "search_issues", search)),
+            typed_call("msg-2", "mcp-1", search),
             typed_result("mcp-1", said("No issues match."), false),
-            typed_call("msg-3", "mcp-2", mcp("github", "create_issue", issue)),
+            typed_call("msg-3", "mcp-2", filing_an_issue()),
             typed_result("mcp-2", said("Created issue #271: https://github.com/example/signals/issues/271"), false),
             text("msg-4", reply),
             replied(reply, 14, 0.05),
         ],
     )
+}
+
+/// Filing an issue on GitHub, from the hub's `GitHub (Northwind)`, as its agent calls it.
+pub(crate) fn filing_an_issue() -> Call {
+    let issue = json!({
+        "title": "Signals should say why a train stopped",
+        "body": "A train that stops at a signal logs \"stop\", but not which signal or why.",
+        "labels": ["kind/feature"],
+    });
+    Call::Mcp { server: "GitHub_Northwind".into(), tool: "create_issue".into(), input: issue }
 }
 
 /// A prompt set for later and a workflow left running, as Antigravity's adapter types them, neither done yet: what the

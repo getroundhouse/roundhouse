@@ -1,4 +1,5 @@
 use client_core::calls::{Recorded, Returned, first_line};
+use client_core::tool_servers::ToolServerNames;
 use protocol::attachment::Attachment;
 use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::asking::Question;
@@ -28,11 +29,18 @@ pub(crate) struct Printer {
     pub(super) background: Option<String>,
     /// What each subagent that hasn't ended was started for, so its end can say which it was.
     pub(super) subagents: HashMap<SubagentId, String>,
+    /// What the person calls each of the hub's tool servers, as it was when printing started.
+    pub(super) servers: ToolServerNames,
     /// The questions each open approval asks, so what was answered can be said by question.
     pub(super) asked: HashMap<ApprovalId, Vec<Question>>,
 }
 
 impl Printer {
+    /// One that names each tool server as `servers` does.
+    pub(crate) fn naming(servers: ToolServerNames) -> Self {
+        Self { servers, ..Self::default() }
+    }
+
     pub(super) fn turn_ended(
         &mut self,
         seq: Seq,
@@ -105,7 +113,7 @@ impl Printer {
                 self.line(event.seq, &format!("approval mode: {}", crate::modes::mode_name(*mode)));
             }
             EventBody::AgentTasks { tasks, stopped } => self.background(event.seq, tasks, stopped),
-            EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) => self.line(event.seq, &own_turn(ended)),
+            EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) => self.line(event.seq, &own_turn(ended, &self.servers)),
             EventBody::SubagentStarted { description, .. } => {
                 if let Some(subagent) = event.body.subagent_started() {
                     self.subagent(event.seq, description.as_deref(), &subagent);
@@ -175,7 +183,7 @@ impl Printer {
 
     /// The line for a list of background tasks, unless it says what the last one did.
     pub(super) fn newly_running(&mut self, tasks: &[AgentTask]) -> Option<String> {
-        let what: Vec<String> = tasks.iter().map(named).collect();
+        let what: Vec<String> = tasks.iter().map(|task| named(task, &self.servers)).collect();
         let running = if what.is_empty() { "nothing".to_string() } else { what.join(", ") };
         let line = format!("running in the background: {running}");
         (self.background.as_ref() != Some(&line)).then(|| self.background.insert(line).clone())

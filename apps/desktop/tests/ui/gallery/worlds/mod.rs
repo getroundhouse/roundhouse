@@ -3,6 +3,7 @@
 #![cfg(test)]
 
 mod accounts;
+mod chat_servers;
 mod github;
 mod github_apps;
 mod github_gh;
@@ -16,6 +17,7 @@ pub(super) use accounts::{
     accounts, automatic, context_held_login, context_in_reserve, context_placed_automatically, context_to_move,
     every_account_out, needs_an_account, none_found, reserves,
 };
+pub(super) use chat_servers::chat_with_a_server;
 pub(super) use github::{
     ada, github_accounts, github_default_ended, github_no_default, github_signing_in, github_signing_in_to,
     github_unnamed, no_github_accounts,

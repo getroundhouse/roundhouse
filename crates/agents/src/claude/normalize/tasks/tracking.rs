@@ -1,7 +1,8 @@
+use super::super::super::tool_servers::Servers;
 use super::super::calls::OpenCalls;
 use super::super::subagents::Subagents;
 use super::super::{Parsed, id_of, other, str_of, string_of};
-use protocol::event::{AgentTask, EventBody, TaskChange, TaskKind, TaskOutcome};
+use protocol::event::{AgentTask, EventBody, TaskChange, TaskKind, TaskOutcome, TaskTool};
 use protocol::model::{SubagentId, TaskId, ToolUseId};
 use protocol::worker::{TOOLS_SERVER, WAIT_TOOL, WAITS_TOOL};
 use serde_json::Value;
@@ -15,37 +16,40 @@ const SUBAGENT: &str = "local_agent";
 const MCP_TASK: &str = "mcp_task";
 
 /// `background_tasks_changed`, which is the whole list each time. Which are monitors, and which left it stopped, come
-/// from what came before, which a [`super::super::Normalizer`] knows.
-pub(in super::super) fn listed(value: &Value) -> Parsed {
+/// from what came before, which a [`super::super::Normalizer`] knows. A tool's task is read by `servers`, the MCP
+/// servers the CLI has.
+pub(in super::super) fn listed(value: &Value, servers: &Servers) -> Parsed {
     match value.get("tasks").and_then(Value::as_array) {
         Some(tasks) => {
-            Parsed::Event(EventBody::AgentTasks { tasks: tasks.iter().filter_map(task).collect(), stopped: Vec::new() })
+            let tasks = tasks.iter().filter_map(|value| task(value, servers)).collect();
+            Parsed::Event(EventBody::AgentTasks { tasks, stopped: Vec::new() })
         }
         // Saying nothing is running when it can't tell would let the agent be stopped mid-task.
         None => other("system/background_tasks_changed"),
     }
 }
 
-fn task(value: &Value) -> Option<AgentTask> {
-    let kind = match str_of(value, "task_type") {
+fn task(value: &Value, servers: &Servers) -> Option<AgentTask> {
+    let task_type = str_of(value, "task_type");
+    let described = str_of(value, "description").filter(|_| task_type == Some(MCP_TASK));
+    let tool = described.and_then(|description| servers.tool_of(description));
+    let kind = match task_type {
         Some(SUBAGENT) => TaskKind::Subagent,
-        Some(MCP_TASK) if is_a_wait(value) => TaskKind::Wait,
+        Some(MCP_TASK) if tool.as_ref().is_some_and(is_a_wait) => TaskKind::Wait,
         // A monitor's is `local_bash` too, as a command's is.
         _ => TaskKind::Command,
     };
     let id: TaskId = id_of(value, "task_id")?;
     // A subagent is named by the task it runs as, as `super::super::subagents::Subagents` names it.
     let subagent = (kind == TaskKind::Subagent).then(|| id.as_str().into());
-    Some(AgentTask { description: string_of(value, "description"), subagent, ..AgentTask::new(id, kind) })
+    Some(AgentTask { description: string_of(value, "description"), subagent, tool, ..AgentTask::new(id, kind) })
 }
 
-/// Whether an MCP task is a wait on the pull request, which the CLI says by describing it as the tool whose call
-/// started it, with its server, as `roundhouse/wait_for_pull_request`. The list says so itself, so a CLI started again
-/// with `--resume`, which lists the task again before any prompt, says so too, though the call was another process's.
-fn is_a_wait(value: &Value) -> bool {
-    str_of(value, "description")
-        .and_then(|description| description.split_once('/'))
-        .is_some_and(|(server, tool)| server == TOOLS_SERVER && matches!(tool, WAIT_TOOL | WAITS_TOOL))
+/// Whether the task of a call to `tool` is a wait on the pull request. The list says whose call it is itself, as
+/// `roundhouse/wait_for_pull_request`, so a CLI started again with `--resume`, which lists the task again before any
+/// prompt, says so too, though the call was another process's.
+fn is_a_wait(tool: &TaskTool) -> bool {
+    tool.server.as_str() == TOOLS_SERVER && matches!(tool.tool.as_str(), WAIT_TOOL | WAITS_TOOL)
 }
 
 /// What the lines before a list say about the tasks in it, which the list itself doesn't.

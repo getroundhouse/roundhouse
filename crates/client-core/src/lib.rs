@@ -33,6 +33,7 @@ pub mod session_log;
 pub mod standing;
 pub mod tasks;
 pub mod this_device;
+pub mod tool_servers;
 pub mod tool_sign_ins;
 pub mod waits;
 pub mod workspace_lines;
