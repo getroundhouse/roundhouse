@@ -1,21 +1,25 @@
-//! What the app's log says of a recording, which is never what was said or hinted.
+//! What's said of a recording: to the app's log, which never has what was said or hinted, and to whatever keeps it, if
+//! the person chose to.
 
 use std::fmt;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use dictation::{DictationError, Ending};
 use sound::InputDevice;
 use uuid::Uuid;
 
 use crate::Place;
+use crate::keeping::{How, Said};
 
-/// One recording, as the log says it, with an event as it starts and another as it ends, however it ends, since this
-/// goes with the recording.
+/// One recording, with an event in the log as it starts and another as it ends, however it ends, since this goes with
+/// the recording. A recording that's kept has the same said of it, with what was heard.
 pub(crate) struct Logged {
     id: RecordingId,
     started: Instant,
     stopped: Option<Instant>,
     how: How,
+    error: Option<String>,
+    keeping: Option<flume::Sender<(Duration, Said)>>,
 }
 
 /// Which recording an event is about.
@@ -25,30 +29,6 @@ struct RecordingId(Uuid);
 impl fmt::Display for RecordingId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
-    }
-}
-
-/// How a recording ended.
-#[derive(Clone, Copy)]
-enum How {
-    Heard,
-    NothingHeard,
-    /// The person cancelled it, and the field was put back as it was.
-    Cancelled,
-    /// Its field was hidden, or reused for something else, or another field dictated.
-    FieldGone,
-    Failed,
-}
-
-impl How {
-    fn as_str(self) -> &'static str {
-        match self {
-            How::Heard => "heard",
-            How::NothingHeard => "nothing_heard",
-            How::Cancelled => "cancelled",
-            How::FieldGone => "field_gone",
-            How::Failed => "failed",
-        }
     }
 }
 
@@ -64,7 +44,30 @@ impl Logged {
             "A recording started"
         );
         // Until something says otherwise, since it's what goes without a word.
-        Self { id, started: Instant::now(), stopped: None, how: How::FieldGone }
+        let started = Instant::now();
+        Self { id, started, stopped: None, how: How::FieldGone, error: None, keeping: None }
+    }
+
+    /// Has what keeps the recording told what's said of it from now on, and gives what tells it, and the recording's
+    /// ID.
+    pub(crate) fn keep(&mut self) -> (String, flume::Receiver<(Duration, Said)>) {
+        let (keeping, said) = flume::unbounded();
+        self.keeping = Some(keeping);
+        (self.id.to_string(), said)
+    }
+
+    fn tell(&self, said: Said) {
+        if let Some(keeping) = &self.keeping {
+            let _ = keeping.send((self.started.elapsed(), said));
+        }
+    }
+
+    pub(crate) fn live(&self, text: &str) {
+        self.tell(Said::Live(text.to_string()));
+    }
+
+    pub(crate) fn final_text(&self, text: &str) {
+        self.tell(Said::Final(text.to_string()));
     }
 
     /// The microphone is open, hearing `device`.
@@ -78,11 +81,13 @@ impl Logged {
             channels,
             "The microphone opened"
         );
+        self.tell(Said::Opened(device.clone()));
     }
 
     /// The last words are being heard, until it ends.
     pub(crate) fn stopped(&mut self) {
         self.stopped = Some(Instant::now());
+        self.tell(Said::Stopped);
     }
 
     pub(crate) fn ended(&mut self, ending: Ending) {
@@ -98,6 +103,7 @@ impl Logged {
 
     pub(crate) fn failed(&mut self, error: &DictationError) {
         self.how = How::Failed;
+        self.error = Some(error.to_string());
         tracing::warn!(name: "dictation.failed", recording_id = %self.id, %error, "A recording failed");
     }
 }
@@ -114,6 +120,8 @@ impl Drop for Logged {
             final_text_ms = self.stopped.map(|stopped| ms(stopped, now)),
             "A recording ended"
         );
+        let error = self.error.take();
+        self.tell(Said::Ended { how: self.how, error });
     }
 }
 

@@ -34,6 +34,7 @@ In it:
 | `updates/` | On Linux, the updates the app has downloaded |
 | `dictation/` | The model that hears what you dictate, 2.4 GB, once you turn dictation on, in a folder for the version it is. Time Machine leaves it out, since it can be downloaded again. Turning dictation off keeps it, and Delete the model, under Dictation in [Settings](settings.md), frees the room |
 | `speaking/` | The voice conversation mode speaks with, about 65 MB, downloaded once speech is on, in a folder for the version it is. Time Machine leaves it out, since it can be fetched again |
+| `recordings/` | What you dictate, once you turn on Keep recordings in [Settings](settings.md): a folder for each recording, which only you can open, with its audio, about 4 MB a minute, and a file of the words it was heard with and what was written. There's no limit on how much room they take, and backups copy them. Turning it off keeps them, and **Delete recordings** deletes them |
 
 ## Worktrees
 
@@ -57,7 +58,7 @@ Two environment variables move them, for a hub started with them set:
 
 ## What leaves your machine
 
-- **The app's check for updates,** and, once you turn [dictation](../guides/dictate-a-prompt.md) on, its download of the model from Hugging Face, and once you turn speech on, to [talk with an agent](../guides/talk-with-the-agent.md), of the voice. Those are its only requests of its own. What you dictate or say is heard on your Mac, and what the agent says is spoken there, so no sound leaves it.
+- **The app's check for updates,** and, once you turn [dictation](../guides/dictate-a-prompt.md) on, its download of the model from Hugging Face, and once you turn speech on, to [talk with an agent](../guides/talk-with-the-agent.md), of the voice. Those are its only requests of its own. What you dictate or say is heard on your Mac, and what the agent says is spoken there, so no sound leaves it. Recordings you chose to keep stay on it too.
 - **What your agent sends,** to its model provider, through the Claude, Codex or Antigravity CLI under its login. Codex and Antigravity keep their native sign-ins and conversation files in their own data directories.
 - **Your prompts' words and their first images, to write a title,** in a separate call through that chat’s CLI and login: Haiku for Claude, Luna at Low effort for Codex, and Gemini 3.8 Flash at Low effort for Antigravity.
 - **What `git` and `gh` send,** to your remotes and to GitHub, as the default GitHub account in [Settings](settings.md#git) on the machines Roundhouse sets up GitHub on, and as your own login on your own machine.

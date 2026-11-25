@@ -36,6 +36,7 @@ members = [
     "crates/spec-screens",
     "crates/terminal-view",
     "crates/video",
+    "crates/kept-recordings",
     "crates/libvpx-build",
     "tools/policy",
     "tools/guide",
@@ -82,6 +83,7 @@ default-members = [
     "crates/waiting",
     "crates/written-counts",
     "crates/video",
+    "crates/kept-recordings",
     "crates/libvpx-build",
     "tools/policy",
     "tools/guide",
@@ -127,6 +129,7 @@ hub = { path = "crates/hub" }
 client-core = { path = "crates/client-core" }
 local-hub = { path = "crates/local-hub" }
 logging = { path = "crates/logging" }
+kept-recordings = { path = "crates/kept-recordings" }
 transcript = { path = "crates/transcript" }
 client-ui = { path = "crates/client-ui" }
 look = { path = "crates/look" }

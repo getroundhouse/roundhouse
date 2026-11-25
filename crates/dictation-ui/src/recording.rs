@@ -9,7 +9,7 @@ use crate::fine_line::FineLine;
 use crate::logged::{self, Logged};
 use crate::source::Recorded;
 use crate::text::Before;
-use crate::{Event, Field, keyboard, source};
+use crate::{Event, Field, Keeping, keyboard, source};
 
 pub const NOTHING_HEARD: &str = "No speech was heard.";
 const ALLOW_THE_MICROPHONE: &str =
@@ -49,8 +49,8 @@ impl Field {
                 }
             }
         }
-        let hints = self.current_hints(cx);
-        if let Some(recorded) = source::record(hints, cx) {
+        let about = self.current_about(cx);
+        if let Some(recorded) = source::record(about, cx) {
             self.start_with(recorded, started, window, cx);
         }
     }
@@ -65,8 +65,12 @@ impl Field {
         if self.underway.is_some() || !self.can_dictate(cx) {
             return;
         }
-        let Recorded { recording, updates, hinted } = recorded;
-        let logged = Logged::start(self.place, hinted);
+        let Recorded { listening: source::Listening { recording, updates, taken }, about } = recorded;
+        let mut logged = Logged::start(self.place, about.hints.words().len());
+        if let Some(taken) = taken {
+            let (id, said) = logged.keep();
+            source::keep(Keeping { id, place: self.place, about, taken, said }, cx);
+        }
         let before = Before::of(self.input.read(cx));
         // Only now, rather than as held Space starts to listen, so a press let go of before it dictates doesn't cut
         // what's playing.
@@ -140,8 +144,14 @@ impl Field {
         let Some(underway) = self.underway.as_mut() else { return };
         match update {
             Update::Opened(device) => underway.logged.opened(&device),
-            Update::Hearing(text) => underway.live = text,
-            Update::Final(text) => self.put_in(&text, window, cx),
+            Update::Hearing(text) => {
+                underway.logged.live(&text);
+                underway.live = text;
+            }
+            Update::Final(text) => {
+                underway.logged.final_text(&text);
+                self.put_in(&text, window, cx);
+            }
             Update::Ended(ending) => {
                 underway.logged.ended(ending);
                 if ending == Ending::NothingHeard {

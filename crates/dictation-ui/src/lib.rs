@@ -7,10 +7,12 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+mod about;
 mod controls;
 mod field;
 mod fine_line;
 mod holding;
+mod keeping;
 mod keyboard;
 mod keys;
 mod logged;
@@ -21,10 +23,12 @@ mod source;
 mod text;
 mod view;
 
+pub use about::About;
 pub use controls::{CANCEL, STOP};
 pub use dictation::{Hint, Hints};
 pub use field::{Event, Field};
 pub use holding::{SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER, SPACE_TALKS_AFTER};
+pub use keeping::{How, Keeping, Said, Taken};
 #[cfg(target_os = "macos")]
 pub use keyboard::monitoring::input_monitoring;
 #[cfg(all(target_os = "macos", not(any(test, feature = "testing"))))]
@@ -35,7 +39,8 @@ pub use keys::{CancelDictation, HOLD_TO_DICTATE_KEY, HoldToDictate, bind_keys, w
 pub use pending::Pending;
 pub use place::Place;
 pub use recording::NOTHING_HEARD;
-pub use source::{Source, install, unavailable};
+pub use sound::InputDevice;
+pub use source::{Listening, Source, install, unavailable};
 #[cfg(any(test, feature = "testing"))]
 pub use source::{hear, quiets_while_dictating};
 pub use view::LIVE_LINE;

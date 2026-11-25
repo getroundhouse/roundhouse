@@ -46,14 +46,14 @@ impl QuestionPanel {
             && self.asks.can_type(q)
         {
             let typed = input.clone();
-            let hints = move |panel: &Self, cx: &App| panel.answer_hints(q, &typed, cx);
+            let about = move |panel: &Self, cx: &App| panel.answer_about(q, &typed, cx);
             let on_event =
                 move |panel: &mut Self, event: &dictation_ui::Event, window: &mut Window, cx: &mut Context<Self>| {
                     panel.dictation_event(q, event, window, cx);
                 };
             let enabled = self.dictation_enabled && q == self.showing;
             let place = dictation_ui::Place::Answer;
-            let (field, dictated) = dictation_ui::Field::attach(input, place, enabled, hints, on_event, window, cx);
+            let (field, dictated) = dictation_ui::Field::attach(input, place, enabled, about, on_event, window, cx);
             events.extend(dictated);
             Some(field)
         } else {

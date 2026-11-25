@@ -18,15 +18,21 @@ impl FileDiff {
         let enabled = self.dictation_is_shown(position, cx);
         let typed = input.clone();
         let path = position.path.clone();
-        let hints = move |diff: &Self, cx: &App| {
+        let about = move |diff: &Self, cx: &App| {
             let typed = typed.read(cx).text().to_string();
-            let listing = diff.review.read(cx).listing();
+            let review = diff.review.read(cx);
+            let listing = review.listing();
             let changed =
                 listing.into_iter().flat_map(|listing| listing.rows.iter()).map(|file| file.path.as_ref()).collect();
             let words = Field::DiffComment { typed: &typed, path: &path, changed }.hint_words();
-            dictation_ui::Hints::new(
+            let hints = dictation_ui::Hints::new(
                 words.into_iter().map(|word| dictation_ui::Hint { text: word.text, spelled: word.spelled }),
-            )
+            );
+            dictation_ui::About {
+                hints,
+                workspace: Some(review.workspace_id().to_string()),
+                ..dictation_ui::About::default()
+            }
         };
         let on_event =
             |this: &mut Self, event: &dictation_ui::Event, window: &mut Window, cx: &mut Context<Self>| match event {
@@ -35,7 +41,7 @@ impl FileDiff {
                 dictation_ui::Event::Error(message) => cx.emit(FileDiffEvent::Error(message.clone())),
             };
         let place = dictation_ui::Place::DiffComment;
-        let (field, attached) = dictation_ui::Field::attach(input, place, enabled, hints, on_event, window, cx);
+        let (field, attached) = dictation_ui::Field::attach(input, place, enabled, about, on_event, window, cx);
         // Its live words change the comment's height, so the rows are laid out again.
         let laid_out = cx.observe(&field, |this, _, cx| this.lay_out_again(cx));
         (field, attached.into_iter().chain([laid_out]).collect())

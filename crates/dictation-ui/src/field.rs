@@ -1,16 +1,16 @@
 //! A field's recording and its lifetime. A host retains this beside its input, and tells it when that input is hidden
 //! or reused for different content; being retained by a view does not mean it is still a target.
 
-use dictation::Hints;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{AnyWindowHandle, App, AppContext as _, Context, Entity, EventEmitter, Subscription, Window};
 
+use crate::About;
 use crate::fine_line::FineLine;
 use crate::holding::SpaceDown;
 use crate::place::Place;
 use crate::recording::Underway;
 
-type HintsFn = Box<dyn Fn(&App) -> Hints>;
+type AboutFn = Box<dyn Fn(&App) -> About>;
 
 pub struct Field {
     pub(crate) place: Place,
@@ -20,7 +20,7 @@ pub struct Field {
     pub(crate) enabled: bool,
     pub(crate) underway: Option<Underway>,
     pub(crate) space_down: Option<SpaceDown>,
-    hints: Option<HintsFn>,
+    about: Option<AboutFn>,
     _keys: Subscription,
     _input: Subscription,
 }
@@ -41,14 +41,14 @@ impl EventEmitter<Event> for Field {}
 
 impl Field {
     /// Dictation over `input`, for the host view `cx` is of, which is drawn again as the field's live words and
-    /// controls change, and which `on_event` tells of what happens to it. `hints` gives the host's words to favour, as
-    /// each recording starts, and `enabled` whether the input shows now, as [`Self::set_enabled`] says. The host keeps
+    /// controls change, and which `on_event` tells of what happens to it. `about` gives what's dictated is about, with
+    /// the words to favour, as each recording starts, and `enabled` whether the input shows now, as [`Self::set_enabled`] says. The host keeps
     /// the subscriptions as long as the field.
     pub fn attach<V: 'static>(
         input: &Entity<TextareaState>,
         place: Place,
         enabled: bool,
-        hints: impl Fn(&V, &App) -> Hints + 'static,
+        about: impl Fn(&V, &App) -> About + 'static,
         on_event: impl Fn(&mut V, &Event, &mut Window, &mut Context<V>) + 'static,
         window: &Window,
         cx: &mut Context<V>,
@@ -56,8 +56,8 @@ impl Field {
         let host = cx.weak_entity();
         let field = cx.new(|cx| {
             let mut field = Self::new(input.clone(), place, window, cx);
-            field.hints =
-                Some(Box::new(move |cx| host.upgrade().map_or_else(Hints::default, |host| hints(host.read(cx), cx))));
+            field.about =
+                Some(Box::new(move |cx| host.upgrade().map_or_else(About::default, |host| about(host.read(cx), cx))));
             field.enabled = enabled;
             field
         });
@@ -84,14 +84,14 @@ impl Field {
             enabled: true,
             underway: None,
             space_down: None,
-            hints: None,
+            about: None,
             _keys: keys,
             _input: changed,
         }
     }
 
-    pub(crate) fn current_hints(&self, cx: &App) -> Hints {
-        self.hints.as_ref().map_or_else(Hints::default, |f| f(cx))
+    pub(crate) fn current_about(&self, cx: &App) -> About {
+        self.about.as_ref().map_or_else(About::default, |f| f(cx))
     }
 
     /// A hidden field cannot start or keep a recording, even when its view stays alive for reopening.

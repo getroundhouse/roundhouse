@@ -35,4 +35,4 @@ These rules say what Roundhouse records about its own running: how each part log
 
 ## What isn't a log
 
-- **A recording of what someone dictated is a file they chose to keep,** not a log, since it holds what was said. A log line and a recording share an ID, so one can be found from the other. *Not built.*
+- **A recording of what someone dictated is a file they chose to keep,** not a log, since it holds what was said. A log line and a recording share an ID, so one can be found from the other.

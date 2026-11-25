@@ -129,6 +129,7 @@ impl AppView {
         // Settings says how dictation stands, and how far the model's download has got while it shows.
         crate::dictating::observe(cx, |_, cx| cx.notify()).detach();
         crate::dictating::observe_progress(cx, |t: &Self, _| t.settings_open()).detach();
+        crate::dictating::keeping::observe(cx, Self::settings_open).detach();
         crate::settings::observe(cx, |_, cx| cx.notify()).detach();
         Self::observe_activation(window, cx);
         quitting::ask_first(window, cx);

@@ -68,11 +68,11 @@ impl Field {
     }
 
     fn listen(&mut self, cx: &mut Context<Self>) {
-        let hints = self.current_hints(cx);
+        let about = self.current_about(cx);
         let Some(down) = self.space_down.as_mut() else { return };
         down.typed = Some(self.input.read(cx).text().clone());
         if !source::uses_microphone(cx) || sound::microphone_permission() == Permission::Allowed {
-            down.listening = source::record(hints, cx);
+            down.listening = source::record(about, cx);
         }
     }
 
@@ -93,7 +93,7 @@ impl Field {
 
     #[cfg(any(test, feature = "testing"))]
     pub(crate) fn space_listening(&self) -> Option<&Recording> {
-        self.space_down.as_ref()?.listening.as_ref().map(|recorded| &recorded.recording)
+        self.space_down.as_ref()?.listening.as_ref().map(|recorded| &recorded.listening.recording)
     }
 }
 

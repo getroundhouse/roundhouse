@@ -24,5 +24,5 @@ mod transducer;
 mod vocab;
 mod windows;
 
-pub use engine::{Nemotron, OLDEST_MACOS, runs_here};
+pub use engine::{HINT_BOOST, Nemotron, OLDEST_MACOS, runs_here};
 pub use files::MODEL;

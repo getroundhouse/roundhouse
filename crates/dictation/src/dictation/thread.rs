@@ -22,6 +22,14 @@ pub struct Dictation {
     requests: flume::Sender<Request>,
 }
 
+/// A recording with a copy of its audio, as [`Dictation::record_copying`] starts one.
+pub struct Copied {
+    pub recording: Recording,
+    pub updates: flume::Receiver<Update>,
+    /// Its audio, at [`crate::SAMPLE_RATE`].
+    pub audio: flume::Receiver<Vec<f32>>,
+}
+
 enum Request {
     Record(Asked),
     Prepare(flume::Sender<Result<(), EngineError>>),
@@ -65,7 +73,25 @@ impl Dictation {
     /// and what's heard of it. Once an earlier recording has finished, the microphone is opened first, and then the
     /// engine loaded if it isn't. Audio awaiting recognition is bounded; exceeding the buffer ends capture with [`DictationError::AudioBacklog`].
     pub fn record(&self, audio: AudioIn, hints: Hints, language: Language) -> (Recording, flume::Receiver<Update>) {
-        let input = Buffer::new();
+        self.record_to(Buffer::new(None), audio, hints, language)
+    }
+
+    /// Starts a recording, as [`Dictation::record`] does, and gives a copy of all its audio too, as it comes: what the
+    /// microphone gave before the recording was stopped, cancelled or failed, whether or not the engine got to it. The
+    /// channel closes once the last of it has come.
+    pub fn record_copying(&self, audio: AudioIn, hints: Hints, language: Language) -> Copied {
+        let (copy, copied) = flume::unbounded();
+        let (recording, updates) = self.record_to(Buffer::new(Some(copy)), audio, hints, language);
+        Copied { recording, updates, audio: copied }
+    }
+
+    fn record_to(
+        &self,
+        input: Buffer,
+        audio: AudioIn,
+        hints: Hints,
+        language: Language,
+    ) -> (Recording, flume::Receiver<Update>) {
         let (updates, read) = flume::unbounded();
         let cancelled = Cancelled::default();
         let recording = Recording::new(input.clone(), audio, cancelled.clone());

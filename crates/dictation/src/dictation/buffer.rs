@@ -28,13 +28,16 @@ struct State {
     samples: usize,
     accepting: bool,
     ending: Option<Input>,
+    /// Where a copy of the audio goes, until the last of it has come.
+    copy: Option<flume::Sender<Vec<f32>>>,
 }
 
 impl Buffer {
-    pub(super) fn new() -> Self {
+    /// `copy` is given all the audio that comes, what recognition never reaches included.
+    pub(super) fn new(copy: Option<flume::Sender<Vec<f32>>>) -> Self {
         let (wake, ready) = flume::bounded(1);
         let (close, closed) = flume::bounded(1);
-        let state = State { audio: VecDeque::new(), samples: 0, accepting: true, ending: None };
+        let state = State { audio: VecDeque::new(), samples: 0, accepting: true, ending: None, copy };
         Self { state: Arc::new(Mutex::new(state)), wake, ready, close, closed, meter: Meter::new() }
     }
 
@@ -42,6 +45,9 @@ impl Buffer {
         let mut state = self.state.lock();
         if !state.accepting || audio.is_empty() {
             return;
+        }
+        if let Some(copy) = &state.copy {
+            let _ = copy.send(audio.clone());
         }
         if audio.len() > MAX_SAMPLES - state.samples {
             self.finish(&mut state, Input::Failed(DictationError::AudioBacklog));
@@ -64,6 +70,7 @@ impl Buffer {
             return;
         }
         state.accepting = false;
+        state.copy = None;
         if !matches!(ending, Input::Stop) {
             state.audio.clear();
             state.samples = 0;

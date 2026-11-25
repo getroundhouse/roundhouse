@@ -13,6 +13,7 @@ pub(super) fn page() -> Option<Page> {
     let mut settings = vec![super::dictation_row::setting(), super::dictation_row::language()];
     let possible = sound::Quieting::ALL.into_iter().filter(|how| how.is_possible());
     settings.extend(possible.map(super::dictation_row::quieting));
+    settings.push(super::dictation_row::keeping());
     settings.extend([super::speech_row::setting(), super::speech_row::speed()]);
     Some(Page { id: PageId::Voice, name: "Voice", icon: Lucide::AudioLines, body: Body::Settings(settings) })
 }

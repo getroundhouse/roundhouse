@@ -73,6 +73,10 @@ pub(crate) enum Step {
     StallDictationDownload,
     /// Gives dictation a made-up model that's all here, so turning dictation on has it ready at once.
     DictationModelHere,
+    /// Turns Keep recordings on, with recordings kept that take this many bytes.
+    KeepRecordings {
+        taking_bytes: u64,
+    },
     /// Gives dictation a made-up model from a server that doesn't have it, so turning dictation on fails.
     FailDictationDownload,
     /// Has dictation ready, with a stand-in for its model, and speech on, with the voice's files here, so conversation

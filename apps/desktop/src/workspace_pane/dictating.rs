@@ -71,17 +71,24 @@ impl WorkspacePane {
         self.after_dictation.wait(&self.dictation, content, then, cx)
     }
 
-    /// The words to favour in the composer: what's typed, its files, then the workspace's and the chat's.
-    pub(super) fn composer_hints(&self, cx: &App) -> dictation_ui::Hints {
+    /// What's dictated into the composer is about, with the words to favour: what's typed, its files, then the
+    /// workspace's and the chat's.
+    pub(super) fn composer_about(&self, cx: &App) -> dictation_ui::About {
         let typed = self.composer.read(cx).text().to_string();
         let attached = self.attached.names();
         let open_file = self.diff.as_ref().and_then(|diff| diff.tab.as_ref()).map(|tab| tab.path.as_ref());
         let chat = self.transcript().map(|transcript| transcript.read(cx).log());
         let around = Around { workspace: Some(self.workspace_around(cx)), chat };
         let words = Field::Composer { typed: &typed, attached: &attached, open_file, around }.hint_words();
-        dictation_ui::Hints::new(
+        let hints = dictation_ui::Hints::new(
             words.into_iter().map(|word| dictation_ui::Hint { text: word.text, spelled: word.spelled }),
-        )
+        );
+        dictation_ui::About {
+            hints,
+            workspace: Some(self.shown.workspace().id.to_string()),
+            chat: self.active.as_ref().map(ToString::to_string),
+            said_out_loud: self.conversation_is_here(cx),
+        }
     }
 
     pub(super) fn attach_transcript_hints(

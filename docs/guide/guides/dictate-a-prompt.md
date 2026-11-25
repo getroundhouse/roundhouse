@@ -1,6 +1,6 @@
 # Dictate a prompt
 
-Say a chat prompt, a new workspace’s first prompt, an answer to an agent’s question, a note on your answer to a proposal or a comment on a diff. A model on your Mac hears what you say, so it never leaves it, and the text waits for you to send.
+Say a chat prompt, a new workspace’s first prompt, an answer to an agent’s question, a note on your answer to a proposal or a comment on a diff. A model on your Mac hears what you say, so it never leaves it, and the text waits for you to send. The sound isn't kept, unless you turn on **Keep recordings** in [Settings](../reference/settings.md).
 
 ## Turn it on
 
