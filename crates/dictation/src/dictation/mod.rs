@@ -8,7 +8,7 @@ mod recording;
 mod thread;
 
 pub use recording::{DictationError, Ending, Recording, Update};
-pub use thread::Dictation;
+pub use thread::{Copied, Dictation};
 
 #[cfg(test)]
 mod tests;

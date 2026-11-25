@@ -2009,6 +2009,7 @@ dependencies = [
  "gpui-pre-apple",
  "hub",
  "image",
+ "kept-recordings",
  "libc",
  "local-hub",
  "logging",
@@ -4985,6 +4986,14 @@ checksum = "0348cde6df2b507ba3c3753beba226baba8567af588d6568cdb9877f02c75b60"
 dependencies = [
  "serde",
  "ucd-trie",
+]
+
+[[package]]
+name = "kept-recordings"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -109,6 +109,10 @@ impl Driver {
             Step::Dictate { with, said, shows } => self.dictate(with, said, shows),
             Step::StallDictationDownload => self.stall_dictation_download(),
             Step::DictationModelHere => self.dictation_model_here(),
+            Step::KeepRecordings { taking_bytes } => self.cx.update(|cx| {
+                desktop::dictating::keep_recordings(true, cx);
+                desktop::dictating::recordings_take(*taking_bytes, cx);
+            }),
             Step::FailDictationDownload => self.fail_dictation_download(),
             Step::ConversationReady => self.conversation_ready(),
             Step::StallVoiceDownload => self.stall_voice_download(),

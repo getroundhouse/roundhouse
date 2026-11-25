@@ -1,6 +1,6 @@
 //! The Dictation row of Voice: Ask first, On or Off, and under it a box that says how dictation stands, the language
-//! what's dictated is heard in, and the switches that mute the sound and pause what's playing while dictating, as
-//! `docs/spec/settings.md` says. Only where `sound::HEARS`, and each switch only where its
+//! what's dictated is heard in, the switches that mute the sound and pause what's playing while dictating, and the one
+//! that keeps recordings, as `docs/spec/settings.md` says. Only where `sound::HEARS`, and each switch only where its
 //! `Quieting::is_possible`.
 
 use std::rc::Rc;
@@ -68,6 +68,21 @@ pub(super) fn quieting(how: Quieting) -> Setting {
             set: Rc::new(move |on, cx| change(cx, |settings| settings.set_quiets_while_dictating(how, on))),
         },
         status_box: None,
+    }
+}
+
+/// The switch that keeps what's dictated, over a box that says how much room it takes.
+pub(super) fn keeping() -> Setting {
+    Setting {
+        name: "Keep recordings",
+        does: "Keep what you dictate on this Mac: its audio, the words it was heard with and what was written, so \
+               dictation can be tried again on what you really say. Nothing is sent anywhere. Turning it off keeps \
+               what's there until you delete it.",
+        control: Control::Switch {
+            is_on: Box::new(|cx| Some(get(cx).keep_recordings)),
+            set: Rc::new(|on, cx| change(cx, |settings| settings.keep_recordings = on)),
+        },
+        status_box: Some(Box::new(crate::dictating::keeping::status_box)),
     }
 }
 

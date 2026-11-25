@@ -9,7 +9,8 @@
 //! live text had. An [`Engine`] is the model that does both. The desktop app's composer dictates with it.
 //!
 //! A recording's audio and its loudness are held in memory, and only while it's heard. Nothing here writes either to
-//! disk or sends it off the device, because `docs/spec/chats.md` says that what's said never leaves the device.
+//! disk or sends it off the device, because `docs/spec/chats.md` says that what's said never leaves the device. A caller
+//! that keeps a recording is given a copy of its audio, by [`Dictation::record_copying`].
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
@@ -26,7 +27,7 @@ mod pauses;
 mod samples;
 
 pub use audio_in::AudioIn;
-pub use dictation::{Dictation, DictationError, Ending, Recording, Update};
+pub use dictation::{Copied, Dictation, DictationError, Ending, Recording, Update};
 pub use engine::{Engine, EngineError, Heard, Listening};
 pub use hints::{Hint, Hints};
 pub use language::Language;

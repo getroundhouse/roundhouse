@@ -94,6 +94,7 @@ fn saving_keeps_what_a_newer_build_wrote() {
             "dictation_language": "auto",
             "mute_while_dictating": false,
             "pause_while_dictating": false,
+            "keep_recordings": false,
             "speech": "ask_first",
             "speech_speed": "normal",
             "from_later": [1, 2],

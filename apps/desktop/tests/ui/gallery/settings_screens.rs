@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use desktop::dictating::{DELETE, RETRY, STATUS};
+use desktop::dictating::{DELETE, DELETE_RECORDINGS, RETRY, STATUS};
 use look::Region;
 
 use super::frame::Frame;
@@ -25,6 +25,9 @@ const VOICE: Step = Step::Click("settings-page-voice");
 const DICTATION: Step = Step::Click("settings-dictation");
 const ON: Step = Step::ClickItem("On");
 const OFF: Step = Step::ClickItem("Off");
+
+/// How much room a few weeks' recordings take.
+const RECORDINGS_BYTES: u64 = 2_640_000_000;
 
 /// A token pasted into the panel, which is plainly made up.
 const TOKEN: &str = "a-made-up-token";
@@ -232,6 +235,33 @@ pub(crate) const SCREENS: &[Screen] = &[
             DICTATION,
             ON,
             Step::WaitFor(RETRY),
+        ],
+    },
+    Screen {
+        name: "settings-recordings",
+        spec: "settings.md",
+        world: Some(conversation),
+        frame: Frame::Layout,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::KeepRecordings { taking_bytes: RECORDINGS_BYTES },
+            Step::OpenSettings,
+            VOICE,
+            Step::WaitFor(DELETE_RECORDINGS),
+        ],
+    },
+    Screen {
+        name: "settings-recordings-deleting",
+        spec: "settings.md",
+        world: Some(conversation),
+        frame: Frame::Dialog,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::KeepRecordings { taking_bytes: RECORDINGS_BYTES },
+            Step::OpenSettings,
+            VOICE,
+            Step::Click(DELETE_RECORDINGS),
+            Step::WaitFor("recordings-delete-act"),
         ],
     },
 ];

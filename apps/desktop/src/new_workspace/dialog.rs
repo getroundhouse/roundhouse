@@ -119,16 +119,17 @@ impl NewWorkspaceDialog {
     }
 
     /// The words to favour in the prompt: what's typed, its files, then the repository chosen and every one offered.
-    fn dictation_hints(&self, cx: &App) -> dictation_ui::Hints {
+    fn dictation_about(&self, cx: &App) -> dictation_ui::About {
         let typed = self.prompt.read(cx).text().to_string();
         let attached = self.attached.names();
         let chosen_repo = self.offer.repos.iter().find(|(id, _)| id == &self.repo).map(|(_, name)| name.as_str());
         let repos = self.offer.repos.iter().map(|(_, name)| name.as_str()).collect();
         let field = Field::NewWorkspace { typed: &typed, attached: &attached, chosen_repo, repos };
         let words = field.hint_words();
-        dictation_ui::Hints::new(
+        let hints = dictation_ui::Hints::new(
             words.into_iter().map(|word| dictation_ui::Hint { text: word.text, spelled: word.spelled }),
-        )
+        );
+        dictation_ui::About { hints, ..dictation_ui::About::default() }
     }
 
     pub(crate) fn new(
@@ -157,7 +158,7 @@ impl NewWorkspaceDialog {
             };
         let place = dictation_ui::Place::NewWorkspace;
         let (dictation, [dictated, live]) =
-            dictation_ui::Field::attach(&prompt, place, true, Self::dictation_hints, on_event, window, cx);
+            dictation_ui::Field::attach(&prompt, place, true, Self::dictation_about, on_event, window, cx);
         let readiness = crate::dictating::observe(cx, |_, cx| cx.notify());
         let (model, effort, mode, attached) = (None, None, None, Attachments::default());
         Self {

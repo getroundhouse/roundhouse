@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use gpui_kit::{Context, SharedString};
-use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, LineCounts, Observed};
+use protocol::model::{ChangeStatus, ChangeSummary, ChangedFile, ChangedFileAt, LineCounts, Observed, WorkspaceId};
 
 use super::Review;
 use super::listed::Summary;
@@ -89,6 +89,11 @@ impl Review {
         self.list_again(cx);
         self.say_what_changes(cx);
         self.read_the_file_again_if_it_moved(cx);
+    }
+
+    /// The workspace whose diff it is.
+    pub fn workspace_id(&self) -> &WorkspaceId {
+        &self.workspace_id
     }
 
     /// What Changes lists now, or `None` until the workspace's level has listed its changes.

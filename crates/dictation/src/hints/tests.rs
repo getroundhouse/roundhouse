@@ -138,6 +138,17 @@ proptest! {
     #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
 
     #[test]
+    fn hints_that_were_kept_are_the_same_again(
+        words in prop::collection::vec(("[A-Za-z_`.' -]{0,24}", any::<bool>()), 0..40)
+    ) {
+        let hints = Hints::new(words.into_iter().map(|(text, spelled)| Hint { text, spelled }));
+        let again = Hints::from_kept(hints.kept());
+        prop_assert_eq!(again.words(), hints.words());
+        let spelled = |hints: &Hints| hints.kept().map(|hint| hint.spelled).collect::<Vec<_>>();
+        prop_assert_eq!(spelled(&again), spelled(&hints));
+    }
+
+    #[test]
     fn sequences_without_complete_hint_words_always_settle_to_zero(
         tokens in prop::collection::vec(1usize..58, 0..30)
     ) {

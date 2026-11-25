@@ -82,6 +82,24 @@ impl Hints {
         &self.phrases
     }
 
+    /// The hints a recording was heard with, from what [`Hints::kept`] gave of them, taken as they are, since cleaning
+    /// them again can change them: `A-A_` is cleaned to `a-a`, and that to `a-a` and `a a`.
+    pub fn from_kept(kept: impl IntoIterator<Item = Hint>) -> Self {
+        let mut hints = Self::default();
+        for Hint { text, spelled } in kept {
+            if spelled {
+                hints.spelled.push(text.clone());
+            }
+            hints.phrases.push(text);
+        }
+        hints
+    }
+
+    /// Each phrase, to be kept with a recording, so it can be heard again with the same.
+    pub fn kept(&self) -> impl Iterator<Item = Hint> {
+        self.phrases.iter().map(|phrase| Hint { text: phrase.clone(), spelled: self.spelled.contains(phrase) })
+    }
+
     pub(super) fn spelled(&self) -> &[String] {
         &self.spelled
     }

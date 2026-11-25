@@ -21,6 +21,7 @@ These rules say who owns a piece of state, what an app keeps on its device, and 
   | Preferences | What the app remembers from how it's used, such as the workspace it was left on | Saved quietly, since they change often and losing one costs little |
   | Paired hubs | The hubs this device paired with | Never lost, and forgetting one forgets its secret |
   | Secrets | The token a paired hub gave this device | Encrypted, and for this device only |
+  | Recordings | What someone dictated, once they chose to keep it | Only its user can read it, written as it's said, so the app going loses none of it, and never sent |
   | Downloads | Such as the model dictation hears with | Left out of backups, since they can be downloaded again |
 
 - **A kind has a trait only where platforms store it differently, which is only secrets.** Any other is one type that every app with that kind uses, given where to keep it, since a trait would have one implementation. *Not built:* that trait, and one type for paired hubs. The desktop app keeps its paired hubs in its settings, with a few preferences, such as which projects are collapsed, and the iPhone app keeps its one hub its own way. *Unconfirmed.*

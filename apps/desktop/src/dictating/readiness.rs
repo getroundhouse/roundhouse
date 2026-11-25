@@ -9,11 +9,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dictation::nemotron::{self, Nemotron};
-use dictation::{AudioIn, Dictation, Engine, EngineError, Recording, Update};
+use dictation::{AudioIn, Dictation, Engine, EngineError};
 use gpui_kit::{App, AsyncApp, Context, Global, Subscription, Task};
 use models::{DownloadError, ModelFiles};
 
 use super::downloading::{self, Downloaded, ModelDownload};
+use super::keeping;
 use super::loading::{Load, timed};
 use crate::settings::Choice;
 
@@ -37,8 +38,8 @@ pub(super) enum Readiness {
     NeedsNewerMacos,
 }
 
-/// The thread that hears what's dictated, which only this module reaches.
-pub(super) struct Hearing(Dictation);
+/// The thread that hears what's dictated, which only `source.rs` records with.
+pub(super) struct Hearing(pub(super) Dictation);
 
 /// Why dictation couldn't be made ready, by the step that failed.
 #[derive(Debug)]
@@ -62,7 +63,7 @@ impl Failure {
 
 /// Where the model's files are kept, where they come from, and how it's loaded from them: the real model, or a test's.
 pub(super) struct Model {
-    files: ModelFiles,
+    pub(super) files: ModelFiles,
     /// The folder every revision of it is kept in.
     pub(super) dir: PathBuf,
     from: String,
@@ -76,7 +77,7 @@ pub(super) struct Dictating {
     readiness: Readiness,
     pub(super) model: Model,
     /// What recordings hear: the microphone, or what a test gives them.
-    audio: AudioIn,
+    pub(super) audio: AudioIn,
     /// Follows what's under way, the download or the loading, until it's done or dictation is turned off. Dropping it
     /// stops a download.
     following: Option<Task<()>>,
@@ -90,11 +91,13 @@ pub(super) struct Dictating {
 
 impl Global for Dictating {}
 
-/// Has dictation follow the person's choice, with the model kept in `data_dir`. Once, as the app starts.
-pub(crate) fn start(data_dir: &Path, cx: &mut App) {
+/// Has dictation follow the person's choices, with the model, and what they dictate, kept in `data_dir`, by `build`.
+/// Once, as the app starts.
+pub(crate) fn start(data_dir: &Path, build: &'static str, cx: &mut App) {
     if cx.has_global::<Dictating>() {
         return;
     }
+    keeping::start(data_dir, build, cx);
     let load: Load = Arc::new(|dir| Ok(Box::new(Nemotron::load(dir)?) as Box<dyn Engine>));
     let files = nemotron::MODEL;
     let model_dir = data_dir.join("dictation").join("nemotron");
@@ -311,38 +314,6 @@ pub(crate) fn for_conversation(cx: &App) -> client_core::conversation::Readiness
         Readiness::Ready(_) => Says::Ready,
         Readiness::Failed(failure) => Says::Failed(super::words::why(failure)),
         Readiness::NeedsNewerMacos => Says::Failed(super::words::needs_newer_macos()),
-    }
-}
-
-/// Whether a recording hears the microphone, which the system has to allow first, rather than audio a test gives it.
-fn hears_the_microphone(cx: &App) -> bool {
-    dictating(cx).audio == AudioIn::Microphone
-}
-
-/// Whether a recording quiets what's playing `how` says while it's dictated to: where this platform can, once it's
-/// chosen.
-fn quiets(how: sound::Quieting, cx: &App) -> bool {
-    how.is_possible() && crate::settings::get(cx).quiets_while_dictating(how)
-}
-
-/// What fields dictate with: this app's model, as it stands, and the person's choices.
-pub(crate) fn source() -> dictation_ui::Source {
-    dictation_ui::Source { ready, record, uses_microphone: hears_the_microphone, quiets }
-}
-
-/// Starts a recording biased toward `hints`, in the language chosen, once dictation is ready, and gives it and what's
-/// heard of it.
-fn record(hints: dictation::Hints, cx: &App) -> Option<(Recording, flume::Receiver<Update>)> {
-    let dictating = dictating(cx);
-    match &dictating.readiness {
-        Readiness::Ready(Hearing(dictation)) => {
-            Some(dictation.record(dictating.audio, hints, crate::settings::get(cx).dictation_language))
-        }
-        Readiness::Off
-        | Readiness::Downloading
-        | Readiness::Preparing(_)
-        | Readiness::Failed(_)
-        | Readiness::NeedsNewerMacos => None,
     }
 }
 

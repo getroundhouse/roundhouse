@@ -23,6 +23,7 @@ testing = ["conversation/testing", "dictation/testing", "dictation-ui/testing"]
 [dependencies]
 protocol.workspace = true
 client-core.workspace = true
+kept-recordings.workspace = true
 local-hub.workspace = true
 logging.workspace = true
 private-files.workspace = true

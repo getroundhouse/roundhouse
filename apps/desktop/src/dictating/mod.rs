@@ -6,19 +6,24 @@
 
 mod deleting;
 mod downloading;
+pub(crate) mod keeping;
 pub(crate) mod language;
 mod loading;
 mod microphone;
 mod readiness;
+mod source;
 mod words;
 
 pub(crate) use downloading::observe_progress;
+pub use keeping::{DELETE as DELETE_RECORDINGS, STATUS as RECORDINGS_STATUS};
+#[cfg(any(test, feature = "testing"))]
+pub use keeping::{keep_recordings, recordings_take};
 pub(crate) use microphone::microphone;
 pub use microphone::{HIDE, MICROPHONE, TURN_ON};
-pub(crate) use readiness::{for_conversation, observe, observe_in, ready, retry, runs_here, source, start};
+pub(crate) use readiness::{for_conversation, observe, observe_in, ready, retry, runs_here, start};
 #[cfg(any(test, feature = "testing"))]
 pub use readiness::{is_ready, set_on, use_engine, use_model};
-#[cfg(test)]
+pub(crate) use source::source;
 pub(crate) use words::gigabytes;
 pub use words::{DELETE, RETRY, STATUS};
 pub(crate) use words::{size, status_box};

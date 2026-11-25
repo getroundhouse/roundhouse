@@ -157,7 +157,7 @@ pub fn open_main_window(
     accessibility_focus::install();
     keys::set(cx);
     dictation_ui::install(dictating::source(), cx);
-    dictating::start(&hub.paths.data_dir, cx);
+    dictating::start(&hub.paths.data_dir, hub.build_version, cx);
     conversing::start(&hub.paths.data_dir, cx);
     menus::set(hub.build_version, cx);
     std::thread::spawn(look::preload_highlighting);

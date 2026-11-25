@@ -20,7 +20,7 @@ pub(super) const LONGEST: Samples = Samples::from_secs(15);
 
 /// Per-token log-probability boost awarded to hint matches during beam search, unless a test sets another with
 /// [`Nemotron::with_hint_boost`]. *Unconfirmed.*
-const HINT_BOOST: f32 = 2.0;
+pub const HINT_BOOST: f32 = 2.0;
 
 /// The oldest macOS that runs the model, since the export is Core ML's specification 8.
 pub const OLDEST_MACOS: u8 = 14;

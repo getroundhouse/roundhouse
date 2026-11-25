@@ -4,9 +4,17 @@ use dictation::{Hints, Recording, Update};
 use gpui_kit::{App, Context, Global, WeakEntity};
 use sound::Quieting;
 
-use crate::Field;
+use crate::{About, Field, Keeping, Taken};
 
-type Record = fn(Hints, &App) -> Option<(Recording, flume::Receiver<Update>)>;
+type Record = fn(Hints, &App) -> Option<Listening>;
+
+/// A recording, as the app starts it.
+pub struct Listening {
+    pub recording: Recording,
+    pub updates: flume::Receiver<Update>,
+    /// What's taken of it to be kept, if the person chose to keep what they dictate.
+    pub taken: Option<Taken>,
+}
 
 /// Installed once by the app, whose model setup answers these without I/O. An app without a source has no dictation.
 pub struct Source {
@@ -16,6 +24,8 @@ pub struct Source {
     /// Whether a recording quiets what's playing in the way it's given, while it's dictated to, as the person has
     /// chosen.
     pub quiets: fn(Quieting, &App) -> bool,
+    /// Keeps a recording the app took what's kept of.
+    pub keep: fn(Keeping, &mut App),
 }
 
 impl Global for Source {}
@@ -52,17 +62,21 @@ pub(crate) fn quiets(how: Quieting, cx: &App) -> bool {
     cx.try_global::<Source>().is_some_and(|source| (source.quiets)(how, cx))
 }
 
-/// A recording, with what's heard of it, and how many words it's biased toward.
+/// A recording, with what's heard of it, and what it's about.
 pub(crate) struct Recorded {
-    pub(crate) recording: Recording,
-    pub(crate) updates: flume::Receiver<Update>,
-    pub(crate) hinted: usize,
+    pub(crate) listening: Listening,
+    pub(crate) about: About,
 }
 
-pub(crate) fn record(hints: Hints, cx: &App) -> Option<Recorded> {
-    let hinted = hints.words().len();
-    let (recording, updates) = (cx.try_global::<Source>()?.record)(hints, cx)?;
-    Some(Recorded { recording, updates, hinted })
+pub(crate) fn record(about: About, cx: &App) -> Option<Recorded> {
+    let listening = (cx.try_global::<Source>()?.record)(about.hints.clone(), cx)?;
+    Some(Recorded { listening, about })
+}
+
+pub(crate) fn keep(keeping: Keeping, cx: &mut App) {
+    if let Some(source) = cx.try_global::<Source>() {
+        (source.keep)(keeping, cx);
+    }
 }
 
 /// Ends an old target before asking the engine for another recording, including one still listening towards a held

@@ -201,7 +201,7 @@ fn a_model_error_releases_capture_without_the_recording_handle_being_dropped() {
 #[test]
 fn a_recording_ended_before_capture_starts_never_opens_the_microphone() {
     for ending in [Input::Stop, Input::Cancel] {
-        let buffer = Buffer::new();
+        let buffer = Buffer::new(None);
         buffer.end(ending);
 
         let (_capture, device) =

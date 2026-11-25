@@ -64,6 +64,9 @@ pub(crate) struct Settings {
     /// unless chosen, since it pauses another app.
     #[serde(default)]
     pub(crate) pause_while_dictating: bool,
+    /// Whether what's dictated is kept on this Mac, with its audio. Off unless chosen, since it's what someone said.
+    #[serde(default)]
+    pub(crate) keep_recordings: bool,
     /// Whether the agent's replies can be read out, in conversation mode, once the voice is downloaded. It asks first
     /// until the person chooses, as dictation does, since turning it on downloads the voice.
     #[serde(default)]
@@ -92,6 +95,7 @@ impl Default for Settings {
             dictation_language: dictation::Language::default(),
             mute_while_dictating: false,
             pause_while_dictating: false,
+            keep_recordings: false,
             speech: Choice::default(),
             speech_speed: conversation::Speed::default(),
             others: Map::new(),

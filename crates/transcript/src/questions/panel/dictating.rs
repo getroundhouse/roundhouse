@@ -42,17 +42,20 @@ impl QuestionPanel {
         self.after_dictation.wait(&field, content, then, cx)
     }
 
-    /// The words to favour in question `q`'s typed answer, `typed`: what's typed there, the question, then the
+    /// What's dictated into question `q`'s typed answer, `typed`, is about, with the words to favour: what's typed there, the question, then the
     /// workspace's and the chat's.
-    pub(super) fn answer_hints(&self, q: usize, typed: &Entity<TextareaState>, cx: &App) -> dictation_ui::Hints {
-        let Some(asked) = self.asked.get(q) else { return dictation_ui::Hints::default() };
+    pub(super) fn answer_about(&self, q: usize, typed: &Entity<TextareaState>, cx: &App) -> dictation_ui::About {
+        let Some(asked) = self.asked.get(q) else { return dictation_ui::About::default() };
         let typed = typed.read(cx).text().to_string();
         let transcript = self.transcript.upgrade();
         let around = transcript.as_ref().map_or_else(Around::default, |t| t.read(cx).dictation_around(cx));
+        let workspace = around.workspace.as_ref().map(|workspace| workspace.shown.workspace().id.to_string());
+        let chat = transcript.as_ref().map(|t| t.read(cx).session_id().to_string());
         let words = Field::Answer { typed: &typed, question: &asked.question, around }.hint_words();
-        dictation_ui::Hints::new(
+        let hints = dictation_ui::Hints::new(
             words.into_iter().map(|word| dictation_ui::Hint { text: word.text, spelled: word.spelled }),
-        )
+        );
+        dictation_ui::About { hints, workspace, chat, said_out_loud: false }
     }
 
     pub(super) fn dictation_event(

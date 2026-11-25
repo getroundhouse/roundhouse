@@ -49,6 +49,14 @@ pub(crate) fn ask_and_hear(
     });
 }
 
+/// Asks `asked` over the window in front, as [`ask`] does over the one it's given, for what has no window to ask over.
+pub(crate) fn ask_in_front(asked: Question, cx: &mut App, act: impl Fn(&mut Window, &mut App) + 'static) {
+    let Some(window) = cx.active_window().or_else(|| cx.windows().first().copied()) else { return };
+    cx.defer(move |cx| {
+        let _ = window.update(cx, |_, window, cx| ask(asked, window, cx, act));
+    });
+}
+
 /// Tells `title` and what it `says` over the window in front, with OK to close it, such as what went wrong where
 /// nothing on screen can say it.
 pub(crate) fn tell(title: impl Into<SharedString>, says: impl Into<SharedString>, cx: &mut App) {

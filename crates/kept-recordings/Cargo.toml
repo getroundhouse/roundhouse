@@ -1,0 +1,16 @@
+[package]
+name = "kept-recordings"
+description = "The files a dictation someone chose to keep is written as: what its JSON file says, and its audio's WAV header. The app writes them and the speech eval reads them, so the form is here once."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

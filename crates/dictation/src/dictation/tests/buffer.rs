@@ -6,7 +6,7 @@ use crate::dictation::recording::Input;
 
 #[test]
 fn stopping_a_full_buffer_keeps_its_audio_in_order_and_refuses_later_audio() {
-    let buffer = Buffer::new();
+    let buffer = Buffer::new(None);
     buffer.audio(vec![0.1; MAX_SAMPLES - 1]);
     buffer.audio(vec![0.2]);
 
@@ -21,7 +21,7 @@ fn stopping_a_full_buffer_keeps_its_audio_in_order_and_refuses_later_audio() {
 
 #[test]
 fn consumed_audio_releases_capacity_and_overflow_discards_the_backlog() {
-    let buffer = Buffer::new();
+    let buffer = Buffer::new(None);
     buffer.audio(vec![0.1; MAX_SAMPLES]);
     assert!(matches!(buffer.next(), Input::Audio(audio) if audio.len() == MAX_SAMPLES));
     buffer.audio(vec![0.2; MAX_SAMPLES]);

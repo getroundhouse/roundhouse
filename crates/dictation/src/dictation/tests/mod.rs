@@ -4,6 +4,7 @@
 mod buffer;
 mod cancelling;
 mod capture;
+mod copying;
 mod engine;
 mod joins;
 mod late_words;
