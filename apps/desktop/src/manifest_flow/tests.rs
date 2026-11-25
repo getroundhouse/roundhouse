@@ -123,7 +123,7 @@ fn it_refuses_any_other_path_or_method_and_goes_on_listening() {
 fn what_a_request_asks_is_read_as_a_forms_encoding_has_it() {
     let asked = Asked::of("GET /made?code=a%2Bb+c&state=s&state=another HTTP/1.1");
 
-    let read = Asked::Made { code: Some("a+b c".to_string()), state: Some("s".to_string()) };
+    let read = Asked::Made { code: Some(GithubManifestCode::new("a+b c")), state: Some("s".to_string()) };
     assert_eq!(asked, read, "and the first of two");
 }
 

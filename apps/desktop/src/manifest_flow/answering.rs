@@ -36,7 +36,7 @@ pub(super) enum Asked {
     /// The page that posts the manifest, with the `state` it says, if it says one.
     Making { state: Option<String> },
     /// What GitHub sends the person back to, with the code and `state` it says, if it says them.
-    Made { code: Option<String>, state: Option<String> },
+    Made { code: Option<GithubManifestCode>, state: Option<String> },
     /// Anything else, which is refused.
     Elsewhere,
 }
@@ -62,11 +62,11 @@ impl Serving {
     }
 
     /// Takes `code`, unless the listener has ended already, and ends it.
-    fn took(&self, code: &str) -> String {
+    fn took(&self, code: &GithubManifestCode) -> String {
         if self.ended.swap(true, Ordering::SeqCst) {
             return page::answer(Status::Gone, &page::said(page::STOPPED));
         }
-        let _ = self.heard.try_send(Heard::Code(GithubManifestCode::new(code)));
+        let _ = self.heard.try_send(Heard::Code(code.clone()));
         let _ = self.stop.try_send(());
         page::answer(Status::Ok, &page::said(page::BACK))
     }
@@ -90,7 +90,7 @@ impl Asked {
         };
         match path {
             MAKING => Asked::Making { state: value("state") },
-            MADE => Asked::Made { code: value("code"), state: value("state") },
+            MADE => Asked::Made { code: value("code").map(GithubManifestCode::new), state: value("state") },
             _ => Asked::Elsewhere,
         }
     }
