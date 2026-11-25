@@ -82,6 +82,7 @@ pub struct Button {
     waiting: bool,
     work: Option<Work>,
     tooltip: Option<Tooltip>,
+    shown_while_over: Option<SharedString>,
 }
 
 /// What a button says it does while the pointer rests on it, given to the kit as it's drawn, and only with a pointer,
@@ -93,7 +94,7 @@ enum Tooltip {
 
 impl Button {
     fn new(kit: KitButton, kind: ButtonKind, shape: Shape) -> Self {
-        Button { kit, kind, shape, off: false, waiting: false, work: None, tooltip: None }
+        Button { kit, kind, shape, off: false, waiting: false, work: None, tooltip: None, shown_while_over: None }
     }
 
     fn kit(mut self, change: impl FnOnce(KitButton) -> KitButton) -> Self {
@@ -207,11 +208,12 @@ impl Button {
         })
     }
 
-    /// Hidden but while the pointer is over `group`, which keeps its room, such as a heading's button that's there only
-    /// while you're in the heading.
-    pub fn shown_while_over(self, group: impl Into<SharedString>) -> Self {
-        let group = group.into();
-        self.kit(|kit| kit.invisible().group_hover(group, Styled::visible))
+    /// Hidden but while the pointer is over `group`, or the keyboard's focus is on it, which keeps its room, such as a
+    /// heading's button that's there only while you're in the heading. Under touch, where nothing rests on the group,
+    /// it always shows.
+    pub fn shown_while_over(mut self, group: impl Into<SharedString>) -> Self {
+        self.shown_while_over = Some(group.into());
+        self
     }
 
     /// Opens a menu, built by `build` each time it opens, from its `anchor` corner. A button with words shows that it
@@ -261,6 +263,13 @@ impl Button {
                 kit.border_color(work.edge(colors)).text_color(work.text(colors))
             }
             _ => kit,
+        };
+        let kit = match self.shown_while_over.filter(|_| Input::of(cx) == Input::Pointer) {
+            // Clear rather than not drawn, since what isn't drawn isn't one of Tab's stops.
+            Some(group) => {
+                kit.opacity(0.).group_hover(group, |style| style.opacity(1.)).focus_visible(|style| style.opacity(1.))
+            }
+            None => kit,
         };
         kit.disabled(self.off)
             .loading(self.waiting)

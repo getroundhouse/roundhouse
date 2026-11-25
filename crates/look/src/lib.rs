@@ -103,7 +103,7 @@ pub use fit::{fit, pixels};
 pub use hand::{Hand, Off};
 pub use heights::{BarSize, RowSize};
 pub use highlight::{Spans, highlight, language, preload_highlighting, try_highlight};
-pub use hover::{HoldOpen, HoverCard, hover_card, hover_card_with_a_button};
+pub use hover::{HoldOpen, HoverCard, bind_hover_card_keys, hover_card, hover_card_with_a_button};
 pub use icon_sizes::{IconSize, IconSizing};
 pub use keys::{Key, KeyKind, key};
 pub use lines::{Line, Lined, line};

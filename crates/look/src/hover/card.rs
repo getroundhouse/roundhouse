@@ -2,7 +2,7 @@
 //! both that and the card, as the kit's does. Under touch, where nothing rests, a tap on what it's for shows it, and a
 //! tap anywhere but the card puts it away, as `components.md` says. Unlike the kit's, something opened from it can hold it open, as a menu
 //! opened from a button in it does while the pointer is in the menu, which is drawn outside the card, and one can show
-//! while what it's for has the keyboard's focus too.
+//! while what it's for has the keyboard's focus too, or anything in it does, which Tab goes on to.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -11,10 +11,11 @@ use std::time::Duration;
 use gpui_kit::base::{Popup, StyledExt as _, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Bounds, ClickEvent, Div, ElementId, Half as _, InteractiveElement as _, IntoElement,
-    MouseDownEvent, ParentElement as _, Pixels, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
-    StyleRefinement, Styled as _, TestSupportExt as _, Window, canvas, div,
+    MouseButton, MouseDownEvent, ParentElement as _, Pixels, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled as _, TestSupportExt as _, Window, canvas, div,
 };
 
+use super::keys::{KEY_CONTEXT, TabBack, TabOn};
 use super::shown::{HoldOpen, Shown};
 use crate::{Input, Space};
 
@@ -125,9 +126,10 @@ impl HoverCard {
     }
 
     /// Has it show while what it's for has the keyboard's focus too, which makes that one of Tab's stops: at once, since
-    /// the focus was moved there on purpose, and for as long as it stays. A click that puts the focus there shows it no
-    /// sooner than the pointer resting there does. What it's for is said to assistive apps as `role`, named `label`, with
-    /// what the card says as `said`, whether it shows or not, since they can't see it.
+    /// the focus was moved there on purpose, and for as long as it stays there or in the card, whose buttons are Tab's
+    /// next stops. A click that puts the focus there shows it no sooner than the pointer resting there does. What it's
+    /// for is said to assistive apps as `role`, named `label`, with what the card says as `said`, whether it shows or
+    /// not, since they can't see it.
     #[must_use]
     pub fn on_focus(mut self, role: Role, label: impl Into<SharedString>, said: impl Into<SharedString>) -> Self {
         self.on_focus = Some(Focusable { role, label: label.into(), said: said.into() });
@@ -151,6 +153,7 @@ impl RenderOnce for HoverCard {
             (shown.open_delay, shown.close_delay, shown.on_open_change) = (open_delay, close_delay, on_open_change);
             (shown.open, shown.opening, focuses.then(|| shown.focus(window, cx)), shown.trigger_at.clone())
         });
+        let in_card = focus.as_ref().map(|focus| focus.card.clone());
         let anchor = if self.flips { fitting(self.anchor, trigger_at.get(), window) } else { self.anchor };
         let touch = Input::of(cx) == Input::Touch;
         // As big as the box `trigger_style` lays out, so what it's for can fill that, as a tab fills its bar's height.
@@ -170,7 +173,9 @@ impl RenderOnce for HoverCard {
                 .aria_label(said.label)
                 .aria_description(said.said)
                 .test_support()
-                .track_focus(&focus)
+                .track_focus(&focus.trigger)
+                .key_context(KEY_CONTEXT)
+                .on_action(window.listener_for(&shown, |shown, _: &TabOn, window, cx| shown.tab_on(window, cx)))
                 .into_any_element(),
             _ => trigger.into_any_element(),
         };
@@ -185,6 +190,16 @@ impl RenderOnce for HoverCard {
             }))
         } else {
             around
+        };
+        let around = match in_card {
+            Some(focus) => around
+                .track_focus(&focus)
+                .key_context(KEY_CONTEXT)
+                // A press on the card leaves the focus where it is, as one on a button does.
+                .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+                .on_action(window.listener_for(&shown, |shown, _: &TabOn, window, cx| shown.tab_on(window, cx)))
+                .on_action(window.listener_for(&shown, |shown, _: &TabBack, window, cx| shown.tab_back(window, cx))),
+            None => around,
         };
         popup.content(around.child(content(&hold, window, cx)))
     }
