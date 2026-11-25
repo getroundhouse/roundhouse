@@ -87,12 +87,31 @@ Observed on 2.1.330, with servers that say which config they came from, a config
 - **`mcp_set_servers`, a control request, adds servers to a running agent.** It connected a new one, and replaced the one of the same name that `--mcp-config` gave.
 - **A server that refuses its configured `Authorization` header with 401 is `failed`.** The CLI doesn't try OAuth, as the table above says.
 
+## Computer use
+
+Claude Code has an MCP server of its own, `computer-use`, that sees the screen and moves the mouse and types. It's on a Mac only, and off until it's turned on for a project with `/mcp`. Roundhouse's agents don't get it. Read on 2.1.330, where no prompt was sent and no computer-use tool was called.
+
+Observed, with a subscription's claude.ai login:
+
+- **A CLI started with `-p` doesn't get it.** In a project that had turned it on, with `-p`, the streams and `--setting-sources user`, `mcp_status` listed the user's other servers and not `computer-use`. An interactive session there wasn't compared. The CLI's docs say the same, and its code adds the server only to an interactive session.
+- **A server of that name in `--mcp-config` isn't loaded,** given as the command `claude --computer-use-mcp`. The debug log says `"computer-use" is a reserved MCP server name and was not loaded`.
+- **A server of that name that the host serves on the stream is loaded.** Declared as `{"type": "sdk", "name": "computer-use"}` in `--mcp-config` and in `sdkMcpServers` on `initialize`, with `--strict-mcp-config`, it connected, and the CLI asked the host for its tools. No tool was called. By the code, the CLI adds its own screen control, approvals and lock only to a stdio server of that name, so a host's server gets none of them and does the work itself.
+
+Read from the binary's code, and not tried. All but the first are of the CLI's own server, so none of it happens in an agent started with `-p`:
+
+- **`claude --computer-use-mcp` answers every call with an error,** that it isn't wired to a session, so it's no use to a host under another name.
+- **Its approvals of an app don't come as `can_use_tool`.** `request_access` opens a dialog of kind `computer_use_approval`, and grants nothing where no dialog can be shown. A host is sent a dialog as `request_user_dialog`, and only of the kinds it names in `supportedDialogKinds` on `initialize`.
+- **The app named in `__CFBundleIdentifier` is taken for the terminal:** it isn't hidden while the agent works, and is left out of screenshots. An agent of the installed app inherits `dev.getroundhouse.desktop`.
+
+Anthropic's docs also say that it needs a Pro, Max or Ultra plan signed in through claude.ai, that the terminal needs Screen Recording, that Accessibility is needed too, and that one session at a time holds it, from its first action until its process exits.
+
 ## Sources
 
 - [Claude Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview)
 - [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching), for how long an entry lasts and what reading and writing it cost
 - [Claude Code's MCP docs, including MCP tasks](https://code.claude.com/docs/en/mcp)
 - [The MCP tasks extension](https://github.com/modelcontextprotocol/ext-tasks)
+- [Claude Code's computer use docs](https://code.claude.com/docs/en/computer-use)
 
 ## Enforcing a hub-selected login
 
