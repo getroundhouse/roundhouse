@@ -31,8 +31,9 @@ pub use holding::{SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER, SPACE_TALKS_AFTER};
 pub use keeping::{How, Keeping, Said, Sent, Taken};
 #[cfg(target_os = "macos")]
 pub use keyboard::monitoring::input_monitoring;
-#[cfg(all(target_os = "macos", not(any(test, feature = "testing"))))]
+#[cfg(target_os = "macos")]
 pub use keyboard::system::ask_to_monitor_input;
+pub use keyboard::watch_keyboard;
 #[cfg(any(test, feature = "testing"))]
 pub use keyboard::{asked_to_see_the_keyboard, hide_the_keyboard, hold_space_down};
 pub use keys::{CancelDictation, HOLD_TO_DICTATE_KEY, HoldToDictate, bind_keys, window_activation_changed};

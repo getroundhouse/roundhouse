@@ -93,6 +93,6 @@ impl Ui<'_> {
     /// Has quitting, and restarting to update, give up on what's on its way to a hub after [`GIVE_UP_AFTER`], rather
     /// than the app's own wait, for a test whose hub is held still until after they've given up on it.
     pub(crate) fn give_up_on_a_frozen_hub_soon(&mut self) {
-        self.cx.update(|cx| desktop::app::the_keeping_wait_is(GIVE_UP_AFTER, cx));
+        self.cx.update(|cx| cx.set_global(desktop::Timers { keeping: GIVE_UP_AFTER, ..desktop::Timers::DEFAULT }));
     }
 }

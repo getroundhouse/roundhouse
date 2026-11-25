@@ -13,9 +13,11 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui_kit::{
-    App, DispatchPhase, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PlatformInput,
-    Styled as _, Window, canvas,
+    DispatchPhase, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PlatformInput, Styled as _,
+    Window, canvas,
 };
+
+use crate::machine::Machine;
 
 /// Whether the window has had a left press and no release since. The window's view keeps it, so it holds from one
 /// frame to the next, while what [`Unreleased::hears`] gives is drawn again on each.
@@ -48,7 +50,7 @@ impl Unreleased {
             if phase != DispatchPhase::Capture
                 || !unreleased.get()
                 || event.pressed_button == Some(MouseButton::Left)
-                || left_button(cx) == Button::Down
+                || (Machine::of(cx).left_button)() == Button::Down
             {
                 return;
             }
@@ -76,30 +78,17 @@ pub enum Button {
     Up,
 }
 
-/// Where the left button is now, as the system says, or as a test says in its place.
-#[cfg(any(test, feature = "testing"))]
-fn left_button(cx: &App) -> Button {
-    cx.try_global::<StandIn>().map_or_else(system::left_button, |StandIn(button)| *button)
-}
-
-#[cfg(not(any(test, feature = "testing")))]
-fn left_button(_: &App) -> Button {
-    system::left_button()
-}
-
-/// What a test says of the left button, in place of the system.
-#[cfg(any(test, feature = "testing"))]
-struct StandIn(Button);
-
-#[cfg(any(test, feature = "testing"))]
-impl gpui_kit::Global for StandIn {}
-
 /// Says the left button is `button` from now on, whatever the system would say. Only Windows is asked, and a test
 /// can't run there, or hold its button.
 #[cfg(any(test, feature = "testing"))]
-pub fn the_left_button_is(button: Button, cx: &mut App) {
-    cx.set_global(StandIn(button));
+pub fn the_left_button_is(button: Button, cx: &mut gpui_kit::App) {
+    crate::machine::given(cx).left_button = match button {
+        Button::Down => || Button::Down,
+        Button::Up => || Button::Up,
+    };
 }
+
+pub(crate) use system::left_button;
 
 #[cfg(target_os = "windows")]
 mod system {
@@ -111,7 +100,7 @@ mod system {
     /// As it is now, rather than as of the last message the app read, since a release that went to another window,
     /// or to Windows' own loop, is never read here. `GetAsyncKeyState` reads the buttons as they're built, so with
     /// them swapped in Settings, the one Windows calls left is the one on the right.
-    pub(super) fn left_button() -> Button {
+    pub(crate) fn left_button() -> Button {
         // SAFETY: it takes no pointer, and any index.
         let swapped = unsafe { GetSystemMetrics(SM_SWAPBUTTON) } != 0;
         let built = if swapped { VK_RBUTTON } else { VK_LBUTTON };
@@ -127,7 +116,7 @@ mod system {
     use super::Button;
 
     /// It's only asked when a move has said the button isn't held, which elsewhere is so.
-    pub(super) fn left_button() -> Button {
+    pub(crate) fn left_button() -> Button {
         Button::Up
     }
 }

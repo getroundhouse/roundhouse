@@ -36,14 +36,13 @@ mod window_buttons;
 mod workspaces;
 
 pub use build_line::{Agents, BuildLine, Updating};
+pub(crate) use device_name::computer_name;
 #[cfg(any(test, feature = "testing"))]
 pub use device_name::the_device_name_is;
 pub use failure::{ConnectionFailure, Unconnected};
 pub use hub_source::HubSource;
 pub use quitting::Quitting;
 pub(crate) use quitting::quit;
-#[cfg(any(test, feature = "testing"))]
-pub use quitting::the_keeping_wait_is;
 pub use restarts::UpdateQuestion;
 pub(crate) use title_bar::TOP_STRIP;
 pub use title_bar::TitleBar;

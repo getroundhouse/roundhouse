@@ -9,5 +9,6 @@ mod system;
 pub(crate) use permission::{Badges, HAS_PERMISSIONS};
 pub use permission::{Permission, Standing};
 pub(crate) use standings::{ask_for_badges, fix, read, standing};
+pub(crate) use system::System;
 #[cfg(any(test, feature = "testing"))]
 pub use system::{asked_for, opened_for, read_again, set_standing};

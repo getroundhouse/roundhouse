@@ -1,4 +1,6 @@
-//! What a conformance trial captures the CLI's launches, exits and stdio with, which only a `testing` build can make.
+//! What a conformance trial captures the CLI's launches, exits and stdio with, which only a `testing` build can make. The
+//! adapter is what knows which lines belong to which launch, and a program between it and the CLI would change the
+//! process the trial is about. The product keeps no such record, since what people write is in it.
 
 #[cfg(any(test, feature = "testing"))]
 pub(crate) use crate::conformance::capture::Tap;

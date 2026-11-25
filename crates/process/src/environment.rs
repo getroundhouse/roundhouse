@@ -9,7 +9,9 @@ pub struct Environment {
     set: Vec<(OsString, OsString)>,
     taken_out: Vec<OsString>,
     /// Whether a process keeps nothing of what it inherits, but what its command was told to set, as a test gives the
-    /// code under it, through [`crate::testing::WholeEnvironment::given`]. Never in the product.
+    /// code under it, through [`crate::testing::WholeEnvironment::given`]. The product always adds to what it inherits. A test can't clear
+    /// its own environment instead, since every test in its process shares it, nor wrap each program the code starts,
+    /// such as git, without changing what's tested.
     #[cfg(any(test, feature = "testing"))]
     inherits_nothing: bool,
 }

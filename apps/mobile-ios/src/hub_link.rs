@@ -4,11 +4,11 @@
 
 use std::sync::Arc;
 
-use client_core::link::{Connect, Link, Lost, Refused};
+use client_core::link::{Connect, Link, Lost, Refused, Waits};
 use client_core::records::Snapshot;
 use client_core::{Client, ClientError, Drafts, GithubView, OlderSide, RecordsFeed, RemoteHub, ShownOfGithub};
 use client_ui::{NeedsUpdating, needs_updating};
-use gpui_kit::{App, Context, EventEmitter, Task};
+use gpui_kit::{Context, EventEmitter, Task};
 use protocol::model::{PullRequestFound, Workspace, WorkspaceStatus};
 
 /// What the hub's list of clients calls the app.
@@ -116,7 +116,8 @@ impl EventEmitter<Reconnected> for HubLink {}
 
 impl HubLink {
     pub(crate) fn new(hub: RemoteHub, connect: ConnectTo, cx: &mut Context<Self>) -> HubLink {
-        let link = start(PairedHub { hub: hub.clone(), connect }, cx);
+        let waits = cx.default_global::<RetryWaits>().0;
+        let link = Link::start_waiting(PairedHub { hub: hub.clone(), connect }, waits);
         let changed = link.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while changed.recv_async().await.is_ok() {
@@ -248,30 +249,20 @@ fn show_drafts_from_elsewhere(drafts: &Drafts, cx: &mut Context<HubLink>) -> Tas
     })
 }
 
-#[cfg(not(any(test, feature = "testing")))]
-fn start(hub: PairedHub, _: &App) -> Link<PairedHub> {
-    Link::start(hub)
-}
+/// The waits each link made takes before trying again: every client's, unless a test has given others.
+struct RetryWaits(Waits);
 
-/// Starts the link, waiting before trying again as a test says, if one has.
-#[cfg(any(test, feature = "testing"))]
-fn start(hub: PairedHub, cx: &App) -> Link<PairedHub> {
-    match cx.try_global::<StandIn>() {
-        Some(StandIn(waits)) => Link::start_waiting(hub, *waits),
-        None => Link::start(hub),
+impl gpui_kit::Global for RetryWaits {}
+
+impl Default for RetryWaits {
+    fn default() -> Self {
+        Self(Waits::EVERY_CLIENT)
     }
 }
-
-/// The waits a test has the link take in place of every client's.
-#[cfg(any(test, feature = "testing"))]
-struct StandIn(client_core::link::Waits);
-
-#[cfg(any(test, feature = "testing"))]
-impl gpui_kit::Global for StandIn {}
 
 /// Has each link made from now on wait as `waits` says before trying again. The waits are by the system's clock rather
 /// than a GPUI timer, since client-core makes them, so a test can't move them, and would otherwise sit through them.
 #[cfg(any(test, feature = "testing"))]
-pub fn the_retry_waits_are(waits: client_core::link::Waits, cx: &mut App) {
-    cx.set_global(StandIn(waits));
+pub fn the_retry_waits_are(waits: Waits, cx: &mut gpui_kit::App) {
+    cx.set_global(RetryWaits(waits));
 }
