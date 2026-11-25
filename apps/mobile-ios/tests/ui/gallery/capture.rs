@@ -17,7 +17,9 @@ use gpui_kit::{
 };
 use image::RgbaImage;
 use mobile::{MemoryVault, MobileApp, Vault as _};
+use protocol::client::{ApiError, CLIENT_PROTOCOL_VERSION, HubRefusing};
 use protocol::pairing::Fingerprint;
+use protocol::versions::Versions;
 use spec_screens::Picture;
 
 use super::screens::{Hub, Screen, Step};
@@ -67,6 +69,7 @@ impl Phone {
         let socket = dir.path().join("hub.sock");
         let vault = Arc::new(MemoryVault::default());
         let reachable = Arc::new(AtomicBool::new(true));
+        let mut fails: fn(&RemoteHub) -> ClientError = unreachable;
         match hub {
             Hub::Unpaired => {}
             Hub::Holds(world) => {
@@ -75,6 +78,11 @@ impl Phone {
             }
             Hub::NeverAnswers => {
                 stand_in_hub::listen(&socket, |_| stand_in_hub::Does::Nothing);
+                vault.save(&paired()).unwrap();
+            }
+            Hub::Older => {
+                reachable.store(false, Ordering::Relaxed);
+                fails = older;
                 vault.save(&paired()).unwrap();
             }
             Hub::Unreachable => {
@@ -107,7 +115,7 @@ impl Phone {
             show: false,
             ..Default::default()
         };
-        let connect = connecting_to(socket, reachable.clone());
+        let connect = connecting_to(socket, reachable.clone(), fails);
         let (handle, app) =
             cx.update(|cx| mobile::open_window_connecting(vault, opened, connect, options, cx)).unwrap();
         let mut phone = Phone { cx, handle, app, links, reachable, _dir: dir };
@@ -294,14 +302,15 @@ fn paired() -> RemoteHub {
     }
 }
 
-/// Connects to the screen's hub on its socket, while it's `reachable`, and fails as a phone off the hub's network
-/// does otherwise.
+/// Connects to the screen's hub on its socket, while it's `reachable`, and fails as `fails` says otherwise, such as a
+/// phone off the hub's network does.
 fn connecting_to(
     socket: PathBuf,
     reachable: Arc<AtomicBool>,
+    fails: fn(&RemoteHub) -> ClientError,
 ) -> impl Fn(&RemoteHub) -> Result<Client, ClientError> + Send + Sync + 'static {
     move |hub| {
-        if reachable.load(Ordering::Relaxed) { connect(&socket) } else { Err(unreachable(hub)) }
+        if reachable.load(Ordering::Relaxed) { connect(&socket) } else { Err(fails(hub)) }
     }
 }
 
@@ -312,4 +321,10 @@ fn connect(socket: &Path) -> Result<Client, ClientError> {
 fn unreachable(hub: &RemoteHub) -> ClientError {
     let timed_out = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
     ClientError::Unreachable { hosts: hub.hosts.clone(), last: Some(timed_out), not_pinned: Vec::new() }
+}
+
+/// The refusal of a hub that's a protocol break behind the app.
+fn older(_: &RemoteHub) -> ClientError {
+    let speaks = Versions::only(CLIENT_PROTOCOL_VERSION - 1);
+    ApiError::versions_differ("refused", HubRefusing { version: "0.9.0".to_string(), speaks }).into()
 }

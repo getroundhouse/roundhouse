@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 use client_core::link::{Connect, Link, Lost, Refused};
 use client_core::records::Snapshot;
-use client_core::{Client, ClientError, Drafts, GithubView, RecordsFeed, RemoteHub, ShownOfGithub};
+use client_core::{Client, ClientError, Drafts, GithubView, OlderSide, RecordsFeed, RemoteHub, ShownOfGithub};
+use client_ui::{NeedsUpdating, needs_updating};
 use gpui_kit::{App, Context, EventEmitter, Task};
 use protocol::model::{PullRequestFound, Workspace, WorkspaceStatus};
 
@@ -30,6 +31,9 @@ pub(crate) enum LinkState {
     Ready,
     /// The last try failed, with what went wrong. Another is on its way.
     Unreachable(String),
+    /// The hub is older than this app and shares no protocol version with it, with what to update. Another try is on
+    /// its way, in case it has been.
+    HubOlder(String),
     /// The last try failed in a way trying again can't fix, such as the hub having revoked the phone's token, with what
     /// went wrong. The phone tries again only when it comes back to the front, so forgetting the hub and pairing again
     /// is the way on.
@@ -54,6 +58,27 @@ pub(crate) struct HubLink {
     _following: Task<()>,
 }
 
+/// Why the phone isn't connected, as it says it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Failure {
+    /// The hub is older than this app, across a protocol break.
+    HubOlder(String),
+    Other(String),
+}
+
+impl Failure {
+    /// What `error` says of `hub`.
+    fn of(hub: &RemoteHub, error: &ClientError) -> Failure {
+        let Some(older) = error.older_side() else { return Failure::Other(error.to_string()) };
+        let NeedsUpdating { heading, says } = needs_updating(&hub.hub_name, "iPhone", None, &older);
+        let why = format!("{heading}. {says}");
+        match older {
+            OlderSide::Hub { .. } => Failure::HubOlder(why),
+            OlderSide::Client { .. } => Failure::Other(format!("{why} Update Roundhouse on this iPhone to reconnect.")),
+        }
+    }
+}
+
 /// The hub as the phone paired with it, which the link connects to as the app was given.
 struct PairedHub {
     hub: RemoteHub,
@@ -62,14 +87,14 @@ struct PairedHub {
 
 impl Connect for PairedHub {
     type With = ();
-    type Failure = String;
+    type Failure = Failure;
 
-    fn connect(&mut self) -> Result<(Client, ()), Refused<String>> {
-        (self.connect)(&self.hub).map(|client| (client, ())).map_err(|e| Refused::by(&e, e.to_string()))
+    fn connect(&mut self) -> Result<(Client, ()), Refused<Failure>> {
+        (self.connect)(&self.hub).map(|client| (client, ())).map_err(|e| Refused::by(&e, Failure::of(&self.hub, &e)))
     }
 
-    fn lost(&self, lost: &Lost) -> String {
-        lost.to_string()
+    fn lost(&self, lost: &Lost) -> Failure {
+        Failure::Other(lost.to_string())
     }
 }
 
@@ -168,8 +193,11 @@ impl HubLink {
                 LinkState::Connecting
             }
             client_core::link::LinkState::Ready(_) => LinkState::Ready,
-            client_core::link::LinkState::Waiting(why) => LinkState::Unreachable(why),
-            client_core::link::LinkState::Stopped(why) => LinkState::Refused(why),
+            client_core::link::LinkState::Waiting(Failure::HubOlder(why)) => LinkState::HubOlder(why),
+            client_core::link::LinkState::Waiting(Failure::Other(why)) => LinkState::Unreachable(why),
+            client_core::link::LinkState::Stopped(Failure::HubOlder(why) | Failure::Other(why)) => {
+                LinkState::Refused(why)
+            }
         };
         // Following goes on whatever went wrong while it did, which nothing here shows.
         drop(self.link.take_errors());

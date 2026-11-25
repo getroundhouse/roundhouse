@@ -12,11 +12,54 @@ use super::frame::{CHAT, Frame, Part, SIDEBAR, SIDEBAR_MENU, WORKSPACE_CARD};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, conversation, diff, finishing_update, hub_update_found, own_hub};
+use client_core::OlderSide;
 use client_core::fake_hub::events::{next_seq, replied, taken, text, user_prompt};
 use client_core::fake_hub::{BUILD, World};
 
 pub(crate) const UPDATE_SCREENS: &[Screen] = &[
     Screen { name: "no-hub", spec: "updates.md", world: None, frame: Frame::Layout, steps: &[] },
+    Screen {
+        name: "hub-older",
+        spec: "hubs.md",
+        world: None,
+        frame: Frame::Layout,
+        steps: &[Step::AcrossABreak(|| OlderSide::Hub { version: Some("0.9.0".to_string()) })],
+    },
+    Screen {
+        name: "hub-older-unsaid",
+        spec: "hubs.md",
+        world: None,
+        frame: Frame::Layout,
+        steps: &[Step::AcrossABreak(|| OlderSide::Hub { version: None })],
+    },
+    Screen {
+        name: "app-older-ready",
+        spec: "hubs.md",
+        world: None,
+        frame: Frame::Layout,
+        steps: &[Step::AcrossABreak(newer_hub), Step::UpdateReady("1.1.0")],
+    },
+    Screen {
+        name: "app-older-checking",
+        spec: "hubs.md",
+        world: None,
+        frame: Frame::Layout,
+        steps: &[Step::AcrossABreak(newer_hub), Step::UpdateChecking],
+    },
+    Screen {
+        name: "app-older-nothing-newer",
+        spec: "hubs.md",
+        world: None,
+        frame: Frame::Layout,
+        steps: &[Step::AcrossABreak(newer_hub), Step::UpToDate],
+    },
+    Screen {
+        name: "app-older-not-updating",
+        spec: "hubs.md",
+        world: None,
+        frame: Frame::Layout,
+        steps: &[Step::AcrossABreak(newer_hub)],
+    },
     Screen {
         name: "about",
         spec: "menus.md",
@@ -164,6 +207,11 @@ pub(crate) const UPDATE_SCREENS: &[Screen] = &[
 
 /// The sidebar, and the card the build line's version or what's said in its place opens.
 const BUILD_LINE_CARD: Frame = Frame::Around(Part::Region(Region::LeftSidebar), &[Part::Region(Region::BuildLineCard)]);
+
+/// A paired hub two protocol breaks ahead of the app.
+fn newer_hub() -> OlderSide {
+    OlderSide::Client { hub_version: "1.1.0".to_string() }
+}
 
 /// The workspace's name in its header, which the card opens from.
 const TITLE: &str = "workspace-title";

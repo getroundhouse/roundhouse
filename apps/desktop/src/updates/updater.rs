@@ -1,6 +1,6 @@
 use super::{answer, location, problem, source};
 use crate::appimage;
-use answer::Answer;
+use answer::{Answer, OwnUpdate};
 use flume::RecvTimeoutError;
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use problem::{Kind, OutOfReach, Problem, Said, Shown, Step};
@@ -167,6 +167,22 @@ pub(crate) fn ready(cx: &App) -> Option<&str> {
     cx.try_global::<Shown>().and_then(|shown| shown.ready.as_deref())
 }
 
+/// How this app's own update stands, for where updating the app is what there is to do.
+pub(crate) fn own_update(cx: &App) -> OwnUpdate<'_> {
+    let shown = cx.try_global::<Shown>();
+    if let Some(next) = ready(cx) {
+        OwnUpdate::Ready(next)
+    } else if shown.is_some_and(|shown| shown.checking) {
+        OwnUpdate::Checking
+    } else if shown.is_some_and(|shown| shown.nothing_newer) {
+        OwnUpdate::NothingNewer
+    } else if cx.has_global::<Updater>() {
+        OwnUpdate::NotFound
+    } else {
+        OwnUpdate::Never
+    }
+}
+
 /// The version of the update a quit would install, if any.
 #[cfg(test)]
 pub(crate) fn installs(cx: &App) -> Option<&str> {
@@ -211,7 +227,7 @@ pub fn show_checking(cx: &mut App) {
 /// Shows a check as having found nothing newer, which only an installed app can do for real.
 #[cfg(any(test, feature = "testing"))]
 pub fn show_up_to_date(cx: &mut App) {
-    cx.set_global(Shown { answer: Some(Answer::UpToDate), ..Shown::default() });
+    cx.set_global(Shown { answer: Some(Answer::UpToDate), nothing_newer: true, ..Shown::default() });
 }
 
 /// Shows an update as downloaded, which only an installed app can do for real.
@@ -273,6 +289,7 @@ fn record((found, out_of_reach): Look, cx: &mut App) {
     cx.update_global::<Shown, _>(|shown, _| {
         shown.record(outcome, out_of_reach);
         if let Some(ready) = ready {
+            shown.nothing_newer = ready.is_none();
             shown.ready = ready;
         }
     });

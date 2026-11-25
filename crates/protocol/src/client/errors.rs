@@ -2,12 +2,17 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::hello::HubRefusing;
 use crate::model::TitleError;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ApiError {
     pub code: ErrorCode,
     pub message: String,
+    /// What a hub that refuses a hello for its versions says of itself. Any other error leaves it out, and so does a
+    /// hub of a build from before it was said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hub: Option<Box<HubRefusing>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,7 +58,12 @@ pub fn error_chain(error: &dyn std::error::Error) -> String {
 
 impl ApiError {
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
-        Self { code, message: message.into() }
+        Self { code, message: message.into(), hub: None }
+    }
+
+    /// A hub's refusal of a hello that names no version it speaks, saying which hub it is.
+    pub fn versions_differ(message: impl Into<String>, hub: HubRefusing) -> Self {
+        Self { hub: Some(Box::new(hub)), ..Self::new(ErrorCode::VersionMismatch, message) }
     }
 
     /// The refusal of a request from a newer peer, which `reader`, such as "this hub", of the build whose version is

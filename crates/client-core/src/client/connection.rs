@@ -1,5 +1,6 @@
 use super::feed::Folding;
 use super::frames::{end_connection, read_frames};
+use super::older_side::OlderSide;
 use super::sent_call::SentCall;
 use super::subscribing::Channels;
 use super::transport::{Closer, Transport};
@@ -65,10 +66,13 @@ impl ClientError {
     }
 
     /// Trying again can't fix it, so a person has to: the hub refused this device's token, answered with another key
-    /// than the one it was paired with, or is across a protocol break from this client. Anything else, such as a hub
-    /// that can't be reached or a connection that went, may be gone by the next try.
+    /// than the one it was paired with, or is across a protocol break from this client, which is the older of the two.
+    /// Anything else may be gone by the next try, such as a hub that can't be reached, a connection that went, or an
+    /// older hub, which someone may update.
     pub fn needs_a_person(&self) -> bool {
-        self.is_unauthorized() || self.is_version_mismatch() || matches!(self, ClientError::FingerprintMismatch { .. })
+        self.is_unauthorized()
+            || matches!(self.older_side(), Some(OlderSide::Client { .. }))
+            || matches!(self, ClientError::FingerprintMismatch { .. })
     }
 
     /// Why the hub didn't do it, when the only reason is that it would lose something, such as work that isn't pushed,

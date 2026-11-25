@@ -1,9 +1,10 @@
 //! The hellos, which are how two versions find one they both speak, so they keep their form even across a real
 //! break. A hello from before ranges names only its version, and still has to be answered.
 
-use protocol::client::{self, ClientRequest, ClientResponse};
+use protocol::client::{self, ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubRefusing, ReplyOutcome};
 use protocol::frame;
 use protocol::model::ClientDevice;
+use protocol::versions::Versions;
 use protocol::worker::{Hello, HelloReply, WorkerRequest, WorkerResponse};
 
 #[test]
@@ -46,6 +47,22 @@ fn a_clients_hello_that_says_its_device_keeps_the_rest_of_its_form() {
     let line = br#"{"method":"hello","protocol_version":4,"client":"desktop","oldest_protocol_version":4,"device":{"id":"d1","name":"Ada's MacBook Air"}}"#;
     assert_eq!(frame::encode(&hello).unwrap(), [&line[..], b"\n"].concat());
     assert_eq!(frame::decode::<ClientRequest>(line).unwrap(), hello);
+}
+
+/// A client reads it across a break, to say which side is older. A hub from before it said which release it's of, and
+/// what it speaks, refuses with neither.
+#[test]
+fn a_hubs_refusal_of_a_hello_keeps_its_form_saying_which_hub_it_is_and_not() {
+    let hub = HubRefusing { version: "0.1.9".into(), speaks: Versions { oldest: 5, newest: 6 } };
+    let says = HubFrame::Reply { id: 1, outcome: ReplyOutcome::Error(ApiError::versions_differ("no", hub)) };
+    let line = br#"{"frame":"reply","id":1,"error":{"code":"version_mismatch","message":"no","hub":{"version":"0.1.9","speaks":{"oldest":5,"newest":6}}}}"#;
+    assert_eq!(frame::encode(&says).unwrap(), [&line[..], b"\n"].concat());
+    assert_eq!(frame::decode::<HubFrame>(line).unwrap(), says);
+
+    let from_before: HubFrame =
+        frame::decode(br#"{"frame":"reply","id":1,"error":{"code":"version_mismatch","message":"no"}}"#).unwrap();
+    let refused = ApiError::new(ErrorCode::VersionMismatch, "no");
+    assert_eq!(from_before, HubFrame::Reply { id: 1, outcome: ReplyOutcome::Error(refused) });
 }
 
 #[test]

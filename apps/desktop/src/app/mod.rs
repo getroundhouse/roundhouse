@@ -20,6 +20,7 @@ mod pull_requests;
 mod quitting;
 mod reading;
 mod records;
+mod remote_failed;
 mod restarts;
 pub(crate) mod saved_hubs;
 mod selecting;

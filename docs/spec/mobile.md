@@ -25,11 +25,15 @@ One hub's workspaces and chats, on a phone, for keeping work moving away from th
   ![The app saying it can't reach the hub](screens/phone/unreachable.png)
 
 - **What the phone keeps is enough to connect again, and no more.** The token the hub gave it is in the Keychain, for this phone only, so no backup carries it to another, and the hub's name, addresses and key are in the app's own files. Removing the phone on the hub, with `roundhouse phone revoke`, closes its connections and stops the token working. *Unconfirmed.*
-- **A lost connection comes back without asking, unless only a person can bring it back,** by the rule every client follows, in `hubs.md`, and the app says it's trying. A hub that refuses the phone's token, answers with another key, or is across a protocol break from this app isn't tried again until the app comes back to the front, and the hub screen says why. Coming back to the app after 20 seconds away connects again at once, since a phone that slept may hold a connection that's gone without a word. What's typed and what's shown stay as they were. *Unconfirmed.*
+- **A lost connection comes back without asking, unless only a person can bring it back,** by the rule every client follows, in `hubs.md`, and the app says it's trying. A hub that refuses the phone's token, answers with another key, or is ahead of this app across a protocol break isn't tried again until the app comes back to the front, and the hub screen says why. Coming back to the app after 20 seconds away connects again at once, since a phone that slept may hold a connection that's gone without a word. What's typed and what's shown stay as they were. *Unconfirmed.*
 
   **Connecting, before the hub has answered.** *Unconfirmed.*
 
   ![The app connecting to its hub](screens/phone/connecting.png)
+
+  **A hub older than the app, across a protocol break.** *Unconfirmed.*
+
+  ![The hub screen saying the hub needs updating](screens/phone/hub-older.png)
 
   **A hub lost while its workspaces showed.** *Unconfirmed.*
 

@@ -6,6 +6,7 @@ mod dictating;
 mod files;
 mod finding;
 mod opening;
+mod paired_hub;
 mod proposals;
 mod recording;
 mod scrollbar;

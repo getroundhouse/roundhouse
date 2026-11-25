@@ -7,7 +7,10 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use protocol::client::listed::Listed;
-use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame, ReplyOutcome};
+use protocol::client::{
+    ApiError, CLIENT_PROTOCOL_VERSION, ClientRequest, ErrorCode, HubFrame, HubRefusing, ReplyOutcome,
+};
+use protocol::versions::Versions;
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
@@ -93,6 +96,12 @@ fn refused(code: ErrorCode) -> ClientError {
     ClientError::Api(ApiError::new(code, "refused"))
 }
 
+/// The refusal of a hub that speaks `speaks`, or that doesn't say what it speaks.
+fn across_a_break(speaks: Option<Versions>) -> ClientError {
+    let said = |speaks| ApiError::versions_differ("refused", HubRefusing { version: "0.1.9".into(), speaks });
+    speaks.map_or_else(|| refused(ErrorCode::VersionMismatch), |speaks| said(speaks).into())
+}
+
 fn ready_on<C: Connect>(link: &Link<C>, which: &str) {
     waiting::thread::until(TIMEOUT, format!("never ready on {which}"), || link.state().ready().is_some());
 }
@@ -104,12 +113,17 @@ fn the_wait_before_trying_again_doubles_from_a_second_up_to_thirty() {
     assert_eq!(waits, [1, 2, 4, 8, 16, 30, 30, 30]);
 }
 
-/// A revoked token, another key or a protocol break stay until a person does something, and anything else may not.
+/// A revoked token, another key or being older than the hub across a protocol break stay until a person does something,
+/// and anything else may not, such as an older hub, which someone may update.
 #[test]
 fn only_what_trying_again_cant_fix_needs_a_person() {
+    let newer = Versions { oldest: CLIENT_PROTOCOL_VERSION + 1, newest: CLIENT_PROTOCOL_VERSION + 2 };
+    let older = Versions { oldest: CLIENT_PROTOCOL_VERSION - 2, newest: CLIENT_PROTOCOL_VERSION - 1 };
     let cases = [
         ("a revoked token", refused(ErrorCode::Unauthorized), true),
-        ("a protocol break", refused(ErrorCode::VersionMismatch), true),
+        ("a protocol break from a newer hub", across_a_break(Some(newer)), true),
+        ("a protocol break from an older hub", across_a_break(Some(older)), false),
+        ("a protocol break from a hub that doesn't say what it speaks", across_a_break(None), false),
         ("another key", ClientError::FingerprintMismatch { host: "a".into() }, true),
         ("unreachable", ClientError::Unreachable { hosts: Vec::new(), last: None, not_pinned: Vec::new() }, false),
         ("gone", ClientError::Disconnected, false),

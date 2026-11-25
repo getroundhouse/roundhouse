@@ -37,7 +37,7 @@ pub(crate) fn internal(message: impl Into<String>) -> ApiError {
 /// or has no room for, and `Worker` for the rest. A client would read the provider protocol's `NotFound` as a file that
 /// has gone, and its `Unsupported` as a hub older than the client.
 pub(crate) fn provider_failed(error: &ProviderError) -> ApiError {
-    let ApiError { code, message } = error.to_api_error();
+    let ApiError { code, message, .. } = error.to_api_error();
     let unavailable = matches!(code, ErrorCode::Unsupported | ErrorCode::Unavailable);
     ApiError::new(if unavailable { ErrorCode::Unavailable } else { ErrorCode::Worker }, message)
 }

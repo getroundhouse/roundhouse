@@ -1,6 +1,6 @@
 //! Why a hub connection failed, distinguishing local failures from remote network, key and authorization failures.
 
-use client_core::ClientError;
+use client_core::{ClientError, OlderSide};
 use protocol::client::HubStatus;
 
 /// Why the app isn't connected to a hub, as client-core's link holds it between tries.
@@ -22,8 +22,9 @@ pub enum ConnectionFailure {
     Revoked,
     /// Remote hub answered with a different TLS key than the pinned one.
     KeyChanged { host: String },
-    /// Remote hub speaks an incompatible protocol version.
-    RemoteProtocolBreak(String),
+    /// Remote hub shares no protocol version with this app, with which of the two is older. Retried automatically while
+    /// the hub is.
+    RemoteProtocolBreak(OlderSide),
     /// Any other failure talking to a remote hub, which is tried again by itself.
     RemoteOther(String),
 }
@@ -33,12 +34,14 @@ impl ConnectionFailure {
         if local {
             return Self::Local(error.to_string());
         }
+        if let Some(older) = error.older_side() {
+            return Self::RemoteProtocolBreak(older);
+        }
         match error {
             ClientError::Unreachable { hosts, .. } => Self::Unreachable { hosts: hosts.clone() },
             ClientError::Io(_) | ClientError::Disconnected => Self::Unreachable { hosts: Vec::new() },
             ClientError::FingerprintMismatch { host } => Self::KeyChanged { host: host.clone() },
             ClientError::Api(_) if error.is_unauthorized() => Self::Revoked,
-            ClientError::Api(api) if error.is_version_mismatch() => Self::RemoteProtocolBreak(api.message.clone()),
             ClientError::Api(api) => Self::RemoteOther(api.message.clone()),
             ClientError::Unexpected(detail) => Self::RemoteOther(detail.clone()),
         }
