@@ -1,7 +1,7 @@
 use crate::model::{
     Account, DiffComment, GithubAccount, GithubApp, GithubSignIn, HubSettings, HubUpdate, ModelList, NewWorkspaceDraft,
     Observation, ObservationKey, Proposal, Record, RecordKey, ReplyHeard, Repo, Rev, Session, Subagent, Terminal,
-    Workspace,
+    ToolServer, Workspace,
 };
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,7 @@ pub enum HubNotice {
     GithubAccount(GithubAccount),
     GithubSignIn(GithubSignIn),
     GithubApp(GithubApp),
+    ToolServer(ToolServer),
     /// A terminal was opened, and a hub that kept its workers learned of it again as it started. One that ended or
     /// was closed is `Removed`.
     Terminal(Terminal),
@@ -104,6 +105,7 @@ impl TryFrom<HubNotice> for RecordNotice {
             HubNotice::GithubAccount(account) => Record::GithubAccount(account),
             HubNotice::GithubSignIn(sign_in) => Record::GithubSignIn(sign_in),
             HubNotice::GithubApp(app) => Record::GithubApp(app),
+            HubNotice::ToolServer(server) => Record::ToolServer(server),
             HubNotice::Terminal(terminal) => Record::Terminal(terminal),
             HubNotice::ModelList(list) => Record::ModelList(list),
             HubNotice::Proposal(proposal) => Record::Proposal(proposal),
@@ -133,6 +135,7 @@ impl From<Record> for HubNotice {
             Record::GithubAccount(account) => HubNotice::GithubAccount(account),
             Record::GithubSignIn(sign_in) => HubNotice::GithubSignIn(sign_in),
             Record::GithubApp(app) => HubNotice::GithubApp(app),
+            Record::ToolServer(server) => HubNotice::ToolServer(server),
             Record::Terminal(terminal) => HubNotice::Terminal(terminal),
             Record::ModelList(list) => HubNotice::ModelList(list),
             Record::Proposal(proposal) => HubNotice::Proposal(proposal),

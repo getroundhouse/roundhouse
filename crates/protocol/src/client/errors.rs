@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::hello::HubRefusing;
-use crate::model::TitleError;
+use crate::model::{TitleError, ToolServerHeaderError, ToolServerNameError, ToolServerUrlError};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ApiError {
@@ -89,6 +89,25 @@ impl std::error::Error for ApiError {}
 /// A title someone typed that the hub refuses, with a message they can read.
 impl From<TitleError> for ApiError {
     fn from(e: TitleError) -> Self {
+        ApiError::new(ErrorCode::InvalidRequest, e.to_string())
+    }
+}
+
+/// A tool server's name someone typed that the hub refuses, with a message they can read, as its URL and its header are.
+impl From<ToolServerNameError> for ApiError {
+    fn from(e: ToolServerNameError) -> Self {
+        ApiError::new(ErrorCode::InvalidRequest, e.to_string())
+    }
+}
+
+impl From<ToolServerUrlError> for ApiError {
+    fn from(e: ToolServerUrlError) -> Self {
+        ApiError::new(ErrorCode::InvalidRequest, e.to_string())
+    }
+}
+
+impl From<ToolServerHeaderError> for ApiError {
+    fn from(e: ToolServerHeaderError) -> Self {
         ApiError::new(ErrorCode::InvalidRequest, e.to_string())
     }
 }

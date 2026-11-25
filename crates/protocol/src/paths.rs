@@ -32,6 +32,10 @@ pub const LOGINS_DIR: &str = "logins";
 /// from agents' logins, so tidying one kind's files never removes another's.
 pub const GITHUB_LOGINS_DIR: &str = "github-logins";
 
+/// The directory in the data directory where the hub keeps what each tool server of its own knows the person by, such as
+/// a key, apart from every login, for the same reason.
+pub const TOOL_SERVERS_DIR: &str = "tool-servers";
+
 /// What a worker locks in its state directory while it serves the instance, so the instance has one worker at a time.
 pub const WORKER_LOCK_FILE: &str = "worker.lock";
 /// Where a worker records itself in its state directory, so its provider can tell whether one runs there.

@@ -6,8 +6,8 @@ use crate::session::ReadingOn;
 use crate::store::AddedBy;
 use protocol::client::{
     ApiError, ClientRequest, ClientResponse, ErrorCode, accounts, admin, agent, attachments, comments, conversation,
-    drafts, files, github_accounts, github_apps, log, new_workspace, queue, records, references, sessions, waits,
-    workspaces,
+    drafts, files, github_accounts, github_apps, log, new_workspace, queue, records, references, sessions,
+    tool_servers, waits, workspaces,
 };
 use protocol::model::ByteRange;
 use std::sync::Arc;
@@ -228,6 +228,8 @@ pub(super) async fn handle(
             C::GithubApp(hub.github_app_installations_connect(id).await?)
         }
         R::GithubAppRemove(github_apps::GithubAppRemove { id }) => C::GithubApp(hub.github_app_remove(id).await?),
+        R::ToolServerAdd(asked) => C::ToolServer(hub.tool_server_add(asked).await?),
+        R::ToolServerRemove(tool_servers::ToolServerRemove { id }) => C::ToolServer(hub.tool_server_remove(id).await?),
         R::SessionQueue(queue::SessionQueue { id, client_msg_id, prompt }) => {
             C::Session(hub.session_queue(id, client_msg_id, prompt, device.as_ref()).await?)
         }

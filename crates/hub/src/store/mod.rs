@@ -57,6 +57,7 @@ mod subagents;
 #[cfg(test)]
 pub(crate) mod tests;
 mod titles;
+mod tool_servers;
 mod tools;
 mod waits;
 mod workspaces;
@@ -81,6 +82,7 @@ pub use repos::RepoToRead;
 pub(crate) use run_logins::Placed;
 pub(crate) use sessions::SessionLogin;
 pub use titles::{Retitle, Retitled};
+pub(crate) use tool_servers::AddingToolServer;
 pub use workspaces::{Ended, Move, WorkspacePlacement};
 
 mod database;

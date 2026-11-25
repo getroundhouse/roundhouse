@@ -8,7 +8,7 @@ use super::{
     Account, AccountId, CommentId, DiffComment, GithubAccount, GithubAccountId, GithubApp, GithubAppId, GithubSignIn,
     GithubSignInId, HubSettings, HubUpdate, MessageId, ModelList, ModelListKey, NewWorkspaceDraft, Observation,
     Proposal, ProposalId, ReplyHeard, Repo, RepoId, Rev, Session, SessionId, Subagent, SubagentId, Terminal,
-    TerminalId, Workspace, WorkspaceId,
+    TerminalId, ToolServer, ToolServerId, Workspace, WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -54,6 +54,10 @@ pub enum RecordKey {
     GithubApp {
         id: GithubAppId,
     },
+    /// Sent once it has been removed, as [`ToolServerRemove`](crate::client::tool_servers::ToolServerRemove) says.
+    ToolServer {
+        id: ToolServerId,
+    },
     Terminal {
         id: TerminalId,
     },
@@ -90,6 +94,7 @@ pub enum Record {
     GithubAccount(GithubAccount),
     GithubSignIn(GithubSignIn),
     GithubApp(GithubApp),
+    ToolServer(ToolServer),
     Terminal(Terminal),
     ModelList(ModelList),
     HubUpdate(HubUpdate),
@@ -115,6 +120,7 @@ impl Record {
             Record::GithubAccount(account) => RecordKey::GithubAccount { id: account.id.clone() },
             Record::GithubSignIn(sign_in) => RecordKey::GithubSignIn { id: sign_in.id.clone() },
             Record::GithubApp(app) => RecordKey::GithubApp { id: app.id },
+            Record::ToolServer(server) => RecordKey::ToolServer { id: server.id.clone() },
             Record::Terminal(terminal) => RecordKey::Terminal { id: terminal.id.clone() },
             Record::ModelList(list) => RecordKey::ModelList(list.key.clone()),
             Record::HubUpdate(_) => RecordKey::HubUpdate,
@@ -139,6 +145,7 @@ impl Record {
             Record::GithubAccount(account) => account.rev,
             Record::GithubSignIn(sign_in) => sign_in.rev,
             Record::GithubApp(app) => app.rev,
+            Record::ToolServer(server) => server.rev,
             Record::Terminal(terminal) => terminal.rev,
             Record::ModelList(list) => list.rev,
             Record::HubUpdate(update) => update.rev,
@@ -174,6 +181,9 @@ pub struct Records {
     /// Empty where the hub has no app of your own.
     #[serde(default)]
     pub github_apps: Vec<GithubApp>,
+    /// The tool servers the hub has of its own. Empty where it has none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_servers: Vec<ToolServer>,
     /// The terminals open in every workspace. Empty when none is open.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub terminals: Vec<Terminal>,
@@ -209,6 +219,7 @@ impl Records {
             github_accounts,
             github_sign_ins,
             github_apps,
+            tool_servers,
             terminals,
             model_lists,
             hub_update,
@@ -225,6 +236,7 @@ impl Records {
         let records = records.chain(github_accounts.into_iter().map(Record::GithubAccount));
         let records = records.chain(github_sign_ins.into_iter().map(Record::GithubSignIn));
         let records = records.chain(github_apps.into_iter().map(Record::GithubApp));
+        let records = records.chain(tool_servers.into_iter().map(Record::ToolServer));
         let records = records.chain(terminals.into_iter().map(Record::Terminal));
         let records = records.chain(model_lists.into_iter().map(Record::ModelList));
         records.chain(hub_update.into_iter().map(Record::HubUpdate))
@@ -237,11 +249,12 @@ mod tests {
     use crate::fixtures;
 
     #[test]
-    fn a_list_gives_its_github_accounts_sign_ins_and_apps_as_records() {
+    fn a_list_gives_its_github_accounts_sign_ins_and_apps_and_its_tool_servers_as_records() {
         let list = Records {
             github_accounts: vec![fixtures::github_account("g")],
             github_sign_ins: vec![fixtures::github_sign_in("s")],
             github_apps: vec![fixtures::github_app(9)],
+            tool_servers: vec![fixtures::tool_server("t")],
             ..Records::default()
         };
 
@@ -249,6 +262,7 @@ mod tests {
 
         let signing_in = RecordKey::GithubSignIn { id: "s".into() };
         let app = RecordKey::GithubApp { id: GithubAppId::new(9) };
-        assert_eq!(keys, [RecordKey::GithubAccount { id: "g".into() }, signing_in, app]);
+        let server = RecordKey::ToolServer { id: "t".into() };
+        assert_eq!(keys, [RecordKey::GithubAccount { id: "g".into() }, signing_in, app, server]);
     }
 }

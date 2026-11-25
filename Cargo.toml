@@ -193,7 +193,8 @@ gpui-pre-apple = { version = "=0.3.12", features = ["font-kit"] }
 gpui_ios = { package = "gpui-pre-ios", version = "=0.3.12", features = ["runtime_shaders"] }
 # The same as GPUI's, which hands its screenshots back as this crate's images.
 image = { version = "0.25.10", default-features = false }
-# Already under Octocrab. Names the header that asks GitHub's device flow to answer in JSON, on a request Octocrab sends.
+# Already under Octocrab. Names the header that asks GitHub's device flow to answer in JSON, on a request Octocrab sends,
+# and reads a tool server's URL, and the header its key is sent in, as what sends a request to it does.
 http = "1.5.0"
 # Already under GPUI. Reads a request's body for the worker's tools, up to a limit.
 http-body-util = "0.1.5"

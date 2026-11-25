@@ -1,10 +1,9 @@
 use super::super::calls::OpenCalls;
 use super::super::subagents::Subagents;
 use super::super::{Parsed, id_of, other, str_of, string_of};
-use crate::claude::TOOLS_SERVER;
 use protocol::event::{AgentTask, EventBody, TaskChange, TaskKind, TaskOutcome};
 use protocol::model::{SubagentId, TaskId, ToolUseId};
-use protocol::worker::{WAIT_TOOL, WAITS_TOOL};
+use protocol::worker::{TOOLS_SERVER, WAIT_TOOL, WAITS_TOOL};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 

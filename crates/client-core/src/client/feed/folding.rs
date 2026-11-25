@@ -62,6 +62,7 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         ClientResponse::GithubAccount(account) => vec![Record::GithubAccount(account.clone())],
         ClientResponse::GithubSignIn(sign_in) => vec![Record::GithubSignIn(sign_in.clone())],
         ClientResponse::GithubApp(app) => vec![Record::GithubApp(app.clone())],
+        ClientResponse::ToolServer(server) => vec![Record::ToolServer(server.clone())],
         ClientResponse::Terminal(terminal) => vec![Record::Terminal(terminal.clone())],
         ClientResponse::Proposal(proposal) => vec![Record::Proposal(proposal.clone())],
         ClientResponse::Repos(_)

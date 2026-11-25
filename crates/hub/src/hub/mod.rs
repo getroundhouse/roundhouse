@@ -48,6 +48,7 @@ mod terminals;
 #[cfg(test)]
 pub(crate) mod tests;
 mod titles;
+mod tool_servers;
 mod tools;
 mod updates;
 mod waits;

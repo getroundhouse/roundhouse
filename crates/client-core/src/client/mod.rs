@@ -26,6 +26,7 @@ mod queueing;
 mod sent_call;
 mod stream;
 mod terminals;
+mod tool_server;
 mod typed;
 mod workspace_level;
 
@@ -44,6 +45,7 @@ pub use open_file::{OpenFile, Opening};
 pub use open_session::{OpenSession, Search, Searched, Stretch, View};
 pub use open_terminal::{OpenTerminal, Pointer, SelectBy};
 pub(crate) use queueing::Shown;
+pub use tool_server::new_tool_server_id;
 pub use workspace_level::FollowedWorkspace;
 
 #[cfg(test)]

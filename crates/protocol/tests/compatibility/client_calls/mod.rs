@@ -9,6 +9,7 @@ mod pinned_replies;
 mod replies;
 mod requests;
 mod session_requests;
+mod tool_servers;
 
 mod round_trip;
 use round_trip::{answered, asked};

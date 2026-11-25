@@ -29,6 +29,7 @@ mod request;
 pub mod sessions;
 pub mod subscriptions;
 pub mod terminals;
+pub mod tool_servers;
 pub mod waits;
 pub mod workspaces;
 

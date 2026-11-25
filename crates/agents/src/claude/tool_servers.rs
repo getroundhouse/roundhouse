@@ -5,10 +5,10 @@
 use protocol::capability::Report;
 use protocol::capability::setup::{ServerState, ToolServerState};
 use protocol::event::EventBody;
+use protocol::worker::TOOLS_SERVER;
 use serde_json::Value;
 
 use super::normalize::value_of;
-use super::server_name::TOOLS_SERVER;
 
 /// What `body`, which the CLI said in `line`, says of the agent's tool servers, or `None` unless it's an `init` that
 /// lists them.

@@ -27,6 +27,9 @@ pub use builders::{
     request_failed, session, started_claiming, subagent, subagent_started, to_run, turn_ended, workspace,
 };
 
+mod tool_server;
+pub use tool_server::tool_server;
+
 pub mod observed;
 
 mod files;

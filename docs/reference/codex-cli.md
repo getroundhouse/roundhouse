@@ -194,6 +194,9 @@ Observed on 0.171.0 through `thread/start`, with a `CODEX_HOME` of the trial's o
   - Over an HTTP server, the `url` in `config` is used, and the `http_headers` on disk are sent to it along with those in `config`.
   - A server with `enabled = false` on disk stays disabled.
 - **`mcp_servers.<name>.enabled` as `false` in `config` disables the one on disk.** With that, the same URL under another name connected.
+- **A server's name must match `^[a-zA-Z0-9_:@/.-]+$`.** For `Linear (Northwind)` and `Café.docs` the thread started and the server failed, with "Invalid MCP server name 'Linear (Northwind)': must match pattern ^[a-zA-Z0-9_:@/.-]+$".
+- **A dot in a dotted config key is a level,** so `mcp_servers.a.b` fails the thread, with "invalid transport in `mcp_servers.a`".
+- **A server given no header is asked for `/.well-known/oauth-protected-resource`** and other OAuth metadata.
 - **A trusted project's `.codex/config.toml` adds its servers,** and its `url` is used over the user's for the same name.
 - **A server that refuses its `Authorization` header with 401 fails to start,** as `mcpServer/startupStatus/updated` says. The thread starts without it.
 

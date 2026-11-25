@@ -482,6 +482,8 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![Two MCP tools' calls from Codex, one opened to its input and output](screens/tool-any-typed.png)
 
+- **A call to one of the hub's own MCP servers shows the name the person gave the server,** wherever a server's name shows, though its agent calls the server by a name Roundhouse made from that one, as `settings.md` says. *Not built.*
+
 - **A typed call of a kind with no drawing of its own is titled in words for what it does,** such as `Schedule a prompt`, `Run a workflow` or `Wait`, never by its kind's name, with its most telling input in faint monospace, such as the prompt, the workflow's name or `20 minutes`, and nothing more where it has none. Opened, its input, then what came back. The CLI prints it the same, and a request to use one is headed with its title. *Unconfirmed.*
 
   **A prompt set for later and a workflow left running, from Antigravity, the prompt opened.** *Unconfirmed.*

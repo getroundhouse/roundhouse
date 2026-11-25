@@ -44,8 +44,8 @@ impl Hub {
         self.agent(agent)?.login.clone().ok_or_else(refused)
     }
 
-    /// Makes the logins' files and the accounts' rows agree, as the hub starts, agents' and then GitHub's. If it fails,
-    /// they stay as they are until the next start, which costs little: a file no row names is never read, and a launch
+    /// Makes the logins' files and the accounts' rows agree, as the hub starts, agents', then GitHub's, and then the
+    /// tool servers'. If it fails, they stay as they are until the next start, which costs little: a file no row names is never read, and a launch
     /// that would be handed a login whose token is gone fails, saying so. Not starting the hub over it would cost every
     /// workspace.
     pub(crate) async fn tidy_logins(&self) {
@@ -57,6 +57,7 @@ impl Hub {
             );
         }
         self.tidy_github_logins().await;
+        self.tidy_tool_servers().await;
     }
 
     /// The login a launch of a chat of `agent`'s kind that's `on` a login runs under, as [`Logins::to_launch`] says.

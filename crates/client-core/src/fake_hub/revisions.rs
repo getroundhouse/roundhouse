@@ -43,6 +43,7 @@ impl World {
         revs.extend(self.github_accounts.iter_mut().map(|record| &mut record.rev));
         revs.extend(self.github_sign_ins.iter_mut().map(|record| &mut record.rev));
         revs.extend(self.github_apps.iter_mut().map(|record| &mut record.rev));
+        revs.extend(self.tool_servers.iter_mut().map(|record| &mut record.rev));
         revs.extend(self.terminals.iter_mut().map(|(record, _)| &mut record.rev));
         revs.extend(self.model_lists.iter_mut().map(|record| &mut record.rev));
         revs.extend(self.hub_update.iter_mut().map(|record| &mut record.rev));

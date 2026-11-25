@@ -19,6 +19,7 @@ use crate::session::{Item, LiveSession, Starting};
 use crate::ssh::Ssh;
 use crate::store::{MadeByRequest, Store, StoreError, now_ms};
 use crate::timers::Timers;
+use crate::tool_servers::ToolServers;
 use crate::versions;
 use crate::worker_link::WorkerLink;
 use awake::Awake;
@@ -55,6 +56,7 @@ pub(crate) struct Hub {
     pub(super) worker_logs_dir: PathBuf,
     pub(super) logins: Arc<Logins>,
     pub(super) github_logins: Arc<GithubLogins>,
+    pub(super) tool_servers: Arc<ToolServers>,
     /// What the hub asks GitHub, such as whose a token is.
     pub(super) github: Github,
     /// `gh` on the hub's own machine, whose login an account can use.
@@ -169,6 +171,7 @@ impl Hub {
             build,
             logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
             github_logins: Arc::new(GithubLogins::new(store.clone(), Arc::clone(&observations), &dirs.data, now_ms())),
+            tool_servers: Arc::new(ToolServers::new(store.clone(), &dirs.data)),
             github,
             ssh: Ssh::new(machine.clone()),
             gh: Gh::new(machine.clone(), dirs.data.clone()),

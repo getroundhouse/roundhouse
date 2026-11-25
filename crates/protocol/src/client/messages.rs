@@ -117,6 +117,7 @@ pub enum ClientResponse {
     MachineLogins(MachineLogins),
     GithubApp(GithubApp),
     GithubAppManifest(github_apps::GithubAppManifest),
+    ToolServer(crate::model::ToolServer),
     WorktreeFiles(WorktreeFiles),
     FileContents(FileContents),
     FileOpened(FileOpened),

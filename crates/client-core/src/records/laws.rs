@@ -5,7 +5,9 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
-use protocol::model::{Account, HubSettings, HubUpdate, NewWorkspaceDraft, Record, Session, SessionId, Title};
+use protocol::model::{
+    Account, HubSettings, HubUpdate, NewWorkspaceDraft, Record, Session, SessionId, Title, ToolServer, ToolServerName,
+};
 
 use super::*;
 
@@ -158,7 +160,7 @@ struct Kind {
     shown: fn(&HubRecords, &RecordKey) -> Option<Record>,
 }
 
-fn kinds() -> [Kind; 4] {
+fn kinds() -> [Kind; 5] {
     [
         Kind {
             name: "what a hub found in the update feed",
@@ -191,6 +193,15 @@ fn kinds() -> [Kind; 4] {
                 held.snapshot().account(id).cloned().map(Record::Account)
             },
         },
+        Kind {
+            name: "a tool server",
+            copy: |version, rev| Record::ToolServer(tool_server("linear", &format!("Linear {version}"), rev)),
+            other: Some(|rev| Record::ToolServer(tool_server("docs", "Docs", rev))),
+            shown: |held, key| {
+                let RecordKey::ToolServer { id } = key else { return None };
+                held.snapshot().tool_server(id).cloned().map(Record::ToolServer)
+            },
+        },
     ]
 }
 
@@ -210,6 +221,7 @@ fn listed(records: impl IntoIterator<Item = Record>, rev: u64) -> Records {
             Record::GithubAccount(account) => list.github_accounts.push(account),
             Record::GithubSignIn(sign_in) => list.github_sign_ins.push(sign_in),
             Record::GithubApp(app) => list.github_apps.push(app),
+            Record::ToolServer(server) => list.tool_servers.push(server),
             Record::Terminal(terminal) => list.terminals.push(terminal),
             Record::ModelList(model_list) => list.model_lists.push(model_list),
             Record::Subagent(_) => panic!("a subagent is listed with its session, not in a list of everything"),
@@ -265,6 +277,14 @@ fn settings(keep_awake: bool, rev: u64) -> HubSettings {
 
 fn dialog(text: &str, rev: u64) -> NewWorkspaceDraft {
     NewWorkspaceDraft { text: text.to_string(), rev: Rev::new(rev), ..NewWorkspaceDraft::default() }
+}
+
+fn tool_server(id: &str, name: &str, rev: u64) -> ToolServer {
+    ToolServer {
+        name: ToolServerName::stored(name.to_string()),
+        rev: Rev::new(rev),
+        ..protocol::fixtures::tool_server(id)
+    }
 }
 
 fn account(id: &str, used_at_ms: u8, rev: u64) -> Account {
