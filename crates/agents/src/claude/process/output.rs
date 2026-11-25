@@ -187,12 +187,16 @@ fn prompt_progress(shared: &Shared, uuid: &str, progress: PromptProgress) -> Eve
 }
 
 async fn refuse_control(shared: &Shared, request_id: &str, subtype: &str) {
-    warn!("answering unsupported control request {subtype} with an error");
+    warn!(
+        name: "claude.control_request_unsupported",
+        subtype,
+        "Answering an unsupported control request with an error"
+    );
     let reply = json!({"type":"control_response","response":{
         "subtype":"error","request_id":request_id,"error":format!("{subtype} is not supported by this host"),
     }});
     if let Err(e) = write_line(shared, &reply).await {
-        warn!("could not answer a control request: {e:#}");
+        warn!(name: "claude.control_request_unanswered", error = format!("{e:#}"), "Couldn't answer a control request");
     }
 }
 

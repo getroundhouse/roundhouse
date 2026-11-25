@@ -19,8 +19,10 @@ pub(in super::super) fn args(tools: &ToolServer) -> Option<[OsString; 2]> {
         Ok(()) => Some(["--mcp-config".into(), tools.config.clone().into_os_string()]),
         Err(e) => {
             warn!(
-                "the agent goes without the worker's tools, since {} couldn't be written: {e}",
-                tools.config.display()
+                name: "claude.tools_unwritten",
+                path = %tools.config.display(),
+                error = %e,
+                "An agent goes without the worker's tools, since the file that names them couldn't be written"
             );
             None
         }
@@ -59,7 +61,12 @@ fn open_for_its_user(path: &Path) -> io::Result<File> {
 pub(in super::super) fn forget(config: &Path) {
     match std::fs::remove_file(config) {
         Err(e) if e.kind() != io::ErrorKind::NotFound => {
-            warn!("couldn't remove {}, which holds an agent's token: {e}", config.display());
+            warn!(
+                name: "claude.tools_unremoved",
+                path = %config.display(),
+                error = %e,
+                "Couldn't remove a file that holds an agent's token"
+            );
         }
         Ok(()) | Err(_) => {}
     }

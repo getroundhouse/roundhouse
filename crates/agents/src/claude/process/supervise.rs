@@ -75,7 +75,7 @@ pub(super) async fn supervise(
         let mut launched = match replacement {
             Ok(launched) => launched,
             Err(e) => {
-                warn!("relaunch failed: {e:#}");
+                warn!(name: "claude.relaunch_failed", error = format!("{e:#}"), "Couldn't relaunch a CLI");
                 break (status, vec![format!("{e:#}")]);
             }
         };
@@ -115,7 +115,11 @@ async fn replay(
             break;
         }
         if let Err(e) = write_to(shared.tap.as_ref(), stdin, &prompt).await {
-            warn!("could not replay a prompt after relaunching: {e:#}");
+            warn!(
+                name: "claude.prompt_unreplayed",
+                error = format!("{e:#}"),
+                "Couldn't replay a prompt after relaunching"
+            );
         }
     }
 }

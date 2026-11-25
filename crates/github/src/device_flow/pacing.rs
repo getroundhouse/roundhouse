@@ -49,9 +49,19 @@ where
             Ok(Asked::Again) => {}
             Ok(Asked::SlowDown { interval: said }) => {
                 interval = said.unwrap_or(interval + SLOWER_BY).max(least);
-                info!(seconds = interval.as_secs(), "GitHub asked the hub to ask after a sign-in less often");
+                info!(
+                    name: "github.sign_in_slowed",
+                    seconds = interval.as_secs(),
+                    "GitHub asked the hub to ask after a sign-in less often"
+                );
             }
-            Err(e) => warn!("couldn't ask GitHub after a sign-in's token, so it's asked again: {}", e.message),
+            Err(e) => {
+                warn!(
+                    name: "github.sign_in_unasked",
+                    error = e.message,
+                    "Couldn't ask GitHub after a sign-in's token, so it's asked again"
+                );
+            }
         }
     }
 }

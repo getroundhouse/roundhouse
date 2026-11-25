@@ -121,7 +121,11 @@ impl Github {
         let ends = given.expires_at.as_deref().and_then(|said| said.parse::<Timestamp>().ok());
         let ends_at_ms = ends.map_or_else(
             || {
-                warn!(said = ?given.expires_at, "couldn't read when GitHub says an installation's token ends");
+                warn!(
+                    name: "github.installation_token_end_unread",
+                    said = given.expires_at,
+                    "Couldn't read when GitHub says an installation's token ends"
+                );
                 given_at.checked_add(INSTALLATION_TOKEN_LASTS).map_or(i64::MAX, Timestamp::as_millisecond)
             },
             Timestamp::as_millisecond,

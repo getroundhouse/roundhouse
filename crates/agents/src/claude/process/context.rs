@@ -129,7 +129,7 @@ fn report(shared: &Shared, output: &mpsc::Sender<AgentOutput>, answer: Result<Va
     let context = match answer {
         Ok(reply) => context_usage(&reply, &watch.windows),
         Err(e) => {
-            debug!("the agent didn't say how full its context is: {e}");
+            debug!(name: "claude.context_unsaid", error = %e, "An agent didn't say how full its context is");
             if let Some(over) = Over::after(&e) {
                 watch.over.get_or_insert(over);
             }

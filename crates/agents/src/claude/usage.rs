@@ -60,7 +60,7 @@ fn models_week(row: &Value) -> Option<UsageLimit> {
     let label = row.pointer("/scope/model/display_name").and_then(Value::as_str).map(str::trim);
     let Some(label) = label.filter(|label| !label.is_empty() && !of_a_surface) else {
         let scope = row.get("scope").unwrap_or(&Value::Null);
-        debug!(%scope, "get_usage has a week of no model's own");
+        debug!(name: "claude.usage_week_skipped", %scope, "get_usage has a week of no model's own");
         return None;
     };
     Some(UsageLimit {

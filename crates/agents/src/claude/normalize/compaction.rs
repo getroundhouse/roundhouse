@@ -41,7 +41,10 @@ impl Compactions {
                 return Some(Parsed::Event(ended.with(summary_in(&text))));
             }
             // Its raw line is kept, so the compaction can still be read from it.
-            warn!("a compaction's boundary wasn't followed by its summary, so it isn't recorded as one");
+            warn!(
+                name: "claude.compaction_unrecorded",
+                "A compaction's boundary wasn't followed by its summary, so it isn't recorded as one"
+            );
         }
         match str_of(value, "type")? {
             "system" => self.system(value),

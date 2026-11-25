@@ -150,7 +150,13 @@ impl Ready {
         let task = tokio::spawn(async move {
             let spare = match Spare::start(&starting).await {
                 Ok(spare) => spare,
-                Err(e) => return debug!("the stand-in didn't start: {e:#}"),
+                Err(e) => {
+                    return debug!(
+                        name: "claude.stand_in_unstarted",
+                        error = format!("{e:#}"),
+                        "A stand-in didn't start"
+                    );
+                }
             };
             if let Ok((question, answer)) = asked.await {
                 let _ = answer.send(spare.answer(&question).await);

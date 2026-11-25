@@ -7,7 +7,7 @@ use protocol::model::{InstanceId, ProviderName};
 use protocol::paths::{AGENTS_DIR, WORKER_RECORD_FILE};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tracing::warn;
+use tracing::{info, warn};
 
 /// How long what a killed worker left running, such as an agent, or a worker still running when the hub asks for it
 /// to be ended, gets to stop by itself, with all it started. An agent stops its own tools if given this.
@@ -48,7 +48,12 @@ impl LocalProvider {
     pub(super) async fn end(&self, instance_id: &InstanceId, grace: Duration) {
         let dir = self.instance_dir(instance_id);
         if let Some(worker) = running_worker(&dir).await {
-            warn!(pid = worker.pid, %instance_id, "ending a worker still running in its instance");
+            info!(
+                name: "worker.left_running",
+                pid = worker.pid,
+                %instance_id,
+                "Ending a worker still running in its instance"
+            );
             stop_groups(&[worker], grace).await;
         }
         stop_orphans(&dir, ORPHAN_GRACE).await;
@@ -77,11 +82,15 @@ async fn stop_groups(leaders: &[ProcessRecord], grace: Duration) {
     }
     left.retain(|leader| leader.group_running());
     for leader in &left {
-        warn!(pid = leader.pid, "its group is still running, sending SIGKILL");
+        warn!(
+            name: "process.group_not_stopped",
+            pid = leader.pid,
+            "A group is still running after SIGTERM, so it's sent SIGKILL"
+        );
         signal_group(leader.pid, Signal::Kill);
     }
     if !gone_within(&mut left, KILLED_GRACE).await {
-        warn!("a group is still running after SIGKILL");
+        warn!(name: "process.group_not_killed", "A group is still running after SIGKILL");
     }
 }
 
@@ -130,7 +139,11 @@ pub(super) async fn stop_orphans(instance_dir: &Path, grace: Duration) {
         if let Some(orphan) = ProcessRecord::read(&path).filter(|orphan| orphan.pid > 1)
             && still_running(&orphan).await
         {
-            warn!(pid = orphan.pid, "stopping what a worker that was killed left running");
+            warn!(
+                name: "process.orphan_found",
+                pid = orphan.pid,
+                "Stopping what a worker that was killed left running"
+            );
             orphans.push(orphan);
         }
         files.push(path);

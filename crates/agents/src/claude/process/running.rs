@@ -211,7 +211,11 @@ async fn send(
     match write_to(process.shared.tap.as_ref(), &mut stdin, &message).await {
         // A failed launch closes stdin. The supervisor replays this prompt if it relaunches.
         Err(e) if !confirmed => {
-            debug!("prompt not delivered before the agent opened: {e:#}");
+            debug!(
+                name: "claude.prompt_undelivered",
+                error = format!("{e:#}"),
+                "A prompt wasn't delivered before the agent opened"
+            );
             Ok(())
         }
         Err(e) => {

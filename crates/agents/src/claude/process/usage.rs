@@ -128,7 +128,7 @@ fn report(
     every_models_week: bool,
 ) {
     if let Err(e) = &answer {
-        debug!("the agent didn't say what's left of its account's limits: {e}");
+        debug!(name: "claude.limits_unsaid", error = %e, "An agent didn't say what's left of its account's limits");
     }
     let mut watch = shared.usage.lock();
     if let Some(limits) = watch.answered(answer) {
