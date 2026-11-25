@@ -202,8 +202,12 @@ fn attached(cx: &App) -> Vec<Attached> {
 
 /// What's saved, or `None` when nothing is, or what is can't be read.
 pub(super) fn read(path: &Path) -> Option<Place> {
-    read_json(path).unwrap_or_else(|e| {
-        eprintln!("couldn't read where the window was left, so it opens in its usual place: {e}");
+    read_json(path).unwrap_or_else(|error| {
+        tracing::warn!(
+            name: "window.place_unread",
+            %error,
+            "Couldn't read where the window was left, so it opens in its usual place"
+        );
         None
     })
 }
@@ -257,7 +261,7 @@ fn load(data_dir: &Path, cx: &mut App) -> Option<Opening> {
         return opening;
     }
     // Nobody is told, since the only cost is the window opening somewhere else next time.
-    let failed = |e| eprintln!("couldn't save where the window is: {e}");
+    let failed = |e| tracing::warn!(name: "window.place_unsaved", error = %e, "Couldn't save where the window is");
     let saver = Saver::start(move |place| write_json(&path, place), failed);
     let (opened_at, window, last_seen, settling) = (None, None, None, None);
     cx.set_global(Kept { saver, saved: left, in_usual_place, opened_at, window, last_seen, settling });

@@ -46,7 +46,7 @@ fn main() {
         cx.activate(true);
         // In its usual place, so one picture is the same size as the next.
         desktop::why_quit::say(checkout.as_ref(), cx);
-        let hub = HubSource::default_local(BUILD).expect("find the hub");
+        let hub = HubSource::paths().and_then(|paths| HubSource::local(paths, BUILD)).expect("find the hub");
         let (handle, view) =
             desktop::open_main_window(hub, checkout, desktop::Opens::InItsUsualPlace, cx).expect("open a window");
         let args = args.clone();

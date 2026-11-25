@@ -8,12 +8,12 @@ mod service_builds;
 mod signals;
 mod worker_role;
 
+use std::io::IsTerminal as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use protocol::client::HubStart;
-use tracing_subscriber::EnvFilter;
 use worker_role::Transport;
 
 /// Which build this is, from the stamp it was compiled with, which the hub and the worker are given.
@@ -125,6 +125,34 @@ fn say_worker_versions() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Logs to stderr, whatever this runs as, because a worker's stdout is its protocol stream. A hub's and a worker's is
+/// their log's file, which a worker's delete writes to as well, unless they're run from a terminal. Anything else's is
+/// read by whoever ran it.
+fn start_log(role: &Role) -> Result<(), logging::AlreadyStarted> {
+    let directives = std::env::var(protocol::paths::ENV_LOG).ok();
+    let log = logging::Log::new(logging::Levels::new(directives.as_deref()));
+    let has_a_file = match role {
+        Role::Hub { .. } | Role::Worker { .. } | Role::Delete { .. } => !std::io::stderr().is_terminal(),
+        Role::GitCredential { .. } | Role::WorkerVersions | Role::PrintEnvironment | Role::Preflight { .. } => false,
+    };
+    if has_a_file { log.json_to(std::io::stderr) } else { log.text_to(std::io::stderr) }.start()
+}
+
+/// Deletes worktrees moved aside, and logs each it couldn't.
+fn delete(paths: &[PathBuf]) -> anyhow::Result<()> {
+    let failed = worker::delete_trees(paths);
+    for (path, e) in &failed {
+        tracing::error!(
+            name: "worktree.undeleted",
+            path = %path.display(),
+            error = %e,
+            "Couldn't delete a worktree moved aside"
+        );
+    }
+    anyhow::ensure!(failed.is_empty(), "{} of {} weren't deleted", failed.len(), paths.len());
+    Ok(())
+}
+
 /// What started a hub, as its flags say. Clap refuses both at once.
 fn hub_start(on_demand: bool, service: bool) -> HubStart {
     match (on_demand, service) {
@@ -145,13 +173,8 @@ fn main() -> anyhow::Result<ExitCode> {
     // runs from leaves the one this runs from. One that can't be marked is being removed just then, which can stop it
     // as it starts, so it goes on unmarked and leaves the rest to that.
     let _running_from = std::env::current_exe().and_then(|program| process::RunningFrom::mark(&program)).ok();
-    // Logs always go to stderr, because a worker's stdout is its protocol stream.
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_env(protocol::paths::ENV_LOG).unwrap_or_else(|_| EnvFilter::new("info")))
-        .with_writer(std::io::stderr)
-        .with_ansi(false)
-        .init();
     let args = Args::parse();
+    start_log(&args.role)?;
     let codex_bin = std::env::var_os(worker::ENV_CODEX_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
     let claude_bin = std::env::var_os(worker::ENV_CLAUDE_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
     let antigravity_bin =
@@ -177,14 +200,7 @@ fn main() -> anyhow::Result<ExitCode> {
         Role::Preflight { agent, checkout } => preflight::run(agent, &checkout, claude_bin, codex_bin, antigravity_bin),
         Role::WorkerVersions => say_worker_versions(),
         Role::PrintEnvironment => Ok(process::print_environment(std::env::vars_os(), &mut std::io::stdout().lock())?),
-        Role::Delete { paths } => {
-            let failed = worker::delete_trees(&paths);
-            for (path, e) in &failed {
-                tracing::error!(path = %path.display(), "couldn't delete a worktree moved aside: {e}");
-            }
-            anyhow::ensure!(failed.is_empty(), "{} of {} weren't deleted", failed.len(), paths.len());
-            Ok(())
-        }
+        Role::Delete { paths } => delete(&paths),
         Role::Worker { stdio: _, attach, listen, workspaces_root, state_dir, clones_dir } => {
             let transport = match (attach, listen) {
                 (true, _) => Transport::Attach,

@@ -16,8 +16,6 @@ mod hub;
 mod jobs;
 mod lasting;
 mod listener;
-#[cfg(test)]
-mod logged;
 mod login_files;
 mod logins;
 mod machine_environment;

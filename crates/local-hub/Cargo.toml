@@ -12,6 +12,7 @@ testing = ["dep:parking_lot"]
 
 [dependencies]
 client-core.workspace = true
+logging.workspace = true
 parking_lot = { workspace = true, optional = true }
 private-files.workspace = true
 process.workspace = true

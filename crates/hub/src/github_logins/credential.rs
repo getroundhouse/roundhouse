@@ -111,8 +111,12 @@ impl GithubLogins {
             if *current == credential {
                 return false;
             }
-            // Its `Debug` leaves out the token. As the hub starts, too, so its log says what workers are sent from then.
-            info!(?credential, "what workers give their processes for github.com from now on");
+            // As the hub starts, too, so its log says what workers are sent from then. Of an account, only its ID.
+            info!(
+                name: "github.credential.changed",
+                sent = ?credential.recorded(),
+                "What workers give their processes for github.com changed"
+            );
             *current = credential;
             true
         });

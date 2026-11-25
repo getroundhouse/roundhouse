@@ -136,6 +136,8 @@ pub struct Paths {
     /// per workspace, kept out of the database.
     pub bundles_dir: PathBuf,
     pub log: PathBuf,
+    /// What the desktop app logs.
+    pub app_log: PathBuf,
     pub instances_dir: PathBuf,
     /// Where the local provider's workers keep their clones of the repositories they're told of by their address, one
     /// for each address, which every one of them shares, and which outlives any instance. The hub only names it to its
@@ -196,6 +198,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         attachments_dir: data_dir.join("attachments"),
         bundles_dir: data_dir.join("bundles"),
         log: data_dir.join("hub.log"),
+        app_log: data_dir.join("app.log"),
         instances_dir: data_dir.join("instances"),
         clones_dir: data_dir.join("clones"),
         worker_logs_dir: data_dir.join("worker-logs"),

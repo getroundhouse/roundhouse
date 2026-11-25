@@ -66,8 +66,9 @@ impl From<StoreError> for ApiError {
 
 #[cfg(test)]
 mod tests {
+    use logging::testing::Logs;
+
     use super::*;
-    use crate::logged::Logs;
 
     /// The API error it becomes, and what that logged.
     fn convert(failure: StoreError) -> (ApiError, String) {

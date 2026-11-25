@@ -78,7 +78,7 @@ If git has already forgotten the worktree, as when deleting it was stopped part 
 The hub is the process that runs your agents, and the app starts it when it needs one. If it can't:
 
 1. Quit the app, and open it again.
-2. Look at `hub.log`, in the hub's data directory. [Where data is kept](../reference/where-data-is-kept.md) says where that is.
+2. Look at `hub.log` and `app.log`, in the data directory. [Where data is kept](../reference/where-data-is-kept.md) says where that is.
 
 ## An update won't install
 

@@ -1821,13 +1821,13 @@ dependencies = [
  "hub",
  "libc",
  "local-hub",
+ "logging",
  "process",
  "protocol",
  "serde_json",
  "tempfile",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "update-feed",
  "waiting",
  "worker",
@@ -2009,6 +2009,7 @@ dependencies = [
  "image",
  "libc",
  "local-hub",
+ "logging",
  "look",
  "models",
  "objc2 0.6.5",
@@ -2022,6 +2023,7 @@ dependencies = [
  "objc2-user-notifications",
  "parking_lot",
  "percent-encoding",
+ "private-files",
  "process",
  "proptest",
  "protocol",
@@ -2037,6 +2039,7 @@ dependencies = [
  "terminal-view",
  "thiserror 2.0.21",
  "tokio",
+ "tracing",
  "transcript",
  "update-feed",
  "velopack",
@@ -4329,6 +4332,7 @@ dependencies = [
  "hub",
  "jiff",
  "libc",
+ "logging",
  "parking_lot",
  "private-files",
  "process",
@@ -4348,7 +4352,6 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tracing",
- "tracing-subscriber",
  "update-feed",
  "uuid",
  "waiting",
@@ -5190,6 +5193,7 @@ version = "0.1.0"
 dependencies = [
  "client-core",
  "libc",
+ "logging",
  "parking_lot",
  "private-files",
  "process",
@@ -5214,6 +5218,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "logging"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "parking_lot",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -11631,6 +11648,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "jiff",
+ "logging",
  "markdown",
  "memchr",
  "notify",
@@ -11650,7 +11668,6 @@ dependencies = [
  "tokio",
  "toml 1.2.1+spec-1.1.0",
  "tracing",
- "tracing-subscriber",
  "uuid",
  "waiting",
  "worker",

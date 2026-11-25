@@ -56,7 +56,7 @@ pub(crate) fn listen(given: Given) -> anyhow::Result<()> {
     let socket = Path::new(protocol::paths::WORKER_SOCKET_FILE);
     // Held until this process exits.
     let Some(_claim) = worker::claim_to_serve(&given.state_dir)? else {
-        tracing::info!("another worker, started at the same time, has the instance");
+        tracing::info!(name: "worker.instance_taken", "Another worker, started at the same time, has the instance");
         return Ok(());
     };
     let stops_with = given.for_tests.stops_with.clone();

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use logging::testing::Logs;
 use process::Environment;
 use protocol::client::ErrorCode;
 use protocol::worker::RepoSource;
@@ -11,7 +12,7 @@ use super::Clones;
 use super::making::WAITING;
 use super::place::MAKING;
 use crate::git::tests::{new_repo, prepare, run};
-use crate::git::worktrees::tests::Logs;
+use crate::git::worktrees::tests::until_logged;
 use crate::testing::given;
 
 /// Long enough for git on a busy machine.
@@ -114,7 +115,7 @@ async fn a_worker_waits_for_another_making_the_clone_and_takes_the_one_it_made()
 
     tokio::select! {
         biased;
-        () = logs.until(WAITING) => {}
+        () = until_logged(&logs, WAITING) => {}
         ended = &mut wanting => panic!("it didn't wait its turn, and ended with {ended:?}"),
     }
     run(dir.path(), &["clone", "-q", "--bare", &remote.url(), clones.of(UNREACHABLE).to_str().unwrap()]);

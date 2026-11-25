@@ -48,6 +48,10 @@ pub(super) async fn reach(
             )),
         },
     };
+    // Not one left running, which goes on writing to the log it has.
+    if opening == Opening::Started {
+        logging::move_aside_if_long(log);
+    }
     let spawned = command.and_then(|command| {
         child_process::spawn(&command.program, &command.args, &command.env, machine, Stderr::Log(log))
             .map_err(|e| ApiError::new(ErrorCode::Worker, e.to_string()))

@@ -16,7 +16,12 @@ pub(super) fn this_device(data_dir: &Path) -> Option<ClientDevice> {
     let id = match kept_id(&data_dir.join(FILE)) {
         Ok(id) => id,
         Err(e) => {
-            eprintln!("couldn't keep this device's ID in {}, so it connects as on none: {e}", data_dir.display());
+            tracing::warn!(
+                name: "device.id_unkept",
+                path = %data_dir.display(),
+                error = %e,
+                "Couldn't keep this device's ID, so the app connects as on none"
+            );
             return None;
         }
     };

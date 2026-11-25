@@ -19,7 +19,7 @@ pub(crate) fn load(opens: Opens, data_dir: &Path, cx: &mut App) {
     if opens == Opens::InItsUsualPlace || cx.has_global::<Kept>() {
         return;
     }
-    let failed = |e| eprintln!("couldn't keep the app's preferences: {e}");
+    let failed = |e| tracing::warn!(name: "preferences.unkept", error = %e, "Couldn't keep the app's preferences");
     cx.set_global(Kept(Preferences::in_dir(data_dir, failed)));
     saved_before_quitting(|Kept(preferences)| preferences.saved(), cx);
 }

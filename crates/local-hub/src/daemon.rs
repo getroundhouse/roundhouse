@@ -164,6 +164,7 @@ pub(super) fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
 
 fn spawn_hub(paths: &Paths, daemon: &Daemon) -> io::Result<Child> {
     private_files::create_dir_all(&paths.data_dir)?;
+    logging::move_aside_if_long(&paths.log);
     let log = private_files::file_options().create(true).append(true).open(&paths.log)?;
     // Whole paths, since the hub doesn't run where this client does. A bare name is looked up on `PATH` instead.
     let exe = daemon.to_start(paths)?;

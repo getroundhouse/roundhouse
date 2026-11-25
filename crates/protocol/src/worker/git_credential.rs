@@ -2,6 +2,8 @@
 //! so agents on a provider where Roundhouse sets up GitHub push and open pull requests as the hub's default GitHub
 //! account, rather than as whatever login the machine has.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 use super::{Request, WorkerRequest};
@@ -85,10 +87,18 @@ pub struct GitCredential {
 /// `ada-roundhouse[bot]`, with the address GitHub links to the bot, `41+ada-roundhouse[bot]@users.noreply.github.com`,
 /// and for a token's or a sign-in's account, the name its user goes by on GitHub, or its username, and the email it
 /// shows there, or the address GitHub gives it, such as `7+ada@users.noreply.github.com`.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+///
+/// Its `Debug` says neither, since a log holds no one's name or email address.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct GitIdentity {
     pub name: String,
     pub email: String,
+}
+
+impl fmt::Debug for GitIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("GitIdentity(..)")
+    }
 }
 
 #[cfg(test)]

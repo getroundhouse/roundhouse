@@ -27,6 +27,7 @@ mod home;
 pub mod image_diff;
 mod keys;
 mod limits;
+mod log;
 pub mod lost_release;
 mod manifest_flow;
 mod menus;
@@ -192,6 +193,9 @@ pub fn open_main_window(
 
 /// Runs the app, which is `build`, from `checkout`, until it quits.
 pub fn run(build: protocol::Build, checkout: Option<Checkout>) {
+    let paths = app::HubSource::paths();
+    log::start(paths.as_ref().ok());
+    tracing::info!(name: "app.started", version = build.version(), pid = std::process::id(), "Started");
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         // Only the app as it runs plays sounds, shows a badge on the Dock, and opens a file in another app, so a test
@@ -202,14 +206,14 @@ pub fn run(build: protocol::Build, checkout: Option<Checkout>) {
         cx.activate(true);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         why_quit::say(checkout.as_ref(), cx);
-        let opened = app::HubSource::default_local(build).and_then(|hub| {
+        let opened = paths.and_then(|paths| app::HubSource::local(paths, build)).and_then(|hub| {
             let data_dir = hub.paths.data_dir.clone();
             open_main_window(hub, checkout, Opens::WhereItWasLeft, cx).map(|_| data_dir)
         });
         match opened {
             Ok(data_dir) => updates::start(&data_dir, cx),
             Err(e) => {
-                eprintln!("couldn't open a window: {e:#}");
+                tracing::error!(name: "app.unopened", error = format!("{e:#}"), "Couldn't open a window");
                 // Not by quitting, which exits with 0, as an app that someone quit does. Nothing is open to wait for.
                 std::process::exit(1);
             }
