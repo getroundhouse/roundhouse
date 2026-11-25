@@ -139,6 +139,7 @@ impl Field {
     fn heard(&mut self, update: Update, window: &mut Window, cx: &mut Context<Self>) {
         let Some(underway) = self.underway.as_mut() else { return };
         match update {
+            Update::Opened(device) => underway.logged.opened(&device),
             Update::Hearing(text) => underway.live = text,
             Update::Final(text) => self.put_in(&text, window, cx),
             Update::Ended(ending) => {

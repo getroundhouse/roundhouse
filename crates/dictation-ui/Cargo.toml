@@ -27,6 +27,7 @@ objc2-io-kit.workspace = true
 [dev-dependencies]
 # What the `testing` feature turns on in it, which the tests have without it.
 dictation = { workspace = true, features = ["testing"] }
+logging = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true

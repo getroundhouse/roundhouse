@@ -4,7 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use sound::{MicrophoneError, Quieting};
+use sound::{InputDevice, MicrophoneError, Quieting};
 
 use super::buffer::Buffer;
 use crate::{AudioIn, EngineError};
@@ -145,6 +145,8 @@ impl Drop for Recording {
 /// What's heard of a recording, in order. Nothing follows [`Update::Ended`] or [`Update::Failed`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Update {
+    /// The microphone is open, hearing this device. It's first, and a recording a test feeds has none.
+    Opened(InputDevice),
     /// The live text of what's been said since the last sentence turned final: all of it each time, so one missed loses
     /// nothing, and empty once there's none.
     Hearing(String),

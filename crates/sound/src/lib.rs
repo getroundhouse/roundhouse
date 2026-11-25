@@ -14,7 +14,7 @@ mod quieting;
 mod resample;
 mod speakers;
 
-pub use microphone::{HEARS, Microphone, MicrophoneError, ask_for_microphone, microphone_permission};
+pub use microphone::{HEARS, InputDevice, Microphone, MicrophoneError, ask_for_microphone, microphone_permission};
 pub use permission::Permission;
 pub use quieting::{Quieted, Quieting, restored};
 pub use resample::Resampler;

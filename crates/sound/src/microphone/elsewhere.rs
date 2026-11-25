@@ -1,11 +1,11 @@
 //! Windows and Linux, where the microphone isn't heard yet, so [`crate::HEARS`] is false and the app offers nothing
 //! that hears it.
 
-use super::MicrophoneError;
+use super::{InputDevice, MicrophoneError};
 use crate::Permission;
 
 /// Never opens: there's no microphone to hear here.
-pub struct Microphone;
+pub enum Microphone {}
 
 impl Microphone {
     pub fn open(
@@ -14,6 +14,11 @@ impl Microphone {
         _failed: impl FnMut(MicrophoneError) + Send + 'static,
     ) -> Result<Self, MicrophoneError> {
         Err(MicrophoneError::Missing)
+    }
+
+    /// The device it hears.
+    pub fn device(&self) -> &InputDevice {
+        match *self {}
     }
 }
 

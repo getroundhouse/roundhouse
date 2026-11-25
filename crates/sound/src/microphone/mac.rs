@@ -7,13 +7,14 @@ use objc2::runtime::Bool;
 use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeAudio};
 use parking_lot::Mutex;
 
-use super::MicrophoneError;
+use super::{InputDevice, MicrophoneError};
 use crate::Permission;
 use crate::resample::Resampler;
 
 /// The system's default input device, heard until this is dropped.
 pub struct Microphone {
     _stream: cpal::Stream,
+    device: InputDevice,
 }
 
 impl Microphone {
@@ -33,6 +34,8 @@ impl Microphone {
         let device = cpal::default_host().default_input_device().ok_or(MicrophoneError::Missing)?;
         let config = device.default_input_config().map_err(|e| failure(&e))?;
         let mut resampler = Resampler::new(config.sample_rate(), config.channels(), rate);
+        let name = device.description().ok().map(|description| description.name().to_string());
+        let input = InputDevice { name, sample_rate: config.sample_rate(), channels: config.channels() };
         let on_error = move |e: cpal::Error| {
             // A few samples lost, and the stream carries on. Anything else ends it, a change of device included, since
             // the resampler is for this device's rate and channels.
@@ -63,7 +66,12 @@ impl Microphone {
         }
         .map_err(|e| failure(&e))?;
         stream.play().map_err(|e| failure(&e))?;
-        Ok(Self { _stream: stream })
+        Ok(Self { _stream: stream, device: input })
+    }
+
+    /// The device it hears, for as long as it does, since a change of device ends it.
+    pub fn device(&self) -> &InputDevice {
+        &self.device
     }
 }
 
