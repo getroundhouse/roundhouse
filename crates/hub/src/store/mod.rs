@@ -63,6 +63,8 @@ mod workspaces;
 
 pub use accounts::Launched;
 pub use attachments::AddedBy;
+#[cfg(any(test, feature = "testing"))]
+pub use backup::copy;
 pub use comments::Commented;
 pub use error::{BackupError, StoreError};
 pub use events::{Initialized, Places, SessionChange, StatusChange, TurnEdge, cancelled_approval};

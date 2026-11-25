@@ -4,12 +4,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, ensure};
 use dictation::nemotron::MODEL;
-use dictation::{Hint, Hints, Language, SAMPLE_RATE};
-use hint_words::HintWord;
+use dictation::{Hints, Language, SAMPLE_RATE};
 use kept_recordings::Kept;
 use serde::{Deserialize, Serialize};
 
 use super::recordings::{self, Recording};
+use super::words::{Chats, ToHear};
 use crate::hearing::{Hearer, Written};
 use crate::{lines, running};
 
@@ -19,6 +19,9 @@ use crate::{lines, running};
 pub(crate) struct Settings {
     pub(crate) boost: Option<f32>,
     pub(crate) no_hints: bool,
+    /// The words today's picker gives each, rather than those it was heard with.
+    #[serde(default)]
+    pub(crate) todays_words: bool,
 }
 
 /// What a run was run with, and on.
@@ -97,13 +100,30 @@ impl Run {
     }
 }
 
-/// Hears each recording in `recordings` with `settings` and the model's files in `model`, into the run in `out`.
-pub(crate) fn hear(recordings: &Path, out: &Path, settings: Settings, model: &Path) -> anyhow::Result<()> {
+/// Hears each recording in `recordings` with `settings` and the model's files in `model`, into the run in `out`. Today's
+/// words are picked from the chats in the hub's database at `hub`.
+pub(crate) fn hear(
+    recordings: &Path,
+    out: &Path,
+    settings: Settings,
+    hub: Option<&Path>,
+    model: &Path,
+) -> anyhow::Result<()> {
     let code = running::code(out)?;
     let stamp = Stamp { settings, model: MODEL.revision.to_string(), code, machine: running::machine() };
     let mut run = Run::open(out, stamp)?;
+    let chats = hub.map(|hub| Chats::open(hub, out)).transpose()?;
+    let ToHear { each, same, gone } = ToHear::of(recordings::read(recordings)?, settings, chats.as_ref())?;
+    drop(chats);
+    if hub.is_some() {
+        eprintln!(
+            "{same} of {} have the words they were heard with, and {gone} aren't heard, since what theirs were picked from \
+             is gone or wasn't kept",
+            each.len()
+        );
+    }
     let model = model.to_path_buf();
-    hear_all(&recordings::read(recordings)?, &mut run, |boost| {
+    hear_all(&each, &mut run, |boost| {
         let model = model.clone();
         let hearer = Hearer::start(move || crate::model::engine(&model, Some(boost)))?;
         eprintln!("loading the model, with a hint boost of {boost}");
@@ -114,41 +134,39 @@ pub(crate) fn hear(recordings: &Path, out: &Path, settings: Settings, model: &Pa
     Ok(())
 }
 
-/// Hears each of `recordings` the run hasn't, with the hearer `start` gives for the boost it's heard with.
+/// Hears each of `to_hear` the run hasn't, with the hearer `start` gives for the boost it's heard with.
 pub(super) fn hear_all(
-    recordings: &[Recording],
+    to_hear: &[(Recording, Hints)],
     run: &mut Run,
     mut start: impl FnMut(f32) -> anyhow::Result<Hearer>,
 ) -> anyhow::Result<()> {
     let settings = run.stamp.settings;
     let boost = |kept: &Kept| settings.boost.unwrap_or(kept.hint_boost);
     let already: Vec<String> = run.heard.iter().map(|heard| heard.id.clone()).collect();
-    let mut left: Vec<&Recording> = recordings.iter().filter(|r| !already.contains(&r.kept.id)).collect();
+    let mut left: Vec<&(Recording, Hints)> = to_hear.iter().filter(|(r, _)| !already.contains(&r.kept.id)).collect();
     // The boost is the engine's, and loading one takes a while, so those heard with the same one are heard together.
-    left.sort_by(|a, b| boost(&a.kept).total_cmp(&boost(&b.kept)));
+    left.sort_by(|(a, _), (b, _)| boost(&a.kept).total_cmp(&boost(&b.kept)));
     let mut hearing: Option<(f32, Hearer)> = None;
-    for (i, recording) in left.iter().enumerate() {
+    for (i, (recording, hints)) in left.iter().enumerate() {
         let boost = boost(&recording.kept);
         let hearer = match &mut hearing {
             Some((with, hearer)) if with.total_cmp(&boost).is_eq() => hearer,
             other => &mut other.insert((boost, start(boost)?)).1,
         };
         let id = &recording.kept.id;
-        let heard = hear_one(hearer, recording, settings).with_context(|| format!("couldn't hear {id} again"))?;
+        let heard = hear_one(hearer, recording, hints).with_context(|| format!("couldn't hear {id} again"))?;
         run.add(heard)?;
         eprintln!("{} of {}: {id}", i + 1, left.len());
     }
     Ok(())
 }
 
-fn hear_one(hearer: &Hearer, recording: &Recording, settings: Settings) -> anyhow::Result<Heard> {
+fn hear_one(hearer: &Hearer, recording: &Recording, hints: &Hints) -> anyhow::Result<Heard> {
     let kept = &recording.kept;
     let language =
         Language::from_code(&kept.language).with_context(|| format!("no language has the code {:?}", kept.language))?;
-    let hint = |word: &HintWord| Hint { text: word.text.clone(), spelled: word.spelled };
-    let hints = if settings.no_hints { Hints::default() } else { Hints::from_kept(kept.hints.iter().map(hint)) };
     let audio = recording.audio()?;
-    let Written { live, final_text, .. } = hearer.hear(&audio, hints, language)?;
+    let Written { live, final_text, .. } = hearer.hear(&audio, hints.clone(), language)?;
     Ok(Heard {
         id: kept.id.clone(),
         started_at_ms: kept.started_at_ms,

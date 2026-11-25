@@ -11,6 +11,8 @@ anyhow.workspace = true
 # The recordings, which are FLAC.
 claxon.workspace = true
 clap.workspace = true
+# Which words the picker hints today, from what a kept recording says its own were picked from.
+client-core.workspace = true
 # What the engine's thread tells the feeder it has heard.
 flume.workspace = true
 # Hears each recording as the app does, cut at its pauses, from audio it's fed, with the boost the run asks for.
@@ -19,10 +21,13 @@ dictation = { workspace = true, features = ["testing"] }
 fetching.workspace = true
 # The files of the dictations someone chose to keep, and the words each was heard with.
 hint-words.workspace = true
+# The chat a kept recording was dictated into, from a copy of the hub's database.
+hub = { workspace = true, features = ["testing"] }
 kept-recordings.workspace = true
 # The model's files, downloaded into the eval's cache if they aren't there.
 models = { workspace = true, features = ["download"] }
 parking_lot.workspace = true
+protocol.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # Converts a 48 kHz recording to the 16 kHz the model hears, as the microphone's audio is.
@@ -30,10 +35,13 @@ sound.workspace = true
 # LibriSpeech's archive.
 flate2.workspace = true
 tar.workspace = true
+# Where the copy of the hub's database is, which goes as the run ends.
+tempfile.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
+# The records a chat is made of, from protocol's builders.
+protocol = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true

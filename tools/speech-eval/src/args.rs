@@ -92,6 +92,10 @@ pub(crate) enum KeptCommand {
         /// Hears each with no hint words.
         #[arg(long)]
         no_hints: bool,
+        /// The hub's database, `hub.db` in its data directory, to hear each with the words today's picker gives it,
+        /// rather than those it was heard with. It's only read, and its copy goes once the words are picked.
+        #[arg(long, value_name = "HUB_DB", conflicts_with = "no_hints")]
+        todays_words: Option<PathBuf>,
         #[command(flatten)]
         model: ModelArgs,
     },

@@ -65,10 +65,10 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             print!("{}", compare::compare(&Run::read(&run)?, &Baseline::read(&baseline)?));
             Ok(())
         }
-        Command::Kept { command: KeptCommand::Hear { recordings, out, boost, no_hints, model } } => {
+        Command::Kept { command: KeptCommand::Hear { recordings, out, boost, no_hints, todays_words, model } } => {
             let (files, _cache) = model_and_cache(model)?;
-            let as_heard = kept::Settings { boost, no_hints };
-            kept::hear(&recordings, &out, as_heard, &files)
+            let settings = kept::Settings { boost, no_hints, todays_words: todays_words.is_some() };
+            kept::hear(&recordings, &out, settings, todays_words.as_deref(), &files)
         }
         Command::Kept { command: KeptCommand::Compare { run, other } } => {
             print!("{}", kept::compare(&run, other.as_deref())?);

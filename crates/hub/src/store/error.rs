@@ -42,6 +42,8 @@ pub enum BackupError {
     /// What it was doing, and what went wrong.
     #[error("{what}")]
     Io { what: String, source: io::Error },
+    #[error("opening the database to copy it")]
+    Open(#[source] rusqlite::Error),
     #[error("copying the database with VACUUM INTO")]
     Vacuum(#[source] rusqlite::Error),
     #[error("moving what's in the WAL into the database before copying it")]

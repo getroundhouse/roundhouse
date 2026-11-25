@@ -11,12 +11,13 @@ use super::comparing::compare;
 use super::hearing::{Run, Settings, Stamp, hear_all};
 use super::recordings;
 use super::sending::sent;
+use super::words::ToHear;
 use crate::hearing::Hearer;
 
 const SCRIPT: &[&str] = &["fix", "the", "test", "run", "it"];
 const MODEL: &str = "the model";
 
-fn kept(id: &str, started_at_ms: u64, finals: &[String]) -> Kept {
+pub(super) fn kept(id: &str, started_at_ms: u64, finals: &[String]) -> Kept {
     let said = |text: &String| Said { at_ms: 0, text: Text::Final(text.clone()) };
     Kept {
         version: VERSION,
@@ -79,7 +80,8 @@ fn stamp(settings: Settings) -> Stamp {
 fn hear(folder: &Path, out: &Path, settings: Settings, engine: &FakeEngine) -> Vec<f32> {
     let mut run = Run::open(out, stamp(settings)).unwrap();
     let mut boosts = Vec::new();
-    hear_all(&recordings::read(folder).unwrap(), &mut run, |boost| {
+    let to_hear = ToHear::of(recordings::read(folder).unwrap(), settings, None).unwrap();
+    hear_all(&to_hear.each, &mut run, |boost| {
         boosts.push(boost);
         let engine = engine.clone();
         Hearer::start(move || Ok(Box::new(engine.clone()) as Box<dyn Engine>))
@@ -118,7 +120,7 @@ fn settings_given_take_the_place_of_those_it_had_and_those_alike_are_heard_toget
 
     assert_eq!(hear(&folder, &data.path().join("as-kept"), Settings::default(), &engine), [1.0, 2.0]);
     assert!(engine.last_hints().words().contains(&"sqlite-vec".to_string()));
-    let other = Settings { boost: Some(3.0), no_hints: true };
+    let other = Settings { boost: Some(3.0), no_hints: true, ..Settings::default() };
     assert_eq!(hear(&folder, &data.path().join("other"), other, &engine), [3.0]);
     assert!(engine.last_hints().words().is_empty());
 }
@@ -139,7 +141,7 @@ fn a_run_goes_on_from_where_it_stopped_and_refuses_other_settings() {
 
     let ids: Vec<String> = Run::read(&out).unwrap().heard.into_iter().map(|heard| heard.id).collect();
     assert_eq!(ids, ["r1", "r2"]);
-    assert!(Run::open(&out, stamp(Settings { boost: Some(3.0), no_hints: false })).is_err());
+    assert!(Run::open(&out, stamp(Settings { boost: Some(3.0), ..Settings::default() })).is_err());
     assert!(Run::open(&out, Stamp { code: "another".to_string(), ..stamp(Settings::default()) }).is_err());
 }
 
@@ -179,7 +181,7 @@ fn a_run_is_set_against_another() {
     hear(&folder, &then, Settings::default(), &engine);
     write(&folder, &kept("r2", 2, &[]), &engine.saying("run it."));
     let other = FakeEngine::new(&["mix", "the", "test", "run", "it"]);
-    hear(&folder, &now, Settings { boost: Some(3.0), no_hints: false }, &other);
+    hear(&folder, &now, Settings { boost: Some(3.0), ..Settings::default() }, &other);
 
     let compared = compare(&now, Some(&then)).unwrap();
     assert!(compared.contains("and 1 with other words."), "{compared}");
