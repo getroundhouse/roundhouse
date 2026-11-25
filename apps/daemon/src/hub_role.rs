@@ -39,7 +39,7 @@ pub(crate) fn run(start: HubStart) -> anyhow::Result<ExitCode> {
     // GitHub's own, whatever the environment says, in a build without `testing`, as the product's is.
     let github = hub::GithubConfig::from_env(|name| std::env::var(name).ok());
     // None, whatever the environment says, in a build without `testing`, as the product's is.
-    let stops_with = hub::TestProcess::from_env(|name| std::env::var(name).ok());
+    let stops_with = process::TestProcess::from_env(|name| std::env::var(name).ok());
     let network_address =
         protocol::paths::listen_address(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
     // Only a hub installed as a service updates as a client says, so only that one reads the feed.
@@ -57,9 +57,8 @@ pub(crate) fn run(start: HubStart) -> anyhow::Result<ExitCode> {
         timers,
         github,
         update_feed,
-        stops_with,
     };
-    Ok(match run_to_end(hub::run(config))?? {
+    Ok(match run_to_end(hub::run(config, process::TestProcess::until_gone(stops_with)))?? {
         hub::Ended::Stopped => ExitCode::SUCCESS,
         hub::Ended::Restarting => ExitCode::from(RESTARTING),
     })

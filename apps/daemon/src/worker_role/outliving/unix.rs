@@ -61,7 +61,7 @@ pub(crate) fn listen(given: Given) -> anyhow::Result<()> {
     };
     let stops_with = given.for_tests.stops_with.clone();
     let config = config(given, None)?;
-    let test_gone = async move { hub::TestProcess::until_gone(stops_with.as_ref()).await };
+    let test_gone = process::TestProcess::until_gone(stops_with);
     run_to_end(worker::listen(socket, config, WITHOUT_A_HUB, test_gone))??;
     Ok(())
 }

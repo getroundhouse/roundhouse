@@ -30,7 +30,6 @@ mod spans;
 mod ssh;
 pub mod store;
 mod terminate;
-mod test_process;
 mod timers;
 mod versions;
 mod worker_link;
@@ -38,7 +37,6 @@ mod worker_link;
 pub use crate::error::HubError;
 pub use crate::hub::UpdateFeed;
 pub use crate::run::{Ended, HubConfig, run};
-pub use crate::test_process::TestProcess;
 pub use crate::timers::Timers;
 pub use github::GithubConfig;
 #[cfg(any(test, feature = "testing"))]

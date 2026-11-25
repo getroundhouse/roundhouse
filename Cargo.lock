@@ -7424,6 +7424,7 @@ dependencies = [
  "protocol",
  "serde_json",
  "tempfile",
+ "tokio",
  "waiting",
  "windows-sys 0.61.2",
 ]

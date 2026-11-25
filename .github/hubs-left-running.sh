@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Fails if a hub or worker that the tests started is still running once they've ended, naming each, and stops them, so
 # a leak shows here rather than as thousands of idle processes on a developer's machine. A test's hub stops once its
-# test process has gone, as `hub::TestOwner` says, which can take as long as stopping its workers does, up to their
-# 15s shutdown grace, so this waits 30s for that first.
+# test process has gone, as `process::TestProcess` says, which can take as long as stopping its workers does, up to
+# their 15s shutdown grace, so this waits 30s for that first.
 #
 # It takes every process running the daemon as the tests', by either of its names, `roundhoused` or `Roundhouse Hub`,
 # a build's copy, which a hub a stamped build starts runs from, wherever it runs from. That's only so on a runner, where
