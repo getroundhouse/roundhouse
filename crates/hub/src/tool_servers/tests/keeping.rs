@@ -7,7 +7,7 @@ use protocol::client::tool_servers::ToolServerAdd;
 use protocol::model::{ToolServerAuth, ToolServerAuthGiven, ToolServerKey};
 
 use super::super::ToolServerChange;
-use super::super::secret::ToolServerSecret;
+use super::super::secret::{ToolServerSecret, read};
 use super::support::{servers_in, with_key, with_neither};
 use crate::login_files::{LoginFile, LoginSecret as _, Stored};
 
@@ -61,6 +61,21 @@ fn a_key_is_kept_in_a_private_file_of_its_own_alone_and_a_server_with_neither_ke
 }
 
 #[test]
+fn a_key_in_authorization_with_no_scheme_is_kept_as_a_bearer_token_and_any_other_as_it_is() {
+    for (header, key, kept) in [
+        ("Authorization", "made-up", "Bearer made-up"),
+        ("AUTHORIZATION", " made-up\n", "Bearer made-up"),
+        ("Authorization", "Bearer made-up", "Bearer made-up"),
+        ("Authorization", "Basic made-up", "Basic made-up"),
+        ("X-API-Key", "made-up", "made-up"),
+    ] {
+        let given = ToolServerAuthGiven::Key { header: header.into(), key: ToolServerKey::new(key) };
+        let (_, secret) = read(given).unwrap();
+        assert_eq!(secret, Some(ToolServerSecret::Key(ToolServerKey::new(kept))), "{key:?} in {header}");
+    }
+}
+
+#[test]
 fn adding_one_of_an_id_again_is_the_server_as_it_is_whatever_else_is_asked() {
     let dir = tempfile::tempdir().unwrap();
     let (servers, store) = servers_in(dir.path());
@@ -106,7 +121,7 @@ fn removing_forgets_the_server_and_its_key_and_again_there_is_none() {
     assert!(removed.rev > other.rev);
     assert_eq!(removed.server, added);
     assert_eq!(store.list_records().unwrap().tool_servers, [other]);
-    assert_eq!(files_in(dir.path()), [r#"{"format":"key","key":"another"}"#]);
+    assert_eq!(files_in(dir.path()), [r#"{"format":"key","key":"Bearer another"}"#]);
     assert_eq!(refused(servers.remove(&"k".into())), ErrorCode::NotFound);
     assert!(servers.add(with_neither("k", "Linear")).unwrap().changed, "its name is free, and so is its ID");
 }

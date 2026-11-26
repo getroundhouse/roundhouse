@@ -72,6 +72,7 @@ mod subagent_chats;
 mod terminal_screens;
 mod tool_chats;
 mod tool_screens;
+mod tool_server_screens;
 mod turn_screens;
 mod typed_chats;
 mod unseen_screens;

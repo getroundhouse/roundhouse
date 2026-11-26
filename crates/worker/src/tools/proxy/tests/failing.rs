@@ -52,9 +52,9 @@ async fn a_server_that_refuses_is_said_to_have_rather_than_its_401_or_403_passed
         let without = told(keyless).await;
 
         let refused = "Linear (Northwind) refused the key Roundhouse sent it";
-        assert_eq!(with_a_key, format!("{refused} ({code}). Change it in Settings › MCP servers."));
+        assert_eq!(with_a_key, format!("{refused} ({code}). Add it again with another in Settings › MCP servers."));
         let refused = "Linear (Northwind) refused a request without a key";
-        assert_eq!(without, format!("{refused} ({code}). Give it one in Settings › MCP servers."));
+        assert_eq!(without, format!("{refused} ({code}). Add it again with one in Settings › MCP servers."));
     }
 }
 

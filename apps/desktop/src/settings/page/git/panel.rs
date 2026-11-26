@@ -1,78 +1,25 @@
-//! A panel of Git's, raised as Agents' panels are: its title and what it says under that, what's in it, then its
-//! buttons. Whichever it is, it's brought into sight as it opens, wherever it is on the page, and gives Settings the
-//! focus back as it goes.
+//! A panel of Git's, framed as [`panel::framed`] frames any page's, and placed by what the page keeps.
 
-use gpui_kit::base::ElementExt as _;
-use gpui_kit::component::h_flex;
-use gpui_kit::{
-    AnyElement, App, ClickEvent, Div, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
-};
-use look::Typeset as _;
+use gpui_kit::{AnyElement, App, IntoElement, Window};
 
+use super::super::panel;
+pub(super) use super::super::panel::{Framed, button, buttons, choice, choices};
 use super::Drawing;
 use super::kept::Panel;
 
-/// What a panel says and holds.
-pub(super) struct Framed {
-    pub(super) title: SharedString,
-    pub(super) lead: SharedString,
-    pub(super) body: Option<AnyElement>,
-    /// Why the hub refused what the panel asked, in red, as an alert, so assistive apps say it as it comes.
-    pub(super) refused: Option<String>,
-    pub(super) buttons: Div,
-}
+/// The page's name, which its panels' parts are known by.
+const PAGE: &str = "git";
 
-/// `panel`, as `framed` says.
-pub(super) fn framed(drawing: &Drawing<'_>, panel: &Panel, framed: Framed, cx: &App) -> AnyElement {
-    let refused = framed.refused.map(|refused| refusal(refused, cx));
+/// `open`, as `framed` says.
+pub(super) fn framed(drawing: &Drawing<'_>, open: &Panel, framed: Framed, cx: &App) -> AnyElement {
     let (kept, scroll) = (drawing.kept.clone(), drawing.scroll.clone());
-    let card = look::card(look::CardKind::InPlace, look::CardWidth::Fills)
-        .roomy()
-        .heading(look::card_heading(framed.title))
-        .under_heading(said_under_the_title(framed.lead, cx))
-        .children(framed.body)
-        .children(refused)
-        .child(framed.buttons);
-    div()
-        .id("git-panel")
-        .track_focus(&panel.focus)
-        .relative()
-        .child(card)
-        .on_prepaint(move |bounds, window, cx| kept.update(cx, |kept, _| kept.laid_out(bounds, &scroll, window)))
-        .test_support()
-        .into_any_element()
+    let laid_out = move |bounds, window: &mut Window, cx: &mut App| {
+        kept.update(cx, |kept, _| kept.laid_out(bounds, &scroll, window));
+    };
+    panel::framed(PAGE, &open.place, framed, laid_out, cx)
 }
 
-/// Why the hub, or GitHub, refused what a panel asked, in red, as an alert, so assistive apps say it as it comes. Tests
-/// find it by `git-refused`.
+/// Why the hub, or GitHub, refused what a panel asked.
 pub(super) fn refusal(refused: String, cx: &App) -> impl IntoElement + use<> {
-    let refused = SharedString::from(refused);
-    let said = div().id("git-refused").role(Role::Alert).aria_label(refused.clone());
-    said.typeset(look::Type::Body).text_color(look::colors(cx).error).child(refused).test_support()
-}
-
-/// What a panel says under its title, which tests read by `git-panel-says`, as assistive apps do.
-fn said_under_the_title(said: SharedString, cx: &App) -> impl IntoElement + use<> {
-    let said_as = div().id("git-panel-says").role(Role::Label).aria_label(said.clone());
-    said_as.text_color(look::colors(cx).text_muted).child(said).test_support()
-}
-
-/// A panel's buttons, at its end.
-pub(super) fn buttons() -> Div {
-    h_flex().justify_end().gap(look::Space::Small)
-}
-
-/// One of a panel's buttons, known to tests by `id`: its main one when it's `primary`, which can be `off`.
-pub(super) fn button(
-    id: &'static str,
-    label: impl Into<SharedString>,
-    primary: bool,
-    off: bool,
-    act: impl Fn(&mut Window, &mut App) + 'static,
-) -> look::Button {
-    let kind = if primary { look::ButtonKind::Main } else { look::ButtonKind::Outlined };
-    look::button(id, kind, look::ControlSize::Regular, label)
-        .off(off)
-        .on_click(move |_: &ClickEvent, window, cx| act(window, cx))
+    panel::refusal(PAGE, refused, cx)
 }

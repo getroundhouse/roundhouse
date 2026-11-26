@@ -137,6 +137,20 @@ fn a_url_is_an_http_address_of_a_host_trimmed_and_otherwise_as_typed() {
 }
 
 #[test]
+fn a_urls_host_is_what_its_between_the_scheme_and_the_path() {
+    for (url, host) in [
+        ("https://mcp.example.com/mcp", "mcp.example.com"),
+        ("HTTPS://mcp.example.com", "mcp.example.com"),
+        ("http://localhost:8080?team=a/b", "localhost:8080"),
+        ("http://[::1]:8080/mcp", "[::1]:8080"),
+        ("mcp.example.com", "mcp.example.com"),
+        ("https://", "https://"),
+    ] {
+        assert_eq!(ToolServerUrl::stored(url.to_owned()).host(), host);
+    }
+}
+
+#[test]
 fn a_keys_header_is_any_but_one_the_connection_to_the_server_sets() {
     use ToolServerHeaderError as E;
     for header in ["Authorization", "X-API-Key", "x_key", "Cookie"] {

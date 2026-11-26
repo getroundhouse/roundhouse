@@ -198,6 +198,18 @@ fn picture(picture: Picture, cx: &App) -> Div {
     }
 }
 
+/// Why the hub couldn't do what was asked of the row `id`, in red, under it, as an alert, so assistive apps say it as it
+/// comes. Tests find it by the row's `id` and `-failed`.
+pub(super) fn failed_line(id: &SharedString, said: &str, cx: &App) -> AnyElement {
+    let line = div().id(SharedString::from(format!("{id}-failed"))).role(Role::Alert).aria_label(said.to_string());
+    line.pb(look::Space::Medium)
+        .typeset(look::Type::Body)
+        .text_color(look::colors(cx).error)
+        .child(said.to_string())
+        .test_support()
+        .into_any_element()
+}
+
 /// A row's `…` menu of `items`, which opens under its button and towards the left, so it stays inside the page's
 /// column. Its button is known to tests by `id`, and to assistive apps as More for `name`, and it's off while `off`.
 pub(super) fn menu(

@@ -9,6 +9,7 @@ mod github_gh;
 mod lines;
 mod providers;
 mod summarized;
+mod tool_servers;
 mod working;
 
 pub(super) use accounts::{
@@ -32,6 +33,7 @@ pub(super) use providers::{
     providers_no_key, providers_ssh,
 };
 pub(super) use summarized::summarized;
+pub(super) use tool_servers::{one_tool_server, tool_server_refused, tool_servers};
 pub(super) use working::{
     queue_held, queued, steered, steered_thinking, streaming, thinking_streaming, waiting_on_checks, waiting_on_stacks,
     working_background,

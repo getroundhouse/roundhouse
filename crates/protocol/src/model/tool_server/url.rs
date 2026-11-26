@@ -68,6 +68,13 @@ impl ToolServerUrl {
         Self(text)
     }
 
+    /// The host a server is at, with its port if it has one, such as `mcp.example.com`, for a row with no room for the
+    /// rest. All of one that isn't a URL, which only a hub whose rule differs could have kept.
+    pub fn host(&self) -> &str {
+        let after_scheme = self.0.split_once("://").map_or(self.as_str(), |(_, rest)| rest);
+        after_scheme.split(['/', '?']).next().filter(|host| !host.is_empty()).unwrap_or(&self.0)
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }

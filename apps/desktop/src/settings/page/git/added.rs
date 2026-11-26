@@ -5,7 +5,6 @@
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedString, Styled as _, div};
-use look::Typeset as _;
 use protocol::model::{GithubAccount, GithubAccountId, SentCredential};
 
 use super::super::account_row::{self, Detail, Picture, Row, Tone};
@@ -91,7 +90,9 @@ fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyE
         | Standing::GhOtherUser => Tone::Problem,
     };
     let kept = drawing.kept.read(cx);
-    let failed = kept.failed(&Asked::Account(account.id.clone())).map(|said| failed_line(said, cx).into_any_element());
+    let id = SharedString::from(format!("git-account-{}", account.id));
+    let failed = kept.failed(&Asked::Account(account.id.clone()));
+    let failed = failed.map(|said| account_row::failed_line(&id, said, cx));
     let panel = kept.panel.as_ref().filter(|panel| panel.under() == Some(&account.id));
     let panel =
         panel.map(|panel| div().pb(look::Space::Large).child(draw_panel(drawing, panel, cx)).into_any_element());
@@ -104,7 +105,7 @@ fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyE
         ),
     };
     let shown = Row {
-        id: SharedString::from(format!("git-account-{}", account.id)),
+        id,
         picture,
         name: drawing.records.github_username(account).to_string(),
         dim: standing == Standing::Disconnected,
@@ -116,10 +117,4 @@ fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyE
         under: failed.into_iter().chain(panel).collect(),
     };
     account_row::row(shown, COLUMNS, cx)
-}
-
-/// Why the hub couldn't do what was asked of a row, or of Found, in red, under it.
-pub(super) fn failed_line(said: &str, cx: &App) -> Div {
-    let line = div().pb(look::Space::Medium).typeset(look::Type::Body).text_color(look::colors(cx).error);
-    line.child(said.to_string())
 }

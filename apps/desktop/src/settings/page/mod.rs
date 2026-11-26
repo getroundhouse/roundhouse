@@ -10,6 +10,7 @@ mod general;
 mod git;
 mod lists;
 mod notifications;
+mod panel;
 mod permission_row;
 mod permissions;
 mod providers;
@@ -22,6 +23,7 @@ mod speech_row;
 mod stand_in_hub;
 #[cfg(test)]
 mod tests;
+mod tool_servers;
 mod voice;
 
 mod settings_view;

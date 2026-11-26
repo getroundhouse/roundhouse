@@ -16,6 +16,7 @@ mod made_up;
 #[cfg(target_os = "macos")]
 mod permissions;
 mod search;
+mod tool_servers;
 
 mod changing;
 pub(crate) use changing::open_settings;

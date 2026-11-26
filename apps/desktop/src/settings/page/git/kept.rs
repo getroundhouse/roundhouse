@@ -8,7 +8,8 @@ use client_core::records::Snapshot;
 use gpui_kit::{Bounds, Context, FocusHandle, Pixels, ScrollHandle, Task, Window};
 use protocol::model::{GithubAccountId, GithubAppId, GithubSignInId};
 
-use super::super::redraw::{RedrawAt, bring_into_sight};
+use super::super::panel::Place;
+use super::super::redraw::RedrawAt;
 use super::Asking;
 use super::app_panel::AppPanel;
 use super::gh_choice::ChoosingPanel;
@@ -51,10 +52,7 @@ pub(super) enum Asked {
 /// A panel open on the page: under Added's heading, or under the row of the account it renews.
 pub(super) struct Panel {
     pub(super) shows: Shows,
-    /// Holds the focus of everything in the panel, to tell whether it has it as it goes.
-    pub(super) focus: FocusHandle,
-    /// Whether to bring the panel into sight as it's next laid out, which it is once as it opens.
-    reveal: bool,
+    pub(super) place: Place,
 }
 
 pub(super) enum Shows {
@@ -104,16 +102,14 @@ impl Kept {
 
     /// Gives the panel itself the focus, when something in it had it, as what had it goes, so keys still reach Settings.
     pub(super) fn focus_the_panel(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(panel) = &self.panel
-            && panel.focus.contains_focused(window, cx)
-        {
-            window.focus(&panel.focus, cx);
+        if let Some(panel) = &self.panel {
+            panel.place.keep_focus(window, cx);
         }
     }
 
     /// Opens a panel showing `shows`, in place of any that was open.
     pub(super) fn open(&mut self, shows: Shows, cx: &mut Context<Self>) {
-        self.panel = Some(Panel { shows, focus: cx.focus_handle(), reveal: true });
+        self.panel = Some(Panel { shows, place: Place::opening(cx) });
         self.failed = None;
         cx.notify();
     }
@@ -125,22 +121,16 @@ impl Kept {
         if let Shows::SignIn(sign_in) = &panel.shows {
             self.put_away.insert(sign_in.id.clone());
         }
-        if let Some(settings) = &self.settings_focus
-            && panel.focus.contains_focused(window, cx)
-        {
-            window.focus(settings, cx);
+        if let Some(settings) = &self.settings_focus {
+            panel.place.give_focus(settings, window, cx);
         }
         cx.notify();
     }
 
-    /// Brings the panel into sight on Settings' `scroll`, once as it opens, now that it's laid out at `bounds`. This is
-    /// during a draw, after the page has been placed by the scroll as it was, so the scroll shows in the frame after,
-    /// which is asked for once this one is done, since the window can't be marked for drawing again while it draws.
+    /// The panel was laid out at `bounds`, on Settings' `scroll`, as [`Place::laid_out`] says.
     pub(super) fn laid_out(&mut self, bounds: Bounds<Pixels>, scroll: &ScrollHandle, window: &mut Window) {
-        let Some(panel) = self.panel.as_mut().filter(|panel| panel.reveal) else { return };
-        panel.reveal = false;
-        if bring_into_sight(scroll, bounds) {
-            window.on_next_frame(|window, _| window.refresh());
+        if let Some(panel) = &mut self.panel {
+            panel.place.laid_out(bounds, scroll, window);
         }
     }
 

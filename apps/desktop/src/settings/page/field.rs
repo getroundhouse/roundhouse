@@ -4,7 +4,8 @@
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::v_flex;
 use gpui_kit::{
-    App, AppContext as _, Context, Div, Entity, ParentElement as _, Pixels, Styled as _, Subscription, Window, div, px,
+    App, AppContext as _, Context, Div, Entity, ParentElement as _, Pixels, SharedString, Styled as _, Subscription,
+    Window, div, px,
 };
 use look::Typeset as _;
 
@@ -35,7 +36,7 @@ impl Field {
         Field { input, _entered: entered }
     }
 
-    /// A field for a token, whose text shows only as dots, and can't be copied from.
+    /// A field for a token or a key, whose text shows only as dots, and can't be copied from.
     pub(super) fn token<T: 'static>(
         window: &mut Window,
         cx: &mut Context<T>,
@@ -60,7 +61,7 @@ pub(super) fn labelled(
     called: &'static str,
     id: &'static str,
     input: &Entity<InputState>,
-    says: &'static str,
+    says: impl Into<SharedString>,
     cx: &App,
 ) -> Div {
     let colors = look::colors(cx);
@@ -71,5 +72,5 @@ pub(super) fn labelled(
         .gap(look::Space::Small)
         .child(div().emphasis().child(called))
         .child(input)
-        .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child(says))
+        .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child(says.into()))
 }

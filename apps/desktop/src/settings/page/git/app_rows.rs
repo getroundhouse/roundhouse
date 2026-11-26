@@ -2,12 +2,11 @@
 //! app's mark, `App`, and where it's installed, and a row for each app installed nowhere yet, which says so.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::{AnyElement, App, IntoElement as _, SharedString};
+use gpui_kit::{AnyElement, App, SharedString};
 use protocol::model::{GithubAccount, GithubApp, GithubInstallation};
 
-use super::super::account_row::{self, Detail, Picture, Row, Tone};
+use super::super::account_row::{self, Detail, Picture, Row, Tone, failed_line};
 use super::Drawing;
-use super::added::failed_line;
 use super::app_menu::{app_menu, installation_menu};
 use super::app_words;
 use super::git_page::COLUMNS;
@@ -45,9 +44,10 @@ pub(super) fn not_installed(drawing: &Drawing<'_>, cx: &App) -> Vec<AnyElement> 
 
 /// `app`'s row, with why the hub couldn't do what was asked of it under it.
 fn app_row(drawing: &Drawing<'_>, app: &GithubApp, cx: &App) -> AnyElement {
-    let failed = drawing.kept.read(cx).failed(&Asked::App(app.id)).map(|said| failed_line(said, cx).into_any_element());
+    let id = SharedString::from(format!("git-app-{}", app.id));
+    let failed = drawing.kept.read(cx).failed(&Asked::App(app.id)).map(|said| failed_line(&id, said, cx));
     let shown = Row {
-        id: SharedString::from(format!("git-app-{}", app.id)),
+        id,
         picture: Picture::Mark(Lucide::Bot),
         name: drawing.records.github_app_name(app),
         dim: false,
