@@ -15,6 +15,7 @@ mod connections;
 mod failure;
 mod forwarding;
 mod headers;
+mod message;
 mod passed_on;
 mod path;
 mod private;

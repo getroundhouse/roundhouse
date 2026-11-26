@@ -5,6 +5,7 @@ use hyper::body::Bytes;
 use hyper::header::{AUTHORIZATION, HOST, HeaderMap, HeaderValue, ORIGIN};
 use hyper::{Method, StatusCode, Uri};
 use protocol::Build;
+use protocol::model::RunId;
 use protocol::worker::ToolsToken;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -18,7 +19,7 @@ fn tools() -> Tools {
     let (frames, _) = mpsc::channel(8);
     let tools = Tools::new(Arc::new(Asks::new(frames)), Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll);
     let caller = crate::tools::Caller { session_id: "s".into(), worktree: "/no/worktree".into() };
-    tools.admit(ToolsToken::new("token-s"), caller);
+    tools.admit(ToolsToken::new("token-s"), caller, RunId::new(1));
     tools
 }
 

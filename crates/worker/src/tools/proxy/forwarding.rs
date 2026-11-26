@@ -1,6 +1,6 @@
 use super::connections::CutOff;
 use super::server::Server;
-use super::{Failure, PassedOn, Proxy, Target, headers};
+use super::{Failure, PassedOn, Proxy, Target, failure, headers};
 use crate::asks::Asks;
 use crate::tools::http::AnswerBody;
 use http_body_util::{Either, Full};
@@ -29,7 +29,7 @@ pub(in super::super) struct Asked<'a> {
 impl Proxy {
     /// Passes a request on to its server, and the answer back as it comes, or says why there's none.
     pub(in super::super) async fn forward(&self, id: &ToolServerId, asked: Asked<'_>) -> Response<AnswerBody> {
-        let Some(server) = self.server(id) else { return Failure::Removed.answer("", &asked.body) };
+        let Some(server) = self.server(id) else { return failure::not_set(&asked.body) };
         let let_in = match self.connections.lets_in(&server.id, &server.place, &asked) {
             Ok(let_in) => let_in,
             Err(CutOff { first }) => {
@@ -50,7 +50,7 @@ impl Proxy {
             Ok(response) => {
                 let said = (response.status(), response.headers());
                 self.connections.answered(&server.id, &server.place, &asked, let_in, said);
-                passed_on(response, |body| PassedOn::new(body, &asked, self.moved(&server)))
+                passed_on(response, |body| PassedOn::new(body, &asked, self.gone(&server)))
             }
             Err(failure) => {
                 warn!(name: "tool_server.request_failed", server_id = %server.id, ?failure, "A request to a tool server failed");

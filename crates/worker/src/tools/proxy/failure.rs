@@ -1,10 +1,9 @@
+use super::message::Message;
 use crate::tools::http::{AnswerBody, whole};
 use hyper::header::HeaderValue;
 use hyper::{Response, StatusCode};
 use protocol::worker::ToolAccess;
-use serde::Deserialize;
-use serde::de::IgnoredAny;
-use serde_json::{Value, json};
+use serde_json::json;
 
 /// JSON-RPC's code for an error inside whoever answers, which a server that can't be used is to its client.
 const INTERNAL_ERROR: i32 = -32603;
@@ -12,8 +11,6 @@ const INTERNAL_ERROR: i32 = -32603;
 /// Why a request got no answer from its server, or one that isn't passed on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Failure {
-    /// The hub has the server no more.
-    Removed,
     /// The person has moved it to another URL since the agent connected to it.
     Moved,
     /// Its URL or its header isn't one HTTP can be sent with.
@@ -49,7 +46,6 @@ impl Failure {
     /// holds no key, and nothing of a URL.
     fn said(self, label: &str) -> String {
         match self {
-            Failure::Removed => "This MCP server was removed from Roundhouse, so its tools can't be used.".into(),
             Failure::Moved => format!(
                 "{label} has been moved to another URL in Roundhouse, so nothing is sent to it until this agent connects \
                  to it again."
@@ -106,30 +102,29 @@ impl Failure {
         }
     }
 
-    /// The answer to a request whose body is `asked`: a JSON-RPC error for a request with an ID, and otherwise a status
-    /// that says it's the server that failed, which isn't one a CLI takes for the session's token being rejected.
+    /// The answer to a request whose body is `asked`, where `label` is what the person calls the server.
     pub(super) fn answer(self, label: &str, asked: &[u8]) -> Response<AnswerBody> {
-        let said = self.said(label);
-        match request_id(asked) {
-            Some(id) => {
-                let error = json!({ "code": INTERNAL_ERROR, "message": said });
-                let body = json!({ "jsonrpc": "2.0", "id": id, "error": error }).to_string();
-                whole(StatusCode::OK, HeaderValue::from_static("application/json"), body)
-            }
-            None => whole(StatusCode::BAD_GATEWAY, HeaderValue::from_static("text/plain; charset=utf-8"), said),
-        }
+        answer(self.said(label), asked)
     }
 }
 
-/// A JSON-RPC request, which has both. A notification has no ID, and an answer to the server's own request no method.
-#[derive(Deserialize)]
-struct Message {
-    #[serde(rename = "method")]
-    _method: IgnoredAny,
-    id: Value,
+/// The answer to a request whose body is `asked`, to a server the hub hasn't set the worker with, as when the person has
+/// removed it, or the hub can't read its key, so nothing is known of what it's called.
+pub(super) fn not_set(asked: &[u8]) -> Response<AnswerBody> {
+    let said =
+        "Roundhouse can't use this MCP server now. It may have been removed, or its key or sign-in can't be read.";
+    answer(said.to_string(), asked)
 }
 
-fn request_id(body: &[u8]) -> Option<Value> {
-    let Message { id, .. } = serde_json::from_slice(body).ok()?;
-    (!id.is_null()).then_some(id)
+/// The answer to a request whose body is `asked`, saying `said`: a JSON-RPC error for a request with an ID, and otherwise
+/// a status that says it's the server that failed, which isn't one a CLI takes for the session's token being rejected.
+fn answer(said: String, asked: &[u8]) -> Response<AnswerBody> {
+    match Message::of(asked).and_then(|message| message.id) {
+        Some(id) => {
+            let error = json!({ "code": INTERNAL_ERROR, "message": said });
+            let body = json!({ "jsonrpc": "2.0", "id": id, "error": error }).to_string();
+            whole(StatusCode::OK, HeaderValue::from_static("application/json"), body)
+        }
+        None => whole(StatusCode::BAD_GATEWAY, HeaderValue::from_static("text/plain; charset=utf-8"), said),
+    }
 }

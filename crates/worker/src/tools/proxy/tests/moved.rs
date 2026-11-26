@@ -8,6 +8,7 @@ use hyper::{Method, Response, StatusCode};
 use logging::testing::Logs;
 use parking_lot::Mutex;
 use protocol::capability::setup::{ServerState, ToolServerState};
+use protocol::model::RunId;
 use protocol::worker::{AskReply, ProxiedServer, ToolsToken};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -167,43 +168,75 @@ async fn an_agent_that_starts_has_each_server_where_it_is() {
     move_to(&agent, &after);
 
     let caller = Caller { session_id: "s".into(), worktree: "/no/worktree".into() };
-    agent.tools.admit(ToolsToken::new("token-s"), caller);
+    agent.tools.admit(ToolsToken::new("token-s"), caller, RunId::new(2));
 
     assert_eq!(send(&agent, Method::POST, "", CALL).await.body, CALL);
 }
 
-/// Its messages come from the server before, and it's open for as long as the agent runs, whichever way its protocol
-/// has it asked for. A call under way goes on.
+/// As its run ends, so the worker keeps nothing of an agent that has gone, but not as an earlier run's ends after the
+/// next has started.
 #[tokio::test]
-async fn a_servers_stream_ends_as_its_moved_and_a_calls_answer_goes_on() {
-    let after = giving("after").await;
-    let (senders, streams): (Vec<_>, Vec<_>) = (0..3).map(|_| mpsc::channel(1)).unzip();
-    let [get, listening, call] = <[_; 3]>::try_from(senders).unwrap();
-    let streams = Mutex::new(streams.into_iter());
-    let before = StandIn::answering(move |_| {
-        Response::builder()
-            .header("content-type", "text/event-stream")
-            .body(Either::Right(Events(streams.lock().next().unwrap())))
-            .unwrap()
-    })
-    .await;
-    let agent = Agent::with(vec![before.as_set()]).await;
-    let path = agent.path().await;
-    let got = agent.request(Method::GET, &path, &[], "").await;
-    let listened = agent.request(Method::POST, &path, &[], LISTEN).await;
-    let mut answer = agent.request(Method::POST, &path, &[], CALL).await;
-    let within = Duration::from_secs(10);
-
+async fn what_the_worker_knows_of_an_agent_goes_as_its_run_ends() {
+    let (before, after) = (giving("before").await, giving("after").await);
+    let agent = connected(&before, "before").await;
+    let session_id = "s".into();
+    let place = |server: &StandIn| Some(server.as_set().url.place());
+    let connected_to =
+        |agent: &Agent| agent.tools.proxy.saying_where(&session_id, vec![hubs()])[0].connected_to.clone();
     move_to(&agent, &after);
 
-    for (mut stream, servers) in [(got, get), (listened, listening)] {
-        let ended = timeout(within, stream.frame()).await.expect("the stream to end");
-        assert!(ended.is_none(), "{ended:?}");
-        timeout(within, servers.closed()).await.expect("the server's end of it to end");
+    agent.tools.proxy.ended(&session_id, RunId::new(2));
+    let not_its_run = connected_to(&agent);
+    agent.tools.proxy.ended(&session_id, RunId::new(1));
+    let its_run = connected_to(&agent);
+    let caller = Caller { session_id: "s".into(), worktree: "/no/worktree".into() };
+    agent.tools.admit(ToolsToken::new("token-s"), caller, RunId::new(2));
+    send(&agent, Method::POST, "", INITIALIZE).await;
+    agent.tools.proxy.ended(&session_id, RunId::new(1));
+
+    assert_eq!(not_its_run, place(&before));
+    assert_eq!(its_run, None);
+    assert_eq!(connected_to(&agent), place(&after), "the next run's is kept");
+}
+
+/// Its messages come from the server before, and it's open for as long as the agent runs, whichever way its protocol
+/// has it asked for. A call under way goes on. The same once the server is removed, or left out of the set.
+#[tokio::test]
+async fn a_servers_stream_ends_as_its_moved_or_removed_and_a_calls_answer_goes_on() {
+    let after = giving("after").await;
+    for removed in [false, true] {
+        let (senders, streams): (Vec<_>, Vec<_>) = (0..3).map(|_| mpsc::channel(1)).unzip();
+        let [get, listening, call] = <[_; 3]>::try_from(senders).unwrap();
+        let streams = Mutex::new(streams.into_iter());
+        let before = StandIn::answering(move |_| {
+            Response::builder()
+                .header("content-type", "text/event-stream")
+                .body(Either::Right(Events(streams.lock().next().unwrap())))
+                .unwrap()
+        })
+        .await;
+        let agent = Agent::with(vec![before.as_set()]).await;
+        let path = agent.path().await;
+        let got = agent.request(Method::GET, &path, &[], "").await;
+        let listened = agent.request(Method::POST, &path, &[], LISTEN).await;
+        let mut answer = agent.request(Method::POST, &path, &[], CALL).await;
+        let within = Duration::from_secs(10);
+
+        if removed {
+            agent.tools.proxy.set(vec![]);
+        } else {
+            move_to(&agent, &after);
+        }
+
+        for (mut stream, servers) in [(got, get), (listened, listening)] {
+            let ended = timeout(within, stream.frame()).await.expect("the stream to end");
+            assert!(ended.is_none(), "{ended:?}");
+            timeout(within, servers.closed()).await.expect("the server's end of it to end");
+        }
+        call.send(Bytes::from_static(b"data: 1\n\n")).await.unwrap();
+        let event = timeout(within, answer.frame()).await.expect("the answer").unwrap().unwrap();
+        assert_eq!(event.into_data().unwrap(), "data: 1\n\n");
     }
-    call.send(Bytes::from_static(b"data: 1\n\n")).await.unwrap();
-    let event = timeout(within, answer.frame()).await.expect("the answer").unwrap().unwrap();
-    assert_eq!(event.into_data().unwrap(), "data: 1\n\n");
 }
 
 /// A call that's refused as it's moved isn't made again where it's moved to.
@@ -224,11 +257,9 @@ async fn a_call_isnt_made_again_where_its_server_has_moved() {
     assert!(after.heard().is_empty(), "{:?}", after.heard());
 }
 
-/// So the app can tell that a running agent is cut off.
-#[tokio::test]
-async fn what_an_agent_says_of_its_servers_is_passed_on_with_where_its_connected() {
-    let (before, after) = (giving("before").await, giving("after").await);
-    let says = || ToolServerState {
+/// What an agent says of the only server, which is the hub's.
+fn hubs() -> ToolServerState {
+    ToolServerState {
         name: "linear_northwind".into(),
         hubs: Some("t-1".into()),
         connected_to: None,
@@ -236,7 +267,14 @@ async fn what_an_agent_says_of_its_servers_is_passed_on_with_where_its_connected
         error: None,
         tools: None,
         connects_again: None,
-    };
+    }
+}
+
+/// So the app can tell that a running agent is cut off.
+#[tokio::test]
+async fn what_an_agent_says_of_its_servers_is_passed_on_with_where_its_connected() {
+    let (before, after) = (giving("before").await, giving("after").await);
+    let says = hubs;
     let own = || ToolServerState { name: "own".into(), hubs: None, ..says() };
     let agent = connected(&before, "before").await;
     let place = |server: &StandIn| Some(server.as_set().url.place());

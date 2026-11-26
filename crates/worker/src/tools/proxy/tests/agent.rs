@@ -8,6 +8,7 @@ use hyper::header::{HOST, HeaderMap, HeaderName, HeaderValue};
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use protocol::Build;
+use protocol::model::RunId;
 use protocol::worker::{AskAnswer, AskOutcome, ProxiedServer, ToolsToken, WorkerAsk, WorkerFrame};
 use serde_json::Value;
 use tokio::io::AsyncWriteExt;
@@ -53,7 +54,7 @@ impl Agent {
         let mut tools = Tools::new(Arc::new(Asks::new(frames)), Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll);
         tools.proxy.upstream = upstream;
         let caller = Caller { session_id: "s".into(), worktree: "/no/worktree".into() };
-        tools.admit(ToolsToken::new("token-s"), caller);
+        tools.admit(ToolsToken::new("token-s"), caller, RunId::new(1));
         tools.proxy.set(servers);
         let tools = Arc::new(tools);
         let port = tools.serve(None).await.unwrap();

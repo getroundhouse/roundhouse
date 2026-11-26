@@ -142,7 +142,7 @@ fn an_agent_calls_a_server_the_person_added_with_their_key_which_neither_it_nor_
 
 /// Its worker is set the rest while it runs, and the agent that was given the server is told why its calls fail.
 #[test]
-fn an_agent_that_has_a_server_the_person_removes_is_told_it_was_removed() {
+fn an_agent_that_has_a_server_the_person_removes_is_told_it_cant_be_used() {
     let (url, _) = stand_in();
     let stack = Stack::start();
     let client = stack.client();
@@ -158,7 +158,7 @@ fn an_agent_that_has_a_server_the_person_removes_is_told_it_was_removed() {
         answered = calls::run(&client, &chat.id, CALL, turn);
         answered.iter().any(|(_, is_error)| *is_error)
     });
-    assert!(answered[0].0.contains("was removed"), "{answered:?}");
+    assert!(answered[0].0.contains("Roundhouse can't use this MCP server now"), "{answered:?}");
 }
 
 /// The server at the stand-in, as `Linear (Northwind)`.

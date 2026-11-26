@@ -283,7 +283,7 @@ A running agent that couldn't connect to the server tries again once you've save
 
 ### Remove
 
-**Remove,** in the row's **…** menu, has the hub forget the server with its sign-in or its key, and asks first. An agent already running can't use the server's tools from then on. It revokes neither: a key still works wherever else you've kept it, and the service may go on listing Roundhouse until you take it off there.
+**Remove,** in the row's **…** menu, has the hub forget the server with its sign-in or its key, and asks first. An agent already running can't use the server's tools from then on: each call fails, and says Roundhouse can't use the server now. It revokes neither: a key still works wherever else you've kept it, and the service may go on listing Roundhouse until you take it off there.
 
 ![An MCP server's menu, with Sign in again, Edit and Remove](../../spec/screens/settings-mcp-menu.png)
 

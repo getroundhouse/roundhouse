@@ -101,19 +101,31 @@ fn a_server_whose_key_cant_be_read_or_whose_way_of_knowing_the_person_isnt_known
     }
 }
 
+/// Such as one only in why a server is left out, which the log says.
 #[test]
 fn a_change_that_changes_nothing_workers_are_sent_has_them_sent_nothing() {
+    let logs = Logs::capture();
     let dir = tempfile::tempdir().unwrap();
-    let (servers, _) = servers_in(dir.path());
+    let (servers, store) = servers_in(dir.path());
     servers.add(with_key("k", "Linear", "Bearer made-up")).unwrap();
+    servers.add(with_key("u", "Docs", "Bearer made-up-u")).unwrap();
+    let file = store.tool_server(&"u".into()).unwrap().unwrap().1.unwrap();
+    let path = dir.path().join("tool-servers").join(file.as_str());
+    std::fs::remove_file(&path).unwrap();
+    servers.edit(named("k", "Linear")).unwrap();
     let mut following = servers.sent();
     following.borrow_and_update();
 
     servers.add(with_key("k", "Linear", "Bearer made-up")).unwrap();
     servers.edit(named("k", "Linear")).unwrap();
     servers.add(with_key("k2", "linear", "another")).unwrap_err();
-    servers.tidy().unwrap();
+    std::fs::create_dir(&path).unwrap();
+    servers.edit(named("k", "Linear")).unwrap();
 
+    assert!(!following.has_changed().unwrap());
+    assert!(logs.text().contains("its file can't be read"), "{}", logs.text());
+    std::fs::remove_dir(&path).unwrap();
+    servers.tidy().unwrap();
     assert!(!following.has_changed().unwrap());
     servers.remove(&"k".into()).unwrap();
     assert!(following.has_changed().unwrap());
