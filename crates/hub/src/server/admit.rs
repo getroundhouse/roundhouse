@@ -321,6 +321,7 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::SessionDecide(..)
         | R::SessionCancel(..)
         | R::SessionCompact(..)
+        | R::SessionReloadToolServer(..)
         | R::SessionConfigure(..)
         | R::SessionClose(..)
         | R::SessionReopen(..)

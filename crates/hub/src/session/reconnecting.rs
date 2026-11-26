@@ -5,22 +5,20 @@
 //! them the worker has the token of, as its link says. So a sign-in that finishes as the agent starts, or while its
 //! worker's connection is down, isn't missed. A server the run says nothing of isn't one it was launched with.
 
-use std::sync::Arc;
-
 use protocol::capability::Control;
-use protocol::capability::setup::{ServerName, ServerState, ToolServerState};
+use protocol::capability::setup::{ServerState, ToolServerState};
 use protocol::model::{RunId, ToolServerId, ToolSignInId};
 use tracing::{info, warn};
 
 use super::messages::Command;
-use super::{AgentRun, LiveSession};
-use crate::hub::{Hub, SessionToolServers};
+use super::{LiveSession, LiveState};
+use crate::hub::Hub;
 use crate::tool_servers::SignedInBy;
 use crate::worker_link::WorkerLink;
 
 /// The sign-in a run has had each of its tool servers by: those signed in to as it launched, and each it has been asked to
-/// connect to again by, or was connected to already. None for a run carried on with from an earlier hub, since nothing
-/// says what it was asked, so one that failed is asked once more. *Unconfirmed.*
+/// connect to again by, whoever asked, or was connected to already. None for a run carried on with from an earlier hub,
+/// since nothing says what it was asked, so one that failed is asked once more. *Unconfirmed.*
 pub(super) struct HadSignIns {
     run: RunId,
     had: SignedInBy,
@@ -30,7 +28,7 @@ pub(super) struct HadSignIns {
 struct Newly {
     id: ToolServerId,
     by: ToolSignInId,
-    name: ServerName,
+    server: ToolServerState,
     /// Whether the run isn't connected to it.
     asks: bool,
 }
@@ -52,23 +50,39 @@ impl HadSignIns {
                 ServerState::Connected => false,
                 ServerState::Starting | ServerState::Disabled | ServerState::Unknown => return None,
             };
-            Some(Newly { id: id.clone(), by: by.clone(), name: server.name.clone(), asks })
+            Some(Newly { id: id.clone(), by: by.clone(), server: server.clone(), asks })
         })
     }
 
-    /// Those to ask the run to connect to again, by the names it has them under. It counts as having had each by
+    /// It has had the server `id` by `by`, if it's `run`'s.
+    fn has_had(&mut self, run: RunId, id: &ToolServerId, by: ToolSignInId) {
+        if self.run == run {
+            self.had.set(id.clone(), by);
+        }
+    }
+
+    /// Those to ask the run to connect to again, as it says they are. It counts as having had each by
     /// `signed_in` from now on, whatever asking comes to, so it's asked once for each sign-in. One it's connected to is
     /// had by it without being asked, since its calls go with the token there is.
-    fn take_due(&mut self, signed_in: &SignedInBy, said: &[ToolServerState]) -> Vec<(ToolServerId, ServerName)> {
+    fn take_due(&mut self, signed_in: &SignedInBy, said: &[ToolServerState]) -> Vec<(ToolServerId, ToolServerState)> {
         let newly: Vec<_> = self.newly(signed_in, said).collect();
         let mut due = Vec::new();
-        for Newly { id, by, name, asks } in newly {
+        for Newly { id, by, server, asks } in newly {
             self.had.set(id.clone(), by);
             if asks {
-                due.push((id, name));
+                due.push((id, server));
             }
         }
         due
+    }
+}
+
+impl LiveState {
+    /// `run` has had the server `id` by `by`, as if it had been asked to connect to it again for that.
+    pub(super) fn has_had(&mut self, run: RunId, id: &ToolServerId, by: ToolSignInId) {
+        if let Some(had) = &mut self.had_sign_ins {
+            had.has_had(run, id, by);
+        }
     }
 }
 
@@ -103,16 +117,18 @@ impl LiveSession {
     pub(super) async fn reconnect_tool_servers(&self) {
         let Ok(hub) = self.hub() else { return };
         let Some(link) = hub.running_worker(&self.workspace_id) else { return };
-        for (id, server) in self.of_the_run(&hub, &link, HadSignIns::take_due).unwrap_or_default() {
-            let control = Control::Reconnect { server };
-            let Some(claims) = self.run_claims().filter(|claims| control.allowed(claims)) else { continue };
+        for (run, id, server) in self.take_due(&hub, &link) {
+            let control = Control::Reconnect { server: server.name.clone() };
+            if !self.run_claims().is_some_and(|claims| control.allowed(&claims)) {
+                continue;
+            }
             info!(
                 name: "session.tool_server_reconnecting",
                 session_id = %self.id,
                 server_id = %id,
                 "Asking an agent to connect to a tool server that's been signed in to"
             );
-            if let Err(e) = self.control_claimed(&link, control, &claims).await {
+            if let Err(e) = self.connect_again(&link, run, &server).await {
                 // Not its message, which can be the CLI's own, and quote the person's settings.
                 warn!(
                     name: "session.tool_server_not_reconnected",
@@ -125,21 +141,31 @@ impl LiveSession {
         }
     }
 
+    /// The servers the run is to be asked to connect to again, and the run, as [`HadSignIns::take_due`] says.
+    fn take_due(&self, hub: &Hub, link: &WorkerLink) -> Vec<(RunId, ToolServerId, ToolServerState)> {
+        let due = self.of_the_run(hub, link, |had, signed_in, said| {
+            let due = had.take_due(signed_in, said);
+            due.into_iter().map(|(id, server)| (had.run, id, server)).collect()
+        });
+        due.unwrap_or_default()
+    }
+
     /// What `read` makes of what the current run has had, what's signed in to on `link`, and what the run says it has, if
     /// it's on that link and has said.
     fn of_the_run<T>(
         &self,
         hub: &Hub,
-        link: &Arc<WorkerLink>,
+        link: &WorkerLink,
         read: impl FnOnce(&mut HadSignIns, &SignedInBy, &[ToolServerState]) -> T,
     ) -> Option<T> {
         let signed_in = link.signed_in().borrow().clone();
-        let agent = self.state.lock().agent.filter(|agent| agent.link == link.id);
-        let AgentRun { run, .. } = agent?;
-        // Forgotten as another run starts, so it's this one's, while this one is current after too.
-        let said = hub.observation_value::<SessionToolServers>(&self.observed_as())?;
+        let (run, said) = self.said_of_its_servers(hub, link)?;
+        let mut said = said?;
         let mut state = self.state.lock();
         state.agent.filter(|agent| agent.run == run)?;
+        if let Some(reloading) = &state.reloading {
+            reloading.starting(run, &mut said);
+        }
         let had = state.had_sign_ins.as_mut().filter(|had| had.run == run)?;
         Some(read(had, &signed_in, &said))
     }
@@ -181,7 +207,7 @@ mod tests {
 
         assert_eq!(had.take_due(&by("first"), &failed), [], "as it launched, and as it's renewed");
         assert_eq!(had.take_due(&SignedInBy::default(), &failed), [], "it needs signing in to");
-        assert_eq!(had.take_due(&by("second"), &failed), [("t".into(), "Linear".into())], "by the name the run has it");
+        assert_eq!(had.take_due(&by("second"), &failed), [("t".into(), failed[0].clone())], "as the run has it");
         assert_eq!(had.take_due(&by("second"), &failed), [], "asked once");
         assert_eq!(had.take_due(&by("third"), &says_hubs(ServerState::NeedsSignIn)).len(), 1);
     }

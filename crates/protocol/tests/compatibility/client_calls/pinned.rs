@@ -47,7 +47,7 @@ pinned! {
         SessionConversationEnd(_), SessionRename(_),
         SessionCallOffWait(_), SessionAssignAccount(_), SessionRead(_), SessionPromptList(_), SessionCompactionList(_),
         SessionFind(_), SessionReadPlaces(_), SessionPrompt(_), SessionQueue(_), SessionChangeQueued(_), SessionUnqueue(_),
-        SessionSendQueued(_), SessionDecide(_), SessionCancel(_), SessionCompact(_), AttachmentAdd(_),
+        SessionSendQueued(_), SessionDecide(_), SessionCancel(_), SessionCompact(_), SessionReloadToolServer(_), AttachmentAdd(_),
         AttachmentRead(_), AttachmentReadRange(_), AttachmentRemove(_), SessionDraft(_), SessionDecisionDraft(_), NewWorkspaceDraftKeep(_),
         NewWorkspaceDraftFileAdd(_), NewWorkspaceDraftFileRead(_), NewWorkspaceDraftFileRemove(_),
         NewWorkspaceCreate(_),

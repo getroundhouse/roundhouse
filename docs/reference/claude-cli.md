@@ -91,12 +91,18 @@ Observed on 2.1.330, with servers that say which config they came from, a config
 
 Observed on 2.1.330 with a scripted model, a home and config directory of the trial's own, and stand-in servers. Only `tengu_glowing_lark` was set among the flags the CLI fetches.
 
-- **`mcp_reconnect` with a `serverName` starts a server that failed,** and its reply holds no header. It answers `success`, or `error` with the server's own message. The model has the tools from its next request, in the same turn too, and `init` lists them from the next turn. A prompt sent meanwhile waits for it.
+- **`mcp_reconnect` with a `serverName` starts a server that failed, and one that's connected again,** the CLI's own too, and its reply holds no header. It answers `success`, or `error` with the server's own message. The model has the tools from its next request, in the same turn too, and `init` lists them from the next turn.
+- **It reads a connected server's list of tools again.** A tool that's new is offered, and a call to one that's gone is refused by the CLI. One the model had already loaded keeps its old schema for the model, in later turns too.
+- **It ends a call in flight to that server, as an error,** which says the connection closed before the call was answered. Calls to other servers go on.
+- **Nothing else on stdin is read until it answers:** a prompt, an interrupt and `get_context_usage` each waited. It answers after 30 s where the server answers nothing, and two at once go one after the other.
+- **`success` doesn't mean the server has its tools.** One whose `tools/list` fails or never answers is `connected`, with none.
+- **One that fails leaves a connected server `failed`,** with its tools gone, and it isn't tried again by itself: not in 75 s after the server was back, nor at the next turn. Another `mcp_reconnect` gets it back.
+- **It closes a 2025 server's session by starting another,** with no DELETE, and nothing sent later has the old ID. A server that has moved to another one, behind the same URL, and isn't reconnected, is sent the old ID at its next call, and the same call again after a 404.
 - **A server that failed as the CLI started isn't tried again by itself,** in 4 s and a new turn. The model is told it failed, with the server's JSON-RPC error message.
 - **`mcp_set_servers` replaces only the servers earlier ones named.** One from `--mcp-config` is kept until a set names it, and then the next set without it removes it, so a set never names `roundhouse`. A server named again unchanged keeps its connection, calls and tasks. Dropping a server fails its running call. A `--resume` doesn't remember one.
 - **`mcp_set_servers`'s reply has no header in it,** as `mcp_status`'s does.
 - **`mcp_toggle` writes to `.claude.json`,** in `disabledMcpServers`, and a resume keeps the server off.
-- **Reconnecting a server with a task running stopped the CLI asking about it** for the 3 s watched.
+- **Reconnecting a server with a task running stops the CLI asking about it for about 5 s,** and then it goes on, and the task's result comes as usual. Where the reconnect fails, the task isn't asked about again, until another reconnect works. `reconnecting…` is all that's said of either.
 - **`notifications/tools/list_changed` makes it list a server's tools again,** over `subscriptions/listen` or a 2025 server's GET stream, where the server declares `listChanged`. It doesn't handshake again unless a 2025 session gets 404.
 - **No MCP tasks were offered with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` set.**
 

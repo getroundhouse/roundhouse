@@ -29,10 +29,9 @@ impl ToolServers {
     }
 
     /// The CLI is being asked to connect to `server` again, in the request `request_id`. Returns the servers to report,
-    /// with that one starting, where the CLI isn't connected to it.
+    /// with that one starting, whether or not the CLI is connected to it, since it lets go of one it is.
     pub(in crate::claude) fn reconnecting(&mut self, request_id: String, server: ServerName) -> Option<Report> {
-        let starting = matches!(self.state_of(&server), Some(ServerState::Failed | ServerState::NeedsSignIn));
-        let report = if starting { self.came_to(server.clone(), ServerState::Starting) } else { None };
+        let report = self.came_to(server.clone(), ServerState::Starting);
         self.reconnecting.insert(request_id, server);
         report
     }
@@ -44,15 +43,11 @@ impl ToolServers {
 
     /// Takes the CLI's answer to the request `request_id`, if it's one to connect to a server again: that it
     /// `connected`, or that it failed. Returns the servers to report, whole. How many tools the server gives isn't known
-    /// until the next `init` lists them, and why it failed isn't kept, since no `init` says it, and the CLI's words for it
-    /// can hold what a server said.
+    /// until the next `init` lists them, which can be none, as for a server that connects and lists nothing. Why it failed
+    /// isn't kept, since no `init` says it, and the CLI's words for it can hold what a server said.
     pub(in crate::claude) fn answered(&mut self, request_id: &str, connected: bool) -> Option<Report> {
         let name = self.reconnecting.remove(request_id)?;
         self.came_to(name, if connected { ServerState::Connected } else { ServerState::Failed })
-    }
-
-    fn state_of(&self, name: &ServerName) -> Option<ServerState> {
-        self.last.iter().find(|server| server.name == *name).map(|server| server.state)
     }
 
     /// The servers with `name` as `state`, or `None` for one the CLI never listed, which it doesn't have.
@@ -227,7 +222,7 @@ mod tests {
     }
 
     /// What's reported of having the CLI connect to `server` again, as it's asked and as it answers, after an `init` that
-    /// listed two.
+    /// listed one that's connected and one that isn't.
     fn asked_for(server: &str, connected: bool) -> [Option<Vec<ToolServerState>>; 2] {
         let mut servers = ToolServers::default();
         servers.listed(vec![is("docs", ServerState::Connected, Some(2)), is("linear", ServerState::Failed, None)]);
@@ -247,8 +242,29 @@ mod tests {
 
         assert_eq!(asked_for("linear", true), [linear(ServerState::Starting), linear(ServerState::Connected)]);
         assert_eq!(asked_for("linear", false), [linear(ServerState::Starting), linear(ServerState::Failed)]);
-        assert_eq!(asked_for("docs", true), [None, linear(ServerState::Failed)], "it was connected, with its tools");
+        let docs = |state| Some(vec![is("docs", state, None), is("linear", ServerState::Failed, None)]);
+        assert_eq!(asked_for("docs", true), [docs(ServerState::Starting), docs(ServerState::Connected)]);
+        assert_eq!(asked_for("docs", false), [docs(ServerState::Starting), docs(ServerState::Failed)], "it's lost");
         assert_eq!(asked_for("nothing", false), [None, None], "a server it doesn't have");
+    }
+
+    /// The CLI answers one whose tools it can't list as it does one that works, so how many is the next `init`'s to say,
+    /// or the one that came as it was connecting.
+    #[test]
+    fn how_many_tools_a_server_connected_to_again_has_is_what_an_init_says() {
+        let mut servers = ToolServers::default();
+        servers.listed(vec![is("docs", ServerState::Connected, Some(14))]);
+        servers.reconnecting("r".into(), "docs".into());
+        servers.answered("r", true);
+        assert_eq!(servers.last, [is("docs", ServerState::Connected, None)]);
+
+        servers.listed(vec![is("docs", ServerState::Connected, Some(0))]);
+
+        assert_eq!(servers.last, [is("docs", ServerState::Connected, Some(0))]);
+        servers.reconnecting("again".into(), "docs".into());
+        servers.listed(vec![is("docs", ServerState::Connected, Some(3))]);
+        servers.answered("again", true);
+        assert_eq!(servers.last, [is("docs", ServerState::Connected, Some(3))]);
     }
 
     /// So a chat with none says so, and one whose CLI doesn't say is not known.

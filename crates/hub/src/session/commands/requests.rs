@@ -43,6 +43,9 @@ pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::
                 let _ = reply.send(session.handle_cancel().await);
             }
             Command::Compact { keeping, reply } => session.handle_compact(keeping, reply).await,
+            Command::ReloadToolServer { server, reply } => {
+                let _ = reply.send(session.reload_tool_server(&server).await);
+            }
             Command::Stop { reply } => {
                 let _ = reply.send(session.handle_stop().await);
             }

@@ -179,6 +179,13 @@ fn every_request_for_a_sessions_agent_keeps_its_form() {
         ClientRequest::SessionCompact(agent::SessionCompact { id: "s".into(), keeping: Some("The API".into()) }),
         r#"{"method":"session_compact","id":"s","keeping":"The API"}"#,
     );
+    asked(
+        ClientRequest::SessionReloadToolServer(agent::SessionReloadToolServer {
+            id: "s".into(),
+            server: "Linear_Northwind".into(),
+        }),
+        r#"{"method":"session_reload_tool_server","id":"s","server":"Linear_Northwind"}"#,
+    );
     let queue = queue::SessionQueue { id: "s".into(), client_msg_id: "m".into(), prompt: Prompt::new("next") };
     asked(
         ClientRequest::SessionQueue(queue),

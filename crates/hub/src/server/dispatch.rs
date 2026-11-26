@@ -299,5 +299,9 @@ pub(super) async fn handle(
             hub.session_compact(id, keeping).await?;
             C::Ok
         }
+        R::SessionReloadToolServer(agent::SessionReloadToolServer { id, server }) => {
+            hub.session_reload_tool_server(id, server).await?;
+            C::Ok
+        }
     })
 }

@@ -1,5 +1,6 @@
 use super::ChatSettings;
 use super::reconnecting::HadSignIns;
+use super::reloading::Reloading;
 use super::{Starting, commands, ingest, limits, messages, progress};
 use crate::attachment_files::FileFor;
 use crate::error::internal;
@@ -109,6 +110,8 @@ pub(super) struct LiveState {
     pub(super) reading_out: super::reading_out::ReadingOut,
     /// What the run has been signed in to its tool servers by, as [`super::reconnecting`] says.
     pub(super) had_sign_ins: Option<HadSignIns>,
+    /// What the run has been asked to connect to again, as [`super::reloading`] says.
+    pub(super) reloading: Option<Reloading>,
     /// How the run was last told the person talks with the agent, as [`super::mode_told`] says.
     pub(super) mode_told: Option<(RunId, protocol::model::InteractionMode)>,
     /// Prompts recorded for the agent that it's sent once its turn ends, oldest first, as
@@ -204,6 +207,7 @@ impl LiveSession {
                 interaction: stored.session.interaction.clone(),
                 reading_out: super::reading_out::ReadingOut::default(),
                 had_sign_ins: agent.map(|agent| HadSignIns::new(agent.run, SignedInBy::default())),
+                reloading: None,
                 mode_told: None,
                 after_the_turn: Vec::new(),
                 live: None,

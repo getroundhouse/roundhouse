@@ -121,6 +121,7 @@ pub enum ClientRequest {
     SessionDecide(agent::SessionDecide),
     SessionCancel(agent::SessionCancel),
     SessionCompact(agent::SessionCompact),
+    SessionReloadToolServer(agent::SessionReloadToolServer),
     SessionConfigure(sessions::SessionConfigure),
     SessionClose(sessions::SessionClose),
     SessionReopen(sessions::SessionReopen),

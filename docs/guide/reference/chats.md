@@ -57,16 +57,22 @@ While the chat has an MCP server, a plug sits before the limits' bars. Rest the 
 | A server says | Which means |
 |---|---|
 | `14 tools`, or `Connected` | The agent has it |
-| `Starting` | Its CLI is still connecting to it, as it does when you've just signed in to it |
-| `Can't be reached` | Its CLI couldn't connect. Codex says why, on the line under it |
+| `Starting` | Its CLI is still connecting to it, as it does when you've just signed in to it, or reloaded it |
+| `Can't be reached`, with **Reload** | Its CLI couldn't connect. Codex says why, after it |
 | **Sign in** | It's one of the hub's that needs you to sign in to it, and the plug is amber until you do. The button opens its page in your browser, and signs in for every chat |
 | `Wants more access`, with **Sign in** | It's one of the hub's that works, and refused a call that needs more than you allowed. Signing in again asks to be allowed that too |
 | `Signing in` | Its page waits in your browser for you to approve it, as [Settings](settings.md#sign-in) says |
-| `Sign in from its CLI` | It's one of the CLI's own, which you sign in to there, such as with `codex mcp login` |
+| `Sign in from its CLI`, with **Reload** | It's one of the CLI's own, which you sign in to there, such as with `codex mcp login`, then reload here |
 | `From its next start` | It was added to the hub, or moved to another URL, after the agent started |
 | `Removed` | It was removed from the hub after the agent started |
 | `Turned off` | The CLI's own settings turn it off |
 | Nothing | The agent hasn't said |
+
+**Reload** has the running agent connect to the server again, in the middle of a turn too, once you've started the server, or fixed what kept it from being reached. Codex tries every server that failed, whichever one you reload.
+
+In a Claude chat, a server that works has a round arrow while you point at its row, or come to it with Tab, for when its tools have changed. A call the agent has made to it fails as it's reloaded. Claude takes nothing else while it connects, so **Stop** and what you send wait, for up to 30 seconds. If the server can't be reached by then, the agent loses it until you reload it again.
+
+There's no **Reload** while the agent isn't running, or in an Antigravity chat, where a server that failed is tried again at your next prompt.
 
 Once you've signed in, an agent that was started with the server connects to it, in the middle of a turn too. Antigravity does at your next prompt.
 

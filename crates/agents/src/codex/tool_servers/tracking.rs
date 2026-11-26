@@ -1,6 +1,6 @@
 //! The tool servers of the agent's own thread, as Codex says each starts, and what it answers of each.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use protocol::capability::Report;
@@ -18,12 +18,11 @@ use crate::{AgentError, AgentOutput};
 #[derive(Default)]
 pub(in crate::codex) struct ToolServers {
     servers: BTreeMap<ServerName, Server>,
-    /// How many times Codex has said one's startup moved.
+    /// How many times one's startup has moved.
     moves: u64,
-    /// Those Codex has been asked to connect to again, and hasn't said it's trying to.
-    asked_for: BTreeSet<ServerName>,
 }
 
+#[derive(Clone)]
 struct Server {
     state: ServerState,
     error: Option<String>,
@@ -35,7 +34,7 @@ struct Server {
 }
 
 /// What a startup of a server is at, as Codex says it, with why it failed as it's shown.
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum CameTo {
     Starting,
     Ready,
@@ -82,13 +81,12 @@ impl Server {
 
 impl ToolServers {
     /// Takes what `params`, a startup's, say of the server `name`. A server that has settled is shown as it settled until
-    /// it settles otherwise, unless it's the one asked for, which is shown as it starts: having every failed one tried
-    /// again, as [`reload`] does, has Codex say that each is starting and has failed, and that each connected one is
-    /// ready, which is nothing new of any but one that now starts.
+    /// it settles otherwise, but for the one asked for, which is starting from then: having every failed one tried again,
+    /// as [`reload`] does, has Codex say that each is starting and has failed, and that each connected one is ready, which
+    /// is nothing new of any but one that now starts.
     fn moved(&mut self, name: &ServerName, params: &Value) -> Moved {
         let came_to = CameTo::of(params);
-        let asked_for = self.asked_for.remove(name);
-        let again = |had: &Server| had.settled() && came_to == CameTo::Starting && !asked_for;
+        let again = |had: &Server| had.settled() && came_to == CameTo::Starting;
         if self.servers.get(name).is_some_and(|had| had.came_to == came_to || again(had)) {
             return Moved::NothingNew;
         }
@@ -107,6 +105,37 @@ impl ToolServers {
         };
         self.servers.insert(name.clone(), Server { state, error, tools: None, came_to, moved: self.moves });
         if more { Moved::MoreToAsk(self.moves) } else { Moved::Said }
+    }
+
+    /// Codex is being asked to connect to the server `name` again, so it's starting, where Codex has said it isn't
+    /// connected to it. Returns how it was.
+    fn asked_for(&mut self, name: &ServerName) -> Option<Server> {
+        let server = self.servers.get_mut(name)?;
+        match server.state {
+            ServerState::Failed | ServerState::NeedsSignIn => {}
+            ServerState::Starting | ServerState::Connected | ServerState::Disabled | ServerState::Unknown => {
+                return None;
+            }
+        }
+        self.moves += 1;
+        let starting = Server {
+            state: ServerState::Starting,
+            error: None,
+            tools: None,
+            came_to: CameTo::Starting,
+            moved: self.moves,
+        };
+        Some(std::mem::replace(server, starting))
+    }
+
+    /// Codex refused to connect to the server `name` again, so it's as it `was`, unless Codex has said otherwise. Returns
+    /// whether it is.
+    fn refused(&mut self, name: &ServerName, was: Server) -> bool {
+        let Some(server) = self.servers.get_mut(name).filter(|server| server.came_to == CameTo::Starting) else {
+            return false;
+        };
+        *server = was;
+        true
     }
 
     /// Takes what Codex answered of the server `name`, `status`, unless its startup has moved since `moved`. Returns
@@ -169,11 +198,19 @@ pub(in crate::codex) async fn moved(shared: &Arc<Shared>, params: &Value, scope:
 /// the connected ones, and their running calls, alone. It answers before they've started, and then says how each comes
 /// to.
 pub(in crate::codex) async fn reload(shared: &Shared, server: &ServerName) -> Result<(), AgentError> {
-    // Before it's asked, since it can say that the server is starting before it answers.
-    shared.tool_servers.lock().await.asked_for.insert(server.clone());
+    let mut servers = shared.tool_servers.lock().await;
+    // Before it's asked, since it can say what the server comes to before it answers.
+    let was = servers.asked_for(server);
+    if was.is_some() {
+        shared.run.emit(servers.report()).await;
+    }
+    drop(servers);
     let reloaded = shared.rpc.ask("config/mcpServer/reload", Value::Null).await;
-    if reloaded.is_err() {
-        shared.tool_servers.lock().await.asked_for.remove(server);
+    if let (Err(_), Some(was)) = (&reloaded, was) {
+        let mut servers = shared.tool_servers.lock().await;
+        if servers.refused(server, was) {
+            shared.run.emit(servers.report()).await;
+        }
     }
     reloaded.map(drop)
 }
@@ -286,16 +323,32 @@ mod tests {
             assert_eq!(servers.moved(&docs, &again), Moved::NothingNew, "{again}");
             assert_eq!(kept(&servers), needs);
         }
-        servers.asked_for.insert(docs.clone());
-        assert_eq!(servers.moved(&docs, &json!({"status":"starting"})), Moved::Said, "it's the one asked for");
-        assert_eq!(kept(&servers), (ServerState::Starting, None, None));
+        assert!(servers.asked_for(&docs).is_some());
+        assert_eq!(kept(&servers), (ServerState::Starting, None, None), "it's the one asked for");
+        assert_eq!(servers.moved(&docs, &json!({"status":"starting"})), Moved::NothingNew, "as it's shown");
         let ready = json!({"status":"ready"});
         let moved = servers.moved(&docs, &ready);
         servers.answered(&docs, asked(&moved).unwrap(), &json!({"runtimeStatus":"connected","tools":{"find":{}}}));
         assert_eq!(servers.moved(&docs, &ready), Moved::NothingNew, "a connected server is left alone");
         assert_eq!(kept(&servers), (ServerState::Connected, None, Some(1)), "with its tools");
+        assert!(servers.asked_for(&docs).is_none(), "nor is it starting");
         let elsewise = json!({"status":"failed","error":"unreachable"});
         assert!(asked(&servers.moved(&docs, &elsewise)).is_some());
         assert_eq!(kept(&servers), (ServerState::Failed, Some("unreachable"), None));
+    }
+
+    #[test]
+    fn a_server_asked_for_is_as_it_was_where_codex_refuses_unless_codex_has_said_what_it_came_to() {
+        let docs = ServerName::from("docs");
+        let (mut servers, _) = after("failed", None);
+
+        let was = servers.asked_for(&docs).unwrap();
+        assert!(servers.refused(&docs, was));
+        assert_eq!(kept(&servers), (ServerState::Failed, Some("refused"), None));
+
+        let was = servers.asked_for(&docs).unwrap();
+        servers.moved(&docs, &json!({"status":"ready"}));
+        assert!(!servers.refused(&docs, was));
+        assert_eq!(kept(&servers), (ServerState::Connected, None, None));
     }
 }

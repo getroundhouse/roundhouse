@@ -7,8 +7,9 @@ use super::{approvals, asking, background, context, conversation, output, setup,
 /// one's contract says: a fork is a conversation that can be resumed, an undo is of a rewind, a preview is of putting
 /// files back, a fresh plan is an approved one, an overruling is of a reviewer's verdict, findings are a review's, a
 /// compaction's progress, summary and tokens are of a compaction, asked for or the agent's own, the context's parts are
-/// of its usage, a direct subagent is a subagent, and streamed reasoning is recorded reasoning. A claim in two rows needs
-/// one of each, as signing in to a tool server needs its state and its request.
+/// of its usage, a direct subagent is a subagent, streamed reasoning is recorded reasoning, and a reload that fails leaves
+/// a tool server to be connected to again. A claim in two rows needs one of each, as signing in to a tool server needs its
+/// state and its request.
 const NEEDS: &[(Capability, &[Capability])] = {
     use Capability::{Approvals, Asking, Background, Context, Conversation, Output, Setup, Turns};
     &[
@@ -37,6 +38,7 @@ const NEEDS: &[(Capability, &[Capability])] = {
         (Background(background::Capability::DirectSubagents), &[Background(background::Capability::Subagents)]),
         (Output(output::Capability::StreamThinking), &[Output(output::Capability::Thinking)]),
         (Setup(setup::Capability::ToolServerReconnect), &[Setup(setup::Capability::ToolServers)]),
+        (Setup(setup::Capability::ToolServerReload), &[Setup(setup::Capability::ToolServerReconnect)]),
         (Setup(setup::Capability::ToolServerSignIn), &[Setup(setup::Capability::ToolServers)]),
         (Setup(setup::Capability::ToolServerSignIn), &[Asking(asking::Capability::ServerRequests)]),
     ]
@@ -78,6 +80,8 @@ mod tests {
         );
         let both = json!({"setup": {"tool_server_sign_in": {}, "tool_servers": {}}, "asking": {"server_requests": {}}});
         assert_eq!(stray(both), []);
+        let reload = Capability::from(setup::Capability::ToolServerReload);
+        assert_eq!(stray(json!({"setup": {"tool_server_reload": {}, "tool_servers": {}}})), [reload]);
         assert_eq!(Capabilities::default().unmet_needs(), []);
     }
 }

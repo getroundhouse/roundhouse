@@ -1,6 +1,7 @@
 //! One typed call for each hub request.
 
 use protocol::capability::approvals::Decision;
+use protocol::capability::setup::ServerName;
 use protocol::client::{
     HubStatus, admin, agent, comments, conversation, log, proposals, records, references, sessions, waits, workspaces,
 };
@@ -272,6 +273,11 @@ impl Client {
     /// Asks the agent to compact its conversation, keeping what `keeping` says. Refused while it's on a turn.
     pub fn session_compact(&self, id: &SessionId, keeping: Option<&str>) -> Result<()> {
         self.call(agent::SessionCompact { id: id.clone(), keeping: keeping.map(str::to_string) })
+    }
+
+    /// See [`agent::SessionReloadToolServer`].
+    pub fn session_reload_tool_server(&self, id: &SessionId, server: &ServerName) -> Result<()> {
+        self.call(agent::SessionReloadToolServer { id: id.clone(), server: server.clone() })
     }
 }
 

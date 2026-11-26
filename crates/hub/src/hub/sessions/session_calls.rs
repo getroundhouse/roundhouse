@@ -5,6 +5,7 @@ use crate::session::{Command, LiveSession, ReadingOn};
 use crate::store::{Places, Reading, Store, StoreError};
 use protocol::capability::approvals::Decision;
 use protocol::capability::settings::Settings;
+use protocol::capability::setup::ServerName;
 use protocol::client::listed::SessionRecords;
 use protocol::client::log::ReadLimit;
 use protocol::client::{ApiError, ErrorCode, HubNotice, log};
@@ -332,6 +333,17 @@ impl Hub {
         self.compacts(session.agent())?;
         let (reply, done) = oneshot::channel();
         session.command(Command::Compact { keeping, reply }).await?;
+        done.await.map_err(|_| internal("the session has stopped"))?
+    }
+
+    pub(crate) async fn session_reload_tool_server(
+        self: &Arc<Self>,
+        id: SessionId,
+        server: ServerName,
+    ) -> Result<(), ApiError> {
+        let session = self.live_session(&id).await?;
+        let (reply, done) = oneshot::channel();
+        session.command(Command::ReloadToolServer { server, reply }).await?;
         done.await.map_err(|_| internal("the session has stopped"))?
     }
 

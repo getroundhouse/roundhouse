@@ -1,4 +1,5 @@
-//! Having the CLI connect again to a tool server it failed to connect to, with `mcp_reconnect`.
+//! Having the CLI connect again to a tool server, one it failed to connect to or one it's connected to, with
+//! `mcp_reconnect`.
 
 use protocol::capability::setup::ServerName;
 use serde_json::json;
@@ -10,7 +11,7 @@ impl ClaudeProcess {
     /// Asks the CLI to connect to the server `server` again. Whether it did is what it answers, which the reader takes
     /// in order with everything else the CLI says, as
     /// [`ToolServers::answered`](super::super::tool_servers::ToolServers::answered) says, so nothing here waits for it:
-    /// the CLI answers once it has shaken hands, which can take it 10 s and more.
+    /// the CLI answers once it has shaken hands, which can take it 30 s, and until then it reads nothing else it's sent.
     pub(in super::super) async fn reconnect(&self, server: &ServerName) -> Result<(), AgentError> {
         let request_id = uuid::Uuid::new_v4().to_string();
         let line = json!({"type": "control_request", "request_id": request_id,

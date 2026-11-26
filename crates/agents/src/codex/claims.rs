@@ -19,6 +19,7 @@ pub(super) fn claims() -> Capabilities {
     claims.context.compaction = Some(context::Compaction { keeping: context::Keeping::Ignored });
     claims.account.limits = Some(Claimed {});
     claims.setup.tool_servers = Some(Claimed {});
+    // Not `tool_server_reload`, since its reload leaves a connected server as it is.
     claims.setup.tool_server_reconnect = Some(Claimed {});
     claims.turns.cancel = Some(turns::Cancel { stops: turns::CancelStops::Nothing });
     claims.approvals.modes = Some(approvals::Modes { default: full_access(), others: vec![plan()] });

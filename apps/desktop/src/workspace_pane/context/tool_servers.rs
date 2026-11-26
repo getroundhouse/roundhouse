@@ -1,15 +1,16 @@
 //! The plug beside Send, and its card, which lists the MCP servers the chat has: the hub's, then the ones its agent's CLI
-//! has of its own. What's said of each is `client_core::tool_servers`'s, and signing in to one is the hub's view's, in
-//! `crate::tool_sign_in`, so every chat's card says the same of it.
+//! has of its own. What's said of each, and whether a reload is offered, is `client_core::tool_servers`'s, and signing in
+//! to one is the hub's view's, in `crate::tool_sign_in`, so every chat's card says the same of it.
 
-use client_core::tool_servers::{ChatToolServer, ChatToolServers, OwnToolServers, Tone};
+use client_core::tool_servers::{ChatToolServer, ChatToolServers, Offered, OwnToolServers, Reload, Tone};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
+    AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels, Role,
     SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, WeakEntity, div, px,
 };
 use look::{CardKind, IconSizing as _, Lined as _, Region, Typeset as _};
+use protocol::capability::setup::ServerName;
 use protocol::model::ToolServerId;
 
 use super::super::WorkspacePane;
@@ -23,15 +24,18 @@ const MOST_HEIGHT: Pixels = px(360.);
 
 impl WorkspacePane {
     /// The plug for the chat showing, while there's something to say of its servers. It's as quiet as the ring, or amber
-    /// while one of the hub's needs the person to sign in to it.
+    /// while one of the hub's needs the person to sign in to it. It's one of Tab's stops, since its card has buttons.
     pub(in super::super) fn plug(&self, cx: &mut Context<Self>) -> Option<Slot> {
         let sign_in = self.tool_sign_in.read(cx).under_way().and_then(UnderWay::of_a_server);
-        let servers = ChatToolServers::of(self.shown.all(), self.session()?, sign_in.as_ref())?;
+        let servers = ChatToolServers::of(self.shown.all(), self.session()?, sign_in.as_ref(), &self.tool_reloads)?;
         let colors = look::colors(cx);
         let color = if servers.needs_sign_in() { colors.warning } else { colors.text_muted };
         let icon = Icon::new(IconName::Plug).sized(look::IconSize::Large).text_color(color);
-        // The whole slot is the plug's to point at, as it is the ring's.
-        let plug = middle().size(Slot::SIZE.height()).child(icon);
+        // The whole slot is the plug's to point at, as it is the ring's. A press on it leaves the focus in the composer.
+        let plug = middle()
+            .size(Slot::SIZE.height())
+            .child(icon)
+            .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default());
         // Said in words too, since a colour alone says nothing to someone who can't see it.
         let said = servers.said();
         let heading = Heading {
@@ -41,10 +45,12 @@ impl WorkspacePane {
             },
             machine: crate::names::runs_on(self.workspace()),
         };
-        let sign_in = OffersSignIn { pane: cx.weak_entity(), off: self.hub == Hub::Away };
-        // It holds a button while one needs signing in to, so it waits for the pointer to cross to it.
-        let kind = if servers.needs_sign_in() { look::hover_card_with_a_button } else { look::hover_card };
-        let hover = card_over(kind("mcp-hover"), plug).content(move |_, _, cx| card(&servers, heading, &sign_in, cx));
+        let offers = Offers { pane: cx.weak_entity(), off: self.hub == Hub::Away };
+        // With a button in it, it waits for the pointer to cross to it.
+        let kind = if servers.offers() { look::hover_card_with_a_button } else { look::hover_card };
+        let hover = card_over(kind("mcp-hover"), plug)
+            .on_focus(Role::Group, said.clone(), servers.each_said())
+            .content(move |_, _, cx| card(&servers, heading, &offers, cx));
         Some(Slot::holding(div().id("mcp").role(Role::Status).aria_label(said).child(hover).test_support()))
     }
 
@@ -55,18 +61,35 @@ impl WorkspacePane {
             self.tool_sign_in.update(cx, |signing_in, cx| signing_in.start(again, cx));
         }
     }
+
+    /// Has the chat's agent connect again to the server it has as `server`. The row says how that goes.
+    fn reload_tool_server(&mut self, server: ServerName, cx: &mut Context<Self>) {
+        let Some(session) = self.session().map(|session| session.id.clone()) else { return };
+        self.tool_reloads.ask(self.shown.all(), &session, &server);
+        let (id, asked) = (session.clone(), server.clone());
+        let asking = self.client.start(move |client| client.session_reload_tool_server(&id, &asked));
+        cx.spawn(async move |this, cx| {
+            let answer = asking.recv().await;
+            let _ = this.update(cx, |pane, cx| {
+                pane.tool_reloads.answered(&session, &server, &answer);
+                cx.notify();
+            });
+        })
+        .detach();
+        cx.notify();
+    }
 }
 
-/// What a row's Sign in button does it through.
-struct OffersSignIn {
+/// What the rows' buttons do what they do through.
+struct Offers {
     pane: WeakEntity<WorkspacePane>,
     /// With no hub to ask.
     off: bool,
 }
 
-impl OffersSignIn {
+impl Offers {
     /// The button that signs in to `server`, which the person calls `name`.
-    fn button(&self, server: &ToolServerId, name: &str) -> look::Button {
+    fn sign_in(&self, server: &ToolServerId, name: &str) -> look::Button {
         let (pane, to) = (self.pane.clone(), server.clone());
         let id = SharedString::from(format!("mcp-sign-in-{server}"));
         look::button(id, look::ButtonKind::Outlined, look::ControlSize::Small, "Sign in")
@@ -76,6 +99,23 @@ impl OffersSignIn {
                 let _ = pane.update(cx, |pane, cx| pane.sign_in_to(&to, cx));
             })
     }
+
+    /// The button that has the agent connect again to the server called `name`, in its row, `row`.
+    fn reload(&self, reload: &Reload, name: &str, row: &SharedString) -> look::Button {
+        let (pane, server) = (self.pane.clone(), reload.server.clone());
+        let id = SharedString::from(format!("mcp-reload-{server}"));
+        let button = match reload.offered {
+            Offered::Plainly => look::button(id, look::ButtonKind::Outlined, look::ControlSize::Small, "Reload"),
+            Offered::Quietly => {
+                look::icon_button(id, look::ButtonKind::Quiet, look::ControlSize::Small, IconName::RotateCw)
+                    .tooltip("Reload")
+                    .shown_while_over(row.clone())
+            }
+        };
+        button.accessibility_label(format!("Reload {name}")).off(self.off || reload.asked).on_click(move |_, _, cx| {
+            let _ = pane.update(cx, |pane, cx| pane.reload_tool_server(server.clone(), cx));
+        })
+    }
 }
 
 /// What's over the servers the CLI has of its own: whose they are, and the machine they're set up on.
@@ -84,12 +124,12 @@ struct Heading {
     machine: SharedString,
 }
 
-fn card(servers: &ChatToolServers, own: Heading, sign_in: &OffersSignIn, cx: &App) -> AnyElement {
-    let hubs = section("MCP servers".into(), "Roundhouse".into(), "mcp-hubs", &servers.hubs, sign_in, cx);
-    let listed = |own: Heading, servers| section(own.own, own.machine, "mcp-own", servers, sign_in, cx);
+fn card(servers: &ChatToolServers, own: Heading, offers: &Offers, cx: &App) -> AnyElement {
+    let hubs = section("MCP servers".into(), "Roundhouse".into(), "mcp-hubs", &servers.hubs, offers, cx);
+    let listed = |own: Heading, servers| section(own.own, own.machine, "mcp-own", servers, offers, cx);
     let own = match &servers.own {
         OwnToolServers::Listed(servers) if !servers.is_empty() => Some(listed(own, servers)),
-        OwnToolServers::NotKnown => Some(section(own.own, "Not known yet".into(), "mcp-own", &[], sign_in, cx)),
+        OwnToolServers::NotKnown => Some(section(own.own, "Not known yet".into(), "mcp-own", &[], offers, cx)),
         OwnToolServers::Listed(_) | OwnToolServers::NeverSaid => None,
     };
     let listed = v_flex().id("mcp-listed").max_h(MOST_HEIGHT).overflow_y_scroll().gap(look::Space::Medium);
@@ -108,7 +148,7 @@ fn section(
     kept: SharedString,
     id: &'static str,
     servers: &[ChatToolServer],
-    sign_in: &OffersSignIn,
+    offers: &Offers,
     cx: &App,
 ) -> Div {
     let kept = div().flex_none().typeset(look::Type::Detail).text_color(look::colors(cx).text_faint).child(kept);
@@ -117,29 +157,34 @@ fn section(
         .gap(look::Space::Medium)
         .child(div().min_w_0().truncate().emphasis().child(whose))
         .child(kept);
-    let rows = servers.iter().enumerate().map(|(at, server)| row((id, at), server, sign_in, cx));
+    let rows = servers.iter().enumerate().map(|(at, server)| row(format!("{id}-{at}").into(), server, offers, cx));
     v_flex().gap(look::Space::Small).child(heading).children(rows)
 }
 
-/// A server, with how it stands at its end, or the button that signs in to it, and under it why it can't be reached or
-/// signed in to, or what it's to be signed in to again for. The name is a person's, so it's the one cut off if they
-/// don't both fit, and how it stands always shows.
-fn row(id: (&'static str, usize), server: &ChatToolServer, sign_in: &OffersSignIn, cx: &App) -> impl IntoElement {
+/// A server, with how it stands at its end, or the button that signs in to it or that has the agent connect to it again.
+/// Under it is why it can't be reached or signed in to, or what it's to be signed in to again for, after how it stands
+/// where a Reload is in that's place. The name is a person's, so it's the one cut off if they don't both fit, and how it
+/// stands always shows.
+fn row(id: SharedString, server: &ChatToolServer, offers: &Offers, cx: &App) -> impl IntoElement {
     let colors = look::colors(cx);
-    let (words, why) = (server.stands.words(), server.stands.why());
     let color = match server.stands.tone() {
         Tone::Plain => colors.text_faint,
         Tone::Coming => colors.text_muted,
         Tone::Problem => colors.warning,
     };
-    let said: Vec<&str> = [Some(server.name.as_str()), words.as_deref(), why].into_iter().flatten().collect();
-    // Read out whole, since a screen reader would read its parts apart, and one to sign in to says so only here.
-    let row = v_flex().id(id).role(Role::Label).aria_label(said.join(", "));
-    let stands = match server.stands.to_sign_in_to() {
-        Some(to) => Some(sign_in.button(to, &server.name).into_any_element()),
-        None => words.map(|words| {
-            div().flex_none().typeset(look::Type::Detail).text_color(color).child(words).into_any_element()
-        }),
+    let words = server
+        .stands
+        .words()
+        .map(|words| div().flex_none().typeset(look::Type::Detail).text_color(color).child(words).into_any_element());
+    let sign_in = server.stands.to_sign_in_to().map(|to| offers.sign_in(to, &server.name));
+    let reload = server.reload.as_ref().map(|reload| (reload.offered, offers.reload(reload, &server.name, &id)));
+    let (at_the_end, words_under) = match (sign_in, reload) {
+        (Some(sign_in), _) => (vec![sign_in.into_any_element()], None),
+        (None, Some((Offered::Plainly, reload))) => (vec![reload.into_any_element()], words),
+        (None, Some((Offered::Quietly, reload))) => {
+            (std::iter::once(reload.into_any_element()).chain(words).collect(), None)
+        }
+        (None, None) => (words.into_iter().collect(), None),
     };
     let line = h_flex()
         .justify_between()
@@ -147,15 +192,25 @@ fn row(id: (&'static str, usize), server: &ChatToolServer, sign_in: &OffersSignI
         .min_h(look::ControlSize::Small.height())
         .gap(look::Space::Medium)
         .child(div().min_w_0().truncate().text_color(colors.text_muted).child(server.name.clone()))
-        .children(stands);
-    let why = why.map(|why| {
-        div()
-            .id("mcp-why")
-            .truncate()
-            .typeset(look::Type::Detail)
-            .text_color(colors.text_faint)
-            .child(why.to_string())
-            .test_support()
-    });
-    row.child(line).children(why).test_support()
+        .child(h_flex().flex_none().items_center().gap(look::Space::Small).children(at_the_end));
+    // Read out whole, since a screen reader would read its parts apart, and one to sign in to says so only here.
+    v_flex()
+        .id(id.clone())
+        .role(Role::Label)
+        .aria_label(server.said())
+        .group(id)
+        .child(line)
+        .children(under(words_under, server.why(), cx))
+        .test_support()
+}
+
+/// The line under a server: how it stands, where that isn't at its end, and why, cut off if it doesn't fit.
+fn under(stands: Option<AnyElement>, why: Option<&str>, cx: &App) -> Option<impl IntoElement> {
+    if stands.is_none() && why.is_none() {
+        return None;
+    }
+    let why = why.map(|why| if stands.is_some() { format!(". {why}") } else { why.to_string() });
+    let why = why.map(|why| div().min_w_0().truncate().child(why));
+    let line = h_flex().id("mcp-why").typeset(look::Type::Detail).text_color(look::colors(cx).text_faint);
+    Some(line.children(stands).children(why).test_support())
 }

@@ -21,10 +21,15 @@ area! { "the agent's setup";
     /// whenever the agent says one changed, and the hub keeps the newest as an observation, the run's alone. The
     /// worker's own, as [`Capability::ToolServer`] has it, is left out, since it's part of Roundhouse.
     ToolServers => tool_servers: Claimed,
-    /// A tool server the agent has and isn't connected to can be connected to again as the agent runs, which what it then
-    /// reports of its servers says the end of. One it's connected to is left as it is. A claim of its own, since an agent
-    /// can say how its servers stand and not be asked to, as one that tries a failed server again by itself needn't be.
+    /// A tool server the agent has and isn't connected to can be connected to again as the agent runs. It's reported as
+    /// starting as that's asked, and then as what it comes to. One it's connected to is left as it is. A claim of its own,
+    /// since an agent can say how its servers stand and not be asked to, as one that tries a failed server again by itself
+    /// needn't be.
     ToolServerReconnect => tool_server_reconnect: Claimed,
+    /// A tool server the agent is connected to can be connected to again as the agent runs, and its tools listed again,
+    /// reported as [`Capability::ToolServerReconnect`] says. It ends the calls to it that are running, and one that fails
+    /// is lost until it's connected to again. A claim of its own, since an agent can leave a connected server as it is.
+    ToolServerReload => tool_server_reload: Claimed,
     /// A tool server that needs signing in to can be signed in to from a client, as all three agents do with MCP's
     /// sign-in: the page to open comes as the server's request, as [`super::asking`] has it, and the server's state
     /// says once it's done.

@@ -90,6 +90,11 @@ pub enum Control {
     Reconnect {
         server: ServerName,
     },
+    /// Connect again to the tool server `server`, which the agent is connected to, and list its tools again. Never
+    /// Roundhouse's own, as [`Control::allowed`] says.
+    Reload {
+        server: ServerName,
+    },
     SignInToServer {
         server: ServerName,
     },
@@ -144,6 +149,7 @@ impl Control {
             Control::StopTask { .. } => one(background::Capability::StopTasks.into()),
             Control::ReadTaskOutput { .. } => one(background::Capability::TaskOutput.into()),
             Control::Reconnect { .. } => one(setup::Capability::ToolServerReconnect.into()),
+            Control::Reload { .. } => one(setup::Capability::ToolServerReload.into()),
             Control::SignInToServer { .. } => one(setup::Capability::ToolServerSignIn.into()),
             Control::SetGoal { .. } | Control::PauseGoal | Control::ClearGoal => one(turns::Capability::Goals.into()),
             Control::Review { .. } => one(turns::Capability::Reviews.into()),
@@ -156,9 +162,9 @@ impl Control {
 
     /// Whether a run that claims `claims` can be asked this: every capability it needs, and what its parameters ask
     /// of the claims, such as a decision's parts, a change's settings, and something to keep only for a compaction
-    /// that reads it. No run is asked to connect again to [`TOOLS_SERVER`], since Claude no longer asks after that
-    /// server's tasks once it has. The hub refuses anything else before it's sent, so an adapter is never asked what it
-    /// didn't claim.
+    /// that reads it. No run is asked to connect again to [`TOOLS_SERVER`], since Claude stops asking after that server's
+    /// tasks for about 5 s, and until another reconnect works where one fails, which strands them. The hub refuses
+    /// anything else before it's sent, so an adapter is never asked what it didn't claim.
     pub fn allowed(&self, claims: &Capabilities) -> bool {
         if !claims.has_all(self.needs()) {
             return false;
@@ -172,7 +178,7 @@ impl Control {
         if let Control::Compact { keeping: Some(_), .. } = self {
             return claims.context.compaction.is_some_and(|compaction| compaction.keeping == Keeping::Read);
         }
-        if let Control::Reconnect { server } = self {
+        if let Control::Reconnect { server } | Control::Reload { server } = self {
             return server.as_str() != TOOLS_SERVER;
         }
         true
@@ -184,17 +190,25 @@ mod tests {
     use super::super::{Capabilities, Claimed};
     use super::*;
 
+    /// One it isn't connected to, and one it is, each by a claim of its own.
     #[test]
     fn a_run_is_asked_to_connect_again_only_where_it_claims_it_can_and_never_to_roundhouses_own_server() {
-        let reconnect =
-            |server: &str, claims: &Capabilities| Control::Reconnect { server: server.into() }.allowed(claims);
+        let asks =
+            |server: &str| [Control::Reconnect { server: server.into() }, Control::Reload { server: server.into() }];
+        let allowed = |server: &str, claims: &Capabilities| asks(server).map(|control| control.allowed(claims));
         let mut claims = Capabilities::default();
         claims.setup.tool_servers = Some(Claimed {});
-        assert!(!reconnect("docs", &claims), "a run of an earlier build says how its servers stand, and refuses it");
+        assert_eq!(
+            allowed("docs", &claims),
+            [false, false],
+            "a run of an earlier build only says how its servers stand"
+        );
 
         claims.setup.tool_server_reconnect = Some(Claimed {});
+        assert_eq!(allowed("docs", &claims), [true, false], "as Codex's, which leaves a connected one as it is");
+        claims.setup.tool_server_reload = Some(Claimed {});
 
-        assert!(reconnect("docs", &claims));
-        assert!(!reconnect(TOOLS_SERVER, &claims));
+        assert_eq!(allowed("docs", &claims), [true, true]);
+        assert_eq!(allowed(TOOLS_SERVER, &claims), [false, false]);
     }
 }
