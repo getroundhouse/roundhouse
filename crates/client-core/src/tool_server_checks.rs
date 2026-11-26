@@ -1,13 +1,11 @@
-//! What adding or saving a tool server comes to, once the hub has asked it for its tools, and what checking it comes to
-//! for a hub from before that, in words for a person: that it's being asked, and why it listed no tools. They're of the
-//! name and the URL the person typed and of what the hub says came of it, so never of anything the server said.
+//! What adding or saving a tool server comes to, once the hub has asked it for its tools, in words for a person: that
+//! it's being asked, and why it listed no tools. They're of the name and the URL the person typed and of what the hub
+//! says came of it, so never of anything the server said.
 
-use protocol::client::tool_server_checks::{NoToolList, ToolServerChecked, ToolServerToCheck, ToolServerUnreached};
+use protocol::client::tool_server_checks::{NoToolList, ToolServerToCheck, ToolServerUnreached};
 use protocol::client::tool_server_saves::ToolServerSaved;
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
 use protocol::model::{ToolServer, ToolServerUrl};
-
-use crate::Result;
 
 /// What's to be added or saved.
 #[derive(Clone, Debug, PartialEq)]
@@ -54,38 +52,10 @@ pub(crate) fn saved(answer: ToolServerSaved, name: &str, url: &str) -> Saved {
         ToolServerSaved::Saved { server } => Saved::Saved(server),
         ToolServerSaved::NotListed { why } => Saved::NotListed(not_listed(why, name, &host(url))),
         ToolServerSaved::Cancelled => Saved::LetGo,
-        ToolServerSaved::Unknown => Saved::NotListed(newer(name)),
+        ToolServerSaved::Unknown => {
+            Saved::NotListed(format!("{name} was asked for its tools. Update this app to see what came of it."))
+        }
     }
-}
-
-/// What a check comes to, for a client of a hub from before saves, which then adds or edits the server itself.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Checked {
-    /// There's nothing to say before it's added or edited: it listed its tools, there was nothing to ask, or the hub is
-    /// too old to check one.
-    Fine,
-    /// It didn't list them, as this says, for a person, whose choice it is whether to go on anyway.
-    Not(String),
-}
-
-/// What `answer` comes to, for the server called `name` at `url`, as the person typed them. An error is one to refuse
-/// what's checked with.
-pub(crate) fn came_to(answer: Result<ToolServerChecked>, name: &str, url: &str) -> Result<Checked> {
-    let checked = match answer {
-        Err(e) if e.is_unsupported() => return Ok(Checked::Fine),
-        answer => answer?,
-    };
-    let name = name.trim();
-    Ok(match checked {
-        ToolServerChecked::NothingToAsk | ToolServerChecked::Listed { tools: _ } => Checked::Fine,
-        ToolServerChecked::NotListed { why } => Checked::Not(not_listed(why, name, &host(url))),
-        ToolServerChecked::Unknown => Checked::Not(newer(name)),
-    })
-}
-
-/// What's said of the server called `name` when a newer hub says what came of asking it.
-fn newer(name: &str) -> String {
-    format!("{name} was asked for its tools. Update this app to see what came of it.")
 }
 
 /// That the server at `url`, as the person typed it, is being asked.
@@ -137,27 +107,12 @@ fn unreached(why: ToolServerUnreached) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use protocol::client::{ApiError, ErrorCode};
-
     use super::*;
-    use crate::ClientError;
 
     const URL: &str = " https://mcp.northwind.example/mcp?toolsets=all ";
 
-    fn of(answer: Result<ToolServerChecked>) -> Checked {
-        came_to(answer, " Runbooks ", URL).unwrap()
-    }
-
-    #[test]
-    fn a_server_that_lists_its_tools_or_isnt_asked_for_them_is_gone_on_with_and_so_is_one_an_old_hub_cant_check() {
-        for checked in [ToolServerChecked::Listed { tools: 0 }, ToolServerChecked::NothingToAsk] {
-            assert_eq!(of(Ok(checked)), Checked::Fine);
-        }
-        let refused = |code| Err(ClientError::Api(ApiError::new(code, "refused")));
-
-        assert_eq!(of(refused(ErrorCode::Unsupported)), Checked::Fine);
-        let taken = came_to(refused(ErrorCode::Conflict), "Runbooks", URL);
-        assert!(matches!(taken, Err(e) if e.is_conflict()), "as adding it would be");
+    fn of(answer: ToolServerSaved) -> Saved {
+        saved(answer, " Runbooks ", URL)
     }
 
     #[test]
@@ -217,25 +172,15 @@ mod tests {
             (NoToolList::WontConnect, "Runbooks answered, and wouldn't connect."),
             (NoToolList::Unknown, "Runbooks didn't list its tools. Update this app to see why."),
         ] {
-            assert_eq!(of(Ok(ToolServerChecked::NotListed { why })), Checked::Not(said.into()));
+            assert_eq!(of(ToolServerSaved::NotListed { why }), Saved::NotListed(said.into()));
         }
-        assert_eq!(
-            of(Ok(ToolServerChecked::Unknown)),
-            Checked::Not("Runbooks was asked for its tools. Update this app to see what came of it.".into())
-        );
     }
 
-    /// Why one listed no tools is said as it is of a check, above.
     #[test]
-    fn what_a_save_comes_to_is_its_record_why_it_listed_no_tools_or_that_it_was_let_go_of() {
+    fn what_a_save_comes_to_is_its_record_that_it_was_let_go_of_or_that_this_app_is_to_be_updated() {
         let server = protocol::fixtures::tool_server("runbooks");
-        let of = |answer| saved(answer, " Runbooks ", URL);
 
         assert_eq!(of(ToolServerSaved::Saved { server: server.clone() }), Saved::Saved(server));
-        assert_eq!(
-            of(ToolServerSaved::NotListed { why: NoToolList::KeyRefused { status: 401 } }),
-            Saved::NotListed("Runbooks refused this key.".into())
-        );
         assert_eq!(of(ToolServerSaved::Cancelled), Saved::LetGo);
         assert_eq!(
             of(ToolServerSaved::Unknown),
