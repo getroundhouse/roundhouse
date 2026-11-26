@@ -1,5 +1,5 @@
-//! Syntax highlighting for the diff and the transcript's tool calls, with syntect and bat's syntax collection
-//! (two-face), in the colours of Visual Studio's dark theme.
+//! Syntax highlighting for the diff, the transcript's tool calls and the code blocks of every text the kit draws, with
+//! syntect and bat's syntax collection (two-face), in the colours of Visual Studio's dark theme.
 //!
 //! gpui-kit's `syntect` feature pulls these crates in, but its `highlight_code` is `pub(crate)`, so they're used
 //! directly here. A large diff is highlighted on a background thread, which can wait for the syntaxes to load. A
@@ -10,6 +10,7 @@ use std::ops::Range;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use gpui_kit::base::text::editor_host::CodeBlock;
 use gpui_kit::{HighlightStyle, Rgba};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::Theme;
@@ -76,22 +77,37 @@ pub fn try_highlight(language: &str, code: &str) -> Option<Spans> {
     READY.load(Ordering::Acquire).then(|| highlight(language, code))
 }
 
+/// The colours for a code block in a text the kit draws, such as a reply's, as [`highlight`] gives them, so code is in
+/// the same colours there as in a diff. A block that names no language is left plain. The kit keeps each block's
+/// colours, so a block drawn before [`preload_highlighting`] has finished would stay plain if this didn't wait for the
+/// syntaxes. It waits on the main thread, as the kit's own highlighter loads them there, and only that once.
+pub(crate) fn code_block(block: &CodeBlock) -> Spans {
+    block.lang().map_or_default(|language| highlight(&language, &block.code()))
+}
+
 /// What to highlight a file as, by its path: its extension, or its whole name for one like `Makefile`.
 pub fn language(path: &str) -> &str {
     let name = path.rsplit('/').find(|part| !part.is_empty()).unwrap_or(path);
     name.rsplit_once('.').map_or(name, |(_, extension)| extension)
 }
 
+/// The syntax for `language`, a file's extension or what a code block's fence names: as syntect knows it, by an
+/// extension or by its own name, such as `tsx` or `javascript`, or else by the extension of what a fence often names in
+/// its place.
 fn find_syntax<'a>(syntaxes: &'a SyntaxSet, language: &str) -> Option<&'a SyntaxReference> {
-    let token = match language {
-        "ts" | "tsx" | "typescript" => "ts",
-        "js" | "javascript" | "jsx" => "js",
-        "rs" | "rust" => "rs",
-        "py" | "python" => "py",
-        "sh" | "shell" | "bash" | "zsh" => "sh",
-        other => other,
+    let instead = match language.to_lowercase().as_str() {
+        "shell" | "zsh" => "sh",
+        "csharp" | "c#" => "cs",
+        "jsonc" => "json",
+        "mdx" => "md",
+        "ejs" => "erb",
+        "make" => "Makefile",
+        _ => language,
     };
-    syntaxes.find_syntax_by_token(token).filter(|s| s.name != "Plain Text")
+    [language, instead]
+        .into_iter()
+        .find_map(|token| syntaxes.find_syntax_by_token(token))
+        .filter(|syntax| syntax.name != "Plain Text")
 }
 
 fn color(c: syntect::highlighting::Color) -> HighlightStyle {
@@ -134,6 +150,26 @@ mod tests {
         assert_eq!(language("/workspaces/aspen/src/signal.rs"), "rs");
         assert_eq!(language("crates/look/src/theme.json"), "json");
         assert_eq!(language("/workspaces/aspen/Makefile"), "Makefile");
+    }
+
+    #[test]
+    fn a_code_block_is_in_the_colours_a_diff_is_and_plain_with_no_language() {
+        let code = "fn main() {}\n";
+
+        assert_eq!(code_block(&CodeBlock::from_code(code, Some("rust"))), highlight("rust", code));
+        assert!(!highlight("rust", code).is_empty());
+        assert!(code_block(&CodeBlock::from_code(code, None::<&str>)).is_empty());
+    }
+
+    #[test]
+    fn a_language_is_found_by_what_a_code_fence_calls_it() {
+        let found = |language| find_syntax(syntaxes(), language).map(|syntax| syntax.name.as_str());
+
+        assert_eq!(found("tsx"), Some("TypeScriptReact"), "by its own extension, not as plain TypeScript");
+        assert_eq!(found("Python"), Some("Python"), "by its name, whatever its case");
+        for language in ["csharp", "c#", "jsonc", "mdx", "ejs", "make", "shell", "zsh"] {
+            assert!(found(language).is_some(), "{language}");
+        }
     }
 
     #[test]
