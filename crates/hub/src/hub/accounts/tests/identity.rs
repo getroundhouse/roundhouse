@@ -58,6 +58,23 @@ async fn who_an_account_is_is_kept_across_a_restart_as_of_its_read() {
     assert!(record.is_some());
 }
 
+/// A launch whose account's record is as it was, but who the account is couldn't be kept, as where the database gives
+/// no revision, fails, so the session doesn't take it as filed, and who the account is stays as it was.
+#[tokio::test]
+async fn a_launch_whose_account_the_hub_couldnt_keep_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    hub.launched_under(&"s".into(), ada("Max"), 1_000).await.unwrap();
+    hub.store.refuse_revisions();
+
+    let launched = hub.launched_under(&"s".into(), ada("Pro"), 2_000).await;
+
+    hub.store.give_revisions();
+    assert!(launched.is_err(), "{launched:?}");
+    let (observed, _) = listed(&hub, "claude-ada").await;
+    assert_eq!(observed, Some(Observed::AsOf { value: ada_is("Max"), as_of_ms: 1_000 }));
+}
+
 /// A database from before who an account is left it opens with the columns gone and the record as it was but for
 /// them, and who the account is not known, as nothing is carried out of the database, until a worker next says.
 #[tokio::test]
@@ -96,6 +113,7 @@ async fn what_s_observed_of_an_account_is_forgotten_with_it() {
     hub.store.account_made(&account).unwrap();
     hub.observation_read::<crate::hub::observations::AccountIdentity>(account.clone(), ada_is("Max"), 1_000)
         .await
+        .result()
         .unwrap();
     hub.hear_limits(account, vec![the_week()], false, 1_000).await;
     hub.observations_written().await;

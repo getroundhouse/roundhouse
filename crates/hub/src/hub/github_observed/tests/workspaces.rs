@@ -216,7 +216,7 @@ async fn what_s_worked_out_of_a_pull_request_goes_with_its_link_and_its_workspac
     assert!(gone.contains(&ObservationKey::WorkspaceBranches { workspace_id: "w".into() }), "{gone:?}");
 
     let worked_out = OwnPullRequestSaid { pull_request: None };
-    hub.observation_worked_out::<WorkspacePullRequest>("gone".into(), worked_out, 1_000).await.unwrap();
+    hub.observation_worked_out::<WorkspacePullRequest>("gone".into(), worked_out, 1_000).await.result().unwrap();
     hub.observe_github_once().await;
 
     assert_eq!(next(&mut feed, removed).await, ObservationKey::WorkspacePullRequest { workspace_id: "gone".into() });

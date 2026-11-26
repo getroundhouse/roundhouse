@@ -61,9 +61,7 @@ async fn a_worker_that_never_ends_a_shell_given_no_record_holds_up_nothing() {
         }
     });
     serving(&hub, &link);
-    let refuse =
-        "CREATE TRIGGER no_rev BEFORE UPDATE ON counters WHEN OLD.name = 'rev' BEGIN SELECT RAISE(ABORT, 'no'); END";
-    hub.store.holding_writes().execute_batch(refuse).unwrap();
+    hub.store.refuse_revisions();
     let carrying_on = tokio::spawn({
         let (hub, link) = (hub.clone(), link.clone());
         async move { hub.carry_on_terminals(&"w".into(), &link).await }
@@ -98,9 +96,7 @@ async fn a_worker_that_never_ends_a_shell_holds_up_neither_a_close_nor_an_open()
             if let WorkerRequest::TerminalStart(start) = request
                 && start.terminal.as_str() == "u"
             {
-                let refuse = "CREATE TRIGGER no_rev BEFORE UPDATE ON counters WHEN OLD.name = 'rev'
-                    BEGIN SELECT RAISE(ABORT, 'no'); END";
-                store.upgrade().unwrap().holding_writes().execute_batch(refuse).unwrap();
+                store.upgrade().unwrap().refuse_revisions();
             }
             Some(Ok(WorkerResponse::Ok))
         }

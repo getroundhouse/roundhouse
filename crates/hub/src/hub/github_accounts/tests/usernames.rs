@@ -6,10 +6,12 @@ use protocol::worker::{GitIdentity, GithubCredential};
 use rusqlite::Connection;
 
 use super::*;
+use crate::github_logins::Heard;
 use crate::hub::Hub;
 use crate::hub::tests::{hub_calling_github, hub_calling_github_again};
 use crate::store::BEFORE_GITHUB_USERS_OBSERVED;
 use crate::store::columns::OneValue;
+use crate::store::now_ms;
 use crate::store::older::store_from_before;
 use github::{Answer, StandIn};
 
@@ -107,4 +109,28 @@ async fn a_username_is_forgotten_with_its_account() {
     assert_eq!(after, (None, None));
     assert_eq!(listed(&again, account.id.as_str()).await, (None, None));
     assert!(!again.observations.keeps::<crate::hub::GithubProfile>(&account.id), "nor its profile");
+}
+
+/// What's heard of who an account is fails to be kept, as where the database gives no revision, at a new username, and
+/// at a new profile with the same username, and whoever heard it is told, rather than the hub going on as though kept.
+#[tokio::test]
+async fn who_an_account_is_that_the_hub_couldnt_keep_fails() {
+    let github = github_of_ada().await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github(dir.path(), github.api());
+    let account = connected(&hub).await;
+    let heard = |username: &str, name: &str| Heard {
+        account: account.id.clone(),
+        username: GithubUsername::from(username),
+        profile: Some(github::GithubProfile { name: Some(name.into()), email: Some("ada@example.com".into()) }),
+        at_ms: now_ms(),
+    };
+    hub.store.refuse_revisions();
+
+    let renamed = hub.github_user_heard(Heard { profile: None, ..heard("ada-renamed", "Ada Lovelace") }).await;
+    let reprofiled = hub.github_user_heard(heard("ada", "Ada King")).await;
+
+    hub.store.give_revisions();
+    assert!(renamed.is_err(), "a new username");
+    assert!(reprofiled.is_err(), "a new profile");
 }

@@ -60,15 +60,7 @@ impl Hub {
     /// since the next is the hub's own. One too old to name its build is another all the same.
     pub(crate) async fn worker_build_heard(&self, workspace_id: &WorkspaceId, word: &WorkerWord<'_>) {
         let build = OtherBuild { said: word.link().said_build().map(str::to_string) };
-        let kept = word.said::<WorkspaceWorkerBuild>(workspace_id.clone(), build, now_ms());
-        if let Err(e) = kept.await {
-            warn!(
-                name: "worker.build_unkept",
-                %workspace_id,
-                error = e.message,
-                "Couldn't keep which build its worker is"
-            );
-        }
+        word.said::<WorkspaceWorkerBuild>(workspace_id.clone(), build, now_ms()).await;
     }
 
     /// Stops the workspace's worker, so the next request for the workspace starts this hub's build, unless something

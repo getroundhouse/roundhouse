@@ -3,7 +3,6 @@
 //! is, the observation `SessionContext`.
 
 use protocol::model::{ConversationCache, PromptCache, Session};
-use tracing::error;
 
 use super::super::LiveSession;
 use crate::hub::{Hub, SessionCache, SessionContext, SessionKey};
@@ -96,13 +95,6 @@ impl LiveSession {
 
     /// Keeps that the cache is as `cache` says, as of `as_of_ms`, which tells clients of a change.
     async fn told_cache(&self, hub: &Hub, cache: ConversationCache, as_of_ms: i64) {
-        if let Err(e) = hub.observation_worked_out::<SessionCache>(self.observed_as(), cache, as_of_ms).await {
-            error!(
-                name: "session.cache_unkept",
-                session_id = %self.id,
-                error = e.message,
-                "Couldn't keep what the cache holds of the conversation"
-            );
-        }
+        hub.observation_worked_out::<SessionCache>(self.observed_as(), cache, as_of_ms).await;
     }
 }

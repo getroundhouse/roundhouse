@@ -207,7 +207,7 @@ async fn a_hub_that_starts_again_removes_what_its_cache_no_longer_has() {
 
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_worked_out::<Referenced>(own(12), ReferenceSaid::Missing, 1_000).await.unwrap();
+    hub.observation_worked_out::<Referenced>(own(12), ReferenceSaid::Missing, 1_000).await.result().unwrap();
     drop(hub);
     let again = hub_in_again(dir.path());
     let mut feed = again.subscribe_feed();

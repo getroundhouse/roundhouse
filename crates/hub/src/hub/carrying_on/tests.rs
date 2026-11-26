@@ -118,7 +118,7 @@ async fn a_starting_hub_takes_the_claims_and_tool_servers_off_every_chat_whose_a
     let change = SessionChange { claims: Some(claimed), ..SessionChange::default() };
     hub.store.append(&id, Some(RunId::new(1)), &started, None, None, Some(change)).unwrap();
     assert!(hub.store.get_session(&id).unwrap().session.agent_capabilities.is_some());
-    hub.observation_read::<SessionToolServers>(servers_of_s(), Vec::new(), 1).await.unwrap();
+    hub.observation_read::<SessionToolServers>(servers_of_s(), Vec::new(), 1).await.result().unwrap();
 
     hub.carry_on(LeftAtWork::read(&hub.store).unwrap()).await;
 
@@ -162,7 +162,7 @@ async fn a_starting_hub_leaves_the_claims_and_tool_servers_of_a_chat_it_carried_
     let (id, run) = (SessionId::from("s"), RunId::new(1));
     let held = RunCapabilities::new(run, claimed());
     hub.store.set_claims(&id, &held).unwrap();
-    hub.observation_read::<SessionToolServers>(servers_of_s(), Vec::new(), 1).await.unwrap();
+    hub.observation_read::<SessionToolServers>(servers_of_s(), Vec::new(), 1).await.result().unwrap();
     hub.carry_on_session(&id, link.id, run, Vec::new(), None).await;
 
     hub.carry_on(LeftAtWork::read(&hub.store).unwrap()).await;

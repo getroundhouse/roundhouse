@@ -29,10 +29,19 @@ async fn whatever_keeps_observations_lets_go_of_every_kind_as_each_says_as_it_go
         (Keeper::Worker(WorkerLink::unconnected().id), Keeper::Worker(WorkerLink::unconnected().id));
     let build = OtherBuild { said: Some("0.9.0".into()) };
     let offer = ReleaseOffer { version: None };
-    hub.observation_said_by_while::<WorkspaceLines>("w".into(), worker, lines(3, 1), 1_000, || true).await.unwrap();
-    hub.observation_said_by_while::<WorkspaceWorkerBuild>("w".into(), worker, build, 1_000, || true).await.unwrap();
-    hub.observation_said_by_while::<ReleaseOffered>((), worker, offer.clone(), 1_000, || true).await.unwrap();
-    hub.observation_said_by_while::<WorkspaceLines>("v".into(), another, lines(1, 0), 1_000, || true).await.unwrap();
+    hub.observation_said_by_while::<WorkspaceLines>("w".into(), worker, lines(3, 1), 1_000, || true)
+        .await
+        .result()
+        .unwrap();
+    hub.observation_said_by_while::<WorkspaceWorkerBuild>("w".into(), worker, build, 1_000, || true)
+        .await
+        .result()
+        .unwrap();
+    hub.observation_said_by_while::<ReleaseOffered>((), worker, offer.clone(), 1_000, || true).await.result().unwrap();
+    hub.observation_said_by_while::<WorkspaceLines>("v".into(), another, lines(1, 0), 1_000, || true)
+        .await
+        .result()
+        .unwrap();
     let (mut feed, before) = (hub.subscribe_feed(), now_ms());
 
     hub.keeper_went(worker).await;
@@ -69,14 +78,23 @@ async fn what_only_a_run_keeps_goes_as_another_keeps_it_and_its_late_word_change
     let (first, next) = (Keeper::Run(RunId::new(1)), Keeper::Run(RunId::new(2)));
     let servers = |of: &SessionKey| observed::<SessionToolServers>(&hub, of);
 
-    hub.observation_said_by_while::<SessionToolServers>(of.clone(), first, Vec::new(), 1_000, || true).await.unwrap();
+    hub.observation_said_by_while::<SessionToolServers>(of.clone(), first, Vec::new(), 1_000, || true)
+        .await
+        .result()
+        .unwrap();
     assert_eq!(servers(&of), Some(Observed::AsOf { value: Vec::new(), as_of_ms: 1_000 }), "never current");
 
-    hub.observation_kept_by::<SessionToolServers>(of.clone(), next).await.unwrap();
+    hub.observation_kept_by::<SessionToolServers>(of.clone(), next).await.result().unwrap();
     assert_eq!(servers(&of), None, "gone as the next run keeps them");
 
-    hub.observation_said_by_while::<SessionToolServers>(of.clone(), next, Vec::new(), 2_000, || true).await.unwrap();
-    hub.observation_said_by_while::<SessionToolServers>(of.clone(), first, Vec::new(), 3_000, || false).await.unwrap();
+    hub.observation_said_by_while::<SessionToolServers>(of.clone(), next, Vec::new(), 2_000, || true)
+        .await
+        .result()
+        .unwrap();
+    hub.observation_said_by_while::<SessionToolServers>(of.clone(), first, Vec::new(), 3_000, || false)
+        .await
+        .result()
+        .unwrap();
     hub.keeper_went(first).await;
     assert_eq!(servers(&of), Some(Observed::AsOf { value: Vec::new(), as_of_ms: 2_000 }), "the next's, as it said");
 
@@ -95,16 +113,16 @@ async fn a_workers_word_is_kept_only_while_it_is_the_workspaces_worker() {
     let word = hub.worker_word(&w, &first).unwrap();
 
     serving(&hub, &next);
-    word.keeps::<WorkspaceLines>(w.clone()).await.unwrap();
-    word.read::<WorkspaceLines>(w.clone(), lines(3, 1), 1_000).await.unwrap();
-    word.said::<WorkspaceWorkerBuild>(w.clone(), OtherBuild { said: None }, 1_000).await.unwrap();
+    word.keeps::<WorkspaceLines>(w.clone()).await.result().unwrap();
+    word.read::<WorkspaceLines>(w.clone(), lines(3, 1), 1_000).await.result().unwrap();
+    word.said::<WorkspaceWorkerBuild>(w.clone(), OtherBuild { said: None }, 1_000).await.result().unwrap();
 
     assert!(hub.worker_word(&w, &first).is_none(), "had for a worker that's been replaced");
     assert_eq!(observed::<WorkspaceLines>(&hub, &w), None);
     assert_eq!(observed::<WorkspaceWorkerBuild>(&hub, &w), None);
     assert!(!hub.observation_is_kept_current::<WorkspaceLines>(&w), "kept current by a worker that's been replaced");
     let next_word = hub.worker_word(&w, &next).unwrap();
-    next_word.keeps::<WorkspaceLines>(w.clone()).await.unwrap();
-    next_word.read::<WorkspaceLines>(w.clone(), lines(3, 1), 2_000).await.unwrap();
+    next_word.keeps::<WorkspaceLines>(w.clone()).await.result().unwrap();
+    next_word.read::<WorkspaceLines>(w.clone(), lines(3, 1), 2_000).await.result().unwrap();
     assert_eq!(observed::<WorkspaceLines>(&hub, &w), Some(Observed::Current { value: lines(3, 1) }));
 }

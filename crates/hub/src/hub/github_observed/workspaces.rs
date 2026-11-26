@@ -8,7 +8,6 @@ use protocol::model::{
     OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PullRequestDetail, PullRequestFound, Workspace, WorkspaceId,
 };
 
-use super::observing::logged;
 use super::reads::{Heard, ReadEnded, ReadWent};
 use crate::github_cache::{Item, Told};
 use crate::hub::Hub;
@@ -43,12 +42,12 @@ impl Hub {
         self.keep_current_or_not::<WorkspaceRepositoryUnseen>(id, current).await;
         if let Some(found) = self.known_of(workspace) {
             let ((said, said_at), (detail, detail_at)) = split(found);
-            logged(self.observation_worked_out::<WorkspacePullRequest>(id.clone(), said, said_at).await);
-            logged(self.observation_worked_out::<WorkspacePullRequestDetail>(id.clone(), detail, detail_at).await);
+            self.observation_worked_out::<WorkspacePullRequest>(id.clone(), said, said_at).await;
+            self.observation_worked_out::<WorkspacePullRequestDetail>(id.clone(), detail, detail_at).await;
         } else {
             // Not looked for yet, or of a pull request the cache has forgotten, or that the record no longer links to.
-            logged(self.observation_gone::<WorkspacePullRequest>(id.clone()).await);
-            logged(self.observation_gone::<WorkspacePullRequestDetail>(id.clone()).await);
+            self.observation_gone::<WorkspacePullRequest>(id.clone()).await;
+            self.observation_gone::<WorkspacePullRequestDetail>(id.clone()).await;
         }
         linked(workspace)
     }
@@ -64,17 +63,16 @@ impl Hub {
             Heard::Seen if self.observations.keeps::<WorkspaceRepositoryUnseen>(id) => None,
             Heard::Seen | Heard::Nothing => return,
         };
-        logged(self.observation_read::<WorkspaceRepositoryUnseen>(id.clone(), unseen, read_at_ms).await);
+        self.observation_read::<WorkspaceRepositoryUnseen>(id.clone(), unseen, read_at_ms).await;
     }
 
     /// Keeps the observation `K` of `id` current from now, or as of its last read.
     async fn keep_current_or_not<K: Kind<Of = WorkspaceId>>(&self, id: &WorkspaceId, current: bool) {
-        let kept = if current {
-            self.observation_kept_by::<K>(id.clone(), Keeper::Hub).await
+        if current {
+            self.observation_kept_by::<K>(id.clone(), Keeper::Hub).await;
         } else {
-            self.observation_no_longer_kept_by::<K>(id.clone(), Keeper::Hub, now_ms()).await
-        };
-        logged(kept);
+            self.observation_no_longer_kept_by::<K>(id.clone(), Keeper::Hub, now_ms()).await;
+        }
     }
 }
 

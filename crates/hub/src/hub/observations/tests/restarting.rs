@@ -16,9 +16,9 @@ use crate::store::columns::OneValue;
 async fn an_observation_is_kept_across_a_restart_as_of_its_last_read_under_a_newer_revision() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_kept_by::<WorkspaceLines>("w".into(), Keeper::Hub).await.unwrap();
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 2_000).await.unwrap();
+    hub.observation_kept_by::<WorkspaceLines>("w".into(), Keeper::Hub).await.result().unwrap();
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.result().unwrap();
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 2_000).await.result().unwrap();
     let (_, before) = listed(&hub).await;
     drop(hub);
 
@@ -38,13 +38,13 @@ async fn an_observation_is_kept_across_a_restart_as_of_its_last_read_under_a_new
 async fn a_read_that_finds_the_same_writes_only_when_it_was_read() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_read::<WorkspaceChanges>("w".into(), changes(3, 1), 1_000).await.unwrap();
+    hub.observation_read::<WorkspaceChanges>("w".into(), changes(3, 1), 1_000).await.result().unwrap();
     hub.observations_written().await;
     let file = Connection::open(dir.path().join("github-cache.db")).unwrap();
     let elsewhere = serde_json::to_string(&changes(9, 9)).unwrap();
     file.execute("UPDATE observed_workspace_changes SET said = ?", [elsewhere]).unwrap();
 
-    hub.observation_read::<WorkspaceChanges>("w".into(), changes(3, 1), 2_000).await.unwrap();
+    hub.observation_read::<WorkspaceChanges>("w".into(), changes(3, 1), 2_000).await.result().unwrap();
     drop(hub);
 
     let again = hub_in_again(dir.path());
@@ -61,7 +61,7 @@ async fn a_read_that_finds_the_same_writes_only_when_it_was_read() {
 async fn a_kind_of_another_form_is_emptied_and_the_others_kept() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.result().unwrap();
     let item = read_a_pull_request(&hub);
     drop(hub);
     let file = Connection::open(dir.path().join("github-cache.db")).unwrap();
@@ -71,7 +71,7 @@ async fn a_kind_of_another_form_is_emptied_and_the_others_kept() {
 
     assert_eq!(listed(&again).await.0, [], "lines of another form");
     assert!(matches!(again.github_cache.summary(&item), Some(ReferenceRead::Found { .. })), "GitHub's kept");
-    again.observation_read::<WorkspaceLines>("w".into(), lines(4, 0), 2_000).await.unwrap();
+    again.observation_read::<WorkspaceLines>("w".into(), lines(4, 0), 2_000).await.result().unwrap();
     drop(again);
     file.pragma_update(None, "user_version", 3).unwrap();
 
@@ -154,9 +154,9 @@ fn rows(conn: &Connection, table: &str) -> i64 {
 async fn a_hub_that_starts_again_forgets_the_observations_of_a_workspace_that_s_gone() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
-    hub.observation_read::<WorkspaceLines>("gone".into(), lines(4, 0), 1_000).await.unwrap();
-    hub.observation_read::<WorkspaceChanges>("gone".into(), changes(4, 0), 1_000).await.unwrap();
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.result().unwrap();
+    hub.observation_read::<WorkspaceLines>("gone".into(), lines(4, 0), 1_000).await.result().unwrap();
+    hub.observation_read::<WorkspaceChanges>("gone".into(), changes(4, 0), 1_000).await.result().unwrap();
     drop(hub);
 
     let again = hub_in_again(dir.path());

@@ -58,15 +58,12 @@ impl Hub {
     async fn keep_wait_read(&self, wait: &Wait) {
         let Some(watch) = &wait.watch else { return };
         let of = key_of(wait);
-        let kept = if wait.ended.is_some() {
-            self.observation_gone::<WaitRead>(of).await
+        if wait.ended.is_some() {
+            self.observation_gone::<WaitRead>(of).await;
         } else {
             let read = watch.read();
             let as_of_ms = read.observed_at_ms;
-            self.observation_worked_out::<WaitRead>(of, read, as_of_ms).await
-        };
-        if let Err(e) = kept {
-            warn!(name: "wait.unkept", wait = %wait.id, error = e.message, "Couldn't keep what a wait read");
+            self.observation_worked_out::<WaitRead>(of, read, as_of_ms).await;
         }
     }
 
@@ -124,9 +121,7 @@ impl Hub {
                     );
                 }
             }
-            if let Err(e) = self.observation_gone::<WaitRead>(of).await {
-                warn!(name: "wait.ended_unforgotten", error = e.message, "Couldn't forget what an ended wait read");
-            }
+            self.observation_gone::<WaitRead>(of).await;
         }
     }
 

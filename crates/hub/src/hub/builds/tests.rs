@@ -57,7 +57,7 @@ async fn a_prompt_recorded_as_the_worker_is_replaced_isnt_interrupted_by_its_age
     let servers = live.observed_as();
     let said =
         hub.observation_said_by_while::<SessionToolServers>(servers.clone(), Keeper::Run(RUN), Vec::new(), 1, || true);
-    said.await.unwrap();
+    said.await.result().unwrap();
 
     assert!(hub.replace_if_idle(&w(), &link).await, "nothing was at work");
     assert!(hub.existing_worker(&w()).is_none(), "the worker is still the workspace's");

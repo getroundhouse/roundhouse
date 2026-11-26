@@ -145,16 +145,14 @@ async fn an_answer_the_hub_couldnt_keep_leaves_its_list_failed() {
     let installed = key(Some("0.170.0"));
     let hub = hub_in(dir.path());
     let asked = hub.model_list_asking(&installed).await;
-    let refuse =
-        "CREATE TRIGGER no_rev BEFORE UPDATE ON counters WHEN OLD.name = 'rev' BEGIN SELECT RAISE(ABORT, 'no'); END";
-    store_of(&hub).holding_writes().execute_batch(refuse).unwrap();
+    store_of(&hub).refuse_revisions();
 
     hub.model_list_settled(&installed, asked, Ok(offered())).await;
 
     let list = hub.model_list_held(&installed).expect("the list asked for");
     let ModelLookup::Failed { message } = &list.lookup else { panic!("not failed: {:?}", list.lookup) };
     assert!(message.contains("couldn't keep"), "{message}");
-    store_of(&hub).holding_writes().execute_batch("DROP TRIGGER no_rev").unwrap();
+    store_of(&hub).give_revisions();
     assert_eq!(listed(&hub, &installed).await.0, None, "nothing kept of what it offered");
 }
 

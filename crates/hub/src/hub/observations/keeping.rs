@@ -1,9 +1,9 @@
 //! How what keeps an observation, such as a workspace's worker or an agent's run, says so, and how all it keeps is let go
 //! of with one call as it goes, so no kind it kept is left out.
 
-use protocol::client::ApiError;
 use tracing::warn;
 
+use super::failing::Keeping;
 use super::keepers::Keeper;
 use super::kept::Change;
 use super::kinds::Kind;
@@ -15,7 +15,7 @@ impl Hub {
     /// read of it from now is current if [`Keeper::keeps_current`] says so. What was read before isn't, so it stays as
     /// of when it was read until the next read. Another that kept it stops, so it's as its kind says once unkept, as
     /// when a run starts in place of one whose tool servers were only ever its own.
-    pub(crate) async fn observation_kept_by<K: Kind>(&self, of: K::Of, keeper: Keeper) -> Result<(), ApiError> {
+    pub(crate) async fn observation_kept_by<K: Kind>(&self, of: K::Of, keeper: Keeper) -> Keeping {
         self.change_observation::<K>(of, |_| Change::KeptBy { keeper, at_ms: now_ms() }).await
     }
 
@@ -29,7 +29,7 @@ impl Hub {
         of: K::Of,
         keeper: Keeper,
         at_ms: i64,
-    ) -> Result<(), ApiError> {
+    ) -> Keeping {
         self.change_observation::<K>(of, |_| Change::NoLongerKeptBy { keeper, at_ms }).await
     }
 
@@ -44,13 +44,16 @@ impl Hub {
         value: K::Value,
         read_at_ms: i64,
         wanted: impl FnOnce() -> bool,
-    ) -> Result<(), ApiError> {
+    ) -> Keeping {
         let _changing = self.observations.changing.lock().await;
         if !wanted() {
-            return Ok(());
+            return Ok(()).into();
         }
-        self.changed_observation_held::<K>(of.clone(), |_| Change::KeptBy { keeper, at_ms: now_ms() }).await?;
-        self.changed_observation_held::<K>(of, |_| Change::Read { value, read_at_ms }).await
+        let kept = self.changed_observation_held::<K>(of.clone(), |_| Change::KeptBy { keeper, at_ms: now_ms() }).await;
+        match kept {
+            Ok(()) => self.changed_observation_held::<K>(of, |_| Change::Read { value, read_at_ms }).await.into(),
+            Err(e) => Err(e).into(),
+        }
     }
 
     /// Whether something keeps the observation of `of` up to date now, as [`Hub::observation_kept_by`] said.

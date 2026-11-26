@@ -25,7 +25,7 @@ async fn a_workspace_s_lines_are_listed_and_sent_to_whoever_follows_the_hub_and_
     let given = Given::new(dir.path()).await;
     let hub = &given.hub;
     let lines = |added, removed| LineCounts { added, removed };
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.result().unwrap();
     let mut one = Connection::greeted(hub, CLIENT_PROTOCOL_VERSION).await;
     let session = Follow::Session { id: "s".into(), from: None };
     let follows = Subscribe { stop: Vec::new(), start: vec![start(HUB, Follow::Hub), start(SESSION, session)] };
@@ -33,8 +33,8 @@ async fn a_workspace_s_lines_are_listed_and_sent_to_whoever_follows_the_hub_and_
     one.until("both lists", |sent| sent.iter().filter(|frame| matches!(frame, HubFrame::Listed { .. })).count() == 2)
         .await;
 
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(4, 0), 2_000).await.unwrap();
-    hub.observation_gone::<WorkspaceLines>("w".into()).await.unwrap();
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(4, 0), 2_000).await.result().unwrap();
+    hub.observation_gone::<WorkspaceLines>("w".into()).await.result().unwrap();
 
     // Of `s`, after the rest, so once it's sent on the session's subscription, whatever that was sent before it was too.
     hub.notify(super::given::subagent_made(hub));
@@ -80,9 +80,9 @@ async fn a_workspace_s_files_are_listed_before_the_reply_and_sent_only_to_whoeve
     let hub = &given.hub;
     let lines = |added, removed| LineCounts { added, removed };
     for workspace in ["w", "v"] {
-        hub.observation_read::<WorkspaceChanges>(workspace.into(), changes(3, 1), 1_000).await.unwrap();
+        hub.observation_read::<WorkspaceChanges>(workspace.into(), changes(3, 1), 1_000).await.result().unwrap();
     }
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.result().unwrap();
     let mut one = Connection::greeted(hub, CLIENT_PROTOCOL_VERSION).await;
     let workspace = Follow::Workspace { id: "w".into() };
     let follows = Subscribe { stop: Vec::new(), start: vec![start(HUB, Follow::Hub), start(WORKSPACE, workspace)] };
@@ -96,11 +96,11 @@ async fn a_workspace_s_files_are_listed_before_the_reply_and_sent_only_to_whoeve
     })
     .await;
 
-    hub.observation_read::<WorkspaceChanges>("v".into(), changes(5, 0), 2_000).await.unwrap();
-    hub.observation_read::<WorkspaceChanges>("w".into(), changes(4, 0), 2_000).await.unwrap();
-    hub.observation_gone::<WorkspaceChanges>("w".into()).await.unwrap();
+    hub.observation_read::<WorkspaceChanges>("v".into(), changes(5, 0), 2_000).await.result().unwrap();
+    hub.observation_read::<WorkspaceChanges>("w".into(), changes(4, 0), 2_000).await.result().unwrap();
+    hub.observation_gone::<WorkspaceChanges>("w".into()).await.result().unwrap();
     // At the hub's level, after the rest, so once it's sent there, whatever that was sent before it was too.
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(4, 0), 2_000).await.unwrap();
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(4, 0), 2_000).await.result().unwrap();
 
     let lines_told = |sent: &[HubFrame]| sent.iter().filter_map(observation_notice).any(is_of_lines);
     one.until("the files' removal, and the lines after it", |sent| {

@@ -158,43 +158,15 @@ impl Hub {
     /// date from now on, until it goes: its lines, and its changed files.
     async fn changes_kept_current(&self, id: &WorkspaceId, link: &Arc<WorkerLink>) {
         let Some(word) = self.worker_word(id, link) else { return };
-        if let Err(e) = word.keeps::<WorkspaceLines>(id.clone()).await {
-            warn!(
-                name: "changes.lines_watch_unkept",
-                workspace_id = %id,
-                error = e.message,
-                "Couldn't keep that the workspace's lines are watched"
-            );
-        }
-        if let Err(e) = word.keeps::<WorkspaceChanges>(id.clone()).await {
-            warn!(
-                name: "changes.files_watch_unkept",
-                workspace_id = %id,
-                error = e.message,
-                "Couldn't keep that the workspace's changed files are watched"
-            );
-        }
+        word.keeps::<WorkspaceLines>(id.clone()).await;
+        word.keeps::<WorkspaceChanges>(id.clone()).await;
     }
 
     /// Keeps that the worker `link` no longer keeps either observation of the workspace's changes up to date, though it
     /// stays, so each is as of now, as [`WorkspaceLines`] and [`WorkspaceChanges`] say once unkept.
     async fn changes_let_go(&self, id: &WorkspaceId, link: WorkerLinkId) {
         let (keeper, at_ms) = (Keeper::Worker(link), now_ms());
-        if let Err(e) = self.observation_no_longer_kept_by::<WorkspaceLines>(id.clone(), keeper, at_ms).await {
-            warn!(
-                name: "changes.lines_watch_unkept",
-                workspace_id = %id,
-                error = e.message,
-                "Couldn't keep that the workspace's lines are no longer watched"
-            );
-        }
-        if let Err(e) = self.observation_no_longer_kept_by::<WorkspaceChanges>(id.clone(), keeper, at_ms).await {
-            warn!(
-                name: "changes.files_watch_unkept",
-                workspace_id = %id,
-                error = e.message,
-                "Couldn't keep that the workspace's changed files are no longer watched"
-            );
-        }
+        self.observation_no_longer_kept_by::<WorkspaceLines>(id.clone(), keeper, at_ms).await;
+        self.observation_no_longer_kept_by::<WorkspaceChanges>(id.clone(), keeper, at_ms).await;
     }
 }

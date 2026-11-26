@@ -10,7 +10,7 @@
 
 use protocol::capability::setup::ToolServerState;
 use protocol::model::{RunId, ToolServerId};
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use super::had_servers::{HadServers, Running};
 use super::messages::Command;
@@ -103,14 +103,7 @@ impl LiveSession {
                 self.mark_waiting(run, said);
             }
         });
-        if let Err(e) = marked.await {
-            error!(
-                name: "session.tool_servers_unmarked",
-                session_id = %self.id,
-                error = e.message,
-                "Couldn't keep which tool servers an agent is to connect to once its turn ends"
-            );
-        }
+        marked.await;
     }
 
     /// Marks those of `said`, which `run` says it has, with when it's to connect to each again, and no others: none where

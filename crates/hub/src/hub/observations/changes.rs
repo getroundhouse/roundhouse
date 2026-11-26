@@ -6,6 +6,7 @@ use protocol::client::{ApiError, ObservationNotice};
 use protocol::model::{GithubAccountId, GithubAppId, WorkspaceId};
 use tracing::warn;
 
+use super::failing::{self, Keeping};
 use super::file::Write;
 use super::kept::{Change, Said, Step, Table};
 use super::kinds::{Kind, Owner, SessionKey};
@@ -19,12 +20,7 @@ impl Hub {
     /// read that finds what's kept tells clients nothing and moves no revision, and the file keeps only that it was
     /// read then, so a hub that starts again has it as of this read. One that began before the read kept, and lands
     /// after it, is dropped.
-    pub(crate) async fn observation_read<K: Kind>(
-        &self,
-        of: K::Of,
-        value: K::Value,
-        read_at_ms: i64,
-    ) -> Result<(), ApiError> {
+    pub(crate) async fn observation_read<K: Kind>(&self, of: K::Of, value: K::Value, read_at_ms: i64) -> Keeping {
         self.change_observation::<K>(of, |_| Change::Read { value, read_at_ms }).await
     }
 
@@ -38,7 +34,7 @@ impl Hub {
         value: K::Value,
         read_at_ms: i64,
         wanted: impl FnOnce() -> bool,
-    ) -> Result<(), ApiError> {
+    ) -> Keeping {
         self.change_observation_while::<K>(of, wanted, |_| Change::Read { value, read_at_ms }).await
     }
 
@@ -52,7 +48,7 @@ impl Hub {
         of: K::Of,
         heard_at_ms: i64,
         merge: impl FnOnce(Option<&K::Value>) -> K::Value,
-    ) -> Result<(), ApiError> {
+    ) -> Keeping {
         let held = of.clone();
         self.change_observation::<K>(of, |table| Change::Merged { value: merge(table.value(&held)), heard_at_ms }).await
     }
@@ -63,12 +59,7 @@ impl Hub {
     /// drops nothing as a late read, since a value worked out from what's kept now is never older than one worked out
     /// before, even where what it's worked out from was read earlier, as when a workspace's pull request becomes
     /// another. So whatever works out a kind works each out in turn.
-    pub(crate) async fn observation_worked_out<K: Kind>(
-        &self,
-        of: K::Of,
-        value: K::Value,
-        as_of_ms: i64,
-    ) -> Result<(), ApiError> {
+    pub(crate) async fn observation_worked_out<K: Kind>(&self, of: K::Of, value: K::Value, as_of_ms: i64) -> Keeping {
         self.change_observation::<K>(of, |_| Change::WorkedOut { value, as_of_ms }).await
     }
 
@@ -79,12 +70,12 @@ impl Hub {
         &self,
         of: K::Of,
         again: impl FnOnce(&mut K::Value),
-    ) -> Result<(), ApiError> {
+    ) -> Keeping {
         let _changing = self.observations.changing.lock().await;
         let kept = K::table(&mut self.observations.tables.lock()).said(&of).cloned();
-        let Some(Said { mut value, read_at_ms, .. }) = kept else { return Ok(()) };
+        let Some(Said { mut value, read_at_ms, .. }) = kept else { return Ok(()).into() };
         again(&mut value);
-        self.changed_observation_held::<K>(of, |_| Change::WorkedOut { value, as_of_ms: read_at_ms }).await
+        self.changed_observation_held::<K>(of, |_| Change::WorkedOut { value, as_of_ms: read_at_ms }).await.into()
     }
 
     /// What the observation of `of` says, however fresh it is, for what the hub decides from it. `None` where it isn't
@@ -111,13 +102,7 @@ impl Hub {
         }
         for of in self.observations.kept_of::<K>() {
             let at_ms = now_ms();
-            if let Err(e) = self.change_observation::<K>(of, |_| Change::NoLongerKeptWithItsKind { at_ms }).await {
-                warn!(
-                    name: "observation.read_unsaid",
-                    error = e.message,
-                    "Couldn't say an observation is no longer kept current"
-                );
-            }
+            self.change_observation::<K>(of, |_| Change::NoLongerKeptWithItsKind { at_ms }).await;
         }
     }
 
@@ -129,7 +114,7 @@ impl Hub {
     }
 
     /// Forgets the observation of `of`, since what it's of is gone, such as a workspace, and tells clients it's gone.
-    pub(crate) async fn observation_gone<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
+    pub(crate) async fn observation_gone<K: Kind>(&self, of: K::Of) -> Keeping {
         self.change_observation::<K>(of, |_| Change::Gone).await
     }
 
@@ -138,12 +123,14 @@ impl Hub {
     /// wanted, as [`Hub::observation_read_while`] says, is forgotten, where the caller stopped wanting it first, and one
     /// that asks after finds it isn't wanted. Stops at the first that fails, which only a database that gives no
     /// revision has.
-    pub(crate) async fn observations_gone_where<K: Kind>(&self, gone: impl Fn(&K::Of) -> bool) -> Result<(), ApiError> {
+    pub(crate) async fn observations_gone_where<K: Kind>(&self, gone: impl Fn(&K::Of) -> bool) -> Keeping {
         let _changing = self.observations.changing.lock().await;
         for of in self.observations.kept_of::<K>().into_iter().filter(|of| gone(of)) {
-            self.changed_observation_held::<K>(of, |_| Change::Gone).await?;
+            if let Err(e) = self.changed_observation_held::<K>(of, |_| Change::Gone).await {
+                return Err(e).into();
+            }
         }
-        Ok(())
+        Ok(()).into()
     }
 
     /// Forgets every observation of workspace `id`, and of its other worktrees and its sessions, of every kind, since the
@@ -284,13 +271,13 @@ impl Hub {
     /// Makes `change` to the observation of `of`, under the lock every change takes, from before it takes a revision
     /// until clients are told, so a list of records has every change its revision takes in. Its write to the file is
     /// queued under the lock too, so the file is written in the order the changes are made, and made after, so no list
-    /// waits on the file. Fails only where the database gives no revision, and then changes nothing but whether
-    /// something keeps it current.
+    /// waits on the file. Fails only where the database gives no revision, which is logged, and then changes nothing
+    /// but whether something keeps it current.
     pub(super) async fn change_observation<K: Kind>(
         &self,
         of: K::Of,
         change: impl FnOnce(&Table<K>) -> Change<K::Value>,
-    ) -> Result<(), ApiError> {
+    ) -> Keeping {
         self.change_observation_while::<K>(of, || true, change).await
     }
 
@@ -301,12 +288,12 @@ impl Hub {
         of: K::Of,
         wanted: impl FnOnce() -> bool,
         change: impl FnOnce(&Table<K>) -> Change<K::Value>,
-    ) -> Result<(), ApiError> {
+    ) -> Keeping {
         let _changing = self.observations.changing.lock().await;
         if !wanted() {
-            return Ok(());
+            return Ok(()).into();
         }
-        self.changed_observation_held::<K>(of, change).await
+        self.changed_observation_held::<K>(of, change).await.into()
     }
 
     /// What [`Hub::change_observation_while`] does once it holds the lock every change takes, which the caller holds.
@@ -316,11 +303,12 @@ impl Hub {
         change: impl FnOnce(&Table<K>) -> Change<K::Value>,
     ) -> Result<(), ApiError> {
         let observations = &self.observations;
-        let step = {
+        let (step, doing) = {
             let mut tables = observations.tables.lock();
             let table = K::table(&mut tables);
             let change = change(table);
-            table.step(&of, change)
+            let doing = change.doing();
+            (table.step(&of, change), doing)
         };
         let changed = match step {
             Step::Same => return Ok(()),
@@ -337,7 +325,7 @@ impl Hub {
             }
             Step::Changed(changed) => changed,
         };
-        let rev = self.blocking(Store::next_rev).await?;
+        let rev = self.blocking(Store::next_rev).await.inspect_err(|e| failing::logged::<K>(&of, doing, e))?;
         let notice = K::table(&mut observations.tables.lock()).change(&of, changed, rev, &observations.writer);
         if let Some(notice) = notice {
             self.tell_of_observation(notice);
