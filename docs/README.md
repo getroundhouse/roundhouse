@@ -30,6 +30,7 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/standards/rust.md` | How Rust is written, whatever the crate |
 | `docs/standards/platforms.md` | How code is written so that it runs on macOS, Windows and Linux |
 | `docs/standards/gpui.md` | How code that uses GPUI is written |
+| `docs/standards/design.md` | How the product is designed before it's built: what's settled in what order, how the owner decides, and how code is built from a design and checked against it |
 | `docs/standards/components.md` | How code makes and uses the components screens are built from, and how a component's API is laid out |
 | `docs/standards/test-levels.md` | Where each kind of test goes, and the hub it runs on |
 | `docs/standards/testing.md` | What a test runs in, and how a test is written |
@@ -63,6 +64,7 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/reference/claude-cli.md` | How the Claude CLI behaves, and how the worker drives it |
 | `docs/reference/codex-cli.md` | How Codex's app-server behaves on the wire, and how to probe it |
 | `docs/reference/antigravity-cli.md` | How Antigravity's ACP server behaves on the wire, and how the worker drives it |
+| `docs/reference/brilliant.md` | How Brilliant, the tool the design is drawn in, behaves, as found by experiment |
 | `docs/reference/git.md` | What git does that took an experiment to find, or that more than one place in the code depends on |
 | `docs/reference/file-watching.md` | What the OS's file watchers do through `notify`, as found by experiment or read from its source |
 | `docs/reference/github.md` | How GitHub and `gh` behave, where more than one place in the code depends on it, or it took an experiment to find |

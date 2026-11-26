@@ -2,7 +2,7 @@
 
 How code makes and uses the components screens are built from. `docs/spec/components.md` says how each component looks and what each of its states means, `docs/spec/look.md` the foundations they're built on, and `docs/standards/gpui.md` everything else about how code that draws is written.
 
-**Draw only with `look`'s components, mocks included.** What they lack is added to them as "Adding a component, a kind or a size" in `docs/standards/components.md` says, in the spec's table and on the sheet before anything uses it, rather than made where it's drawn or sized from outside, and a change to what a rule the owner decided comes to, such as a component's size, is asked about first.
+**Draw only with `look`'s components.** What they lack is designed first, as `docs/standards/design.md` says, then added as "Adding a component, a kind or a size" says, in the spec's table and on the sheet before anything uses it, rather than made where it's drawn or sized from outside.
 
 ## What it is
 
@@ -35,9 +35,9 @@ Each component follows the same pattern, so one that's learned reads like the ot
 
 ## Adding a component, a kind or a size
 
-A new size or option of a component goes through these steps as a kind does, and is on the component's sheet beside the rest before anything uses it, so how it looks beside them is seen first. A change that would alter what a rule the owner decided comes to, such as a component's height, is asked about before it's made.
+A new size or option of a component goes through these steps as a kind does, and is on the component's sheet beside the rest before anything uses it, so how it looks beside them is seen first. Its design is ready first, as `docs/standards/design.md` says, and so is a change to one.
 
-1. Write its rules, its table and its sheet's caption in `docs/spec/components.md`, marked *Unconfirmed* until the owner confirms them.
+1. Write its rules, its table and its sheet's caption in `docs/spec/components.md`, as its design shows it.
 2. Make its type in `look`, with its kinds in a `named!` enum, the way to make one that takes what it can't be without, and its options.
 3. Hold the spec's table to the names with a test, and test what's built in.
 4. Draw its sheet in `apps/desktop/tests/ui/gallery`, with each kind's place for the design system's page, and accept it as `docs/reference/commands.md` says.

@@ -25,11 +25,11 @@ A rule can end with *Not built*, when it's decided and not in the product yet, o
 
 ## How it looks
 
-Each area's file shows its screens beside the rules they go with, because what a feature does and how it looks are decided together, and read together. A screen is a picture rather than words: the owner decides the look by looking at it, so the record of each decision is the picture itself. The images are kept in `screens/`, the desktop app's in that folder and the iPhone app's in `screens/phone/`. The real app draws every screen from made-up data, and a test fails when a screen no longer matches its image, or its area's file doesn't show it, so the look can't change without someone seeing it.
+Each area's file shows its screens beside the rules they go with, because what a feature does and how it looks are decided together, and read together. A screen is a picture rather than words, and the owner decides the look by looking at it, in the design, as `docs/standards/design.md` says. The screens here show that what was designed is what was built. The images are kept in `screens/`, the desktop app's in that folder and the iPhone app's in `screens/phone/`. The real app draws every screen from made-up data, and a test fails when a screen no longer matches its image, or its area's file doesn't show it, so the look can't change without someone seeing it.
 
 Each image shows only what its screen is about, such as a sidebar, the composer, or what's in the chat, so a change shows in the images of what it changed rather than in every image of the window. A few show the whole window: those about how it's laid out, and those with a dialog, which dims all of it. The screens about what's in the chat, such as its rows and the composer, are drawn in a window wide enough that the chat's column is at its widest whatever the sidebars' widths, so widening a sidebar doesn't change them. The rest, which are as wide as the window lets them be, such as the tabs, are drawn at the size the app opens at, and a sidebar's width changes those.
 
-A screen is confirmed the same way as a rule. One an agent adds, or changes before the owner has approved it, ends with *Unconfirmed*. Changing a confirmed screen's image needs the owner's approval, in the PR that changes it, where GitHub shows the old image beside the new one.
+A screen is confirmed when the owner has seen that it's what the design shows. One an agent adds, or changes before the owner has approved it, ends with *Unconfirmed*. Changing a confirmed screen's image needs the owner's approval, in the PR that changes it, which shows the drawing it's built from beside it.
 
 A screen that shows a rule goes under it, in the rule's list item, with a caption of its own, so each rule is read beside the pictures of what it says, and a rule that describes several states has a screen for each. A screen about no one rule, such as the window before there's a project, goes on its own, after the rules it goes with. *Unconfirmed.*
 
@@ -39,14 +39,10 @@ Beside it, the same command draws the design system's page, which lays out `look
 
 An image is exact about everything, including what nobody chose, such as how text is smoothed. So a GPUI upgrade or a font change can change confirmed images too, and those need approving the same way.
 
-The design system is what screens are built from: its foundations, the rules every screen follows, such as spacing, type and colour, in `look.md`, the way `speed.md` holds the bars every area meets, and the components built on them, such as buttons and the status mark, in `components.md`. A size, or any value with a name, that more than one component shares is a foundation, and one that only a single component has is that component's, such as a button's sizes. A rule about one place in the app is in that place's file, even when it's about how it looks, such as the transcript's column in `chats.md` and the window's buttons in `window.md`.
+The design system is what screens are built from: its foundations, the rules every screen follows, such as spacing, type and colour, in `look.md`, the way `speed.md` holds the bars every area meets, the components built on them, such as buttons and the status mark, in `components.md`, and the patterns that put components together for one purpose, such as asking for a decision. *Not built:* the patterns. A size, or any value with a name, that more than one component shares is a foundation, and one that only a single component has is that component's, such as a button's sizes. A rule about one place in the app is in that place's file, even when it's about how it looks, such as the transcript's column in `chats.md` and the window's buttons in `window.md`.
 
 ## How a feature is designed
 
-What a feature does and how it looks are settled in one issue, labelled `kind/question` and `needs/owner`, because neither can be judged without the other.
+What a feature does and how it looks are decided together, before code, because neither can be judged without the other. `docs/standards/design.md` has how: it's drawn in the design, the owner settles it there, and it's built in the gallery and then in the app.
 
-1. An agent sketches two to four options. Each is a few rules and the screens that show them, drawn by the real app on a branch that's never merged, and posted in the issue with `gh issue comment --attach`. A flow across several screens can start as a diagram.
-2. The owner picks one in the issue, or asks for another round.
-3. One PR builds it: the code, its tests, and the rules and screens in the area's file. It closes the issue, and the owner approves the rules, the images and the code there together.
-
-When building waits, the rules go in marked *Not built*, and the chosen screens stay in the issue until it's built, because every image here is one the app draws.
+What was decided goes in the area's file in words, marked *Not built* until it is. The design holds what it'll look like until then, because every image here is one the app draws.

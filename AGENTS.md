@@ -34,7 +34,7 @@ cargo run -p guide -- OUT         # Builds docs/guide, and refuses a link or a p
 
 - **Say why with `--note` whenever you open the app,** since copies from several checkouts can be open at once. As it quits, it says why on stderr. "Quit by whoever had it open" means they've finished with it, so don't look into it, and don't open it again unless they ask.
 - **Nothing run from a checkout reaches the installed app's hub.** `cargo run` and `cargo test` use this checkout's own, in `.context/dev`. A debug binary run directly uses `roundhouse-dev`, and only a release build uses the real data.
-- **Leave `dev`, `gallery`, `clips`, `spec` and `site` in `.context/` to the tools that write them.** Put nothing of your own in them, and don't move or delete what's there.
+- **Leave `dev`, `gallery`, `clips`, `spec` and `site` in `.context/` to the tools that write them.** Add, move or delete nothing there.
 
 ## Read before you…
 
@@ -44,7 +44,7 @@ cargo run -p guide -- OUT         # Builds docs/guide, and refuses a link or a p
 | decide where a change goes | `docs/principles/state.md`, and the rest of `docs/principles/` for the part you're changing |
 | write Rust | `docs/standards/rust.md` and `docs/standards/platforms.md` |
 | write a test | `docs/standards/testing.md` |
-| write UI code | `docs/standards/gpui.md` and `docs/standards/components.md` |
+| design or write UI | `docs/standards/design.md`, `docs/standards/gpui.md` and `docs/standards/components.md` |
 | change the kit | `third_party/README.md` |
 | add a dependency | `docs/standards/dependencies.md` |
 | run a timing test | `docs/reference/performance.md` |
