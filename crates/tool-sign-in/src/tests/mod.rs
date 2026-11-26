@@ -5,6 +5,5 @@ mod client_document;
 mod granted;
 mod renewing;
 mod secrets;
-mod server_url;
 mod signing_in;
 pub(crate) use signing_in::{CLIENT, REDIRECT, approved, begun};

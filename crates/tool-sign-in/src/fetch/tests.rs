@@ -9,7 +9,7 @@ use url::Url;
 
 use super::reach::host;
 use super::{Caller, LONGEST_ANSWER, MOST_REDIRECTS, NotFetched, Reach, json};
-use crate::{Failure, ServerUrl, ToolSignIn};
+use crate::{Failure, ToolSignIn};
 
 /// Longer than any call may take, on tokio's paused clock.
 const FOREVER: Duration = Duration::from_secs(600);
@@ -86,7 +86,7 @@ async fn a_server_is_on_a_private_network_when_every_address_its_host_comes_to_i
         ("https://1.1.1.1/mcp", false),
     ];
     for (server, private) in servers {
-        let reach = Reach::of(&ServerUrl::parse(server).unwrap(), &names).await.unwrap();
+        let reach = Reach::of(&Url::parse(server).unwrap(), &names).await.unwrap();
         assert_eq!(reach.takes(&url("http://sign-in.example")).is_ok(), private, "{server}");
     }
 }
@@ -130,7 +130,7 @@ async fn metadata_is_read_through_a_few_redirects_to_what_would_have_been_fetche
         names: Names::Fixed(HashMap::from([("sign-in.example", vec!["1.1.1.1".parse().unwrap()])])),
         ..ToolSignIn::new("https://client.example")
     };
-    let calls = client.calls_for(&ServerUrl::parse(&server.base).unwrap()).await.unwrap();
+    let calls = client.calls_for(&Url::parse(&server.base).unwrap()).await.unwrap();
     let get = async |path: &str| calls.get(&url(&format!("{}{path}", server.base))).await;
 
     let read = get(&format!("/{MOST_REDIRECTS}/0")).await.unwrap();
@@ -150,7 +150,7 @@ async fn an_answer_with_too_much_in_it_isnt_read_and_one_that_never_comes_isnt_w
     let server = serve(paths.map(|(path, long)| (path.to_string(), vec![Reply::file(vec![b'1'; long])])).into());
     let server = server.unwrap();
     let client = ToolSignIn::new("https://client.example");
-    let calls = client.calls_for(&ServerUrl::parse(&server.base).unwrap()).await.unwrap();
+    let calls = client.calls_for(&Url::parse(&server.base).unwrap()).await.unwrap();
 
     assert!(calls.get(&url(&format!("{}/fits", server.base))).await.is_ok());
     let too_long = calls.get(&url(&format!("{}/too-long", server.base))).await.err().unwrap();
@@ -167,7 +167,7 @@ async fn a_server_that_never_answers_fails_the_call_at_its_time_limit() {
     let server = format!("http://{}", listener.local_addr().unwrap());
     let call = tokio::spawn(async move {
         let client = ToolSignIn::new("https://client.example");
-        let calls = client.calls_for(&ServerUrl::parse(&server).unwrap()).await.unwrap();
+        let calls = client.calls_for(&Url::parse(&server).unwrap()).await.unwrap();
         calls.get(&url(&server)).await.err().unwrap()
     });
     let _connected = listener.accept().await.unwrap();

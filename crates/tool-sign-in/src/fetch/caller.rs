@@ -12,7 +12,7 @@ use url::form_urlencoded::Serializer;
 use super::Reach;
 use super::reach::{addresses, host};
 use crate::messages::Message;
-use crate::{Failure, ServerUrl, ToolSignIn};
+use crate::{Failure, ToolSignIn};
 
 /// How long a call has, from looking up where to ask to the end of its answer, redirects included. A server answers in
 /// well under a second, so this leaves room for a slow network, and doesn't leave a person waiting long on one that
@@ -59,8 +59,8 @@ enum Reading {
 
 impl ToolSignIn {
     /// Makes the calls for `server`.
-    pub(crate) async fn calls_for(&self, server: &ServerUrl) -> Result<Caller<'_>, Failure> {
-        let host = host(server.url());
+    pub(crate) async fn calls_for(&self, server: &Url) -> Result<Caller<'_>, Failure> {
+        let host = host(server);
         let reach = within(&host, async {
             let of = Reach::of(server, &self.names).await;
             of.map_err(|source| Failure::Unanswered { host: host.clone(), source: source.into() })

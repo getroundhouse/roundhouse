@@ -4,7 +4,7 @@ use protocol::model::ToolScopes;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::ServerUrl;
+use protocol::model::ToolServerUrl;
 
 /// What an authorization server is called, by its own word and the server's, letter for letter, which is how it's told
 /// from another.
@@ -40,7 +40,7 @@ pub(crate) enum Takes {
 /// How a server is signed in to, as it and its authorization server say.
 #[derive(Clone, Debug)]
 pub struct Way {
-    pub(crate) server: ServerUrl,
+    pub(crate) server: ToolServerUrl,
     /// The server, as its metadata names it.
     pub(crate) resource: String,
     pub(crate) issuer: Issuer,

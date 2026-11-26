@@ -1,5 +1,5 @@
 use super::{Pending, Returned};
-use crate::fetch::json;
+use crate::fetch::{json, url_of};
 use crate::token_endpoint::{Refusal, granted};
 use crate::{AuthorizationCode, Failure, Granted, Registration, Renewable, ToolSignIn};
 
@@ -32,7 +32,7 @@ impl ToolSignIn {
             ("code_verifier", verifier.as_str()),
             ("resource", &way.resource),
         ];
-        let calls = self.calls_for(&way.server).await?;
+        let calls = self.calls_for(&url_of(&way.server)?).await?;
         let answer = calls.post_form(&way.token_endpoint, &form).await?;
         if let Some(Refusal { error }) = json(&answer).filter(|_| answer.refused()) {
             return Err(Failure::NoTokens(error));

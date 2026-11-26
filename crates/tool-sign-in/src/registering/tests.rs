@@ -1,14 +1,15 @@
 use std::time::Duration;
 
 use fetching::serving::NOWHERE;
+use protocol::client::tool_sign_ins::NoToolSignIn;
 use protocol::client::{ApiError, ErrorCode};
 use serde_json::{Value, json};
 
 use super::{Client, Registration, TakenAs};
 use crate::tests::{CLIENT, REDIRECT, begun};
 use crate::{
-    Failure, Found, Issuer, NoWay, NotFetched, OauthError, RedirectUri, Refreshing, Registers, Renewal, Returned,
-    Script, SignedIn, StandIn, ToolSignIn, Way,
+    Failure, Found, Issuer, NotFetched, OauthError, RedirectUri, Refreshing, Registers, Renewal, Returned, Script,
+    SignedIn, StandIn, ToolSignIn, Way,
 };
 
 /// Far longer than a stand-in takes to be asked, on a busy machine.
@@ -22,8 +23,11 @@ fn registers(registers: Registers) -> Script {
 /// How an authorization server says a client can say who it is.
 type AuthMethods = Option<Vec<&'static str>>;
 
-/// Why its way to sign in is none.
-type Why = fn(Issuer) -> NoWay;
+/// Why its way to sign in is none, at the authorization server given.
+type Why = fn(String) -> NoToolSignIn;
+
+const WITH_SECRETS: Why = |authorization_server| NoToolSignIn::OnlyClientsWithSecrets { authorization_server };
+const REGISTERED: Why = |authorization_server| NoToolSignIn::OnlyRegisteredClients { authorization_server };
 
 async fn found(stand_in: &StandIn) -> Found {
     ToolSignIn::new(CLIENT).find(&stand_in.server()).await.unwrap()
@@ -64,10 +68,10 @@ async fn the_document_comes_first_then_registering_with_no_secret_and_finding_ou
         (true, anyone.clone(), secret.clone(), Ok(false)),
         (false, anyone.clone(), None, Ok(true)),
         (false, anyone.clone(), none.clone(), Ok(true)),
-        (false, anyone.clone(), secret.clone(), Err(NoWay::OnlyClientsWithSecrets)),
-        (false, anyone, Some(vec![]), Err(NoWay::OnlyClientsWithSecrets)),
-        (false, nobody.clone(), none, Err(NoWay::OnlyRegisteredClients)),
-        (false, nobody, secret, Err(NoWay::OnlyRegisteredClients)),
+        (false, anyone.clone(), secret.clone(), Err(WITH_SECRETS)),
+        (false, anyone, Some(vec![]), Err(WITH_SECRETS)),
+        (false, nobody.clone(), none, Err(REGISTERED)),
+        (false, nobody, secret, Err(REGISTERED)),
     ];
     for (client_documents, registers, client_auth_methods, expected) in cases {
         let said = format!("{client_documents}, {registers:?}, {client_auth_methods:?}");
@@ -84,13 +88,13 @@ async fn the_document_comes_first_then_registering_with_no_secret_and_finding_ou
                 assert_eq!(client.registration().is_some(), is_registered, "{said}");
                 assert_eq!(times_asked(&stand_in), usize::from(is_registered), "{said}");
             }
-            (Found::NoWay(why), Err(expected)) => assert_eq!(why, expected(Issuer::new(stand_in.issuer())), "{said}"),
+            (Found::NoWay(why), Err(expected)) => assert_eq!(why, expected(stand_in.issuer()), "{said}"),
             (found, _) => panic!("{said}: {found:?}"),
         }
     }
     let no_s256 = StandIn::with(Script { s256: false, ..registers(Registers::Anyone) }).await;
     let found = found(&no_s256).await;
-    assert!(matches!(found, Found::NoWay(NoWay::NoS256(_))), "{found:?}");
+    assert!(matches!(found, Found::NoWay(NoToolSignIn::NoS256 { .. })), "{found:?}");
 }
 
 /// As the site publishes it, but for its own address and the redirect with no port, which none is sent back to.
@@ -211,11 +215,14 @@ async fn a_client_thats_given_is_taken_only_with_an_id_that_can_be_one_and_witho
         let taken = asked(&stand_in, REDIRECT, None).await;
 
         let Ok(TakenAs::NoWay(why)) = taken else { panic!("{method}: {taken:?}") };
-        assert_eq!(why, NoWay::OnlyClientsWithSecrets(Issuer::new(stand_in.issuer())), "{method}");
+        assert_eq!(why, WITH_SECRETS(stand_in.issuer()), "{method}");
     }
     let no_method =
         StandIn::with(registers(Registers::Says(201, json!({"client_id": "a", "client_secret": "b"})))).await;
-    assert!(matches!(asked(&no_method, REDIRECT, None).await, Ok(TakenAs::NoWay(NoWay::OnlyClientsWithSecrets(_)))));
+    assert!(matches!(
+        asked(&no_method, REDIRECT, None).await,
+        Ok(TakenAs::NoWay(NoToolSignIn::OnlyClientsWithSecrets { .. }))
+    ));
 }
 
 /// Nothing of what it was answered is in what's said but one of OAuth's names.
@@ -235,10 +242,10 @@ async fn a_refusal_to_register_says_so_with_oauths_name_for_why_and_what_may_pas
         let taken = asked(&stand_in, REDIRECT, None).await;
 
         let Ok(TakenAs::NoWay(why)) = taken else { panic!("{status}: {taken:?}") };
-        assert!(!format!("{why:?} {why}").contains("ade up"), "{why:?}");
-        let NoWay::NotRegistered { issuer, error } = why else { panic!("{status}: {why:?}") };
-        assert_eq!(issuer.as_str(), stand_in.issuer());
-        assert_eq!(error.as_ref().map(OauthError::as_str), named, "{status}");
+        assert!(!format!("{why:?}").contains("ade up"), "{why:?}");
+        let NoToolSignIn::NotRegistered { authorization_server, error } = why else { panic!("{status}: {why:?}") };
+        assert_eq!(authorization_server, stand_in.issuer());
+        assert_eq!(error.as_deref(), named, "{status}");
     }
 
     let long = "a".repeat(300 * 1024);

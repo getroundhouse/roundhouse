@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::fetch::json;
 use crate::token_endpoint::{Refusal, granted};
-use crate::{ClientId, Failure, Granted, Issuer, OauthError, RefreshToken, ServerUrl, ToolSignIn};
+use protocol::model::ToolServerUrl;
+
+use crate::fetch::url_of;
+use crate::{ClientId, Failure, Granted, Issuer, OauthError, RefreshToken, ToolSignIn};
 
 /// What OAuth calls a refresh token that has ended, been used or been revoked, by RFC 6749, section 5.2.
 const INVALID_GRANT: &str = "invalid_grant";
@@ -11,7 +14,7 @@ const INVALID_GRANT: &str = "invalid_grant";
 /// What renews a sign-in, with its refresh token. It has no secret in it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Renewable {
-    pub(crate) server: ServerUrl,
+    pub(crate) server: ToolServerUrl,
     /// The server, as its metadata named it.
     pub(crate) resource: String,
     pub(crate) issuer: Issuer,
@@ -61,7 +64,7 @@ impl ToolSignIn {
             ("client_id", renewable.client_id.as_str()),
             ("resource", &renewable.resource),
         ];
-        let calls = self.calls_for(&renewable.server).await?;
+        let calls = self.calls_for(&url_of(&renewable.server)?).await?;
         let answer = calls.post_form(&calls.address(&renewable.token_endpoint)?, &form).await?;
         if let Some(Refusal { error }) = json(&answer).filter(|_| answer.refused()) {
             let of_document = renewable.client_id == self.document;
