@@ -87,7 +87,7 @@ Labels answer five questions, each with a prefix of its own, so any common searc
 - **`needs/owner`:** only the owner can move it, because it needs their decision, their account or device, or their judgment by hand. A PR that changes an owner doc, or a file that enforces a standard, gets it too, and waits for the owner's approval.
 - **`needs/upstream`:** it waits on a project this repo doesn't own, such as a change of ours to offer gpui-kit or Zed, or a release of an agent's CLI. The issue says where it stands there, such as the link to the pull request it was offered in.
 
-**Platform: only when it's on one.** `platform/windows` or `platform/linux`, for an issue that happens there and not on a Mac. The iPhone app is already `area/mobile`.
+**Platform: each it happens on, when that's not all of them.** `platform/macos`, `platform/windows`, `platform/linux` and `platform/ios`. An area says which code an issue is in and a platform which system it shows on, so a bug in the iPhone app is `area/mobile` and `platform/ios`, and a bug in `client-core` seen only on Windows is `area/client-core` and `platform/windows`. A platform gets its label once something of ours runs there.
 
 **Concern: when it cuts across areas.** `concern/security`, for anything that would let someone else read what's yours or act as you. A concern is added when there's a search someone would run for it, not ahead of one.
 
