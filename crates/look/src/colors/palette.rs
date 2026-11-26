@@ -163,10 +163,11 @@ colors! {
         /// A file that's changed, and what changed in an image.
         modified = 0xe9b2_4cff,
     }
-    // In GitHub's colours on a dark background, which the people Roundhouse is for already know.
+    // In GitHub's colours on a dark background, which the people Roundhouse is for already know, but for an open one,
+    // which is the app's own green, so the app has one.
     "A pull request" {
-        /// Open.
-        pr_open = 0x3fb9_50ff,
+        /// Open, in the green of what's added and what's done.
+        pr_open = 0x6cc4_88ff,
         /// Merged.
         pr_merged = 0xa371_f7ff,
         /// Closed: muted, so it doesn't read as the agent stopping short.

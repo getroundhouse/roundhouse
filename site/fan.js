@@ -32,7 +32,7 @@ const COLORS = {
   copper: "#d08a5c",
   none: "#7c7671",
   draft: "#8b949e",
-  open: "#3fb950",
+  open: "#6cc488",
   merged: "#a371f7",
   closed: "#b9605a",
   red: "#ee6f64",
