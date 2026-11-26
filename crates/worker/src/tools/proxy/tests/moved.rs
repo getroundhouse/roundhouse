@@ -14,8 +14,8 @@ use tokio::sync::mpsc;
 use tokio::time::timeout;
 
 use super::signed_in::{FIRST, answered_by, with};
-use super::stand_in::{Heard, url};
-use super::{Agent, Answer, Events, Reply, StandIn};
+use super::stand_in::url;
+use super::{Agent, Answer, Events, Heard, Reply, StandIn, as_set};
 use crate::tools::Caller;
 
 const INITIALIZE: &str = r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{}}"#;
@@ -29,14 +29,14 @@ const MOVED: &str = "Linear (Northwind) has been moved to another URL in Roundho
 async fn giving(session: &'static str) -> StandIn {
     StandIn::answering(move |asked| {
         let reply = Response::builder().header("mcp-session-id", session);
-        reply.body(Either::Left(Full::new(asked.body.clone()))).unwrap()
+        reply.body(Full::new(asked.body.clone())).unwrap()
     })
     .await
 }
 
 /// One that gives no sessions.
 async fn giving_none() -> StandIn {
-    StandIn::answering(|asked| Response::new(Either::Left(Full::new(asked.body.clone())))).await
+    StandIn::answering(|asked| Response::new(Full::new(asked.body.clone()))).await
 }
 
 async fn send(agent: &Agent, method: Method, session: &str, body: &'static str) -> Answer {
@@ -46,14 +46,14 @@ async fn send(agent: &Agent, method: Method, session: &str, body: &'static str) 
 
 /// Connected to `server`, in the session it gave.
 async fn connected(server: &StandIn, session: &'static str) -> Agent {
-    let agent = Agent::with(vec![server.as_set()]).await;
+    let agent = Agent::with(vec![as_set(server)]).await;
     let answer = send(&agent, Method::POST, "", INITIALIZE).await;
     assert_eq!((answer.status, answer.header("mcp-session-id")), (StatusCode::OK, session));
     agent
 }
 
 fn move_to(agent: &Agent, server: &StandIn) {
-    agent.tools.proxy.set(vec![server.as_set()]);
+    agent.tools.proxy.set(vec![as_set(server)]);
 }
 
 /// Nothing of the old server's reaches the new one, by any of the transport's methods, and what's refused is refused as
@@ -118,7 +118,7 @@ async fn a_session_of_the_server_before_stays_cut_off_once_the_agent_has_connect
 async fn a_handshake_thats_refused_lets_nothing_else_in() {
     let before = giving_none().await;
     let after = StandIn::answering(|_| refused()).await;
-    let agent = Agent::with(vec![before.as_set()]).await;
+    let agent = Agent::with(vec![as_set(&before)]).await;
     send(&agent, Method::POST, "", DISCOVER).await;
     move_to(&agent, &after);
 
@@ -142,7 +142,7 @@ async fn a_query_that_changes_cuts_no_agent_off() {
     let agent = connected(&server, "before").await;
     let queried = url(&format!("http://127.0.0.1:{}/mcp?tools=made-up", server.port));
 
-    agent.tools.proxy.set(vec![ProxiedServer { url: queried, header: None, ..server.as_set() }]);
+    agent.tools.proxy.set(vec![ProxiedServer { url: queried, header: None, ..as_set(&server) }]);
 
     let called = send(&agent, Method::POST, "before", CALL).await;
     assert_eq!((called.status, called.body.as_str()), (StatusCode::OK, CALL));
@@ -180,7 +180,7 @@ async fn what_the_worker_knows_of_an_agent_goes_as_its_run_ends() {
     let (before, after) = (giving("before").await, giving("after").await);
     let agent = connected(&before, "before").await;
     let session_id = "s".into();
-    let place = |server: &StandIn| Some(server.as_set().url.place());
+    let place = |server: &StandIn| Some(as_set(server).url.place());
     let connected_to =
         |agent: &Agent| agent.tools.proxy.saying_where(&session_id, vec![hubs()])[0].connected_to.clone();
     move_to(&agent, &after);
@@ -211,11 +211,11 @@ async fn a_servers_stream_ends_as_its_moved_or_removed_and_a_calls_answer_goes_o
         let before = StandIn::answering(move |_| {
             Response::builder()
                 .header("content-type", "text/event-stream")
-                .body(Either::Right(Events(streams.lock().next().unwrap())))
+                .body(Events(streams.lock().next().unwrap()))
                 .unwrap()
         })
         .await;
-        let agent = Agent::with(vec![before.as_set()]).await;
+        let agent = Agent::with(vec![as_set(&before)]).await;
         let path = agent.path().await;
         let got = agent.request(Method::GET, &path, &[], "").await;
         let listened = agent.request(Method::POST, &path, &[], LISTEN).await;
@@ -242,10 +242,9 @@ async fn a_servers_stream_ends_as_its_moved_or_removed_and_a_calls_answer_goes_o
 /// A call that's refused as it's moved isn't made again where it's moved to.
 #[tokio::test]
 async fn a_call_isnt_made_again_where_its_server_has_moved() {
-    let refusing = StandIn::answering(|_| {
-        Response::builder().status(StatusCode::UNAUTHORIZED).body(Either::Left(Full::default())).unwrap()
-    })
-    .await;
+    let refusing =
+        StandIn::answering(|_| Response::builder().status(StatusCode::UNAUTHORIZED).body(Full::default()).unwrap())
+            .await;
     let after = giving("after").await;
     let renewed = with(&after, "made-up-second", FIRST.next());
     let set = with(&refusing, "made-up-first", FIRST);
@@ -277,7 +276,7 @@ async fn what_an_agent_says_of_its_servers_is_passed_on_with_where_its_connected
     let says = hubs;
     let own = || ToolServerState { name: "own".into(), hubs: None, ..says() };
     let agent = connected(&before, "before").await;
-    let place = |server: &StandIn| Some(server.as_set().url.place());
+    let place = |server: &StandIn| Some(as_set(server).url.place());
     let said = |agent: &Agent| {
         let said = agent.tools.proxy.saying_where(&"s".into(), vec![says(), own()]);
         said.into_iter().map(|server| server.connected_to).collect::<Vec<_>>()

@@ -14,12 +14,12 @@ use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio::time::{Instant, timeout};
 use tokio_rustls::TlsAcceptor;
+use tool_server_http::Names;
 
 use super::stand_in::{list_tools, url};
-use super::{Heard, KEY, Reply, StandIn, as_json, held_after, listed, status};
+use super::{Heard, KEY, Reply, StandIn, as_json, held_after, listed, status, with_key};
 use crate::ToolSignIn;
 use crate::checking::{CHECK_WITHIN, LONGEST_ANSWER};
-use crate::fetch::Names;
 
 fn unreached(why: ToolServerUnreached) -> Result<u32, NoToolList> {
     Err(NoToolList::Unreached { why: Some(why) })
@@ -43,29 +43,17 @@ async fn moving(code: u16, to: impl Fn(u16) -> String + Send + Sync + 'static) -
     .await
 }
 
+/// One followed, with the key, and one that isn't. Which are followed is `tool_server_http`'s
+/// `a_redirect_is_followed_only_within_its_origin`.
 #[tokio::test]
-async fn a_redirect_is_followed_within_its_origin_and_the_key_goes_to_no_other() {
-    let elsewhere = StandIn::answering(|_| as_json(&listed())).await;
-    let other = elsewhere.port;
+async fn a_redirect_is_followed_only_within_its_origin() {
+    let within = moving(307, |_| "/moved".into()).await;
+    let named = moving(307, |here| format!("http://localhost:{here}/moved")).await;
 
-    for code in [307, 308] {
-        let within = moving(code, |_| "/moved".into()).await;
-        assert_eq!(within.with_key().await, Ok(2));
-        assert!(within.heard().iter().all(|heard| heard.header("authorization") == Some(KEY)));
-        let whole = moving(code, |here| format!("http://127.0.0.1:{here}/moved")).await;
-        assert_eq!(whole.with_key().await, Ok(2));
-        let away = moving(code, move |_| format!("http://127.0.0.1:{other}/moved")).await;
-        assert_eq!(away.with_key().await, Err(NoToolList::Redirected));
-        let named = moving(code, |here| format!("http://localhost:{here}/moved")).await;
-        assert_eq!(named.with_key().await, Err(NoToolList::Redirected));
-    }
-    for code in [301, 302, 303] {
-        let moved = moving(code, |_| "/moved".into()).await;
-        assert_eq!(moved.with_key().await, Err(NoToolList::Redirected), "{code}");
-    }
-    let circles = moving(307, |_| "/mcp".into()).await;
-    assert_eq!(circles.with_key().await, Err(NoToolList::Redirected));
-    assert!(elsewhere.heard().is_empty(), "{:?}", elsewhere.heard());
+    assert_eq!(with_key(&within).await, Ok(2));
+    assert_eq!(with_key(&named).await, Err(NoToolList::Redirected));
+
+    assert!(within.heard().iter().all(|heard| heard.header("authorization") == Some(KEY)));
 }
 
 #[tokio::test]
@@ -124,7 +112,7 @@ async fn a_server_that_goes_before_it_answers_is_lost() {
     .await;
 
     assert_eq!(list_tools(&at, true).await, Err(NoToolList::Lost));
-    assert_eq!(ends.with_key().await, Err(NoToolList::Lost), "a stream that ends with no answer");
+    assert_eq!(with_key(&ends).await, Err(NoToolList::Lost), "a stream that ends with no answer");
 }
 
 #[tokio::test]
@@ -133,7 +121,7 @@ async fn no_more_of_an_answer_is_read_than_a_limit() {
 
     for content_type in ["application/json", "text/event-stream"] {
         let server = StandIn::answering(move |_| held_after(content_type, long())).await;
-        assert_eq!(server.with_key().await, Err(NoToolList::TooLong), "{content_type}");
+        assert_eq!(with_key(&server).await, Err(NoToolList::TooLong), "{content_type}");
     }
     let mut fits = listed().to_string().into_bytes();
     fits.resize(LONGEST_ANSWER, b' ');
@@ -143,7 +131,7 @@ async fn no_more_of_an_answer_is_read_than_a_limit() {
         reply
     })
     .await;
-    assert_eq!(fits.with_key().await, Ok(2));
+    assert_eq!(with_key(&fits).await, Ok(2));
 }
 
 /// A server that hangs at `hangs`, having sent its headers, and gives a session before its tools are asked for, and

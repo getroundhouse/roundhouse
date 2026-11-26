@@ -5,13 +5,12 @@ use http::{HeaderMap, Method, Request};
 use http_body_util::{BodyExt as _, Collected, Full, LengthLimitError, Limited};
 use hyper::body::Bytes;
 use serde::de::DeserializeOwned;
-use tokio::sync::OnceCell;
+use tool_server_http::{Names, Tls, send};
 use url::Url;
 use url::form_urlencoded::Serializer;
 
-use super::reach::host;
-use super::sending::{self, Tls};
-use super::{Names, Reach};
+use super::Reach;
+use super::reach::{addresses, host};
 use crate::messages::Message;
 use crate::{Failure, ServerUrl, ToolSignIn};
 
@@ -32,7 +31,7 @@ const JSON: &str = "application/json";
 pub(crate) struct Caller<'a> {
     reach: Reach,
     names: &'a Names,
-    tls: &'a OnceCell<Tls>,
+    tls: &'a Tls,
 }
 
 /// What was answered, whatever it is.
@@ -130,14 +129,14 @@ impl Caller<'_> {
         let refused = |why| Failure::NotFetched { host: host.clone(), why };
         let unanswered = |source| Failure::Unanswered { host: host.clone(), source };
         self.reach.takes(url).map_err(refused)?;
-        let addresses = self.names.look_up(url).await.map_err(|e| unanswered(e.into()))?;
+        let addresses = addresses(self.names, url).await.map_err(|e| unanswered(e.into()))?;
         let addresses = self.reach.vetted(url, addresses).map_err(refused)?;
         let mut request = Request::builder().method(&sent.method).uri(url.as_str()).header(USER_AGENT, "roundhouse");
         for (name, value) in sent.headers {
             request = request.header(*name, *value);
         }
         let request = request.body(Full::new(sent.body.clone())).map_err(|e| unanswered(e.into()))?;
-        let response = sending::send(self.tls, addresses, request).await.map_err(unanswered)?;
+        let response = send(self.tls, addresses, request).await.map_err(unanswered)?;
         let (head, body) = response.into_parts();
         let body = match sent.reading {
             Reading::Whole => Limited::new(body, LONGEST_ANSWER).collect().await.map(Collected::to_bytes),
@@ -155,7 +154,7 @@ impl Caller<'_> {
 
 #[cfg(test)]
 impl<'a> Caller<'a> {
-    pub(super) fn made_up(reach: Reach, names: &'a Names, tls: &'a OnceCell<Tls>) -> Self {
+    pub(super) fn made_up(reach: Reach, names: &'a Names, tls: &'a Tls) -> Self {
         Self { reach, names, tls }
     }
 }

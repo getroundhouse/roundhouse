@@ -14,7 +14,7 @@ use tokio::sync::mpsc;
 use tokio::time::timeout;
 
 use super::stand_in::url;
-use super::{Agent, Answer, StandIn};
+use super::{Agent, Answer, StandIn, as_set};
 use crate::tools::proxy::under_way::MOST_UNDER_WAY;
 use crate::tools::server::MAX_CONNECTIONS;
 
@@ -94,10 +94,10 @@ async fn a_call_counts_until_its_answer_ends_and_a_stream_of_events_until_its_be
         // Each answer ends once the test drops where it's sent from, and any after that at once.
         let _ = if asked.method == Method::GET { to_streams.send(events) } else { to_calls.send(events) };
         let answer = hyper::Response::builder().header("content-type", "text/event-stream");
-        answer.body(http_body_util::Either::Right(super::Events(stream))).unwrap()
+        answer.body(super::Events(stream)).unwrap()
     })
     .await;
-    let agent = Agent::with(vec![server.as_set()]).await;
+    let agent = Agent::with(vec![as_set(&server)]).await;
     let path = agent.path().await;
     let mut answers = Vec::new();
     let asking = repeat_n((Method::GET, ""), MOST_UNDER_WAY + 1).chain(repeat_n((Method::POST, CALL), MOST_UNDER_WAY));

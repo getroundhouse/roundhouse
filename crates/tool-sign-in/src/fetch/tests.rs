@@ -4,11 +4,11 @@ use std::time::Duration;
 
 use fetching::serving::{NOWHERE, Reply, serve};
 use tokio::net::TcpListener;
-use tokio::sync::OnceCell;
+use tool_server_http::{Names, Tls};
 use url::Url;
 
 use super::reach::host;
-use super::{Caller, LONGEST_ANSWER, MOST_REDIRECTS, Names, NotFetched, Reach, json};
+use super::{Caller, LONGEST_ANSWER, MOST_REDIRECTS, NotFetched, Reach, json};
 use crate::{Failure, ServerUrl, ToolSignIn};
 
 /// Longer than any call may take, on tokio's paused clock.
@@ -97,7 +97,7 @@ async fn a_name_that_comes_to_this_machine_is_refused_before_its_connected_to() 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let names = Names::Fixed(HashMap::from([("sign-in.example", vec!["127.0.0.1".parse().unwrap()])]));
-    let tls = OnceCell::new();
+    let tls = Tls::default();
     let calls = Caller::made_up(Reach::made_up("tools.example", false), &names, &tls);
 
     for place in [format!("https://sign-in.example:{port}/"), format!("https://127.0.0.1:{port}/")] {

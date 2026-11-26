@@ -19,7 +19,6 @@ base64.workspace = true
 jiff.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
-hyper-rustls.workspace = true
 hyper-util = { workspace = true, features = ["client-legacy", "http1"] }
 markdown.workspace = true
 memchr.workspace = true
@@ -27,15 +26,13 @@ notify.workspace = true
 percent-encoding.workspace = true
 portable-pty.workspace = true
 toml.workspace = true
-rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha1_smol.workspace = true
 terminal-state.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-# For what a server's refusal says it wants, which the hub's signing in reads too.
-tower-service.workspace = true
+tool-server-http.workspace = true
 tracing.workspace = true
 uuid = { workspace = true, features = ["v5"] }
 
@@ -49,6 +46,8 @@ protocol = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 # A paused clock, for the waits watches settle with.
 tokio = { workspace = true, features = ["test-util"] }
+# A stand-in for a tool server, and a lookup of names made up.
+tool-server-http = { workspace = true, features = ["testing"] }
 logging = { workspace = true, features = ["testing"] }
 waiting.workspace = true
 

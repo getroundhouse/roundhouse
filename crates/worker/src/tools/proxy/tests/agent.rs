@@ -15,10 +15,9 @@ use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
+use tool_server_http::{KEY, Names};
 
 use super::super::Upstream;
-use super::super::private::Lookup;
-use super::stand_in::KEY;
 use crate::asks::Asks;
 use crate::tools::{Caller, Tools};
 
@@ -41,9 +40,9 @@ impl Agent {
         Self::reaching(servers, Upstream::default(), answer).await
     }
 
-    /// One whose worker finds where a server signed in to over `http` is with `lookup`.
-    pub(super) async fn looking_up(servers: Vec<ProxiedServer>, lookup: Lookup) -> Self {
-        Self::reaching(servers, Upstream::looking_up(lookup), |ask| panic!("{ask:?}")).await
+    /// One whose worker finds where a server signed in to over `http` is with `names`.
+    pub(super) async fn looking_up(servers: Vec<ProxiedServer>, names: Names) -> Self {
+        Self::reaching(servers, Upstream::looking_up(names), |ask| panic!("{ask:?}")).await
     }
 
     async fn reaching(

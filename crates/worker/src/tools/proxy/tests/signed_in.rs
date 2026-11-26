@@ -8,8 +8,7 @@ use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::worker::{AskReply, ProxiedServer, RenewToolServer, ServerHeader, ServerSignIn, TokenNumber, WorkerAsk};
 
-use super::stand_in::Heard;
-use super::{Agent, Reply, StandIn};
+use super::{Agent, Heard, Reply, StandIn, as_set};
 
 pub(super) const CALL: &str = r#"{"jsonrpc":"2.0","id":"call-7","method":"tools/call","params":{"name":"list"}}"#;
 pub(super) const FIRST: TokenNumber = TokenNumber::FIRST;
@@ -32,11 +31,11 @@ fn reply(status: StatusCode, asked: &Heard) -> Reply {
 
 pub(super) fn with(server: &StandIn, access_token: &str, token: TokenNumber) -> ProxiedServer {
     let sign_in = Some(ServerSignIn::Works { token });
-    ProxiedServer { header: Some(ServerHeader::bearer(access_token)), sign_in, ..server.as_set() }
+    ProxiedServer { header: Some(ServerHeader::bearer(access_token)), sign_in, ..as_set(server) }
 }
 
 fn needing_sign_in(server: &StandIn) -> ProxiedServer {
-    ProxiedServer { header: None, sign_in: Some(ServerSignIn::NeedsSignIn), ..server.as_set() }
+    ProxiedServer { header: None, sign_in: Some(ServerSignIn::NeedsSignIn), ..as_set(server) }
 }
 
 /// An agent whose server is `set`, and its worker's asks, each answered with `answer`.
@@ -120,7 +119,7 @@ async fn nothing_else_a_server_refuses_is_asked_about() {
     let forbidding = StandIn::answering(|asked| reply(StatusCode::FORBIDDEN, asked)).await;
     let server = taking_the_second().await;
     let newer = ProxiedServer { sign_in: Some(ServerSignIn::Unknown), ..with(&server, "made-up-first", FIRST) };
-    let cases = [with(&forbidding, "made-up-first", FIRST), server.as_set(), newer];
+    let cases = [with(&forbidding, "made-up-first", FIRST), as_set(&server), newer];
 
     for set in cases {
         let (agent, asks) = agent(set, Ok(with(&server, "made-up-second", FIRST.next()))).await;

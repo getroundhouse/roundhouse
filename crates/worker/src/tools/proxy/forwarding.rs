@@ -5,13 +5,13 @@ use super::under_way::TooMany;
 use super::{Failure, PassedOn, Proxy, Target, failure, headers};
 use crate::asks::Asks;
 use crate::tools::http::AnswerBody;
-use http_body_util::{Either, Full};
+use http_body_util::Either;
 use hyper::body::{Bytes, Incoming};
 use hyper::header::{CONNECTION, HeaderMap, HeaderValue};
-use hyper::{Method, Request, Response, StatusCode, Uri};
+use hyper::{Method, Response, StatusCode};
 use protocol::model::{SessionId, ToolServerId};
-use protocol::tool_server_http::{MOST_REDIRECTS_WITHIN, Redirected, access_wanted, redirected};
 use protocol::worker::{AskForToolAccess, RenewToolServer, ToolAccess};
+use tool_server_http::{Redirected, access_wanted};
 use tracing::{info, warn};
 
 /// What MCP's streamable HTTP asks a server: a message, its stream of events, and to end a session.
@@ -86,18 +86,13 @@ impl Proxy {
         unless_refused(server, target, response, asked).await
     }
 
-    /// The server's answer, following a redirect as [`redirected`] says.
+    /// The server's answer to the agent's request without the session's token, which isn't among the headers passed
+    /// on, following a redirect as [`tool_server_http::Server::send`] says.
     async fn ask(&self, target: &Target, asked: &Asked<'_>) -> Result<Response<Incoming>, Failure> {
-        let mut to = target.uri.clone();
-        for _ in 0..=MOST_REDIRECTS_WITHIN {
-            let response = self.upstream.send(request(target, &to, asked), target.sent()).await?;
-            match redirected(&to, response.status(), response.headers()) {
-                Redirected::Not => return Ok(response),
-                Redirected::Within(within) => to = within,
-                Redirected::Elsewhere => return Err(Failure::Redirected),
-            }
-        }
-        Err(Failure::Redirected)
+        let (headers, sent) = (headers::to_server(asked.headers), target.sent());
+        let sending = |request| self.upstream.send(request, sent);
+        let answered = target.server.send(asked.method, &headers, &asked.body, sending).await?;
+        answered.map_err(|Redirected| Failure::Redirected)
     }
 }
 
@@ -176,19 +171,6 @@ async fn access_to(wants: AskForToolAccess, asked: &Asked<'_>) -> ToolAccess {
         );
         ToolAccess::SignInAgain
     })
-}
-
-/// What the server is sent: the agent's request without the session's token, which isn't among the headers passed on,
-/// and with the server's own header, over any of its name from the agent.
-fn request(target: &Target, to: &Uri, asked: &Asked<'_>) -> Request<Full<Bytes>> {
-    let mut request = Request::new(Full::new(asked.body.clone()));
-    *request.method_mut() = asked.method.clone();
-    *request.uri_mut() = to.clone();
-    *request.headers_mut() = headers::to_server(asked.headers);
-    if let Some((name, value)) = &target.header {
-        request.headers_mut().insert(name, value.clone());
-    }
-    request
 }
 
 fn passed_on(response: Response<Incoming>, body_of: impl FnOnce(Incoming) -> PassedOn) -> Response<AnswerBody> {

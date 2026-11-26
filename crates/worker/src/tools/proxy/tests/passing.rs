@@ -5,11 +5,11 @@ use http_body_util::{BodyExt, Either, Full};
 use hyper::body::Bytes;
 use hyper::{Method, Response, StatusCode};
 use parking_lot::Mutex;
+use protocol::worker::ProxiedServer;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
-use super::stand_in::{KEY, header};
-use super::{Agent, Answer, Events, Reply, StandIn};
+use super::{Agent, Answer, Events, KEY, Reply, StandIn, as_set};
 
 const LIST: &str = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
 const LISTED: &str = r#"{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}"#;
@@ -39,7 +39,7 @@ async fn what_an_agent_sends_is_passed_on_with_the_servers_key_and_the_answer_as
         }
     })
     .await;
-    let agent = Agent::with(vec![server.as_set()]).await;
+    let agent = Agent::with(vec![as_set(&server)]).await;
     let path = agent.path().await;
     let sent = [
         ("content-type", "application/json"),
@@ -83,27 +83,20 @@ async fn what_an_agent_sends_is_passed_on_with_the_servers_key_and_the_answer_as
     }
 }
 
-/// A server with no header is sent none, the session's token included, and one's own header takes the place of the
-/// agent's of its name.
+/// A server with no header is sent none, the session's token included, and is sent the agent's own. How a server's
+/// own takes the place of the agent's of its name is `tool_server_http`'s
+/// `a_servers_own_header_goes_with_each_request_over_any_of_its_name`.
 #[tokio::test]
-async fn a_server_is_sent_only_the_header_it_has() {
+async fn a_server_with_no_header_is_sent_none() {
     let server = StandIn::answering(|_| reply(202, &[], "")).await;
-    let mut own = server.as_set();
-    own.header.as_mut().unwrap().name = header("Mcp-Key");
-    let mut keyless = server.as_set();
-    keyless.header = None;
+    let agent = Agent::with(vec![ProxiedServer { header: None, ..as_set(&server) }]).await;
 
-    for set in [own, keyless] {
-        let agent = Agent::with(vec![set]).await;
-        let path = agent.path().await;
-        agent.request(Method::POST, &path, &[("mcp-key", "the agent's")], LIST).await;
-    }
+    let path = agent.path().await;
+    agent.request(Method::POST, &path, &[("mcp-key", "the agent's")], LIST).await;
 
     let heard = server.heard();
-    assert_eq!(heard[0].headers["mcp-key"], KEY);
-    assert_eq!(heard[0].headers.get_all("mcp-key").iter().count(), 1);
-    assert_eq!(heard[1].headers["mcp-key"], "the agent's");
-    assert!(heard.iter().all(|asked| !asked.headers.contains_key("authorization")), "{heard:?}");
+    assert_eq!(heard[0].headers["mcp-key"], "the agent's");
+    assert!(!heard[0].headers.contains_key("authorization"), "{heard:?}");
 }
 
 /// Each event as the server sends it, and once the agent has hung up, the server's end of it goes too.
@@ -113,10 +106,10 @@ async fn events_arrive_as_they_are_sent_and_the_stream_ends_with_the_agents() {
     let sent = Mutex::new(Some(sent));
     let server = StandIn::answering(move |_| {
         let body = Events(sent.lock().take().unwrap());
-        Response::builder().header("content-type", "text/event-stream").body(Either::Right(body)).unwrap()
+        Response::builder().header("content-type", "text/event-stream").body(body).unwrap()
     })
     .await;
-    let agent = Agent::with(vec![server.as_set()]).await;
+    let agent = Agent::with(vec![as_set(&server)]).await;
     let within = Duration::from_secs(10);
 
     let path = agent.path().await;
@@ -138,7 +131,7 @@ async fn a_status_is_passed_on() {
     let status = Arc::new(Mutex::new(200));
     let said = status.clone();
     let server = StandIn::answering(move |_| reply(*said.lock(), &[], "said")).await;
-    let agent = Agent::with(vec![server.as_set()]).await;
+    let agent = Agent::with(vec![as_set(&server)]).await;
 
     for code in [200, 202, 400, 404, 429, 500] {
         *status.lock() = code;
@@ -149,44 +142,30 @@ async fn a_status_is_passed_on() {
     }
 }
 
-/// Only within the origin the key is for, and only one that keeps the method and the body.
+/// One followed, with the key, and one that isn't, which the agent is told of. Which are followed is
+/// `tool_server_http`'s `a_redirect_is_followed_only_within_its_origin`.
 #[tokio::test]
 async fn a_redirect_is_followed_only_within_its_origin() {
-    let elsewhere = StandIn::answering(|_| reply(200, &[], "elsewhere")).await;
-    let other = elsewhere.port;
-    let to = Arc::new(Mutex::new((307, String::new())));
+    let to = Arc::new(Mutex::new(String::new()));
     let told = to.clone();
     let server = StandIn::answering(move |asked| {
-        let (status, location) = told.lock().clone();
-        if asked.path == "/moved" { reply(200, &[], "moved") } else { reply(status, &[("location", &location)], "") }
+        let location = told.lock().clone();
+        if asked.path == "/moved" { reply(200, &[], "moved") } else { reply(307, &[("location", &location)], "") }
     })
     .await;
-    let agent = Agent::with(vec![server.as_set()]).await;
-    let here = server.port;
-    let followed = [(307, "/moved".into()), (308, "/moved".into()), (308, format!("http://127.0.0.1:{here}/moved"))];
-    let not_followed = [
-        (307, format!("http://127.0.0.1:{other}/moved")),
-        (308, format!("http://localhost:{here}/moved")),
-        (307, format!("https://127.0.0.1:{here}/moved")),
-        (307, format!("//127.0.0.1:{other}/moved")),
-        (302, "/moved".into()),
-        (303, "/moved".into()),
-        (307, "moved".into()),
-        // In circles.
-        (307, "/mcp".into()),
-    ];
+    let agent = Agent::with(vec![as_set(&server)]).await;
 
-    for redirect in followed {
-        *to.lock() = redirect.clone();
-        assert_eq!(agent.post(LIST).await.body, "moved", "{redirect:?}");
-        let last = server.heard().pop().unwrap();
-        assert_eq!((last.method, last.body), (Method::POST, Bytes::from(LIST)), "{redirect:?}");
-        assert_eq!(last.headers["authorization"], KEY);
-    }
-    for redirect in not_followed {
-        *to.lock() = redirect.clone();
-        let (_, said) = agent.post(LIST).await.error();
-        assert!(said.contains("redirected the request"), "{redirect:?}: {said}");
-    }
-    assert!(elsewhere.heard().is_empty(), "the key left its origin: {:?}", elsewhere.heard());
+    *to.lock() = "/moved".into();
+    let followed = agent.post(LIST).await;
+    *to.lock() = format!("http://localhost:{}/moved", server.port);
+    let (_, not_followed) = agent.post(LIST).await.error();
+
+    assert_eq!(followed.body, "moved");
+    let heard = server.heard();
+    assert_eq!(
+        (&heard[1].method, &heard[1].body[..], heard[1].header("authorization")),
+        (&Method::POST, LIST.as_bytes(), Some(KEY))
+    );
+    assert!(not_followed.contains("redirected the request"), "{not_followed}");
+    assert_eq!(server.heard().len(), 3, "{:?}", server.heard());
 }

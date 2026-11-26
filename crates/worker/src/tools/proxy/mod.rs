@@ -6,7 +6,7 @@
 //! answers 403 since it wants more access fails that call alone, once the hub has been told what it wants. And an agent
 //! that's connected to a server the person has since moved to another URL is cut off from it until it connects to it
 //! there. A request that carries a sign-in's access token goes over plain `http` only to a private address, as
-//! `private` says.
+//! `upstream` says.
 
 #[cfg(test)]
 mod tests;
@@ -18,7 +18,6 @@ mod headers;
 mod message;
 mod passed_on;
 mod path;
-mod private;
 mod server;
 mod under_way;
 mod upstream;

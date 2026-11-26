@@ -2,25 +2,24 @@
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
-use std::sync::Arc;
 
-use http_body_util::{Either, Full};
+use http_body_util::Full;
 use hyper::{Response, StatusCode};
 use protocol::worker::ProxiedServer;
+use tool_server_http::Names;
 
-use super::super::private::Lookup;
 use super::signed_in::{CALL, FIRST, with};
 use super::stand_in::url;
-use super::{Agent, StandIn};
+use super::{Agent, Reply, StandIn};
 
 const NOT_PRIVATE: &str = "Linear (Northwind)'s address isn't private, so its sign-in isn't sent to it over http. Give \
                            it an https URL in Settings › MCP servers.";
 
-/// On the internet, as `protocol`'s rule says, so a test that's broken on purpose dials one, and neither answered when
+/// On the internet, as [`tool_server_http::is_private`] says, so a test that's broken on purpose dials one, and neither answered when
 /// that was tried, so it fails once connecting times out.
 const PUBLIC: [&str; 2] = ["11.0.0.1", "3ffe::1"];
 
-fn lookup() -> Lookup {
+fn names() -> Names {
     let public = PUBLIC.map(|address| address.parse::<IpAddr>().unwrap());
     let private = IpAddr::V4(Ipv4Addr::LOCALHOST);
     let names = [
@@ -28,7 +27,7 @@ fn lookup() -> Lookup {
         ("both.northwind.test", vec![public[0], public[1], private]),
         ("public.northwind.test", public.to_vec()),
     ];
-    Lookup::Fixed(Arc::new(HashMap::from(names)))
+    Names::Fixed(HashMap::from(names))
 }
 
 fn at(server: &StandIn, host: &str) -> ProxiedServer {
@@ -39,7 +38,7 @@ fn at(server: &StandIn, host: &str) -> ProxiedServer {
 #[tokio::test]
 async fn a_sign_in_goes_over_http_only_to_a_private_address_of_its_servers() {
     let server = StandIn::answering(|asked| {
-        Response::builder().status(StatusCode::OK).body(Either::Left(Full::new(asked.body.clone()))).unwrap()
+        Response::builder().status(StatusCode::OK).body(Full::new(asked.body.clone())).unwrap()
     })
     .await;
     let cases = [
@@ -52,7 +51,7 @@ async fn a_sign_in_goes_over_http_only_to_a_private_address_of_its_servers() {
 
     for (host, private) in cases {
         let heard = server.heard().len();
-        let agent = Agent::looking_up(vec![at(&server, host)], lookup()).await;
+        let agent = Agent::looking_up(vec![at(&server, host)], names()).await;
 
         let answer = agent.post(CALL).await;
 
@@ -69,8 +68,8 @@ async fn a_sign_in_goes_over_http_only_to_a_private_address_of_its_servers() {
 
 #[tokio::test]
 async fn a_request_with_no_id_is_told_its_server_isnt_private_with_a_502() {
-    let server = StandIn::answering(|_| unreachable!()).await;
-    let agent = Agent::looking_up(vec![at(&server, "public.northwind.test")], lookup()).await;
+    let server = StandIn::answering(|_| -> Reply { unreachable!() }).await;
+    let agent = Agent::looking_up(vec![at(&server, "public.northwind.test")], names()).await;
 
     let answer = agent.get().await;
 

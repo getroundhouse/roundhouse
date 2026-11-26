@@ -1,11 +1,10 @@
 use std::io;
 use std::net::SocketAddr;
 
-use protocol::tool_server_http::is_private;
 use thiserror::Error;
+use tool_server_http::{Names, is_private};
 use url::Url;
 
-use super::Names;
 use crate::ServerUrl;
 
 /// Why something isn't fetched.
@@ -30,7 +29,7 @@ pub(crate) struct Reach {
 
 impl Reach {
     pub(super) async fn of(server: &ServerUrl, names: &Names) -> io::Result<Self> {
-        let addresses = names.look_up(server.url()).await?;
+        let addresses = addresses(names, server.url()).await?;
         let private = !addresses.is_empty() && addresses.iter().all(|address| is_private(address.ip()));
         Ok(Self { host: host(server.url()), private })
     }
@@ -67,6 +66,11 @@ impl Reach {
     pub(super) fn made_up(host: &str, private: bool) -> Self {
         Self { host: host.to_string(), private }
     }
+}
+
+/// Every address `url`'s host comes to, or its own where it is one, with `url`'s port.
+pub(super) async fn addresses(names: &Names, url: &Url) -> io::Result<Vec<SocketAddr>> {
+    names.of(&host(url), url.port_or_known_default().unwrap_or_default()).await
 }
 
 /// `url`'s host, which an address that's fetched always has.

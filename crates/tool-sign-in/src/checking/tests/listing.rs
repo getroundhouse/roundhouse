@@ -2,7 +2,7 @@
 
 use serde_json::{Value, json};
 
-use super::{Heard, KEY, Reply, StandIn, as_json, as_stream, listed, status};
+use super::{Heard, KEY, Reply, StandIn, as_json, as_stream, listed, status, with_key, with_none};
 
 fn result(result: &Value) -> Value {
     json!({"jsonrpc": "2.0", "id": 1, "result": result})
@@ -54,12 +54,12 @@ async fn a_server_on_this_version_is_asked_what_it_is_and_then_for_its_tools_and
         })
         .await;
 
-        let tools = server.with_key().await;
+        let tools = with_key(&server).await;
 
         assert_eq!(tools, Ok(2));
         assert_eq!(server.asked(), ["server/discover", "tools/list"], "one page of them");
         for heard in server.heard() {
-            assert_eq!((heard.method.as_str(), heard.path.as_str()), ("POST", "/mcp?tools=some"));
+            assert_eq!((heard.method.as_str(), heard.path.as_str()), ("POST", "/mcp?query=made-up-query"));
             assert_eq!(heard.header("mcp-protocol-version"), Some("2026-07-28"));
             assert_eq!(heard.header("mcp-method"), Some(heard.asks()));
             assert_eq!(heard.header("accept"), Some("application/json, text/event-stream"));
@@ -87,7 +87,7 @@ async fn a_server_on_a_version_before_is_shaken_hands_with_and_its_session_ended
     for (refuses, answer) in refuses.into_iter().zip([as_json, as_stream].into_iter().cycle()) {
         let server = StandIn::answering(shakes_hands(Some("made-up-session"), answer, refuses)).await;
 
-        let tools = server.with_key().await;
+        let tools = with_key(&server).await;
 
         assert_eq!(tools, Ok(2));
         let asked = ["server/discover", "initialize", "notifications/initialized", "tools/list", "DELETE"];
@@ -108,7 +108,7 @@ async fn a_server_on_a_version_before_is_shaken_hands_with_and_its_session_ended
 async fn a_server_that_gives_no_session_has_none_ended() {
     let server = StandIn::answering(shakes_hands(None, as_json, || status(405))).await;
 
-    let tools = server.with_none().await;
+    let tools = with_none(&server).await;
 
     assert_eq!(tools, Ok(2));
     assert_eq!(server.asked(), ["server/discover", "initialize", "notifications/initialized", "tools/list"]);
@@ -129,7 +129,7 @@ async fn a_session_is_ended_whatever_came_of_it() {
     })
     .await;
 
-    let refused = failing.with_key().await;
+    let refused = with_key(&failing).await;
 
     assert!(refused.is_err(), "{refused:?}");
     let heard = failing.heard();

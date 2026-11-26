@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use protocol::model::ToolScopes;
 use tokio::time::{Instant, timeout_at};
+use tool_server_http::Challenge;
 
 use super::asking::as_nobody;
 use super::metadata::{AuthorizationServerMetadata, ServerMetadata};
@@ -11,7 +12,6 @@ use crate::failure::{host_of, shown};
 use crate::fetch::Caller;
 use crate::offline_access::lists_offline;
 use crate::{Failure, ServerUrl, ToolSignIn};
-use protocol::tool_server_http::Challenge;
 
 /// How long finding out has in all, which is several calls, each of which is answered in well under a second.
 pub(super) const FIND_WITHIN: Duration = Duration::from_secs(30);
