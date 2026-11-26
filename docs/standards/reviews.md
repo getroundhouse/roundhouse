@@ -45,7 +45,7 @@ After its findings, each reviewer's report has a part headed **For the owner:**,
 ## Until it's done
 
 1. The builder keeps the diff its reviewers saw, and checks each finding against the code, since a reviewer can be wrong. It fixes each must fix, or answers it: why the finding is wrong, or which downside the change accepts instead, and why that's better. The answer goes in a paragraph of its own in part 3 of the PR's description if there is one, and otherwise in its report. A must fix whose fix would take the change in another direction is the owner's to decide, so the builder leaves it and asks the owner, with its question tool.
-2. It fixes each minor finding whose fix is a few lines and plainly right. A bug it doesn't fix gets an issue labelled `kind/bug`, so the owner can weigh it later, and the rest it passes on are dropped.
+2. It fixes each minor finding whose fix is a few lines and plainly right, and each bug the change caused. Any other bug it fixes in a PR of its own, files or drops, as "When to file" in `docs/standards/issues.md` says, and the rest it passes on are dropped.
 3. The builder checks its fixes as it checks the rest of its work, such as by breaking one on purpose to see its test fail. A fresh agent checks them only when the owner asks.
 
 A second review of the whole change, by fresh reviewers, is the owner's to ask for. Fresh reviewers find new things each time, so a review that waits for them to find nothing doesn't end.
@@ -58,7 +58,7 @@ The owner hears about a review once, when it's done, in one report from the buil
 - **What was answered rather than fixed:** each must fix the builder judged wrong, and each downside the change accepts, with why.
 - **What's the owner's to confirm:** a fix that changed an owner doc, with what the builder recommends.
 - **What the reviewers put under For the owner,** passed on whole, with what the builder thinks of each.
-- **What was filed,** as issues, including each bug passed on, since nothing lives only in a chat.
+- **What was filed or dropped,** with the issue for each bug filed, and why each was dropped.
 - **How much review it took:** how many reviewers ran, in which lanes, and whether the fixes were checked.
 
 ## Lanes
