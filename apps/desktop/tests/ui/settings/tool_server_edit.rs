@@ -46,6 +46,8 @@ fn kept(stack: &Stack, secret: &str) -> usize {
     files_holding(stack.dir.path(), secret, "").len()
 }
 
+/// Its name taken, then changed elsewhere meanwhile, and last removed elsewhere while it's edited, which leaves its panel
+/// open under Added's heading, with what's typed in it.
 #[gpui_kit::test]
 fn a_server_is_edited_under_its_row_and_its_new_name_is_for_agents_next_start(cx: &mut TestAppContext) {
     let (stack, serving, elsewhere) = (Stack::new(), open_to_anyone(), open_to_anyone());
@@ -101,8 +103,14 @@ fn a_server_is_edited_under_its_row_and_its_new_name_is_for_agents_next_start(cx
     type_in(&mut ui, "mcp-url", &elsewhere.url());
     save(&mut ui);
     assert_eq!(url_of(&ui, "Elsewhere"), elsewhere.url(), "its name, which this app didn't change, stays");
+    edit(&mut ui, &server);
+    type_in(&mut ui, "mcp-name", "Northwind runbooks");
     stack.client().tool_server_remove(&server).unwrap();
     ui.wait("its row gone", |ui| !ui.has(row(&server)));
+    assert!(ui.bounds("mcp-panel").origin.y < ui.bounds(more(&docs)).origin.y, "under Added's heading");
+    assert_eq!(says(&mut ui), "Running agents have the new name from their next start.", "with what's typed");
+    ui.click("mcp-panel-go");
+    assert_eq!(refused(&mut ui), "The hub no longer has this MCP server.");
 }
 
 /// With its header changed, and then its query.
@@ -144,7 +152,8 @@ fn a_key_left_empty_is_kept_until_its_for_another_server(cx: &mut TestAppContext
     assert_eq!((header(&ui).as_str(), kept(&stack, KEY), kept(&stack, "another-made-up-one")), ("X-Key", 0, 1));
 }
 
-/// Its query, then how it's signed in to, which is forgotten once the key is saved.
+/// Its query, with nothing in its menu to take the panel's place, then how it's signed in to, which is forgotten once
+/// the key is saved.
 #[gpui_kit::test]
 fn a_server_stays_signed_in_to_as_its_query_changes_and_until_another_way_is_saved(cx: &mut TestAppContext) {
     let (stack, serving) = (Stack::new(), Serving::with(ToolServerScript::default()));
@@ -158,6 +167,12 @@ fn a_server_stays_signed_in_to_as_its_query_changes_and_until_another_way_is_sav
     type_in(&mut ui, "mcp-url", &queried);
     assert_eq!(label_of(&mut ui, "mcp-way-says"), "You stay signed in.");
     assert_eq!(says(&mut ui), format!("Running agents have the change at once. {TOOLS}"));
+    ui.click(more(&linear));
+    ui.press("down");
+    ui.press("enter");
+    ui.wait("what's on in its menu", |ui| ui.asked().is_some());
+    assert_eq!(ui.asked().unwrap().0, "Remove Linear?", "Sign in again is off while a panel is open, as Edit is");
+    ui.click("remove-mcp-server-keep");
     save(&mut ui);
     ui.wait("its URL", |ui| url_of(ui, "Linear") == queried);
     assert_eq!(auth_of(&ui, "Linear"), Some(WORKS));

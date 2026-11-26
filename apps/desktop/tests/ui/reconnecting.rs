@@ -76,7 +76,7 @@ fn after_a_reconnect_panes_catch_up_when_shown_and_an_archived_ones_goes(cx: &mu
     let hidden_diff = open_empty_diff(&mut ui);
     let shown = ui.new_workspace();
     let shown_diff = open_empty_diff(&mut ui);
-    lose_the_hub(&mut ui, &stack);
+    ui.lose_the_hub(&stack);
     // A kept pane does nothing until there's a connection for it, even when a shortcut reaches the window.
     ui.cx.update_window(ui.handle, |_, window, cx| window.blur(cx)).unwrap();
     ui.frame();
@@ -114,14 +114,14 @@ fn a_pane_shown_while_the_hub_is_gone_catches_up_once_it_is_back(cx: &mut TestAp
     let diff = open_empty_diff(&mut ui);
     ui.new_workspace();
     assert!(ui.on("add-project"), "with a hub, a project can be added");
-    lose_the_hub(&mut ui, &stack);
+    ui.lose_the_hub(&stack);
     assert_eq!(ui.view().records().repos().len(), 1, "the repository is still listed");
     assert!(ui.has("add-project"), "so the heading stays over it");
     assert!(ui.off("add-project"), "with no hub to add one to");
     local_hub::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");
     ui.wait("the hub to come back", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
-    lose_the_hub(&mut ui, &stack);
+    ui.lose_the_hub(&stack);
     std::fs::write(ui.worktree(&behind).join("a.txt"), "one\nchanged while away\n").unwrap();
 
     ui.click(SharedString::from(format!("workspace-{behind}")));
@@ -133,12 +133,6 @@ fn a_pane_shown_while_the_hub_is_gone_catches_up_once_it_is_back(cx: &mut TestAp
     ui.click("try-hub-again");
     ui.wait("it to catch up", |ui| matches!(ui.view().connection(), Connection::Ready(_)) && shows_changes(ui, &diff));
     assert_eq!(ui.view().error.as_deref(), None);
-}
-
-/// Stops the hub, and waits for the app to find it can't start another.
-fn lose_the_hub(ui: &mut Ui<'_>, stack: &Stack) {
-    client_core::stop_hub(&stack.hub.paths.socket).unwrap();
-    ui.wait("the app to find no hub", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
 }
 
 /// Opens the selected workspace's diff, which has nothing in it yet.
