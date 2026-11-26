@@ -1,6 +1,7 @@
 //! What an authorization server answers a client that asks to be registered, as RFC 7591, section 3.2, has it.
 
 use serde::Deserialize;
+use serde::de::IgnoredAny;
 
 use crate::fetch::{Answer, json};
 use crate::token_endpoint::Refusal;
@@ -18,12 +19,15 @@ pub(super) enum Answered {
     Refused(Option<OauthError>),
 }
 
-/// What's read of a registration. A secret in it, and a token to change it with, are left unread.
+/// What's read of a registration. A secret in it is read only for whether it's there, and a token to change it with
+/// is left unread.
 #[derive(Deserialize)]
 struct Given {
     client_id: String,
     #[serde(default)]
     token_endpoint_auth_method: Option<String>,
+    #[serde(default)]
+    client_secret: Option<IgnoredAny>,
 }
 
 pub(super) fn answered(answer: Answer) -> Result<Answered, Failure> {
@@ -33,10 +37,13 @@ pub(super) fn answered(answer: Answer) -> Result<Answered, Failure> {
     if !matches!(answer.status, 200 | 201) {
         return Err(answer.failure());
     }
-    let Some(Given { client_id, token_endpoint_auth_method }) = json(&answer) else {
+    let Some(Given { client_id, token_endpoint_auth_method, client_secret }) = json(&answer) else {
         return Err(no_client(answer));
     };
-    if token_endpoint_auth_method.is_some_and(|method| method != NO_SECRET) {
+    // One that names no method has the default, `client_secret_basic`, by RFC 7591, section 2, which a secret shows it
+    // was registered with.
+    let with_secret = token_endpoint_auth_method.map_or(client_secret.is_some(), |method| method != NO_SECRET);
+    if with_secret {
         return Ok(Answered::WithSecret);
     }
     ClientId::given(&client_id).map(Answered::Registered).ok_or_else(|| no_client(answer))

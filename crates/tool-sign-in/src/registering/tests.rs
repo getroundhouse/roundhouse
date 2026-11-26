@@ -180,7 +180,7 @@ async fn a_client_thats_given_is_taken_only_with_an_id_that_can_be_one_and_witho
         (201, id("a"), "a"),
         (200, id("a"), "a"),
         (201, with("none".into()), "a"),
-        (201, with(Value::Null), "a"),
+        (201, json!({"client_id": "a", "token_endpoint_auth_method": null, "client_secret": null}), "a"),
         (201, id(" ~A.b"), " ~A.b"),
         (201, id(&longest), &longest),
     ] {
@@ -198,14 +198,19 @@ async fn a_client_thats_given_is_taken_only_with_an_id_that_can_be_one_and_witho
 
         assert!(matches!(failure, Failure::Unreadable { .. }), "{body}: {failure:?}");
     }
-    for method in ["client_secret_basic", "client_secret_post", "private_key_jwt", ""] {
-        let stand_in = StandIn::with(registers(Registers::Says(201, with(method.into())))).await;
+    // A secret with no method is one with `client_secret_basic`, by RFC 7591, section 2.
+    let methods = ["client_secret_basic", "client_secret_post", "private_key_jwt", ""].map(Value::from);
+    for method in [methods.to_vec(), vec![Value::Null]].concat() {
+        let stand_in = StandIn::with(registers(Registers::Says(201, with(method.clone())))).await;
 
         let taken = asked(&stand_in, REDIRECT, None).await;
 
         let Ok(TakenAs::NoWay(why)) = taken else { panic!("{method}: {taken:?}") };
         assert_eq!(why, NoWay::OnlyClientsWithSecrets(Issuer::new(stand_in.issuer())), "{method}");
     }
+    let no_method =
+        StandIn::with(registers(Registers::Says(201, json!({"client_id": "a", "client_secret": "b"})))).await;
+    assert!(matches!(asked(&no_method, REDIRECT, None).await, Ok(TakenAs::NoWay(NoWay::OnlyClientsWithSecrets(_)))));
 }
 
 /// Nothing of what it was answered is in what's said but one of OAuth's names.
