@@ -1,10 +1,8 @@
 use super::path::path_of;
 use super::{Connections, Failure, Sent, UnderWay, Upstream};
-use parking_lot::Mutex;
 use protocol::capability::setup::{ServerName, ToolServerState};
 use protocol::model::{RunId, SessionId, ToolServerId, ToolServerName, ToolServerPlace};
 use protocol::worker::{ProxiedServer, ServerSignIn, TokenNumber};
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::watch;
 
@@ -12,9 +10,8 @@ use tokio::sync::watch;
 /// them.
 #[derive(Default)]
 pub(crate) struct Proxy {
-    servers: Mutex<Vec<Arc<Server>>>,
-    /// Where each is, for a stream of one's to end as it's moved or removed.
-    places: watch::Sender<HashMap<ToolServerId, ToolServerPlace>>,
+    /// Watched for a stream of one's to end as it's moved or removed.
+    servers: watch::Sender<Vec<Arc<Server>>>,
     pub(super) connections: Connections,
     /// The calls under way to each, kept here rather than on each server, which each set makes again.
     pub(super) under_way: UnderWay,
@@ -24,10 +21,7 @@ pub(crate) struct Proxy {
 impl Proxy {
     /// Takes the place of the servers before. A request under way goes on with the server it began with.
     pub(crate) fn set(&self, servers: Vec<ProxiedServer>) {
-        let servers: Vec<_> = servers.into_iter().map(|server| Arc::new(Server::new(server))).collect();
-        let places = servers.iter().map(|server| (server.id.clone(), server.place.clone())).collect();
-        *self.servers.lock() = servers;
-        self.places.send_replace(places);
+        self.servers.send_replace(servers.into_iter().map(|server| Arc::new(Server::new(server))).collect());
     }
 
     /// The agent of `session_id` starts, as its `run`, so nothing is known of where it's connected.
@@ -50,22 +44,23 @@ impl Proxy {
 
     /// Until `server` is at another place than it is, or isn't one of the hub's.
     pub(super) fn gone(&self, server: &Server) -> impl Future<Output = ()> + Send + 'static {
-        let (mut places, id, place) = (self.places.subscribe(), server.id.clone(), server.place.clone());
+        let (mut servers, id, place) = (self.servers.subscribe(), server.id.clone(), server.place.clone());
         async move {
-            let gone = |places: &HashMap<_, _>| places.get(&id) != Some(&place);
+            let gone =
+                |servers: &Vec<Arc<Server>>| !servers.iter().any(|server| server.id == id && server.place == place);
             // An error says the worker has stopped serving.
-            let _gone = places.wait_for(gone).await;
+            let _gone = servers.wait_for(gone).await;
         }
     }
 
     /// Each server, its name, as agents are given it, and its path on the worker.
     pub(in super::super) fn paths(&self) -> Vec<(ToolServerId, ServerName, String)> {
         let path = |server: &Arc<Server>| (server.id.clone(), server.name.clone(), path_of(&server.id));
-        self.servers.lock().iter().map(path).collect()
+        self.servers.borrow().iter().map(path).collect()
     }
 
     pub(super) fn server(&self, id: &ToolServerId) -> Option<Arc<Server>> {
-        self.servers.lock().iter().find(|server| server.id == *id).cloned()
+        self.servers.borrow().iter().find(|server| server.id == *id).cloned()
     }
 }
 

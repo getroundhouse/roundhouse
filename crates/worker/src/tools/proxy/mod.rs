@@ -18,6 +18,7 @@ mod headers;
 mod message;
 mod passed_on;
 mod path;
+mod refusals;
 mod server;
 mod under_way;
 mod upstream;
