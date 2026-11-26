@@ -19,7 +19,7 @@ impl Client {
         self.call(tool_servers::ToolServerAdd { id: id.clone(), name: name.to_string(), url: url.to_string(), auth })
     }
 
-    /// Has the hub forget the tool server `id` and its key, and answers with its record as it last was, which the feed
+    /// Has the hub forget the tool server `id` and its key or its sign-in, and answers with its record as it last was, which the feed
     /// then says has been removed. See [`tool_servers::ToolServerRemove`].
     pub fn tool_server_remove(&self, id: &ToolServerId) -> Result<ToolServer> {
         self.call(tool_servers::ToolServerRemove { id: id.clone() })

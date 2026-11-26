@@ -295,6 +295,9 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         | R::GithubAppMake(_)
         | R::GithubAppRemove(_)
         | R::ToolServerRemove(_)
+        | R::ToolSignInStart(_)
+        | R::ToolSignInFinish(_)
+        | R::ToolSignInCancel(_)
         | R::NewWorkspaceDraftKeep(_)
         | R::NewWorkspaceDraftFileAdd(_)
         | R::NewWorkspaceDraftFileRemove(_) => Err(read_only("change anything")),

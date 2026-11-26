@@ -9,7 +9,7 @@
 mod client;
 pub use client::{CLIENT_DOCUMENT, ToolSignIn};
 mod failure;
-pub use failure::{Failure, OauthError};
+pub use failure::{Failure, OauthError, shown};
 mod fetch;
 pub use fetch::NotFetched;
 mod finding;
@@ -29,6 +29,6 @@ pub use token_endpoint::Granted;
 #[cfg(any(test, feature = "testing"))]
 mod stand_in;
 #[cfg(any(test, feature = "testing"))]
-pub use stand_in::{Asked, Asks, Iss, MetadataAt, Person, Refreshing, Says, Script, ServerMetadataAt, StandIn};
+pub use stand_in::{Asked, Asks, Gate, Iss, MetadataAt, Person, Refreshing, Says, Script, ServerMetadataAt, StandIn};
 #[cfg(test)]
 mod tests;

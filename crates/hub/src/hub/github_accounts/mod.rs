@@ -5,7 +5,7 @@
 //! `crate::github_logins`'s.
 
 #[cfg(test)]
-use credential::check_by_the_wall_clock;
+use super::wall_clock::check_by_the_wall_clock;
 #[cfg(test)]
 use protocol::client::github_accounts::{GithubAccountConnect, GithubAccountSetDefault};
 #[cfg(test)]

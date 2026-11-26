@@ -11,6 +11,8 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+mod gate;
+pub use gate::Gate;
 mod pace;
 pub mod task;
 pub mod thread;

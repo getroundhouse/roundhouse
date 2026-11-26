@@ -1,8 +1,9 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use protocol::client::tool_servers::ToolServerAdd;
-use protocol::model::{ToolServerAuthGiven, ToolServerKey};
+use protocol::client::{ApiError, ErrorCode};
+use protocol::model::{ToolServerAuthGiven, ToolServerId, ToolServerKey};
 
 use super::super::ToolServers;
 use crate::store::Store;
@@ -24,3 +25,38 @@ pub(super) fn with_neither(id: &str, name: &str) -> ToolServerAdd {
     let url = "https://mcp.example.com/mcp".into();
     ToolServerAdd { id: id.into(), name: name.into(), url, auth: ToolServerAuthGiven::Neither }
 }
+
+pub(super) fn refused<T: std::fmt::Debug>(done: Result<T, ApiError>) -> ErrorCode {
+    done.unwrap_err().code
+}
+
+/// What's in every file in the tool servers' directory.
+pub(super) fn files_in(dir: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(dir.join("tool-servers")) else { return Vec::new() };
+    let mut files: Vec<String> = entries.map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap()).collect();
+    files.sort();
+    files
+}
+
+/// The file of the server `id`.
+pub(super) fn path(dir: &Path, store: &Store, id: &ToolServerId) -> PathBuf {
+    let file = store.tool_server(id).unwrap().unwrap().1.unwrap();
+    dir.join("tool-servers").join(file.as_str())
+}
+
+/// Every file in `dir` that holds `text`, such as the database, its log and whatever else the hub keeps, by the
+/// directory it's in.
+pub(super) fn holding(dir: &Path, text: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            found.extend(holding(&path, text));
+        } else if std::fs::read(&path).unwrap().windows(text.len()).any(|bytes| bytes == text.as_bytes()) {
+            found.push(path.parent().unwrap().file_name().unwrap().to_string_lossy().into_owned());
+        }
+    }
+    found
+}
+
+pub(super) const KEY_FILE: &str = r#"{"format":"key","key":"Bearer made-up"}"#;

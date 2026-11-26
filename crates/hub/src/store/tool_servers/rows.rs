@@ -63,14 +63,13 @@ impl Store {
         Ok(row_of(&lock(&self.reader), id)?)
     }
 
-    /// The file of each tool server that names one, by server, for the hub to make the files and the rows agree as it
-    /// starts. A file the hub doesn't make is `None`. A server that doesn't know the person names none, so it isn't
-    /// here, and tidying leaves it.
-    pub(crate) fn tool_server_secrets(&self) -> Result<Vec<(ToolServerId, Option<LoginFile>)>, StoreError> {
+    /// Each tool server that names a file, with the file, or `None` for one the hub doesn't make. A server that doesn't
+    /// know the person names none, so it isn't here, and tidying leaves it.
+    pub(crate) fn tool_servers_with_secrets(&self) -> Result<Vec<(ToolServer, Option<LoginFile>)>, StoreError> {
         let conn = lock(&self.reader);
         let select = format!("SELECT {} FROM tool_servers WHERE secret_file IS NOT NULL", ServerColumns::LIST);
         let mut statement = conn.prepare_cached(&select)?;
-        let rows = statement.query_map([], |row| Ok((server_at(row)?.id, secret_at(row)?)))?;
+        let rows = statement.query_map([], |row| Ok((server_at(row)?, secret_at(row)?)))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
@@ -86,6 +85,25 @@ impl Store {
             )?;
             Ok(row_of(tx, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?.0)
         })
+    }
+
+    /// Returns the tool server as knowing the person by `auth` left it, or `None` when it does already, or there's no
+    /// such server.
+    pub(crate) fn set_tool_server_auth(
+        &self,
+        id: &ToolServerId,
+        auth: &ToolServerAuth,
+    ) -> Result<Option<ToolServer>, StoreError> {
+        let auth = serde_json::to_string(auth)?;
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction()?;
+        let update = "UPDATE tool_servers SET auth = ?1 WHERE id = ?2 AND auth IS NOT ?1";
+        if tx.execute(update, params![auth, id.as_str()])? == 0 {
+            return Ok(None);
+        }
+        let changed = row_of(&tx, id)?.map(|(server, _)| server);
+        tx.commit()?;
+        Ok(changed)
     }
 
     /// Removes the tool server `id`'s record, whose secret the hub has let go of, and answers with the revision of its

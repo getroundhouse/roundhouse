@@ -6,7 +6,8 @@
 #![expect(clippy::unwrap_used, reason = "only tests use it, so failing loudly is what it should do")]
 
 mod answer;
-pub use answer::{Answer, Gate};
+pub use answer::Answer;
+pub use waiting::Gate;
 mod apps;
 mod made_up_key;
 mod pull_requests;

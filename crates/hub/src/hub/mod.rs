@@ -52,6 +52,7 @@ mod tool_servers;
 mod tools;
 mod updates;
 mod waits;
+mod wall_clock;
 mod workers;
 mod workspace_lines;
 mod workspaces;

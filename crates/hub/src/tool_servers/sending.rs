@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use protocol::model::{ToolServer, ToolServerAuth, ToolServerId, ToolServerKey};
+use protocol::model::{ToolServer, ToolServerAuth, ToolServerId};
 use protocol::worker::{ProxiedServer, ServerHeader, ServerHeaderValue, ToolServersSet};
 use tokio::sync::watch;
 use tracing::{error, warn};
@@ -34,11 +34,13 @@ impl SentToolServers {
 enum LeftOut {
     /// Only a newer build knows how it knows the person.
     UnknownAuth,
-    /// Only a newer build can read its key.
+    /// Only a newer build can read its key or its sign-in.
     Newer,
-    /// Its key is gone.
+    /// Its key or its sign-in is gone.
     Gone,
-    /// Its key's file can't be read.
+    /// Its sign-in needs the person to sign in again.
+    NeedsSignIn,
+    /// Its file can't be read.
     Unreadable(std::io::ErrorKind),
 }
 
@@ -46,9 +48,10 @@ impl fmt::Display for LeftOut {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LeftOut::UnknownAuth => f.write_str("only a newer build knows how it knows the person"),
-            LeftOut::Newer => f.write_str("only a newer build can read its key"),
-            LeftOut::Gone => f.write_str("its key is gone"),
-            LeftOut::Unreadable(kind) => write!(f, "its key's file can't be read: {kind}"),
+            LeftOut::Newer => f.write_str("only a newer build can read its key or its sign-in"),
+            LeftOut::Gone => f.write_str("its key or its sign-in is gone"),
+            LeftOut::NeedsSignIn => f.write_str("it needs signing in to"),
+            LeftOut::Unreadable(kind) => write!(f, "its file can't be read: {kind}"),
         }
     }
 }
@@ -100,7 +103,8 @@ impl ToolServers {
     }
 
     fn worked_out(&self, files: &Locked<'_, ToolServerSecret>) -> Result<SentToolServers, StoreError> {
-        let secrets: HashMap<_, _> = self.store.tool_server_secrets()?.into_iter().collect();
+        let named = self.store.tool_servers_with_secrets()?.into_iter().map(|(server, file)| (server.id, file));
+        let secrets: HashMap<_, _> = named.collect();
         let mut worked_out = SentToolServers::default();
         for server in self.store.tool_servers()? {
             let file = secrets.get(&server.id).and_then(Option::as_ref);
@@ -113,7 +117,8 @@ impl ToolServers {
     }
 }
 
-/// What each request to a server that knows the person by `auth` carries, with the key `file` holds.
+/// What each request to a server that knows the person by `auth` carries, with the key or the access token
+/// `file` holds.
 fn header(
     auth: &ToolServerAuth,
     files: &Locked<'_, ToolServerSecret>,
@@ -121,17 +126,23 @@ fn header(
 ) -> Result<Option<ServerHeader>, LeftOut> {
     match auth {
         ToolServerAuth::Key { header } => {
-            let key = key(files, file)?;
+            let ToolServerSecret::Key(key) = secret(files, file)? else { return Err(LeftOut::Gone) };
             Ok(Some(ServerHeader { name: header.clone(), value: ServerHeaderValue::new(key.as_str()) }))
+        }
+        // Its file says how it stands, and its record says what the file does.
+        ToolServerAuth::SignIn { status: _ } => {
+            let ToolServerSecret::SignIn(kept) = secret(files, file)? else { return Err(LeftOut::Gone) };
+            let tokens = kept.tokens.ok_or(LeftOut::NeedsSignIn)?;
+            Ok(Some(ServerHeader::bearer(tokens.access.as_str())))
         }
         ToolServerAuth::Neither => Ok(None),
         ToolServerAuth::Unknown => Err(LeftOut::UnknownAuth),
     }
 }
 
-fn key(files: &Locked<'_, ToolServerSecret>, file: Option<&LoginFile>) -> Result<ToolServerKey, LeftOut> {
+fn secret(files: &Locked<'_, ToolServerSecret>, file: Option<&LoginFile>) -> Result<ToolServerSecret, LeftOut> {
     match files.read(file.ok_or(LeftOut::Gone)?) {
-        Ok(Stored::Secret(ToolServerSecret::Key(key))) => Ok(key),
+        Ok(Stored::Secret(secret)) => Ok(secret),
         Ok(Stored::Newer) => Err(LeftOut::Newer),
         Ok(Stored::Nothing) => Err(LeftOut::Gone),
         Err(e) => Err(LeftOut::Unreadable(e.kind())),

@@ -1,3 +1,5 @@
+use waiting::Gate;
+
 /// How the stand-in answers. By default it asks for a sign-in as MCP has a server do, the person approves, and each
 /// renewal gives a new refresh token.
 #[derive(Clone, Debug)]
@@ -31,6 +33,9 @@ pub struct Script {
     /// Whether each renewal gives a new refresh token, with the last refused from then on.
     pub rotates: bool,
     pub refreshing: Refreshing,
+    /// What holds back each answer of its authorization server for tokens, once it has done what it was asked, as a
+    /// refresh token that's replaced is already refused.
+    pub answers_after: Option<Gate>,
 }
 
 impl Default for Script {
@@ -53,6 +58,7 @@ impl Default for Script {
             lasts: Some(3600),
             rotates: true,
             refreshing: Refreshing::Works,
+            answers_after: None,
         }
     }
 }

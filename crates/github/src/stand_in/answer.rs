@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use serde_json::json;
-use tokio::sync::watch;
+use waiting::Gate;
 
 use super::MADE_UP_APP_KEY;
 
@@ -14,26 +12,6 @@ pub enum Answer {
     Never,
     /// What the boxed answer says, once the gate has been opened.
     After(Gate, Box<Answer>),
-}
-
-/// What holds an answer back until a test opens it, as [`Answer::After`] says.
-#[derive(Clone)]
-pub struct Gate(Arc<watch::Sender<bool>>);
-
-impl Gate {
-    /// One no answer has passed yet.
-    pub fn closed() -> Self {
-        Gate(Arc::new(watch::Sender::new(false)))
-    }
-
-    /// Lets every answer it holds back go, and every one after.
-    pub fn open(&self) {
-        self.0.send_replace(true);
-    }
-
-    pub(super) async fn opened(&self) {
-        self.0.subscribe().wait_for(|open| *open).await.unwrap();
-    }
 }
 
 impl Answer {

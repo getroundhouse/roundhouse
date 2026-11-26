@@ -50,6 +50,14 @@ pub struct ServerHeader {
     pub value: ServerHeaderValue,
 }
 
+impl ServerHeader {
+    /// The header a server that's signed in to knows the person by, with `access_token`.
+    pub fn bearer(access_token: &str) -> Self {
+        let value = ServerHeaderValue::new(format!("Bearer {access_token}"));
+        Self { name: ToolServerHeader::authorization(), value }
+    }
+}
+
 crate::tokens!(
     /// The value of a tool server's header, as it's sent, such as `Bearer` and a key. The worker sends it only to the
     /// server's own origin, and no agent is given it.

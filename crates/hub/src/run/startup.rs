@@ -200,7 +200,7 @@ pub async fn run(config: HubConfig, stops_with: impl Future<Output = ()>) -> Res
     hub.stop_jobs();
     listener::unbind(&paths.socket);
     // Before the lock goes, so what a renewal under way is given is written before the next hub can start.
-    hub.stop_checking_github_logins(watching_github_logins).await;
+    tokio::join!(hub.stop_checking_github_logins(watching_github_logins), hub.stop_renewing_tool_sign_ins());
     let ended = end_workers(&hub, signalled).await;
     hub.shut_down_providers().await;
     if let Some(awake) = awake {
@@ -246,13 +246,14 @@ async fn end_workers(hub: &Arc<Hub>, signalled: bool) -> Ended {
 }
 
 /// What `hub` watches while it serves, each a task of `serving`: its waits' deadlines, its pull requests, what's sent
-/// of GitHub as observations, its reach on GitHub, and the update feed, if it reads one.
+/// of GitHub as observations, its reach on GitHub, its sign-ins to tool servers, and the update feed, if it reads one.
 fn watch_while_serving(hub: &Arc<Hub>, serving: &mut JoinSet<()>) {
     serving.spawn(Arc::clone(hub).watch_wait_deadlines());
     serving.spawn(Arc::clone(hub).watch_pull_requests());
     serving.spawn(Arc::clone(hub).observe_github());
     // What it would record is checked again as the next hub starts.
     serving.spawn(Arc::clone(hub).watch_github_reach());
+    serving.spawn(Arc::clone(hub).watch_tool_sign_ins());
     serving.spawn(Arc::clone(hub).look_for_updates());
 }
 

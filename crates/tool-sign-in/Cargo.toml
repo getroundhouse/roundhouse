@@ -7,7 +7,7 @@ license.workspace = true
 
 [features]
 # What tests of the hub from outside it need: a stand-in for an MCP server and its authorization server.
-testing = ["dep:parking_lot"]
+testing = ["dep:parking_lot", "dep:waiting"]
 
 [dependencies]
 base64.workspace = true
@@ -26,15 +26,16 @@ tokio.workspace = true
 tower-service.workspace = true
 url.workspace = true
 parking_lot = { workspace = true, optional = true }
+waiting = { workspace = true, optional = true }
 
 [dev-dependencies]
 # For a web server that redirects, and an address where nothing listens.
 fetching = { workspace = true, features = ["testing"] }
 # What the `testing` feature brings in, which the tests have without it.
 parking_lot.workspace = true
+waiting.workspace = true
 # For tests that pause time, so a timeout passes without being waited for.
 tokio = { workspace = true, features = ["test-util"] }
-waiting.workspace = true
 
 [lints]
 workspace = true

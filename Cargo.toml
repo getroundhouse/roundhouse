@@ -131,6 +131,7 @@ agents = { path = "crates/agents" }
 providers = { path = "crates/providers" }
 worker = { path = "crates/worker" }
 github = { path = "crates/github" }
+tool-sign-in = { path = "crates/tool-sign-in" }
 hub = { path = "crates/hub" }
 daemon = { path = "apps/daemon" }
 client-core = { path = "crates/client-core" }

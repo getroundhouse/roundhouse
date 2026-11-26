@@ -73,9 +73,9 @@ impl ToolServers {
         Ok(ToolServerChange { server, changed: true })
     }
 
-    /// Forgets a server and its key, as `ToolServerRemove` says. The file goes first, and then the row, as
+    /// Forgets a server and its key or its sign-in, as `ToolServerRemove` says. The file goes first, and then the row, as
     /// [`Locked::disconnect`](crate::login_files::Locked::disconnect) says, so a hub that stops between leaves a server
-    /// whose key is gone, which tidying removes as the next starts, and never a key that was to be forgotten.
+    /// whose secret is gone, which tidying removes as the next starts, and never a secret that was to be forgotten.
     pub(crate) fn remove(&self, id: &ToolServerId) -> Result<ToolServerRemoved, ApiError> {
         self.changing(|files| {
             let (server, secret) = self.store.tool_server(id)?.ok_or_else(|| gone(id))?;
@@ -90,19 +90,22 @@ impl ToolServers {
 
     /// Makes the secrets' files and the servers' rows agree, as the hub starts, as
     /// [`Locked::tidy`](crate::login_files::Locked::tidy) says. A server whose secret is gone is removed, as removing it
-    /// would have, had the hub not stopped between letting go of its file and its row.
+    /// would have, had the hub not stopped between letting go of its file and its row. Then each sign-in's record says
+    /// what its file does, which a hub that stopped between writing the two left otherwise.
     pub(crate) fn tidy(&self) -> Result<(), ApiError> {
         self.changing(|files| {
-            files.tidy(self.store.tool_server_secrets()?, |id| {
+            let named = self.store.tool_servers_with_secrets()?.into_iter().map(|(server, file)| (server.id, file));
+            files.tidy(named.collect(), |id| {
                 self.store.remove_tool_server(id)?;
                 Ok(())
-            })
+            })?;
+            self.say_as_kept(files)
         })
     }
 
     /// Refuses `name` with `Conflict` when agents would call a server the hub has the same, saying which, and that they
     /// would when the names as typed don't show it.
-    fn free(&self, name: &ToolServerName) -> Result<(), ApiError> {
+    pub(super) fn free(&self, name: &ToolServerName) -> Result<(), ApiError> {
         let servers = self.store.tool_servers()?;
         let Some(has_it) = servers.iter().find(|server| server.name.is_same_for_agents(name)) else {
             return Ok(());
@@ -117,6 +120,6 @@ impl ToolServers {
     }
 }
 
-fn gone(id: &ToolServerId) -> StoreError {
+pub(super) fn gone(id: &ToolServerId) -> StoreError {
     StoreError::NotFound { kind: "MCP server", id: id.to_string() }
 }

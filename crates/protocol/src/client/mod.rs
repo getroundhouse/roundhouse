@@ -30,6 +30,7 @@ pub mod sessions;
 pub mod subscriptions;
 pub mod terminals;
 pub mod tool_servers;
+pub mod tool_sign_ins;
 pub mod waits;
 pub mod workspaces;
 
