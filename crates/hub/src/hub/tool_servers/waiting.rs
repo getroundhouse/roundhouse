@@ -7,12 +7,18 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::ToolSignInId;
 use tokio::sync::Mutex as AsyncMutex;
 use tool_sign_in::Pending;
+use tracing::info;
 
 use crate::store::later_ms;
 use crate::tool_servers::SigningIn;
 
 /// How many sign-ins can wait at once. One person signs in to one server at a time, so a few let others beside them, and
 /// keep a client that starts them without end from having the hub hold many. *Unconfirmed.*
+///
+/// Starting one more forgets the one that has waited longest, rather than refusing it until one has waited as long as
+/// one does. Nothing cancels the sign-in of an app that quits, so refusing would have four apps that quit as they waited
+/// block every sign-in for 15 minutes, with nothing the person could do but wait. A sign-in forgotten that someone
+/// still waits on is answered as one that has waited too long is, and started again.
 pub(super) const MOST_WAITING: usize = 4;
 
 /// The sign-ins to tool servers that wait for the person, or for what the hub asks of them, by ID. Only the client that
@@ -54,16 +60,17 @@ impl Waiting {
         Some(Arc::clone(&by_id.get(id)?.sign_in))
     }
 
-    /// Has the sign-in `id`, `to`, wait from `now_ms`, or answers with the one of that ID that waits. Refused with
-    /// `Unavailable` when as many wait as may.
+    /// Has the sign-in `id`, `to`, wait from `now_ms`, or answers with the one of that ID that waits. When as many wait
+    /// as may, the one that has waited longest is forgotten, as [`MOST_WAITING`] says. Refused with `Unavailable` when
+    /// each that waits is being kept, which is for moments.
     pub(super) fn begin(&self, id: &ToolSignInId, to: SigningIn, now_ms: i64) -> Result<Arc<WaitingSignIn>, ApiError> {
         let mut by_id = self.by_id.lock();
         forget_late(&mut by_id, now_ms);
         if let Some(entry) = by_id.get(id) {
             return Ok(Arc::clone(&entry.sign_in));
         }
-        if by_id.len() >= MOST_WAITING {
-            let message = "as many sign-ins to MCP servers as may wait at once are waiting; finish or cancel one";
+        if by_id.len() >= MOST_WAITING && !forget_longest_waiting(&mut by_id) {
+            let message = "as many sign-ins to MCP servers as may wait at once are being finished; try again";
             return Err(ApiError::new(ErrorCode::Unavailable, message));
         }
         let sign_in = Arc::new(WaitingSignIn { to, stage: AsyncMutex::new(Stage::Finding) });
@@ -98,4 +105,17 @@ impl Waiting {
 /// Forgets each that has waited as long as one does.
 fn forget_late(by_id: &mut HashMap<ToolSignInId, Entry>, now_ms: i64) {
     by_id.retain(|_, entry| entry.keeping || entry.until_ms > now_ms);
+}
+
+/// Forgets the one that has waited longest and isn't being kept, if there's one. Each waits as long, so it's the one
+/// that waits until soonest, and of those that began in the same millisecond, the first by ID, so it's always the same.
+fn forget_longest_waiting(by_id: &mut HashMap<ToolSignInId, Entry>) -> bool {
+    let longest = by_id
+        .iter()
+        .filter(|(_, entry)| !entry.keeping)
+        .min_by(|(a, one), (b, other)| one.until_ms.cmp(&other.until_ms).then_with(|| a.as_str().cmp(b.as_str())));
+    let Some(id) = longest.map(|(id, _)| id.clone()) else { return false };
+    info!(name: "tool_sign_in.forgotten", "Forgot the sign-in to a tool server that had waited longest, for another");
+    by_id.remove(&id);
+    true
 }
