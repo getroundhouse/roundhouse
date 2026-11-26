@@ -248,7 +248,7 @@ Some servers can't be signed in to. One whose service takes only apps it was tol
 
 ### Sign in again
 
-The hub renews a sign-in by itself, until the service no longer lets it, such as once you've taken Roundhouse off your account there. The server's row then says **Needs you to sign in**, and its tools fail in every chat.
+The hub renews a sign-in by itself, until the service no longer lets it, such as once you've taken Roundhouse off your account there. The server's row then says **Needs you to sign in**, and its tools fail in every chat. While the service can't be reached, or has a problem of its own, you stay signed in, and the hub tries again every few minutes. The server's tools fail meanwhile once the token it last gave has ended.
 
 Choose **Sign in again** in the row's **…** menu, or **Sign in** on [a chat's plug](chats.md#the-chats-mcp-servers), and approve it as before. The server keeps its name, so agents go on calling it what they did. An agent that was started with the server connects to it once you've signed in and its turn has ended, as [Chats](chats.md#the-chats-mcp-servers) says.
 

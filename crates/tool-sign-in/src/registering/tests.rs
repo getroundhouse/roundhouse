@@ -7,8 +7,8 @@ use serde_json::{Value, json};
 use super::{Client, Registration, TakenAs};
 use crate::tests::{CLIENT, REDIRECT, begun};
 use crate::{
-    Failure, Found, Issuer, NoWay, NotFetched, OauthError, RedirectUri, Registers, Renewal, Returned, Script, SignedIn,
-    StandIn, ToolSignIn, Way,
+    Failure, Found, Issuer, NoWay, NotFetched, OauthError, RedirectUri, Refreshing, Registers, Renewal, Returned,
+    Script, SignedIn, StandIn, ToolSignIn, Way,
 };
 
 /// Far longer than a stand-in takes to be asked, on a busy machine.
@@ -134,13 +134,18 @@ async fn a_registered_client_signs_in_and_renews_as_it_was_registered_with_no_se
     let finished = client.finish(&started.pending, Returned::of_query(&query)).await.unwrap();
     let logged = format!("{logged} {finished:?}");
     let SignedIn { renewable, granted, registration } = finished;
-    let renewal = client.renew(&renewable, &granted.refresh.unwrap()).await.unwrap();
+    let refresh = granted.refresh.unwrap();
+    let renewal = client.renew(&renewable, &refresh).await.unwrap();
+    stand_in.change(|script| script.refreshing = Refreshing::Refused("invalid_client"));
+    let unknown = client.renew(&renewable, &refresh).await.unwrap();
 
     assert_eq!(registration.as_ref(), Some(&registered));
     assert!(started.page.as_str().contains(&format!("&client_id={id}&")), "{}", started.page.as_str());
     assert!(matches!(renewal, Renewal::Renewed(_)), "{renewal:?}");
+    let Renewal::SignInAgain(said) = unknown else { panic!("{unknown:?}") };
+    assert!(said.is_invalid_client(), "a registration it has forgotten is gone for good");
     let asked = stand_in.asked_for("POST /token");
-    assert_eq!(asked.len(), 2);
+    assert_eq!(asked.len(), 3);
     for asked in asked {
         assert_eq!(asked.form("client_id").as_deref(), Some(id));
         assert!(asked.form("client_secret").is_none() && !asked.headers.contains_key("authorization"));
