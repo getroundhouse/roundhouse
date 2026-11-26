@@ -2991,7 +2991,7 @@ fn mark_highlight(mark: &TextMark, node_cx: &NodeContext, cx: &App) -> InlineHig
     InlineHighlight {
         style: highlight,
         font_family,
-        font_size_scale: mark.code.then_some(0.875),
+        font_size_scale: mark.code.then_some(node_cx.style.inline_code_scale()),
         code_style: mark.code.then(|| node_cx.style.inline_code_style().clone()),
     }
 }
@@ -4055,7 +4055,7 @@ impl BlockNode {
                     .w_full()
                     .min_w_0()
                     // Items breathe a little apart, less than paragraphs do.
-                    .when(ix > 0, |this| this.pt(body * 0.25))
+                    .when(ix > 0, |this| this.pt(body * node_cx.style.list_item_gap()))
                     .when(*spread, |this| this.child(div()))
                     .children({
                         let mut items: Vec<Div> = Vec::with_capacity(children.len());
@@ -4844,6 +4844,14 @@ mod tests {
                 ..Default::default()
             };
             let measured = paragraph.inline_highlights(&context, cx);
+            let smaller = NodeContext {
+                style: Arc::new(TextViewStyle::default().with_inline_code_scale(0.5)),
+                ..Default::default()
+            };
+            let scale = paragraph.inline_highlights(&smaller, cx)[2]
+                .1
+                .font_size_scale;
+            assert_eq!(scale, Some(0.5));
             let (text, highlights, links) = paragraph.plain_render(&context, cx);
             assert_eq!(text.as_ref(), "a中😀文b");
             assert_eq!(links, vec![(8..12, link)]);

@@ -1,0 +1,123 @@
+diff --git a/crates/base/src/text/node.rs b/crates/base/src/text/node.rs
+index 4db2f7a..c05acdc 100644
+--- a/crates/base/src/text/node.rs
++++ b/crates/base/src/text/node.rs
+@@ -4054,7 +4054,7 @@ impl BlockNode {
+                     .w_full()
+                     .min_w_0()
+                     // Items breathe a little apart, less than paragraphs do.
+-                    .when(ix > 0, |this| this.pt(body * 0.25))
++                    .when(ix > 0, |this| this.pt(body * node_cx.style.list_item_gap()))
+                     .when(*spread, |this| this.child(div()))
+                     .children({
+                         let mut items: Vec<Div> = Vec::with_capacity(children.len());
+diff --git a/crates/base/src/text/style.rs b/crates/base/src/text/style.rs
+index f3ea33e..53c7ed3 100644
+--- a/crates/base/src/text/style.rs
++++ b/crates/base/src/text/style.rs
+@@ -19,6 +19,7 @@ pub struct TextViewStyle {
+     code_background: Hsla,
+     border: Hsla,
+     paragraph_gap: Rems,
++    list_item_gap: f32,
+     heading: Arc<dyn Fn(u8) -> StyleRefinement + Send + Sync + 'static>,
+     code_block: StyleRefinement,
+     table: StyleRefinement,
+@@ -46,6 +47,7 @@ pub struct TextViewStyle {
+ impl PartialEq for TextViewStyle {
+     fn eq(&self, other: &Self) -> bool {
+         self.paragraph_gap == other.paragraph_gap
++            && self.list_item_gap == other.list_item_gap
+             && self.foreground == other.foreground
+             && self.muted_foreground == other.muted_foreground
+             && self.link == other.link
+@@ -99,6 +101,7 @@ impl TextViewStyle {
+             code_background: colors.accent,
+             border: colors.border,
+             paragraph_gap: rems(0.75),
++            list_item_gap: 0.25,
+             heading: Arc::new(|_| StyleRefinement::default()),
+             code_block: StyleRefinement::default(),
+             table: StyleRefinement::default(),
+@@ -235,6 +238,16 @@ impl TextViewStyle {
+         self
+     }
+ 
++    /// Sets the gap between a list's items, as a share of the body text's size.
++    ///
++    /// 0.25 by default. A non-finite or negative share is ignored.
++    pub fn with_list_item_gap(mut self, gap: f32) -> Self {
++        if gap.is_finite() && gap >= 0. {
++            self.list_item_gap = gap;
++        }
++        self
++    }
++
+     /// Refines the marker of a bullet or numbered list item.
+     ///
+     /// Applied to the marker column after its defaults: the muted text color,
+@@ -393,6 +406,11 @@ impl TextViewStyle {
+         &self.inline_code_style
+     }
+ 
++    /// The gap between a list's items, as a share of the body text's size.
++    pub fn list_item_gap(&self) -> f32 {
++        self.list_item_gap
++    }
++
+     /// Explicit list marker refinements.
+     pub fn list_style(&self) -> &StyleRefinement {
+         &self.list_style
+@@ -681,6 +699,26 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn list_item_gap_ignores_what_no_gap_can_be() {
++        let plain = TextViewStyle::default();
++        assert_eq!(plain.list_item_gap(), 0.25);
++        for gap in [f32::NAN, f32::INFINITY, -1.] {
++            assert_eq!(plain.clone().with_list_item_gap(gap).list_item_gap(), 0.25);
++        }
++        assert_eq!(plain.clone().with_list_item_gap(0.).list_item_gap(), 0.);
++
++        let colors = ColorTokens::light();
++        let style = plain.clone().with_list_item_gap(1.);
++        assert!(style != plain);
++        assert_eq!(
++            style
++                .on_text_color(colors.primary_foreground)
++                .list_item_gap(),
++            1.
++        );
++    }
++
+     #[test]
+     fn list_and_blockquote_refinements_remain_explicit_on_an_inverted_surface() {
+         let colors = ColorTokens::light();
+diff --git a/crates/base/src/text/text_view.rs b/crates/base/src/text/text_view.rs
+index 64a157a..6dc1f60 100644
+--- a/crates/base/src/text/text_view.rs
++++ b/crates/base/src/text/text_view.rs
+@@ -2535,6 +2535,21 @@ mod tests {
+         }
+     }
+ 
++    #[gpui::test]
++    fn list_items_are_as_far_apart_as_the_style_says(cx: &mut TestAppContext) {
++        cx.update(crate::init);
++        let apart = |cx: &mut TestAppContext| {
++            let (_, rows) = fitted_list_bounds("- One\n- Two", 600., cx);
++            rows[1].top() - rows[0].top()
++        };
++        let by_default = apart(cx);
++        let style = TextViewStyle::default().with_list_item_gap(1.);
++        cx.update(|cx| crate::TextViewDefaults::new().with_style(style).install(cx));
++
++        // The root's text is 16px, and the gap goes from a quarter of it to the whole.
++        assert_eq!(apart(cx) - by_default, px(12.));
++    }
++
+     #[gpui::test]
+     fn fitted_lists_wrap_their_body_within_the_available_width(cx: &mut TestAppContext) {
+         cx.update(crate::init);

@@ -1,0 +1,9 @@
+bm:v1
+fps(60) s(400,220)
+canvases["Motion canvas"]
+state(01 Closed) #a
+state(02 Open) #b
+
+#a hold(sec(0.5))
+#a to(#b) sec(0.2) ease(out,cubic)
+#b hold(sec(0.8))

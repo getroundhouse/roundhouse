@@ -1,0 +1,20 @@
+bp:v1
+canvas:
+  backgroundEnabled: false
+  writer: 1
+---
+fad6ae17504ae094 al(v,g(8:$spacing.sm),pad(24:$spacing.xl)) p(0,0) s(560,hug:221) f[(68a22599ac826bde,tok(color.surface.pane,#140F0C))] "Index"
+  4a2ab6793bb8c345 t("Index",SF Pro Text:$font.family,24:$font.size.PageTitle,m:$font.weight.emphasis,align(l),lh(auto,1.21)) p(24,24) s(hug:62.84,hug:29) f[(7b16b5f99bd642d2,tok(color.text,#EEE6E1))] "Heading"
+  ee49455068c32fdc al(h,x(sb),y(c)) p(24,61) s(fill,28) ext(512,) f[] "Foundations"
+    662dbae6e13ec4ed t("Foundations",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.15px)) p(0,2.75) s(hug:79.61,hug:22.5) f[(5e59d2a61ab5bb1b,tok(color.text,#EEE6E1))] $typography.Body "Name"
+    959f450a7712611f inst("Status Draft",canvas(Components/Status)) mid(c7a5b4f8f8055dc1) p(467.38,4) ext(44.62,20) "Status"
+  ea071aaea0c54c4e al(h,x(sb),y(c)) p(24,97) s(fill,28) ext(512,) f[] "Screens/Plan to approve"
+    3cb8b4fe44e6b8a5 t("Screens / Plan to approve",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.15px)) p(0,2.75) s(hug:164.48,hug:22.5) f[(c609e4ec09638fe6,tok(color.text,#EEE6E1))] $typography.Body "Name"
+    c55af059ae246604 inst("Status Review",canvas(Components/Status)) mid(fcbac3605ea3f943) p(437.34,4) ext(74.66,20) "Status"
+  712234b0610c73f6 al(h,x(sb),y(c)) p(24,133) s(fill,28) ext(512,) f[] "Components/Status"
+    4d829714e7f0130c t("Components / Status",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.15px)) p(0,2.75) s(hug:135.51,hug:22.5) f[(deb3c10319d8166a,tok(color.text,#EEE6E1))] $typography.Body "Name"
+    ea62f8a5c001d3c5 inst("Status Draft",canvas(Components/Status)) mid(c7a5b4f8f8055dc1) p(467.38,4) ext(44.62,20) "Status"
+  90efd7be91e8fc5f al(h,x(sb),y(c)) p(24,169) s(fill,28) ext(512,) f[] "Motion canvas"
+    c698b87e5d6a791d t("Motion canvas",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.15px)) p(0,2.75) s(hug:93.31,hug:22.5) f[(1ff26deb9ab1a5b1,tok(color.text,#EEE6E1))] $typography.Body "Name"
+    267495e7a6052a2c inst("Status Draft",canvas(Components/Status)) mid(c7a5b4f8f8055dc1) p(467.38,4) ext(44.62,20) "Status"
+bp:end

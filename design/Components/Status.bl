@@ -1,0 +1,15 @@
+bp:v1
+canvas:
+  background:
+    type: solid
+    color: "#000000"
+    opacity: 0.5
+  backgroundEnabled: false
+---
+c7a5b4f8f8055dc1 al(h,x(c),y(c),pad(0:$spacing.none,8:$spacing.sm,0:$spacing.none,8:$spacing.sm)) comp p(0,0) s(hug:44.62,20) f[(209d95507c6651bc,tok(color.surface.raised,#26211E))] rd(4:$radius.InlineControl) "Status Draft"
+  3a72af35029a84f9 t("Draft",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) mref(3a72af35029a84f9) p(8,3) s(hug:28.62,hug:14) f[(f8c24a9ab855765e,tok(color.text.muted,#B8B1AC))] $typography.Detail "Words"
+5f4619443197c38a al(h,x(c),y(c),pad(0:$spacing.none,8:$spacing.sm,0:$spacing.none,8:$spacing.sm)) comp p(0,40) s(hug:51.03,20) f[(c26860519ed22ad8,tok(color.surface.raised,#26211E))] rd(4:$radius.InlineControl) "Status Ready"
+  9a5d51d14797d10d t("Ready",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) mref(9a5d51d14797d10d) p(8,3) s(hug:35.03,hug:14) f[(ac5261ea0e6775f6,tok(color.status.done,#6CC488))] $typography.Detail "Words"
+fcbac3605ea3f943 al(h,x(c),y(c),pad(0:$spacing.none,8:$spacing.sm,0:$spacing.none,8:$spacing.sm)) comp p(0,80) s(hug:74.66,20) f[(652d763d84403e0e,tok(color.surface.raised,#26211E))] rd(4:$radius.InlineControl) "Status Review"
+  ec74c517cf3e99e0 t("For review",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) mref(ec74c517cf3e99e0) p(8,3) s(hug:58.66,hug:14) f[(5619f92a23058092,tok(color.status.needs_you,#E9B24C))] $typography.Detail "Words"
+bp:end

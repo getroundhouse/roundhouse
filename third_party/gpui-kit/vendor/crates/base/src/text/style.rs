@@ -20,6 +20,7 @@ pub struct TextViewStyle {
     code_background: Hsla,
     border: Hsla,
     paragraph_gap: Rems,
+    list_item_gap: f32,
     heading: Arc<dyn Fn(u8) -> StyleRefinement + Send + Sync + 'static>,
     code_block: StyleRefinement,
     table: StyleRefinement,
@@ -27,6 +28,7 @@ pub struct TextViewStyle {
     table_cell: StyleRefinement,
     strong: HighlightStyle,
     inline_code: HighlightStyle,
+    inline_code_scale: f32,
     /// Explicit inline code refinements, applied after theme and surface colors.
     inline_code_style: StyleRefinement,
     /// Explicit list marker refinements, applied after theme and surface colors.
@@ -46,6 +48,7 @@ pub struct TextViewStyle {
 impl PartialEq for TextViewStyle {
     fn eq(&self, other: &Self) -> bool {
         self.paragraph_gap == other.paragraph_gap
+            && self.list_item_gap == other.list_item_gap
             && self.foreground == other.foreground
             && self.muted_foreground == other.muted_foreground
             && self.link == other.link
@@ -60,6 +63,7 @@ impl PartialEq for TextViewStyle {
             && self.table_cell == other.table_cell
             && self.strong == other.strong
             && self.inline_code == other.inline_code
+            && self.inline_code_scale == other.inline_code_scale
             && self.inline_code_style == other.inline_code_style
             && self.list_style == other.list_style
             && self.blockquote_style == other.blockquote_style
@@ -98,6 +102,7 @@ impl TextViewStyle {
             code_background: colors.accent,
             border: colors.border,
             paragraph_gap: rems(0.75),
+            list_item_gap: 0.25,
             heading: Arc::new(|_| StyleRefinement::default()),
             code_block: StyleRefinement::default(),
             table: StyleRefinement::default(),
@@ -111,6 +116,7 @@ impl TextViewStyle {
                 background_color: Some(colors.accent),
                 ..Default::default()
             },
+            inline_code_scale: 0.875,
             inline_code_style: StyleRefinement::default(),
             list_style: StyleRefinement::default(),
             blockquote_style: StyleRefinement::default(),
@@ -207,6 +213,17 @@ impl TextViewStyle {
         self
     }
 
+    /// Sets how big inline code is, as a share of the size of the text around it.
+    ///
+    /// 0.875 by default. A font size given to [`Self::with_inline_code_style`]
+    /// takes precedence. A non-finite or non-positive share is ignored.
+    pub fn with_inline_code_scale(mut self, scale: f32) -> Self {
+        if scale.is_finite() && scale > 0. {
+            self.inline_code_scale = scale;
+        }
+        self
+    }
+
     /// Overrides inline code typography and its box presentation.
     ///
     /// Supports font family, size, features, fallbacks, weight, style, color, underline and
@@ -219,6 +236,16 @@ impl TextViewStyle {
     /// inverted surfaces.
     pub fn with_inline_code_style(mut self, style: StyleRefinement) -> Self {
         self.inline_code_style = normalize_inline_code_style(style);
+        self
+    }
+
+    /// Sets the gap between a list's items, as a share of the body text's size.
+    ///
+    /// 0.25 by default. A non-finite or negative share is ignored.
+    pub fn with_list_item_gap(mut self, gap: f32) -> Self {
+        if gap.is_finite() && gap >= 0. {
+            self.list_item_gap = gap;
+        }
         self
     }
 
@@ -370,9 +397,19 @@ impl TextViewStyle {
         self.inline_code
     }
 
+    /// How big inline code is, as a share of the size of the text around it.
+    pub fn inline_code_scale(&self) -> f32 {
+        self.inline_code_scale
+    }
+
     /// Explicit inline code typography and box refinements.
     pub fn inline_code_style(&self) -> &StyleRefinement {
         &self.inline_code_style
+    }
+
+    /// The gap between a list's items, as a share of the body text's size.
+    pub fn list_item_gap(&self) -> f32 {
+        self.list_item_gap
     }
 
     /// Explicit list marker refinements.
@@ -635,6 +672,51 @@ mod tests {
                 .on_text_color(colors.primary_foreground)
                 .inline_code_style(),
             &refinement
+        );
+    }
+
+    #[test]
+    fn inline_code_scale_ignores_what_no_text_can_be() {
+        let plain = TextViewStyle::default();
+        assert_eq!(plain.inline_code_scale(), 0.875);
+        for scale in [f32::NAN, f32::INFINITY, 0., -1.] {
+            assert_eq!(
+                plain
+                    .clone()
+                    .with_inline_code_scale(scale)
+                    .inline_code_scale(),
+                0.875
+            );
+        }
+
+        let colors = ColorTokens::light();
+        let style = plain.clone().with_inline_code_scale(0.5);
+        assert!(style != plain);
+        assert_eq!(
+            style
+                .on_text_color(colors.primary_foreground)
+                .inline_code_scale(),
+            0.5
+        );
+    }
+
+    #[test]
+    fn list_item_gap_ignores_what_no_gap_can_be() {
+        let plain = TextViewStyle::default();
+        assert_eq!(plain.list_item_gap(), 0.25);
+        for gap in [f32::NAN, f32::INFINITY, -1.] {
+            assert_eq!(plain.clone().with_list_item_gap(gap).list_item_gap(), 0.25);
+        }
+        assert_eq!(plain.clone().with_list_item_gap(0.).list_item_gap(), 0.);
+
+        let colors = ColorTokens::light();
+        let style = plain.clone().with_list_item_gap(1.);
+        assert!(style != plain);
+        assert_eq!(
+            style
+                .on_text_color(colors.primary_foreground)
+                .list_item_gap(),
+            1.
         );
     }
 

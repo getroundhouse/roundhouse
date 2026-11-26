@@ -6,7 +6,7 @@ use crate::find::Part;
 
 /// What's marked strong in Markdown is `look::STRONG`, semibold, as its headings are, where the kit's own is bold. A
 /// thought keeps the surrounding text's weight even where its Markdown asks for bold, so its progress notes stay
-/// quieter than the answer. This changes only how the kit draws it, never its source or parsed blocks.
+/// quieter than the answer. Both have inline code and a list's items as `look` has them. This changes only how the kit draws it, never its source or parsed blocks.
 #[derive(Clone, Copy)]
 pub(crate) enum Style {
     Markdown,
@@ -23,8 +23,9 @@ impl Style {
         context.with_style(style)
     }
 
-    /// `style`, with what's strong and its headings as this kind of text has them.
+    /// `style`, with what's strong, its headings, its inline code and its lists as this kind of text has them.
     fn styled(self, style: TextViewStyle) -> TextViewStyle {
+        let style = style.with_inline_code_scale(look::INLINE_CODE).with_list_item_gap(look::LIST_ITEM_GAP);
         match self {
             Self::Markdown => {
                 let strong = HighlightStyle { font_weight: Some(look::STRONG), ..HighlightStyle::default() };
@@ -51,6 +52,16 @@ mod tests {
         assert_eq!(style.strong().font_weight, Some(FontWeight::SEMIBOLD));
         for level in 1..=6 {
             assert_eq!(style.heading(level).text.font_weight, Some(FontWeight::SEMIBOLD), "a heading of level {level}");
+        }
+    }
+
+    #[test]
+    fn inline_code_and_a_lists_items_are_as_look_has_them() {
+        for kind in [Style::Markdown, Style::Thinking] {
+            let style = kind.styled(TextViewStyle::default().with_inline_code_scale(1.).with_list_item_gap(1.));
+
+            let drawn = (style.inline_code_scale(), style.list_item_gap());
+            assert_eq!(drawn, (look::INLINE_CODE, look::LIST_ITEM_GAP));
         }
     }
 

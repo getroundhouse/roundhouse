@@ -35,11 +35,11 @@ Each level is made only from the ones above it, and is settled before anything r
 
 ## Where it lives
 
-The design is a Brilliant project in `design/`. *Not built.* It's branched, reviewed and merged with the rest of the repo, so that changes that can't both stand are found as they merge.
+The design is a Brilliant project in `design/`. It's branched, reviewed and merged with the rest of the repo, so that changes that can't both stand are found as they merge.
 
 - **A canvas holds one component, pattern or screen,** so that branches seldom change the same file. *Unconfirmed.*
 - **What's drawn and what's built have the same names.** A token is named as `look` names it, a component and its kinds, sizes and states as `look`'s types are, and a screen's frame as its image in the gallery. So each can be found from the other, and checked against it.
-- **A canvas draws with roles,** the `color.` tokens, and never with the palettes they're made from, since Brilliant makes steps of a palette that nobody chose. A test refuses one that doesn't. *Not built.*
+- **A canvas draws with roles,** the `color.` tokens, and never with the palettes they're made from, since Brilliant makes steps of a palette that nobody chose. A test refuses one that doesn't.
 - **Text is in SF Pro Text, with the letter spacing that makes it as wide as the system font,** since Brilliant can't draw the system font by name. *Unconfirmed.*
 - **Content is made up,** as a fixture's is, since the repo is public.
 - **Thumbnails, caches and exports aren't committed.** Brilliant makes them again.
@@ -48,7 +48,7 @@ The design is a Brilliant project in `design/`. *Not built.* It's branched, revi
 
 ## Deciding
 
-Each canvas has a status badge at its top, a component of the design's own, and an index canvas lists every part with its status. The status isn't in a canvas's name, since other canvases find a component by its path. *Not built.*
+Each canvas has a status badge at its top, a component of the design's own, and an index canvas lists every part with its status. The status isn't in a canvas's name, since other canvases find a component by its path.
 
 | Status | Meaning |
 |---|---|
@@ -85,12 +85,12 @@ Motion is shared between them. What moves, in what order, for how long and on wh
 
 ## Checking one against the other
 
-1. **Values.** A test holds every token in `design/` but the font's to `look`'s value of the same name, as the spec's tables are held. *Not built.*
+1. **Values.** A test holds every token in `design/` but the font's to `look`'s value of the same name, as the spec's tables are held.
 2. **Pictures.** The PR that builds a part shows the gallery's picture beside the design's. The agent fixes what differs, and says what still does and why. The owner looks at both before it merges. They're never compared pixel by pixel, since each draws the edges of letters and the widths of text its own way.
 
 ## Merging designs
 
 - **Git merges canvases, as it merges code.** Where one conflicts, the branch that comes second takes `main`'s canvas and makes its change again in Brilliant.
 - **A canvas that two branches changed is laid out again and looked at** before it's committed, since a merge leaves sizes as they were on one side.
-- **A test refuses a canvas that uses a token the design system doesn't have.** Brilliant draws the value the token last had and says nothing, so two branches that can't both stand would otherwise merge. *Not built.*
+- **A test refuses a canvas that uses a token the design system doesn't have.** Brilliant draws the value the token last had and says nothing, so two branches that can't both stand would otherwise merge.
 - **A conflict in what was designed is the owner's to settle,** as any open question is, and never whichever side came last.

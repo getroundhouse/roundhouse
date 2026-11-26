@@ -2537,6 +2537,21 @@ mod tests {
     }
 
     #[gpui::test]
+    fn list_items_are_as_far_apart_as_the_style_says(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let apart = |cx: &mut TestAppContext| {
+            let (_, rows) = fitted_list_bounds("- One\n- Two", 600., cx);
+            rows[1].top() - rows[0].top()
+        };
+        let by_default = apart(cx);
+        let style = TextViewStyle::default().with_list_item_gap(1.);
+        cx.update(|cx| crate::TextViewDefaults::new().with_style(style).install(cx));
+
+        // The root's text is 16px, and the gap goes from a quarter of it to the whole.
+        assert_eq!(apart(cx) - by_default, px(12.));
+    }
+
+    #[gpui::test]
     fn fitted_lists_wrap_their_body_within_the_available_width(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let body = "Visible text that wraps without being clipped. ".repeat(12);

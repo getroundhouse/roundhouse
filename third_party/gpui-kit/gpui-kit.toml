@@ -40,4 +40,6 @@ patches = [
     "menu-item-danger",
     "menu-item-truncate",
     "code-block-wrap",
+    "inline-code-scale",
+    "list-item-gap",
 ]
