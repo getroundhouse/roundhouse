@@ -125,8 +125,8 @@ roundhouse --help
 | **Agents** | Claude, Codex and Antigravity, through their CLIs. Codex discovers the models and efforts available to its CLI before the first prompt. Antigravity starts on Gemini 4 Neon at High effort. Both integrations are exercised on macOS. |
 | **Hub** | Runs on your machine and can be controlled from another paired desktop. Cloud providers, with workspaces in VMs or sandboxes, are designed for and not built. |
 | **iPhone** | Built from source with Xcode, and not on the App Store: it pairs with a hub, lists its workspaces and works in their chats, as `docs/spec/mobile.md` says. `apps/mobile-ios/README.md` says how to build it. `mobile-poc/` is the proof of concept that came before it. |
-| **Windows** | A first preview. An installer is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-amd64-Setup.exe) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe). It's unsigned, so Windows warns about it, and the only checks that run on Windows are a lint and a hub starting and stopping. |
-| **Linux** | A first preview. An AppImage is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-amd64.AppImage) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-arm64.AppImage). Make it executable and open it, and it updates itself. It needs glibc 2.35 or newer, as on Ubuntu 22.04 and later, Vulkan and FUSE. The only checks that run on Linux are the tests and a hub starting and stopping. |
+| **Windows** | First-class, after the Mac and Linux, and a first preview for now. An installer is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-amd64-Setup.exe) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe). It's unsigned, so Windows warns about it, and the only checks that run on Windows are a lint and a hub starting and stopping. |
+| **Linux** | First-class, after the Mac, and a first preview for now. An AppImage is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-amd64.AppImage) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-arm64.AppImage). Make it executable and open it, and it updates itself. It needs glibc 2.35 or newer, as on Ubuntu 22.04 and later, Vulkan and FUSE. The only checks that run on Linux are the tests and a hub starting and stopping. |
 
 What's left is on GitHub: [issues](https://github.com/getroundhouse/roundhouse/issues) for features, bugs, flaky tests, tasks and questions, and [milestones](https://github.com/getroundhouse/roundhouse/milestones) for the build order.
 
@@ -179,7 +179,7 @@ Anything recorded since the copy is lost.
 
 ## Contributing
 
-Issues are welcome: a bug, with the build shown at the bottom of the sidebar or in About Roundhouse, or something that's missing. Before a pull request that's more than a small fix, open an issue, since what the product does and how it looks are settled there first, as [`docs/standards/documentation.md`](docs/standards/documentation.md) says. [`docs/standards/pull-requests.md`](docs/standards/pull-requests.md) says how a pull request is written.
+Roundhouse is a community project, so issues are welcome from anyone: a bug, with the build shown at the bottom of the sidebar or in About Roundhouse, or something that's missing. Before a pull request that's more than a small fix, open an issue, since what the product does and how it looks are settled there first, as [`docs/standards/documentation.md`](docs/standards/documentation.md) says. [`docs/standards/pull-requests.md`](docs/standards/pull-requests.md) says how a pull request is written.
 
 ## License
 

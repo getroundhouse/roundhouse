@@ -789,7 +789,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
   ![The composer in plan mode](screens/plan-mode.png)
 
 - **A chat that's planning when its agent stops is still planning when the agent comes back.** Otherwise an agent that restarted would make changes nobody had approved. *Unconfirmed.*
-- **A new chat of the same agent keeps the model and its effort, but not plan mode,** which belongs to the task at hand. *Unconfirmed.*
+- **A new chat of the same agent keeps the model and its effort, but not plan mode,** which belongs to the task at hand.
 - **Every chat names its model and, on a model that offers a choice, its effort,** so the chat decides which model and level the agent runs, rather than the user's own Claude settings or the account. An alias such as `opus` is still the CLI's to resolve to a model. There's no default model to choose.
 - **For Claude, the model picker offers aliases:** `fable`, `opus`, `sonnet` and `haiku`. They follow the CLI's newest of each without a release here. *Unconfirmed.*
 - **The model and its effort are one picker,** since how hard the agent thinks is part of choosing what thinks. It shows the model's name, then the effort in muted text, such as `Opus Extra high`, and its menu lists the models, then the levels: Low, Medium, High, Extra high and Max, which are the CLI's own. *Unconfirmed.*
@@ -1072,7 +1072,7 @@ The API keeps what an agent's requests read and write for a while, so the next r
 
 ## Closing chats, and keys
 
-- **Closing a chat stops its agent and keeps its history.** Closing the last one starts a new one rather than leaving nothing, and a workspace's first chat is found or made by the hub, so two clients opening a workspace at once share one chat. One made from the new-workspace dialog runs the agent chosen there, even when a client opens the workspace before the hub has given it its chat. *Unconfirmed.*
+- **Closing a chat stops its agent and keeps its history.** Closing the last one starts a new one rather than leaving nothing, and a workspace's first chat is found or made by the hub, so two clients opening a workspace at once share one chat. One made from the new-workspace dialog runs the agent chosen there, even when a client opens the workspace before the hub has given it its chat, since the hub, told the agent as it makes the workspace, is what chooses.
 - **Closing a chat nothing has been sent in deletes it,** since it has nothing to go back to, so new chats opened and closed unused don't pile up among the closed ones. A prompt queued counts as sent, and a title typed by hand doesn't. A file added for a prompt that never arrived goes with the chat, since nothing shows it.
 - **A closed chat is reopened from the history button at the far end of the tabs,** which shows once a chat is closed and stays put as chats open and close. It's a muted icon with no fill, which brightens while the pointer is over it or its menu is open. The menu lists the closed chats, the most recently closed first, each with its title, cut short where it's long, and how long ago it was closed, such as `9m ago`, faint at its end. A row has no icon, as the owner decided, since every row reopens its chat, as the button says, so the same icon on each would tell none apart. A row has no mark, because a mark says what a chat's agent is doing, and closing a chat stops its agent. *Unconfirmed.*
 
