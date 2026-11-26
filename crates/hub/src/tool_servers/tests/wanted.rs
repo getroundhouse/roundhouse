@@ -97,7 +97,7 @@ fn nothing_is_kept_of_a_token_that_isnt_the_one_the_hub_has() {
     assert_eq!(status_of(&store, "t"), ToolSignInStatus::Works);
 }
 
-/// In one ask, or in as many as a server likes to make.
+/// In one ask, of which no more is read than `ToolScopes` keeps, or in as many as a server likes to make.
 #[test]
 fn no_more_is_kept_than_a_sign_in_could_ask_for_and_nothing_of_a_server_that_names_none() {
     let dir = tempfile::tempdir().unwrap();
@@ -106,17 +106,19 @@ fn no_more_is_kept_than_a_sign_in_could_ask_for_and_nothing_of_a_server_that_nam
     let of = |numbers: std::ops::Range<u32>| numbers.map(|n| format!("scope:{n}")).collect::<Vec<_>>().join(" ");
     let before = files_in(dir.path());
 
-    for too_much in [of(0..33), "x".repeat(201), format!("write {}", "x".repeat(201)), String::new(), "\" \\".into()] {
-        assert_eq!(wants(&servers, FIRST, &too_much), IN_VAIN, "{too_much}");
+    for none in ["x".repeat(201), String::new(), "\" \\".into()] {
+        assert_eq!(wants(&servers, FIRST, &none), IN_VAIN, "{none}");
     }
     assert_eq!((files_in(dir.path()), status_of(&store, "t")), (before, ToolSignInStatus::Works));
 
     wants(&servers, FIRST, &of(0..31)).change.unwrap();
+    assert_eq!(wants(&servers, FIRST, "another more"), IN_VAIN, "with no room for all of it");
     wants(&servers, FIRST, &"x".repeat(200)).change.unwrap();
     let full = files_in(dir.path());
     assert_eq!(wants(&servers, FIRST, "another"), IN_VAIN);
     assert_eq!(wants(&servers, FIRST, &of(3..5)), ASKED, "what's kept still is");
     assert_eq!(files_in(dir.path()), full);
+    assert!(full[0].contains(r#""wants":"scope:0"#) && !full[0].contains("another"), "{}", full[0]);
 }
 
 #[test]

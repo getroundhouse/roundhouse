@@ -9,7 +9,7 @@ use super::reading::{Read, authorization_server_metadata, server_metadata};
 use super::{Found, Issuer, NoWay, Takes, Way};
 use crate::failure::{host_of, shown};
 use crate::fetch::Caller;
-use crate::offline_access::has_offline;
+use crate::offline_access::lists_offline;
 use crate::{Failure, ServerUrl, ToolSignIn};
 use protocol::tool_server_http::Challenge;
 
@@ -87,9 +87,8 @@ fn way(
         return Ok(Found::NoWay(NoWay::NoS256(issuer)));
     }
     let says_iss = authorization_server.says_iss();
-    let supported = |scopes: Option<Vec<String>>| ToolScopes::of(scopes.unwrap_or_default());
-    let scopes = challenge.scope.unwrap_or_else(|| supported(metadata.scopes_supported));
-    let offline = has_offline(&supported(authorization_server.scopes_supported));
+    let scopes = challenge.scope.unwrap_or_else(|| ToolScopes::of(metadata.scopes_supported.unwrap_or_default()));
+    let offline = lists_offline(&authorization_server.scopes_supported.unwrap_or_default());
     Ok(Found::SignIn(Box::new(Way {
         server: server.clone(),
         resource: metadata.resource,

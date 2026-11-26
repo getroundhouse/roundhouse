@@ -51,12 +51,13 @@ impl ToolServers {
             return Ok(Wanted::nothing_kept(ToolAccess::NotAskedFor));
         }
         let all = kept.wants.clone().and(wants);
-        if all == kept.wants {
-            return Ok(Wanted::nothing_kept(ToolAccess::SignInAgain));
-        }
-        if !all.are_few() {
+        // What's wanted that there's no room for among what's kept.
+        if !all.has_all(wants) {
             warn!(name: "tool_sign_in.wants_too_much", server_id = %id, "A tool server wants more scopes than the hub keeps");
             return Ok(Wanted::nothing_kept(ToolAccess::NotAskedFor));
+        }
+        if all == kept.wants {
+            return Ok(Wanted::nothing_kept(ToolAccess::SignInAgain));
         }
         info!(name: "tool_sign_in.wants_access", server_id = %id, "A tool server wants more access than its sign-in has");
         let change = self.keep(files, id, &file, KeptSignIn { wants: all, ..kept })?;
