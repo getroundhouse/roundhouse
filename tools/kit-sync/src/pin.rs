@@ -10,7 +10,7 @@ use crate::files::CopyPath;
 pub const UPSTREAM: &str = "https://github.com/longbridge/gpui-kit.git";
 
 // renovate: datasource=github-tags depName=longbridge/gpui-kit
-const RELEASE: &str = "v0.10.0";
+const RELEASE: &str = "v0.11.0";
 /// The commit [`RELEASE`] tags. A tag can be moved, so a copy is made only from the commit it was checked to be.
 const COMMIT: &str = "f697c3133d55c64fa8a5b67926147fb3dadd276d";
 
