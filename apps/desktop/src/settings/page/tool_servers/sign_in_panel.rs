@@ -6,11 +6,12 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{AnyElement, App, Div, IntoElement as _, ParentElement as _, Styled as _};
 
-use super::super::panel::{Closes, Framed, button, buttons, waiting_line};
+use super::super::panel::{Closes, Framed, button, buttons};
 use super::Drawing;
 use super::kept::Kept;
 use super::words;
 use crate::tool_sign_in::{Stands, UnderWay};
+use crate::waiting_line::waiting_line;
 
 pub(super) fn sign_in(drawing: &Drawing<'_>, under_way: &UnderWay, cx: &App) -> Framed {
     let (to, stands) = (under_way.to(), under_way.stands());

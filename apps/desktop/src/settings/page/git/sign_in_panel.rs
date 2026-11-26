@@ -11,9 +11,10 @@ use protocol::model::GithubUserCode;
 
 use super::Drawing;
 use super::kept::Panel;
-use super::panel::{Closes, Framed, button, buttons, framed, waiting_line};
+use super::panel::{Closes, Framed, button, buttons, framed};
 use super::sign_in::SignInPanel;
 use super::sign_in_words::{self, Stands};
+use crate::waiting_line::waiting_line;
 
 pub(super) fn sign_in(drawing: &Drawing<'_>, panel: &Panel, sign_in: &SignInPanel, cx: &App) -> AnyElement {
     let stands = Stands::of(sign_in, drawing.records, drawing.github, cx);

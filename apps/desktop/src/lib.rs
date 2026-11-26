@@ -56,6 +56,7 @@ mod status_box;
 mod timers;
 mod tool_sign_in;
 pub mod updates;
+mod waiting_line;
 mod warnings;
 pub mod why_quit;
 #[cfg(target_os = "windows")]
