@@ -7,7 +7,7 @@ use super::asking::as_nobody;
 use super::metadata::{AuthorizationServerMetadata, ServerMetadata};
 use super::reading::{Read, authorization_server_metadata, server_metadata};
 use super::{Found, Issuer, NoWay, Takes, Way};
-use crate::failure::shown;
+use crate::failure::{host_of, shown};
 use crate::fetch::Caller;
 use crate::offline_access::has_offline;
 use crate::{Failure, ServerUrl, ToolSignIn};
@@ -52,7 +52,7 @@ impl ToolSignIn {
 async fn look(calls: &Caller<'_>, server: &ServerUrl, challenge: Challenge) -> Result<Said, Failure> {
     let metadata = match server_metadata(calls, server, &challenge).await? {
         Read::Right(metadata) => metadata,
-        Read::OfAnother(said) => return Ok(Said::Found(Found::NoWay(NoWay::OtherResource { said }))),
+        Read::OfAnother(said) => return Ok(Said::Found(Found::NoWay(NoWay::OtherResource { host: host_of(&said) }))),
         Read::Nothing => return Ok(Said::Nothing),
         Read::Unread(failure) => return Ok(Said::Unread(failure)),
     };
@@ -60,7 +60,7 @@ async fn look(calls: &Caller<'_>, server: &ServerUrl, challenge: Challenge) -> R
     let Some(issuer) = metadata.authorization_servers.first() else { return Ok(Said::Nothing) };
     match authorization_server_metadata(calls, issuer).await? {
         Read::Right(of_issuer) => Ok(Said::Found(way(calls, server, challenge, metadata, of_issuer)?)),
-        Read::OfAnother(said) => Err(Failure::OtherIssuer { asked: shown(issuer), said: shown(&said) }),
+        Read::OfAnother(said) => Err(Failure::OtherIssuer { asked: shown(issuer), host: host_of(&said) }),
         Read::Nothing => Ok(Said::Nothing),
         Read::Unread(failure) => Ok(Said::Unread(failure)),
     }

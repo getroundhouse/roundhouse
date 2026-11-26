@@ -124,8 +124,13 @@ pub enum NoToolSignIn {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
-    /// What it says of its sign-in is said of another server.
-    OtherServer { said: String },
+    /// What it says of its sign-in is said of another server, at `host`, with its port where it names one, and empty
+    /// where what it said isn't an address. It's `said` on the wire, where a hub from before sent what it said, cut
+    /// short.
+    OtherServer {
+        #[serde(rename = "said")]
+        host: String,
+    },
     /// Its authorization server doesn't say it takes PKCE with S256, without which MCP has a client refuse it.
     NoS256 { authorization_server: String },
     /// From a newer hub.
