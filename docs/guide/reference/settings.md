@@ -234,6 +234,7 @@ When you click **Sign in**, the hub asks the server how it's signed in to, which
 ![Waiting for a sign-in to an MCP server](../../spec/screens/settings-mcp-waiting.png)
 
 - **Roundhouse asks for what the server says it needs,** and to stay signed in, if the service has that, so that the hub can renew the sign-in by itself. Where the server says nothing, the service decides both. The page in your browser says what you're approving.
+- **The panel says where you approve it,** and the server it's for where that's another address, as in `auth.notion.example for mcp.notion.example`. A server can send you to any service's page, so check that the page is the service you meant to sign in to.
 - **If you closed the page,** click **Open it again**. **Cancel** ends the sign-in, and adds nothing.
 - **You have 15 minutes.** After that, or if you refuse it, the panel says so, and you can try again.
 - **If the service's page shows an error** instead of asking you to approve Roundhouse, sign in once more. A service can forget the Roundhouse that was registered with it, and the next try registers it again, or the one after that if the hub has restarted since.

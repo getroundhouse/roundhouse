@@ -21,7 +21,7 @@ pub(super) fn sign_in(drawing: &Drawing<'_>, under_way: &UnderWay, cx: &App) -> 
                 .icon(Lucide::ExternalLink);
             let line = waiting_line(words::WAITING, cx);
             let body = v_flex().gap(look::Space::Large).child(h_flex().child(open)).child(line).into_any_element();
-            (words::approve_on(waiting.host()), Some(body))
+            (words::approve_on(waiting.host(), to), Some(body))
         }
         Stands::Finishing(_) => (words::sign_in(to).to_string(), Some(waits(words::FINISHING.to_string(), cx))),
         Stands::NoWay(no_page) => (no_page.why().to_string(), None),
