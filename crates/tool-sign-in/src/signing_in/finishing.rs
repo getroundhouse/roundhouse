@@ -49,6 +49,28 @@ impl ToolSignIn {
     }
 }
 
+impl Failure {
+    /// Of what [`ToolSignIn::finish`] failed with, whether the person was sent back from the authorization server's page
+    /// with the sign-in's own state, and from the authorization server that was asked, which its page does only for a
+    /// client it knows. That's each failure but those of what came back, since finishing checks that first.
+    pub fn was_sent_back(&self) -> bool {
+        match self {
+            Failure::WrongState | Failure::WrongIssuer => false,
+            Failure::Unanswered { .. }
+            | Failure::TimedOut { .. }
+            | Failure::Busy { .. }
+            | Failure::Answered { .. }
+            | Failure::Unreadable { .. }
+            | Failure::NotFetched { .. }
+            | Failure::OtherIssuer { .. }
+            | Failure::RefusedByPerson
+            | Failure::RefusedAtPage(_)
+            | Failure::NoTokens(_)
+            | Failure::NoRandomness => true,
+        }
+    }
+}
+
 impl Pending {
     /// The code in `returned`, once its state and its issuer are right, before which nothing in it is believed, not
     /// even that the sign-in was refused, as MCP has a client do.

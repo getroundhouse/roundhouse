@@ -24,9 +24,10 @@ impl InDoubt {
         self.by_server.lock().get(id) == Some(registration)
     }
 
-    /// The server `id` was signed in to, with whichever client, which is the one it has now, or the person refused it at a
-    /// page that knew the client.
-    pub(super) fn finished(&self, id: &ToolServerId) {
+    /// Nothing is in doubt of the server `id`'s registration any more: it was signed in to, with whichever client, which
+    /// is the one it has now, the page sent the person back with the sign-in's own state, which it does only for a client
+    /// it knows, or the server was removed.
+    pub(super) fn settled(&self, id: &ToolServerId) {
         self.by_server.lock().remove(id);
     }
 }

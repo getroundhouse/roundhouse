@@ -26,6 +26,7 @@ impl Hub {
     pub(crate) async fn tool_server_remove(&self, id: ToolServerId) -> Result<ToolServer, ApiError> {
         let servers = Arc::clone(&self.tool_servers);
         let ToolServerRemoved { server, rev } = off_thread(move || servers.remove(&id)).await?;
+        self.tool_sign_ins.in_doubt.settled(&server.id);
         self.notify(HubNotice::Removed { record: RecordKey::ToolServer { id: server.id.clone() }, rev });
         Ok(server)
     }

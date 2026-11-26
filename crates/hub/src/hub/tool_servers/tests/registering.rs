@@ -8,9 +8,9 @@ use std::time::Duration;
 use protocol::client::ErrorCode;
 use protocol::client::tool_sign_ins::{NoToolSignIn, ToolSignInBegun, ToolSignInStart, ToolSignInTo, redirect};
 use serde_json::json;
-use tool_sign_in::{AuthorizationPage, Gate, Person, Refreshing, Registers, Script, StandIn};
+use tool_sign_in::{AuthorizationPage, Gate, Iss, Person, Refreshing, Registers, Registration, Script, StandIn};
 
-use super::support::{NEEDS_SIGN_IN, WORKS, finished, kept, new, page, servers, signed_in, start, visited};
+use super::support::{NEEDS_SIGN_IN, WORKS, finish, finished, kept, new, page, servers, signed_in, start, visited};
 use crate::hub::Hub;
 use crate::hub::tests::{hub_in, hub_in_again};
 use crate::store::now_ms;
@@ -191,6 +191,32 @@ async fn a_registration_in_doubt_stays_so_until_the_server_is_signed_in_to() {
     assert_eq!(asked, [1, 2, 3]);
     assert_eq!(client(dir.path()), first, "it was good all along");
     assert_eq!(times_asked(&stand_in), 3, "so it's used again");
+}
+
+/// A page that sends the person back with the sign-in's own state knows the client, whatever it sends back with, but
+/// not where what comes back says it's from another authorization server, which isn't the one asked. A server that's
+/// removed is signed in to again by nothing.
+#[tokio::test]
+async fn a_registration_is_out_of_doubt_once_its_page_sends_the_person_back_or_its_server_is_removed() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, stand_in) = hub_signed_in(dir.path()).await;
+    let registration: Registration = serde_json::from_value(kept(dir.path())["registration"].clone()).unwrap();
+    let in_doubt = || hub.tool_sign_ins.in_doubt.holds(&"t".into(), &registration);
+    stand_in.change(|script| script.person = Person::Refuses);
+
+    let refused = page(&hub, again("refused")).await;
+    let returned = stand_in.visit(&AuthorizationPage::new(refused.as_str())).replace("access_denied", "invalid_scope");
+    let at_page = hub.tool_sign_in_finish(finish("refused", &returned)).await.unwrap_err();
+    let after_the_page = in_doubt();
+    stand_in.change(|script| (script.person, script.iss) = (Person::Approves, Iss::Another));
+    let another = page(&hub, again("another")).await;
+    hub.tool_sign_in_finish(visited("another", &stand_in, &another)).await.unwrap_err();
+    let after_another = in_doubt();
+    hub.tool_server_remove("t".into()).await.unwrap();
+
+    assert!(at_page.message.contains("invalid_scope"), "{}", at_page.message);
+    assert_eq!((after_the_page, after_another, in_doubt()), (false, true, false));
+    assert_eq!(times_asked(&stand_in), 1, "it was used again");
 }
 
 /// After a restart, so that only what's in the file says whether to register.
