@@ -12,7 +12,9 @@ mod metadata;
 mod registering;
 mod replies;
 mod script;
-pub use script::{Asks, Iss, MetadataAt, Person, Query, Refreshing, Registers, Says, Script, ServerMetadataAt, Wants};
+pub use script::{
+    Asks, Iss, MetadataAt, Person, Query, Refreshing, Registers, Says, SaysAllowed, Script, ServerMetadataAt, Wants,
+};
 mod serving;
 pub use serving::StandIn;
 mod tokens;

@@ -2,10 +2,12 @@
 
 use std::time::Duration;
 
+use protocol::model::ToolScopes;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
 use crate::fetch::{Answer, json};
+use crate::offline_access::without_offline;
 use crate::{AccessToken, Failure, OauthError, RefreshToken};
 
 /// What a sign-in's tokens are.
@@ -16,6 +18,10 @@ pub struct Granted {
     pub lasts: Option<Duration>,
     /// What renews it, from now on. `None` where it can't be renewed.
     pub refresh: Option<RefreshToken>,
+    /// What the access token is allowed, but for what asks for a refresh token, which is asked for where it's listed
+    /// and nowhere else. `None` where the authorization server doesn't say, which means what was asked for, or, of a
+    /// renewal, what was granted before, by RFC 6749, sections 5.1 and 6.
+    pub scopes: Option<ToolScopes>,
 }
 
 #[derive(Deserialize)]
@@ -26,6 +32,8 @@ struct Given {
     expires_in: Option<Value>,
     #[serde(default)]
     refresh_token: Option<RefreshToken>,
+    #[serde(default)]
+    scope: Option<Value>,
 }
 
 /// Why it gave none.
@@ -47,11 +55,19 @@ pub(crate) fn granted(answer: Answer) -> Result<Granted, Failure> {
     let what = "no token that goes in an Authorization header";
     let given = json::<Given>(&answer).filter(|given| !given.access_token.as_str().is_empty());
     let given = given.filter(|given| given.token_type.eq_ignore_ascii_case("bearer"));
-    let Some(Given { access_token, expires_in, refresh_token, .. }) = given else {
+    let Some(Given { access_token, expires_in, refresh_token, scope, .. }) = given else {
         return Err(Failure::Unreadable { host: answer.host, what });
     };
     let refresh = refresh_token.filter(|refresh| !refresh.as_str().is_empty());
-    Ok(Granted { access: access_token, lasts: expires_in.as_ref().and_then(seconds), refresh })
+    let lasts = expires_in.as_ref().and_then(seconds);
+    Ok(Granted { access: access_token, lasts, refresh, scopes: scope.as_ref().and_then(scopes) })
+}
+
+/// What `said` allows. What scopes can't be read from says nothing, as [`seconds`] has it, and so does what allows
+/// nothing but a refresh token.
+fn scopes(said: &Value) -> Option<ToolScopes> {
+    let scopes = without_offline(ToolScopes::said(said.as_str()?)?);
+    (!scopes.is_empty()).then_some(scopes)
 }
 
 /// How long `said` is, which is a number of seconds, and which some write as text or with a fraction. What it can't be

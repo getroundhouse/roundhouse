@@ -3,7 +3,6 @@
 //! only that it wants more. What workers are sent doesn't change, since the access token is good for the rest.
 
 use protocol::client::ApiError;
-use protocol::model::ToolScopes;
 use protocol::worker::{AskForToolAccess, ToolAccess};
 use tracing::{info, warn};
 
@@ -13,12 +12,6 @@ use super::servers::gone;
 use super::sign_ins::kept_in;
 use super::{ToolServerChange, ToolServers};
 use crate::login_files::Locked;
-
-/// How many scopes a server can want between one sign-in and the next, and how long each can be: far more than a server
-/// was seen to name, and few enough that one that names new ones at each call can't have its file and its sign-in's page
-/// grow with each. *Unconfirmed.*
-const MOST_WANTED: usize = 32;
-const LONGEST_WANTED: usize = 200;
 
 /// What came of a server wanting more access.
 #[derive(Debug, PartialEq, Eq)]
@@ -61,7 +54,7 @@ impl ToolServers {
         if all == kept.wants {
             return Ok(Wanted::nothing_kept(ToolAccess::SignInAgain));
         }
-        if !is_kept(&all) {
+        if !all.are_few() {
             warn!(name: "tool_sign_in.wants_too_much", server_id = %id, "A tool server wants more scopes than the hub keeps");
             return Ok(Wanted::nothing_kept(ToolAccess::NotAskedFor));
         }
@@ -69,8 +62,4 @@ impl ToolServers {
         let change = self.keep(files, id, &file, KeptSignIn { wants: all, ..kept })?;
         Ok(Wanted { access: ToolAccess::SignInAgain, change: Some(change) })
     }
-}
-
-fn is_kept(wants: &ToolScopes) -> bool {
-    wants.iter().len() <= MOST_WANTED && wants.iter().all(|scope| scope.len() <= LONGEST_WANTED)
 }

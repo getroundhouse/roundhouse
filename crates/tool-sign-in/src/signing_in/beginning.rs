@@ -39,9 +39,9 @@ impl Pending {
 
 impl ToolSignIn {
     /// Starts signing in by `way` as `client`, which [`ToolSignIn::client_for`] gives, asking to be allowed `scopes`: the
-    /// way's own, and those asked for before and wanted since where it's signing in again. What asks for a refresh token
-    /// is asked for as well, where the authorization server says it has that. The person is sent back to `redirect`.
-    /// Nothing is sent.
+    /// way's own, and those asked for and granted before and wanted since where it's signing in again. What asks for a
+    /// refresh token is asked for as well, where the authorization server says it has that. The person is sent back to
+    /// `redirect`. Nothing is sent.
     pub fn begin(
         &self,
         way: Way,

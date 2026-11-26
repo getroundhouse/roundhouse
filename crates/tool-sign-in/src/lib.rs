@@ -37,8 +37,8 @@ pub use token_endpoint::Granted;
 mod stand_in;
 #[cfg(any(test, feature = "testing"))]
 pub use stand_in::{
-    Asked, Asks, Gate, Iss, MetadataAt, Person, Query, Refreshing, Registers, Says, Script, ServerMetadataAt, StandIn,
-    Wants,
+    Asked, Asks, Gate, Iss, MetadataAt, Person, Query, Refreshing, Registers, Says, SaysAllowed, Script,
+    ServerMetadataAt, StandIn, Wants,
 };
 #[cfg(test)]
 mod tests;

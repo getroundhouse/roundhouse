@@ -27,6 +27,7 @@ pub(super) fn granted(access: &str) -> Granted {
         access: AccessToken::new(access),
         lasts: Some(LASTS),
         refresh: Some(RefreshToken::new(format!("{access}-refresh"))),
+        scopes: None,
     }
 }
 
@@ -48,7 +49,7 @@ fn as_first(granted: Granted) -> SignedIn {
     given("read", "https://auth.example.com", granted)
 }
 
-fn new(id: &str, name: &str) -> ToolSignInTo {
+pub(super) fn new(id: &str, name: &str) -> ToolSignInTo {
     ToolSignInTo::New { id: id.into(), name: name.into(), url: "https://mcp.example.com/mcp".into() }
 }
 
@@ -77,7 +78,7 @@ pub(super) fn status_of(store: &Arc<Store>, id: &str) -> ToolSignInStatus {
 }
 
 /// The form is spelled out, since a build that reads it differently would take every sign-in for what isn't one.
-const FILE: &str = concat!(
+pub(super) const FILE: &str = concat!(
     r#"{"format":"sign_in","made_by":"t","renewable":{"server":"https://mcp.example.com/mcp","#,
     r#""resource":"https://mcp.example.com/mcp","issuer":"https://auth.example.com","#,
     r#""token_endpoint":"https://auth.example.com/token","client_id":"https://client.example/client.json","#,

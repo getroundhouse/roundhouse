@@ -128,8 +128,8 @@ impl Hub {
         })
     }
 
-    /// Starts signing in by `way`, asking to be allowed what the server was signed in with before, and has wanted since,
-    /// too, and as the client it was signed in with before, where that's one to use again.
+    /// Starts signing in by `way`, asking to be allowed what the sign-in before was asked for and granted, and the
+    /// server has wanted since, too, and as the client it was signed in with before, where that's one to use again.
     async fn begin_sign_in(&self, way: Way, to: &SigningIn, redirect: RedirectUri) -> Result<Begun, Failure> {
         let ToolSignIns { client, in_doubt, .. } = &self.tool_sign_ins;
         let before = to.registered().filter(|(server, before)| !in_doubt.holds(server, before));

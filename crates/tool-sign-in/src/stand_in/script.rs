@@ -37,6 +37,10 @@ pub struct Script {
     pub authorization_scopes: Option<Vec<&'static str>>,
     pub iss: Iss,
     pub person: Person,
+    /// What its authorization server allows, whatever it's asked for. `None` where that's what it's asked for.
+    pub allows: Option<&'static str>,
+    /// What its authorization server says it allows as it gives tokens.
+    pub says_allowed: SaysAllowed,
     /// How many seconds each access token is said to last.
     pub lasts: Option<u64>,
     /// Whether each renewal gives a new refresh token, with the last refused from then on.
@@ -70,6 +74,8 @@ impl Default for Script {
             authorization_scopes: None,
             iss: Iss::Said,
             person: Person::Approves,
+            allows: None,
+            says_allowed: SaysAllowed::Nothing,
             lasts: Some(3600),
             rotates: true,
             refreshing: Refreshing::Works,
@@ -182,6 +188,15 @@ impl Iss {
 pub enum Person {
     Approves,
     Refuses,
+}
+
+/// What its authorization server says it allows as it gives tokens.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SaysAllowed {
+    Nothing,
+    WhatItAllows,
+    /// This, which may be no scopes at all.
+    Else(Value),
 }
 
 /// What its authorization server does with a refresh token it would take.
