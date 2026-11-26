@@ -885,8 +885,35 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
 - **How full a context is belongs to its chat's record,** so every client shows the same ring, and it's still there once the agent has gone or the hub has restarted, since the conversation the agent resumes is as full. It isn't in the chat's history: only the newest matters, and it answers the app's own question rather than being something the agent said. *Unconfirmed.*
 
-- **A plug before the limits' bars opens a card of the chat's MCP servers while the pointer rests on it:** the hub's, then the ones the agent's CLI has of its own, under a rule. Each says how many tools it has, where the agent says, or that it can't be reached. One of the hub's that needs you to sign in to it has a Sign in button, which signs in for every chat. An agent that can't take a server while it runs has it from its next start, and the card says so. One of the CLI's own that needs signing in to says to do it from its CLI. *Not built.*
-- **The plug is amber while one of the hub's servers needs you to sign in, and otherwise as quiet as the ring.** No line above the composer says so, since every chat has every server, and most don't use most of them. One of the CLI's own never turns it amber, since it can't be signed in to from the app. *Not built.*
+- **A plug before the limits' bars opens a card of the chat's MCP servers while the pointer rests on it:** the hub's, then the ones the agent's CLI has of its own, under a rule. Each says how many tools it has, where the agent says, or that it can't be reached. One of the hub's that needs you to sign in to it has a Sign in button, which signs in for every chat. An agent that can't take a server while it runs has it from its next start, and the card says so. One of the CLI's own that needs signing in to says to do it from its CLI. *Not built:* an agent taking a server while it runs, so every agent has one from its next start.
+
+  **The card, where Codex was launched before Linear was added, and can't reach Runbooks.** *Unconfirmed.*
+
+  ![The plug's card, with the hub's servers and then Codex's own](screens/mcp-servers.png)
+
+- **The plug is amber while one of the hub's servers needs you to sign in, and otherwise as quiet as the ring.** No line above the composer says so, since every chat has every server, and most don't use most of them. One of the CLI's own never turns it amber, since it can't be signed in to from the app.
+
+  **The plug and its card, where Linear needs you to sign in to it.** *Unconfirmed.*
+
+  ![The amber plug's card, with Linear's Sign in button](screens/mcp-servers-sign-in.png)
+
+- **Sign in opens the server's page in the browser, as signing in from Settings does, and the button gives way to `Signing in` until you've approved it.** It's the app's one sign-in to the hub's servers, so it shows in every chat's card and in Settings, wherever it was started, and starting another cancels it. The plug stays amber, and the card's other servers say what they did, until the hub says the server works. The button is off with no hub to ask. *Unconfirmed.*
+
+  **The card, while the sign-in waits to be approved.** *Unconfirmed.*
+
+  ![The plug's card, saying Linear is being signed in to](screens/mcp-servers-signing-in.png)
+
+- **A sign-in that comes to nothing has the button again, with why on the line under it,** cut off if it's long, which Settings says in full. *Unconfirmed.*
+
+  **The card, where signing in to Linear failed.** *Unconfirmed.*
+
+  ![The plug's card, with Sign in again and why it failed](screens/mcp-servers-sign-in-refused.png)
+
+- **There's a plug only in a chat with a server to list,** the hub's or the CLI's own. *Unconfirmed.*
+- **A card of more servers than fit in 360px scrolls,** about ten, so it stays in the window. *Unconfirmed.*
+- **The hub's are listed by the names you gave them, and the CLI's own by what the CLI calls them,** each by name, under whose they are, with where they're kept: in Roundhouse, or on the machine the agent runs on, as the workspace's card says it. *Unconfirmed:* the order.
+- **A server's words are at its line's end.** Besides its tools, `Can't be reached` and `Sign in from its CLI`: `Connected`, where the agent doesn't say how many tools it has, `Starting`, `Turned off` for one the CLI's own settings turn off, `From its next start`, for one of the hub's the agent wasn't launched with, and `Removed`, for one it was launched with that the hub has since removed, which is listed last, by what the agent calls it. Why one can't be reached is on a line under it, cut off if it's long, where the agent says: Codex does, and Claude doesn't. One of the hub's that only the agent says to sign in to says `Can't be reached`, since the hub's record is what says whether you need to. *Unconfirmed.*
+- **Nothing is said of a server the agent has said nothing of.** Until the agent has said which servers it has, as before its first turn and while it isn't running, the hub's are listed with nothing said of them, but for one that needs you to sign in, and the CLI's own say `Not known yet`. An agent that never says, which is Antigravity, has only the hub's listed. *Unconfirmed.*
 
 ## Compacting
 

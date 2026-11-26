@@ -44,7 +44,7 @@ fn an_mcp_task_of_the_worker_tool_that_waits_is_a_wait() {
 fn an_mcp_task_names_its_server_and_tool_and_no_other_task_does() {
     let launched = ToolServers {
         tools_url: String::new(),
-        hubs: vec![HubToolServer { name: "Linear_Northwind".into(), url: String::new() }],
+        hubs: vec![HubToolServer { id: "t-1".into(), name: "Linear_Northwind".into(), url: String::new() }],
         token: ToolsToken::new("token"),
         config: std::path::PathBuf::new(),
     };

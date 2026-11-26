@@ -62,6 +62,9 @@ pub(crate) const CONVERSATION_CARD: Frame =
 pub(crate) const QUEUE: Frame = Frame::Around(Part::Region(Region::Queue), &[Part::Region(Region::Composer)]);
 /// The composer, and the card about the chat's context that opens from it.
 pub(crate) const CONTEXT: Frame = Frame::Around(Part::Region(Region::Composer), &[Part::Region(Region::ContextCard)]);
+/// The composer, and the card about the chat's MCP servers that opens from it.
+pub(crate) const TOOL_SERVERS: Frame =
+    Frame::Around(Part::Region(Region::Composer), &[Part::Region(Region::ToolServersCard)]);
 /// A question the agent asked, which shows in the composer's place.
 pub(crate) const QUESTION: Frame = Frame::Around(Part::Region(Region::Question), NOTHING_MORE);
 /// Conversation mode's bar, in the composer's place.
@@ -142,6 +145,7 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::EditPreview
         | Region::TurnCard
         | Region::ContextCard
+        | Region::ToolServersCard
         | Region::UsageCard
         | Region::DictationCard
         | Region::ConversationCard

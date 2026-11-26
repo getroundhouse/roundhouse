@@ -1,22 +1,73 @@
-//! The screens about the context and the account, beside Send: the ring's card, as it usually is, when a setting caps
-//! the context and when it's the one card to say whose account it is, for a login on the machine and for one the hub
-//! holds, then the limits' card, with a model's own weekly limit too, with the menu that moves the chat to another
-//! account, and on an account that's using what it reserves of its week, with the line above the composer that says so.
+//! The screens about the context and the account, beside Send: the plug's card, quiet, and while one of the hub's MCP
+//! servers needs you to sign in to it, as its sign-in goes on and once it has come to nothing, then the ring's card, as
+//! it usually is, when a setting caps the context and when it's the one card to say whose account it is, for a login on
+//! the machine and for one the hub holds, then the limits' card, with a model's own weekly limit too, with the menu
+//! that moves the chat to another account, and on an account that's using what it reserves of its week, with the line
+//! above the composer that says so.
 
 #![cfg(test)]
 
 use look::Region;
 
-use super::frame::{CONTEXT, Frame, Part};
+use super::frame::{CONTEXT, Frame, Part, TOOL_SERVERS};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{
-    context, context_capped, context_held_login, context_in_reserve, context_placed_automatically, context_to_move,
-    context_with_a_models_limit, context_without_limits, every_account_out, needs_an_account,
+    chat_servers, chat_servers_to_sign_in_to, context, context_capped, context_held_login, context_in_reserve,
+    context_placed_automatically, context_to_move, context_with_a_models_limit, context_without_limits,
+    every_account_out, needs_an_account, tool_sign_in_refused,
 };
 
 /// The screens about the context and the account.
 pub(crate) const SCREENS: &[Screen] = &[
+    Screen {
+        name: "mcp-servers",
+        spec: "chats.md",
+        world: Some(chat_servers),
+        frame: TOOL_SERVERS,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::WaitFor("usage"),
+            Step::Hover { on: Target::Id("mcp"), shows: Region::ToolServersCard.id() },
+        ],
+    },
+    Screen {
+        name: "mcp-servers-sign-in",
+        spec: "chats.md",
+        world: Some(chat_servers_to_sign_in_to),
+        frame: TOOL_SERVERS,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::WaitFor("usage"),
+            Step::Hover { on: Target::Id("mcp"), shows: Region::ToolServersCard.id() },
+        ],
+    },
+    Screen {
+        name: "mcp-servers-signing-in",
+        spec: "chats.md",
+        world: Some(chat_servers_to_sign_in_to),
+        frame: TOOL_SERVERS,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::WaitFor("usage"),
+            Step::Hover { on: Target::Id("mcp"), shows: Region::ToolServersCard.id() },
+            Step::Click("mcp-sign-in-linear"),
+            Step::Point("mcp"),
+        ],
+    },
+    Screen {
+        name: "mcp-servers-sign-in-refused",
+        spec: "chats.md",
+        world: Some(tool_sign_in_refused),
+        frame: TOOL_SERVERS,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Hover { on: Target::Id("mcp"), shows: Region::ToolServersCard.id() },
+            Step::Click("mcp-sign-in-linear"),
+            Step::WaitFor("mcp-why"),
+            Step::Point("mcp"),
+        ],
+    },
     Screen {
         name: "context",
         spec: "chats.md",

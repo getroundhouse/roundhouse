@@ -28,7 +28,7 @@ pub use builders::{
 };
 
 mod tool_server;
-pub use tool_server::tool_server;
+pub use tool_server::{tool_server, tool_server_needing_sign_in};
 
 pub mod observed;
 

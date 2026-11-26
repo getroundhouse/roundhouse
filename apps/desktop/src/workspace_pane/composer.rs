@@ -286,7 +286,8 @@ impl WorkspacePane {
     /// lines it up and spaces it.
     fn beside_the_main_action(&self, cx: &mut Context<Self>) -> Vec<Slot> {
         let usage = self.usage(cx);
-        let agents = self.usage_bars(usage.as_ref(), cx).into_iter().chain(self.context_ring(usage.as_ref(), cx));
+        let agents = self.plug(cx).into_iter().chain(self.usage_bars(usage.as_ref(), cx));
+        let agents = agents.chain(self.context_ring(usage.as_ref(), cx));
         let conversation = crate::conversing::offered(cx).then(|| self.conversation_button(cx));
         let microphone = self.microphone(cx);
         agents.chain(conversation).chain(microphone).collect()

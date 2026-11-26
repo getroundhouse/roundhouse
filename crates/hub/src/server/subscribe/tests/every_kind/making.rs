@@ -136,7 +136,8 @@ pub(super) async fn make(hub: &Hub, kind: &ObservationKey, round: u8) {
             read::<hub::SessionTodos>(hub, session, TodoList { items: Vec::new(), note: Some(said) }, at).await;
         }
         K::SessionToolServers { .. } => {
-            let server = ToolServerState { name: said.into(), state: ServerState::Connected, error: None, tools: None };
+            let state = ServerState::Connected;
+            let server = ToolServerState { name: said.into(), hubs: None, state, error: None, tools: None };
             read::<hub::SessionToolServers>(hub, session, vec![server], at).await;
         }
         K::SessionCache { .. } => {

@@ -81,7 +81,7 @@ All of the following was observed on CLI 2.1.319 with Haiku, except where a row 
 Observed on 2.1.330, with servers that say which config they came from, a config directory of the trial's own and no prompt sent. Roundhouse's launch flags were left out, but for the streams and `--permission-prompt-tool stdio`.
 
 - **A worktree gets the servers of its repository's main checkout.** Servers added to the user, local and project scopes all connected in a worktree made afterwards, the local one having been added from the main checkout. A server in a committed `.mcp.json` connected without being approved.
-- **A server in `--mcp-config` replaces one of the same name on disk, whole.** It did so over the user, local and project scopes at once. Without it, the local server was used over the project's and the user's, and the project's over the user's.
+- **A server in `--mcp-config` replaces one of the same name on disk, whole,** so what `init` says of a server with the name of one of the hub's is said of the hub's. It did so over the user, local and project scopes at once. Without it, the local server was used over the project's and the user's, and the project's over the user's.
 - **Two names for one URL are two servers.** One in the user scope and one in `--mcp-config` both connected.
 - **`--strict-mcp-config` leaves only the servers in `--mcp-config`.**
 - **`mcp_set_servers`, a control request, adds servers to a running agent.** It connected a new one, and replaced the one of the same name that `--mcp-config` gave.

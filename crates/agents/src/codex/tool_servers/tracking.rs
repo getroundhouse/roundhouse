@@ -71,6 +71,7 @@ impl ToolServers {
     fn report(&self) -> AgentOutput {
         let servers = self.servers.iter().map(|(name, server)| ToolServerState {
             name: name.clone(),
+            hubs: None,
             state: server.state,
             error: server.error.clone(),
             tools: server.tools,
@@ -79,7 +80,11 @@ impl ToolServers {
     }
 }
 
-/// `mcpServer/startupStatus/updated`: one of the thread's servers starting, ready, stopped or failed, which is reported
+/// How Codex says one of a thread's servers is starting, ready, stopped or failed. Its line is never kept, since the
+/// `error` of one that failed can hold its URL with its query, and the body of what it replied.
+pub(in crate::codex) const STARTUP_MOVED: &str = "mcpServer/startupStatus/updated";
+
+/// [`STARTUP_MOVED`]: one of the thread's servers starting, ready, stopped or failed, which is reported
 /// with the rest, and again once Codex has answered what it doesn't say here. A subagent's thread starts the servers
 /// again for itself, which says nothing of the agent's.
 pub(in crate::codex) async fn moved(shared: &Arc<Shared>, params: &Value, scope: &Scope) {

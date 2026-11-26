@@ -1,9 +1,9 @@
 use super::http;
 use super::proxy::Proxy;
 use crate::asks::Asks;
+use agents::HubToolServer;
 use parking_lot::Mutex;
 use protocol::Build;
-use protocol::capability::setup::ServerName;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::SessionId;
 use protocol::worker::ToolsToken;
@@ -46,8 +46,8 @@ pub(crate) struct Caller {
 pub(crate) struct Addresses {
     /// The worker's own tools.
     pub(crate) tools: String,
-    /// Each of the hub's tool servers, by the name an agent is given it.
-    pub(crate) servers: Vec<(ServerName, String)>,
+    /// Each of the hub's tool servers, as an agent is given it.
+    pub(crate) servers: Vec<HubToolServer>,
 }
 
 pub(crate) struct Tools {
@@ -93,7 +93,8 @@ impl Tools {
             Serving::NotYet | Serving::Stopped => return None,
         };
         let at = |path: &str| format!("http://{}:{port}{path}", Ipv4Addr::LOCALHOST);
-        let servers = self.proxy.paths().into_iter().map(|(name, path)| (name, at(&path))).collect();
+        let servers = self.proxy.paths().into_iter();
+        let servers = servers.map(|(id, name, path)| HubToolServer { id, name, url: at(&path) }).collect();
         Some(Addresses { tools: at(PATH), servers })
     }
 

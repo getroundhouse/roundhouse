@@ -65,7 +65,7 @@ impl Said {
             path: workspace.path.clone().map(SharedString::from),
             version,
             moving_to,
-            runs_on: runs_on(workspace),
+            runs_on: crate::names::runs_on(workspace),
             ports,
         }
     }
@@ -117,15 +117,6 @@ fn row(label: &'static str, said: String, value: Div, cx: &App) -> Stateful<Div>
     let row = h_flex().id(label).role(Role::Label).aria_label(said).items_start().gap(look::Space::Medium);
     row.child(div().flex_none().w(LABEL).text_color(look::colors(cx).text_faint).child(label))
         .child(value.flex_1().min_w_0())
-}
-
-/// Where the workspace's worker runs. Every hub the app reaches is on this machine, so the local provider's workers
-/// are too.
-fn runs_on(workspace: &Workspace) -> SharedString {
-    if !workspace.provider.is_local() {
-        return workspace.provider.to_string().into();
-    }
-    format!("This {}", crate::names::MACHINE).into()
 }
 
 #[cfg(test)]

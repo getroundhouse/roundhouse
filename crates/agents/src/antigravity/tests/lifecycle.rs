@@ -32,7 +32,11 @@ async fn title_for_returns_title_in_plan_mode_without_asking_and_cleans_up_sessi
         binary: BinaryLookup { explicit: Some(PROGRAM.path()), home: Some(home), ..Default::default() },
         tools: Some(ToolServers {
             tools_url: "http://127.0.0.1:9/mcp".into(),
-            hubs: vec![HubToolServer { name: "linear".into(), url: "http://127.0.0.1:9/tool-servers/t-1".into() }],
+            hubs: vec![HubToolServer {
+                id: "t-1".into(),
+                name: "linear".into(),
+                url: "http://127.0.0.1:9/tool-servers/t-1".into(),
+            }],
             token: ToolsToken::new("secret-token"),
             config: room.path().join("mcp.json"),
         }),
@@ -83,7 +87,11 @@ async fn agent_launch_passes_each_tool_server_in_session_new_with_bearer_header(
     let room = tempfile::tempdir().unwrap();
     let tools = ToolServers {
         tools_url: "http://127.0.0.1:50123/mcp".into(),
-        hubs: vec![HubToolServer { name: "linear".into(), url: "http://127.0.0.1:50123/tool-servers/t-1".into() }],
+        hubs: vec![HubToolServer {
+            id: "t-1".into(),
+            name: "linear".into(),
+            url: "http://127.0.0.1:50123/tool-servers/t-1".into(),
+        }],
         token: ToolsToken::new("tok-123"),
         config: room.path().join("mcp.json"),
     };

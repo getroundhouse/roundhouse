@@ -6,7 +6,7 @@ use crate::new_workspace::Request;
 use crate::rename;
 use crate::rename::Renaming;
 use crate::settings::PageId;
-use crate::workspace_pane::{PaneEvent, WorkspacePane};
+use crate::workspace_pane::{OfHub, PaneEvent, WorkspacePane};
 use client_core::records::Snapshot;
 use gpui_kit::{AppContext as _, Context, PathPromptOptions, Window};
 use in_view::InView;
@@ -24,8 +24,9 @@ impl AppView {
                 return;
             }
             let (Some(records), Some(drafts)) = (self.feed(), self.drafts.clone()) else { return };
-            let conversations = self.conversations.clone();
-            let pane = cx.new(|cx| WorkspacePane::new(client, records, drafts, conversations, shown, window, cx));
+            let (conversations, tool_sign_in) = (self.conversations.clone(), self.tool_sign_in.clone());
+            let of_hub = OfHub { client, records, drafts, conversations, tool_sign_in };
+            let pane = cx.new(|cx| WorkspacePane::new(of_hub, shown, window, cx));
             let (busy, retitling) = (self.busy.clone(), self.retitling.contains(&id));
             pane.update(cx, |pane, cx| {
                 pane.set_busy(busy, cx);

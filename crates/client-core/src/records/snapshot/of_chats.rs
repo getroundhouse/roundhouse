@@ -1,8 +1,10 @@
 //! What a view reads of a chat that its agent, or the hub's reads of GitHub, last said, rather than what the hub
-//! decides: how full the agent's context is, what the API's cache holds of the conversation, and what each of the
-//! chat's open waits last read of the pull requests it watches. Each is read from its observation: the context and the
-//! waits' reads at the chat's own level, so only while something follows the chat, and the cache at the hub's.
+//! decides: how full the agent's context is, which tool servers it has, what the API's cache holds of the conversation,
+//! and what each of the chat's open waits last read of the pull requests it watches. Each is read from its observation:
+//! the context, the servers and the waits' reads at the chat's own level, so only while something follows the chat, and
+//! the cache at the hub's.
 
+use protocol::capability::setup::ToolServerState;
 use protocol::model::{ContextUsage, Observation, ObservationKey, Session, Wait, WaitRead};
 
 use super::Snapshot;
@@ -16,6 +18,14 @@ impl Snapshot {
         let key = ObservationKey::SessionContext { session_id: session.id.clone() };
         let Some(Observation::SessionContext { context, .. }) = self.observation(&key) else { return None };
         said(context)
+    }
+
+    /// The tool servers `session`'s agent has, as its run last said. `None` until it has, for an agent that says nothing of
+    /// them, while none is running, and while nothing follows the chat.
+    pub(crate) fn tool_servers_said(&self, session: &Session) -> Option<&[ToolServerState]> {
+        let key = ObservationKey::SessionToolServers { session_id: session.id.clone() };
+        let Some(Observation::SessionToolServers { servers, .. }) = self.observation(&key) else { return None };
+        said(servers).map(Vec::as_slice)
     }
 
     /// What the API's cache holds of `session`'s conversation, and whether its context is big enough that writing it

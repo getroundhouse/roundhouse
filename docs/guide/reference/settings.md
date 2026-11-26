@@ -233,11 +233,11 @@ Some servers can't be signed in to. Roundhouse says who it is by [a document on 
 
 The hub renews a sign-in by itself, until the service no longer lets it, such as once you've taken Roundhouse off your account there. The server's row then says **Needs you to sign in**, and its tools fail in every chat.
 
-Choose **Sign in again** in the row's **…** menu, and approve it as before. The server keeps its name, so agents go on calling it what they did.
+Choose **Sign in again** in the row's **…** menu, or **Sign in** on [a chat's plug](chats.md#the-chats-mcp-servers), and approve it as before. The server keeps its name, so agents go on calling it what they did.
 
 ### When a server refuses a call
 
-If the server refuses its key, an agent gets an error in place of its tools, or of what a call was to answer, such as `Linear refused the key Roundhouse sent it (401)`. A Codex chat shows it as a notice as it starts. To give the server another key, remove it and add it again. One that can't be reached from an agent's machine says so in the same way.
+If the server refuses its key, an agent gets an error in place of its tools, or of what a call was to answer, such as `Linear refused the key Roundhouse sent it (401)`. A Codex chat's plug says it too, as [Chats](chats.md#the-chats-mcp-servers) says. To give the server another key, remove it and add it again. One that can't be reached from an agent's machine says so in the same way.
 
 ### Where an agent's CLI has a server of the same name
 

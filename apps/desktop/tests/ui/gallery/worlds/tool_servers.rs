@@ -39,11 +39,15 @@ pub(in crate::gallery) fn tool_server_refused() -> World {
     world
 }
 
+/// The page to approve a sign-in on.
+pub(super) fn page() -> ToolSignInBegun {
+    ToolSignInBegun::Page { page: ToolSignInPage::new("https://auth.notion.example/authorize?state=made-up") }
+}
+
 /// [`one_tool_server`], whose hub answers a sign-in to another with the page to approve it on.
 pub(in crate::gallery) fn tool_sign_in_waiting() -> World {
-    let page = ToolSignInPage::new("https://auth.notion.example/authorize?state=made-up");
     let mut world = one_tool_server();
-    world.tool_sign_in_answer = Some(Ok(ToolSignInBegun::Page { page }));
+    world.tool_sign_in_answer = Some(Ok(page()));
     world
 }
 

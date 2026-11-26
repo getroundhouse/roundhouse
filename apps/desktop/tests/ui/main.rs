@@ -70,6 +70,7 @@ mod support;
 mod terminals;
 mod title_strip;
 mod titles;
+mod tool_servers;
 mod tool_use;
 mod tools;
 mod turn_card;

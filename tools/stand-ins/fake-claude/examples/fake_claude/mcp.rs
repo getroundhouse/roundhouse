@@ -79,6 +79,17 @@ pub(crate) fn connect(args: &[String], state: &Path) {
     let _ = CONNECTED.set(connected.collect());
 }
 
+/// The servers it was launched with, and whether each connected, as the real CLI's `init` lists them, or `None` with only
+/// the worker's, so only a test that gives it another is told of any.
+pub(crate) fn listed() -> Option<Value> {
+    let connected = CONNECTED.get().filter(|connected| connected.keys().any(|name| name != SERVER))?;
+    let listed = connected.iter().map(|(name, server)| {
+        let status = if server.is_ok() { "connected" } else { "failed" };
+        json!({ "name": name, "status": status })
+    });
+    Some(listed.collect())
+}
+
 /// Calls a tool, which the model knows as `mcp__SERVER__TOOL`, as the real CLI names a server's tools.
 pub(crate) fn call(turn: &mut Turn, command: &str) {
     let (tool, arguments) = command.split_once(' ').unwrap_or((command, "{}"));

@@ -26,6 +26,7 @@ pub(in crate::claude) fn said(body: &EventBody, line: &str) -> Option<Report> {
         let state = state(status);
         ToolServerState {
             name: (*name).into(),
+            hubs: None,
             state,
             // `init` never says why one failed.
             error: None,
@@ -125,7 +126,7 @@ mod tests {
     }
 
     fn is(name: &str, state: ServerState, tools: Option<u32>) -> ToolServerState {
-        ToolServerState { name: name.into(), state, error: None, tools }
+        ToolServerState { name: name.into(), hubs: None, state, error: None, tools }
     }
 
     #[test]

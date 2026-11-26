@@ -22,9 +22,10 @@ impl Proxy {
         *self.servers.lock() = servers;
     }
 
-    /// Each server's name, as agents are given it, and its path on the worker.
-    pub(in super::super) fn paths(&self) -> Vec<(ServerName, String)> {
-        self.servers.lock().iter().map(|server| (server.name.clone(), path_of(&server.id))).collect()
+    /// Each server, its name, as agents are given it, and its path on the worker.
+    pub(in super::super) fn paths(&self) -> Vec<(ToolServerId, ServerName, String)> {
+        let path = |server: &Arc<Server>| (server.id.clone(), server.name.clone(), path_of(&server.id));
+        self.servers.lock().iter().map(path).collect()
     }
 
     pub(super) fn server(&self, id: &ToolServerId) -> Option<Arc<Server>> {
