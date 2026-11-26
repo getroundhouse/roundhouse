@@ -102,14 +102,14 @@ async fn a_server_with_no_sign_in_or_no_way_roundhouse_could_says_so_and_waits_f
         (Script { server_metadata_at: ServerMetadataAt::Nowhere, ..Script::default() }, |_| ToolSignInBegun::NoWay {
             why: NoToolSignIn::NoAuthorizationServer,
         }),
-        (Script { client_documents: false, ..Script::default() }, |authorization_server| ToolSignInBegun::NoWay {
-            why: NoToolSignIn::OnlyRegisteredClients { authorization_server },
+        (Script { client_documents: false, ..Script::default() }, |host| ToolSignInBegun::NoWay {
+            why: NoToolSignIn::OnlyRegisteredClients { host },
         }),
         (Script { resource: Says::Another, ..Script::default() }, |_| ToolSignInBegun::NoWay {
             why: NoToolSignIn::OtherServer { host: "other.example".into() },
         }),
-        (Script { s256: false, ..Script::default() }, |authorization_server| ToolSignInBegun::NoWay {
-            why: NoToolSignIn::NoS256 { authorization_server },
+        (Script { s256: false, ..Script::default() }, |host| ToolSignInBegun::NoWay {
+            why: NoToolSignIn::NoS256 { host },
         }),
     ];
     for (script, expected) in cases {
@@ -119,7 +119,7 @@ async fn a_server_with_no_sign_in_or_no_way_roundhouse_could_says_so_and_waits_f
         let begun = hub.tool_sign_in_start(new("i", &stand_in)).await.unwrap();
         let finished = hub.tool_sign_in_finish(finish("i", "code=made-up&state=made-up")).await.unwrap_err();
 
-        assert_eq!(begun, expected(stand_in.issuer()));
+        assert_eq!(begun, expected(stand_in.issuer_host()));
         assert_eq!(finished.code, ErrorCode::NotFound);
     }
 }

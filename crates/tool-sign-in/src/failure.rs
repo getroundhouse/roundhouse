@@ -30,7 +30,8 @@ pub enum Failure {
     /// It's at an address Roundhouse doesn't fetch.
     #[error("Roundhouse doesn't fetch from {host}, since {why}")]
     NotFetched { host: String, why: NotFetched },
-    /// What the authorization server says of itself is said of another, at `host`, where what it said is an address.
+    /// What the authorization server at the host `asked` says of itself is said of another, at `host`, where what it
+    /// said is an address.
     #[error("the authorization server {asked} says it's {}", .host.as_deref().unwrap_or("another"))]
     OtherIssuer { asked: String, host: Option<String> },
     /// What came back from the browser isn't of this sign-in, which is still waiting.
@@ -54,13 +55,8 @@ pub enum Failure {
     NoRandomness,
 }
 
-/// The most shown of an address that a server says is its own, longer than any is.
+/// The most shown of a host that a server names, longer than any is.
 const LONGEST_SHOWN: usize = 200;
-
-/// `said`, as a person is told it, such as an address that a server says is its own, cut short.
-pub(crate) fn shown(said: &str) -> String {
-    said.chars().take(LONGEST_SHOWN).collect()
-}
 
 /// The host of the address a server `said`, with its port where it names one, as a person is told it. `None` where
 /// what it said isn't an address. A server's own text is never shown as Roundhouse's words, so only what an address
@@ -69,7 +65,7 @@ pub(crate) fn host_of(said: &str) -> Option<String> {
     let url = url::Url::parse(said).ok()?;
     let host = url.host_str().filter(|host| !host.is_empty())?;
     let host = url.port().map_or_else(|| host.to_string(), |port| format!("{host}:{port}"));
-    Some(shown(&host))
+    Some(host.chars().take(LONGEST_SHOWN).collect())
 }
 
 /// What an authorization server said was wrong, as OAuth names it, such as `invalid_grant`. Its description is left

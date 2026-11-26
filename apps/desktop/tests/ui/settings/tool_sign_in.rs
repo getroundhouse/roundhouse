@@ -124,7 +124,7 @@ fn a_new_server_with_no_sign_in_says_so_in_the_panel_it_was_typed_in_and_is_adde
     let only_registered = format!(
         "Roundhouse can't sign in to this server. {}, where it's signed in to, takes only apps registered with it. It \
          may take a key.",
-        registered.stand_in.issuer()
+        registered.stand_in.issuer_host()
     );
     let no_sign_in = "This server has no sign-in. Anyone who can reach it can use it. To add it, choose None, or Key if \
                       it gave you one.";
@@ -178,7 +178,7 @@ fn a_server_signed_in_to_again_with_no_way_to_says_only_why_and_closes(cx: &mut 
     };
     let only_registered = format!(
         "Roundhouse can't sign in to this server. {}, where it's signed in to, takes only apps registered with it.",
-        serving.stand_in.issuer()
+        serving.stand_in.issuer_host()
     );
 
     serving.stand_in.change(|script| script.client_documents = false);

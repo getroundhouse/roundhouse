@@ -94,20 +94,22 @@ async fn a_server_whose_sign_in_isnt_one_roundhouse_gives_says_why_and_metadata_
         let registered = StandIn::with(Script { client_documents: false, ..script.clone() }).await;
         let s256 = StandIn::with(Script { s256: false, ..script.clone() }).await;
         let resource = found_with(Script { resource: Says::Another, ..script.clone() }).await.unwrap();
-        let issuer = found_with(Script { issuer: Says::Another, ..script }).await.unwrap_err();
+        let another = StandIn::with(Script { issuer: Says::Another, ..script }).await;
+        let issuer = find(&another).await.unwrap_err();
 
         let Found::NoWay(resource) = resource else { panic!("{resource:?}") };
         assert_eq!(resource, NoToolSignIn::OtherServer { host: "other.example".to_string() });
-        let registered_only: fn(String) -> NoToolSignIn =
-            |authorization_server| NoToolSignIn::OnlyRegisteredClients { authorization_server };
-        let no_s256: fn(String) -> NoToolSignIn = |authorization_server| NoToolSignIn::NoS256 { authorization_server };
+        let registered_only: fn(String) -> NoToolSignIn = |host| NoToolSignIn::OnlyRegisteredClients { host };
+        let no_s256: fn(String) -> NoToolSignIn = |host| NoToolSignIn::NoS256 { host };
         for (stand_in, no_way) in [(&registered, registered_only), (&s256, no_s256)] {
             let found = find(stand_in).await.unwrap();
             let Found::NoWay(found) = found else { panic!("{found:?}") };
-            assert_eq!(found, no_way(stand_in.issuer()));
+            assert_eq!(found, no_way(stand_in.issuer_host()));
         }
-        let Failure::OtherIssuer { host, .. } = &issuer else { panic!("{issuer:?}") };
-        assert_eq!(host.as_deref(), Some("other.example"));
+        let Failure::OtherIssuer { asked, host } = &issuer else { panic!("{issuer:?}") };
+        assert_eq!((asked, host.as_deref()), (&another.issuer_host(), Some("other.example")));
+        let said = issuer.to_string();
+        assert_eq!(said, format!("the authorization server {} says it's other.example", another.issuer_host()));
     }
 }
 

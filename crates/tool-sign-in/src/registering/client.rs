@@ -1,10 +1,9 @@
+use protocol::client::tool_sign_ins::NoToolSignIn;
 use url::Url;
 
 use super::answer::{Answered, answered};
 use super::{Registration, client_metadata};
-use protocol::client::tool_sign_ins::NoToolSignIn;
-
-use crate::failure::shown;
+use crate::failure::host_of;
 use crate::fetch::url_of;
 use crate::finding::Takes;
 use crate::{ClientId, Failure, RedirectUri, ToolSignIn, Way};
@@ -53,17 +52,15 @@ impl ToolSignIn {
         }
         let calls = self.calls_for(&url_of(&way.server)?).await?;
         let answer = calls.post_json(endpoint, &client_metadata(&redirect_uris)).await?;
-        let issuer = way.issuer.clone();
+        let (issuer, host) = (way.issuer.clone(), host_of(way.issuer.as_str()).unwrap_or_default());
         Ok(match answered(answer)? {
             Answered::Registered(client_id) => {
                 TakenAs::Client(Client::Registered(Registration { client_id, issuer, redirect_uris }))
             }
-            Answered::WithSecret => {
-                TakenAs::NoWay(NoToolSignIn::OnlyClientsWithSecrets { authorization_server: shown(issuer.as_str()) })
-            }
+            Answered::WithSecret => TakenAs::NoWay(NoToolSignIn::OnlyClientsWithSecrets { host }),
             Answered::Refused(error) => {
-                let (authorization_server, error) = (shown(issuer.as_str()), error.map(|error| error.to_string()));
-                TakenAs::NoWay(NoToolSignIn::NotRegistered { authorization_server, error })
+                let error = error.map(|error| error.to_string());
+                TakenAs::NoWay(NoToolSignIn::NotRegistered { host, error })
             }
         })
     }

@@ -10,7 +10,7 @@ use super::asking::as_nobody;
 use super::metadata::{AuthorizationServerMetadata, ServerMetadata};
 use super::reading::{Read, authorization_server_metadata, server_metadata};
 use super::{Found, Issuer, Takes, Way};
-use crate::failure::{host_of, shown};
+use crate::failure::host_of;
 use crate::fetch::Caller;
 use crate::fetch::url_of;
 use crate::offline_access::lists_offline;
@@ -68,7 +68,11 @@ async fn look(calls: &Caller<'_>, server: &ToolServerUrl, url: &Url, challenge: 
     let Some(issuer) = metadata.authorization_servers.first() else { return Ok(Said::Nothing) };
     match authorization_server_metadata(calls, issuer).await? {
         Read::Right(of_issuer) => Ok(Said::Found(way(calls, server, challenge, metadata, of_issuer)?)),
-        Read::OfAnother(said) => Err(Failure::OtherIssuer { asked: shown(issuer), host: host_of(&said) }),
+        Read::OfAnother(said) => {
+            // Only its host, as of any service a sign-in can't be made at, which one that was fetched always has.
+            let asked = host_of(issuer).unwrap_or_default();
+            Err(Failure::OtherIssuer { asked, host: host_of(&said) })
+        }
         Read::Nothing => Ok(Said::Nothing),
         Read::Unread(failure) => Ok(Said::Unread(failure)),
     }
@@ -83,17 +87,18 @@ fn way(
     authorization_server: AuthorizationServerMetadata,
 ) -> Result<Found, Failure> {
     let issuer = Issuer::new(&authorization_server.issuer);
-    let at = || shown(issuer.as_str());
+    // Only its host, which can hold no words of the server's, and which an issuer that was fetched always has.
+    let host = || host_of(issuer.as_str()).unwrap_or_default();
     let takes = match (&authorization_server.registration_endpoint, authorization_server.takes_client_documents()) {
         (_, true) => Takes::Documents,
-        (None, false) => return Ok(Found::NoWay(NoToolSignIn::OnlyRegisteredClients { authorization_server: at() })),
+        (None, false) => return Ok(Found::NoWay(NoToolSignIn::OnlyRegisteredClients { host: host() })),
         (Some(_), false) if !authorization_server.takes_clients_without_secrets() => {
-            return Ok(Found::NoWay(NoToolSignIn::OnlyClientsWithSecrets { authorization_server: at() }));
+            return Ok(Found::NoWay(NoToolSignIn::OnlyClientsWithSecrets { host: host() }));
         }
         (Some(endpoint), false) => Takes::Registered { endpoint: calls.address(endpoint)? },
     };
     if !authorization_server.takes_s256() {
-        return Ok(Found::NoWay(NoToolSignIn::NoS256 { authorization_server: at() }));
+        return Ok(Found::NoWay(NoToolSignIn::NoS256 { host: host() }));
     }
     let says_iss = authorization_server.says_iss();
     let scopes = challenge.scope.unwrap_or_else(|| ToolScopes::of(metadata.scopes_supported.unwrap_or_default()));
