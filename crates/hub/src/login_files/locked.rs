@@ -47,7 +47,7 @@ impl<S: LoginSecret> Locked<'_, S> {
     pub(crate) fn read(&self, file: &LoginFile) -> io::Result<Stored<S>> {
         match fs::read(self.path(file)) {
             Ok(bytes) if bytes.is_empty() => Ok(Stored::Nothing),
-            Ok(bytes) => Ok(S::from_bytes(bytes)),
+            Ok(bytes) => S::from_bytes(bytes),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Stored::Nothing),
             Err(e) => Err(e),
         }

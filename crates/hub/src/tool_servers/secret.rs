@@ -40,15 +40,32 @@ impl LoginSecret for ToolServerSecret {
         Ok(serde_json::to_vec(&form)?)
     }
 
-    /// What isn't one of the forms, such as one cut short, holds none.
-    fn from_bytes(bytes: Vec<u8>) -> Stored<Self> {
-        match serde_json::from_slice(&bytes) {
+    /// What isn't one of the forms, such as one cut short, holds none. A whole sign-in that this build can't read is
+    /// unreadable rather than nothing, so it's kept, and its server with it. Its form holds types of `tool-sign-in` that
+    /// check what they read, such as a server's URL, and that crate may come to check them differently, or to name a
+    /// field otherwise, without knowing it changes a stored form. A file cut short isn't whole JSON, so it still holds
+    /// none.
+    fn from_bytes(bytes: Vec<u8>) -> io::Result<Stored<Self>> {
+        Ok(match serde_json::from_slice(&bytes) {
             Ok(Form::Key { key }) => Stored::Secret(ToolServerSecret::Key(key)),
             Ok(Form::SignIn(kept)) => Stored::Secret(ToolServerSecret::SignIn(kept)),
             Ok(Form::Newer) => Stored::Newer,
+            // Fixed words, since serde's could have some of the file in them, which has tokens in it.
+            Err(_) if is_sign_in(&bytes) => {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "a sign-in this build can't read"));
+            }
             Err(_) => Stored::Nothing,
-        }
+        })
     }
+}
+
+/// Whether `bytes` are a whole JSON object whose `format` is [`Form::SignIn`]'s.
+fn is_sign_in(bytes: &[u8]) -> bool {
+    #[derive(Deserialize)]
+    struct Named {
+        format: String,
+    }
+    serde_json::from_slice(bytes).is_ok_and(|named: Named| named.format == "sign_in")
 }
 
 /// Longer than any key a server gives.

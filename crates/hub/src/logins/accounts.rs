@@ -25,8 +25,8 @@ impl LoginSecret for LoginToken {
         Ok(self.as_str().as_bytes().to_vec())
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Stored<Self> {
-        String::from_utf8(bytes).map_or(Stored::Nothing, |token| Stored::Secret(LoginToken::new(token)))
+    fn from_bytes(bytes: Vec<u8>) -> std::io::Result<Stored<Self>> {
+        Ok(String::from_utf8(bytes).map_or(Stored::Nothing, |token| Stored::Secret(LoginToken::new(token))))
     }
 }
 

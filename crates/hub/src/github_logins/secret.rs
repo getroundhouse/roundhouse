@@ -114,18 +114,18 @@ impl LoginSecret for GithubLogin {
 
     /// Text that isn't a JSON object is a token. A JSON object that isn't one of the forms it can be, such as one cut
     /// short, holds none.
-    fn from_bytes(bytes: Vec<u8>) -> Stored<Self> {
+    fn from_bytes(bytes: Vec<u8>) -> io::Result<Stored<Self>> {
         if bytes.first() == Some(&b'{') {
-            return match serde_json::from_slice(&bytes) {
+            return Ok(match serde_json::from_slice(&bytes) {
                 Ok(Form::SignIn(signed_in)) => Stored::Secret(GithubLogin::SignIn(signed_in)),
                 Ok(Form::Installation(installation)) => Stored::Secret(GithubLogin::Installation(installation)),
                 Ok(Form::App { key }) => Stored::Secret(GithubLogin::App(key)),
                 Ok(Form::Gh { user }) => Stored::Secret(GithubLogin::Gh { user }),
                 Ok(Form::Newer) => Stored::Newer,
                 Err(_) => Stored::Nothing,
-            };
+            });
         }
-        String::from_utf8(bytes)
-            .map_or(Stored::Nothing, |token| Stored::Secret(GithubLogin::Token(GithubToken::new(token))))
+        Ok(String::from_utf8(bytes)
+            .map_or(Stored::Nothing, |token| Stored::Secret(GithubLogin::Token(GithubToken::new(token)))))
     }
 }
