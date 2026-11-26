@@ -1,4 +1,4 @@
-//! What Codex says for the person to read: its warnings, its errors, and an MCP server that didn't start.
+//! What Codex says for the person to read: its warnings and its errors.
 
 use protocol::event::{EventBody, NoticeLevel};
 use serde_json::Value;
@@ -19,29 +19,6 @@ pub(super) async fn warning(shared: &Shared, params: &Value, scope: &Scope, raw:
 pub(super) async fn error(shared: &Shared, params: &Value, scope: &Scope, raw: String) {
     let message = params["error"]["message"].as_str().unwrap_or("Codex's request failed");
     shared.run.event(notice(NoticeLevel::Error, message.into(), scope), Some(raw)).await;
-}
-
-/// `mcpServer/startupStatus/updated`: an MCP server starting, ready, stopped or failed. Only its failing is the
-/// person's to know, since its tools are then missing. The rest is state Codex keeps for its own interfaces.
-pub(super) async fn mcp_server(shared: &Shared, params: &Value, scope: &Scope, raw: String) {
-    let Some(message) = mcp_failure(params) else { return };
-    shared.run.event(notice(NoticeLevel::Warning, message, scope), Some(raw)).await;
-}
-
-/// What to say of a failed MCP server, or `None` for one that didn't fail.
-pub(super) fn mcp_failure(params: &Value) -> Option<String> {
-    if params["status"].as_str() != Some("failed") {
-        return None;
-    }
-    let name = params["name"].as_str().unwrap_or("An MCP server");
-    let server = format!("The MCP server `{name}`");
-    if params["failureReason"].as_str() == Some("reauthenticationRequired") {
-        return Some(format!("{server} needs you to sign in to it again, so its tools aren't available."));
-    }
-    Some(match params["error"].as_str().map(str::trim).filter(|error| !error.is_empty()) {
-        Some(error) => format!("{server} didn't start, so its tools aren't available: {error}"),
-        None => format!("{server} didn't start, so its tools aren't available."),
-    })
 }
 
 fn notice(level: NoticeLevel, message: String, scope: &Scope) -> EventBody {

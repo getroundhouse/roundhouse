@@ -1,6 +1,6 @@
-//! The two cards beside Send. The ring's says how much room is left in the chat's context and what's in it. The
-//! bars' says how much of the account's limits is left, and whose account it is. Each says only what it's been
-//! told, so a part nobody has said is left out.
+//! The ring's and the bars' cards beside Send. The ring's says how much room is left in the chat's context and what's
+//! in it. The bars' says how much of the account's limits is left, and whose account it is. Each says only what it's
+//! been told, so a part nobody has said is left out.
 
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
@@ -16,7 +16,7 @@ use super::{Usage, words};
 use crate::workspace_pane::WorkspacePane;
 
 /// A card over the rest, of a few lines.
-fn surface(region: Region) -> look::Card {
+pub(super) fn surface(region: Region) -> look::Card {
     look::card(look::CardKind::Over, look::CardWidth::Small).region(region)
 }
 

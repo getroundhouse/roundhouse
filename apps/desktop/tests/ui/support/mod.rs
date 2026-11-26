@@ -32,6 +32,7 @@ mod stand_in_gh;
 mod stand_in_github;
 mod stopping;
 mod terminal;
+mod tool_servers;
 mod workspaces;
 
 pub(crate) use asked::id;
@@ -56,6 +57,7 @@ pub(crate) use order::{MORE_THAN_FIT, after_every_workspace, order, three_worksp
 pub(crate) use projects::{open_on_the_world, project_row, two_projects, two_projects_world, with_a_chat};
 pub(crate) use stand_in::StandInHub;
 pub(crate) use terminal::{Cells, in_window};
+pub(crate) use tool_servers::{SentBack, Serving, redirect_of, renewing_often};
 pub(crate) use workspaces::{home_row, pencil, sidebar_row};
 
 mod stack;

@@ -1,9 +1,10 @@
-//! What sits beside Send: a ring for how full the chat's context is, and a bar for each of the account's limits.
-//! Each shows a card while the pointer rests on it: what the context holds, or how much of the limits is left and
-//! whose account it is, with a menu that moves the chat to another account.
+//! What sits beside Send: a plug for the chat's MCP servers, a bar for each of the account's limits, and a ring for how
+//! full the chat's context is. Each shows a card while the pointer rests on it: the servers, how much of the limits is
+//! left and whose account it is, with a menu that moves the chat to another account, or what the context holds.
 
 mod card;
 mod moving;
+mod tool_servers;
 mod words;
 
 mod usage;

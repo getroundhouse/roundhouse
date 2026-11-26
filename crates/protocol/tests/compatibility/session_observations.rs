@@ -77,9 +77,16 @@ fn a_session_s_context_and_todos_keep_their_form_as_notices_and_in_its_list() {
 /// notice and as a removal.
 #[test]
 fn a_session_s_tool_servers_keep_their_form_as_a_notice_and_a_removal() {
-    let docs = ToolServerState { name: "docs".into(), state: ServerState::Connected, error: None, tools: Some(2) };
+    let docs = ToolServerState {
+        name: "docs".into(),
+        hubs: Some("t-1".into()),
+        state: ServerState::Connected,
+        error: None,
+        tools: Some(2),
+    };
     let gone = ToolServerState {
         name: "gone".into(),
+        hubs: None,
         state: ServerState::Failed,
         error: Some("connection refused".into()),
         tools: None,
@@ -98,7 +105,7 @@ fn a_session_s_tool_servers_keep_their_form_as_a_notice_and_a_removal() {
         &HubNotice::Observation(copy),
         concat!(
             r#"{"notice":"observation","kind":"session_tool_servers","session_id":"s","servers":{"freshness":"as_of","#,
-            r#""value":[{"name":"docs","state":"connected","tools":2},{"name":"gone","state":"failed","#,
+            r#""value":[{"name":"docs","hubs":"t-1","state":"connected","tools":2},{"name":"gone","state":"failed","#,
             r#""error":"connection refused"}],"as_of_ms":1795230000000},"rev":5}"#
         ),
     );

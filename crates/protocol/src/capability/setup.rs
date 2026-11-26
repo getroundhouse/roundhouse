@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Claimed;
 use super::area::area;
-use crate::model::ids;
+use crate::model::{ToolServerId, ids};
 
 area! { "the agent's setup";
     /// Roundhouse's instructions reach the agent's system prompt at every launch, a resumed one included, and each of
@@ -42,6 +42,10 @@ ids!(
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ToolServerState {
     pub name: ServerName,
+    /// Which of the hub's own it is, which its worker says, as it passed it to the agent at launch, so it's told apart
+    /// from one of the CLI's own with the same name. `None` for one the agent's CLI has of its own, and from an adapter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hubs: Option<ToolServerId>,
     pub state: ServerState,
     /// Why, in the agent's words, for one that failed, on one line, without the secrets an agent's words can hold, such
     /// as a server's URL past its origin, which its adapter takes out.
@@ -61,6 +65,7 @@ pub enum ServerState {
     NeedsSignIn,
     Failed,
     Disabled,
+    /// The agent has said nothing of it, or something this build doesn't know.
     #[serde(other)]
     Unknown,
 }

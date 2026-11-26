@@ -17,7 +17,8 @@ const MODELS: [(&str, &str, Effort, bool); 8] = [
     ("gpt-5.6-luna", "GPT-5.6 Luna", Effort::Medium, false),
 ];
 
-fn models() -> protocol::capability::settings::ModelCatalog {
+/// What Codex offers, as its own list does.
+pub(super) fn models() -> protocol::capability::settings::ModelCatalog {
     use protocol::capability::settings::{Input, ModelCatalog, ModelOffer, Stage};
     ModelCatalog {
         default_model: Some(ModelName::named("gpt-6.1-sol")),

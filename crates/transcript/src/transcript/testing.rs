@@ -3,6 +3,7 @@
 
 use client_core::session_log::{Position, PromptState, Row, SessionLog};
 use gpui_kit::{Bounds, Context, Pixels, Window};
+use protocol::capability::setup::ServerName;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{PromptLine, Seq};
 
@@ -47,6 +48,11 @@ impl Transcript {
     /// The failed request whose card offers Retry, if one does, as the transcript worked it out last.
     pub fn retry_offered_at(&self) -> Option<Seq> {
         self.model.borrow().retry_at
+    }
+
+    /// What a call to a tool of `server`, as its agent calls it, shows the server as.
+    pub fn server_shown(&self, server: &ServerName) -> String {
+        self.model.borrow().tool_servers.shown(server).to_string()
     }
 
     /// What the agent is writing, as far as it's got.

@@ -35,7 +35,11 @@ async fn the_pid_file_records_the_process_and_goes_away_with_it() {
 fn with_tools(config: &Path) -> AgentOptions {
     let tools = ToolServers {
         tools_url: "http://127.0.0.1:50123/mcp".into(),
-        hubs: vec![HubToolServer { name: "linear".into(), url: "http://127.0.0.1:50123/tool-servers/t-1".into() }],
+        hubs: vec![HubToolServer {
+            id: "t-1".into(),
+            name: "linear".into(),
+            url: "http://127.0.0.1:50123/tool-servers/t-1".into(),
+        }],
         token: ToolsToken::new("token-s"),
         config: config.to_path_buf(),
     };

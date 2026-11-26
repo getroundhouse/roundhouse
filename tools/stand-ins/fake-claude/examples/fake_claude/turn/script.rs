@@ -31,11 +31,12 @@ fn remember(config: &Config, prompt: &str) {
 
 /// What the real CLI writes as a turn begins: that it's ready, and in its first, what's left of the account's limits.
 pub(crate) fn begin(config: &Config, out: &Out) {
-    emit(
-        out,
-        json!({"type":"system","subtype":"init","session_id":config.session_id,"model":current_model(),
-        "cwd":std::env::current_dir().unwrap(),"permissionMode":current_mode(),"claude_code_version":"fake"}),
-    );
+    let mut init = json!({"type":"system","subtype":"init","session_id":config.session_id,"model":current_model(),
+        "cwd":std::env::current_dir().unwrap(),"permissionMode":current_mode(),"claude_code_version":"fake"});
+    if let Some(servers) = crate::mcp::listed() {
+        init["mcp_servers"] = servers;
+    }
+    emit(out, init);
     if crate::account::says_limits(&config.conversation) {
         emit(out, crate::account::rate_limit_event(&config.session_id));
     }

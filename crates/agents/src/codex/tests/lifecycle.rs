@@ -41,7 +41,11 @@ async fn abandoning_initialization_kills_the_process_group_and_removes_its_recor
 async fn a_thread_is_started_with_each_tool_server_under_a_key_of_its_own() {
     let servers = ToolServers {
         tools_url: "http://127.0.0.1:50123/mcp".into(),
-        hubs: vec![HubToolServer { name: "linear".into(), url: "http://127.0.0.1:50123/tool-servers/t-1".into() }],
+        hubs: vec![HubToolServer {
+            id: "t-1".into(),
+            name: "linear".into(),
+            url: "http://127.0.0.1:50123/tool-servers/t-1".into(),
+        }],
         token: ToolsToken::new("token-s"),
         config: "/no/file".into(),
     };

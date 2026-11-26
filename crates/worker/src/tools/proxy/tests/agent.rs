@@ -1,6 +1,7 @@
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 
+use agents::HubToolServer;
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::header::{HOST, HeaderMap, HeaderName, HeaderValue};
@@ -54,7 +55,7 @@ impl Agent {
     /// The path of the only server, as an agent is launched with it.
     pub(super) async fn path(&self) -> String {
         let addresses = self.tools.addresses().await.unwrap();
-        let [(_, url)] = &addresses.servers[..] else { panic!("{addresses:?}") };
+        let [HubToolServer { url, .. }] = &addresses.servers[..] else { panic!("{addresses:?}") };
         url.strip_prefix(&format!("http://127.0.0.1:{}", self.port)).unwrap().to_string()
     }
 

@@ -53,7 +53,7 @@ Context, limits, compacting and cache estimates depend on what the agent reports
 
 - **Updates never stop a running agent.** See [Updates](../reference/updates.md).
 - **Nothing typed is lost.** What's in a composer, files and all, is kept until it's sent, and a prompt that can't send comes back to it.
-- **Add an MCP server once, and every agent has it,** on every machine, with its sign-in or its key kept by the hub. See [Settings](../reference/settings.md#mcp-servers).
+- **Add an MCP server once, and every agent has it,** on every machine, with its sign-in or its key kept by the hub. Each chat's plug says which it has, and signs in to one that needs you. See [Settings](../reference/settings.md#mcp-servers) and [Chats](../reference/chats.md#the-chats-mcp-servers).
 - **A command line talks to the same hub.** See [The command line](../reference/command-line.md).
 - **A repository set up for Conductor works unchanged.** See [Coming from Conductor](coming-from-conductor.md).
 - **Your agent, your login.** It runs the Claude, Codex or Antigravity CLI you already have. There's no Roundhouse account, and nothing is sent to us. See [Where data is kept](../reference/where-data-is-kept.md).

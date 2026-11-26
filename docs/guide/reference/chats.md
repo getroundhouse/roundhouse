@@ -41,11 +41,35 @@ Where you type. Its bottom row has:
 |---|---|
 | `+` | Attaches files, and turns plan mode on and off |
 | The model picker | Chooses the model and its effort |
+| The plug | The chat's MCP servers, when it has any: the hub's, and the ones its agent's CLI has of its own |
 | The limits' bars | What's left of your account's limits, when the agent reports them |
 | The context's ring | How full the context is, when the agent reports it |
 | Send | Sends what's typed. While the agent is on a turn, it offers to stop it |
 
 What's typed and attached is kept by the hub until it's sent. It's there when the app opens again, and a prompt that can't be sent comes back to it. Closing the chat lets go of it.
+
+### The chat's MCP servers
+
+While the chat has an MCP server, a plug sits before the limits' bars. Rest the pointer on it for a card of them: the hub's, by the names you gave them, then the ones the agent's CLI has of its own, which it reads from its own settings.
+
+![The plug's card, with the hub's servers and then Codex's own](../../spec/screens/mcp-servers.png)
+
+| A server says | Which means |
+|---|---|
+| `14 tools`, or `Connected` | The agent has it |
+| `Starting` | Its CLI is still connecting to it |
+| `Can't be reached` | Its CLI couldn't connect. Codex says why, on the line under it |
+| **Sign in** | It's one of the hub's that needs you to sign in to it, and the plug is amber until you do. The button opens its page in your browser, and signs in for every chat |
+| `Signing in` | Its page waits in your browser for you to approve it, as [Settings](settings.md#sign-in) says |
+| `Sign in from its CLI` | It's one of the CLI's own, which you sign in to there, such as with `codex mcp login` |
+| `From its next start` | It was added to the hub after the agent started |
+| `Removed` | It was removed from the hub after the agent started |
+| `Turned off` | The CLI's own settings turn it off |
+| Nothing | The agent hasn't said |
+
+When a sign-in comes to nothing, why is on the line under the server, and **Sign in** starts it again. Settings › MCP servers shows the sign-in too, with a button that opens its page again and one that cancels it.
+
+An agent says which servers it has as it starts on a turn, so until then the CLI's own say `Not known yet`. Antigravity never says, so only the hub's are listed there.
 
 ## The parts of a chat
 

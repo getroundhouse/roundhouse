@@ -121,7 +121,7 @@ impl WorkspacePane {
 
 /// `card`, opening above `slot` while the pointer rests on it, with its right edge on the slot's, so it covers nothing
 /// in the bar.
-fn card_over(card: HoverCard, slot: Div) -> HoverCard {
+pub(super) fn card_over(card: HoverCard, slot: Div) -> HoverCard {
     card.anchor(Anchor::BottomRight).trigger(slot)
 }
 

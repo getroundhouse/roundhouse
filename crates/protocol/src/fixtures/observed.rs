@@ -4,6 +4,7 @@
 
 use crate::capability::output::TodoList;
 use crate::capability::settings::ModelCatalog;
+use crate::capability::setup::ToolServerState;
 use crate::model::{
     AccountId, AccountIdentity, Branches, ContextUsage, ConversationCache, GithubAccountId, GithubAppId, GithubAppSaid,
     GithubUser, GithubUsername, ModelListKey, Observation, Observed, OtherBuild, Reach, ReleaseOffer, RepoId, Rev,
@@ -88,6 +89,11 @@ pub fn worker_build(workspace: impl Into<WorkspaceId>, build: Option<&str>) -> O
 /// How full the chat's agent's context is, as it said.
 pub fn context(session: impl Into<SessionId>, context: ContextUsage) -> Observation {
     Observation::SessionContext { session_id: session.into(), context: said(context), rev: REV }
+}
+
+/// The tool servers the chat's agent has, as it said.
+pub fn tool_servers(session: impl Into<SessionId>, servers: Vec<ToolServerState>) -> Observation {
+    Observation::SessionToolServers { session_id: session.into(), servers: said(servers), rev: REV }
 }
 
 /// The chat's agent's to-do list, as it said.

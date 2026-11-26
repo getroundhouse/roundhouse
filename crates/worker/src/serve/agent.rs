@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use agents::{AgentOptions, AgentOutput, BinaryLookup, DrainGrace, HubToolServer, Instructions, ToolServers};
+use agents::{AgentOptions, AgentOutput, BinaryLookup, DrainGrace, Instructions, ToolServers};
 use protocol::attachment::NewAttachment;
+use protocol::capability::Report;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{AgentKind, AgentLogin, RunId, SessionId};
 use protocol::paths::AGENTS_DIR;
@@ -111,13 +112,15 @@ pub(crate) async fn start_agent(
         environment: (*state.credentials.given()).clone(),
         drain_grace: DrainGrace(state.config.timers.agent_drain),
     };
+    let tools = options.tools.clone();
     let span = error_span!(parent: None, "agent", %session_id, %run);
     let process = agents::spawn(spec, tx, options).instrument(span.clone()).await?;
     let (pid, capabilities) = (process.pid(), Box::new(process.capabilities()));
     info!(name: "agent.started", pid, %session_id, %run, "Started an agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
-    forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, worktree, rx).instrument(span));
+    let forwarding = forward_output(state.clone(), session_id, run, worktree, tools, rx);
+    forwarders.lock().await.spawn(forwarding.instrument(span));
     Ok(WorkerResponse::AgentStarted(AgentStarted { pid, run, already_running: false, capabilities }))
 }
 
@@ -161,22 +164,23 @@ async fn make_context_folder(session_id: &SessionId, worktree: &Path) {
 /// find.
 async fn tools_for(state: &State, spec: &mut AgentSpec, config: PathBuf) -> Result<Option<ToolServers>, ApiError> {
     let Some(token) = spec.tools_token.take() else { return Ok(None) };
-    let Some(crate::tools::Addresses { tools: tools_url, servers }) = state.tools.addresses().await else {
+    let Some(crate::tools::Addresses { tools: tools_url, servers: hubs }) = state.tools.addresses().await else {
         let why = "the worker doesn't serve Roundhouse's tools, so it starts no agent that was given a token for them";
         return Err(ApiError::new(ErrorCode::Worker, why));
     };
     let caller = crate::tools::Caller { session_id: spec.session_id.clone(), worktree: PathBuf::from(&spec.cwd) };
     state.tools.admit(token.clone(), caller);
-    let hubs = servers.into_iter().map(|(name, url)| HubToolServer { name, url }).collect();
     Ok(Some(ToolServers { tools_url, hubs, token, config }))
 }
 
-/// Sends on what the agent says, in order, with the images its text points to in `worktree`.
+/// Sends on what the agent says, in order, with the images its text points to in `worktree`, and with which of its tool
+/// servers are the hub's, as it was launched with `tools`.
 async fn forward_output(
     state: Arc<State>,
     session_id: SessionId,
     run: RunId,
     worktree: PathBuf,
+    tools: Option<ToolServers>,
     mut output: mpsc::Receiver<AgentOutput>,
 ) {
     while let Some(item) = output.recv().await {
@@ -191,6 +195,12 @@ async fn forward_output(
                 WorkerFrame::AgentRetrying { session_id: session_id.clone(), run, retrying }
             }
             AgentOutput::Report(report) => {
+                let report = match (report, &tools) {
+                    (Report::ToolServers { servers }, Some(tools)) => {
+                        Report::ToolServers { servers: tools.saying_which_are_the_hubs(servers) }
+                    }
+                    (report, _) => report,
+                };
                 WorkerFrame::AgentReport { session_id: session_id.clone(), run, report, seq: None }
             }
             AgentOutput::Exited { code, signal, stderr_tail, requested } => {

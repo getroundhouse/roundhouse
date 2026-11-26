@@ -1,4 +1,6 @@
-use super::{attaching, closed, composer, dictating, file_tab, proposal_tab, queue, reading, subagent_tab, terminals};
+use super::{
+    OfHub, attaching, closed, composer, dictating, file_tab, proposal_tab, queue, reading, subagent_tab, terminals,
+};
 use crate::all_files::AllFiles;
 use crate::attached::Attachments;
 use crate::busy::Busy;
@@ -8,6 +10,7 @@ use crate::file_view::FileView;
 use crate::pull_request::Lookup;
 use crate::review::Review;
 use crate::sidebar_tabs::TabShown;
+use crate::tool_sign_in::ToolSigningIn;
 use crate::warnings::Warning;
 use attaching::{Composed, Waiting};
 use client_core::records::InWorkspace;
@@ -15,9 +18,9 @@ use client_core::{Client, Drafts, RecordsFeed};
 use conversation::Conversations;
 use file_tab::FileTab;
 use gpui_kit::component::input::TextareaState;
-use gpui_kit::{AnyWindowHandle, Context, Entity, EventEmitter, Subscription, Task, Window};
+use gpui_kit::{AnyWindowHandle, Context, Entity, Subscription, Task, Window};
 use protocol::attachment::Attachment;
-use protocol::model::{AgentKind, Seq, Session, SessionId, TerminalId, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{AgentKind, Seq, Session, SessionId, TerminalId, Workspace, WorkspaceStatus};
 use reading::Reading;
 use std::collections::{HashMap, VecDeque};
 use transcript::Transcript;
@@ -75,26 +78,6 @@ pub(super) struct Chat {
     pub(super) marking: Option<Seq>,
 }
 
-/// A pane asks its owning hub view to present window effects, so replies from an unselected hub cannot show a
-/// modal over another hub. The callback keeps a weak pane handle, since its workspace may have gone meanwhile.
-type Presentation = std::rc::Rc<dyn Fn(&mut Window, &mut gpui_kit::App)>;
-
-#[derive(Clone)]
-pub enum PaneEvent {
-    Error(String),
-    Archive(WorkspaceId, bool),
-    /// Title the workspace again from what's been asked in it.
-    RegenerateTitle(WorkspaceId),
-    /// What's in front under the tabs changed, so the chat being read may have, and what has focus should follow it
-    /// in the pane on screen.
-    Showing,
-    Present(Presentation),
-    /// Show Git in Settings, where the default GitHub account is chosen and accounts are connected.
-    OpenGit,
-    /// Show another workspace, as the menu of a pull request a chat links to asks.
-    GoToWorkspace(WorkspaceId),
-}
-
 /// A tab to show once client-core's copy of the records has it open.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Next {
@@ -141,6 +124,9 @@ pub struct WorkspacePane {
     pub(super) typed_before_talking: Option<(SessionId, String)>,
     /// The hub's chats' conversations on this Mac, which the app follows whichever workspace shows.
     pub(super) conversations: Entity<Conversations>,
+    /// The hub's view's sign-in to an MCP server, which every chat's card says how it stands. The view draws the window
+    /// again as it changes.
+    pub(super) tool_sign_in: Entity<ToolSigningIn>,
     /// The chat whose conversation mode is waiting on dictation and speech, while its card shows how they stand. The
     /// mode starts once both are ready, unless the card has closed.
     pub(super) setting_up: Option<super::setting_up::SettingUp>,
@@ -168,29 +154,16 @@ pub struct WorkspacePane {
     pub(super) subscriptions: Vec<Subscription>,
 }
 
-impl EventEmitter<PaneEvent> for WorkspacePane {}
-
 impl WorkspacePane {
-    /// The pane for the workspace `shown` is part of, as `records` had it.
-    pub fn new(
-        client: Client,
-        records: RecordsFeed,
-        keeper: Drafts,
-        conversations: Entity<Conversations>,
-        shown: InWorkspace,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    /// The pane for the workspace `shown` is part of, as the hub's records had it.
+    pub(crate) fn new(of_hub: OfHub, shown: InWorkspace, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let OfHub { client, records, drafts: keeper, conversations, tool_sign_in } = of_hub;
         let (composer, on_enter) = composer::new_input(window, cx);
         let (about, on_event) = (Self::composer_about, Self::dictation_event);
         let place = dictation_ui::Place::Composer;
         let (dictation, [dictated, live]) =
             dictation_ui::Field::attach(&composer, place, true, about, on_event, window, cx);
-        let on_settings = crate::settings::observe(cx, |this, cx| {
-            for transcript in this.every_transcript() {
-                transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));
-            }
-        });
+        let on_settings = Self::follow_settings(cx);
         // The microphone is as dictation stands.
         let on_dictation = crate::dictating::observe(cx, |_, cx| cx.notify());
         let [needs_dictation, needs_speech] = crate::conversing::observe_needs(window, cx, Self::start_once_ready);
@@ -217,6 +190,7 @@ impl WorkspacePane {
             dictation_chat: None,
             typed_before_talking: None,
             conversations,
+            tool_sign_in,
             setting_up: None,
             after_dictation: dictation_ui::Pending::default(),
             composer,
@@ -242,6 +216,15 @@ impl WorkspacePane {
             None => this.ensure_chat(cx),
         }
         this
+    }
+
+    /// Has every chat's thinking open or closed as the app's settings say, as they change.
+    fn follow_settings(cx: &mut Context<Self>) -> Subscription {
+        crate::settings::observe(cx, |this, cx| {
+            for transcript in this.every_transcript() {
+                transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));
+            }
+        })
     }
 
     pub fn workspace(&self) -> &Workspace {

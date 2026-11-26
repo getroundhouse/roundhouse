@@ -1,6 +1,7 @@
 //! A sign-in there is, for whatever draws it: what it's to, and how it stands. Each stage holds what only it needs, so a
 //! sign-in that ends, however it ends, lets go of its port, its page's address and what the person was sent back with.
 
+use client_core::tool_servers::{SignIn, SignInStands};
 use gpui_kit::{SharedString, Task};
 use protocol::client::tool_sign_ins::{ToolSignInReturned, ToolSignInTo};
 use protocol::model::{ToolServer, ToolServerId, ToolServerName, ToolServerUrl, ToolSignInId};
@@ -22,6 +23,16 @@ impl UnderWay {
 
     pub(crate) fn stands(&self) -> &Stands {
         &self.stands
+    }
+
+    /// As what's said of a server the hub has goes by it. `None` for one to a new server, which nothing is said of.
+    pub(crate) fn of_a_server(&self) -> Option<SignIn> {
+        let SignInTo::Again { id, .. } = &self.to else { return None };
+        let stands = match &self.stands {
+            Stands::Starting(_) | Stands::Waiting(_) | Stands::Finishing(_) => SignInStands::UnderWay,
+            Stands::NoWay(why) | Stands::Failed(why) => SignInStands::CameToNothing(why.clone()),
+        };
+        Some(SignIn { to: id.clone(), stands })
     }
 }
 

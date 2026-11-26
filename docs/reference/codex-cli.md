@@ -56,7 +56,7 @@ Generate it from the CLI being qualified: fields and defaults can change between
 
 `thread/tokenUsage/updated` says what the thread's newest request held, under `last`, and its running total, under `total`. How full the context is is `last.totalTokens` of `modelContextWindow`, as Codex's own interface counts it. The window is the configuration's, which can be smaller than the model's, and the notification doesn't say which. A subagent's thread sends its own, which its record keeps. `account/rateLimits/updated` names the account's limit on every model as `codex`, with a window of 10,080 minutes seen, and can leave out what hasn't changed. The adapter sends the limits it names to the hub as a report, `Report::Limits`, outside the log.
 
-`warning` carries a message for the person, which Roundhouse shows as a notice. Codex warns in every thread of an under-development feature it's running with, such as `default_mode_request_user_input`, which Roundhouse turns on, so it's launched with `suppress_unstable_features_warning=true`. `mcpServer/startupStatus/updated` says a server is `starting`, `ready`, `failed` or `cancelled`, and Roundhouse shows only a failure, with its `error`, or, when `failureReason` is `reauthenticationRequired`, that it needs signing in to again.
+`warning` carries a message for the person, which Roundhouse shows as a notice. Codex warns in every thread of an under-development feature it's running with, such as `default_mode_request_user_input`, which Roundhouse turns on, so it's launched with `suppress_unstable_features_warning=true`. `mcpServer/startupStatus/updated` says a server is `starting`, `ready`, `failed` or `cancelled`, which the adapter reports, as "What it says of them" below says, and records as no event, since its `error` can hold secrets. A log from an older build has a notice for each failure.
 
 The standalone distribution uses its sibling `codex-code-mode-host` executable for Code Mode. A sandbox that permitted only the `codex` executable made the CLI report that the host couldn't be found. Permitting reads of that installed release's directory let commands work, while the rest of the person's home stayed inaccessible. A worker needs the distribution's supporting executables, not just a copied `codex` binary.
 
@@ -191,7 +191,7 @@ Observed on 0.171.0 through `thread/start`, with a `CODEX_HOME` of the trial's o
 
 - **A server in `config` is merged, field by field, into one of the same name on disk.**
   - Over a stdio server, a `url` fails `thread/start` with `-32600`, "url is not supported for stdio", so there's no thread.
-  - Over an HTTP server, the `url` in `config` is used, and the `http_headers` on disk are sent to it along with those in `config`.
+  - Over an HTTP server, the `url` in `config` is used, and the `http_headers` on disk are sent to it along with those in `config`. So what Codex says of a server of that name is said of the hub's, reached through the worker.
   - A server with `enabled = false` on disk stays disabled.
 - **`mcp_servers.<name>.enabled` as `false` in `config` disables the one on disk.** With that, the same URL under another name connected.
 - **A server's name must match `^[a-zA-Z0-9_:@/.-]+$`.** For `Linear (Northwind)` and `Café.docs` the thread started and the server failed, with "Invalid MCP server name 'Linear (Northwind)': must match pattern ^[a-zA-Z0-9_:@/.-]+$".
@@ -210,14 +210,14 @@ Observed on 0.171.0, with a `HOME` and a `CODEX_HOME` of the trial's own and sta
 - **One that needs signing in to for the first time is `failed`, with no `failureReason`,** and an `error` of "The tickets MCP server is not logged in. Run `codex mcp login tickets`." Only `mcpServerStatus/list` says which it is, in `runtimeStatus`: `authenticationRequired`, with an `authStatus` of `notLoggedIn`. One that refuses its header is `failed` in both, with an `authStatus` of `bearerToken`.
 - **`mcpServerStatus/list` with a `threadId` and a `serverName` answers from the thread's own connection, in 0.04 s or less,** and sent an HTTP server only a `GET` and requests for OAuth's metadata. Without a `serverName`, it connects to every server again, which took 6 s with one that didn't answer. Without a `threadId`, `runtimeStatus` is null. `runtimeStatus` is also `connected`, `failed` or `disabled`, and the schema has `notStarted`, `starting` and `cancelled`.
 - **A connected server's `tools` has each by its name.** `toolsError` says why where there's no list.
-- **`error` and `toolsError` can hold secrets.** Of one it can't reach, they hold its URL with its query, and of a reply it can't use, the status and the reply's body. Each says so twice, among the names of Rust types. The adapter keeps a URL's origin and a reply's status.
+- **`error` and `toolsError` can hold secrets.** Of one it can't reach, they hold its URL with its query, and of a reply it can't use, the status and the reply's body. Each says so twice, among the names of Rust types. The adapter keeps a URL's origin and a reply's status, and no line that has either.
 
 ## The hub's tool servers, through the worker
 
 Observed on 0.171.0 as above, with stand-in servers given an `Authorization` header in `http_headers`.
 
 - **It asks such a server for no OAuth metadata,** whether the server starts or fails, and reports its `authStatus` as `bearerToken`. Given no header, it does ask, as `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`, at the root and under the server's path.
-- **A server that answers `initialize` with a JSON-RPC error fails to start, and `mcpServer/startupStatus/updated` gives the error's message,** so the worker's words for a key that was refused reach the chat's notice.
+- **A server that answers `initialize` with a JSON-RPC error fails to start, and `mcpServer/startupStatus/updated` gives the error's message,** so the worker's words for a key that was refused reach the card of the chat's servers.
 - **It sent no GET for a stream,** and `initialize` again as `mcpServerStatus/list` was asked.
 
 ## Compacting when asked

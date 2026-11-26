@@ -74,6 +74,7 @@ async fn the_agents_servers_are_reported_as_codex_says_them_and_with_what_it_ans
     assert_eq!(reported(&mut h).await, [], "none, as the turn starts");
     let is = |name: &str, state, error: Option<&str>, tools| ToolServerState {
         name: name.into(),
+        hubs: None,
         state,
         error: error.map(str::to_owned),
         tools,

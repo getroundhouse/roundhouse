@@ -44,7 +44,15 @@ async fn notification(shared: &Arc<Shared>, value: &Value, raw: String) -> Resul
     if method == "turn/started" {
         subagents::turn_started(shared, params).await?;
     }
-    let Some(scope) = subagents::scope(shared, params) else {
+    let scope = subagents::scope(shared, params);
+    // Before any line is kept, whichever thread it's of, since what Codex says of one that failed can hold secrets.
+    if method == tool_servers::STARTUP_MOVED {
+        if let Some(scope) = &scope {
+            tool_servers::moved(shared, params, scope).await;
+        }
+        return Ok(());
+    }
+    let Some(scope) = scope else {
         // Preserve unsupported foreign-thread data without letting it consume a prompt, settle the root turn,
         // or appear as the root assistant. No call association means it cannot be normalized safely.
         shared
@@ -141,10 +149,6 @@ async fn dispatch(
         "thread/tokenUsage/updated" => usage::tokens(shared, params, scope, raw).await,
         "account/rateLimits/updated" => usage::limits(shared, params, scope, raw).await,
         "warning" => notices::warning(shared, params, scope, raw).await,
-        "mcpServer/startupStatus/updated" => {
-            tool_servers::moved(shared, params, scope).await;
-            notices::mcp_server(shared, params, scope, raw).await;
-        }
         "error" => notices::error(shared, params, scope, raw).await,
         "turn/plan/updated" => turn_reports::plan(shared, params, scope).await?,
         // From a Codex that sends them though it was asked not to.

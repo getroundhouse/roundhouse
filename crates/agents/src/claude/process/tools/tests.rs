@@ -8,7 +8,11 @@ use super::*;
 fn tools(config: &Path) -> ToolServers {
     ToolServers {
         tools_url: "http://127.0.0.1:50123/mcp".into(),
-        hubs: vec![HubToolServer { name: "linear".into(), url: "http://127.0.0.1:50123/tool-servers/t-1".into() }],
+        hubs: vec![HubToolServer {
+            id: "t-1".into(),
+            name: "linear".into(),
+            url: "http://127.0.0.1:50123/tool-servers/t-1".into(),
+        }],
         token: ToolsToken::new("token-s"),
         config: config.to_path_buf(),
     }

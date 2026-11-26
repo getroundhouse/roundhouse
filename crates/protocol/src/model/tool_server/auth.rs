@@ -22,6 +22,19 @@ pub enum ToolServerAuth {
     Unknown,
 }
 
+impl ToolServerAuth {
+    /// Whether the person has to sign in to it before any agent can use it.
+    pub fn needs_sign_in(&self) -> bool {
+        match self {
+            ToolServerAuth::SignIn { status } => match status {
+                ToolSignInStatus::NeedsSignIn => true,
+                ToolSignInStatus::Works | ToolSignInStatus::Unknown => false,
+            },
+            ToolServerAuth::Key { .. } | ToolServerAuth::Neither | ToolServerAuth::Unknown => false,
+        }
+    }
+}
+
 /// Whether a tool server's sign-in works, as far as its authorization server has said.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -50,4 +63,20 @@ pub enum ToolServerAuthGiven {
     /// From a newer client, which the hub refuses.
     #[serde(other)]
     Unknown,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_sign_in_thats_gone_needs_the_person() {
+        let signed_in = |status| ToolServerAuth::SignIn { status }.needs_sign_in();
+
+        assert!(signed_in(ToolSignInStatus::NeedsSignIn));
+        assert!(!signed_in(ToolSignInStatus::Works));
+        assert!(!signed_in(ToolSignInStatus::Unknown), "a newer hub's");
+        assert!(!ToolServerAuth::Neither.needs_sign_in());
+        assert!(!ToolServerAuth::Unknown.needs_sign_in());
+    }
 }

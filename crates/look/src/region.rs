@@ -55,6 +55,8 @@ pub enum Region {
     TurnCard,
     /// How full the chat's context is, shown from the composer.
     ContextCard,
+    /// The MCP servers the chat has, shown from the composer.
+    ToolServersCard,
     /// What's left of the account's limits, shown from the composer.
     UsageCard,
     /// What the composer's microphone opens until dictation is ready: the offer to turn it on, or how it stands.
@@ -110,6 +112,7 @@ impl Region {
             Region::EditPreview => "edit-preview",
             Region::TurnCard => "turn-card",
             Region::ContextCard => "context-card",
+            Region::ToolServersCard => "mcp-card",
             Region::UsageCard => "usage-card",
             Region::DictationCard => "dictation-card",
             Region::ConversationCard => "conversation-card",
