@@ -6,7 +6,7 @@ use url::Url;
 /// RFC 9728, section 3.1, makes the address.
 pub(super) fn of_server(server: &Url) -> Vec<Url> {
     let suffix = "oauth-protected-resource";
-    let root = inserted(&host_of(server), suffix);
+    let root = inserted(&root_of(server), suffix);
     let own = inserted(server, suffix);
     if own == root { vec![root] } else { vec![own, root] }
 }
@@ -25,8 +25,8 @@ pub(super) fn of_authorization_server(issuer: &Url) -> Vec<Url> {
     addresses
 }
 
-/// `url`, with no path.
-pub(super) fn host_of(url: &Url) -> Url {
+/// `url`, with neither its path nor its query, as metadata for its host alone is found from.
+pub(super) fn root_of(url: &Url) -> Url {
     let mut root = url.clone();
     root.set_path("");
     root.set_query(None);

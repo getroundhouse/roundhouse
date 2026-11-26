@@ -3,7 +3,7 @@ use tool_server_http::Challenge;
 use url::Url;
 
 use super::metadata::{AuthorizationServerMetadata, ServerMetadata};
-use super::well_known::{host_of, of_authorization_server, of_server};
+use super::well_known::{of_authorization_server, of_server, root_of};
 use crate::Failure;
 use crate::fetch::{Caller, json};
 
@@ -24,13 +24,13 @@ pub(super) async fn server_metadata(
     server: &Url,
     challenge: &Challenge,
 ) -> Result<Read<ServerMetadata>, Failure> {
-    let host = host_of(server);
+    let root = root_of(server);
     let said = challenge.resource_metadata.as_ref().map(|said| calls.address(said)).transpose()?;
     // What's at the host's own well-known place may be of the host, as RFC 9728, section 3.3, has it.
-    let hosts = if said.is_none() { of_server(&host) } else { Vec::new() };
+    let roots = if said.is_none() { of_server(&root) } else { Vec::new() };
     let places = said.map_or_else(|| of_server(server), |said| vec![said]);
     let is_right = |place: &Url, metadata: &ServerMetadata| {
-        metadata.is_of(server) || (hosts.contains(place) && metadata.is_of(&host))
+        metadata.is_of(server) || (roots.contains(place) && metadata.is_of(&root))
     };
     Ok(first_right(calls, places, is_right, |metadata| metadata.resource).await)
 }
