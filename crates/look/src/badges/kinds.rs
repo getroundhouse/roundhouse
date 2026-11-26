@@ -1,6 +1,6 @@
 use gpui_kit::Hsla;
 
-use crate::colors::Colors;
+use crate::colors::{Colors, Strength};
 use crate::named::named;
 
 named! {
@@ -21,9 +21,9 @@ impl BadgeKind {
     /// Its words' colour and its fill.
     pub(super) fn colors(self, colors: &Colors) -> (Hsla, Hsla) {
         match self {
-            BadgeKind::Plain => (colors.text_muted, colors.text.opacity(0.08)),
-            BadgeKind::Warning => (colors.warning, colors.warning.opacity(0.14)),
-            BadgeKind::Failure => (colors.stopped, colors.stopped.opacity(0.14)),
+            BadgeKind::Plain => (colors.text_muted, Strength::XSoft.of(colors.text)),
+            BadgeKind::Warning => (colors.warning, Strength::Soft.of(colors.warning)),
+            BadgeKind::Failure => (colors.stopped, Strength::Soft.of(colors.stopped)),
         }
     }
 

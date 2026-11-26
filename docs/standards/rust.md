@@ -33,6 +33,7 @@ Two ideas sit behind the rules:
 | No `std::sync::Mutex` | `disallowed-types` in `clippy.toml`. See "Async and locks" |
 | Text views are made as `docs/decisions/transcript-keeps-its-texts.md` says. | `disallowed-methods` in `clippy.toml` |
 | No reading a row's column by its number. The hub reads it by name, as `crates/hub/src/store/columns.rs` says | `disallowed-methods` in `clippy.toml` |
+| A colour drawn over another is a role at a step of `look::Strength`, as `docs/spec/look.md` says | `disallowed-methods` in `clippy.toml` |
 | No glob imports | `wildcard_imports`, part of pedantic. See "Crates and modules" |
 | Functions of at most 60 lines | `too_many_lines`, with `too-many-lines-threshold` in `clippy.toml` |
 

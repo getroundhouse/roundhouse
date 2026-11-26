@@ -66,6 +66,10 @@ fn strips(sweep: f32) -> impl Iterator<Item = f32> {
 }
 
 /// The robot again, in the light, over the one beneath it, each strip as lit as [`strips`] says.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the robot's own drawing, each strip as lit as the light passing over it"
+)]
 fn lit(window: &mut Window, robot: Bounds<Pixels>, light: Hsla, sweep: f32, cx: &App) {
     // Each strip's edges are the next's, worked out the same way, so no column of pixels is lit twice or missed.
     let edge = |strip: usize| robot.origin.x + robot.size.width * (as_f32(strip) / as_f32(STRIPS));

@@ -172,6 +172,7 @@ fn tile_fill(colors: &Colors) -> Background {
 }
 
 /// In the middle of the tile, as a fan is in the middle of its box.
+#[expect(clippy::disallowed_methods, reason = "the app icon's own drawing, as the mark's")]
 fn scaled(
     bounds: Bounds<Pixels>,
     style: AppIconStyle,
@@ -195,6 +196,7 @@ fn scaled(
 }
 
 /// Each dot is a square of whole pixels, which at this size is sharper than a circle's soft edge.
+#[expect(clippy::disallowed_methods, reason = "the app icon's own drawing, as the mark's")]
 fn on_pixels(bounds: Bounds<Pixels>, style: AppIconStyle, fan: &OnPixels, colors: &Colors, window: &mut Window) {
     let scale = window.scale_factor();
     let layout = Layout::of(fan, bounds.size.width * scale / px(1.));

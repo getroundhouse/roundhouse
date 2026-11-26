@@ -17,10 +17,10 @@ const STAND_OFF: f32 = 4.;
 /// How near two outlines can come on the screen before their places are drawn as one.
 const NEARLY: f32 = 2.;
 /// How strong the outline is, and the wash inside it, of the colour of what changed.
-const OUTLINE: f32 = 0.55;
-const WASH: f32 = 0.08;
+const OUTLINE: look::Strength = look::Strength::XStrong;
+const WASH: look::Strength = look::Strength::XSoft;
 /// How strong the stripes across what only one image covers are, of the muted colour.
-const STRIPES: f32 = 0.35;
+const STRIPES: look::Strength = look::Strength::Strong;
 
 /// The side shown, which a click flips, as Space does. Before and After in the bar choose one.
 pub(super) fn flip(before: &FileImage, after: &FileImage, shown: Shown, view: WeakEntity<ImageDiff>) -> AnyElement {
@@ -50,7 +50,7 @@ pub(super) fn difference(outcome: Outcome<'_>, cx: &App) -> AnyElement {
         Outcome::Made(difference) => difference.clone(),
     };
     let colors = look::colors(cx);
-    let (colour, apart) = (colors.modified, colors.text_muted.opacity(STRIPES));
+    let (colour, apart) = (colors.modified, STRIPES.of(colors.text_muted));
     let covers = (difference.width, difference.height);
     let drawn = fitted(covers, Placed::Top, move |scale, cx| {
         let at = |side: u32| px(pixels(side) * scale);
@@ -76,8 +76,8 @@ pub(super) fn difference(outcome: Outcome<'_>, cx: &App) -> AnyElement {
                 .h(across(place.height))
                 .corners(look::Corner::Glyph)
                 .border(look::EDGE)
-                .border_color(colour.opacity(OUTLINE))
-                .bg(colour.opacity(WASH))
+                .border_color(OUTLINE.of(colour))
+                .bg(WASH.of(colour))
         });
         let stack = on_checkerboard(difference.picture.clone(), covers, scale, cx).children(striped).children(outlines);
         edged(stack, cx)

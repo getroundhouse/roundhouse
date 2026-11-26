@@ -2,10 +2,10 @@ bp:v1
 canvas:
   backgroundEnabled: false
   writer: 1
-  gen: 1795628756915
 ---
 0a0e329168f372fe al(h,y(c),g(8:$spacing.sm)) p(0,-40) s(hug:110.27,20) f[] "Title and status"
-  e7aa734b41cc6ac3 inst("Status Ready for review",canvas(Board/Status)) mid(fcbac3605ea3f943) p(0,0) ext(110.27,20) "Status"
+  e7aa734b41cc6ac3 inst("Status Ready for review",canvas(Board/Status),emb,al(h,x(c),y(c),pad(0:$spacing.none,8:$spacing.sm,0:$spacing.none,8:$spacing.sm))) mid(fcbac3605ea3f943) p(0,0) s(hug:110.27,20) f[(652d763d84403e0e,tok(color.surface.raised,#26211E))] rd(4:$radius.InlineControl) "Status"
+    210ba1fd2697da6a t("Ready for review",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) mref(ec74c517cf3e99e0) p(8,3) s(hug:94.27,hug:14) f[(5619f92a23058092,tok(color.status.needs_you,#E9B24C))] $typography.Detail "Words"
 4e3f08bd06e7f193 al(v,g(16:$spacing.lg),pad(8:$spacing.sm,16:$spacing.lg,16:$spacing.lg,16:$spacing.lg)) p(0,0) s(880,473) f[(9e2e14c0eaba0800,tok(color.surface.pane,#140F0C))] "plan-approval"
   16d765508035e2a7 al(h,x(e)) p(16,8) s(fill,hug:46.5) ext(848,) f[] "Prompt row"
     9c927a9549f8d4c8 al(v,pad(12:$spacing.md,16:$spacing.lg,12:$spacing.md,16:$spacing.lg)) p(275.97,0) s(hug:572.03,hug:46.5) f[(b10d0507f041e8d6,tok(color.surface.prompt,#36251A))] rd(6:$radius.Control) "Prompt"
@@ -36,7 +36,7 @@ canvas:
             037b9ac127dcc2fc v(nodes[(0,3.5,0.8700000000000001,mi),(1,2.63,1.75,mi),(2,1.75,0.8700000000000001,mi),(3,2.63,0,mi),(4,7.880000000000001,0.8700000000000001,mi),(5,7,1.75,mi),(6,6.13,0.8700000000000001,mi),(7,7,0,mi),(8,1.31,3.95,di),(9,0,5.8999999999999995,mi),(10,1.75,7.000000000000001,di),(11,1.75,5.250000000000001,st),(12,8.31,3.9300000000000006,di),(13,9.63,5.8999999999999995,mi),(14,7.880000000000001,7.000000000000001,di),(15,7.880000000000001,5.250000000000001,st)],edges[(0,0,1,0,0.48,0.48,0),(1,1,2,-0.48,0,0,0.48),(2,2,3,0,-0.48,-0.48,0),(3,0,3,0,-0.48,0.48,0),(4,4,5,0,0.48,0.48,0),(5,5,6,-0.48,0,0,0.48),(6,6,7,0,-0.48,-0.48,0),(7,4,7,0,-0.48,0.48,0),(8,8,9,-0.59,0.32,0,-1.09),(9,9,10,0,1.09,-0.68,-0.03),(10,10,11,0,0,0,0),(11,12,13,0.59,0.32,0,-1.09),(12,13,14,0,1.09,0.68,-0.03),(13,14,15,0,0,0,0)],regions[(0+1+2+3-),(4+5+6+7-)]) p(1.75,4.38) s(9.63,7) st[(0eb16a3db5a17f90,#FAB387,w(0.88),dashcap(r))] "Path"
         08f9eb797995f4d0 t("sidebar.rs",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(27,0.75) s(hug:63.34,hug:22.5) f[(2681a770540ab00f,tok(color.text,#EEE6E1))] $typography.Body "Chip words"
     1cb7ad5a1ceef3f5 t("That's all it needs. Here's the plan.",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(0,72) s(hug:223.55,hug:22.5) f[(c5ed4422e51a6136,tok(color.text,#EEE6E1))] $typography.Body "Said"
-  9e1dd6884894e6a6 al(v,g(12:$spacing.md),pad(12:$spacing.md)) p(16,219.5) s(fill,hug:237.5) ext(848,) f[(8590d446a6862df6,solid(tok(color.status.needs_you_wash,#E9B24C),o(0.09)))] rd(10:$radius.Card) "Plan card"
+  9e1dd6884894e6a6 al(v,g(12:$spacing.md),pad(12:$spacing.md)) p(16,219.5) s(fill,hug:237.5) ext(848,) f[(8590d446a6862df6,solid(tok(color.status.needs_you,#E9B24C),o(0.09:$strength.XSoft)))] rd(10:$radius.Card) "Plan card"
     c8d3dd7df7b9c529 al(h,y(c),g(8:$spacing.sm)) p(12,12) s(fill,22.5) ext(824,) f[] "Heading"
       6b7320741a4be536 fr p(0,3.25) s(16,16) sref(16:$size.icon.Large,16:$size.icon.Large) f[] "notebook-pen"
         67f37d8907b0b861 fr p(1.33,1.33) s(hug:13.33,hug:13.33) f[] "notebook-pen drawing"
@@ -84,7 +84,7 @@ canvas:
       93598f31d7347c96 al(h,x(c),y(c),pad(0:$spacing.none,17:$spacing.Edged,0:$spacing.none,17:$spacing.Edged)) p(125.09,0) s(hug:125.52,32) sref(,32:$size.control.Large) f[(90a82e92b7f5eb61,tok(color.button,#201B18))] st[(be15f2c107e52ef3,tok(color.edge.control_edge,#332D2A),w(1:$stroke.width.Edge),pos(i))] rd(6:$radius.Control) "Keep planning"
         20f57c964141ea69 t("Keep planning",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(17,4.75) s(hug:91.52,hug:22.5) f[(bb09fbab6d5857ab,tok(color.text,#EEE6E1))] $typography.Body "Words"
 155400b383710424 fr p(0,553) s(400,220) f[(4cbc3d7f98d7b5e4,tok(color.surface.pane,#140F0C))] clip "01 Closed"
-  8f9165f17ee44a6e al(v,g(12:$spacing.md),pad(12:$spacing.md)) p(16,16) s(368,46.5) f[(65af110f9cd3936b,solid(tok(color.status.needs_you_wash,#E9B24C),o(0.09)))] rd(10:$radius.Card) clip "Card"
+  8f9165f17ee44a6e al(v,g(12:$spacing.md),pad(12:$spacing.md)) p(16,16) s(368,46.5) f[(65af110f9cd3936b,solid(tok(color.status.needs_you,#E9B24C),o(0.09:$strength.XSoft)))] rd(10:$radius.Card) clip "Card"
     5ca05072a2242f07 al(h,y(c),g(8:$spacing.sm)) p(12,12) s(fill,22.5) ext(344,) f[] "Head"
       567a2889aa496150 t("Plan",SF Pro Text,14,m,align(l),lh(1.6071),ls(-0.1498px)) p(0,0) s(fill,hug:22.5) ext(250.88,) f[(e0588a217325b3fc,tok(color.status.needs_you,#E9B24C))] $typography.Emphasis "Title"
       d6e608bd205fc197 t("Waiting for you",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) p(258.88,4.25) s(hug:85.12,hug:14) f[(9de2f3d550486799,tok(color.text.faint,#7C7671))] $typography.Detail "State"
@@ -92,7 +92,7 @@ canvas:
     b14fea324d8e63ed t("Send it with the workspace's notice",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(12,81) s(hug:228.86,hug:22.5) f[(965079a65c01bd50,tok(color.text,#EEE6E1))] $typography.Body "Line 1"
     0e601561edb1b4fc t("Draw each state in the gallery",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(12,115.5) s(hug:191.06,hug:22.5) f[(91f008f1d0c875e3,tok(color.text,#EEE6E1))] $typography.Body "Line 2"
 8c17353256eb17e0 fr p(440,553) s(400,220) f[(8c15f42579844dc0,tok(color.surface.pane,#140F0C))] clip "02 Open"
-  172f827ba05d6a8b al(v,g(12:$spacing.md),pad(12:$spacing.md)) p(16,16) s(368,188) f[(80f2f3a0b98e8bb2,solid(tok(color.status.needs_you_wash,#E9B24C),o(0.09)))] rd(10:$radius.Card) clip "Card"
+  172f827ba05d6a8b al(v,g(12:$spacing.md),pad(12:$spacing.md)) p(16,16) s(368,188) f[(80f2f3a0b98e8bb2,solid(tok(color.status.needs_you,#E9B24C),o(0.09:$strength.XSoft)))] rd(10:$radius.Card) clip "Card"
     2f485c2a8d780245 al(h,y(c),g(8:$spacing.sm)) p(12,12) s(fill,22.5) ext(344,) f[] "Head"
       bf8171f82623b747 t("Plan",SF Pro Text,14,m,align(l),lh(1.6071),ls(-0.1498px)) p(0,0) s(fill,hug:22.5) ext(250.88,) f[(281fd8313ba32d6f,tok(color.status.needs_you,#E9B24C))] $typography.Emphasis "Title"
       21f8c79d2f7ced83 t("Waiting for you",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) p(258.88,4.25) s(hug:85.12,hug:14) f[(cf20526bc53fe757,tok(color.text.faint,#7C7671))] $typography.Detail "State"

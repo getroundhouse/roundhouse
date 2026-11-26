@@ -8,6 +8,7 @@ use gpui_kit::{
     App, BorderStyle, Bounds, Context, Corners, Edges, Hsla, IntoElement, PathBuilder, Pixels, Render, Styled as _,
     Task, Window, canvas, linear_color_stop, linear_gradient, point, px, quad, transparent_black,
 };
+use look::Strength;
 use look::motion::Sliding;
 
 pub(crate) struct FineLine {
@@ -97,7 +98,7 @@ fn paint(
         Corners::all(corner.radius()),
         transparent_black(),
         Edges::all(look::EDGE),
-        color.opacity(opacity * 0.14),
+        Strength::Soft.of_fading(color, opacity),
         BorderStyle::default(),
     ));
     let margin = look::Space::Medium.size();
@@ -119,8 +120,8 @@ fn paint(
             }
         }
         if let Ok(path) = path.build() {
-            let ink = color.opacity(opacity * 0.7);
-            let clear = color.opacity(0.);
+            let ink = Strength::XXStrong.of_fading(color, opacity);
+            let clear = Strength::XXStrong.of_fading(color, 0.);
             let (from, to) = if half == 0 { (clear, ink) } else { (ink, clear) };
             window.paint_path(path, linear_gradient(90., linear_color_stop(from, 0.), linear_color_stop(to, 1.)));
         }

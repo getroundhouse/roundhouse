@@ -107,4 +107,6 @@ mod icon_sizes;
 
 mod spaces;
 
+mod strengths;
+
 mod corners;

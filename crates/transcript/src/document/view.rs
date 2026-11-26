@@ -212,7 +212,7 @@ fn marked(text: AnyElement, change: Change, kept_next: bool, cx: &App) -> AnyEle
         .py(look::Space::XSmall)
         .border_l(look::QUOTE_RULE)
         .border_color(tint)
-        .bg(tint.opacity(0.12))
+        .bg(look::Strength::Soft.of(tint))
         .rounded_r(px(4.))
         .when(kept_next, |block| block.mb(look::Space::Medium));
     let block = if struck { block.text_color(colors.text_muted).line_through() } else { block };

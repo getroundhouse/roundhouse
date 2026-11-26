@@ -127,7 +127,7 @@ impl RenderOnce for Banner {
             .pr(BarKind::END.size() + end)
             .py(Space::XSmall)
             .gap(Space::Small)
-            .bg(tone.opacity(WASH))
+            .bg(WASH.of(tone))
             .typeset(Type::Body)
             .text_color(colors.text)
             .child(h_flex().flex_none().h(line).child(Icon::new(self.kind.icon()).sized(ICON).text_color(tone)))

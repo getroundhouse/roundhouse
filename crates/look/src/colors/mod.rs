@@ -13,9 +13,11 @@ mod oklab;
 mod palette;
 mod ramp;
 mod srgb;
+mod strength;
 
 #[cfg(any(test, feature = "testing"))]
 pub use palette::NamedColor;
 #[cfg(test)]
 use palette::hsla;
 pub use palette::{Colors, colors};
+pub use strength::Strength;

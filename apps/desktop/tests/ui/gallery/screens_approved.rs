@@ -6,7 +6,7 @@ use super::{
     conversation_chats, corners, dialog_widths, dictation_screens, diff_screens, empty_kinds, failure_chats,
     failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds, kinds_of_text, lines, list_rows,
     mark_states, menu_rows, own_turn_chats, proposal_chats, pull_requests, settings_screens, sidebar_screens,
-    small_things, spaces, steps, subagent_chats, switch_kinds, tab_widths, terminal_screens, toggle_states,
+    small_things, spaces, steps, strengths, subagent_chats, switch_kinds, tab_widths, terminal_screens, toggle_states,
     tool_screens, tooltips, turn_screens, update_screens, workspace_screens,
 };
 use diff_screens::DIFF_SCREENS;
@@ -123,6 +123,7 @@ fn every_screen_looks_as_approved() {
             code_lines::NAME,
             icon_sizes::NAME,
             spaces::NAME,
+            strengths::NAME,
         ])
         .collect();
     problems.extend(DESKTOP.without_a_screen(&names).into_iter().map(|name| format!("{name}.png has no screen")));
@@ -242,5 +243,16 @@ fn every_step_of_space_looks_as_approved() {
 
     let mut problems = DESKTOP.look_at(spaces::NAME, spaces::SPEC, &picture);
     problems.extend(places.look_at(spaces::NAME));
+    report(&problems);
+}
+
+#[test]
+fn every_strength_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let (picture, places) = strengths::draw(&text_system);
+
+    let mut problems = DESKTOP.look_at(strengths::NAME, strengths::SPEC, &picture);
+    problems.extend(places.look_at(strengths::NAME));
     report(&problems);
 }

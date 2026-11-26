@@ -29,7 +29,7 @@ pub(crate) fn style(colors: &Colors) -> PopupMenuStyle {
         row_gap: Some(gpui_kit::px(0.)),
         icon_size: Some(Size::Size(ROW.icon_with_words().size())),
         icon_color: Some(colors.text_muted),
-        hover: Some(colors.text.opacity(UNDER_POINTER)),
+        hover: Some(UNDER_POINTER.of(colors.text)),
         separator_width: Some(EDGE),
         separator_margin: Some(Space::XSmall.size()),
         separator_overhang: Some(gpui_kit::px(0.)),

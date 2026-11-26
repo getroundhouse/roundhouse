@@ -137,7 +137,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 ## Tabs
 
 - **A tab names one of what its bar can show, and the one showing is underlined,** with a 2px line in the paled copper over the bar's bottom edge, rather than filled, so its bar stays a row of names, as `chats.md` says of the chat tabs. Its name is muted whether or not it's showing, and stronger, in the text's colour, only when what it names needs a look, such as a reply not yet read. `look::tab` makes one, the workspace's tabs and the sidebar's All files and Changes alike.
-- **The pointer over a tab that isn't showing draws its line, faint,** the paled copper at 35%, as the owner chose from pictures of five ways, over a fill, which made the tab under the pointer look more chosen than the one showing, a box, or a brighter name, which a tab that needs a look has. *Unconfirmed:* 35%.
+- **The pointer over a tab that isn't showing draws its line, faint,** as the owner chose from pictures of five ways, over a fill, which made the tab under the pointer look more chosen than the one showing, a box, or a brighter name, which a tab that needs a look has. The line is the paled copper at `Strong`. *Unconfirmed:* `Strong`, the step nearest the 35% it was drawn at before every strength was a step.
 - **A tab's close button shows only while the pointer is over it,** at its end, hidden rather than left out, so the name doesn't move when it shows. A tab that closes has 8px at its end, where the button sits, and one that doesn't has 12px, as at its start. *Unconfirmed.*
 - **A tab that's replaced rather than added to has its name in italics,** such as the file tab and the subagent tab. *Unconfirmed.*
 

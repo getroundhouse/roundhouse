@@ -77,8 +77,6 @@ color.status.error: red
 color.status.added: green
 color.status.removed: red
 color.status.modified: amber
-// The plan card's: `needs_you` at `look`'s strength for a card.
-color.status.needs_you_wash: #e9b24c17
 
 // A pull request.
 color.PR.open: green
@@ -114,6 +112,16 @@ color.code.preprocessor: #9b9b9b
 color.code.processing: #68685b
 color.code.js_operator: #687687
 color.code.method_storage: #70727e
+
+// `look::Strength`'s steps, how strongly a role is drawn over another, by its names, from the faintest. A fill, an edge
+// or a word takes one as `solid($color.status.added,o($strength.Soft))`.
+strength.XXSoft: 0.06
+strength.XSoft: 0.09
+strength.Soft: 0.12
+strength.Medium: 0.2
+strength.Strong: 0.3
+strength.XStrong: 0.55
+strength.XXStrong: 0.75
 
 // `look::Space`'s steps: XSmall is `xs`, and so on to XXLarge, `2xl`.
 spacing: tshirt(number([4, 8, 12, 16, 24, 32]), min: { none: 0 }, transforms: none)

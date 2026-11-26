@@ -14,7 +14,7 @@ use gpui_kit::{
     AnyElement, App, ElementId, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels,
     SharedString, Styled, TestSupportExt as _, div, px,
 };
-use look::Typeset as _;
+use look::{Strength, Typeset as _};
 
 use super::highlight::{Spans, spans};
 use super::{Toggle, block};
@@ -138,10 +138,10 @@ fn row(
     let colors = look::colors(cx);
     let (tint, numbers) = match line.mark {
         Mark::Same => (None, colors.text_faint),
-        Mark::Added => (Some(colors.added), colors.added.opacity(0.75)),
-        Mark::Removed => (Some(colors.removed), colors.removed.opacity(0.75)),
+        Mark::Added => (Some(colors.added), Strength::XXStrong.of(colors.added)),
+        Mark::Removed => (Some(colors.removed), Strength::XXStrong.of(colors.removed)),
     };
-    let styles = with_changed(syntax, &line.changed, tint.map(|t| t.opacity(0.3)), line.text.len());
+    let styles = with_changed(syntax, &line.changed, tint.map(|t| Strength::Strong.of(t)), line.text.len());
     let styles = marks.over(&styles, line.text.len());
     let here =
         marks.here().zip(marks.reveal()).map(|(range, reveal)| (tabbed(&line.text, range.start), reveal.clone()));
@@ -152,7 +152,7 @@ fn row(
         .flex_none()
         .border_l(px(BAR_WIDTH))
         .border_color(tint.unwrap_or(gpui_kit::transparent_black()))
-        .when_some(tint, |d, tint| d.bg(tint.opacity(0.11)))
+        .when_some(tint, |d, tint| d.bg(Strength::Soft.of(tint)))
         .child(
             div()
                 .flex_none()

@@ -19,7 +19,7 @@ const GROUP: &str = "workspaces-heading";
 /// it isn't taken for a repository's button for a new workspace under it. Greyed out while there's no hub to add to.
 /// Before it, the button that chooses the order, while the pointer is on the heading.
 pub(super) fn heading(app: &AppView, connected: bool, cx: &mut Context<AppView>) -> AnyElement {
-    let faint = look::colors(cx).text_muted.opacity(0.7);
+    let faint = look::Strength::XXStrong.of(look::colors(cx).text_muted);
     let remote = app.hub.remote.is_some();
     let can_add = connected && !remote;
     h_flex()

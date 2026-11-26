@@ -219,9 +219,9 @@ impl RenderOnce for ListRow {
             .corners(Corner::Control)
             .typeset(Type::Body)
             .hand_while(clickable)
-            .when(self.chosen, |row| row.bg(colors.text.opacity(CHOSEN)))
-            .when(!self.chosen && on, |row| row.hover(|row| row.bg(colors.text.opacity(UNDER_POINTER))))
-            .when(clickable, |row| row.active(|row| row.bg(colors.text.opacity(PRESSED))))
+            .when(self.chosen, |row| row.bg(CHOSEN.of(colors.text)))
+            .when(!self.chosen && on, |row| row.hover(|row| row.bg(UNDER_POINTER.of(colors.text))))
+            .when(clickable, |row| row.active(|row| row.bg(PRESSED.of(colors.text))))
             .when_some(self.role, |row, (role, label)| {
                 let row = row.role(role).aria_label(label);
                 if role == Role::ListBoxOption { row.aria_selected(self.chosen) } else { row }

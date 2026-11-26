@@ -6,7 +6,7 @@ use super::oklab::Oklab;
 use super::palette::DARK;
 use super::ramp::{Lightness, Stop};
 use super::srgb::Srgb;
-use super::{Colors, hsla};
+use super::{Colors, Strength, hsla};
 use crate::spec_table;
 use crate::theme::hex;
 
@@ -120,4 +120,38 @@ fn the_specs_table_has_every_colour_in_its_group_in_order_as_the_app_draws_it() 
         .map(|role| (role.group.to_string(), role.name.to_string(), role.hex()))
         .collect();
     assert_eq!(table, drawn, "docs/spec/look.md's table of colours, against crates/look/src/colors/mod.rs");
+}
+
+#[test]
+fn the_specs_table_has_every_strength_in_order_as_the_app_has_it() {
+    let table: Vec<[String; 2]> = spec_table::rows("**Every strength, by its name.**");
+
+    let stepped: Vec<[String; 2]> = Strength::ALL.iter().map(|strength| strength.written()).collect();
+    assert_eq!(table, stepped, "docs/spec/look.md's table of strengths, against crates/look/src/colors/strength.rs");
+}
+
+/// Each step is stronger than the one before it, so a step's name says how strong it is beside the others, and none is
+/// none of the colour or all of it, which aren't drawn over anything.
+#[test]
+fn every_strength_is_some_of_its_colour_and_more_than_the_one_before_it() {
+    for &strength in Strength::ALL {
+        assert!(strength.share() > 0. && strength.share() < 1., "{strength:?}");
+    }
+    for pair in Strength::ALL.windows(2) {
+        assert!(pair[0].share() < pair[1].share(), "{:?} is stronger than {:?}", pair[1], pair[0]);
+    }
+}
+
+/// A role at a strength is the role with that share of it, and fading it takes the same share of that again.
+#[test]
+fn a_role_at_a_strength_is_that_share_of_it() {
+    let added = Colors::dark().added;
+
+    for &strength in Strength::ALL {
+        let drawn = strength.of(added);
+        assert_eq!((drawn.h, drawn.s, drawn.l), (added.h, added.s, added.l), "{strength:?}");
+        assert!((drawn.a - strength.share()).abs() < f32::EPSILON, "{strength:?}");
+        assert!((strength.of_fading(added, 0.5).a - strength.share() / 2.).abs() < f32::EPSILON, "{strength:?}");
+        assert_eq!(strength.of_fading(added, 0.).a, 0., "{strength:?}");
+    }
 }

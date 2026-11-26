@@ -91,9 +91,7 @@ pub(super) fn of_windows(window: &Window, cx: &mut App) -> Option<impl IntoEleme
     let colors = look::colors(cx);
     // Dimmed while another window is active, as Windows dims its own.
     let colour = if window.is_window_active() { colors.text } else { colors.text_muted };
-    let faint = Shade { hover: colors.text.opacity(0.06), pressed: colors.text.opacity(0.04), text: colour };
-    let red = colors.windows_close;
-    let red = Shade { hover: red, pressed: red.opacity(0.9), text: colors.on_windows_close };
+    let (faint, red) = shades(colors, colour);
     let drawn = |button: Button, shade: Shade| drawn(button, glyphs.as_ref(), colour, shade);
     let maximize = if window.is_maximized() { Button::Restore } else { Button::Maximize };
     // A third of the room `sides` leaves them each.
@@ -104,6 +102,15 @@ pub(super) fn of_windows(window: &Window, cx: &mut App) -> Option<impl IntoEleme
         .child(drawn(maximize, faint))
         .child(drawn(Button::Close, red));
     Some(div().absolute().top_0().right_0().child(deferred(buttons).with_priority(PRIORITY)))
+}
+
+/// The shades of minimize and maximize, a faint wash of the text with their glyphs in `colour`, and of close, Windows'
+/// red, as Windows shades its own.
+#[expect(clippy::disallowed_methods, reason = "Windows' own shades for its caption buttons, not strengths")]
+fn shades(colors: &look::Colors, colour: Hsla) -> (Shade, Shade) {
+    let faint = Shade { hover: colors.text.opacity(0.06), pressed: colors.text.opacity(0.04), text: colour };
+    let red = colors.windows_close;
+    (faint, Shade { hover: red, pressed: red.opacity(0.9), text: colors.on_windows_close })
 }
 
 /// What a button's background is under the pointer and while it's pressed, and its glyph's colour then.

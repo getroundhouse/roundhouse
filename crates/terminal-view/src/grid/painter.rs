@@ -26,10 +26,7 @@ impl Painter<'_> {
 
     pub(super) fn glyph(&self, glyph: &Glyph, row: u16, ink: Rgb, window: &mut Window) {
         let cell = self.cells(glyph.col, row, if glyph.wide { 2 } else { 1 });
-        let mut ink = color::to_hsla(ink);
-        if glyph.look.faint {
-            ink = ink.opacity(0.5);
-        }
+        let ink = if glyph.look.faint { color::faint(ink) } else { color::to_hsla(ink) };
         let Metrics { baseline, font_size, .. } = *self.metrics;
         if glyph.look.underline {
             let line = Bounds::new(point(cell.left(), cell.top() + baseline + px(1.)), size(cell.size.width, px(1.)));

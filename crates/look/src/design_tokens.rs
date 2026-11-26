@@ -7,12 +7,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use gpui_kit::{FontWeight, Pixels, phi, px};
 
-use crate::cards::WASH;
 use crate::chips::INSIDE;
 use crate::motion::{FADE, PANEL, SCROLL};
 use crate::traits::Reach;
 use crate::typography::{CodeLines, INLINE_CODE, LIST_ITEM_GAP, STRONG, Type, rem};
-use crate::{BarSize, Colors, ControlSize, Corner, EDGE, IconSize, NamedColor, QUOTE_RULE, RowSize, Space, TAB_LINE};
+use crate::{
+    BarSize, Colors, ControlSize, Corner, EDGE, IconSize, NamedColor, QUOTE_RULE, RowSize, Space, Strength, TAB_LINE,
+};
 
 /// The design system, whose tokens are lines such as `color.surface.prompt: #36251a`.
 const DESIGN: &str = include_str!("../../../design/Styles/default.ds");
@@ -26,6 +27,7 @@ const ICON: &str = include_str!("../../../third_party/gpui-kit/vendor/crates/ass
 /// The groups a test here holds to the app's, each by what its tokens' names start with.
 const HELD: &[&str] = &[
     "color",
+    "strength",
     "spacing",
     "radius",
     "size",
@@ -42,11 +44,9 @@ const HELD: &[&str] = &[
 /// wide, which macOS gives the system font.
 const THE_FONTS: &[&str] = &["font.family", "font.letterSpacing"];
 
-/// The names in the design that a test of their own holds, by their group, rather than their group's: the wash of a
-/// card, what a chip, a part with an edge and a list have inside, inline code's size, and the styles of text that
-/// stands out.
+/// The names in the design that a test of their own holds, by their group, rather than their group's: what a chip, a
+/// part with an edge and a list have inside, inline code's size, and the styles of text that stands out.
 const OF_THEIR_OWN: &[(&str, &[&str])] = &[
-    ("color", &["status.needs_you_wash"]),
     ("spacing", &["Chip", "ListItem", "Edged", "ChipStart", "ChipEnd"]),
     ("font.size", &["InlineCode"]),
     ("typography", &["Emphasis", "Strong", "InlineCode"]),
@@ -350,13 +350,13 @@ fn the_shadow_in_the_design_is_the_apps() {
     assert_eq!(layers, of_the_app.collect::<Vec<_>>());
 }
 
-/// The plan card's wash is the colour that needs you, at the strength the app washes it with.
+/// Each strength a role is drawn at is one of the app's steps, by its name, as `f32` writes its share.
 #[test]
-fn the_wash_is_needs_you_at_the_apps_strength() {
-    let wash = Colors::dark().needs_you.opacity(WASH);
+fn every_strength_in_the_design_is_the_apps_of_the_same_name() {
+    let strengths = the_apps(Strength::ALL.iter().map(|step| (format!("{step:?}"), step.share().to_string())));
 
     for reach in Reach::ALL {
-        assert_eq!(tokens("color", reach)["status.needs_you_wash"], crate::theme::hex(wash), "{reach:?}");
+        assert_eq!(tokens("strength", reach), strengths, "{reach:?}");
     }
 }
 

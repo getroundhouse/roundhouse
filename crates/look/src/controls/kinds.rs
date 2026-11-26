@@ -64,3 +64,10 @@ impl ButtonKind {
         [format!("{self:?}")]
     }
 }
+
+/// A button filled in a colour of its own, such as one that removes or a pull request's main action, under the pointer
+/// and pressed: its fill, a little faded, and faded more.
+#[expect(clippy::disallowed_methods, reason = "a filled button's own states, which its component settles")]
+pub(super) fn filled_states(fill: Hsla) -> (Hsla, Hsla) {
+    (fill.opacity(0.85), fill.opacity(0.7))
+}

@@ -31,6 +31,10 @@ pub fn raised(cx: &App) -> Div {
         .shadow(shadow(colors))
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the shadow's layers, each as strong as the design's shadow token has it"
+)]
 pub(crate) fn shadow(colors: &Colors) -> Vec<BoxShadow> {
     let layer = |layer: &Layer| BoxShadow {
         color: colors.shadow.opacity(layer.strength),

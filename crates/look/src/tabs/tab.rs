@@ -9,7 +9,7 @@ use gpui_kit::{
 
 use super::TabWidth;
 use crate::baseline::LineText;
-use crate::colors::colors;
+use crate::colors::{Strength, colors};
 use crate::controls::Button;
 use crate::counts::{CountKind, count};
 use crate::hand::Hand as _;
@@ -23,9 +23,9 @@ use crate::typography::{Type, Typeset as _};
 pub(crate) const TAB_START: Space = Space::Medium;
 /// Each tab's, so what shows while the pointer is over a tab shows only on that tab.
 const GROUP: &str = "look-tab";
-/// How strong the line under a tab is while the pointer is over it, of the line under the tab showing, as the owner
-/// chose from pictures: there, but quieter than the tab showing.
-const UNDER_POINTER: f32 = 0.35;
+/// How strong the line under a tab is while the pointer is over it, of the line under the tab showing: there, but
+/// quieter than the tab showing. The owner chose 35% from pictures, and this is the step nearest it.
+const UNDER_POINTER: Strength = Strength::Strong;
 
 /// A tab of `width` that says `name`, found by `id`, which shows what it names when it's clicked.
 pub fn tab(id: impl Into<SharedString>, name: impl Into<SharedString>, width: TabWidth) -> Tab {
@@ -212,6 +212,6 @@ fn line(showing: bool, cx: &App) -> Div {
     if showing {
         line.bg(colors.current)
     } else {
-        line.bg(colors.current.opacity(UNDER_POINTER)).invisible().group_hover(GROUP, Styled::visible)
+        line.bg(UNDER_POINTER.of(colors.current)).invisible().group_hover(GROUP, Styled::visible)
     }
 }
