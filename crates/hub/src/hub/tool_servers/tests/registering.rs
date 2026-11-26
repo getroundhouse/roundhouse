@@ -15,9 +15,6 @@ use crate::hub::Hub;
 use crate::hub::tests::{hub_in, hub_in_again};
 use crate::store::now_ms;
 
-/// Why a server whose authorization server is at the host given can't be signed in to.
-type Why = fn(String) -> NoToolSignIn;
-
 fn registers(registers: Registers) -> Script {
     Script { client_documents: false, registers, ..Script::default() }
 }
@@ -76,26 +73,17 @@ async fn a_registration_is_kept_with_its_sign_in_and_used_to_renew_it_and_to_sig
     assert!(!text.contains("made-up-secret") && !text.contains("made-up-registration-token"), "{text}");
 }
 
+/// Such as for a redirect the kept one wasn't registered with. That it registers anew then, and for another issuer, is
+/// tested in the `tool-sign-in` crate.
 #[tokio::test]
-async fn another_issuer_and_another_place_to_be_sent_back_to_are_registered_with_anew() {
+async fn a_start_that_registered_anew_and_wasnt_finished_puts_the_kept_registration_in_no_doubt() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, stand_in) = hub_signed_in(dir.path()).await;
-    let first = client(dir.path());
 
-    let elsewhere = |id| ToolSignInStart { redirect: redirect(4321), ..again(id) };
-    page(&hub, elsewhere("unfinished")).await;
-    assert_eq!(times_asked(&stand_in), 2);
+    page(&hub, ToolSignInStart { redirect: redirect(4321), ..again("elsewhere") }).await;
     page(&hub, again("here")).await;
-    assert_eq!(times_asked(&stand_in), 2, "that wasn't used, so nothing has come of it that puts it in doubt");
-    hub.tool_sign_in_cancel(&"unfinished".into());
-    finished(&hub, &stand_in, elsewhere("elsewhere")).await.unwrap();
-    let second = client(dir.path());
-    stand_in.change(|script| script.issuer_path = "/another");
-    finished(&hub, &stand_in, again("another")).await.unwrap();
-    let third = client(dir.path());
 
-    assert!(first != second && second != third, "{first:?}, {second:?}, {third:?}");
-    assert_eq!(times_asked(&stand_in), 4);
+    assert_eq!(times_asked(&stand_in), 2, "once as it was first signed in to, and once for the other redirect");
 }
 
 #[tokio::test]
@@ -278,34 +266,21 @@ async fn one_cancelled_as_its_server_is_asked_registers_nothing() {
     assert_eq!(times_asked(&stand_in), 0);
 }
 
+/// One of the refusals the `tool-sign-in` crate tests, which says why with OAuth's name for it.
 #[tokio::test]
 async fn one_that_wont_register_roundhouse_says_why_and_waits_for_nothing_and_one_that_cant_now_may_be_asked_again() {
-    let refusal = |error: &str| Registers::Says(400, json!({"error": error, "error_description": "made up"}));
-    let no_way: [(Script, Why); 3] = [
-        (registers(refusal("invalid_redirect_uri")), |host| NoToolSignIn::NotRegistered {
-            host,
-            error: Some("invalid_redirect_uri".into()),
-        }),
-        (registers(Registers::Says(403, json!({}))), |host| NoToolSignIn::NotRegistered { host, error: None }),
-        (Script { client_auth_methods: Some(vec!["client_secret_post"]), ..registers(Registers::Anyone) }, |host| {
-            NoToolSignIn::OnlyClientsWithSecrets { host }
-        }),
-    ];
-    for (script, expected) in no_way {
-        let dir = tempfile::tempdir().unwrap();
-        let (hub, stand_in) = (hub_in(dir.path()), StandIn::with(script).await);
-
-        let begun = hub.tool_sign_in_start(new("i", &stand_in)).await.unwrap();
-
-        assert_eq!(begun, ToolSignInBegun::NoWay { why: expected(stand_in.issuer_host()) });
-        assert!(hub.tool_sign_ins.waiting.get(&"i".into(), now_ms()).is_none());
-    }
-
+    let refusal = Registers::Says(400, json!({"error": "invalid_redirect_uri", "error_description": "made up"}));
     let dir = tempfile::tempdir().unwrap();
-    let stand_in = StandIn::with(registers(Registers::Says(503, json!({})))).await;
-    let hub = hub_in(dir.path());
+    let (hub, stand_in) = (hub_in(dir.path()), StandIn::with(registers(refusal)).await);
+
+    let begun = hub.tool_sign_in_start(new("i", &stand_in)).await.unwrap();
+    let waits = hub.tool_sign_ins.waiting.get(&"i".into(), now_ms()).is_some();
+    stand_in.change(|script| script.registers = Registers::Says(503, json!({})));
     let down = hub.tool_sign_in_start(new("i", &stand_in)).await.unwrap_err();
     stand_in.change(|script| script.registers = Registers::Anyone);
     let up = finished(&hub, &stand_in, new("i", &stand_in)).await;
+
+    let why = NoToolSignIn::NotRegistered { host: stand_in.issuer_host(), error: Some("invalid_redirect_uri".into()) };
+    assert_eq!((begun, waits), (ToolSignInBegun::NoWay { why }, false));
     assert_eq!((down.code, up.unwrap().auth), (ErrorCode::Unavailable, WORKS));
 }
