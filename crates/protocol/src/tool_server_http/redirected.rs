@@ -1,6 +1,3 @@
-//! Which redirects of a request to an MCP server are followed, by whatever sends one on a person's behalf: a worker's
-//! proxy, and a check of the server.
-
 use http::header::{HeaderMap, LOCATION};
 use http::uri::{PathAndQuery, Scheme};
 use http::{StatusCode, Uri};

@@ -2,9 +2,9 @@
 
 use std::mem;
 
+use crate::model::ToolScopes;
 use http::HeaderMap;
 use http::header::WWW_AUTHENTICATE;
-use protocol::model::ToolScopes;
 
 /// What RFC 6750, section 3.1, calls a token that's good, and isn't allowed what was asked.
 const INSUFFICIENT_SCOPE: &str = "insufficient_scope";
@@ -19,17 +19,17 @@ pub fn access_wanted(headers: &HeaderMap) -> Option<ToolScopes> {
 
 /// What a refusal says of signing in, as RFC 9728, section 5.1, and RFC 6750, section 3, have it.
 #[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) struct Challenge {
+pub struct Challenge {
     /// Where the server's metadata is. Any scheme's may say it.
-    pub(crate) resource_metadata: Option<String>,
+    pub resource_metadata: Option<String>,
     /// What to ask to be allowed, which `Bearer`'s says.
-    pub(crate) scope: Option<ToolScopes>,
+    pub scope: Option<ToolScopes>,
     /// Why it refused, which `Bearer`'s says.
-    pub(crate) error: Option<String>,
+    pub error: Option<String>,
 }
 
 impl Challenge {
-    pub(crate) fn of(headers: &HeaderMap) -> Self {
+    pub fn of(headers: &HeaderMap) -> Self {
         let mut challenge = Challenge::default();
         for value in headers.get_all(WWW_AUTHENTICATE) {
             let mut scheme = String::new();

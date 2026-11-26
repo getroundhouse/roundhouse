@@ -34,6 +34,7 @@ pub mod tail;
 pub mod terminal;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
+pub mod tool_server_http;
 pub mod versions;
 pub mod worker;
 

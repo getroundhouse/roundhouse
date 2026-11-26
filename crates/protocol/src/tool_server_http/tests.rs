@@ -1,9 +1,7 @@
+use super::{Challenge, access_wanted};
+use crate::model::ToolScopes;
 use http::HeaderMap;
 use http::header::WWW_AUTHENTICATE;
-use protocol::model::ToolScopes;
-
-use crate::access_wanted;
-use crate::challenge::Challenge;
 
 fn scopes(text: &str) -> ToolScopes {
     ToolScopes::from(text.to_string())

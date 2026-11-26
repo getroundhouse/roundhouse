@@ -9,9 +9,10 @@ use protocol::worker::ServerHeader;
 use tokio::sync::OnceCell;
 
 use super::unreached;
+use crate::ToolSignIn;
 use crate::fetch::{Names, Tls, send};
 use crate::messages::Message;
-use crate::{MOST_REDIRECTS_WITHIN, Redirected, ToolSignIn, redirected};
+use protocol::tool_server_http::{MOST_REDIRECTS_WITHIN, Redirected, redirected};
 
 /// The calls made to one server, at the URL the person typed, which is any their agents' calls would go to: over `http`
 /// too, and on a private network or not. So they aren't kept to what [`NotFetched`](crate::NotFetched) leaves, which is

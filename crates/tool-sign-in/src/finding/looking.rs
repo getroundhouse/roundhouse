@@ -7,11 +7,11 @@ use super::asking::as_nobody;
 use super::metadata::{AuthorizationServerMetadata, ServerMetadata};
 use super::reading::{Read, authorization_server_metadata, server_metadata};
 use super::{Found, Issuer, NoWay, Takes, Way};
-use crate::challenge::Challenge;
 use crate::failure::shown;
 use crate::fetch::Caller;
 use crate::offline_access::has_offline;
 use crate::{Failure, ServerUrl, ToolSignIn};
+use protocol::tool_server_http::Challenge;
 
 /// How long finding out has in all, which is several calls, each of which is answered in well under a second.
 pub(super) const FIND_WITHIN: Duration = Duration::from_secs(30);
