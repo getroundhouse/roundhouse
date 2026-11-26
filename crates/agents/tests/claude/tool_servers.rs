@@ -32,16 +32,16 @@ async fn the_servers_init_lists_are_a_report_after_its_event() {
 }
 
 /// What it answers is reported without waiting for the next `init`, with the rest of its servers as they were, and the
-/// adapter doesn't wait for it, since the CLI can take a while to.
+/// adapter doesn't wait for it, since the CLI can take a while to. Each control once, and each answer once: what each
+/// answer makes of either server is `ToolServers`' own tests'.
 #[tokio::test]
 async fn connecting_to_a_server_again_is_asked_of_the_cli_and_what_it_answers_is_reported() {
     let works = (r#""subtype":"success","request_id":"%s""#, ServerState::Connected);
     let fails = (r#""subtype":"error","request_id":"%s","error":"Sign in to it in Settings.""#, ServerState::Failed);
-    let reconnect = || Control::Reconnect { server: "linear".into() };
-    let reload = || Control::Reload { server: "docs".into() };
+    let reconnect = Control::Reconnect { server: "linear".into() };
+    let reload = Control::Reload { server: "docs".into() };
 
-    for (asks, (answer, came_to)) in [(reconnect(), works), (reconnect(), fails), (reload(), works), (reload(), fails)]
-    {
+    for (asks, (answer, came_to)) in [(reconnect, works), (reload, fails)] {
         let dir = tempfile::tempdir().unwrap();
         let (tx, mut rx) = mpsc::channel(16);
         let init = r#"{"type":"system","subtype":"init","session_id":"s","tools":["mcp__docs__find"],"mcp_servers":[{"name":"docs","status":"connected"},{"name":"linear","status":"failed"}]}"#;

@@ -5,7 +5,7 @@
 //! the cache at the hub's.
 
 use protocol::capability::setup::ToolServerState;
-use protocol::model::{ContextUsage, Observation, ObservationKey, Rev, Session, SessionId, Wait, WaitRead};
+use protocol::model::{ContextUsage, Observation, ObservationKey, Session, SessionId, Wait, WaitRead};
 
 use super::Snapshot;
 use super::observed::said;
@@ -26,11 +26,6 @@ impl Snapshot {
         let key = ObservationKey::SessionToolServers { session_id: session.clone() };
         let Some(Observation::SessionToolServers { servers, .. }) = self.observation(&key) else { return None };
         said(servers).map(Vec::as_slice)
-    }
-
-    /// The revision of what it last said of them, for telling whether it has said more since.
-    pub(crate) fn tool_servers_rev(&self, session: &SessionId) -> Option<Rev> {
-        self.observation(&ObservationKey::SessionToolServers { session_id: session.clone() }).map(Observation::rev)
     }
 
     /// What the API's cache holds of `session`'s conversation, and whether its context is big enough that writing it

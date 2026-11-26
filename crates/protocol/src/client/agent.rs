@@ -98,10 +98,11 @@ impl Request for SessionCompact {
 
 /// Has the session's run connect again to the tool server `server`, as the run names it, the hub's or its CLI's own,
 /// whether or not it's on a turn. It starts no run. Resolves once the run has been asked, and what comes of it is what
-/// the run then says of its servers. Sent again before the run has said anything of them since, it's asked once.
+/// the run then says of its servers. Sent again before the run has said anything of them since, it's asked once, and
+/// for one the run says is starting, it resolves and nothing is asked, since the run is doing what was asked.
 ///
 /// Refused, changing nothing, with `NotFound` for a server the run hasn't said it has, which Roundhouse's own is, with
-/// `Conflict` for one that's starting or turned off, or of which nothing is known, and with no run going, and with
+/// `Conflict` for one that's turned off, or of which nothing is known, and with no run going, and with
 /// `InvalidRequest` for a run that doesn't claim it can: `ToolServerReload` for one it's connected to, and
 /// `ToolServerReconnect` for one it isn't. `Unsupported` is only a hub's that doesn't know the request.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
