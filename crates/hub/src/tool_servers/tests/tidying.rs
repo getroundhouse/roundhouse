@@ -61,19 +61,38 @@ fn tidying_has_a_sign_ins_record_say_what_its_file_does() {
     assert_eq!(store.tool_server(&same.id).unwrap().unwrap().0, same, "one that agrees is left as it is");
 }
 
-/// What an earlier build finds of a newer one's, and what a file cut short leaves.
+/// What an earlier build finds of a newer one's, and what a file cut short leaves. A whole sign-in that this build
+/// refuses a value of, as one with a server's URL that `tool-sign-in` no longer takes, or a registration's redirect, is
+/// kept as one that can't be read is, since a newer build may take it.
 #[test]
 fn tidying_keeps_a_sign_in_in_a_form_only_a_newer_build_reads_and_removes_one_whose_file_isnt_whole() {
     let dir = tempfile::tempdir().unwrap();
     let (servers, store) = servers_in(dir.path());
     let newer = signed_in(&servers, "newer", "Linear");
     let cut = signed_in(&servers, "cut", "Docs");
+    let url = signed_in(&servers, "url", "Figma");
+    let redirect = signed_in(&servers, "redirect", "Notion");
     let newer_form = r#"{"format":"sign_in_of_a_newer_build"}"#;
     std::fs::write(path(dir.path(), &store, &newer.id), newer_form).unwrap();
     std::fs::write(path(dir.path(), &store, &cut.id), r#"{"format":"sign_in","made_by":"i","#).unwrap();
+    let refused_url = std::fs::read_to_string(path(dir.path(), &store, &url.id)).unwrap().replacen(
+        r#""server":"https://mcp.example.com/mcp""#,
+        r#""server":"https://mcp.example.com/mcp#at""#,
+        1,
+    );
+    std::fs::write(path(dir.path(), &store, &url.id), &refused_url).unwrap();
+    let registration = r#""registration":{"client_id":"c","issuer":"https://auth.example.com","redirect_uris":["http://localhost:17869/callback"]},"number""#;
+    let refused_redirect = std::fs::read_to_string(path(dir.path(), &store, &redirect.id)).unwrap().replacen(
+        r#""number""#,
+        registration,
+        1,
+    );
+    std::fs::write(path(dir.path(), &store, &redirect.id), &refused_redirect).unwrap();
 
     servers.tidy().unwrap();
 
-    assert_eq!(store.list_records().unwrap().tool_servers, [newer]);
-    assert_eq!(files_in(dir.path()), [newer_form]);
+    assert_eq!(store.list_records().unwrap().tool_servers, [url, newer, redirect]);
+    let mut kept = vec![newer_form.to_string(), refused_url, refused_redirect];
+    kept.sort();
+    assert_eq!(files_in(dir.path()), kept);
 }

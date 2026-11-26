@@ -19,15 +19,15 @@ impl LoginSecret for TwoParts {
         Ok([self.0.as_bytes(), &[0xff], self.1.as_bytes()].concat())
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Stored<Self> {
+    fn from_bytes(bytes: Vec<u8>) -> std::io::Result<Stored<Self>> {
         if bytes.starts_with(NEWER.as_bytes()) {
-            return Stored::Newer;
+            return Ok(Stored::Newer);
         }
         let parts = bytes.iter().position(|byte| *byte == 0xff).and_then(|at| {
             let (first, second) = (&bytes[..at], &bytes[at + 1..]);
             Some(Self(String::from_utf8(first.to_vec()).ok()?, String::from_utf8(second.to_vec()).ok()?))
         });
-        parts.map_or(Stored::Nothing, Stored::Secret)
+        Ok(parts.map_or(Stored::Nothing, Stored::Secret))
     }
 }
 

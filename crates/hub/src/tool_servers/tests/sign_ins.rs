@@ -110,7 +110,7 @@ fn a_sign_in_is_kept_in_a_file_of_its_own_alone_and_the_record_says_it_works() {
     assert_eq!(server.auth, ToolServerAuth::SignIn { status: ToolSignInStatus::Works });
     assert_eq!(store.list_records().unwrap().tool_servers, [server]);
     assert_eq!(files_in(dir.path()), [FILE]);
-    assert!(matches!(ToolServerSecret::from_bytes(FILE.into()), Stored::Secret(ToolServerSecret::SignIn(_))));
+    assert!(matches!(ToolServerSecret::from_bytes(FILE.into()).unwrap(), Stored::Secret(ToolServerSecret::SignIn(_))));
     assert_eq!(holding(dir.path(), "made-up-t"), ["tool-servers"], "nothing else has it, the database least of all");
 }
 

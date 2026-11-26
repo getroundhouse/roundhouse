@@ -11,8 +11,9 @@ pub(crate) trait LoginSecret: Sized {
     /// written, such as one serde refuses.
     fn to_bytes(&self) -> io::Result<Vec<u8>>;
 
-    /// What a file's `bytes` hold, which are never empty.
-    fn from_bytes(bytes: Vec<u8>) -> Stored<Self>;
+    /// What a file's `bytes` hold, which are never empty. Fails for a file that's whole and says it's of a form this
+    /// build knows, and that this build can't read all the same, which is kept, as one that can't be read is.
+    fn from_bytes(bytes: Vec<u8>) -> io::Result<Stored<Self>>;
 }
 
 /// What a login's file holds, as this build reads it.

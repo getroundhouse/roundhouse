@@ -138,7 +138,7 @@ fn what_cant_be_a_servers_is_refused_and_keeps_nothing() {
 #[test]
 fn a_keys_file_is_a_json_object_of_its_form_and_what_isnt_one_holds_none() {
     let key = ToolServerSecret::Key(ToolServerKey::new("Bearer made-up"));
-    let read = |text: &str| ToolServerSecret::from_bytes(text.as_bytes().to_vec());
+    let read = |text: &str| ToolServerSecret::from_bytes(text.as_bytes().to_vec()).unwrap();
 
     assert_eq!(String::from_utf8(key.to_bytes().unwrap()).unwrap(), KEY_FILE);
     assert_eq!(read(KEY_FILE), Stored::Secret(key.clone()));
