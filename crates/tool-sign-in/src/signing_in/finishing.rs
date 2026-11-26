@@ -1,7 +1,7 @@
 use super::{Pending, Returned};
 use crate::fetch::json;
 use crate::token_endpoint::{Refusal, granted};
-use crate::{AuthorizationCode, Failure, Granted, Renewable, ToolSignIn};
+use crate::{AuthorizationCode, Failure, Granted, Registration, Renewable, ToolSignIn};
 
 /// What OAuth calls the person's own refusal.
 const ACCESS_DENIED: &str = "access_denied";
@@ -12,6 +12,8 @@ pub struct SignedIn {
     /// What renews it, with its refresh token, which goes in a file of its own.
     pub renewable: Renewable,
     pub granted: Granted,
+    /// The registration it was made with, where it was with one, for signing in again.
+    pub registration: Option<Registration>,
 }
 
 impl ToolSignIn {
@@ -20,12 +22,13 @@ impl ToolSignIn {
     /// still waiting. Any other failure ends it, since a code is good once.
     pub async fn finish(&self, pending: &Pending, returned: Returned) -> Result<SignedIn, Failure> {
         let code = pending.code(returned)?;
-        let Pending { way, client_id, redirect, scopes, verifier, .. } = pending;
+        let Pending { way, client, redirect, scopes, verifier, .. } = pending;
+        let client_id = self.id_of(client);
         let form = [
             ("grant_type", "authorization_code"),
             ("code", code.as_str()),
             ("redirect_uri", redirect.as_str()),
-            ("client_id", client_id),
+            ("client_id", client_id.as_str()),
             ("code_verifier", verifier.as_str()),
             ("resource", &way.resource),
         ];
@@ -42,7 +45,7 @@ impl ToolSignIn {
             client_id: client_id.clone(),
             scopes: scopes.clone(),
         };
-        Ok(SignedIn { renewable, granted: granted(answer)? })
+        Ok(SignedIn { renewable, granted: granted(answer)?, registration: client.registration().cloned() })
     }
 }
 

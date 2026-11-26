@@ -48,8 +48,8 @@ pub use github::{
 #[cfg(any(test, feature = "testing"))]
 pub use tool_sign_in::{
     Asks as ToolServerAsks, AuthorizationPage as ToolServerPage, Person as ToolServerPerson,
-    Refreshing as ToolServerRefreshing, Script as ToolServerScript, StandIn as ToolServerStandIn,
-    Wants as ToolServerWants,
+    Refreshing as ToolServerRefreshing, Registers as ToolServerRegisters, Script as ToolServerScript,
+    StandIn as ToolServerStandIn, Wants as ToolServerWants,
 };
 
 /// The names the hub picks a new workspace's from, so a test can have git hold every one.

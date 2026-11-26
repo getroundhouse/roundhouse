@@ -6,7 +6,7 @@ use crate::{Granted, RefreshToken, Refreshing, Renewable, Renewal, Script, Signe
 /// A sign-in to a stand-in answering as `script` says, with what renews it and its refresh token.
 async fn signed_in(script: Script) -> (ToolSignIn, StandIn, Renewable, RefreshToken) {
     let (client, stand_in) = (ToolSignIn::new(CLIENT), StandIn::with(script).await);
-    let SignedIn { renewable, granted } = approved(&client, &stand_in).await;
+    let SignedIn { renewable, granted, .. } = approved(&client, &stand_in).await;
     (client, stand_in, renewable, granted.refresh.unwrap())
 }
 

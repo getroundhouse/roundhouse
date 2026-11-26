@@ -15,6 +15,7 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [worker-tools-over-mcp-http.md](worker-tools-over-mcp-http.md) | The worker serves Roundhouse's tools to its agents over MCP, as HTTP on 127.0.0.1 |
 | [hub-holds-agent-logins.md](hub-holds-agent-logins.md) | The hub holds each agent account's login and hands it to every launch |
 | [hub-holds-tool-servers.md](hub-holds-tool-servers.md) | The hub has tool servers of its own and holds their sign-ins, and agents reach them through a proxy on the worker |
+| [register-where-no-client-document.md](register-where-no-client-document.md) | The hub registers Roundhouse with a service that doesn't take its client document |
 | [git-credential-set-by-hub.md](git-credential-set-by-hub.md) | The hub sets the GitHub credential for every process a worker starts |
 | [machine-gh-token-handed-to-hub.md](machine-gh-token-handed-to-hub.md) | While each machine's own `gh` login is the default, the hub reads GitHub with the token a worker hands it. Replaced |
 | [github-identity-held-by-hub.md](github-identity-held-by-hub.md) | Agents' GitHub identity always comes from an account the hub holds, and a `gh` login on the hub's machine is one. Replaced |

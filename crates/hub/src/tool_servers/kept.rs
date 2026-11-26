@@ -3,7 +3,7 @@ use std::ops::Not;
 use protocol::model::{ToolScopes, ToolSignInId, ToolSignInStatus};
 use protocol::worker::TokenNumber;
 use serde::{Deserialize, Serialize};
-use tool_sign_in::{AccessToken, Granted, RefreshToken, Renewable, SignedIn};
+use tool_sign_in::{AccessToken, Granted, RefreshToken, Registration, Renewable, SignedIn};
 
 use crate::store::later_ms;
 
@@ -13,6 +13,10 @@ pub(super) struct KeptSignIn {
     /// The sign-in a person approved last, which finishing it again is answered by.
     pub(super) made_by: ToolSignInId,
     pub(super) renewable: Renewable,
+    /// The registration it was made with, which signing in again uses. `None` where it was made with the client document,
+    /// and once its authorization server has said it knows no such client.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) registration: Option<Registration>,
     pub(super) number: TokenNumber,
     /// `None` once it's gone, after which only the person signing in again brings it back, with what it was asked to
     /// allow.
@@ -47,7 +51,7 @@ impl KeptSignIn {
         given_at_ms: i64,
         before: Option<&KeptSignIn>,
     ) -> Self {
-        let SignedIn { renewable, granted } = signed_in;
+        let SignedIn { renewable, granted, registration } = signed_in;
         let number = before.map_or(TokenNumber::FIRST, |before| before.number.next());
         // What was wanted at another authorization server is nothing to this one.
         let before = before.filter(|before| before.renewable.issuer() == renewable.issuer());
@@ -55,7 +59,7 @@ impl KeptSignIn {
         let wants = before.map_or_default(|before| before.wants.clone().without(renewable.scopes()));
         let asked_again = before.is_some_and(KeptSignIn::would_ask_again);
         let tokens = Some(KeptTokens::given(granted, given_at_ms));
-        Self { made_by, renewable, number, tokens, wants, asked_again }
+        Self { made_by, renewable, registration, number, tokens, wants, asked_again }
     }
 
     /// Whether signing in again asks for no more than this one was asked for, which its server wanted all the same. One
@@ -77,6 +81,11 @@ impl KeptSignIn {
     /// The same, gone.
     pub(super) fn gone(self) -> Self {
         Self { tokens: None, ..self }
+    }
+
+    /// The same, with no registration for signing in again.
+    pub(super) fn unregistered(self) -> Self {
+        Self { registration: None, ..self }
     }
 
     /// What the server's record says of it.

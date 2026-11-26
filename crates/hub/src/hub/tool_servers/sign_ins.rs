@@ -1,5 +1,6 @@
 use tool_sign_in::ToolSignIn;
 
+use super::in_doubt::InDoubt;
 use super::renewing::Renewing;
 use super::waiting::Waiting;
 
@@ -10,10 +11,11 @@ pub(in super::super) struct ToolSignIns {
     /// Those that aren't finished.
     pub(super) waiting: Waiting,
     pub(super) renewing: Renewing,
+    pub(super) in_doubt: InDoubt,
 }
 
 impl ToolSignIns {
     pub(in super::super) fn new(client: ToolSignIn) -> Self {
-        Self { client, waiting: Waiting::default(), renewing: Renewing::default() }
+        Self { client, waiting: Waiting::default(), renewing: Renewing::default(), in_doubt: InDoubt::default() }
     }
 }

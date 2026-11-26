@@ -1,13 +1,14 @@
 use protocol::model::ToolScopes;
 use serde::{Deserialize, Serialize};
 
+use crate::failure::INVALID_CLIENT;
 use crate::fetch::json;
 use crate::token_endpoint::{Refusal, granted};
-use crate::{Failure, Granted, Issuer, OauthError, RefreshToken, ServerUrl, ToolSignIn};
+use crate::{ClientId, Failure, Granted, Issuer, OauthError, RefreshToken, ServerUrl, ToolSignIn};
 
 /// What OAuth calls a refresh token that has ended, been used or been revoked, and a client the authorization server
 /// no longer takes, by RFC 6749, section 5.2.
-const FOR_GOOD: [&str; 2] = ["invalid_grant", "invalid_client"];
+const FOR_GOOD: [&str; 2] = ["invalid_grant", INVALID_CLIENT];
 
 /// What renews a sign-in, with its refresh token. It has no secret in it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,7 +18,7 @@ pub struct Renewable {
     pub(crate) resource: String,
     pub(crate) issuer: Issuer,
     pub(crate) token_endpoint: String,
-    pub(crate) client_id: String,
+    pub(crate) client_id: ClientId,
     pub(crate) scopes: ToolScopes,
 }
 
@@ -52,7 +53,7 @@ impl ToolSignIn {
         let form = [
             ("grant_type", "refresh_token"),
             ("refresh_token", refresh.as_str()),
-            ("client_id", &renewable.client_id),
+            ("client_id", renewable.client_id.as_str()),
             ("resource", &renewable.resource),
         ];
         let calls = self.calls_for(&renewable.server).await?;

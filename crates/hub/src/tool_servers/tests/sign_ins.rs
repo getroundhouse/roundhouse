@@ -7,10 +7,10 @@ use protocol::client::tool_sign_ins::ToolSignInTo;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{ToolServer, ToolServerAuth, ToolSignInStatus};
 use serde_json::json;
-use tool_sign_in::{AccessToken, Granted, RefreshToken, SignedIn};
+use tool_sign_in::{AccessToken, Granted, RefreshToken, Registration, SignedIn};
 
 use super::super::secret::ToolServerSecret;
-use super::super::{ToolServerChange, ToolServers};
+use super::super::{SigningIn, ToolServerChange, ToolServers};
 use super::support::{files_in, holding, refused, servers_in, with_key, with_neither};
 use crate::login_files::{LoginSecret as _, Stored};
 use crate::store::Store;
@@ -40,7 +40,7 @@ pub(super) fn given(scopes: &str, issuer: &str, granted: Granted) -> SignedIn {
         "client_id": "https://client.example/client.json",
         "scopes": scopes,
     });
-    SignedIn { renewable: serde_json::from_value(renewable).unwrap(), granted }
+    SignedIn { renewable: serde_json::from_value(renewable).unwrap(), granted, registration: None }
 }
 
 /// What a person signed in, asked to allow `read`, as each server here first is.
@@ -97,6 +97,54 @@ fn a_sign_in_is_kept_in_a_file_of_its_own_alone_and_the_record_says_it_works() {
     assert_eq!(files_in(dir.path()), [FILE]);
     assert!(matches!(ToolServerSecret::from_bytes(FILE.into()), Stored::Secret(ToolServerSecret::SignIn(_))));
     assert_eq!(holding(dir.path(), "made-up-t"), ["tool-servers"], "nothing else has it, the database least of all");
+}
+
+/// As [`FILE`]'s, with the registration it was made with, which a build that knew of none left out.
+#[test]
+fn a_registration_is_kept_beside_its_sign_in_until_another_takes_its_place_or_its_forgotten() {
+    let dir = tempfile::tempdir().unwrap();
+    let (servers, _store) = servers_in(dir.path());
+    let registration = |client_id: &str| -> Registration {
+        let redirects = ["http://127.0.0.1:17867/callback"];
+        let issuer = "https://auth.example.com";
+        serde_json::from_value(json!({"client_id": client_id, "issuer": issuer, "redirect_uris": redirects})).unwrap()
+    };
+    let (first, second) = (registration("made-up-1"), registration("made-up-2"));
+    let with = |registration: &Registration| SignedIn {
+        registration: Some(registration.clone()),
+        ..as_first(granted("made-up-t"))
+    };
+    let to = |to| servers.signing_in(to).unwrap();
+    let again = || to(ToolSignInTo::Again { id: "t".into() });
+    let registered = |to: &SigningIn| to.registered().map(|(id, registration)| (id.to_string(), registration.clone()));
+    let is = |registration: &Registration| Some(("t".to_string(), registration.clone()));
+    let keep = |to: &SigningIn, signed_in| servers.keep_sign_in("t".into(), to, signed_in, GIVEN_AT_MS).unwrap();
+
+    let as_new = to(new("t", "Linear"));
+    keep(&as_new, with(&first));
+    let field = concat!(
+        r#""registration":{"client_id":"made-up-1","issuer":"https://auth.example.com","#,
+        r#""redirect_uris":["http://127.0.0.1:17867/callback"]},"#,
+    );
+    assert_eq!(files_in(dir.path()), [FILE.replace(r#""number":1"#, &format!(r#"{field}"number":1"#))]);
+    assert_eq!((registered(&as_new), registered(&again())), (None, is(&first)));
+
+    let before = again();
+    keep(&again(), with(&second));
+    servers.forget_registration(&before, &first).unwrap();
+    assert_eq!(registered(&again()), is(&second), "what's refused is another by now");
+    servers.forget_registration(&before, &second).unwrap();
+    assert_eq!(registered(&again()), None);
+    keep(&again(), with(&first));
+    keep(&again(), as_first(granted("made-up-t")));
+    assert_eq!(registered(&again()), None, "this one was made with the client document");
+
+    keep(&again(), with(&first));
+    let gone = again();
+    servers.remove(&"t".into()).unwrap();
+    keep(&to(new("t", "Linear")), with(&first));
+    servers.forget_registration(&gone, &first).unwrap();
+    assert_eq!(registered(&again()), is(&first), "the server it was of is gone");
 }
 
 #[test]

@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use client_core::{Client, RecordsFeed};
-use hub::{ToolServerPage, ToolServerRefreshing, ToolServerScript, ToolServerStandIn, ToolServerWants};
+use hub::{
+    ToolServerPage, ToolServerRefreshing, ToolServerRegisters, ToolServerScript, ToolServerStandIn, ToolServerWants,
+};
 use protocol::capability::settings::Settings;
 use protocol::capability::setup::ServerState;
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerRemove};
@@ -176,6 +178,30 @@ fn an_agents_call_to_a_server_the_person_signed_in_to_goes_on_working_across_its
     assert_eq!(calls::run(&client, &chat.id, CALL, 2), works);
 
     assert_eq!(stand_in.asked_for("POST /token").len(), 2, "a code, and one renewal");
+}
+
+/// Its service takes no client document, so the hub registers with it, and renews as it was registered.
+#[test]
+fn a_server_whose_service_has_apps_register_is_signed_in_to_and_renewed() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let registers = ToolServerRegisters::Anyone;
+    let script = ToolServerScript { client_documents: false, registers, ..ToolServerScript::default() };
+    let stand_in = runtime.block_on(ToolServerStandIn::with(script));
+    let stack = Stack::start();
+    let client = stack.client();
+    sign_in(&client, &stand_in, new(&stand_in));
+    let (_, chat) = stack.workspace(&client);
+    let works = [("Found issue 7".to_string(), false)];
+
+    assert_eq!(calls::run(&client, &chat.id, CALL, 1), works);
+    stand_in.end_access_tokens();
+    assert_eq!(calls::run(&client, &chat.id, CALL, 2), works);
+
+    let ids: Vec<_> = stand_in.asked_for("POST /token").iter().map(|asked| asked.form("client_id").unwrap()).collect();
+    assert_eq!(ids, ["made-up-client-1", "made-up-client-1"], "a code, and one renewal");
+    assert_eq!(stand_in.asked_for("POST /register").len(), 1);
+    assert_eq!(holding(&stack.path(""), "made-up-secret"), Vec::<PathBuf>::new());
+    assert_eq!(holding(&stack.path(""), "made-up-registration-token"), Vec::<PathBuf>::new());
 }
 
 /// Its other tool works before and after, for which it wants what it was first asked for.

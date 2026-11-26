@@ -7,6 +7,15 @@ use super::script::{Iss, Person, Script};
 use super::serving::Addresses;
 use super::tokens::{Approved, Grant, Tokens};
 
+/// Whether the page at `page` sends the person back, rather than shows an error.
+pub(super) fn sends_back(page: &Url, script: &Script, tokens: &Tokens) -> bool {
+    takes(&page.query_pairs().into_owned().collect(), script, tokens)
+}
+
+fn takes(asked: &HashMap<String, String>, script: &Script, tokens: &Tokens) -> bool {
+    tokens.sends_back(&asked["client_id"], &asked["redirect_uri"], script)
+}
+
 /// Has the person do on the page at `page` what `script` says, and gives the query of where they're sent back to.
 /// Panics where the page wasn't asked for as an authorization server has it, as one shows an error on.
 pub(super) fn visited(page: &Url, script: &Script, at: &Addresses, tokens: &mut Tokens) -> String {
@@ -16,6 +25,7 @@ pub(super) fn visited(page: &Url, script: &Script, at: &Addresses, tokens: &mut 
     assert_eq!(asked["response_type"], "code");
     assert_eq!(asked["code_challenge_method"], "S256");
     assert_eq!(asked["resource"], at.resource(script));
+    assert!(takes(&asked, script, tokens), "it shows an error, as to a client it doesn't know");
     let mut back = Url::parse(&asked["redirect_uri"]).unwrap();
     let iss = match script.iss {
         Iss::Said | Iss::SaidUnannounced => Some(at.issuer(script)),

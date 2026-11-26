@@ -1,6 +1,6 @@
 # The hub has tool servers of its own and holds their sign-ins, and agents reach them through the worker
 
-**Status:** Decided.
+**Status:** Decided. Partly [replaced](register-where-no-client-document.md).
 **First recorded:** 2026-11-24, in #2675.
 
 A person adds a tool server, which is an MCP server over HTTP, to the hub once and signs in to it once. Every agent in every workspace has it, whichever CLI it runs and machine it's on.

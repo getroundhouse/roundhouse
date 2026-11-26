@@ -13,11 +13,11 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use url::Url;
 
-use super::authorization::visited;
+use super::authorization::{sends_back, visited};
 use super::replies::{Reply, said, status};
-use super::script::{Asks, Script, ServerMetadataAt, Wants};
+use super::script::{Asks, Query, Script, ServerMetadataAt, Wants};
 use super::tokens::Tokens;
-use super::{Asked, metadata};
+use super::{Asked, metadata, registering};
 use crate::{AuthorizationPage, ServerUrl};
 
 /// The stand-in, serving until the runtime it was started on ends.
@@ -40,13 +40,22 @@ pub(super) struct Addresses {
 
 impl Addresses {
     /// Its MCP server.
-    fn server(&self) -> String {
-        format!("{}/mcp", self.host)
+    fn server(&self, script: &Script) -> String {
+        match script.query {
+            Query::None => format!("{}/mcp", self.host),
+            Query::Repeated(query) | Query::LeftOut(query) => format!("{}/mcp?{query}", self.host),
+        }
     }
 
     /// What its MCP server's metadata says it's of.
     pub(super) fn resource(&self, script: &Script) -> String {
-        if script.server_metadata_at == ServerMetadataAt::ItsHost { self.host.clone() } else { self.server() }
+        if script.server_metadata_at == ServerMetadataAt::ItsHost {
+            return self.host.clone();
+        }
+        match script.query {
+            Query::None | Query::Repeated(_) => self.server(script),
+            Query::LeftOut(_) => format!("{}/mcp", self.host),
+        }
     }
 
     /// Its authorization server's name.
@@ -80,7 +89,7 @@ impl StandIn {
 
     /// Its MCP server's address.
     pub fn server(&self) -> ServerUrl {
-        ServerUrl::parse(&self.state.at.server()).unwrap()
+        ServerUrl::parse(&self.state.at.server(&self.state.script.lock())).unwrap()
     }
 
     /// Its authorization server's name.
@@ -96,6 +105,17 @@ impl StandIn {
     /// Takes no access token it has given so far, as once they've ended.
     pub fn end_access_tokens(&self) {
         self.state.tokens.lock().end_access();
+    }
+
+    /// Knows none of the clients that were registered with it, as a service that has forgotten them.
+    pub fn forget_clients(&self) {
+        self.state.tokens.lock().forget_clients();
+    }
+
+    /// Whether `page` sends the person back once they've done what they do there, rather than shows them an error.
+    pub fn sends_back(&self, page: &AuthorizationPage) -> bool {
+        let page = Url::parse(page.as_str()).unwrap();
+        sends_back(&page, &self.state.script.lock(), &self.state.tokens.lock())
     }
 
     /// Opens `page`, as the person's browser does, and has the person do there what the script says. Gives the query of
@@ -129,6 +149,13 @@ impl State {
             "POST /mcp" => self.mcp(&asked, &script),
             "POST /token" => {
                 let reply = self.tokens.lock().answer(&asked, &script);
+                if let Some(gate) = &script.answers_after {
+                    gate.opened().await;
+                }
+                reply
+            }
+            "POST /register" => {
+                let reply = registering::answer(&asked, &script, &mut self.tokens.lock());
                 if let Some(gate) = &script.answers_after {
                     gate.opened().await;
                 }

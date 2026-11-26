@@ -28,6 +28,15 @@ impl fmt::Display for Issuer {
     }
 }
 
+/// The clients an authorization server takes that Roundhouse could be, of which the first is the one MCP has it be.
+#[derive(Clone, Debug)]
+pub(crate) enum Takes {
+    /// Those with a document that describes them.
+    Documents,
+    /// Those that register at `endpoint`.
+    Registered { endpoint: Url },
+}
+
 /// How a server is signed in to, as it and its authorization server say.
 #[derive(Clone, Debug)]
 pub struct Way {
@@ -37,6 +46,7 @@ pub struct Way {
     pub(crate) issuer: Issuer,
     pub(crate) authorization_endpoint: Url,
     pub(crate) token_endpoint: Url,
+    pub(crate) takes: Takes,
     /// Whether the authorization server says who it is as it sends the person back, as RFC 9207 has it.
     pub(crate) says_iss: bool,
     pub(crate) scopes: ToolScopes,

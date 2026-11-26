@@ -3,6 +3,7 @@
 //! kept, and what's refused, is tested in `crate::tool_servers`, and what's asked of a server in the `tool-sign-in` crate.
 
 mod refused;
+mod registering;
 mod renewals;
 mod renewing;
 mod sign_ins;

@@ -1,8 +1,9 @@
 use std::path::Path;
 
 use protocol::client::tool_sign_ins::{REDIRECT_PATH, REDIRECT_PORTS, redirect};
-use serde_json::{Value, json};
+use serde_json::Value;
 
+use crate::registering::client_metadata;
 use crate::{CLIENT_DOCUMENT, RedirectUri};
 
 /// The site publishes what's in `site/` at the address it's at there. An authorization server refuses a sign-in whose
@@ -16,16 +17,8 @@ fn the_client_document_the_site_publishes_is_roundhouses_and_lists_each_redirect
 
     let mut redirects = vec![format!("http://127.0.0.1{REDIRECT_PATH}")];
     redirects.extend(REDIRECT_PORTS.map(redirect));
-    let expected = json!({
-        "client_id": CLIENT_DOCUMENT,
-        "client_name": "Roundhouse",
-        "client_uri": "https://getroundhouse.dev",
-        "application_type": "native",
-        "redirect_uris": redirects,
-        "grant_types": ["authorization_code", "refresh_token"],
-        "response_types": ["code"],
-        "token_endpoint_auth_method": "none",
-    });
+    let redirects: Vec<_> = redirects.iter().map(|redirect| RedirectUri::parse(redirect).unwrap()).collect();
+    let mut expected = client_metadata(&redirects);
+    expected["client_id"] = CLIENT_DOCUMENT.into();
     assert_eq!(document, expected);
-    assert!(redirects.iter().all(|redirect| RedirectUri::parse(redirect).is_ok()));
 }

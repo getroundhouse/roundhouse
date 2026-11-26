@@ -4,12 +4,15 @@ use protocol::client::tool_sign_ins::{
     NoToolSignIn, ToolSignInBegun, ToolSignInFinish, ToolSignInPage, ToolSignInStart,
 };
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{ToolServer, ToolSignInId};
-use tool_sign_in::{Failure, Found, NoWay, Pending, RedirectUri, Returned, ServerUrl, Started, Way, shown};
-use tracing::info;
+use protocol::model::{ToolServer, ToolServerId, ToolSignInId};
+use tool_sign_in::{
+    Failure, Found, NoWay, Pending, RedirectUri, Registration, Returned, ServerUrl, Started, TakenAs, Way, shown,
+};
+use tracing::{info, warn};
 
 use super::super::{Hub, off_thread};
-use super::waiting::Stage;
+use super::ToolSignIns;
+use super::waiting::{Stage, WaitingSignIn};
 use crate::store::now_ms;
 use crate::tool_servers::SigningIn;
 
@@ -29,12 +32,13 @@ impl Hub {
         if let Stage::OnPage { page, .. } = &*stage {
             return Ok(ToolSignInBegun::Page { page: page.clone() });
         }
-        let found = self.find_sign_in(&sign_in.to, &redirect).await;
-        if !self.tool_sign_ins.waiting.holds(&id, &sign_in) {
-            return Err(ApiError::new(ErrorCode::Conflict, "the sign-in was cancelled"));
-        }
+        let found = self.find_sign_in(&id, &sign_in, &redirect).await;
+        self.waits_still(&id, &sign_in)?;
         match found {
             Ok(Begun::Waits { page, pending }) => {
+                if let Some((server, registration)) = used_again(&sign_in.to, &pending) {
+                    self.tool_sign_ins.in_doubt.used(server, registration);
+                }
                 *stage = Stage::OnPage { page: page.clone(), pending };
                 Ok(ToolSignInBegun::Page { page })
             }
@@ -67,6 +71,15 @@ impl Hub {
             Err(e @ Failure::WrongState) => return Err(e.into()),
             Err(e) => {
                 self.tool_sign_ins.waiting.end(&id, &sign_in);
+                if e.is_invalid_client() {
+                    self.forget_registration(&sign_in, pending).await;
+                }
+                // Which it sends the person back to say only of a client it knows.
+                if matches!(e, Failure::RefusedByPerson)
+                    && let Some((server, _)) = used_again(&sign_in.to, pending)
+                {
+                    self.tool_sign_ins.in_doubt.finished(server);
+                }
                 return Err(e.into());
             }
         };
@@ -78,6 +91,7 @@ impl Hub {
         let kept = off_thread(move || servers.keep_sign_in(made_by, &to.to, signed_in, given_at_ms)).await;
         self.tool_sign_ins.waiting.end(&id, &sign_in);
         let server = self.announce_tool_server(kept?);
+        self.tool_sign_ins.in_doubt.finished(&server.id);
         info!(name: "tool_sign_in.signed_in", server_id = %server.id, "Signed in to a tool server");
         Ok(server)
     }
@@ -94,24 +108,61 @@ impl Hub {
     }
 
     /// Asks the server how it's signed in to, and starts that, with the person sent back to `redirect`.
-    async fn find_sign_in(&self, to: &SigningIn, redirect: &str) -> Result<Begun, ApiError> {
+    async fn find_sign_in(
+        &self,
+        id: &ToolSignInId,
+        sign_in: &Arc<WaitingSignIn>,
+        redirect: &str,
+    ) -> Result<Begun, ApiError> {
         let refused = |e: &dyn std::error::Error| ApiError::new(ErrorCode::InvalidRequest, e.to_string());
         let redirect = RedirectUri::parse(redirect).map_err(|e| refused(&e))?;
-        let server = ServerUrl::parse(to.url().as_str()).map_err(|e| refused(&e))?;
+        let server = ServerUrl::parse(sign_in.to.url().as_str()).map_err(|e| refused(&e))?;
         Ok(match self.tool_sign_ins.client.find(&server).await? {
             Found::SignIn(way) => {
-                let Started { page, pending } = self.begin_sign_in(*way, to, redirect)?;
-                Begun::Waits { page: ToolSignInPage::new(page.as_str()), pending: Box::new(pending) }
+                // Registering can't be undone, so one that was cancelled meanwhile doesn't.
+                self.waits_still(id, sign_in)?;
+                self.begin_sign_in(*way, &sign_in.to, redirect).await?
             }
             Found::NoSignIn => Begun::Not(ToolSignInBegun::NoSignIn),
             Found::NoWay(why) => Begun::Not(ToolSignInBegun::NoWay { why: no_way(why) }),
         })
     }
 
-    /// Starts signing in by `way`, asking to be allowed what the server was signed in with before, and has wanted since, too.
-    fn begin_sign_in(&self, way: Way, to: &SigningIn, redirect: RedirectUri) -> Result<Started, Failure> {
+    /// Starts signing in by `way`, asking to be allowed what the server was signed in with before, and has wanted since,
+    /// too, and as the client it was signed in with before, where that's one to use again.
+    async fn begin_sign_in(&self, way: Way, to: &SigningIn, redirect: RedirectUri) -> Result<Begun, Failure> {
+        let ToolSignIns { client, in_doubt, .. } = &self.tool_sign_ins;
+        let before = to.registered().filter(|(server, before)| !in_doubt.holds(server, before));
+        let taken = client.client_for(&way, &redirect, before.map(|(_, before)| before)).await?;
+        let taken_as = match taken {
+            TakenAs::Client(taken_as) => taken_as,
+            TakenAs::NoWay(why) => return Ok(Begun::Not(ToolSignInBegun::NoWay { why: no_way(why) })),
+        };
         let scopes = way.scopes().clone().and(&to.asked_before(way.issuer()));
-        self.tool_sign_ins.client.begin(way, scopes, redirect)
+        let Started { page, pending } = client.begin(way, taken_as, scopes, redirect)?;
+        Ok(Begun::Waits { page: ToolSignInPage::new(page.as_str()), pending: Box::new(pending) })
+    }
+
+    /// Refused where `sign_in` waits as `id` no more.
+    fn waits_still(&self, id: &ToolSignInId, sign_in: &Arc<WaitingSignIn>) -> Result<(), ApiError> {
+        if self.tool_sign_ins.waiting.holds(id, sign_in) {
+            return Ok(());
+        }
+        Err(ApiError::new(ErrorCode::Conflict, "the sign-in was cancelled"))
+    }
+
+    /// Forgets the registration `pending` was signing in with, where it was with one.
+    async fn forget_registration(&self, sign_in: &Arc<WaitingSignIn>, pending: &Pending) {
+        let Some(registration) = pending.registration().cloned() else { return };
+        let (servers, to) = (Arc::clone(&self.tool_servers), Arc::clone(sign_in));
+        if let Err(e) = off_thread(move || servers.forget_registration(&to.to, &registration)).await {
+            // The next sign-in registers again all the same, unless this hub stops first.
+            warn!(
+                name: "tool_sign_in.registration_kept",
+                error = e.message,
+                "Couldn't forget a registration that a tool server's authorization server doesn't know"
+            );
+        }
     }
 }
 
@@ -125,6 +176,11 @@ enum Begun {
     Not(ToolSignInBegun),
 }
 
+/// The registration from before that `pending` is signing in `to` its server with, where it's with that one.
+fn used_again<'a>(to: &'a SigningIn, pending: &Pending) -> Option<(&'a ToolServerId, &'a Registration)> {
+    to.registered().filter(|(_, before)| pending.registration() == Some(*before))
+}
+
 /// Why a finish finds no sign-in of its ID.
 fn no_sign_in() -> ApiError {
     ApiError::new(ErrorCode::NotFound, "that sign-in to an MCP server has ended")
@@ -136,6 +192,13 @@ fn no_way(why: NoWay) -> NoToolSignIn {
         NoWay::OnlyRegisteredClients(issuer) => {
             NoToolSignIn::OnlyRegisteredClients { authorization_server: shown(issuer.as_str()) }
         }
+        NoWay::OnlyClientsWithSecrets(issuer) => {
+            NoToolSignIn::OnlyClientsWithSecrets { authorization_server: shown(issuer.as_str()) }
+        }
+        NoWay::NotRegistered { issuer, error } => NoToolSignIn::NotRegistered {
+            authorization_server: shown(issuer.as_str()),
+            error: error.map(|error| error.to_string()),
+        },
         NoWay::OtherResource { said } => NoToolSignIn::OtherServer { said: shown(&said) },
         NoWay::NoS256(issuer) => NoToolSignIn::NoS256 { authorization_server: shown(issuer.as_str()) },
     }

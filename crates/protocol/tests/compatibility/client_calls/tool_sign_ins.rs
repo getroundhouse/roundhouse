@@ -50,6 +50,21 @@ fn what_a_start_comes_to_keeps_its_form() {
             r#""kind":"no_way","why":{"kind":"only_registered_clients","authorization_server":"https://auth.example.com"}"#,
         ),
         (
+            no_way(NoToolSignIn::OnlyClientsWithSecrets { authorization_server: issuer() }),
+            r#""kind":"no_way","why":{"kind":"only_clients_with_secrets","authorization_server":"https://auth.example.com"}"#,
+        ),
+        (
+            no_way(NoToolSignIn::NotRegistered { authorization_server: issuer(), error: None }),
+            r#""kind":"no_way","why":{"kind":"not_registered","authorization_server":"https://auth.example.com"}"#,
+        ),
+        (
+            no_way(NoToolSignIn::NotRegistered {
+                authorization_server: issuer(),
+                error: Some("invalid_redirect_uri".into()),
+            }),
+            r#""kind":"no_way","why":{"kind":"not_registered","authorization_server":"https://auth.example.com","error":"invalid_redirect_uri"}"#,
+        ),
+        (
             no_way(NoToolSignIn::OtherServer { said: "https://other.example".into() }),
             r#""kind":"no_way","why":{"kind":"other_server","said":"https://other.example"}"#,
         ),

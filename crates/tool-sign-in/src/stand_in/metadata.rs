@@ -1,10 +1,10 @@
 use std::future::pending;
 
 use http::header::WWW_AUTHENTICATE;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::replies::{Reply, said, status};
-use super::script::{MetadataAt, Says, Script, ServerMetadataAt};
+use super::script::{MetadataAt, Registers, Says, Script, ServerMetadataAt};
 use super::serving::Addresses;
 
 /// Where its server's metadata is when its 401 says.
@@ -32,6 +32,9 @@ pub(super) fn forbidden(scope: &str) -> Reply {
 
 /// The metadata at `path`, if `script` has some there.
 pub(super) async fn at(path: &str, script: &Script, at: &Addresses) -> Option<Reply> {
+    if let Some(gate) = &script.metadata_after {
+        gate.opened().await;
+    }
     let well_known = "/.well-known/oauth-protected-resource";
     let of_server = match script.server_metadata_at {
         ServerMetadataAt::Said => path == SAID,
@@ -62,6 +65,7 @@ pub(super) async fn at(path: &str, script: &Script, at: &Addresses) -> Option<Re
 fn of_the_server(script: &Script, at: &Addresses) -> Reply {
     let resource = match script.resource {
         Says::Itself => at.resource(script),
+        Says::ItsHost => at.host.clone(),
         Says::Another => "https://other.example/mcp".to_string(),
     };
     let servers = [at.issuer(script)];
@@ -74,6 +78,7 @@ fn of_the_server(script: &Script, at: &Addresses) -> Reply {
 fn of_the_authorization_server(script: &Script, at: &Addresses) -> Reply {
     let issuer = match script.issuer {
         Says::Itself => at.issuer(script),
+        Says::ItsHost => at.host.clone(),
         Says::Another => "https://other.example".to_string(),
     };
     let mut metadata = json!({
@@ -85,6 +90,14 @@ fn of_the_authorization_server(script: &Script, at: &Addresses) -> Reply {
         "authorization_response_iss_parameter_supported": script.iss.is_announced(),
         "scopes_supported": script.authorization_scopes,
     });
+    metadata["registration_endpoint"] = match &script.registers {
+        Registers::Nobody => Value::Null,
+        Registers::Anyone | Registers::Says(..) => format!("{}/register", at.host).into(),
+        Registers::At(elsewhere) => elsewhere.as_str().into(),
+    };
+    if let Some(methods) = &script.client_auth_methods {
+        metadata["token_endpoint_auth_methods_supported"] = json!(methods);
+    }
     if script.s256 {
         metadata["code_challenge_methods_supported"] = json!(["plain", "S256"]);
     }
