@@ -57,13 +57,14 @@ While the chat has an MCP server, a plug sits before the limits' bars. Rest the 
 | A server says | Which means |
 |---|---|
 | `14 tools`, or `Connected` | The agent has it |
-| `Starting` | Its CLI is still connecting to it, as it does when you've just signed in to it, or reloaded it |
+| `Starting` | Its CLI is still connecting to it, as it does when you've just signed in to it, edited it or reloaded it |
 | `Can't be reached`, with **Reload** | Its CLI couldn't connect. Codex says why, after it |
 | **Sign in** | It's one of the hub's that needs you to sign in to it, and the plug is amber until you do. The button opens its page in your browser, and signs in for every chat |
 | `Wants more access`, with **Sign in** | It's one of the hub's that works, and refused a call that needs more than you allowed. Signing in again asks to be allowed that too |
 | `Signing in` | Its page waits in your browser for you to approve it, as [Settings](settings.md#sign-in) says |
 | `Sign in from its CLI`, with **Reload** | It's one of the CLI's own, which you sign in to there, such as with `codex mcp login`, then reload here |
-| `From its next start` | It was added to the hub, or moved to another URL, after the agent started |
+| `When its turn ends`, with **Reload** | You've signed in to it or edited it, and the agent connects to it again once its turn ends. **Reload** has it connect now |
+| `From its next start` | It was added to the hub after the agent started, or moved to another URL while an agent that can't connect to it again as it runs, such as Codex, was connected to it. Claude says `When its turn ends` instead |
 | `Removed` | It was removed from the hub after the agent started |
 | `Turned off` | The CLI's own settings turn it off |
 | Nothing | The agent hasn't said |
@@ -74,7 +75,7 @@ In a Claude chat, a server that works has a round arrow while you point at its r
 
 There's no **Reload** while the agent isn't running, or in an Antigravity chat, where a server that failed is tried again at your next prompt.
 
-Once you've signed in, an agent that was started with the server connects to it, in the middle of a turn too. Antigravity does at your next prompt.
+Once you've signed in, an agent that was started with the server connects to it once its turn ends, or at once if it's on none. Antigravity does at your next prompt. An agent connects again by itself to a server you edit, too, as [Settings](settings.md#edit) says.
 
 When a sign-in comes to nothing, why is on the line under the server, and **Sign in** starts it again. Settings › MCP servers shows the sign-in too, with a button that opens its page again and one that cancels it.
 

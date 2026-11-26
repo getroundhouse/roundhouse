@@ -32,6 +32,10 @@ pub(super) enum Sent {
 
 pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::Receiver<Command>) {
     while let Some(command) = commands.recv().await {
+        // Here too, since one can be asked for as a turn ends, ahead of what its end asks for.
+        if command.may_start_a_turn() {
+            session.reconnect_tool_servers().await;
+        }
         match command {
             Command::Prompt { client_msg_id, prompt, device, reply } => {
                 session.handle_prompt(client_msg_id, prompt, device, reply).await;

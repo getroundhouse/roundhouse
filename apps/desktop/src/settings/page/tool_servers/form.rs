@@ -143,7 +143,7 @@ impl Form {
                 let edited = self.edited(was, cx);
                 let auth = edits::auth(&edited, &self.auth, cx);
                 let (name, url) = (edited.new_name(), edited.new_url());
-                ToolServerToCheck::Edit(ToolServerEdit { id: was.id.clone(), name, url, auth })
+                ToolServerToCheck::Edit(ToolServerEdit { id: was.id.clone(), name, url, auth, saved_anyway: false })
             }
         })
     }

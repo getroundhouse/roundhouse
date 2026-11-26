@@ -13,7 +13,7 @@ fn idle() -> EventBody {
     EventBody::AgentState { state: AgentRunState::Idle }
 }
 
-fn ended(outcome: TurnOutcome) -> EventBody {
+pub(in super::super) fn ended(outcome: TurnOutcome) -> EventBody {
     EventBody::TurnEnded {
         outcome,
         result: None,

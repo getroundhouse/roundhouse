@@ -29,7 +29,13 @@ fn a_server_is_asked_with_the_key_its_to_have_and_whats_checked_is_neither_kept_
         let key = key.map(ToolServerKey::new);
         let auth = ToolServerAuthEdit::Key { header: "X-Key".into(), key, url: url.clone() };
         let queried = Some(format!("{url}?tools=a"));
-        ToolServerToCheck::Edit(ToolServerEdit { id: "t".into(), name: None, url: queried, auth: Some(auth) })
+        ToolServerToCheck::Edit(ToolServerEdit {
+            id: "t".into(),
+            name: None,
+            url: queried,
+            auth: Some(auth),
+            saved_anyway: false,
+        })
     };
 
     assert_eq!(client.tool_server_check(to_add(WRONG)).unwrap(), REFUSED);

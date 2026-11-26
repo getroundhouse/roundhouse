@@ -49,7 +49,8 @@ impl Reply for ToolServer {
 
 /// Edits a tool server: what's given here changes, and what's left out stays as it is, so clients that edit different
 /// things don't undo each other. Answers with its record, as it is then. What the server has already changes nothing,
-/// so sending it again does nothing more. The name, the URL, the header and the key are trimmed.
+/// so sending it again does nothing more. The name, the URL, the header and the key are trimmed. An agent that's running
+/// is asked to connect to the server again where it has to be, to have it as it is then.
 ///
 /// A URL whose scheme, host, port or path differs is another server's, as
 /// [`ToolServerUrl::is_same_server`](crate::model::ToolServerUrl::is_same_server) says, and what the server knows the
@@ -72,6 +73,10 @@ pub struct ToolServerEdit {
     pub url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth: Option<ToolServerAuthEdit>,
+    /// The person saved it though the hub couldn't use the server as it would be, so what a running agent has of it may
+    /// be no use.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub saved_anyway: bool,
 }
 
 impl Request for ToolServerEdit {

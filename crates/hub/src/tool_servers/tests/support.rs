@@ -16,7 +16,7 @@ pub(super) fn servers_in(dir: &Path) -> (ToolServers, Arc<Store>) {
 }
 
 /// Adding `name` as `id`, with the key `key` in `Authorization`.
-pub(super) fn with_key(id: &str, name: &str, key: &str) -> ToolServerAdd {
+pub(crate) fn with_key(id: &str, name: &str, key: &str) -> ToolServerAdd {
     let auth = ToolServerAuthGiven::Key { header: "Authorization".into(), key: ToolServerKey::new(key) };
     ToolServerAdd { auth, ..with_neither(id, name) }
 }
@@ -27,8 +27,8 @@ pub(super) fn with_neither(id: &str, name: &str) -> ToolServerAdd {
 }
 
 /// An edit of the server `id` that changes nothing.
-pub(super) fn edit(id: &str) -> ToolServerEdit {
-    ToolServerEdit { id: id.into(), name: None, url: None, auth: None }
+pub(crate) fn edit(id: &str) -> ToolServerEdit {
+    ToolServerEdit { id: id.into(), name: None, url: None, auth: None, saved_anyway: false }
 }
 
 /// Having the server `id` called `name`.

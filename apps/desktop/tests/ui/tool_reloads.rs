@@ -6,7 +6,7 @@
 use client_core::fake_hub::{Asked, World};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
-use protocol::capability::setup::{ServerState, ToolServerState};
+use protocol::capability::setup::{ConnectsAgain, ServerState, ToolServerState};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::fixtures::{observed, tool_server};
 use protocol::model::{AgentKind, RunCapabilities, RunId, ToolServerAuthGiven};
@@ -60,6 +60,32 @@ fn a_claude_chats_rows_have_it_and_a_codex_chats_where_the_server_doesnt_work(cx
     assert_eq!(offered(cx, AgentKind::Claude), [notion, runbooks.clone(), docs.clone()], "its CLI's own too");
     assert_eq!(offered(cx, AgentKind::Codex), [runbooks, docs]);
     assert_eq!(offered(cx, AgentKind::Antigravity), []);
+}
+
+/// Whether the agent is connected to it as it was, or couldn't reach it.
+#[gpui_kit::test]
+fn one_to_be_connected_to_once_the_turn_ends_says_so_under_its_reload(cx: &mut TestAppContext) {
+    let mut world = with_servers(AgentKind::Claude);
+    let chat = world.sessions.last().unwrap().id.clone();
+    let waits = |name: &str, state| ToolServerState {
+        error: Some("Connection refused".into()),
+        connects_again: Some(ConnectsAgain::WhenItsTurnEnds),
+        ..said(name, Some(&name.to_lowercase()), state)
+    };
+    let servers = vec![waits("Notion", ServerState::Connected), waits("Runbooks", ServerState::Failed)];
+    world.observations.clear();
+    world.observe(observed::tool_servers(chat, servers));
+    let asked: Asked = world.asked.clone();
+    let (_fake, mut ui) = open(cx, world);
+
+    open_card(&mut ui);
+
+    for server in ["Notion", "Runbooks"] {
+        assert!(ui.shows_label("mcp-card", &format!("{server}, When its turn ends")), "{server}");
+    }
+    assert!(ui.visible("mcp-reload-Notion") && ui.visible("mcp-reload-Runbooks"), "with no row pointed at");
+    ui.click("mcp-reload-Notion");
+    ui.wait("the hub to be asked", |_| asked.count("session_reload_tool_server") == 1);
 }
 
 /// An observation is forgotten as its run ends, so it's the hub's record of what the run claims that's left.

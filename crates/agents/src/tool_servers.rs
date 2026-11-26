@@ -56,6 +56,7 @@ impl ToolServers {
                     state: ServerState::Unknown,
                     error: None,
                     tools: None,
+                    connects_again: None,
                 });
             }
         }
@@ -80,6 +81,7 @@ mod tests {
             state,
             error: None,
             tools: None,
+            connects_again: None,
         }
     }
 

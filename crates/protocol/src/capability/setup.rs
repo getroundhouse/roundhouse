@@ -69,6 +69,25 @@ pub struct ToolServerState {
     /// How many tools it offers, once connected.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<u32>,
+    /// When the agent is to have one of the hub's as it is, where it hasn't since the person signed in to it or edited it,
+    /// which the hub decides, and acts on, and says here alone. `None` where it has it, and where nothing says when, such
+    /// as while it's connecting. No worker or adapter says it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connects_again: Option<ConnectsAgain>,
+}
+
+/// When an agent connects again to one of the hub's tool servers, as [`ToolServerState::connects_again`] says.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectsAgain {
+    /// Once its turn ends, when the hub asks it to.
+    WhenItsTurnEnds,
+    /// Once it starts again, since it's connected to it where it was before it was moved, which its worker has cut it off
+    /// from, and it can't be asked to connect to it again.
+    AtItsNextStart,
+    /// Something this build doesn't know.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

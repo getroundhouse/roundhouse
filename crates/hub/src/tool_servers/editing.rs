@@ -63,7 +63,8 @@ pub(super) enum Becomes {
 impl ToolServers {
     /// Edits a server, as `ToolServerEdit` says.
     pub(crate) fn edit(&self, asked: ToolServerEdit) -> Result<ToolServerChange, ApiError> {
-        self.changing(|files| self.edit_in(files, asked))
+        let saved_anyway = asked.saved_anyway.then(|| asked.id.clone());
+        self.changing_saved(saved_anyway.as_ref(), |files| self.edit_in(files, asked))
     }
 
     fn edit_in(
@@ -92,7 +93,7 @@ impl ToolServers {
 
     /// What editing `asked` would change, refused as `ToolServerEdit` says.
     pub(super) fn editing(&self, asked: ToolServerEdit) -> Result<Editing, ApiError> {
-        let ToolServerEdit { id, name, url, auth } = asked;
+        let ToolServerEdit { id, name, url, auth, saved_anyway: _ } = asked;
         let (server, file) = self.store.tool_server(&id)?.ok_or_else(|| gone(&id))?;
         let changes = self.changes(&id, name, url)?;
         let becomes = becomes(&server, &changes, auth)?;

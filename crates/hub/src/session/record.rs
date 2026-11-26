@@ -143,10 +143,10 @@ impl LiveSession {
     /// them together.
     async fn after_commit(&self, hub: &Arc<Hub>, recorded: Vec<(Origin, &Appended, Next)>, made: Made) {
         let appended: Vec<&Appended> = recorded.iter().map(|(_, appended, _)| *appended).collect();
-        let (ready, turn_ended, left, mode_changed) = {
+        let (ready, turn_ended, between_turns, left, mode_changed) = {
             let mut state = self.state.lock();
             let was_ready = state.ready_for_queue();
-            let was_in_turn = state.progress.status.in_turn();
+            let (was_in_turn, was_on_a_turn) = (state.progress.status.in_turn(), state.on_a_turn());
             let (had, was) = (state.interaction.device().map(|had| had.id.clone()), state.interaction.mode());
             take_all(&mut state, recorded);
             if let Some(settings) = &made.settings {
@@ -155,7 +155,9 @@ impl LiveSession {
             let turn_ended = was_in_turn && !state.progress.status.in_turn();
             let left = left_conversation(had.as_ref(), &state.interaction);
             let mode_changed = state.interaction.mode() != was;
-            (!was_ready && state.ready_for_queue(), turn_ended && !state.after_the_turn.is_empty(), left, mode_changed)
+            let ready = !was_ready && state.ready_for_queue();
+            let after_the_turn = turn_ended && !state.after_the_turn.is_empty();
+            (ready, after_the_turn, was_on_a_turn && !state.on_a_turn(), left, mode_changed)
         };
         if mode_changed {
             self.wake_the_mode();
@@ -165,12 +167,7 @@ impl LiveSession {
             self.settle_hearing(hub).await;
         }
         self.after_an_exit(hub, &appended).await;
-        if turn_ended {
-            self.wake_after_the_turn();
-        }
-        if ready {
-            self.wake_queue();
-        }
+        self.wake_between_turns(between_turns, turn_ended, ready);
         if made.waits {
             self.wait_for_pickup();
         }
@@ -201,6 +198,21 @@ impl LiveSession {
         if made.turn_ended {
             hub.read_pull_request_after_turn(&self.workspace_id);
             hub.read_lines_after_turn(&self.workspace_id);
+        }
+    }
+
+    /// Asks the command task for what comes between turns, in the order it comes in: the tool servers to connect to
+    /// again, if the agent is on no turn any more, then what was kept for the turn's end, if that `turn_ended`, and then
+    /// what's queued, if it's `ready` for it.
+    fn wake_between_turns(&self, on_none: bool, turn_ended: bool, ready: bool) {
+        if on_none {
+            self.wake_reconnects();
+        }
+        if turn_ended {
+            self.wake_after_the_turn();
+        }
+        if ready {
+            self.wake_queue();
         }
     }
 

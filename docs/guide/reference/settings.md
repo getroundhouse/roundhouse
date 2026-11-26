@@ -250,7 +250,7 @@ Some servers can't be signed in to. One whose service takes only apps it was tol
 
 The hub renews a sign-in by itself, until the service no longer lets it, such as once you've taken Roundhouse off your account there. The server's row then says **Needs you to sign in**, and its tools fail in every chat.
 
-Choose **Sign in again** in the row's **…** menu, or **Sign in** on [a chat's plug](chats.md#the-chats-mcp-servers), and approve it as before. The server keeps its name, so agents go on calling it what they did. An agent that was started with the server connects to it once you've signed in, as [Chats](chats.md#the-chats-mcp-servers) says.
+Choose **Sign in again** in the row's **…** menu, or **Sign in** on [a chat's plug](chats.md#the-chats-mcp-servers), and approve it as before. The server keeps its name, so agents go on calling it what they did. An agent that was started with the server connects to it once you've signed in and its turn has ended, as [Chats](chats.md#the-chats-mcp-servers) says.
 
 A server can want more than you allowed when you signed in, as when an agent changes an issue and you allowed only reading. That call fails, the agent is told why, and its other calls work as before. The row says **Sign in for more access**, and signing in again asks for what Roundhouse asked for before, what you allowed, and what the server wants.
 
@@ -271,9 +271,11 @@ Choose **Edit** in the row's **…** menu, change what you want in the panel und
 | If you change | Your sign-in or key | Agents that are running |
 |---|---|---|
 | The name | Is kept | Call it by the new name from their next start |
-| What's after the `?` in the URL, such as which tools to have | Is kept | Use the new URL at once |
-| The rest of the URL, which is another server | Is asked for again | Lose the server until their next start. A call to it fails, and says why |
+| What's after the `?` in the URL, such as which tools to have | Is kept | Use the new URL at once. Claude lists its tools again once its turn ends, and other agents at their next start |
+| The rest of the URL, which is another server | Is asked for again | Claude loses the server until its turn ends, then connects to it there. Other agents lose it until their next start. A call to it meanwhile fails, and says why |
 | **Authentication,** or the key | Is forgotten once you've saved another | Use the new one at once |
+
+A running agent that couldn't connect to the server tries again once you've saved anything but its name and its turn has ended. Antigravity does at your next prompt. An agent on no turn connects as you save. To have one connect in the middle of a turn, press **Reload** on [the chat's plug](chats.md#the-chats-mcp-servers).
 
 - **To keep the key,** leave its field empty. You can change its header and keep the key.
 - **If the server doesn't list its tools,** nothing is saved, and **Save anyway** does it all the same, as [adding one](#if-the-server-doesnt-list-its-tools) says.

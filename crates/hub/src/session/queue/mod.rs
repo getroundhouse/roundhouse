@@ -11,7 +11,7 @@
 use protocol::model::Seq;
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;
 
 mod delivery;
 

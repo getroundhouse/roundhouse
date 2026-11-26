@@ -116,7 +116,13 @@ async fn a_server_with_a_key_comes_to_be_signed_in_to_and_every_client_is_told_o
     let add = ToolServerAdd { id: "t".into(), name: "Linear".into(), url, auth };
     hub.tool_server_add(add).await.unwrap();
     let mut feed = hub.subscribe_feed();
-    let rename = || ToolServerEdit { id: "t".into(), name: Some("Linear (EU)".into()), url: None, auth: None };
+    let rename = || ToolServerEdit {
+        id: "t".into(),
+        name: Some("Linear (EU)".into()),
+        url: None,
+        auth: None,
+        saved_anyway: false,
+    };
 
     let renamed = hub.tool_server_edit(rename()).await.unwrap();
     hub.tool_server_edit(rename()).await.unwrap();

@@ -70,6 +70,7 @@ printf '{{"type":"control_response","response":{{{answer}}}}}\n' "$id""#
             state,
             error: None,
             tools,
+            connects_again: None,
         };
         let listed = vec![says("docs", ServerState::Connected, Some(1)), says("linear", ServerState::Failed, None)];
         // The one asked for has no tools known from then on, and the other is as it was.

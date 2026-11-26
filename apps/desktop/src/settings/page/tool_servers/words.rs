@@ -8,7 +8,7 @@ use protocol::model::{ToolServerAuth, ToolServerName, ToolServerUrl, ToolSignInS
 
 use super::super::account_row::Tone;
 use super::super::field::Says;
-use super::edits::{Edits, Takes};
+use super::edits::{Edits, Rest, Takes};
 use super::form::{Does, Way};
 use crate::names::MACHINE;
 use crate::tool_sign_in::SignInTo;
@@ -99,20 +99,53 @@ pub(super) fn key_says(edits: Option<Edits>) -> &'static str {
     }
 }
 
-/// What running agents have of `edits`, which its panel says under its title. *Unconfirmed.*
-pub(super) fn edit_says(edits: Edits) -> &'static str {
+/// What running agents have of `edits`, saved `anyway` if the server didn't list its tools, which its panel says under
+/// its title. The agents that can list a server's tools again are those whose run claims `tool_server_reload`, which
+/// the words don't name, since which they are is each run's to say. *Unconfirmed.*
+pub(super) fn edit_says(edits: Edits, anyway: bool) -> &'static str {
     let Edits { name, moved, rest, takes: _ } = edits;
-    match (edits.signs_in(), moved, name, rest) {
-        (true, true, ..) => "Once you've signed in, running agents lose this server until their next start.",
-        (false, true, ..) => "Running agents lose this server until their next start.",
-        (true, false, true, _) => {
+    // As the hub has them, where its tools may be others: by another query, or none, where it's saved though it didn't
+    // list them.
+    let lists_again = match rest {
+        Rest::Query => true,
+        Rest::Auth => anyway,
+        Rest::Nothing => false,
+    };
+    match (edits.signs_in(), moved, lists_again, rest, name) {
+        (true, true, ..) => {
+            "Once you've signed in, running agents that can list its tools again lose this server until their turn \
+             ends, and others until their next start."
+        }
+        (false, true, ..) => {
+            "Running agents that can list its tools again lose this server until their turn ends, and others until \
+             their next start."
+        }
+        (true, false, true, _, true) => {
+            "Once you've signed in, running agents have the change at once, and the new name from their next start. \
+             Those that can list its tools again do so once their turn ends, and others at their next start."
+        }
+        (true, false, true, _, false) => {
+            "Once you've signed in, running agents have the change at once. Those that can list its tools again do so \
+             once their turn ends, and others at their next start."
+        }
+        (true, false, false, _, true) => {
             "Once you've signed in, running agents have the change at once, and the new name from their next start."
         }
-        (true, false, false, _) => "Once you've signed in, running agents have the change at once.",
-        (false, false, true, true) => "Running agents have the new name from their next start, and the rest at once.",
-        (false, false, true, false) => "Running agents have the new name from their next start.",
-        (false, false, false, true) => "Running agents have the change at once.",
-        (false, false, false, false) => "Change its name, its URL or how it knows you.",
+        (true, false, false, _, false) => "Once you've signed in, running agents have the change at once.",
+        (false, false, true, _, true) => {
+            "Running agents have the new name from their next start, and the rest at once. Those that can list its \
+             tools again do so once their turn ends, and others at their next start."
+        }
+        (false, false, true, _, false) => {
+            "Running agents have the change at once. Those that can list its tools again do so once their turn ends, \
+             and others at their next start."
+        }
+        (false, false, false, Rest::Auth | Rest::Query, true) => {
+            "Running agents have the new name from their next start, and the rest at once."
+        }
+        (false, false, false, Rest::Auth | Rest::Query, false) => "Running agents have the change at once.",
+        (false, false, false, Rest::Nothing, true) => "Running agents have the new name from their next start.",
+        (false, false, false, Rest::Nothing, false) => "Change its name, its URL or how it knows you.",
     }
 }
 

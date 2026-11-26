@@ -31,12 +31,12 @@ impl Followings {
         }
     }
 
-    /// Follows each from now on, and has `hub` look at its agents again each time `link`, to `workspace_id`'s worker, has
-    /// the token of a tool server that's newly signed in to.
+    /// Follows each from now on, and has `hub` look at its agents again each time `link`, to `workspace_id`'s worker, has a
+    /// tool server as it wasn't before.
     pub(super) fn follow(self, hub: &Arc<Hub>, link: &Arc<WorkerLink>, workspace_id: &WorkspaceId, span: &Span) {
         tokio::spawn(self.credential.follow().instrument(span.clone()));
         // Before the servers are followed, so it misses none.
-        let reconnecting = Arc::clone(hub).reconnect_as_signed_in(workspace_id.clone(), Arc::clone(link));
+        let reconnecting = Arc::clone(hub).reconnect_as_changed(workspace_id.clone(), Arc::clone(link));
         tokio::spawn(reconnecting.instrument(span.clone()));
         tokio::spawn(self.tool_servers.follow().instrument(span.clone()));
     }

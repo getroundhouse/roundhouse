@@ -1,4 +1,4 @@
-use protocol::capability::setup::{ServerState, ToolServerState};
+use protocol::capability::setup::{ConnectsAgain, ServerState, ToolServerState};
 use protocol::model::{ToolServer, ToolServerId};
 
 use super::{SignIn, SignInFor, SignInStands};
@@ -28,8 +28,13 @@ pub enum Stands {
     },
     /// By the CLI's settings.
     TurnedOff,
-    /// One of the hub's that the agent wasn't launched with, or one that's been moved to another URL since the agent
-    /// connected to it, so its worker has cut the agent off from it.
+    /// One of the hub's that the agent is to connect to again once its turn ends, to have it as the person has since
+    /// signed in to it or edited it, and that it's connected to as it was, or isn't.
+    WhenItsTurnEnds {
+        connected: bool,
+    },
+    /// One of the hub's that the agent wasn't launched with, or one the hub says it has from its next start, as one it's
+    /// connected to where it was before it was moved to another URL, so its worker has cut the agent off from it.
     FromItsNextStart,
     /// One the agent has that the hub no longer does.
     Removed,
@@ -72,13 +77,17 @@ impl Stands {
             let sign_in = sign_in.and_then(|sign_in| sign_in.stands_of(&server.id)).cloned();
             return Stands::NeedsSignIn { server: server.id.clone(), wanted, sign_in };
         }
-        match said {
-            Some(said) if said.connected_to.as_ref().is_some_and(|place| *place != server.url.place()) => {
-                Stands::FromItsNextStart
+        let Some(said) = said else {
+            return if agents_said { Stands::FromItsNextStart } else { Stands::NotSaid };
+        };
+        // As the hub decides it, which it does from more than its record and what the agent says. A newer hub's word
+        // this build doesn't know leaves what the agent says.
+        match said.connects_again {
+            Some(ConnectsAgain::WhenItsTurnEnds) => {
+                Stands::WhenItsTurnEnds { connected: said.state == ServerState::Connected }
             }
-            Some(said) => Self::said(said),
-            None if agents_said => Stands::FromItsNextStart,
-            None => Stands::NotSaid,
+            Some(ConnectsAgain::AtItsNextStart) => Stands::FromItsNextStart,
+            Some(ConnectsAgain::Unknown) | None => Self::said(said),
         }
     }
 
@@ -109,6 +118,7 @@ impl Stands {
             Stands::SignInFromItsCli => "Sign in from its CLI",
             Stands::CantBeReached { .. } => "Can't be reached",
             Stands::TurnedOff => "Turned off",
+            Stands::WhenItsTurnEnds { .. } => "When its turn ends",
             Stands::FromItsNextStart => "From its next start",
             Stands::Removed => "Removed",
         };
@@ -123,9 +133,9 @@ impl Stands {
             | Stands::Starting
             | Stands::TurnedOff
             | Stands::Removed => Tone::Plain,
-            Stands::FromItsNextStart | Stands::NeedsSignIn { sign_in: Some(SignInStands::UnderWay), .. } => {
-                Tone::Coming
-            }
+            Stands::WhenItsTurnEnds { .. }
+            | Stands::FromItsNextStart
+            | Stands::NeedsSignIn { sign_in: Some(SignInStands::UnderWay), .. } => Tone::Coming,
             Stands::NeedsSignIn { sign_in: None | Some(SignInStands::CameToNothing(_)), .. }
             | Stands::SignInFromItsCli
             | Stands::CantBeReached { .. } => Tone::Problem,
@@ -144,6 +154,7 @@ impl Stands {
             | Stands::SignInFromItsCli
             | Stands::CantBeReached { .. }
             | Stands::TurnedOff
+            | Stands::WhenItsTurnEnds { .. }
             | Stands::FromItsNextStart
             | Stands::Removed => None,
         }
@@ -160,6 +171,7 @@ impl Stands {
             | Stands::SignInFromItsCli
             | Stands::CantBeReached { .. }
             | Stands::TurnedOff
+            | Stands::WhenItsTurnEnds { .. }
             | Stands::FromItsNextStart
             | Stands::Removed => None,
         }
@@ -180,6 +192,7 @@ impl Stands {
             | Stands::Starting
             | Stands::SignInFromItsCli
             | Stands::TurnedOff
+            | Stands::WhenItsTurnEnds { .. }
             | Stands::FromItsNextStart
             | Stands::Removed => None,
         }

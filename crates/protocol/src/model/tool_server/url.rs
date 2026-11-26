@@ -84,6 +84,11 @@ impl ToolServerUrl {
         ToolServerPlace::of(self)
     }
 
+    /// What's asked of it, which is all of it that isn't its place: what's after its `?`, where it has one.
+    pub fn query(&self) -> Option<&str> {
+        self.0.split_once('?').map(|(_, query)| query)
+    }
+
     /// Whether `other` is of the same server, so what that knows the person by stays good: they differ in their queries
     /// at most.
     pub fn is_same_server(&self, other: &ToolServerUrl) -> bool {

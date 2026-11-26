@@ -1,5 +1,5 @@
 use super::ChatSettings;
-use super::reconnecting::HadSignIns;
+use super::had_servers::HadServers;
 use super::reloading::Reloading;
 use super::{Starting, commands, ingest, limits, messages, progress};
 use crate::attachment_files::FileFor;
@@ -7,7 +7,7 @@ use crate::error::internal;
 use crate::hub::Hub;
 use crate::store;
 use crate::store::SessionLogin;
-use crate::tool_servers::SignedInBy;
+use crate::tool_servers::ServersAsSent;
 use crate::worker_link::WorkerLinkId;
 use commands::{Sendable, run_commands};
 use ingest::run_ingest;
@@ -108,8 +108,8 @@ pub(super) struct LiveState {
     pub(super) interaction: protocol::model::Interaction,
     /// The reply that device is reading out, if any.
     pub(super) reading_out: super::reading_out::ReadingOut,
-    /// What the run has been signed in to its tool servers by, as [`super::reconnecting`] says.
-    pub(super) had_sign_ins: Option<HadSignIns>,
+    /// How the run has had each of its tool servers, as [`super::reconnecting`] says.
+    pub(super) had_servers: Option<HadServers>,
     /// What the run has been asked to connect to again, as [`super::reloading`] says.
     pub(super) reloading: Option<Reloading>,
     /// How the run was last told the person talks with the agent, as [`super::mode_told`] says.
@@ -206,7 +206,7 @@ impl LiveSession {
                 closed_at_ms: stored.session.closed_at_ms,
                 interaction: stored.session.interaction.clone(),
                 reading_out: super::reading_out::ReadingOut::default(),
-                had_sign_ins: agent.map(|agent| HadSignIns::new(agent.run, SignedInBy::default())),
+                had_servers: agent.map(|agent| HadServers::new(agent.run, ServersAsSent::default())),
                 reloading: None,
                 mode_told: None,
                 after_the_turn: Vec::new(),
@@ -233,7 +233,7 @@ impl LiveSession {
     fn carried_on(self: &Arc<Self>, run: RunId) {
         // So what the agent hears of its account's limits is filed under the account, as for one this hub launched.
         self.launched(run);
-        // A tool server may have been signed in to as the last hub went.
+        // A tool server may have been signed in to or edited as the last hub went.
         self.ask_for_reconnects();
         // The last hub's wait for the agent to pick up again went with it.
         if self.state.lock().progress.waits_for_pickup() {

@@ -9,6 +9,7 @@
 #[cfg(test)]
 pub(crate) mod tests;
 
+mod as_sent;
 mod checking;
 mod editing;
 mod kept;
@@ -17,13 +18,12 @@ mod secret;
 mod sending;
 mod servers;
 mod sign_ins;
-mod signed_in_by;
 mod signing_in;
 mod wanted;
+pub(crate) use as_sent::{ServerAsSent, ServersAsSent};
 pub(crate) use checking::{Checking, ToAsk};
 pub(crate) use renewals::{Checked, Due, Held};
 pub(crate) use sending::SentToolServers;
 pub(crate) use servers::{ToolServerChange, ToolServerRemoved, ToolServers};
-pub(crate) use signed_in_by::SignedInBy;
 pub(crate) use signing_in::SigningIn;
 pub(crate) use wanted::Wanted;

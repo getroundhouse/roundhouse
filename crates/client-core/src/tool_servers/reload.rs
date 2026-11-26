@@ -105,7 +105,8 @@ fn offered(session: &Session, stands: &Stands) -> Option<Offered> {
     let claims = &session.agent_capabilities.as_ref()?.claims.setup;
     match stands {
         Stands::Tools(_) | Stands::Connected => claims.tool_server_reload.map(|_| Offered::Quietly),
-        Stands::CantBeReached { .. } | Stands::SignInFromItsCli => {
+        Stands::WhenItsTurnEnds { connected: true } => claims.tool_server_reload.map(|_| Offered::Plainly),
+        Stands::WhenItsTurnEnds { connected: false } | Stands::CantBeReached { .. } | Stands::SignInFromItsCli => {
             claims.tool_server_reconnect.map(|_| Offered::Plainly)
         }
         Stands::NotSaid
@@ -120,7 +121,7 @@ fn offered(session: &Session, stands: &Stands) -> Option<Offered> {
 #[cfg(test)]
 mod tests {
     use protocol::capability::Claimed;
-    use protocol::capability::setup::{ServerState, ToolServerState};
+    use protocol::capability::setup::{ConnectsAgain, ServerState, ToolServerState};
     use protocol::client::{ApiError, ErrorCode};
     use protocol::fixtures;
     use protocol::model::{RunCapabilities, RunId, SessionId};
@@ -210,6 +211,26 @@ mod tests {
         assert_eq!(offering(&chat(false, false)), [], "a run of an older build, or an agent that can't");
         let none_said = Session { agent_capabilities: None, ..chat(true, true) };
         assert_eq!(offering(&none_said), [], "whatever its kind can do");
+    }
+
+    /// By what it takes of a run to connect to it as it stands. One the hub says it has from its next start isn't
+    /// offered, whatever the run claims.
+    #[test]
+    fn one_the_agent_is_to_connect_to_once_its_turn_ends_is_offered_plainly_as_the_run_claims() {
+        let offered = |when, state, session: &Session| {
+            let said = ToolServerState { connects_again: Some(when), ..said("as-t-1", Some("t-1"), state) };
+            let records = held(vec![named("t-1", "Docs")], Some(vec![said]));
+            let [row] = &of(&records, session, &Reloads::default())[..] else { panic!("one server") };
+            row.reload.as_ref().map(|reload| reload.offered)
+        };
+        let (claude, codex) = (chat(true, true), chat(true, false));
+        let when_it_ends = |state, session| offered(ConnectsAgain::WhenItsTurnEnds, state, session);
+
+        assert_eq!(when_it_ends(ServerState::Connected, &claude), Some(Offered::Plainly));
+        assert_eq!(when_it_ends(ServerState::Failed, &claude), Some(Offered::Plainly));
+        assert_eq!(when_it_ends(ServerState::Connected, &codex), None);
+        assert_eq!(when_it_ends(ServerState::Failed, &codex), Some(Offered::Plainly));
+        assert_eq!(offered(ConnectsAgain::AtItsNextStart, ServerState::Connected, &claude), None);
     }
 
     /// Which is what its card waits for the pointer for, and what's read out of it.

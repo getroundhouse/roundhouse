@@ -60,7 +60,8 @@ fn the_card_follows_the_hubs_servers_and_what_the_agent_says_of_them(cx: &mut Te
     assert_eq!(called(&ui, "Linear_Northwind"), "Linear (Northwind)");
 
     add("t-2", "Docs");
-    let renamed = ToolServerEdit { id: "t-1".into(), name: Some("Linear".into()), url: None, auth: None };
+    let renamed =
+        ToolServerEdit { id: "t-1".into(), name: Some("Linear".into()), url: None, auth: None, saved_anyway: false };
     client.tool_server_edit(renamed).unwrap();
 
     ui.wait("the server added", |ui| ui.shows_label("mcp-card", "Docs, From its next start"));
@@ -85,6 +86,7 @@ pub(crate) fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolSe
         state,
         error: None,
         tools: None,
+        connects_again: None,
     }
 }
 

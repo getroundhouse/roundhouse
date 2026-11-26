@@ -21,7 +21,7 @@ fn a_check_of_a_tool_server_holds_what_would_be_done_and_keeps_its_form() {
     let url = || "https://mcp.example.com/mcp".to_string();
     let add = ToolServerAdd { id: "t".into(), name: "Docs".into(), url: url(), auth: given };
     let auth = ToolServerAuthEdit::Key { header: "X-Key".into(), key: Some(key()), url: url() };
-    let edit = ToolServerEdit { id: "t".into(), name: None, url: Some(url()), auth: Some(auth) };
+    let edit = ToolServerEdit { id: "t".into(), name: None, url: Some(url()), auth: Some(auth), saved_anyway: false };
 
     asked(
         check(ToolServerToCheck::Add(add)),

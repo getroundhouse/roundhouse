@@ -5,7 +5,7 @@
 use client_core::tool_server_checks::{Checked, came_to};
 use gpui_kit::{App, Context, Task, Window};
 use protocol::client::tool_server_checks::{ToolServerChecked, ToolServerToCheck};
-use protocol::client::tool_servers::ToolServerAdd;
+use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
 use protocol::model::ToolServer;
 
 use super::form::{AuthFields, Does, Form};
@@ -32,6 +32,17 @@ impl FormStands {
         match self {
             FormStands::AskingServer { .. } | FormStands::AskingHub { .. } => true,
             FormStands::Open | FormStands::Refused(_) | FormStands::NotListed(_) => false,
+        }
+    }
+
+    /// Whether it's to be saved anyway, since the server didn't list its tools.
+    pub(super) fn saves_anyway(&self) -> bool {
+        match self {
+            FormStands::NotListed(_) => true,
+            FormStands::Open
+            | FormStands::AskingServer { .. }
+            | FormStands::AskingHub { .. }
+            | FormStands::Refused(_) => false,
         }
     }
 
@@ -97,7 +108,7 @@ impl Kept {
                 self.sign_in(to, window, cx);
             }
             (Does::Add | Does::Save, Some(of)) => self.check(of, window, cx),
-            (Does::Add | Does::Save, None) => self.go_on(window, cx),
+            (Does::Add | Does::Save, None) => self.go_on(false, window, cx),
         }
     }
 
@@ -108,7 +119,7 @@ impl Kept {
         }
         // The button that was pressed goes.
         self.focus_the_panel(window, cx);
-        self.go_on(window, cx);
+        self.go_on(true, window, cx);
     }
 
     /// Has the hub ask the server for its tools, and goes on once it has listed them.
@@ -128,7 +139,7 @@ impl Kept {
     fn checked(&mut self, answer: client_core::Result<ToolServerChecked>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(form) = self.form() else { return };
         match came_to(answer, &form.name.value(cx), &form.url.value(cx)) {
-            Ok(Checked::Fine) => self.go_on(window, cx),
+            Ok(Checked::Fine) => self.go_on(false, window, cx),
             Ok(Checked::Not(why)) => self.stand(FormStands::NotListed(why), cx),
             Err(e) => {
                 let why = words::couldnt(words::to_do(form.does(cx)), &e);
@@ -137,8 +148,8 @@ impl Kept {
         }
     }
 
-    /// Has the hub add or save it.
-    fn go_on(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// Has the hub add it, or save it, `anyway` if the server didn't list its tools.
+    fn go_on(&mut self, anyway: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some((hub, form)) = self.asking.clone().zip(self.form()) else {
             return self.stand(FormStands::Open, cx);
         };
@@ -147,7 +158,10 @@ impl Kept {
             Some(ToolServerToCheck::Add(ToolServerAdd { id, name, url, auth })) => {
                 hub.client.start(move |client| client.tool_server_add(&id, &name, &url, auth))
             }
-            Some(ToolServerToCheck::Edit(edit)) => hub.client.start(move |client| client.tool_server_edit(edit)),
+            Some(ToolServerToCheck::Edit(edit)) => {
+                let edit = ToolServerEdit { saved_anyway: anyway, ..edit };
+                hub.client.start(move |client| client.tool_server_edit(edit))
+            }
             // A server that's signed in to is added once that's approved, and a form asks for no change this build
             // doesn't know.
             Some(ToolServerToCheck::Unknown) | None => return,

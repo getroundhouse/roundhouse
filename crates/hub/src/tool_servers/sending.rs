@@ -9,8 +9,9 @@ use protocol::worker::{ProxiedServer, ServerHeader, ServerHeaderValue, ServerSig
 use tokio::sync::watch;
 use tracing::{error, warn};
 
+use super::as_sent::Change;
 use super::secret::{ToolServerSecret, as_sent};
-use super::{SignedInBy, ToolServers};
+use super::{ServersAsSent, ToolServers};
 use crate::login_files::{Locked, LoginFile, Stored};
 use crate::store::StoreError;
 
@@ -19,7 +20,9 @@ use crate::store::StoreError;
 #[derive(Clone, Default, PartialEq, Eq)]
 pub(crate) struct SentToolServers {
     sent: Vec<ProxiedServer>,
-    signed_in: SignedInBy,
+    as_sent: ServersAsSent,
+    /// The last change `as_sent` numbers.
+    last: Change,
     left_out: Vec<(ToolServerId, LeftOut)>,
 }
 
@@ -29,9 +32,25 @@ impl SentToolServers {
         ToolServersSet { servers: self.sent.clone() }
     }
 
-    /// Those of them that are signed in to, so a worker that's set them has their tokens.
-    pub(crate) fn signed_in(&self) -> &SignedInBy {
-        &self.signed_in
+    /// How each is, for a worker that's set them to have them so.
+    pub(crate) fn as_sent(&self) -> &ServersAsSent {
+        &self.as_sent
+    }
+
+    /// Adds `server`, known by the sign-in `signed_in_by` if it's signed in to, to what workers are sent after `before`,
+    /// as [`ServersAsSent::after`] says.
+    fn add(
+        &mut self,
+        before: &SentToolServers,
+        server: ProxiedServer,
+        signed_in_by: Option<ToolSignInId>,
+        saved_anyway: Option<&ToolServerId>,
+    ) {
+        let was = before.sent.iter().find(|was| was.id == server.id);
+        let saved_anyway = saved_anyway == Some(&server.id);
+        let as_sent = before.as_sent.after(was, &server, signed_in_by, saved_anyway, &mut self.last);
+        self.as_sent.set(server.id.clone(), as_sent);
+        self.sent.push(server);
     }
 }
 
@@ -78,16 +97,26 @@ impl ToolServers {
         &self,
         change: impl FnOnce(&Locked<'_, ToolServerSecret>) -> Result<T, E>,
     ) -> Result<T, E> {
+        self.changing_saved(None, change)
+    }
+
+    /// The same, where the person saves what changes of the server `saved_anyway` though the hub couldn't use it.
+    pub(super) fn changing_saved<T, E>(
+        &self,
+        saved_anyway: Option<&ToolServerId>,
+        change: impl FnOnce(&Locked<'_, ToolServerSecret>) -> Result<T, E>,
+    ) -> Result<T, E> {
         let files = self.files.lock();
         let changed = change(&files);
-        self.publish(&files);
+        self.publish(&files, saved_anyway);
         changed
     }
 
     /// Has workers sent the servers the hub has now, if that has changed, and says each that's left out. If they can't
     /// be read, workers have what they were last sent until the next change.
-    pub(super) fn publish(&self, files: &Locked<'_, ToolServerSecret>) {
-        let worked_out = match self.worked_out(files) {
+    pub(super) fn publish(&self, files: &Locked<'_, ToolServerSecret>, saved_anyway: Option<&ToolServerId>) {
+        let worked_out = self.worked_out(files, &self.sent.borrow(), saved_anyway);
+        let worked_out = match worked_out {
             Ok(worked_out) => worked_out,
             Err(error) => {
                 error!(
@@ -110,18 +139,22 @@ impl ToolServers {
         });
     }
 
-    fn worked_out(&self, files: &Locked<'_, ToolServerSecret>) -> Result<SentToolServers, StoreError> {
+    /// What workers are to be sent after `before`.
+    fn worked_out(
+        &self,
+        files: &Locked<'_, ToolServerSecret>,
+        before: &SentToolServers,
+        saved_anyway: Option<&ToolServerId>,
+    ) -> Result<SentToolServers, StoreError> {
         let named = self.store.tool_servers_with_secrets()?.into_iter().map(|(server, file)| (server.id, file));
         let secrets: HashMap<_, _> = named.collect();
-        let mut worked_out = SentToolServers::default();
+        let mut worked_out = SentToolServers { last: before.last, ..SentToolServers::default() };
         for server in self.store.tool_servers()? {
             let file = secrets.get(&server.id).and_then(Option::as_ref);
             match knows_by(&server.auth, || secret(files, file)) {
                 Ok(known) => {
-                    if let Known::SignedIn { by, .. } = &known {
-                        worked_out.signed_in.set(server.id.clone(), by.clone());
-                    }
-                    worked_out.sent.push(proxied(server, known));
+                    let signed_in_by = if let Known::SignedIn { by, .. } = &known { Some(by.clone()) } else { None };
+                    worked_out.add(before, proxied(server, known), signed_in_by, saved_anyway);
                 }
                 Err(why) => worked_out.left_out.push((server.id, why)),
             }

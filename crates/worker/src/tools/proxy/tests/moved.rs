@@ -22,7 +22,7 @@ const DISCOVER: &str = r#"{"jsonrpc":"2.0","id":0,"method":"server/discover"}"#;
 const CALL: &str = r#"{"jsonrpc":"2.0","id":"call-7","method":"tools/call","params":{"name":"list"}}"#;
 const LISTEN: &str = r#"{"jsonrpc":"2.0","id":"listen-1","method":"subscriptions/listen","params":{}}"#;
 const NOTIFICATION: &str = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
-const MOVED: &str = "Linear (Northwind) has been moved to another URL in Roundhouse since this agent connected to it, so nothing was sent to it. This agent has it from its next start.";
+const MOVED: &str = "Linear (Northwind) has been moved to another URL in Roundhouse, so nothing is sent to it until this agent connects to it again.";
 
 /// One that gives each agent the session `session`, and answers a message with itself.
 async fn giving(session: &'static str) -> StandIn {
@@ -235,6 +235,7 @@ async fn what_an_agent_says_of_its_servers_is_passed_on_with_where_its_connected
         state: ServerState::Connected,
         error: None,
         tools: None,
+        connects_again: None,
     };
     let own = || ToolServerState { name: "own".into(), hubs: None, ..says() };
     let agent = connected(&before, "before").await;
