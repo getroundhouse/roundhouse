@@ -1,6 +1,6 @@
 use super::{
     ApiError, admin, agent, attachments, comments, feed, github_apps, hello, log, new_workspace, proposals, records,
-    request, sessions, tool_server_checks, tool_sign_ins, workspaces,
+    request, sessions, tool_server_checks, tool_server_saves, tool_sign_ins, workspaces,
 };
 use crate::attachment::Attachment;
 use crate::event::SessionEvent;
@@ -119,6 +119,7 @@ pub enum ClientResponse {
     GithubAppManifest(github_apps::GithubAppManifest),
     ToolServer(crate::model::ToolServer),
     ToolServerChecked(tool_server_checks::ToolServerChecked),
+    ToolServerSaved(tool_server_saves::ToolServerSaved),
     ToolSignInBegun(tool_sign_ins::ToolSignInBegun),
     WorktreeFiles(WorktreeFiles),
     FileContents(FileContents),

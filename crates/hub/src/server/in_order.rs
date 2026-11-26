@@ -1,6 +1,7 @@
 //! What a connection takes in the order it was sent: what's pressed and new sizes, which go on to the terminal's
-//! worker before the next request is read, and what it subscribes to, which one task of the connection's takes in turn
-//! while the next requests are read and answered.
+//! worker before the next request is read, a save of a tool server, which is under way before the next request is read,
+//! so a cancel sent after it finds it, and what it subscribes to, which one task of the connection's takes in turn while
+//! the next requests are read and answered.
 
 use std::sync::Arc;
 
@@ -25,11 +26,22 @@ pub(super) enum Answering {
 }
 
 /// What's pressed and new sizes, sent on to the terminal's worker as they're read, rather than on a task of their own,
-/// since typing out of order isn't what was typed. Their replies come once that's done.
-pub(super) async fn in_order(hub: &Arc<Hub>, request: Result<ClientRequest, serde_json::Error>) -> Answering {
+/// since typing out of order isn't what was typed, and a save of a tool server, begun as it's read. Their replies come
+/// once that's done.
+pub(super) async fn in_order(
+    hub: &Arc<Hub>,
+    connection: &Connection,
+    request: Result<ClientRequest, serde_json::Error>,
+) -> Answering {
     let queued = match request {
         Ok(ClientRequest::TerminalTyped(typed)) => hub.terminal_typed(typed).await,
         Ok(ClientRequest::TerminalFit(fit)) => hub.terminal_fit(fit).await,
+        Ok(ClientRequest::ToolServerSave(save)) => {
+            hub.tool_server_save(save, connection.closed.subscribe()).map(|saved| {
+                let queued: Queued = Box::pin(async move { saved.await.map(ClientResponse::ToolServerSaved) });
+                queued
+            })
+        }
         request => return Answering::OnATask(request),
     };
     Answering::Queued(queued.unwrap_or_else(|refused| Box::pin(async move { Err(refused) })))

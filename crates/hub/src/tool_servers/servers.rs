@@ -69,7 +69,11 @@ impl ToolServers {
         self.changing(|files| self.add_to(files, asked))
     }
 
-    fn add_to(&self, files: &Locked<'_, ToolServerSecret>, asked: ToolServerAdd) -> Result<ToolServerChange, ApiError> {
+    pub(super) fn add_to(
+        &self,
+        files: &Locked<'_, ToolServerSecret>,
+        asked: ToolServerAdd,
+    ) -> Result<ToolServerChange, ApiError> {
         let Adding { id, name, url, auth, secret } = match self.adding(asked)? {
             ToAdd::There(server) => return Ok(ToolServerChange { server, changed: false }),
             ToAdd::New(adding) => adding,

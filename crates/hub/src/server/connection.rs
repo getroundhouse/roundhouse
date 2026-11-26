@@ -246,10 +246,11 @@ async fn answer(
         Ok(ClientRequest::Subscribe(asked)) => {
             return subscribes.queue(&connection, id, asked, under_way).await;
         }
-        read => in_order(&hub, read).instrument(span.clone()).await,
+        read => in_order(&hub, &connection, read).instrument(span.clone()).await,
     };
     // On a task of its own, which outlasts the connection, so a request the hub has read is carried out whether or not
-    // its client is still there, as a prompt sent just before a client quits is.
+    // its client is still there, as a prompt sent just before a client quits is. A save of a tool server lets go of
+    // itself instead while its server is asked, as `ToolServerSave` says.
     tokio::spawn(
         async move {
             let answered = match answering {

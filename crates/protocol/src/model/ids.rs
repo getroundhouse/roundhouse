@@ -113,6 +113,9 @@ ids!(
     /// A sign-in to a tool server, chosen by the client that starts it, as a UUID, so starting it again, as after a reply
     /// that was lost, is the same sign-in.
     ToolSignInId,
+    /// A save of a tool server, chosen by the client that sends it, as a UUID, for that client to cancel it by while the
+    /// server is asked for its tools. No other client is told it, so none can cancel another's.
+    ToolServerSaveId,
     /// What GitHub calls a GitHub App in its addresses, such as `ada-roundhouse`, which its bot is named for, as
     /// `ada-roundhouse[bot]`. GitHub gives it as the app is made, from the name the person chose.
     GithubAppSlug,

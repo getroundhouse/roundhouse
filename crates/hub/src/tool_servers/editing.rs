@@ -67,7 +67,7 @@ impl ToolServers {
         self.changing_saved(saved_anyway.as_ref(), |files| self.edit_in(files, asked))
     }
 
-    fn edit_in(
+    pub(super) fn edit_in(
         &self,
         files: &Locked<'_, ToolServerSecret>,
         asked: ToolServerEdit,

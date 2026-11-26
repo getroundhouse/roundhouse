@@ -7,7 +7,7 @@ use crate::store::AddedBy;
 use protocol::client::{
     ApiError, ClientRequest, ClientResponse, ErrorCode, accounts, admin, agent, attachments, comments, conversation,
     drafts, files, github_accounts, github_apps, log, new_workspace, queue, records, references, sessions,
-    tool_servers, tool_sign_ins, waits, workspaces,
+    tool_server_saves, tool_servers, tool_sign_ins, waits, workspaces,
 };
 use protocol::model::ByteRange;
 use std::sync::Arc;
@@ -229,6 +229,15 @@ pub(super) async fn handle(
         }
         R::GithubAppRemove(github_apps::GithubAppRemove { id }) => C::GithubApp(hub.github_app_remove(id).await?),
         R::ToolServerCheck(asked) => C::ToolServerChecked(hub.tool_server_check(asked).await?),
+        // Begun as the connection reads it, by `in_order`, so a cancel it sends after finds it, and none comes here. One
+        // that did is still saved and answered.
+        R::ToolServerSave(asked) => {
+            C::ToolServerSaved(hub.tool_server_save(asked, connection.closed.subscribe())?.await?)
+        }
+        R::ToolServerSaveCancel(tool_server_saves::ToolServerSaveCancel { id }) => {
+            hub.tool_server_save_cancel(&id);
+            C::Ok
+        }
         R::ToolServerAdd(asked) => C::ToolServer(hub.tool_server_add(asked).await?),
         R::ToolServerEdit(asked) => C::ToolServer(hub.tool_server_edit(asked).await?),
         R::ToolServerRemove(tool_servers::ToolServerRemove { id }) => C::ToolServer(hub.tool_server_remove(id).await?),
