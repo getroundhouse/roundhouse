@@ -58,7 +58,7 @@ impl ChatToolServers {
     /// agent is known to have any. `sign_in` is the one this client has, if it has one, whichever chat it was started in,
     /// and `reloads` those it has asked for.
     pub fn of(records: &Snapshot, session: &Session, sign_in: Option<&SignIn>, reloads: &Reloads) -> Option<Self> {
-        let said = records.tool_servers_said(session);
+        let said = records.tool_servers_said(&session.id);
         let row = |name: String, agents: Option<&ToolServerState>, stands: Stands| {
             let agents = agents.map(|said| OfReload::of(records, session, &said.name, &stands, reloads));
             let OfReload { reload, refused } = agents.unwrap_or_default();

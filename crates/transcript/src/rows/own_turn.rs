@@ -145,7 +145,7 @@ mod tests {
         task.task.tool = Some(TaskTool { server: "Linear_Northwind".into(), tool: "export_issues".into() });
 
         assert_eq!(
-            words(&task, held.snapshot().tool_server_names()).1.into_words(),
+            words(&task, &held.snapshot().tool_server_names(&"s".into())).1.into_words(),
             "Linear (Northwind): Export issues"
         );
     }

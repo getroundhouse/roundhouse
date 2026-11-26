@@ -140,11 +140,11 @@ impl Transcript {
         self.follow_the_subagent(session, cx);
         self.set_proposals(records.proposals(&id), cx);
         self.set_replies_heard(records.replies_heard(&id), cx);
-        self.set_tool_servers(records.tool_server_names(), cx);
+        self.set_tool_servers(&records.tool_server_names(&id), cx);
     }
 
     /// Takes what the person calls each of the hub's tool servers, and draws every row again if that changed, which only
-    /// adding, renaming or removing one does.
+    /// adding, renaming or removing one does, and the agent saying which it has.
     fn set_tool_servers(&mut self, names: &ToolServerNames, cx: &mut Context<Self>) {
         if self.model.borrow().tool_servers == *names {
             return;

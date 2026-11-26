@@ -35,7 +35,7 @@ fn a_background_task_of_an_mcp_servers_tool_prints_the_persons_name_for_the_serv
     let northwind =
         ToolServer { name: ToolServerName::stored("Linear (Northwind)".into()), ..fixtures::tool_server("t") };
     let records = crate::run::held(Records { tool_servers: vec![northwind], ..Records::default() });
-    let names = records.tool_server_names();
+    let names = records.tool_server_names(&"s".into());
     let mut export = task("a", TaskKind::Command);
     export.tool = Some(TaskTool { server: "Linear_Northwind".into(), tool: "export_issues".into() });
     let printed = Printer::naming(names.clone()).newly_running(std::slice::from_ref(&export));
@@ -43,7 +43,7 @@ fn a_background_task_of_an_mcp_servers_tool_prints_the_persons_name_for_the_serv
     assert_eq!(printed.as_deref(), Some("running in the background: Linear (Northwind): Export issues"));
     let ended = EndedTask { task: export, outcome: TaskOutcome::Finished, wait: None };
     let said = "the agent picked up by itself, after: Linear (Northwind): Export issues finished";
-    assert_eq!(own_turn(&[ended], names), said);
+    assert_eq!(own_turn(&[ended], &names), said);
 }
 
 /// So the terminal reads a call as the app does: by its kind, and one of no kind a client knows by its tool's name.

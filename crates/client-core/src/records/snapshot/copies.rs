@@ -3,7 +3,6 @@ use super::by_session::SessionsListed;
 use super::github::GithubListed;
 use super::observed::ObservationsListed;
 use crate::Agents;
-use crate::tool_servers::ToolServerNames;
 use protocol::model::{
     Account, AccountId, DiffComment, HubSettings, HubUpdate, MessageId, ModelList, ModelListKey, NewWorkspaceDraft,
     Proposal, ProposalId, Reach, Record, ReplyHeard, Repo, RepoId, Session, SessionId, Subagent, SubagentId, Terminal,
@@ -47,7 +46,6 @@ pub(in super::super) struct Listed {
     pub(super) github: GithubListed,
     /// By name.
     pub(super) tool_servers: Vec<ToolServer>,
-    pub(super) tool_server_names: ToolServerNames,
 }
 
 /// Some records that go together, such as a workspace's sessions, and which copies of them these are.
@@ -116,7 +114,6 @@ impl Listed {
         }
         listed.repos.sort_by(Repo::by_name);
         listed.tool_servers.sort_by(ToolServer::by_name);
-        listed.tool_server_names = ToolServerNames::of(&listed.tool_servers);
         listed.repo_at = listed.repos.iter().enumerate().map(|(at, repo)| (repo.id.clone(), at)).collect();
         workspaces.sort_by(|(a, _), (b, _)| a.oldest_first(b));
         listed.workspace_at = workspaces

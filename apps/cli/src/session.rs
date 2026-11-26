@@ -72,15 +72,15 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
     Ok(())
 }
 
-/// One that names the hub's tool servers as the hub has them now.
-fn printer(client: &Client) -> anyhow::Result<render::Printer> {
-    Ok(render::Printer::naming(held(client.records()?).tool_server_names().clone()))
+/// One that names the hub's tool servers as the hub has them now, in `session`.
+fn printer(client: &Client, session: &SessionId) -> anyhow::Result<render::Printer> {
+    Ok(render::Printer::naming(held(client.records()?).tool_server_names(session)))
 }
 
 pub(crate) fn print_log(client: &Client, session: &str, from: Seq, limit: u32, raw: bool) -> anyhow::Result<()> {
     let session = find_session(client, session)?;
     let (events, _) = client.session_read(&session.id, from, limit, raw)?;
-    let mut printer = printer(client)?;
+    let mut printer = printer(client, &session.id)?;
     for event in events {
         if raw {
             println!("{}", serde_json::to_string(&event)?);
@@ -143,7 +143,7 @@ pub(crate) fn follow(
     until_idle: bool,
     json: bool,
 ) -> anyhow::Result<()> {
-    let mut printer = printer(client)?;
+    let mut printer = printer(client, session_id)?;
     let mut following = Following::starting_at(from);
     // Nothing is left to wait for if the agent is done and everything recorded has been seen. A status from a newer
     // hub doesn't say it's done, so following goes on.

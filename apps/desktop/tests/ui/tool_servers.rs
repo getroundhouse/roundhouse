@@ -66,12 +66,8 @@ fn the_card_follows_the_hubs_servers_and_what_the_agent_says_of_them(cx: &mut Te
 
     ui.wait("the server added", |ui| ui.shows_label("mcp-card", "Docs, From its next start"));
     ui.wait("the server renamed", |ui| ui.shows_label("mcp-card", "Linear, Can't be reached"));
-    ui.wait("the chat's calls to it", |ui| called(ui, "Linear") == "Linear");
-    assert_eq!(
-        called(&ui, "Linear_Northwind"),
-        "Linear_Northwind",
-        "as its agent calls it, now that none has the name"
-    );
+    ui.wait("the chat's calls to it", |ui| called(ui, "Linear_Northwind") == "Linear");
+    assert_eq!(called(&ui, "Linear"), "Linear", "as agents are given it from now on");
 }
 
 pub(crate) fn named(name: &str, server: ToolServer) -> ToolServer {
