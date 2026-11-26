@@ -10,11 +10,12 @@ use hub::{ToolServerPerson, ToolServerRefreshing};
 use protocol::capability::setup::{ServerState, ToolServerState};
 use protocol::client::tool_sign_ins::{ToolSignInBegun, ToolSignInPage};
 use protocol::event::{EventBody, TaskKind, TaskTool};
-use protocol::fixtures::{observed, tool_server, tool_server_needing_sign_in};
+use protocol::fixtures::{observed, tool_server, tool_server_needing_sign_in, tool_server_wanting_more_access};
 use protocol::model::{SessionId, SessionStatus, ToolServer, ToolServerAuthGiven, ToolServerName};
 
 use desktop::workspace_pane::WorkspacePane;
 
+use crate::settings::open_settings;
 use crate::support::{Serving, Stack, Ui, one_chat, open_on_the_chat, renewing_often};
 
 /// Whether the plug is there, saying `said` to assistive apps, which is as much as its colour says.
@@ -238,6 +239,34 @@ fn the_button_is_off_while_the_hub_is_away_and_says_why_where_theres_no_way_to_s
     ui.cx.update(|cx| pane.update(cx, WorkspacePane::hub_went_away));
 
     assert!(ui.off("mcp-sign-in-notion") && ui.off("mcp-sign-in-linear"));
+}
+
+/// It works, so it's as one that needs signing in to is, but for saying what for.
+#[gpui_kit::test]
+fn a_server_that_wants_more_access_is_signed_in_to_again_from_the_card_or_from_settings(cx: &mut TestAppContext) {
+    let (mut world, chat) = chat();
+    let page = ToolSignInPage::new("https://auth.example.com/authorize?state=made-up");
+    world.tool_servers.push(named("Linear", tool_server_wanting_more_access("linear")));
+    world.tool_sign_in_answer = Some(Ok(ToolSignInBegun::Page { page }));
+    let asked: Asked = world.asked.clone();
+    let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
+    ui.wait("the plug", |ui| plug_says(ui, "MCP servers, Linear wants more access"));
+    open_card(&mut ui);
+    assert!(ui.shows_label("mcp-card", "Linear, Needs you to sign in again, Wants more access"));
+
+    ui.click("mcp-sign-in-linear");
+
+    page_opened(&mut ui, None);
+    assert!(ui.shows_label("mcp-card", "Linear, Signing in"));
+    open_settings(&mut ui);
+    ui.click("settings-page-mcp");
+    assert!(ui.shows_label("mcp-server-linear", "Sign in for more access"));
+    ui.wait("the sign-in from the card", |ui| ui.has("mcp-cancel"));
+    ui.click("mcp-cancel");
+    ui.click("mcp-more-linear");
+    ui.click_menu_item("Sign in again");
+    ui.wait("another", |ui| ui.has("mcp-open-page"));
+    assert_eq!(asked.count("tool_sign_in_start"), 2);
 }
 
 #[gpui_kit::test]

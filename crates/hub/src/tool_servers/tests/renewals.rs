@@ -119,13 +119,16 @@ fn one_refused_for_good_has_its_tokens_forgotten_and_its_record_say_it_needs_sig
     let (servers, store) = servers_in(dir.path());
     signed_in(&servers, "t", "Linear");
 
-    let change = servers.renewed(&only_due(&servers), refused_for_good(), 0).unwrap().unwrap();
+    let due = only_due(&servers);
+
+    let change = servers.renewed(&due, refused_for_good(), 0).unwrap().unwrap();
 
     assert!(change.changed);
     assert_eq!(status_of(&store, "t"), ToolSignInStatus::NeedsSignIn);
     assert_eq!(holding(dir.path(), "made-up-t"), Vec::<String>::new());
     let to = servers.signing_in(ToolSignInTo::Again { id: "t".into() }).unwrap();
-    assert_eq!(to.before().unwrap().scopes().to_string(), "read", "what it was asked to allow is kept");
+    let asked = to.asked_before(due.renewable.issuer());
+    assert_eq!(asked.to_string(), "read", "what it was asked to allow is kept");
 }
 
 /// As on a full disk, here with a directory where the file is written beside the one it replaces. The file goes first, so

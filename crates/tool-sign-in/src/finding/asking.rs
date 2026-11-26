@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use super::challenge::Challenge;
+use crate::challenge::Challenge;
 use crate::fetch::Caller;
 use crate::{Failure, ServerUrl};
 

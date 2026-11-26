@@ -17,7 +17,7 @@ pub use comments::{DiffComments, ReadDiffComments};
 pub use proposals::{ProposalRecord, Propose, ReadProposal, Revise, Withdraw};
 
 pub use pull_requests::{CancelWait, PullRequestAnswer, ReadPullRequest, ReadWait, WaitAnswer};
-pub use tool_servers::RenewToolServer;
+pub use tool_servers::{AskForToolAccess, RenewToolServer, ToolAccess};
 pub use worktrees::{
     CreateWorktree, ListWorktrees, ListedChild, NewWorktreeOn, OwnWorktree, RemoveWorktree, WorktreeCreated,
     WorktreeRemoval, WorktreeRemoved, Worktrees, WouldLose,

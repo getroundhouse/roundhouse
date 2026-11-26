@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
+use protocol::model::ToolScopes;
 use url::Url;
 
 use super::{NotARedirect, RedirectUri, Returned, SignedIn, Started, challenge_of};
 use crate::secrets::Verifier;
 use crate::tests::{CLIENT, REDIRECT, begun};
-use crate::{Failure, Iss, Person, Scopes, Script, StandIn, ToolSignIn};
+use crate::{Failure, Found, Iss, Person, Script, StandIn, ToolSignIn};
 
 /// A sign-in with `script`, to its end, and the stand-in it was with.
 async fn signed_in_with(script: Script) -> (Result<SignedIn, Failure>, StandIn) {
@@ -53,8 +54,9 @@ fn the_challenge_is_the_verifiers_hash() {
 
 #[tokio::test]
 async fn a_server_that_leaves_what_to_allow_to_its_authorization_server_isnt_asked_for_any() {
-    let (client, stand_in) =
-        (ToolSignIn::new(CLIENT), StandIn::with(Script { challenge_scope: None, ..Script::default() }).await);
+    let authorization_scopes = Some(vec!["offline_access"]);
+    let script = Script { challenge_scope: None, authorization_scopes, ..Script::default() };
+    let (client, stand_in) = (ToolSignIn::new(CLIENT), StandIn::with(script).await);
 
     let Started { page, .. } = begun(&client, &stand_in).await;
 
@@ -64,11 +66,17 @@ async fn a_server_that_leaves_what_to_allow_to_its_authorization_server_isnt_ask
 #[tokio::test]
 async fn asking_for_a_refresh_token_has_the_person_asked_to_consent() {
     let authorization_scopes = Some(vec!["offline_access"]);
+    let client = ToolSignIn::new(CLIENT);
     let stand_in = StandIn::with(Script { authorization_scopes, ..Script::default() }).await;
 
-    let Started { page, .. } = begun(&ToolSignIn::new(CLIENT), &stand_in).await;
+    let Started { page, .. } = begun(&client, &stand_in).await;
+    stand_in.change(|script| script.challenge_scope = None);
+    let Found::SignIn(way) = client.find(&stand_in.server()).await.unwrap() else { panic!("it has none") };
+    let redirect = RedirectUri::parse(REDIRECT).unwrap();
+    let wanted_since = client.begin(*way, ToolScopes::of(["admin"]), redirect).unwrap().page;
 
     assert!(page.as_str().contains("scope=read+write+offline_access&prompt=consent"), "{}", page.as_str());
+    assert!(wanted_since.as_str().contains("scope=admin+offline_access&prompt=consent"), "{}", wanted_since.as_str());
 }
 
 #[tokio::test]
@@ -79,7 +87,7 @@ async fn approving_gives_tokens_and_what_renews_them() {
     assert!(granted.refresh.is_some());
     assert_eq!(granted.lasts.unwrap().as_secs(), 3600);
     assert_eq!(renewable.issuer().as_str(), stand_in.issuer());
-    assert_eq!(renewable.scopes(), &Scopes::from("read write".to_string()));
+    assert_eq!(renewable.scopes(), &ToolScopes::from("read write".to_string()));
     let exchanges = stand_in.asked_for("POST /token");
     let [exchange] = &exchanges[..] else { panic!("{exchanges:?}") };
     assert_eq!(exchange.form("resource").as_deref(), Some(stand_in.server().as_str()));

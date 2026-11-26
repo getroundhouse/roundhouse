@@ -90,6 +90,10 @@ pub(super) fn known_by(auth: &ToolServerAuth) -> Option<(&'static str, Tone)> {
         ToolServerAuth::SignIn { status: ToolSignInStatus::NeedsSignIn } => {
             Some(("Needs you to sign in", Tone::Problem))
         }
+        // Not that it needs it, since it works for all else.
+        ToolServerAuth::SignIn { status: ToolSignInStatus::NeedsMoreAccess } => {
+            Some(("Sign in for more access", Tone::Problem))
+        }
         // `Unknown` is a way, or a state of one, only a newer hub has, which this app has no word for.
         ToolServerAuth::SignIn { status: ToolSignInStatus::Works | ToolSignInStatus::Unknown }
         | ToolServerAuth::Neither

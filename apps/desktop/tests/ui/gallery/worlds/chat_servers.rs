@@ -5,8 +5,8 @@
 use client_core::fake_hub::World;
 use protocol::capability::setup::{ServerState, ToolServerState};
 use protocol::event::EventBody;
-use protocol::fixtures::{observed, tool_server, tool_server_needing_sign_in};
-use protocol::model::{AgentKind, ModelName, SessionStatus, ToolServer, ToolServerName};
+use protocol::fixtures::{observed, tool_server, tool_server_needing_sign_in, tool_server_wanting_more_access};
+use protocol::model::{AgentKind, ModelName, SessionStatus, ToolServer, ToolServerName, ToolServerUrl};
 
 use super::super::codex_screens::models;
 use super::scenarios::{chat_world, context};
@@ -41,6 +41,20 @@ pub(in super::super) fn chat_servers_to_sign_in_to() -> World {
     let mut world = with_servers(linear, said_of);
     world.tool_sign_in_answer = Some(Ok(page()));
     world
+}
+
+/// A Claude chat, where one of the hub's works, and wants more access than its sign-in has.
+pub(in super::super) fn chat_servers_wanting_more_access() -> World {
+    let linear = ToolServer {
+        url: ToolServerUrl::stored("https://mcp.linear.app/mcp".into()),
+        ..named("Linear", tool_server_wanting_more_access("linear"))
+    };
+    let said_of = vec![
+        with_tools("Linear", Some("linear"), 23),
+        with_tools("Notion", Some("notion"), 14),
+        with_tools("Runbooks", Some("runbooks"), 2),
+    ];
+    with_servers(linear, said_of)
 }
 
 /// A chat of `events`, in `status`, on a hub that has a server the person called `GitHub (Northwind)`.

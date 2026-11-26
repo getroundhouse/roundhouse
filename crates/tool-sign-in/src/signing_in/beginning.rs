@@ -1,11 +1,13 @@
 use base64::Engine as _;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
+use protocol::model::ToolScopes;
 use ring::digest::{SHA256, digest};
 use ring::rand::{SecureRandom as _, SystemRandom};
 
 use super::RedirectUri;
+use crate::offline_access::{has_offline, offline};
 use crate::secrets::Verifier;
-use crate::{AuthorizationPage, Failure, Scopes, SignInState, ToolSignIn, Way};
+use crate::{AuthorizationPage, Failure, SignInState, ToolSignIn, Way};
 
 /// A sign-in the person hasn't approved yet.
 #[derive(Debug)]
@@ -23,15 +25,17 @@ pub struct Pending {
     pub(super) way: Way,
     pub(super) client_id: String,
     pub(super) redirect: RedirectUri,
-    pub(super) scopes: Scopes,
+    pub(super) scopes: ToolScopes,
     pub(super) state: SignInState,
     pub(super) verifier: Verifier,
 }
 
 impl ToolSignIn {
-    /// Starts signing in by `way`, asking to be allowed `scopes`: the way's own, and those asked for before where it's
-    /// signing in again. The person is sent back to `redirect`. Nothing is sent.
-    pub fn begin(&self, way: Way, scopes: Scopes, redirect: RedirectUri) -> Result<Started, Failure> {
+    /// Starts signing in by `way`, asking to be allowed `scopes`: the way's own, and those asked for before and wanted
+    /// since where it's signing in again. What asks for a refresh token is asked for as well, where the authorization
+    /// server says it has that. The person is sent back to `redirect`. Nothing is sent.
+    pub fn begin(&self, way: Way, scopes: ToolScopes, redirect: RedirectUri) -> Result<Started, Failure> {
+        let scopes = if way.offline { offline(scopes) } else { scopes };
         let (state, verifier) = (SignInState::new(random()?), Verifier::new(random()?));
         let mut page = way.authorization_endpoint.clone();
         {
@@ -47,7 +51,7 @@ impl ToolSignIn {
                 asks.append_pair("scope", &scopes.to_string());
             }
             // OIDC gives a refresh token only to someone asked to consent, by Core 1.0, section 11.
-            if scopes.has_offline() {
+            if has_offline(&scopes) {
                 asks.append_pair("prompt", "consent");
             }
         }

@@ -1,8 +1,9 @@
+use protocol::model::ToolScopes;
 use serde::{Deserialize, Serialize};
 
 use crate::fetch::json;
 use crate::token_endpoint::{Refusal, granted};
-use crate::{Failure, Granted, Issuer, OauthError, RefreshToken, Scopes, ServerUrl, ToolSignIn};
+use crate::{Failure, Granted, Issuer, OauthError, RefreshToken, ServerUrl, ToolSignIn};
 
 /// What OAuth calls a refresh token that has ended, been used or been revoked, and a client the authorization server
 /// no longer takes, by RFC 6749, section 5.2.
@@ -17,7 +18,7 @@ pub struct Renewable {
     pub(crate) issuer: Issuer,
     pub(crate) token_endpoint: String,
     pub(crate) client_id: String,
-    pub(crate) scopes: Scopes,
+    pub(crate) scopes: ToolScopes,
 }
 
 /// What renewing a sign-in came to, as its authorization server answered.
@@ -37,7 +38,7 @@ impl Renewable {
     }
 
     /// What it was asked to be allowed, which signing in again asks for too.
-    pub fn scopes(&self) -> &Scopes {
+    pub fn scopes(&self) -> &ToolScopes {
         &self.scopes
     }
 }

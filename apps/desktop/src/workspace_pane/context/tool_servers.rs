@@ -122,7 +122,8 @@ fn section(
 }
 
 /// A server, with how it stands at its end, or the button that signs in to it, and under it why it can't be reached or
-/// signed in to. The name is a person's, so it's the one cut off if they don't both fit, and how it stands always shows.
+/// signed in to, or what it's to be signed in to again for. The name is a person's, so it's the one cut off if they
+/// don't both fit, and how it stands always shows.
 fn row(id: (&'static str, usize), server: &ChatToolServer, sign_in: &OffersSignIn, cx: &App) -> impl IntoElement {
     let colors = look::colors(cx);
     let (words, why) = (server.stands.words(), server.stands.why());

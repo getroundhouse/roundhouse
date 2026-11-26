@@ -8,10 +8,12 @@ mod auth;
 mod header;
 mod name;
 mod record;
+mod scopes;
 mod url;
 
 pub use auth::{ToolServerAuth, ToolServerAuthGiven, ToolServerKey, ToolSignInStatus};
 pub use header::{ToolServerHeader, ToolServerHeaderError};
 pub use name::{ToolServerName, ToolServerNameError};
 pub use record::ToolServer;
+pub use scopes::ToolScopes;
 pub use url::{ToolServerUrl, ToolServerUrlError};

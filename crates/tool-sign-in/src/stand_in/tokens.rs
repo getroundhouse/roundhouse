@@ -1,7 +1,8 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use base64::Engine as _;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
+use protocol::model::ToolScopes;
 use ring::digest::{SHA256, digest};
 use serde_json::json;
 
@@ -14,17 +15,24 @@ use super::script::{Refreshing, Script};
 pub(super) struct Tokens {
     given: usize,
     codes: HashMap<String, Approved>,
-    access: HashSet<String>,
-    /// Each refresh token, with whom it's for, and what.
-    refresh: HashMap<String, (String, String)>,
+    /// Each access token, with what it's allowed.
+    access: HashMap<String, ToolScopes>,
+    refresh: HashMap<String, Grant>,
 }
 
 /// What the page was asked for, once the person approved it.
 pub(super) struct Approved {
     pub(super) challenge: String,
     pub(super) redirect: String,
+    pub(super) grant: Grant,
+}
+
+/// Whom a token is for, and what it's good for.
+#[derive(Clone)]
+pub(super) struct Grant {
     pub(super) client: String,
     pub(super) resource: String,
+    pub(super) scopes: ToolScopes,
 }
 
 impl Tokens {
@@ -35,9 +43,9 @@ impl Tokens {
         code
     }
 
-    /// Whether the MCP server takes `access`.
-    pub(super) fn takes(&self, access: &str) -> bool {
-        self.access.contains(access)
+    /// What the MCP server allows `access`, if it takes it.
+    pub(super) fn allowed(&self, access: &str) -> Option<ToolScopes> {
+        self.access.get(access).cloned()
     }
 
     /// Takes no access token it has given so far, as once they've ended.
@@ -59,14 +67,14 @@ impl Tokens {
         let Some(approved) = self.codes.remove(&said("code")) else { return oauth_error("invalid_grant") };
         let hash = BASE64_URL_SAFE_NO_PAD.encode(digest(&SHA256, said("code_verifier").as_bytes()));
         let same = hash == approved.challenge && said("redirect_uri") == approved.redirect;
-        if !same || said("client_id") != approved.client {
+        if !same || said("client_id") != approved.grant.client {
             return oauth_error("invalid_grant");
         }
-        if said("resource") != approved.resource {
+        if said("resource") != approved.grant.resource {
             return oauth_error("invalid_target");
         }
-        let refresh = self.new_refresh(approved.client, approved.resource);
-        self.give(Some(refresh), script)
+        let refresh = self.new_refresh(approved.grant.clone());
+        self.give(approved.grant.scopes, Some(refresh), script)
     }
 
     fn for_refresh(&mut self, asked: &Asked, script: &Script) -> Reply {
@@ -77,29 +85,29 @@ impl Tokens {
         }
         let said = |name: &str| asked.form(name).unwrap_or_default();
         let used = said("refresh_token");
-        let Some((client, resource)) = self.refresh.get(&used).cloned() else { return oauth_error("invalid_grant") };
-        if said("client_id") != client {
+        let Some(grant) = self.refresh.get(&used).cloned() else { return oauth_error("invalid_grant") };
+        if said("client_id") != grant.client {
             return oauth_error("invalid_client");
         }
-        if said("resource") != resource {
+        if said("resource") != grant.resource {
             return oauth_error("invalid_target");
         }
         let refresh = script.rotates.then(|| {
             self.refresh.remove(&used);
-            self.new_refresh(client, resource)
+            self.new_refresh(grant.clone())
         });
-        self.give(refresh, script)
+        self.give(grant.scopes, refresh, script)
     }
 
-    fn new_refresh(&mut self, client: String, resource: String) -> String {
+    fn new_refresh(&mut self, grant: Grant) -> String {
         let refresh = self.next("refresh");
-        self.refresh.insert(refresh.clone(), (client, resource));
+        self.refresh.insert(refresh.clone(), grant);
         refresh
     }
 
-    fn give(&mut self, refresh: Option<String>, script: &Script) -> Reply {
+    fn give(&mut self, scopes: ToolScopes, refresh: Option<String>, script: &Script) -> Reply {
         let access = self.next("access");
-        self.access.insert(access.clone());
+        self.access.insert(access.clone(), scopes);
         let mut given = json!({"access_token": access, "token_type": "Bearer"});
         if let Some(refresh) = refresh {
             given["refresh_token"] = refresh.into();

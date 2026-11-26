@@ -22,6 +22,14 @@ pub(super) fn unauthorized(script: &Script, at: &Addresses) -> Reply {
     reply
 }
 
+/// A 403 to a token that isn't allowed `scope`, as MCP has a server refuse it.
+pub(super) fn forbidden(scope: &str) -> Reply {
+    let mut reply = status(403);
+    let wants = format!("Bearer error=\"insufficient_scope\", scope=\"{scope}\", error_description=\"made up\"");
+    reply.headers_mut().insert(WWW_AUTHENTICATE, wants.parse().unwrap());
+    reply
+}
+
 /// The metadata at `path`, if `script` has some there.
 pub(super) async fn at(path: &str, script: &Script, at: &Addresses) -> Option<Reply> {
     let well_known = "/.well-known/oauth-protected-resource";

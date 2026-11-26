@@ -1,22 +1,35 @@
+//! What a server says of signing in as it refuses a request, in its `WWW-Authenticate`.
+
 use std::mem;
 
 use http::HeaderMap;
 use http::header::WWW_AUTHENTICATE;
+use protocol::model::ToolScopes;
 
-use crate::Scopes;
+/// What RFC 6750, section 3.1, calls a token that's good, and isn't allowed what was asked.
+const INSUFFICIENT_SCOPE: &str = "insufficient_scope";
 
-/// What a 401 says of signing in, in its `WWW-Authenticate`, as RFC 9728, section 5.1, and RFC 6750, section 3, have
-/// it.
+/// What a server's 403, with these `headers`, says its access token would have to allow as well, by MCP's "Scope
+/// Challenge Handling". Empty where it says that's why it refused, and not what it wants. `None` where it doesn't say
+/// that's why. It's the server's own text, of any number and length.
+pub fn access_wanted(headers: &HeaderMap) -> Option<ToolScopes> {
+    let Challenge { error, scope, .. } = Challenge::of(headers);
+    (error? == INSUFFICIENT_SCOPE).then(|| scope.unwrap_or_default())
+}
+
+/// What a refusal says of signing in, as RFC 9728, section 5.1, and RFC 6750, section 3, have it.
 #[derive(Debug, Default, PartialEq, Eq)]
-pub(super) struct Challenge {
+pub(crate) struct Challenge {
     /// Where the server's metadata is. Any scheme's may say it.
-    pub(super) resource_metadata: Option<String>,
+    pub(crate) resource_metadata: Option<String>,
     /// What to ask to be allowed, which `Bearer`'s says.
-    pub(super) scope: Option<Scopes>,
+    pub(crate) scope: Option<ToolScopes>,
+    /// Why it refused, which `Bearer`'s says.
+    pub(crate) error: Option<String>,
 }
 
 impl Challenge {
-    pub(super) fn of(headers: &HeaderMap) -> Self {
+    pub(crate) fn of(headers: &HeaderMap) -> Self {
         let mut challenge = Challenge::default();
         for value in headers.get_all(WWW_AUTHENTICATE) {
             let mut scheme = String::new();
@@ -40,7 +53,10 @@ impl Challenge {
                 self.resource_metadata.get_or_insert(value);
             }
             "scope" if scheme == "bearer" => {
-                self.scope.get_or_insert_with(|| Scopes::from(value));
+                self.scope.get_or_insert_with(|| ToolScopes::from(value));
+            }
+            "error" if scheme == "bearer" => {
+                self.error.get_or_insert(value);
             }
             _ => {}
         }

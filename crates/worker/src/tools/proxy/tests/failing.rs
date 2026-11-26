@@ -140,7 +140,7 @@ async fn a_server_keeps_its_path_as_its_header_changes_and_says_once_its_removed
     assert_eq!(changed, path);
     let (id, said) = removed.error();
     assert_eq!(id, json!("call-7"));
-    assert_eq!(said, "This tool server was removed from Roundhouse, so its tools can't be used.");
+    assert_eq!(said, "This MCP server was removed from Roundhouse, so its tools can't be used.");
     assert!(server.heard().is_empty());
 }
 

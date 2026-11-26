@@ -1,6 +1,7 @@
 use crate::tools::http::{AnswerBody, whole};
 use hyper::header::HeaderValue;
 use hyper::{Response, StatusCode};
+use protocol::worker::ToolAccess;
 use serde::Deserialize;
 use serde::de::IgnoredAny;
 use serde_json::{Value, json};
@@ -19,6 +20,8 @@ pub(super) enum Failure {
     NeedsSignIn,
     /// It answered 401 or 403 to a request that carried `sent`.
     Refused { sent: Sent, status: StatusCode },
+    /// It answered 403 to its access token, saying it wants more access, which the hub made this of.
+    WantsAccess(ToolAccess),
     /// It sent the request somewhere else.
     Redirected,
     /// There was no connecting to it.
@@ -42,7 +45,7 @@ impl Failure {
     /// holds no key, and nothing of a URL.
     fn said(self, label: &str) -> String {
         match self {
-            Failure::Removed => "This tool server was removed from Roundhouse, so its tools can't be used.".into(),
+            Failure::Removed => "This MCP server was removed from Roundhouse, so its tools can't be used.".into(),
             Failure::Unusable => {
                 format!(
                     "Roundhouse can't use the URL or the header {label} has. Add it again in Settings › MCP servers."
@@ -71,6 +74,16 @@ impl Failure {
                     "{label} refused a request without a key ({status}). Add it again with one in Settings › MCP \
                      servers."
                 )
+            }
+            Failure::WantsAccess(access) => {
+                let then = match access {
+                    ToolAccess::SignInAgain | ToolAccess::Unknown => "Sign in to it again from Settings › MCP servers.",
+                    ToolAccess::NotAskedFor => {
+                        "Signing in to it again would ask for no more, so the account signed in with may not have it."
+                    }
+                    ToolAccess::OtherToken => "Its sign-in has changed since, so this may work if it's tried again.",
+                };
+                format!("{label} wants more access for this than its sign-in has (403). {then}")
             }
             Failure::Redirected => format!(
                 "{label} redirected the request to another address, which Roundhouse doesn't follow. Add it again \

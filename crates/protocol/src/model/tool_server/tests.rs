@@ -207,3 +207,16 @@ fn servers_are_listed_by_name_in_any_case_then_by_id() {
 
     assert_eq!(servers.map(|server| server.id.as_str().to_owned()), ["1", "2", "0", "3"]);
 }
+
+#[test]
+fn scopes_are_each_once_and_none_that_isnt_one() {
+    let scopes = |text: &str| ToolScopes::from(text.to_owned());
+    let read = scopes("read  write read \"quoted\" a\\b caf\u{e9} \u{7f}");
+
+    assert_eq!(read.to_string(), "read write");
+    assert_eq!(read.clone().and(&scopes("write admin")).to_string(), "read write admin");
+    assert_eq!(read.clone().without(&scopes("admin read")).to_string(), "write");
+    assert!(read.has_all(&scopes("write")) && read.has_all(&scopes("")) && !read.has_all(&scopes("write admin")));
+    assert_eq!(serde_json::to_string(&read).unwrap(), "\"read write\"");
+    assert_eq!(serde_json::from_str::<ToolScopes>("\"read \\\" write\"").unwrap(), read);
+}

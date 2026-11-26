@@ -1,9 +1,9 @@
 use serde::de::DeserializeOwned;
 use url::Url;
 
-use super::challenge::Challenge;
 use super::metadata::{AuthorizationServerMetadata, ServerMetadata};
 use super::well_known::{host_of, of_authorization_server, of_server};
+use crate::challenge::Challenge;
 use crate::fetch::{Caller, json};
 use crate::{Failure, ServerUrl};
 

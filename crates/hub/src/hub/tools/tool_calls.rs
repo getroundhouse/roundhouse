@@ -83,6 +83,7 @@ impl Hub {
                 Ok(AskReply::DiffComments(DiffComments { comments }))
             }
             WorkerAsk::RenewToolServer(asked) => self.tool_server_refused(asked).await.map(AskReply::ToolServer),
+            WorkerAsk::AskForToolAccess(asked) => self.tool_server_wants_access(asked).await.map(AskReply::ToolAccess),
             WorkerAsk::Unknown => Err(self.unsupported(None)),
         }
     }

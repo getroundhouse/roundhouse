@@ -2,7 +2,8 @@
 //! takes is the worker's to send and no agent has it. What an agent sends is passed on as it is, and so is the answer,
 //! as it comes. A server's 401 or 403 isn't passed on, since a CLI takes the server for failed and says only that its header
 //! was rejected, which is the session's: the agent is told in words it can read. A server that's signed in to, and answers
-//! 401, is asked once more, with the access token the hub has for it then, before the agent is told anything.
+//! 401, is asked once more, with the access token the hub has for it then, before the agent is told anything. One that
+//! answers 403 since it wants more access fails that call alone, once the hub has been told what it wants.
 
 #[cfg(test)]
 mod tests;

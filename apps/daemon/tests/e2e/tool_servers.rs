@@ -7,11 +7,11 @@ use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
-use client_core::Client;
-use hub::{ToolServerPage, ToolServerScript, ToolServerStandIn};
+use client_core::{Client, RecordsFeed};
+use hub::{ToolServerPage, ToolServerScript, ToolServerStandIn, ToolServerWants};
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerRemove};
 use protocol::client::tool_sign_ins::{ToolSignInBegun, ToolSignInReturned, ToolSignInTo, redirect};
-use protocol::model::{ToolServerAuthGiven, ToolServerKey};
+use protocol::model::{ToolServerAuth, ToolServerAuthGiven, ToolServerKey, ToolSignInStatus};
 
 use crate::support::{Stack, calls, read_all, wait_until};
 
@@ -139,11 +139,15 @@ fn an_agent_that_has_a_server_the_person_removes_is_told_it_was_removed() {
     assert!(answered[0].0.contains("was removed"), "{answered:?}");
 }
 
-/// Signs in to the stand-in's server as `Linear (Northwind)`, as the person does in their browser.
-fn sign_in(client: &Client, stand_in: &ToolServerStandIn) {
-    let id = client_core::new_tool_sign_in_id();
+/// The server at the stand-in, as `Linear (Northwind)`.
+fn new(stand_in: &ToolServerStandIn) -> ToolSignInTo {
     let url = stand_in.server().as_str().to_string();
-    let to = ToolSignInTo::New { id: "t".into(), name: "Linear (Northwind)".into(), url };
+    ToolSignInTo::New { id: "t".into(), name: "Linear (Northwind)".into(), url }
+}
+
+/// Signs in `to` the stand-in's server, as the person does in their browser.
+fn sign_in(client: &Client, stand_in: &ToolServerStandIn, to: ToolSignInTo) {
+    let id = client_core::new_tool_sign_in_id();
     let begun = client.tool_sign_in_start(&id, to, redirect(17867)).unwrap();
     let ToolSignInBegun::Page { page } = begun else { panic!("{begun:?}") };
     let returned = stand_in.visit(&ToolServerPage::new(page.as_str()));
@@ -157,7 +161,7 @@ fn an_agents_call_to_a_server_the_person_signed_in_to_goes_on_working_across_its
     let stand_in = runtime.block_on(ToolServerStandIn::with(ToolServerScript::default()));
     let stack = Stack::start();
     let client = stack.client();
-    sign_in(&client, &stand_in);
+    sign_in(&client, &stand_in, new(&stand_in));
     let (_, chat) = stack.workspace(&client);
     let works = [("Found issue 7".to_string(), false)];
 
@@ -166,4 +170,45 @@ fn an_agents_call_to_a_server_the_person_signed_in_to_goes_on_working_across_its
     assert_eq!(calls::run(&client, &chat.id, CALL, 2), works);
 
     assert_eq!(stand_in.asked_for("POST /token").len(), 2, "a code, and one renewal");
+}
+
+/// Its other tool works before and after, for which it wants what it was first asked for.
+#[test]
+fn a_tool_that_wants_more_access_fails_alone_and_works_once_the_person_signs_in_again() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let wants = |tool, scope| ToolServerWants { tool, scope };
+    let wants = vec![wants("find_issue", "read"), wants("close_issue", "admin")];
+    let stand_in = runtime.block_on(ToolServerStandIn::with(ToolServerScript { wants, ..ToolServerScript::default() }));
+    let stack = Stack::start();
+    let client = stack.client();
+    let feed = RecordsFeed::start(&client);
+    sign_in(&client, &stand_in, new(&stand_in));
+    let (_, chat) = stack.workspace(&client);
+    let both = format!("mcp:Linear_Northwind/close_issue {{}}; {CALL}");
+    let is = |status| {
+        let auth = ToolServerAuth::SignIn { status };
+        feed.snapshot().tool_server(&"t".into()).is_some_and(|server| server.auth == auth)
+    };
+    let found = ("Found issue 7".to_string(), false);
+
+    let before = calls::run(&client, &chat.id, &both, 1);
+    wait_until("the record says it wants more access", || is(ToolSignInStatus::NeedsMoreAccess));
+    // So only what the hub kept says what to ask for.
+    stand_in.change(|script| script.challenge_scope = None);
+    sign_in(&client, &stand_in, ToolSignInTo::Again { id: "t".into() });
+    wait_until("the record says it works", || is(ToolSignInStatus::Works));
+    // Its worker is sent the new token while it runs.
+    let (mut turn, mut after) = (1, Vec::new());
+    wait_until("the call works", || {
+        turn += 1;
+        after = calls::run(&client, &chat.id, &both, turn);
+        after.iter().all(|(_, is_error)| !is_error)
+    });
+
+    let [(said, true), found_before] = &before[..] else { panic!("{before:?}") };
+    let expected = "Linear (Northwind) wants more access for this than its sign-in has (403). Sign in to it again from \
+                    Settings › MCP servers.";
+    assert!(said.contains(expected), "{said}");
+    assert_eq!(*found_before, found);
+    assert_eq!(after, [("Closed issue 7".to_string(), false), found]);
 }

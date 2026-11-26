@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
+use protocol::model::ToolScopes;
 use url::Url;
 
 use super::script::{Iss, Person, Script};
 use super::serving::Addresses;
-use super::tokens::{Approved, Tokens};
+use super::tokens::{Approved, Grant, Tokens};
 
 /// Has the person do on the page at `page` what `script` says, and gives the query of where they're sent back to.
 /// Panics where the page wasn't asked for as an authorization server has it, as one shows an error on.
@@ -26,8 +27,11 @@ pub(super) fn visited(page: &Url, script: &Script, at: &Addresses, tokens: &mut 
             let code = tokens.approve(Approved {
                 challenge: asked["code_challenge"].clone(),
                 redirect: asked["redirect_uri"].clone(),
-                client: asked["client_id"].clone(),
-                resource: asked["resource"].clone(),
+                grant: Grant {
+                    client: asked["client_id"].clone(),
+                    resource: asked["resource"].clone(),
+                    scopes: asked.get("scope").cloned().map_or_default(ToolScopes::from),
+                },
             });
             back.query_pairs_mut().append_pair("code", &code);
         }

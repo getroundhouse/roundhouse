@@ -11,7 +11,7 @@ mod authorization;
 mod metadata;
 mod replies;
 mod script;
-pub use script::{Asks, Iss, MetadataAt, Person, Refreshing, Says, Script, ServerMetadataAt};
+pub use script::{Asks, Iss, MetadataAt, Person, Refreshing, Says, Script, ServerMetadataAt, Wants};
 mod serving;
 pub use serving::StandIn;
 mod tokens;

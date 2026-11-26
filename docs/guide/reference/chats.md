@@ -60,6 +60,7 @@ While the chat has an MCP server, a plug sits before the limits' bars. Rest the 
 | `Starting` | Its CLI is still connecting to it |
 | `Can't be reached` | Its CLI couldn't connect. Codex says why, on the line under it |
 | **Sign in** | It's one of the hub's that needs you to sign in to it, and the plug is amber until you do. The button opens its page in your browser, and signs in for every chat |
+| `Wants more access`, with **Sign in** | It's one of the hub's that works, and refused a call that needs more than you allowed. Signing in again asks to be allowed that too |
 | `Signing in` | Its page waits in your browser for you to approve it, as [Settings](settings.md#sign-in) says |
 | `Sign in from its CLI` | It's one of the CLI's own, which you sign in to there, such as with `codex mcp login` |
 | `From its next start` | It was added to the hub after the agent started |
