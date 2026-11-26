@@ -8,6 +8,7 @@ members = [
     "crates/providers",
     "crates/worker",
     "crates/github",
+    "crates/tool-sign-in",
     "crates/hub",
     "crates/client-core",
     "crates/local-hub",
@@ -65,6 +66,7 @@ default-members = [
     "crates/providers",
     "crates/worker",
     "crates/github",
+    "crates/tool-sign-in",
     "crates/hub",
     "crates/client-core",
     "crates/local-hub",
@@ -200,9 +202,9 @@ http = "1.5.0"
 http-body-util = "0.1.5"
 # Already under GPUI. Serves the worker's tools to its agents, over HTTP on 127.0.0.1.
 hyper = { version = "1.12.0", features = ["http1", "server"] }
-# Already under Octocrab. The worker's calls to the hub's tool servers over TLS: HTTP/1.1, on rustls with ring and the
-# system's certificates, as the hub's calls to GitHub are. Octocrab turns on its `logging`, which the
-# worker doesn't need.
+# Already under Octocrab. The worker's calls to the hub's tool servers, and the hub's signing in to them, over TLS:
+# HTTP/1.1, on rustls with ring and the system's certificates, as the hub's calls to GitHub are. Octocrab turns on its
+# `logging`, which neither needs.
 hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "native-tokio", "ring", "tls12"] }
 # Already under GPUI. Runs hyper's connections on tokio. Its client makes the worker's calls to the hub's tool servers.
 hyper-util = { version = "0.1.21", features = ["tokio"] }
@@ -312,6 +314,9 @@ tempfile = "3.27.0"
 thiserror = "2.0.21"
 toml = "1.2.1"
 tokio = { version = "1.54.1", features = ["io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
+# Already under hyper-util, whose client connects with one, and looks a name up through one. Puts the worker's time limit
+# on connecting to a tool server, and only checked addresses in a sign-in's connections.
+tower-service = "0.3.3"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 two-face = { version = "0.4.5", default-features = false }
@@ -320,13 +325,13 @@ two-face = { version = "0.4.5", default-features = false }
 unicode-segmentation = "1.13.3"
 # The one Velopack uses, with its TLS, which `fetching` fetches the update feed and dictation's model with.
 ureq = "3.5.2"
+# Already under Octocrab. Reads addresses, and makes ones with a query.
+url = "2.5.8"
 uuid = { version = "1.29.3", features = ["v4"] }
 # Exact, because tools/package/dotnet-tools.json pins vpk, which makes the packages this reads, to the same version.
 # `public-utils` makes public a type that its `UpdateSource` trait names, so another crate can implement it. Its
 # `file-logging` would add a log file and a panic hook, so it stays off.
 velopack = { version = "=1.2.161", features = ["public-utils"] }
-# Already under hyper-util, whose client connects with one. Puts the worker's time limit on connecting to a tool server.
-tower-service = "0.3.3"
 # Already under tokio and GPUI. The Win32 API, for what std leaves out on Windows: a process's descendants and start
 # time, and reading a named pipe while writing to it.
 windows-sys = "0.61.2"
