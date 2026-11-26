@@ -81,7 +81,7 @@ color.status.modified: amber
 color.status.needs_you_wash: #e9b24c17
 
 // A pull request.
-color.PR.open: #3fb950
+color.PR.open: green
 color.PR.merged: #a371f7
 color.PR.closed: #b9605a
 color.PR.draft: #8b949e
