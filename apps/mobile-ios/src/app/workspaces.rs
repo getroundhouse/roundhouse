@@ -18,8 +18,8 @@ use crate::chat::ChatView;
 use crate::chrome;
 use crate::hub_link::{HubLink, listed};
 
-/// A workspace's row: its name and its branch under it, which takes a large row.
-const ROW: RowSize = RowSize::Large;
+/// A workspace's row: its mark and its name, as the desktop's sidebar has them, in a list's regular row.
+const ROW: RowSize = RowSize::Regular;
 
 impl MobileApp {
     pub(super) fn workspaces_screen(&self, followed: &Followed, window: &Window, cx: &mut Context<Self>) -> AnyElement {
@@ -92,26 +92,22 @@ impl MobileApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let colors = look::colors(cx);
-        let (muted, chats) = (colors.text_muted, records.sessions(&workspace.id));
+        let chats = records.sessions(&workspace.id);
         let signal = client_ui::workspace_signal(workspace, chats);
         let needs_a_look = client_core::marking::needs_a_look(workspace, chats, Session::unread);
         let id = workspace.id.clone();
         let name = div()
-            .typeset(Type::Body)
-            .truncate()
-            .text_color(if needs_a_look { colors.text } else { muted })
-            .when(needs_a_look, look::Typeset::emphasis);
-        let names = v_flex()
             .flex_1()
             .min_w_0()
-            .child(name.child(workspace.label().to_string()))
-            .when_some(chrome::branch_under_name(workspace), |d, branch| {
-                d.child(div().typeset(Type::Detail).text_color(muted).truncate().child(branch))
-            });
+            .typeset(Type::Body)
+            .truncate()
+            .text_color(if needs_a_look { colors.text } else { colors.text_muted })
+            .when(needs_a_look, look::Typeset::emphasis)
+            .child(workspace.label().to_string());
         look::list_row(ElementId::Name(format!("workspace-{}", workspace.id).into()), ROW)
             .off(!ready)
             .child(look::mark(signal, work, look::Size::Row, cx))
-            .child(names)
+            .child(name)
             .opens()
             .on_click(cx.listener(move |app, _, window, cx| app.open_workspace(&id, window, cx)))
             .when(ready, |row| {

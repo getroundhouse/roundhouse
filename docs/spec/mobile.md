@@ -48,7 +48,7 @@ One hub's workspaces and chats, on a phone, for keeping work moving away from th
 
 ## Workspaces
 
-- **The list, which Back from a chat goes to, has the hub's workspaces, grouped by repository,** each repository's last active first, the order the desktop's sidebar lists them in until another is chosen there. Each workspace has the status mark the desktop's sidebar shows, in its pull request's colour as the hub sends it, what the sidebar calls it, which is its title or its name until it has one, and its branch where that isn't the same again. Only workspaces that are ready are listed, since one still being made or archived has nothing to open. *Unconfirmed.*
+- **The list, which Back from a chat goes to, has the hub's workspaces, grouped by repository,** each repository's last active first, the order the desktop's sidebar lists them in until another is chosen there. Each workspace's row is only its status mark, in its pull request's colour as the hub sends it, and what the desktop's sidebar calls it, which is its title or its name until it has one, as a row of the sidebar starts, so the list is as quick to look down. Its branch is under its title over its chat. Only workspaces that are ready are listed, since one still being made or archived has nothing to open. *Unconfirmed.*
 - **A workspace's name is muted until it needs a look, then at full brightness in medium weight,** as in the desktop's sidebar, as `sidebar.md` says: one of its open chats has a reply nobody has read, or waits on an answer or an approval. *Unconfirmed.*
 
   **A hub's workspaces, with one waiting on an answer.** *Unconfirmed.*
