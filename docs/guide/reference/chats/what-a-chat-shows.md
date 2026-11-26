@@ -140,6 +140,8 @@ With more than four, each kind with several has one line, such as `6 subagents`,
 
 Rest the pointer on a code block for a button at its top right that copies its code. Code blocks in your prompts and in the agent's thinking have one too.
 
+Code in a block that names its language is coloured for it, in the same colours as the diff.
+
 ## Images in a reply
 
 An image the agent's reply points to shows in the reply, if it's in the workspace, and so does an SVG drawing. The hub keeps it as it was when the reply came, so it's still there after the agent changes the file, and after the workspace is archived.

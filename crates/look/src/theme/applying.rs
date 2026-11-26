@@ -2,6 +2,7 @@ use crate::colors::Colors;
 use crate::shape::Corner;
 use crate::traits::Reach;
 use crate::typography::{mono_size, rem};
+use gpui_kit::base::TextViewDefaults;
 use gpui_kit::component::{Theme, ThemeConfig, ThemeMode};
 use gpui_kit::{App, Hsla, Pixels, Rgba};
 use serde_json::{Map, Value, json};
@@ -33,6 +34,9 @@ pub fn apply(cx: &mut App) {
     }
     Theme::global_mut(cx).dark_theme = config;
     Theme::change(ThemeMode::Dark, None, cx);
+    // The kit gives every text view a highlighter for code blocks as it changes the theme, in its theme's colours, so
+    // look's goes in after, and a reply's code is in a diff's colours.
+    TextViewDefaults::global(cx).with_code_block_highlighter(crate::highlight::code_block).install(cx);
     let menus = crate::menus::style(crate::colors::colors(cx));
     cx.set_global(menus);
     let tooltips = crate::tooltips::style(crate::colors::colors(cx));
