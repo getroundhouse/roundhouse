@@ -2,6 +2,8 @@
 
 What the product does for the person using it, how fast, how it looks, and why, one file per area. The owner decides it, and `docs/standards/who-decides.md` says how it changes.
 
+The desktop app is first-class on macOS, Linux and Windows, as the owner decided, and comes to them in that order.
+
 A rule can end with *Not built*, when it's decided and not in the product yet, or *Unconfirmed*, when an agent chose it and the owner hasn't confirmed it.
 
 | File | Covers |

@@ -1,6 +1,6 @@
 # The transcript draws its text from the kit's Markdown blocks and keeps the selection itself
 
-**Status:** Chosen by an agent, and built. *Unconfirmed.*
+**Status:** Chosen by an agent, built, and confirmed by the owner.
 **First recorded:** 2026-11-12, in #669 and #670, for the agent's replies. The rest of the chat's Markdown followed by 2026-11-13, in #1032, and the plain text a call shows in #1129.
 
 The transcript makes none of the kit's text views. Its Markdown, such as the agent's replies and the person's prompts, is parsed by the kit's Markdown parser and drawn by the kit's drawing of blocks, through `editor_host`, the layer under the kit's text view. The kit says where it drew each paragraph, heading, code block and table cell, and paints the ranges it's given behind them, which is how what's selected and what's found are drawn.
