@@ -261,13 +261,10 @@ impl WorkspacePane {
         self.client = client.clone();
         self.reload_request = ReloadRequest::Known;
         self.showing_changed(cx);
-        if let Some(diff) = &mut self.diff {
-            diff.review.update(cx, |r, cx| r.reconnect(client, cx));
-            diff.all_files.update(cx, |a, _| a.reconnect(client));
-            diff.viewer.update(cx, |v, cx| v.reconnect(client, cx));
-        }
         self.behind = true;
         self.bring_back_files(cx);
+        // What it draws of what the last connection said, such as which tool servers can be reloaded, changes.
+        cx.notify();
     }
 
     /// For when the pane is shown after a reconnect, to read again what it may have changed.

@@ -1,4 +1,3 @@
-use client_core::Client;
 use gpui_kit::{
     App, AppContext as _, Context, Entity, IntoElement, ObjectFit, ParentElement as _, Render, RenderImage,
     Styled as _, StyledImage as _, Task, Window, div, img, px, size,
@@ -148,13 +147,6 @@ impl VideoPlayer {
         };
         self.watch(cx.background_executor().now(), cx);
         cx.notify();
-    }
-
-    /// Carries on on a new connection, stopped where it was, as [`VideoPlayer::stop_for_new_connection`] says, reading
-    /// what it reads on a connection of its own on `client`.
-    pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
-        self.source = self.source.on(client.clone());
-        self.stop_for_new_connection(cx);
     }
 
     /// Stops where it was, since what was being read went with the connection before.

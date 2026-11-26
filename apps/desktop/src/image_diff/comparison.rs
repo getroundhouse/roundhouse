@@ -7,6 +7,7 @@ use crate::shared_choice::{Chosen, chosen};
 use client_core::ClientError;
 use difference::Difference;
 use gpui_kit::{App, AppContext as _, Context, Entity, SharedString, Subscription, Task};
+use protocol::client::files::{WorkspaceFileRead, WorkspaceFileReadAt};
 use protocol::model::{CommitId, FileContents};
 use std::rc::Rc;
 
@@ -270,7 +271,7 @@ impl ImageDiff {
         let binary = review.file_against().filter(|(file, _)| file.is_binary() && file.path() == path);
         let Some((file, base)) = binary else { return };
         let (before, after) = (file.old_path().map(ToString::to_string), file.new_path().map(ToString::to_string));
-        let ((client, id), base) = (review.source(), base.clone());
+        let ((hub, id), base) = (review.source(), base.clone());
         let from = before.clone().map(|before| (base.clone(), before));
         let read_before = from.is_none() || from != self.before_from || !matches!(self.before, Side::Image(_));
         let shown = (self.before.hash(), self.after.hash());
@@ -281,10 +282,10 @@ impl ImageDiff {
                 let before = match before {
                     _ if !read_before => None,
                     None => Some(Side::Absent),
-                    Some(path) => side(client.workspace_file_read_at(&id, &base, &path), shown.0),
+                    Some(path) => side(hub.call(WorkspaceFileReadAt { id: id.clone(), commit: base, path }), shown.0),
                 };
                 let after =
-                    after.map_or(Some(Side::Absent), |path| side(client.workspace_file_read(&id, &path), shown.1));
+                    after.map_or(Some(Side::Absent), |path| side(hub.call(WorkspaceFileRead { id, path }), shown.1));
                 (before, after)
             });
             let (before, after) = sides.await;

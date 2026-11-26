@@ -4,7 +4,7 @@ use super::{lines, reading};
 use crate::file_header::file_header;
 use crate::file_image::{FileImage, Placed, fitted};
 use crate::shared_choice::{Chosen, chosen, switch};
-use client_core::Client;
+use client_core::{Hub, Round};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
@@ -32,7 +32,10 @@ pub(super) enum Contents {
 }
 
 pub struct FileView {
-    pub(super) client: Client,
+    /// What the file is read from.
+    pub(super) hub: Hub,
+    /// The hub's round as it last stopped a video that was playing, which it does once on each new one.
+    pub(super) round: Round,
     pub(super) workspace_id: WorkspaceId,
     /// The file the file tab shows, while it shows one.
     pub path: Option<SharedString>,
@@ -63,14 +66,15 @@ impl Focusable for FileView {
 }
 
 impl FileView {
-    pub fn new(client: Client, workspace_id: WorkspaceId, cx: &mut Context<Self>) -> Self {
+    pub fn new(hub: Hub, workspace_id: WorkspaceId, cx: &mut Context<Self>) -> Self {
         let releasing = cx.on_release(|t, cx| {
             if let Contents::Image(image) = &t.contents {
                 image.release(cx);
             }
         });
         Self {
-            client,
+            round: hub.round(),
+            hub,
             workspace_id,
             path: None,
             contents: Contents::Loading,
@@ -92,14 +96,16 @@ impl FileView {
         self.worktree_here = worktree;
     }
 
-    /// Carries on on a new connection to the hub. A read on the old one is dropped, and the file is read again on this
-    /// one with the next [`Self::refresh`]. A video playing carries on on it, and one the app couldn't play is read
-    /// again, in case the old connection was why.
-    pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
-        self.client = client.clone();
-        self.reads += 1;
+    /// Once a new connection has caught up, as the hub's round says, a video playing stops where it was, and one the
+    /// app couldn't play is read again, in case the old connection was why. A read on the connection before needs
+    /// nothing here, since [`Self::refresh`] reads again and drops it.
+    fn caught_up_again(&mut self, cx: &mut Context<Self>) {
+        let round = self.hub.round();
+        if std::mem::replace(&mut self.round, round) == round {
+            return;
+        }
         if let Contents::Video(video) = &self.contents
-            && !video.reconnect(client, cx)
+            && !video.stop_for_new_connection(cx)
         {
             self.shown = None;
         }
@@ -162,6 +168,7 @@ impl FileView {
 
     /// Reads the file again, keeping what's shown, and where it's scrolled to, until it's read.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
+        self.caught_up_again(cx);
         self.read(cx);
     }
 

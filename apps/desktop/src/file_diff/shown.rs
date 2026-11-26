@@ -58,7 +58,7 @@ impl FileDiff {
             self.lay_out_again(cx);
             return;
         };
-        let (base, (client, id)) = (review.base_commit().cloned().zip(file.old_path().cloned()), review.source());
+        let (base, (hub, id)) = (review.base_commit().cloned().zip(file.old_path().cloned()), review.source());
         let from = Some((file.clone(), base.clone()));
         if self.making.from == from {
             return;
@@ -67,7 +67,7 @@ impl FileDiff {
         {
             // One that couldn't be opened is opened again, and taken in once it is.
             if let Some((old, _)) = &shown.old
-                && old.reconnect(&client)
+                && old.open_again()
             {
                 shown.settled = false;
             }
@@ -75,7 +75,7 @@ impl FileDiff {
                 return;
             }
         } else {
-            let old = base.as_ref().map(|(commit, path)| OpenFile::start(&client, &id, commit, path));
+            let old = base.as_ref().map(|(commit, path)| hub.open_file(&id, commit, path));
             self.shown = Some(Shown::plain(file.clone(), base.clone(), old, cx));
             self.lay_out_again(cx);
         }

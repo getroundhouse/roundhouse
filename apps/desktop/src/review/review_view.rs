@@ -1,6 +1,6 @@
 use super::listed::Summary;
 use super::listing::{ChangedEntry, Listing};
-use client_core::Client;
+use client_core::Hub;
 use gpui_kit::{Context, EventEmitter};
 use protocol::model::{CommentDraft, CommentId, DiffComment, WorkspaceId};
 use std::collections::HashSet;
@@ -18,7 +18,8 @@ pub enum ReviewEvent {
 }
 
 pub struct Review {
-    pub(super) client: Client,
+    /// What the diff is read from, and comments are saved to.
+    pub(super) hub: Hub,
     pub(super) workspace_id: WorkspaceId,
     /// What Changes lists, and the file the file tab shows, read with it. `None` until the workspace's level has listed
     /// its changes.
@@ -47,14 +48,14 @@ impl Review {
     /// client-core holds of the changed files, while the worktree can be read, as `worktree_readable` says to start
     /// with.
     pub fn new(
-        client: Client,
+        hub: Hub,
         workspace_id: WorkspaceId,
         held: Vec<DiffComment>,
         worktree_readable: bool,
         cx: &mut Context<Self>,
     ) -> Self {
         let mut this = Self {
-            client,
+            hub,
             workspace_id,
             listed: None,
             listing: None,
@@ -69,16 +70,11 @@ impl Review {
         this
     }
 
-    /// Carries on on a new connection to the hub. Nothing is read until the next summary, or the next [`Self::refresh`],
-    /// so a reconnect doesn't start a worker for every pane at once.
-    pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
-        self.client = client.clone();
-        self.list_again(cx);
-    }
-
     /// Says again how many files the workspace changes, and reads the file the file tab shows again if its last read
     /// failed, at each moment that would read the changes again, as the pane shows or a turn ends. Nothing else is
-    /// read, since Changes lists what the workspace's level sends.
+    /// read, since Changes lists what the workspace's level sends. It needs nothing more once a new connection has
+    /// caught up, since what it lists came with the hub's records, so a reconnect doesn't start a worker for every
+    /// pane at once.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.say_what_changes(cx);
         self.read_the_file_again_if_it_moved(cx);
@@ -100,9 +96,9 @@ impl Review {
         }
     }
 
-    /// The connection the diff is read on, and its workspace, for reading what each file it changes holds.
-    pub(crate) fn source(&self) -> (Client, WorkspaceId) {
-        (self.client.clone(), self.workspace_id.clone())
+    /// What the diff is read from, and its workspace, for reading what each file it changes holds.
+    pub(crate) fn source(&self) -> (Hub, WorkspaceId) {
+        (self.hub.clone(), self.workspace_id.clone())
     }
 
     /// Whether the changes have been listed, and the workspace changes nothing.

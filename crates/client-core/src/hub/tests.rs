@@ -13,7 +13,7 @@ use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFr
 
 use crate::link::{Connect, Link, LinkState, Lost, Refused, Waits};
 use crate::stand_in_hub::{self, Does};
-use crate::{Client, ClientError, NotTaken, View, Written};
+use crate::{Client, ClientError, NotTaken, Opening, View, Written};
 use protocol::prompt::Prompt;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -112,7 +112,8 @@ fn followed(heard: &flume::Receiver<ClientRequest>, on: &str) {
 
 /// What's asked while a new connection catches up on the records isn't sent, then or later, so it can't act on records
 /// the first list is about to replace. It fails at once, as with no connection, and once it's caught up it's sent. A
-/// prompt sent through an open chat is the same, handed back at once. The round moves only once it has caught up.
+/// prompt sent through an open chat is the same, handed back at once, and so are what's asked once something else has
+/// answered, and opening a file. The round moves only once it has caught up.
 #[test]
 fn a_request_is_sent_only_on_a_connection_that_has_caught_up() {
     let dir = tempfile::tempdir().unwrap();
@@ -127,11 +128,19 @@ fn a_request_is_sent_only_on_a_connection_that_has_caught_up() {
 
     let while_catching_up = hub.ask(RepoList).wait();
     let prompt_while_catching_up = chat.start_sending(Written::new(Prompt::new("hello"))).wait();
+    let (_answered, answers) = flume::bounded(1);
+    let after_while_catching_up = hub.ask_after(answers, RepoList).wait();
+    let file = hub.open_file(&"w".into(), &"c".into(), "f");
+    waiting::thread::until(TIMEOUT, "the file never failed", || {
+        file.read(|opening| matches!(opening, Opening::Failed))
+    });
     list.send(()).unwrap();
     waiting::thread::until(TIMEOUT, "never caught up", || hub.caught_up());
     let once_caught_up = hub.ask(RepoList).wait();
 
     assert!(matches!(while_catching_up, Err(ClientError::Disconnected)), "{while_catching_up:?}");
+    assert!(matches!(after_while_catching_up, Err(ClientError::Disconnected)), "{after_while_catching_up:?}");
+    assert!(matches!(file.take_errors().as_slice(), [ClientError::Disconnected]), "the file wasn't asked for");
     let Err(NotTaken { error: ClientError::Disconnected, prompt }) = prompt_while_catching_up else {
         panic!("the prompt wasn't handed back: {prompt_while_catching_up:?}")
     };
@@ -142,6 +151,29 @@ fn a_request_is_sent_only_on_a_connection_that_has_caught_up() {
     assert_eq!(asked, 1, "only what was asked once it had caught up was sent");
     assert!(!heard.iter().any(|request| matches!(request, ClientRequest::SessionPrompt(_))), "the prompt was sent");
     assert_ne!(hub.round(), round_catching_up, "a connection that has caught up is a new round");
+}
+
+/// What's asked once something else has answered, as a comment once what's typed has been kept, isn't sent until then,
+/// and is sent then.
+#[test]
+fn a_request_asked_after_something_waits_for_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (list, listed) = flume::bounded(1);
+    let (client, heard) = hub_that_lists_after(&dir.path().join("hub.sock"), listed);
+    list.send(()).unwrap();
+    let link = Link::start_waiting(Tries::of(vec![Ok(client)]), Waits::retrying(NEVER, NEVER));
+    let hub = link.hub();
+    waiting::thread::until(TIMEOUT, "never caught up", || hub.caught_up());
+    let (answer, answered) = flume::bounded(1);
+
+    let asked = hub.ask_after(answered, RepoList);
+    waiting::thread::for_what_mustnt_happen(Duration::from_millis(100));
+    let before = heard.try_iter().filter(|request| *request == ClientRequest::RepoList).count();
+    // Gone, rather than waited on, if what's asked didn't wait.
+    let _ = answer.send(());
+
+    assert_eq!(before, 0, "asked before what it waits for answered");
+    assert_eq!(asked.wait().unwrap(), Repos { repos: Vec::new() });
 }
 
 /// A terminal and a chat opened before there's a connection follow on the first, and on each after it, as after the
@@ -166,4 +198,25 @@ fn what_is_opened_from_the_hub_follows_on_each_connection() {
 
     followed(&second_heard, "the second connection");
     waiting::thread::until(TIMEOUT, "never followed there", || open.connected());
+}
+
+/// Where the hub is doesn't change with its connection, so a hub reached by its socket is on this machine once that
+/// connection has gone, as it is while it's there. Before any connection, nothing says so.
+#[test]
+fn a_hub_is_on_this_machine_as_its_newest_connection_said_once_that_has_gone() {
+    let dir = tempfile::tempdir().unwrap();
+    let (first, _) = hub_that_goes_when_asked(&dir.path().join("hub.sock"));
+    let refused = ClientError::Api(ApiError::new(ErrorCode::Unauthorized, "refused"));
+    let link = Link::start_waiting(Tries::of(vec![Err(refused), Ok(first)]), Waits::retrying(NEVER, NEVER));
+    let hub = link.hub();
+    waiting::thread::until(TIMEOUT, "it never stopped", || matches!(link.state(), LinkState::Stopped(_)));
+    let before_any = hub.on_this_machine();
+    link.connect_now();
+    waiting::thread::until(TIMEOUT, "never caught up", || hub.caught_up());
+
+    drop(hub.ask(RepoList));
+
+    waiting::thread::until(TIMEOUT, "the connection never went", || !hub.caught_up());
+    assert!(!before_any, "nothing says where it is before a connection");
+    assert!(hub.on_this_machine(), "on this machine, as the connection that went said");
 }

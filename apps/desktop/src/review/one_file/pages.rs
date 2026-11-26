@@ -1,7 +1,8 @@
 //! Reading every page of one file's diff as one patch of one version of the file, and taking in what it says.
 
-use client_core::{Client, ClientError};
+use client_core::{ClientError, Hub};
 use gpui_kit::SharedString;
+use protocol::client::workspaces::WorkspaceFileDiff;
 use protocol::model::{ChangeStatus, ChangedFileAt, FileDiff, FileDiffBody, FileVersion, WorkspaceId};
 
 use super::file::Taken;
@@ -44,18 +45,18 @@ impl Unread {
 /// only where `listed`, the version the summary names, is none too, as for a deleted file, since otherwise naming none
 /// says the file changed while that page was read.
 pub(super) fn every_page(
-    client: &Client,
+    hub: &Hub,
     id: &WorkspaceId,
     at: &ChangedFileAt,
     from: Option<&str>,
     listed: Option<&FileVersion>,
 ) -> Result<FileDiff, Unread> {
     'read: for _ in 0..=MOST_READS_AGAIN {
-        let first = client.workspace_file_diff(id, at, from, 0).map_err(Unread::Hub)?;
+        let first = hub.call(page_of(id, at, from, 0)).map_err(Unread::Hub)?;
         let FileDiffBody::Patch { patch: mut whole, mut next_line } = first.body else { return Ok(first) };
         let known = first.version.is_some() || listed.is_none();
         while let Some(line) = next_line {
-            let page = client.workspace_file_diff(id, at, from, line).map_err(Unread::Hub)?;
+            let page = hub.call(page_of(id, at, from, line)).map_err(Unread::Hub)?;
             let FileDiffBody::Patch { patch, next_line: next } = page.body else { continue 'read };
             if !known || page.version != first.version {
                 continue 'read;
@@ -67,6 +68,12 @@ pub(super) fn every_page(
         return Ok(FileDiff { body, ..first });
     }
     Err(Unread::KeptChanging)
+}
+
+/// What asks for the page of the diff of the file `at` names, renamed from `from`, from the patch's line `first_line`.
+fn page_of(id: &WorkspaceId, at: &ChangedFileAt, from: Option<&str>, first_line: u32) -> WorkspaceFileDiff {
+    let ChangedFileAt { untracked, path } = at.clone();
+    WorkspaceFileDiff { id: id.clone(), path, untracked, from: from.map(str::to_string), first_line }
 }
 
 /// What `diff` says of the file at `path`, as the file tab draws it, moved from `from` and changed as `status` says,

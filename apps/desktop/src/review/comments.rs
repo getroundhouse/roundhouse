@@ -2,6 +2,7 @@
 //! copy of the hub's, less what's being deleted here.
 
 use gpui_kit::Context;
+use protocol::client::comments::{CommentAdd, CommentDelete, CommentEdit};
 use protocol::model::{CommentDraft, CommentId, DiffComment};
 
 use super::{Review, ReviewEvent};
@@ -30,22 +31,13 @@ impl Review {
     /// answers. It shows once client-core's copy has it, like any other change. Saving takes it off the hub as what's
     /// being written, so one that couldn't be saved is given back, with why.
     pub fn save_comment(&mut self, saving: CommentDraft, kept: flume::Receiver<()>, cx: &mut Context<Self>) {
-        let (id, draft) = (self.workspace_id.clone(), saving.clone());
-        let saved = self.client.start(move |client| {
-            // An answer, whether it's kept or as far as it could get, so a hub that's gone can't hold the save forever.
-            let _ = kept.recv();
-            match &draft.editing {
-                Some(comment) => client.comment_edit(comment, &draft.text),
-                None => client.comment_add(
-                    &id,
-                    &draft.path,
-                    draft.side,
-                    draft.line,
-                    &draft.text,
-                    Some(client_core::new_request_id()),
-                ),
-            }
-        });
+        let CommentDraft { editing, path, side, line, text } = saving.clone();
+        let saved = if let Some(id) = editing {
+            self.hub.ask_after(kept, CommentEdit { id, text })
+        } else {
+            let (workspace_id, client_request_id) = (self.workspace_id.clone(), Some(client_core::new_request_id()));
+            self.hub.ask_after(kept, CommentAdd { workspace_id, path, side, line, text, client_request_id })
+        };
         cx.spawn(async move |this, cx| {
             let saved = saved.recv().await;
             let _ = this.update(cx, |_, cx| {
@@ -63,7 +55,7 @@ impl Review {
         self.deleting.insert(id.clone());
         self.show_comments(cx);
         let target = id.clone();
-        let deleting = self.client.start(move |client| client.comment_delete(&target));
+        let deleting = self.hub.ask(CommentDelete { id: target });
         cx.spawn(async move |this, cx| {
             if let Err(e) = deleting.recv().await {
                 let _ = this.update(cx, |t, cx| {

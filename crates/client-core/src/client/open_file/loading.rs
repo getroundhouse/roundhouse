@@ -1,6 +1,8 @@
-use super::super::{Client, ClientError};
+use super::super::ClientError;
+use crate::Hub;
 use crate::file_text::FileText;
 use parking_lot::Mutex;
+use protocol::client::files::{WorkspaceFileOpenAt, WorkspaceFilePages};
 use protocol::model::{CommitId, FileOpened, WorkspaceId};
 use std::ops::Range;
 use std::sync::Arc;
@@ -13,8 +15,8 @@ pub enum Opening {
     Text(FileText),
     /// It's an image, or something else that isn't text.
     NotText,
-    /// It couldn't be opened, such as when it isn't there, or the connection went, so it's opened again on the next
-    /// connection it's given.
+    /// It couldn't be opened, such as when it isn't there, or there was no connection that had caught up, so it's
+    /// opened again when it's next asked to be, with [`OpenFile::open_again`].
     Failed,
 }
 
@@ -27,6 +29,8 @@ pub struct OpenFile {
 }
 
 pub(super) struct Shared {
+    /// What it's read from.
+    pub(super) hub: Hub,
     pub(super) file: (WorkspaceId, CommitId, String),
     pub(super) state: Mutex<State>,
     pub(super) changed: (flume::Sender<()>, flume::Receiver<()>),
@@ -34,7 +38,6 @@ pub(super) struct Shared {
 
 pub(super) struct State {
     pub(super) opening: Opening,
-    pub(super) client: Client,
     /// The lines a view has asked for since the thread last looked.
     pub(super) wanted: Vec<Range<u32>>,
     pub(super) errors: Vec<ClientError>,
@@ -42,10 +45,11 @@ pub(super) struct State {
 
 impl OpenFile {
     /// Opens the file at `path` as `commit` held it, in the workspace `id`'s repository, on a thread of its own, so
-    /// this doesn't wait for the hub.
-    pub fn start(client: &Client, id: &WorkspaceId, commit: &CommitId, path: &str) -> OpenFile {
-        let state = State { opening: Opening::Opening, client: client.clone(), wanted: Vec::new(), errors: Vec::new() };
+    /// this doesn't wait for the hub. It reads from `hub` as [`Hub::call`] does. A view opens one from its [`Hub`].
+    pub(crate) fn start(hub: &Hub, id: &WorkspaceId, commit: &CommitId, path: &str) -> OpenFile {
+        let state = State { opening: Opening::Opening, wanted: Vec::new(), errors: Vec::new() };
         let shared = Arc::new(Shared {
+            hub: hub.clone(),
             file: (id.clone(), commit.clone(), path.to_string()),
             state: Mutex::new(state),
             changed: flume::bounded(1),
@@ -73,10 +77,10 @@ impl OpenFile {
         let _ = self.wake.try_send(());
     }
 
-    /// Carries on on a new connection, opening the file again if it couldn't be opened before, and says whether it is.
-    pub fn reconnect(&self, client: &Client) -> bool {
+    /// Opens the file again if it couldn't be opened before, as when there was no connection that had caught up then,
+    /// and says whether it is.
+    pub fn open_again(&self) -> bool {
         let mut state = self.shared.state.lock();
-        state.client = client.clone();
         let again = matches!(state.opening, Opening::Failed);
         if again {
             state.opening = Opening::Opening;
@@ -113,12 +117,11 @@ fn read(shared: &Shared, woken: &flume::Receiver<()>) {
 /// Opens the file, if it's to be opened.
 fn open(shared: &Shared) {
     let (id, commit, path) = &shared.file;
-    let client = {
-        let state = shared.state.lock();
-        let Opening::Opening = state.opening else { return };
-        state.client.clone()
-    };
-    let (opened, error) = match client.workspace_file_open_at(id, commit, path) {
+    if !matches!(shared.state.lock().opening, Opening::Opening) {
+        return;
+    }
+    let asked = WorkspaceFileOpenAt { id: id.clone(), commit: commit.clone(), path: path.clone() };
+    let (opened, error) = match shared.hub.call(asked) {
         Ok(FileOpened::Text(opened)) => (Opening::Text(FileText::new(opened)), None),
         Ok(FileOpened::NotText | FileOpened::Unknown) => (Opening::NotText, None),
         Err(e) => (Opening::Failed, Some(e)),
@@ -134,16 +137,17 @@ fn open(shared: &Shared) {
 /// that don't come are fetched again when they're next wanted.
 fn fetch(shared: &Shared) -> bool {
     let (id, commit, path) = &shared.file;
-    let (client, page_lines, asked) = {
+    let (page_lines, asked) = {
         let mut state = shared.state.lock();
-        let State { opening: Opening::Text(text), client, wanted, .. } = &mut *state else { return false };
+        let State { opening: Opening::Text(text), wanted, .. } = &mut *state else { return false };
         let asked = text.to_fetch(&std::mem::take(wanted));
         if asked.is_empty() {
             return false;
         }
-        (client.clone(), text.page_lines(), asked)
+        (text.page_lines(), asked)
     };
-    let read = client.workspace_file_pages(id, commit, path, page_lines, &asked);
+    let (id, commit, path, pages) = (id.clone(), commit.clone(), path.clone(), asked.clone());
+    let read = shared.hub.call(WorkspaceFilePages { id, commit, path, page_lines, pages });
     let mut state = shared.state.lock();
     let State { opening: Opening::Text(text), errors, .. } = &mut *state else { return true };
     let (pages, error) = match read {

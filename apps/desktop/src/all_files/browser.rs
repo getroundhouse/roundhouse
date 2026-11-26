@@ -1,6 +1,6 @@
 use super::listed;
 use crate::file_tree::{List, Row, chain, file_frame, folder_row, split};
-use client_core::{Client, ClientError};
+use client_core::{ClientError, Hub};
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -11,6 +11,7 @@ use listed::Listed;
 use look::Typeset as _;
 use look::folder_icon;
 use protocol::client::ErrorCode;
+use protocol::client::files::{WorkspaceFiles, WorkspaceFolderRead};
 use protocol::model::{WorkspaceId, WorktreeFiles};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::Range;
@@ -32,7 +33,8 @@ pub(super) enum Listing {
 }
 
 pub struct AllFiles {
-    pub(super) client: Client,
+    /// What the files are read from.
+    pub(super) hub: Hub,
     pub(super) workspace_id: WorkspaceId,
     /// What the hub last said is in the worktree, shared with the thread that lays it out rather than copied.
     pub(super) worktree: Option<Arc<WorktreeFiles>>,
@@ -58,9 +60,9 @@ impl EventEmitter<AllFilesEvent> for AllFiles {}
 
 impl AllFiles {
     /// Lists nothing until [`Self::refresh`], so a workspace whose All files never shows never asks.
-    pub fn new(client: Client, workspace_id: WorkspaceId) -> Self {
+    pub fn new(hub: Hub, workspace_id: WorkspaceId) -> Self {
         Self {
-            client,
+            hub,
             workspace_id,
             worktree: None,
             read: BTreeMap::new(),
@@ -73,14 +75,6 @@ impl AllFiles {
             reading: HashMap::new(),
             reads: 0,
         }
-    }
-
-    /// Carries on on a new connection to the hub. What was being asked on the old one is dropped, and asked again on
-    /// this one with the next [`Self::refresh`].
-    pub fn reconnect(&mut self, client: &Client) {
-        self.client = client.clone();
-        self.asks += 1;
-        self.reading.clear();
     }
 
     /// Whether the folder at `path` is open.
@@ -96,12 +90,13 @@ impl AllFiles {
     }
 
     /// Lists the files again, and reads again each folder that's open and in view and is read when it's opened,
-    /// keeping the files shown and the folders open until the new list is ready.
+    /// keeping the files shown and the folders open until the new list is ready. It needs nothing more once a new
+    /// connection has caught up: a list or a folder asked for before is dropped as it's asked for again.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.asks += 1;
-        let (ask, client, id) = (self.asks, self.client.clone(), self.workspace_id.clone());
+        let (ask, hub, id) = (self.asks, self.hub.clone(), self.workspace_id.clone());
         cx.spawn(async move |this, cx| {
-            let listed = cx.background_spawn(async move { client.workspace_files(&id) }).await;
+            let listed = cx.background_spawn(async move { hub.call(WorkspaceFiles { id }) }).await;
             let _ = this.update(cx, |t, cx| {
                 if ask != t.asks {
                     return;
@@ -115,7 +110,7 @@ impl AllFiles {
                         t.read_open(&folders, cx);
                         t.lay_out_files(cx);
                     }
-                    // Lost with the connection, and listed again once the pane catches up on the next one.
+                    // With no connection that has caught up, and listed again once the pane catches up on the next.
                     Err(ClientError::Disconnected) => {}
                     // A list from before is still worth showing.
                     Err(_) if t.worktree.is_some() => {}
@@ -147,9 +142,9 @@ impl AllFiles {
         self.reads += 1;
         let read = self.reads;
         self.reading.insert(path.clone(), read);
-        let (client, id, folder) = (self.client.clone(), self.workspace_id.clone(), path.clone());
+        let (hub, id, folder) = (self.hub.clone(), self.workspace_id.clone(), path.clone());
         cx.spawn(async move |this, cx| {
-            let listed = cx.background_spawn(async move { client.workspace_folder_read(&id, &folder) }).await;
+            let listed = cx.background_spawn(async move { hub.call(WorkspaceFolderRead { id, path: folder }) }).await;
             let _ = this.update(cx, |t, cx| {
                 if t.reading.get(&path) != Some(&read) {
                     return;
@@ -161,8 +156,8 @@ impl AllFiles {
                         t.read.insert(path, Arc::new(files));
                         t.read_open(&folders, cx);
                     }
-                    // Lost with the connection, so the folder stays as it was, and is read again once the pane
-                    // catches up on the next one.
+                    // With no connection that has caught up, so the folder stays as it was, and is read again once
+                    // the pane catches up on the next.
                     Err(ClientError::Disconnected) => {}
                     Err(e) => {
                         t.read.remove(&path);

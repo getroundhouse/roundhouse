@@ -1,6 +1,6 @@
-//! What the window does while a new connection to its hub catches up on the hub's records: nothing a chat asks is sent
-//! until then, and what it couldn't do meanwhile is done once it has. Each opens on a fake hub that holds back its list
-//! of records on a new connection until the test lets it go, so the window is held open.
+//! What the window does while a new connection to its hub catches up on the hub's records: nothing a chat or a file
+//! view asks is sent until then, and what it couldn't do meanwhile is done once it has. Each opens on a fake hub that
+//! holds back its list of records on a new connection until the test lets it go, so the window is held open.
 
 #![cfg(test)]
 
@@ -12,10 +12,10 @@ use desktop::app::AppView;
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
-use protocol::model::{AttachmentId, SessionStatus};
+use protocol::model::{AttachmentId, FileContents, SessionStatus, WorktreeFiles};
 use protocol::prompt::{Prompt, PromptFrom};
 
-use crate::support::{Ui, one_chat, open_on_the_chat};
+use crate::support::{FakeHub, Ui, one_chat, open_on_the_chat};
 
 /// Long enough for the app to take up a new connection it has been told of, which it does at once.
 const LONG_ENOUGH: Duration = Duration::from_millis(300);
@@ -23,7 +23,7 @@ const LONG_ENOUGH: Duration = Duration::from_millis(300);
 const PAUSE: Duration = Duration::from_secs(1);
 
 /// Connects again now, as Try again does, so the next connection is held catching up.
-fn connect_again(ui: &mut Ui<'_>) {
+pub(crate) fn connect_again(ui: &mut Ui<'_>) {
     let view = ui.view.clone();
     ui.cx.update(|cx| view.update(cx, AppView::connect));
 }
@@ -108,4 +108,38 @@ fn what_a_chat_couldn_t_read_or_find_while_catching_up_is_asked_again_once_it_ha
     ui.wait("the picture, read once it has caught up", |_| asked.count("attachment_read") > read_then);
     ui.wait("the search, asked again", |_| asked.count("session_find") > found_then);
     ui.wait("the picture, shown", |ui| !unreadable(ui));
+}
+
+/// What the file tab shows of the file it has open, as lines, while it does.
+fn shown_text(ui: &Ui<'_>) -> Option<String> {
+    let viewer = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.diff.as_ref().map(|d| d.viewer.clone())).unwrap();
+    ui.cx.read_entity(&viewer, |viewer, _| viewer.shown_text())
+}
+
+/// A file opened from All files while a new connection catches up isn't read until it has, as with no hub, and is read
+/// then, as the pane catches up.
+#[gpui_kit::test]
+fn a_file_opened_while_catching_up_is_read_once_it_has(cx: &mut TestAppContext) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    world.chat(&workspace, SessionStatus::Idle, Vec::new());
+    world.worktree = WorktreeFiles { paths: vec!["notes.txt".into()], folders: Vec::new(), truncated: false };
+    world.worktree_files.insert("notes.txt".into(), FileContents::Text { text: "read at last\n".into() });
+    let (held, asked) = (world.held_list.clone(), world.asked.clone());
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("the workspace", |ui| ui.pane().is_some());
+    ui.click("sidebar-tab-all-files");
+    ui.wait("All files to list it", |ui| ui.has("all-file-notes.txt"));
+    held.hold();
+    connect_again(&mut ui);
+    crate::support::wait_until("the new connection's list to be held", || held.held() > 0);
+
+    ui.click("all-file-notes.txt");
+    throughout(&mut ui, "nothing is read while the connection catches up", |ui| shown_text(ui).is_none());
+
+    assert_eq!(asked.count("workspace_file_read"), 0, "nothing was asked");
+    held.let_go();
+    ui.wait("the file, once it has caught up", |ui| shown_text(ui).as_deref() == Some("read at last"));
 }

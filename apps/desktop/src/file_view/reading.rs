@@ -9,6 +9,7 @@ use client_core::ClientError;
 use gpui_kit::{AppContext as _, AsyncApp, Context, SharedString, WeakEntity};
 use protocol::attachment::{MediaType, describe_size};
 use protocol::client::ErrorCode;
+use protocol::client::files::WorkspaceFileRead;
 use protocol::model::FileContents;
 use transcript::{VideoPlayer, VideoSource};
 
@@ -70,10 +71,11 @@ impl FileView {
     pub(super) fn read(&mut self, cx: &mut Context<Self>) {
         let Some(path) = self.path.clone() else { return };
         self.reads += 1;
-        let (read, client, id, shown) = (self.reads, self.client.clone(), self.workspace_id.clone(), self.shown);
+        let (read, hub, id, shown) = (self.reads, self.hub.clone(), self.workspace_id.clone(), self.shown);
         cx.spawn(async move |this, cx| {
-            let (file, reading, workspace) = (path.to_string(), client.clone(), id.clone());
-            let contents = cx.background_spawn(async move { reading.workspace_file_read(&workspace, &file) }).await;
+            let asked = WorkspaceFileRead { id: id.clone(), path: path.to_string() };
+            let reading = hub.clone();
+            let contents = cx.background_spawn(async move { reading.call(asked) }).await;
             match what_it_gives(contents) {
                 Read::Lost => {}
                 Read::Instead(why) => {
@@ -81,7 +83,7 @@ impl FileView {
                 }
                 Read::Image(media_type, data) => show_image(&this, cx, read, shown, media_type, data).await,
                 Read::Video(media_type, bytes) => {
-                    let source = VideoSource::Worktree { client, workspace: id, path: path.to_string() };
+                    let source = VideoSource::Worktree { hub, workspace: id, path: path.to_string() };
                     show_video(&this, cx, read, shown, media_type, bytes, source).await;
                 }
                 Read::Text(text) => show_text(&this, cx, read, shown, &path, text).await,
