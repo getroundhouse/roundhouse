@@ -144,18 +144,16 @@ impl Hub {
     /// Keeps the release `read` found offered, current while the reads work, or as of the last that did, once one
     /// fails. Before the record says the read, so its copy holds what the read found.
     async fn release_offered(&self, read: &Result<Option<(String, HubArchive)>, String>) {
-        let kept = match read {
+        match read {
             Ok(newer) => {
                 let offered = ReleaseOffer { version: newer.as_ref().map(|(version, _)| version.clone()) };
-                match self.observation_kept_by::<ReleaseOffered>((), Keeper::Hub).await {
-                    Ok(()) => self.observation_read::<ReleaseOffered>((), offered, now_ms()).await,
-                    Err(e) => Err(e),
+                if self.observation_kept_by::<ReleaseOffered>((), Keeper::Hub).await.result().is_ok() {
+                    self.observation_read::<ReleaseOffered>((), offered, now_ms()).await;
                 }
             }
-            Err(_) => self.observation_no_longer_kept_by::<ReleaseOffered>((), Keeper::Hub, now_ms()).await,
-        };
-        if let Err(e) = kept {
-            warn!(name: "update.unkept", error = e.message, "Couldn't keep the release the update feed offers");
+            Err(_) => {
+                self.observation_no_longer_kept_by::<ReleaseOffered>((), Keeper::Hub, now_ms()).await;
+            }
         }
     }
 

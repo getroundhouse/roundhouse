@@ -169,9 +169,9 @@ pub(super) async fn make(hub: &Hub, kind: &ObservationKey, round: u8) {
 }
 
 async fn read<K: Kind>(hub: &Hub, of: K::Of, value: K::Value, at: i64) {
-    hub.observation_read::<K>(of, value, at).await.unwrap();
+    hub.observation_read::<K>(of, value, at).await.result().unwrap();
 }
 
 async fn worked_out<K: Kind>(hub: &Hub, of: K::Of, value: K::Value, at: i64) {
-    hub.observation_worked_out::<K>(of, value, at).await.unwrap();
+    hub.observation_worked_out::<K>(of, value, at).await.result().unwrap();
 }

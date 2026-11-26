@@ -54,14 +54,7 @@ impl Hub {
         }
         let merge =
             |held: Option<&Vec<UsageLimit>>| merged(held.map(Vec::as_slice), &limits, every_models_week, heard_at_ms);
-        if let Err(e) = self.observation_updated::<AccountLimits>(account.clone(), heard_at_ms, merge).await {
-            error!(
-                name: "account.limits_unkept",
-                %account,
-                error = e.message,
-                "Couldn't keep what an agent heard of its account's limits"
-            );
-        }
+        self.observation_updated::<AccountLimits>(account, heard_at_ms, merge).await;
     }
 
     /// Files that `session`'s agent launched under `under`, as its worker read it at `read_at_ms`, and tells every
@@ -83,7 +76,7 @@ impl Hub {
         if let Some(account) = under.logged_in_as().cloned() {
             let AgentAccount { model_provider, plan, login, email, .. } = under;
             let identity = protocol::model::AccountIdentity { model_provider, plan, login, email };
-            self.observation_read::<AccountIdentity>(account, identity, read_at_ms).await?;
+            self.observation_read::<AccountIdentity>(account, identity, read_at_ms).await.result()?;
         }
         Ok(launched)
     }

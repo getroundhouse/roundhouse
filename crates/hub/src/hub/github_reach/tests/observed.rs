@@ -132,8 +132,8 @@ async fn a_reach_is_forgotten_with_its_repository() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_calling_github(dir.path(), crate::hub::tests::NO_GITHUB.to_string());
     let pushes = Reach::Pushes { repository: CLI, username: "ada".into() };
-    hub.observation_read::<RepositoryReach>("gone".into(), pushes.clone(), 1_000).await.unwrap();
-    hub.observation_read::<RepositoryReach>("r".into(), pushes, 1_000).await.unwrap();
+    hub.observation_read::<RepositoryReach>("gone".into(), pushes.clone(), 1_000).await.result().unwrap();
+    hub.observation_read::<RepositoryReach>("r".into(), pushes, 1_000).await.result().unwrap();
     hub.observations_written().await;
     drop(hub);
 
@@ -155,7 +155,7 @@ async fn a_reach_of_the_machines_own_login_from_a_cache_file_reads_as_unknown() 
         let dir = tempfile::tempdir().unwrap();
         let hub = hub_calling_github(dir.path(), crate::hub::tests::NO_GITHUB.to_string());
         let pushes = Reach::Pushes { repository: CLI, username: "ada".into() };
-        hub.observation_read::<RepositoryReach>("r".into(), pushes, 1_000).await.unwrap();
+        hub.observation_read::<RepositoryReach>("r".into(), pushes, 1_000).await.result().unwrap();
         hub.observations_written().await;
         drop(hub);
         let file = Connection::open(dir.path().join("github-cache.db")).unwrap();

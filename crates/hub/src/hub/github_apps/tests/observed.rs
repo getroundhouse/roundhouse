@@ -101,6 +101,45 @@ async fn an_app_renamed_on_github_shows_as_it_is_once_its_asked_again_a_day_on()
     assert_eq!((renamed.name.as_str(), renamed.owner.name.as_str()), ("Ada's renamed", "adalabs-moved"));
 }
 
+/// A look a person asks for at an app the hub knows nothing of is refused with why, where what GitHub says of it
+/// couldn't be kept, as where the database gives no revision, rather than going on as though GitHub hadn't said.
+#[tokio::test]
+async fn a_look_at_an_app_whose_name_the_hub_couldnt_keep_is_refused_with_why() {
+    let github = github_saying(vec![Answer::app_said(9, "ada-roundhouse", "Ada's Roundhouse", (2, "adalabs"))]).await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github(dir.path(), github.api());
+    made(&hub).await;
+    knowing_nothing(&hub).await;
+    hub.store.refuse_revisions();
+
+    let looked = hub.github_app_installations_connect(APP).await;
+
+    hub.store.give_revisions();
+    let refused = looked.expect_err("refused");
+    assert_ne!(refused.message, "GitHub hasn't said what it calls the app yet");
+    assert_eq!(observed(&hub).await.0, None, "nothing kept");
+}
+
+/// A look a person asks for at an app whose bot the hub doesn't know is refused, where the bot GitHub names couldn't be
+/// kept, as where the database gives no revision, before it asks GitHub for the app's installations.
+#[tokio::test]
+async fn a_look_at_an_app_whose_bot_the_hub_couldnt_keep_is_refused() {
+    let github = github_saying(Vec::new()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github(dir.path(), github.api());
+    made(&hub).await;
+    hub.observations.forget_for_a_test::<GithubAppBot>(&APP);
+    let asked_before = github.asked().len();
+    hub.store.refuse_revisions();
+
+    let looked = hub.github_app_installations_connect(APP).await;
+
+    hub.store.give_revisions();
+    assert!(looked.is_err(), "{looked:?}");
+    let asked: Vec<_> = github.asked().into_iter().skip(asked_before).collect();
+    assert!(!asked.iter().any(|asked| asked.contains("installations")), "{asked:?}");
+}
+
 /// A hub that starts again has what GitHub said of the app, its bot and where its installation is, as of when it was
 /// said, before it asks GitHub again.
 #[tokio::test]
@@ -174,7 +213,7 @@ async fn what_github_says_of_an_app_is_forgotten_with_the_app() {
     let hub = hub_calling_github(dir.path(), crate::hub::tests::NO_GITHUB.to_string());
     let gone = protocol::model::GithubAppId::new(99);
     let said = GithubAppSaid { slug: "gone".into(), name: "Gone".into(), owner: adalabs() };
-    hub.observation_read::<Said>(gone, said, 1_000).await.unwrap();
+    hub.observation_read::<Said>(gone, said, 1_000).await.result().unwrap();
     hub.observations_written().await;
     drop(hub);
 

@@ -4,9 +4,8 @@ use std::sync::Arc;
 
 use protocol::capability::Report;
 use protocol::capability::account::Limit;
-use protocol::client::ApiError;
 use protocol::model::RunId;
-use tracing::{debug, error};
+use tracing::debug;
 
 use super::LiveSession;
 use crate::hub::{Hub, Keeper, Kind, SessionContext, SessionKey, SessionTodos, SessionToolServers};
@@ -21,13 +20,13 @@ impl LiveSession {
         }
         match report {
             Report::Context { context } => {
-                self.agent_said::<SessionContext>(run, context, "how full the agent's context is").await;
+                self.agent_said::<SessionContext>(run, context).await;
                 self.tell_cache_worth_telling().await;
             }
-            Report::Todos(todos) => self.agent_said::<SessionTodos>(run, todos, "the agent's to-do list").await,
+            Report::Todos(todos) => self.agent_said::<SessionTodos>(run, todos).await,
             Report::ToolServers { mut servers } => {
                 self.mark_waiting(run, &mut servers);
-                self.run_said_its_own::<SessionToolServers>(run, servers, "the agent's tool servers").await;
+                self.run_said_its_own::<SessionToolServers>(run, servers).await;
                 self.said_its_servers(run);
                 self.wake_reconnects();
             }
@@ -103,20 +102,20 @@ impl LiveSession {
     /// Keeps `said`, which the agent of `run` reported, as the session's observation of kind `K`, as of now, by the
     /// hub's clock. Only the current run speaks for the session, which is asked as it's kept, so what a run said never
     /// lands after the run was replaced. The store tells clients only of a change, so the feed isn't told what it knows.
-    async fn agent_said<K: Kind<Of = SessionKey>>(&self, run: RunId, said: K::Value, what: &str) {
+    async fn agent_said<K: Kind<Of = SessionKey>>(&self, run: RunId, said: K::Value) {
         let Ok(hub) = self.hub() else { return };
         let speaks = || self.speaks(run);
         let kept = hub.observation_read_while::<K>(self.observed_as(), said, crate::store::now_ms(), speaks);
-        self.kept_or_logged(kept.await, what);
+        kept.await;
     }
 
     /// Keeps `said`, as [`Self::agent_said`] does, for what's only true of `run`, as its tool servers are, so `run`
     /// keeps it, and it goes with the run, as [`Self::run_keeps_its_own`] says.
-    async fn run_said_its_own<K: Kind<Of = SessionKey>>(&self, run: RunId, said: K::Value, what: &str) {
+    async fn run_said_its_own<K: Kind<Of = SessionKey>>(&self, run: RunId, said: K::Value) {
         let Ok(hub) = self.hub() else { return };
         let (of, keeper, now) = (self.observed_as(), Keeper::Run(run), crate::store::now_ms());
         let kept = hub.observation_said_by_while::<K>(of, keeper, said, now, || self.speaks(run));
-        self.kept_or_logged(kept.await, what);
+        kept.await;
     }
 
     /// Whether what `run` says speaks for the session now, as [`speaks_for_the_session`] says.
@@ -124,32 +123,12 @@ impl LiveSession {
         speaks_for_the_session(self.state.lock().agent.map(|agent| agent.run), run)
     }
 
-    /// Logs a failure to keep `what` an agent reported.
-    fn kept_or_logged(&self, kept: Result<(), ApiError>, what: &str) {
-        if let Err(e) = kept {
-            error!(
-                name: "session.report_unkept",
-                session_id = %self.id,
-                what,
-                error = e.message,
-                "Couldn't keep what an agent reported"
-            );
-        }
-    }
-
     /// Keeps that `run` keeps what's only true of it, its tool servers, from now on, so they go with it, as
     /// `docs/principles/keeping-observations.md` says, as its exit is recorded. Those of the run before go now, as it
     /// starts, rather than once it has, so it's never what it said that goes, and a replaced run's late exit leaves those
     /// of the run after it.
     pub(crate) async fn run_keeps_its_own(&self, hub: &Hub, run: RunId) {
-        if let Err(e) = hub.observation_kept_by::<SessionToolServers>(self.observed_as(), Keeper::Run(run)).await {
-            error!(
-                name: "session.tool_servers_kept",
-                session_id = %self.id,
-                error = e.message,
-                "Couldn't forget the tool servers of the run before"
-            );
-        }
+        hub.observation_kept_by::<SessionToolServers>(self.observed_as(), Keeper::Run(run)).await;
     }
 }
 

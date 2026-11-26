@@ -4,9 +4,9 @@
 
 use std::sync::Arc;
 
-use protocol::client::ApiError;
 use protocol::model::WorkspaceId;
 
+use super::failing::Keeping;
 use super::keepers::Keeper;
 use super::kept::Change;
 use super::kinds::Kind;
@@ -43,13 +43,13 @@ impl WorkerWord<'_> {
 
     /// Keeps that the worker read `value` of `of` at `read_at_ms`, as [`Hub::observation_read`] does, current if it
     /// keeps it current, while it's still the workspace's worker.
-    pub(crate) async fn read<K: Kind>(&self, of: K::Of, value: K::Value, read_at_ms: i64) -> Result<(), ApiError> {
+    pub(crate) async fn read<K: Kind>(&self, of: K::Of, value: K::Value, read_at_ms: i64) -> Keeping {
         self.hub.observation_read_while::<K>(of, value, read_at_ms, || self.still_its()).await
     }
 
     /// Keeps that the worker keeps the observation of `of` current from now, as it watches it, while it's still the
     /// workspace's worker, as [`Hub::observation_kept_by`] does.
-    pub(crate) async fn keeps<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
+    pub(crate) async fn keeps<K: Kind>(&self, of: K::Of) -> Keeping {
         let keeper = self.keeper();
         let change = |_: &_| Change::KeptBy { keeper, at_ms: now_ms() };
         self.hub.change_observation_while::<K>(of, || self.still_its(), change).await
@@ -57,7 +57,7 @@ impl WorkerWord<'_> {
 
     /// Keeps that the worker said `value` of `of`, read at `read_at_ms`, and keeps it current from now, while it's
     /// still the workspace's worker, as [`Hub::observation_said_by_while`] does.
-    pub(crate) async fn said<K: Kind>(&self, of: K::Of, value: K::Value, read_at_ms: i64) -> Result<(), ApiError> {
+    pub(crate) async fn said<K: Kind>(&self, of: K::Of, value: K::Value, read_at_ms: i64) -> Keeping {
         let keeper = self.keeper();
         self.hub.observation_said_by_while::<K>(of, keeper, value, read_at_ms, || self.still_its()).await
     }

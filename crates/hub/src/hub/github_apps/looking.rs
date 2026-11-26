@@ -50,14 +50,7 @@ impl Hub {
             if let Some(change) = off_thread(connecting).await? {
                 let account = change.account.id.clone();
                 let change = self.github_user_connected(change, bot.clone(), None, connected_at_ms).await;
-                if let Err(e) = self.observation_read::<InstalledOn>(account, on, connected_at_ms).await {
-                    warn!(
-                        name: "github.installation_place_unkept",
-                        app = %id,
-                        error = e.message,
-                        "Couldn't keep where a connected installation is"
-                    );
-                }
+                self.observation_read::<InstalledOn>(account, on, connected_at_ms).await;
                 self.workers_sent_again(id).await;
                 self.announce_github_account(change);
             }
@@ -78,7 +71,7 @@ impl Hub {
             return Ok(());
         }
         match self.github.app(id, key).await {
-            Ok(said) => self.observation_read::<GithubAppSaid>(id, said, asked_at_ms).await,
+            Ok(said) => self.observation_read::<GithubAppSaid>(id, said, asked_at_ms).await.result(),
             Err(e) if read_at_ms.is_some() => {
                 warn!(
                     name: "github.app_unasked",
@@ -103,7 +96,7 @@ impl Hub {
         };
         let asked_at_ms = now_ms();
         let bot = self.github.bot(&said.slug).await?;
-        self.observation_read::<GithubAppBot>(id, bot.clone(), asked_at_ms).await?;
+        self.observation_read::<GithubAppBot>(id, bot.clone(), asked_at_ms).await.result()?;
         Ok(bot)
     }
 
@@ -125,14 +118,7 @@ impl Hub {
         for (account, _) in accounts {
             let Some(installed) = &account.installation else { continue };
             let Some(listed) = found.iter().find(|listed| listed.on.id == installed.on.id) else { continue };
-            if let Err(e) = self.observation_read::<InstalledOn>(account.id, listed.on.name.clone(), read_at_ms).await {
-                warn!(
-                    name: "github.installation_place_unkept",
-                    app = %id,
-                    error = e.message,
-                    "Couldn't keep where an installation is"
-                );
-            }
+            self.observation_read::<InstalledOn>(account.id, listed.on.name.clone(), read_at_ms).await;
         }
         self.workers_sent_again(id).await;
     }

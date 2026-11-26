@@ -231,9 +231,7 @@ impl Hub {
         // What each offered goes with it, and so does one the cache file kept that no list held. After the lock a
         // list's change takes, as `settle_model_list` says, and picked out under the observation's, so an answer that
         // found its list still held is forgotten too, and one that asks from now finds it gone.
-        if let Err(e) = self.observations_gone_where::<observations::ModelCatalog>(&is_gone).await {
-            warn!(name: "models.not_let_go", error = e.message, "Couldn't let go of which models agents offer");
-        }
+        self.observations_gone_where::<observations::ModelCatalog>(&is_gone).await;
     }
 
     /// Starts asking the agent for the list `lookup` is for, which is held as asking under revision `asked`.
@@ -272,13 +270,7 @@ impl Hub {
                 let still = || lists.asking_for(key, asked);
                 let read =
                     self.observation_read_while::<observations::ModelCatalog>(key.clone(), catalog, now_ms(), still);
-                read.await.map_err(|e| {
-                    warn!(
-                        name: "models.unkept",
-                        list = %key,
-                        error = e.message,
-                        "Couldn't keep which models an agent offers"
-                    );
+                read.await.result().map_err(|e| {
                     let message = format!("the hub couldn't keep which models the agent offers: {}", e.message);
                     ApiError::new(e.code, message)
                 })

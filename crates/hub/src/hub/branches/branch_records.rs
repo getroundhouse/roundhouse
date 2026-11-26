@@ -4,7 +4,7 @@ use super::super::ready::ReadyWorkspace;
 use crate::hub::observations::{ChildWorktreeBranches, ChildWorktreeKey, WorkerWord, WorkspaceBranches};
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
-use protocol::client::{ApiError, ErrorCode};
+use protocol::client::ErrorCode;
 use protocol::model::{Branches, ChildWorktreeId, Head, Upstream, WorkspaceId, WorkspaceStatus};
 use protocol::worker::{WatchBranches, WorkerFrame};
 use std::sync::Arc;
@@ -123,7 +123,7 @@ impl Hub {
             }
         };
         let of = ChildWorktreeKey { workspace_id: id.clone(), id: child.id };
-        child_branches_kept(id, word.read::<ChildWorktreeBranches>(of, branches, now_ms()).await);
+        word.read::<ChildWorktreeBranches>(of, branches, now_ms()).await;
     }
 
     /// Keeps `branches` as what the workspace's other worktree `child` has, as of now, as the worker that made it said
@@ -135,7 +135,7 @@ impl Hub {
         branches: Branches,
     ) {
         let of = ChildWorktreeKey { workspace_id: id.clone(), id: child };
-        child_branches_kept(id, self.observation_read::<ChildWorktreeBranches>(of, branches, now_ms()).await);
+        self.observation_read::<ChildWorktreeBranches>(of, branches, now_ms()).await;
     }
 
     /// What the workspace's worker, whose word `word` is, read of its own worktree's branches, which the hub keeps as
@@ -143,7 +143,7 @@ impl Hub {
     /// have something new.
     async fn branches_read(self: &Arc<Self>, id: &WorkspaceId, word: &WorkerWord<'_>, branches: Branches) {
         let before = self.observations.value_of::<WorkspaceBranches>(id);
-        branches_kept(id, word.read::<WorkspaceBranches>(id.clone(), branches.clone(), now_ms()).await);
+        word.read::<WorkspaceBranches>(id.clone(), branches.clone(), now_ms()).await;
         // Removed or archived while they were read, after that forgot what was kept, so what this kept goes too.
         match self.workspace(id).await {
             Err(e) if e.code == ErrorCode::NotFound => return self.workspace_observations_gone(id).await,
@@ -164,7 +164,7 @@ impl Hub {
     /// Keeps `branches` as what the workspace's own worktree has, as of now, as the worker that made the worktree said
     /// as it made it, or current while its worker watches them.
     pub(crate) async fn branches_known(&self, id: &WorkspaceId, branches: Branches) {
-        branches_kept(id, self.observation_read::<WorkspaceBranches>(id.clone(), branches, now_ms()).await);
+        self.observation_read::<WorkspaceBranches>(id.clone(), branches, now_ms()).await;
     }
 
     /// What the hub knows of the workspace's branches, however fresh, or `None` while they aren't known, as before its
@@ -184,28 +184,14 @@ impl Hub {
     /// until it goes, and as of then after. Nothing, for one that's no longer the workspace's.
     async fn branches_kept_current(&self, id: &WorkspaceId, link: &Arc<WorkerLink>) {
         let Some(word) = self.worker_word(id, link) else { return };
-        if let Err(e) = word.keeps::<WorkspaceBranches>(id.clone()).await {
-            warn!(
-                name: "branches.watch_unkept",
-                workspace_id = %id,
-                error = e.message,
-                "Couldn't keep that the workspace's branches are watched"
-            );
-        }
+        word.keeps::<WorkspaceBranches>(id.clone()).await;
     }
 
     /// Forgets the workspace's branches, as once it's archived, whose record keeps the branch it had checked out, and
     /// whose worker says them again once it's brought back. Its other worktrees' are kept, since a branch one of them
     /// had is still the workspace's, as `crate::hub::children` reads it.
     pub(in super::super) async fn branches_forgotten(&self, id: &WorkspaceId) {
-        if let Err(e) = self.observation_gone::<WorkspaceBranches>(id.clone()).await {
-            warn!(
-                name: "branches.unforgotten",
-                workspace_id = %id,
-                error = e.message,
-                "Couldn't forget the workspace's branches"
-            );
-        }
+        self.observation_gone::<WorkspaceBranches>(id.clone()).await;
     }
 }
 
@@ -232,23 +218,4 @@ pub(super) fn moved(before: &Branches, after: &Branches) -> Option<Moved> {
             pushed.tip.as_ref() == Some(&is.tip) && was_pushed.map(|was| &was.tip) != Some(&pushed.tip)
         });
     (elsewhere || caught_up).then_some(Moved::Pushed)
-}
-
-/// Logs that the workspace `id`'s branches couldn't be kept, if `kept` says so.
-fn branches_kept(id: &WorkspaceId, kept: Result<(), ApiError>) {
-    if let Err(e) = kept {
-        warn!(name: "branches.unkept", workspace_id = %id, error = e.message, "Couldn't keep the workspace's branches");
-    }
-}
-
-/// Logs that the branches of another of the workspace `id`'s worktrees couldn't be kept, if `kept` says so.
-fn child_branches_kept(id: &WorkspaceId, kept: Result<(), ApiError>) {
-    if let Err(e) = kept {
-        debug!(
-            name: "branches.other_unkept",
-            workspace_id = %id,
-            error = e.message,
-            "Couldn't keep another worktree's branches"
-        );
-    }
 }

@@ -27,14 +27,7 @@ impl Hub {
         let AppChange { app, changed } = off_thread(move || logins.keep_app(&made, &code)).await?;
         if changed {
             // What GitHub said of it as it made it, as it would say asked as the app.
-            if let Err(e) = self.observation_read::<Said>(app.id, said, made_at_ms).await {
-                warn!(
-                    name: "github.app_unkept",
-                    app = %app.id,
-                    error = e.message,
-                    "Couldn't keep what GitHub said of an app it made"
-                );
-            }
+            self.observation_read::<Said>(app.id, said, made_at_ms).await;
             self.notify(HubNotice::GithubApp(app.clone()));
         }
         match self.look_at_app(app.id, true).await {

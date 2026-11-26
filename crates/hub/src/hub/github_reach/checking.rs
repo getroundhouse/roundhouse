@@ -243,16 +243,9 @@ impl Checks {
         {
             return;
         }
-        let kept = match answered_at_ms {
+        match answered_at_ms {
             Some(answered_at_ms) => self.hub.observation_read::<RepositoryReach>(repo, reach, answered_at_ms).await,
             None => self.hub.observation_worked_out::<RepositoryReach>(repo, reach, now_ms()).await,
         };
-        if let Err(e) = kept {
-            warn!(
-                name: "github.reach_unkept",
-                error = e.message,
-                "Couldn't keep whether the default can push to a repository"
-            );
-        }
     }
 }

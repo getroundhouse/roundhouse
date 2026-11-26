@@ -243,6 +243,19 @@ impl Store {
         lock(&self.writer)
     }
 
+    /// Has the database give no revision from now, as [`Store::next_rev`] fails, until [`Store::give_revisions`].
+    #[cfg(test)]
+    pub(crate) fn refuse_revisions(&self) {
+        let refuse = "CREATE TRIGGER no_rev BEFORE UPDATE ON counters WHEN OLD.name = 'rev' BEGIN SELECT RAISE(ABORT, 'no'); END";
+        self.holding_writes().execute_batch(refuse).unwrap();
+    }
+
+    /// Has the database give revisions again, after [`Store::refuse_revisions`].
+    #[cfg(test)]
+    pub(crate) fn give_revisions(&self) {
+        self.holding_writes().execute_batch("DROP TRIGGER no_rev").unwrap();
+    }
+
     // Repos ---------------------------------------------------------------------------------------
 
     // Workspaces ----------------------------------------------------------------------------------

@@ -4,7 +4,6 @@ use std::collections::HashSet;
 
 use protocol::model::{ReferenceAsk, ReferenceSaid};
 
-use super::observing::logged;
 use crate::github_cache::{Item, KeptSummary, Told};
 use crate::hub::Hub;
 use crate::hub::observations::{Keeper, Referenced};
@@ -25,7 +24,7 @@ impl Hub {
     pub(super) async fn forget_unkept_chips(&self) {
         for ask in self.observations.kept_of::<Referenced>() {
             if self.github_cache.summary_kept(&item_of(&ask)).is_none() {
-                logged(self.observation_gone::<Referenced>(ask).await);
+                self.observation_gone::<Referenced>(ask).await;
             }
         }
     }
@@ -39,13 +38,12 @@ impl Hub {
             return;
         };
         let Some(said) = ReferenceSaid::of(found.as_ref()) else { return };
-        let keeping = if current && !failed_since {
-            self.observation_kept_by::<Referenced>(ask.clone(), Keeper::Hub).await
+        if current && !failed_since {
+            self.observation_kept_by::<Referenced>(ask.clone(), Keeper::Hub).await;
         } else {
-            self.observation_no_longer_kept_by::<Referenced>(ask.clone(), Keeper::Hub, now_ms()).await
-        };
-        logged(keeping);
-        logged(self.observation_worked_out::<Referenced>(ask.clone(), said, read_at_ms).await);
+            self.observation_no_longer_kept_by::<Referenced>(ask.clone(), Keeper::Hub, now_ms()).await;
+        }
+        self.observation_worked_out::<Referenced>(ask.clone(), said, read_at_ms).await;
     }
 }
 
@@ -60,7 +58,7 @@ impl Chips {
         }
         for ask in self.followed.difference(&now) {
             self.read.remove(ask);
-            logged(hub.observation_no_longer_kept_by::<Referenced>(ask.clone(), Keeper::Hub, now_ms()).await);
+            hub.observation_no_longer_kept_by::<Referenced>(ask.clone(), Keeper::Hub, now_ms()).await;
         }
         self.followed = now;
     }
@@ -73,7 +71,7 @@ impl Chips {
             let item = item_of(&ask);
             if forgotten.contains(&item) {
                 self.read.remove(&ask);
-                logged(hub.observation_gone::<Referenced>(ask).await);
+                hub.observation_gone::<Referenced>(ask).await;
             } else if kept.contains(&item) {
                 if self.followed.contains(&ask) {
                     self.read.insert(ask.clone());

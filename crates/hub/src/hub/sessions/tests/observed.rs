@@ -46,8 +46,8 @@ async fn listed(hub: &Hub) -> (Vec<Observation>, Session) {
 async fn a_sessions_context_and_todos_are_kept_across_a_restart_as_of_the_report() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_read::<SessionContext>(s(), context(60_000), 1_000).await.unwrap();
-    hub.observation_read::<SessionTodos>(s(), todos(), 2_000).await.unwrap();
+    hub.observation_read::<SessionContext>(s(), context(60_000), 1_000).await.result().unwrap();
+    hub.observation_read::<SessionTodos>(s(), todos(), 2_000).await.result().unwrap();
     hub.observations_written().await;
     drop(hub);
 
@@ -120,7 +120,7 @@ async fn a_session_from_before_opens_with_its_context_and_todos_not_known() {
 async fn a_sessions_context_and_todos_are_forgotten_with_it() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_read::<SessionContext>(s(), context(60_000), 1_000).await.unwrap();
+    hub.observation_read::<SessionContext>(s(), context(60_000), 1_000).await.result().unwrap();
     hub.observations_written().await;
     drop(hub);
     let db = Connection::open(dir.path().join("hub.db")).unwrap();
@@ -130,7 +130,7 @@ async fn a_sessions_context_and_todos_are_forgotten_with_it() {
 
     assert!(!again.observations.keeps::<SessionContext>(&s()), "kept though the database lacks the session");
     again.store.insert_session(&idle_session(1), None).unwrap();
-    again.observation_read::<SessionTodos>(s(), todos(), 2_000).await.unwrap();
+    again.observation_read::<SessionTodos>(s(), todos(), 2_000).await.result().unwrap();
     again.session_close(SessionId::from("s")).await.unwrap();
     assert!(!again.observations.keeps::<SessionTodos>(&s()), "kept after the session was deleted");
 }

@@ -122,7 +122,7 @@ async fn a_stopping_hub_lets_go_of_its_lock_once_its_observations_are_written() 
     let holder = Connection::open(dir.path().join("github-cache.db")).unwrap();
     holder.execute_batch("BEGIN IMMEDIATE;").unwrap();
     let lines = LineCounts { added: 3, removed: 1 };
-    hub.observation_read::<WorkspaceLines>("w".into(), lines, 1_000).await.unwrap();
+    hub.observation_read::<WorkspaceLines>("w".into(), lines, 1_000).await.result().unwrap();
 
     let mut letting_go = tokio::spawn({
         let hub = hub.clone();

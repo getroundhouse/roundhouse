@@ -21,7 +21,7 @@ const HELD_FOR: Duration = Duration::from_millis(200);
 async fn a_change_made_while_the_records_are_listed_is_told_after_the_list() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.result().unwrap();
     let (before, _) = listed(&hub).await;
     let mut feed = hub.subscribe_feed();
     let ((listing, began), (go, gone_on)) = (oneshot::channel(), oneshot::channel::<()>());
@@ -46,7 +46,7 @@ async fn a_change_made_while_the_records_are_listed_is_told_after_the_list() {
     assert!(tokio::time::timeout(HELD_FOR, &mut making).await.is_err(), "the change waits for the list");
     go.send(()).unwrap();
     let (rev, observations) = asking.await.unwrap();
-    making.await.unwrap().unwrap();
+    making.await.unwrap().result().unwrap();
     assert_eq!(observations, before, "the copy from before");
     let changed = told_copy(&mut feed);
     assert!(changed.rev() > rev, "{changed:?} after a list at {rev}");
@@ -83,7 +83,7 @@ async fn a_list_waits_for_a_change_made<K: Kind, F: Future<Output = (Vec<Observa
 {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_read::<K>("w".into(), before, 1_000).await.unwrap();
+    hub.observation_read::<K>("w".into(), before, 1_000).await.result().unwrap();
     let mut feed = hub.subscribe_feed();
     let writes = hub.store.holding_writes();
     let making = tokio::spawn({
@@ -97,7 +97,7 @@ async fn a_list_waits_for_a_change_made<K: Kind, F: Future<Output = (Vec<Observa
 
     assert!(tokio::time::timeout(HELD_FOR, &mut asking).await.is_err(), "the list waits for the change");
     drop(writes);
-    making.await.unwrap().unwrap();
+    making.await.unwrap().result().unwrap();
     let (observations, rev) = asking.await.unwrap();
     let changed = told_copy(&mut feed);
     assert_eq!(observations, std::slice::from_ref(&changed), "the new copy");
@@ -119,8 +119,8 @@ async fn a_list_waits_for_no_write_to_the_cache_file() {
     writer.execute_batch("BEGIN IMMEDIATE;").unwrap();
 
     let changing = async {
-        hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
-        hub.observation_read::<WorkspaceLines>("w".into(), lines(4, 0), 2_000).await.unwrap();
+        hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.result().unwrap();
+        hub.observation_read::<WorkspaceLines>("w".into(), lines(4, 0), 2_000).await.result().unwrap();
         listed(&hub).await
     };
     // Well inside the 5 s a write waits for the file, so a change that waited for its write would fail this.
@@ -151,14 +151,14 @@ async fn each_level_is_listed_only_its_own_observations() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     for workspace in ["w", "v"] {
-        hub.observation_read::<WorkspaceLines>(workspace.into(), lines(3, 1), 1_000).await.unwrap();
-        hub.observation_read::<WorkspaceChanges>(workspace.into(), changes(3, 1), 1_000).await.unwrap();
+        hub.observation_read::<WorkspaceLines>(workspace.into(), lines(3, 1), 1_000).await.result().unwrap();
+        hub.observation_read::<WorkspaceChanges>(workspace.into(), changes(3, 1), 1_000).await.result().unwrap();
     }
 
     let ask =
         |n| ReferenceAsk { repository: GithubRepositoryName::named("o/r"), number: IssueNumber::try_from(n).unwrap() };
-    hub.observation_worked_out::<Referenced>(ask(1), ReferenceSaid::Missing, 1_000).await.unwrap();
-    hub.observation_worked_out::<Referenced>(ask(2), ReferenceSaid::Missing, 2_000).await.unwrap();
+    hub.observation_worked_out::<Referenced>(ask(1), ReferenceSaid::Missing, 1_000).await.result().unwrap();
+    hub.observation_worked_out::<Referenced>(ask(2), ReferenceSaid::Missing, 2_000).await.result().unwrap();
 
     let of_the_hub = hub.records_list().await.unwrap().observations;
     let (of_w, _) = hub.observations_at(&Level::Workspace { id: "w".into() }).await.unwrap();

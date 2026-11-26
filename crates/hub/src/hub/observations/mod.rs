@@ -5,6 +5,7 @@
 //! and removed.
 
 mod changes;
+mod failing;
 mod file;
 mod github_kinds;
 mod hub_kinds;

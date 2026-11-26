@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use protocol::client::{ApiError, HubNotice};
+use protocol::client::HubNotice;
 use protocol::model::{Observation, RecordKey};
 use tokio::sync::broadcast::error::RecvError;
 use tracing::warn;
@@ -111,13 +111,5 @@ impl Observing {
         self.follow_now(hub).await;
         self.chips.work_out_all(hub).await;
         self.workspaces.all_again(hub).await;
-    }
-}
-
-/// Says in the log why a change to an observation failed, which only a database that gives no revision fails, so it's
-/// as it was until what it's worked out from changes again.
-pub(super) fn logged(changed: Result<(), ApiError>) {
-    if let Err(error) = changed {
-        warn!(name: "github.observation_unkept", error = error.message, "Couldn't keep an observation of GitHub");
     }
 }

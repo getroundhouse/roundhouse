@@ -19,13 +19,13 @@ use crate::hub::tests::hub_in;
 /// Keeps one observation of each kind of what's of a workspace, of `id`.
 async fn one_of_each(hub: &Hub, id: &str) {
     let id = WorkspaceId::from(id);
-    hub.observation_read::<WorkspaceLines>(id.clone(), lines(3, 1), 1_000).await.unwrap();
-    hub.observation_read::<WorkspaceChanges>(id.clone(), changes(3, 1), 1_000).await.unwrap();
+    hub.observation_read::<WorkspaceLines>(id.clone(), lines(3, 1), 1_000).await.result().unwrap();
+    hub.observation_read::<WorkspaceChanges>(id.clone(), changes(3, 1), 1_000).await.result().unwrap();
     let said = OwnPullRequestSaid { pull_request: None };
-    hub.observation_worked_out::<WorkspacePullRequest>(id.clone(), said, 1_000).await.unwrap();
+    hub.observation_worked_out::<WorkspacePullRequest>(id.clone(), said, 1_000).await.result().unwrap();
     let detail = OwnPullRequestDetail { pull_request: None };
-    hub.observation_worked_out::<WorkspacePullRequestDetail>(id.clone(), detail, 1_000).await.unwrap();
-    hub.observation_read::<WorkspaceRepositoryUnseen>(id, None, 1_000).await.unwrap();
+    hub.observation_worked_out::<WorkspacePullRequestDetail>(id.clone(), detail, 1_000).await.result().unwrap();
+    hub.observation_read::<WorkspaceRepositoryUnseen>(id, None, 1_000).await.result().unwrap();
 }
 
 /// How many kinds the store keeps an observation of `id` of.
@@ -96,7 +96,7 @@ async fn the_observations_of_a_workspace_the_hub_doesn_t_have_are_swept() {
         repository: GithubRepositoryName::named("example/project"),
         number: IssueNumber::try_from(7).unwrap(),
     };
-    hub.observation_worked_out::<Referenced>(chip.clone(), ReferenceSaid::Missing, 1_000).await.unwrap();
+    hub.observation_worked_out::<Referenced>(chip.clone(), ReferenceSaid::Missing, 1_000).await.result().unwrap();
 
     hub.observations_of_no_workspace_gone().await;
 
@@ -117,12 +117,12 @@ async fn a_read_still_landing_as_what_it_s_of_is_forgotten_goes_with_it() {
         let hub = Arc::clone(&hub);
         async move {
             let still = || wanted.send(()).is_ok();
-            hub.observation_read_while::<WorkspaceLines>("w".into(), lines(3, 1), 1_000, still).await.unwrap();
+            hub.observation_read_while::<WorkspaceLines>("w".into(), lines(3, 1), 1_000, still).await.result().unwrap();
         }
     });
     asked.await.unwrap();
 
-    hub.observations_gone_where::<WorkspaceLines>(|_| true).await.unwrap();
+    hub.observations_gone_where::<WorkspaceLines>(|_| true).await.result().unwrap();
     reading.await.unwrap();
 
     assert!(!hub.observations.keeps::<WorkspaceLines>(&"w".into()), "forgotten");
