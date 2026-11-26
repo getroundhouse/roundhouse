@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+use fetching::serving::NOWHERE;
 use gpui_kit::TestAppContext;
 use hub::{ToolServerAsks, ToolServerGate, ToolServerScript};
 use protocol::model::{ToolServerAuth, ToolServerAuthGiven};
@@ -222,10 +223,10 @@ fn an_edit_is_checked_where_it_changes_what_the_server_is_sent_and_is_saved_anyw
 fn a_server_that_cant_be_reached_says_so_and_one_the_hub_wont_have_is_refused_as_it_would_be(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_servers(cx, &stack);
-    let nobody = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap().local_addr().unwrap();
-    fill_in(&mut ui, "Docs", &format!("http://{nobody}/mcp"));
+    fill_in(&mut ui, "Docs", &format!("{NOWHERE}/mcp"));
     choose(&mut ui, NONE_WAY);
     ui.click("mcp-panel-go");
+    let nobody = NOWHERE.trim_start_matches("http://");
     assert_eq!(refused(&mut ui), format!("The hub can't reach {nobody}. Connection refused."));
 
     added_elsewhere(&stack, "docs", "Docs", &open_to_anyone().url(), ToolServerAuthGiven::Neither);

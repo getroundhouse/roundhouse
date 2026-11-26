@@ -5,6 +5,7 @@
 
 use client_core::fake_hub::events::{first_turn, replied, task, text, user_prompt};
 use client_core::fake_hub::{Asked, World};
+use fetching::serving::NOWHERE;
 use gpui_kit::{AppContext as _, ElementId, ScrollDelta, TestAppContext, point, px};
 use hub::{ToolServerPerson, ToolServerRefreshing};
 use protocol::capability::setup::{ServerState, ToolServerState};
@@ -41,7 +42,7 @@ fn the_card_follows_the_hubs_servers_and_what_the_agent_says_of_them(cx: &mut Te
     assert!(!ui.has("mcp"), "a chat with no servers has no plug");
     // Nothing listens there, so the agent can't reach it.
     let add = |id: &str, name: &str| {
-        client.tool_server_add(&id.into(), name, "http://127.0.0.1:9/mcp", ToolServerAuthGiven::Neither).unwrap();
+        client.tool_server_add(&id.into(), name, &format!("{NOWHERE}/mcp"), ToolServerAuthGiven::Neither).unwrap();
     };
 
     add("t-1", "Linear (Northwind)");
