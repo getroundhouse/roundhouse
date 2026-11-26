@@ -16,8 +16,9 @@ How Brilliant, the design tool, behaves where the design depends on it, as found
 
 ## Files
 
-- A project is a folder. A canvas is a `.bl` file, a design system a `.ds` in `Styles/`, and a film a `.bm` in `Motion/`, all text.
+- A project is a folder. A canvas is a `.bl` file, a design system a `.ds` in `Styles/`, and a film a `.bm` in a `Motion/` folder, all text. A film's `Motion/` can be at the project's root or in the folder of the canvas it draws from, such as `Screens/Motion/`, which names that canvas by its name alone or by its path. One at the root names a canvas in a folder by its path, such as `Screens/Frames`, and is refused naming it by its name alone. A film anywhere else, such as beside its canvas with no `Motion/`, or in `Screens/Films/`, isn't a film to Brilliant: `edit` refuses to write one there, and `export` to play it. `edit` refused a film in `Screens/Desktop/Chats/Motion/` that named its canvas by its name alone, which `export` played, and wrote it once it named the canvas by its path.
 - A row of a `.bl` is one element, led by an ID it keeps. A copy of a component is one row naming its master, but for a copy on a canvas edited since its master changed, which also holds the master's layout and children.
+- A canvas written by a program needs no position or size that Brilliant measures, such as `s(hug,hug)` in place of `s(hug:62.84,hug:29)`, nor a token's value beside its name, such as `tok(color.text)`, nor a text's font when it has a type's token, such as `t("Index") $typography.PageTitle`. Brilliant lays it out and draws it from the design system when it reads it, and didn't write it again.
 - A row holds what was measured, such as `s(360,hug:132)`, and a token's value beside its name, such as `tok(color.primary,#0080FF)`. Changing a token or a master doesn't rewrite the canvases that use it until each is next edited.
 - A project is named by its folder, so each workspace's is "design". A name in `.brilliant/settings.json` is ignored, a symlink to the folder is followed to it, and links inside a project aren't. Opening the whole worktree takes the worktree's name, but writes a design system and a `.gitignore` there, and components' paths no longer resolve. So the setup script in `.conductor/settings.toml` makes a folder such as `@ sants-2` in `design/`, which is first in Brilliant's list of files, and which git ignores.
 - `.brilliant/`, `Styles/.gen/` and each `Assets/.thumbs/` are made again. A thumbnail changes with every edit, and conflicts in a merge.
@@ -53,6 +54,14 @@ How Brilliant, the design tool, behaves where the design depends on it, as found
 - A merged canvas keeps the sizes it had on one side when it's opened. Changing an element's layout and back lays it out again.
 - A canvas that uses a token its design system no longer has is drawn with the value stored in the row, and nothing says so. Only a new row that uses it is refused.
 - A change to a component's master reaches a copy on a canvas that another branch added, once they're merged.
+
+## Moving a canvas
+
+- A canvas moved or renamed in Brilliant, with `move_canvas` or `rename_canvas`, has every copy of its components on every canvas pointed at its new path, as `inst("Status Ready for review",canvas(Board/Status))`, in the files on disk. The moved file is otherwise unchanged. Some copies were written with their master's layout and fill beside them, as a copy on a canvas edited since its master changed is.
+- A master renamed with `edit` had every copy's row renamed with it, in each file, in a project open in the app. In a project open only in the background, the copies kept the old name until their rows were renamed by hand, after which they drew the new master. A copy's body stored beside its row kept the old words, and didn't show them.
+- A film isn't pointed at a canvas that moved: its `canvases[…]` keeps the old path.
+- A copy that names a path no canvas has draws nothing, and nothing says so, though its row names its master's ID. `read` shows the row as it is, with no warning. A canvas added on a branch cut before a move is one once they're merged: in a project opened afresh, its copy naming the old path drew nothing, and the same copy naming the new path drew. A film that names a path no canvas has is refused, with the path it named.
+- Until the app quits, what names a path a canvas was moved from in Brilliant can still find it, so a check of a move is made in a project opened afresh.
 
 ## Fonts
 

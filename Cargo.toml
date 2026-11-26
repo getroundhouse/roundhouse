@@ -41,6 +41,7 @@ members = [
     "crates/hint-words",
     "crates/libvpx-build",
     "tools/policy",
+    "tools/design",
     "tools/guide",
     "tools/kit-sync",
     "tools/spec-page",
@@ -91,6 +92,7 @@ default-members = [
     "crates/hint-words",
     "crates/libvpx-build",
     "tools/policy",
+    "tools/design",
     "tools/guide",
     "tools/kit-sync",
     "tools/spec-page",
@@ -162,6 +164,7 @@ video = { path = "crates/video" }
 libvpx-build = { path = "crates/libvpx-build" }
 desktop = { path = "apps/desktop" }
 mobile-ios = { path = "apps/mobile-ios" }
+design = { path = "tools/design" }
 kit-sync = { path = "tools/kit-sync" }
 
 anyhow = "1.0.104"

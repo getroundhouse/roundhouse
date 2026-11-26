@@ -11,6 +11,7 @@ Where each kind of test goes, and the hub a test of the hub or the window runs o
 | The window | Clicking and typing through to what's shown | `apps/desktop/tests/` |
 | How each screen looks, and the app icon | That each still matches its approved image | `apps/desktop/tests/ui/gallery/` and `apps/mobile-ios/tests/ui/gallery/` |
 | The repo's rules | Dependencies, licenses, file length and lint inheritance, against the real dependency graph | `tools/policy/` |
+| The design's tool | That it lists each canvas of the design with its status, and that `design/Index.bl` is as the badges have it | `tools/design/` |
 | The guide's tool | That it publishes each page and refuses a link, heading or picture that isn't there, against made-up guides. CI's `guide` job builds the real one | `tools/guide/tests/` |
 | The kit's tool | That it makes the copy of gpui-kit and keeps its patches in step with it, against stand-ins for upstream's repository and this one | `tools/kit-sync/tests/` |
 | Publishing updates | That a release signs only a feed it computed, finishes after stopping partway, and reads back as apps would, against a directory standing in for the bucket | `tools/package/test_publish.py` |

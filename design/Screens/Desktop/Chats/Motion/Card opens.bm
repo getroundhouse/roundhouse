@@ -1,6 +1,6 @@
 bm:v1
 fps(60) s(400,220)
-canvases["Motion canvas"]
+canvases["Screens/Desktop/Chats/Plan to approve"]
 state(01 Closed) #a
 state(02 Open) #b
 

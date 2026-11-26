@@ -6,6 +6,7 @@
 
 mod dependencies;
 mod design;
+mod design_paths;
 mod design_system;
 mod docs;
 mod environments;

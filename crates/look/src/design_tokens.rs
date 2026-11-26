@@ -16,7 +16,7 @@ use crate::{BarSize, Colors, ControlSize, Corner, EDGE, IconSize, NamedColor, QU
 const DESIGN: &str = include_str!("../../../design/Styles/default.ds");
 
 /// The film of a card opening, whose change is a line such as `#a to(#b) sec(0.2) ease(out,cubic)`.
-const FILM: &str = include_str!("../../../design/Motion/Card opens.bm");
+const FILM: &str = include_str!("../../../design/Screens/Desktop/Chats/Motion/Card opens.bm");
 
 /// One of the kit's icons, as each of them is drawn but for a few, such as `width="24"` and `stroke-width="2"`.
 const ICON: &str = include_str!("../../../third_party/gpui-kit/vendor/crates/assets/assets/icons/file-text.svg");

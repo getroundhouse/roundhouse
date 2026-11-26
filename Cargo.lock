@@ -2004,6 +2004,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "design"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "desktop"
 version = "0.1.0"
 dependencies = [
@@ -7262,6 +7271,7 @@ dependencies = [
 name = "policy"
 version = "0.1.0"
 dependencies = [
+ "design",
  "kit-sync",
  "proc-macro2",
  "process",
