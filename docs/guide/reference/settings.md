@@ -195,9 +195,9 @@ The MCP servers the hub has of its own, each signed in to, with a key or with ne
 
 ### Add a server
 
-1. Click **Add server**, then **Sign in**. If the server gave you a key, click **Paste a key** instead, or **Add it** if anyone who can reach the server can use it.
-2. Paste the server's URL, which its own page has, and give it a name.
-3. With a key, paste it, and change the header it's sent in if the server wants another than `Authorization`.
+1. Click **Add server**, name the server, and paste its URL, which its own page has.
+2. Leave **Authentication** on **Sign in**. If the server gave you a key, choose **Key** instead, or **None** if anyone who can reach the server can use it.
+3. With **Key**, paste it, and change the header it's sent in if the server wants another than `Authorization`.
 4. Click **Sign in**, or **Add**.
 5. Signing in, approve Roundhouse on the page your browser opens, and go back to the app. The server is added then.
 
@@ -207,7 +207,7 @@ An agent has the server from its next start, so one already running goes on with
 
 In `Authorization`, a key on its own is sent as `Bearer` and the key. One that names its scheme, such as `Basic`, is sent as it is, and so is a key in any other header.
 
-The app hands the key to the hub, which keeps it in its own data, as [Where data is kept](where-data-is-kept.md) says. The app writes it nowhere, and forgets it as it's sent, so if the hub refuses to add the server, you paste the key again. No agent is given the key: its calls go through Roundhouse on its machine, which adds it.
+The app hands the key to the hub, which keeps it in its own data, as [Where data is kept](where-data-is-kept.md) says. The app writes it nowhere, and forgets it as it's sent or as you choose another way in **Authentication**, so if the hub refuses to add the server, you paste the key again. No agent is given the key: its calls go through Roundhouse on its machine, which adds it.
 
 The name is whatever you like, up to 64 characters. Agents call the server by a name made from it, such as `Linear_Northwind` for `Linear (Northwind)`, so two servers can't have names that come to the same. The panel says so if they do, and which server has it.
 
@@ -227,7 +227,7 @@ When you click **Sign in**, the hub asks the server how it's signed in to, which
 
 The hub keeps the sign-in in its own data, and renews it, as [Where data is kept](where-data-is-kept.md) says. No agent is given it: its calls go through Roundhouse on its machine, which adds the token of the moment.
 
-Some servers can't be signed in to. Roundhouse says who it is by [a document on its site](https://getroundhouse.dev/oauth/client.json), and registers with no service, so one that takes only apps registered with it can't be. Nor can one that doesn't keep a sign-in safe with PKCE, or that doesn't say where to sign in. The panel says which it is, and **Use a key** goes on with the URL and the name you typed, if the server takes one. A server over plain HTTP can be signed in to only on the hub's machine or a private network.
+Some servers can't be signed in to. Roundhouse says who it is by [a document on its site](https://getroundhouse.dev/oauth/client.json), and registers with no service, so one that takes only apps registered with it can't be. Nor can one that doesn't keep a sign-in safe with PKCE, or that doesn't say where to sign in. The panel is then there again as you typed it, and says why. Choose **Key** in it if the server gave you one. If it says that the server has no sign-in, anyone who can reach it can use it, so choose **None**, or **Key** if it gave you one. A server over plain HTTP can be signed in to only on the hub's machine or a private network.
 
 ### Sign in again
 

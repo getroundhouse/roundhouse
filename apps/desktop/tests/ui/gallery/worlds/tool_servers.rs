@@ -59,6 +59,13 @@ pub(in crate::gallery) fn no_tool_sign_in() -> World {
     world
 }
 
+/// [`one_tool_server`], whose hub answers that the server to sign in to is one anyone can use.
+pub(in crate::gallery) fn open_tool_server() -> World {
+    let mut world = one_tool_server();
+    world.tool_sign_in_answer = Some(Ok(ToolSignInBegun::NoSignIn));
+    world
+}
+
 /// [`tool_servers`], whose hub can't reach a server to sign in to it, as it words why.
 pub(in crate::gallery) fn tool_sign_in_refused() -> World {
     let why = ApiError::new(ErrorCode::Unavailable, "mcp.linear.app didn't answer in time");

@@ -1,5 +1,5 @@
-//! MCP servers' screens in Settings, each of a state its rules in `settings.md` say: the servers, none yet, adding one,
-//! signing in to one, and a row's menu.
+//! MCP servers' screens in Settings, each of a state its rules in `settings.md` say: the servers, none yet, adding one
+//! each way, signing in to one, and a row's menu.
 
 #![cfg(test)]
 
@@ -7,22 +7,19 @@ use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::{
-    chat_servers_wanting_more_access, conversation, no_tool_sign_in, one_tool_server, tool_server_refused,
-    tool_servers, tool_sign_in_refused, tool_sign_in_waiting,
+    chat_servers_wanting_more_access, conversation, no_tool_sign_in, one_tool_server, open_tool_server,
+    tool_server_refused, tool_servers, tool_sign_in_refused, tool_sign_in_waiting,
 };
 use client_core::fake_hub::World;
 
 /// Shows MCP servers, once Settings is open.
 const SERVERS: Step = Step::Click("settings-page-mcp");
-/// Opens Add server's panel.
+/// Opens Add server's panel, with the cursor in its name.
 const ADD: Step = Step::Click("mcp-add");
-/// Opens the panel for signing in to a server, from Add server's, with the cursor in its URL.
-const SIGN_IN: Step = Step::Click("mcp-sign-in");
-/// Opens the panel for adding a server a key is sent to, from Add server's, with the cursor in its URL.
-const KEY: Step = Step::Click("mcp-use-key");
-/// Puts the cursor in a name's field.
-const NAME: Step = Step::Click("mcp-name");
-
+/// Puts the cursor in the URL's field.
+const URL: Step = Step::Click("mcp-url");
+/// Opens the dropdown of the ways a server can know the person.
+const WAYS: Step = Step::Click("mcp-way");
 /// Adds what a panel's fields say, or starts signing in to it.
 const GO: Step = Step::Click("mcp-panel-add");
 
@@ -41,7 +38,20 @@ pub(crate) const SCREENS: &[Screen] = &[
         &[Step::Select(FOCUS), Step::OpenSettings, SERVERS],
     ),
     mcp("settings-mcp-none", conversation, &[Step::Select(FOCUS), Step::OpenSettings, SERVERS]),
-    mcp("settings-mcp-choosing", conversation, &[Step::Select(FOCUS), Step::OpenSettings, SERVERS, ADD, AWAY]),
+    mcp(
+        "settings-mcp-authentication",
+        one_tool_server,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            ADD,
+            Step::Type("Notion"),
+            URL,
+            Step::Type("https://mcp.notion.example/mcp"),
+            WAYS,
+        ],
+    ),
     mcp(
         "settings-mcp-key",
         one_tool_server,
@@ -50,11 +60,11 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::OpenSettings,
             SERVERS,
             ADD,
-            KEY,
-            Step::Type("https://mcp.northwind.example/mcp"),
-            NAME,
             Step::Type("Runbooks"),
-            Step::Click("mcp-key"),
+            URL,
+            Step::Type("https://mcp.northwind.example/mcp"),
+            WAYS,
+            Step::ClickItem("Key, Sent with every request"),
             Step::Type("a-made-up-key"),
             AWAY,
         ],
@@ -67,10 +77,9 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::OpenSettings,
             SERVERS,
             ADD,
-            SIGN_IN,
-            Step::Type("https://mcp.linear.app/mcp"),
-            NAME,
             Step::Type("Linear (Northwind)"),
+            URL,
+            Step::Type("https://mcp.linear.app/mcp"),
             AWAY,
         ],
     ),
@@ -82,10 +91,9 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::OpenSettings,
             SERVERS,
             ADD,
-            SIGN_IN,
-            Step::Type("https://mcp.notion.example/mcp"),
-            NAME,
             Step::Type("Notion"),
+            URL,
+            Step::Type("https://mcp.notion.example/mcp"),
             AWAY,
         ],
     ),
@@ -97,29 +105,43 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::OpenSettings,
             SERVERS,
             ADD,
-            SIGN_IN,
-            Step::Type("https://mcp.notion.example/mcp"),
-            NAME,
             Step::Type("Notion"),
+            URL,
+            Step::Type("https://mcp.notion.example/mcp"),
             GO,
             Step::WaitFor("mcp-open-page"),
             AWAY,
         ],
     ),
     mcp(
-        "settings-mcp-no-sign-in",
+        "settings-mcp-open-server",
+        open_tool_server,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            ADD,
+            Step::Type("Docs"),
+            URL,
+            Step::Type("https://docs.northwind.example/mcp"),
+            GO,
+            Step::WaitFor("mcp-refused"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-cant-sign-in",
         no_tool_sign_in,
         &[
             Step::Select(FOCUS),
             Step::OpenSettings,
             SERVERS,
             ADD,
-            SIGN_IN,
-            Step::Type("https://mcp.northwind.example/mcp"),
-            NAME,
             Step::Type("Runbooks"),
+            URL,
+            Step::Type("https://mcp.northwind.example/mcp"),
             GO,
-            Step::WaitFor("mcp-key-instead"),
+            Step::WaitFor("mcp-refused"),
             AWAY,
         ],
     ),
@@ -131,10 +153,9 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::OpenSettings,
             SERVERS,
             ADD,
-            SIGN_IN,
-            Step::Type("https://mcp.linear.app/mcp"),
-            NAME,
             Step::Type("Linear (Ada)"),
+            URL,
+            Step::Type("https://mcp.linear.app/mcp"),
             GO,
             Step::WaitFor("mcp-refused"),
             AWAY,
@@ -161,10 +182,11 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::OpenSettings,
             SERVERS,
             ADD,
-            Step::Click("mcp-use-neither"),
-            Step::Type("https://docs.northwind.example/mcp"),
-            NAME,
             Step::Type("Linear"),
+            URL,
+            Step::Type("https://docs.northwind.example/mcp"),
+            WAYS,
+            Step::ClickItem("None, Anyone can use it"),
             GO,
             Step::WaitFor("mcp-refused"),
             AWAY,

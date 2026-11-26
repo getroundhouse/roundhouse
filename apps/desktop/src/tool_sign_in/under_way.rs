@@ -2,6 +2,7 @@
 //! sign-in that ends, however it ends, lets go of its port, its page's address and what the person was sent back with.
 
 use client_core::tool_servers::{SignIn, SignInStands};
+use client_core::tool_sign_ins::NoPage;
 use gpui_kit::{SharedString, Task};
 use protocol::client::tool_sign_ins::{ToolSignInReturned, ToolSignInTo};
 use protocol::model::{ToolServer, ToolServerId, ToolServerName, ToolServerUrl, ToolSignInId};
@@ -30,7 +31,8 @@ impl UnderWay {
         let SignInTo::Again { id, .. } = &self.to else { return None };
         let stands = match &self.stands {
             Stands::Starting(_) | Stands::Waiting(_) | Stands::Finishing(_) => SignInStands::UnderWay,
-            Stands::NoWay(why) | Stands::Failed(why) => SignInStands::CameToNothing(why.clone()),
+            Stands::NoWay(no_page) => SignInStands::CameToNothing(no_page.why().to_string()),
+            Stands::Failed(why) => SignInStands::CameToNothing(why.clone()),
         };
         Some(SignIn { to: id.clone(), stands })
     }
@@ -97,7 +99,7 @@ pub(crate) enum Stands {
     /// They have, and the hub is finishing it.
     Finishing(Finishing),
     /// The server has no way to sign in, as this says, so nothing waits.
-    NoWay(String),
+    NoWay(NoPage),
     /// It came to nothing, as this says, so nothing waits.
     Failed(String),
 }

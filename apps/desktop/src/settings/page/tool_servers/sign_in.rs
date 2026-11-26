@@ -1,13 +1,14 @@
 //! Signing in to a server, as the page has a part in it: starting one, and showing the one there is, wherever it was
 //! started. How it stands is the window's, in `crate::tool_sign_in`, so it goes on while the page doesn't show. A sign-in
 //! to a new server that came to nothing is the panel it was started from again, with what was typed in it and why, so it
-//! can be changed and tried again there.
+//! can be changed there, and tried again or added another way.
 
 use gpui_kit::{Context, Window};
 use protocol::model::ToolServer;
 
 use super::kept::{Kept, Shows};
-use crate::tool_sign_in::{SignInTo, Stands, ToolSigningIn};
+use super::words;
+use crate::tool_sign_in::{NewServer, SignInTo, Stands, ToolSigningIn, UnderWay};
 
 impl Kept {
     /// Signs in to `to`, in a panel under Added's heading, in place of any other.
@@ -38,16 +39,6 @@ impl Kept {
         }
     }
 
-    /// Opens the panel for a key, in place of the sign-in there is, with what was typed of its server in it.
-    pub(super) fn use_a_key_instead(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let to = self.signing_in.read(cx).under_way().map(|under_way| under_way.to().clone());
-        if let Some(SignInTo::New(typed)) = to {
-            self.put_away_panel(window, cx);
-            self.open_key_for(typed, window, cx);
-            self.put_away_sign_in(window, cx);
-        }
-    }
-
     /// Has the page show how the sign-in there is stands now: its panel, for one that has come to be, and no panel once
     /// it has gone.
     pub(super) fn follow_sign_in(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -59,8 +50,7 @@ impl Kept {
             }
             return;
         };
-        if let (SignInTo::New(typed), Stands::Failed(why)) = (under_way.to(), under_way.stands()) {
-            let (typed, why) = (typed.clone(), why.clone());
+        if let Some((typed, why)) = not_added(under_way) {
             self.put_away_panel(window, cx);
             self.open_sign_in_refused(typed, why, window, cx);
             self.put_away_sign_in(window, cx);
@@ -73,4 +63,16 @@ impl Kept {
         }
         cx.notify();
     }
+}
+
+/// What was typed of the new server `under_way` was to, once it has come to nothing, and why, with how else to add it
+/// where there's no way to sign in. `None` while it hasn't, and for one to a server the hub has.
+fn not_added(under_way: &UnderWay) -> Option<(NewServer, String)> {
+    let SignInTo::New(typed) = under_way.to() else { return None };
+    let why = match under_way.stands() {
+        Stands::Starting(_) | Stands::Waiting(_) | Stands::Finishing(_) => return None,
+        Stands::NoWay(no_page) => words::add_another_way(no_page),
+        Stands::Failed(why) => why.clone(),
+    };
+    Some((typed.clone(), why))
 }

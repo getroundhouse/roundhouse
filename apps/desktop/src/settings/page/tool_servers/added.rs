@@ -8,7 +8,7 @@ use protocol::model::ToolServer;
 
 use super::super::account_row::{self, Detail, Picture, Row};
 use super::super::lists::{heading, list as rows_of, said_in_the_list};
-use super::kept::{Kept, Shows};
+use super::kept::Kept;
 use super::servers_page::COLUMNS;
 use super::{Drawing, panels, server_menu, words};
 
@@ -18,7 +18,7 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Div {
     let add = look::button("mcp-add", look::ButtonKind::Outlined, look::ControlSize::Regular, "Add server")
         .icon(IconName::Plus)
         .off(!drawing.can_ask(cx) || kept.panel.is_some())
-        .on_click(move |_, _, cx| opening.update(cx, |kept: &mut Kept, cx| kept.open(Shows::Choosing, cx)));
+        .on_click(move |_, window, cx| opening.update(cx, |kept: &mut Kept, cx| kept.open_add(window, cx)));
     let panel = kept.panel.as_ref().map(|panel| div().py(look::Space::Large).child(panels::draw(drawing, panel, cx)));
     let servers = drawing.records.tool_servers();
     let none = (drawing.arrived() && servers.is_empty() && panel.is_none())

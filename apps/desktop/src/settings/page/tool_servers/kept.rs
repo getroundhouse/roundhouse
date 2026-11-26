@@ -34,8 +34,6 @@ pub(super) struct Panel {
 }
 
 pub(super) enum Shows {
-    /// Add server, choosing how the server knows the person.
-    Choosing,
     Adding(Box<AddPanel>),
     /// The sign-in there is, as it stands.
     SigningIn,
