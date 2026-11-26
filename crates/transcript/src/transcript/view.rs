@@ -122,7 +122,7 @@ impl Transcript {
         let model = Rc::new(RefCell::new(Model {
             approvals,
             claims: session.agent_capabilities.clone(),
-            tool_servers: records.snapshot().tool_server_names().clone(),
+            tool_servers: records.snapshot().tool_server_names(&session.id),
             ..Model::with(at_work)
         }));
         let signals = open.changed().clone();

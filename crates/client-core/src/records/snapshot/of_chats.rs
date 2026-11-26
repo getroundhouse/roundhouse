@@ -22,8 +22,8 @@ impl Snapshot {
 
     /// The tool servers `session`'s agent has, as its run last said. `None` until it has, for an agent that says nothing of
     /// them, while none is running, and while nothing follows the chat.
-    pub(crate) fn tool_servers_said(&self, session: &Session) -> Option<&[ToolServerState]> {
-        let key = ObservationKey::SessionToolServers { session_id: session.id.clone() };
+    pub(crate) fn tool_servers_said(&self, session: &SessionId) -> Option<&[ToolServerState]> {
+        let key = ObservationKey::SessionToolServers { session_id: session.clone() };
         let Some(Observation::SessionToolServers { servers, .. }) = self.observation(&key) else { return None };
         said(servers).map(Vec::as_slice)
     }

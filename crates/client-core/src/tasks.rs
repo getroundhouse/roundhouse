@@ -76,7 +76,7 @@ mod tests {
     fn a_task_of_a_servers_tool_says_the_persons_name_for_the_server_and_any_other_what_its_agent_said() {
         let northwind =
             ToolServer { name: ToolServerName::stored("Linear (Northwind)".into()), ..fixtures::tool_server("t") };
-        let names = ToolServerNames::of(&[northwind]);
+        let names = ToolServerNames::of(&[northwind], None);
         let of = |server: &str, tool: &str| Some(TaskTool { server: server.into(), tool: tool.into() });
         let said = |description: Option<&str>, tool| {
             let description = description.map(Into::into);

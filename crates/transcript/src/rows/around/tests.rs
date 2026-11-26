@@ -220,7 +220,7 @@ fn a_call_to_an_mcp_servers_tool_has_the_persons_name_for_the_server() {
     };
     let mut held = client_core::records::HubRecords::default();
     held.apply_list(protocol::model::Records { tool_servers: vec![northwind], ..Default::default() });
-    let m = Model { tool_servers: held.snapshot().tool_server_names().clone(), ..Model::default() };
+    let m = Model { tool_servers: held.snapshot().tool_server_names(&"s".into()), ..Model::default() };
     let shown = |body: EventBody| {
         let log = log([event(Seq::FIRST, body.clone())]);
         Around::read(&log, &m, Seq::FIRST, &body).blocks[0].server.clone()

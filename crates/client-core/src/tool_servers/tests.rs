@@ -282,11 +282,32 @@ fn each_state_is_said_in_a_few_words_and_only_whats_in_the_way_is_a_problem() {
 
 #[test]
 fn a_server_is_shown_by_the_persons_name_for_it_as_the_hub_has_it_now() {
-    let names = ToolServerNames::of(&[named("t-1", "Linear (Northwind)"), named("t-2", "Docs")]);
+    let names = ToolServerNames::of(&[named("t-1", "Linear (Northwind)"), named("t-2", "Docs")], None);
     let shown = |server: &str| names.shown(&server.into()).to_string();
 
     assert_eq!(shown("Linear_Northwind"), "Linear (Northwind)");
     assert_eq!(shown("Docs"), "Docs");
     assert_eq!(shown("linear_northwind"), "linear_northwind", "another, since agents are given its case");
     assert_eq!(shown("github"), "github");
+}
+
+/// As its worker says which of the hub's each is, so a call after a rename still shows the person's name, and one of the
+/// CLI's own is itself, whatever the hub's is called. A name the run doesn't say goes by what agents are given now.
+#[test]
+fn a_server_the_run_says_it_has_is_shown_as_the_one_its_worker_says_it_is() {
+    let hub = vec![named("t-1", "Linear (Northwind)"), named("t-2", "Docs!")];
+    let agents = vec![
+        said("Linear", Some("t-1"), ServerState::Connected),
+        said("Docs", None, ServerState::Connected),
+        said("Old_one", Some("t-9"), ServerState::Connected),
+    ];
+    let names = held(hub.clone(), Some(agents)).tool_server_names(&"s".into());
+    let shown = |server: &str| names.shown(&server.into()).to_string();
+
+    assert_eq!(shown("Linear"), "Linear (Northwind)", "as it was called as the agent started");
+    assert_eq!(shown("Docs"), "Docs", "the CLI's own");
+    assert_eq!(shown("Old_one"), "Old_one", "removed since");
+    assert_eq!(shown("Linear_Northwind"), "Linear (Northwind)", "not said, so as agents are given it now");
+    let before = held(hub, None).tool_server_names(&"s".into());
+    assert_eq!(before.shown(&"Docs".into()), "Docs!", "before the run has said");
 }

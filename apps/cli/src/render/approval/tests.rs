@@ -108,7 +108,7 @@ fn a_tool_with_no_kind_of_its_own_prints_its_server_as_the_person_calls_it_and_i
     let names = {
         let name = ToolServerName::stored("GitHub (Northwind)".into());
         let northwind = ToolServer { name, ..protocol::fixtures::tool_server("t") };
-        crate::run::held(Records { tool_servers: vec![northwind], ..Records::default() }).tool_server_names().clone()
+        crate::run::held(Records { tool_servers: vec![northwind], ..Records::default() }).tool_server_names(&"s".into())
     };
     let printed = |call| lines_naming(&protocol::fixtures::event(Seq::new(7), asked_to(call).into()), &names);
     let mcp = |server: &str, input| Call::Mcp { server: server.into(), tool: "create_issue".into(), input };

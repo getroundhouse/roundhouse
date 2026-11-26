@@ -1,6 +1,6 @@
 //! The tool servers the hub has of its own, as views read them, which [`crate::tool_servers`] says what's shown of.
 
-use protocol::model::{ToolServer, ToolServerId, ToolServerUrl};
+use protocol::model::{SessionId, ToolServer, ToolServerId, ToolServerUrl};
 
 use super::Snapshot;
 use crate::tool_servers::ToolServerNames;
@@ -11,9 +11,10 @@ impl Snapshot {
         &self.records.tool_servers
     }
 
-    /// What the person calls each, where an agent's name for it would show.
-    pub fn tool_server_names(&self) -> &ToolServerNames {
-        &self.records.tool_server_names
+    /// What the person calls each, where an agent's name for it would show in `session`, by the names its agent's run
+    /// says it has them under, where it has said, as [`ToolServerNames::of`] says.
+    pub fn tool_server_names(&self, session: &SessionId) -> ToolServerNames {
+        ToolServerNames::of(&self.records.tool_servers, self.tool_servers_said(session))
     }
 
     /// The record of the tool server `id`, until it's removed.
