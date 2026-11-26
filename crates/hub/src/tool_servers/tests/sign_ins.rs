@@ -11,7 +11,7 @@ use tool_sign_in::{AccessToken, Granted, RefreshToken, Registration, SignedIn};
 
 use super::super::secret::ToolServerSecret;
 use super::super::{SigningIn, ToolServerChange, ToolServers};
-use super::support::{files_in, holding, refused, servers_in, with_key, with_neither};
+use super::support::{files_in, holding, named, refused, servers_in, with_key, with_neither};
 use crate::login_files::{LoginSecret as _, Stored};
 use crate::store::Store;
 
@@ -45,7 +45,7 @@ pub(super) fn given(scopes: &str, issuer: &str, granted: Granted) -> SignedIn {
 }
 
 /// What a person signed in, asked to allow `read`, as each server here first is.
-fn as_first(granted: Granted) -> SignedIn {
+pub(super) fn as_first(granted: Granted) -> SignedIn {
     given("read", "https://auth.example.com", granted)
 }
 
@@ -191,14 +191,15 @@ fn a_server_signed_in_to_again_keeps_its_id_its_name_and_its_files_place() {
     let dir = tempfile::tempdir().unwrap();
     let (servers, store) = servers_in(dir.path());
     let first = signed_in(&servers, "t", "Linear");
-    let needs = servers.say(&first.id, ToolSignInStatus::NeedsSignIn).unwrap().server;
+    servers.say(&first.id, ToolSignInStatus::NeedsSignIn).unwrap();
+    let renamed = servers.edit(named("t", "Sentry")).unwrap().server;
     let file = store.tool_server(&first.id).unwrap().unwrap().1;
 
     let change = again(&servers, "t").unwrap();
 
-    assert!(change.changed && change.server.rev > needs.rev);
+    assert!(change.changed && change.server.rev > renamed.rev);
     let works = ToolServerAuth::SignIn { status: ToolSignInStatus::Works };
-    assert_eq!(change.server, ToolServer { auth: works, rev: change.server.rev, ..needs });
+    assert_eq!(change.server, ToolServer { auth: works, rev: change.server.rev, ..renamed });
     assert_eq!(store.tool_server(&first.id).unwrap().unwrap().1, file);
     let kept = files_in(dir.path()).remove(0);
     assert!(kept.contains(r#""made_by":"again""#) && kept.contains(r#""access":"made-up-again""#), "{kept}");

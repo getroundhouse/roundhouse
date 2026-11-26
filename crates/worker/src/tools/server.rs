@@ -81,8 +81,9 @@ impl Tools {
         Self { asks, build, wait_poll, tokens, proxy: Proxy::default(), serving }
     }
 
-    /// Lets calls carrying `token` through, as `caller`'s.
+    /// Lets calls carrying `token` through, as `caller`'s, whose agent starts.
     pub(crate) fn admit(&self, token: ToolsToken, caller: Caller) {
+        self.proxy.starts(&caller.session_id);
         self.tokens.lock().insert(token, Arc::new(caller));
     }
 

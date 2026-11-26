@@ -104,8 +104,9 @@ pub use subagent::{Lately, LatelyCall, LatelyResult, Said, Subagent, SubagentSta
 pub use terminal::Terminal;
 pub use title::{Title, TitleError, TitleSource};
 pub use tool_server::{
-    ToolScopes, ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerHeader, ToolServerHeaderError,
-    ToolServerKey, ToolServerName, ToolServerNameError, ToolServerUrl, ToolServerUrlError, ToolSignInStatus,
+    ToolScopes, ToolServer, ToolServerAuth, ToolServerAuthEdit, ToolServerAuthGiven, ToolServerHeader,
+    ToolServerHeaderError, ToolServerKey, ToolServerName, ToolServerNameError, ToolServerPlace, ToolServerUrl,
+    ToolServerUrlError, ToolSignInStatus,
 };
 pub use wait::{EndedWait, Wait, WaitEnd, WaitEnded, WaitUntil, Watching};
 pub use worktrees::{CHILDREN, ChildStatus, ChildWorktree, MadeBy, WorkName, WorkNameError};

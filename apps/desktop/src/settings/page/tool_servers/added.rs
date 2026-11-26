@@ -1,5 +1,5 @@
 //! Added, the servers a person gave the hub: Add server by its heading, the panel for adding one under that, and a row
-//! for each server, with its menu.
+//! for each server, with its menu, and the panel for editing it under it.
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{IconName, v_flex};
@@ -8,7 +8,7 @@ use protocol::model::ToolServer;
 
 use super::super::account_row::{self, Detail, Picture, Row};
 use super::super::lists::{heading, list as rows_of, said_in_the_list};
-use super::kept::Kept;
+use super::kept::{Kept, Panel};
 use super::servers_page::COLUMNS;
 use super::{Drawing, panels, server_menu, words};
 
@@ -19,19 +19,28 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Div {
         .icon(IconName::Plus)
         .off(!drawing.can_ask(cx) || kept.panel.is_some())
         .on_click(move |_, window, cx| opening.update(cx, |kept: &mut Kept, cx| kept.open_add(window, cx)));
-    let panel = kept.panel.as_ref().map(|panel| div().py(look::Space::Large).child(panels::draw(drawing, panel, cx)));
     let servers = drawing.records.tool_servers();
+    // One whose server has gone meanwhile is here too, with what's typed in it.
+    let under = kept.panel_under(cx).filter(|id| servers.iter().any(|server| server.id == **id));
+    let panel = kept.panel.as_ref().filter(|_| under.is_none());
+    let panel = panel.map(|panel| div().py(look::Space::Large).child(panels::draw(drawing, panel, cx)));
     let none = (drawing.arrived() && servers.is_empty() && panel.is_none())
         .then(|| said_in_the_list("mcp-none-added", words::NONE_ADDED.into(), cx));
-    let rows = servers.iter().map(|server| server_row(drawing, server, cx));
+    let rows = servers.iter().map(|server| {
+        let panel = kept.panel.as_ref().filter(|_| under == Some(&server.id));
+        server_row(drawing, server, panel, cx)
+    });
     let list = rows_of(cx).children(panel).children(none).children(rows);
     v_flex().child(heading("Added", None, words::ADDED_SAYS, Some(add.into_any_element()), cx)).child(list)
 }
 
-/// `server`'s row, with why the hub couldn't do what was asked of it under it.
-fn server_row(drawing: &Drawing<'_>, server: &ToolServer, cx: &App) -> AnyElement {
+/// `server`'s row, with why the hub couldn't do what was asked of it under it, and the `panel` it's edited in.
+fn server_row(drawing: &Drawing<'_>, server: &ToolServer, panel: Option<&Panel>, cx: &App) -> AnyElement {
     let id = SharedString::from(format!("mcp-server-{}", server.id));
     let failed = drawing.kept.read(cx).failed(&server.id).map(|said| account_row::failed_line(&id, said, cx));
+    let panel = panel.map(|panel| {
+        div().pt(look::Space::Small).pb(look::Space::Large).child(panels::draw(drawing, panel, cx)).into_any_element()
+    });
     let shown = Row {
         id,
         picture: Picture::Mark(Lucide::Plug),
@@ -42,7 +51,7 @@ fn server_row(drawing: &Drawing<'_>, server: &ToolServer, cx: &App) -> AnyElemen
         detail: words::known_by(&server.auth).map(|(said, tone)| Detail::Said(said.to_string(), tone)),
         menu: Some(server_menu::menu(drawing, server, cx)),
         card: None,
-        under: failed.into_iter().collect(),
+        under: failed.into_iter().chain(panel).collect(),
     };
     account_row::row(shown, COLUMNS, cx)
 }

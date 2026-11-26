@@ -229,6 +229,7 @@ pub(super) async fn handle(
         }
         R::GithubAppRemove(github_apps::GithubAppRemove { id }) => C::GithubApp(hub.github_app_remove(id).await?),
         R::ToolServerAdd(asked) => C::ToolServer(hub.tool_server_add(asked).await?),
+        R::ToolServerEdit(asked) => C::ToolServer(hub.tool_server_edit(asked).await?),
         R::ToolServerRemove(tool_servers::ToolServerRemove { id }) => C::ToolServer(hub.tool_server_remove(id).await?),
         R::ToolSignInStart(asked) => C::ToolSignInBegun(hub.tool_sign_in_start(asked).await?),
         R::ToolSignInFinish(asked) => C::ToolServer(hub.tool_sign_in_finish(asked).await?),

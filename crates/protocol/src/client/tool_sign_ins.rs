@@ -46,9 +46,9 @@ pub fn redirect(port: u16) -> String {
 ///
 /// Refused as [`ToolServerAdd`](super::tool_servers::ToolServerAdd) says of a name and a URL, and with `Conflict` when
 /// the hub has a server of the new one's ID. Refused with `NotFound` when it has no record of the server to sign in to
-/// again, and with `InvalidRequest` when that one isn't signed in to. Refused with `Unavailable` when as many sign-ins
-/// as may wait are waiting, and when the server or its authorization server can't be reached, which may pass, and with
-/// `InvalidRequest` when what they say can't be right.
+/// again or to edit, and with `InvalidRequest` when the one to sign in to again isn't signed in to. Refused with
+/// `Unavailable` when as many sign-ins as may wait are waiting, and when the server or its authorization server can't
+/// be reached, which may pass, and with `InvalidRequest` when what they say can't be right.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ToolSignInStart {
     pub id: ToolSignInId,
@@ -66,6 +66,18 @@ pub enum ToolSignInTo {
     New { id: ToolServerId, name: String, url: String },
     /// One there is, which is signed in to again, and keeps its ID, its name and its URL.
     Again { id: ToolServerId },
+    /// One there is, however it knows the person, to change what's given here and have it know them by this sign-in. So
+    /// it's how a server is signed in to at another URL, and how one with a key, or with neither, comes to be signed in
+    /// to. What's left out stays as it is, and nothing changes until the sign-in is finished, which keeps the edit and
+    /// the sign-in together. The name and the URL are as the person typed them, for the hub to check, as the sign-in
+    /// starts and again as it's finished.
+    Edit {
+        id: ToolServerId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        url: Option<String>,
+    },
     /// From a newer client, which the hub refuses.
     #[serde(other)]
     Unknown,
@@ -138,7 +150,8 @@ impl Reply for ToolSignInBegun {
 /// Refused with `InvalidRequest`, and the sign-in still waiting, when `returned` isn't of it, as by its `state`. Any
 /// other refusal ends it: with `InvalidRequest` when the person refused it, or the authorization server did, with
 /// `Unavailable` when that couldn't be reached, and with `Conflict` when another server has taken the name meanwhile, as
-/// [`ToolServerAdd`](super::tool_servers::ToolServerAdd) says, or the server being signed in to again has gone.
+/// [`ToolServerAdd`](super::tool_servers::ToolServerAdd) says, or the server being signed in to has been removed, moved
+/// to another, or given another key or another way to know the person.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ToolSignInFinish {
     pub id: ToolSignInId,

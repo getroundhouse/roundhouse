@@ -160,7 +160,14 @@ mod tests {
     }
 
     fn says(hubs: Option<&str>, state: ServerState) -> Vec<ToolServerState> {
-        vec![ToolServerState { name: "Linear".into(), hubs: hubs.map(Into::into), state, error: None, tools: None }]
+        vec![ToolServerState {
+            name: "Linear".into(),
+            hubs: hubs.map(Into::into),
+            connected_to: None,
+            state,
+            error: None,
+            tools: None,
+        }]
     }
 
     fn says_hubs(state: ServerState) -> Vec<ToolServerState> {

@@ -28,7 +28,11 @@ impl UnderWay {
 
     /// As what's said of a server the hub has goes by it. `None` for one to a new server, which nothing is said of.
     pub(crate) fn of_a_server(&self) -> Option<SignIn> {
-        let SignInTo::Again { id, .. } = &self.to else { return None };
+        let id = match &self.to {
+            SignInTo::New(_) => return None,
+            SignInTo::Again { id, .. } => id,
+            SignInTo::Edited(edited) => &edited.was.id,
+        };
         let stands = match &self.stands {
             Stands::Starting(_) | Stands::Waiting(_) | Stands::Finishing(_) => SignInStands::UnderWay,
             Stands::NoWay(no_page) => SignInStands::CameToNothing(no_page.why().to_string()),
@@ -45,6 +49,8 @@ pub(crate) enum SignInTo {
     New(NewServer),
     /// One the hub has, which is signed in to again.
     Again { id: ToolServerId, name: ToolServerName, url: ToolServerUrl },
+    /// One the hub has, as it's edited, which the hub saves once it's approved.
+    Edited(EditedServer),
 }
 
 /// A server to add, as the person typed it.
@@ -53,6 +59,37 @@ pub(crate) struct NewServer {
     pub(crate) id: ToolServerId,
     pub(crate) name: String,
     pub(crate) url: String,
+}
+
+/// A server the hub has, with its name and its URL as the person typed them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct EditedServer {
+    /// As it was when they came to edit it.
+    pub(crate) was: ToolServer,
+    pub(crate) name: String,
+    pub(crate) url: String,
+}
+
+impl EditedServer {
+    /// What's typed as its name, unless it's the one it had.
+    pub(crate) fn new_name(&self) -> Option<String> {
+        (self.name.trim() != self.was.name.as_str()).then(|| self.name.clone())
+    }
+
+    /// What's typed as its URL, unless it's the one it had.
+    pub(crate) fn new_url(&self) -> Option<String> {
+        (self.url.trim() != self.was.url.as_str()).then(|| self.url.clone())
+    }
+
+    /// Whether its URL is another server's. What isn't a URL, as while one is typed, is none's.
+    pub(crate) fn is_moved(&self) -> bool {
+        ToolServerUrl::typed(&self.url).is_ok_and(|url| !url.is_same_server(&self.was.url))
+    }
+
+    /// Whether its URL is of the server it was.
+    pub(crate) fn is_where_it_was(&self) -> bool {
+        ToolServerUrl::typed(&self.url).is_ok_and(|url| url.is_same_server(&self.was.url))
+    }
 }
 
 impl SignInTo {
@@ -66,17 +103,18 @@ impl SignInTo {
         match self {
             SignInTo::New(new) => new.name.trim().to_string().into(),
             SignInTo::Again { name, .. } => name.to_string().into(),
+            SignInTo::Edited(edited) => edited.name.trim().to_string().into(),
         }
     }
 
     /// The host it's at, or all of what was typed where that isn't a URL, which the hub refuses.
     pub(crate) fn host(&self) -> String {
-        match self {
-            SignInTo::New(new) => {
-                ToolServerUrl::typed(&new.url).map_or_else(|_| new.url.clone(), |url| url.host().to_string())
-            }
-            SignInTo::Again { url, .. } => url.host().to_string(),
-        }
+        let typed = match self {
+            SignInTo::New(new) => &new.url,
+            SignInTo::Again { url, .. } => return url.host().to_string(),
+            SignInTo::Edited(edited) => &edited.url,
+        };
+        ToolServerUrl::typed(typed).map_or_else(|_| typed.clone(), |url| url.host().to_string())
     }
 
     /// As the hub is asked for it.
@@ -86,6 +124,10 @@ impl SignInTo {
                 ToolSignInTo::New { id: id.clone(), name: name.clone(), url: url.clone() }
             }
             SignInTo::Again { id, .. } => ToolSignInTo::Again { id: id.clone() },
+            SignInTo::Edited(edited) => {
+                let (id, name, url) = (edited.was.id.clone(), edited.new_name(), edited.new_url());
+                ToolSignInTo::Edit { id, name, url }
+            }
         }
     }
 }

@@ -5,20 +5,9 @@ use protocol::model::{ToolServerAuth, ToolServerName, ToolServerUrl};
 use protocol::worker::{ServerSignIn, TokenNumber};
 use tool_sign_in::{OauthError, Renewal};
 
-use super::super::ToolServers;
 use super::sign_ins::{GIVEN_AT_MS, again, granted, signed_in};
-use super::support::{servers_in, with_key, with_neither};
+use super::support::{named, sent, servers_in, with_key, with_neither};
 use crate::store::AddingToolServer;
-
-/// The servers workers are sent, by ID, and what each request to each carries.
-fn sent(servers: &ToolServers) -> Vec<(String, Option<String>)> {
-    let set = servers.sent().borrow().set();
-    let carried = |server: protocol::worker::ProxiedServer| {
-        let header = server.header.map(|header| format!("{}: {}", header.name.as_str(), header.value.as_str()));
-        (server.id.to_string(), header)
-    };
-    set.servers.into_iter().map(carried).collect()
-}
 
 /// Before any link can follow them, and with no change made.
 #[test]
@@ -91,10 +80,9 @@ fn a_server_whose_key_cant_be_read_or_whose_way_of_knowing_the_person_isnt_known
     };
     store.add_tool_server(&unknown).unwrap();
 
-    servers.add(with_neither("neither", "neither")).unwrap();
+    servers.edit(named("kept", "Linear")).unwrap();
 
-    let kept = ("kept".to_string(), Some("Authorization: Bearer secret-kept".to_string()));
-    assert_eq!(sent(&servers), [kept, ("neither".to_string(), None)]);
+    assert_eq!(sent(&servers), [("kept".to_string(), Some("Authorization: Bearer secret-kept".to_string()))]);
     let left_out = |event: &serde_json::Value| {
         let field = |name: &str| event["fields"][name].as_str().unwrap_or_default().to_string();
         (event["event"] == "tool_servers.left_out").then(|| format!("{}: {}", field("id"), field("why")))
@@ -122,6 +110,7 @@ fn a_change_that_changes_nothing_workers_are_sent_has_them_sent_nothing() {
     following.borrow_and_update();
 
     servers.add(with_key("k", "Linear", "Bearer made-up")).unwrap();
+    servers.edit(named("k", "Linear")).unwrap();
     servers.add(with_key("k2", "linear", "another")).unwrap_err();
     servers.tidy().unwrap();
 

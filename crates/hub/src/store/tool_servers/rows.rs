@@ -20,6 +20,21 @@ pub(crate) struct AddingToolServer<'a> {
     pub(crate) secret: Option<&'a LoginFile>,
 }
 
+/// What a person changes of a tool server, with what isn't here left as it is.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct EditingToolServer<'a> {
+    pub(crate) name: Option<&'a ToolServerName>,
+    pub(crate) url: Option<&'a ToolServerUrl>,
+    pub(crate) known_by: Option<KnownBy<'a>>,
+}
+
+/// How a tool server is to know the person, and where what it knows them by is, as [`AddingToolServer`] says.
+#[derive(Clone, Copy)]
+pub(crate) struct KnownBy<'a> {
+    pub(crate) auth: &'a ToolServerAuth,
+    pub(crate) secret: Option<&'a LoginFile>,
+}
+
 /// A row's record. A way of knowing the person this build can't read, which only a newer build's row could hold, is
 /// `Unknown`.
 fn server_at(row: &Row<'_>) -> rusqlite::Result<ToolServer> {
@@ -84,6 +99,32 @@ impl Store {
                 params![id.as_str(), name.as_str(), url.as_str(), auth, secret.map(LoginFile::as_str)],
             )?;
             Ok(row_of(tx, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?.0)
+        })
+    }
+
+    /// Returns the tool server as `editing` left it, or `None` when it's all so already, or there's no such server. All
+    /// of it is written at once, with the file of what the server knows the person by, so a hub that stops leaves the
+    /// server as it was or as it was edited. Its commit is on disk before this returns, since the file before is let go
+    /// of then.
+    pub(crate) fn edit_tool_server(
+        &self,
+        id: &ToolServerId,
+        editing: &EditingToolServer<'_>,
+    ) -> Result<Option<ToolServer>, StoreError> {
+        let EditingToolServer { name, url, known_by } = *editing;
+        let auth = known_by.map(|known_by| serde_json::to_string(known_by.auth)).transpose()?;
+        let secret = known_by.and_then(|known_by| known_by.secret).map(LoginFile::as_str);
+        self.lasting(|tx| {
+            let update = "UPDATE tool_servers
+                SET name = coalesce(?2, name), url = coalesce(?3, url), auth = coalesce(?4, auth),
+                    secret_file = iif(?4 IS NULL, secret_file, ?5)
+                WHERE id = ?1 AND (name IS NOT coalesce(?2, name) OR url IS NOT coalesce(?3, url)
+                    OR auth IS NOT coalesce(?4, auth) OR secret_file IS NOT iif(?4 IS NULL, secret_file, ?5))";
+            let (name, url) = (name.map(ToolServerName::as_str), url.map(ToolServerUrl::as_str));
+            if tx.execute(update, params![id.as_str(), name, url, auth, secret])? == 0 {
+                return Ok(None);
+            }
+            Ok(row_of(tx, id)?.map(|(server, _)| server))
         })
     }
 

@@ -4,8 +4,12 @@ use http::Uri;
 use http::uri::Authority;
 use serde::{Deserialize, Serialize};
 
+use super::ToolServerPlace;
+
 /// Where a tool server is, such as `https://mcp.example.com/mcp`: an `http` or `https` address of a host, with no
-/// username or password in it, so it's kept, sent and logged as it is.
+/// username or password in it. It's kept and sent as it is, its query too, though that can hold a key, as
+/// [`ToolServerUrl::looks_keyed`] says. This file and [`ToolServerPlace`]'s are the one home of which text can be a
+/// URL, and of which two are one server's.
 ///
 /// Only [`ToolServerUrl::typed`] checks it, as [`ToolServerName`](super::ToolServerName) says of a name.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -75,10 +79,41 @@ impl ToolServerUrl {
         after_scheme.split(['/', '?']).next().filter(|host| !host.is_empty()).unwrap_or(&self.0)
     }
 
+    /// Which server it's of.
+    pub fn place(&self) -> ToolServerPlace {
+        ToolServerPlace::of(self)
+    }
+
+    /// Whether `other` is of the same server, so what that knows the person by stays good: they differ in their queries
+    /// at most.
+    pub fn is_same_server(&self, other: &ToolServerUrl) -> bool {
+        self.place() == other.place()
+    }
+
+    /// Whether `typed`, what a person has typed of a URL so far, looks like it has a key in its query, for a client to
+    /// warn of, since every client is shown the URL. Nothing tells a key from an option for certain, so it stops
+    /// nothing. It goes by an option whose name ends as a key's does and whose value is long enough, with a digit, to
+    /// be one.
+    pub fn looks_keyed(typed: &str) -> bool {
+        let Some((_, query)) = typed.trim().split_once('?') else { return false };
+        query.split('&').filter_map(|option| option.split_once('=')).any(|(name, value)| {
+            let name: String = name.chars().filter(|c| !['_', '-'].contains(c)).collect::<String>().to_lowercase();
+            KEYS_NAMES_END.iter().any(|end| name.ends_with(end))
+                && value.chars().count() >= LEAST_KEY_CHARS
+                && value.chars().any(|c| c.is_ascii_digit())
+        })
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
+
+/// How the name of a query's option that holds a key ends, in lowercase, with no `_` or `-`.
+const KEYS_NAMES_END: [&str; 4] = ["apikey", "token", "secret", "password"];
+
+/// The shortest value that's taken for a key.
+const LEAST_KEY_CHARS: usize = 16;
 
 /// Whether `authority`, with no username in it, is a host, with a port a server can be on or none. `http` takes any
 /// digits, or none, as a port.

@@ -14,6 +14,8 @@ const INTERNAL_ERROR: i32 = -32603;
 pub(super) enum Failure {
     /// The hub has the server no more.
     Removed,
+    /// The person has moved it to another URL since the agent connected to it.
+    Moved,
     /// Its URL or its header isn't one HTTP can be sent with.
     Unusable,
     /// It's signed in to, and needs the person to again, so it wasn't asked.
@@ -46,10 +48,12 @@ impl Failure {
     fn said(self, label: &str) -> String {
         match self {
             Failure::Removed => "This MCP server was removed from Roundhouse, so its tools can't be used.".into(),
+            Failure::Moved => format!(
+                "{label} has been moved to another URL in Roundhouse since this agent connected to it, so nothing was \
+                 sent to it. This agent has it from its next start."
+            ),
             Failure::Unusable => {
-                format!(
-                    "Roundhouse can't use the URL or the header {label} has. Add it again in Settings › MCP servers."
-                )
+                format!("Roundhouse can't use the URL or the header {label} has. Edit it in Settings › MCP servers.")
             }
             Failure::NeedsSignIn => {
                 format!("{label} needs you to sign in to it. Sign in from Settings › MCP servers.")
@@ -64,16 +68,12 @@ impl Failure {
             Failure::Refused { sent: Sent::Key, status } => {
                 let status = status.as_u16();
                 format!(
-                    "{label} refused the key Roundhouse sent it ({status}). Add it again with another in Settings › MCP \
-                     servers."
+                    "{label} refused the key Roundhouse sent it ({status}). Give it another in Settings › MCP servers."
                 )
             }
             Failure::Refused { sent: Sent::Nothing, status } => {
                 let status = status.as_u16();
-                format!(
-                    "{label} refused a request without a key ({status}). Add it again with one in Settings › MCP \
-                     servers."
-                )
+                format!("{label} refused a request without a key ({status}). Give it one in Settings › MCP servers.")
             }
             Failure::WantsAccess(access) => {
                 let then = match access {
@@ -86,8 +86,8 @@ impl Failure {
                 format!("{label} wants more access for this than its sign-in has (403). {then}")
             }
             Failure::Redirected => format!(
-                "{label} redirected the request to another address, which Roundhouse doesn't follow. Add it again \
-                 with its new URL in Settings › MCP servers."
+                "{label} redirected the request to another address, which Roundhouse doesn't follow. Edit \
+                 its URL in Settings › MCP servers."
             ),
             Failure::Unreachable => format!("{label} couldn't be reached from this machine."),
             Failure::Lost => format!(

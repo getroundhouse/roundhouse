@@ -55,38 +55,48 @@ impl LoginSecret for ToolServerSecret {
 const MAX_KEY_BYTES: usize = 4096;
 
 /// How a server being added is to know the person, for its record, and what it's to know them by, for its file, as a
-/// client `given` both. The key is trimmed, since what's pasted often ends in a line break. Refused with
-/// `InvalidRequest` when the header can't be one, and when the key is empty, very long, or can't be sent in a header,
-/// as one with a line break inside can't, which could end the header and start another. A key can have a space inside,
-/// as one with its scheme, such as `Bearer`, has. One in `Authorization` with no scheme is given one, as [`as_sent`]
-/// says.
+/// client `given` both. Refused with `InvalidRequest` when the header can't be one, and as [`read_key`] says.
 pub(super) fn read(given: ToolServerAuthGiven) -> Result<(ToolServerAuth, Option<ToolServerSecret>), ApiError> {
-    let refused = |message: &str| Err(ApiError::new(ErrorCode::InvalidRequest, message));
     match given {
         ToolServerAuthGiven::Key { header, key } => {
             let header = ToolServerHeader::typed(&header)?;
-            let key = key.as_str().trim();
-            if key.is_empty() || key.len() > MAX_KEY_BYTES {
-                return refused("the key is empty, or longer than any key is");
-            }
-            if !key.chars().all(|c| c == ' ' || c.is_ascii_graphic()) {
-                return refused("the key has a line break inside, or another character that can't be sent in a header");
-            }
-            let secret = ToolServerSecret::Key(as_sent(&header, key));
+            let secret = ToolServerSecret::Key(read_key(&key)?);
             Ok((ToolServerAuth::Key { header }, Some(secret)))
         }
         ToolServerAuthGiven::Neither => Ok((ToolServerAuth::Neither, None)),
-        // Not `Unsupported`, which says the hub has no tool servers of its own at all.
-        ToolServerAuthGiven::Unknown => refused("this hub doesn't know that way for an MCP server to know who you are"),
+        ToolServerAuthGiven::Unknown => Err(unknown_way()),
     }
 }
 
-/// What `header` is to hold for `key`, as a person gave it, which is what's kept. Servers give out a key alone, to be
-/// sent as a bearer token, so one in `Authorization` with no space in it is one without its scheme. Any other header
-/// holds what its server says it does, so a key in one is kept as it is.
-fn as_sent(header: &ToolServerHeader, key: &str) -> ToolServerKey {
-    if header.is_authorization() && !key.contains(' ') {
-        return ToolServerKey::new(format!("Bearer {key}"));
+/// A key as it's kept, which is as a client gave it, trimmed, since what's pasted often ends in a line break. Refused
+/// with `InvalidRequest` when it's empty, very long, or can't be sent in a header, as one with a line break inside
+/// can't, which could end the header and start another. A key can have a space inside, as one with its scheme, such as
+/// `Bearer`, has.
+pub(super) fn read_key(given: &ToolServerKey) -> Result<ToolServerKey, ApiError> {
+    let key = given.as_str().trim();
+    if key.is_empty() || key.len() > MAX_KEY_BYTES {
+        return Err(refused("the key is empty, or longer than any key is"));
     }
-    ToolServerKey::new(key)
+    if !key.chars().all(|c| c == ' ' || c.is_ascii_graphic()) {
+        return Err(refused("the key has a line break inside, or another character that can't be sent in a header"));
+    }
+    Ok(ToolServerKey::new(key))
+}
+
+/// Why a way only a newer client knows is refused. Not `Unsupported`, which says the hub has no tool servers of its own
+/// at all.
+pub(super) fn unknown_way() -> ApiError {
+    refused("this hub doesn't know that way for an MCP server to know who you are")
+}
+
+pub(super) fn refused(message: &str) -> ApiError {
+    ApiError::new(ErrorCode::InvalidRequest, message)
+}
+
+/// What `header` holds for `key`, which is kept as it was given, so it's right in another header too. Servers give out
+/// a key alone, to be sent as a bearer token, so one in `Authorization` with no space in it is one without its scheme.
+/// Any other header holds what its server says it does, so a key in one is sent as it is.
+pub(super) fn as_sent(header: &ToolServerHeader, key: &ToolServerKey) -> String {
+    let key = key.as_str();
+    if header.is_authorization() && !key.contains(' ') { format!("Bearer {key}") } else { key.to_owned() }
 }

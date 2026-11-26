@@ -101,6 +101,7 @@ pub enum ClientRequest {
     GithubAppInstallationsConnect(github_apps::GithubAppInstallationsConnect),
     GithubAppRemove(github_apps::GithubAppRemove),
     ToolServerAdd(tool_servers::ToolServerAdd),
+    ToolServerEdit(tool_servers::ToolServerEdit),
     ToolServerRemove(tool_servers::ToolServerRemove),
     ToolSignInStart(tool_sign_ins::ToolSignInStart),
     ToolSignInFinish(tool_sign_ins::ToolSignInFinish),

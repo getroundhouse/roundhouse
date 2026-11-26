@@ -8,6 +8,7 @@ use client_core::fake_hub::{Asked, World};
 use gpui_kit::{AppContext as _, ElementId, ScrollDelta, TestAppContext, point, px};
 use hub::{ToolServerPerson, ToolServerRefreshing};
 use protocol::capability::setup::{ServerState, ToolServerState};
+use protocol::client::tool_servers::ToolServerEdit;
 use protocol::client::tool_sign_ins::{ToolSignInBegun, ToolSignInPage};
 use protocol::event::{EventBody, TaskKind, TaskTool};
 use protocol::fixtures::{observed, tool_server, tool_server_needing_sign_in, tool_server_wanting_more_access};
@@ -30,7 +31,7 @@ fn called(ui: &Ui<'_>, server: &str) -> String {
 }
 
 /// What the hub has and what the agent says of it both reach the card, with nothing asked: a server added while the
-/// agent runs is from its next start, and one that's removed is said to be, and its calls show what the agent called it.
+/// agent runs is from its next start, and one that's renamed is still the one the agent has, which its calls show too.
 #[gpui_kit::test]
 fn the_card_follows_the_hubs_servers_and_what_the_agent_says_of_them(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -59,10 +60,12 @@ fn the_card_follows_the_hubs_servers_and_what_the_agent_says_of_them(cx: &mut Te
     assert_eq!(called(&ui, "Linear_Northwind"), "Linear (Northwind)");
 
     add("t-2", "Docs");
-    client.tool_server_remove(&"t-1".into()).unwrap();
+    let renamed = ToolServerEdit { id: "t-1".into(), name: Some("Linear".into()), url: None, auth: None };
+    client.tool_server_edit(renamed).unwrap();
 
     ui.wait("the server added", |ui| ui.shows_label("mcp-card", "Docs, From its next start"));
-    ui.wait("the server removed", |ui| ui.shows_label("mcp-card", "Linear_Northwind, Removed"));
+    ui.wait("the server renamed", |ui| ui.shows_label("mcp-card", "Linear, Can't be reached"));
+    ui.wait("the chat's calls to it", |ui| called(ui, "Linear") == "Linear");
     assert_eq!(
         called(&ui, "Linear_Northwind"),
         "Linear_Northwind",
@@ -75,7 +78,14 @@ fn named(name: &str, server: ToolServer) -> ToolServer {
 }
 
 fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolServerState {
-    ToolServerState { name: name.into(), hubs: hubs.map(Into::into), state, error: None, tools: None }
+    ToolServerState {
+        name: name.into(),
+        hubs: hubs.map(Into::into),
+        connected_to: None,
+        state,
+        error: None,
+        tools: None,
+    }
 }
 
 /// A call to one of the hub's that went on in the background, as its agent lists it.

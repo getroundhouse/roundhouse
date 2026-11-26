@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use protocol::client::tool_servers::ToolServerAdd;
+use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
 use protocol::client::{ApiError, HubNotice};
 use protocol::model::{RecordKey, ToolServer, ToolServerId};
 use tokio::sync::watch;
@@ -14,6 +14,12 @@ impl Hub {
     pub(crate) async fn tool_server_add(&self, asked: ToolServerAdd) -> Result<ToolServer, ApiError> {
         let servers = Arc::clone(&self.tool_servers);
         Ok(self.announce_tool_server(off_thread(move || servers.add(asked)).await?))
+    }
+
+    /// Edits a tool server, as `ToolServerEdit` says, and tells every client when that changed its record.
+    pub(crate) async fn tool_server_edit(&self, asked: ToolServerEdit) -> Result<ToolServer, ApiError> {
+        let servers = Arc::clone(&self.tool_servers);
+        Ok(self.announce_tool_server(off_thread(move || servers.edit(asked)).await?))
     }
 
     /// Forgets a tool server and its key or its sign-in, as `ToolServerRemove` says, and tells every client it's gone.

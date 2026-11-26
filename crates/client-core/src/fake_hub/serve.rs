@@ -294,6 +294,7 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         | R::GithubSignInCancel(_)
         | R::GithubAppMake(_)
         | R::GithubAppRemove(_)
+        | R::ToolServerEdit(_)
         | R::ToolServerRemove(_)
         | R::ToolSignInFinish(_)
         | R::ToolSignInCancel(_)

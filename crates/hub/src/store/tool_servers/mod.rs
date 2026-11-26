@@ -6,5 +6,5 @@
 mod tests;
 
 mod rows;
-pub(crate) use rows::AddingToolServer;
 pub(super) use rows::tool_servers;
+pub(crate) use rows::{AddingToolServer, EditingToolServer, KnownBy};

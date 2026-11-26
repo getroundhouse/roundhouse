@@ -1,6 +1,6 @@
 //! The panel of the sign-in there is, as it stands: that the hub is finding out how, the page to approve it on, with a
-//! button that opens it again, or why one to a server the hub has came to nothing, with what to do about that. One to a
-//! new server that came to nothing is the panel it was added from again.
+//! button that opens it again, or why one to sign in again came to nothing, with what to do about that. Any other that
+//! came to nothing is the panel it was started from again.
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{h_flex, v_flex};
@@ -15,7 +15,7 @@ use crate::tool_sign_in::{Stands, UnderWay};
 pub(super) fn sign_in(drawing: &Drawing<'_>, under_way: &UnderWay, cx: &App) -> Framed {
     let (to, stands) = (under_way.to(), under_way.stands());
     let (lead, body) = match stands {
-        Stands::Starting(_) => (words::SIGN_IN.to_string(), Some(waits(words::starting(&to.host()), cx))),
+        Stands::Starting(_) => (words::sign_in(to).to_string(), Some(waits(words::starting(&to.host()), cx))),
         Stands::Waiting(waiting) => {
             let open =
                 button("mcp-open-page", "Open it again", false, false, act(drawing.kept, Kept::open_sign_in_page))
@@ -24,9 +24,9 @@ pub(super) fn sign_in(drawing: &Drawing<'_>, under_way: &UnderWay, cx: &App) -> 
             let body = v_flex().gap(look::Space::Large).child(h_flex().child(open)).child(line).into_any_element();
             (words::approve_on(waiting.host()), Some(body))
         }
-        Stands::Finishing(_) => (words::SIGN_IN.to_string(), Some(waits(words::FINISHING.to_string(), cx))),
+        Stands::Finishing(_) => (words::sign_in(to).to_string(), Some(waits(words::FINISHING.to_string(), cx))),
         Stands::NoWay(no_page) => (no_page.why().to_string(), None),
-        Stands::Failed(_) => (words::SIGN_IN.to_string(), None),
+        Stands::Failed(_) => (words::sign_in(to).to_string(), None),
     };
     let refused = match stands {
         Stands::Failed(why) => Some(why.clone()),

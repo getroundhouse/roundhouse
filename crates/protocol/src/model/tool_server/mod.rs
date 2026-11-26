@@ -7,13 +7,15 @@ mod tests;
 mod auth;
 mod header;
 mod name;
+mod place;
 mod record;
 mod scopes;
 mod url;
 
-pub use auth::{ToolServerAuth, ToolServerAuthGiven, ToolServerKey, ToolSignInStatus};
+pub use auth::{ToolServerAuth, ToolServerAuthEdit, ToolServerAuthGiven, ToolServerKey, ToolSignInStatus};
 pub use header::{ToolServerHeader, ToolServerHeaderError};
 pub use name::{ToolServerName, ToolServerNameError};
+pub use place::ToolServerPlace;
 pub use record::ToolServer;
 pub use scopes::ToolScopes;
 pub use url::{ToolServerUrl, ToolServerUrlError};

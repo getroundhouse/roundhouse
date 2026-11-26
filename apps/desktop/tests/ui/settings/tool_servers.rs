@@ -13,11 +13,11 @@ use super::git_app::label_of;
 use super::open_settings;
 use crate::support::{Stack, Ui, files_holding};
 
-const URL: &str = "https://mcp.example.com/mcp";
-const KEY: &str = "a-made-up-key";
+pub(super) const URL: &str = "https://mcp.example.com/mcp";
+pub(super) const KEY: &str = "a-made-up-key";
 
 /// The dropdown's ways, as its menu lists them.
-const SIGN_IN_WAY: &str = "Sign in, In your browser";
+pub(super) const SIGN_IN_WAY: &str = "Sign in, In your browser";
 pub(super) const KEY_WAY: &str = "Key, Sent with every request";
 pub(super) const NONE_WAY: &str = "None, Anyone can use it";
 
@@ -34,11 +34,11 @@ pub(super) fn in_servers<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a
 }
 
 /// A server another client adds.
-fn added_elsewhere(stack: &Stack, id: &str, name: &str, auth: ToolServerAuthGiven) -> ToolServerId {
+pub(super) fn added_elsewhere(stack: &Stack, id: &str, name: &str, auth: ToolServerAuthGiven) -> ToolServerId {
     stack.client().tool_server_add(&id.into(), name, URL, auth).unwrap().id
 }
 
-fn with_key() -> ToolServerAuthGiven {
+pub(super) fn with_key() -> ToolServerAuthGiven {
     ToolServerAuthGiven::Key { header: "Authorization".into(), key: ToolServerKey::new(KEY) }
 }
 
@@ -72,7 +72,7 @@ pub(super) fn fill_in(ui: &mut Ui<'_>, name: &str, url: &str) {
     ui.click("mcp-add");
     assert_eq!(label_of(ui, "mcp-way"), SIGN_IN_CHOSEN);
     ui.input(name);
-    assert!(ui.off("mcp-panel-add"), "until there's a URL");
+    assert!(ui.off("mcp-panel-go"), "until there's a URL");
     type_in(ui, "mcp-url", url);
 }
 
@@ -96,13 +96,13 @@ fn a_server_is_added_with_a_key_only_the_hub_keeps_or_with_neither_and_a_name_th
     fill_in(&mut ui, "linear", URL);
     assert!(ui.off("mcp-add"), "while a panel is open");
     choose(&mut ui, KEY_WAY);
-    assert!(ui.off("mcp-panel-add"), "until there's a key");
+    assert!(ui.off("mcp-panel-go"), "until there's a key");
     ui.input(KEY);
-    ui.click("mcp-panel-add");
+    ui.click("mcp-panel-go");
     ui.wait("the hub's refusal", |ui| ui.has("mcp-refused"));
     let refused = "Couldn't add it: agents would call linear and the MCP server Linear the same, Linear";
     assert!(ui.shows_label("mcp-panel", refused));
-    assert!(ui.off("mcp-panel-add"), "a name that's taken: the key's field is empty");
+    assert!(ui.off("mcp-panel-go"), "a name that's taken: the key's field is empty");
     assert_eq!(the_hubs(&stack), ["Linear"], "a name that's taken: nothing is added");
 
     type_in(&mut ui, "mcp-key", KEY);
@@ -119,7 +119,7 @@ fn a_server_is_added_with_a_key_only_the_hub_keeps_or_with_neither_and_a_name_th
     fill_in(&mut ui, "Docs", URL);
     choose(&mut ui, NONE_WAY);
     assert!(!ui.has("mcp-key") && !ui.has("mcp-header"));
-    ui.click("mcp-panel-add");
+    ui.click("mcp-panel-go");
     ui.wait("the server with neither", |ui| named(ui, "Docs").is_some() && !ui.has("mcp-panel"));
     assert_eq!(named(&ui, "Docs").unwrap().auth, ToolServerAuth::Neither);
     assert_eq!(the_hubs(&stack), ["Docs", "Linear", "Runbooks"]);
@@ -135,20 +135,20 @@ fn changing_how_a_server_knows_you_keeps_its_name_and_url_and_drops_the_key_and_
     fill_in(&mut ui, "linear", URL);
     choose(&mut ui, KEY_WAY);
     ui.input(KEY);
-    assert!(ui.on("mcp-panel-add"));
+    assert!(ui.on("mcp-panel-go"));
 
     choose(&mut ui, SIGN_IN_WAY);
 
     assert!(!ui.has("mcp-key") && !ui.has("mcp-header"));
-    assert!(ui.on("mcp-panel-add"), "with the name and the URL");
+    assert!(ui.on("mcp-panel-go"), "with the name and the URL");
     choose(&mut ui, KEY_WAY);
-    assert!(ui.off("mcp-panel-add"), "the key went");
+    assert!(ui.off("mcp-panel-go"), "the key went");
     ui.input(KEY);
     ui.press("enter");
     ui.wait("the hub's refusal", |ui| ui.has("mcp-refused"));
     choose(&mut ui, NONE_WAY);
     assert!(!ui.has("mcp-refused"), "it was of the way before");
-    ui.click("mcp-panel-add");
+    ui.click("mcp-panel-go");
     ui.wait("the same refusal", |ui| ui.has("mcp-refused"));
     let refused = "Couldn't add it: agents would call linear and the MCP server Linear the same, Linear";
     assert_eq!(label_of(&mut ui, "mcp-refused"), refused);

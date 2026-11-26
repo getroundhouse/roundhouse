@@ -11,7 +11,7 @@ use super::secret::{ToolServerSecret, read};
 use crate::login_files::{Locked, LoginFiles};
 use crate::store::{AddingToolServer, Store, StoreError};
 
-/// Adds, removes and tidies one at a time, under its files' lock, so none finds another half done, and no two
+/// Adds, edits, removes and tidies one at a time, under its files' lock, so none finds another half done, and no two
 /// servers are given names agents would call the same, and has workers sent what each leaves. Synchronous, and only
 /// called off the async threads.
 pub(crate) struct ToolServers {
@@ -61,7 +61,7 @@ impl ToolServers {
         let name = ToolServerName::typed(&name)?;
         let url = ToolServerUrl::typed(&url)?;
         let (auth, secret) = read(auth)?;
-        self.free(&name)?;
+        self.free(&name, &id)?;
         let adding = AddingToolServer { id: &id, name: &name, url: &url, auth: &auth, secret: None };
         let server = match secret {
             Some(secret) => files.connect(&secret, |file| {
@@ -103,11 +103,12 @@ impl ToolServers {
         })
     }
 
-    /// Refuses `name` with `Conflict` when agents would call a server the hub has the same, saying which, and that they
-    /// would when the names as typed don't show it.
-    pub(super) fn free(&self, name: &ToolServerName) -> Result<(), ApiError> {
+    /// Refuses `name` with `Conflict` when agents would call a server other than `id` the same, saying which, and that
+    /// they would when the names as typed don't show it.
+    pub(super) fn free(&self, name: &ToolServerName, id: &ToolServerId) -> Result<(), ApiError> {
         let servers = self.store.tool_servers()?;
-        let Some(has_it) = servers.iter().find(|server| server.name.is_same_for_agents(name)) else {
+        let Some(has_it) = servers.iter().find(|server| server.id != *id && server.name.is_same_for_agents(name))
+        else {
             return Ok(());
         };
         let message = if has_it.name == *name {

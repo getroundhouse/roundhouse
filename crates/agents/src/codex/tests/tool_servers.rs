@@ -76,6 +76,7 @@ async fn the_agents_servers_are_reported_as_codex_says_them_and_with_what_it_ans
     let is = |name: &str, state, error: Option<&str>, tools| ToolServerState {
         name: name.into(),
         hubs: None,
+        connected_to: None,
         state,
         error: error.map(str::to_owned),
         tools,
@@ -135,7 +136,14 @@ async fn connecting_to_a_server_again_is_a_reload_which_says_only_what_changed()
     ]));
     let agent = h.started().await;
     agent.prompt(Seq::FIRST, &Prompt::new("Look it up")).await.unwrap();
-    let is = |name: &str, state, tools| ToolServerState { name: name.into(), hubs: None, state, error: None, tools };
+    let is = |name: &str, state, tools| ToolServerState {
+        name: name.into(),
+        hubs: None,
+        connected_to: None,
+        state,
+        error: None,
+        tools,
+    };
     let why = || Some("Sign in to it in Settings.".to_owned());
     let (docs, gone) = (
         is("docs", ServerState::Connected, Some(2)),

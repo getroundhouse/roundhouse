@@ -3,11 +3,12 @@
 
 use protocol::model::{
     HubSettingsChange, NewWorkspaceDraftToKeep, Reserve, Rev, SentCredential, ToolServer, ToolServerAuth,
-    ToolSignInStatus,
+    ToolServerName, ToolServerUrl, ToolSignInStatus,
 };
 
-use super::super::{AddingToolServer, Store};
+use super::super::{AddingToolServer, EditingToolServer, KnownBy, Store};
 use super::rule::Said;
+use crate::login_files::LoginFile;
 
 pub(super) fn settings(store: &Store) -> Rev {
     store.hub_settings().unwrap().rev
@@ -67,6 +68,21 @@ pub(super) fn tool_server(store: &Store) {
     let ToolServer { id, name, url, auth, .. } = protocol::fixtures::tool_server("t");
     let adding = AddingToolServer { id: &id, name: &name, url: &url, auth: &auth, secret: None };
     store.add_tool_server(&adding).unwrap();
+}
+
+pub(super) fn edit_name(store: &Store) -> Said {
+    let name = ToolServerName::stored("Sentry".into());
+    let editing = EditingToolServer { name: Some(&name), ..EditingToolServer::default() };
+    Said::Changed(store.edit_tool_server(&"t".into(), &editing).unwrap().is_some())
+}
+
+/// And where it is and what it's known by are, all at once.
+pub(super) fn edit(store: &Store) -> Said {
+    let (name, url) = (ToolServerName::stored("Sentry".into()), ToolServerUrl::stored("https://example.com".into()));
+    let (auth, file) = (ToolServerAuth::Neither, LoginFile::parse("0b9c7d1e-5a52-4a0e-9d7c-0f6e2f6b8f11").unwrap());
+    let known_by = Some(KnownBy { auth: &auth, secret: Some(&file) });
+    let editing = EditingToolServer { name: Some(&name), url: Some(&url), known_by };
+    Said::Changed(store.edit_tool_server(&"t".into(), &editing).unwrap().is_some())
 }
 
 pub(super) fn needs_sign_in(store: &Store) -> Said {

@@ -83,7 +83,7 @@ impl Transcript {
 
     /// Tells the panel what's around its request: what the person calls the MCP server its tool is from, what the
     /// subagent that asks is for, by its record, and how many more requests wait behind it. Each can change while the
-    /// request waits, as a server is added or removed, a record comes or another agent asks.
+    /// request waits, as a server is added, renamed or removed, a record comes or another agent asks.
     pub(super) fn tell_the_panel(&self, cx: &mut Context<Self>) {
         let Some(panel) = &self.asking else { return };
         let around = {

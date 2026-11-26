@@ -52,6 +52,7 @@ impl ToolServers {
                 said.push(ToolServerState {
                     name: hubs.name.clone(),
                     hubs: Some(hubs.id.clone()),
+                    connected_to: None,
                     state: ServerState::Unknown,
                     error: None,
                     tools: None,
@@ -72,7 +73,14 @@ mod tests {
     use super::*;
 
     fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolServerState {
-        ToolServerState { name: name.into(), hubs: hubs.map(Into::into), state, error: None, tools: None }
+        ToolServerState {
+            name: name.into(),
+            hubs: hubs.map(Into::into),
+            connected_to: None,
+            state,
+            error: None,
+            tools: None,
+        }
     }
 
     #[test]

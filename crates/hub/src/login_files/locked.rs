@@ -136,6 +136,21 @@ impl<S: LoginSecret> Locked<'_, S> {
         clear_row()
     }
 
+    /// Has `write_row` write a row that keeps the rest of what it says and names no file, returning what that returns
+    /// but for the file it named, which is then let go of. The row goes first, since one whose file is gone is cleared
+    /// as the hub next starts, as after [`Locked::disconnect`], and here a hub that stops between the two leaves a file
+    /// no row names, which goes then.
+    pub(crate) fn unname<T>(
+        &self,
+        write_row: impl FnOnce() -> Result<(T, Option<LoginFile>), ApiError>,
+    ) -> Result<T, ApiError> {
+        let (written, named) = write_row()?;
+        if let Some(named) = named {
+            self.let_go(&named);
+        }
+        Ok(written)
+    }
+
     /// Makes the files and the rows of the tables that name them agree, as the hub starts. `named` is each of their rows
     /// that names a file, by the row's ID, with the file, or `None` for a row that names one but doesn't hold it, such
     /// as one naming a file the hub doesn't make. Each row whose file holds nothing, as [`Stored::Nothing`] says, or

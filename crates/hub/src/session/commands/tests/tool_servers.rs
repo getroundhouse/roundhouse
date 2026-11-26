@@ -22,7 +22,8 @@ fn says_servers() -> Capabilities {
 /// What `run` says of its servers, once the session has taken it in: that it has the one called `name`.
 async fn says(live: &LiveSession, run: RunId, name: &str) {
     let state = ServerState::Connected;
-    let server = ToolServerState { name: name.into(), hubs: None, state, error: None, tools: Some(2) };
+    let server =
+        ToolServerState { name: name.into(), hubs: None, connected_to: None, state, error: None, tools: Some(2) };
     let report = Report::ToolServers { servers: vec![server] };
     live.send_item(Item::Report { run, report, seq: None }).await;
     flushed(live).await;

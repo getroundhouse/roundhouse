@@ -1,4 +1,5 @@
-//! The page's panels: the one for adding a server, with what the way it knows the person takes, and the sign-in's.
+//! The page's panels: the one a server is added or edited in, with what the way it knows the person takes, and the
+//! sign-in's.
 
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
@@ -8,7 +9,8 @@ use gpui_kit::{
 use super::super::field::{FIELDS_WIDTH, Field, captioned, labelled};
 use super::super::panel::{self, Framed, button, buttons};
 use super::Drawing;
-use super::adding::{AddPanel, AuthFields, Way};
+use super::edits::Edits;
+use super::form::{AuthFields, Form, Of, Way};
 use super::kept::{Kept, Panel, Shows};
 use super::{sign_in_panel, words};
 
@@ -27,7 +29,7 @@ const WAYS_WIDTH: Pixels = px(320.);
 /// `open`, whichever it is.
 pub(super) fn draw(drawing: &Drawing<'_>, open: &Panel, cx: &App) -> AnyElement {
     let framed = match &open.shows {
-        Shows::Adding(adding) => add(drawing, adding, cx),
+        Shows::Form(form) => self::form(drawing, form, cx),
         Shows::SigningIn => match drawing.kept.read(cx).signing_in.read(cx).under_way() {
             Some(under_way) => sign_in_panel::sign_in(drawing, under_way, cx),
             // It has just gone, and the panel goes with it before the next frame.
@@ -41,33 +43,43 @@ pub(super) fn draw(drawing: &Drawing<'_>, open: &Panel, cx: &App) -> AnyElement 
     panel::framed(PAGE, &open.place, framed, laid_out, cx)
 }
 
-/// The panel for adding a server: its name, its URL and how it knows the person, with the header and the key it takes
-/// for a key, and Add, or Sign in, which is off until there's each, and while the hub hasn't answered. A URL that's
-/// already there says which server it is, and stops nothing.
-fn add(drawing: &Drawing<'_>, adding: &AddPanel, cx: &App) -> Framed {
-    let there = drawing.records.tool_server_at(&adding.url.value(cx)).map(|server| &server.name);
-    let chosen = adding.auth.way();
-    let key = match &adding.auth {
-        AuthFields::Key { header, key } => Some(key_row(header, key, cx)),
+/// The panel a server is added or edited in: its name, its URL and how it knows the person, with the header and the key
+/// it takes for a key, and Add, Save or Sign in, which is off until there's each, and while the hub hasn't answered. A
+/// URL that's already there says which server it is, and one that looks like it has a key in it says so, and neither
+/// stops anything.
+fn form(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Framed {
+    let (url, edits, chosen) = (form.url.value(cx), form.edits(cx), form.auth.way());
+    let had = match &form.of {
+        Of::New(_) => None,
+        Of::Had(was) => Some(&**was),
+    };
+    let there = drawing.records.tool_server_at(&url, had.map(|was| &was.id)).map(|server| &server.name);
+    let key = match &form.auth {
+        AuthFields::Key { header, key } => Some(key_row(header, key, edits, cx)),
         AuthFields::SignIn | AuthFields::Neither => None,
     };
+    let way = h_flex().child(ways(drawing, chosen));
     let fields = v_flex()
         .gap(look::Space::Large)
-        .child(labelled("Name", "mcp-name", &adding.name.input, words::name_says(there), cx))
-        .child(labelled("URL", "mcp-url", &adding.url.input, words::url_says(there), cx))
-        .child(captioned(AUTHENTICATION, h_flex().child(ways(drawing, chosen)), words::way_says(chosen), cx))
+        .child(labelled("Name", "mcp-name", &form.name.input, words::name_says(there), cx))
+        .child(labelled("URL", "mcp-url", &form.url.input, words::url_says(&url, there), cx))
+        .child(captioned(AUTHENTICATION, "mcp-way", way, words::way_says(chosen, edits), cx))
         .children(key);
+    let (title, lead) = match had.zip(edits) {
+        None => ("Add an MCP server".into(), words::ADD),
+        Some((was, edits)) => (words::edit_title(&was.name).into(), words::edit_says(edits)),
+    };
     let act = drawing.kept.clone();
-    let off = !drawing.kept.read(cx).can_add(cx);
-    let add = button("mcp-panel-add", words::add_does(chosen), true, off, move |window, cx| {
-        act.update(cx, |kept, cx| kept.add(window, cx));
+    let off = !drawing.kept.read(cx).can_go(cx);
+    let go = button("mcp-panel-go", words::does(form.does(cx)), true, off, move |window, cx| {
+        act.update(cx, |kept, cx| kept.go(window, cx));
     });
     Framed {
-        title: "Add an MCP server".into(),
-        lead: words::ADD.into(),
+        title,
+        lead: lead.into(),
         body: Some(fields.into_any_element()),
-        refused: adding.refused.clone(),
-        buttons: buttons().child(cancel(drawing.kept)).child(add),
+        refused: form.refused.clone(),
+        buttons: buttons().child(cancel(drawing.kept)).child(go),
     }
 }
 
@@ -89,9 +101,9 @@ fn ways(drawing: &Drawing<'_>, chosen: Way) -> look::MenuButton {
 }
 
 /// The header a key is sent in and the key, in a row as wide as the fields over it.
-fn key_row(header: &Field, key: &Field, cx: &App) -> Div {
+fn key_row(header: &Field, key: &Field, edits: Option<Edits>, cx: &App) -> Div {
     let header = labelled("Header", "mcp-header", &header.input, words::HEADER_SAYS, cx);
-    let key = labelled("Key", "mcp-key", &key.input, words::KEY_SAYS, cx);
+    let key = labelled("Key", "mcp-key", &key.input, words::key_says(edits), cx);
     h_flex()
         .items_start()
         .w_full()

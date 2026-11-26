@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use protocol::client::tool_servers::ToolServerAdd;
+use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{ToolServerAuthGiven, ToolServerId, ToolServerKey};
 
@@ -24,6 +24,32 @@ pub(super) fn with_key(id: &str, name: &str, key: &str) -> ToolServerAdd {
 pub(super) fn with_neither(id: &str, name: &str) -> ToolServerAdd {
     let url = "https://mcp.example.com/mcp".into();
     ToolServerAdd { id: id.into(), name: name.into(), url, auth: ToolServerAuthGiven::Neither }
+}
+
+/// An edit of the server `id` that changes nothing.
+pub(super) fn edit(id: &str) -> ToolServerEdit {
+    ToolServerEdit { id: id.into(), name: None, url: None, auth: None }
+}
+
+/// Having the server `id` called `name`.
+pub(crate) fn named(id: &str, name: &str) -> ToolServerEdit {
+    ToolServerEdit { name: Some(name.into()), ..edit(id) }
+}
+
+/// Having no change to a server's row be written, as a hub that stops before one is.
+pub(super) fn stop_writing_rows(store: &Store) {
+    let stop = "CREATE TEMP TRIGGER stopped BEFORE UPDATE ON tool_servers BEGIN SELECT RAISE(ABORT, 'stopped'); END";
+    store.holding_writes().execute_batch(stop).unwrap();
+}
+
+/// The servers workers are sent, by ID, and what each request to each carries.
+pub(super) fn sent(servers: &ToolServers) -> Vec<(String, Option<String>)> {
+    let set = servers.sent().borrow().set();
+    let carried = |server: protocol::worker::ProxiedServer| {
+        let header = server.header.map(|header| format!("{}: {}", header.name.as_str(), header.value.as_str()));
+        (server.id.to_string(), header)
+    };
+    set.servers.into_iter().map(carried).collect()
 }
 
 pub(super) fn refused<T: std::fmt::Debug>(done: Result<T, ApiError>) -> ErrorCode {

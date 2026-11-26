@@ -5,8 +5,8 @@ use protocol::client::tool_servers::ToolServerAdd;
 use protocol::model::{ToolServerAuth, ToolServerAuthGiven, ToolServerKey};
 
 use super::super::ToolServerChange;
-use super::super::secret::{ToolServerSecret, read};
-use super::support::{KEY_FILE, files_in, holding, refused, servers_in, with_key, with_neither};
+use super::super::secret::ToolServerSecret;
+use super::support::{KEY_FILE, files_in, holding, named, refused, sent, servers_in, with_key, with_neither};
 use crate::login_files::{LoginSecret as _, Stored};
 
 #[test]
@@ -30,18 +30,24 @@ fn a_key_is_kept_in_a_private_file_of_its_own_alone_and_a_server_with_neither_ke
     assert_eq!(holding(dir.path(), "made-up"), ["tool-servers"], "nothing else has it, the database least of all");
 }
 
+/// It's kept as it was given, so it's right in whichever header it's sent in next.
 #[test]
-fn a_key_in_authorization_with_no_scheme_is_kept_as_a_bearer_token_and_any_other_as_it_is() {
-    for (header, key, kept) in [
+fn a_key_in_authorization_with_no_scheme_is_sent_as_a_bearer_token_and_any_other_as_it_is() {
+    for (header, key, carries) in [
         ("Authorization", "made-up", "Bearer made-up"),
         ("AUTHORIZATION", " made-up\n", "Bearer made-up"),
         ("Authorization", "Bearer made-up", "Bearer made-up"),
         ("Authorization", "Basic made-up", "Basic made-up"),
         ("X-API-Key", "made-up", "made-up"),
     ] {
+        let dir = tempfile::tempdir().unwrap();
+        let (servers, _) = servers_in(dir.path());
         let given = ToolServerAuthGiven::Key { header: header.into(), key: ToolServerKey::new(key) };
-        let (_, secret) = read(given).unwrap();
-        assert_eq!(secret, Some(ToolServerSecret::Key(ToolServerKey::new(kept))), "{key:?} in {header}");
+
+        servers.add(ToolServerAdd { auth: given, ..with_neither("k", "Linear") }).unwrap();
+
+        assert_eq!(sent(&servers), [("k".to_string(), Some(format!("{header}: {carries}")))]);
+        assert_eq!(files_in(dir.path()), [format!(r#"{{"format":"key","key":"{}"}}"#, key.trim())]);
     }
 }
 
@@ -49,34 +55,39 @@ fn a_key_in_authorization_with_no_scheme_is_kept_as_a_bearer_token_and_any_other
 fn adding_one_of_an_id_again_is_the_server_as_it_is_whatever_else_is_asked() {
     let dir = tempfile::tempdir().unwrap();
     let (servers, store) = servers_in(dir.path());
-    let added = servers.add(with_key("k", "Linear", "Bearer made-up")).unwrap().server;
+    servers.add(with_key("k", "Linear", "Bearer made-up")).unwrap();
+    let renamed = servers.edit(named("k", "Linear 2")).unwrap().server;
     let before = store.list_records().unwrap();
 
     let again = servers.add(with_key("k", "Linear", "Bearer made-up")).unwrap();
     let otherwise = servers.add(ToolServerAdd { url: "not a URL".into(), ..with_key("k", "", "another") }).unwrap();
 
-    assert_eq!(again, ToolServerChange { server: added, changed: false });
+    assert_eq!(again, ToolServerChange { server: renamed, changed: false });
     assert_eq!(otherwise, again);
     assert_eq!(store.list_records().unwrap(), before);
     assert_eq!(files_in(dir.path()), [KEY_FILE]);
 }
 
 #[test]
-fn a_name_agents_would_call_another_server_by_is_refused_saying_which() {
+fn a_name_agents_would_call_another_server_by_is_refused_saying_which_as_its_added_and_renamed() {
     let dir = tempfile::tempdir().unwrap();
     let (servers, store) = servers_in(dir.path());
     servers.add(with_neither("a", "Linear (Northwind)")).unwrap();
+    servers.add(with_neither("b", "Docs")).unwrap();
     let before = store.list_records().unwrap();
 
     let same = servers.add(with_key("c", "Linear (Northwind)", "Bearer made-up")).unwrap_err();
     let same_for_agents = servers.add(with_key("c", "linear northwind", "Bearer made-up")).unwrap_err();
+    let renamed = servers.edit(named("b", "Linear  Northwind")).unwrap_err();
 
-    assert_eq!([&same, &same_for_agents].map(|e| e.code), [ErrorCode::Conflict; 2]);
+    assert_eq!([&same, &same_for_agents, &renamed].map(|e| e.code), [ErrorCode::Conflict; 3]);
     assert_eq!(same.message, "another MCP server is called Linear (Northwind)");
     let both = "agents would call linear northwind and the MCP server Linear (Northwind) the same, Linear_Northwind";
     assert_eq!(same_for_agents.message, both);
     assert_eq!(store.list_records().unwrap(), before);
     assert_eq!(files_in(dir.path()), Vec::<String>::new());
+    let own = servers.edit(named("a", "LINEAR (Northwind)")).unwrap();
+    assert!(own.changed, "what agents call a server itself doesn't stop it being renamed");
 }
 
 #[test]
@@ -91,7 +102,7 @@ fn removing_forgets_the_server_and_its_key_and_again_there_is_none() {
     assert!(removed.rev > other.rev);
     assert_eq!(removed.server, added);
     assert_eq!(store.list_records().unwrap().tool_servers, [other]);
-    assert_eq!(files_in(dir.path()), [r#"{"format":"key","key":"Bearer another"}"#]);
+    assert_eq!(files_in(dir.path()), [r#"{"format":"key","key":"another"}"#]);
     assert_eq!(refused(servers.remove(&"k".into())), ErrorCode::NotFound);
     assert!(servers.add(with_neither("k", "Linear")).unwrap().changed, "its name is free, and so is its ID");
 }

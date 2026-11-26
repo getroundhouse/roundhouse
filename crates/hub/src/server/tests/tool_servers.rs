@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe, Subscription};
-use protocol::client::tool_servers::{ToolServerAdd, ToolServerRemove};
+use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit, ToolServerRemove};
 use protocol::client::tool_sign_ins::{
     REDIRECT_PORTS, ToolSignInBegun, ToolSignInCancel, ToolSignInFinish, ToolSignInReturned, ToolSignInStart,
     ToolSignInTo, redirect,
@@ -64,7 +64,7 @@ fn files_in(dir: &Path) -> usize {
 }
 
 #[tokio::test]
-async fn a_server_one_client_adds_and_removes_reaches_another() {
+async fn a_server_one_client_adds_edits_and_removes_reaches_another() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     let mut adds = client(&hub).await;
@@ -72,7 +72,10 @@ async fn a_server_one_client_adds_and_removes_reaches_another() {
 
     let added = ask(&mut adds, 2, add("t", "Linear", a_key())).await;
     told(&mut second, &HubNotice::ToolServer(added.clone())).await;
-    let removed = ask(&mut adds, 3, ToolServerRemove { id: "t".into() }).await;
+    let rename = ToolServerEdit { id: "t".into(), name: Some("Sentry".into()), url: None, auth: None };
+    let edited = ask(&mut adds, 3, rename).await;
+    told(&mut second, &HubNotice::ToolServer(edited.clone())).await;
+    let removed = ask(&mut adds, 4, ToolServerRemove { id: "t".into() }).await;
     second
         .until("its removal", |sent| {
             let gone = RecordKey::ToolServer { id: "t".into() };
@@ -83,7 +86,8 @@ async fn a_server_one_client_adds_and_removes_reaches_another() {
         .await;
 
     assert_eq!(listed, []);
-    assert_eq!(removed, added);
+    assert_eq!(edited.name.as_str(), "Sentry");
+    assert_eq!(removed, edited);
 }
 
 /// How it's waited for, finished and refused is tested in `crate::hub`.

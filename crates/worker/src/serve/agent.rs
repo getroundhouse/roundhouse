@@ -174,7 +174,7 @@ async fn tools_for(state: &State, spec: &mut AgentSpec, config: PathBuf) -> Resu
 }
 
 /// Sends on what the agent says, in order, with the images its text points to in `worktree`, and with which of its tool
-/// servers are the hub's, as it was launched with `tools`.
+/// servers are the hub's, as it was launched with `tools`, and where it's connected to each.
 async fn forward_output(
     state: Arc<State>,
     session_id: SessionId,
@@ -197,7 +197,8 @@ async fn forward_output(
             AgentOutput::Report(report) => {
                 let report = match (report, &tools) {
                     (Report::ToolServers { servers }, Some(tools)) => {
-                        Report::ToolServers { servers: tools.saying_which_are_the_hubs(servers) }
+                        let servers = tools.saying_which_are_the_hubs(servers);
+                        Report::ToolServers { servers: state.tools.proxy.saying_where(&session_id, servers) }
                     }
                     (report, _) => report,
                 };

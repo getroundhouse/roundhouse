@@ -59,6 +59,7 @@ mod subagents;
 mod support;
 mod terminals;
 mod titles;
+mod tool_server_edits;
 mod tool_servers;
 mod tools;
 mod worker_versions;

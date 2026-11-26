@@ -61,8 +61,14 @@ printf '{{"type":"control_response","response":{{{answer}}}}}\n' "$id""#
             serde_json::from_slice(&std::fs::read(dir.path().join("asked")).unwrap()).unwrap();
         let expected = serde_json::json!({"subtype": "mcp_reconnect", "serverName": "linear"});
         assert_eq!((&asked["type"], &asked["request"]), (&"control_request".into(), &expected));
-        let says =
-            |name: &str, state, tools| ToolServerState { name: name.into(), hubs: None, state, error: None, tools };
+        let says = |name: &str, state, tools| ToolServerState {
+            name: name.into(),
+            hubs: None,
+            connected_to: None,
+            state,
+            error: None,
+            tools,
+        };
         let of = |linear| vec![says("docs", ServerState::Connected, Some(1)), says("linear", linear, None)];
         let mut reported = vec![init];
         reported.extend(seen.into_iter().filter_map(servers_of));

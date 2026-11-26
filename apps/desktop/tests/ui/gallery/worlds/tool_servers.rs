@@ -31,6 +31,16 @@ pub(in crate::gallery) fn one_tool_server() -> World {
     world
 }
 
+/// The conversation, on a hub with two servers: one that's signed in to, whose URL says which of its tools to have, and
+/// one with a key.
+pub(in crate::gallery) fn tool_servers_to_edit() -> World {
+    let mut world = conversation();
+    let metrics = server("Metrics", "https://mcp.metrics.example/v1/mcp?toolsets=core");
+    world.tool_servers =
+        vec![ToolServer { auth: linear().auth, ..metrics }, server("Runbooks", "https://mcp.northwind.example/mcp")];
+    world
+}
+
 /// [`one_tool_server`], whose hub refuses to add another of its name, as it words why.
 pub(in crate::gallery) fn tool_server_refused() -> World {
     let mut world = one_tool_server();

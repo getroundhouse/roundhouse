@@ -8,7 +8,9 @@ use crate::model::{ToolServerHeader, ToolServerId, ToolServerName, ToolServerUrl
 
 /// Sets the tool servers the worker's agents reach through it, all of them each time, so sending it twice is the same
 /// as once. An agent started after the answer is given every server in it, and a call to one that's no longer in it is
-/// told it was removed. A call already under way goes on as it began.
+/// told it was removed. One to a server that's another now, by its URL's
+/// [`place`](crate::model::ToolServerUrl::place), is refused until its agent connects to it afresh, so what was meant
+/// for one server is never sent to another. A call already under way goes on as it began.
 ///
 /// The worker keeps them in memory and in no file, so each hub that connects sets them again. It applies a set on its
 /// connection's own loop, before it reads the next frame, as it does a

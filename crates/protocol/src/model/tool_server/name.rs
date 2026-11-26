@@ -67,7 +67,8 @@ impl ToolServerName {
     /// digits and `-`, with their case, and one `_` for each run of anything else, with neither `_` nor `-` at an end.
     /// A CLI makes a tool's name from its server's, `__` between them, so a name with no `__` can't be the start of
     /// another server's tool's, and each CLI takes every character in it, as its reference in `docs/reference/` says.
-    /// It's made each time it's asked for and stored nowhere.
+    /// It's made each time it's asked for and stored nowhere, so a server that's renamed has its new one from each
+    /// agent's next start.
     pub fn for_agents(&self) -> ServerName {
         let mut taken = String::with_capacity(self.0.len());
         for c in self.0.chars() {

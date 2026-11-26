@@ -15,4 +15,4 @@ mod under_way;
 mod words;
 
 pub(crate) use signing_in::ToolSigningIn;
-pub(crate) use under_way::{NewServer, SignInTo, Stands, UnderWay};
+pub(crate) use under_way::{EditedServer, NewServer, SignInTo, Stands, UnderWay};

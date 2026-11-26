@@ -1,11 +1,11 @@
 //! The tool servers a hub has of its own, as the requests, replies, feed and lists carry them, spelled out.
 
-use protocol::client::tool_servers::{ToolServerAdd, ToolServerRemove};
+use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit, ToolServerRemove};
 use protocol::client::{ClientRequest, ClientResponse, HubNotice};
 use protocol::frame;
 use protocol::model::{
-    RecordKey, Records, Rev, ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerKey, ToolServerName,
-    ToolServerUrl,
+    RecordKey, Records, Rev, ToolServer, ToolServerAuth, ToolServerAuthEdit, ToolServerAuthGiven, ToolServerKey,
+    ToolServerName, ToolServerUrl,
 };
 
 use super::{answered, asked};
@@ -49,6 +49,33 @@ fn every_request_about_a_tool_server_keeps_its_form() {
 }
 
 #[test]
+fn an_edit_of_a_tool_server_holds_only_what_changes_and_keeps_its_form() {
+    let edit = |name: Option<&str>, url: Option<&str>, auth| {
+        let (name, url) = (name.map(str::to_string), url.map(str::to_string));
+        ClientRequest::ToolServerEdit(ToolServerEdit { id: "t".into(), name, url, auth })
+    };
+    let key = |key: Option<&str>| ToolServerAuthEdit::Key {
+        header: "X-Key".to_string(),
+        key: key.map(ToolServerKey::new),
+        url: "https://mcp.example.com/mcp".to_string(),
+    };
+    let of = |rest: &str| format!(r#"{{"method":"tool_server_edit","id":"t"{rest}}}"#);
+
+    asked(edit(None, None, None), &of(""));
+    asked(edit(Some("Sentry"), None, None), &of(r#","name":"Sentry""#));
+    asked(edit(None, Some("https://mcp.example.com"), None), &of(r#","url":"https://mcp.example.com""#));
+    asked(edit(None, None, Some(ToolServerAuthEdit::Neither)), &of(r#","auth":{"kind":"neither"}"#));
+    asked(
+        edit(None, None, Some(key(Some("made-up")))),
+        &of(r#","auth":{"kind":"key","header":"X-Key","key":"made-up","url":"https://mcp.example.com/mcp"}"#),
+    );
+    asked(
+        edit(None, None, Some(key(None))),
+        &of(r#","auth":{"kind":"key","header":"X-Key","url":"https://mcp.example.com/mcp"}"#),
+    );
+}
+
+#[test]
 fn a_tool_servers_record_keeps_its_form_as_a_reply() {
     let neither = ToolServer { auth: ToolServerAuth::Neither, ..with_key() };
 
@@ -82,4 +109,5 @@ fn a_way_of_knowing_the_person_this_build_doesnt_know_reads_as_unknown() {
 
     assert_eq!(serde_json::from_str::<ToolServerAuth>(auth).unwrap(), ToolServerAuth::Unknown);
     assert_eq!(serde_json::from_str::<ToolServerAuthGiven>(auth).unwrap(), ToolServerAuthGiven::Unknown);
+    assert_eq!(serde_json::from_str::<ToolServerAuthEdit>(auth).unwrap(), ToolServerAuthEdit::Unknown);
 }
