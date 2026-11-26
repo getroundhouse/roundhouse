@@ -11,6 +11,7 @@ use hub::{GithubAnswer, GithubScript};
 use protocol::model::{GithubLoginKind, GithubSignInStatus};
 
 use super::git::{default, in_git};
+use super::settings_showing;
 use crate::support::{Stack, Ui};
 
 /// What GitHub gives a sign-in once it's approved, which it knows as `ada`'s.
@@ -104,23 +105,32 @@ fn a_sign_in_that_isnt_approved_says_how_it_ended_and_offers_to_sign_in_again(cx
     assert!(ui.view().records().github_accounts().is_empty(), "nothing was connected");
 }
 
+/// A way to cancel a sign-in from its panel.
+type Cancel = fn(&mut Ui<'_>);
+
+/// Cancelled by its button, then by Escape, which does the same, and leaves Settings showing.
 #[gpui_kit::test]
 fn cancelling_a_sign_in_has_the_hub_stop_waiting_and_puts_its_panel_away(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let _github = stack.start_hub_with_stand_in_github(signing_in(vec![vec![pending()]]));
+    let _github = stack.start_hub_with_stand_in_github(signing_in(vec![vec![pending()], vec![pending()]]));
     let mut ui = in_git(cx, &stack);
-    ui.click("git-connect");
-    ui.click("git-sign-in");
-    ui.wait("the code", |ui| ui.has("git-code"));
-
-    ui.click("git-cancel");
-
-    assert!(!ui.has("git-panel"));
     let hubs = || stack.client().records().unwrap().github_sign_ins;
-    crate::support::wait_until("the hub to cancel it", || {
-        hubs().first().is_some_and(|sign_in| sign_in.status == GithubSignInStatus::Cancelled)
-    });
-    ui.wait("the app to hear it", |ui| statuses(ui) == [GithubSignInStatus::Cancelled]);
-    assert!(!ui.has("git-panel"), "one that ended shows only in the panel that showed it waiting");
-    assert!(ui.on("git-connect"));
+    let ways: [(&str, Cancel); 2] = [("Cancel", |ui| ui.click("git-cancel")), ("Escape", |ui| ui.press("escape"))];
+
+    for (way, cancel) in ways {
+        ui.click("git-connect");
+        ui.click("git-sign-in");
+        ui.wait("the code", |ui| ui.has("git-code"));
+
+        cancel(&mut ui);
+
+        assert!(!ui.has("git-panel"), "{way}");
+        assert!(settings_showing(&mut ui), "{way}");
+        crate::support::wait_until("the hub to cancel it", || {
+            hubs().first().is_some_and(|sign_in| sign_in.status == GithubSignInStatus::Cancelled)
+        });
+        ui.wait("the app to hear it", |ui| statuses(ui) == [GithubSignInStatus::Cancelled]);
+        assert!(!ui.has("git-panel"), "{way}: one that ended shows only in the panel that showed it waiting");
+        assert!(ui.on("git-connect"), "{way}");
+    }
 }

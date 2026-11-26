@@ -1,6 +1,7 @@
 use self::kept::{Kept, To};
 use super::super::account_row::COLUMN_WIDTH;
 use super::super::lists::{heading, list, said_in_the_list};
+use super::super::panel::OpenPanel;
 use super::super::{Asking, Body, OfHub, Page, PageId, Within};
 use super::{kept, panel, row, words};
 use client_core::Agents;
@@ -38,6 +39,8 @@ pub(super) struct Drawing<'a> {
     pub(super) agents: &'a Agents,
     /// The scroll of Settings' page, to bring a panel into sight as it opens.
     pub(super) scroll: &'a ScrollHandle,
+    /// The panel open, which Escape closes.
+    pub(super) open_panel: &'a OpenPanel,
     /// The one moment every row says a time as of.
     pub(super) now_ms: i64,
     pub(super) defaults: Option<&'a [AccountDefault]>,
@@ -63,8 +66,8 @@ impl RenderOnce for AgentsPage {
         let focus = self.within.focus.clone();
         kept.update(cx, |kept, cx| kept.drawn(self.asking, focus, changes_at_ms, cx));
         let defaults = records.hub_settings().and_then(|settings| settings.account_defaults.as_deref());
-        let (agents, scroll) = (records.agents(), &self.within.scroll);
-        let drawing = Drawing { records, kept: &kept, agents, scroll, now_ms, defaults };
+        let (agents, scroll, open_panel) = (records.agents(), &self.within.scroll, &self.within.open_panel);
+        let drawing = Drawing { records, kept: &kept, agents, scroll, open_panel, now_ms, defaults };
         v_flex()
             .w_full()
             .max_w(COLUMN_WIDTH)

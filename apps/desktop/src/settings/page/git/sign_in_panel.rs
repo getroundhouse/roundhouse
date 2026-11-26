@@ -11,7 +11,7 @@ use protocol::model::GithubUserCode;
 
 use super::Drawing;
 use super::kept::Panel;
-use super::panel::{Framed, button, buttons, framed, waiting_line};
+use super::panel::{Closes, Framed, button, buttons, framed, waiting_line};
 use super::sign_in::SignInPanel;
 use super::sign_in_words::{self, Stands};
 
@@ -22,36 +22,36 @@ pub(super) fn sign_in(drawing: &Drawing<'_>, panel: &Panel, sign_in: &SignInPane
     } else {
         None
     };
+    let (buttons, closes) = buttons_for(drawing, &stands, sign_in.again.clone(), cx);
     let framed_as = Framed {
         title: stands.title().into(),
         lead: stands.lead(sign_in.again.as_deref()).into(),
         body,
         refused: None,
-        buttons: buttons_for(drawing, &stands, sign_in.again.clone(), cx),
+        buttons,
+        closes,
     };
     framed(drawing, panel, framed_as, cx)
 }
 
-/// Cancel while the hub may still wait for the person, and otherwise Close, or Done once it's approved, with Sign in
-/// again for one that ended in a way another try might change.
-fn buttons_for(drawing: &Drawing<'_>, stands: &Stands<'_>, again: Option<String>, cx: &App) -> gpui_kit::Div {
+/// Cancel while the hub may still wait for the person, which cancels it there, and otherwise Close, or Done once it's
+/// approved, with Sign in again for one that ended in a way another try might change. With what the first does.
+fn buttons_for(drawing: &Drawing<'_>, stands: &Stands<'_>, again: Option<String>, cx: &App) -> (gpui_kit::Div, Closes) {
     let kept = drawing.kept.clone();
     if stands.may_wait() {
-        return buttons().child(button("git-cancel", "Cancel", false, false, move |window, cx| {
-            kept.update(cx, |kept, cx| kept.cancel_sign_in(window, cx));
-        }));
+        let cancels = Closes::new(move |window, cx| kept.update(cx, |kept, cx| kept.cancel_sign_in(window, cx)));
+        return (buttons().child(cancels.button("git-cancel", "Cancel", false)), cancels);
     }
     let approved = matches!(stands, Stands::Approved { .. });
-    let close = button("git-close", if approved { "Done" } else { "Close" }, approved, false, move |window, cx| {
-        kept.update(cx, |kept, cx| kept.put_away_panel(window, cx));
-    });
+    let closes = Closes::new(move |window, cx| kept.update(cx, |kept, cx| kept.put_away_panel(window, cx)));
+    let close = closes.button("git-close", if approved { "Done" } else { "Close" }, approved);
     let try_again = stands.may_try_again().then(|| {
         let kept = drawing.kept.clone();
         button("git-sign-in-again", "Sign in again", true, !drawing.can_ask(cx), move |_, cx| {
             kept.update(cx, |kept, cx| kept.sign_in(again.clone(), cx));
         })
     });
-    buttons().child(close).children(try_again)
+    (buttons().child(close).children(try_again), closes)
 }
 
 /// The code to type, in code's font, with a button that copies it, beside one that opens `address`, where it's typed,

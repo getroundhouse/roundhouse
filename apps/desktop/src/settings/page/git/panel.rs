@@ -3,7 +3,7 @@
 use gpui_kit::{AnyElement, App, IntoElement, Window};
 
 use super::super::panel;
-pub(super) use super::super::panel::{Framed, button, buttons, choice, choices, waiting_line};
+pub(super) use super::super::panel::{Closes, Framed, button, buttons, choice, choices, waiting_line};
 use super::Drawing;
 use super::kept::Panel;
 
@@ -16,7 +16,7 @@ pub(super) fn framed(drawing: &Drawing<'_>, open: &Panel, framed: Framed, cx: &A
     let laid_out = move |bounds, window: &mut Window, cx: &mut App| {
         kept.update(cx, |kept, _| kept.laid_out(bounds, &scroll, window));
     };
-    panel::framed(PAGE, &open.place, framed, laid_out, cx)
+    panel::framed(PAGE, &open.place, framed, laid_out, drawing.open_panel, cx)
 }
 
 /// Why the hub, or GitHub, refused what a panel asked.

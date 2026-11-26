@@ -8,6 +8,7 @@ use gpui_kit::{App, Entity, IntoElement, ParentElement as _, RenderOnce, ScrollH
 use protocol::model::{GithubAccount, GithubSettings, SentCredential};
 
 use super::super::account_row::{COLUMN_WIDTH, Columns};
+use super::super::panel::OpenPanel;
 use super::kept::Kept;
 use super::words::Standing;
 use super::{Asking, Body, OfHub, Page, PageId, Within, added, words};
@@ -38,6 +39,8 @@ pub(super) struct Drawing<'a> {
     pub(super) records: &'a Snapshot,
     /// The scroll of Settings' page, to bring a panel into sight as it opens.
     pub(super) scroll: &'a ScrollHandle,
+    /// The panel open, which Escape closes.
+    pub(super) open_panel: &'a OpenPanel,
     /// The one moment every row says a time as of.
     pub(super) now_ms: i64,
     /// What the hub's settings say of GitHub. `None` until they've arrived.
@@ -79,7 +82,8 @@ impl RenderOnce for GitPage {
         let changes_at_ms = changes_at_ms(self.records.github_accounts(), now_ms);
         let focus = self.within.focus.clone();
         kept.update(cx, |kept, cx| kept.drawn(self.asking, focus, &self.records, changes_at_ms, cx));
-        let drawing = Drawing { kept: &kept, records: &self.records, scroll: &self.within.scroll, now_ms, github };
+        let (scroll, open_panel) = (&self.within.scroll, &self.within.open_panel);
+        let drawing = Drawing { kept: &kept, records: &self.records, scroll, open_panel, now_ms, github };
         v_flex()
             .w_full()
             .max_w(COLUMN_WIDTH)

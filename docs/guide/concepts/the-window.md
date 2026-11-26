@@ -52,4 +52,4 @@ Clicking a file, in either tab of the sidebar of changes, shows it in the worksp
 
 ## In place of the workspace
 
-Home shows in place of the workspace, and goes away when you pick one. Settings shows in place of the sidebar and the workspace, and `Back`, Escape or `Cmd-W` goes back.
+Home shows in place of the workspace, and goes away when you pick one. Settings shows in place of the sidebar and the workspace, and `Back`, Escape or `Cmd-W` goes back. Escape first closes a panel that's open there.

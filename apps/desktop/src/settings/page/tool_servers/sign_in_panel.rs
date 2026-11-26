@@ -6,7 +6,7 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{AnyElement, App, Div, IntoElement as _, ParentElement as _, Styled as _};
 
-use super::super::panel::{Framed, button, buttons, waiting_line};
+use super::super::panel::{Closes, Framed, button, buttons, waiting_line};
 use super::Drawing;
 use super::kept::Kept;
 use super::words;
@@ -31,22 +31,24 @@ pub(super) fn sign_in(drawing: &Drawing<'_>, under_way: &UnderWay, cx: &App) -> 
         Stands::Failed(why) => Some(why.clone()),
         Stands::Starting(_) | Stands::Waiting(_) | Stands::Finishing(_) | Stands::NoWay(_) => None,
     };
+    let closes = Closes::new(drawing.act(Kept::put_away_sign_in));
     Framed {
         title: words::sign_in_title(&to.name()).into(),
         lead: lead.into(),
         body,
         refused,
-        buttons: buttons_for(drawing, under_way, cx),
+        buttons: buttons_for(drawing, under_way, &closes, cx),
+        closes,
     }
 }
 
-/// Cancel while it's under way, and Close once it's not, with another try for one that came to nothing.
-fn buttons_for(drawing: &Drawing<'_>, under_way: &UnderWay, cx: &App) -> Div {
+/// Cancel while it's under way, and Close once it's not, each of which `closes` it, with another try for one that came
+/// to nothing.
+fn buttons_for(drawing: &Drawing<'_>, under_way: &UnderWay, closes: &Closes, cx: &App) -> Div {
     let off = !drawing.can_ask(cx);
-    let put_away = |id, label| button(id, label, false, false, drawing.act(Kept::put_away_sign_in));
     let go_on = match under_way.stands() {
         Stands::Starting(_) | Stands::Waiting(_) | Stands::Finishing(_) => {
-            return buttons().child(put_away("mcp-cancel", "Cancel"));
+            return buttons().child(closes.button("mcp-cancel", "Cancel", false));
         }
         // It would come to the same, and the hub has the server already, which a key can't be given to.
         Stands::NoWay(_) => None,
@@ -54,7 +56,7 @@ fn buttons_for(drawing: &Drawing<'_>, under_way: &UnderWay, cx: &App) -> Div {
             Some(button("mcp-try-again", words::TRY_AGAIN, true, off, drawing.act(Kept::try_sign_in_again)))
         }
     };
-    buttons().child(put_away("mcp-close", "Close")).children(go_on)
+    buttons().child(closes.button("mcp-close", "Close", false)).children(go_on)
 }
 
 fn waits(said: String, cx: &App) -> AnyElement {

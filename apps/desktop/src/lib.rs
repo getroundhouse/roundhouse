@@ -117,6 +117,7 @@ actions!(
         ShowAll,
         OpenSettings,
         CloseSettings,
+        CloseSettingsPanel,
         FindSetting,
         Quit,
         Minimize,

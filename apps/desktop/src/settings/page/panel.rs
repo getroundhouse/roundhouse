@@ -1,6 +1,10 @@
 //! A panel of a page of its own, such as Git's and MCP servers', raised as Agents' are: its title and what it says under
 //! that, what's in it, then its buttons, and the choices one offers. Wherever it is on the page, it's brought into sight
-//! as it opens, as its end is once there's more at it, and gives Settings the focus back as it goes.
+//! as it opens, as its end is once there's more at it, and gives Settings the focus back as it goes. Escape closes it as
+//! the button that closes it does.
+
+use std::cell::Cell;
+use std::rc::Rc;
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::ElementExt as _;
@@ -72,6 +76,47 @@ impl Place {
     }
 }
 
+/// What closes a panel: its Cancel, which lets go of whatever it waits on, or its Close or Done where it has no Cancel.
+/// Its button and Escape both close it with this, so the two can't differ.
+#[derive(Clone)]
+pub(super) struct Closes(Rc<Close>);
+
+/// Closes a panel, in the window it's in.
+type Close = dyn Fn(&mut Window, &mut App);
+
+impl Closes {
+    pub(super) fn new(close: impl Fn(&mut Window, &mut App) + 'static) -> Closes {
+        Closes(Rc::new(close))
+    }
+
+    /// The button that closes the panel, known to tests by `id`: its main one when it's `primary`, as Done is.
+    pub(super) fn button(&self, id: &'static str, label: impl Into<SharedString>, primary: bool) -> look::Button {
+        let close = self.0.clone();
+        button(id, label, primary, false, move |window, cx| close(window, cx))
+    }
+}
+
+/// The panel open on the page showing, as Settings was last drawn, for Escape to close. Settings makes one for each
+/// frame, and a panel gives it its [`Closes`] as it's drawn, so it holds only a panel that's on screen. Where a page has
+/// two open, as Agents can, it holds the one drawn last, which is the lower.
+#[derive(Clone, Default)]
+pub(super) struct OpenPanel(Rc<Cell<Option<Closes>>>);
+
+impl OpenPanel {
+    /// The panel being drawn closes with `closes`.
+    pub(super) fn drawn(&self, closes: &Closes) {
+        self.0.set(Some(closes.clone()));
+    }
+
+    /// Closes the panel, and says whether one was open. It's let go of as it closes, so Escape pressed again before the
+    /// next frame closes Settings, as it would once that frame is drawn.
+    pub(super) fn close(&self, window: &mut Window, cx: &mut App) -> bool {
+        let Some(Closes(close)) = self.0.take() else { return false };
+        close(window, cx);
+        true
+    }
+}
+
 /// What a panel says and holds.
 pub(super) struct Framed {
     pub(super) title: SharedString,
@@ -79,18 +124,22 @@ pub(super) struct Framed {
     pub(super) body: Option<AnyElement>,
     /// Why the hub refused what the panel asked, in red, as an alert, so assistive apps say it as it comes.
     pub(super) refused: Option<String>,
+    /// Its buttons, the first of which is the one `closes` makes.
     pub(super) buttons: Div,
+    pub(super) closes: Closes,
 }
 
-/// A panel at `place` on the `page` of that name, as `framed` says, which tells `laid_out` where it was laid out. Tests
-/// know it by the page's name and `-panel`.
+/// A panel at `place` on the `page` of that name, as `framed` says, which tells `laid_out` where it was laid out, and
+/// `open` how it closes. Tests know it by the page's name and `-panel`.
 pub(super) fn framed(
     page: &'static str,
     place: &Place,
     framed: Framed,
     laid_out: impl Fn(Bounds<Pixels>, &mut Window, &mut App) + 'static,
+    open: &OpenPanel,
     cx: &App,
 ) -> AnyElement {
+    open.drawn(&framed.closes);
     let refused = framed.refused.map(|refused| refusal(page, refused, cx));
     let card = look::card(look::CardKind::InPlace, look::CardWidth::Fills)
         .roomy()

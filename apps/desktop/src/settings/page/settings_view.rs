@@ -1,8 +1,9 @@
+use super::panel::OpenPanel;
 use super::{agents, general, git, notifications, permissions, providers, rows, sidebar, tool_servers, voice};
-use crate::FindSetting;
 use crate::app::TOP_STRIP;
 use crate::status_box::StatusBox;
 use crate::tool_sign_in::ToolSigningIn;
+use crate::{CloseSettingsPanel, FindSetting};
 use client_core::records::Snapshot;
 use client_core::{Client, RecordsFeed};
 use gpui_kit::assets::IconName as Lucide;
@@ -78,14 +79,14 @@ impl RenderOnce for SettingsView {
         let scroll = window.use_keyed_state("settings-scroll", cx, |_, _| ScrollHandle::new()).read(cx).clone();
         let sections = found(sections(&self.hub), &search.read(cx).value());
         let shown = shown(&sections, *chosen.read(cx));
-        let within = Within { focus: self.focus.clone(), scroll };
+        let within = Within { focus: self.focus.clone(), scroll, open_panel: OpenPanel::default() };
         let shown_page = match shown {
             Some(page) => settings_page(page, &within, cx).into_any_element(),
             None => nothing_found().into_any_element(),
         };
         let shown_id = shown.map(|page| page.id);
         let sidebar = sidebar::sidebar(&search, &sections, shown_id, &chosen, self.width, window, cx);
-        let find = search.clone();
+        let (find, open_panel) = (search.clone(), within.open_panel.clone());
         div()
             .id("settings")
             .key_context(KEY_CONTEXT)
@@ -95,6 +96,13 @@ impl RenderOnce for SettingsView {
                     search.focus(window, cx);
                     search.select_all(window, cx);
                 });
+            })
+            // Wherever the keyboard's focus is in Settings, since a panel with no field leaves it on Settings, or in the
+            // search. With no panel open, Escape goes on to close Settings.
+            .on_action(move |_: &CloseSettingsPanel, window, cx| {
+                if !open_panel.close(window, cx) {
+                    cx.propagate();
+                }
             })
             .relative()
             .size_full()
@@ -231,11 +239,13 @@ pub(super) enum Body {
 type Draw = Box<dyn Fn(&Within) -> AnyElement>;
 
 /// What a page is drawn within: Settings' focus, where keys reach it, for something on the page that goes while it
-/// has the focus to give it back to, and the scroll of the page under its name, to bring something on it into sight.
+/// has the focus to give it back to, the scroll of the page under its name, to bring something on it into sight, and
+/// the panel open on it, which Escape closes.
 #[derive(Clone)]
 pub(super) struct Within {
     pub(super) focus: FocusHandle,
     pub(super) scroll: ScrollHandle,
+    pub(super) open_panel: OpenPanel,
 }
 
 impl Page {

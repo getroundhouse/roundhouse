@@ -11,6 +11,7 @@ use gpui_kit::{
 use look::{Shaped as _, Typeset as _};
 
 use super::super::field::{FIELDS_WIDTH, labelled as field};
+use super::super::panel::{Closes, button, buttons as buttons_row};
 use super::Drawing;
 use super::kept::{Panel, To};
 use super::words;
@@ -40,6 +41,9 @@ pub(super) fn panel(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyElemen
         said.typeset(look::Type::Body).text_color(colors.error).child(refused).test_support()
     });
     let (kept, scroll) = (drawing.kept.clone(), drawing.scroll.clone());
+    let cancel = drawing.kept.clone();
+    let closes = Closes::new(move |window, cx| cancel.update(cx, |kept, cx| kept.cancel(window, cx)));
+    drawing.open_panel.drawn(&closes);
     let card = look::card(look::CardKind::InPlace, look::CardWidth::Fills)
         .roomy()
         .heading(look::card_heading(said.title))
@@ -48,7 +52,7 @@ pub(super) fn panel(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyElemen
         .child(token)
         .children(name)
         .children(refused)
-        .child(buttons(drawing, said.act, cx));
+        .child(buttons(drawing, said.act, &closes, cx));
     div()
         .id("accounts-panel")
         .track_focus(&panel.focus)
@@ -120,26 +124,12 @@ fn command(made_with: &str, cx: &App) -> Div {
         .child(look::copy_button("accounts-copy-command", made_with.to_string(), "Copy command", cx))
 }
 
-/// Cancel, then the panel's main action, `act`, which is off until there's what connecting takes, and while the hub
-/// hasn't answered.
-fn buttons(drawing: &Drawing<'_>, act: &'static str, cx: &App) -> Div {
-    let kept = drawing.kept.read(cx);
-    let (cancel, connect) = (drawing.kept.clone(), drawing.kept.clone());
-    h_flex()
-        .justify_end()
-        .gap(look::Space::Small)
-        .child(
-            look::button("accounts-cancel", look::ButtonKind::Outlined, look::ControlSize::Regular, "Cancel")
-                .on_click(move |_, window, cx| cancel.update(cx, |kept, cx| kept.cancel(window, cx))),
-        )
-        .child(
-            look::button(
-                "accounts-panel-connect",
-                look::ButtonKind::Main,
-                look::ControlSize::Regular,
-                SharedString::from(act),
-            )
-            .off(!kept.can_connect(cx))
-            .on_click(move |_, window, cx| connect.update(cx, |kept, cx| kept.connect(window, cx))),
-        )
+/// Cancel, which `closes` the panel, then the panel's main action, `act`, which is off until there's what connecting
+/// takes, and while the hub hasn't answered.
+fn buttons(drawing: &Drawing<'_>, act: &'static str, closes: &Closes, cx: &App) -> Div {
+    let (off, kept) = (!drawing.kept.read(cx).can_connect(cx), drawing.kept.clone());
+    let connect = button("accounts-panel-connect", act, true, off, move |window, cx| {
+        kept.update(cx, |kept, cx| kept.connect(window, cx));
+    });
+    buttons_row().child(closes.button("accounts-cancel", "Cancel", false)).child(connect)
 }

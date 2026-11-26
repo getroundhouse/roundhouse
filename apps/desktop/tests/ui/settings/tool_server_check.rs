@@ -234,7 +234,7 @@ fn a_server_that_cant_be_reached_says_so_and_one_the_hub_wont_have_is_refused_as
 }
 
 /// The window on a fake hub that holds `world`, with Add's panel filled in, with a key.
-fn filled_in_on(cx: &mut TestAppContext, world: World) -> (FakeHub, Ui<'_>) {
+pub(super) fn filled_in_on(cx: &mut TestAppContext, world: World) -> (FakeHub, Ui<'_>) {
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
     open_settings(&mut ui);

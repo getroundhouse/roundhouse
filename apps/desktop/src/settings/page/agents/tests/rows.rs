@@ -6,6 +6,7 @@ use protocol::fixtures::{account, claude_default, observed};
 use protocol::model::{Account, AccountId, AccountIdentity, HeldLogin, LimitWindow, Observation};
 
 use super::super::super::account_row::Tone;
+use super::super::super::panel::OpenPanel;
 use super::super::kept::Kept;
 use super::super::row::changes_at_ms;
 use super::super::words::{self, Says};
@@ -95,7 +96,7 @@ fn otherwise_a_row_says_whats_left_of_its_limits_or_that_none_has_been_heard(cx:
 fn the_default_is_the_account_the_hubs_settings_name_for_its_kind(cx: &mut TestAppContext) {
     let kept = cx.new(|_| Kept::default());
     let agents = Agents::new(vec![claude(None)]);
-    let scroll = ScrollHandle::new();
+    let (scroll, open_panel) = (ScrollHandle::new(), OpenPanel::default());
     let chosen = [claude_default(&"a2".into())];
     let records = holding([], []);
     let drawing = |defaults| Drawing {
@@ -103,6 +104,7 @@ fn the_default_is_the_account_the_hubs_settings_name_for_its_kind(cx: &mut TestA
         kept: &kept,
         agents: &agents,
         scroll: &scroll,
+        open_panel: &open_panel,
         now_ms: NOW_MS,
         defaults,
     };

@@ -38,11 +38,11 @@ use transcript::{SelectStepBack, SelectStepOn, StepBack, StepOn};
 
 use crate::workspace_pane::CHAT_KEY_CONTEXT;
 use crate::{
-    ArchiveWorkspace, BackToComposer, ChatPageDown, ChatPageUp, CloseChat, CloseSettings, ConversationMode,
-    CreatePullRequest, FindInChat, FindNext, FindPrevious, FindSetting, FlipImage, GoBack, GoForward, Hide, HideOthers,
-    MarkWorkspace, Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, OpenSettings, PreviousChat,
-    PreviousWorkspace, Quit, StopAgent, ToggleDiff, ToggleMenus, TogglePlanMode, ToggleSidebar, composing, file_diff,
-    image_diff, settings,
+    ArchiveWorkspace, BackToComposer, ChatPageDown, ChatPageUp, CloseChat, CloseSettings, CloseSettingsPanel,
+    ConversationMode, CreatePullRequest, FindInChat, FindNext, FindPrevious, FindSetting, FlipImage, GoBack, GoForward,
+    Hide, HideOthers, MarkWorkspace, Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace,
+    OpenSettings, PreviousChat, PreviousWorkspace, Quit, StopAgent, ToggleDiff, ToggleMenus, TogglePlanMode,
+    ToggleSidebar, composing, file_diff, image_diff, settings,
 };
 
 /// A Mac's own shortcuts. Only a Mac hides an app, and elsewhere the system minimizes a window itself.
@@ -83,8 +83,10 @@ pub(crate) fn set(cx: &mut App) {
     let bindings = [
         key("secondary-q", Quit, outside_a_terminal, cx),
         key("secondary-,", OpenSettings, outside_a_terminal, cx),
-        // Only while Settings shows. Otherwise the same key closes a chat.
         key("escape", CloseSettings, in_settings, cx),
+        // Bound after Settings' own Escape, so it's tried first, and Escape closes a panel open there before Settings.
+        key("escape", CloseSettingsPanel, in_settings, cx),
+        // Only while Settings shows. Otherwise the same key closes a chat.
         key("secondary-w", CloseSettings, in_settings, cx),
         key(settings::FIND_KEY, FindSetting, in_settings, cx),
         key("secondary-n", NewWorkspace, outside_a_terminal, cx),

@@ -104,7 +104,8 @@ Find and stopping the agent are for a chat, so they do nothing unless the chat s
 | Key | Action |
 |---|---|
 | `Cmd-,` | Open Settings |
-| Escape, `Cmd-W` | Go back from Settings |
+| Escape | In Settings, close the panel that's open, as its Cancel does, or else go back from Settings |
+| `Cmd-W` | Go back from Settings |
 | `Cmd-F` | In Settings, search them |
 | `Cmd-H` | On a Mac, hide Roundhouse |
 | `Cmd-Option-H` | On a Mac, hide the other apps |
