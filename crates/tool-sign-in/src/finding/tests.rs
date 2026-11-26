@@ -224,11 +224,16 @@ async fn an_authorization_servers_metadata_is_found_in_each_place_mcp_has_it_in_
 async fn what_to_ask_to_be_allowed_is_what_the_401_says_or_else_the_metadata_and_a_refresh_token_where_there_is_one() {
     let (said, supported) = (Some("read write"), Some(vec!["read", "admin"]));
     let offline = Some(vec!["openid", "offline_access"]);
+    // More than are kept, of which the first are asked for, and the refresh token's at the end all the same.
+    let many: Vec<&'static str> = (0..40).map(|n| &*format!("scope:{n}").leak()).collect();
+    let first = many[..32].join(" ");
+    let many_then_offline = [many.clone(), vec!["offline_access"]].concat();
     let cases = [
         (said, supported.clone(), None, "read write", false),
         (None, supported, None, "read admin", false),
         (None, None, None, "", false),
         (None, None, offline, "", true),
+        (None, Some(many), Some(many_then_offline), first.as_str(), true),
     ];
     for (challenge_scope, server_scopes, authorization_scopes, asked, offline) in cases {
         let script = Script { challenge_scope, server_scopes, authorization_scopes, ..Script::default() };

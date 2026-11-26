@@ -301,6 +301,28 @@ fn scopes_are_each_once_and_none_that_isnt_one() {
     assert_eq!(serde_json::from_str::<ToolScopes>("\"read \\\" write\"").unwrap(), read);
 }
 
+/// However a set is made, it has no more than are kept, each no longer than is kept: a server can name any number, of
+/// any length, in its metadata or a 401.
+#[test]
+fn every_set_of_scopes_keeps_as_many_as_it_can_and_no_more() {
+    let of = |numbers: std::ops::Range<usize>| numbers.map(|n| format!("scope:{n}")).collect::<Vec<_>>();
+    let (longest, longer) = ("x".repeat(200), "x".repeat(201));
+    let most = ToolScopes::of(of(0..32));
+
+    let named = ToolScopes::of([of(0..40), vec![longer.clone()]].concat());
+    let read = ToolScopes::from(format!("{longer} {longest} {}", of(0..40).join(" ")));
+    let joined = ToolScopes::of(of(0..20)).and(&ToolScopes::of(of(10..40)));
+
+    assert_eq!(named, most);
+    assert_eq!(read.iter().count(), 32);
+    assert_eq!(read.iter().next(), Some(longest.as_str()));
+    assert_eq!(joined, most);
+    assert_eq!(
+        serde_json::from_str::<ToolScopes>(&serde_json::to_string(&of(0..40).join(" ")).unwrap()).unwrap(),
+        most
+    );
+}
+
 /// Where a server's own text is all read, or none of it is.
 #[test]
 fn what_another_machine_said_is_read_whole_where_its_all_scopes_and_few_enough_of_them() {
