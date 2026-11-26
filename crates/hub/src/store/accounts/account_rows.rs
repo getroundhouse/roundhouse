@@ -3,7 +3,6 @@ use super::super::sessions::on_the_hubs;
 use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock, rev_of};
 use protocol::model::{Account, AccountId, AgentAccount, Reserve, SessionId};
 use rusqlite::{Connection, OptionalExtension as _, params};
-use std::collections::HashSet;
 
 /// What filing a launch's account changed, so the hub announces only what did.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -90,14 +89,6 @@ impl Store {
     /// returns, as a held login's launch is, since a power cut that took it back would leave the session on none.
     pub fn launched_under(&self, session: &SessionId, under: &AgentAccount) -> Result<Launched, StoreError> {
         self.lasting(|tx| launched_under(tx, session, under))
-    }
-
-    /// Every account's ID.
-    pub(crate) fn account_ids(&self) -> Result<HashSet<AccountId>, StoreError> {
-        let conn = lock(&self.reader);
-        let mut statement = conn.prepare("SELECT id FROM accounts")?;
-        let ids = statement.query_map([], OneValue::read::<String>)?;
-        Ok(ids.map(|id| id.map(AccountId::from)).collect::<rusqlite::Result<_>>()?)
     }
 
     /// The record of `id`. `None` for an account with none.

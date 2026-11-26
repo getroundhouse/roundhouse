@@ -1,4 +1,5 @@
-//! What each kind of observation can be of, and what owns it, so the store forgets it with what owns it.
+//! What each kind of observation can be of, and which of the hub's records it goes with, so the store keeps it only
+//! while that record is there.
 
 use std::hash::Hash;
 
@@ -9,18 +10,24 @@ use protocol::model::{
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-/// What an observation can be of, which says what owns it, if anything, so the store forgets it with what owns it
-/// whatever its kind, and a new kind of what's of a workspace, a session or an account needs nothing more to be
-/// forgotten with it.
+use crate::store::Record;
+
+/// What an observation can be of, which says which of the hub's records it goes with, if any, so the store keeps it
+/// only while that record is there, whatever its kind, and a new kind of what's of a workspace, a session or an
+/// account needs nothing more to go with it.
 pub(crate) trait Subject: Clone + Eq + Hash + Serialize + DeserializeOwned + Send + Sync {
-    fn owner(&self) -> Option<Owner<'_>>;
+    fn goes_with(&self) -> Option<GoesWith<'_>>;
 }
 
-/// What owns an observation, so it's forgotten once that's gone: as a workspace is removed, and as the hub starts on a
-/// database that lacks it.
+/// Which of the hub's records an observation goes with: nothing of it is kept while the record isn't there, as the
+/// database says as the change takes its revision, and it's forgotten once the record goes, as a workspace is removed,
+/// and as the hub starts on a database that lacks it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Owner<'a> {
+pub(crate) enum GoesWith<'a> {
     Workspace(&'a WorkspaceId),
+    /// A workspace's own worktree, which goes with its workspace, and as it's archived, and is back once it's
+    /// restored.
+    Worktree(&'a WorkspaceId),
     /// Another worktree made for a workspace's work, which goes with its workspace too.
     ChildWorktree(&'a ChildWorktreeKey),
     /// A session, which goes with its workspace too.
@@ -36,28 +43,48 @@ pub(crate) enum Owner<'a> {
     Hub,
 }
 
-impl<'a> Owner<'a> {
+impl<'a> GoesWith<'a> {
     /// The workspace it is, or goes with, if any.
     pub(crate) fn workspace(self) -> Option<&'a WorkspaceId> {
         match self {
-            Owner::Workspace(workspace) => Some(workspace),
-            Owner::ChildWorktree(worktree) => Some(&worktree.workspace_id),
-            Owner::Session(session) => Some(&session.workspace_id),
-            Owner::Wait(wait) => Some(&wait.workspace_id),
-            Owner::Account(_) | Owner::Repo(_) | Owner::GithubAccount(_) | Owner::App(_) | Owner::Hub => None,
+            GoesWith::Workspace(workspace) | GoesWith::Worktree(workspace) => Some(workspace),
+            GoesWith::ChildWorktree(worktree) => Some(&worktree.workspace_id),
+            GoesWith::Session(session) => Some(&session.workspace_id),
+            GoesWith::Wait(wait) => Some(&wait.workspace_id),
+            GoesWith::Account(_)
+            | GoesWith::Repo(_)
+            | GoesWith::GithubAccount(_)
+            | GoesWith::App(_)
+            | GoesWith::Hub => None,
         }
+    }
+
+    /// The record the database says is there or not, or `None` for the hub's own, which always is.
+    pub(super) fn record(self) -> Option<Record> {
+        Some(match self {
+            GoesWith::Workspace(id) => Record::Workspace(id.clone()),
+            GoesWith::Worktree(id) => Record::Worktree(id.clone()),
+            GoesWith::ChildWorktree(key) => Record::ChildWorktree(key.id.clone()),
+            GoesWith::Session(key) => Record::Session(key.session_id.clone()),
+            GoesWith::Wait(key) => Record::Wait(key.wait.clone()),
+            GoesWith::Account(id) => Record::Account(id.clone()),
+            GoesWith::Repo(id) => Record::Repo(id.clone()),
+            GoesWith::GithubAccount(id) => Record::GithubAccount(id.clone()),
+            GoesWith::App(id) => Record::App(*id),
+            GoesWith::Hub => return None,
+        })
     }
 }
 
 impl Subject for WorkspaceId {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::Workspace(self))
+    fn goes_with(&self) -> Option<GoesWith<'_>> {
+        Some(GoesWith::Workspace(self))
     }
 }
 
-/// A chip's issue or pull request, which nothing owns, since chips in any chat can name it.
+/// A chip's issue or pull request, which goes with none of the hub's records, since chips in any chat can name it.
 impl Subject for ReferenceAsk {
-    fn owner(&self) -> Option<Owner<'_>> {
+    fn goes_with(&self) -> Option<GoesWith<'_>> {
         None
     }
 }
@@ -65,8 +92,8 @@ impl Subject for ReferenceAsk {
 /// A list of models, which the hub keeps for whichever agent, project, provider and account a chat would launch with,
 /// and lets go of itself, so it's the hub's.
 impl Subject for ModelListKey {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::Hub)
+    fn goes_with(&self) -> Option<GoesWith<'_>> {
+        Some(GoesWith::Hub)
     }
 }
 
@@ -79,8 +106,8 @@ pub(crate) struct ChildWorktreeKey {
 }
 
 impl Subject for ChildWorktreeKey {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::ChildWorktree(self))
+    fn goes_with(&self) -> Option<GoesWith<'_>> {
+        Some(GoesWith::ChildWorktree(self))
     }
 }
 
@@ -93,8 +120,8 @@ pub(crate) struct SessionKey {
 }
 
 impl Subject for SessionKey {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::Session(self))
+    fn goes_with(&self) -> Option<GoesWith<'_>> {
+        Some(GoesWith::Session(self))
     }
 }
 
@@ -107,38 +134,38 @@ pub(crate) struct WaitKey {
 }
 
 impl Subject for WaitKey {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::Wait(self))
+    fn goes_with(&self) -> Option<GoesWith<'_>> {
+        Some(GoesWith::Wait(self))
     }
 }
 
 /// What a hub has at most one of, such as the release the update feed offers it, which is the hub's.
 impl Subject for () {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::Hub)
+    fn goes_with(&self) -> Option<GoesWith<'_>> {
+        Some(GoesWith::Hub)
     }
 }
 
 impl Subject for AccountId {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::Account(self))
+    fn goes_with(&self) -> Option<GoesWith<'_>> {
+        Some(GoesWith::Account(self))
     }
 }
 
 impl Subject for RepoId {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::Repo(self))
+    fn goes_with(&self) -> Option<GoesWith<'_>> {
+        Some(GoesWith::Repo(self))
     }
 }
 
 impl Subject for GithubAccountId {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::GithubAccount(self))
+    fn goes_with(&self) -> Option<GoesWith<'_>> {
+        Some(GoesWith::GithubAccount(self))
     }
 }
 
 impl Subject for GithubAppId {
-    fn owner(&self) -> Option<Owner<'_>> {
-        Some(Owner::App(self))
+    fn goes_with(&self) -> Option<GoesWith<'_>> {
+        Some(GoesWith::App(self))
     }
 }

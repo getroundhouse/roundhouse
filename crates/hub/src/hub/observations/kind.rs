@@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
 
 use super::keepers::Unkept;
 use super::kept::Table;
-use super::subjects::Subject;
+use super::subjects::{GoesWith, Subject};
 use super::tables::Tables;
 
 /// A kind of observation. A new kind is added to [`Observation`] and [`ObservationKey`] in `protocol`, gets a type
@@ -38,6 +38,12 @@ pub(crate) trait Kind: Sized + 'static {
 
     /// Its table among the store's.
     fn table(tables: &mut Tables) -> &mut Table<Self>;
+
+    /// Which of the hub's records the observation of `of` goes with, as what it's of says, but for a kind that goes
+    /// with less than that, as a workspace's lines go with its worktree, which goes as it's archived.
+    fn goes_with(of: &Self::Of) -> Option<GoesWith<'_>> {
+        of.goes_with()
+    }
 
     /// Whether `read` says what `held` says, so a client isn't told of it, and no revision moves: whether the two are
     /// equal, but for a kind that holds what clients aren't told of a change to, such as when each of an account's

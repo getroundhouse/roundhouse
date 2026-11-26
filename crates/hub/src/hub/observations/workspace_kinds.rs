@@ -6,7 +6,7 @@ use protocol::model::{Branches, Observation, ObservationKey, Observed, OtherBuil
 use super::keepers::Unkept;
 use super::kept::Table;
 use super::kinds::{Form, Kind};
-use super::subjects::ChildWorktreeKey;
+use super::subjects::{ChildWorktreeKey, GoesWith};
 use super::tables::Tables;
 
 /// A workspace's branches, as its worker last read them, sent at the workspace's level: current while its worker
@@ -30,6 +30,12 @@ impl Kind for WorkspaceBranches {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.workspace_branches
+    }
+
+    /// Its worktree, whose branches they are, which goes as the workspace is archived. Its record keeps the branch
+    /// it had checked out.
+    fn goes_with(workspace_id: &WorkspaceId) -> Option<GoesWith<'_>> {
+        Some(GoesWith::Worktree(workspace_id))
     }
 }
 

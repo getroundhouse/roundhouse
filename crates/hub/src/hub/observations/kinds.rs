@@ -12,7 +12,7 @@ use protocol::model::{
 use super::keepers::Unkept;
 use super::kept::Table;
 pub(crate) use super::kind::{Form, Kind};
-pub(crate) use super::subjects::{Owner, SessionKey, Subject, WaitKey};
+pub(crate) use super::subjects::{GoesWith, SessionKey, WaitKey};
 use super::tables::Tables;
 
 /// How many lines a workspace's changes add and remove against its base, in all.
@@ -37,6 +37,11 @@ impl Kind for WorkspaceLines {
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.workspace_lines
     }
+
+    /// Its worktree, whose lines they are, which goes as the workspace is archived.
+    fn goes_with(workspace_id: &WorkspaceId) -> Option<GoesWith<'_>> {
+        Some(GoesWith::Worktree(workspace_id))
+    }
 }
 
 /// Every file a workspace changes against its base, with each file's lines and version, as its worker summed them up,
@@ -59,6 +64,11 @@ impl Kind for WorkspaceChanges {
 
     fn table(tables: &mut Tables) -> &mut Table<Self> {
         &mut tables.workspace_changes
+    }
+
+    /// Its worktree, whose changes they are, which goes as the workspace is archived.
+    fn goes_with(workspace_id: &WorkspaceId) -> Option<GoesWith<'_>> {
+        Some(GoesWith::Worktree(workspace_id))
     }
 }
 

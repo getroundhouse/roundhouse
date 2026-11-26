@@ -132,13 +132,18 @@ async fn a_reach_is_forgotten_with_its_repository() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_calling_github(dir.path(), crate::hub::tests::NO_GITHUB.to_string());
     let pushes = Reach::Pushes { repository: CLI, username: "ada".into() };
+    hub.store.add_repo(&"gone".into(), "gone", "/gone", 1_000).unwrap();
     hub.observation_read::<RepositoryReach>("gone".into(), pushes.clone(), 1_000).await.result().unwrap();
     hub.observation_read::<RepositoryReach>("r".into(), pushes, 1_000).await.result().unwrap();
+    let kept = hub.observations.keeps::<RepositoryReach>(&"gone".into());
     hub.observations_written().await;
     drop(hub);
+    let db = rusqlite::Connection::open(dir.path().join("hub.db")).unwrap();
+    db.execute("DELETE FROM repos WHERE id = 'gone'", []).unwrap();
 
     let again = hub_calling_github_again(dir.path(), crate::hub::tests::NO_GITHUB.to_string());
 
+    assert!(kept, "while the repository was there");
     assert!(listed(&again, "r").await.is_some());
     assert!(!again.observations.keeps::<RepositoryReach>(&"gone".into()));
 }

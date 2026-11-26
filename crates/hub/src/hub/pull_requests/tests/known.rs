@@ -7,9 +7,10 @@ use github::PullRequestState;
 use protocol::client::ErrorCode;
 use protocol::model::{GithubLoginKind, PrState, PullRequestLinked};
 
+use super::super::reading::{Asked, When};
 use super::reading::{CLIENTS_TAKE_A_READ, known, numbered, queries};
 use crate::github_logins::DefaultCredential;
-use crate::hub::tests::{forget_github, hub_on_github, hub_on_github_timed, pushed};
+use crate::hub::tests::{archived, forget_github, hub_on_github, hub_on_github_timed, pushed};
 use crate::hub::{Followed, Hub};
 use crate::timers::Timers;
 
@@ -149,6 +150,26 @@ async fn a_read_that_fails_after_github_showed_no_repository_records_no_none() {
     assert!(hub.unseen_of(&"w".into()).is_some(), "still unseen, as last heard");
 }
 
+/// A word of an archived workspace's branches is kept nowhere, and the read of its pull request it still has made, with
+/// its branches forgotten as it was archived, asks GitHub nothing and records nothing.
+#[tokio::test]
+async fn an_archived_workspace_s_read_after_its_branches_moved_asks_and_records_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.branches_known(&"w".into(), pushed("local", "head-7", (2, 0))).await;
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    let (asked, linked) = (queries(&github).len(), hub.store.get_workspace(&"w".into()).unwrap().pull_request_link);
+    archived(&hub);
+    hub.worktree_observations_gone(&"w".into()).await;
+
+    // As the worker's word of its branches does once it's refused, where nothing was known before.
+    hub.read_pull_request(&"w".into(), Asked::Agent, When::Always).await.unwrap();
+
+    assert_eq!(queries(&github).len(), asked, "nothing asked of GitHub");
+    assert_eq!(hub.store.get_workspace(&"w".into()).unwrap().pull_request_link, linked, "nothing recorded");
+}
+
 /// With its branches not known, as on the first start after they left the database with no worker running, which pull
 /// request is the workspace's can't be told: a read asks GitHub nothing and records nothing, so one found before is
 /// what's known, with the worktree as it stood against it then, and one not looked for yet isn't recorded as having
@@ -162,7 +183,7 @@ async fn with_its_branches_not_known_a_read_asks_and_records_nothing() {
     hub.workspace_pull_request("w".into()).await.unwrap();
     hub.observe_github_once().await;
     let asked = queries(&github).len();
-    hub.branches_forgotten(&"w".into()).await;
+    hub.worktree_observations_gone(&"w".into()).await;
 
     let found_before = hub.workspace_pull_request("w".into()).await.unwrap();
     let linked_before = hub.store.get_workspace(&"w".into()).unwrap().pull_request_link;

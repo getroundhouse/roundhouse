@@ -53,6 +53,7 @@ pub(crate) use schema::{
 };
 mod sent;
 mod sessions;
+mod still_there;
 mod subagents;
 #[cfg(test)]
 pub(crate) mod tests;
@@ -81,6 +82,7 @@ pub use reading::Reading;
 pub use repos::RepoToRead;
 pub(crate) use run_logins::Placed;
 pub(crate) use sessions::SessionLogin;
+pub(crate) use still_there::Record;
 pub use titles::{Retitle, Retitled};
 pub(crate) use tool_servers::{AddingToolServer, EditingToolServer, KnownBy};
 pub use workspaces::{Ended, Move, WorkspacePlacement};

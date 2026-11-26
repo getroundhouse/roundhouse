@@ -26,6 +26,13 @@ pub(crate) fn store_with_session(dir: &Path) -> Store {
     store
 }
 
+/// Has `store` hold the workspace `id` too, of the repository `r` that [`store_with_session`] adds, for a test of
+/// what's kept of another workspace, which the hub keeps only of one the database has.
+pub(crate) fn another_workspace(store: &Store, id: &str) {
+    let placement = WorkspacePlacement::local_checkout("/repo");
+    store.insert_workspace(&protocol::fixtures::workspace(id), &placement, None).unwrap();
+}
+
 /// The session `s`, in the workspace `w`, with nothing said in it, and with no approval, no prompt and no conversation
 /// open, as the hub makes one.
 pub(crate) fn idle_session(now: i64) -> StoredSession {

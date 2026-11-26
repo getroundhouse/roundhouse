@@ -15,6 +15,7 @@ use super::super::kinds::{
 use super::seen::{changes, lines, listed, told};
 use crate::hub::Hub;
 use crate::hub::tests::hub_in;
+use crate::store::tests::another_workspace;
 
 /// Keeps one observation of each kind of what's of a workspace, of `id`.
 async fn one_of_each(hub: &Hub, id: &str) {
@@ -47,6 +48,7 @@ fn kinds_kept(hub: &Hub, id: &str) -> usize {
 async fn a_workspace_that_s_gone_takes_every_kind_of_observation_of_it() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
+    another_workspace(&hub.store, "v");
     one_of_each(&hub, "w").await;
     one_of_each(&hub, "v").await;
     let (_, list_rev) = listed(&hub).await;
@@ -90,8 +92,14 @@ async fn a_workspace_that_s_gone_takes_every_kind_of_observation_of_it() {
 async fn the_observations_of_a_workspace_the_hub_doesn_t_have_are_swept() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
+    another_workspace(&hub.store, "gone");
     one_of_each(&hub, "w").await;
     one_of_each(&hub, "gone").await;
+    let kept_before = kinds_kept(&hub, "gone");
+    rusqlite::Connection::open(dir.path().join("hub.db"))
+        .unwrap()
+        .execute("DELETE FROM workspaces WHERE id = 'gone'", [])
+        .unwrap();
     let chip = ReferenceAsk {
         repository: GithubRepositoryName::named("example/project"),
         number: IssueNumber::try_from(7).unwrap(),
@@ -100,6 +108,7 @@ async fn the_observations_of_a_workspace_the_hub_doesn_t_have_are_swept() {
 
     hub.observations_of_no_workspace_gone().await;
 
+    assert_eq!(kept_before, 5);
     assert_eq!(kinds_kept(&hub, "gone"), 0);
     assert_eq!(kinds_kept(&hub, "w"), 5, "of a workspace it has");
     assert!(hub.observations.keeps::<Referenced>(&chip), "a chip's");

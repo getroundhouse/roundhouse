@@ -8,11 +8,10 @@ use github::{PullRequestState, PullRequests, StandIn};
 use protocol::client::{ErrorCode, HubNotice, ObservationNotice};
 use protocol::model::{
     GithubRepositoryName, IssueNumber, Level, Observation, ObservationKey, Observed, OwnPullRequestDetail,
-    OwnPullRequestSaid, PrState, PullRequest, PullRequestLink, PullRequestLinked, RecordKey, Reference, ReferenceAsk,
+    OwnPullRequestSaid, PrState, PullRequest, PullRequestLink, PullRequestLinked, Reference, ReferenceAsk,
     RepositoryUnseen,
 };
 
-use crate::hub::observations::WorkspacePullRequest;
 use crate::hub::tests::hub_on_github;
 use crate::hub::{Followed, Hub};
 
@@ -171,11 +170,9 @@ async fn a_repository_github_doesnt_show_is_worked_out_until_it_does() {
 }
 
 /// A record that links the workspace to another pull request, which the cache has nothing of, leaves nothing known of
-/// it, so its observations go until it's read. A workspace that's gone takes its observations with it, as the task
-/// hears, and one worked out of it after, as by a read that raced the removal, goes once the task works everything out
-/// again.
+/// it, so its observations go until it's read.
 #[tokio::test]
-async fn what_s_worked_out_of_a_pull_request_goes_with_its_link_and_its_workspace() {
+async fn what_s_worked_out_of_a_pull_request_goes_with_its_link() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, pull_requests, _github) = observing(dir.path()).await;
     pull_requests.set(7, PullRequestState::Open);
@@ -200,26 +197,6 @@ async fn what_s_worked_out_of_a_pull_request_goes_with_its_link_and_its_workspac
             ObservationKey::WorkspacePullRequestDetail { workspace_id: "w".into() },
         ]
     );
-
-    hub.store.set_workspace_pull_request(&"w".into(), Some(&PullRequestLinked { link: None }), None).unwrap();
-    hub.workspace_pull_request("w".into()).await.unwrap();
-    next(&mut feed, detail).await;
-    // Only the notice the hub sends as it removes a workspace, since this one's chat keeps its record.
-    hub.notify(HubNotice::Removed {
-        record: RecordKey::Workspace { id: "w".into() },
-        rev: hub.store.next_rev().unwrap(),
-    });
-
-    let gone = [next(&mut feed, removed).await, next(&mut feed, removed).await, next(&mut feed, removed).await];
-    assert!(gone.contains(&ObservationKey::WorkspacePullRequest { workspace_id: "w".into() }), "{gone:?}");
-    assert!(gone.contains(&ObservationKey::WorkspacePullRequestDetail { workspace_id: "w".into() }), "{gone:?}");
-    assert!(gone.contains(&ObservationKey::WorkspaceBranches { workspace_id: "w".into() }), "{gone:?}");
-
-    let worked_out = OwnPullRequestSaid { pull_request: None };
-    hub.observation_worked_out::<WorkspacePullRequest>("gone".into(), worked_out, 1_000).await.result().unwrap();
-    hub.observe_github_once().await;
-
-    assert_eq!(next(&mut feed, removed).await, ObservationKey::WorkspacePullRequest { workspace_id: "gone".into() });
 }
 
 /// A push moves the pull request's head, which a read of its summary alone finds, as a chip's does, so the checks

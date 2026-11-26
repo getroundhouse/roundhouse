@@ -1,8 +1,7 @@
 use super::super::made::Made;
-use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, json_at, lock, now_ms, rev_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, json_at, lock, now_ms, rev_of};
 use protocol::model::{AskKey, ChildStatus, ChildWorktree, ChildWorktreeId, MadeBy, SessionId, WorkspaceId};
 use rusqlite::{Connection, OptionalExtension, Row, params};
-use std::collections::HashSet;
 
 columns! {
     /// The columns every read of a child worktree's row takes, as [`child_from_row`] reads them.
@@ -150,14 +149,5 @@ impl Store {
         );
         let conn = lock(&self.reader);
         Ok(conn.query_row(&select, params![workspace_id.as_str(), path], child_from_row).optional()?)
-    }
-
-    /// Every one of every workspace's, those removed too, as the observations kept of them are forgotten once the
-    /// database lacks theirs.
-    pub(crate) fn child_worktree_ids(&self) -> Result<HashSet<ChildWorktreeId>, StoreError> {
-        let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached("SELECT id FROM child_worktrees")?;
-        let ids = statement.query_map([], OneValue::read::<String>)?;
-        ids.map(|id| Ok(ChildWorktreeId::from(id?))).collect()
     }
 }

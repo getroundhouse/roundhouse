@@ -11,6 +11,7 @@ use super::seen::{lines, told};
 use crate::hub::Hub;
 use crate::hub::tests::{hub_in, serving};
 use crate::store::now_ms;
+use crate::store::tests::another_workspace;
 use crate::worker_link::WorkerLink;
 
 /// What the store keeps of the observation of kind `K` of `of`, as a client is sent it.
@@ -25,6 +26,7 @@ fn observed<K: Kind>(hub: &Hub, of: &K::Of) -> Option<Observed<K::Value>> {
 async fn whatever_keeps_observations_lets_go_of_every_kind_as_each_says_as_it_goes() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
+    another_workspace(&hub.store, "v");
     let (worker, another) =
         (Keeper::Worker(WorkerLink::unconnected().id), Keeper::Worker(WorkerLink::unconnected().id));
     let build = OtherBuild { said: Some("0.9.0".into()) };

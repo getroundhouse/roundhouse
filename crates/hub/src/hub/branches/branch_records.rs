@@ -4,8 +4,7 @@ use super::super::ready::ReadyWorkspace;
 use crate::hub::observations::{ChildWorktreeBranches, ChildWorktreeKey, WorkerWord, WorkspaceBranches};
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
-use protocol::client::ErrorCode;
-use protocol::model::{Branches, ChildWorktreeId, Head, Upstream, WorkspaceId, WorkspaceStatus};
+use protocol::model::{Branches, ChildWorktreeId, Head, Upstream, WorkspaceId};
 use protocol::worker::{WatchBranches, WorkerFrame};
 use std::sync::Arc;
 use std::time::Duration;
@@ -143,13 +142,8 @@ impl Hub {
     /// have something new.
     async fn branches_read(self: &Arc<Self>, id: &WorkspaceId, word: &WorkerWord<'_>, branches: Branches) {
         let before = self.observations.value_of::<WorkspaceBranches>(id);
+        // Kept only while its worktree is there, so not once the workspace is removed or archived.
         word.read::<WorkspaceBranches>(id.clone(), branches.clone(), now_ms()).await;
-        // Removed or archived while they were read, after that forgot what was kept, so what this kept goes too.
-        match self.workspace(id).await {
-            Err(e) if e.code == ErrorCode::NotFound => return self.workspace_observations_gone(id).await,
-            Ok(workspace) if workspace.status == WorkspaceStatus::Archived => return self.branches_forgotten(id).await,
-            Ok(_) | Err(_) => {}
-        }
         // With nothing known before, as after the hub's cache was emptied, which pull request is the workspace's
         // couldn't be told, so it's read now it can. Otherwise a pull request found on another branch is read in turn
         // even so, merged or not.
@@ -185,13 +179,6 @@ impl Hub {
     async fn branches_kept_current(&self, id: &WorkspaceId, link: &Arc<WorkerLink>) {
         let Some(word) = self.worker_word(id, link) else { return };
         word.keeps::<WorkspaceBranches>(id.clone()).await;
-    }
-
-    /// Forgets the workspace's branches, as once it's archived, whose record keeps the branch it had checked out, and
-    /// whose worker says them again once it's brought back. Its other worktrees' are kept, since a branch one of them
-    /// had is still the workspace's, as `crate::hub::children` reads it.
-    pub(in super::super) async fn branches_forgotten(&self, id: &WorkspaceId) {
-        self.observation_gone::<WorkspaceBranches>(id.clone()).await;
     }
 }
 

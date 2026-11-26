@@ -1,9 +1,8 @@
 use protocol::client::github_apps::GithubManifestCode;
 use protocol::model::{GithubApp, GithubAppId, Rev};
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
-use std::collections::HashSet;
 
-use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, current_rev, lock, rev_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, current_rev, lock, rev_of};
 use crate::login_files::LoginFile;
 
 columns! {
@@ -81,14 +80,6 @@ impl Store {
             )?;
             Ok(row_of(tx, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?.0)
         })
-    }
-
-    /// Every app's ID.
-    pub(crate) fn github_app_ids(&self) -> Result<HashSet<GithubAppId>, StoreError> {
-        let conn = lock(&self.reader);
-        let mut statement = conn.prepare("SELECT id FROM github_apps")?;
-        let ids = statement.query_map([], OneValue::read::<u64>)?;
-        Ok(ids.map(|id| id.map(GithubAppId::new)).collect::<rusqlite::Result<_>>()?)
     }
 
     /// Removes the app `id`'s record, whose key the hub has let go of, and answers with the revision of its removal, or

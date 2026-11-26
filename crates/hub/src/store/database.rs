@@ -159,14 +159,15 @@ impl Store {
 
     /// Adds one to counter `name`, and returns what it is now.
     pub(super) fn bump(&self, name: &str) -> Result<u64, StoreError> {
-        let conn = lock(&self.writer);
-        let value: i64 = conn.query_row(
-            "UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value",
-            [name],
-            OneValue::read,
-        )?;
-        Ok(value.cast_unsigned())
+        Ok(bump(&lock(&self.writer), name)?)
     }
+}
+
+/// Adds one to counter `name`, on the writer `conn`, and returns what it is now.
+pub(super) fn bump(conn: &Connection, name: &str) -> rusqlite::Result<u64> {
+    let value: i64 =
+        conn.query_row("UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value", [name], OneValue::read)?;
+    Ok(value.cast_unsigned())
 }
 
 /// The newest revision, which on the writer is the one its last change made.
