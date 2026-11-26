@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use protocol::client::tool_server_checks::ToolServerToCheck;
 use protocol::client::tool_server_saves::{SaveWhen, ToolServerSave, ToolServerSaveCancel};
 use protocol::model::ToolServerSaveId;
 
 use super::super::{Client, Reply, Result};
-use crate::tool_server_checks::{Saved, ToSave, When, saved};
+use crate::tool_server_checks::{Saved, saved};
 
 /// A save of a tool server, under way on a thread of its own, as [`ToolServerSaving::start`] starts it. Dropping it
 /// before the hub has answered lets go of it, so nothing is added or saved, unless the hub has begun to save it. Then
@@ -19,7 +20,13 @@ impl ToolServerSaving {
     /// Starts adding `of`, or saving it, as `when` says, and returns the save, with its reply, which says what came of
     /// it for the server called `name` at `url`, as the person typed them. Once the hub has asked the server for its
     /// tools, that can take 15 seconds. A hub from before saves refuses it with `Unsupported`.
-    pub fn start(client: &Client, of: ToSave, when: When, name: String, url: String) -> (Self, Reply<Saved>) {
+    pub fn start(
+        client: &Client,
+        of: ToolServerToCheck,
+        when: SaveWhen,
+        name: String,
+        url: String,
+    ) -> (Self, Reply<Saved>) {
         let saving = Arc::new(Saving::default());
         let on = Arc::clone(&saving);
         let reply = client.start(move |client| on.save(client, of, when, &name, &url));
@@ -69,7 +76,14 @@ impl Saving {
 
     /// Adds or saves `of`, and answers with what came of it, blocking until the hub has. Nothing is sent once it has
     /// ended, and it ends as it answers.
-    pub(super) fn save(&self, client: &Client, of: ToSave, when: When, name: &str, url: &str) -> Result<Saved> {
+    pub(super) fn save(
+        &self,
+        client: &Client,
+        of: ToolServerToCheck,
+        when: SaveWhen,
+        name: &str,
+        url: &str,
+    ) -> Result<Saved> {
         let saved = self.saving(client, of, when, name, url);
         *self.stands.lock() = Stands::Ended;
         saved
@@ -88,17 +102,13 @@ impl Saving {
         sent.reply()
     }
 
-    fn saving(&self, client: &Client, of: ToSave, when: When, name: &str, url: &str) -> Result<Saved> {
-        let when = match when {
-            When::Listed => SaveWhen::Listed,
-            When::Anyway => SaveWhen::Anyway,
-        };
+    fn saving(&self, client: &Client, of: ToolServerToCheck, when: SaveWhen, name: &str, url: &str) -> Result<Saved> {
         let sent = {
             let mut stands = self.stands.lock();
             if *stands == Stands::Ended {
                 return Ok(Saved::LetGo);
             }
-            let sent = client.send_call(ToolServerSave { id: self.id.clone(), of: of.into(), when })?;
+            let sent = client.send_call(ToolServerSave { id: self.id.clone(), of, when })?;
             *stands = Stands::Sent;
             sent
         };

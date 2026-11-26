@@ -5,7 +5,8 @@
 
 use std::time::Duration;
 
-use protocol::client::tool_server_saves::ToolServerSaved;
+use protocol::client::tool_server_checks::ToolServerToCheck;
+use protocol::client::tool_server_saves::{SaveWhen, ToolServerSaved};
 use protocol::client::tool_servers::ToolServerAdd;
 use protocol::client::{ClientRequest, ClientResponse, ReplyOutcome};
 use protocol::model::ToolServerAuthGiven;
@@ -14,7 +15,7 @@ use super::super::Client;
 use super::ToolServerSaving;
 use super::saving::Saving;
 use crate::stand_in_hub::{self, Does};
-use crate::tool_server_checks::{Saved, ToSave, When};
+use crate::tool_server_checks::Saved;
 
 const URL: &str = "https://mcp.example.com/mcp";
 const WAIT: Duration = Duration::from_secs(10);
@@ -23,9 +24,9 @@ fn answers(response: ClientResponse) -> Does {
     Does::Answers(Box::new(ReplyOutcome::Response(response)))
 }
 
-fn add() -> ToSave {
+fn add() -> ToolServerToCheck {
     let auth = ToolServerAuthGiven::Neither;
-    ToSave::Add(ToolServerAdd { id: "t".into(), name: "Runbooks".into(), url: URL.into(), auth })
+    ToolServerToCheck::Add(ToolServerAdd { id: "t".into(), name: "Runbooks".into(), url: URL.into(), auth })
 }
 
 /// What each request but a hello asks, in a few words.
@@ -85,8 +86,8 @@ fn a_save_let_go_of_before_its_sent_sends_nothing_and_one_let_go_of_after_has_it
 
     let early = Saving::default();
     early.let_go(&client).unwrap();
-    let not_sent = early.save(&client, add(), When::Listed, "Runbooks", URL).unwrap();
-    let (saving, reply) = ToolServerSaving::start(&client, add(), When::Listed, "Runbooks".into(), URL.into());
+    let not_sent = early.save(&client, add(), SaveWhen::Listed, "Runbooks", URL).unwrap();
+    let (saving, reply) = ToolServerSaving::start(&client, add(), SaveWhen::Listed, "Runbooks".into(), URL.into());
     heard.until("save Listed");
     drop(saving);
     heard.until("cancel");
@@ -94,7 +95,7 @@ fn a_save_let_go_of_before_its_sent_sends_nothing_and_one_let_go_of_after_has_it
 
     assert_eq!((not_sent, reply.wait().unwrap()), (Saved::LetGo, Saved::LetGo));
     let answered = Saving::default();
-    assert_eq!(answered.save(&client, add(), When::Anyway, "Runbooks", URL).unwrap(), Saved::Saved(record));
+    assert_eq!(answered.save(&client, add(), SaveWhen::Anyway, "Runbooks", URL).unwrap(), Saved::Saved(record));
     answered.let_go(&client).unwrap();
     assert_eq!(heard.all(), ["save Listed", "cancel", "save Anyway"]);
 }
