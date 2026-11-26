@@ -7,14 +7,12 @@
 //! Roundhouse is the client that its document at [`CLIENT_DOCUMENT`] describes, or one it registers as where an
 //! authorization server doesn't take that, as [`ToolSignIn::client_for`] says. Each call is within a time limit, and of
 //! the addresses that servers name, fetches only what [`NotFetched`] leaves. It keeps nothing, and knows nothing of the
-//! hub, which is to keep what the calls return, as `docs/decisions/hub-holds-tool-servers.md` says. A worker, which
-//! signs in to nothing, only reads with [`access_wanted`] why a server refused a call it passed on, and with
-//! [`redirected`] where one is sent on to.
+//! hub, which is to keep what the calls return, as `docs/decisions/hub-holds-tool-servers.md` says. What a server's
+//! answer says of signing in and of where it sends a request on is read by [`protocol::tool_server_http`], as a worker
+//! reads it too.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
-mod challenge;
-pub use challenge::access_wanted;
 mod checking;
 mod client;
 pub use client::{CLIENT_DOCUMENT, ToolSignIn};
@@ -30,8 +28,6 @@ mod messages;
 mod offline_access;
 mod registering;
 pub use registering::{Client, Registration, TakenAs};
-mod redirected;
-pub use redirected::{MOST_REDIRECTS_WITHIN, Redirected, redirected};
 mod renewing;
 pub use renewing::{Renewable, Renewal};
 mod secrets;

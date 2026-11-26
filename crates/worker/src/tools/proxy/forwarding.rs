@@ -8,8 +8,8 @@ use hyper::body::{Bytes, Incoming};
 use hyper::header::HeaderMap;
 use hyper::{Method, Request, Response, StatusCode, Uri};
 use protocol::model::{SessionId, ToolServerId};
+use protocol::tool_server_http::{MOST_REDIRECTS_WITHIN, Redirected, access_wanted, redirected};
 use protocol::worker::{AskForToolAccess, RenewToolServer, ToolAccess};
-use tool_sign_in::{MOST_REDIRECTS_WITHIN, Redirected, access_wanted, redirected};
 use tracing::{info, warn};
 
 /// What MCP's streamable HTTP asks a server: a message, its stream of events, and to end a session.
