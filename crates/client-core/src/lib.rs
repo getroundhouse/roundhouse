@@ -34,6 +34,7 @@ pub mod standing;
 pub mod tasks;
 pub mod this_device;
 pub mod tool_server_checks;
+pub mod tool_server_edits;
 pub mod tool_servers;
 pub mod tool_sign_ins;
 pub mod waits;

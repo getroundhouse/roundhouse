@@ -1,6 +1,7 @@
 //! A sign-in there is, for whatever draws it: what it's to, and how it stands. Each stage holds what only it needs, so a
 //! sign-in that ends, however it ends, lets go of its port, its page's address and what the person was sent back with.
 
+use client_core::tool_server_edits::{Sent, Typed, TypedAuth};
 use client_core::tool_servers::{SignIn, SignInStands};
 use client_core::tool_sign_ins::NoPage;
 use gpui_kit::{SharedString, Task};
@@ -70,28 +71,6 @@ pub(crate) struct EditedServer {
     pub(crate) url: String,
 }
 
-impl EditedServer {
-    /// What's typed as its name, unless it's the one it had.
-    pub(crate) fn new_name(&self) -> Option<String> {
-        (self.name.trim() != self.was.name.as_str()).then(|| self.name.clone())
-    }
-
-    /// What's typed as its URL, unless it's the one it had.
-    pub(crate) fn new_url(&self) -> Option<String> {
-        (self.url.trim() != self.was.url.as_str()).then(|| self.url.clone())
-    }
-
-    /// Whether its URL is another server's. What isn't a URL, as while one is typed, is none's.
-    pub(crate) fn is_moved(&self) -> bool {
-        ToolServerUrl::typed(&self.url).is_ok_and(|url| !url.is_same_server(&self.was.url))
-    }
-
-    /// Whether its URL is of the server it was.
-    pub(crate) fn is_where_it_was(&self) -> bool {
-        ToolServerUrl::typed(&self.url).is_ok_and(|url| url.is_same_server(&self.was.url))
-    }
-}
-
 impl SignInTo {
     /// The server the hub has, to sign in to it again.
     pub(crate) fn again(server: &ToolServer) -> SignInTo {
@@ -124,9 +103,11 @@ impl SignInTo {
                 ToolSignInTo::New { id: id.clone(), name: name.clone(), url: url.clone() }
             }
             SignInTo::Again { id, .. } => ToolSignInTo::Again { id: id.clone() },
-            SignInTo::Edited(edited) => {
-                let (id, name, url) = (edited.was.id.clone(), edited.new_name(), edited.new_url());
-                ToolSignInTo::Edit { id, name, url }
+            SignInTo::Edited(EditedServer { was, name, url }) => {
+                // Only what's changed, as saving the edit without a sign-in sends it.
+                let typed = Typed { name: name.clone(), url: url.clone(), auth: TypedAuth::SignIn };
+                let Sent { name, url, auth: _ } = typed.edit_of(was).into_sent();
+                ToolSignInTo::Edit { id: was.id.clone(), name, url }
             }
         }
     }

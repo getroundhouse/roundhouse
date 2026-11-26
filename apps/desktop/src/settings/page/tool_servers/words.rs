@@ -1,6 +1,8 @@
 //! What MCP servers says in words: what the list says of itself, what a panel's fields take, what removing a server
-//! asks, and what the hub not doing what was asked means, with why it refused as client-core's `refusals` says it.
+//! asks, and what the hub not doing what was asked means, with why it refused as client-core's `refusals` says it. What
+//! an edit does, and what saving it takes, are client-core's `tool_server_edits` to say.
 
+use client_core::tool_server_edits::{Does, SIGN_IN_TO_SAVE, Way};
 use client_core::tool_sign_ins::NoPage;
 use client_core::{ClientError, refusals};
 use gpui_kit::SharedString;
@@ -8,8 +10,6 @@ use protocol::model::{ToolServerAuth, ToolServerName, ToolServerUrl, ToolSignInS
 
 use super::super::account_row::Tone;
 use super::super::field::Says;
-use super::edits::{Edits, Rest, Takes};
-use super::form::{Does, Way};
 use crate::names::MACHINE;
 use crate::tool_sign_in::SignInTo;
 
@@ -32,9 +32,6 @@ pub(super) const ADD: &str = "Every agent has its tools once it's added.";
 
 /// What signing in to a server does.
 const SIGN_IN: &str = "Your browser opens on its own page. Every agent has its tools once you've signed in.";
-
-/// What signing in to one to save an edit of it does.
-const SIGN_IN_TO_SAVE: &str = "Your browser opens on its own page. Nothing changes until you've signed in.";
 
 /// What a sign-in says while the person has its page.
 pub(super) const WAITING: &str = "Waiting for you to approve it in your browser.";
@@ -70,82 +67,6 @@ pub(super) fn way_note(way: Way) -> &'static str {
         Way::SignIn => "In your browser",
         Way::Key => "Sent with every request",
         Way::Neither => "Anyone can use it",
-    }
-}
-
-/// What's said under the dropdown while `way` is chosen, for a server to add, or one with `edits`.
-pub(super) fn way_says(way: Way, edits: Option<Edits>) -> &'static str {
-    match edits {
-        Some(Edits { takes: Takes::StayingSignedIn, .. }) => return "You stay signed in.",
-        Some(Edits { takes: Takes::SignIn, moved: true, .. }) => {
-            return "That's another server, so you sign in to it. Nothing changes until you have.";
-        }
-        Some(Edits { takes: Takes::SignIn, moved: false, .. }) => return SIGN_IN_TO_SAVE,
-        Some(Edits { takes: Takes::KeyOrTheKept | Takes::WhatsTyped, .. }) | None => {}
-    }
-    match way {
-        Way::SignIn => "Your browser opens on its own page, and the hub renews the sign-in by itself.",
-        Way::Key => "Sent in a header with every request, such as an API key. Only the hub keeps it.",
-        Way::Neither => "For a server that anyone who can reach it can use.",
-    }
-}
-
-/// What's said under a key's field, for a server to add, or one with `edits`.
-pub(super) fn key_says(edits: Option<Edits>) -> &'static str {
-    match edits {
-        Some(edits) if edits.keeps_a_key() => "Leave it empty to keep the one you gave.",
-        Some(edits) if edits.moved => "That's another server, so give it its key.",
-        Some(_) | None => "What the server gave you.",
-    }
-}
-
-/// What running agents have of `edits`, saved `anyway` if the server didn't list its tools, which its panel says under
-/// its title. The agents that can list a server's tools again are those whose run claims `tool_server_reload`, which
-/// the words don't name, since which they are is each run's to say. *Unconfirmed.*
-pub(super) fn edit_says(edits: Edits, anyway: bool) -> &'static str {
-    let Edits { name, moved, rest, takes: _ } = edits;
-    // As the hub has them, where its tools may be others: by another query, or none, where it's saved though it didn't
-    // list them.
-    let lists_again = match rest {
-        Rest::Query => true,
-        Rest::Auth => anyway,
-        Rest::Nothing => false,
-    };
-    match (edits.signs_in(), moved, lists_again, rest, name) {
-        (true, true, ..) => {
-            "Once you've signed in, running agents that can list its tools again lose this server until their turn \
-             ends, and others until their next start."
-        }
-        (false, true, ..) => {
-            "Running agents that can list its tools again lose this server until their turn ends, and others until \
-             their next start."
-        }
-        (true, false, true, _, true) => {
-            "Once you've signed in, running agents have the change at once, and the new name from their next start. \
-             Those that can list its tools again do so once their turn ends, and others at their next start."
-        }
-        (true, false, true, _, false) => {
-            "Once you've signed in, running agents have the change at once. Those that can list its tools again do so \
-             once their turn ends, and others at their next start."
-        }
-        (true, false, false, _, true) => {
-            "Once you've signed in, running agents have the change at once, and the new name from their next start."
-        }
-        (true, false, false, _, false) => "Once you've signed in, running agents have the change at once.",
-        (false, false, true, _, true) => {
-            "Running agents have the new name from their next start, and the rest at once. Those that can list its \
-             tools again do so once their turn ends, and others at their next start."
-        }
-        (false, false, true, _, false) => {
-            "Running agents have the change at once. Those that can list its tools again do so once their turn ends, \
-             and others at their next start."
-        }
-        (false, false, false, Rest::Auth | Rest::Query, true) => {
-            "Running agents have the new name from their next start, and the rest at once."
-        }
-        (false, false, false, Rest::Auth | Rest::Query, false) => "Running agents have the change at once.",
-        (false, false, false, Rest::Nothing, true) => "Running agents have the new name from their next start.",
-        (false, false, false, Rest::Nothing, false) => "Change its name, its URL or how it knows you.",
     }
 }
 

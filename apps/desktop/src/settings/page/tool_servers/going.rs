@@ -3,12 +3,13 @@
 //! What the check comes to is client-core's `tool_server_checks` to say.
 
 use client_core::tool_server_checks::{Checked, came_to};
+use client_core::tool_server_edits::Does;
 use gpui_kit::{App, Context, Task, Window};
 use protocol::client::tool_server_checks::{ToolServerChecked, ToolServerToCheck};
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
 use protocol::model::ToolServer;
 
-use super::form::{AuthFields, Does, Form};
+use super::form::{AuthFields, Form};
 use super::kept::Kept;
 use super::words;
 
