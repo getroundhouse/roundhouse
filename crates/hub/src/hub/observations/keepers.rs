@@ -77,6 +77,16 @@ impl<K: Kind> Table<K> {
         self.unkept(of, K::UNKEPT.at(at_ms))
     }
 
+    /// What `keeper` no longer keeping the observation of `of`, from `at_ms`, makes of it: as its kind says once unkept,
+    /// unless another keeps it.
+    pub(super) fn no_longer_kept_by(&mut self, of: &K::Of, keeper: Keeper, at_ms: i64) -> Step<K::Value> {
+        if self.keepers.get(of) != Some(&keeper) {
+            return Step::Same;
+        }
+        self.keepers.remove(of);
+        self.unkept(of, K::UNKEPT.at(at_ms))
+    }
+
     /// What the observation of `of` is once nothing keeps it, as `unkeeping` says. Leaves what keeps it to the caller.
     pub(super) fn unkept(&self, of: &K::Of, unkeeping: Unkeeping) -> Step<K::Value> {
         let Some(kept) = self.said(of) else { return Step::Same };

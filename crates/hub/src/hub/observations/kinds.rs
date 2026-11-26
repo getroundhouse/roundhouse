@@ -22,6 +22,8 @@ impl Kind for WorkspaceLines {
     type Of = WorkspaceId;
     type Value = LineCounts;
     const FORM: Form = Form { table: "workspace_lines", version: 1 };
+    // As of when its worker stopped watching, which would have said of any change until then. That's the owner's
+    // choice: as of the last summary that differed can show an hour-old time for lines right a moment ago.
     const UNKEPT: Unkept = Unkept::AsOfThen;
 
     fn observation(workspace_id: &WorkspaceId, lines: Observed<LineCounts>, rev: Rev) -> Option<Observation> {

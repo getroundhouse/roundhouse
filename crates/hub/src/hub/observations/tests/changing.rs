@@ -1,10 +1,13 @@
 use protocol::client::HubNotice;
-use protocol::model::{ObservationKey, Observed};
+use protocol::model::{Observation, ObservationKey, Observed, ReleaseOffer};
 
+use super::super::ReleaseOffered;
 use super::super::keepers::Keeper;
 use super::super::kinds::WorkspaceLines;
 use super::seen::{as_of, lines, listed, of_w, told, told_copy};
 use crate::hub::tests::hub_in;
+use crate::store::now_ms;
+use crate::worker_link::WorkerLink;
 
 /// A read that finds what's kept tells clients nothing and moves no revision, however much later it's made, and one that
 /// finds something else tells them, under a newer revision than the list they hold. One that began before the read
@@ -35,9 +38,10 @@ async fn only_a_read_that_finds_something_else_tells_clients_and_moves_the_revis
 }
 
 /// What something keeps up to date is current from the first read after it starts, not before, since what was read
-/// before may be old, and once nothing does, it's as of when nothing did any more.
+/// before may be old. Once what kept it lets go, though it stays, it's as its kind says, which for lines is as of when
+/// it let go, and another letting go of what it doesn't keep changes nothing.
 #[tokio::test]
-async fn an_observation_is_current_while_something_keeps_it_up_to_date_and_then_as_of_its_last_read() {
+async fn an_observation_is_current_while_something_keeps_it_and_as_its_kind_says_once_that_lets_go() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
@@ -53,14 +57,25 @@ async fn an_observation_is_current_while_something_keeps_it_up_to_date_and_then_
     let current = told_copy(&mut feed);
     assert_eq!(current, of_w(Observed::Current { value: lines(3, 1) }, current.rev()));
 
-    hub.observation_let_go::<WorkspaceLines>("w".into(), 5_000).await.unwrap();
+    let another = Keeper::Worker(WorkerLink::unconnected().id);
+    hub.observation_no_longer_kept_by::<WorkspaceLines>("w".into(), another, now_ms()).await.unwrap();
+    assert_eq!(told(&mut feed), [], "what another doesn't keep is left as it was");
+    let before = now_ms();
+    hub.observation_no_longer_kept_by::<WorkspaceLines>("w".into(), Keeper::Hub, now_ms()).await.unwrap();
 
     let let_go = told_copy(&mut feed);
     assert!(let_go.rev() > current.rev());
-    assert_eq!(let_go, of_w(as_of(lines(3, 1), 5_000), let_go.rev()), "as of when it was let go");
+    let Observation::WorkspaceLines { lines: Observed::AsOf { value, as_of_ms }, .. } = let_go else { panic!() };
+    assert_eq!(value, lines(3, 1));
+    assert!(as_of_ms >= before, "as of when it was let go, as lines are once unkept");
+    hub.observation_no_longer_kept_by::<WorkspaceLines>("w".into(), Keeper::Hub, now_ms()).await.unwrap();
     hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 4_000).await.unwrap();
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 6_000).await.unwrap();
-    assert_eq!(told(&mut feed), [], "a read begun before it was let go is dropped, and one after says the same");
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), as_of_ms + 1_000).await.unwrap();
+    assert_eq!(
+        told(&mut feed),
+        [],
+        "saying it again, a read begun before, and one after that finds the same tell none"
+    );
 }
 
 /// Once what an observation is of is gone, clients are told it's gone, and it's listed no more. Saying so again, or of
@@ -127,21 +142,23 @@ async fn what_is_worked_out_again_stays_as_of_its_read_and_is_nothing_where_noth
     assert_eq!(told(&mut feed), [], "the same, worked out again");
 }
 
-/// What the hub kept up to date by reading it again, as it reads GitHub while a client follows it, is as of its last
-/// read once it no longer does, since nothing would have said of a change since, unlike what was watched.
+/// What the hub kept up to date by reading it again, as it reads the update feed, is as of its last read once it no
+/// longer does, as its kind says, since nothing would have said of a change since, unlike what was watched.
 #[tokio::test]
-async fn an_observation_no_longer_read_again_is_as_of_its_last_read() {
+async fn an_observation_of_a_kind_read_again_is_as_of_its_last_read_once_no_longer_kept() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_kept_by::<WorkspaceLines>("w".into(), Keeper::Hub).await.unwrap();
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
-    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 2_000).await.unwrap();
+    let offered = ReleaseOffer { version: Some("1.2.0".into()) };
+    hub.observation_kept_by::<ReleaseOffered>((), Keeper::Hub).await.unwrap();
+    hub.observation_read::<ReleaseOffered>((), offered.clone(), 1_000).await.unwrap();
+    hub.observation_read::<ReleaseOffered>((), offered.clone(), 2_000).await.unwrap();
     let mut feed = hub.subscribe_feed();
 
-    hub.observation_no_longer_read_again::<WorkspaceLines>("w".into()).await.unwrap();
+    hub.observation_no_longer_kept_by::<ReleaseOffered>((), Keeper::Hub, now_ms()).await.unwrap();
 
     let no_longer = told_copy(&mut feed);
-    assert_eq!(no_longer, of_w(as_of(lines(3, 1), 2_000), no_longer.rev()), "as of its last read");
-    hub.observation_no_longer_read_again::<WorkspaceLines>("w".into()).await.unwrap();
+    let as_of_its_last_read = Observed::AsOf { value: offered, as_of_ms: 2_000 };
+    assert_eq!(no_longer, Observation::ReleaseOffered { offered: as_of_its_last_read, rev: no_longer.rev() });
+    hub.observation_no_longer_kept_by::<ReleaseOffered>((), Keeper::Hub, now_ms()).await.unwrap();
     assert_eq!(told(&mut feed), [], "already as of it");
 }

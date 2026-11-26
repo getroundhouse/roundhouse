@@ -13,7 +13,7 @@ use super::watches::{Answer, Told, Turn};
 use crate::hub::observations::{Keeper, WorkspaceChanges, WorkspaceLines};
 use crate::hub::{Followed, Hub};
 use crate::store::now_ms;
-use crate::worker_link::WorkerLink;
+use crate::worker_link::{WorkerLink, WorkerLinkId};
 
 impl Hub {
     /// Tells the workspace's worker whether to watch its worktree: it watches while a subscription follows the
@@ -78,7 +78,7 @@ impl Hub {
                     "A worker can't watch its worktree"
                 );
                 *told = Some(Told { link: link.id, base_ref, answer: Answer::Refused });
-                self.changes_let_go(id).await;
+                self.changes_let_go(id, link.id).await;
                 self.read_lines(id, &link);
             }
             Ok(Err(e)) => {
@@ -89,7 +89,7 @@ impl Hub {
                     "Couldn't ask a worker to watch its worktree"
                 );
                 *told = None;
-                self.changes_let_go(id).await;
+                self.changes_let_go(id, link.id).await;
             }
             Err(late) => {
                 warn!(
@@ -99,7 +99,7 @@ impl Hub {
                     "A worker asked to watch its worktree answered too late"
                 );
                 *told = Some(Told { link: link.id, base_ref, answer: Answer::Late });
-                self.changes_let_go(id).await;
+                self.changes_let_go(id, link.id).await;
             }
         }
     }
@@ -137,7 +137,7 @@ impl Hub {
     /// isn't asked again once the workspace is followed again.
     async fn stop_watching(&self, id: &WorkspaceId, told: &mut Turn<'_>) {
         let Some(was) = told.take_if(|was| was.answer != Answer::Refused) else { return };
-        self.changes_let_go(id).await;
+        self.changes_let_go(id, was.link).await;
         let Some(link) = self.running_worker(id).filter(|link| link.id == was.link) else { return };
         let Ok(ready) = self.workspace(id).await.map(|workspace| workspace.path) else { return };
         let Some(path) = ready else { return };
@@ -178,12 +178,11 @@ impl Hub {
         }
     }
 
-    /// Keeps that nothing keeps either observation of the workspace's changes up to date any more, as of now, since
-    /// what watched them would have said of any change until then. That's the owner's choice. The other was as of the
-    /// last summary that differed, which can show an hour-old time for one that was right a moment ago.
-    async fn changes_let_go(&self, id: &WorkspaceId) {
-        let as_of_ms = now_ms();
-        if let Err(e) = self.observation_let_go::<WorkspaceLines>(id.clone(), as_of_ms).await {
+    /// Keeps that the worker `link` no longer keeps either observation of the workspace's changes up to date, though it
+    /// stays, so each is as of now, as [`WorkspaceLines`] and [`WorkspaceChanges`] say once unkept.
+    async fn changes_let_go(&self, id: &WorkspaceId, link: WorkerLinkId) {
+        let (keeper, at_ms) = (Keeper::Worker(link), now_ms());
+        if let Err(e) = self.observation_no_longer_kept_by::<WorkspaceLines>(id.clone(), keeper, at_ms).await {
             warn!(
                 name: "changes.lines_watch_unkept",
                 workspace_id = %id,
@@ -191,7 +190,7 @@ impl Hub {
                 "Couldn't keep that the workspace's lines are no longer watched"
             );
         }
-        if let Err(e) = self.observation_let_go::<WorkspaceChanges>(id.clone(), as_of_ms).await {
+        if let Err(e) = self.observation_no_longer_kept_by::<WorkspaceChanges>(id.clone(), keeper, at_ms).await {
             warn!(
                 name: "changes.files_watch_unkept",
                 workspace_id = %id,

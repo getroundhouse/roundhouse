@@ -152,7 +152,7 @@ impl Hub {
                     Err(e) => Err(e),
                 }
             }
-            Err(_) => self.observation_no_longer_read_again::<ReleaseOffered>(()).await,
+            Err(_) => self.observation_no_longer_kept_by::<ReleaseOffered>((), Keeper::Hub, now_ms()).await,
         };
         if let Err(e) = kept {
             warn!(name: "update.unkept", error = e.message, "Couldn't keep the release the update feed offers");

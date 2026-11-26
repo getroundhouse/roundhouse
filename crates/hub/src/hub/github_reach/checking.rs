@@ -84,7 +84,7 @@ impl Checks {
     pub(super) async fn run(mut self) {
         self.hub.observations_kept_current::<RepositoryReach>().await;
         self.checking().await;
-        self.hub.observations_no_longer_read_again::<RepositoryReach>().await;
+        self.hub.observations_no_longer_kept::<RepositoryReach>().await;
     }
 
     /// What [`Checks::run`] does while it runs.

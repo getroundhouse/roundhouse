@@ -8,6 +8,7 @@ use super::observing::logged;
 use crate::github_cache::{Item, KeptSummary, Told};
 use crate::hub::Hub;
 use crate::hub::observations::{Keeper, Referenced};
+use crate::store::now_ms;
 
 /// The chips the task last saw clients follow, and which of them the cache has kept a read of since.
 #[derive(Default)]
@@ -41,7 +42,7 @@ impl Hub {
         let keeping = if current && !failed_since {
             self.observation_kept_by::<Referenced>(ask.clone(), Keeper::Hub).await
         } else {
-            self.observation_no_longer_read_again::<Referenced>(ask.clone()).await
+            self.observation_no_longer_kept_by::<Referenced>(ask.clone(), Keeper::Hub, now_ms()).await
         };
         logged(keeping);
         logged(self.observation_worked_out::<Referenced>(ask.clone(), said, read_at_ms).await);
@@ -59,7 +60,7 @@ impl Chips {
         }
         for ask in self.followed.difference(&now) {
             self.read.remove(ask);
-            logged(hub.observation_no_longer_read_again::<Referenced>(ask.clone()).await);
+            logged(hub.observation_no_longer_kept_by::<Referenced>(ask.clone(), Keeper::Hub, now_ms()).await);
         }
         self.followed = now;
     }

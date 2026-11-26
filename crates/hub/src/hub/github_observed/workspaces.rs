@@ -72,7 +72,7 @@ impl Hub {
         let kept = if current {
             self.observation_kept_by::<K>(id.clone(), Keeper::Hub).await
         } else {
-            self.observation_no_longer_read_again::<K>(id.clone()).await
+            self.observation_no_longer_kept_by::<K>(id.clone(), Keeper::Hub, now_ms()).await
         };
         logged(kept);
     }
