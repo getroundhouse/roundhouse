@@ -32,6 +32,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      # To list the run's artifacts, as the step before the deploy does.
+      actions: read
       pages: write
       id-token: write
     # No `url`, since it would show the address on every run.
@@ -57,4 +59,23 @@ jobs:
           path: ${{ runner.temp }}/artifact.tar
           if-no-files-found: error
           retention-days: 1
+      # deploy-pages looks the artifact up by name the moment it starts, and from 2026-11-21 about a third of the runs
+      # found none, though the upload had finished and the run kept it. So it starts once GitHub lists the artifact,
+      # and the log says how many looks that took.
+      - name: Wait until GitHub lists the artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for look in $(seq 1 30); do
+            # A look that fails, as a call to GitHub can, counts as not listed yet.
+            listed=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[].name' || true)
+            if grep -qx github-pages <<<"$listed"; then
+              echo "GitHub listed the github-pages artifact at look $look"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::GitHub hadn't listed the github-pages artifact after a minute"
+          exit 1
       - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
