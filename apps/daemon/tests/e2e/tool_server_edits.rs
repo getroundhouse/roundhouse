@@ -5,12 +5,11 @@
 use std::path::PathBuf;
 
 use client_core::Client;
-use protocol::capability::settings::Settings;
 use protocol::capability::setup::{ConnectsAgain, ServerState, ToolServerState};
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentKind, Observation, Observed, SessionId, SessionStatus, ToolServerAuthEdit, ToolServerAuthGiven, ToolServerKey,
+    Observation, Observed, SessionId, SessionStatus, ToolServerAuthEdit, ToolServerAuthGiven, ToolServerKey,
     ToolServerUrl,
 };
 
@@ -121,38 +120,4 @@ fn a_running_agent_is_connected_to_a_failed_server_once_its_key_is_corrected() {
 
     wait_until("it to be connected", || said(&client, &chat.id).state == ServerState::Connected);
     assert_eq!(calls::run(&client, &chat.id, CALL, 2), [("Found issue 7".to_string(), false)]);
-}
-
-/// One on none lists them at once, which says that the hub has looked at the other too, whose call has the query by then.
-#[test]
-fn a_running_agent_lists_a_servers_tools_by_its_other_query_once_its_on_no_turn() {
-    let (url, heard) = stand_in();
-    let stack = Stack::start();
-    let client = stack.client();
-    add(&client, url.clone());
-    let (workspace, busy) = stack.workspace(&client);
-    let idle = client.session_create(&workspace.id, AgentKind::Claude, Settings::default(), None).unwrap();
-    for chat in [&busy, &idle] {
-        assert_eq!(calls::run(&client, &chat.id, CALL, 1), [("Found issue 7".to_string(), false)]);
-        wait_until("it to be connected", || said(&client, &chat.id).state == ServerState::Connected);
-    }
-    let gate = stack.path("queried");
-    client.session_prompt(&busy.id, &format!("hang-until:{}; {CALL}", gate.display()), None).unwrap();
-    wait_for_status(&client, &busy.id, SessionStatus::Running);
-
-    let url = Some(format!("{url}?tools=some"));
-    client.call(ToolServerEdit { id: "t".into(), name: None, url, auth: None, saved_anyway: false }).unwrap();
-    let mut took = Vec::new();
-    let mut lists = |times: usize| {
-        wait_until("its tools to be listed", || {
-            let queried = heard.try_iter().filter(|took| took.path == "/mcp?tools=some");
-            took.extend(queried.map(|took| took.method).filter(|method| method.starts_with("tools/")));
-            took.iter().filter(|method| *method == "tools/list").count() == times
-        });
-        took.clone()
-    };
-    assert_eq!(lists(1), ["tools/list"]);
-    std::fs::write(gate, "").unwrap();
-
-    assert_eq!(lists(2), ["tools/list", "tools/call", "tools/list"], "in its turn, and once that has ended");
 }

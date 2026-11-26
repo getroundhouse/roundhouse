@@ -29,30 +29,23 @@ impl Running {
     }
 }
 
-/// As it says how it stands in the turn too, and not where it isn't to be asked. One it's cut off from stays so after the
-/// turn.
+/// As it says how it stands in the turn too. Which servers wait, and which a run is cut off from, by what changed, how the
+/// run stands and what it claims, is `crate::session::had_servers`' to say, in
+/// `what_changed_how_the_run_stands_and_what_it_claims_decide_whether_its_asked` and
+/// `a_moved_server_a_connected_run_cant_be_asked_for_is_asked_for_once_it_isnt_connected`.
 #[tokio::test(start_paused = true)]
 async fn clients_are_told_what_waits_for_the_turn_to_end_until_its_asked_for() {
-    for (claims, state, asked, waits, cut_off) in [
-        (claims_reloading(), ServerState::Failed, keyed(URL), true, false),
-        (claims_reconnecting(), ServerState::Failed, keyed(URL), true, false),
-        (claims_reloading(), ServerState::Connected, moved(), true, false),
-        (claims_reconnecting(), ServerState::Connected, moved(), false, true),
-        (claims_reloading(), ServerState::Connected, keyed(URL), false, false),
-    ] {
-        let running = given(claims, state).await;
-        assert!(!running.waits());
-        running.turn(AgentRunState::Running).await;
-        assert!(!running.waits());
+    let running = given(claims_reloading(), ServerState::Failed).await;
+    running.turn(AgentRunState::Running).await;
+    assert!(!running.waits());
 
-        running.edited(asked.clone()).await;
-        assert_eq!((running.waits(), running.cut_off()), (waits, cut_off), "{state:?}, {asked:?}");
-        running.said(state, URL).await;
-        assert_eq!((running.waits(), running.cut_off()), (waits, cut_off), "{state:?}, {asked:?}");
-        running.turn(AgentRunState::Idle).await;
+    running.edited(keyed(URL)).await;
+    assert!(running.waits());
+    running.said(ServerState::Failed, URL).await;
+    assert!(running.waits(), "as the run says how it stands");
+    running.turn(AgentRunState::Idle).await;
 
-        assert_eq!((running.waits(), running.cut_off()), (false, cut_off), "{state:?}, {asked:?}");
-    }
+    assert!(!running.waits());
 }
 
 /// So its row doesn't flicker, and a reload that's been asked for isn't taken as answered.
