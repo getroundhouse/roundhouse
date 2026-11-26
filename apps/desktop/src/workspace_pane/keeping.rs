@@ -181,8 +181,7 @@ impl WorkspacePane {
     pub(super) fn save_writing(&self, saving: CommentDraft, cx: &mut Context<Self>) {
         let Some(diff) = &self.diff else { return };
         self.keeper.set(DraftChange::Comment(self.workspace().id.clone(), Some(saving.clone())));
-        let kept = self.keeper.flushed();
-        diff.review.update(cx, |review, cx| review.save_comment(saving, kept, cx));
+        diff.review.update(cx, |review, cx| review.save_comment(saving, cx));
     }
 
     /// Opens the box again with a comment that couldn't be saved.
@@ -258,7 +257,7 @@ impl WorkspacePane {
     fn bring_back(&self, chat: SessionId, files: Vec<Attachment>, cx: &mut Context<Self>) {
         let kept_for = FilesFor::Chat(chat.clone());
         read_back(
-            self.client.clone(),
+            self.linked.clone(),
             kept_for,
             files,
             move |t: &mut Self, read, cx| t.brought_back(&chat, read, cx),

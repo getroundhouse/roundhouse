@@ -52,9 +52,8 @@ pub(crate) struct HubLink {
     state: LinkState,
     /// The connection, while there is one that's caught up.
     client: Option<Client>,
-    /// What has the hub keep what's typed and not sent, from the first connection on, and the task that shows a draft
-    /// made elsewhere once one typed here has reached the hub.
-    drafts: Option<(Drafts, Task<()>)>,
+    /// Shows a draft made elsewhere once one typed here has reached the hub.
+    _drafts_from_elsewhere: Task<()>,
     _following: Task<()>,
 }
 
@@ -110,7 +109,6 @@ pub(crate) struct Ready {
     pub(crate) hub: Hub,
     pub(crate) client: Client,
     pub(crate) feed: RecordsFeed,
-    pub(crate) drafts: Drafts,
 }
 
 impl EventEmitter<Reconnected> for HubLink {}
@@ -128,7 +126,16 @@ impl HubLink {
             }
         });
         let hub = link.hub();
-        HubLink { paired, link, hub, state: LinkState::Connecting, client: None, drafts: None, _following: following }
+        let drafts_from_elsewhere = show_drafts_from_elsewhere(&hub.drafts(), cx);
+        HubLink {
+            paired,
+            link,
+            hub,
+            state: LinkState::Connecting,
+            client: None,
+            _drafts_from_elsewhere: drafts_from_elsewhere,
+            _following: following,
+        }
     }
 
     /// The hub as the phone paired with it.
@@ -156,8 +163,8 @@ impl HubLink {
 
     /// The connection, the records and the drafts, while there's a connection that's caught up.
     pub(crate) fn ready(&self) -> Option<Ready> {
-        let (client, feed, (drafts, _)) = (self.client()?, self.hub.records()?, self.drafts.as_ref()?);
-        Some(Ready { hub: self.hub.clone(), client, feed, drafts: drafts.clone() })
+        let (client, feed) = (self.client()?, self.hub.records()?);
+        Some(Ready { hub: self.hub.clone(), client, feed })
     }
 
     /// Connects again now, such as when the app comes back to the front, since a phone that slept may hold a
@@ -169,16 +176,13 @@ impl HubLink {
     /// Has the hub keep at once what's typed and not kept yet, rather than once typing pauses, for an app iOS may end
     /// without a word, such as one sent to the background.
     pub(crate) fn keep_drafts_now(&self) {
-        if let Some((drafts, _)) = &self.drafts {
-            // How it went isn't waited for: the app goes on as it was either way.
-            drop(drafts.flushed());
-        }
+        // How it went isn't waited for: the app goes on as it was either way.
+        drop(self.hub.drafts().flushed());
     }
 
     /// Draws how the link stands, and what it has of the hub, and hands any new connection on.
     fn link_changed(&mut self, cx: &mut Context<Self>) {
         if let Some((client, ())) = self.link.take_connection() {
-            self.keep_drafts_on(&client, cx);
             cx.emit(Reconnected(client));
         }
         let state = self.link.state();
@@ -197,17 +201,6 @@ impl HubLink {
         // Following goes on whatever went wrong while it did, which nothing here shows.
         drop(self.link.take_errors());
         cx.notify();
-    }
-
-    /// Keeps drafts on `client`'s hub from here on, carrying on with any the last connection couldn't.
-    fn keep_drafts_on(&mut self, client: &Client, cx: &mut Context<Self>) {
-        if let Some((drafts, _)) = &self.drafts {
-            drafts.reconnect(client);
-        } else {
-            let drafts = Drafts::start(client);
-            let shown = show_drafts_from_elsewhere(&drafts, cx);
-            self.drafts = Some((drafts, shown));
-        }
     }
 }
 

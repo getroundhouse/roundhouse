@@ -10,17 +10,17 @@ use crate::{Client, ClientError, FileToSend};
 
 /// Starts the thread, which ends once every handle has gone.
 pub(super) fn start(
-    client: Client,
+    client: Option<Client>,
     requests: flume::Receiver<Request>,
     counts: Counts,
     catching_up: flume::Sender<()>,
 ) {
     let keeper = Keeper {
+        stalled: client.is_none(),
         client,
         pending: HashMap::new(),
         adding: VecDeque::new(),
         removing: Vec::new(),
-        stalled: false,
         counts,
         catching_up,
         flushing: Vec::new(),
@@ -30,7 +30,8 @@ pub(super) fn start(
 }
 
 struct Keeper {
-    client: Client,
+    /// `None` until there's been a connection, while it's stalled.
+    client: Option<Client>,
     /// The newest change to each draft that isn't kept yet, and when to keep it.
     pending: HashMap<DraftKey, Pending>,
     /// Files to give the hub for what's typed where they're attached, a chat's composer or the new-workspace dialog,
@@ -99,7 +100,7 @@ impl Keeper {
             Request::Reconnect(client) => {
                 // The dialog's copy agreed on went as the client was handed the connection, and goes again now, in
                 // case the last hub's answer came since.
-                (self.client, self.stalled) = (client, false);
+                (self.client, self.stalled) = (Some(client), false);
                 self.counts.lock().agreed.remove(&DraftKey::NewWorkspace);
                 for pending in self.pending.values_mut() {
                     pending.due = now;
@@ -122,7 +123,7 @@ impl Keeper {
             self.adding.remove(i);
             self.reached(&from.key(), None);
             // Unless the hub has it anyway, such as a file of a prompt that came back because it couldn't be sent.
-            if !matches!(&from, FilesFor::Chat(id) if self.client.has_given(id, &file)) {
+            if !matches!(&from, FilesFor::Chat(id) if self.has_given(id, &file)) {
                 return;
             }
         }
@@ -168,23 +169,30 @@ impl Keeper {
         }
     }
 
+    /// Whether the connection has given the hub `file` for `chat`, as [`Client::has_given`] says.
+    fn has_given(&self, chat: &protocol::model::SessionId, file: &AttachmentId) -> bool {
+        self.client.as_ref().is_some_and(|client| client.has_given(chat, file))
+    }
+
+    /// The connection, or what a change meets without one, which only a keeper that's stalled has.
+    fn client(&self) -> Result<&Client, ClientError> {
+        self.client.as_ref().ok_or(ClientError::Disconnected)
+    }
+
     /// Has the hub keep `pending`'s change, and says what the record it kept it on says is there now.
     fn send(&self, pending: &Pending) -> Result<Agreed, ClientError> {
+        let client = self.client()?;
         match &pending.change {
-            DraftChange::Composer(id, draft) => self
-                .client
+            DraftChange::Composer(id, draft) => client
                 .session_draft(id, draft, Some(pending.typed_at_ms))
                 .map(|session| Agreed { rev: session.rev, said: Said::Composer(session.draft) }),
-            DraftChange::Decision(id, draft) => self
-                .client
+            DraftChange::Decision(id, draft) => client
                 .session_decision_draft(id, draft.as_ref())
                 .map(|session| Agreed { rev: session.rev, said: Said::Decision(session.decision_draft) }),
-            DraftChange::Comment(id, draft) => self
-                .client
+            DraftChange::Comment(id, draft) => client
                 .workspace_comment_draft(id, draft.as_ref())
                 .map(|workspace| Agreed { rev: workspace.rev, said: Said::Comment(workspace.comment_draft) }),
-            DraftChange::NewWorkspace(draft) => self
-                .client
+            DraftChange::NewWorkspace(draft) => client
                 .new_workspace_draft_keep(draft)
                 .map(|kept| Agreed { rev: kept.rev, said: Said::new_workspace(&kept) }),
         }
@@ -214,12 +222,13 @@ impl Keeper {
     /// Gives the hub `file` for what's typed in `to` to name.
     fn add(&self, to: &FilesFor, file: &FileToSend) -> Result<(), ClientError> {
         let (id, name, data) = (&file.attachment.id, &file.attachment.name, &file.data);
+        let client = self.client()?;
         let added = match to {
             // Such as a file of a prompt that came back because it couldn't be sent.
-            FilesFor::Chat(chat) if self.client.has_given(chat, id) => return Ok(()),
-            FilesFor::Chat(chat) => file.give(|kind| self.client.attachment_add(chat, id, name, kind, data.clone())),
+            FilesFor::Chat(chat) if client.has_given(chat, id) => return Ok(()),
+            FilesFor::Chat(chat) => file.give(|kind| client.attachment_add(chat, id, name, kind, data.clone())),
             FilesFor::NewWorkspace => {
-                file.give(|kind| self.client.new_workspace_draft_file_add(id, name, kind, data.clone()))
+                file.give(|kind| client.new_workspace_draft_file_add(id, name, kind, data.clone()))
             }
         };
         added.map(drop)
@@ -233,10 +242,10 @@ impl Keeper {
                 left.push((from, file));
                 continue;
             }
-            let removed = match &from {
-                FilesFor::Chat(chat) => self.client.attachment_remove(chat, &file),
-                FilesFor::NewWorkspace => self.client.new_workspace_draft_file_remove(&file),
-            };
+            let removed = self.client().and_then(|client| match &from {
+                FilesFor::Chat(chat) => client.attachment_remove(chat, &file),
+                FilesFor::NewWorkspace => client.new_workspace_draft_file_remove(&file),
+            });
             match removed {
                 // Let go of, or the hub keeps it, such as for a prompt that carries it.
                 Ok(()) | Err(ClientError::Api(_) | ClientError::Unexpected(_)) => {}

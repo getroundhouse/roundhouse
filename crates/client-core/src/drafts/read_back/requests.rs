@@ -32,7 +32,7 @@ impl Client {
     /// Reads back each of `files`, which the hub kept for `kept_for`, one at a time. Each read blocks, and can be a lot
     /// of bytes, so it belongs on a thread of its own, and isn't a command quitting waits for, since the hub keeps them
     /// anyway.
-    pub fn read_back(&self, kept_for: &FilesFor, files: Vec<Attachment>) -> ReadBack {
+    pub(crate) fn read_back(&self, kept_for: &FilesFor, files: Vec<Attachment>) -> ReadBack {
         let read = files.into_iter().map(|file| {
             let data = match kept_for {
                 FilesFor::Chat(chat) => self.attachment_read(chat, &file.id),
@@ -45,6 +45,11 @@ impl Client {
 }
 
 impl ReadBack {
+    /// What reading back `files` comes to with no connection to read them on, which the next reads again.
+    pub(crate) fn cut_off(files: Vec<Attachment>) -> ReadBack {
+        ReadBack(files.into_iter().map(|file| (file, Err(ClientError::Disconnected))).collect())
+    }
+
     /// What came back, once it's every file still `waiting`, in its order. `None` for files no longer waited for, such
     /// as ones a change made elsewhere stopped naming, and for a read the connection cut off, since they're read again
     /// on the next.

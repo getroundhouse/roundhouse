@@ -10,6 +10,7 @@ use protocol::fixtures::{event, session, turn_ended};
 use protocol::model::{Ending, InteractionMode, ReplyPlace, Seq, SpokenThrough};
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 
+use crate::Hub;
 use crate::conversation::{FromVoice, ReadingOut, ToVoice, Voice, VoiceText};
 use crate::stand_in_hub::{self, Does};
 use protocol::event::TurnOutcome;
@@ -117,16 +118,18 @@ fn hub(socket: &std::path::Path) -> (crate::Client, flume::Receiver<Told>) {
     (client, told)
 }
 
-/// Reading out the hub's chat, with a voice the test is given what's given to, and has say what it says.
+/// Reading out the hub's chat, on a hub caught up on `client`, with a voice the test is given what's given to, and has
+/// say what it says, with the hub.
 fn reading_out(
     client: &crate::Client,
-) -> (ReadingOut, flume::Receiver<ToVoice>, flume::Sender<FromVoice>, flume::Receiver<()>) {
+) -> (Hub, ReadingOut, flume::Receiver<ToVoice>, flume::Sender<FromVoice>, flume::Receiver<()>) {
     let (given, voice_was_given) = flume::unbounded();
     let (say, says) = flume::unbounded();
     let (tell, changed) = flume::bounded(1);
     let chat = protocol::model::Session { last_seq: Seq::new(1), ..session("s") };
-    let reading = ReadingOut::start(client, &chat, FakeVoice { given, says }, tell);
-    (reading, voice_was_given, say, changed)
+    let hub = Hub::caught_up_on(client);
+    let reading = ReadingOut::start(&hub, &chat, FakeVoice { given, says }, tell);
+    (hub, reading, voice_was_given, say, changed)
 }
 
 /// What was recorded before the tail came, with what comes after of that reply, and what was under way in the tail,
@@ -136,7 +139,7 @@ fn reading_out(
 fn only_what_comes_after_the_tail_is_read_and_the_hub_is_told_in_order() {
     let dir = tempfile::tempdir().unwrap();
     let (client, told) = hub(&dir.path().join("hub.sock"));
-    let (reading, voice_was_given, say, _changed) = reading_out(&client);
+    let (_hub, reading, voice_was_given, say, _changed) = reading_out(&client);
 
     let text = VoiceText(1);
     assert_eq!(voice_was_given.recv_timeout(TIMEOUT), Ok(ToVoice::Say { text, at: 0, more: "Yes.".into() }));
@@ -161,7 +164,7 @@ fn only_what_comes_after_the_tail_is_read_and_the_hub_is_told_in_order() {
 fn leaving_tells_the_hub_how_the_reply_ended_before_the_mode_ends() {
     let dir = tempfile::tempdir().unwrap();
     let (client, told) = hub(&dir.path().join("hub.sock"));
-    let (reading, voice_was_given, say, changed) = reading_out(&client);
+    let (_hub, reading, voice_was_given, say, changed) = reading_out(&client);
     let text = VoiceText(1);
     voice_was_given.recv_timeout(TIMEOUT).unwrap();
     voice_was_given.recv_timeout(TIMEOUT).unwrap();
@@ -180,8 +183,8 @@ fn leaving_tells_the_hub_how_the_reply_ended_before_the_mode_ends() {
     assert!(ending.wait().is_err_and(|e| e.is_unsupported()), "this hub refuses it");
 }
 
-/// How a reply ended, told on a connection that goes as it's told, is told again on the next, so a device that read
-/// to the end isn't shown as stopped where the hub last heard of it.
+/// How a reply ended, told on a connection that goes as it's told, is told again once the next has caught up, so a
+/// device that read to the end isn't shown as stopped where the hub last heard of it.
 #[test]
 fn how_a_reply_ended_is_told_again_on_a_new_connection() {
     let dir = tempfile::tempdir().unwrap();
@@ -200,7 +203,7 @@ fn how_a_reply_ended_is_told_again_on_a_new_connection() {
         }
         if matches!(request, ClientRequest::SessionReplyHeard(_)) { Does::HangsUp } else { Does::Nothing }
     });
-    let (reading, voice_was_given, say, _changed) = reading_out(&first);
+    let (hub, _reading, voice_was_given, say, _changed) = reading_out(&first);
     let text = VoiceText(1);
     voice_was_given.recv_timeout(TIMEOUT).unwrap();
     voice_was_given.recv_timeout(TIMEOUT).unwrap();
@@ -214,7 +217,7 @@ fn how_a_reply_ended_is_told_again_on_a_new_connection() {
         }
         Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Ok)))
     });
-    reading.reconnect(&second);
+    hub.carry_on_to(&second);
 
     assert_eq!(told.recv_timeout(TIMEOUT), Ok(Told::Heard("m1".into(), Ending::ToTheEnd)));
 }

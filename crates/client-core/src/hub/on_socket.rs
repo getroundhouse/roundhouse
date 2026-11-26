@@ -1,10 +1,11 @@
 //! A hub on this machine as a test holds it, connected to by its socket.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use super::Hub;
 use crate::Client;
-use crate::link::{Connect, Link, Lost, Refused};
+use crate::link::{Connect, Link, Lost, Refused, Waits};
 
 /// The hub on `socket` as a view holds it, for a test of what a view opens from it against a real hub, with the link
 /// that connects to it, which it holds so it goes on connecting for as long as this is held. It connects as the
@@ -15,9 +16,12 @@ pub struct OnSocket {
 }
 
 impl OnSocket {
-    /// Starts connecting, returning at once. The hub has caught up once [`Hub::caught_up`] says so.
+    /// Starts connecting, returning at once. The hub has caught up once [`Hub::caught_up`] says so. A connection that
+    /// goes, as when a test restarts the hub, is tried again within a tenth of a second, so a test doesn't sit through
+    /// every client's waits.
     pub fn connect(socket: &Path) -> OnSocket {
-        let link = Link::start(Socket(socket.to_path_buf()));
+        let waits = Waits::retrying(Duration::from_millis(20), Duration::from_millis(100));
+        let link = Link::start_waiting(Socket(socket.to_path_buf()), waits);
         let hub = link.hub();
         OnSocket { _link: link, hub }
     }

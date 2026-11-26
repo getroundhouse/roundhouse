@@ -13,7 +13,7 @@ use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFr
 
 use crate::link::{Connect, Link, LinkState, Lost, Refused, Waits};
 use crate::stand_in_hub::{self, Does};
-use crate::{Client, ClientError, NotTaken, Opening, View, Written};
+use crate::{Client, ClientError, DraftChange, NotTaken, Opening, View, Written};
 use protocol::prompt::Prompt;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -112,8 +112,8 @@ fn followed(heard: &flume::Receiver<ClientRequest>, on: &str) {
 
 /// What's asked while a new connection catches up on the records isn't sent, then or later, so it can't act on records
 /// the first list is about to replace. It fails at once, as with no connection, and once it's caught up it's sent. A
-/// prompt sent through an open chat is the same, handed back at once, and so are what's asked once something else has
-/// answered, and opening a file. The round moves only once it has caught up.
+/// prompt sent through an open chat is the same, handed back at once, and so are what's asked once what's typed has
+/// been kept, and opening a file. The round moves only once it has caught up.
 #[test]
 fn a_request_is_sent_only_on_a_connection_that_has_caught_up() {
     let dir = tempfile::tempdir().unwrap();
@@ -128,8 +128,7 @@ fn a_request_is_sent_only_on_a_connection_that_has_caught_up() {
 
     let while_catching_up = hub.ask(RepoList).wait();
     let prompt_while_catching_up = chat.start_sending(Written::new(Prompt::new("hello"))).wait();
-    let (_answered, answers) = flume::bounded(1);
-    let after_while_catching_up = hub.ask_after(answers, RepoList).wait();
+    let once_kept_while_catching_up = hub.ask_once_kept(RepoList).wait();
     let file = hub.open_file(&"w".into(), &"c".into(), "f");
     waiting::thread::until(TIMEOUT, "the file never failed", || {
         file.read(|opening| matches!(opening, Opening::Failed))
@@ -139,7 +138,7 @@ fn a_request_is_sent_only_on_a_connection_that_has_caught_up() {
     let once_caught_up = hub.ask(RepoList).wait();
 
     assert!(matches!(while_catching_up, Err(ClientError::Disconnected)), "{while_catching_up:?}");
-    assert!(matches!(after_while_catching_up, Err(ClientError::Disconnected)), "{after_while_catching_up:?}");
+    assert!(matches!(once_kept_while_catching_up, Err(ClientError::Disconnected)), "{once_kept_while_catching_up:?}");
     assert!(matches!(file.take_errors().as_slice(), [ClientError::Disconnected]), "the file wasn't asked for");
     let Err(NotTaken { error: ClientError::Disconnected, prompt }) = prompt_while_catching_up else {
         panic!("the prompt wasn't handed back: {prompt_while_catching_up:?}")
@@ -153,26 +152,38 @@ fn a_request_is_sent_only_on_a_connection_that_has_caught_up() {
     assert_ne!(hub.round(), round_catching_up, "a connection that has caught up is a new round");
 }
 
-/// What's asked once something else has answered, as a comment once what's typed has been kept, isn't sent until then,
-/// and is sent then.
+/// What's asked once what's typed has been kept, as a comment saved from what's typed of it, isn't sent until the hub
+/// has answered for what's typed, and is sent then.
 #[test]
-fn a_request_asked_after_something_waits_for_it() {
+fn a_request_asked_once_what_is_typed_is_kept_waits_for_it() {
     let dir = tempfile::tempdir().unwrap();
-    let (list, listed) = flume::bounded(1);
-    let (client, heard) = hub_that_lists_after(&dir.path().join("hub.sock"), listed);
-    list.send(()).unwrap();
+    let socket = dir.path().join("hub.sock");
+    let (keep, kept) = flume::bounded(1);
+    let heard = stand_in_hub::listen(&socket, move |request| {
+        if let ClientRequest::Subscribe(subscribe) = &request {
+            listing(subscribe)
+        } else if request == ClientRequest::RepoList {
+            Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Repos(Repos { repos: Vec::new() }))))
+        } else if matches!(request, ClientRequest::WorkspaceCommentDraft(_)) {
+            Does::After(kept.clone(), Box::new(doesnt_know()))
+        } else {
+            doesnt_know()
+        }
+    });
+    let client = Client::connect(&socket, "test").unwrap();
     let link = Link::start_waiting(Tries::of(vec![Ok(client)]), Waits::retrying(NEVER, NEVER));
     let hub = link.hub();
     waiting::thread::until(TIMEOUT, "never caught up", || hub.caught_up());
-    let (answer, answered) = flume::bounded(1);
+    hub.drafts().set(DraftChange::Comment("w".into(), None));
+    let comment_draft = |request: &ClientRequest| matches!(request, ClientRequest::WorkspaceCommentDraft(_));
+    waiting::thread::until(TIMEOUT, "what's typed never went", || heard.try_iter().any(|r| comment_draft(&r)));
 
-    let asked = hub.ask_after(answered, RepoList);
+    let asked = hub.ask_once_kept(RepoList);
     waiting::thread::for_what_mustnt_happen(Duration::from_millis(100));
     let before = heard.try_iter().filter(|request| *request == ClientRequest::RepoList).count();
-    // Gone, rather than waited on, if what's asked didn't wait.
-    let _ = answer.send(());
+    keep.send(()).unwrap();
 
-    assert_eq!(before, 0, "asked before what it waits for answered");
+    assert_eq!(before, 0, "asked before what's typed was kept");
     assert_eq!(asked.wait().unwrap(), Repos { repos: Vec::new() });
 }
 

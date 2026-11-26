@@ -8,7 +8,7 @@ use protocol::event::SessionEvent;
 use protocol::model::{Seq, Session, SessionId};
 use protocol::tail::{StreamDelta, Tail};
 
-use super::follow::{Following, Source};
+use super::follow::{Carried, Following, Source};
 use super::{Client, Result, Subscription, SubscriptionItem};
 
 /// One of what the hub sent, in order.
@@ -38,10 +38,11 @@ pub struct LiveLog {
 }
 
 impl LiveLog {
-    /// Starts following `session` from the event after its last as it's recorded here.
-    pub fn start(client: &Client, session: &Session) -> Self {
+    /// Starts following `session` from the event after its last as it's recorded here,
+    /// on `connection`, or on the first its [`Hub`](crate::Hub) carries it on to if there's none yet.
+    pub(crate) fn start(connection: Option<&Client>, session: &Session) -> Self {
         let source = LiveSource { id: session.id.clone(), next: session.last_seq.next() };
-        let follow = Following::start(Some(client), Items::default(), move || source);
+        let follow = Following::start(connection, Items::default(), move || source);
         follow.wake();
         Self { follow }
     }
@@ -56,9 +57,9 @@ impl LiveLog {
         self.follow.quietly(|held| held.items.drain(..).collect())
     }
 
-    /// Carries on, on a new connection to the hub.
-    pub fn reconnect(&self, client: &Client) {
-        self.follow.reconnect(client);
+    /// What carries it on to a new connection, from where it got to, for as long as it's held.
+    pub(crate) fn carried(&self) -> Box<dyn Carried> {
+        Box::new(self.follow.giver())
     }
 }
 

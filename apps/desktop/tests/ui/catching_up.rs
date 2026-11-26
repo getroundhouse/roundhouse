@@ -12,7 +12,7 @@ use desktop::app::AppView;
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
-use protocol::model::{AttachmentId, FileContents, SessionStatus, WorktreeFiles};
+use protocol::model::{AttachmentId, FileContents, NewWorkspaceDraft, SessionStatus, WorktreeFiles};
 use protocol::prompt::{Prompt, PromptFrom};
 
 use crate::support::{FakeHub, Ui, one_chat, open_on_the_chat};
@@ -142,4 +142,62 @@ fn a_file_opened_while_catching_up_is_read_once_it_has(cx: &mut TestAppContext) 
     assert_eq!(asked.count("workspace_file_read"), 0, "nothing was asked");
     held.let_go();
     ui.wait("the file, once it has caught up", |ui| shown_text(ui).as_deref() == Some("read at last"));
+}
+
+/// An image the hub keeps in `world`, which a draft can name.
+fn kept_shot(world: &mut World) -> Attachment {
+    let shot = Attachment {
+        id: AttachmentId::from("shot-1"),
+        name: "shot.png".into(),
+        media_type: MediaType::Png,
+        size_bytes: 3,
+    };
+    world.attachments.insert(shot.id.clone(), crate::attachments::png());
+    shot
+}
+
+/// A file a chat's draft names that couldn't be read back as the last connection went is read back once the next has
+/// caught up, so it's in the composer again, rather than gone until the connection after.
+#[gpui_kit::test]
+fn a_draft_s_file_cut_off_as_the_connection_went_is_read_back_once_the_next_has_caught_up(cx: &mut TestAppContext) {
+    let (mut world, chat) = one_chat(SessionStatus::Idle, first_turn(user_prompt("Hello."), [text("hi", "Hi.")]));
+    let shot = kept_shot(&mut world);
+    let session = world.sessions.iter_mut().find(|session| session.id == chat).unwrap();
+    session.draft.text = "look at this".into();
+    session.draft.files = vec![shot];
+    let (held, asked) = (world.held_list.clone(), world.asked.clone());
+    // The connection goes as the file's read is on its way, and the app connects again by itself, to a hub that holds
+    // back its list.
+    world.hangs_up_reading.arm();
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_window(cx, fake.source().clone(), None);
+    ui.wait("the next connection's list to be held", |_| held.held() > 0);
+
+    throughout(&mut ui, "nothing is read back while the connection catches up", |ui| ui.attached().is_empty());
+    held.let_go();
+
+    ui.wait("the file, back in the composer", |ui| ui.attached() == ["shot.png"]);
+    assert_eq!(asked.count("attachment_read"), 2, "read again once the next connection had caught up");
+    assert_eq!(ui.composer_text(), "look at this");
+}
+
+/// The same for a file the new-workspace dialog names, which is read back as the dialog opens.
+#[gpui_kit::test]
+fn a_dialog_s_file_cut_off_as_the_connection_went_is_read_back_once_the_next_has_caught_up(cx: &mut TestAppContext) {
+    let (mut world, _) = one_chat(SessionStatus::Idle, Vec::new());
+    let shot = kept_shot(&mut world);
+    let draft = NewWorkspaceDraft { repo_id: Some(world.repos[0].id.clone()), files: vec![shot], ..Default::default() };
+    world.new_workspace_draft = Some(draft);
+    let (held, asked) = (world.held_list.clone(), world.asked.clone());
+    world.hangs_up_reading.arm();
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+
+    ui.open_new_workspace();
+    ui.wait("the next connection's list to be held", |_| held.held() > 0);
+    throughout(&mut ui, "nothing is read back while the connection catches up", |ui| ui.dialog_attached().is_empty());
+    held.let_go();
+
+    ui.wait("the file, back in the dialog", |ui| ui.dialog_attached() == ["shot.png"]);
+    assert_eq!(asked.count("new_workspace_draft_file_read"), 2, "read again once the next connection had caught up");
 }

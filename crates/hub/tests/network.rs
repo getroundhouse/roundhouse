@@ -138,18 +138,40 @@ fn an_unpaired_connection_and_a_different_server_key_are_refused() {
     running.stop();
 }
 
+/// How a test connects to a paired hub, as an app does, with what pairing gave it, which pairing again renews.
+struct Paired(client_core::RemoteHub);
+
+impl client_core::link::Connect for Paired {
+    type With = ();
+    type Failure = String;
+
+    fn connect(&mut self) -> Result<(Client, ()), client_core::link::Refused<String>> {
+        Client::connect_remote(&self.0, "test")
+            .map(|client| (client, ()))
+            .map_err(|e| client_core::link::Refused::by(&e, e.to_string()))
+    }
+
+    fn lost(&self, lost: &client_core::link::Lost) -> String {
+        lost.to_string()
+    }
+}
+
 #[test]
 fn pending_drafts_resume_after_the_same_hub_is_paired_again() {
-    use client_core::{DraftChange, DraftKey, Drafts};
+    use client_core::link::{Link, Waits};
+    use client_core::{DraftChange, DraftKey};
     use protocol::model::NewWorkspaceDraftToKeep;
 
     let running = Running::start();
     let pairing = running.local.pairing_start().unwrap();
     let first = client_core::pair(&pairing.link, "Desktop").unwrap();
-    let client = Client::connect_remote(&first, "test").unwrap();
-    let drafts = Drafts::start(&client);
+    let waits = Waits::retrying(Duration::from_millis(20), Duration::from_millis(100));
+    let link = Link::start_waiting(Paired(first.clone()), waits);
+    let hub = link.hub();
+    waiting::thread::until(Duration::from_secs(10), "never caught up", || hub.caught_up());
+    let drafts = hub.drafts();
     running.local.device_revoke(&first.device_id).unwrap();
-    assert!(client.records().is_err());
+    waiting::thread::until(Duration::from_secs(10), "the connection never went", || !hub.caught_up());
     drafts.set(DraftChange::NewWorkspace(NewWorkspaceDraftToKeep {
         text: "Kept across re-pairing".into(),
         ..Default::default()
@@ -161,7 +183,8 @@ fn pending_drafts_resume_after_the_same_hub_is_paired_again() {
     let second = client_core::pair(&pairing.link, "Desktop").unwrap();
     assert_eq!(first.fingerprint, second.fingerprint);
     assert_ne!(first.device_id, second.device_id);
-    drafts.reconnect(&Client::connect_remote(&second, "test").unwrap());
+    link.connect_with(Paired(second));
+    waiting::thread::until(Duration::from_secs(10), "never caught up again", || hub.caught_up());
     drafts.flushed().recv_timeout(Duration::from_secs(3)).unwrap();
     assert!(!drafts.unkept(&DraftKey::NewWorkspace));
     assert_eq!(running.local.records().unwrap().new_workspace_draft.unwrap().text, "Kept across re-pairing");

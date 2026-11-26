@@ -3,6 +3,8 @@
 
 #![cfg(test)]
 
+use std::time::Duration;
+
 use client_core::{DraftChange, DraftKey, Drafts, FileToSend, FilesFor, KeptDraft, RecordsFeed};
 use protocol::attachment::MediaType;
 use protocol::model::{
@@ -68,7 +70,8 @@ fn a_change_held_while_the_hub_was_gone_gives_way_to_one_typed_after_it_elsewher
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let phone = Drafts::start(&client);
+    let hub = stack.hub();
+    let phone = hub.hub().drafts();
     stack.kill_hub();
     phone.typed(DraftChange::Composer(session.id.clone(), DraftToKeep::new("typed on the train")));
     phone.flushed().recv().unwrap();
@@ -77,9 +80,8 @@ fn a_change_held_while_the_hub_was_gone_gives_way_to_one_typed_after_it_elsewher
     let desk = stack.client();
     desk.session_draft(&session.id, &DraftToKeep::new("typed at the desk"), None).unwrap();
 
-    phone.reconnect(&stack.client());
-
-    phone.caught_up().recv().unwrap();
+    // The hub connects again by itself, and the phone's change goes then.
+    phone.caught_up().recv_timeout(Duration::from_secs(10)).unwrap();
     let kept = desk.session_get(&session.id).unwrap();
     assert_eq!(kept.draft.text, "typed at the desk");
     assert!(phone.from_elsewhere(&KeptDraft::composer(&kept)), "so the phone shows it in place of its own");
@@ -92,15 +94,15 @@ fn a_change_held_while_the_hub_was_gone_replaces_one_typed_before_it_elsewhere()
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let phone = Drafts::start(&client);
+    let hub = stack.hub();
+    let phone = hub.hub().drafts();
     stack.client().session_draft(&session.id, &DraftToKeep::new("typed at the desk"), None).unwrap();
     stack.kill_hub();
     phone.typed(DraftChange::Composer(session.id.clone(), DraftToKeep::new("typed on the train")));
     phone.flushed().recv().unwrap();
     stack.start_hub();
 
-    phone.reconnect(&stack.client());
-
+    wait_until("the hub to be caught up on again", || hub.hub().caught_up());
     phone.flushed().recv().unwrap();
     assert!(!phone.unkept(&DraftKey::Composer(session.id.clone())));
     assert_eq!(stack.client().session_get(&session.id).unwrap().draft.text, "typed on the train");

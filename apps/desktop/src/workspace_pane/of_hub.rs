@@ -1,4 +1,4 @@
-use client_core::{Client, Drafts, Hub, RecordsFeed};
+use client_core::{Client, Hub, RecordsFeed};
 use conversation::Conversations;
 use gpui_kit::Entity;
 
@@ -9,7 +9,6 @@ pub(crate) struct OfHub {
     pub(crate) linked: Hub,
     pub(crate) client: Client,
     pub(crate) records: RecordsFeed,
-    pub(crate) drafts: Drafts,
     pub(crate) conversations: Entity<Conversations>,
     pub(crate) tool_sign_in: Entity<ToolSigningIn>,
 }

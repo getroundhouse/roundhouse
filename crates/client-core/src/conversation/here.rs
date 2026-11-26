@@ -6,11 +6,13 @@ use protocol::tail::Tail;
 
 use super::bar::{Bar, HereNow, Shows};
 use super::reading_out::{ReadingOut, Voice};
-use crate::client::{Client, Reply};
+use crate::Hub;
+use crate::client::Reply;
+use protocol::client::conversation::SessionConversationEnd;
 
 /// One chat's conversation on this device, while the chat is in conversation mode.
 pub struct Conversation {
-    /// The device the connection is on, as the hub takes it, once there's been one.
+    /// The device this client is on, as the hub takes it, once there's been a connection.
     this: Option<DeviceId>,
     session: SessionId,
     reading: Option<ReadingOut>,
@@ -24,45 +26,45 @@ impl Conversation {
         Self { this: None, session, reading: None, left: false, bar: Bar::default() }
     }
 
-    /// Follows the chat's record, `session`, on `client`: once the conversation is on the device the connection is on,
+    /// Follows the chat's record, `session`, on `hub`: once the conversation is on the device this client is on,
     /// starts reading its replies out with the voice `voice` makes, saying on `tell` when what it reads changes, and
     /// once it isn't, stops. Once the chat is closed here, turns the mode off, as closing its tab stops the
     /// conversation.
     pub fn follow<V: Voice>(
         &mut self,
-        client: &Client,
+        hub: &Hub,
         session: &Session,
         voice: impl FnOnce() -> V,
         tell: &flume::Sender<()>,
     ) {
         debug_assert_eq!(session.id, self.session);
-        self.this = client.device().cloned();
+        self.this = hub.device();
         self.bar.saw(session, self.this.as_ref());
         let here = session.interaction.device().is_some_and(|device| Some(&device.id) == self.this.as_ref());
         self.left &= here;
         if here && !session.is_open() && !self.left {
             // The chat is closed here, so nothing shows the hub refusing.
-            drop(self.end(client));
+            drop(self.end(hub));
             return;
         }
         let reads = here && !self.left;
         if reads != self.reading.is_some() {
-            self.reading = reads.then(|| ReadingOut::start(client, session, voice(), tell.clone()));
+            self.reading = reads.then(|| ReadingOut::start(hub, session, voice(), tell.clone()));
         }
     }
 
-    /// Turns the mode off, as typing, Type and ✕ do, on `client`: how far the voice got, and how each reply ended,
+    /// Turns the mode off, as typing, Type and ✕ do, on `hub`: how far the voice got, and how each reply ended,
     /// reach the hub first, so it needn't settle them. Until the chat's record says the mode is off, the conversation
     /// isn't read here again. Asked again meanwhile, it asks the hub again. Answers with how the hub took it: a
     /// client says why when it refused, and has the conversation carry on with [`Self::refused`].
-    pub fn end(&mut self, client: &Client) -> Reply<()> {
+    pub fn end(&mut self, hub: &Hub) -> Reply<()> {
         self.left = true;
         if let Some(reading) = self.reading.take() {
             return reading.leave();
         }
         let id = self.session.clone();
         // Nothing is being read, so there's nothing to say first.
-        client.start(move |client| client.session_conversation_end(&id).map(drop))
+        hub.start(move |client| client.call(SessionConversationEnd { id }).map(drop))
     }
 
     /// The hub refused to turn the mode off, so it's still on: the conversation carries on, read here again from the
@@ -74,13 +76,6 @@ impl Conversation {
     /// Whether the conversation is here, so this device hears and reads.
     pub fn is_here(&self) -> bool {
         self.reading.is_some()
-    }
-
-    /// Carries on, on a new connection to the hub.
-    pub fn reconnect(&self, client: &Client) {
-        if let Some(reading) = &self.reading {
-            reading.reconnect(client);
-        }
     }
 
     /// The person started talking: what's being read is talked over, and nothing is read over them.

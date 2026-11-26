@@ -1,5 +1,5 @@
 //! Holding back the list of a hub's records on a new connection, as a hub that's slow to send it does, for a test of
-//! what a client does while a connection catches up.
+//! what a client does while a connection catches up, and closing a connection as a read is on its way.
 
 use std::sync::Arc;
 
@@ -55,5 +55,24 @@ impl HeldList {
             self.0.let_go.wait(&mut state);
         }
         state.held = state.held.saturating_sub(1);
+    }
+}
+
+/// Once it's armed, the next read of a file the hub keeps closes the connection it's asked on rather than answering, as
+/// a connection that goes while a read is on its way does, and the world's [`HeldList`] holds back the list on the
+/// next, so the client's new connection stays catching up until the test lets it go. Every clone shares it, as
+/// [`HeldList`]'s do.
+#[derive(Clone, Default)]
+pub struct HangsUp(Arc<std::sync::atomic::AtomicBool>);
+
+impl HangsUp {
+    /// Has the next read of a file close its connection.
+    pub fn arm(&self) {
+        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Whether this read closes its connection, which only the first after it's armed does.
+    pub(super) fn now(&self) -> bool {
+        self.0.swap(false, std::sync::atomic::Ordering::SeqCst)
     }
 }

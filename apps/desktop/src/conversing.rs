@@ -6,6 +6,7 @@
 
 use std::path::Path;
 
+use client_core::Hub;
 use client_core::conversation::{Needs, Readiness};
 use conversation::{Conversations, Voices};
 use gpui_kit::assets::IconName as Lucide;
@@ -73,8 +74,8 @@ pub(crate) fn retry(cx: &App) {
 }
 
 /// A hub's conversations on this Mac, with every window drawn again as what one here is reading changes.
-pub(crate) fn conversations(cx: &mut App) -> Entity<Conversations> {
-    let conversations = Conversations::new();
+pub(crate) fn conversations(hub: Hub, cx: &mut App) -> Entity<Conversations> {
+    let conversations = Conversations::new(hub);
     let changed = conversations.changed().clone();
     cx.spawn(async move |cx| {
         while changed.recv_async().await.is_ok() {

@@ -37,7 +37,7 @@ fn a_prompt_the_hub_couldnt_give_the_new_chat_whole_goes_back_to_the_dialog(cx: 
     ui.input("say:with notes");
     ui.paste(copied(&stack, 1));
     ui.wait("the file to be attached", |ui| ui.dialog_attached().len() == 1);
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     for kept in std::fs::read_dir(stack.hub.paths.attachments_dir.join("workspace-draft.files")).unwrap() {
         std::fs::remove_file(kept.unwrap().path()).unwrap();
     }

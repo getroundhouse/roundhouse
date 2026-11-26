@@ -55,7 +55,7 @@ fn whats_typed_just_before_quitting_is_kept(cx: &mut TestAppContext) {
     let kept = || stack.client().session_get(&chat).unwrap().draft.text;
     // The first change is kept at once, so once the hub has answered it, the one after it waits for typing to pause.
     ui.input("half");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     assert_eq!(kept(), "half");
     ui.input(" a thought");
 
@@ -124,7 +124,7 @@ fn quitting_waits_for_whats_on_its_way_to_the_hub(cx: &mut TestAppContext) {
     ui.new_workspace();
     let chat = ui.active_chat();
     ui.input("half a thought");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     // Once the hub has answered a change, the one after it waits for typing to pause. One letter, as typing several
     // can take longer than the pause in a test.
     ui.input("?");
@@ -144,7 +144,7 @@ fn quitting_asks_about_whats_typed_once_the_hub_has_had_long_enough_to_take_it(c
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
     ui.input("half");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     ui.give_up_on_a_frozen_hub_soon();
     let _frozen = ui.freeze_hub(&stack);
     ui.input(" a thought");

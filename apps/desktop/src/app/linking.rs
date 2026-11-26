@@ -7,7 +7,7 @@ use client_core::link::LinkState;
 use gpui_kit::Context;
 use protocol::client::HubStatus;
 
-use super::{AppView, Connection, ConnectionFailure, Unconnected, hub_source, restarts};
+use super::{AppView, Connection, ConnectionFailure, Unconnected, hub_source, quitting, restarts};
 use crate::workspace_pane::WorkspacePane;
 
 impl AppView {
@@ -55,6 +55,7 @@ impl AppView {
                     for pane in self.panes.values() {
                         pane.update(cx, WorkspacePane::hub_came_back);
                     }
+                    self.dialog_came_back(cx);
                 }
             }
             Some(connection) if !same(&self.connection, &connection) => {
@@ -91,13 +92,16 @@ impl AppView {
         }
         // Of the hub before, if this is another, or of this one before it restarted on the release it was asked for.
         self.hub_update_asked = None;
-        self.keep_drafts_on(client, cx);
+        // Quitting waits for what's started on this connection, and for what's typed to be kept.
+        quitting::wait_for(client, self.linked.drafts(), cx);
+        if self.following_drafts.is_none() {
+            self.following_drafts = Some(super::drafts::follow_drafts(&self.linked.drafts(), cx));
+        }
         if self.shown.is_none()
             && let Some(feed) = self.feed()
         {
             self.start_showing(&feed);
         }
-        self.conversations.update(cx, |conversations, _| conversations.connected(client));
         // Every pane stays as it was, with whatever's typed in it, and carries on here.
         for pane in self.panes.values() {
             pane.update(cx, |p, cx| p.reconnect(client, cx));

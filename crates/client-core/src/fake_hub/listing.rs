@@ -27,8 +27,8 @@ impl World {
                 rev: MADE,
             }),
             accounts: self.accounts.clone(),
-            // None kept, since the world's hub keeps nothing it's given.
-            new_workspace_draft: None,
+            // As the world has it, since the world's hub keeps nothing it's given.
+            new_workspace_draft: self.new_workspace_draft.clone(),
             github_accounts: self.github_accounts.clone(),
             github_sign_ins: self.github_sign_ins.clone(),
             github_apps: self.github_apps.clone(),

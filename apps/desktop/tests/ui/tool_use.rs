@@ -73,7 +73,7 @@ fn a_tools_use_is_asked_in_the_composers_place_and_denied_in_the_persons_words(c
     }
     ui.let_what_is_asked_settle();
     ui.press("enter");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     assert_eq!(ui.session_status(), Some(SessionStatus::WaitingApproval), "nothing was sent");
     assert!(gone.exists() && outcomes(&ui).is_empty());
 
