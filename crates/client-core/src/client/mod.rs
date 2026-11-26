@@ -4,6 +4,7 @@ mod account;
 mod admin;
 mod agent_list;
 mod api;
+mod at_level;
 mod commands;
 mod feed;
 mod files;

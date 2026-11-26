@@ -9,7 +9,7 @@ use protocol::client::{ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
 use protocol::model::{Rev, WorkspaceId};
 
 use super::followed::Wanted;
-use super::source::WorkspacesSource;
+use crate::client::at_level::LevelSource;
 use crate::client::follow::{Following, Source as _, Unstarted};
 use crate::client::{Client, SubscriptionItem};
 use crate::records::HubRecords;
@@ -20,11 +20,11 @@ use crate::stand_in_hub::{self, Does, refusing_every_start, starts};
 fn source_of(
     socket: &std::path::Path,
     answers: impl Fn(&ClientRequest) -> ReplyOutcome + Send + 'static,
-) -> (Client, WorkspacesSource, Unstarted<HubRecords>, flume::Receiver<ClientRequest>) {
+) -> (Client, LevelSource<WorkspaceId>, Unstarted<HubRecords>, flume::Receiver<ClientRequest>) {
     let heard = stand_in_hub::listen(socket, move |request| Does::Answers(Box::new(answers(&request))));
     let client = Client::connect(socket, "test").unwrap();
     let records = Following::unstarted(HubRecords::default());
-    let source = WorkspacesSource::new(records.reach());
+    let source = LevelSource::new(records.reach());
     (client, source, records, heard)
 }
 

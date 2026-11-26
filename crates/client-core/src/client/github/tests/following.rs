@@ -6,14 +6,14 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use protocol::client::listed::{Listed, ReferenceObservations};
-use protocol::client::subscriptions::{Follow, Subscribe};
-use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame, ReplyOutcome};
+use protocol::client::subscriptions::{Follow, Subscribe, Subscribed};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
 use protocol::model::{
     GithubRepositoryName, IssueNumber, Level, Observation, ObservationKey, Observed, ReferenceAsk, ReferenceSaid, Rev,
 };
 
 use super::super::held::GithubHeld;
-use super::super::source::GithubSource;
+use crate::client::at_level::LevelSource;
 use crate::client::follow::{Following, Source as _};
 use crate::records::HubRecords;
 use crate::stand_in_hub::{self, Does, refusing_every_start, starts, subscribed};
@@ -153,7 +153,7 @@ fn a_refused_start_is_asked_for_again_only_once_what_s_shown_changes() {
     });
     let client = Client::connect(&socket, "test").unwrap();
     let records = Following::unstarted(HubRecords::default());
-    let (held, mut source) = (Mutex::new(GithubHeld::default()), GithubSource::new(records.reach()));
+    let (held, mut source) = (Mutex::new(GithubHeld::default()), LevelSource::<ReferenceAsk>::new(records.reach()));
     held.lock().add(1);
     let _subscription = source.resume(&client, &held).unwrap();
     let mut show = |shown| {
@@ -178,7 +178,7 @@ fn what_s_sent_of_a_chip_no_longer_followed_is_dropped() {
     let dir = tempfile::tempdir().unwrap();
     let (client, _) = hub_that_says_missing(&dir.path().join("hub.sock"));
     let records = Following::unstarted(HubRecords::default());
-    let (held, mut source) = (Mutex::new(GithubHeld::default()), GithubSource::new(records.reach()));
+    let (held, mut source) = (Mutex::new(GithubHeld::default()), LevelSource::<ReferenceAsk>::new(records.reach()));
     held.lock().add(1);
     held.lock().show(1, chips(&[1]));
     let _subscription = source.resume(&client, &held).unwrap();
@@ -200,4 +200,31 @@ fn what_s_sent_of_a_chip_no_longer_followed_is_dropped() {
     source.apply(&client, &held, listed()).unwrap();
 
     assert!(!held_of_it(), "let go of, and not listed again by what came after");
+}
+
+/// What's held of a chip stays through a new connection until its level lists it again, which a hub may do only after
+/// it has answered the request that follows it, so it isn't let go of while its list is on its way.
+#[test]
+fn what_s_held_of_a_chip_stays_through_a_new_connection_until_its_level_lists_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("hub.sock");
+    let _heard = stand_in_hub::listen(&socket, |_| {
+        Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Subscribed(Subscribed::default()))))
+    });
+    let client = Client::connect(&socket, "test").unwrap();
+    let records = Following::unstarted(HubRecords::default());
+    let (held, mut source) = (Mutex::new(GithubHeld::default()), LevelSource::<ReferenceAsk>::new(records.reach()));
+    held.lock().add(1);
+    held.lock().show(1, chips(&[1]));
+    let _first = source.resume(&client, &held).unwrap();
+    let said = Observed::Current { value: ReferenceSaid::Missing };
+    let observation = Observation::Reference { reference: ask(1), said, rev: Rev::new(1) };
+    let listed = ReferenceObservations { reference: ask(1), observations: vec![observation], rev: Rev::new(1) };
+    source.apply(&client, &held, SubscriptionItem::Listed(Box::new(Listed::Reference(listed)))).unwrap();
+
+    source.reconnected();
+    let _second = source.resume(&client, &held).unwrap();
+
+    let key = ObservationKey::Reference { reference: ask(1) };
+    assert!(records.reach().read(|records| records.snapshot().observation(&key).is_some()).unwrap());
 }
