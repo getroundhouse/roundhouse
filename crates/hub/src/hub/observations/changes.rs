@@ -296,7 +296,7 @@ impl Hub {
 
     /// What [`Hub::change_observation`] does, if `wanted` says the change is still wanted, as
     /// [`Hub::observation_read_while`] says.
-    async fn change_observation_while<K: Kind>(
+    pub(super) async fn change_observation_while<K: Kind>(
         &self,
         of: K::Of,
         wanted: impl FnOnce() -> bool,

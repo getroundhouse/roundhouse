@@ -1,10 +1,10 @@
 use super::super::Hub;
 use super::super::pull_requests::When;
 use super::super::ready::ReadyWorkspace;
-use crate::hub::observations::{ChildWorktreeBranches, ChildWorktreeKey, Keeper, WorkspaceBranches};
+use crate::hub::observations::{ChildWorktreeBranches, ChildWorktreeKey, WorkerWord, WorkspaceBranches};
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
-use protocol::client::ErrorCode;
+use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{Branches, ChildWorktreeId, Head, Upstream, WorkspaceId, WorkspaceStatus};
 use protocol::worker::{WatchBranches, WorkerFrame};
 use std::sync::Arc;
@@ -87,10 +87,9 @@ impl Hub {
         link: &Arc<WorkerLink>,
         frame: WorkerFrame,
     ) -> Option<WorkerFrame> {
-        let current = || link.is_current(&self.workers.lock(), id);
         if let WorkerFrame::Branches { branches } = frame {
-            if current() {
-                self.branches_read(id, branches).await;
+            if let Some(word) = self.worker_word(id, link) {
+                self.branches_read(id, &word, branches).await;
                 // Its first word of them, as the hub takes it on, or a checkout, a rebase or a reset, which can change
                 // what the worktree adds and removes against its base.
                 self.read_lines(id, link);
@@ -98,17 +97,17 @@ impl Hub {
             return None;
         }
         if let WorkerFrame::ChildBranches { path, branches } = frame {
-            if current() {
-                self.child_branches_read(id, path, branches).await;
+            if let Some(word) = self.worker_word(id, link) {
+                self.child_branches_read(id, &word, path, branches).await;
             }
             return None;
         }
         Some(frame)
     }
 
-    /// What the workspace's worker read of the branches of another of its worktrees, at `path`, which the hub keeps of
-    /// that worktree, and sends nowhere.
-    pub(super) async fn child_branches_read(&self, id: &WorkspaceId, path: String, branches: Branches) {
+    /// What the workspace's worker, whose word `word` is, read of the branches of another of its worktrees, at `path`,
+    /// which the hub keeps of that worktree, and sends nowhere.
+    async fn child_branches_read(&self, id: &WorkspaceId, word: &WorkerWord<'_>, path: String, branches: Branches) {
         let owned = id.clone();
         let child = match self.blocking(move |store| store.child_at(&owned, &path)).await {
             Ok(Some(child)) => child,
@@ -123,10 +122,12 @@ impl Hub {
                 );
             }
         };
-        self.child_branches_known(id, child.id, branches).await;
+        let of = ChildWorktreeKey { workspace_id: id.clone(), id: child.id };
+        child_branches_kept(id, word.read::<ChildWorktreeBranches>(of, branches, now_ms()).await);
     }
 
-    /// Keeps `branches` as what the workspace's other worktree `child` has, as of now.
+    /// Keeps `branches` as what the workspace's other worktree `child` has, as of now, as the worker that made it said
+    /// as it made it.
     pub(in super::super) async fn child_branches_known(
         &self,
         id: &WorkspaceId,
@@ -134,22 +135,15 @@ impl Hub {
         branches: Branches,
     ) {
         let of = ChildWorktreeKey { workspace_id: id.clone(), id: child };
-        if let Err(e) = self.observation_read::<ChildWorktreeBranches>(of, branches, now_ms()).await {
-            debug!(
-                name: "branches.other_unkept",
-                workspace_id = %id,
-                error = e.message,
-                "Couldn't keep another worktree's branches"
-            );
-        }
+        child_branches_kept(id, self.observation_read::<ChildWorktreeBranches>(of, branches, now_ms()).await);
     }
 
-    /// What the workspace's worker read of its own worktree's branches, which the hub keeps as the observation
-    /// [`WorkspaceBranches`]. Reads the pull request again where what moved says it may be another, or have something
-    /// new.
-    pub(super) async fn branches_read(self: &Arc<Self>, id: &WorkspaceId, branches: Branches) {
+    /// What the workspace's worker, whose word `word` is, read of its own worktree's branches, which the hub keeps as
+    /// the observation [`WorkspaceBranches`]. Reads the pull request again where what moved says it may be another, or
+    /// have something new.
+    async fn branches_read(self: &Arc<Self>, id: &WorkspaceId, word: &WorkerWord<'_>, branches: Branches) {
         let before = self.observations.value_of::<WorkspaceBranches>(id);
-        self.branches_known(id, branches.clone()).await;
+        branches_kept(id, word.read::<WorkspaceBranches>(id.clone(), branches.clone(), now_ms()).await);
         // Removed or archived while they were read, after that forgot what was kept, so what this kept goes too.
         match self.workspace(id).await {
             Err(e) if e.code == ErrorCode::NotFound => return self.workspace_observations_gone(id).await,
@@ -167,16 +161,10 @@ impl Hub {
         }
     }
 
-    /// Keeps `branches` as what the workspace's own worktree has, as of now, or current while its worker watches them.
+    /// Keeps `branches` as what the workspace's own worktree has, as of now, as the worker that made the worktree said
+    /// as it made it, or current while its worker watches them.
     pub(crate) async fn branches_known(&self, id: &WorkspaceId, branches: Branches) {
-        if let Err(e) = self.observation_read::<WorkspaceBranches>(id.clone(), branches, now_ms()).await {
-            warn!(
-                name: "branches.unkept",
-                workspace_id = %id,
-                error = e.message,
-                "Couldn't keep the workspace's branches"
-            );
-        }
+        branches_kept(id, self.observation_read::<WorkspaceBranches>(id.clone(), branches, now_ms()).await);
     }
 
     /// What the hub knows of the workspace's branches, however fresh, or `None` while they aren't known, as before its
@@ -193,9 +181,10 @@ impl Hub {
     }
 
     /// Keeps that `link`, the workspace's worker, watches its branches from now on, so what it reads of them is current
-    /// until it goes, and as of then after.
-    async fn branches_kept_current(&self, id: &WorkspaceId, link: &WorkerLink) {
-        if let Err(e) = self.observation_kept_by::<WorkspaceBranches>(id.clone(), Keeper::Worker(link.id)).await {
+    /// until it goes, and as of then after. Nothing, for one that's no longer the workspace's.
+    async fn branches_kept_current(&self, id: &WorkspaceId, link: &Arc<WorkerLink>) {
+        let Some(word) = self.worker_word(id, link) else { return };
+        if let Err(e) = word.keeps::<WorkspaceBranches>(id.clone()).await {
             warn!(
                 name: "branches.watch_unkept",
                 workspace_id = %id,
@@ -243,4 +232,23 @@ pub(super) fn moved(before: &Branches, after: &Branches) -> Option<Moved> {
             pushed.tip.as_ref() == Some(&is.tip) && was_pushed.map(|was| &was.tip) != Some(&pushed.tip)
         });
     (elsewhere || caught_up).then_some(Moved::Pushed)
+}
+
+/// Logs that the workspace `id`'s branches couldn't be kept, if `kept` says so.
+fn branches_kept(id: &WorkspaceId, kept: Result<(), ApiError>) {
+    if let Err(e) = kept {
+        warn!(name: "branches.unkept", workspace_id = %id, error = e.message, "Couldn't keep the workspace's branches");
+    }
+}
+
+/// Logs that the branches of another of the workspace `id`'s worktrees couldn't be kept, if `kept` says so.
+fn child_branches_kept(id: &WorkspaceId, kept: Result<(), ApiError>) {
+    if let Err(e) = kept {
+        debug!(
+            name: "branches.other_unkept",
+            workspace_id = %id,
+            error = e.message,
+            "Couldn't keep another worktree's branches"
+        );
+    }
 }

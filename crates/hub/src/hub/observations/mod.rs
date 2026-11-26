@@ -18,6 +18,7 @@ mod subjects;
 mod tables;
 #[cfg(test)]
 mod tests;
+mod worker_word;
 mod workspace_kinds;
 mod writer;
 
@@ -35,4 +36,5 @@ pub(crate) use kinds::{
     WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
 pub(crate) use subjects::ChildWorktreeKey;
+pub(crate) use worker_word::WorkerWord;
 pub(crate) use workspace_kinds::{ChildWorktreeBranches, WorkspaceBranches, WorkspaceWorkerBuild};

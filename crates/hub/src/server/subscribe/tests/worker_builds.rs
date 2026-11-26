@@ -1,13 +1,15 @@
 //! Which build a workspace's worker is, an observation at the hub's level, kept in memory alone.
 
+use std::sync::Arc;
+
 use protocol::client::subscriptions::{Follow, Subscribe};
 use protocol::client::{CLIENT_PROTOCOL_VERSION, HubFrame, HubNotice};
-use protocol::model::{Observation, ObservationKey, Observed, OtherBuild};
+use protocol::model::{Observation, ObservationKey, Observed, OtherBuild, WorkspaceId};
 use rusqlite::Connection as Database;
 
 use super::given::{mark, ok, start};
-use crate::hub::Keeper;
 use crate::hub::tests::{hub_in, hub_in_again, serving};
+use crate::hub::{Hub, Keeper};
 use crate::server::tests::Connection;
 use crate::store::BEFORE_WORKER_BUILD_OBSERVED;
 use crate::store::columns::OneValue;
@@ -28,6 +30,13 @@ fn observed_sent(client: &Connection) -> Vec<Option<Observed<OtherBuild>>> {
     told.collect()
 }
 
+/// Has `link` be `w`'s worker, and the hub hear which build it is, as it does of one it carries on with.
+async fn heard(hub: &Hub, link: &Arc<WorkerLink>) {
+    let w = WorkspaceId::from("w");
+    serving(hub, link);
+    hub.worker_build_heard(&w, &hub.worker_word(&w, link).unwrap()).await;
+}
+
 /// As the hub carries on with a worker of another build, a client is sent the observation, current, and its removal
 /// once it's gone. A worker too old to name its build is another all the same.
 #[tokio::test]
@@ -39,11 +48,9 @@ async fn which_build_a_worker_is_is_sent_as_an_observation_and_its_removal() {
     client.until("the list", |sent| sent.iter().any(|frame| matches!(frame, HubFrame::Listed { .. }))).await;
 
     let (first, next) = (WorkerLink::unconnected().of_build("0.9.0"), WorkerLink::unconnected());
-    serving(&hub, &first);
-    hub.worker_build_heard(&"w".into(), &first).await;
+    heard(&hub, &first).await;
     hub.keeper_went(Keeper::Worker(first.id)).await;
-    serving(&hub, &next);
-    hub.worker_build_heard(&"w".into(), &next).await;
+    heard(&hub, &next).await;
     mark(&hub, &mut client).await;
 
     let said = |said: Option<&str>| Some(Observed::Current { value: OtherBuild { said: said.map(str::to_string) } });
@@ -57,9 +64,7 @@ async fn which_build_a_worker_is_is_not_known_after_a_restart_nor_from_a_databas
     let dir = tempfile::tempdir().unwrap();
     drop(store_from_before(dir.path(), BEFORE_WORKER_BUILD_OBSERVED, "UPDATE workspaces SET worker_build = '0.9.0';"));
     let hub = hub_in_again(dir.path());
-    let link = WorkerLink::unconnected().of_build("0.9.0");
-    serving(&hub, &link);
-    hub.worker_build_heard(&"w".into(), &link).await;
+    heard(&hub, &WorkerLink::unconnected().of_build("0.9.0")).await;
     hub.observations_written().await;
     drop(hub);
 

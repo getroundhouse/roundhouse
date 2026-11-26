@@ -1,5 +1,5 @@
 use super::super::Hub;
-use crate::hub::observations::{Keeper, WorkspaceWorkerBuild};
+use crate::hub::observations::{Keeper, WorkerWord, WorkspaceWorkerBuild};
 use crate::spans;
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
@@ -21,7 +21,9 @@ impl Hub {
         workspace_id: WorkspaceId,
         link: Arc<WorkerLink>,
     ) {
-        self.worker_build_heard(&workspace_id, &link).await;
+        // One that's no longer the workspace's has gone, or is going, and the next is the hub's own build.
+        let Some(word) = self.worker_word(&workspace_id, &link) else { return };
+        self.worker_build_heard(&workspace_id, &word).await;
         let hub = self.clone();
         let span = spans::workspace(&workspace_id);
         tokio::spawn(
@@ -53,15 +55,12 @@ impl Hub {
         );
     }
 
-    /// Keeps that the workspace's worker, `link`, is another build than the hub's, as its hello said, current while
-    /// it's the workspace's, so every client can say which build its agents are on, and gone with it, since the next is
-    /// the hub's own. One that's no longer the workspace's isn't kept, so nothing is kept after it went. One too old to
-    /// name its build is another all the same.
-    pub(crate) async fn worker_build_heard(&self, workspace_id: &WorkspaceId, link: &Arc<WorkerLink>) {
-        let build = OtherBuild { said: link.said_build().map(str::to_string) };
-        let (id, keeper) = (workspace_id.clone(), Keeper::Worker(link.id));
-        let still_its = || link.is_current(&self.workers.lock(), workspace_id);
-        let kept = self.observation_said_by_while::<WorkspaceWorkerBuild>(id, keeper, build, now_ms(), still_its);
+    /// Keeps that the workspace's worker, whose word `word` is, is another build than the hub's, as its hello said,
+    /// current while it's the workspace's, so every client can say which build its agents are on, and gone with it,
+    /// since the next is the hub's own. One too old to name its build is another all the same.
+    pub(crate) async fn worker_build_heard(&self, workspace_id: &WorkspaceId, word: &WorkerWord<'_>) {
+        let build = OtherBuild { said: word.link().said_build().map(str::to_string) };
+        let kept = word.said::<WorkspaceWorkerBuild>(workspace_id.clone(), build, now_ms());
         if let Err(e) = kept.await {
             warn!(
                 name: "worker.build_unkept",
