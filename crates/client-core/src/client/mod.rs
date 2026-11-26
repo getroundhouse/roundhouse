@@ -37,6 +37,7 @@ pub use admin::{HubAdmin, IdleStop, Restart, restart_hub, stop_hub, stop_hub_if_
 pub use api::{new_attachment_id, new_device_id, new_message_id, new_request_id, new_terminal_id};
 pub use commands::{Commands, Reply};
 pub use feed::RecordsFeed;
+pub(crate) use follow::Carried;
 pub use follow::FollowError;
 pub use github::{GithubFeed, GithubView};
 pub use github_account::new_github_sign_in_id;

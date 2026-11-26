@@ -5,7 +5,6 @@
 
 use std::collections::HashMap;
 
-use client_core::{Client, OpenTerminal};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::Icon;
 use gpui_kit::{
@@ -13,6 +12,7 @@ use gpui_kit::{
     Styled, Window, div,
 };
 use look::{IconSizing as _, InRegion as _, Region};
+use protocol::client::terminals::{TerminalClose, TerminalOpen};
 use protocol::model::{Terminal, TerminalId};
 use protocol::terminal::TerminalSize;
 use terminal_view::{Room, TerminalView};
@@ -66,8 +66,8 @@ impl WorkspacePane {
         if std::mem::replace(&mut self.terminals.opening, true) {
             return;
         }
-        let (workspace, id) = (self.workspace().id.clone(), client_core::new_terminal_id());
-        let opening = self.client.start(move |client| client.terminal_open(&workspace, &id, OPENING_SIZE));
+        let (workspace_id, id) = (self.workspace().id.clone(), client_core::new_terminal_id());
+        let opening = self.linked.ask(TerminalOpen { workspace_id, id, size: OPENING_SIZE });
         cx.spawn(async move |this, cx| {
             let opened = opening.recv().await;
             let _ = this.update(cx, |t, cx| {
@@ -101,7 +101,7 @@ impl WorkspacePane {
             // Asked for again before this ran, which made its view, so it isn't made twice, but it comes to the front,
             // since another may have been asked for between.
             if !t.terminals.views.contains_key(&id) {
-                let open = OpenTerminal::start(&t.client, &id);
+                let open = t.linked.open_terminal(&id);
                 let view = cx.new(|cx| TerminalView::new(open, room, window, cx));
                 t.terminals.views.insert(id.clone(), view);
             }
@@ -127,7 +127,7 @@ impl WorkspacePane {
     pub(super) fn close_terminal(&mut self, id: TerminalId, cx: &mut Context<Self>) {
         let was_in_front = self.terminal_in_front() == Some(&id);
         self.terminals.views.remove(&id);
-        let closing = self.client.start(move |client| client.terminal_close(&id));
+        let closing = self.linked.ask(TerminalClose { id });
         cx.spawn(async move |this, cx| match closing.recv().await {
             Ok(_) => {}
             // Its shell ended on its own as it was closed, so it's gone either way.
@@ -149,13 +149,6 @@ impl WorkspacePane {
         self.terminals.views.retain(|id, _| open.contains(id));
         if self.terminals.in_front.is_some() && self.terminal_in_front().is_none() {
             self.show_chat(cx);
-        }
-    }
-
-    /// Carries each terminal shown on to a new connection, which starts it again from what it shows.
-    pub(super) fn reconnect_terminals(&self, client: &Client, cx: &mut Context<Self>) {
-        for view in self.terminals.views.values() {
-            view.read(cx).open_terminal().reconnect(client);
         }
     }
 

@@ -4,7 +4,9 @@
 //! for a native mobile client.
 //!
 //! A [`link::Link`] connects to a hub, connects again whenever the connection goes, and keeps a [`RecordsFeed`] on
-//! each connection, by one rule for every client, so an app only draws how it stands.
+//! each connection, by one rule for every client, so an app only draws how it stands. The [`Hub`] it gives out is what a
+//! view holds: it reads the records from it, asks the hub through it, and opens what it follows from it, and the link
+//! carries each on to every connection it makes.
 //!
 //! [`records`] holds what a client has of a hub's records, and [`session_log`] what it has of a
 //! session's history. [`RecordsFeed`] and [`OpenSession`] keep them current, each on a thread of its
@@ -48,6 +50,7 @@ mod client;
 mod drafts;
 #[cfg(any(test, feature = "testing"))]
 pub mod fake_hub;
+mod hub;
 mod new_chat;
 mod sending;
 #[cfg(any(test, feature = "testing"))]
@@ -57,6 +60,9 @@ pub use agents::Agents;
 pub use approval::{Answered, Approval, Given, ToolUseAnswer, ToolUseAsked, claims_of_the_asker};
 pub use attachments::{FileToSend, NotAttached};
 pub use drafts::{CameBack, DraftChange, DraftKey, Drafts, FilesFor, KeptDraft, NotReadBack, ReadBack};
+pub use hub::Hub;
+#[cfg(any(test, feature = "testing"))]
+pub use hub::OnSocket;
 pub use new_chat::new_chat_settings;
 pub use sending::{NotTaken, Taking, Written};
 

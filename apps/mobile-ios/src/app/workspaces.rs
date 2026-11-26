@@ -23,7 +23,7 @@ const ROW: RowSize = RowSize::Regular;
 impl MobileApp {
     pub(super) fn workspaces_screen(&self, followed: &Followed, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let link = followed.link.read(cx);
-        let (name, ready) = (link.hub().hub_name.clone(), link.client().is_some());
+        let (name, ready) = (link.paired().hub_name.clone(), link.client().is_some());
         let hub = chrome::icon_button("hub", IconName::Server, "Hub")
             .on_click(cx.listener(|app, _, _, cx| app.show_panel(Some(Panel::Hub), cx)));
         let new = chrome::icon_button("new-workspace", IconName::Plus, "New workspace")

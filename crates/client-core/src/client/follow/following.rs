@@ -125,6 +125,30 @@ pub(in crate::client) struct Giver<H> {
     wake: flume::WeakSender<()>,
 }
 
+/// Something followed that carries on over each new connection it's given, for as long as it's there, without being kept
+/// followed by what gives it them.
+pub(crate) trait Carried: Send {
+    /// Carries on on `client`, a new connection, as [`Following::reconnect`] does. Returns false, doing nothing, once
+    /// every handle on it has gone.
+    fn carry_on(&self, client: &Client) -> bool;
+
+    /// Whether every handle on it has gone, so there's nothing to carry on.
+    fn gone(&self) -> bool;
+}
+
+impl<H: Send + 'static> Carried for Giver<H> {
+    fn carry_on(&self, client: &Client) -> bool {
+        let (Some(shared), Some(wake)) = (self.shared.upgrade(), self.wake.upgrade()) else { return false };
+        shared.reconnect_on(client);
+        let _ = wake.try_send(());
+        true
+    }
+
+    fn gone(&self) -> bool {
+        self.shared.strong_count() == 0
+    }
+}
+
 impl<H> Giver<H> {
     /// Changes what's held without telling readers, then wakes the thread, as a reader that asks for something does.
     /// Returns false, changing nothing, once every handle on it has gone.
@@ -137,13 +161,14 @@ impl<H> Giver<H> {
 }
 
 impl<H: Send + 'static> Following<H> {
-    /// Starts following on a thread of its own, so this doesn't wait for the hub, with the source `source` makes there.
+    /// Starts following on a thread of its own, so this doesn't wait for the hub, with the source `source` makes there,
+    /// on `connection`, or on the first given to [`Following::reconnect`] if there's none yet.
     pub(in crate::client) fn start<S: Source<Held = H>>(
-        client: &Client,
+        connection: Option<&Client>,
         held: H,
         source: impl FnOnce() -> S + Send + 'static,
     ) -> Self {
-        Following::unstarted(held).start(client, source)
+        Following::unstarted(held).start(connection, source)
     }
 
     /// What's to be followed, holding `held`, before its thread starts, so what its source needs can be given a handle
@@ -200,8 +225,7 @@ impl<H: Send + 'static> Following<H> {
 
     /// Carries on on a new connection, which isn't caught up on until the thread says so.
     pub(in crate::client) fn reconnect(&self, client: &Client) {
-        *self.shared.reconnect.lock() = Some(client.clone());
-        self.shared.connected.store(false, Ordering::SeqCst);
+        self.shared.reconnect_on(client);
         self.wake();
     }
 
@@ -237,11 +261,11 @@ impl<H: Send + 'static> Unstarted<H> {
     /// Starts following on a thread of its own, as [`Following::start`] does.
     pub(in crate::client) fn start<S: Source<Held = H>>(
         self,
-        client: &Client,
+        connection: Option<&Client>,
         source: impl FnOnce() -> S + Send + 'static,
     ) -> Following<H> {
         let Unstarted { follow, woken } = self;
-        let (client, shared) = (client.clone(), follow.shared.clone());
+        let (client, shared) = (connection.cloned(), follow.shared.clone());
         let thread = move || {
             let source = source();
             Follower { source, client, shared, woken, subscription: None, let_go: false }.run();
@@ -254,6 +278,12 @@ impl<H: Send + 'static> Unstarted<H> {
 }
 
 impl<H> Shared<H> {
+    /// Has the thread carry on on `client` once it next wakes, which it isn't caught up on until the thread says so.
+    fn reconnect_on(&self, client: &Client) {
+        *self.reconnect.lock() = Some(client.clone());
+        self.connected.store(false, Ordering::SeqCst);
+    }
+
     pub(super) fn changed(&self) {
         let _ = self.signal.try_send(());
     }

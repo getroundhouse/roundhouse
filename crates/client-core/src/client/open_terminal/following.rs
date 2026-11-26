@@ -10,7 +10,7 @@ use protocol::terminal::{KeyPress, TerminalSize, TerminalUpdate, Typed};
 use super::asking::{self, Waiting};
 use super::given::{Given, Queue};
 use super::window::{Ask, Pointer, Replied, SelectBy, Window};
-use crate::client::follow::{Following, Source};
+use crate::client::follow::{Carried, Following, Source};
 use crate::client::{Client, ClientError, FollowError, Result, Subscription, SubscriptionItem};
 use crate::drawn::{Frame, Rgb};
 use protocol::client::subscriptions::Follow;
@@ -44,18 +44,19 @@ pub(super) struct Held {
 }
 
 impl OpenTerminal {
-    /// Follows the terminal `id` on a thread of its own, so this doesn't wait for the hub. It's taken to be shown until
-    /// [`OpenTerminal::set_shown`] says otherwise.
-    pub fn start(client: &Client, id: &TerminalId) -> Self {
-        Self::letting_go_after(client, id, LET_GO_AFTER)
+    /// Follows the terminal `id` on a thread of its own, so this doesn't wait for the hub, on `connection`, or on the
+    /// first it's carried on to if there's none yet. It's taken to be shown until [`OpenTerminal::set_shown`] says
+    /// otherwise. A view opens one from its [`Hub`](crate::Hub), which carries it on to each new connection.
+    pub(crate) fn start(connection: Option<&Client>, id: &TerminalId) -> Self {
+        Self::letting_go_after(connection, id, LET_GO_AFTER)
     }
 
     /// As [`OpenTerminal::start`], letting it go once it hasn't been shown for `after`.
-    pub(super) fn letting_go_after(client: &Client, id: &TerminalId, after: Duration) -> Self {
+    pub(super) fn letting_go_after(connection: Option<&Client>, id: &TerminalId, after: Duration) -> Self {
         let (waiting, replies) = flume::unbounded();
         let source =
             TerminalSource { id: id.clone(), window: Window::new(), waiting, copies: Vec::new(), let_go_after: after };
-        let follow = Following::start(client, Held::default(), move || source);
+        let follow = Following::start(connection, Held::default(), move || source);
         asking::start(id.clone(), replies, follow.giver());
         Self { id: id.clone(), follow }
     }
@@ -182,9 +183,10 @@ impl OpenTerminal {
         self.follow.wake();
     }
 
-    /// Carries on on a new connection, which starts again from a picture of what the terminal shows.
-    pub fn reconnect(&self, client: &Client) {
-        self.follow.reconnect(client);
+    /// What carries it on to a new connection, which starts it again from a picture of what the terminal shows, for as
+    /// long as a view has it open.
+    pub(crate) fn carried(&self) -> Box<dyn Carried> {
+        Box::new(self.follow.giver())
     }
 
     /// True once it has caught up on a connection, and false from when that goes until it has on another.

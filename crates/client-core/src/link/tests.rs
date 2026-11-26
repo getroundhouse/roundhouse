@@ -173,7 +173,7 @@ fn a_connection_that_goes_is_made_again_at_once_and_the_records_carry_on_on_the_
     let link = Link::start_waiting(tries.clone(), Waits::retrying(NEVER, NEVER));
     ready_on(&link, "the first");
     let (_, which) = link.take_connection().unwrap();
-    let feed = link.feed().unwrap();
+    let feed = link.hub().records().unwrap();
 
     let _ = first.repo_list();
 

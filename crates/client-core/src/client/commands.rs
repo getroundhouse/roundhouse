@@ -83,6 +83,13 @@ impl<T> Reply<T> {
         (reply, Self(replied))
     }
 
+    /// A reply there is already, as to a request that fails before it's sent.
+    pub(crate) fn now(result: Result<T>) -> Self {
+        let (reply, replied) = Self::channel();
+        let _ = reply.send(result);
+        replied
+    }
+
     /// Waits for the reply without holding a thread. A call that ended without one, which only a panic does, counts as
     /// the connection lost.
     pub async fn recv(self) -> Result<T> {

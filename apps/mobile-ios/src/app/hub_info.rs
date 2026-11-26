@@ -13,7 +13,7 @@ impl MobileApp {
     pub(super) fn hub_screen(&self, followed: &Followed, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let back = chrome::back().on_click(cx.listener(|app, _, _, cx| app.show_panel(None, cx)));
         let link = followed.link.read(cx);
-        let hub = link.hub();
+        let hub = link.paired();
         let why = match link.state() {
             LinkState::Unreachable(why) | LinkState::HubOlder(why) | LinkState::Refused(why) => Some(why.clone()),
             LinkState::Connecting | LinkState::Ready => None,

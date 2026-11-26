@@ -13,7 +13,7 @@ use crate::tool_sign_in::ToolSigningIn;
 use attaching::{Composed, Waiting};
 use client_core::records::InWorkspace;
 use client_core::tool_servers::ReloadRequest;
-use client_core::{Client, Drafts, RecordsFeed};
+use client_core::{Client, Drafts, Hub, RecordsFeed};
 use conversation::Conversations;
 use file_tab::FileTab;
 use gpui_kit::component::input::TextareaState;
@@ -86,6 +86,9 @@ pub(super) enum Next {
 
 pub struct WorkspacePane {
     pub(super) model_lookup: client_ui::FollowedModels,
+    /// The hub, which what's opened here, such as a terminal, is followed from over every connection, and what's
+    /// moved to it is asked through.
+    pub(super) linked: Hub,
     pub(super) client: Client,
     /// Client-core's copy of the hub's records, which keeps the subagents of each chat the pane shows.
     pub(super) records: RecordsFeed,
@@ -154,7 +157,7 @@ pub struct WorkspacePane {
 impl WorkspacePane {
     /// The pane for the workspace `shown` is part of, as the hub's records had it.
     pub(crate) fn new(of_hub: OfHub, shown: InWorkspace, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let OfHub { client, records, drafts: keeper, conversations, tool_sign_in } = of_hub;
+        let OfHub { linked, client, records, drafts: keeper, conversations, tool_sign_in } = of_hub;
         let (composer, on_enter) = composer::new_input(window, cx);
         let (about, on_event) = (Self::composer_about, Self::dictation_event);
         let place = dictation_ui::Place::Composer;
@@ -165,6 +168,7 @@ impl WorkspacePane {
         let on_dictation = crate::dictating::observe(cx, |_, cx| cx.notify());
         let [needs_dictation, needs_speech] = crate::conversing::observe_needs(window, cx, Self::start_once_ready);
         let mut this = Self {
+            linked,
             client,
             records,
             shown,
@@ -260,7 +264,6 @@ impl WorkspacePane {
         for transcript in self.every_transcript() {
             transcript.update(cx, |t, cx| t.reconnect(client, cx));
         }
-        self.reconnect_terminals(client, cx);
         if let Some(view) = self.proposals.view() {
             view.update(cx, |v, cx| v.reconnect(client, cx));
         }

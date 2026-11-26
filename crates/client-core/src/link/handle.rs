@@ -6,10 +6,12 @@ use parking_lot::Mutex;
 
 use super::linker::Linker;
 use super::{Connect, LinkState, Lost, Waits};
-use crate::{Client, FollowError, RecordsFeed};
+use crate::hub::Kept;
+use crate::{Client, FollowError, Hub};
 
 /// The connection to one hub, made again on a thread of its own by [the rule every client
-/// follows](crate::link), and the hub's records, kept over every connection. The thread stops once this has gone.
+/// follows](crate::link), and the [`Hub`] every view of it holds, kept over every connection. The thread stops once this
+/// has gone, and with it every connection the views' [`Hub`] holds.
 pub struct Link<C: Connect> {
     shared: Arc<Shared<C>>,
     changed: flume::Receiver<()>,
@@ -18,8 +20,8 @@ pub struct Link<C: Connect> {
 
 pub(super) struct Shared<C: Connect> {
     pub(super) state: Mutex<LinkState<C::Failure>>,
-    /// Started on the first connection, and carried on on every later one.
-    pub(super) feed: Mutex<Option<RecordsFeed>>,
+    /// The records, the connection that has caught up and what's open, for every [`Hub`] this gives out.
+    pub(super) kept: Arc<Kept>,
     /// The newest connection the app hasn't taken, with what was read as it was made.
     pub(super) connection: Mutex<Option<(Client, C::With)>>,
     /// What went wrong following the hub's records on a connection that's caught up, for a person to hear about.
@@ -59,7 +61,7 @@ impl<C: Connect> Link<C> {
         let (asks, asked) = flume::unbounded();
         let shared = Arc::new(Shared {
             state: Mutex::new(LinkState::Connecting(None)),
-            feed: Mutex::new(None),
+            kept: Arc::default(),
             connection: Mutex::new(None),
             errors: Mutex::new(Vec::new()),
             signal,
@@ -95,9 +97,9 @@ impl<C: Connect> Link<C> {
         self.shared.state.lock().clone()
     }
 
-    /// The hub's records, once there's been a connection, which carry on over every later one.
-    pub fn feed(&self) -> Option<RecordsFeed> {
-        self.shared.feed.lock().clone()
+    /// The hub this connects to, as every view of it holds it, whichever connection there is.
+    pub fn hub(&self) -> Hub {
+        Hub::of(self.shared.kept.clone())
     }
 
     /// The newest connection since this was last asked, with what was read of the hub as it was made, for everything

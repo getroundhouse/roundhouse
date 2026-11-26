@@ -67,7 +67,7 @@ impl<C: Connect> Linker<C> {
                 }
                 Woke::Feed => self.feed_changed(stand),
                 Woke::Due => self.due(stand),
-                Woke::Gone => return,
+                Woke::Gone => return self.shared.kept.let_go(),
             };
         }
     }
@@ -126,13 +126,8 @@ impl<C: Connect> Linker<C> {
     }
 
     fn connected(&mut self, client: Client, with: C::With) -> Stand<C::Failure> {
-        if let Some(feed) = &self.feed {
-            feed.reconnect(&client);
-        } else {
-            let feed = RecordsFeed::start(&client);
-            *self.shared.feed.lock() = Some(feed.clone());
-            self.feed = Some(feed);
-        }
+        let feed = self.shared.kept.connected(&client);
+        self.feed.get_or_insert(feed);
         *self.shared.connection.lock() = Some((client.clone(), with));
         self.set(LinkState::CatchingUp(client.clone()));
         Stand::Connected { client, catching_up_until: Some(Instant::now() + self.waits.catch_up()) }
@@ -189,6 +184,7 @@ impl<C: Connect> Linker<C> {
     }
 
     fn set(&self, state: LinkState<C::Failure>) {
+        self.shared.kept.set_ready(state.ready().cloned());
         *self.shared.state.lock() = state;
         self.shared.tell();
     }

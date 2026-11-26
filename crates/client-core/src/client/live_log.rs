@@ -41,7 +41,7 @@ impl LiveLog {
     /// Starts following `session` from the event after its last as it's recorded here.
     pub fn start(client: &Client, session: &Session) -> Self {
         let source = LiveSource { id: session.id.clone(), next: session.last_seq.next() };
-        let follow = Following::start(client, Items::default(), move || source);
+        let follow = Following::start(Some(client), Items::default(), move || source);
         follow.wake();
         Self { follow }
     }

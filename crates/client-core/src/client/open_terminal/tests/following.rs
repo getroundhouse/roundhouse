@@ -88,7 +88,7 @@ fn an_open_terminal_keeps_what_it_shows_for_a_view_to_draw() {
         start_hub(&socket, false, |_| Some(Watched { pictures: pictures(&[b"$ ", b"ls\r\n", b"a.rs"]), exited: true }));
     let client = Client::connect(&socket, "test").unwrap();
 
-    let open = OpenTerminal::start(&client, &"t".into());
+    let open = OpenTerminal::start(Some(&client), &"t".into());
     open.set_colors(RED, BLUE);
     let frame = frame_when(&open, "what came after the first picture", |frame| text(frame)[1] == "a.rs");
     open.key(key('x'));
@@ -116,13 +116,13 @@ fn a_terminal_carries_on_on_a_new_connection() {
     let (first, second) = (dir.path().join("first.sock"), dir.path().join("second.sock"));
     let first_asked = start_hub(&first, false, |_| Some(showing(&[b"before"])));
     let second_asked = start_hub(&second, false, |_| Some(showing(&[b"after"])));
-    let open = OpenTerminal::start(&Client::connect(&first, "test").unwrap(), &"t".into());
+    let open = OpenTerminal::start(Some(&Client::connect(&first, "test").unwrap()), &"t".into());
     frame_when(&open, "the first screen", |frame| text(frame)[0] == "before");
 
     let next = Client::connect(&second, "test").unwrap();
     open.follow.quietly(|held| {
         held.given.give(Given::Key(key('w')));
-        open.reconnect(&next);
+        open.follow.reconnect(&next);
     });
     frame_when(&open, "the second screen", |frame| text(frame)[0] == "after");
     open.key(key('x'));
@@ -148,7 +148,7 @@ fn without_a_connection_the_held_history_scrolls_and_what_is_typed_is_dropped() 
     // The first picture, then the next after 17 rows have scrolled off, which the client holds.
     let _first_asked = start_hub(&first, true, move |_| Some(showing(&[early.as_bytes(), late.as_bytes()])));
     let second_asked = start_hub(&second, false, |_| Some(showing(&[b"after"])));
-    let open = OpenTerminal::start(&Client::connect(&first, "test").unwrap(), &"t".into());
+    let open = OpenTerminal::start(Some(&Client::connect(&first, "test").unwrap()), &"t".into());
     frame_when(&open, "the screen", |frame| text(frame)[0] == "line 17");
 
     open.key(key('a'));
@@ -162,7 +162,7 @@ fn without_a_connection_the_held_history_scrolls_and_what_is_typed_is_dropped() 
     let next = Client::connect(&second, "test").unwrap();
     open.follow.quietly(|held| {
         held.given.give(Given::Key(key('d')));
-        open.reconnect(&next);
+        open.follow.reconnect(&next);
     });
     frame_when(&open, "the second screen", |frame| text(frame)[0] == "after");
     open.key(key('c'));
@@ -179,7 +179,7 @@ fn a_terminal_whose_record_has_gone_has_ended() {
     let _asked = start_hub(&socket, false, |_| None);
     let client = Client::connect(&socket, "test").unwrap();
 
-    let open = OpenTerminal::start(&client, &"t".into());
+    let open = OpenTerminal::start(Some(&client), &"t".into());
 
     until_ended(&open);
     assert!(open.take_errors().is_empty(), "it isn't a failure to hear of");
@@ -201,7 +201,7 @@ fn rows_scrolled_back_to_are_fetched_and_what_is_selected_is_copied() {
     let id = world.terminal(&workspace, SIZE, lines.as_bytes());
     crate::fake_hub::serve(&socket, world);
     let client = Client::connect(&socket, "test").unwrap();
-    let open = OpenTerminal::start(&client, &id);
+    let open = OpenTerminal::start(Some(&client), &id);
     frame_when(&open, "the screen", |frame| text(frame)[0] == "line 77");
 
     open.wheel(-60);
@@ -273,7 +273,7 @@ fn only_a_new_connection_asks_for_the_views_size_again() {
     let second_asked = start_hub(&second, false, move |_| Some(showing_at(other, &[b"after"])));
     let client = Client::connect(&first, "test").unwrap();
 
-    let open = OpenTerminal::start(&client, &"t".into());
+    let open = OpenTerminal::start(Some(&client), &"t".into());
     heard_watched.recv_timeout(WAIT).unwrap();
     // The view is held, as a view that doesn't keep up is, until the buffer has filled.
     open.follow.quietly(|held| {
@@ -288,7 +288,7 @@ fn only_a_new_connection_asks_for_the_views_size_again() {
     assert_eq!(watches_and_stops(&on_the_first).0, 2, "{on_the_first:?}");
     assert_eq!(fits(&on_the_first), [], "it took the size back after falling behind");
 
-    open.reconnect(&Client::connect(&second, "test").unwrap());
+    open.follow.reconnect(&Client::connect(&second, "test").unwrap());
     frame_when(&open, "the picture on the new connection", |frame| text(frame)[0] == "after");
     open.key(key('y'));
 
@@ -316,7 +316,7 @@ fn a_terminal_not_shown_for_as_long_as_it_waits_is_let_go_until_it_shows_again()
         let socket = dir.path().join("hub.sock");
         let asked =
             start_hub(&socket, false, |watches| Some(showing(&[if watches == 1 { b"before" } else { b"after" }])));
-        let open = OpenTerminal::letting_go_after(&Client::connect(&socket, "test").unwrap(), &"t".into(), wait);
+        let open = OpenTerminal::letting_go_after(Some(&Client::connect(&socket, "test").unwrap()), &"t".into(), wait);
         open.fit(SIZE);
         frame_when(&open, "the first picture", |frame| text(frame)[0] == "before");
 

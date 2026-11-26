@@ -10,6 +10,7 @@ use crate::workspace_pane::{OfHub, PaneEvent, WorkspacePane};
 use client_core::records::Snapshot;
 use gpui_kit::{AppContext as _, Context, PathPromptOptions, Window};
 use in_view::InView;
+use protocol::client::workspaces::WorkspaceRename;
 use protocol::model::{Repo, RepoId, WorkspaceId, WorkspaceStatus};
 use protocol::prompt::Prompt;
 
@@ -25,7 +26,8 @@ impl AppView {
             }
             let (Some(records), Some(drafts)) = (self.feed(), self.drafts.clone()) else { return };
             let (conversations, tool_sign_in) = (self.conversations.clone(), self.tool_sign_in.clone());
-            let of_hub = OfHub { client, records, drafts, conversations, tool_sign_in };
+            let linked = self.linked.clone();
+            let of_hub = OfHub { linked, client, records, drafts, conversations, tool_sign_in };
             let pane = cx.new(|cx| WorkspacePane::new(of_hub, shown, window, cx));
             let (busy, retitling) = (self.busy.clone(), self.retitling.contains(&id));
             pane.update(cx, |pane, cx| {
@@ -227,9 +229,12 @@ impl AppView {
         });
     }
 
+    /// Renames the workspace, which does nothing while there's no connection that has caught up to ask it on.
     pub(super) fn rename(&mut self, id: WorkspaceId, title: String, cx: &mut Context<Self>) {
-        let Some(client) = self.client() else { return };
-        let renaming = client.start(move |client| client.workspace_rename(&id, &title));
+        if !self.linked.caught_up() {
+            return;
+        }
+        let renaming = self.linked.ask(WorkspaceRename { id, title });
         cx.spawn(async move |this, cx| {
             if let Err(e) = renaming.recv().await {
                 let _ = this.update(cx, |t, cx| t.show_error(Renaming::Workspace.failed(&e), cx));
