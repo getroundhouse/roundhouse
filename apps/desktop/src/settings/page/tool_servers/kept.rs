@@ -2,15 +2,15 @@
 //! couldn't do. How a sign-in stands is the window's, which the page follows. What a server is called, where it is and
 //! how it knows the person are never kept here: each frame reads them from the hub's records, as client-core keeps them.
 
-use gpui_kit::{Bounds, Context, Entity, FocusHandle, Pixels, ScrollHandle, Window};
+use gpui_kit::{App, Bounds, Context, Entity, FocusHandle, Pixels, ScrollHandle, Window};
 use protocol::model::{ToolServer, ToolServerId};
 
 use super::super::panel::Place;
 use super::Asking;
-use super::adding::AddPanel;
+use super::form::{Form, Of};
 use super::words;
 use crate::asking::{self, Question};
-use crate::tool_sign_in::ToolSigningIn;
+use crate::tool_sign_in::{EditedServer, SignInTo, ToolSigningIn, UnderWay};
 
 /// The page's state, kept only while it shows, so a key half pasted goes with it, and so does the wait for what the hub
 /// answers.
@@ -27,14 +27,15 @@ pub(super) struct Kept {
     failed: Option<(ToolServerId, String)>,
 }
 
-/// The panel open under Added's heading.
+/// The panel that's open, as [`Kept::panel_under`] says where.
 pub(super) struct Panel {
     pub(super) shows: Shows,
     pub(super) place: Place,
 }
 
 pub(super) enum Shows {
-    Adding(Box<AddPanel>),
+    /// The one a server is added or edited in.
+    Form(Box<Form>),
     /// The sign-in there is, as it stands.
     SigningIn,
 }
@@ -62,6 +63,20 @@ impl Kept {
     /// Why the hub couldn't do what was last asked of the server `id`, if it couldn't.
     pub(super) fn failed(&self, id: &ToolServerId) -> Option<&str> {
         self.failed.as_ref().filter(|(server, _)| server == id).map(|(_, said)| said.as_str())
+    }
+
+    /// The server whose row the panel is under: the one it edits, by a sign-in too. Any other is under Added's heading.
+    pub(super) fn panel_under<'a>(&'a self, cx: &'a App) -> Option<&'a ToolServerId> {
+        match &self.panel.as_ref()?.shows {
+            Shows::Form(form) => match &form.of {
+                Of::Had(was) => Some(&was.id),
+                Of::New(_) => None,
+            },
+            Shows::SigningIn => match self.signing_in.read(cx).under_way().map(UnderWay::to)? {
+                SignInTo::Edited(EditedServer { was, .. }) => Some(&was.id),
+                SignInTo::New(_) | SignInTo::Again { .. } => None,
+            },
+        }
     }
 
     /// Opens a panel showing `shows`, in place of any that was open.

@@ -278,3 +278,21 @@ fn tidying_a_kind_that_has_never_had_a_file_makes_no_directory() {
 
     assert!(!dir_in(dir.path()).exists());
 }
+
+/// A row that keeps the rest of what it says isn't cleared for a file that's gone, so it's written first.
+#[test]
+fn a_row_that_no_longer_names_a_file_is_written_before_the_file_goes() {
+    let data = tempfile::tempdir().unwrap();
+    let files = LoginFiles::new(data.path());
+    let files = files.lock();
+    let file = connected(&files, &two_parts("a-token"));
+    let held = || matches!(files.read(&file), Ok(Stored::Secret(_)));
+
+    let failed = files.unname::<()>(|| Err(ApiError::new(ErrorCode::Internal, "stopped")));
+    let kept = held();
+    let written = files.unname(|| Ok((held(), Some(file.clone())))).unwrap();
+    let again = files.unname(|| Ok(((), None)));
+
+    assert!(failed.is_err() && kept && written && again.is_ok());
+    assert!(names_in(data.path()).is_empty());
+}

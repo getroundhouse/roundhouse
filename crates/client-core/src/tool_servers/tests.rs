@@ -4,7 +4,7 @@ use protocol::client::listed::SessionRecords;
 use protocol::fixtures::{self, observed};
 use protocol::model::{
     Records, Rev, RunCapabilities, RunId, Session, SessionId, ToolServer, ToolServerAuth, ToolServerName,
-    ToolSignInStatus,
+    ToolServerUrl, ToolSignInStatus,
 };
 
 use super::{
@@ -21,7 +21,14 @@ fn needing_sign_in(id: &str, name: &str) -> ToolServer {
 }
 
 fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolServerState {
-    ToolServerState { name: name.into(), hubs: hubs.map(Into::into), state, error: None, tools: None }
+    ToolServerState {
+        name: name.into(),
+        hubs: hubs.map(Into::into),
+        connected_to: None,
+        state,
+        error: None,
+        tools: None,
+    }
 }
 
 /// What a client holds of a hub with `servers`, whose chat's agent has said it has `said`, if it's said.
@@ -84,12 +91,34 @@ fn a_chat_has_the_hubs_servers_by_the_persons_names_and_its_clis_by_theirs() {
             ("runbooks", Stands::CantBeReached { why: Some("refused".into()) }),
             ("Old_one", Stands::Removed),
         ],
-        "by which they are, whatever the agent calls them, and a sign-in is the record's to say"
+        "by which they are, so one renamed since is itself, and a sign-in is the record's to say"
     );
     let OwnToolServers::Listed(own) = &servers.own else { panic!("{servers:?}") };
     assert_eq!(listed(own), [("Browser", Stands::Tools(3)), ("zebra", Stands::SignInFromItsCli)]);
     assert!(servers.needs_sign_in());
     assert_eq!(servers.said(), "MCP servers, Notion needs you to sign in");
+}
+
+/// By where its worker says the agent last connected to it, however the agent says it is, and whatever its query is.
+#[test]
+fn one_thats_moved_since_the_agent_connected_to_it_is_from_its_next_start() {
+    let url = |url: &str| ToolServerUrl::stored(url.to_owned());
+    let server = |at: &str| ToolServer { url: url(at), ..named("t-1", "Docs") };
+    let stands = |at: &str, connected_to: Option<&str>, state| {
+        let connected_to = connected_to.map(|at| url(at).place());
+        let agents = vec![ToolServerState { connected_to, tools: Some(2), ..said("Docs", Some("t-1"), state) }];
+        let servers = ChatToolServers::of(&held(vec![server(at)], Some(agents)), &chat(true), None).unwrap();
+        servers.hubs[0].stands.clone()
+    };
+
+    for state in [ServerState::Connected, ServerState::Failed] {
+        let moved = stands("https://eu.example.com/mcp", Some("https://mcp.example.com/mcp"), state);
+        assert_eq!(moved, Stands::FromItsNextStart, "{state:?}");
+    }
+    let queried =
+        stands("https://mcp.example.com/mcp?a=b", Some("https://mcp.example.com/mcp"), ServerState::Connected);
+    assert_eq!(queried, Stands::Tools(2));
+    assert_eq!(stands("https://eu.example.com/mcp", None, ServerState::Connected), Stands::Tools(2), "it hasn't said");
 }
 
 #[test]

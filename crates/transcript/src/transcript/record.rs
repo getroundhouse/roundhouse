@@ -144,7 +144,7 @@ impl Transcript {
     }
 
     /// Takes what the person calls each of the hub's tool servers, and draws every row again if that changed, which only
-    /// adding or removing one does.
+    /// adding, renaming or removing one does.
     fn set_tool_servers(&mut self, names: &ToolServerNames, cx: &mut Context<Self>) {
         if self.model.borrow().tool_servers == *names {
             return;

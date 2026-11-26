@@ -131,6 +131,7 @@ impl ToolServers {
         let servers = self.servers.iter().map(|(name, server)| ToolServerState {
             name: name.clone(),
             hubs: None,
+            connected_to: None,
             state: server.state,
             error: server.error.clone(),
             tools: server.tools,

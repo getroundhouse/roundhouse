@@ -23,6 +23,20 @@ fn every_request_about_a_sign_in_to_a_tool_server_keeps_its_form() {
         ClientRequest::ToolSignInStart(start(ToolSignInTo::Again { id: "t".into() })),
         r#"{"method":"tool_sign_in_start","id":"i","to":{"kind":"again","id":"t"},"redirect":"http://127.0.0.1:17867/callback"}"#,
     );
+    let edit = |name: Option<&str>, url: Option<&str>| {
+        let (name, url) = (name.map(str::to_string), url.map(str::to_string));
+        ClientRequest::ToolSignInStart(start(ToolSignInTo::Edit { id: "t".into(), name, url }))
+    };
+    for (edit, changes) in [
+        (edit(None, None), ""),
+        (edit(Some("Sentry"), None), r#","name":"Sentry""#),
+        (edit(None, Some("https://mcp.example.com")), r#","url":"https://mcp.example.com""#),
+    ] {
+        let form = format!(
+            r#"{{"method":"tool_sign_in_start","id":"i","to":{{"kind":"edit","id":"t"{changes}}},"redirect":"http://127.0.0.1:17867/callback"}}"#
+        );
+        asked(edit, &form);
+    }
     asked(
         ClientRequest::ToolSignInFinish(ToolSignInFinish { id: "i".into(), returned }),
         r#"{"method":"tool_sign_in_finish","id":"i","returned":"code=made-up&state=made-up"}"#,

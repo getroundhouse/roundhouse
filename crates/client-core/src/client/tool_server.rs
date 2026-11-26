@@ -1,5 +1,5 @@
-//! The calls about the tool servers a hub has of its own: adding one and removing it. A refusal is worded as any other
-//! is, by [`crate::refusals`], since the hub's message says what's wrong with what the person typed.
+//! The calls about the tool servers a hub has of its own: adding one, editing it and removing it. A refusal is worded
+//! as any other is, by [`crate::refusals`], since the hub's message says what's wrong with what the person typed.
 
 use protocol::client::tool_servers;
 use protocol::model::{ToolServer, ToolServerAuthGiven, ToolServerId};
@@ -19,8 +19,13 @@ impl Client {
         self.call(tool_servers::ToolServerAdd { id: id.clone(), name: name.to_string(), url: url.to_string(), auth })
     }
 
-    /// Has the hub forget the tool server `id` and its key or its sign-in, and answers with its record as it last was, which the feed
-    /// then says has been removed. See [`tool_servers::ToolServerRemove`].
+    /// Edits a tool server as `edit` says, and answers with its record. See [`tool_servers::ToolServerEdit`].
+    pub fn tool_server_edit(&self, edit: tool_servers::ToolServerEdit) -> Result<ToolServer> {
+        self.call(edit)
+    }
+
+    /// Has the hub forget the tool server `id` and its key or its sign-in, and answers with its record as it last was,
+    /// which the feed then says has been removed. See [`tool_servers::ToolServerRemove`].
     pub fn tool_server_remove(&self, id: &ToolServerId) -> Result<ToolServer> {
         self.call(tool_servers::ToolServerRemove { id: id.clone() })
     }

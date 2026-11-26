@@ -80,7 +80,14 @@ fn named(name: &str, server: ToolServer) -> ToolServer {
 }
 
 fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolServerState {
-    ToolServerState { name: name.into(), hubs: hubs.map(Into::into), state, error: None, tools: None }
+    ToolServerState {
+        name: name.into(),
+        hubs: hubs.map(Into::into),
+        connected_to: None,
+        state,
+        error: None,
+        tools: None,
+    }
 }
 
 fn with_tools(name: &str, hubs: Option<&str>, tools: u32) -> ToolServerState {

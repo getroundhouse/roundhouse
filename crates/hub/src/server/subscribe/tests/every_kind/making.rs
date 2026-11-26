@@ -137,7 +137,8 @@ pub(super) async fn make(hub: &Hub, kind: &ObservationKey, round: u8) {
         }
         K::SessionToolServers { .. } => {
             let state = ServerState::Connected;
-            let server = ToolServerState { name: said.into(), hubs: None, state, error: None, tools: None };
+            let server =
+                ToolServerState { name: said.into(), hubs: None, connected_to: None, state, error: None, tools: None };
             read::<hub::SessionToolServers>(hub, session, vec![server], at).await;
         }
         K::SessionCache { .. } => {

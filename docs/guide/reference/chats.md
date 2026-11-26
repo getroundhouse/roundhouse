@@ -63,7 +63,7 @@ While the chat has an MCP server, a plug sits before the limits' bars. Rest the 
 | `Wants more access`, with **Sign in** | It's one of the hub's that works, and refused a call that needs more than you allowed. Signing in again asks to be allowed that too |
 | `Signing in` | Its page waits in your browser for you to approve it, as [Settings](settings.md#sign-in) says |
 | `Sign in from its CLI` | It's one of the CLI's own, which you sign in to there, such as with `codex mcp login` |
-| `From its next start` | It was added to the hub after the agent started |
+| `From its next start` | It was added to the hub, or moved to another URL, after the agent started |
 | `Removed` | It was removed from the hub after the agent started |
 | `Turned off` | The CLI's own settings turn it off |
 | Nothing | The agent hasn't said |

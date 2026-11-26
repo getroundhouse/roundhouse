@@ -1,5 +1,5 @@
 //! MCP servers' screens in Settings, each of a state its rules in `settings.md` say: the servers, none yet, adding one
-//! each way, signing in to one, and a row's menu.
+//! each way, signing in to one, a row's menu, and editing one.
 
 #![cfg(test)]
 
@@ -8,7 +8,7 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::{
     chat_servers_wanting_more_access, conversation, no_tool_sign_in, one_tool_server, open_tool_server,
-    tool_server_refused, tool_servers, tool_sign_in_refused, tool_sign_in_waiting,
+    tool_server_refused, tool_servers, tool_servers_to_edit, tool_sign_in_refused, tool_sign_in_waiting,
 };
 use client_core::fake_hub::World;
 
@@ -20,8 +20,14 @@ const ADD: Step = Step::Click("mcp-add");
 const URL: Step = Step::Click("mcp-url");
 /// Opens the dropdown of the ways a server can know the person.
 const WAYS: Step = Step::Click("mcp-way");
-/// Adds what a panel's fields say, or starts signing in to it.
-const GO: Step = Step::Click("mcp-panel-add");
+/// Opens a row's menu, and Edit's panel under it.
+const METRICS: Step = Step::Click("mcp-more-metrics");
+const RUNBOOKS: Step = Step::Click("mcp-more-runbooks");
+const EDIT: Step = Step::ClickItem("Edit");
+/// Selects all of a field, so typing replaces it.
+const ALL: Step = Step::Press("secondary-a");
+/// Adds or saves what a panel's fields say, or starts signing in to it.
+const GO: Step = Step::Click("mcp-panel-go");
 
 /// Rests the pointer on what the panel says under its title, which has no hover of its own.
 const AWAY: Step = Step::Point("mcp-panel-says");
@@ -196,5 +202,69 @@ pub(crate) const SCREENS: &[Screen] = &[
         "settings-mcp-menu",
         tool_servers,
         &[Step::Select(FOCUS), Step::OpenSettings, SERVERS, Step::Click("mcp-more-linear")],
+    ),
+    mcp(
+        "settings-mcp-edit-query",
+        tool_servers_to_edit,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            METRICS,
+            EDIT,
+            URL,
+            ALL,
+            Step::Type("https://mcp.metrics.example/v1/mcp?toolsets=core,apm"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-edit-moved",
+        tool_servers_to_edit,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            METRICS,
+            EDIT,
+            URL,
+            ALL,
+            Step::Type("https://mcp.eu.metrics.example/v1/mcp?toolsets=core"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-edit-key",
+        tool_servers_to_edit,
+        &[Step::Select(FOCUS), Step::OpenSettings, SERVERS, RUNBOOKS, EDIT, Step::Click("mcp-key"), AWAY],
+    ),
+    mcp(
+        "settings-mcp-edit-key-moved",
+        tool_servers_to_edit,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            RUNBOOKS,
+            EDIT,
+            URL,
+            ALL,
+            Step::Type("https://mcp.contoso.example/mcp"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-key-in-url",
+        one_tool_server,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            ADD,
+            Step::Type("Search"),
+            URL,
+            Step::Type("https://mcp.search.example/mcp?searchApiKey=made-up-0123456789"),
+            AWAY,
+        ],
     ),
 ];

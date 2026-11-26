@@ -28,7 +28,8 @@ pub enum Stands {
     },
     /// By the CLI's settings.
     TurnedOff,
-    /// One of the hub's that the agent wasn't launched with.
+    /// One of the hub's that the agent wasn't launched with, or one that's been moved to another URL since the agent
+    /// connected to it, so its worker has cut the agent off from it.
     FromItsNextStart,
     /// One the agent has that the hub no longer does.
     Removed,
@@ -72,6 +73,9 @@ impl Stands {
             return Stands::NeedsSignIn { server: server.id.clone(), wanted, sign_in };
         }
         match said {
+            Some(said) if said.connected_to.as_ref().is_some_and(|place| *place != server.url.place()) => {
+                Stands::FromItsNextStart
+            }
             Some(said) => Self::said(said),
             None if agents_said => Stands::FromItsNextStart,
             None => Stands::NotSaid,

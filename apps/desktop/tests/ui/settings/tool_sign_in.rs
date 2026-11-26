@@ -17,8 +17,8 @@ use super::tool_servers::{
 };
 use crate::support::{SentBack, Serving, Stack, Ui, files_holding, redirect_of, renewing_often, wait_until};
 
-const WORKS: ToolServerAuth = ToolServerAuth::SignIn { status: ToolSignInStatus::Works };
-const NEEDS_SIGN_IN: ToolServerAuth = ToolServerAuth::SignIn { status: ToolSignInStatus::NeedsSignIn };
+pub(super) const WORKS: ToolServerAuth = ToolServerAuth::SignIn { status: ToolSignInStatus::Works };
+pub(super) const NEEDS_SIGN_IN: ToolServerAuth = ToolServerAuth::SignIn { status: ToolSignInStatus::NeedsSignIn };
 
 /// Waits until nothing listens where `page` sends the person back to.
 fn until_stopped(page: &str) {
@@ -28,22 +28,22 @@ fn until_stopped(page: &str) {
 }
 
 /// Waits for the browser to be opened on a page, other than `before`, and for the panel to wait there.
-fn page_opened(ui: &mut Ui<'_>, before: Option<&str>) -> String {
+pub(super) fn page_opened(ui: &mut Ui<'_>, before: Option<&str>) -> String {
     ui.wait("the server's page", |ui| ui.cx.opened_url().as_deref() != before && ui.has("mcp-open-page"));
     ui.cx.opened_url().unwrap()
 }
 
 /// What the panel says under its title.
-fn says(ui: &mut Ui<'_>) -> String {
+pub(super) fn says(ui: &mut Ui<'_>) -> String {
     label_of(ui, "mcp-panel-says")
 }
 
-fn refused(ui: &mut Ui<'_>) -> String {
+pub(super) fn refused(ui: &mut Ui<'_>) -> String {
     ui.wait("why", |ui| ui.has("mcp-refused"));
     label_of(ui, "mcp-refused")
 }
 
-fn auth_of(ui: &Ui<'_>, name: &str) -> Option<ToolServerAuth> {
+pub(super) fn auth_of(ui: &Ui<'_>, name: &str) -> Option<ToolServerAuth> {
     named(ui, name).map(|server| server.auth)
 }
 
@@ -56,7 +56,7 @@ fn a_server_is_added_once_its_sign_in_is_approved_in_the_browser_whatever_the_wi
     fill_in(&mut ui, "Linear", &serving.url());
     assert_eq!(says(&mut ui), "Every agent has its tools once it's added.");
 
-    ui.click("mcp-panel-add");
+    ui.click("mcp-panel-go");
 
     let page = page_opened(&mut ui, None);
     let machine = if cfg!(target_os = "macos") { "Mac" } else { "computer" };
@@ -99,7 +99,7 @@ fn a_sign_in_thats_refused_says_so_and_can_be_changed_and_tried_again(cx: &mut T
     let not_a_url = "Couldn't sign in: an MCP server's URL starts with http:// or https://";
     assert_eq!(refused(&mut ui), not_a_url, "before the hub asks anyone");
     type_in(&mut ui, "mcp-url", &serving.url());
-    ui.click("mcp-panel-add");
+    ui.click("mcp-panel-go");
     let page = page_opened(&mut ui, None);
 
     let answered = serving.sent_back_to(&page).follow();
@@ -109,7 +109,7 @@ fn a_sign_in_thats_refused_says_so_and_can_be_changed_and_tried_again(cx: &mut T
     assert_eq!(the_hubs(&stack), Vec::<String>::new());
     until_stopped(&page);
     serving.stand_in.change(|script| script.person = ToolServerPerson::Approves);
-    ui.click("mcp-panel-add");
+    ui.click("mcp-panel-go");
     let again = page_opened(&mut ui, Some(&page));
     serving.sent_back_to(&again).follow();
     ui.wait("the server", |ui| auth_of(ui, "Linear") == Some(WORKS) && !ui.has("mcp-panel"));
@@ -131,10 +131,10 @@ fn a_new_server_with_no_sign_in_says_so_in_the_panel_it_was_typed_in_and_is_adde
     let mut ui = in_servers(cx, &stack);
     let refused_as_it_was_typed = |ui: &mut Ui<'_>, name: &str, serving: &Serving, why: &str| {
         fill_in(ui, name, &serving.url());
-        ui.click("mcp-panel-add");
+        ui.click("mcp-panel-go");
         assert_eq!(refused(ui), why);
         assert_eq!(label_of(ui, "mcp-way"), SIGN_IN_CHOSEN, "it doesn't move by itself");
-        assert!(ui.on("mcp-panel-add"), "what was typed is there");
+        assert!(ui.on("mcp-panel-go"), "what was typed is there");
         assert_eq!(ui.cx.opened_url(), None);
         assert!(named(ui, name).is_none(), "nothing is added");
     };
@@ -143,7 +143,7 @@ fn a_new_server_with_no_sign_in_says_so_in_the_panel_it_was_typed_in_and_is_adde
 
     choose(&mut ui, NONE_WAY);
     assert!(!ui.has("mcp-refused"));
-    ui.click("mcp-panel-add");
+    ui.click("mcp-panel-go");
     ui.wait("the server anyone can use", |ui| named(ui, "Docs").is_some() && !ui.has("mcp-panel"));
     let docs = named(&ui, "Docs").unwrap();
     assert_eq!((docs.url.as_str(), docs.auth), (open.url().as_str(), ToolServerAuth::Neither));
@@ -191,7 +191,7 @@ fn cancelling_a_sign_in_that_waits_puts_its_panel_away_and_nothing_listens(cx: &
     let (stack, serving) = (Stack::new(), Serving::with(ToolServerScript::default()));
     let mut ui = in_servers(cx, &stack);
     fill_in(&mut ui, "Linear", &serving.url());
-    ui.click("mcp-panel-add");
+    ui.click("mcp-panel-go");
     let page = page_opened(&mut ui, None);
 
     ui.click("mcp-cancel");

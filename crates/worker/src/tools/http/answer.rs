@@ -1,10 +1,11 @@
+use super::super::proxy::PassedOn;
 use http_body_util::{Either, Full};
-use hyper::body::{Bytes, Incoming};
+use hyper::body::Bytes;
 use hyper::header::{CONTENT_TYPE, HeaderValue};
 use hyper::{Response, StatusCode};
 
 /// What's answered with: something the worker has whole, or a tool server's answer, passed on as it comes.
-pub(in super::super) type AnswerBody = Either<Full<Bytes>, Incoming>;
+pub(in super::super) type AnswerBody = Either<Full<Bytes>, PassedOn>;
 
 pub(super) fn empty(status: StatusCode) -> Response<AnswerBody> {
     let mut response = Response::new(Either::Left(Full::default()));

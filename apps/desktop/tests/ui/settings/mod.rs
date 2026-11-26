@@ -16,6 +16,7 @@ mod made_up;
 #[cfg(target_os = "macos")]
 mod permissions;
 mod search;
+mod tool_server_edit;
 mod tool_servers;
 mod tool_sign_in;
 

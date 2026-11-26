@@ -22,9 +22,10 @@ impl Snapshot {
     }
 
     /// The first tool server, by name, at the URL a person `typed`, as the hub would keep it, for a client to say it's
-    /// there already. Two can be at one URL, so it stops nobody adding another.
-    pub fn tool_server_at(&self, typed: &str) -> Option<&ToolServer> {
+    /// there already. Two can be at one URL, so it stops nobody adding another. `edited` is the one it's typed for,
+    /// which isn't another.
+    pub fn tool_server_at(&self, typed: &str, edited: Option<&ToolServerId>) -> Option<&ToolServer> {
         let url = ToolServerUrl::typed(typed).ok()?;
-        self.records.tool_servers.iter().find(|server| server.url == url)
+        self.records.tool_servers.iter().find(|server| server.url == url && Some(&server.id) != edited)
     }
 }

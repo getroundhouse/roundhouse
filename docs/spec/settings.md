@@ -419,10 +419,10 @@ The app's own settings, and where they're shown.
 
   ![Adding an MCP server, refused in red in the panel](screens/settings-mcp-refused.png)
 
-- **A server's name can be whatever you like, up to 64 characters on one line, and the app always shows it as you typed it.** Agents call the server by a name Roundhouse makes from it, which every agent's CLI takes: its ASCII letters, digits and `-` as they are, with each run of anything else as one `_`, and no `_` or `-` at either end, so `Linear (Northwind)` is `Linear_Northwind`. That name is at most 32 characters, and `server` when nothing is left. A name whose agents' name another server has, in any case, is refused, saying which server, and that agents would call both the same where the names differ, and so is one that agents would call `roundhouse`, which Roundhouse's own tools are. *Unconfirmed:* the 32 characters, `server`, and refusing a name that agents would call the same.
+- **A server's name can be whatever you like, up to 64 characters on one line, and the app always shows it as you typed it.** Agents call the server by a name Roundhouse makes from it, which every agent's CLI takes: its ASCII letters, digits and `-` as they are, with each run of anything else as one `_`, and no `_` or `-` at either end, so `Linear (Northwind)` is `Linear_Northwind`. That name is at most 32 characters, and `server` when nothing is left. A new name is what an agent calls the server from the agent's next start. A name whose agents' name another server has, in any case, is refused, saying which server, and that agents would call both the same where the names differ, and so is one that agents would call `roundhouse`, which Roundhouse's own tools are. *Unconfirmed:* the 32 characters, `server`, and refusing a name that agents would call the same.
 - **Signing in opens the server's page in the browser on this device, and the panel waits, with a button that opens it again.** Nothing is added until it's approved. It works for a hub on another machine too, since the browser sends you back to this device, at a port the app listens on only while it waits. The hub first asks the server how it's signed in to, which can take half a minute, and the panel says so. A server that anyone can use, and that has a sign-in too, is signed in to when you choose to sign in to it. *Unconfirmed:* signing in to a server that anyone can use.
 - **Where the service a server is signed in to doesn't take the document that says who Roundhouse is, the hub registers Roundhouse with it, and uses that each time you sign in to the server again.** It registers once it has found that the rest can work, which can take as long again. A service that only registers apps with a secret can't be signed in to, nor can one that won't register Roundhouse, and the panel says which, with what the service calls the reason. If the service has forgotten the registration, its page shows an error, and signing in once more registers again, or once more than that if the hub has restarted between. *Unconfirmed:* all but registering there.
-- **The dropdown never moves by itself, as the owner decided.** When a new server turns out to have no way to sign in, the panel is there again as it was typed, still on Sign in, with why in red where every other refusal is. A server that anyone can use says so, and to choose None, or Key if it gave you one. One that can't be signed in to says why, and that it may take a key. A server that's signed in to again and has no way says only why, in the sign-in's own panel, with Close. *Unconfirmed:* the words, and what signing in again says.
+- **The dropdown never moves by itself, as the owner decided.** When a server that's added or edited turns out to have no way to sign in, the panel is there again as it was typed, still on Sign in, with why in red where every other refusal is. A server that anyone can use says so, and to choose None, or Key if it gave you one. One that can't be signed in to says why, and that it may take a key. A server that's signed in to again and has no way says only why, in the sign-in's own panel, with Close. *Unconfirmed:* the words, and what signing in again says.
 
   **Signing in to a new server that anyone can use.** *Unconfirmed.*
 
@@ -439,7 +439,7 @@ The app's own settings, and where they're shown.
 
   ![Waiting for a sign-in to an MCP server](screens/settings-mcp-waiting.png)
 
-- **A sign-in that comes to nothing says why, in red, with a way to try again,** whether it was refused, it failed, nobody approved it within 15 minutes, the hub no longer has it, or its server's name was taken meanwhile. For a new server that's the panel it was started from, with what was typed still in it. For one there is, it's the sign-in's own, with Try again. *Unconfirmed.*
+- **A sign-in that comes to nothing says why, in red, with a way to try again,** whether it was refused, it failed, nobody approved it within 15 minutes, the hub no longer has it, or its server's name was taken meanwhile. For a server that's added or edited, that's the panel it was started from, with what was typed still in it. For one that's signed in to again, it's the sign-in's own, with Try again. *Unconfirmed.*
 - **The app has one sign-in to a hub's servers at a time, and it goes on with Settings closed.** MCP servers shows it wherever it was started. Starting another cancels it, and so does Cancel, after which nothing listens. If the connection to the hub is lost once you've approved it, it's finished when the connection is back. *Unconfirmed.*
 
   **A sign-in refused, in the panel it was started from.** *Unconfirmed.*
@@ -451,10 +451,46 @@ The app's own settings, and where they're shown.
   ![Signing in to an MCP server again, refused, with Try again](screens/settings-mcp-again-refused.png)
 
 - **A server that wants more access than its sign-in has fails only the call it wants it for,** as when an agent changes an issue and only reading was allowed. The agent is told that the server wants more access and to sign in to it again from Settings › MCP servers, and its other calls work as before. Signing in again asks to be allowed all that was asked for before, all that was granted, and what the server has wanted since. More may have been granted than was asked for, as where the server said nothing and its service chose. A server that wants something that was already asked for has it asked for once more, since it may have been left out on the server's page, and after that only the agent is told, as it is of one that doesn't say what it wants. The server's row and each chat's plug say so until then. *Unconfirmed:* being told and not asked during the turn, and asking once more.
-- **A server's menu has Sign in again, where it's signed in to, and Remove.** Sign in again signs in to that server as adding it did, and changes nothing until it's approved. Remove asks first, as disconnecting a GitHub account does, and then the hub forgets the server with its sign-in or its key, which isn't revoked at the server. What the hub couldn't do is said under the row, in red. *Unconfirmed.*
+- **A URL that looks like it has a key in it says so under its field, in amber, as it's added or edited: `This looks like it has a key in it. Every app on this hub can see the URL. If the server takes a key in a header, use Key.`** It stops nothing, since a URL can't be told to have one. It looks like it where an option's name ends in `apikey`, `token`, `secret` or `password`, in any case and without its `_` and `-`, and its value has at least 16 characters, one of them a digit.
+
+  **Adding a server whose URL looks like it has a key in it.** *Unconfirmed.*
+
+  ![Adding an MCP server, with an amber line under its URL](screens/settings-mcp-key-in-url.png)
+
+- **A server's menu has Sign in again, where it's signed in to, Edit and Remove.** Sign in again signs in to that server as adding it did, and changes nothing until it's approved. Edit is off while a panel is open, and isn't there for a server that knows you in a way only a newer hub has. Remove asks first, as disconnecting a GitHub account does, and then the hub forgets the server with its sign-in or its key, which isn't revoked at the server. What the hub couldn't do is said under the row, in red. *Unconfirmed.*
 
   **The menu of a server that's signed in to.** *Unconfirmed.*
 
   ![An MCP server's menu](screens/settings-mcp-menu.png)
+
+- **Edit opens adding's form, filled in with the server's name, its whole URL and how it knows you, with Save, or with Sign in where what's changed takes one.** Only what's changed is saved, so what another app has changed meanwhile stays, and each change does this:
+
+  | Change | Sign-in or key | Running agents |
+  |---|---|---|
+  | Its name | Kept | The new name from each one's next start |
+  | Only its URL's query | Kept | Their calls use the new URL at once |
+  | Its URL's scheme, host, port or path, which is another server | Asked for again. With a sign-in, the button is Sign in, and nothing changes until it's approved. With a key, Save is off until one is typed | Cut off from it until they connect to it again, which is at their next start for now |
+  | How it knows you, or the key itself | The old one is forgotten once the new one is saved | Their calls use the new one at once |
+
+  Choosing Sign in for a server that wasn't signed in to takes a sign-in too. A sign-in that's approved saves the whole edit with it, and is refused if the server was moved, removed or signed in to meanwhile, or the name taken. *Unconfirmed:* refusing it.
+- **The key's field says `Kept` while there's one to keep, with `Leave it empty to keep the one you gave.` under it.** A header that's changed keeps the key. For another server it says `That's another server, so give it its key.` Under Authentication, a server that stays signed in to says `You stay signed in.`, and another server that's signed in to says `That's another server, so you sign in to it. Nothing changes until you have.`
+- **Edit's panel is under the server's row, and so is the sign-in it starts.** Under its title is what running agents have of what's changed so far, such as `Running agents lose this server until their next start.` A server that's removed meanwhile leaves the panel under Added's heading. *Unconfirmed:* all of it, with the words, and `Kept` going from the field for another server.
+- **An agent that's cut off is refused each call, with an error that says the server was moved and that the agent has it from its next start,** and nothing it sends reaches either server. A stream the old server had open to the agent ends, and a call under way finishes there. The agent has the server again as soon as it connects afresh, in no session of the old server's. *Unconfirmed:* the words, and ending the stream.
+
+  **Editing a server, with its URL's query changed.** *Unconfirmed.*
+
+  ![Editing an MCP server that stays signed in to](screens/settings-mcp-edit-query.png)
+
+  **Editing a server, moved to another URL.** *Unconfirmed.*
+
+  ![Editing an MCP server that's to be signed in to where it moves](screens/settings-mcp-edit-moved.png)
+
+  **Editing a server with a key.** *Unconfirmed.*
+
+  ![Editing an MCP server, whose key is kept](screens/settings-mcp-edit-key.png)
+
+  **Editing a server with a key, moved to another URL.** *Unconfirmed.*
+
+  ![Editing an MCP server that takes another key where it moves](screens/settings-mcp-edit-key-moved.png)
 
 - **The iPhone app has no MCP servers page and no signing in to one.** *Not built.*

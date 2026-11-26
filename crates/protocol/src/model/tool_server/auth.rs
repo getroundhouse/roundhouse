@@ -54,3 +54,23 @@ pub enum ToolServerAuthGiven {
     #[serde(other)]
     Unknown,
 }
+
+/// How a tool server the hub has is to know the person, as a client that edits it gives that to the hub.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ToolServerAuthEdit {
+    /// As [`ToolServerAuthGiven::Key`] says.
+    Key {
+        header: String,
+        /// `None` keeps the one the server has.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        key: Option<ToolServerKey>,
+        /// The URL the person gave it for, which is the server's own once it's edited, but for its query. So a key for
+        /// one server is never sent to another that a second client has moved it to meanwhile.
+        url: String,
+    },
+    Neither,
+    /// From a newer client, which the hub refuses.
+    #[serde(other)]
+    Unknown,
+}

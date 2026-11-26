@@ -21,7 +21,7 @@ use crate::hub::tests::{
     carried_on, claimed, flushed, hub_with_worktree, serving, started_again, taken, tool_servers_of,
 };
 use crate::session::{Item, LiveSession};
-use crate::tool_servers::tests::{again, signed_in};
+use crate::tool_servers::tests::{again, named, signed_in};
 use crate::worker_link::{Answer, WorkerLink};
 
 type Answered = Result<WorkerResponse, ApiError>;
@@ -108,7 +108,14 @@ async fn says(live: &LiveSession, run: RunId, state: ServerState) {
 
 /// The same, of the one it knows as `name`, which is `hubs` of the hub's if it's any, as its worker says.
 async fn says_of(live: &LiveSession, run: RunId, hubs: Option<&str>, name: &str, state: ServerState) {
-    let server = ToolServerState { name: name.into(), hubs: hubs.map(Into::into), state, error: None, tools: None };
+    let server = ToolServerState {
+        name: name.into(),
+        hubs: hubs.map(Into::into),
+        connected_to: None,
+        state,
+        error: None,
+        tools: None,
+    };
     live.send_item(Item::Report { run, report: Report::ToolServers { servers: vec![server] }, seq: None }).await;
     settled(live).await;
 }
@@ -117,6 +124,7 @@ async fn log(hub: &Arc<Hub>) -> Vec<SessionEvent> {
     hub.blocking(|store| store.read_events(&"s".into(), Seq::FIRST, 100, u64::MAX, false)).await.unwrap()
 }
 
+/// The server has been renamed since the agent launched, which goes on knowing it as it did.
 #[tokio::test(start_paused = true)]
 async fn an_agent_is_asked_once_for_each_sign_in_only_once_its_worker_has_the_token() {
     let dir = tempfile::tempdir().unwrap();
@@ -129,6 +137,8 @@ async fn an_agent_is_asked_once_for_each_sign_in_only_once_its_worker_has_the_to
     let run = current_run(&live);
     says(&live, run, ServerState::Failed).await;
     assert_eq!(worker.told(), ["set"], "as it launched with it");
+    servers.edit(named("t", "Tickets")).unwrap();
+    settled(&live).await;
 
     let (answer, held) = oneshot::channel();
     *worker.next_set.lock() = Some(held);
@@ -139,7 +149,7 @@ async fn an_agent_is_asked_once_for_each_sign_in_only_once_its_worker_has_the_to
     settled(&live).await;
     says(&live, run, ServerState::Failed).await;
 
-    assert_eq!(worker.told(), ["set", "set", "has the token", "Linear"]);
+    assert_eq!(worker.told(), ["set", "set", "set", "has the token", "Linear"]);
 }
 
 /// Each has an agent that can say a server failed when the person has signed in to another, and nothing to ask of it.

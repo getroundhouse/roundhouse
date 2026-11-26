@@ -5,7 +5,7 @@ use protocol::capability::setup::ServerName;
 use protocol::model::{ToolServer, ToolServerName};
 
 /// What the person calls each of the hub's tool servers, by what agents call it, as the hub's records are now. So a call
-/// made before a server was removed shows the name its agent called it by. Cloning it shares it.
+/// made before a server was renamed or removed shows the name its agent called it by. Cloning it shares it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ToolServerNames(Arc<HashMap<ServerName, ToolServerName>>);
 

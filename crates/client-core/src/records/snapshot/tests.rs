@@ -344,10 +344,12 @@ fn a_url_someone_types_finds_the_first_tool_server_by_name_thats_at_it() {
     held.apply_list(Records { tool_servers: vec![second, at("b", "Linear", url), other], ..Records::default() });
     let shown = held.snapshot();
 
-    let found = |typed: &str| shown.tool_server_at(typed).map(|server| server.id.as_str());
+    let found = |typed: &str| shown.tool_server_at(typed, None).map(|server| server.id.as_str());
 
     assert_eq!(found(&format!(" {url}\n")), Some("b"));
     assert_eq!(found("https://docs.example.com/mcp"), Some("c"));
     assert_eq!(found("https://mcp.example.com/"), None);
     assert_eq!(found("mcp"), None);
+    let but = |edited: &str| shown.tool_server_at(url, Some(&edited.into())).map(|server| server.id.as_str());
+    assert_eq!((but("b"), but("a")), (Some("a"), Some("b")), "but the one that's edited");
 }

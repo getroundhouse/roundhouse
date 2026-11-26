@@ -211,6 +211,8 @@ The app hands the key to the hub, which keeps it in its own data, as [Where data
 
 The name is whatever you like, up to 64 characters. Agents call the server by a name made from it, such as `Linear_Northwind` for `Linear (Northwind)`, so two servers can't have names that come to the same. The panel says so if they do, and which server has it.
 
+Every app connected to the hub shows the URL. If it looks like it has a key in it, the panel says so, and lets you go on. If the server takes a key in a header, use **Key** instead.
+
 For a second account at the same server, add it again under another name. The panel says which server already has the URL, and lets you go on.
 
 ### Sign in
@@ -242,17 +244,33 @@ A server can want more than you allowed when you signed in, as when an agent cha
 
 ### When a server refuses a call
 
-If the server refuses its key, an agent gets an error in place of its tools, or of what a call was to answer, such as `Linear refused the key Roundhouse sent it (401)`. A Codex chat's plug says it too, as [Chats](chats.md#the-chats-mcp-servers) says. To give the server another key, remove it and add it again. One that can't be reached from an agent's machine says so in the same way.
+If the server refuses its key, an agent gets an error in place of its tools, or of what a call was to answer, such as `Linear refused the key Roundhouse sent it (401)`. A Codex chat's plug says it too, as [Chats](chats.md#the-chats-mcp-servers) says. To give the server another key, choose **Edit** in its row's **…** menu. One that can't be reached from an agent's machine says so in the same way.
 
 ### Where an agent's CLI has a server of the same name
 
-Its CLI decides. Claude uses the one you added here, in place of its own. Antigravity uses its own. Codex merges the two: it uses the one here, but leaves it off if its own is turned off, and starts no chat if its own is a command to run rather than a URL. The name that counts is the one agents call it, so to have both, remove yours and add it again under another name.
+Its CLI decides. Claude uses the one you added here, in place of its own. Antigravity uses its own. Codex merges the two: it uses the one here, but leaves it off if its own is turned off, and starts no chat if its own is a command to run rather than a URL. The name that counts is the one agents call it, so give either another if you want both.
+
+### Edit
+
+Choose **Edit** in the row's **…** menu, change what you want in the panel under the row, and click **Save**. The panel says what agents that are running have of it.
+
+![Editing an MCP server with a key](../../spec/screens/settings-mcp-edit-key.png)
+
+| If you change | Your sign-in or key | Agents that are running |
+|---|---|---|
+| The name | Is kept | Call it by the new name from their next start |
+| What's after the `?` in the URL, such as which tools to have | Is kept | Use the new URL at once |
+| The rest of the URL, which is another server | Is asked for again | Lose the server until their next start. A call to it fails, and says why |
+| **Authentication,** or the key | Is forgotten once you've saved another | Use the new one at once |
+
+- **To keep the key,** leave its field empty. You can change its header and keep the key.
+- **Where it takes a sign-in,** the button is **Sign in,** and nothing changes until you've approved it in your browser.
 
 ### Remove
 
 **Remove,** in the row's **…** menu, has the hub forget the server with its sign-in or its key, and asks first. An agent already running can't use the server's tools from then on. It revokes neither: a key still works wherever else you've kept it, and the service may go on listing Roundhouse until you take it off there.
 
-![An MCP server's menu, with Sign in again and Remove](../../spec/screens/settings-mcp-menu.png)
+![An MCP server's menu, with Sign in again, Edit and Remove](../../spec/screens/settings-mcp-menu.png)
 
 ## Whose setting it is
 

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Claimed;
 use super::area::area;
-use crate::model::{ToolServerId, ids};
+use crate::model::{ToolServerId, ToolServerPlace, ids};
 
 area! { "the agent's setup";
     /// Roundhouse's instructions reach the agent's system prompt at every launch, a resumed one included, and each of
@@ -46,10 +46,16 @@ ids!(
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ToolServerState {
     pub name: ServerName,
-    /// Which of the hub's own it is, which its worker says, as it passed it to the agent at launch, so it's told apart
-    /// from one of the CLI's own with the same name. `None` for one the agent's CLI has of its own, and from an adapter.
+    /// Which of the hub's own it is, which its worker says, as it passed it to the agent at launch, so it's still that
+    /// one once it's been renamed, and told apart from one of the CLI's own with the same name. `None` for one the
+    /// agent's CLI has of its own, and from an adapter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hubs: Option<ToolServerId>,
+    /// Where one of the hub's was as the agent last connected to it, which its worker says, as it passed the connection
+    /// on. A server that isn't there now has been moved since, so the worker refuses the agent's calls to it, until it
+    /// connects to it again. `None` for one it hasn't connected to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connected_to: Option<ToolServerPlace>,
     pub state: ServerState,
     /// Why, in the agent's words, for one that failed, on one line, without the secrets an agent's words can hold, such
     /// as a server's URL past its origin, which its adapter takes out.

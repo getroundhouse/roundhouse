@@ -4,8 +4,8 @@
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::v_flex;
 use gpui_kit::{
-    App, AppContext as _, Context, Div, Entity, IntoElement, ParentElement as _, Pixels, SharedString, Styled as _,
-    Subscription, Window, div, px,
+    App, AppContext as _, Context, Div, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _, Window, div, px,
 };
 use look::Typeset as _;
 
@@ -55,32 +55,59 @@ impl Field {
     }
 }
 
+/// What's said under a field.
+pub(super) enum Says {
+    Plain(SharedString),
+    /// In amber, for what's typed that may not be meant, and stops nothing.
+    Warning(SharedString),
+}
+
+impl From<&'static str> for Says {
+    fn from(said: &'static str) -> Self {
+        Says::Plain(said.into())
+    }
+}
+
+impl From<SharedString> for Says {
+    fn from(said: SharedString) -> Self {
+        Says::Plain(said)
+    }
+}
+
 /// A field `called` something, of what `input` holds, with what goes in it said under it. `id` is its own, for tests to
-/// find it by. It's a setting's, so it's a regular one, as tall as the panel's buttons.
+/// find it by, and what's said under it by that and `-says`. It's a setting's, so it's a regular one, as tall as the
+/// panel's buttons.
 pub(super) fn labelled(
     called: &'static str,
     id: &'static str,
     input: &Entity<InputState>,
-    says: impl Into<SharedString>,
+    says: impl Into<Says>,
     cx: &App,
 ) -> Div {
     let input = look::field(id, input, look::FieldKind::Boxed, look::ControlSize::Regular).accessibility_label(called);
-    captioned(called, input, says, cx)
+    captioned(called, id, input, says, cx)
 }
 
 /// A control `called` something, such as a dropdown among the panel's fields, with what it does said under it, laid out
-/// as a [`labelled`] field is. An assistive app calls it what it calls itself.
+/// as a [`labelled`] field is. An assistive app calls it what it calls itself, and is told what's said under it.
 pub(super) fn captioned(
     called: &'static str,
+    id: &'static str,
     control: impl IntoElement,
-    says: impl Into<SharedString>,
+    says: impl Into<Says>,
     cx: &App,
 ) -> Div {
+    let colors = look::colors(cx);
+    let (said, color) = match says.into() {
+        Says::Plain(said) => (said, colors.text_faint),
+        Says::Warning(said) => (said, colors.warning),
+    };
+    let says = div().id(SharedString::from(format!("{id}-says"))).role(Role::Label).aria_label(said.clone());
     v_flex()
         .w_full()
         .max_w(FIELDS_WIDTH)
         .gap(look::Space::Small)
         .child(div().emphasis().child(called))
         .child(control)
-        .child(div().typeset(look::Type::Detail).text_color(look::colors(cx).text_faint).child(says.into()))
+        .child(says.typeset(look::Type::Detail).text_color(color).child(said).test_support())
 }

@@ -150,6 +150,80 @@ fn a_urls_host_is_what_its_between_the_scheme_and_the_path() {
     }
 }
 
+/// Each is compared both ways, with the first of its row.
+#[test]
+fn two_urls_are_of_one_server_when_they_differ_in_their_query_at_most() {
+    let of_one = [
+        &["https://mcp.example.com/mcp", "https://mcp.example.com/mcp?tools=a", "https://mcp.example.com/mcp?tools=b"]
+            [..],
+        &["https://mcp.example.com/mcp", "HTTPS://MCP.Example.com/mcp", "https://mcp.example.com:443/mcp"],
+        &["http://127.0.0.1", "http://127.0.0.1/", "http://127.0.0.1:80", "http://127.0.0.1?tools=a"],
+        &["http://[::1]:8080/mcp", "http://[::1]:8080/mcp?"],
+        &["not a URL", "not a URL"],
+    ];
+    let of_another = [
+        &["https://mcp.example.com/mcp", "http://mcp.example.com/mcp", "http://mcp.example.com:443/mcp"][..],
+        &["https://mcp.example.com/mcp", "https://eu.mcp.example.com/mcp", "https://mcp.example.com.evil/mcp"],
+        &["https://mcp.example.com/mcp", "https://mcp.example.com:8443/mcp", "https://mcp.example.com:80/mcp"],
+        &["https://mcp.example.com/mcp", "https://mcp.example.com/mcp/", "https://mcp.example.com/MCP"],
+        &["https://mcp.example.com/mcp", "https://mcp.example.com/", "https://mcp.example.com/mcp%2f"],
+        &["https://mcp.example.com/mcp", "not a URL", "https://mcp.example.com/?/mcp"],
+        &["not a URL", "not a URL?"],
+    ];
+    let url = |text: &str| ToolServerUrl::stored(text.to_owned());
+    let same = |a: &str, b: &str| [url(a).is_same_server(&url(b)), url(b).is_same_server(&url(a))];
+
+    for row in of_one {
+        for other in row {
+            assert_eq!(same(row[0], other), [true; 2], "{} and {other}", row[0]);
+        }
+    }
+    for row in of_another {
+        for other in &row[1..] {
+            assert_eq!(same(row[0], other), [false; 2], "{} and {other}", row[0]);
+        }
+    }
+    let place = serde_json::to_string(&url("HTTPS://MCP.Example.com/mcp?tools=a").place()).unwrap();
+    assert_eq!(place, r#""https://mcp.example.com:443/mcp""#, "with no query, which can hold a key");
+}
+
+/// Near misses are the same but for one thing.
+#[test]
+fn a_url_looks_keyed_by_an_options_name_and_a_long_value_with_a_digit() {
+    let keyed = [
+        "https://mcp.example.com/mcp?searchApiKey=made-up-0123456789",
+        " https://mcp.example.com/mcp?apikey=0123456789abcdef ",
+        "https://mcp.example.com/mcp?tools=a&api_key=0123456789abcdef&b=c",
+        "https://mcp.example.com/mcp?X-API-Key=0123456789abcdef",
+        "https://mcp.example.com/mcp?ACCESS_TOKEN=0123456789abcdef",
+        "https://mcp.example.com/mcp?client-secret=0123456789abcdef",
+        "https://mcp.example.com/mcp?password=0123456789abcdef",
+        "https://mcp.example.com/mcp?token=0123456789abcde=",
+        "mcp.example.com?token=0123456789abcdef",
+    ];
+    let not_keyed = [
+        "https://mcp.example.com/mcp",
+        "https://mcp.example.com/mcp?",
+        "https://mcp.example.com/mcp?apikey",
+        "https://mcp.example.com/mcp?apikey=",
+        "https://mcp.example.com/mcp?apikey=0123456789abcde",
+        "https://mcp.example.com/mcp?apikey=abcdefghijklmnop",
+        "https://mcp.example.com/mcp?apikeys=0123456789abcdef",
+        "https://mcp.example.com/mcp?tokenizer=0123456789abcdef",
+        "https://mcp.example.com/mcp?key=0123456789abcdef",
+        "https://mcp.example.com/mcp?toolsets=core,apm,logs,metrics-2",
+        "https://mcp.example.com/apikey=0123456789abcdef",
+        "https://mcp.example.com/mcp?tools=apikey&version=0123456789abcdef",
+    ];
+
+    for typed in keyed {
+        assert!(ToolServerUrl::looks_keyed(typed), "{typed}");
+    }
+    for typed in not_keyed {
+        assert!(!ToolServerUrl::looks_keyed(typed), "{typed}");
+    }
+}
+
 #[test]
 fn a_keys_header_is_any_but_one_the_connection_to_the_server_sets() {
     use ToolServerHeaderError as E;

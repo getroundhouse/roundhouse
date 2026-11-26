@@ -1,71 +1,23 @@
-//! What a sign-in to a tool server is to, and keeping it once the person has approved it. The hub asks the server and
-//! its authorization server between the two, never under the files' lock, so each checks what it needs.
+//! Working out what a sign-in to a tool server is to, and keeping it once the person has approved it. The hub asks the
+//! server and its authorization server between the two, never under the files' lock, so each checks what it needs.
 
 use protocol::client::tool_sign_ins::ToolSignInTo;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    ToolScopes, ToolServer, ToolServerAuth, ToolServerId, ToolServerName, ToolServerUrl, ToolSignInId, ToolSignInStatus,
+    ToolServer, ToolServerAuth, ToolServerId, ToolServerName, ToolServerUrl, ToolSignInId, ToolSignInStatus,
 };
-use tool_sign_in::{Issuer, Registration, SignedIn};
+use protocol::worker::TokenNumber;
+use tool_sign_in::{Registration, SignedIn};
 use tracing::warn;
 
 use super::kept::KeptSignIn;
 use super::secret::ToolServerSecret;
 use super::servers::gone;
-use super::{ToolServerChange, ToolServers};
+use super::signing_in::{Before, To};
+use super::{SigningIn, ToolServerChange, ToolServers};
 use crate::error::internal;
 use crate::login_files::{Locked, LoginFile, Stored};
 use crate::store::AddingToolServer;
-
-/// What a sign-in is to, as it started.
-#[derive(Debug)]
-pub(crate) struct SigningIn {
-    to: To,
-    url: ToolServerUrl,
-    before: Option<Before>,
-}
-
-/// The sign-in a server had as it's signed in to again.
-#[derive(Debug)]
-struct Before {
-    issuer: Issuer,
-    /// What signing in again asks `issuer` to allow.
-    asks: ToolScopes,
-    registration: Option<Registration>,
-}
-
-#[derive(Debug)]
-enum To {
-    New {
-        id: ToolServerId,
-        name: ToolServerName,
-    },
-    /// The server whose file this is, which no other server's ever is.
-    Again {
-        id: ToolServerId,
-        file: LoginFile,
-    },
-}
-
-impl SigningIn {
-    pub(crate) fn url(&self) -> &ToolServerUrl {
-        &self.url
-    }
-
-    /// What the sign-in before was asked for and granted, and its server has wanted since, which `issuer` is to be
-    /// asked to allow too, as [`KeptSignIn::to_ask_for`] says. What's of another authorization server is nothing to
-    /// this one.
-    pub(crate) fn asked_before(&self, issuer: &Issuer) -> ToolScopes {
-        let before = self.before.as_ref().filter(|before| before.issuer == *issuer);
-        before.map_or_default(|before| before.asks.clone())
-    }
-
-    /// The server there is that it's to, and the registration that was signed in to with before, where it was with one.
-    pub(crate) fn registered(&self) -> Option<(&ToolServerId, &Registration)> {
-        let To::Again { id, .. } = &self.to else { return None };
-        Some((id, self.before.as_ref()?.registration.as_ref()?))
-    }
-}
 
 impl ToolServers {
     /// What signing in `to` would sign in to, refused as `ToolSignInStart` says.
@@ -82,13 +34,18 @@ impl ToolServers {
                 let (ToolServerAuth::SignIn { .. }, Some(file)) = (server.auth, file) else {
                     return Err(ApiError::new(ErrorCode::InvalidRequest, "that MCP server has no sign-in"));
                 };
-                let kept = kept_in(&files, &id, &file);
-                let before = kept.map(|kept| Before {
-                    issuer: kept.renewable.issuer().clone(),
-                    asks: kept.to_ask_for(),
-                    registration: kept.registration,
-                });
+                let before = kept_in(&files, &id, &file).map(Before::of);
                 Ok(SigningIn { to: To::Again { id, file }, url: server.url, before })
+            }
+            ToolSignInTo::Edit { id, name, url } => {
+                let (server, file) = self.store.tool_server(&id)?.ok_or_else(|| gone(&id))?;
+                let changes = self.changes(&id, name, url)?;
+                let url = changes.url_of(&server).clone();
+                let before = file.as_ref().and_then(|file| kept_in(&files, &id, file)).map(Before::of);
+                // What another server was asked to allow is nothing to this one. Roundhouse is the same to their
+                // service.
+                let before = before.map(|before| if changes.move_it(&server) { before.moved() } else { before });
+                Ok(SigningIn { to: To::Edit { id, changes, at: server.url.place(), file }, url, before })
             }
             // Not `Unsupported`, which says the hub signs in to no server at all.
             ToolSignInTo::Unknown => {
@@ -99,7 +56,7 @@ impl ToolServers {
 
     /// Keeps what the person `signed_in`, as the sign-in `made_by`, to what it was `to`, given at `given_at_ms`, and
     /// answers with the server's record. Refused with `Conflict` when another server has taken the name meanwhile, or
-    /// the server's ID, and when the server being signed in to again has gone, and then nothing is kept. The tokens are
+    /// the server's ID, and when the server there was has gone or is another, and then nothing is kept. The tokens are
     /// on disk before the record says it's signed in to.
     pub(crate) fn keep_sign_in(
         &self,
@@ -122,7 +79,7 @@ impl ToolServers {
         match &to.to {
             To::New { id, name } => {
                 self.free_for_new(id, name)?;
-                let kept = KeptSignIn::new(made_by, signed_in, given_at_ms, None);
+                let kept = KeptSignIn::new(made_by, signed_in, given_at_ms, TokenNumber::FIRST, None);
                 let auth = ToolServerAuth::SignIn { status: kept.status() };
                 let secret = ToolServerSecret::SignIn(Box::new(kept));
                 let server = files.connect(&secret, |file| {
@@ -134,12 +91,30 @@ impl ToolServers {
             To::Again { id, file } => {
                 // One removed, and added again under its ID, has another file.
                 if self.store.tool_server(id)?.is_none_or(|(_, holds)| holds.as_ref() != Some(file)) {
-                    let message = "the MCP server was removed while it was being signed in to";
-                    return Err(ApiError::new(ErrorCode::Conflict, message));
+                    return Err(changed_meanwhile());
                 }
                 let before = kept_in(files, id, file);
-                let kept = KeptSignIn::new(made_by, signed_in, given_at_ms, before.as_ref());
+                let number = KeptSignIn::next_number(before.as_ref());
+                let kept = KeptSignIn::new(made_by, signed_in, given_at_ms, number, before.as_ref());
                 self.keep(files, id, file, kept)
+            }
+            To::Edit { id, changes, at, file } => {
+                let there = self.store.tool_server(id)?;
+                let (server, holds) = there
+                    .filter(|(server, holds)| holds == file && server.url.place() == *at)
+                    .ok_or_else(changed_meanwhile)?;
+                if let Some(name) = &changes.name {
+                    self.free(name, id)?;
+                }
+                let before = holds.as_ref().and_then(|file| kept_in(files, id, file));
+                // On from what another server's were too, so its worker's word of one of those is never of one of
+                // these.
+                let number = KeptSignIn::next_number(before.as_ref());
+                let before = before.filter(|_| !changes.move_it(&server));
+                let kept = KeptSignIn::new(made_by, signed_in, given_at_ms, number, before.as_ref());
+                let auth = ToolServerAuth::SignIn { status: kept.status() };
+                let secret = ToolServerSecret::SignIn(Box::new(kept));
+                self.keep_secret(files, (server, holds), changes, &auth, &secret)
             }
         }
     }
@@ -147,7 +122,7 @@ impl ToolServers {
     /// Forgets `registration`, which the authorization server of what's signed in `to` has said it doesn't know, so that
     /// signing in again registers again. The sign-in there is, whatever was made with it, stays until it's refused.
     pub(crate) fn forget_registration(&self, to: &SigningIn, registration: &Registration) -> Result<(), ApiError> {
-        let To::Again { id, file } = &to.to else { return Ok(()) };
+        let (Some(id), Some(file)) = (to.to.there(), to.to.file()) else { return Ok(()) };
         self.changing(|files| {
             let holds = self.store.tool_server(id)?.is_some_and(|(_, holds)| holds.as_ref() == Some(file));
             let kept = if holds { kept_in(files, id, file) } else { None };
@@ -225,8 +200,13 @@ impl ToolServers {
         if self.store.tool_server(id)?.is_some() {
             return Err(ApiError::new(ErrorCode::Conflict, "the hub has that MCP server already"));
         }
-        self.free(name)
+        self.free(name, id)
     }
+}
+
+fn changed_meanwhile() -> ApiError {
+    let message = "the MCP server was removed, or changed to another, while it was being signed in to";
+    ApiError::new(ErrorCode::Conflict, message)
 }
 
 /// The sign-in `file`, the server `id`'s, holds. `None` where it holds none this build reads, and where it can't be read,

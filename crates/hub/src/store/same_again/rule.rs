@@ -82,6 +82,8 @@ const ROWS: &[Row] = &[
     row("github_accounts", "its login cleared", github::by_token, github::clear, github::account),
     row("github_accounts", "signing in again", github::signed_in, github::needs, github::account),
     row("github_sign_ins", "where it's got to", github::waiting, github::refused, github::sign_in),
+    row("tool_servers", "its name", hub::tool_server, hub::edit_name, hub::tool_server_rev),
+    row("tool_servers", "all that's edited", hub::tool_server, hub::edit, hub::tool_server_rev),
     row("tool_servers", "how it knows the person", hub::tool_server, hub::needs_sign_in, hub::tool_server_rev),
     row("proposals", "made again by its ask", nothing, proposals::propose, proposals::proposal),
     row("proposals", "answered again by its request", proposals::proposed, proposals::answer, proposals::proposal),

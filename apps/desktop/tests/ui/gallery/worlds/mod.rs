@@ -38,8 +38,8 @@ pub(super) use providers::{
 };
 pub(super) use summarized::summarized;
 pub(super) use tool_servers::{
-    no_tool_sign_in, one_tool_server, open_tool_server, tool_server_refused, tool_servers, tool_sign_in_refused,
-    tool_sign_in_waiting,
+    no_tool_sign_in, one_tool_server, open_tool_server, tool_server_refused, tool_servers, tool_servers_to_edit,
+    tool_sign_in_refused, tool_sign_in_waiting,
 };
 pub(super) use working::{
     queue_held, queued, steered, steered_thinking, streaming, thinking_streaming, waiting_on_checks, waiting_on_stacks,

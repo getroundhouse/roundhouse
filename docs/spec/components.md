@@ -93,7 +93,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ## Switches
 
-- **A choice of one of a few is a switch, its segments in a row, with the one chosen on,** such as the diff's views, the image comparison's and where a GitHub app is made. Each segment is a borderless button, with an icon or words, so it lights under the pointer and is on while it's chosen as any button is. `look::SwitchKind` holds the kinds, as the owner decided: one on a track, as the diff's, and one without, as the image comparison's. Where a GitHub app is made is a switch without a track rather than a pair of radios, as the owner decided, so choosing one of a few looks the same wherever it is. A track there would be the card's own colour, so it wouldn't show.
+- **A choice of one of a few is a switch, its segments in a row, with the one chosen on,** such as the diff's views, the image comparison's and where a GitHub app is made. Each segment is a borderless button, with an icon or words, so it lights under the pointer and is on while it's chosen as any button is. `look::SwitchKind` holds the kinds, as the owner decided: one on a track, as the diff's, and one without, as the image comparison's. Where a GitHub app is made is a switch without a track rather than a pair of radios, as the owner decided, so choosing one of a few looks the same wherever it is. How an MCP server knows you is a dropdown instead, as the owner decided. A track there would be the card's own colour, so it wouldn't show.
 
 **Every kind of switch, by its name.** Each is a kind in `look::SwitchKind`. *Unconfirmed.*
 

@@ -14,6 +14,7 @@ use super::super::{Following, SET_WITHIN, Servers};
 use super::support::{until, until_set};
 use crate::store::tests::open_in;
 use crate::tool_servers::ToolServers;
+use crate::tool_servers::tests::named;
 use crate::worker_link::WorkerLink;
 
 fn servers_in(dir: &Path) -> ToolServers {
@@ -59,16 +60,17 @@ fn spelled(set: &ToolServersSet) -> Vec<Spelled<'_>> {
 }
 
 #[tokio::test(start_paused = true)]
-async fn every_link_is_sent_the_whole_set_as_a_server_is_added_and_removed() {
+async fn every_link_is_sent_the_whole_set_as_a_server_is_added_renamed_and_removed() {
     let dir = tempfile::tempdir().unwrap();
     let servers = servers_in(dir.path());
     let mut links: Vec<_> = (0..2).map(|_| following(&servers, || Some(Ok(WorkerResponse::Ok)))).collect();
     let key = Some(("Authorization", "Bearer made-up"));
     let mut made = Vec::new();
     // Each once the last has reached every link, since a link is sent only the newest.
-    let changes: [&dyn Fn(); 3] = [
+    let changes: [&dyn Fn(); 4] = [
         &|| add(&servers, "k", "Linear (Northwind)", a_key()),
         &|| add(&servers, "n", "Docs", ToolServerAuthGiven::Neither),
+        &|| drop(servers.edit(named("n", "Sentry")).unwrap()),
         &|| drop(servers.remove(&"k".into()).unwrap()),
     ];
 
@@ -82,7 +84,12 @@ async fn every_link_is_sent_the_whole_set_as_a_server_is_added_and_removed() {
     for sets in &made[made.len() - 2..] {
         let sets: Vec<_> = sets.iter().map(spelled).collect();
         let linear = ("Linear_Northwind", "Linear (Northwind)", key);
-        let expected = [vec![linear], vec![("Docs", "Docs", None), linear], vec![("Docs", "Docs", None)]];
+        let expected = [
+            vec![linear],
+            vec![("Docs", "Docs", None), linear],
+            vec![linear, ("Sentry", "Sentry", None)],
+            vec![("Sentry", "Sentry", None)],
+        ];
         assert_eq!(sets, expected);
     }
     assert!(links.iter().all(|(link, _)| link.is_open()));

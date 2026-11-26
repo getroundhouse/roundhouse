@@ -47,16 +47,21 @@ pub(super) struct KeptTokens {
 }
 
 impl KeptSignIn {
-    /// What a person `signed_in` as `made_by`, given at `given_at_ms`, in place of `before`, if the server was signed in
-    /// to before.
+    /// The number of the tokens that take the place of `before`'s, if the server was signed in to before.
+    pub(super) fn next_number(before: Option<&KeptSignIn>) -> TokenNumber {
+        before.map_or(TokenNumber::FIRST, |before| before.number.next())
+    }
+
+    /// What a person `signed_in` as `made_by`, given at `given_at_ms`, whose tokens are the server's `number`, in place
+    /// of `before`, if it's a server that was signed in to before.
     pub(super) fn new(
         made_by: ToolSignInId,
         signed_in: SignedIn,
         given_at_ms: i64,
+        number: TokenNumber,
         before: Option<&KeptSignIn>,
     ) -> Self {
         let SignedIn { renewable, granted, registration } = signed_in;
-        let number = before.map_or(TokenNumber::FIRST, |before| before.number.next());
         // What was wanted at another authorization server is nothing to this one.
         let before = before.filter(|before| before.renewable.issuer() == renewable.issuer());
         let asked_again = before.is_some_and(KeptSignIn::would_ask_again);

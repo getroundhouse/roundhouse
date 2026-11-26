@@ -1,5 +1,6 @@
+use super::connections::CutOff;
 use super::server::Server;
-use super::{Failure, Proxy, Target, headers, redirect};
+use super::{Failure, PassedOn, Proxy, Target, headers, redirect};
 use crate::asks::Asks;
 use crate::tools::http::AnswerBody;
 use http_body_util::{Either, Full};
@@ -9,7 +10,7 @@ use hyper::{Method, Request, Response, StatusCode, Uri};
 use protocol::model::{SessionId, ToolServerId};
 use protocol::worker::{AskForToolAccess, RenewToolServer, ToolAccess};
 use tool_sign_in::access_wanted;
-use tracing::warn;
+use tracing::{info, warn};
 
 /// What MCP's streamable HTTP asks a server: a message, its stream of events, and to end a session.
 pub(in super::super) const METHODS: [Method; 3] = [Method::POST, Method::GET, Method::DELETE];
@@ -33,8 +34,28 @@ impl Proxy {
     /// Passes a request on to its server, and the answer back as it comes, or says why there's none.
     pub(in super::super) async fn forward(&self, id: &ToolServerId, asked: Asked<'_>) -> Response<AnswerBody> {
         let Some(server) = self.server(id) else { return Failure::Removed.answer("", &asked.body) };
+        let let_in = match self.connections.lets_in(&server.id, &server.place, &asked) {
+            Ok(let_in) => let_in,
+            Err(CutOff { first }) => {
+                // Not each time, since a CLI can go on asking, as Claude does of a task each second.
+                if first {
+                    let session_id = asked.session_id;
+                    info!(
+                        name: "tool_server.cut_off",
+                        server_id = %server.id,
+                        %session_id,
+                        "An agent is cut off from a tool server that was moved"
+                    );
+                }
+                return Failure::Moved.answer(server.label.as_str(), &asked.body);
+            }
+        };
         match self.answered(&server, &asked).await {
-            Ok(response) => passed_on(response),
+            Ok(response) => {
+                let said = (response.status(), response.headers());
+                self.connections.answered(&server.id, &server.place, &asked, let_in, said);
+                passed_on(response, |body| PassedOn::new(body, asked.method, self.moved(&server)))
+            }
             Err(failure) => {
                 warn!(name: "tool_server.request_failed", server_id = %server.id, ?failure, "A request to a tool server failed");
                 failure.answer(server.label.as_str(), &asked.body)
@@ -79,7 +100,11 @@ async fn renewed(server: &Server, target: &Target, asked: &Asked<'_>) -> Result<
     let renewing = RenewToolServer { server: server.id.clone(), refused };
     match asked.asks.ask(asked.session_id.clone(), renewing).await {
         Ok(renewed) => {
-            let renewed = Server::new(renewed).target?;
+            let renewed = Server::new(renewed);
+            if renewed.place != server.place {
+                return Err(Failure::Moved);
+            }
+            let renewed = renewed.target?;
             Ok((renewed.token() != Some(refused)).then_some(renewed))
         }
         Err(e) => {
@@ -147,9 +172,9 @@ fn request(target: &Target, to: &Uri, asked: &Asked<'_>) -> Request<Full<Bytes>>
     request
 }
 
-fn passed_on(response: Response<Incoming>) -> Response<AnswerBody> {
+fn passed_on(response: Response<Incoming>, body_of: impl FnOnce(Incoming) -> PassedOn) -> Response<AnswerBody> {
     let (parts, body) = response.into_parts();
-    let mut answer = Response::new(Either::Right(body));
+    let mut answer = Response::new(Either::Right(body_of(body)));
     *answer.status_mut() = parts.status;
     *answer.headers_mut() = headers::to_agent(&parts.headers);
     answer

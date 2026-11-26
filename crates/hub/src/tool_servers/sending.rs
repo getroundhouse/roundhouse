@@ -9,7 +9,7 @@ use protocol::worker::{ProxiedServer, ServerHeader, ServerHeaderValue, ServerSig
 use tokio::sync::watch;
 use tracing::{error, warn};
 
-use super::secret::ToolServerSecret;
+use super::secret::{ToolServerSecret, as_sent};
 use super::{SignedInBy, ToolServers};
 use crate::login_files::{Locked, LoginFile, Stored};
 use crate::store::StoreError;
@@ -152,7 +152,8 @@ fn knows_by(
     match auth {
         ToolServerAuth::Key { header } => {
             let ToolServerSecret::Key(key) = secret(files, file)? else { return Err(LeftOut::Gone) };
-            Ok(Known::By(ServerHeader { name: header.clone(), value: ServerHeaderValue::new(key.as_str()) }))
+            let value = ServerHeaderValue::new(as_sent(header, &key));
+            Ok(Known::By(ServerHeader { name: header.clone(), value }))
         }
         // Its file says how it stands, and its record says what the file does.
         ToolServerAuth::SignIn { status: _ } => {

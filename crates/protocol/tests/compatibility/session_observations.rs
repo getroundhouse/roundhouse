@@ -7,7 +7,8 @@ use protocol::capability::setup::{ServerState, ToolServerState};
 use protocol::client::listed::{Listed, SessionRecords};
 use protocol::client::{HubFrame, HubNotice};
 use protocol::model::{
-    CacheTtl, ContextUsage, ConversationCache, Observation, ObservationKey, Observed, PromptCache, Rev, WaitRead,
+    CacheTtl, ContextUsage, ConversationCache, Observation, ObservationKey, Observed, PromptCache, Rev, ToolServerUrl,
+    WaitRead,
 };
 
 use crate::keeps_its_form;
@@ -80,6 +81,7 @@ fn a_session_s_tool_servers_keep_their_form_as_a_notice_and_a_removal() {
     let docs = ToolServerState {
         name: "docs".into(),
         hubs: Some("t-1".into()),
+        connected_to: Some(ToolServerUrl::typed("https://docs.example.com/mcp").unwrap().place()),
         state: ServerState::Connected,
         error: None,
         tools: Some(2),
@@ -87,6 +89,7 @@ fn a_session_s_tool_servers_keep_their_form_as_a_notice_and_a_removal() {
     let gone = ToolServerState {
         name: "gone".into(),
         hubs: None,
+        connected_to: None,
         state: ServerState::Failed,
         error: Some("connection refused".into()),
         tools: None,
@@ -105,8 +108,8 @@ fn a_session_s_tool_servers_keep_their_form_as_a_notice_and_a_removal() {
         &HubNotice::Observation(copy),
         concat!(
             r#"{"notice":"observation","kind":"session_tool_servers","session_id":"s","servers":{"freshness":"as_of","#,
-            r#""value":[{"name":"docs","hubs":"t-1","state":"connected","tools":2},{"name":"gone","state":"failed","#,
-            r#""error":"connection refused"}],"as_of_ms":1795230000000},"rev":5}"#
+            r#""value":[{"name":"docs","hubs":"t-1","connected_to":"https://docs.example.com:443/mcp","state":"connected","#,
+            r#""tools":2},{"name":"gone","state":"failed","error":"connection refused"}],"as_of_ms":1795230000000},"rev":5}"#
         ),
     );
     keeps_its_form(

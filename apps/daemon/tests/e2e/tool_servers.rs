@@ -14,7 +14,7 @@ use hub::{
 };
 use protocol::capability::settings::Settings;
 use protocol::capability::setup::ServerState;
-use protocol::client::tool_servers::{ToolServerAdd, ToolServerRemove};
+use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit, ToolServerRemove};
 use protocol::client::tool_sign_ins::{ToolSignInBegun, ToolSignInReturned, ToolSignInTo, redirect};
 use protocol::event::EventBody;
 use protocol::model::{
@@ -24,27 +24,37 @@ use protocol::model::{
 use crate::carrying_on::update;
 use crate::support::{Stack, calls, read_all, session_records, wait_until};
 
-const KEY: &str = "made-up-key-of-a-person";
+pub(crate) const KEY: &str = "made-up-key-of-a-person";
 
-const CALL: &str = "mcp:Linear_Northwind/find_issue {}";
+/// Another of theirs.
+pub(crate) const ANOTHER: &str = "made-up-other-key-of-a-person";
 
-/// An MCP server with one tool, which refuses a request without [`KEY`], and says the method of each with it.
-/// It's there until the test's process exits.
-fn stand_in() -> (String, Receiver<String>) {
+pub(crate) const CALL: &str = "mcp:Linear_Northwind/find_issue {}";
+
+/// A request a stand-in took: its method, and the key it came with.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Took {
+    method: String,
+    pub(crate) key: String,
+}
+
+/// An MCP server with one tool, which refuses a request without [`KEY`] or [`ANOTHER`], and says each with one. It's
+/// there until the test's process exits.
+pub(crate) fn stand_in() -> (String, Receiver<Took>) {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let url = format!("http://{}/mcp", listener.local_addr().unwrap());
-    let (methods, heard) = channel();
+    let (took, heard) = channel();
     std::thread::spawn(move || {
         for stream in listener.incoming() {
-            let methods = methods.clone();
-            std::thread::spawn(move || serve(&stream.unwrap(), &methods));
+            let took = took.clone();
+            std::thread::spawn(move || serve(&stream.unwrap(), &took));
         }
     });
     (url, heard)
 }
 
 /// Answers one connection's one request, and closes it.
-fn serve(mut stream: &TcpStream, methods: &Sender<String>) {
+fn serve(mut stream: &TcpStream, took: &Sender<Took>) {
     let mut from = BufReader::new(stream);
     let mut lines = Vec::new();
     loop {
@@ -65,8 +75,8 @@ fn serve(mut stream: &TcpStream, methods: &Sender<String>) {
     let mut body = vec![0; field("content-length").unwrap().parse().unwrap()];
     from.read_exact(&mut body).unwrap();
     let asked: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    let (status, result) = if field("x-key").as_deref() == Some(KEY) {
-        let _ = methods.send(asked["method"].as_str().unwrap().to_string());
+    let (status, result) = if let Some(key) = field("x-key").filter(|key| [KEY, ANOTHER].contains(&key.as_str())) {
+        let _ = took.send(Took { method: asked["method"].as_str().unwrap().to_string(), key });
         let result = match asked["method"].as_str() {
             Some("tools/list") => serde_json::json!({ "tools": [{ "name": "find_issue" }] }),
             Some("tools/call") => serde_json::json!({ "content": [{ "type": "text", "text": "Found issue 7" }] }),
@@ -83,7 +93,7 @@ fn serve(mut stream: &TcpStream, methods: &Sender<String>) {
 
 /// Every file under `dir` that holds `text`, such as the hub's database, its log and the agent's copy of what it was
 /// launched with.
-fn holding(dir: &Path, text: &str) -> Vec<PathBuf> {
+pub(crate) fn holding(dir: &Path, text: &str) -> Vec<PathBuf> {
     let mut found = Vec::new();
     for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
         let Ok(kind) = entry.file_type() else { continue };
@@ -100,7 +110,7 @@ fn holding(dir: &Path, text: &str) -> Vec<PathBuf> {
 }
 
 /// Adds the server at `url` as `Linear (Northwind)`, which agents call `Linear_Northwind`, with [`KEY`].
-fn add(client: &Client, url: String) {
+pub(crate) fn add(client: &Client, url: String) {
     let auth = ToolServerAuthGiven::Key { header: "X-Key".into(), key: ToolServerKey::new(KEY) };
     client.call(ToolServerAdd { id: "t".into(), name: "Linear (Northwind)".into(), url, auth }).unwrap();
 }
@@ -116,7 +126,8 @@ fn an_agent_calls_a_server_the_person_added_with_their_key_which_neither_it_nor_
     let answered = calls::run(&client, &chat.id, CALL, 1);
 
     assert_eq!(answered, [("Found issue 7".to_string(), false)]);
-    assert_eq!(heard.try_iter().last().as_deref(), Some("tools/call"), "it took the key from the worker");
+    let took = Took { method: "tools/call".into(), key: KEY.into() };
+    assert_eq!(heard.try_iter().last(), Some(took), "it took the key from the worker");
     let kept = stack.agent_state().join("last-mcp-config");
     assert!(std::fs::read_to_string(kept).unwrap().contains("Linear_Northwind"), "what's searched below");
     assert!(!format!("{:?}", read_all(&client, &chat.id)).contains(KEY));
@@ -282,7 +293,7 @@ fn states(client: &Client, chat: &SessionId) -> Vec<(String, ServerState)> {
 
 /// Each agent was given the server as it launched, the second one that needed signing in to by then, so the CLI of each
 /// failed to connect to it. The worker refuses it until it has the token, and each is asked once, so it's connected only
-/// if the worker had the token first.
+/// if the worker had the token first. The server has been given another name since, which neither agent knows it by.
 #[test]
 fn a_running_agent_is_connected_to_a_server_once_the_person_signs_in_to_it() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -303,6 +314,7 @@ fn a_running_agent_is_connected_to_a_server_once_the_person_signs_in_to_it() {
     let second = client.session_create(&workspace.id, AgentKind::Claude, Settings::default(), None).unwrap();
     failed(&second.id);
 
+    client.call(ToolServerEdit { id: "t".into(), name: Some("Linear".into()), url: None, auth: None }).unwrap();
     sign_in(&client, &stand_in, ToolSignInTo::Again { id: "t".into() });
 
     for chat in [first.id, second.id] {
