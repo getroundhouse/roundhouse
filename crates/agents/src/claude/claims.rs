@@ -49,6 +49,7 @@ pub(super) fn claims() -> Capabilities {
     });
     claims.account.limits = Some(Claimed {});
     claims.setup.tool_servers = Some(Claimed {});
+    claims.setup.tool_server_reconnect = Some(Claimed {});
     claims.background.subagents = Some(Claimed {});
     claims.background.background_commands = Some(protocol::capability::background::BackgroundCommands {
         hears: protocol::capability::background::Hears::AtOnce,

@@ -27,6 +27,8 @@ impl Followed for Credential {
         GitCredentialSet { credential }
     }
 
+    fn applied(&mut self, _: &WorkerLink) {}
+
     async fn changed(&mut self) -> bool {
         match &mut self.0 {
             Some(credential) => credential.changed().await.is_ok(),

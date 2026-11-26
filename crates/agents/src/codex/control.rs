@@ -37,6 +37,7 @@ impl AgentProcess for CodexProcess {
             Control::Change(settings) => change(&self.shared, settings).await,
             // Codex reads nothing to keep, which its claims say, so none is sent.
             Control::Compact { asked, .. } => compact(&self.shared, *asked).await,
+            Control::Reconnect { server } => super::tool_servers::reload(&self.shared, server).await,
             Control::Note { .. }
             | Control::Aside { .. }
             | Control::Overrule { .. }
@@ -47,7 +48,6 @@ impl AgentProcess for CodexProcess {
             | Control::RunCommand { .. }
             | Control::StopTask { .. }
             | Control::ReadTaskOutput { .. }
-            | Control::Reconnect { .. }
             | Control::SignInToServer { .. }
             | Control::SetGoal { .. }
             | Control::PauseGoal

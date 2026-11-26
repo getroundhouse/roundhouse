@@ -27,6 +27,9 @@ pub(in super::super) trait Followed: Send + 'static {
     /// Sets what the hub has now, which counts as the last sent from then on.
     fn set(&mut self) -> Self::Set;
 
+    /// The worker of `link` has applied the last set.
+    fn applied(&mut self, link: &WorkerLink);
+
     /// Once the hub has another than the last sent, which says `true`, or `false` once the link has nothing to follow.
     fn changed(&mut self) -> impl Future<Output = bool> + Send;
 
@@ -100,7 +103,10 @@ impl<F: Followed> Following<F> {
     /// What an answer that came, or didn't, within [`SET_WITHIN`] comes to, as [`Following::answered`] says.
     fn taken(&mut self, answered: Result<Result<(), ApiError>, Elapsed>) -> Result<(), ApiError> {
         match answered {
-            Ok(Ok(())) => Ok(()),
+            Ok(Ok(())) => {
+                self.followed.applied(&self.link);
+                Ok(())
+            }
             Ok(Err(refused)) => self.followed.refused(&self.link, refused),
             Err(_) => {
                 let message = format!("the worker didn't answer its {} within {SET_WITHIN:?}", F::CALLED);

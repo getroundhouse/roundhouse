@@ -100,6 +100,8 @@ pub(crate) enum Command {
     /// Tells the run how the person talks with the agent, if that changed since it was last told, after whatever was
     /// asked before, so a prompt said out loud reaches a run that knows the mode is on.
     TellTheMode,
+    /// Asks the run to connect again to each tool server that's due, after whatever was asked before, so after a launch.
+    ReconnectToolServers,
     /// Sends the prompts kept for the turn's end, which has come.
     SendAfterTheTurn,
     /// The session is gone. What's queued ahead of this is carried out, and then the task stops.

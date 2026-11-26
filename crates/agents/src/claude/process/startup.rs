@@ -49,6 +49,7 @@ pub(super) async fn begin(
         compacts: Mutex::new(AskedToCompact::default()),
         waiting: Mutex::new(HashMap::new()),
         pending_controls: Mutex::new(HashMap::new()),
+        tool_servers: Mutex::default(),
         context: Mutex::new(ContextWatch::default()),
         usage: Mutex::new(UsageWatch::default()),
         entering_plan: AtomicBool::new(false),

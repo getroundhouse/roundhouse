@@ -8,12 +8,18 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use client_core::{Client, RecordsFeed};
-use hub::{ToolServerPage, ToolServerScript, ToolServerStandIn, ToolServerWants};
+use hub::{ToolServerPage, ToolServerRefreshing, ToolServerScript, ToolServerStandIn, ToolServerWants};
+use protocol::capability::settings::Settings;
+use protocol::capability::setup::ServerState;
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerRemove};
 use protocol::client::tool_sign_ins::{ToolSignInBegun, ToolSignInReturned, ToolSignInTo, redirect};
-use protocol::model::{ToolServerAuth, ToolServerAuthGiven, ToolServerKey, ToolSignInStatus};
+use protocol::event::EventBody;
+use protocol::model::{
+    AgentKind, Observation, Observed, SessionId, ToolServerAuth, ToolServerAuthGiven, ToolServerKey, ToolSignInStatus,
+};
 
-use crate::support::{Stack, calls, read_all, wait_until};
+use crate::carrying_on::update;
+use crate::support::{Stack, calls, read_all, session_records, wait_until};
 
 const KEY: &str = "made-up-key-of-a-person";
 
@@ -211,4 +217,71 @@ fn a_tool_that_wants_more_access_fails_alone_and_works_once_the_person_signs_in_
     assert!(said.contains(expected), "{said}");
     assert_eq!(*found_before, found);
     assert_eq!(after, [("Closed issue 7".to_string(), false), found]);
+}
+
+/// How the chat's agent last said each of its servers is, where the hub knows.
+fn states(client: &Client, chat: &SessionId) -> Vec<(String, ServerState)> {
+    let listed = session_records(client, chat).observations.into_iter();
+    let servers = listed.filter_map(|observation| match observation {
+        Observation::SessionToolServers { servers: Observed::AsOf { value, .. }, .. } => Some(value),
+        _ => None,
+    });
+    servers.flatten().map(|server| (server.name.to_string(), server.state)).collect()
+}
+
+/// Each agent was given the server as it launched, the second one that needed signing in to by then, so the CLI of each
+/// failed to connect to it. The worker refuses it until it has the token, and each is asked once, so it's connected only
+/// if the worker had the token first.
+#[test]
+fn a_running_agent_is_connected_to_a_server_once_the_person_signs_in_to_it() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let stand_in = runtime.block_on(ToolServerStandIn::with(ToolServerScript::default()));
+    let stack = Stack::start();
+    let client = stack.client();
+    sign_in(&client, &stand_in, new(&stand_in));
+    stand_in.change(|script| script.refreshing = ToolServerRefreshing::Refused("invalid_grant"));
+    stand_in.end_access_tokens();
+    let (workspace, first) = stack.workspace(&client);
+    let is = |state| [("Linear_Northwind".to_string(), state)];
+    let failed = |chat: &SessionId| {
+        let answered = calls::run(&client, chat, CALL, 1);
+        assert!(answered[0].1 && answered[0].0.contains("Sign in"), "{answered:?}");
+        wait_until("the server to have failed", || states(&client, chat) == is(ServerState::Failed));
+    };
+    failed(&first.id);
+    let second = client.session_create(&workspace.id, AgentKind::Claude, Settings::default(), None).unwrap();
+    failed(&second.id);
+
+    sign_in(&client, &stand_in, ToolSignInTo::Again { id: "t".into() });
+
+    for chat in [first.id, second.id] {
+        wait_until("it to be connected", || states(&client, &chat) == is(ServerState::Connected));
+        assert_eq!(calls::run(&client, &chat, CALL, 2), [("Found issue 7".to_string(), false)]);
+        assert_eq!(states(&client, &chat), is(ServerState::Connected), "as its next turn says too");
+    }
+}
+
+/// The next hub has which servers the agent was given, and how each is, as the last hub heard.
+#[test]
+fn an_agent_the_hub_carried_on_with_is_connected_to_a_server_signed_in_to_since() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let stand_in = runtime.block_on(ToolServerStandIn::with(ToolServerScript::default()));
+    let mut stack = Stack::start();
+    let client = stack.client();
+    sign_in(&client, &stand_in, new(&stand_in));
+    stand_in.change(|script| script.refreshing = ToolServerRefreshing::Refused("invalid_grant"));
+    stand_in.end_access_tokens();
+    let (_, chat) = stack.workspace(&client);
+    let is = |state| [("Linear_Northwind".to_string(), state)];
+    assert!(calls::run(&client, &chat.id, CALL, 1)[0].1);
+    wait_until("the server to have failed", || states(&client, &chat.id) == is(ServerState::Failed));
+
+    update(&mut stack);
+    let client = stack.client();
+    sign_in(&client, &stand_in, ToolSignInTo::Again { id: "t".into() });
+
+    wait_until("it to be connected", || states(&client, &chat.id) == is(ServerState::Connected));
+    let started =
+        read_all(&client, &chat.id).iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count();
+    assert_eq!(started, 1, "the same agent");
 }

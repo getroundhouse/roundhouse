@@ -1,5 +1,6 @@
 //! An agent reaching the hub's tool servers through its worker, which sends each the key no agent is given.
 
+use std::collections::BTreeSet;
 use std::net::Ipv4Addr;
 use std::time::Duration;
 
@@ -7,8 +8,8 @@ use protocol::capability::Report;
 use protocol::capability::setup::ToolServerState;
 use protocol::model::{ToolServerHeader, ToolServerName, ToolServerUrl};
 use protocol::worker::{
-    ProxiedServer, ServeTools, ServerHeader, ServerHeaderValue, ToolServersSet, ToolsToken, WorkerFrame, WorkerOutcome,
-    WorkerRequest, WorkerResponse,
+    ProxiedServer, ServeTools, ServerHeader, ServerHeaderValue, ServerSignIn, ToolServersSet, ToolsToken, WorkerFrame,
+    WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader, Lines};
@@ -44,15 +45,11 @@ async fn an_agent_is_launched_with_the_servers_set_before_it_and_reaches_one_wit
     let dir = tempfile::tempdir().unwrap();
     let server = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
     let set = ProxiedServer {
-        id: "t-1".into(),
-        name: "linear".into(),
-        label: ToolServerName::typed("Linear").unwrap(),
-        url: ToolServerUrl::typed(&format!("http://{}/mcp", server.local_addr().unwrap())).unwrap(),
         header: Some(ServerHeader {
             name: ToolServerHeader::typed("X-Key").unwrap(),
             value: ServerHeaderValue::new("made-up-key"),
         }),
-        sign_in: None,
+        ..proxied("t-1", "linear", &format!("http://{}/mcp", server.local_addr().unwrap()))
     };
     let Worker { read: hub_read, write: mut hub_write, running } =
         start_worker(config(dir.path(), Some(cli(dir.path(), &format!("{SAYS_ITS_SERVERS}\n{KEEPS_ITS_MCP_CONFIG}")))));
@@ -104,6 +101,46 @@ async fn servers_said<R: AsyncRead + Unpin>(frames: &mut Lines<BufReader<R>>) ->
         }
     };
     timeout(Duration::from_secs(10), said).await.expect("a report")
+}
+
+/// One that needs signing in to is given too, so its agent can be connected to it once it's signed in to.
+#[tokio::test]
+async fn an_agent_is_given_each_server_whether_or_not_its_signed_in_to() {
+    let dir = tempfile::tempdir().unwrap();
+    let Worker { read: hub_read, write: mut hub_write, running } =
+        start_worker(config(dir.path(), Some(cli(dir.path(), KEEPS_ITS_MCP_CONFIG))));
+    let mut frames = BufReader::new(hub_read).lines();
+    let linear = ProxiedServer {
+        sign_in: Some(ServerSignIn::NeedsSignIn),
+        ..proxied("t-1", "linear", "https://mcp.example.com/mcp")
+    };
+    let docs = proxied("t-2", "docs", "https://docs.example.com/mcp");
+    let calls = [
+        hello(),
+        WorkerRequest::ServeTools(ServeTools { port: None }),
+        WorkerRequest::ToolServersSet(ToolServersSet { servers: vec![linear, docs] }),
+        WorkerRequest::AgentStart(agent_start("s", dir.path(), Some(ToolsToken::new("token-s")))),
+    ];
+    send(&mut hub_write, calls).await;
+    reply(&mut frames, 3).await;
+
+    let told: Value = serde_json::from_str(&given(dir.path()).await.1).unwrap();
+    let names: BTreeSet<_> = told["mcpServers"].as_object().unwrap().keys().map(String::as_str).collect();
+    assert_eq!(names, BTreeSet::from(["docs", "linear", "roundhouse"]));
+    hub_write.shutdown().await.unwrap();
+    timeout(Duration::from_secs(10), running).await.expect("the worker didn't exit").unwrap();
+}
+
+/// The server `id` at `url`, which needs no key, as a hub sets it on its workers.
+fn proxied(id: &str, name: &str, url: &str) -> ProxiedServer {
+    ProxiedServer {
+        id: id.into(),
+        name: name.into(),
+        label: ToolServerName::typed("Linear").unwrap(),
+        url: ToolServerUrl::typed(url).unwrap(),
+        header: None,
+        sign_in: None,
+    }
 }
 
 /// Every file under `dir`, which is all a worker in it writes to.

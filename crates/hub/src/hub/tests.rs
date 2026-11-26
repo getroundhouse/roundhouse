@@ -179,6 +179,11 @@ pub(crate) fn store_of(hub: &Hub) -> &Arc<Store> {
     &hub.store
 }
 
+/// The hub's tool servers, for a test outside the hub's own module.
+pub(crate) fn tool_servers_of(hub: &Hub) -> &crate::tool_servers::ToolServers {
+    &hub.tool_servers
+}
+
 /// Has `link` be `w`'s worker.
 pub(crate) fn serving(hub: &Hub, link: &Arc<WorkerLink>) {
     hub.workers.lock().insert("w".into(), link.clone());

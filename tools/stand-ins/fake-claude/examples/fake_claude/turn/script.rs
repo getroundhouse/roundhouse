@@ -33,8 +33,9 @@ fn remember(config: &Config, prompt: &str) {
 pub(crate) fn begin(config: &Config, out: &Out) {
     let mut init = json!({"type":"system","subtype":"init","session_id":config.session_id,"model":current_model(),
         "cwd":std::env::current_dir().unwrap(),"permissionMode":current_mode(),"claude_code_version":"fake"});
-    if let Some(servers) = crate::mcp::listed() {
-        init["mcp_servers"] = servers;
+    if let Some((servers, tools)) = crate::mcp::listed() {
+        init["mcp_servers"] = servers.into();
+        init["tools"] = tools.into();
     }
     emit(out, init);
     if crate::account::says_limits(&config.conversation) {

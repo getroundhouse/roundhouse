@@ -1,18 +1,73 @@
 //! What the CLI says of its tool servers: `init`, which it sends as each turn starts, lists each with its status, and
-//! every tool the agent has. The adapter never asks with `mcp_status`, since its answer has each server's
+//! every tool the agent has, and what it answers of one it's asked to connect to again says how that one is until the
+//! next. The adapter never asks with `mcp_status`, since its answer has each server's
 //! `Authorization` header in it, and the hub keeps the CLI's lines.
 
+use std::collections::HashMap;
+
 use protocol::capability::Report;
-use protocol::capability::setup::{ServerState, ToolServerState};
+use protocol::capability::setup::{ServerName, ServerState, ToolServerState};
 use protocol::event::EventBody;
 use protocol::worker::TOOLS_SERVER;
 use serde_json::Value;
 
 use super::super::normalize::value_of;
 
+/// What the CLI last said of its tool servers, whole, with what it has answered of one since, and which of them it's been
+/// asked to connect to again, by the request that asked.
+#[derive(Default)]
+pub(in crate::claude) struct ToolServers {
+    last: Vec<ToolServerState>,
+    reconnecting: HashMap<String, ServerName>,
+}
+
+impl ToolServers {
+    /// Takes `servers`, as an `init` lists them, and returns them to report.
+    pub(in crate::claude) fn listed(&mut self, servers: Vec<ToolServerState>) -> Report {
+        self.last.clone_from(&servers);
+        Report::ToolServers { servers }
+    }
+
+    /// The CLI is being asked to connect to `server` again, in the request `request_id`. Returns the servers to report,
+    /// with that one starting, where the CLI isn't connected to it.
+    pub(in crate::claude) fn reconnecting(&mut self, request_id: String, server: ServerName) -> Option<Report> {
+        let starting = matches!(self.state_of(&server), Some(ServerState::Failed | ServerState::NeedsSignIn));
+        let report = if starting { self.came_to(server.clone(), ServerState::Starting) } else { None };
+        self.reconnecting.insert(request_id, server);
+        report
+    }
+
+    /// The request `request_id` wasn't written, so nothing answers it, and the CLI has gone.
+    pub(in crate::claude) fn unasked(&mut self, request_id: &str) {
+        self.reconnecting.remove(request_id);
+    }
+
+    /// Takes the CLI's answer to the request `request_id`, if it's one to connect to a server again: that it
+    /// `connected`, or that it failed. Returns the servers to report, whole. How many tools the server gives isn't known
+    /// until the next `init` lists them, and why it failed isn't kept, since no `init` says it, and the CLI's words for it
+    /// can hold what a server said.
+    pub(in crate::claude) fn answered(&mut self, request_id: &str, connected: bool) -> Option<Report> {
+        let name = self.reconnecting.remove(request_id)?;
+        self.came_to(name, if connected { ServerState::Connected } else { ServerState::Failed })
+    }
+
+    fn state_of(&self, name: &ServerName) -> Option<ServerState> {
+        self.last.iter().find(|server| server.name == *name).map(|server| server.state)
+    }
+
+    /// The servers with `name` as `state`, or `None` for one the CLI never listed, which it doesn't have.
+    fn came_to(&mut self, name: ServerName, state: ServerState) -> Option<Report> {
+        let server = self.last.iter_mut().find(|server| server.name == name)?;
+        if server.state != state {
+            *server = ToolServerState { name, hubs: None, state, error: None, tools: None };
+        }
+        Some(Report::ToolServers { servers: self.last.clone() })
+    }
+}
+
 /// What `body`, which the CLI said in `line`, says of the agent's tool servers, or `None` unless it's an `init` that
 /// lists them.
-pub(in crate::claude) fn said(body: &EventBody, line: &str) -> Option<Report> {
+pub(in crate::claude) fn said(body: &EventBody, line: &str) -> Option<Vec<ToolServerState>> {
     let EventBody::AgentInit { .. } = body else { return None };
     let init = value_of(line)?;
     let listed: Vec<(&str, &Value)> = init["mcp_servers"]
@@ -33,7 +88,7 @@ pub(in crate::claude) fn said(body: &EventBody, line: &str) -> Option<Report> {
             tools: if state == ServerState::Connected { tools.of_server(name) } else { None },
         }
     });
-    Some(Report::ToolServers { servers: servers.collect() })
+    Some(servers.collect())
 }
 
 fn state(status: &Value) -> ServerState {
@@ -113,8 +168,7 @@ mod tests {
     fn reported(init: &Value) -> Option<Vec<ToolServerState>> {
         let line = init.to_string();
         let Parsed::Event(body) = Normalizer::default().line(&line).parsed else { panic!("not an event") };
-        let Report::ToolServers { servers } = said(&body, &line)? else { panic!("another report") };
-        Some(servers)
+        said(&body, &line)
     }
 
     fn init(servers: &Value, tools: &[&str]) -> Value {
@@ -169,6 +223,31 @@ mod tests {
         assert_eq!(counts(&["a.b", "a b"], &["mcp__a_b__x"]), [None, None], "either's");
         assert_eq!(counts(&["claude.ai  Mail (Work)"], &["mcp__claude_ai_Mail_Work__x"]), [Some(1)]);
         assert_eq!(counts(&["docs \u{1f5c2}"], &["mcp__docs_____x"]), [Some(1)], "an emoji is two UTF-16 units");
+    }
+
+    /// What's reported of having the CLI connect to `server` again, as it's asked and as it answers, after an `init` that
+    /// listed two.
+    fn asked_for(server: &str, connected: bool) -> [Option<Vec<ToolServerState>>; 2] {
+        let mut servers = ToolServers::default();
+        servers.listed(vec![is("docs", ServerState::Connected, Some(2)), is("linear", ServerState::Failed, None)]);
+        let asked = servers.reconnecting("r".into(), server.into());
+        assert_eq!(servers.answered("another", connected), None, "an answer to something else");
+        let answered = servers.answered("r", connected);
+        assert_eq!(servers.answered("r", connected), None, "only once");
+        [asked, answered].map(|report| {
+            let Report::ToolServers { servers } = report? else { panic!("another report") };
+            Some(servers)
+        })
+    }
+
+    #[test]
+    fn a_server_connected_to_again_is_starting_and_then_what_the_cli_answers_until_the_next_init() {
+        let linear = |state| Some(vec![is("docs", ServerState::Connected, Some(2)), is("linear", state, None)]);
+
+        assert_eq!(asked_for("linear", true), [linear(ServerState::Starting), linear(ServerState::Connected)]);
+        assert_eq!(asked_for("linear", false), [linear(ServerState::Starting), linear(ServerState::Failed)]);
+        assert_eq!(asked_for("docs", true), [None, linear(ServerState::Failed)], "it was connected, with its tools");
+        assert_eq!(asked_for("nothing", false), [None, None], "a server it doesn't have");
     }
 
     /// So a chat with none says so, and one whose CLI doesn't say is not known.

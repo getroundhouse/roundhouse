@@ -12,5 +12,6 @@ mod models;
 mod prompt_intake;
 #[cfg(unix)]
 mod real_cli;
+mod tool_servers;
 mod transitions;
 mod wakeup;

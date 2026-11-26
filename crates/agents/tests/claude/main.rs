@@ -11,5 +11,6 @@ mod covering;
 mod process;
 mod results;
 mod run_files;
+mod tool_servers;
 
 mod login;

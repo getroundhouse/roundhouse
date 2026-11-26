@@ -7,11 +7,21 @@ use tracing::info;
 
 use super::super::WorkerLink;
 use super::Followed;
-use crate::tool_servers::SentToolServers;
+use crate::tool_servers::{SentToolServers, SignedInBy};
 
-/// The tool servers the hub has its workers pass calls on to, or `None` once the link's worker has said it passes on
-/// none, as one from before they did says.
-pub(in super::super) struct Servers(pub(in super::super) Option<watch::Receiver<SentToolServers>>);
+/// The tool servers the hub has its workers pass calls on to.
+pub(in super::super) struct Servers {
+    /// `None` once the link's worker has said it passes on none, as one from before they did says.
+    sent: Option<watch::Receiver<SentToolServers>>,
+    /// Those signed in to in the last set.
+    last: SignedInBy,
+}
+
+impl Servers {
+    pub(in super::super) fn new(sent: watch::Receiver<SentToolServers>) -> Self {
+        Self { sent: Some(sent), last: SignedInBy::default() }
+    }
+}
 
 impl Followed for Servers {
     type Set = ToolServersSet;
@@ -19,11 +29,18 @@ impl Followed for Servers {
     const CALLED: &'static str = "tool servers";
 
     fn set(&mut self) -> ToolServersSet {
-        self.0.as_mut().map_or_else(|| ToolServersSet { servers: Vec::new() }, |sent| sent.borrow_and_update().set())
+        let Some(sent) = &mut self.sent else { return ToolServersSet { servers: Vec::new() } };
+        let sent = sent.borrow_and_update();
+        self.last = sent.signed_in().clone();
+        sent.set()
+    }
+
+    fn applied(&mut self, link: &WorkerLink) {
+        link.has_signed_in(&self.last);
     }
 
     async fn changed(&mut self) -> bool {
-        match &mut self.0 {
+        match &mut self.sent {
             Some(sent) => sent.changed().await.is_ok(),
             None => false,
         }
@@ -35,7 +52,7 @@ impl Followed for Servers {
         if refused.code != ErrorCode::Unsupported {
             return Err(refused);
         }
-        self.0 = None;
+        self.sent = None;
         info!(
             name: "worker.tool_servers_unsupported",
             link = %link,

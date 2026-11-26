@@ -57,7 +57,7 @@ While the chat has an MCP server, a plug sits before the limits' bars. Rest the 
 | A server says | Which means |
 |---|---|
 | `14 tools`, or `Connected` | The agent has it |
-| `Starting` | Its CLI is still connecting to it |
+| `Starting` | Its CLI is still connecting to it, as it does when you've just signed in to it |
 | `Can't be reached` | Its CLI couldn't connect. Codex says why, on the line under it |
 | **Sign in** | It's one of the hub's that needs you to sign in to it, and the plug is amber until you do. The button opens its page in your browser, and signs in for every chat |
 | `Wants more access`, with **Sign in** | It's one of the hub's that works, and refused a call that needs more than you allowed. Signing in again asks to be allowed that too |
@@ -67,6 +67,8 @@ While the chat has an MCP server, a plug sits before the limits' bars. Rest the 
 | `Removed` | It was removed from the hub after the agent started |
 | `Turned off` | The CLI's own settings turn it off |
 | Nothing | The agent hasn't said |
+
+Once you've signed in, an agent that was started with the server connects to it, in the middle of a turn too. Antigravity does at your next prompt.
 
 When a sign-in comes to nothing, why is on the line under the server, and **Sign in** starts it again. Settings › MCP servers shows the sign-in too, with a button that opens its page again and one that cancels it.
 

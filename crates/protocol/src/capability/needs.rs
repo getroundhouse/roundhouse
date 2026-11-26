@@ -36,6 +36,7 @@ const NEEDS: &[(Capability, &[Capability])] = {
         (Context(context::Capability::UsageParts), &[Context(context::Capability::Usage)]),
         (Background(background::Capability::DirectSubagents), &[Background(background::Capability::Subagents)]),
         (Output(output::Capability::StreamThinking), &[Output(output::Capability::Thinking)]),
+        (Setup(setup::Capability::ToolServerReconnect), &[Setup(setup::Capability::ToolServers)]),
         (Setup(setup::Capability::ToolServerSignIn), &[Setup(setup::Capability::ToolServers)]),
         (Setup(setup::Capability::ToolServerSignIn), &[Asking(asking::Capability::ServerRequests)]),
     ]

@@ -6,7 +6,7 @@
 //! [`ToolServers::sent`] says, with the keys and the access tokens, which go nowhere else.
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 mod kept;
 mod renewals;
@@ -14,9 +14,11 @@ mod secret;
 mod sending;
 mod servers;
 mod sign_ins;
+mod signed_in_by;
 mod wanted;
 pub(crate) use renewals::{Checked, Due, Held};
 pub(crate) use sending::SentToolServers;
 pub(crate) use servers::{ToolServerChange, ToolServerRemoved, ToolServers};
 pub(crate) use sign_ins::SigningIn;
+pub(crate) use signed_in_by::SignedInBy;
 pub(crate) use wanted::Wanted;

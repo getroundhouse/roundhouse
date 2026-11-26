@@ -4,9 +4,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::ProviderName;
+use protocol::model::{ProviderName, WorkspaceId};
 use protocol::worker::{Hello, HelloReply};
 use providers::Provider;
+use tracing::{Instrument as _, Span};
 
 use super::WorkerLink;
 use super::following::{Credential, Following, Servers};
@@ -26,8 +27,18 @@ impl Followings {
         let credential = Credential((!left_to_machine).then(|| hub.git_credential()));
         Self {
             credential: Following::new(Arc::clone(link), credential),
-            tool_servers: Following::new(Arc::clone(link), Servers(Some(hub.sent_tool_servers()))),
+            tool_servers: Following::new(Arc::clone(link), Servers::new(hub.sent_tool_servers())),
         }
+    }
+
+    /// Follows each from now on, and has `hub` look at its agents again each time `link`, to `workspace_id`'s worker, has
+    /// the token of a tool server that's newly signed in to.
+    pub(super) fn follow(self, hub: &Arc<Hub>, link: &Arc<WorkerLink>, workspace_id: &WorkspaceId, span: &Span) {
+        tokio::spawn(self.credential.follow().instrument(span.clone()));
+        // Before the servers are followed, so it misses none.
+        let reconnecting = Arc::clone(hub).reconnect_as_signed_in(workspace_id.clone(), Arc::clone(link));
+        tokio::spawn(reconnecting.instrument(span.clone()));
+        tokio::spawn(self.tool_servers.follow().instrument(span.clone()));
     }
 }
 

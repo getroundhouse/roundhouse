@@ -12,10 +12,12 @@ use protocol::worker::{AgentSpec, AgentStarted, AgentStop};
 use tracing::{error, warn};
 
 use super::super::chat_settings::ChatSettings;
+use super::super::reconnecting::HadSignIns;
 use super::super::{AgentRun, Command, LiveSession, Origin};
 use crate::hub::Hub;
 use crate::logins::{Handed, Launching, NO_ACCOUNT_TO_SPARE};
 use crate::store::Store;
+use crate::tool_servers::SignedInBy;
 use crate::worker_link::WorkerLink;
 
 /// What an agent is launched with, besides what the session keeps.
@@ -169,6 +171,8 @@ impl LiveSession {
             interaction,
         };
         let starting = AgentRun { link: link.id, run: asked };
+        // As of now, so one signed in to while the agent starts is looked at once it has.
+        let signed_in = link.signed_in().borrow().clone();
         self.state.lock().agent = Some(starting);
         // Now, rather than once it has started, so it's never what the new run said that goes.
         self.tool_servers_of_no_run_gone(hub).await;
@@ -180,7 +184,8 @@ impl LiveSession {
             }
         })?;
         let claims = RunCapabilities { run, claims: capabilities };
-        let current = self.take_started(starting, run, already_running, &claims, interaction);
+        let had = if already_running { SignedInBy::default() } else { signed_in };
+        let current = self.take_started(starting, already_running, &claims, had, interaction);
         self.forget_other_run_logins(hub, run).await;
         if already_running {
             // Its start, which recorded them, may be from before the record let go of them, as when its worker's
@@ -193,9 +198,10 @@ impl LiveSession {
             let started = EventBody::AgentStarted { pid, resumed: resume, build, previous_build, capabilities };
             self.record_or_log(Origin::Run { run, current, numbered: None }, started).await;
         }
-        // The mode may have changed while it launched.
+        // The mode may have changed while it launched, and a tool server been signed in to.
         if current {
             self.wake_the_mode();
+            self.wake_reconnects();
         }
         Ok(())
     }
@@ -212,24 +218,26 @@ impl LiveSession {
         Ok(kept.settings())
     }
 
-    /// Makes the run its worker started, `run`, current, with its claims and the mode it was told as it started, and says
-    /// whether it is. An agent that was already running keeps the run it started with, and was told the mode as it was
-    /// then. A new one can exit before its worker's reply arrives, and then its exit has already been recorded, so it
-    /// isn't made current again.
+    /// Makes the run its worker started current, with its claims, what it `had` been signed in to its tool servers by and
+    /// the mode it was told as it started, and says whether it is. An agent that was already running keeps the run it
+    /// started with, and was told the mode as it was then. A new one can exit before its worker's reply arrives, and then
+    /// its exit has already been recorded, so it isn't made current again.
     fn take_started(
         &self,
         starting: AgentRun,
-        run: RunId,
         already_running: bool,
         claims: &RunCapabilities,
+        had: SignedInBy,
         interaction: InteractionMode,
     ) -> bool {
+        let run = claims.run;
         let mut state = self.state.lock();
         let current = already_running || state.agent == Some(starting);
         if current {
             state.agent = Some(AgentRun { link: starting.link, run });
             // With it, so nothing is asked of it that its claims don't allow.
             state.capabilities = Some(claims.clone());
+            state.had_sign_ins = Some(HadSignIns::new(run, had));
             state.mode_told = (!already_running).then_some((run, interaction));
         }
         current

@@ -363,20 +363,3 @@ async fn the_limits_the_cli_says_by_itself_are_a_report_and_not_an_event() {
     assert_eq!(reported, Some((vec![(Some(7 * 24 * 60), 25)], false)), "{seen:?}");
     assert!(!seen.iter().any(|item| matches!(item, AgentOutput::Event { body: EventBody::AgentLimits { .. }, .. })));
 }
-
-/// It says nothing the log keeps, so it's beside the event `init` is, and after it.
-#[tokio::test]
-async fn the_servers_init_lists_are_a_report_after_its_event() {
-    let dir = tempfile::tempdir().unwrap();
-    let (tx, mut rx) = mpsc::channel(16);
-    let line = r#"{"type":"system","subtype":"init","session_id":"s","tools":["mcp__docs__find"],"mcp_servers":[{"name":"docs","status":"connected"}]}"#;
-    let body = format!("printf '%s\\n' '{line}'");
-    spawn_at(script(dir.path(), &body), spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
-
-    let seen = until_exit(&mut rx).await;
-
-    let opened = |item: &AgentOutput| matches!(item, AgentOutput::Event { body: EventBody::AgentInit { .. }, .. });
-    let after: Vec<_> = seen.iter().skip_while(|item| !opened(item)).collect();
-    let [_, AgentOutput::Report(Report::ToolServers { servers }), ..] = after[..] else { panic!("{seen:?}") };
-    assert_eq!(servers.iter().map(|one| (one.name.as_str(), one.tools)).collect::<Vec<_>>(), [("docs", Some(1))]);
-}
