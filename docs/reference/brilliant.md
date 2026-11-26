@@ -32,6 +32,13 @@ How Brilliant, the design tool, behaves where the design depends on it, as found
 - A palette's colour makes nine steps, `hint` to `intense`, of which the middle, `mid`, is the colour. The app pins one to a colour of its own as `grey.soft { $default: #201b18 }`, and marks it on Colours. The eleven numbered steps, such as `grey.400`, are still made from the palette's colour, and aren't what a pinned step is.
 - A role that names a palette's step follows it. A canvas's drawing followed a changed step, and a canvas file changed on disk was read again.
 
+## Modes
+
+- A design system can declare an axis of its own, as `modes { reach: [desk, handheld] }`, and a token a value for each of its values, as `font.size.Body { $default: 14, reach.handheld: 17 }`. A number, a size, a line height and a token that names a step of space, as `spacing.control.Large { $default: spacing.lg, reach.handheld: spacing.xl }`, each took the handheld's value in a frame set to it. A type's token built on them, such as `typography.Body`, followed them, its letter spacing too, since that's a share of its size.
+- A frame takes a mode with `ds(, reach(handheld))`, and what's in it follows. A copy of a component drawn in a frame of the default mode, on its canvas or on another, took the handheld's sizes in such a frame: a large control 44 tall rather than 32, and as wide as the one drawn there.
+- A canvas takes a mode with `active { modes: { reach: handheld } }` in a `ds` fence, which writes it in the canvas's header and leaves the design system's file as it was. Switched after its elements were drawn, the canvas drew its text at the handheld's size in boxes still measured at the desk's, and laying it out again didn't change that. Opened afresh in another project, it was laid out at the handheld's sizes.
+- Brilliant's docs give no guidance for designing for several devices, and name no breakpoints. Their example of an axis of one's own is a `platform` one, and they say a switch of mode resolves colours, opacity, font families and sizes again. How the design system's pages show a token with a value for each mode wasn't looked at.
+
 ## Drawing what the app draws
 
 - A fill's opacity isn't written inside it: `f[($color.x,o($y))]` drops the opacity and says so. A colour token has its own opacity, such as `#e9b24c17`. A colour given as `rgba()` was refused as unknown.

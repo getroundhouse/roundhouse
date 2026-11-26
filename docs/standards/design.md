@@ -50,6 +50,7 @@ The design is a Brilliant project in `design/`. It's branched, reviewed and merg
 - **A canvas is placed and named before others use it.** A copy of a component names its master's canvas by path, so moving one rewrites every canvas with a copy of it, which conflicts with each branch that changed one of those.
 - **A film is in a `Motion/` folder beside the canvas it plays, and names that canvas by its path,** so that it's found with the part that moves. Brilliant plays a film only from a folder of that name, and writes one there only when it names its canvas by its path.
 - **A film's states are frames on the canvas of the part that moves,** beside the part's own. *Unconfirmed.*
+- **The design system has a value for each reach,** as `look` has, in a mode of its own, `reach`, whose values are `desk` and `handheld`. A token that's different on a handheld has both, and one that's the same has one. A handheld's screen sets its frame to the handheld with `ds(, reach(handheld))`, and what's in it takes the handheld's values, copies of components too. Its canvas isn't switched as a whole, since Brilliant doesn't lay out again what's already on it.
 - **What's drawn and what's built have the same names.** A token is named as `look` names it, a component and its kinds, sizes and states as `look`'s types are, and a screen's frame as its image in the gallery. So each can be found from the other, and checked against it.
 - **A canvas draws with roles,** the `color.` tokens, and never with the palettes they're made from, since Brilliant makes steps of a palette that nobody chose. A test refuses one that doesn't.
 - **Text is in SF Pro Text, with the letter spacing that makes it as wide as the system font,** since Brilliant can't draw the system font by name. *Unconfirmed.*
@@ -97,7 +98,7 @@ Motion is shared between them. What moves, in what order, for how long and on wh
 
 ## Checking one against the other
 
-1. **Values.** A test holds every token in `design/` but the font's to `look`'s value of the same name, as the spec's tables are held.
+1. **Values.** A test holds every token in `design/` but the font's to `look`'s value of the same name, at each reach, as the spec's tables are held.
 2. **Pictures.** The PR that builds a part shows the gallery's picture beside the design's. The agent fixes what differs, and says what still does and why. The owner looks at both before it merges. They're never compared pixel by pixel, since each draws the edges of letters and the widths of text its own way.
 
 ## Merging designs

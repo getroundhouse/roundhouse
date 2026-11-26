@@ -16,6 +16,10 @@ pub enum Reach {
 static CHOSEN: AtomicU8 = AtomicU8::new(Reach::Desk.code());
 
 impl Reach {
+    /// Every reach, for a test of what each one has.
+    #[cfg(test)]
+    pub(crate) const ALL: [Reach; 2] = [Reach::Desk, Reach::Handheld];
+
     /// The reach this process draws for.
     pub fn now() -> Reach {
         if CHOSEN.load(Ordering::Relaxed) == Reach::Handheld.code() { Reach::Handheld } else { Reach::Desk }

@@ -3,6 +3,10 @@ ds:v1
 // value here to `look`'s.
 inherits: none
 
+// `look::Reach`: at a desk, or on a handheld, which a frame of a handheld's screen takes with `ds(, reach(handheld))`. A
+// token whose value is the same at both has one.
+modes { reach: [desk, handheld] }
+
 // Palettes. The greys are the stops of `look`'s ramp that something is, from the darkest, pinned at their exact values.
 // The middle one is the colour it's made from.
 grey: boldness(color(#231e1b))
@@ -94,13 +98,13 @@ color.window.on_windows_close: #ffffff
 spacing: tshirt(number([4, 8, 12, 16, 24, 32]), min: { none: 0 }, transforms: none)
 
 // The room at each end of a control, by its size.
-spacing.control.Small: spacing.sm
-spacing.control.Regular: spacing.md
+spacing.control.Small { $default: spacing.sm, reach.handheld: spacing.md }
+spacing.control.Regular { $default: spacing.md, reach.handheld: 14 }
 spacing.control.Large: spacing.lg
 
 // Lengths that aren't steps of `look::Space`: a chip's inside, and between a list's items, which is 0.25 of their text.
 spacing.Chip: 6
-spacing.ListItem: 3.5
+spacing.ListItem { $default: 3.5, reach.handheld: 4.25 }
 // A part's edge takes room in the app, and a stroke takes none here, so what has an edge is inset a pixel more.
 spacing.Edged: 17
 spacing.ChipStart: 7
@@ -116,23 +120,23 @@ radius.Card: 10
 stroke.width.Edge: 1
 stroke.width.QuoteRule: 2
 stroke.width.TabLine: 2
-stroke.width.icon.Small: 1
-stroke.width.icon.Regular: 1.1667
-stroke.width.icon.Large: 1.3333
+stroke.width.icon.Small { $default: 1, reach.handheld: 1.1667 }
+stroke.width.icon.Regular { $default: 1.1667, reach.handheld: 1.5 }
+stroke.width.icon.Large { $default: 1.3333, reach.handheld: 1.8333 }
 
-// How big an icon is, and how tall a control, a bar and a row are, at a desk, by `look`'s names for each. A bar's has
-// the edge under it. The room at a control's ends is with the spaces.
-size.icon.Small: 12
-size.icon.Regular: 14
-size.icon.Large: 16
-size.control.Small: 24
-size.control.Regular: 28
-size.control.Large: 32
-size.bar.Small: 32
-size.bar.Regular: 40
-size.row.Small: 28
-size.row.Regular: 36
-size.row.Large: 44
+// How big an icon is, and how tall a control, a bar and a row are, by `look`'s names for each. A bar's has the edge
+// under it. The room at a control's ends is with the spaces.
+size.icon.Small { $default: 12, reach.handheld: 14 }
+size.icon.Regular { $default: 14, reach.handheld: 18 }
+size.icon.Large { $default: 16, reach.handheld: 22 }
+size.control.Small { $default: 24, reach.handheld: 32 }
+size.control.Regular { $default: 28, reach.handheld: 36 }
+size.control.Large { $default: 32, reach.handheld: 44 }
+size.bar.Small { $default: 32, reach.handheld: 36 }
+size.bar.Regular { $default: 40, reach.handheld: 44 }
+size.row.Small { $default: 28, reach.handheld: 36 }
+size.row.Regular { $default: 36, reach.handheld: 44 }
+size.row.Large { $default: 44, reach.handheld: 56 }
 
 // How long what moves takes, in milliseconds. A film's are numbers of its own, since it takes no token.
 motion.Panel: 200
@@ -156,24 +160,26 @@ font.weight.emphasis: 500
 font.weight.strong: 600
 
 // `look::Type`'s sizes, and inline code's in body text: `look::INLINE_CODE` of it.
-font.size.PageTitle: 24
-font.size.Heading: 16
-font.size.Body: 14
-font.size.Detail: 12
-font.size.Code: 12
-font.size.Key: 10
-font.size.KeyHeld: 7.5
-font.size.InlineCode: 12.25
+font.size.PageTitle { $default: 24, reach.handheld: 28 }
+font.size.Heading { $default: 16, reach.handheld: 17 }
+font.size.Body { $default: 14, reach.handheld: 17 }
+font.size.Detail { $default: 12, reach.handheld: 15 }
+font.size.Code { $default: 12, reach.handheld: 14 }
+font.size.Key { $default: 10, reach.handheld: 12 }
+font.size.KeyHeld { $default: 7.5, reach.handheld: 9 }
+font.size.InlineCode { $default: 12.25, reach.handheld: 14.875 }
 
 // How far apart lines are, over the size of their text: body text's is the golden ratio of its size, to the nearest
-// device pixel, 22.5; code's is `look::CodeLines`'; and what a key says and what's held with it are as tall as the key.
-font.lineHeight.Body: 1.6071
-font.lineHeight.CodeFile: 1.6667
-font.lineHeight.CodeChat: 1.4167
+// device pixel, 22.5 at a desk and 27.5 on a handheld; code's is `look::CodeLines`', which is the same at both; and what
+// a key says and what's held with it are as tall as the key.
+font.lineHeight.Body { $default: 1.6071, reach.handheld: 1.6176 }
+font.lineHeight.CodeFile { $default: 1.6667, reach.handheld: 1.4286 }
+font.lineHeight.CodeChat { $default: 1.4167, reach.handheld: 1.2143 }
 font.lineHeight.Key: 1
 font.lineHeight.KeyHeld: 1.3333
 
-// Over the size of the text, as macOS spaces its own system font, measured at each of its sizes.
+// Over the size of the text, as macOS spaces its own system font, measured at each of its sizes at a desk. A handheld's
+// weren't measured, so they're a desk's, at each kind's size there.
 font.letterSpacing.PageTitle: 0.0135
 font.letterSpacing.Heading: -0.0194
 font.letterSpacing.Body: -0.0107

@@ -136,11 +136,11 @@ impl Type {
         self.set_at(reach).size.to_pixels(rem)
     }
 
-    /// How far apart its lines are at a desk, in a window whose rem is `rem`, if it has lines of its own.
+    /// How far apart its lines are at `reach`, if it has lines of its own.
     #[cfg(test)]
-    pub(crate) fn line(self, rem: Pixels) -> Option<Pixels> {
-        let set = self.set_at(Reach::Desk);
-        set.line.map(|line| line.to_pixels(set.size, rem))
+    pub(crate) fn line_at(self, reach: Reach) -> Option<Pixels> {
+        let set = self.set_at(reach);
+        set.line.map(|line| line.to_pixels(set.size, rem(reach)))
     }
 
     /// How the spec's table writes it: its name, its font, its size at a desk, at the app's rem there, its weight, and
