@@ -22,6 +22,7 @@ How Brilliant, the design tool, behaves where the design depends on it, as found
 - A row holds what was measured, such as `s(360,hug:132)`, and a token's value beside its name, such as `tok(color.primary,#0080FF)`. Changing a token or a master doesn't rewrite the canvases that use it until each is next edited.
 - A project is named by its folder, so each workspace's is "design". A name in `.brilliant/settings.json` is ignored, a symlink to the folder is followed to it, and links inside a project aren't. Opening the whole worktree takes the worktree's name, but writes a design system and a `.gitignore` there, and components' paths no longer resolve. So the setup script in `.conductor/settings.toml` makes a folder such as `@ sants-2` in `design/`, which is first in Brilliant's list of files, and which git ignores.
 - `.brilliant/`, `Styles/.gen/` and each `Assets/.thumbs/` are made again. A thumbnail changes with every edit, and conflicts in a merge.
+- `execute_commands` deletes a canvas and its file with `delete_canvas` and `{"canvasId": "<path>"}`, and refuses a `path`. Its folder's empty `Assets/` stays.
 
 ## The design system's pages
 
@@ -41,9 +42,11 @@ How Brilliant, the design tool, behaves where the design depends on it, as found
 
 ## Drawing what the app draws
 
-- A fill's opacity isn't written inside it: `f[($color.x,o($y))]` drops the opacity and says so. A colour token has its own opacity, such as `#e9b24c17`. A colour given as `rgba()` was refused as unknown.
+- A fill draws a role at a strength that's a token of its own, as `f[(solid($color.status.needs_you,o($strength.Wash)))]` with `strength.Wash: 0.09` in the design system, with the same pixels as a colour token with that opacity, `#e9b24c17`. A token under `visibility.` did the same, and so did a stroke, `st[(solid($color.x,o($strength.y)),w(…))]`, and a span of text, `spans[("MM",solid($color.x,o($strength.y)))]`, each within a level of the colour worked out. Written as `f[($color.x,o($y))]`, without `solid`, the opacity is dropped, and said so. A colour given as `rgba()` was refused as unknown.
+- An edit in the `default` design system refuses a bare number in `o()` and a bare colour, and one in `none` refuses every token. So a value no token holds yet, such as an option drawn to decide, goes in an edit of its own in `none`, on rows drawn first in `default`.
+- A fill of eight hex digits is taken as CSS's `#rrggbbaa` and written as `solid(#rrggbb,o(N))`, with a note that Brilliant's own order is `#aarrggbb`.
 - A drop shadow's blur is twice the number the app gives GPUI for it: at 24 and 6, where the app has 12 and 3, the gallery's own shadow was matched at every point sampled.
-- A size can be a token, as `s($size.icon.Large,$size.icon.Large)` or `s(fill,$size.row.Small)`, kept as `sref(…)` in the element's row. A film's times can't be, by its docs, so each is a number.
+- A size can be a token, as `s($size.icon.Large,$size.icon.Large)` or `s(fill,$size.row.Small)`, kept as `sref(…)` in the element's row. A film's times can't be, by its docs, so each is a number. An icon made with `svg(icon:…)` and sized as `s($size.icon.Regular,$size.icon.Regular)` was drawn 208 square, and a number sized it.
 - A stroke takes no room, where the app's edge does, so what has an edge is inset a pixel more.
 - Text keeps the fraction of a pixel it measures, where the app rounds its width up to a whole one, so a button, a chip or a pill that hugs its words is up to a pixel narrower. GPUI does the rounding, in `elements/text.rs`, and it rounds what it measures up to a device pixel after that in any case, in `taffy.rs`. Brilliant's snapping to the pixel grid is for moving, resizing and making an element, and no setting was found that rounds a text's own width.
 - A colour on an inline `svg()` is a token once its stroke is written with a width, such as `st[($color.x,w($edge.width))]`. A colour in the SVG's own text is a plain value that no test of the tokens sees.
