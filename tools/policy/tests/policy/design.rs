@@ -119,7 +119,7 @@ fn no_canvas_names_a_token_the_design_system_does_not_have() {
 /// `Values`, as `docs/standards/design.md` says. Its other frames, such as the heading and the rail, draw with some of
 /// the same tokens, so what they draw isn't counted.
 const BOARDS: [(&str, &[&str]); 3] = [
-    ("Foundations/Colours.bl", &["color.", "strength."]),
+    ("Foundations/Colours.bl", &["color.", "strength.", "shadow."]),
     ("Foundations/Type.bl", &["font.", "typography."]),
     ("Foundations/Space and shape.bl", &["spacing.", "radius.", "stroke.width.", "size."]),
 ];
