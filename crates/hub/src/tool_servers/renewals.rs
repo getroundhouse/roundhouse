@@ -111,8 +111,9 @@ impl ToolServers {
 
     /// Keeps what renewing `due` came to, as its authorization server answered at `answered_at_ms`, and answers with the
     /// server's record: the new tokens in its file, on disk before anything uses them, or, when it was refused for good,
-    /// the last of them forgotten and then the record saying it needs signing in to. `None`, and nothing kept, when the
-    /// server has been removed or signed in to again meanwhile, since that isn't the sign-in that was asked about.
+    /// the last of them forgotten and then the record saying it needs signing in to, and its registration forgotten too
+    /// where the authorization server knows no such client. `None`, and nothing kept, when the server has been removed or
+    /// signed in to again meanwhile, since that isn't the sign-in that was asked about.
     pub(crate) fn renewed(
         &self,
         due: &Due,
@@ -138,7 +139,8 @@ impl ToolServers {
             Renewal::Renewed(granted) => kept.renewed(granted, answered_at_ms),
             Renewal::SignInAgain(refused) => {
                 warn!(name: "tool_sign_in.refused", %server_id, %refused, "A tool server's sign-in won't be renewed, so it needs signing in to");
-                kept.gone()
+                let gone = kept.gone();
+                if refused.is_invalid_client() { gone.unregistered() } else { gone }
             }
         };
         self.keep(files, server_id, &due.of.file, kept).map(Some)

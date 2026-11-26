@@ -21,8 +21,8 @@ crate::tokens!(
 );
 
 /// The ports a client listens on for where a person is sent back, taking the first that's free. An authorization server
-/// may take only a redirect the client document lists, port and all, so the document lists each, and these can't change
-/// while a build that listens on them is in use.
+/// may take only a redirect the client document lists, or that Roundhouse registered with it, port and all, so each is
+/// among both, and these can't change while a build that listens on them is in use.
 pub const REDIRECT_PORTS: [u16; 3] = [17867, 17868, 17869];
 
 /// The path it listens for them at.
@@ -39,7 +39,7 @@ pub fn redirect(port: u16) -> String {
 
 /// Starts signing in to a tool server, and answers with the page to open, or with why there's none. Nothing is added or
 /// changed until the sign-in is finished. The hub asks the server, and then its authorization server, which can take as
-/// long as 30 seconds.
+/// long as 30 seconds, and as long again where that has Roundhouse register with it first.
 ///
 /// `id` is the client's own, so sending it again is the same sign-in, and answers with the same page while it waits,
 /// however the rest of the request differs. It waits [`SIGN_IN_WAITS`].
@@ -101,8 +101,17 @@ pub enum ToolSignInBegun {
 pub enum NoToolSignIn {
     /// It asks for a sign-in, and doesn't say where, or that doesn't say how.
     NoAuthorizationServer,
-    /// Its authorization server takes only clients registered with it, and Roundhouse registers with none.
+    /// Its authorization server takes only clients registered with it, and has nowhere to register.
     OnlyRegisteredClients { authorization_server: String },
+    /// Its authorization server takes only clients with a secret, which Roundhouse has none of.
+    OnlyClientsWithSecrets { authorization_server: String },
+    /// Its authorization server takes clients that register with it, and wouldn't register Roundhouse. `error` is what
+    /// OAuth calls why, such as `invalid_redirect_uri`, where it said.
+    NotRegistered {
+        authorization_server: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     /// What it says of its sign-in is said of another server.
     OtherServer { said: String },
     /// Its authorization server doesn't say it takes PKCE with S256, without which MCP has a client refuse it.

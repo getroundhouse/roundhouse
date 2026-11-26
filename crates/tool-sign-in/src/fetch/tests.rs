@@ -128,6 +128,8 @@ async fn a_name_that_comes_to_this_machine_is_refused_before_its_connected_to() 
         assert_eq!((refused, why), (host(&place), NotFetched::Address));
         let failure = calls.post_form(&place, &[]).await.err().unwrap();
         assert!(matches!(failure, Failure::NotFetched { why: NotFetched::Address, .. }), "{failure:?}");
+        let failure = calls.post_json(&place, &serde_json::json!({})).await.err().unwrap();
+        assert!(matches!(failure, Failure::NotFetched { why: NotFetched::Address, .. }), "{failure:?}");
     }
     let connected = std::future::poll_fn(|cx| std::task::Poll::Ready(listener.poll_accept(cx).is_ready())).await;
     assert!(!connected, "something connected");

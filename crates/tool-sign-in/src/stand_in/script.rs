@@ -1,3 +1,4 @@
+use serde_json::Value;
 use waiting::Gate;
 
 /// How the stand-in answers. By default it asks for a sign-in as MCP has a server do, the person approves, and each
@@ -15,6 +16,8 @@ pub struct Script {
     pub wants: Vec<Wants>,
     /// What its server's metadata says to.
     pub server_scopes: Option<Vec<&'static str>>,
+    /// The query its server's address has.
+    pub query: Query,
     /// Who its server's metadata says it's of.
     pub resource: Says,
     /// The path its authorization server's name ends in, such as `/tenant`, or nothing.
@@ -24,6 +27,10 @@ pub struct Script {
     pub issuer: Says,
     /// Whether its authorization server takes client documents.
     pub client_documents: bool,
+    /// What its authorization server does with a client that asks to be registered.
+    pub registers: Registers,
+    /// How its authorization server says a client can say who it is for tokens.
+    pub client_auth_methods: Option<Vec<&'static str>>,
     /// Whether its authorization server says it takes S256.
     pub s256: bool,
     /// What its authorization server says it can allow.
@@ -35,8 +42,10 @@ pub struct Script {
     /// Whether each renewal gives a new refresh token, with the last refused from then on.
     pub rotates: bool,
     pub refreshing: Refreshing,
-    /// What holds back each answer of its authorization server for tokens, once it has done what it was asked, as a
-    /// refresh token that's replaced is already refused.
+    /// What holds back each piece of its metadata.
+    pub metadata_after: Option<Gate>,
+    /// What holds back each answer of its authorization server for tokens, and to a client that asks to be registered,
+    /// once it has done what it was asked, as a refresh token that's replaced is already refused.
     pub answers_after: Option<Gate>,
 }
 
@@ -49,11 +58,14 @@ impl Default for Script {
             challenge_scope: Some("read write"),
             wants: vec![],
             server_scopes: None,
+            query: Query::None,
             resource: Says::Itself,
             issuer_path: "",
             metadata_at: MetadataAt::Oauth,
             issuer: Says::Itself,
             client_documents: true,
+            registers: Registers::Nobody,
+            client_auth_methods: None,
             s256: true,
             authorization_scopes: None,
             iss: Iss::Said,
@@ -61,6 +73,7 @@ impl Default for Script {
             lasts: Some(3600),
             rotates: true,
             refreshing: Refreshing::Works,
+            metadata_after: None,
             answers_after: None,
         }
     }
@@ -111,11 +124,34 @@ pub enum MetadataAt {
     NeverAnswers,
 }
 
+/// The query a server's address has, such as `tools=a`, and whether its metadata says it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Query {
+    None,
+    Repeated(&'static str),
+    LeftOut(&'static str),
+}
+
 /// Who metadata says it's of.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Says {
     Itself,
+    /// Its host alone.
+    ItsHost,
     Another,
+}
+
+/// What its authorization server does with a client that asks to be registered.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Registers {
+    /// It has nowhere to ask.
+    Nobody,
+    /// Registers each that asks, at `/register`, with an ID, and with a secret and a token to change it with besides.
+    Anyone,
+    /// Registers nobody, and answers with this status and body.
+    Says(u16, Value),
+    /// It says the place to ask is this address, which isn't its own.
+    At(String),
 }
 
 /// Who its authorization server says it is as it sends the person back.

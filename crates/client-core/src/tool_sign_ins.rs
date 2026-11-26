@@ -51,6 +51,15 @@ fn no_way(why: &NoToolSignIn) -> String {
         NoToolSignIn::OnlyRegisteredClients { authorization_server } => {
             format!("{authorization_server}, where it's signed in to, takes only apps registered with it.")
         }
+        NoToolSignIn::OnlyClientsWithSecrets { authorization_server } => {
+            format!(
+                "{authorization_server}, where it's signed in to, takes only apps with a secret, and Roundhouse has none."
+            )
+        }
+        NoToolSignIn::NotRegistered { authorization_server, error } => {
+            let why = error.as_ref().map_or_default(|error| format!(": {error}"));
+            format!("{authorization_server}, where it's signed in to, wouldn't register Roundhouse{why}.")
+        }
         NoToolSignIn::OtherServer { said } => format!("It says its sign-in is for {said}, which isn't its address."),
         NoToolSignIn::NoS256 { authorization_server } => {
             format!("{authorization_server}, where it's signed in to, doesn't say it keeps a sign-in safe with PKCE.")
@@ -105,6 +114,21 @@ mod tests {
                  apps registered with it."
             )
         );
+        assert_eq!(
+            said(NoToolSignIn::OnlyClientsWithSecrets { authorization_server: authorization_server() }),
+            cant_sign_in(
+                "Roundhouse can't sign in to this server. https://auth.example.com, where it's signed in to, takes only \
+                 apps with a secret, and Roundhouse has none."
+            )
+        );
+        for (error, why) in [(Some("invalid_redirect_uri".to_string()), ": invalid_redirect_uri"), (None, "")] {
+            let begun = said(NoToolSignIn::NotRegistered { authorization_server: authorization_server(), error });
+            let expected = format!(
+                "Roundhouse can't sign in to this server. https://auth.example.com, where it's signed in to, wouldn't \
+                 register Roundhouse{why}."
+            );
+            assert_eq!(begun, cant_sign_in(&expected));
+        }
         assert_eq!(
             said(NoToolSignIn::OtherServer { said: "https://other.example".into() }),
             cant_sign_in(

@@ -66,6 +66,9 @@ pub fn shown(said: &str) -> String {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OauthError(String);
 
+/// What OAuth calls a client the authorization server doesn't know, by RFC 6749, section 5.2.
+pub(crate) const INVALID_CLIENT: &str = "invalid_client";
+
 /// Longer than any name OAuth has for an error.
 const LONGEST: usize = 64;
 
@@ -79,6 +82,32 @@ impl OauthError {
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Whether it's said of a client the authorization server doesn't know, such as one whose registration it has
+    /// forgotten.
+    pub fn is_invalid_client(&self) -> bool {
+        self.0 == INVALID_CLIENT
+    }
+}
+
+impl Failure {
+    /// Whether it's that the authorization server doesn't know the client, as [`OauthError::is_invalid_client`] says.
+    pub fn is_invalid_client(&self) -> bool {
+        match self {
+            Failure::NoTokens(error) | Failure::RefusedAtPage(error) => error.is_invalid_client(),
+            Failure::Unanswered { .. }
+            | Failure::TimedOut { .. }
+            | Failure::Busy { .. }
+            | Failure::Answered { .. }
+            | Failure::Unreadable { .. }
+            | Failure::NotFetched { .. }
+            | Failure::OtherIssuer { .. }
+            | Failure::WrongState
+            | Failure::WrongIssuer
+            | Failure::RefusedByPerson
+            | Failure::NoRandomness => false,
+        }
     }
 }
 

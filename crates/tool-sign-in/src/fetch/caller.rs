@@ -103,6 +103,14 @@ impl Caller<'_> {
         within(&host(url), self.ask(url, &sent)).await
     }
 
+    /// Posts `body` to `url`. No redirect is followed, as RFC 7591 has none.
+    pub(crate) async fn post_json(&self, url: &Url, body: &serde_json::Value) -> Result<Answer, Failure> {
+        let headers = [(ACCEPT.as_str(), JSON), (CONTENT_TYPE.as_str(), JSON)];
+        let sent =
+            Sent { method: Method::POST, headers: &headers, body: body.to_string().into(), reading: Reading::Whole };
+        within(&host(url), self.ask(url, &sent)).await
+    }
+
     /// Posts an MCP message to `url`, with `headers`, and reads only the status and headers of the answer.
     pub(crate) async fn post_message(
         &self,

@@ -6,7 +6,7 @@ use tokio::time::{Instant, timeout_at};
 use super::asking::as_nobody;
 use super::metadata::{AuthorizationServerMetadata, ServerMetadata};
 use super::reading::{Read, authorization_server_metadata, server_metadata};
-use super::{Found, Issuer, NoWay, Way};
+use super::{Found, Issuer, NoWay, Takes, Way};
 use crate::challenge::Challenge;
 use crate::failure::shown;
 use crate::fetch::Caller;
@@ -75,9 +75,14 @@ fn way(
     authorization_server: AuthorizationServerMetadata,
 ) -> Result<Found, Failure> {
     let issuer = Issuer::new(&authorization_server.issuer);
-    if !authorization_server.takes_client_documents() {
-        return Ok(Found::NoWay(NoWay::OnlyRegisteredClients(issuer)));
-    }
+    let takes = match (&authorization_server.registration_endpoint, authorization_server.takes_client_documents()) {
+        (_, true) => Takes::Documents,
+        (None, false) => return Ok(Found::NoWay(NoWay::OnlyRegisteredClients(issuer))),
+        (Some(_), false) if !authorization_server.takes_clients_without_secrets() => {
+            return Ok(Found::NoWay(NoWay::OnlyClientsWithSecrets(issuer)));
+        }
+        (Some(endpoint), false) => Takes::Registered { endpoint: calls.address(endpoint)? },
+    };
     if !authorization_server.takes_s256() {
         return Ok(Found::NoWay(NoWay::NoS256(issuer)));
     }
@@ -91,6 +96,7 @@ fn way(
         issuer,
         authorization_endpoint: calls.address(&authorization_server.authorization_endpoint)?,
         token_endpoint: calls.address(&authorization_server.token_endpoint)?,
+        takes,
         says_iss,
         scopes,
         offline,

@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod tests;
 
+mod in_doubt;
 mod reconnecting;
 mod renewals;
 mod renewing;

@@ -6,7 +6,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
     ToolScopes, ToolServer, ToolServerAuth, ToolServerId, ToolServerName, ToolServerUrl, ToolSignInId, ToolSignInStatus,
 };
-use tool_sign_in::{Issuer, Renewable, SignedIn};
+use tool_sign_in::{Issuer, Registration, Renewable, SignedIn};
 use tracing::warn;
 
 use super::kept::KeptSignIn;
@@ -30,6 +30,7 @@ pub(crate) struct SigningIn {
 struct Before {
     renewable: Renewable,
     wants: ToolScopes,
+    registration: Option<Registration>,
 }
 
 #[derive(Debug)]
@@ -56,6 +57,12 @@ impl SigningIn {
         let before = self.before.as_ref().filter(|before| before.renewable.issuer() == issuer);
         before.map_or_default(|before| before.renewable.scopes().clone().and(&before.wants))
     }
+
+    /// The server there is that it's to, and the registration that was signed in to with before, where it was with one.
+    pub(crate) fn registered(&self) -> Option<(&ToolServerId, &Registration)> {
+        let To::Again { id, .. } = &self.to else { return None };
+        Some((id, self.before.as_ref()?.registration.as_ref()?))
+    }
 }
 
 impl ToolServers {
@@ -74,7 +81,10 @@ impl ToolServers {
                     return Err(ApiError::new(ErrorCode::InvalidRequest, "that MCP server has no sign-in"));
                 };
                 let kept = kept_in(&files, &id, &file);
-                let before = kept.map(|KeptSignIn { renewable, wants, .. }| Before { renewable, wants });
+                let before = kept.map(|kept| {
+                    let KeptSignIn { renewable, wants, registration, .. } = kept;
+                    Before { renewable, wants, registration }
+                });
                 Ok(SigningIn { to: To::Again { id, file }, url: server.url, before })
             }
             // Not `Unsupported`, which says the hub signs in to no server at all.
@@ -129,6 +139,20 @@ impl ToolServers {
                 self.keep(files, id, file, kept)
             }
         }
+    }
+
+    /// Forgets `registration`, which the authorization server of what's signed in `to` has said it doesn't know, so that
+    /// signing in again registers again. The sign-in there is, whatever was made with it, stays until it's refused.
+    pub(crate) fn forget_registration(&self, to: &SigningIn, registration: &Registration) -> Result<(), ApiError> {
+        let To::Again { id, file } = &to.to else { return Ok(()) };
+        self.changing(|files| {
+            let holds = self.store.tool_server(id)?.is_some_and(|(_, holds)| holds.as_ref() == Some(file));
+            let kept = if holds { kept_in(files, id, file) } else { None };
+            if let Some(kept) = kept.filter(|kept| kept.registration.as_ref() == Some(registration)) {
+                self.keep(files, id, file, kept.unregistered())?;
+            }
+            Ok(())
+        })
     }
 
     /// The server signed in to by the sign-in `id`, if it was the last to, for finishing it again.

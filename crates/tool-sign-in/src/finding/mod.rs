@@ -14,6 +14,7 @@ use looking::FIND_WITHIN;
 mod metadata;
 mod reading;
 mod way;
+pub(crate) use way::Takes;
 pub use way::{Issuer, Way};
 mod well_known;
 #[cfg(test)]

@@ -6,9 +6,9 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::{FIND_WITHIN, of_authorization_server, of_server};
-use crate::tests::CLIENT;
+use crate::tests::{CLIENT, approved};
 use crate::{
-    Asks, Failure, Found, Issuer, MetadataAt, NoWay, Says, Script, ServerMetadataAt, StandIn, ToolSignIn, Way,
+    Asks, Failure, Found, Issuer, MetadataAt, NoWay, Query, Says, Script, ServerMetadataAt, StandIn, ToolSignIn, Way,
 };
 
 /// Far longer than a stand-in takes to be asked, on a busy machine.
@@ -109,6 +109,26 @@ async fn a_server_whose_sign_in_isnt_one_roundhouse_gives_says_why_and_metadata_
         }
         assert!(matches!(issuer, Failure::OtherIssuer { .. }), "{issuer:?}");
     }
+}
+
+/// As one whose address chooses among its tools, asked for its sign-in's tokens by what its metadata said.
+#[tokio::test]
+async fn a_server_with_a_query_is_signed_in_to_as_its_metadata_names_it_with_the_query_or_without() {
+    for (query, resource) in [(Query::LeftOut("tools=a"), "/mcp"), (Query::Repeated("tools=a"), "/mcp?tools=a")] {
+        let (client, stand_in) = (ToolSignIn::new(CLIENT), StandIn::with(Script { query, ..Script::default() }).await);
+
+        let renewable = approved(&client, &stand_in).await.renewable;
+
+        assert!(stand_in.server().as_str().ends_with("/mcp?tools=a"), "{query:?}");
+        assert_eq!(renewable.server, stand_in.server());
+        let resource = format!("{}{resource}", stand_in.issuer());
+        let asked = stand_in.asked_for("POST /token");
+        assert_eq!(asked[0].form("resource"), Some(resource), "{query:?}");
+    }
+    // Its host's, where its 401 says the metadata is, is less than its address.
+    let script = Script { query: Query::LeftOut("tools=a"), resource: Says::ItsHost, ..Script::default() };
+    let found = found_with(script).await.unwrap();
+    assert!(matches!(found, Found::NoWay(NoWay::OtherResource { .. })), "{found:?}");
 }
 
 /// Time stands still once the authorization server has been asked, and moves only by tokio's paused clock, so nothing
@@ -252,4 +272,15 @@ fn metadata_is_of_a_server_by_its_address_but_for_how_its_host_is_written() {
     {
         assert!(!is_of(other, "https://tools.example/mcp"), "{other}");
     }
+    for same in ["https://tools.example/mcp", "https://tools.example/mcp?tools=a"] {
+        assert!(is_of(same, "https://tools.example/mcp?tools=a"), "{same}");
+    }
+    let others = ["mcp?tools=b", "mcp?", "mcp?tools=a&more=b", "", "?tools=a", "mcp/", "mcp/more", "MCP"];
+    for other in others.map(|other| format!("https://tools.example/{other}")) {
+        assert!(!is_of(&other, "https://tools.example/mcp?tools=a"), "{other}");
+    }
+    for other in ["http://tools.example/mcp", "https://other.example/mcp", "https://tools.example:444/mcp"] {
+        assert!(!is_of(other, "https://tools.example/mcp?tools=a"), "{other}");
+    }
+    assert!(!is_of("https://tools.example/mcp?tools=a", "https://tools.example/mcp"), "a query the server hasn't");
 }

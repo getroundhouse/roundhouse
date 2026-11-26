@@ -14,10 +14,17 @@ use super::script::{Refreshing, Script};
 #[derive(Default)]
 pub(super) struct Tokens {
     given: usize,
+    /// Each client that's registered, with where it's sent back to.
+    clients: HashMap<String, Vec<String>>,
     codes: HashMap<String, Approved>,
     /// Each access token, with what it's allowed.
     access: HashMap<String, ToolScopes>,
     refresh: HashMap<String, Grant>,
+}
+
+/// Whether `client` is the address of a document.
+fn has_document(client: &str) -> bool {
+    client.starts_with("https://")
 }
 
 /// What the page was asked for, once the person approved it.
@@ -36,6 +43,31 @@ pub(super) struct Grant {
 }
 
 impl Tokens {
+    /// The ID of a client that's sent back to `redirects`, now registered.
+    pub(super) fn register(&mut self, redirects: Vec<String>) -> String {
+        let client = self.next("client");
+        self.clients.insert(client.clone(), redirects);
+        client
+    }
+
+    /// Registers none of those that have been any more.
+    pub(super) fn forget_clients(&mut self) {
+        self.clients.clear();
+    }
+
+    /// Whether `client` is one it knows, as its document's address is of any that has one.
+    fn knows(&self, client: &str) -> bool {
+        has_document(client) || self.clients.contains_key(client)
+    }
+
+    /// Whether `client` is one its page sends a person back to `redirect` for.
+    pub(super) fn sends_back(&self, client: &str, redirect: &str, script: &Script) -> bool {
+        if has_document(client) {
+            return script.client_documents;
+        }
+        self.clients.get(client).is_some_and(|redirects| redirects.iter().any(|one| one == redirect))
+    }
+
     /// A code for what the person approved, good once.
     pub(super) fn approve(&mut self, approved: Approved) -> String {
         let code = self.next("code");
@@ -64,6 +96,9 @@ impl Tokens {
 
     fn for_code(&mut self, asked: &Asked, script: &Script) -> Reply {
         let said = |name: &str| asked.form(name).unwrap_or_default();
+        if !self.knows(&said("client_id")) {
+            return oauth_error("invalid_client");
+        }
         let Some(approved) = self.codes.remove(&said("code")) else { return oauth_error("invalid_grant") };
         let hash = BASE64_URL_SAFE_NO_PAD.encode(digest(&SHA256, said("code_verifier").as_bytes()));
         let same = hash == approved.challenge && said("redirect_uri") == approved.redirect;
@@ -86,7 +121,7 @@ impl Tokens {
         let said = |name: &str| asked.form(name).unwrap_or_default();
         let used = said("refresh_token");
         let Some(grant) = self.refresh.get(&used).cloned() else { return oauth_error("invalid_grant") };
-        if said("client_id") != grant.client {
+        if said("client_id") != grant.client || !self.knows(&grant.client) {
             return oauth_error("invalid_client");
         }
         if said("resource") != grant.resource {

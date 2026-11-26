@@ -222,12 +222,15 @@ When you click **Sign in**, the hub asks the server how it's signed in to, which
 - **Roundhouse asks for what the server says it needs,** and to stay signed in, if the service has that, so that the hub can renew the sign-in by itself. Where the server says nothing, the service decides both. The page in your browser says what you're approving.
 - **If you closed the page,** click **Open it again**. **Cancel** ends the sign-in, and adds nothing.
 - **You have 15 minutes.** After that, or if you refuse it, the panel says so, and you can try again.
+- **If the service's page shows an error** instead of asking you to approve Roundhouse, sign in once more. A service can forget the Roundhouse that was registered with it, and the next try registers it again, or the one after that if the hub has restarted since.
 - **You can close Settings meanwhile.** Only one sign-in is under way at a time, so starting another cancels it.
 - **The browser sends you back to the app,** which listens on `127.0.0.1` alone, for that one sign-in, and stops as it ends. It hands what it's sent to the hub, and keeps none of it once the hub has it.
 
 The hub keeps the sign-in in its own data, and renews it, as [Where data is kept](where-data-is-kept.md) says. No agent is given it: its calls go through Roundhouse on its machine, which adds the token of the moment.
 
-Some servers can't be signed in to. Roundhouse says who it is by [a document on its site](https://getroundhouse.dev/oauth/client.json), and registers with no service, so one that takes only apps registered with it can't be. Nor can one that doesn't keep a sign-in safe with PKCE, or that doesn't say where to sign in. The panel is then there again as you typed it, and says why. Choose **Key** in it if the server gave you one. If it says that the server has no sign-in, anyone who can reach it can use it, so choose **None**, or **Key** if it gave you one. A server over plain HTTP can be signed in to only on the hub's machine or a private network.
+Roundhouse says who it is by [a document on its site](https://getroundhouse.dev/oauth/client.json). Where a service doesn't take that, the hub registers Roundhouse with the service as you sign in, which can take half a minute more, and uses the same registration each time you sign in to that server again.
+
+Some servers can't be signed in to. One whose service takes only apps it was told of beforehand, or only apps with a secret, can't be, and nor can one whose service won't register Roundhouse, that doesn't keep a sign-in safe with PKCE, or that doesn't say where to sign in. The panel is then there again as you typed it, and says why. Choose **Key** in it if the server gave you one. If it says that the server has no sign-in, anyone who can reach it can use it, so choose **None**, or **Key** if it gave you one. A server over plain HTTP can be signed in to only on the hub's machine or a private network.
 
 ### Sign in again
 
