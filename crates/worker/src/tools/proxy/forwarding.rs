@@ -77,7 +77,7 @@ impl Proxy {
     async fn ask(&self, target: &Target, asked: &Asked<'_>) -> Result<Response<Incoming>, Failure> {
         let mut to = target.uri.clone();
         for _ in 0..=MOST_REDIRECTS_WITHIN {
-            let response = self.upstream.send(request(target, &to, asked)).await?;
+            let response = self.upstream.send(request(target, &to, asked), target.sent()).await?;
             match redirected(&to, response.status(), response.headers()) {
                 Redirected::Not => return Ok(response),
                 Redirected::Within(within) => to = within,

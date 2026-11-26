@@ -26,6 +26,8 @@ pub(super) enum Failure {
     WantsAccess(ToolAccess),
     /// It sent the request somewhere else.
     Redirected,
+    /// It's signed in to over plain `http`, and isn't at a private address, so it wasn't connected to.
+    NotPrivate,
     /// There was no connecting to it.
     Unreachable,
     /// It was connected to, and went before it answered.
@@ -88,6 +90,10 @@ impl Failure {
             Failure::Redirected => format!(
                 "{label} redirected the request to another address, which Roundhouse doesn't follow. Edit \
                  its URL in Settings › MCP servers."
+            ),
+            Failure::NotPrivate => format!(
+                "{label}'s address isn't private, so its sign-in isn't sent to it over http. Give it an https URL in \
+                 Settings › MCP servers."
             ),
             Failure::Unreachable => format!("{label} couldn't be reached from this machine."),
             Failure::Lost => format!(

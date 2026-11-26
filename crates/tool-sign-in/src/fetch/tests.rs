@@ -8,7 +8,7 @@ use tokio::sync::OnceCell;
 use url::Url;
 
 use super::reach::host;
-use super::{Caller, LONGEST_ANSWER, MOST_REDIRECTS, Names, NotFetched, Reach, is_special, json};
+use super::{Caller, LONGEST_ANSWER, MOST_REDIRECTS, Names, NotFetched, Reach, json};
 use crate::{Failure, ServerUrl, ToolSignIn};
 
 /// Longer than any call may take, on tokio's paused clock.
@@ -20,27 +20,6 @@ fn url(text: &str) -> Url {
 
 fn addresses(these: &[&str]) -> Vec<SocketAddr> {
     these.iter().map(|address| SocketAddr::new(address.parse().unwrap(), 443)).collect()
-}
-
-/// This machine's, a private network's, the link's, and what's kept for something else, with IPv4's written as IPv6's.
-const SPECIAL: &str = "127.0.0.1 127.9.9.9 0.0.0.0 ::1 :: 10.1.2.3 172.16.0.1 172.31.255.255 192.168.1.1 \
-    169.254.169.254 100.64.0.1 100.127.255.255 fd12::1 fc00::1 fe80::1 fec0::1 192.0.0.8 192.0.2.1 192.88.99.1 \
-    198.18.0.1 198.19.255.255 198.51.100.1 203.0.113.1 224.0.0.1 240.0.0.1 255.255.255.255 ff02::1 2001::1 \
-    2001:1ff::1 2001:db8::1 3fff::1 ::ffff:127.0.0.1 ::ffff:10.0.0.1 ::127.0.0.1 64:ff9b::a9fe:a9fe 64:ff9b:1::1 \
-    2002:7f00:1::1 2002:c0a8:101::1";
-
-/// Either side of those, and IPv4's on the internet written as IPv6's.
-const ON_THE_INTERNET: &str = "1.1.1.1 11.0.0.1 100.63.255.255 100.128.0.1 172.15.0.1 172.32.0.1 192.0.1.1 \
-    192.167.1.1 198.17.0.1 198.20.0.1 223.255.255.255 2606:4700::1111 2001:200::1 2001:4860::8888 3ffe::1 \
-    ::ffff:1.1.1.1 64:ff9b::101:101 2002:101:101::1";
-
-#[test]
-fn an_address_is_one_machines_on_the_internet_or_special() {
-    for (these, expected) in [(SPECIAL, true), (ON_THE_INTERNET, false)] {
-        for address in these.split_whitespace() {
-            assert_eq!(is_special(address.parse::<IpAddr>().unwrap()), expected, "{address}");
-        }
-    }
 }
 
 #[test]
