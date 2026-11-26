@@ -57,6 +57,7 @@ impl Unkept {
 }
 
 /// What an observation is from when nothing keeps it.
+#[derive(Clone, Copy)]
 pub(super) enum Unkeeping {
     /// As of the time it holds, in ms by the hub's clock, or of its last read where that's later, as one that landed
     /// since can be.
