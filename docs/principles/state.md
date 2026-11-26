@@ -4,7 +4,7 @@ These rules say who owns a piece of state, what an app keeps on its device, and 
 
 ## Owners
 
-- **Each piece of state has one owner, and every other copy is a cache.** For example, git and GitHub own code, pull requests and CI, and the worker and the hub only cache them.
+- **Each piece of state has one owner, and every other copy is a cache.** For example, git and GitHub own code, pull requests and CI, and the worker and the hub only cache them. The hub owns its tool servers, so it sends every worker the whole set as its link opens and each time they change.
 - **State that every client shows the same is the hub's, and the hub records it instead of computing it or fetching it live.** The test: should a second client, or this client after a restart, show the same thing? If so, the hub owns it and a client only draws it. For example, a GitHub sign-in in progress is a record of the hub's, so every client shows the same code, and a client that reconnects to the same hub picks the sign-in up again.
 - **A client keeps or computes only what's about its own device.** For example, a client owns which workspace and chat are open, and the scroll position. A fix that finds a client keeping or computing more moves the state to the hub, usually with a protocol change, even when fixing the client would be the smaller change.
 - **State that's one person's is kept for that person, on the hub.** How far a chat is read, and what's typed and not sent, belong to whoever read or typed, not to the chat. *Not built:* a hub has one user, so these are on the session's and the workspace's records. *Unconfirmed.*

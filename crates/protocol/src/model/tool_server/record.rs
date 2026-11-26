@@ -7,7 +7,7 @@ use crate::model::{Rev, ToolServerId};
 
 /// A tool server the hub has of its own, which is an MCP server over HTTP, as a person added it, so every client shows
 /// the same. It's in every project. What it knows the person by, such as a key, is in a file of the hub's, and never on
-/// the record. *Not built:* an agent reaching it, as `docs/decisions/hub-holds-tool-servers.md` plans.
+/// the record. Agents reach it through their worker, as `docs/decisions/hub-holds-tool-servers.md` says.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ToolServer {
     pub id: ToolServerId,

@@ -1,5 +1,4 @@
-//! Links following the hub's git credential, to stand-ins for workers, on a paused clock, so one that never answers
-//! holds a test up only as long as it takes to move the clock.
+//! Links following the hub's git credential.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -12,7 +11,8 @@ use protocol::model::{GithubAccountId, GithubToken, GithubUser, GithubUserId, Un
 use protocol::worker::{GitCredential, GitCredentialSet, GitIdentity, GithubCredential, WorkerRequest, WorkerResponse};
 use tokio::sync::watch;
 
-use super::{Following, SET_WITHIN};
+use super::super::{Credential, Following, SET_WITHIN};
+use super::support::{until, until_set};
 use crate::github_logins::{Connect, DefaultCredential, GithubLogins};
 use crate::store::tests::store_with_session;
 use crate::worker_link::WorkerLink;
@@ -32,23 +32,8 @@ fn following(
         kept.send_modify(|sets| sets.push(credential));
         answer()
     });
-    tokio::spawn(Following::new(Arc::clone(&link), credential).follow());
+    tokio::spawn(Following::new(Arc::clone(&link), Credential(credential)).follow());
     (link, sets)
-}
-
-/// Once a stand-in's sets are as `done` says, which comes before the clock moves, since nothing else is waited for, and
-/// otherwise fails, once the clock has moved a second.
-async fn until(
-    sets: &mut watch::Receiver<Vec<GithubCredential>>,
-    done: impl FnMut(&Vec<GithubCredential>) -> bool,
-) -> Vec<GithubCredential> {
-    let sets = tokio::time::timeout(Duration::from_secs(1), sets.wait_for(done)).await;
-    sets.expect("the stand-in wasn't set what was waited for").unwrap().clone()
-}
-
-/// Once a stand-in has been set `count` credentials, as [`until`] says.
-async fn until_set(sets: &mut watch::Receiver<Vec<GithubCredential>>, count: usize) -> Vec<GithubCredential> {
-    until(sets, |sets| sets.len() >= count).await
 }
 
 /// The GitHub logins of a hub in `dir`, with none.
@@ -122,7 +107,7 @@ async fn a_worker_left_to_its_machine_is_set_the_machines_own_once_and_follows_n
         Some(Ok(WorkerResponse::Ok))
     });
 
-    let mut following = Following::new(Arc::clone(&link), None);
+    let mut following = Following::new(Arc::clone(&link), Credential(None));
     // As the link's greeting sets it.
     following.queue().await.unwrap().await.unwrap();
     let followed = tokio::time::timeout(SET_WITHIN, following.follow()).await;

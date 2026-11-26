@@ -5,12 +5,13 @@ use std::path::Path;
 
 use process::ProcessRecord;
 use protocol::client::HubStart;
+use protocol::client::tool_servers::ToolServerAdd;
 use protocol::frame;
-use protocol::model::{self, GitFile};
+use protocol::model::{self, GitFile, ToolServerAuthGiven};
 use protocol::paths::WORKER_RECORD_FILE;
 use protocol::worker::{
     AskId, AskOutcome, AskReply, CancelSetup, GitCredentialSet, GitStatus, GithubCredential, PullRequestAnswer,
-    WorkerAsk, WorkerCall, WorkerOutcome, WorkerRequest,
+    ToolServersSet, WorkerAsk, WorkerCall, WorkerOutcome, WorkerRequest,
 };
 use providers::local::{LocalConfig, LocalProvider};
 
@@ -187,7 +188,7 @@ async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_t
         dir.path(),
         &[
             ("ask", WorkerFrame::Ask { id: AskId::new(9), session_id: "s".into(), ask: WorkerAsk::PullRequest }),
-            ("status", WorkerFrame::Reply { id: 3, outcome: WorkerOutcome::Response(status) }),
+            ("status", WorkerFrame::Reply { id: 4, outcome: WorkerOutcome::Response(status) }),
         ],
     );
     let d = dir.path().display();
@@ -246,10 +247,10 @@ async fn an_ask_this_hub_cant_read_is_refused() {
     link.kill();
 }
 
-/// The worker answers the hello only once it has read the set too, so a hub that waited for the hello's answer before
-/// it queued the set would fail, and the hub's next call comes after the set, with nothing between.
+/// The worker answers the hello only once it has read both sets too, so a hub that waited for the hello's answer before
+/// it queued them would fail, and the hub's next call, as a launch would be, comes after them, with nothing between.
 #[tokio::test]
-async fn a_worker_is_set_the_hubs_git_credential_right_behind_its_hello_before_anything_else() {
+async fn a_worker_is_set_the_hubs_git_credential_and_tool_servers_right_behind_its_hello_before_anything_else() {
     let dir = tempfile::tempdir().unwrap();
 
     let (link, credential) = greeted_link(dir.path(), WorkerOutcome::Response(WorkerResponse::Ok)).await;
@@ -258,7 +259,12 @@ async fn a_worker_is_set_the_hubs_git_credential_right_behind_its_hello_before_a
     let call = |name: &str| frame::decode::<WorkerCall>(&std::fs::read(dir.path().join(name)).unwrap()).unwrap();
     let set = WorkerRequest::GitCredentialSet(GitCredentialSet { credential });
     assert_eq!(call("set"), WorkerCall { id: 2, request: set });
-    assert_eq!(call("next"), WorkerCall { id: 3, request: WorkerRequest::CancelSetup });
+    let servers = call("servers");
+    let WorkerCall { id: 3, request: WorkerRequest::ToolServersSet(ToolServersSet { servers }) } = servers else {
+        panic!("not the tool servers: {servers:?}")
+    };
+    assert_eq!(servers.iter().map(|server| server.label.as_str()).collect::<Vec<_>>(), ["Docs"]);
+    assert_eq!(call("next"), WorkerCall { id: 4, request: WorkerRequest::CancelSetup });
     assert_eq!(cancelled, Ok(()));
     link.kill();
 }
@@ -266,7 +272,7 @@ async fn a_worker_is_set_the_hubs_git_credential_right_behind_its_hello_before_a
 /// A link to a worker that answers the hub's set of its git credential with `set_answer`, and the call after it, which
 /// it keeps in `next` in `dir`, as done, and what the hub had to set as it opened.
 async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>, GithubCredential) {
-    let done = WorkerFrame::Reply { id: 3, outcome: WorkerOutcome::Response(WorkerResponse::Ok) };
+    let done = WorkerFrame::Reply { id: 4, outcome: WorkerOutcome::Response(WorkerResponse::Ok) };
     frames_in(dir, &[("done", done)]);
     let d = dir.display();
     let next = format!("read -r next\nprintf '%s\\n' \"$next\" > '{d}/next'\ncat '{d}/done'\ncat >/dev/null");
@@ -274,6 +280,13 @@ async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>
     provider.create(&"i".into(), None, None).await.unwrap();
     // Short, so a hub that waits for the hello's answer before it sets the credential fails soon.
     let hub = hub_timed(dir, &provider, Timers { hello_within: Duration::from_secs(2), ..Timers::DEFAULT });
+    let docs = ToolServerAdd {
+        id: "t".into(),
+        name: "Docs".into(),
+        url: "https://mcp.example.com/mcp".into(),
+        auth: ToolServerAuthGiven::Neither,
+    };
+    hub.tool_server_add(docs).await.unwrap();
     let credential = hub.git_credential().borrow().for_workers();
     let log = dir.join("logs/i.log");
     let opening = WorkerLink::open(hub, provider, "w".into(), "i".into(), &log, Opening::Started);
@@ -281,8 +294,9 @@ async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>
     (opened.unwrap(), credential)
 }
 
-/// For a script: reads the hub's hello and the git credential it sets behind it, keeping the set in `set` in `dir`,
-/// then answers the hello, and the set with `set`, as its first two calls.
+/// For a script: reads the hub's hello and the git credential and tool servers it sets behind it, keeping the sets in
+/// `set` and `servers` in `dir`, then answers the hello, the credential with `set`, and the servers as done, as its
+/// first three calls.
 fn greeted(dir: &Path, set: WorkerOutcome) -> String {
     let hello = WorkerResponse::Hello(HelloReply { protocol_version: versions::WORKERS.newest, build: None });
     frames_in(
@@ -290,10 +304,16 @@ fn greeted(dir: &Path, set: WorkerOutcome) -> String {
         &[
             ("hello", WorkerFrame::Reply { id: 1, outcome: WorkerOutcome::Response(hello) }),
             ("set-answer", WorkerFrame::Reply { id: 2, outcome: set }),
+            ("servers-answer", WorkerFrame::Reply { id: 3, outcome: WorkerOutcome::Response(WorkerResponse::Ok) }),
         ],
     );
     let d = dir.display();
-    format!("read -r call\nread -r set\nprintf '%s\\n' \"$set\" > '{d}/set'\ncat '{d}/hello'\ncat '{d}/set-answer'\n")
+    let keep = |name: &str| format!("read -r {name}\nprintf '%s\\n' \"${name}\" > '{d}/{name}'\n");
+    format!(
+        "read -r call\n{}{}cat '{d}/hello'\ncat '{d}/set-answer'\ncat '{d}/servers-answer'\n",
+        keep("set"),
+        keep("servers")
+    )
 }
 
 /// For a script: reads the hub's next line, an answer, into `answered` in `dir`, all at once, then waits.

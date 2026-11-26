@@ -153,6 +153,7 @@ A table named here is in the hub's database, except `facets`, `observed_workspac
 | GitHub accounts: the GitHub user each is, by its ID, its held login, and the app installation it is | Roundhouse's, and what it holds | `github_accounts`, and the login files | The hub's level |
 | Apps of your own, by their ID, with their keys and what each was made from | Roundhouse made each, through GitHub | `github_apps`, and the key files | The hub's level |
 | Sign-ins with GitHub | Roundhouse's, so every client shows the same code | `github_sign_ins` | The hub's level |
+| Tool servers: name, URL and how each knows the person | A person added each | `tool_servers`, and the key files | The hub's level |
 | Paired devices: name, when paired and when last seen | Roundhouse's, and what it holds | `devices` | `DeviceList` |
 | A workspace's open terminals | A person opened each. Kept while its shell runs | The hub's memory | The hub's level |
 | Whether the hub is asking an agent which models it offers, and how that went | The hub's own work, which lasts only as long as the hub | The hub's memory, on the list of models' `ModelList` record | The hub's level, and `ModelsFor` |
@@ -206,5 +207,6 @@ The hub reads these from a worker, or from its own machine, each time a client a
 | The agent's own ID for a session's conversation, and how far the hub recorded each run's events | `sessions.agent_session_id`, `recorded_run` and `recorded_through` |
 | When a session's draft was typed, so the newest typing wins | `sessions.draft_typed_at_ms` |
 | Where each attachment was put in the worktree, and whether a client added it | `attachments.placed_at` and `by_client` |
-| Where each login, key and device token is | `login_file` of `accounts` and `github_accounts`, `github_apps.key_file` and `made_from`, and `devices.token_sha256` |
+| Where each login, key and device token is | `login_file` of `accounts` and `github_accounts`, `github_apps.key_file` and `made_from`, `tool_servers.secret_file`, and `devices.token_sha256` |
+| What workers are sent for the tool servers, with their keys, which each worker has in memory too | The hub's memory, worked out from `tool_servers` and the key files |
 | What each client shows of GitHub, and when the hub reads GitHub next | The hub's memory |

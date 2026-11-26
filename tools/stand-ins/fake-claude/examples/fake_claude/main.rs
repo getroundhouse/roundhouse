@@ -75,9 +75,11 @@
 //!   advise:TEXT     Same, with TEXT as a reply that can be read.
 //!   advise-failed:CODE  Same, failing with the error CODE, such as `overloaded`.
 //!   advise-unanswered   Same, with no reply at all, as the real CLI's call after one of the agent's own tools gets.
-//!   mcp:TOOL JSON   Call TOOL with optional JSON arguments on the MCP server `--mcp-config` names over HTTP, and get what
-//!                   it says. As with the real CLI, a server that refused `server/discover` or `tools/list` as the
-//!                   agent launched has failed. A copy of the file is kept as `last-mcp-config` in `$FAKE_CLAUDE_STATE`.
+//!   mcp:TOOL JSON   Call TOOL with optional JSON arguments on the worker's MCP server, which `--mcp-config` names, over
+//!                   HTTP, and get what it says. As with the real CLI, a server that refused `server/discover` or
+//!                   `tools/list` as the agent launched has failed. A copy of the file is kept as `last-mcp-config` in
+//!                   `$FAKE_CLAUDE_STATE`.
+//!   mcp:SERVER/TOOL JSON  Same, on another server the file names.
 //!
 //! What the files it's given to add to its system prompt, and to its subagents', say is kept as `last-system-prompt` and
 //! `last-subagent-system-prompt` in `$FAKE_CLAUDE_STATE`. As with the real CLI, a launch given a file that isn't there

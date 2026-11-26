@@ -10,6 +10,7 @@ pub(crate) use observed::{Observing, at_the_hub, branches_once, known};
 pub(crate) use processes::{is_alive, parent_of, signal, terminate};
 
 mod approvals;
+pub(crate) mod calls;
 mod examples;
 mod feed;
 mod gate;

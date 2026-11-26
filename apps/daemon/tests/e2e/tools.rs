@@ -3,12 +3,13 @@
 
 #![cfg(test)]
 
-use client_core::{Client, IdleStop, stop_hub_if_idle};
-use protocol::event::{ContentBlock, EventBody, ExitReason, SessionEvent, TaskKind};
-use protocol::model::{DiffSide, SessionId, SessionStatus};
+use client_core::{IdleStop, stop_hub_if_idle};
+use protocol::event::{EventBody, ExitReason, TaskKind};
+use protocol::model::{DiffSide, SessionStatus};
 
 use hub::GithubPullRequestState::{Merged, Open};
 
+use crate::support::calls;
 use crate::support::github::{StandInGithub, workspace_on_github};
 use crate::support::{
     Stack, assistant_text, is_alive, latest_started_pid, parent_of, read_all, started_pid, wait_for_status,
@@ -17,23 +18,6 @@ use crate::support::{
 
 const READ: &str = r#"mcp:get_pull_requests {"pull_requests":[7]}"#;
 const WAIT: &str = r#"mcp:wait_for_pull_requests {"pull_requests":[7],"until":"merged"}"#;
-
-/// What each of the turn's calls to a tool came back with, and whether it failed, in order.
-fn results(events: &[SessionEvent]) -> Vec<(String, bool)> {
-    let blocks = events.iter().filter_map(|event| match &event.body {
-        EventBody::AgentUser { blocks, .. } => Some(blocks),
-        _ => None,
-    });
-    blocks
-        .flatten()
-        .filter_map(|block| match block {
-            ContentBlock::CallResult { output, is_error, .. } => {
-                Some((client_core::calls::typed::output(output), *is_error))
-            }
-            _ => None,
-        })
-        .collect()
-}
 
 /// Where the agent's CLI was last told the worker's tools are, and the header that carries its token, from the copy
 /// the fake agent keeps. Read rather than compared as text, since a hub started again in a run of every package's tests
@@ -45,14 +29,6 @@ fn last_told(stack: &Stack) -> (String, String) {
     (server["url"].as_str().unwrap().to_string(), server["headers"]["Authorization"].as_str().unwrap().to_string())
 }
 
-/// Sends the chat a prompt, and returns what its calls came back with, once it's the `turn`th to end.
-fn run(client: &Client, chat: &SessionId, script: &str, turn: usize) -> Vec<(String, bool)> {
-    client.session_prompt(chat, script, None).unwrap();
-    let events = wait_for_turn_end(client, chat, turn);
-    let since = events.iter().rposition(|event| matches!(event.body, EventBody::UserPrompt { .. })).unwrap();
-    results(&events[since..])
-}
-
 #[test]
 fn an_agent_asking_where_its_pull_request_stands_hears_what_the_hub_read_from_github() {
     let github = StandInGithub::start();
@@ -61,7 +37,7 @@ fn an_agent_asking_where_its_pull_request_stands_hears_what_the_hub_read_from_gi
     let client = stack.client();
     let (_, chat) = workspace_on_github(&stack, &client);
 
-    let answered = run(&client, &chat.id, READ, 1);
+    let answered = calls::run(&client, &chat.id, READ, 1);
 
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
     assert!(text.contains("#7: Change 7"), "{text}");
@@ -75,7 +51,7 @@ fn an_agent_reading_the_diffs_comments_hears_each_one_the_person_left() {
     let (workspace, chat) = stack.workspace(&client);
     client.comment_add(&workspace.id, "a.txt", DiffSide::New, 2, "Why this word?", None).unwrap();
 
-    let answered = run(&client, &chat.id, "mcp:get_diff_comments {}", 1);
+    let answered = calls::run(&client, &chat.id, "mcp:get_diff_comments {}", 1);
 
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
     assert!(text.contains("- `a.txt:2`: Why this word?"), "{text}");
@@ -88,7 +64,7 @@ fn an_agent_started_after_the_hub_restarts_reaches_the_tools_where_it_did_with_t
     let (mut stack, _gh) = github.stack();
     let client = stack.client();
     let (_, chat) = workspace_on_github(&stack, &client);
-    let answered = run(&client, &chat.id, READ, 1);
+    let answered = calls::run(&client, &chat.id, READ, 1);
     assert!(!answered[0].1, "{answered:?}");
     let before = last_told(&stack);
     let worker = parent_of(started_pid(&wait_for_turn_end(&client, &chat.id, 1)).unwrap());
@@ -99,7 +75,7 @@ fn an_agent_started_after_the_hub_restarts_reaches_the_tools_where_it_did_with_t
     wait_until("the worker to exit", || !is_alive(worker));
     stack.start_hub();
     let client = stack.client();
-    let answered = run(&client, &chat.id, READ, 2);
+    let answered = calls::run(&client, &chat.id, READ, 2);
 
     assert_eq!(last_told(&stack), before, "the same address and token");
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
@@ -115,7 +91,7 @@ fn the_agent_the_next_hub_carries_on_with_reaches_the_tools_as_it_did() {
     let (mut stack, _gh) = github.stack();
     let client = stack.client();
     let (_, chat) = workspace_on_github(&stack, &client);
-    let answered = run(&client, &chat.id, READ, 1);
+    let answered = calls::run(&client, &chat.id, READ, 1);
     assert!(!answered[0].1, "{answered:?}");
     let agent = started_pid(&wait_for_turn_end(&client, &chat.id, 1)).unwrap();
     drop(client);
@@ -123,7 +99,7 @@ fn the_agent_the_next_hub_carries_on_with_reaches_the_tools_as_it_did() {
     stack.kill_hub();
     stack.start_hub();
     let client = stack.client();
-    let answered = run(&client, &chat.id, READ, 2);
+    let answered = calls::run(&client, &chat.id, READ, 2);
 
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
     assert!(text.contains("#7: Change 7"), "{text}");
@@ -144,7 +120,7 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
     client.session_prompt(&chat.id, WAIT, None).unwrap();
     let mut answered = Vec::new();
     wait_until("the call to come back", || {
-        answered = results(&read_all(&client, &chat.id));
+        answered = calls::results(&read_all(&client, &chat.id));
         !answered.is_empty()
     });
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
