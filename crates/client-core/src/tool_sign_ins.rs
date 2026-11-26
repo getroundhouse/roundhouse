@@ -1,5 +1,5 @@
-//! What signing in to a tool server comes to, in words for a person: why its server has no page to sign in on, and why
-//! it couldn't be started or finished.
+//! What signing in to a tool server comes to, in words for a person: where it's approved, why its server has no page to
+//! sign in on, and why it couldn't be started or finished.
 
 use protocol::client::ErrorCode;
 use protocol::client::tool_sign_ins::{NoToolSignIn, ToolSignInBegun, ToolSignInPage};
@@ -70,6 +70,22 @@ fn no_way(why: &NoToolSignIn) -> String {
         NoToolSignIn::Unknown => return "Roundhouse can't sign in to this server.".to_string(),
     };
     format!("Roundhouse can't sign in to this server. {said}")
+}
+
+/// What a sign-in says while the person has its page: to approve Roundhouse there, on `page`, the page's host, for the
+/// server at `server`, its host with its port if it has one, in the browser on this `machine`, such as `Mac`. A server
+/// can send the person to any service's page, so both are named, as `on auth.linear.app for mcp.example.com`, and the
+/// host once where the server is on the page's, whatever its port.
+pub fn approve_on(page: &str, server: &str, machine: &str) -> String {
+    let on = if same_host(page, server) { page.to_string() } else { format!("{page} for {server}") };
+    format!("Approve Roundhouse on {on}, in the browser on this {machine}. Roundhouse never sees your password.")
+}
+
+/// Whether `page`, a host, is the host of `server`, a host with or without its port, in any case, as hosts are.
+fn same_host(page: &str, server: &str) -> bool {
+    let port = |port: &str| !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit());
+    let named = server.rsplit_once(':').filter(|(_, after)| port(after)).map_or(server, |(named, _)| named);
+    page.eq_ignore_ascii_case(named)
 }
 
 /// What to say when a sign-in couldn't be started, for `e`.
@@ -152,6 +168,26 @@ mod tests {
         );
         assert_eq!(said(NoToolSignIn::Unknown), cant_sign_in("Roundhouse can't sign in to this server."));
         assert_eq!(begun(ToolSignInBegun::Unknown), cant_sign_in("Update this app to sign in to this server."));
+    }
+
+    #[test]
+    fn a_sign_in_is_approved_on_its_pages_host_and_for_its_servers_where_thats_another() {
+        let approve = |on: &str| {
+            format!("Approve Roundhouse on {on}, in the browser on this Mac. Roundhouse never sees your password.")
+        };
+
+        for (page, server, on) in [
+            ("auth.linear.app", "mcp.example.com", "auth.linear.app for mcp.example.com"),
+            ("auth.linear.app", "mcp.example.com:8443", "auth.linear.app for mcp.example.com:8443"),
+            ("mcp.example.com", "mcp.example.com", "mcp.example.com"),
+            ("mcp.example.com", "MCP.Example.com", "mcp.example.com"),
+            ("127.0.0.1", "127.0.0.1:54321", "127.0.0.1"),
+            ("[::1]", "[::1]:8080", "[::1]"),
+            ("[::1]", "[::2]", "[::1] for [::2]"),
+            ("example.com", "mcp.example.com", "example.com for mcp.example.com"),
+        ] {
+            assert_eq!(approve_on(page, server, "Mac"), approve(on), "{page} and {server}");
+        }
     }
 
     #[test]

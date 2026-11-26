@@ -3,7 +3,7 @@
 //! an edit does, and what saving it takes, are client-core's `tool_server_edits` to say.
 
 use client_core::tool_server_edits::{Does, SIGN_IN_TO_SAVE, Way};
-use client_core::tool_sign_ins::NoPage;
+use client_core::tool_sign_ins::{self, NoPage};
 use client_core::{ClientError, refusals};
 use gpui_kit::SharedString;
 use protocol::model::{ToolServerAuth, ToolServerName, ToolServerUrl, ToolSignInStatus};
@@ -139,9 +139,9 @@ pub(super) fn starting(host: &str) -> String {
     format!("Asking {host} how you sign in to it. This can take half a minute.")
 }
 
-/// What a sign-in says while the person has its page, which is on `host`.
-pub(super) fn approve_on(host: &str) -> String {
-    format!("Approve Roundhouse on {host}, in the browser on this {MACHINE}. Roundhouse never sees your password.")
+/// What a sign-in to `to` says while the person has its page, which is on the host `page`.
+pub(super) fn approve_on(page: &str, to: &SignInTo) -> String {
+    tool_sign_ins::approve_on(page, &to.host(), MACHINE)
 }
 
 /// Why a server wasn't signed in to, where there's no page to sign in on, with how else it may be done `to_do`, such as
