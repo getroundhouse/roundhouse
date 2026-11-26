@@ -76,11 +76,11 @@ fn pull(number: u64, title: &str, days: i64, change: impl FnOnce(&mut Summary)) 
     change(&mut said);
     Reference::PullRequest(PullRequest {
         repository: repository("roundhouse"),
-        number: fixture.number,
         summary: Read { said, read_at_ms: NOW_MS },
         history: None,
         stack: None,
         checks: None,
+        ..fixture
     })
 }
 
