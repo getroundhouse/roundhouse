@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use protocol::client::tool_servers::ToolServerAdd;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{Rev, ToolServer, ToolServerId, ToolServerName, ToolServerUrl};
+use protocol::model::{Rev, ToolServer, ToolServerAuth, ToolServerId, ToolServerName, ToolServerUrl};
 use tokio::sync::watch;
 
 use super::SentToolServers;
@@ -35,6 +35,22 @@ pub(crate) struct ToolServerRemoved {
     pub(crate) rev: Rev,
 }
 
+/// What adding a server would add.
+pub(super) enum ToAdd {
+    /// The server there is of its ID.
+    There(ToolServer),
+    New(Adding),
+}
+
+/// A server to add, with what it's to know the person by.
+pub(super) struct Adding {
+    pub(super) id: ToolServerId,
+    pub(super) name: ToolServerName,
+    pub(super) url: ToolServerUrl,
+    pub(super) auth: ToolServerAuth,
+    pub(super) secret: Option<ToolServerSecret>,
+}
+
 impl ToolServers {
     /// The tool servers of a hub whose data directory is `data_dir`, with what workers are to be sent, before any link
     /// can follow it.
@@ -54,14 +70,10 @@ impl ToolServers {
     }
 
     fn add_to(&self, files: &Locked<'_, ToolServerSecret>, asked: ToolServerAdd) -> Result<ToolServerChange, ApiError> {
-        let ToolServerAdd { id, name, url, auth } = asked;
-        if let Some((server, _)) = self.store.tool_server(&id)? {
-            return Ok(ToolServerChange { server, changed: false });
-        }
-        let name = ToolServerName::typed(&name)?;
-        let url = ToolServerUrl::typed(&url)?;
-        let (auth, secret) = read(auth)?;
-        self.free(&name, &id)?;
+        let Adding { id, name, url, auth, secret } = match self.adding(asked)? {
+            ToAdd::There(server) => return Ok(ToolServerChange { server, changed: false }),
+            ToAdd::New(adding) => adding,
+        };
         let adding = AddingToolServer { id: &id, name: &name, url: &url, auth: &auth, secret: None };
         let server = match secret {
             Some(secret) => files.connect(&secret, |file| {
@@ -71,6 +83,19 @@ impl ToolServers {
             None => self.store.add_tool_server(&adding)?,
         };
         Ok(ToolServerChange { server, changed: true })
+    }
+
+    /// What adding `asked` would add, refused as `ToolServerAdd` says.
+    pub(super) fn adding(&self, asked: ToolServerAdd) -> Result<ToAdd, ApiError> {
+        let ToolServerAdd { id, name, url, auth } = asked;
+        if let Some((server, _)) = self.store.tool_server(&id)? {
+            return Ok(ToAdd::There(server));
+        }
+        let name = ToolServerName::typed(&name)?;
+        let url = ToolServerUrl::typed(&url)?;
+        let (auth, secret) = read(auth)?;
+        self.free(&name, &id)?;
+        Ok(ToAdd::New(Adding { id, name, url, auth, secret }))
     }
 
     /// Forgets a server and its key or its sign-in, as `ToolServerRemove` says. The file goes first, and then the row, as

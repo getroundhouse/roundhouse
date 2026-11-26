@@ -35,6 +35,7 @@ pinned! {
     ],
     "client_calls/file_diffs.rs" => [FileDiff(_)],
     "client_calls/github_apps.rs" => [GithubApp(_), GithubAppManifest(_)],
+    "client_calls/tool_server_checks.rs" => [ToolServerChecked(_)],
     "client_calls/tool_servers.rs" => [ToolServer(_)],
     "client_calls/tool_sign_ins.rs" => [ToolSignInBegun(_)],
     "proposals.rs" => [Proposal(_), ProposalRevisions(_)],

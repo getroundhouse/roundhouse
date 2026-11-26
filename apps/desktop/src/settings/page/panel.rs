@@ -1,6 +1,6 @@
 //! A panel of a page of its own, such as Git's and MCP servers', raised as Agents' are: its title and what it says under
 //! that, what's in it, then its buttons, and the choices one offers. Wherever it is on the page, it's brought into sight
-//! as it opens, and gives Settings the focus back as it goes.
+//! as it opens, as its end is once there's more at it, and gives Settings the focus back as it goes.
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::ElementExt as _;
@@ -9,24 +9,38 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Bounds, ClickEvent, Div, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _,
     Pixels, Role, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _,
-    Window, div,
+    Window, div, px, size,
 };
 use look::{IconSizing as _, Lined as _, Typeset as _};
 
 use super::redraw::bring_into_sight;
 
-/// Where an open panel's focus is, and whether it has been brought into sight, which the page's state keeps with it.
+/// Where an open panel's focus is, and what of it is still to be brought into sight, which the page's state keeps with
+/// it.
 pub(super) struct Place {
     /// Holds the focus of everything in the panel, to tell whether it has it as it goes.
     focus: FocusHandle,
-    /// Whether to bring the panel into sight as it's next laid out, which it is once as it opens.
-    reveal: bool,
+    /// What to bring into sight as the panel is next laid out.
+    reveal: Option<Reveal>,
+}
+
+/// What of a panel is brought into sight.
+enum Reveal {
+    /// All of it, as it opens.
+    Whole,
+    /// Its end, where its buttons are, once there's more at it.
+    End,
 }
 
 impl Place {
     /// Of a panel that's opening.
     pub(super) fn opening(cx: &App) -> Place {
-        Place { focus: cx.focus_handle(), reveal: true }
+        Place { focus: cx.focus_handle(), reveal: Some(Reveal::Whole) }
+    }
+
+    /// What the panel says at its end has changed, so its end is brought into sight as it's next laid out.
+    pub(super) fn end_changed(&mut self) {
+        self.reveal.get_or_insert(Reveal::End);
     }
 
     /// Moves the focus to the panel itself when something in it has it, as what has it goes, so keys still reach
@@ -42,11 +56,17 @@ impl Place {
         }
     }
 
-    /// Brings the panel into sight on Settings' `scroll`, once as it opens, now that it's laid out at `bounds`. This is
-    /// during a draw, after the page has been placed by the scroll as it was, so the scroll shows in the frame after,
-    /// which is asked for once this one is done, since the window can't be marked for drawing again while it draws.
+    /// Brings what's still to be brought into sight there, on Settings' `scroll`, now that the panel is laid out at
+    /// `bounds`. This is during a draw, after the page has been placed by the scroll as it was, so the scroll shows in
+    /// the frame after, which is asked for once this one is done, since the window can't be marked for drawing again
+    /// while it draws.
     pub(super) fn laid_out(&mut self, bounds: Bounds<Pixels>, scroll: &ScrollHandle, window: &mut Window) {
-        if std::mem::take(&mut self.reveal) && bring_into_sight(scroll, bounds) {
+        let revealed = match self.reveal.take() {
+            Some(Reveal::Whole) => bounds,
+            Some(Reveal::End) => Bounds::new(bounds.bottom_left(), size(bounds.size.width, px(0.))),
+            None => return,
+        };
+        if bring_into_sight(scroll, revealed) {
             window.on_next_frame(|window, _| window.refresh());
         }
     }

@@ -4,7 +4,9 @@
 use client_core::records::Snapshot;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::v_flex;
-use gpui_kit::{App, Entity, IntoElement, ParentElement as _, RenderOnce, ScrollHandle, Styled as _, Window, px};
+use gpui_kit::{
+    App, Context, Entity, IntoElement, ParentElement as _, RenderOnce, ScrollHandle, Styled as _, Window, px,
+};
 
 use super::super::account_row::{COLUMN_WIDTH, Columns};
 use super::kept::Kept;
@@ -50,6 +52,15 @@ impl Drawing<'_> {
     /// Whether the page can ask the hub to change something now: there's a hub, and its records have arrived.
     pub(super) fn can_ask(&self, cx: &App) -> bool {
         self.arrived() && self.kept.read(cx).can_ask()
+    }
+
+    /// What a panel's button does to the page's state.
+    pub(super) fn act(
+        &self,
+        act: fn(&mut Kept, &mut Window, &mut Context<Kept>),
+    ) -> impl Fn(&mut Window, &mut App) + 'static {
+        let kept = self.kept.clone();
+        move |window, cx| kept.update(cx, |kept, cx| act(kept, window, cx))
     }
 }
 

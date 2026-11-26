@@ -1,6 +1,6 @@
 use super::connections::CutOff;
 use super::server::Server;
-use super::{Failure, PassedOn, Proxy, Target, headers, redirect};
+use super::{Failure, PassedOn, Proxy, Target, headers};
 use crate::asks::Asks;
 use crate::tools::http::AnswerBody;
 use http_body_util::{Either, Full};
@@ -9,15 +9,11 @@ use hyper::header::HeaderMap;
 use hyper::{Method, Request, Response, StatusCode, Uri};
 use protocol::model::{SessionId, ToolServerId};
 use protocol::worker::{AskForToolAccess, RenewToolServer, ToolAccess};
-use tool_sign_in::access_wanted;
+use tool_sign_in::{MOST_REDIRECTS_WITHIN, Redirected, access_wanted, redirected};
 use tracing::{info, warn};
 
 /// What MCP's streamable HTTP asks a server: a message, its stream of events, and to end a session.
 pub(in super::super) const METHODS: [Method; 3] = [Method::POST, Method::GET, Method::DELETE];
-
-/// More than a server that adds a slash to its path, or has moved once, needs, and few enough that one going in circles
-/// ends soon.
-const MAX_REDIRECTS: usize = 3;
 
 /// A request of an agent's to one of the hub's servers.
 pub(in super::super) struct Asked<'a> {
@@ -54,7 +50,7 @@ impl Proxy {
             Ok(response) => {
                 let said = (response.status(), response.headers());
                 self.connections.answered(&server.id, &server.place, &asked, let_in, said);
-                passed_on(response, |body| PassedOn::new(body, asked.method, self.moved(&server)))
+                passed_on(response, |body| PassedOn::new(body, &asked, self.moved(&server)))
             }
             Err(failure) => {
                 warn!(name: "tool_server.request_failed", server_id = %server.id, ?failure, "A request to a tool server failed");
@@ -77,17 +73,15 @@ impl Proxy {
         unless_refused(server, target, response, asked).await
     }
 
-    /// The server's answer, following a redirect that keeps the method and the body, within its origin.
+    /// The server's answer, following a redirect as [`redirected`] says.
     async fn ask(&self, target: &Target, asked: &Asked<'_>) -> Result<Response<Incoming>, Failure> {
         let mut to = target.uri.clone();
-        for _ in 0..=MAX_REDIRECTS {
+        for _ in 0..=MOST_REDIRECTS_WITHIN {
             let response = self.upstream.send(request(target, &to, asked)).await?;
-            match response.status() {
-                StatusCode::TEMPORARY_REDIRECT | StatusCode::PERMANENT_REDIRECT => {
-                    to = redirect::at_same_origin(&to, response.headers()).ok_or(Failure::Redirected)?;
-                }
-                status if status.is_redirection() => return Err(Failure::Redirected),
-                _ => return Ok(response),
+            match redirected(&to, response.status(), response.headers()) {
+                Redirected::Not => return Ok(response),
+                Redirected::Within(within) => to = within,
+                Redirected::Elsewhere => return Err(Failure::Redirected),
             }
         }
         Err(Failure::Redirected)

@@ -23,7 +23,7 @@ use super::logs::{prompt_lines, read};
 use super::parts::{part, worktree_video};
 use super::stand_in::{claude, fixed_pairing, status, version};
 use super::worker_reads::WorkerReads;
-use super::world::{NOW_MS, World};
+use super::world::{NOW_MS, ToolServerCheckWorld, World};
 
 /// Listens until the process ends, since nothing stops it. Each world gets a socket of its own, so no test reaches
 /// another's.
@@ -304,6 +304,11 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         R::ToolServerAdd(_) => {
             Err(world.tool_server_add_refused.clone().unwrap_or_else(|| read_only("change anything")))
         }
+        R::ToolServerCheck(_) => match world.tool_server_check.clone() {
+            ToolServerCheckWorld::TooOld => Err(ApiError::new(ErrorCode::Unsupported, "a hub from before checks")),
+            ToolServerCheckWorld::Asking => Ok(Outcome::Never),
+            ToolServerCheckWorld::Answers(answer) => reply(C::ToolServerChecked(answer?)),
+        },
         R::ToolSignInStart(_) => {
             let answer = world.tool_sign_in_answer.clone();
             reply(C::ToolSignInBegun(answer.unwrap_or_else(|| Err(read_only("change anything")))?))

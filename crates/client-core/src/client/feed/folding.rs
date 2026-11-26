@@ -46,6 +46,7 @@ impl Folding {
 /// The records `response` carries. A list carries none, since it's of every record of a kind, or of a session, and a
 /// record missing from it is gone, which only the feed's own list can say, as only it is read at a revision. A reply
 /// to a list has no revision, so one read on another thread could put an older copy in place of a newer.
+#[expect(clippy::too_many_lines, reason = "a flat match over every reply, so a new one has to have an arm")]
 fn carried(response: &ClientResponse) -> Vec<Record> {
     match response {
         ClientResponse::HubSettings(settings) => vec![Record::HubSettings(settings.clone())],
@@ -100,6 +101,7 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::Attachment(_)
         | ClientResponse::AttachmentData(_)
         | ClientResponse::GithubAppManifest(_)
+        | ClientResponse::ToolServerChecked(_)
         | ClientResponse::ToolSignInBegun(_)
         | ClientResponse::WorktreeFiles(_)
         | ClientResponse::FileContents(_)

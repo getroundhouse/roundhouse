@@ -38,8 +38,16 @@ impl Changes {
     }
 }
 
+/// A server there is, as it's to be edited without signing in.
+pub(super) struct Editing {
+    pub(super) server: ToolServer,
+    pub(super) file: Option<LoginFile>,
+    pub(super) changes: Changes,
+    pub(super) becomes: Becomes,
+}
+
 /// How a server is to know the person, as it's edited without signing in.
-enum Becomes {
+pub(super) enum Becomes {
     AsItIs,
     /// By the key it has, sent in `header`.
     KeptKey {
@@ -63,10 +71,8 @@ impl ToolServers {
         files: &Locked<'_, ToolServerSecret>,
         asked: ToolServerEdit,
     ) -> Result<ToolServerChange, ApiError> {
-        let ToolServerEdit { id, name, url, auth } = asked;
-        let (server, file) = self.store.tool_server(&id)?.ok_or_else(|| gone(&id))?;
-        let changes = self.changes(&id, name, url)?;
-        match becomes(&server, &changes, auth)? {
+        let Editing { server, file, changes, becomes } = self.editing(asked)?;
+        match becomes {
             Becomes::AsItIs => self.keep_edit(server, &changes, None),
             Becomes::KeptKey { header } => {
                 let auth = ToolServerAuth::Key { header };
@@ -82,6 +88,15 @@ impl ToolServers {
                 Ok((self.keep_edit(server, &changes, Some(known_by))?, file))
             }),
         }
+    }
+
+    /// What editing `asked` would change, refused as `ToolServerEdit` says.
+    pub(super) fn editing(&self, asked: ToolServerEdit) -> Result<Editing, ApiError> {
+        let ToolServerEdit { id, name, url, auth } = asked;
+        let (server, file) = self.store.tool_server(&id)?.ok_or_else(|| gone(&id))?;
+        let changes = self.changes(&id, name, url)?;
+        let becomes = becomes(&server, &changes, auth)?;
+        Ok(Editing { server, file, changes, becomes })
     }
 
     /// What's to change of the server `id`, as a person typed its name and its URL, refused as `ToolServerAdd` says of

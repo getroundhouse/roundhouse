@@ -16,7 +16,6 @@ mod forwarding;
 mod headers;
 mod passed_on;
 mod path;
-mod redirect;
 mod server;
 mod upstream;
 

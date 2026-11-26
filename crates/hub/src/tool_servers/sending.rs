@@ -37,7 +37,7 @@ impl SentToolServers {
 
 /// Why workers aren't sent a server, which the log says, so never with what was read.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum LeftOut {
+pub(super) enum LeftOut {
     /// Only a newer build knows how it knows the person.
     UnknownAuth,
     /// Only a newer build can read its key or its sign-in.
@@ -116,7 +116,7 @@ impl ToolServers {
         let mut worked_out = SentToolServers::default();
         for server in self.store.tool_servers()? {
             let file = secrets.get(&server.id).and_then(Option::as_ref);
-            match knows_by(&server.auth, files, file) {
+            match knows_by(&server.auth, || secret(files, file)) {
                 Ok(known) => {
                     if let Known::SignedIn { by, .. } = &known {
                         worked_out.signed_in.set(server.id.clone(), by.clone());
@@ -131,7 +131,7 @@ impl ToolServers {
 }
 
 /// What a server knows the person by, as workers are sent it.
-enum Known {
+pub(super) enum Known {
     Not,
     By(ServerHeader),
     /// Its access token, which is the token `number` of those it has had, given by a sign-in and what renewed it since.
@@ -143,21 +143,20 @@ enum Known {
     NeedsSignIn,
 }
 
-/// What a server that knows the person by `auth` knows them by, with the key or the access token `file` holds.
-fn knows_by(
+/// What a server that knows the person by `auth` knows them by, with the key or the access token `secret` gives.
+pub(super) fn knows_by(
     auth: &ToolServerAuth,
-    files: &Locked<'_, ToolServerSecret>,
-    file: Option<&LoginFile>,
+    secret: impl FnOnce() -> Result<ToolServerSecret, LeftOut>,
 ) -> Result<Known, LeftOut> {
     match auth {
         ToolServerAuth::Key { header } => {
-            let ToolServerSecret::Key(key) = secret(files, file)? else { return Err(LeftOut::Gone) };
+            let ToolServerSecret::Key(key) = secret()? else { return Err(LeftOut::Gone) };
             let value = ServerHeaderValue::new(as_sent(header, &key));
             Ok(Known::By(ServerHeader { name: header.clone(), value }))
         }
         // Its file says how it stands, and its record says what the file does.
         ToolServerAuth::SignIn { status: _ } => {
-            let ToolServerSecret::SignIn(kept) = secret(files, file)? else { return Err(LeftOut::Gone) };
+            let ToolServerSecret::SignIn(kept) = secret()? else { return Err(LeftOut::Gone) };
             Ok(match kept.tokens {
                 Some(tokens) => Known::SignedIn {
                     header: ServerHeader::bearer(tokens.access.as_str()),
@@ -172,7 +171,10 @@ fn knows_by(
     }
 }
 
-fn secret(files: &Locked<'_, ToolServerSecret>, file: Option<&LoginFile>) -> Result<ToolServerSecret, LeftOut> {
+pub(super) fn secret(
+    files: &Locked<'_, ToolServerSecret>,
+    file: Option<&LoginFile>,
+) -> Result<ToolServerSecret, LeftOut> {
     match files.read(file.ok_or(LeftOut::Gone)?) {
         Ok(Stored::Secret(secret)) => Ok(secret),
         Ok(Stored::Newer) => Err(LeftOut::Newer),

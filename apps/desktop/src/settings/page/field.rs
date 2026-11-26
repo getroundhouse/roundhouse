@@ -16,6 +16,7 @@ pub(super) const FIELDS_WIDTH: Pixels = px(560.);
 pub(super) struct Field {
     pub(super) input: Entity<InputState>,
     _entered: Subscription,
+    _changed: Option<Subscription>,
 }
 
 impl Field {
@@ -33,7 +34,22 @@ impl Field {
             }
         });
         input.update(cx, |input, cx| input.focus(window, cx));
-        Field { input, _entered: entered }
+        Field { input, _entered: entered, _changed: None }
+    }
+
+    /// The field, which has `changed` done to the page's state as what's typed in it changes.
+    pub(super) fn on_change<T: 'static>(
+        self,
+        window: &mut Window,
+        cx: &mut Context<T>,
+        changed: fn(&mut T, &mut Window, &mut Context<T>),
+    ) -> Field {
+        let changed = cx.subscribe_in(&self.input, window, move |this, _, event: &InputEvent, window, cx| {
+            if matches!(event, InputEvent::Change) {
+                changed(this, window, cx);
+            }
+        });
+        Field { _changed: Some(changed), ..self }
     }
 
     /// A field for a token or a key, whose text shows only as dots, and can't be copied from.

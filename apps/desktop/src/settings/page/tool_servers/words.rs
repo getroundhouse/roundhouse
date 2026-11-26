@@ -130,6 +130,14 @@ pub(super) fn does(does: Does) -> &'static str {
     }
 }
 
+/// What the main button says of a form whose server didn't list its tools, and of a sign-in that failed.
+pub(super) const TRY_AGAIN: &str = "Try again";
+
+/// What the button says that does what a form's main button `does` though the server didn't list its tools.
+pub(super) fn anyway(does: &str) -> String {
+    format!("{does} anyway")
+}
+
 /// What the hub couldn't do, where it couldn't do what a form's button does.
 pub(super) fn to_do(does: Does) -> &'static str {
     match does {

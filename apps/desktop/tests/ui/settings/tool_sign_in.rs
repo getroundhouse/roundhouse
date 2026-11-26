@@ -152,6 +152,7 @@ fn a_new_server_with_no_sign_in_says_so_in_the_panel_it_was_typed_in_and_is_adde
 
     choose(&mut ui, KEY_WAY);
     ui.input("a-made-up-key");
+    registered.stand_in.change(|script| script.asks = ToolServerAsks::Nothing);
     ui.press("enter");
     ui.wait("the server with a key", |ui| named(ui, "Runbooks").is_some() && !ui.has("mcp-panel"));
     let runbooks = named(&ui, "Runbooks").unwrap();

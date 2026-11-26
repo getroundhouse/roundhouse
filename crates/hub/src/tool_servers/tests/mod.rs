@@ -1,5 +1,6 @@
-//! What's kept of a tool server, where, what's refused, and what workers are sent.
+//! What's kept of a tool server, where, what's refused, what workers are sent, and what a check would ask.
 
+mod checking;
 mod editing;
 mod editing_by_sign_in;
 mod granted;

@@ -47,7 +47,7 @@ pub use github::{
 };
 #[cfg(any(test, feature = "testing"))]
 pub use tool_sign_in::{
-    Asks as ToolServerAsks, AuthorizationPage as ToolServerPage, Person as ToolServerPerson,
+    Asks as ToolServerAsks, AuthorizationPage as ToolServerPage, Gate as ToolServerGate, Person as ToolServerPerson,
     Refreshing as ToolServerRefreshing, Registers as ToolServerRegisters, SaysAllowed as ToolServerSaysAllowed,
     Script as ToolServerScript, StandIn as ToolServerStandIn, Wants as ToolServerWants,
 };
