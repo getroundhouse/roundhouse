@@ -123,11 +123,9 @@ impl Hub {
     ) -> Option<WorkerFrame> {
         let WorkerFrame::Changes { path, summary } = frame else { return Some(frame) };
         let read_at_ms = now_ms();
-        if !link.is_current(&self.workers.lock(), id) {
-            return None;
-        }
+        let word = self.worker_word(id, link)?;
         if self.ready_workspace(id).await.is_ok_and(|ready| ready.path() == path) {
-            self.changes_read(id, summary, read_at_ms).await;
+            self.changes_read(id, &word, summary, read_at_ms).await;
         }
         None
     }
@@ -158,9 +156,9 @@ impl Hub {
 
     /// Keeps that `link`, the worker watching the workspace's worktree, keeps both observations of its changes up to
     /// date from now on, until it goes: its lines, and its changed files.
-    async fn changes_kept_current(&self, id: &WorkspaceId, link: &WorkerLink) {
-        let keeper = Keeper::Worker(link.id);
-        if let Err(e) = self.observation_kept_by::<WorkspaceLines>(id.clone(), keeper).await {
+    async fn changes_kept_current(&self, id: &WorkspaceId, link: &Arc<WorkerLink>) {
+        let Some(word) = self.worker_word(id, link) else { return };
+        if let Err(e) = word.keeps::<WorkspaceLines>(id.clone()).await {
             warn!(
                 name: "changes.lines_watch_unkept",
                 workspace_id = %id,
@@ -168,7 +166,7 @@ impl Hub {
                 "Couldn't keep that the workspace's lines are watched"
             );
         }
-        if let Err(e) = self.observation_kept_by::<WorkspaceChanges>(id.clone(), keeper).await {
+        if let Err(e) = word.keeps::<WorkspaceChanges>(id.clone()).await {
             warn!(
                 name: "changes.files_watch_unkept",
                 workspace_id = %id,

@@ -55,7 +55,7 @@ impl Hub {
     /// Reads the changes of the workspace `id` from `link`, if the workspace is ready, since one being made has no
     /// worktree to read yet, and an archived one's is gone, and keeps what the worker says, as [`Hub::changes_read`]
     /// does, uncut, so the two observations it fills are as of the same read.
-    async fn read_lines_once(self: &Arc<Self>, id: &WorkspaceId, link: &WorkerLink) {
+    async fn read_lines_once(self: &Arc<Self>, id: &WorkspaceId, link: &Arc<WorkerLink>) {
         step("reading the workspace's record");
         let Ok(ready) = self.ready_workspace(id).await else { return };
         let read_at_ms = now_ms();
@@ -81,7 +81,13 @@ impl Hub {
                 );
             }
         };
-        let (hub, id) = (self.clone(), id.clone());
-        uncut(async move { hub.changes_read(&id, summary, read_at_ms).await }).await;
+        // Only from the workspace's worker still, which one replaced while it read isn't.
+        let (hub, id, link) = (self.clone(), id.clone(), link.clone());
+        uncut(async move {
+            if let Some(word) = hub.worker_word(&id, &link) {
+                hub.changes_read(&id, &word, summary, read_at_ms).await;
+            }
+        })
+        .await;
     }
 }

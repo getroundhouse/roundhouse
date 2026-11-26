@@ -1,7 +1,7 @@
 //! What keeps an observation, and what each kind is once that goes.
 
 use protocol::client::HubNotice;
-use protocol::model::{Observed, OtherBuild, ReleaseOffer, Rev, RunId};
+use protocol::model::{Observed, OtherBuild, ReleaseOffer, Rev, RunId, WorkspaceId};
 
 use super::super::keepers::Keeper;
 use super::super::kept::Said;
@@ -9,7 +9,7 @@ use super::super::kinds::{Kind, SessionKey, SessionToolServers, WorkspaceLines};
 use super::super::{ReleaseOffered, WorkspaceWorkerBuild};
 use super::seen::{lines, told};
 use crate::hub::Hub;
-use crate::hub::tests::hub_in;
+use crate::hub::tests::{hub_in, serving};
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
 
@@ -82,4 +82,29 @@ async fn what_only_a_run_keeps_goes_as_another_keeps_it_and_its_late_word_change
 
     hub.keeper_went(next).await;
     assert_eq!(servers(&of), None);
+}
+
+/// A worker's word is had only while it's the workspace's worker, and what it says, keeps or reads after another has
+/// replaced it, as a frame on the way can land, changes nothing, while the next one's word is kept.
+#[tokio::test]
+async fn a_workers_word_is_kept_only_while_it_is_the_workspaces_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let (w, first, next) = (WorkspaceId::from("w"), WorkerLink::unconnected(), WorkerLink::unconnected());
+    serving(&hub, &first);
+    let word = hub.worker_word(&w, &first).unwrap();
+
+    serving(&hub, &next);
+    word.keeps::<WorkspaceLines>(w.clone()).await.unwrap();
+    word.read::<WorkspaceLines>(w.clone(), lines(3, 1), 1_000).await.unwrap();
+    word.said::<WorkspaceWorkerBuild>(w.clone(), OtherBuild { said: None }, 1_000).await.unwrap();
+
+    assert!(hub.worker_word(&w, &first).is_none(), "had for a worker that's been replaced");
+    assert_eq!(observed::<WorkspaceLines>(&hub, &w), None);
+    assert_eq!(observed::<WorkspaceWorkerBuild>(&hub, &w), None);
+    assert!(!hub.observation_is_kept_current::<WorkspaceLines>(&w), "kept current by a worker that's been replaced");
+    let next_word = hub.worker_word(&w, &next).unwrap();
+    next_word.keeps::<WorkspaceLines>(w.clone()).await.unwrap();
+    next_word.read::<WorkspaceLines>(w.clone(), lines(3, 1), 2_000).await.unwrap();
+    assert_eq!(observed::<WorkspaceLines>(&hub, &w), Some(Observed::Current { value: lines(3, 1) }));
 }

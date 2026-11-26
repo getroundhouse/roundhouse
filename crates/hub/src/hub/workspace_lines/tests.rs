@@ -128,12 +128,14 @@ async fn an_archived_workspace_forgets_its_lines_its_files_and_its_branches() {
     assert_eq!(hub.records_list().await.unwrap().observations.len(), 1, "its lines");
     let branches = Branches { head: Head::Detached { commit: "c1".into() }, had: Vec::new() };
     hub.branches_known(&workspace.id, branches).await;
+    let link = hub.existing_worker(&workspace.id).unwrap();
+    let word = hub.worker_word(&workspace.id, &link).unwrap();
 
     hub.workspace_archive(workspace.id.clone(), true).await.unwrap();
 
     assert_eq!(of_its_own_level(&hub, &workspace.id).await, []);
     assert_eq!(hub.records_list().await.unwrap().observations, []);
-    hub.changes_read(&workspace.id, changes(4, 0), now_ms()).await;
+    hub.changes_read(&workspace.id, &word, changes(4, 0), now_ms()).await;
     assert_eq!(of_its_own_level(&hub, &workspace.id).await, [], "a read that lands after");
     assert_eq!(hub.records_list().await.unwrap().observations, [], "a read that lands after");
 }
