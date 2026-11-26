@@ -45,10 +45,10 @@ Each colour means one thing.
 - **Amber is for the card that needs you, and red means the agent stopped short.** A plan waiting to be approved is washed in amber, with its heading in amber, and a failed request's card the same in red, as `components.md` says. A question isn't a card, and neither is a request to use a tool, since each takes the composer's place, and has the thin edge colour on the pane's own surface, as `chats.md` says. Amber isn't on the mark, where the merge queue's yellow would be taken for it.
 - **The diff uses the colours review tools do,** because they're about a file rather than about you or the agent: lines added and removed are green and red, and a modified file's icon is yellow.
 - **A file's icon is in its kind's colours,** as Catppuccin's Mocha flavour draws them, in thin lines, which editors have made familiar, and a folder's is the plain folder in the muted text colour, whatever it holds, as is the plain file's, for a file with no icon of its own. They say what a file is, never how anything stands, so they sit beside a name and nowhere a status would.
-- **Code is in the same colours wherever it's shown,** a diff's, a file's, a call's and a reply's code block's, so a keyword looks the same in each. `look::highlight` colours them all, in Visual Studio's Dark+ colours, as the owner chose on 2026-11-26, rather than leave a reply's code hard to read until the design names code's colours. They're the one set not named in `look::Colors`, as the rule below asks, until the design's Colour foundation names them.
+- **Code is in the same colours wherever it's shown,** a diff's, a file's, a call's and a reply's code block's, so a keyword looks the same in each. They're Visual Studio's Dark+, which the people Roundhouse is for know from their editor, each a role of its own, such as `code_keyword`, but for its plain colour: plain code is in `text`, so it's as warm as the words around it, as the owner decided. `look::highlight` colours them all.
 - **A pull request's state is shown in GitHub's colours,** which the people Roundhouse is for already know: green when it's open, purple when it's merged, a muted red when it's closed, and a grey of its own when it's a draft. Its green is the app's own, that of what's added and what's done, rather than GitHub's, as the owner decided, so the app has one green, and the bar's words read more easily on it. The colour says what it is, whatever's in the way of merging it, as GitHub colours it, so a draft that conflicts is a draft's grey on the mark and the bar, and the bar's words say what's in the way, as the owner decided.
 - **The pull request's bar says what's in the way with a sign of its own, not its colour.** An open pull request's bar is green whatever's in the way, as the owner decided, as its mark and its chip are and as GitHub shows it. Before its words, a sign says what kind of thing is in the way: a red ✕, with the words in `error` too, for what has to be fixed before it can merge, which is conflicts, changes requested and failed checks; a muted spinner for what it waits on, GitHub or someone else; and a check once nothing is in the way. Work in the worktree has none, since its button says what to do. With the sidebar hidden, the header shows the same sign beside the number, as the owner decided, so a problem shows there too. A place in the merge queue is GitHub's yellow, which GitHub uses for what's waiting on it, and the bar always says in words what it's waiting for, so it isn't taken for amber's turn of yours. The fan is yellow there too, and green for every other open pull request. Amber is never on the mark, so the queue's yellow isn't taken for it. `look::Work` chooses them from `look::Colors`, so a workspace's fan and the bar can't disagree. *Unconfirmed.*
-- **Every colour the app draws with has a name for what it's for,** so a colour means the same wherever it's drawn, and two that look alike and mean different things, such as an approval's amber and a warning's, can change apart. What's drawn takes one of them by its name, or one of them at a strength chosen where it's drawn, such as a removed line's wash, which is `removed` at 12%, rather than a colour by its value. The app is dark only, and a light theme would be a second set of values for the same names. `look::Colors` holds them, and the kit's theme is made from them, so the kit's own parts, such as its buttons and menus, draw with the same ones. The few that only the kit's own parts draw with, such as the text on its danger button, are given where the theme is made. Code's colours, a file's icon and an image's pixels are their own, as above. *Unconfirmed.*
+- **Every colour the app draws with has a name for what it's for,** so a colour means the same wherever it's drawn, and two that look alike and mean different things, such as an approval's amber and a warning's, can change apart. What's drawn takes one of them by its name, or one of them at a strength chosen where it's drawn, such as a removed line's wash, which is `removed` at 12%, rather than a colour by its value. The app is dark only, and a light theme would be a second set of values for the same names. `look::Colors` holds them, and the kit's theme is made from them, so the kit's own parts, such as its buttons and menus, draw with the same ones. The few that only the kit's own parts draw with, such as the text on its danger button, are given where the theme is made. A file's icon and an image's pixels are their own, as above. *Unconfirmed.*
 
 **Every colour, by its name.** Each is the field of that name in `look::Colors`. *Unconfirmed.*
 
@@ -107,6 +107,26 @@ Each colour means one thing.
 | `scroll_thumb_hover` | `#ffffff33` | A scrollbar's thumb under the pointer |
 | `windows_close` | `#c42b1c` | Windows' close button under the pointer |
 | `on_windows_close` | `#ffffff` | Its glyph |
+| **Code** | | |
+| `code_keyword` | `#c586c0` | A keyword, such as `if` |
+| `code_storage` | `#569cd6` | A word that declares or is built in, such as `fn`, `let` or `true`, a markup tag's name, and a heading |
+| `code_comment` | `#608b4e` | A comment |
+| `code_string` | `#d69d85` | A string |
+| `code_escape` | `#e3bbab` | An escape in a string |
+| `code_number` | `#b5cea8` | A number, and a library's constant |
+| `code_constant` | `#b4cea8` | Any other constant |
+| `code_function` | `#dcdcaa` | A function's name |
+| `code_type` | `#4ec9b0` | A type's name |
+| `code_variable` | `#9cdcfe` | A variable, and a property's name in CSS |
+| `code_attribute` | `#92caf4` | An attribute's name in markup |
+| `code_tag` | `#808080` | The tag around a markup tag's name, and a doctype |
+| `code_value` | `#c8c8c8` | A quoted value in XML or HTML, and a property's value in CSS |
+| `code_selector` | `#d7ba7d` | A selector in CSS |
+| `code_at_rule` | `#87cefa` | An at-rule in CSS, such as `@media` |
+| `code_preprocessor` | `#9b9b9b` | A preprocessor's line, such as `#include` |
+| `code_processing` | `#68685b` | XML's processing instruction |
+| `code_js_operator` | `#687687` | An operator in JavaScript |
+| `code_method_storage` | `#70727e` | The word that declares a method |
 
 Three strengths have names of their own, since several places draw with them: what's selected in text is `brand` at 30%, the most the kit lets a selection show, every match of what's found is `current` at 22%, and the match being shown is `brand` at 55%. *Unconfirmed.*
 

@@ -94,6 +94,27 @@ color.window.scroll_thumb_hover: #ffffff33
 color.window.windows_close: #c42b1c
 color.window.on_windows_close: #ffffff
 
+// Code, in Visual Studio's Dark+ as bat ships it: a role for each of its colours but its plain one, which is text.
+color.code.keyword: #c586c0
+color.code.storage: #569cd6
+color.code.comment: #608b4e
+color.code.string: #d69d85
+color.code.escape: #e3bbab
+color.code.number: #b5cea8
+color.code.constant: #b4cea8
+color.code.function: #dcdcaa
+color.code.type: #4ec9b0
+color.code.variable: #9cdcfe
+color.code.attribute: #92caf4
+color.code.tag: #808080
+color.code.value: #c8c8c8
+color.code.selector: #d7ba7d
+color.code.at_rule: #87cefa
+color.code.preprocessor: #9b9b9b
+color.code.processing: #68685b
+color.code.js_operator: #687687
+color.code.method_storage: #70727e
+
 // `look::Space`'s steps: XSmall is `xs`, and so on to XXLarge, `2xl`.
 spacing: tshirt(number([4, 8, 12, 16, 24, 32]), min: { none: 0 }, transforms: none)
 

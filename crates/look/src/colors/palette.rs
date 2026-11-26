@@ -189,6 +189,49 @@ colors! {
         /// The glyph on Windows' close button under the pointer.
         on_windows_close = 0xffff_ffff,
     }
+    // Code, wherever it's shown, in Visual Studio's Dark+ as bat ships it: a role for each of its colours but its plain
+    // one, which is `text`, so code is as warm as the words around it. `crate::highlight` draws with them.
+    "Code" {
+        /// A keyword, such as `if`, `return` or `use`.
+        code_keyword = 0xc586_c0ff,
+        /// A word that declares or is built in, such as `fn`, `let`, `u32` or `true`, a markup tag's name, and a
+        /// heading.
+        code_storage = 0x569c_d6ff,
+        /// A comment.
+        code_comment = 0x608b_4eff,
+        /// A string.
+        code_string = 0xd69d_85ff,
+        /// An escape in a string, such as `\n`.
+        code_escape = 0xe3bb_abff,
+        /// A number, and a constant a library gives.
+        code_number = 0xb5ce_a8ff,
+        /// Any other constant.
+        code_constant = 0xb4ce_a8ff,
+        /// A function's name where it's declared or called.
+        code_function = 0xdcdc_aaff,
+        /// A type's name, and the class one inherits.
+        code_type = 0x4ec9_b0ff,
+        /// A variable, and a property's name in CSS.
+        code_variable = 0x9cdc_feff,
+        /// An attribute's name in markup.
+        code_attribute = 0x92ca_f4ff,
+        /// The tag around a markup tag's name, and a doctype.
+        code_tag = 0x8080_80ff,
+        /// A quoted value in XML or HTML, and a property's value in CSS.
+        code_value = 0xc8c8_c8ff,
+        /// A selector in CSS.
+        code_selector = 0xd7ba_7dff,
+        /// An at-rule in CSS, such as `@media`.
+        code_at_rule = 0x87ce_faff,
+        /// A preprocessor's line, such as `#include`.
+        code_preprocessor = 0x9b9b_9bff,
+        /// XML's processing instruction, such as `<?xml ?>`.
+        code_processing = 0x6868_5bff,
+        /// An operator in JavaScript, which Dark+ draws apart from other languages' operators.
+        code_js_operator = 0x6876_87ff,
+        /// The word that declares a method, where a language has one.
+        code_method_storage = 0x7072_7eff,
+    }
 }
 
 impl Global for Colors {}
