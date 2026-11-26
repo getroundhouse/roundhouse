@@ -6,9 +6,10 @@
 //! is, and Cancel, or the panel going, lets go of the save.
 
 use client_core::ToolServerSaving;
-use client_core::tool_server_checks::{Saved, When};
+use client_core::tool_server_checks::Saved;
 use client_core::tool_server_edits::Does;
 use gpui_kit::{App, Context, Task, Window};
+use protocol::client::tool_server_saves::SaveWhen;
 
 use super::kept::Kept;
 use super::words;
@@ -20,7 +21,7 @@ pub(super) enum FormStands {
     Open,
     /// The hub is adding or saving it, as `when` says, once it has asked the server for its tools where it asks. The
     /// save is let go of if it goes before the hub has answered, as it does with the panel.
-    Saving { when: When, _saving: ToolServerSaving, _wait: Task<()> },
+    Saving { when: SaveWhen, _saving: ToolServerSaving, _wait: Task<()> },
     /// It wasn't added or saved, for this reason, for the person to read.
     Refused(String),
     /// The server didn't list its tools, for this reason, for the person to read. They choose whether to go on anyway.
@@ -64,11 +65,8 @@ impl FormStands {
     /// hub doesn't say when it has done, so it's for as long as the save is under way.
     pub(super) fn asks(&self, is_asked: impl FnOnce() -> bool) -> bool {
         match self {
-            FormStands::Saving { when: When::Listed, .. } => is_asked(),
-            FormStands::Saving { when: When::Anyway, .. }
-            | FormStands::Open
-            | FormStands::Refused(_)
-            | FormStands::NotListed(_) => false,
+            FormStands::Saving { when, .. } => *when == SaveWhen::Listed && is_asked(),
+            FormStands::Open | FormStands::Refused(_) | FormStands::NotListed(_) => false,
         }
     }
 }
@@ -92,7 +90,7 @@ impl Kept {
                 let to = form.signs_in_to(cx);
                 self.sign_in(to, window, cx);
             }
-            Does::Add | Does::Save => self.save(When::Listed, window, cx),
+            Does::Add | Does::Save => self.save(SaveWhen::Listed, window, cx),
         }
     }
 
@@ -103,11 +101,11 @@ impl Kept {
         }
         // The button that was pressed goes.
         self.focus_the_panel(window, cx);
-        self.save(When::Anyway, window, cx);
+        self.save(SaveWhen::Anyway, window, cx);
     }
 
     /// Has the hub add it, or save it, as `when` says.
-    fn save(&mut self, when: When, window: &mut Window, cx: &mut Context<Self>) {
+    fn save(&mut self, when: SaveWhen, window: &mut Window, cx: &mut Context<Self>) {
         let Some((hub, form)) = self.asking.clone().zip(self.form()) else {
             return self.stand(FormStands::Open, cx);
         };

@@ -12,7 +12,8 @@ use super::secret::{ToolServerSecret, refused};
 use super::{ToolServerChange, ToolServers};
 use crate::login_files::Locked;
 
-/// When a save is made, as its client chose.
+/// When a save is made, as its client chose. It's `SaveWhen` without `Unknown`, which the hub refuses as the request
+/// comes, so what saves a server matches only what it knows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum When {
     /// Once the server has listed its tools, where there's anything to ask it.

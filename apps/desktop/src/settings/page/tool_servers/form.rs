@@ -4,9 +4,9 @@
 //! that.
 
 use client_core::new_tool_server_id;
-use client_core::tool_server_checks::ToSave;
 use client_core::tool_server_edits::{Does, Edit, Sent, Typed, TypedAuth, Way};
 use gpui_kit::{App, Context, Window};
+use protocol::client::tool_server_checks::ToolServerToCheck;
 use protocol::client::tool_servers::ToolServerEdit;
 use protocol::model::{ToolServer, ToolServerAuth, ToolServerId, ToolServerKey};
 
@@ -110,13 +110,13 @@ impl Form {
 
     /// What the hub is asked to add, or to save of what it has, which is only what's changed. `None` for a server to
     /// add by signing in to it, which is the person's to approve first.
-    pub(super) fn to_save(&self, cx: &App) -> Option<ToSave> {
+    pub(super) fn to_save(&self, cx: &App) -> Option<ToolServerToCheck> {
         let typed = self.typed(cx);
         Some(match &self.of {
-            Of::New(id) => ToSave::Add(typed.added(id)?),
+            Of::New(id) => ToolServerToCheck::Add(typed.added(id)?),
             Of::Had(was) => {
                 let Sent { name, url, auth } = typed.edit_of(was).into_sent();
-                ToSave::Edit(ToolServerEdit { id: was.id.clone(), name, url, auth, saved_anyway: false })
+                ToolServerToCheck::Edit(ToolServerEdit { id: was.id.clone(), name, url, auth, saved_anyway: false })
             }
         })
     }

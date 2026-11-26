@@ -2,36 +2,9 @@
 //! it's being asked, and why it listed no tools. They're of the name and the URL the person typed and of what the hub
 //! says came of it, so never of anything the server said.
 
-use protocol::client::tool_server_checks::{NoToolList, ToolServerToCheck, ToolServerUnreached};
+use protocol::client::tool_server_checks::{NoToolList, ToolServerUnreached};
 use protocol::client::tool_server_saves::ToolServerSaved;
-use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
 use protocol::model::{ToolServer, ToolServerUrl};
-
-/// What's to be added or saved.
-#[derive(Clone, Debug, PartialEq)]
-pub enum ToSave {
-    Add(ToolServerAdd),
-    /// An edit, whose own `saved_anyway` is the save's to say.
-    Edit(ToolServerEdit),
-}
-
-impl From<ToSave> for ToolServerToCheck {
-    fn from(of: ToSave) -> Self {
-        match of {
-            ToSave::Add(add) => ToolServerToCheck::Add(add),
-            ToSave::Edit(edit) => ToolServerToCheck::Edit(edit),
-        }
-    }
-}
-
-/// When it's added or saved, as the person chose.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum When {
-    /// Once the server has listed its tools, or at once where there's nothing to ask it.
-    Listed,
-    /// At once, without asking it anything, as the person chose once it didn't list them.
-    Anyway,
-}
 
 /// What a save comes to.
 #[derive(Clone, Debug, PartialEq)]
