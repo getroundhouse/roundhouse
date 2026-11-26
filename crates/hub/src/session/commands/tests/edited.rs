@@ -13,13 +13,13 @@ use protocol::worker::WorkerResponse;
 use tokio::sync::oneshot;
 
 use super::launching::{current_run, exited};
-use super::reconnecting::{Answered, Worker, claims_reconnecting, says_server, settled};
+use super::reconnecting::{Answered, Worker, says_server, settled};
 use super::reloading::{Running, claims_reloading};
 use crate::hub::Hub;
 use crate::hub::tests::{carried_on, hub_with_worktree, started_again, tool_servers_of};
 use crate::session::queue::tests::ended;
 use crate::session::{Item, LiveSession};
-use crate::tool_servers::tests::{again, edit, edited_by_signing_in, named, renewed, signed_in, with_key};
+use crate::tool_servers::tests::{again, edit, edited_by_signing_in, renewed, signed_in, with_key};
 
 pub(super) const URL: &str = "https://mcp.example.com/mcp";
 pub(super) const QUERIED: &str = "https://mcp.example.com/mcp?tools=some";
@@ -104,72 +104,26 @@ impl Running {
     }
 }
 
-/// Whichever way its turn ends, and at once where it's on none.
+/// One change, which asks a connected Claude: whether each change asks a run, by how it stands and what it claims, is
+/// `crate::session::had_servers`' table, and what ends a turn is the session's progress's.
 #[tokio::test(start_paused = true)]
-async fn a_connected_run_is_asked_once_its_turn_ends_whatever_changed() {
-    let anyway = ToolServerEdit { saved_anyway: true, ..keyed(URL) };
-    let ends = [
-        EventBody::AgentState { state: AgentRunState::Idle },
-        ended(TurnOutcome::Success),
-        ended(TurnOutcome::Cancelled),
-        ended(TurnOutcome::Error),
-    ];
-    for (asked, connects_at) in [(at(QUERIED), URL), (anyway, URL), (moved(), ELSEWHERE)] {
-        let idle = connected().await;
-        idle.edited(asked.clone()).await;
-        assert_eq!(idle.told(), ["reload Linear"], "{asked:?}");
+async fn a_run_is_asked_once_its_turn_ends_or_at_once_where_its_on_none_and_only_once() {
+    let idle = connected().await;
+    idle.edited(at(QUERIED)).await;
+    assert_eq!(idle.told(), ["reload Linear"]);
 
-        for end in ends.clone() {
-            let running = connected().await;
-            running.turn(AgentRunState::Running).await;
-            running.edited(asked.clone()).await;
-            assert_eq!(running.told(), Vec::<String>::new(), "{asked:?}");
+    let running = connected().await;
+    running.turn(AgentRunState::Running).await;
+    running.edited(at(QUERIED)).await;
+    assert_eq!(running.told(), Vec::<String>::new());
 
-            event(&running.live, running.run, end.clone()).await;
+    event(&running.live, running.run, ended(TurnOutcome::Success)).await;
 
-            assert_eq!(running.told(), ["reload Linear"], "{asked:?}, {end:?}");
-            running.connects(connects_at).await;
-            running.turn(AgentRunState::Running).await;
-            running.turn(AgentRunState::Idle).await;
-            assert_eq!(running.told(), ["reload Linear"], "once");
-        }
-    }
-}
-
-/// A name, and a key its calls have already, and, for one that leaves a connected server alone, anything.
-#[tokio::test(start_paused = true)]
-async fn nothing_is_asked_of_a_connected_run_that_has_it_already_or_cant_be_asked() {
-    let claude = connected().await;
-    claude.edited(named("t", "Sentry")).await;
-    claude.edited(keyed(URL)).await;
-    assert_eq!(claude.told(), Vec::<String>::new());
-
-    let codex = given(claims_reconnecting(), ServerState::Connected).await;
-    for asked in [keyed(URL), at(QUERIED), moved()] {
-        codex.edited(asked).await;
-    }
-    codex.turn(AgentRunState::Running).await;
-    codex.turn(AgentRunState::Idle).await;
-    assert_eq!(codex.told(), Vec::<String>::new());
-}
-
-/// Once for each, where it fails each time.
-#[tokio::test(start_paused = true)]
-async fn a_run_that_isnt_connected_is_asked_once_its_turn_ends_too_whatever_changed() {
-    for claims in [claims_reloading(), claims_reconnecting()] {
-        let running = given(claims, ServerState::Failed).await;
-        for (asked, times) in [(named("t", "Sentry"), 0), (keyed(URL), 1), (at(QUERIED), 2), (moved(), 3)] {
-            running.turn(AgentRunState::Running).await;
-            running.edited(asked.clone()).await;
-            assert_eq!(running.told().len(), usize::saturating_sub(times, 1), "on the turn: {asked:?}");
-
-            running.turn(AgentRunState::Idle).await;
-
-            running.said(ServerState::Starting, URL).await;
-            running.said(ServerState::Failed, URL).await;
-            assert_eq!(running.told(), vec!["Linear"; times], "{asked:?}");
-        }
-    }
+    assert_eq!(running.told(), ["reload Linear"]);
+    running.connects(URL).await;
+    running.turn(AgentRunState::Running).await;
+    running.turn(AgentRunState::Idle).await;
+    assert_eq!(running.told(), ["reload Linear"], "once");
 }
 
 #[tokio::test(start_paused = true)]

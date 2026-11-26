@@ -80,24 +80,15 @@ async fn a_server_is_asked_for_its_tools_before_its_added_or_edited_which_change
     }
 }
 
+/// One refused, as a key kept for a server would be sent to another, and one with nothing to ask. Each change it's refused
+/// for, and each that asks nothing, is in `crate::tool_servers`' tests.
 #[tokio::test]
-async fn what_cant_be_added_or_edited_is_refused_before_anything_is_asked_and_a_kept_key_goes_to_no_other_server() {
+async fn what_cant_be_edited_is_refused_and_what_needs_nothing_asked_and_neither_asks_the_server() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, first, second) = (hub_in(dir.path()), open("a=1").await, open("a=1").await);
     hub.tool_server_add(add("t", "Linear", &url(&first), with_key())).await.unwrap();
-    let keep = |given_for: &StandIn| {
-        let (header, url) = ("Authorization".to_string(), url(given_for));
-        Some(ToolServerAuthEdit::Key { header, key: None, url })
-    };
-
-    for (check, code) in [
-        (to_add(add("new", "linear", &url(&second), with_key())), ErrorCode::Conflict),
-        (to_edit(&url(&second), None), ErrorCode::InvalidRequest),
-        (to_edit(&url(&second), keep(&second)), ErrorCode::InvalidRequest),
-        (to_edit(&url(&second), keep(&first)), ErrorCode::Conflict),
-    ] {
-        assert_eq!(hub.tool_server_check(check).await.unwrap_err().code, code);
-    }
+    let (header, given_for) = ("Authorization".to_string(), url(&first));
+    let keep = Some(ToolServerAuthEdit::Key { header, key: None, url: given_for });
     let named = ToolServerEdit {
         id: "t".into(),
         name: Some("Linear (Ada)".into()),
@@ -105,8 +96,11 @@ async fn what_cant_be_added_or_edited_is_refused_before_anything_is_asked_and_a_
         auth: None,
         saved_anyway: false,
     };
+
+    let refused = hub.tool_server_check(to_edit(&url(&second), keep)).await.unwrap_err();
     let nothing = hub.tool_server_check(ToolServerCheck { of: ToolServerToCheck::Edit(named) }).await.unwrap();
 
+    assert_eq!(refused.code, ErrorCode::Conflict);
     assert_eq!(nothing, ToolServerChecked::NothingToAsk);
     assert!(first.asked().is_empty() && second.asked().is_empty());
 }
