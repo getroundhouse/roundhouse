@@ -1,6 +1,7 @@
 //! Reading a session's log a version at a time, as a frame drawing each of its rows does, and hearing of each change
 //! as it comes.
 
+use crate::Hub;
 use parking_lot::Mutex;
 use protocol::client::{ClientRequest, ClientResponse, ReplyOutcome, log};
 use protocol::event::{EventBody, NoticeLevel};
@@ -8,12 +9,12 @@ use protocol::model::{Place, QueuedPrompt, Seq};
 use protocol::prompt::Prompt;
 use std::sync::Arc;
 
+use super::super::View;
 use super::super::source::SessionSource;
-use super::super::{OpenSession, View};
 use super::{answered_simply, session, start_hub_answering};
+use crate::Client;
 use crate::client::follow::Source as _;
 use crate::session_log::SessionLog;
-use crate::{Client, RecordsFeed};
 use protocol::prompt::PromptFrom;
 
 /// So whatever reads a version, such as a frame drawing each of its rows from it, reads one log however much comes
@@ -24,8 +25,8 @@ fn a_version_stays_as_it_was_while_the_log_goes_on() {
     let socket = dir.path().join("hub.sock");
     let _heard = start_hub_answering(&socket, answered_simply);
     let client = Client::connect(&socket, "test").unwrap();
-    let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start(&client, &feed, &session(), View::Own);
+    let hub = Hub::caught_up_on(&client);
+    let open = hub.open_session(&session(), View::Own);
     let before = open.version();
 
     open.add_pending(QueuedPrompt {
@@ -61,12 +62,13 @@ fn each_page_fetched_is_told_of_as_it_is_put_in_place() {
         Some(ReplyOutcome::Response(ClientResponse::PlacedEvents(log::PlacedEvents { events, last_place: LAST })))
     });
     let client = Client::connect(&socket, "test").unwrap();
-    let feed = RecordsFeed::start(&client);
+    let hub = Hub::caught_up_on(&client);
+    let feed = hub.records().unwrap();
     let mut source = SessionSource {
         session_id: "s".into(),
         view: View::Own,
         placed: true,
-        read_from: client.hub_version().to_string(),
+        read_from: Some(client.hub_version().to_string()),
         records: feed.reach(),
     };
     let mut log = SessionLog::new(LAST);

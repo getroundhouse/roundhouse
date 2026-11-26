@@ -2,7 +2,7 @@
 
 use super::examples;
 use super::processes::Hub;
-use client_core::{Client, Subscription, SubscriptionItem};
+use client_core::{Client, OnSocket, Subscription, SubscriptionItem};
 use examples::fake_agent;
 use hub::Timers;
 use local_hub::Daemon;
@@ -143,6 +143,14 @@ impl Stack {
 
     pub(crate) fn client(&self) -> Client {
         Client::connect(&self.socket(), "test").unwrap()
+    }
+
+    /// This stack's hub as a view holds it, once it has caught up on the hub's records, connecting again by itself
+    /// whenever the connection goes, for as long as it's held.
+    pub(crate) fn hub(&self) -> OnSocket {
+        let hub = OnSocket::connect(&self.socket());
+        wait_until("the hub to be caught up on", || hub.hub().caught_up());
+        hub
     }
 
     pub(crate) fn hub_pid(&self) -> u32 {

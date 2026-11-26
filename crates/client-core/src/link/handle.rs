@@ -61,7 +61,7 @@ impl<C: Connect> Link<C> {
         let (asks, asked) = flume::unbounded();
         let shared = Arc::new(Shared {
             state: Mutex::new(LinkState::Connecting(None)),
-            kept: Arc::default(),
+            kept: Arc::new(Kept::new()),
             connection: Mutex::new(None),
             errors: Mutex::new(Vec::new()),
             signal,

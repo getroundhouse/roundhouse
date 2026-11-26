@@ -1,6 +1,7 @@
 //! What a client shows once it connects again, to a hub that may be another, or the same one with its revisions started
 //! again, as after its database is replaced from a copy.
 
+use crate::Hub;
 use std::time::Duration;
 
 use protocol::model::{
@@ -10,7 +11,7 @@ use protocol::model::{
 
 use super::super::World;
 use super::served::served;
-use crate::{OpenSession, RecordsFeed, View};
+use crate::{RecordsFeed, View};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -101,18 +102,18 @@ fn a_hub_whose_revisions_are_lower_is_shown_as_soon_as_it_lists_each_level() {
     let (second, ..) = world(2, 2);
     let (_first_dir, first) = served(first);
     let (_second_dir, second) = served(second);
-    let feed = RecordsFeed::start(&first);
+    let hub = Hub::caught_up_on(&first);
+    let feed = hub.records().unwrap();
     waiting::thread::until(TIMEOUT, "the first hub's records", || feed.connected());
     let _followed = feed.follow_workspace(&elm);
     let session = feed.snapshot().session(&chat).unwrap().clone();
-    let open = OpenSession::start(&first, &feed, &session, View::Own);
+    let _open = hub.open_session(&session, View::Own);
     let view = feed.github().view();
     view.show(vec![twelve()]);
     let read = || Read::of(&feed, &elm, &chat);
     waiting::thread::until(TIMEOUT, "what the first hub says at every level", || read() == Read::said_by(1));
 
-    feed.reconnect(&second);
-    open.reconnect(&second);
+    hub.carry_on_to(&second);
 
     waiting::thread::until(TIMEOUT, "what the second hub says at every level", || read() == Read::said_by(2));
 }

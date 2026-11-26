@@ -13,6 +13,7 @@ mod attachments;
 mod back_and_forward;
 mod background;
 mod cached_transcript;
+mod catching_up;
 mod changes;
 mod changes_summary;
 mod chats;

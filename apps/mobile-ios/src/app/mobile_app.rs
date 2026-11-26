@@ -330,6 +330,12 @@ impl MobileApp {
         self.open.chat.as_ref().and_then(|open| open.chat.read(cx).shown_record().cloned())
     }
 
+    /// What the open chat says went wrong, while it says it.
+    #[cfg(feature = "testing")]
+    pub fn chat_says(&self, cx: &App) -> Option<String> {
+        self.open.chat.as_ref().and_then(|open| open.chat.read(cx).said())
+    }
+
     /// What's typed in the open chat's composer.
     #[cfg(feature = "testing")]
     pub fn typed(&self, cx: &App) -> Option<String> {

@@ -1,5 +1,6 @@
 //! Following a view of a session: the agent's own events, or a subagent's, read again from a hub of another build.
 
+use crate::Hub;
 use std::path::Path;
 use std::time::Duration;
 
@@ -10,9 +11,9 @@ use protocol::model::{Place, Seq, Session, SubagentId};
 
 use super::super::{OpenSession, View};
 use super::follows_session;
+use crate::Client;
 use crate::session_log::Row;
 use crate::stand_in_hub::{Does, StandIn, subscribed};
-use crate::{Client, RecordsFeed};
 
 /// The session's events: the agent's own at the odd `seq`s, and a subagent's among them at the even ones, so no event
 /// but the first has its `seq` as its place. Each says its `seq` and the build of the hub that served it, as a
@@ -138,15 +139,15 @@ fn an_open_view_reads_its_events_again_from_a_hub_of_another_build_once() {
         start_hub(&socket("after.sock"), "2", LAST_SEQ);
         let asked = start_hub(&socket("again.sock"), "2", LAST_SEQ);
         let client = Client::connect(&socket("before.sock"), "test").unwrap();
-        let feed = RecordsFeed::start(&client);
-        let open = OpenSession::start(&client, &feed, &session(), view.clone());
+        let hub = Hub::caught_up_on(&client);
+        let open = hub.open_session(&session(), view.clone());
         wait_for(&open, held);
 
-        open.reconnect(&Client::connect(&socket("after.sock"), "test").unwrap());
+        hub.carry_on_to(&Client::connect(&socket("after.sock"), "test").unwrap());
 
         let again: Vec<Option<String>> = held.iter().map(|seq| Some(format!("{seq} from 2"))).collect();
         wait_until(&open, said, &again);
-        open.reconnect(&Client::connect(&socket("again.sock"), "test").unwrap());
+        hub.carry_on_to(&Client::connect(&socket("again.sock"), "test").unwrap());
         let next = u64::try_from(held.len()).unwrap() + 1;
         assert_eq!(first(&asked, subscribed_from), next, "{view:?} carries on from the last it holds");
     }
@@ -162,13 +163,13 @@ fn an_open_view_reads_its_events_again_as_far_as_the_new_hub_has_them() {
     start_hub(&before, "1", 1480);
     start_hub(&after, "2", 1510);
     let client = Client::connect(&before, "test").unwrap();
-    let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start(&client, &feed, &session(), View::Own);
+    let hub = Hub::caught_up_on(&client);
+    let open = hub.open_session(&session(), View::Own);
     let row_300 = |open: &OpenSession| said(open).get(300).cloned().flatten();
     open.want(300..301, Some(300));
     wait_until(&open, row_300, &Some("601 from 1".into()));
 
-    open.reconnect(&Client::connect(&after, "test").unwrap());
+    hub.carry_on_to(&Client::connect(&after, "test").unwrap());
     open.want(300..301, Some(300));
 
     wait_until(&open, row_300, &Some("601 from 2".into()));

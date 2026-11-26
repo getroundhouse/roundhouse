@@ -22,7 +22,7 @@ use crate::support::{FakeHub, Stack, Ui};
 use protocol::prompt::PromptFrom;
 
 /// A real PNG, so the app can read its size, as it does for any image it shows.
-fn png() -> Vec<u8> {
+pub(crate) fn png() -> Vec<u8> {
     encoded(image::ImageFormat::Png)
 }
 

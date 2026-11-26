@@ -89,10 +89,19 @@ impl Drop for OnItsWay {
 }
 
 impl OpenSession {
-    /// Sends a prompt on `client` as [`Client::send_prompt`] does, on a thread of its own, as [`Client::start`] starts
-    /// a call, in its place in its chat's line from now. The chat shows it from now, on its way, as
-    /// [`crate::SessionLog::pending`] says, until the hub records it, or it's handed back.
-    pub fn start_sending(&self, client: &Client, written: Written) -> Taking<(Seq, bool)> {
+    /// Sends a prompt as [`Client::send_prompt`] does, on a thread of its own, as [`Client::start`] starts a call, in its
+    /// place in its chat's line from now, on the connection that has caught up, as [`crate::Hub::ask`] says. Without one
+    /// it's handed back at once. The chat shows it from now, on its way, as [`crate::SessionLog::pending`] says, until
+    /// the hub records it, or it's handed back.
+    pub fn start_sending(&self, written: Written) -> Taking<(Seq, bool)> {
+        let client = match self.hub.ready() {
+            Ok(client) => client,
+            Err(error) => {
+                let said = written.prompt.carrying_too(Vec::new());
+                let reply = Reply::now(Ok(Err(NotTaken { error, prompt: written.prompt })));
+                return Taking { reply, said, _shown: None };
+            }
+        };
         self.add_pending(written.on_its_way());
         let client_msg_id = written.client_msg_id.clone();
         let mut on_its_way = OnItsWay { shown_in: self.clone(), client_msg_id, recorded: false };

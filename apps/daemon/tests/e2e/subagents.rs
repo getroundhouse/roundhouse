@@ -5,7 +5,7 @@
 #![cfg(test)]
 
 use client_core::session_log::{Row, SessionLog};
-use client_core::{Client, OpenSession, RecordsFeed, Subscription, View};
+use client_core::{Client, RecordsFeed, Subscription, View};
 use protocol::capability::calls::Call;
 use protocol::client::subscriptions::{Follow, LogFrom};
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TaskOutcome};
@@ -133,12 +133,13 @@ fn a_view_holds_only_the_agents_own_events_or_one_subagents_and_the_feed_keeps_t
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let feed = RecordsFeed::start(&client);
+    let hub = stack.hub();
+    let feed = hub.hub().records().unwrap();
     client.session_prompt(&session.id, "agent-calls:1:Look around", None).unwrap();
     let (_, id) = subagent(&client, &session.id);
 
-    let own = OpenSession::start(&client, &feed, &session, View::Own);
-    let work = OpenSession::start(&client, &feed, &session, View::Subagent(id.clone()));
+    let own = hub.hub().open_session(&session, View::Own);
+    let work = hub.hub().open_session(&session, View::Subagent(id.clone()));
     wait_for_turn_end(&client, &session.id, 1);
 
     let hub_has = |subagent| client.session_read_places(&session.id, subagent, Place::new(1), 1000).unwrap().0;

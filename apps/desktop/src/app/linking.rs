@@ -8,6 +8,7 @@ use gpui_kit::Context;
 use protocol::client::HubStatus;
 
 use super::{AppView, Connection, ConnectionFailure, Unconnected, hub_source, restarts};
+use crate::workspace_pane::WorkspacePane;
 
 impl AppView {
     /// Listens to the link, which tells of each change: how it stands, a new connection, the records, or an error.
@@ -47,8 +48,14 @@ impl AppView {
         }
         match shown(state) {
             Some(Connection::Ready(client)) => {
+                let back = !matches!(self.connection, Connection::Ready(_));
                 self.connection = Connection::Ready(client);
                 self.tell_tool_sign_in(cx);
+                if back {
+                    for pane in self.panes.values() {
+                        pane.update(cx, WorkspacePane::hub_came_back);
+                    }
+                }
             }
             Some(connection) if !same(&self.connection, &connection) => {
                 // The hub said its status, so the app has heard which release it's on. One newer than the app, which

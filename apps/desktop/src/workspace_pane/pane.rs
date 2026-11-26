@@ -254,19 +254,13 @@ impl WorkspacePane {
 
     /// Carries on on a new connection to the hub, keeping everything shown and typed, and reads the chat showing if
     /// it's being read. What the hub reads from the worktree waits for [`Self::catch_up`], so a reconnect doesn't
-    /// start a worker for every pane at once.
+    /// start a worker for every pane at once. What's typed isn't sent until the connection has caught up, as
+    /// [`Self::hub_came_back`] says.
     pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.model_lookup.reset();
         self.client = client.clone();
-        self.hub = composer::Hub::Here;
         self.reload_request = ReloadRequest::Known;
         self.showing_changed(cx);
-        for transcript in self.every_transcript() {
-            transcript.update(cx, |t, cx| t.reconnect(client, cx));
-        }
-        if let Some(view) = self.proposals.view() {
-            view.update(cx, |v, cx| v.reconnect(client, cx));
-        }
         if let Some(diff) = &mut self.diff {
             diff.review.update(cx, |r, cx| r.reconnect(client, cx));
             diff.all_files.update(cx, |a, _| a.reconnect(client));

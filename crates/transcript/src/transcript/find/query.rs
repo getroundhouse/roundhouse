@@ -5,7 +5,7 @@ use crate::reveal::Wanted;
 use crate::rows::{NEAR, found_in_row, rows_drawing, rows_to_count};
 use bar::Bar;
 use client_core::session_log::{Position, Row, SessionLog};
-use client_core::{Client, Search, Searched};
+use client_core::{Search, Searched};
 use count::{At, Counts};
 use gpui_kit::{Context, Task, Window};
 use protocol::find::Needle;
@@ -40,9 +40,9 @@ pub(super) struct Query {
 }
 
 impl Query {
-    pub(super) fn new(needle: Needle, client: &Client, session: &client_core::OpenSession) -> Self {
+    pub(super) fn new(needle: Needle, session: &client_core::OpenSession) -> Self {
         Self {
-            search: session.search(client, needle.clone(), NEAR),
+            search: session.search(needle.clone(), NEAR),
             needle,
             counts: Counts::default(),
             candidates: BTreeSet::new(),
@@ -152,7 +152,7 @@ impl Transcript {
         let needle = Needle::new(&finding.bar.query(cx)).ok();
         let reveal = self.selection.reveal();
         reveal.done_with(Wanted::Match);
-        finding.query = needle.clone().map(|needle| Query::new(needle, &self.client, &self.session));
+        finding.query = needle.clone().map(|needle| Query::new(needle, &self.session));
         self.model.borrow_mut().find = Rc::new(FindLook::new(needle.clone(), None, reveal.clone(), look::colors(cx)));
         if let Some(needle) = needle {
             let (found, rows) = held_to_count(&self.log, &needle);
@@ -164,12 +164,12 @@ impl Transcript {
         self.after_counting(cx);
     }
 
-    /// Carries on on a new connection, asking again of a search that failed.
+    /// Asks again of a search that failed, once a new connection has caught up.
     pub(crate) fn find_on_new_connection(&mut self) {
-        let (client, session) = (&self.client, &self.session);
+        let session = &self.session;
         let Some(query) = self.finding.as_mut().and_then(|finding| finding.query.as_mut()) else { return };
         if query.search.searched() == Searched::Failed {
-            query.search = session.search(client, query.needle.clone(), NEAR);
+            query.search = session.search(query.needle.clone(), NEAR);
         }
     }
 

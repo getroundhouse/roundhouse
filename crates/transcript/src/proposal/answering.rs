@@ -6,7 +6,7 @@
 //! this view's alone. The note can be dictated into, as `dictating` says, and `bar` draws the bar. Nothing is sent
 //! while a newer revision is held back, as `held` says.
 
-use client_core::Client;
+use client_core::Hub;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, IntoElement as _, Subscription, WeakEntity, Window,
@@ -42,17 +42,17 @@ impl ProposalRequest {
 
     /// Sends it to the hub, which tells the agent, and tells `view`, which asked for it, how that went. client-core
     /// takes in the answered proposal the reply carries, so its copy has it by the time `view` hears.
-    fn send(self, client: &Client, view: WeakEntity<ProposalView>, cx: &mut App) {
+    fn send(self, hub: &Hub, view: WeakEntity<ProposalView>, cx: &mut App) {
         let doing = match &self {
             ProposalRequest::Answer(_) => "send your answer",
             ProposalRequest::AnotherRound(_) => "ask for another round",
         };
-        let sending = client.start(move |client| match self {
-            ProposalRequest::Answer(answer) => client.proposal_answer(answer).map(drop),
-            ProposalRequest::AnotherRound(round) => client.proposal_another_round(round).map(drop),
-        });
+        let sending = match self {
+            ProposalRequest::Answer(answer) => hub.ask(answer),
+            ProposalRequest::AnotherRound(round) => hub.ask(round),
+        };
         cx.spawn(async move |cx| {
-            let outcome = sending.recv().await.map_err(|e| client_core::refusals::couldnt(doing, &e));
+            let outcome = sending.recv().await.map(drop).map_err(|e| client_core::refusals::couldnt(doing, &e));
             let _ = view.update(cx, |view, cx| view.sent(outcome, cx));
         })
         .detach();
@@ -250,7 +250,7 @@ impl ProposalView {
         self.answering.sending = Sending::Going;
         self.note_sent(cx);
         self.follow_dictation(cx);
-        request.send(&self.client, cx.weak_entity(), cx);
+        request.send(&self.hub, cx.weak_entity(), cx);
         cx.notify();
     }
 

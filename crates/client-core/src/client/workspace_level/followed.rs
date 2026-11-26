@@ -77,9 +77,8 @@ pub(in crate::client) struct Workspaces {
 impl Workspaces {
     /// Starts following, on a thread of its own, with nothing followed until a handle is asked for. What's sent goes
     /// into `records`.
-    pub(in crate::client) fn start(client: &Client, records: Reach<HubRecords>) -> Self {
-        let follow =
-            Following::start(Some(client), Wanted::default(), move || LevelSource::<WorkspaceId>::new(records));
+    pub(in crate::client) fn start(connection: Option<&Client>, records: Reach<HubRecords>) -> Self {
+        let follow = Following::start(connection, Wanted::default(), move || LevelSource::<WorkspaceId>::new(records));
         Workspaces { follow }
     }
 

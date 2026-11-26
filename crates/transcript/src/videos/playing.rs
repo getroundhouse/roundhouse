@@ -150,9 +150,15 @@ impl VideoPlayer {
         cx.notify();
     }
 
-    /// Carries on on a new connection, stopped where it was, since what was being read went with the old one.
+    /// Carries on on a new connection, stopped where it was, as [`VideoPlayer::stop_for_new_connection`] says, reading
+    /// what it reads on a connection of its own on `client`.
     pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.source = self.source.on(client.clone());
+        self.stop_for_new_connection(cx);
+    }
+
+    /// Stops where it was, since what was being read went with the connection before.
+    pub fn stop_for_new_connection(&mut self, cx: &mut Context<Self>) {
         if let At::Playing { .. } = self.at {
             self.at = At::Paused(self.position(cx.background_executor().now()));
         }

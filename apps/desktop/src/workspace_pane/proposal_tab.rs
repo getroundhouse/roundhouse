@@ -101,8 +101,8 @@ impl WorkspacePane {
         if !showing {
             let Some(record) = self.shown.all().proposal(&session, proposal).cloned() else { return };
             let in_front = self.proposals.in_front();
-            let client = self.client.clone();
-            let view = cx.new(|cx| ProposalView::new(record, client, cx));
+            let hub = self.linked.clone();
+            let view = cx.new(|cx| ProposalView::new(record, hub, cx));
             let pane = cx.weak_entity();
             let chat = session.clone();
             view.update(cx, |view, _| {

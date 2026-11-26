@@ -28,12 +28,20 @@ impl RecordsFeed {
     /// on, and what's shown needn't wait for the hub to say the same. So are the records of each session an
     /// [`OpenSession`](crate::OpenSession) handed this follows, as its subscription sends them.
     pub fn start(client: &Client) -> RecordsFeed {
+        RecordsFeed::started(Some(client))
+    }
+
+    /// As [`RecordsFeed::start`], on `connection`, or with none until one is given to [`RecordsFeed::reconnect`], as a
+    /// hub's are before its link has connected.
+    pub(crate) fn started(connection: Option<&Client>) -> RecordsFeed {
         let records = Following::unstarted(HubRecords::default());
-        let github = GithubFeed::start(client, records.reach());
-        let workspaces = Workspaces::start(client, records.reach());
-        let follow = records.start(Some(client), || RecordsSource);
+        let github = GithubFeed::start(connection, records.reach());
+        let workspaces = Workspaces::start(connection, records.reach());
+        let follow = records.start(connection, || RecordsSource);
         let feed = RecordsFeed { follow, github, workspaces };
-        client.inner.folding.reach(&feed.follow);
+        if let Some(client) = connection {
+            client.inner.folding.reach(&feed.follow);
+        }
         feed
     }
 

@@ -118,10 +118,10 @@ impl WorkspacePane {
         let tab = self.subagents.tab.as_ref();
         let showing = tab.is_some_and(|tab| tab.session == session && tab.subagent == subagent);
         if !showing && let Some(chat) = self.shown.session(&session).cloned() {
-            let (client, records, shown) = (self.client.clone(), self.shown.all().clone(), subagent.clone());
+            let (hub, records, shown) = (self.linked.clone(), self.shown.all().clone(), subagent.clone());
             let feed = self.records.clone();
             let transcript = cx.new(|cx| {
-                let mut transcript = Transcript::subagent(client, &feed, &chat, shown, cx);
+                let mut transcript = Transcript::subagent(hub, &feed, &chat, shown, cx);
                 transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
                 transcript.records_changed(&records, cx);
                 transcript
