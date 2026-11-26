@@ -171,8 +171,7 @@ impl HubRecords {
                 | Level::Reference { .. }
                 | Level::Unknown => None,
             });
-            let hub_listed = self.observations.levels_listed().any(|level| *level == Level::Hub);
-            Arc::new(ObservationsListed::of(held, workspaces_listed.collect(), hub_listed))
+            Arc::new(ObservationsListed::of(held, workspaces_listed.collect()))
         });
         Snapshot::new(
             records.clone(),

@@ -1,5 +1,5 @@
-//! What a client holds of GitHub's observations, against a fake hub that sends them as a hub does, and what a view is
-//! told of them.
+//! What a client holds of GitHub's observations, against a fake hub that sends them as a hub does, as views read them,
+//! and what tells a view which changed.
 
 use std::time::Duration;
 
@@ -11,10 +11,9 @@ use protocol::model::{
     RepositoryUnseen, Rev, SessionStatus, WorkspaceId,
 };
 
-use super::super::held::{GithubHeld, github_keys, notice_key};
 use crate::fake_hub::{World, serve};
 use crate::records::{HubRecords, Snapshot};
-use crate::{Client, FollowedWorkspace, RecordsFeed, ShownOfGithub};
+use crate::{Client, FollowedWorkspace, RecordsFeed};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -70,7 +69,7 @@ fn read_once_said(client: &Client) -> (Read, RecordsFeed, (Vec<FollowedWorkspace
     let workspaces = records.snapshot().workspaces().iter().map(|workspace| workspace.id.clone()).collect::<Vec<_>>();
     let elm = workspaces.iter().find(|id| records.snapshot().workspace(id).unwrap().name == "elm").unwrap().clone();
     let followed = workspaces.iter().map(|id| records.follow_workspace(id)).collect();
-    view.show(ShownOfGithub { workspaces, references: vec![twelve()] });
+    view.show(vec![twelve()]);
     let read = || Read::of(&records.snapshot(), &elm);
     waiting::thread::until(TIMEOUT, "the pull request with its checks, the unseen repository and the chip", || {
         let read = read();
@@ -166,33 +165,25 @@ fn notice(observation: Observation) -> HubNotice {
     ObservationNotice::Copy(observation).into()
 }
 
-/// What's held of GitHub and the copy of the hub's records beside it, taken in as the sources take them in.
+/// The copy of the hub's records, taking in what each level sends of GitHub as the sources take it in.
 #[derive(Default)]
 struct Holding {
     records: HubRecords,
-    held: GithubHeld,
 }
 
 impl Holding {
     fn notice(&mut self, observation: Observation) {
-        let notice = notice(observation);
-        let key = notice_key(&notice).unwrap();
-        let changed = self.records.apply_notice(notice);
-        self.held.observed(&[key], changed);
+        self.records.apply_notice(notice(observation));
     }
 
     fn workspace_list(&mut self, w: &str, observations: Vec<Observation>, rev: u64) {
-        let keys = github_keys(&observations);
         let listed = WorkspaceObservations { workspace_id: w.into(), observations, rev: Rev::new(rev) };
-        let changed = self.records.apply_workspace_list(listed);
-        self.held.observed(&keys, changed);
+        self.records.apply_workspace_list(listed);
     }
 
     fn reference_list(&mut self, observations: Vec<Observation>, rev: u64) {
-        let keys = github_keys(&observations);
         let listed = ReferenceObservations { reference: twelve(), observations, rev: Rev::new(rev) };
-        let changed = self.records.apply_reference_list(listed);
-        self.held.observed(&keys, changed);
+        self.records.apply_reference_list(listed);
     }
 
     /// The checks, history and stack read with `w`'s pull request, and how fresh they are.
@@ -248,36 +239,4 @@ fn a_view_tells_which_chip_changed_since_it_last_looked() {
     holding.notice(said(7));
 
     assert!(!holding.records.snapshot().changes_since(&after).reference_said(&twelve()), "the same again");
-}
-
-/// A view is told of a change to an observation of what it shows, and isn't told of one of what it doesn't show, or
-/// one that changes nothing.
-#[test]
-fn a_view_is_told_of_a_change_to_what_it_shows_and_of_nothing_else() {
-    let mut holding = Holding::default();
-    let (shows_w, w_told) = flume::unbounded();
-    let (shows_chip, chip_told) = flume::unbounded();
-    holding.held.add(1, shows_w);
-    holding.held.add(2, shows_chip);
-    holding.held.show(1, ShownOfGithub { workspaces: vec!["w".into()], ..ShownOfGithub::default() });
-    holding.held.show(2, ShownOfGithub { references: vec![twelve()], ..ShownOfGithub::default() });
-    let told = |told: &flume::Receiver<()>| told.drain().count();
-
-    holding.notice(stands("w", "head-7", PrState::Open, 5));
-
-    assert_eq!((told(&w_told), told(&chip_told)), (1, 0), "only the view that shows w");
-
-    holding.notice(stands("w", "head-7", PrState::Open, 5));
-    holding.notice(stands("v", "head-7", PrState::Open, 6));
-
-    assert_eq!((told(&w_told), told(&chip_told)), (0, 0), "the same again, and another's");
-
-    let chip = Observation::Reference {
-        reference: twelve(),
-        said: Observed::Current { value: ReferenceSaid::Missing },
-        rev: Rev::new(7),
-    };
-    holding.reference_list(vec![chip], 7);
-
-    assert_eq!((told(&w_told), told(&chip_told)), (0, 1), "only the view that shows the chip");
 }

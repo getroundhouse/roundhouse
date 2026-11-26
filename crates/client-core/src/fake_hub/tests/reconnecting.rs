@@ -10,7 +10,7 @@ use protocol::model::{
 
 use super::super::World;
 use super::served::served;
-use crate::{OpenSession, RecordsFeed, ShownOfGithub, View};
+use crate::{OpenSession, RecordsFeed, View};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -107,7 +107,7 @@ fn a_hub_whose_revisions_are_lower_is_shown_as_soon_as_it_lists_each_level() {
     let session = feed.snapshot().session(&chat).unwrap().clone();
     let open = OpenSession::start(&first, &feed, &session, View::Own);
     let view = feed.github().view();
-    view.show(ShownOfGithub { workspaces: Vec::new(), references: vec![twelve()] });
+    view.show(vec![twelve()]);
     let read = || Read::of(&feed, &elm, &chat);
     waiting::thread::until(TIMEOUT, "what the first hub says at every level", || read() == Read::said_by(1));
 

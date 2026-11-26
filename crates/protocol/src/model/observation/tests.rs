@@ -336,11 +336,9 @@ fn of_the_hub() -> Vec<(Observation, ObservationKey, Rev, Sent)> {
 }
 
 #[test]
-fn an_observation_says_which_it_is_its_revision_the_level_it_is_sent_at_and_whether_its_githubs() {
-    let github: Vec<ObservationKey> = of_github().into_iter().map(|(_, key, _, _)| key).collect();
+fn an_observation_says_which_it_is_its_revision_and_the_level_it_is_sent_at() {
     for (observation, key, rev, sent) in of_each_kind() {
         assert_eq!((observation.key(), observation.rev()), (key.clone(), rev), "{observation:?}");
         assert_eq!(key.level(), sent, "{key:?}");
-        assert_eq!(key.is_github(), github.contains(&key), "{key:?}");
     }
 }

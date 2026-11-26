@@ -5,13 +5,12 @@
 //! observation goes into the copy of the hub's records.
 
 use parking_lot::Mutex;
-use std::cell::Cell;
 
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::Follow;
 use protocol::model::{Level, ReferenceAsk};
 
-use super::held::{GithubHeld, github_keys, notice_key};
+use super::held::GithubHeld;
 use crate::client::follow::{Reach, Source};
 use crate::client::subscribing::Changing;
 use crate::client::{Client, Result, Subscription, SubscriptionItem};
@@ -71,43 +70,27 @@ impl Source for GithubSource {
         Ok(subscription)
     }
 
-    /// Takes what an issue's or a pull request's level sends as observations into the copy of the hub's records, telling
-    /// the views here that show it. What's sent of a chip no longer followed, which was already on its way as it was let go
-    /// of, is dropped, so nothing brings back what letting go of it let go of.
-    fn apply(&mut self, _: &Client, held: &Mutex<GithubHeld>, item: SubscriptionItem) -> Result<bool> {
+    /// Takes what an issue's or a pull request's level sends as observations into the copy of the hub's records, which
+    /// tells its own readers when that changes it. What's sent of a chip no longer followed, which was already on its way
+    /// as it was let go of, is dropped, so nothing brings back what letting go of it let go of.
+    fn apply(&mut self, _: &Client, _: &Mutex<GithubHeld>, item: SubscriptionItem) -> Result<bool> {
         let Some(Level::Reference { reference }) = item.level() else { return Ok(false) };
         if !self.references.contains(&reference) {
             return Ok(false);
         }
-        // Whether the copy changed, which it tells its own readers of.
-        let changed = Cell::new(false);
-        let change = |change: &dyn Fn(&mut HubRecords) -> bool| {
-            self.records.change(|records| {
-                let changed_it = change(records);
-                changed.set(changed.get() || changed_it);
-                changed_it
-            });
-        };
         match item {
             SubscriptionItem::Listed(listed) => {
-                let keys = match *listed {
+                match *listed {
                     Listed::Reference(observations) => {
-                        let keys = github_keys(&observations.observations);
-                        change(&|records| records.apply_reference_list(observations.clone()));
-                        keys
+                        self.records.change(|records| records.apply_reference_list(observations));
                     }
                     // Of a level this doesn't follow.
-                    Listed::Hub(_) | Listed::Workspace(_) | Listed::Session(_) | Listed::Unknown => Vec::new(),
-                };
-                held.lock().observed(&keys, changed.get());
+                    Listed::Hub(_) | Listed::Workspace(_) | Listed::Session(_) | Listed::Unknown => {}
+                }
                 Ok(false)
             }
             SubscriptionItem::Notice(notice) => {
-                let key = notice_key(&notice);
-                change(&|records| records.apply_notice((*notice).clone()));
-                if let Some(key) = key {
-                    held.lock().observed(&[key], changed.get());
-                }
+                self.records.change(|records| records.apply_notice(*notice));
                 Ok(false)
             }
             SubscriptionItem::Event(_)
@@ -138,5 +121,5 @@ impl Source for GithubSource {
 
 /// What to follow for the chips the views show.
 fn followed(held: &GithubHeld) -> Vec<Follow> {
-    held.shown().references.into_iter().map(|reference| Follow::Reference { reference }).collect()
+    held.shown().into_iter().map(|reference| Follow::Reference { reference }).collect()
 }

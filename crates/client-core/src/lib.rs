@@ -63,10 +63,10 @@ pub use sending::{NotTaken, Taking, Written};
 pub use client::{
     Client, ClientError, Commands, Ended, FollowError, FollowedWorkspace, GithubFeed, GithubView, HubAdmin, IdleStop,
     Introduction, LiveItem, LiveLog, OlderSide, OpenFile, OpenSession, OpenTerminal, Opening, PairingWait, Pointer,
-    RecordsFeed, Reply, Restart, Result, Search, Searched, SelectBy, ShownOfGithub, Stretch, Subscription,
-    SubscriptionItem, ToolServerSaving, View, hub_is_missing, new_attachment_id, new_device_id, new_github_sign_in_id,
-    new_message_id, new_request_id, new_terminal_id, new_tool_server_id, new_tool_sign_in_id, restart_hub, stop_hub,
-    stop_hub_if_idle, stop_hub_if_still,
+    RecordsFeed, Reply, Restart, Result, Search, Searched, SelectBy, Stretch, Subscription, SubscriptionItem,
+    ToolServerSaving, View, hub_is_missing, new_attachment_id, new_device_id, new_github_sign_in_id, new_message_id,
+    new_request_id, new_terminal_id, new_tool_server_id, new_tool_sign_in_id, restart_hub, stop_hub, stop_hub_if_idle,
+    stop_hub_if_still,
 };
 
 #[cfg(any(test, feature = "testing"))]

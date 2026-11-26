@@ -104,7 +104,9 @@ impl<H> Reach<H> {
         true
     }
 
-    /// What `read` makes of what's held, or `None` once every handle on it and its thread have gone.
+    /// What `read` makes of what's held, or `None` once every handle on it and its thread have gone, for a test that
+    /// drives a source itself.
+    #[cfg(test)]
     pub(in crate::client) fn read<T>(&self, read: impl FnOnce(&H) -> T) -> Option<T> {
         let shared = self.0.upgrade()?;
         Some(read(&shared.held.lock()))
@@ -224,6 +226,12 @@ impl<H: Send + 'static> Unstarted<H> {
     /// A handle on what's held that doesn't keep it followed, as [`Following::reach`] gives once it's started.
     pub(in crate::client) fn reach(&self) -> Reach<H> {
         self.follow.reach()
+    }
+
+    /// What tells its readers that what's held changed, for a test that drives a source itself to see they're told.
+    #[cfg(test)]
+    pub(in crate::client) fn changed(&self) -> &flume::Receiver<()> {
+        &self.follow.changed
     }
 
     /// Starts following on a thread of its own, as [`Following::start`] does.
