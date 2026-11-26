@@ -1,11 +1,13 @@
 //! What the store does with every kind's table alike, and the one list of every kind it keeps.
 
+use protocol::client::ObservationNotice;
 use protocol::model::{Level, Observation, ObservationKey, Rev};
 
 use super::file::{self, Row, Write};
 use super::github_kinds::{GithubAppBot, GithubAppSaid, GithubProfile, GithubUsername, InstalledOn, RepositoryReach};
 use super::hub_kinds::ReleaseOffered;
-use super::kept::Table;
+use super::keepers::Keeper;
+use super::kept::{Changed, Step, Table};
 use super::kinds::{
     AccountIdentity, AccountLimits, Form, Kind, ModelCatalog, Owner, Referenced, SessionCache, SessionContext,
     SessionTodos, SessionToolServers, Subject, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
@@ -61,6 +63,16 @@ pub(super) trait AnyTable {
     /// Forgets each observation of an owner that `gone` picks out, and that anything keeps it current, and queues its
     /// removal from the file on `writer`. Returns which it forgot, as clients are told of each.
     fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey>;
+    /// Whether `keeper` going at `at_ms` changes what any observation it keeps says, as [`AnyTable::keeper_went`] would.
+    fn changes_as_it_goes(&self, keeper: Keeper, at_ms: i64) -> bool;
+    /// Lets go of each observation `keeper` keeps, which is as its kind says once unkept, as of `at_ms`, at `rev`, and
+    /// queues each write on `writer`. Returns what clients are to be told. With no `rev`, as where the database gives
+    /// none, it only lets go of them, and each says what it said.
+    fn keeper_went(&mut self, keeper: Keeper, at_ms: i64, rev: Option<Rev>, writer: &Writer) -> Vec<ObservationNotice>;
+    /// Whether it keeps an observation nothing keeps, of a kind that's gone once unkept.
+    fn keeps_unkept(&self) -> bool;
+    /// Forgets each of those at `rev`, and queues each removal on `writer`. Returns what clients are to be told.
+    fn forget_unkept(&mut self, rev: Rev, writer: &Writer) -> Vec<ObservationNotice>;
 }
 
 impl<K: Kind> AnyTable for Table<K> {
@@ -89,13 +101,38 @@ impl<K: Kind> AnyTable for Table<K> {
     }
 
     fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey> {
-        self.kept_current.retain(|of| !of.owner().is_some_and(gone));
+        self.keepers.retain(|of, _| !of.owner().is_some_and(gone));
         let forgotten: Vec<K::Of> = self.kept.keys().filter(|of| of.owner().is_some_and(gone)).cloned().collect();
         for of in &forgotten {
             self.kept.remove(of);
             writer.write::<K>(of.clone(), Write::Gone);
         }
         forgotten.iter().filter_map(K::key).collect()
+    }
+
+    fn changes_as_it_goes(&self, keeper: Keeper, at_ms: i64) -> bool {
+        let unkept = |of: &K::Of| self.unkept(of, K::UNKEPT.at(at_ms));
+        self.kept_by_keeper(keeper).iter().any(|of| matches!(unkept(of), Step::Changed(_)))
+    }
+
+    fn keeper_went(&mut self, keeper: Keeper, at_ms: i64, rev: Option<Rev>, writer: &Writer) -> Vec<ObservationNotice> {
+        let mut notices = Vec::new();
+        for of in self.kept_by_keeper(keeper) {
+            self.keepers.remove(&of);
+            if let (Some(rev), Step::Changed(changed)) = (rev, self.unkept(&of, K::UNKEPT.at(at_ms))) {
+                notices.extend(self.change(&of, changed, rev, writer));
+            }
+        }
+        notices
+    }
+
+    fn keeps_unkept(&self) -> bool {
+        !self.unkept_of_a_kind_gone_once_unkept().is_empty()
+    }
+
+    fn forget_unkept(&mut self, rev: Rev, writer: &Writer) -> Vec<ObservationNotice> {
+        let unkept = self.unkept_of_a_kind_gone_once_unkept();
+        unkept.iter().filter_map(|of| self.change(of, Changed::Gone, rev, writer)).collect()
     }
 }
 
@@ -169,6 +206,32 @@ impl Tables {
     /// Forgets every observation of an owner that `gone` picks out, of every kind, as [`AnyTable::forget_of`] does.
     pub(super) fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey> {
         self.each().into_iter().flat_map(|table| table.forget_of(gone, writer)).collect()
+    }
+
+    /// Whether `keeper` going at `at_ms` changes anything of any kind, as [`AnyTable::changes_as_it_goes`] says.
+    pub(super) fn change_as_it_goes(&mut self, keeper: Keeper, at_ms: i64) -> bool {
+        self.each().iter().any(|table| table.changes_as_it_goes(keeper, at_ms))
+    }
+
+    /// Lets go of every observation `keeper` keeps, of every kind, as [`AnyTable::keeper_went`] does.
+    pub(super) fn keeper_went(
+        &mut self,
+        keeper: Keeper,
+        at_ms: i64,
+        rev: Option<Rev>,
+        writer: &Writer,
+    ) -> Vec<ObservationNotice> {
+        self.each().into_iter().flat_map(|table| table.keeper_went(keeper, at_ms, rev, writer)).collect()
+    }
+
+    /// Whether any kind keeps what [`AnyTable::forget_unkept`] forgets.
+    pub(super) fn keep_unkept(&mut self) -> bool {
+        self.each().iter().any(|table| table.keeps_unkept())
+    }
+
+    /// Forgets what nothing keeps of every kind that's gone once unkept, as [`AnyTable::forget_unkept`] does.
+    pub(super) fn forget_unkept(&mut self, rev: Rev, writer: &Writer) -> Vec<ObservationNotice> {
+        self.each().into_iter().flat_map(|table| table.forget_unkept(rev, writer)).collect()
     }
 
     /// The form of each kind's table in the cache file, of each kind not kept in memory alone.

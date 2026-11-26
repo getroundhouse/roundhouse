@@ -6,6 +6,7 @@ use protocol::model::{
     GithubAccountId, GithubAppId, GithubUser, Observation, ObservationKey, Observed, Reach, RepoId, Rev,
 };
 
+use super::keepers::Unkept;
 use super::kept::Table;
 use super::kinds::{Form, Kind};
 use super::tables::Tables;
@@ -18,6 +19,7 @@ impl Kind for RepositoryReach {
     type Of = RepoId;
     type Value = Reach;
     const FORM: Form = Form { table: "repository_reach", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(repo: &RepoId, reach: Observed<Reach>, rev: Rev) -> Option<Observation> {
         Some(Observation::RepositoryReach { repo: repo.clone(), reach, rev })
@@ -41,6 +43,7 @@ impl Kind for GithubUsername {
     type Of = GithubAccountId;
     type Value = protocol::model::GithubUsername;
     const FORM: Form = Form { table: "github_username", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(account: &GithubAccountId, username: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
         Some(Observation::GithubUsername { account: account.clone(), username, rev })
@@ -63,6 +66,7 @@ impl Kind for GithubAppSaid {
     type Of = GithubAppId;
     type Value = protocol::model::GithubAppSaid;
     const FORM: Form = Form { table: "github_app_said", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(app: &GithubAppId, said: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
         Some(Observation::GithubAppSaid { app: *app, said, rev })
@@ -85,6 +89,7 @@ impl Kind for GithubAppBot {
     type Of = GithubAppId;
     type Value = GithubUser;
     const FORM: Form = Form { table: "github_app_bot", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(app: &GithubAppId, bot: Observed<GithubUser>, rev: Rev) -> Option<Observation> {
         Some(Observation::GithubAppBot { app: *app, bot, rev })
@@ -107,6 +112,7 @@ impl Kind for InstalledOn {
     type Of = GithubAccountId;
     type Value = protocol::model::GithubUsername;
     const FORM: Form = Form { table: "installed_on", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(account: &GithubAccountId, on: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
         Some(Observation::InstalledOn { account: account.clone(), on, rev })
@@ -130,6 +136,7 @@ impl Kind for GithubProfile {
     type Of = GithubAccountId;
     type Value = github::GithubProfile;
     const FORM: Form = Form { table: "github_profile", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(_: &GithubAccountId, _: Observed<Self::Value>, _: Rev) -> Option<Observation> {
         None

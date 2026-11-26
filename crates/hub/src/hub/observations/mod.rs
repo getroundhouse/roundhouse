@@ -8,6 +8,8 @@ mod changes;
 mod file;
 mod github_kinds;
 mod hub_kinds;
+mod keepers;
+mod keeping;
 mod kept;
 mod kind;
 mod kinds;
@@ -24,6 +26,7 @@ pub(crate) use github_kinds::{
     GithubAppBot, GithubAppSaid, GithubProfile, GithubUsername, InstalledOn, RepositoryReach,
 };
 pub(crate) use hub_kinds::ReleaseOffered;
+pub(crate) use keepers::Keeper;
 pub(crate) use kept::Observations;
 pub(crate) use kinds::Kind;
 pub(crate) use kinds::{

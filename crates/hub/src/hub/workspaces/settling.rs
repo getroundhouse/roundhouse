@@ -74,7 +74,7 @@ impl Hub {
                 // One with a session carried on is being replaced already.
                 let carried_on = self.sessions.lock().live.values().any(|session| session.workspace_id == *id);
                 if !carried_on && link.is_another_build(self.build) {
-                    self.replace_once_idle(id.clone(), link);
+                    self.replace_once_idle(id.clone(), link).await;
                 }
             }
             Err(_) => match self.provider(&workspace.provider) {

@@ -9,6 +9,7 @@ use protocol::model::{
     WorkspaceId,
 };
 
+use super::keepers::Unkept;
 use super::kept::Table;
 pub(crate) use super::kind::{Form, Kind};
 pub(crate) use super::subjects::{Owner, SessionKey, Subject, WaitKey};
@@ -21,6 +22,7 @@ impl Kind for WorkspaceLines {
     type Of = WorkspaceId;
     type Value = LineCounts;
     const FORM: Form = Form { table: "workspace_lines", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfThen;
 
     fn observation(workspace_id: &WorkspaceId, lines: Observed<LineCounts>, rev: Rev) -> Option<Observation> {
         Some(Observation::WorkspaceLines { workspace_id: workspace_id.clone(), lines, rev })
@@ -43,6 +45,7 @@ impl Kind for WorkspaceChanges {
     type Of = WorkspaceId;
     type Value = ChangeSummary;
     const FORM: Form = Form { table: "workspace_changes", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfThen;
 
     fn observation(workspace_id: &WorkspaceId, changes: Observed<ChangeSummary>, rev: Rev) -> Option<Observation> {
         Some(Observation::WorkspaceChanges { workspace_id: workspace_id.clone(), changes, rev })
@@ -65,6 +68,7 @@ impl Kind for Referenced {
     type Of = ReferenceAsk;
     type Value = ReferenceSaid;
     const FORM: Form = Form { table: "referenced", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(reference: &ReferenceAsk, said: Observed<ReferenceSaid>, rev: Rev) -> Option<Observation> {
         Some(Observation::Reference { reference: reference.clone(), said, rev })
@@ -87,6 +91,7 @@ impl Kind for WorkspacePullRequest {
     type Of = WorkspaceId;
     type Value = OwnPullRequestSaid;
     const FORM: Form = Form { table: "workspace_pull_request", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(
         workspace_id: &WorkspaceId,
@@ -113,6 +118,7 @@ impl Kind for WorkspacePullRequestDetail {
     type Of = WorkspaceId;
     type Value = OwnPullRequestDetail;
     const FORM: Form = Form { table: "workspace_pull_request_detail", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(
         workspace_id: &WorkspaceId,
@@ -139,6 +145,7 @@ impl Kind for WorkspaceRepositoryUnseen {
     type Of = WorkspaceId;
     type Value = Option<RepositoryUnseen>;
     const FORM: Form = Form { table: "workspace_repository_unseen", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(
         workspace_id: &WorkspaceId,
@@ -164,6 +171,7 @@ impl Kind for ModelCatalog {
     type Of = ModelListKey;
     type Value = protocol::capability::settings::ModelCatalog;
     const FORM: Form = Form { table: "model_catalog", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(list: &ModelListKey, catalog: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
         Some(Observation::ModelCatalog { list: list.clone(), catalog, rev })
@@ -185,6 +193,7 @@ impl Kind for AccountIdentity {
     type Of = AccountId;
     type Value = protocol::model::AccountIdentity;
     const FORM: Form = Form { table: "account_identity", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(account: &AccountId, identity: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
         Some(Observation::AccountIdentity { account: account.clone(), identity, rev })
@@ -208,6 +217,7 @@ impl Kind for AccountLimits {
     type Of = AccountId;
     type Value = Vec<UsageLimit>;
     const FORM: Form = Form { table: "account_limits", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(account: &AccountId, limits: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
         Some(Observation::AccountLimits { account: account.clone(), limits, rev })
@@ -238,6 +248,7 @@ impl Kind for SessionContext {
     type Of = SessionKey;
     type Value = ContextUsage;
     const FORM: Form = Form { table: "session_context", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(of: &SessionKey, context: Observed<ContextUsage>, rev: Rev) -> Option<Observation> {
         Some(Observation::SessionContext { session_id: of.session_id.clone(), context, rev })
@@ -259,6 +270,7 @@ impl Kind for SessionTodos {
     type Of = SessionKey;
     type Value = TodoList;
     const FORM: Form = Form { table: "session_todos", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(of: &SessionKey, todos: Observed<TodoList>, rev: Rev) -> Option<Observation> {
         Some(Observation::SessionTodos { session_id: of.session_id.clone(), todos, rev })
@@ -281,6 +293,7 @@ impl Kind for SessionToolServers {
     type Of = SessionKey;
     type Value = Vec<ToolServerState>;
     const FORM: Form = Form { table: "session_tool_servers", version: 1 };
+    const UNKEPT: Unkept = Unkept::Gone;
 
     fn observation(of: &SessionKey, servers: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
         Some(Observation::SessionToolServers { session_id: of.session_id.clone(), servers, rev })
@@ -303,6 +316,7 @@ impl Kind for SessionCache {
     type Of = SessionKey;
     type Value = ConversationCache;
     const FORM: Form = Form { table: "session_cache", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(of: &SessionKey, cache: Observed<ConversationCache>, rev: Rev) -> Option<Observation> {
         Some(Observation::SessionCache { session_id: of.session_id.clone(), cache, rev })
@@ -325,6 +339,7 @@ impl Kind for WaitRead {
     type Of = WaitKey;
     type Value = protocol::model::WaitRead;
     const FORM: Form = Form { table: "wait_read", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(of: &WaitKey, read: Observed<Self::Value>, rev: Rev) -> Option<Observation> {
         Some(Observation::WaitRead { session_id: of.session_id.clone(), wait: of.wait.clone(), read, rev })

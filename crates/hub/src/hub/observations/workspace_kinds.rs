@@ -3,6 +3,7 @@
 
 use protocol::model::{Branches, Observation, ObservationKey, Observed, OtherBuild, Rev, WorkspaceId};
 
+use super::keepers::Unkept;
 use super::kept::Table;
 use super::kinds::{Form, Kind};
 use super::subjects::ChildWorktreeKey;
@@ -17,6 +18,7 @@ impl Kind for WorkspaceBranches {
     type Of = WorkspaceId;
     type Value = Branches;
     const FORM: Form = Form { table: "workspace_branches", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfThen;
 
     fn observation(workspace_id: &WorkspaceId, branches: Observed<Branches>, rev: Rev) -> Option<Observation> {
         Some(Observation::WorkspaceBranches { workspace_id: workspace_id.clone(), branches, rev })
@@ -41,6 +43,7 @@ impl Kind for WorkspaceWorkerBuild {
     type Value = OtherBuild;
     const FORM: Form = Form { table: "workspace_worker_build", version: 1 };
     const IN_MEMORY_ALONE: bool = true;
+    const UNKEPT: Unkept = Unkept::Gone;
 
     fn observation(workspace_id: &WorkspaceId, build: Observed<OtherBuild>, rev: Rev) -> Option<Observation> {
         Some(Observation::WorkspaceWorkerBuild { workspace_id: workspace_id.clone(), build, rev })
@@ -65,6 +68,7 @@ impl Kind for ChildWorktreeBranches {
     type Of = ChildWorktreeKey;
     type Value = Branches;
     const FORM: Form = Form { table: "child_worktree_branches", version: 1 };
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation(_: &ChildWorktreeKey, _: Observed<Branches>, _: Rev) -> Option<Observation> {
         None

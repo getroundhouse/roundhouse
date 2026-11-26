@@ -13,6 +13,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use tracing::{Instrument as _, warn};
 
 use super::Hub;
+use super::observations::Keeper;
 use super::ready::ReadyWorkspace;
 use crate::jobs;
 use crate::session::Item;
@@ -287,11 +288,10 @@ impl Hub {
         }
         // Their shells have gone with it.
         self.terminals_lost(link.id).await;
-        // And what it watched.
+        // And its watch, and what it kept: whether a replacement watches the worktree is told apart, and what that keeps
+        // is the replacement's own.
         self.changes_watcher_gone(workspace_id, link).await;
-        if current {
-            self.branches_let_go(workspace_id).await;
-        }
+        self.keeper_went(Keeper::Worker(link.id)).await;
     }
 
     /// Asks a worker to stop and waits for its output to end. If it's stuck, it's ended as [`Hub::end_stuck_worker`]

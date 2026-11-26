@@ -268,12 +268,13 @@ impl LiveSession {
     /// Lets go of its agent if it's on the worker `link`, which the hub is about to stop with nothing at work, to
     /// replace it. The agent's exit is then of one the session has moved on from, so it changes nothing, even if a
     /// prompt is recorded first, and the next prompt starts an agent on the next worker, which resumes the
-    /// conversation.
-    pub(crate) fn let_go_of_agent_on(&self, link: WorkerLinkId) {
+    /// conversation. Returns the run it let go of, which no longer speaks for the session, so the caller lets go of what
+    /// it kept, since its exit may never reach the hub.
+    pub(crate) fn let_go_of_agent_on(&self, link: WorkerLinkId) -> Option<RunId> {
         let mut state = self.state.lock();
-        if state.agent.is_some_and(|agent| agent.link == link) {
-            state.agent = None;
-        }
+        let let_go = state.agent.filter(|agent| agent.link == link)?;
+        state.agent = None;
+        Some(let_go.run)
     }
 }
 

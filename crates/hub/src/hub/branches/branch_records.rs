@@ -1,7 +1,7 @@
 use super::super::Hub;
 use super::super::pull_requests::When;
 use super::super::ready::ReadyWorkspace;
-use crate::hub::observations::{ChildWorktreeBranches, ChildWorktreeKey, WorkspaceBranches};
+use crate::hub::observations::{ChildWorktreeBranches, ChildWorktreeKey, Keeper, WorkspaceBranches};
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
 use protocol::client::ErrorCode;
@@ -30,7 +30,7 @@ impl Hub {
     /// Its other worktrees' records are settled, and those there watched, on a task of their own, and its worktree's
     /// files are watched too while a client follows the workspace, as each worker the hub takes on is told.
     pub(in super::super) async fn watch_branches(self: &Arc<Self>, ready: &ReadyWorkspace, link: &Arc<WorkerLink>) {
-        self.branches_kept_current(ready.id()).await;
+        self.branches_kept_current(ready.id(), link).await;
         let path = ready.path().to_owned();
         if let Err(e) = link.send(WatchBranches { path }).await {
             debug!(
@@ -53,7 +53,7 @@ impl Hub {
         link: &Arc<WorkerLink>,
     ) {
         self.settle_children_later(ready.id(), link);
-        self.branches_kept_current(ready.id()).await;
+        self.branches_kept_current(ready.id(), link).await;
         let path = ready.path().to_owned();
         let first = tokio::time::timeout(FIRST_READ_TIMEOUT, link.call(WatchBranches { path })).await;
         let id = ready.id();
@@ -192,27 +192,15 @@ impl Hub {
         self.observations.keep_as_read::<WorkspaceBranches>(id.clone(), branches, read_at_ms);
     }
 
-    /// Keeps that the workspace's worker watches its branches from now on, so what it reads of them is current.
-    async fn branches_kept_current(&self, id: &WorkspaceId) {
-        if let Err(e) = self.observation_kept_current::<WorkspaceBranches>(id.clone()).await {
+    /// Keeps that `link`, the workspace's worker, watches its branches from now on, so what it reads of them is current
+    /// until it goes, and as of then after.
+    async fn branches_kept_current(&self, id: &WorkspaceId, link: &WorkerLink) {
+        if let Err(e) = self.observation_kept_by::<WorkspaceBranches>(id.clone(), Keeper::Worker(link.id)).await {
             warn!(
                 name: "branches.watch_unkept",
                 workspace_id = %id,
                 error = e.message,
                 "Couldn't keep that the workspace's branches are watched"
-            );
-        }
-    }
-
-    /// Keeps that nothing watches the workspace's branches any more, as its worker has gone, so they're as of now, since
-    /// the worker would have said of any change until then.
-    pub(in super::super) async fn branches_let_go(&self, id: &WorkspaceId) {
-        if let Err(e) = self.observation_let_go::<WorkspaceBranches>(id.clone(), now_ms()).await {
-            warn!(
-                name: "branches.watch_unkept",
-                workspace_id = %id,
-                error = e.message,
-                "Couldn't keep that the workspace's branches are no longer watched"
             );
         }
     }

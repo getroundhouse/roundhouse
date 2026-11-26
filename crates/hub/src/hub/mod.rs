@@ -70,8 +70,8 @@ pub(crate) use observations::{
     WorkspaceLines, WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen, WorkspaceWorkerBuild,
 };
 pub(crate) use observations::{
-    GithubAppBot, GithubAppSaid, GithubProfile, GithubUsername, InstalledOn, Kind, Observations, RepositoryReach,
-    SessionCache, SessionContext, SessionKey, SessionTodos, SessionToolServers,
+    GithubAppBot, GithubAppSaid, GithubProfile, GithubUsername, InstalledOn, Keeper, Kind, Observations,
+    RepositoryReach, SessionCache, SessionContext, SessionKey, SessionTodos, SessionToolServers,
 };
 
 mod devices;
