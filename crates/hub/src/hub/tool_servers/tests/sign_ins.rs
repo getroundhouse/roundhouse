@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use protocol::client::ErrorCode;
 use protocol::client::tool_servers::ToolServerAdd;
@@ -127,18 +128,31 @@ async fn a_server_with_no_sign_in_or_no_way_roundhouse_could_says_so_and_waits_f
     }
 }
 
-/// Once it answers again, the same start is answered as it's found then.
+/// Once it answers again, the same start is answered as it's found then. One sent again as the first is asked, which
+/// waits for it, isn't asked again once the first has failed, which can take half a minute.
 #[tokio::test]
 async fn a_server_that_cant_be_asked_now_may_be_asked_again() {
     let dir = tempfile::tempdir().unwrap();
-    let script = Script { asks: Asks::Answers(503), ..Script::default() };
+    let gate = Gate::closed();
+    let script = Script { asks: Asks::Answers(503), server_after: Some(gate.clone()), ..Script::default() };
     let (hub, stand_in) = (hub_in(dir.path()), StandIn::with(script).await);
+    let starting = || {
+        let (hub, asked) = (Arc::clone(&hub), new("i", &stand_in));
+        tokio::spawn(async move { hub.tool_sign_in_start(asked).await })
+    };
 
-    let down = hub.tool_sign_in_start(new("i", &stand_in)).await.unwrap_err();
+    let (first, again) = (starting(), starting());
+    // Held by the hub's list, by each start and by this.
+    let both_hold_it = || hub.tool_sign_ins.waiting.get(&"i".into(), 0).is_some_and(|it| Arc::strong_count(&it) == 4);
+    waiting::task::until(Duration::from_secs(10), "both starts didn't hold the sign-in", both_hold_it).await;
+    gate.open();
+    let mut failed = [first.await.unwrap().unwrap_err().code, again.await.unwrap().unwrap_err().code];
     stand_in.change(|script| script.asks = Asks::SignIn);
     let begun = hub.tool_sign_in_start(new("i", &stand_in)).await.unwrap();
 
-    assert_eq!(down.code, ErrorCode::Unavailable);
+    failed.sort_by_key(|code| *code == ErrorCode::Conflict);
+    assert_eq!(failed, [ErrorCode::Unavailable, ErrorCode::Conflict], "whichever was asked first");
+    assert_eq!(stand_in.asked_for("POST /mcp").len(), 2, "once for the two at once, and once after");
     assert!(matches!(begun, ToolSignInBegun::Page { .. }), "{begun:?}");
 }
 

@@ -29,6 +29,8 @@ impl Hub {
             self.tool_sign_ins.waiting.begin(&id, to, now_ms())?
         };
         let mut stage = sign_in.stage.lock().await;
+        // One sent again as the first was finding, which has failed since, isn't asked again only to be refused.
+        self.waits_still(&id, &sign_in)?;
         if let Stage::OnPage { page, .. } = &*stage {
             return Ok(ToolSignInBegun::Page { page: page.clone() });
         }
