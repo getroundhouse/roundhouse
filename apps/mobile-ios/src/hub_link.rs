@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use client_core::link::{Connect, Link, Lost, Refused, Waits};
 use client_core::records::Snapshot;
-use client_core::{Client, ClientError, Drafts, OlderSide, RecordsFeed, RemoteHub};
+use client_core::{Client, ClientError, Drafts, Hub, OlderSide, RecordsFeed, RemoteHub};
 use client_ui::{NeedsUpdating, needs_updating};
 use gpui_kit::{Context, EventEmitter, Task};
 use protocol::model::{Workspace, WorkspaceStatus};
@@ -44,8 +44,11 @@ pub(crate) enum LinkState {
 pub(crate) struct Reconnected(pub(crate) Client);
 
 pub(crate) struct HubLink {
-    hub: RemoteHub,
+    paired: RemoteHub,
     link: Link<PairedHub>,
+    /// The hub the link connects to, as every screen of it holds it: its records, and what's asked of it, kept over
+    /// every connection.
+    hub: Hub,
     state: LinkState,
     /// The connection, while there is one that's caught up.
     client: Option<Client>,
@@ -112,9 +115,9 @@ pub(crate) struct Ready {
 impl EventEmitter<Reconnected> for HubLink {}
 
 impl HubLink {
-    pub(crate) fn new(hub: RemoteHub, connect: ConnectTo, cx: &mut Context<Self>) -> HubLink {
+    pub(crate) fn new(paired: RemoteHub, connect: ConnectTo, cx: &mut Context<Self>) -> HubLink {
         let waits = cx.default_global::<RetryWaits>().0;
-        let link = Link::start_waiting(PairedHub { hub: hub.clone(), connect }, waits);
+        let link = Link::start_waiting(PairedHub { hub: paired.clone(), connect }, waits);
         let changed = link.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while changed.recv_async().await.is_ok() {
@@ -123,10 +126,16 @@ impl HubLink {
                 }
             }
         });
-        HubLink { hub, link, state: LinkState::Connecting, client: None, drafts: None, _following: following }
+        let hub = link.hub();
+        HubLink { paired, link, hub, state: LinkState::Connecting, client: None, drafts: None, _following: following }
     }
 
-    pub(crate) fn hub(&self) -> &RemoteHub {
+    /// The hub as the phone paired with it.
+    pub(crate) fn paired(&self) -> &RemoteHub {
+        &self.paired
+    }
+
+    pub(crate) fn hub(&self) -> &Hub {
         &self.hub
     }
 
@@ -141,12 +150,12 @@ impl HubLink {
 
     /// What client-core holds of the hub's records, once it has followed them at all.
     pub(crate) fn snapshot(&self) -> Option<Snapshot> {
-        self.link.feed().map(|feed| feed.snapshot())
+        self.hub.records().map(|feed| feed.snapshot())
     }
 
     /// The connection, the records and the drafts, while there's a connection that's caught up.
     pub(crate) fn ready(&self) -> Option<Ready> {
-        let (client, feed, (drafts, _)) = (self.client()?, self.link.feed()?, self.drafts.as_ref()?);
+        let (client, feed, (drafts, _)) = (self.client()?, self.hub.records()?, self.drafts.as_ref()?);
         Some(Ready { client, feed, drafts: drafts.clone() })
     }
 

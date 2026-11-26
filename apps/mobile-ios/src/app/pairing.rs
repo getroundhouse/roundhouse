@@ -70,7 +70,7 @@ impl MobileApp {
             Pairing::Idle | Pairing::Busy { .. } | Pairing::Failed(_) => ("Pair with a hub", self.instructions(cx)),
         };
         let back = self.followed.as_ref().filter(|_| !matches!(self.pairing, Pairing::Confirm(_))).map(|followed| {
-            let hub = followed.link.read(cx).hub().hub_name.clone();
+            let hub = followed.link.read(cx).paired().hub_name.clone();
             chrome::icon_button("keep-hub", IconName::ChevronLeft, "Back")
                 .accessibility_label(format!("Back to {hub}"))
                 .on_click(cx.listener(|app, _, _, cx| app.keep_hub(cx)))
@@ -126,7 +126,7 @@ impl MobileApp {
     }
 
     fn confirm(&self, link: &PairingLink, cx: &mut Context<Self>) -> AnyElement {
-        let old = self.followed.as_ref().map_or_default(|followed| followed.link.read(cx).hub().hub_name.clone());
+        let old = self.followed.as_ref().map_or_default(|followed| followed.link.read(cx).paired().hub_name.clone());
         let new = link.hub_name.clone();
         let muted = look::colors(cx).text_muted;
         let confirm = look::button("confirm-pair", ButtonKind::Main, TAPPED, format!("Pair with {new}"))

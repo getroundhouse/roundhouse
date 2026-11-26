@@ -20,7 +20,7 @@ impl MobileApp {
             return;
         }
         let can_show = |id: &WorkspaceId| records.workspace(id).is_some_and(listed);
-        let last = self.preferences.last_workspace(Some(&link.hub().fingerprint)).cloned();
+        let last = self.preferences.last_workspace(Some(&link.paired().fingerprint)).cloned();
         match last.filter(can_show) {
             Some(workspace) => self.open_workspace(&workspace, window, cx),
             None => self.left_on(None, cx),
@@ -30,7 +30,7 @@ impl MobileApp {
     /// Keeps `workspace` as the one whose chat is open, for the app to open on again, or with none, the list.
     pub(super) fn left_on(&mut self, workspace: Option<&WorkspaceId>, cx: &App) {
         if let Some(followed) = &self.followed {
-            self.preferences.left_on(Some(&followed.link.read(cx).hub().fingerprint), workspace);
+            self.preferences.left_on(Some(&followed.link.read(cx).paired().fingerprint), workspace);
         }
     }
 }

@@ -31,7 +31,7 @@ impl RecordsFeed {
         let records = Following::unstarted(HubRecords::default());
         let github = GithubFeed::start(client, records.reach());
         let workspaces = Workspaces::start(client, records.reach());
-        let follow = records.start(client, || RecordsSource);
+        let follow = records.start(Some(client), || RecordsSource);
         let feed = RecordsFeed { follow, github, workspaces };
         client.inner.folding.reach(&feed.follow);
         feed

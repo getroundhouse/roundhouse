@@ -13,6 +13,7 @@ use gpui_kit::{
     Window,
 };
 use look::{ButtonKind, ControlSize, FieldKind, Space};
+use protocol::client::workspaces::WorkspaceRename;
 use protocol::model::{Session, Title, TitleError, Workspace, WorkspaceId};
 
 use super::MobileApp;
@@ -198,15 +199,16 @@ impl MobileApp {
             return;
         }
         let id = renaming.id.clone();
-        // With no connection, the sheet stays, with what's typed, to be tried again once the hub's back.
-        let Some(client) = self.client(cx) else {
+        // With no connection that has caught up, the sheet stays, with what's typed, to be tried again once the hub's
+        // back.
+        let Some(hub) = self.hub(cx).filter(client_core::Hub::caught_up) else {
             return self.say(client_core::refusals::couldnt("rename the workspace", &ClientError::Disconnected), cx);
         };
         if let Some(followed) = &mut self.followed {
             followed.renaming = None;
         }
         cx.notify();
-        let renamed = client.start(move |client| client.workspace_rename(&id, &title));
+        let renamed = hub.ask(WorkspaceRename { id, title });
         cx.spawn(async move |this, cx| {
             if let Err(e) = renamed.recv().await {
                 let _ =

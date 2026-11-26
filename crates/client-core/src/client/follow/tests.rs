@@ -99,7 +99,7 @@ fn a_source_not_wanted_is_let_go_until_it_is_wanted_again_on_the_connection_it_t
     let (first_asked, second_asked) = (start_hub(&first), start_hub(&second));
     let seen = Arc::new(Mutex::new(Vec::new()));
     let made = Made { seen: seen.clone() };
-    let follow = Following::start(&Client::connect(&first, "test").unwrap(), Wanted::default(), move || made);
+    let follow = Following::start(Some(&Client::connect(&first, "test").unwrap()), Wanted::default(), move || made);
     assert!(starts(&next(&first_asked, "the first watch")));
 
     want_until(&follow, Some(Instant::now() + Duration::from_millis(50)));

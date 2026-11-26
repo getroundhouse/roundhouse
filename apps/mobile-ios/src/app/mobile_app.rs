@@ -164,7 +164,7 @@ impl MobileApp {
     /// Starts following a hub, in place of any before it, with nothing of the last one open, nor kept of where the app
     /// was left on it.
     pub(super) fn follow(&mut self, hub: RemoteHub, window: &mut Window, cx: &mut Context<Self>) {
-        if self.link().is_some_and(|link| link.read(cx).hub().fingerprint != hub.fingerprint) {
+        if self.link().is_some_and(|link| link.read(cx).paired().fingerprint != hub.fingerprint) {
             self.left_on(None, cx);
         }
         let connect = self.connect.clone();
@@ -240,6 +240,11 @@ impl MobileApp {
 
     pub(super) fn link(&self) -> Option<&Entity<HubLink>> {
         self.followed.as_ref().map(|followed| &followed.link)
+    }
+
+    /// The hub this phone paired with, while it follows one.
+    pub(super) fn hub(&self, cx: &App) -> Option<client_core::Hub> {
+        self.link().map(|link| link.read(cx).hub().clone())
     }
 
     /// The connection to the hub, while there is one.

@@ -5,6 +5,7 @@
 mod following;
 mod thread;
 
+pub(crate) use following::Carried;
 pub use following::FollowError;
 #[cfg(test)]
 pub(super) use following::Unstarted;

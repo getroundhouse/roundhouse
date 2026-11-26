@@ -8,7 +8,7 @@ use crate::tool_sign_in::ToolSigningIn;
 use crate::workspace_pane::WorkspacePane;
 use client_core::link::Link;
 use client_core::records::Snapshot;
-use client_core::{Client, Drafts, RecordsFeed};
+use client_core::{Client, Drafts, Hub, RecordsFeed};
 use gpui_kit::{AnyWindowHandle, AppContext as _, Context, Entity, FocusHandle, ScrollHandle, Task, Window};
 use hub_source::HubSource;
 use protocol::client::HubStatus;
@@ -45,8 +45,11 @@ pub struct AppView {
     pub(super) presentation: super::presentation::Pending,
     /// The checkout this build is from, which the sidebar names, with why it's open.
     pub(crate) checkout: Option<Checkout>,
-    /// The connection to the hub, made again whenever it goes, and the hub's records, kept on every connection.
+    /// The connection to the hub, made again whenever it goes.
     pub(super) link: Link<HubSource>,
+    /// The hub the link connects to, as every view of it holds it: its records, what's asked of it and what's opened
+    /// from it, kept over every connection.
+    pub(super) linked: Hub,
     /// What's shown of how the link stands. Set by [`Self::set_connection`], so the panes are told, and by
     /// `link_changed` once a new connection is ready.
     pub(super) connection: Connection,
@@ -128,12 +131,7 @@ impl AppView {
     pub fn new(hub: HubSource, checkout: Option<Checkout>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
-        crate::updates::observe(cx).detach();
-        // Settings says how dictation stands, and how far the model's download has got while it shows.
-        crate::dictating::observe(cx, |_, cx| cx.notify()).detach();
-        crate::dictating::observe_progress(cx, |t: &Self, _| t.settings_open()).detach();
-        crate::dictating::keeping::observe(cx, Self::settings_open).detach();
-        crate::settings::observe(cx, |_, cx| cx.notify()).detach();
+        Self::observe_the_app(cx);
         Self::observe_activation(window, cx);
         quitting::ask_first(window, cx);
         let tool_sign_in = cx.new(|_| ToolSigningIn::default());
@@ -141,6 +139,7 @@ impl AppView {
         let link = Link::start(hub.clone());
         let mut this = Self {
             hub,
+            linked: link.hub(),
             link,
             visible: true,
             presentation: Vec::new(),
@@ -188,6 +187,16 @@ impl AppView {
         };
         this.follow_link(cx);
         this
+    }
+
+    /// Draws the window again as what it shows of the app changes: its update, dictation and its settings.
+    fn observe_the_app(cx: &mut Context<Self>) {
+        crate::updates::observe(cx).detach();
+        // Settings says how dictation stands, and how far the model's download has got while it shows.
+        crate::dictating::observe(cx, |_, cx| cx.notify()).detach();
+        crate::dictating::observe_progress(cx, |t: &Self, _| t.settings_open()).detach();
+        crate::dictating::keeping::observe(cx, Self::settings_open).detach();
+        crate::settings::observe(cx, |_, cx| cx.notify()).detach();
     }
 
     fn observe_activation(window: &mut Window, cx: &mut Context<Self>) {
@@ -239,7 +248,7 @@ impl AppView {
 
     /// Client-core's copy of the hub's records, once it's following a hub.
     pub fn feed(&self) -> Option<RecordsFeed> {
-        self.link.feed()
+        self.linked.records()
     }
 
     pub fn show_error(&mut self, message: impl Into<String>, cx: &mut Context<Self>) {

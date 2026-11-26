@@ -5,7 +5,7 @@
 
 use std::time::{Duration, Instant};
 
-use client_core::{Client, OpenTerminal};
+use client_core::{Client, OnSocket, OpenTerminal};
 use process::ProcessRecord;
 use protocol::model::{TerminalId, WorkspaceId};
 use protocol::paths::AGENTS_DIR;
@@ -74,10 +74,13 @@ fn recorded_in_front(stack: &Stack) -> Option<u32> {
     instances.flatten().find_map(|instance| record(instance.path())).map(|record| record.pid)
 }
 
-fn open_terminal(client: &Client, workspace: &WorkspaceId) -> OpenTerminal {
+/// Opens terminal `t` in `workspace`, and follows it from the hub on `stack`, as a view does, which it does for as long
+/// as the hub's returned with it is held.
+fn open_terminal(stack: &Stack, client: &Client, workspace: &WorkspaceId) -> (OnSocket, OpenTerminal) {
     let id = TerminalId::from("t");
     client.terminal_open(workspace, &id, SIZE).unwrap();
-    let open = OpenTerminal::start(client, &id);
+    let hub = OnSocket::connect(&stack.socket());
+    let open = hub.hub().open_terminal(&id);
     // One that can't be followed says why at once, rather than once the wait gives up. A follow drops an error that
     // says the connection went, which the client says instead.
     wait_until("the terminal to be followed", || {
@@ -88,7 +91,7 @@ fn open_terminal(client: &Client, workspace: &WorkspaceId) -> OpenTerminal {
         );
         open.connected()
     });
-    open
+    (hub, open)
 }
 
 fn terminals_open(client: &Client) -> usize {
@@ -102,7 +105,7 @@ fn a_terminal_runs_a_shell_in_its_worktree_until_it_is_closed() {
     let (workspace, _) = stack.workspace(&client);
     let worktree = support::workspace(&client, &workspace.id).path.unwrap();
 
-    let open = open_terminal(&client, &workspace.id);
+    let (_hub, open) = open_terminal(&stack, &client, &workspace.id);
     type_in(&client, &open, "pwd -P; echo is-$((6*7))\r");
     let shown = shown_until(&open, "is-42");
     let pid = shell_pid(&client, &open);
@@ -123,13 +126,13 @@ fn a_terminal_outlasts_its_client_and_its_hub() {
     let mut stack = stack();
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
-    let open = open_terminal(&client, &workspace.id);
+    let (hub, open) = open_terminal(&stack, &client, &workspace.id);
     type_in(&client, &open, "echo before-$((6*7))\r");
     shown_until(&open, "before-42");
     let pid = shell_pid(&client, &open);
     // A restart waits for the workspace's setup to finish, and opening a terminal doesn't, so this does first.
     support::wait_for_setup(&client, &workspace.id);
-    drop((open, client));
+    drop((open, hub, client));
 
     restart(&mut stack);
     stack.start_hub();
@@ -137,7 +140,8 @@ fn a_terminal_outlasts_its_client_and_its_hub() {
 
     assert!(is_alive(pid), "the restart left the shell running");
     assert_eq!(terminals_open(&client), 1, "the next hub carries on with it");
-    let open = OpenTerminal::start(&client, &"t".into());
+    let hub = OnSocket::connect(&stack.socket());
+    let open = hub.hub().open_terminal(&"t".into());
     // What it shows, which is what it showed.
     shown_until(&open, "before-42");
     type_in(&client, &open, "echo after-$((7*8))\r");
@@ -151,7 +155,7 @@ fn the_job_a_killed_workers_terminal_ran_in_front_is_stopped() {
     let stack = stack();
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
-    let open = open_terminal(&client, &workspace.id);
+    let (_hub, open) = open_terminal(&stack, &client, &workspace.id);
     let shell = shell_pid(&client, &open);
     // `sleep` keeps the hangup ignored, and ends by itself, should the test fail before it's stopped.
     type_in(&client, &open, "sh -c 'trap \"\" HUP; echo jo''b:$$:; exec sleep 300'\r");

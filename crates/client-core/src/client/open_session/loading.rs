@@ -63,7 +63,7 @@ impl OpenSession {
             records.want_session(&session.id);
             false
         });
-        let follow = Following::start(client, Arc::new(log), move || source);
+        let follow = Following::start(Some(client), Arc::new(log), move || source);
         follow.wake();
         OpenSession { follow, session_id: session.id.clone(), view, searches: Arc::default() }
     }
