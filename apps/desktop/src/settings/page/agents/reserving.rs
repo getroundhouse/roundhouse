@@ -15,6 +15,7 @@ use gpui_kit::{
 use look::Typeset as _;
 use protocol::model::{Account, AccountId, Reserve};
 
+use super::super::panel::{Closes, button, buttons as buttons_row};
 use super::super::redraw::bring_into_sight;
 use super::Drawing;
 use super::kept::Kept;
@@ -125,7 +126,9 @@ pub(super) fn panel(drawing: &Drawing<'_>, account: &Account, cx: &App) -> Optio
         let said = div().id("reserve-refused").role(Role::Alert).aria_label(refused.clone());
         said.typeset(look::Type::Body).text_color(colors.error).child(refused).test_support()
     });
-    let (laid_out, scroll) = (drawing.kept.clone(), drawing.scroll.clone());
+    let (laid_out, scroll, cancel) = (drawing.kept.clone(), drawing.scroll.clone(), drawing.kept.clone());
+    let closes = Closes::new(move |_, cx| cancel.update(cx, Kept::close_reserving));
+    drawing.open_panel.drawn(&closes);
     let card = look::card(look::CardKind::InPlace, look::CardWidth::Fills)
         .roomy()
         .heading(look::card_heading(format!("Reserve usage on {name}")))
@@ -139,7 +142,7 @@ pub(super) fn panel(drawing: &Drawing<'_>, account: &Account, cx: &App) -> Optio
         )
         .children(week(drawing.records, account, chosen, drawing.now_ms, cx))
         .children(refused)
-        .child(buttons(drawing, reserving.saving.is_some() || !kept.can_ask()));
+        .child(buttons(drawing, &closes, reserving.saving.is_some() || !kept.can_ask()));
     let panel = div()
         .id("reserve-panel")
         .relative()
@@ -183,19 +186,9 @@ fn week(records: &Snapshot, account: &Account, chosen: Option<Reserve>, now_ms: 
     )
 }
 
-/// Cancel, then Save, which is `off` while the hub hasn't answered, and with no hub to ask.
-fn buttons(drawing: &Drawing<'_>, off: bool) -> Div {
-    let (cancel, save) = (drawing.kept.clone(), drawing.kept.clone());
-    h_flex()
-        .justify_end()
-        .gap(look::Space::Small)
-        .child(
-            look::button("reserve-cancel", look::ButtonKind::Outlined, look::ControlSize::Regular, "Cancel")
-                .on_click(move |_, _, cx| cancel.update(cx, Kept::close_reserving)),
-        )
-        .child(
-            look::button("reserve-save", look::ButtonKind::Main, look::ControlSize::Regular, "Save")
-                .off(off)
-                .on_click(move |_, _, cx| save.update(cx, Kept::save_reserve)),
-        )
+/// Cancel, which `closes` the panel, then Save, which is `off` while the hub hasn't answered, and with no hub to ask.
+fn buttons(drawing: &Drawing<'_>, closes: &Closes, off: bool) -> Div {
+    let kept = drawing.kept.clone();
+    let save = button("reserve-save", "Save", true, off, move |_, cx| kept.update(cx, Kept::save_reserve));
+    buttons_row().child(closes.button("reserve-cancel", "Cancel", false)).child(save)
 }

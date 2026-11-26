@@ -14,7 +14,7 @@ use super::super::field::labelled;
 use super::Drawing;
 use super::gh_choice::ChoosingPanel;
 use super::kept::{Kept, Panel};
-use super::panel::{Framed, button, buttons, choice, choices, framed};
+use super::panel::{Closes, Framed, button, buttons, choice, choices, framed};
 use super::token::TokenPanel;
 use super::{app_words, words};
 
@@ -73,13 +73,15 @@ pub(super) fn choosing(drawing: &Drawing<'_>, panel: &Panel, choosing: &Choosing
     ];
     let offered = choices(gh.into_iter().chain(ways), cx);
     let body = v_flex().gap(look::Space::Small).child(h_flex().child(which(cx))).child(offered);
+    let closes = cancels(drawing.kept);
     let framed_as = Framed {
         title: "Connect a GitHub account".into(),
         lead: "Who agents are on GitHub when they push, open pull requests and comment: you, or an app of your own."
             .into(),
         body: Some(body.into_any_element()),
         refused: choosing.refused.clone(),
-        buttons: buttons().child(cancel(drawing.kept)),
+        buttons: buttons().child(closes.button("git-cancel", "Cancel", false)),
+        closes,
     };
     framed(drawing, panel, framed_as, cx)
 }
@@ -127,20 +129,20 @@ pub(super) fn token(drawing: &Drawing<'_>, panel: &Panel, token: &TokenPanel, cx
     let connect = button("git-panel-connect", act, true, !drawing.kept.read(cx).can_connect(cx), move |window, cx| {
         connecting.update(cx, |kept, cx| kept.connect(window, cx));
     });
+    let closes = cancels(drawing.kept);
     let framed_as = Framed {
         title,
         lead,
         body: Some(v_flex().gap(look::Space::Large).child(h_flex().child(make)).child(field).into_any_element()),
         refused: token.refused.clone(),
-        buttons: buttons().child(cancel(drawing.kept)).child(connect),
+        buttons: buttons().child(closes.button("git-cancel", "Cancel", false)).child(connect),
+        closes,
     };
     framed(drawing, panel, framed_as, cx)
 }
 
-/// Cancel, which puts the panel away, and any wait for the hub's answer with it.
-fn cancel(kept: &gpui_kit::Entity<Kept>) -> look::Button {
+/// What Cancel does: puts the panel away, and any wait for the hub's answer with it.
+fn cancels(kept: &gpui_kit::Entity<Kept>) -> Closes {
     let kept = kept.clone();
-    button("git-cancel", "Cancel", false, false, move |window: &mut Window, cx| {
-        kept.update(cx, |kept, cx| kept.put_away_panel(window, cx));
-    })
+    Closes::new(move |window: &mut Window, cx| kept.update(cx, |kept, cx| kept.put_away_panel(window, cx)))
 }

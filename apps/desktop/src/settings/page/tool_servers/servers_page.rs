@@ -9,6 +9,7 @@ use gpui_kit::{
 };
 
 use super::super::account_row::{COLUMN_WIDTH, Columns};
+use super::super::panel::OpenPanel;
 use super::kept::Kept;
 use super::{Asking, Body, OfHub, Page, PageId, Within, added, words};
 use crate::tool_sign_in::ToolSigningIn;
@@ -41,6 +42,8 @@ pub(super) struct Drawing<'a> {
     pub(super) records: &'a Snapshot,
     /// The scroll of Settings' page, to bring a panel into sight as it opens.
     pub(super) scroll: &'a ScrollHandle,
+    /// The panel open, which Escape closes.
+    pub(super) open_panel: &'a OpenPanel,
 }
 
 impl Drawing<'_> {
@@ -71,7 +74,8 @@ impl RenderOnce for ServersPage {
         let kept = window.use_keyed_state(of_hub, cx, |window, cx| Kept::new(signing_in, window, cx));
         let focus = self.within.focus.clone();
         kept.update(cx, |kept, _| kept.drawn(self.asking, focus));
-        let drawing = Drawing { kept: &kept, records: &self.records, scroll: &self.within.scroll };
+        let (scroll, open_panel) = (&self.within.scroll, &self.within.open_panel);
+        let drawing = Drawing { kept: &kept, records: &self.records, scroll, open_panel };
         v_flex().w_full().max_w(COLUMN_WIDTH).pb(look::Space::Large).child(added::list(&drawing, cx))
     }
 }

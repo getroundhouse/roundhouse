@@ -1,19 +1,22 @@
 //! MCP servers in Settings, against a real hub, and a stand-in for one that's asked for its tools as it's added: one
 //! another client adds, adding one with a key and one with neither, a name that's taken, changing the way before one is
-//! added, the hub going while one is typed, and removing one, which asks first. Every server and key is plainly made up.
+//! added, the hub going while one is typed, and removing one, which asks first. What Escape closes, against a fake hub,
+//! since it asks the hub nothing. Every server and key is plainly made up.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
 
+use client_core::fake_hub::World;
 use desktop::app::AppView;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use hub::{ToolServerAsks, ToolServerScript};
 use protocol::model::{ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerId, ToolServerKey};
 
 use super::git_app::label_of;
-use super::open_settings;
-use crate::support::{Serving, Stack, Ui, files_holding};
+use super::tool_server_check::filled_in_on;
+use super::{open_settings, settings_showing};
+use crate::support::{MENU, Serving, Stack, Ui, files_holding};
 
 pub(super) const URL: &str = "https://mcp.example.com/mcp";
 pub(super) const KEY: &str = "a-made-up-key";
@@ -221,4 +224,27 @@ fn a_servers_menu_removes_it_once_asked_forgetting_its_key(cx: &mut TestAppConte
     ui.wait("its row gone", |ui| !ui.has(row(&server)));
     assert_eq!(the_hubs(&stack), ["Docs"]);
     assert!(files_holding(&keys, KEY, "").is_empty(), "the hub forgot its key");
+}
+
+/// One walk through what Escape closes in Settings, from the inside out: the dropdown's menu, then the panel, with the
+/// cursor in its key, as its Cancel does, then Settings, once no panel is open.
+#[gpui_kit::test]
+fn escape_closes_a_menu_then_its_panel_then_settings(cx: &mut TestAppContext) {
+    let (_fake, mut ui) = filled_in_on(cx, World::default());
+    ui.click("mcp-way");
+    ui.wait("the menu", |ui| ui.has(MENU));
+
+    ui.press("escape");
+
+    ui.wait("the menu to close", |ui| !ui.has(MENU));
+    assert!(ui.has("mcp-panel"), "the menu: the panel stays open");
+    ui.click("mcp-key");
+    ui.press("escape");
+    assert!(!ui.has("mcp-panel"), "the key's field: the panel closes");
+    assert!(settings_showing(&mut ui), "the key's field: Settings stays");
+    ui.click("mcp-add");
+    ui.press("escape");
+    assert!(!ui.has("mcp-panel"), "the name's field: the panel closes");
+    ui.press("escape");
+    assert!(!settings_showing(&mut ui), "no panel: Settings closes");
 }

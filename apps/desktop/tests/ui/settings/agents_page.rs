@@ -1,6 +1,7 @@
 //! What Agents in Settings draws of the logins a hub holds, and how its page moves, on a fake hub, since none of it
 //! asks the hub to change anything: a row warning of its login's end by the page's own clock, a panel opening at its
-//! row in sight, and the page stretching as it's pulled. Every account is plainly made up.
+//! row in sight, what Escape closes with two panels open, and the page stretching as it's pulled. Every account is
+//! plainly made up.
 
 #![cfg(test)]
 
@@ -13,6 +14,7 @@ use protocol::model::AccountId;
 
 use super::agents::{id, record, says, to_agents};
 use super::made_up::{DAY_MS, added, holding_logins, in_agents_of};
+use super::settings_showing;
 use crate::support::{FakeHub, Ui, click_menu_item};
 
 const MINUTE_MS: i64 = 60_000;
@@ -66,6 +68,30 @@ fn renewing_a_login_opens_its_panel_at_its_row_in_sight(cx: &mut TestAppContext)
     assert!(shows.unwrap(), "the whole panel shows");
     let (row, panel) = (ui.bounds(id("account", last)), ui.bounds("accounts-panel"));
     assert!(row.top() < panel.top() && panel.bottom() <= row.bottom(), "under its row: {row:?}, {panel:?}");
+}
+
+/// A new login's panel, under Added's heading, and Reserve usage's, under the account's row, are open at once, so
+/// Escape closes the lower first, as its Cancel does, then the other, then Settings.
+#[gpui_kit::test]
+fn escape_closes_the_lower_of_two_panels_then_the_other_then_settings(cx: &mut TestAppContext) {
+    let work = added("claude-login-0001", "Work", 200 * DAY_MS);
+    let account = work.id.clone();
+    let (_hub, mut ui) = in_agents_of(cx, holding_logins(vec![work]));
+    ui.click(id("account-more", &account));
+    ui.cx.update_window(ui.handle, |_, window, cx| click_menu_item(window, "Reserve usage…", cx)).unwrap();
+    ui.wait("Reserve usage's panel", |ui| ui.has("reserve-panel"));
+    ui.click("accounts-connect");
+    ui.wait("the login's panel", |ui| ui.has("accounts-panel"));
+
+    ui.press("escape");
+
+    assert!(!ui.has("reserve-panel"), "the lower, Reserve usage's, closes first");
+    assert!(ui.has("accounts-panel"), "the login's stays");
+    ui.press("escape");
+    assert!(!ui.has("accounts-panel"), "then the login's closes");
+    assert!(settings_showing(&mut ui), "and Settings stays");
+    ui.press("escape");
+    assert!(!settings_showing(&mut ui), "then Settings closes");
 }
 
 /// As a Mac's own pages do, which a test's window holds still unless it's let move.

@@ -10,7 +10,7 @@ use gpui_kit::{
 };
 
 use super::super::field::{FIELDS_WIDTH, Field, captioned, labelled};
-use super::super::panel::{self, Framed, button, buttons, waiting_line};
+use super::super::panel::{self, Closes, Framed, button, buttons, waiting_line};
 use super::Drawing;
 use super::form::{AuthFields, Form, Of};
 use super::going::FormStands;
@@ -43,7 +43,7 @@ pub(super) fn draw(drawing: &Drawing<'_>, open: &Panel, cx: &App) -> AnyElement 
     let laid_out = move |bounds, window: &mut Window, cx: &mut App| {
         kept.update(cx, |kept, _| kept.laid_out(bounds, &scroll, window));
     };
-    panel::framed(PAGE, &open.place, framed, laid_out, cx)
+    panel::framed(PAGE, &open.place, framed, laid_out, drawing.open_panel, cx)
 }
 
 /// The panel a server is added or edited in: its name, its URL and how it knows the person, with the header and the key
@@ -78,12 +78,14 @@ fn form(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Framed {
             (words::edit_title(&was.name).into(), tool_server_edits::edit_says(edit, form.stands.saves_anyway()))
         }
     };
+    let closes = Closes::new(drawing.act(Kept::put_away_panel));
     Framed {
         title,
         lead: lead.into(),
         body: Some(fields.into_any_element()),
         refused: form.stands.why_not().map(str::to_string),
-        buttons: form_buttons(drawing, form, cx),
+        buttons: form_buttons(drawing, form, &closes, cx),
+        closes,
     }
 }
 
@@ -94,9 +96,9 @@ fn asking(url: &str, cx: &App) -> AnyElement {
     line.id("mcp-asking").role(Role::Status).aria_label(said).test_support().into_any_element()
 }
 
-/// Cancel, and the form's main button, which is off while it can't be pressed. Once the server hasn't listed its tools,
-/// that's Try again, with a button beside it that adds or saves it anyway.
-fn form_buttons(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Div {
+/// Cancel, which `closes`, and the form's main button, which is off while it can't be pressed. Once the server hasn't
+/// listed its tools, that's Try again, with a button beside it that adds or saves it anyway.
+fn form_buttons(drawing: &Drawing<'_>, form: &Form, closes: &Closes, cx: &App) -> Div {
     let off = !drawing.kept.read(cx).can_go(cx);
     let does = words::does(form.does(cx));
     let (anyway, goes) = match &form.stands {
@@ -108,7 +110,7 @@ fn form_buttons(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Div {
             (None, does)
         }
     };
-    let cancel = button("mcp-cancel", "Cancel", false, false, drawing.act(Kept::put_away_panel));
+    let cancel = closes.button("mcp-cancel", "Cancel", false);
     buttons().child(cancel).children(anyway).child(button("mcp-panel-go", goes, true, off, drawing.act(Kept::go)))
 }
 

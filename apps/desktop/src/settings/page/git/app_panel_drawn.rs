@@ -19,7 +19,7 @@ use crate::timers::Timers;
 use super::app_panel::{AppPanel, AppStep, Choosing, OnGithub};
 use super::app_words;
 use super::kept::{Kept, Panel};
-use super::panel::{Framed, button, buttons, framed, refusal, waiting_line};
+use super::panel::{Closes, Framed, button, buttons, framed, refusal, waiting_line};
 
 /// How far a step has got.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -72,10 +72,11 @@ pub(super) fn app(drawing: &Drawing<'_>, panel: &Panel, app: &AppPanel, cx: &App
             ]
         }
     };
+    let closes = put_away(kept);
     let end = if installed.is_some() {
-        button("git-close", "Done", true, false, put_away(kept))
+        closes.button("git-close", "Done", true)
     } else {
-        button("git-cancel", "Cancel", false, false, put_away(kept))
+        closes.button("git-cancel", "Cancel", false)
     };
     let framed_as = Framed {
         title: app_words::title(installed.is_some()).into(),
@@ -83,14 +84,15 @@ pub(super) fn app(drawing: &Drawing<'_>, panel: &Panel, app: &AppPanel, cx: &App
         body: Some(v_flex().gap(look::Space::Large).children(steps).into_any_element()),
         refused: None,
         buttons: buttons().child(end),
+        closes,
     };
     framed(drawing, panel, framed_as, cx)
 }
 
 /// Puts the panel away, and whatever it waits on with it.
-fn put_away(kept: &Entity<Kept>) -> impl Fn(&mut gpui_kit::Window, &mut App) + 'static {
+fn put_away(kept: &Entity<Kept>) -> Closes {
     let kept = kept.clone();
-    move |window, cx| kept.update(cx, |kept, cx| kept.put_away_panel(window, cx))
+    Closes::new(move |window, cx| kept.update(cx, |kept, cx| kept.put_away_panel(window, cx)))
 }
 
 /// A step's line, `number`, with what's in it under it while the panel is at it. Assistive apps are told the line, and
