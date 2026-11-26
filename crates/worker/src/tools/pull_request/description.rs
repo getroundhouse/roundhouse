@@ -38,7 +38,7 @@ pub(in super::super) fn describe(pull_request: Option<&OwnPullRequest>) -> Strin
     };
     let pr = &own.pull_request;
     let said = pr.said();
-    let stands = Standing::of(Some(own));
+    let stands = Standing::of(said, own.local, pr.checks_said());
     let mut lines = vec![format!(
         "Pull request #{}, \"{}\", into {}: {}",
         pr.number.get(),

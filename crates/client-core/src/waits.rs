@@ -100,7 +100,7 @@ fn holding(pull_requests: &[PullRequest]) -> Option<String> {
             .any(|below| open.iter().any(|other| other.number == *below))
     };
     let pr = open.iter().find(|row| !waits_on_another(row)).or(open.first())?;
-    let stands = match Standing::on_github_alone(pr) {
+    let stands = match Standing::on_github_alone(pr.said(), pr.checks_said()) {
         Standing::NoPullRequest | Standing::Merged | Standing::Closed | Standing::Unknown => return None,
         standing @ (Standing::Queued(_)
         | Standing::Uncommitted(_)
