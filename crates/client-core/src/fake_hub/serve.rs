@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use protocol::attachment::AttachmentBytes;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::log::ReadLimit;
+use protocol::client::tool_server_saves::SaveWhen;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome, admin,
     attachments, comments, drafts, files, github_accounts, log, proposals, records, references, sessions, workspaces,
@@ -23,7 +24,7 @@ use super::logs::{prompt_lines, read};
 use super::parts::{part, worktree_video};
 use super::stand_in::{claude, fixed_pairing, status, version};
 use super::worker_reads::WorkerReads;
-use super::world::{NOW_MS, ToolServerCheckWorld, World};
+use super::world::{NOW_MS, ToolServerCheckWorld, ToolServerSaveWorld, World};
 
 /// Listens until the process ends, since nothing stops it. Each world gets a socket of its own, so no test reaches
 /// another's.
@@ -305,10 +306,16 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             Err(world.tool_server_add_refused.clone().unwrap_or_else(|| read_only("change anything")))
         }
         R::SessionReloadToolServer(_) => world.tool_server_reload_refused.clone().map_or_else(|| reply(C::Ok), Err),
-        // As a hub from before saves, so the app checks it and adds or edits it itself.
-        R::ToolServerSave(_) | R::ToolServerSaveCancel(_) => {
-            Err(ApiError::new(ErrorCode::Unsupported, "a hub from before saves"))
-        }
+        R::ToolServerSave(save) => match world.tool_server_save.clone() {
+            ToolServerSaveWorld::TooOld => Err(before_saves()),
+            ToolServerSaveWorld::Asking => Ok(Outcome::Never),
+            ToolServerSaveWorld::Answers(_) if save.when != SaveWhen::Listed => Err(read_only("change anything")),
+            ToolServerSaveWorld::Answers(answer) => reply(C::ToolServerSaved(answer?)),
+        },
+        R::ToolServerSaveCancel(_) => match world.tool_server_save {
+            ToolServerSaveWorld::TooOld => Err(before_saves()),
+            ToolServerSaveWorld::Asking | ToolServerSaveWorld::Answers(_) => reply(C::Ok),
+        },
         R::ToolServerCheck(_) => match world.tool_server_check.clone() {
             ToolServerCheckWorld::TooOld => Err(ApiError::new(ErrorCode::Unsupported, "a hub from before checks")),
             ToolServerCheckWorld::Asking => Ok(Outcome::Never),
@@ -355,6 +362,11 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             Err(read_only("change a terminal"))
         }
     }
+}
+
+/// As a hub from before saves refuses one, so a client checks the server and adds or edits it itself.
+fn before_saves() -> ApiError {
+    ApiError::new(ErrorCode::Unsupported, "a hub from before saves")
 }
 
 pub(super) fn read_only(what: &str) -> ApiError {

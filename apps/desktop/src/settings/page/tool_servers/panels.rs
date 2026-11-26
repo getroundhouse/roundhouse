@@ -60,10 +60,7 @@ fn form(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Framed {
         AuthFields::Key { header, key } => Some(key_row(header, key, tool_server_edits::key_says(edit.as_ref()), cx)),
         AuthFields::SignIn | AuthFields::Neither => None,
     };
-    let asking = match &form.stands {
-        FormStands::AskingServer { .. } => Some(self::asking(&url, cx)),
-        FormStands::Open | FormStands::AskingHub { .. } | FormStands::Refused(_) | FormStands::NotListed(_) => None,
-    };
+    let asking = form.stands.asks(|| form.is_asked(cx)).then(|| self::asking(&url, cx));
     let way = h_flex().child(ways(drawing, chosen));
     let fields = v_flex()
         .gap(look::Space::Large)
@@ -106,7 +103,7 @@ fn form_buttons(drawing: &Drawing<'_>, form: &Form, closes: &Closes, cx: &App) -
             let anyway = button("mcp-anyway", words::anyway(does), false, off, drawing.act(Kept::go_anyway));
             (Some(anyway), words::TRY_AGAIN)
         }
-        FormStands::Open | FormStands::AskingServer { .. } | FormStands::AskingHub { .. } | FormStands::Refused(_) => {
+        FormStands::Open | FormStands::Saving { .. } | FormStands::LettingGo { .. } | FormStands::Refused(_) => {
             (None, does)
         }
     };

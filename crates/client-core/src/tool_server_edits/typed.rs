@@ -1,7 +1,7 @@
 use protocol::client::tool_servers::ToolServerAdd;
 use protocol::model::{ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerId, ToolServerKey};
 
-use super::Edit;
+use super::{Edit, Sent};
 
 /// A way a tool server can know the person.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -92,6 +92,21 @@ impl Typed {
             TypedAuth::SignIn | TypedAuth::Neither => true,
         };
         filled(&self.url) && filled(&self.name) && auth
+    }
+
+    /// Whether the hub asks the server for its tools before it's added, or saved as an edit of `was`, the one the hub
+    /// has: not one that's signed in to, whose sign-in says whether it works, nor an edit that changes nothing of where
+    /// it is or what it's sent, such as its name alone. The hub decides as it saves, so this is for what a client says
+    /// while it waits.
+    pub fn is_asked(&self, was: Option<&ToolServer>) -> bool {
+        match (self.auth.way(), was) {
+            (Way::SignIn, _) => false,
+            (Way::Key | Way::Neither, None) => true,
+            (Way::Key | Way::Neither, Some(was)) => {
+                let Sent { url, auth, .. } = self.edit_of(was).into_sent();
+                url.is_some() || auth.is_some()
+            }
+        }
     }
 
     /// What the hub is asked to add, as the server `id`. `None` for one to sign in to, which is the person's to approve

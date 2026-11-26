@@ -1,14 +1,15 @@
 //! The tool servers the hub has of its own, as MCP servers in Settings lists them. Their sign-ins and keys are the
 //! hub's, so none is here.
 
-use protocol::client::tool_server_checks::{NoToolList, ToolServerChecked, ToolServerUnreached};
+use protocol::client::tool_server_checks::{NoToolList, ToolServerUnreached};
+use protocol::client::tool_server_saves::ToolServerSaved;
 use protocol::client::tool_sign_ins::{NoToolSignIn, ToolSignInBegun, ToolSignInPage};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::fixtures::tool_server;
 use protocol::model::{ToolServer, ToolServerAuth, ToolServerName, ToolServerUrl, ToolSignInStatus};
 
 use super::conversation;
-use client_core::fake_hub::{ToolServerCheckWorld, World};
+use client_core::fake_hub::{ToolServerSaveWorld, World};
 
 /// The conversation, on a hub with four servers: two accounts at one URL, each signed in to, one of them once and no
 /// longer, one anyone can use, and one of a company's own, with a key.
@@ -46,14 +47,14 @@ pub(in crate::gallery) fn tool_servers_to_edit() -> World {
 pub(in crate::gallery) fn tool_server_refused() -> World {
     let mut world = one_tool_server();
     let why = format!("another MCP server is called {}", linear().name);
-    world.tool_server_check = ToolServerCheckWorld::Answers(Err(ApiError::new(ErrorCode::Conflict, why)));
+    world.tool_server_save = ToolServerSaveWorld::Answers(Err(ApiError::new(ErrorCode::Conflict, why)));
     world
 }
 
 /// [`one_tool_server`], whose hub goes on asking a server for its tools.
 pub(in crate::gallery) fn tool_server_asked() -> World {
     let mut world = one_tool_server();
-    world.tool_server_check = ToolServerCheckWorld::Asking;
+    world.tool_server_save = ToolServerSaveWorld::Asking;
     world
 }
 
@@ -70,7 +71,7 @@ pub(in crate::gallery) fn tool_server_unreached() -> World {
 }
 
 fn not_listed(mut world: World, why: NoToolList) -> World {
-    world.tool_server_check = ToolServerCheckWorld::Answers(Ok(ToolServerChecked::NotListed { why }));
+    world.tool_server_save = ToolServerSaveWorld::Answers(Ok(ToolServerSaved::NotListed { why }));
     world
 }
 
