@@ -1,5 +1,6 @@
 use super::Asked;
 use super::message::Message;
+use super::refusals::{Refusals, Refused};
 use hyper::header::{HeaderMap, HeaderName, HeaderValue};
 use hyper::{Method, StatusCode};
 use parking_lot::Mutex;
@@ -38,8 +39,8 @@ struct Connection {
     place: ToolServerPlace,
     /// The sessions it has given the agent there.
     sessions: HashSet<HeaderValue>,
-    /// Whether the agent has been refused since, so the log says so once.
-    cut_off: bool,
+    /// The agent's requests refused since it last connected.
+    refusals: Refusals,
 }
 
 /// Why a request is let through.
@@ -51,11 +52,6 @@ pub(super) enum LetIn {
     Connecting,
 }
 
-/// A request that isn't. `first` is whether it's the agent's first since it was cut off.
-pub(super) struct CutOff {
-    pub(super) first: bool,
-}
-
 impl Connections {
     /// Whether `asked`, of the server `id`, which is at `place`, is let through to it.
     pub(super) fn lets_in(
@@ -63,7 +59,7 @@ impl Connections {
         id: &ToolServerId,
         place: &ToolServerPlace,
         asked: &Asked<'_>,
-    ) -> Result<LetIn, CutOff> {
+    ) -> Result<LetIn, Refused> {
         let mut known = self.0.lock();
         let Some(connection) = known.by_agent.get_mut(&key(id, asked)) else { return Ok(LetIn::AsConnected) };
         let session = asked.headers.get(MCP_SESSION);
@@ -73,7 +69,7 @@ impl Connections {
         if connects(asked) {
             return Ok(LetIn::Connecting);
         }
-        Err(CutOff { first: !std::mem::replace(&mut connection.cut_off, true) })
+        Err(connection.refusals.refused())
     }
 
     /// The server `id`, at `place`, answered `asked`, which was `let_in`, with `status` and `headers`. One that refuses
@@ -90,11 +86,11 @@ impl Connections {
             return;
         }
         let mut known = self.0.lock();
-        let here = || Connection { place: place.clone(), sessions: HashSet::new(), cut_off: false };
+        let here = || Connection { place: place.clone(), sessions: HashSet::new(), refusals: Refusals::default() };
         let connection = known.by_agent.entry(key(id, asked)).or_insert_with(here);
         match let_in {
             LetIn::Connecting if connection.place != *place => *connection = here(),
-            LetIn::Connecting => connection.cut_off = false,
+            LetIn::Connecting => connection.refusals = Refusals::default(),
             // The answer of one that was moved as it answered.
             LetIn::AsConnected if connection.place != *place => return,
             LetIn::AsConnected => {}

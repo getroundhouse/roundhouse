@@ -1,7 +1,6 @@
-use super::connections::CutOff;
 use super::passed_on::{Of, is_for_events};
+use super::refusals::Refused;
 use super::server::Server;
-use super::under_way::TooMany;
 use super::{Failure, PassedOn, Proxy, Target, failure, headers};
 use crate::asks::Asks;
 use crate::tools::http::AnswerBody;
@@ -34,8 +33,7 @@ impl Proxy {
         let Some(server) = self.server(id) else { return failure::not_set(&asked.body) };
         let let_in = match self.connections.lets_in(&server.id, &server.place, &asked) {
             Ok(let_in) => let_in,
-            Err(CutOff { first }) => {
-                // Not each time, since a CLI can go on asking, as Claude does of a task each second.
+            Err(Refused { first }) => {
                 if first {
                     let session_id = asked.session_id;
                     info!(
@@ -50,7 +48,7 @@ impl Proxy {
         };
         let counted = match self.under_way.counted(&server.id) {
             Ok(counted) => counted,
-            Err(TooMany { first }) => return too_many(&server, &asked, first),
+            Err(Refused { first }) => return too_many(&server, &asked, first),
         };
         match self.answered(&server, &asked).await {
             Ok(response) => {
@@ -98,7 +96,7 @@ impl Proxy {
 
 /// The answer to a request to `server`, which has as many under way as it may. The agent's connection is closed with it,
 /// so a CLI that keeps its connections open, and goes on asking, doesn't hold one more of those the worker takes for
-/// each request that's refused. Logged only if it's the `first` since one ended, since a CLI can go on asking.
+/// each request that's refused. Logged only if it's the `first` since one ended.
 fn too_many(server: &Server, asked: &Asked<'_>, first: bool) -> Response<AnswerBody> {
     if first {
         warn!(name: "tool_server.too_many_under_way", server_id = %server.id, "A tool server is sent nothing more for now");
