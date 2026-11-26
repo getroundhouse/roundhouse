@@ -113,7 +113,7 @@ fn half(
     cx: &App,
 ) -> Div {
     let half = div().w_1_2().h_full().min_w_0();
-    let Some(number_) = line else { return half.bg(look::colors(cx).inset.opacity(0.3)) };
+    let Some(number_) = line else { return half.bg(look::Strength::Strong.of(look::colors(cx).inset)) };
     let side = if old_side { &drawing.sides.old } else { &drawing.sides.new };
     let kind = match (same, old_side) {
         (true, _) => LineKind::Same,
@@ -145,8 +145,8 @@ fn background(kind: LineKind, at: Option<(DiffSide, u32)>, drawing: &Drawing, cx
     }
     match kind {
         LineKind::Same => None,
-        LineKind::Removed => Some(colors.removed.opacity(0.12)),
-        LineKind::Added => Some(colors.added.opacity(0.12)),
+        LineKind::Removed => Some(look::Strength::Soft.of(colors.removed)),
+        LineKind::Added => Some(look::Strength::Soft.of(colors.added)),
     }
 }
 
@@ -166,7 +166,7 @@ fn changes(kind: LineKind, code: &Code<'_>, drawing: &Drawing, at: Option<(DiffS
         .min_w_0()
         .h_full()
         .child(div().flex_none().w(SIGN).text_color(tint.unwrap_or(colors.text_muted)).child(sign))
-        .child(self::code(code, tint.map(|tint| tint.opacity(0.3)), drawing, cx))
+        .child(self::code(code, tint.map(|tint| look::Strength::Strong.of(tint)), drawing, cx))
         .children(at.map(|at| add_button(at, marked, drawing, cx)))
         .into_any_element()
 }

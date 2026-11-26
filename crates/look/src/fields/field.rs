@@ -7,7 +7,7 @@ use gpui_kit::{
 };
 
 use super::FieldKind;
-use crate::{ControlSize, Corner, EDGE, IconSizing as _, Shaped as _, Space, Typeset as _, colors};
+use crate::{ControlSize, Corner, EDGE, IconSizing as _, Shaped as _, Space, Strength, Typeset as _, colors};
 
 /// A field to type a line of text in, which `input` holds, of `kind` and `size`, found by `id`. It's as tall as its
 /// size and leaves its size's room at each end, so it's as tall as the buttons beside it, and what's typed in it is
@@ -111,7 +111,7 @@ impl RenderOnce for Field {
                     .corners(Corner::Control)
                     .border(EDGE)
                     .border_color(if focused { colors.brand } else { colors.control_edge })
-                    .bg(colors.control_edge.opacity(0.3))
+                    .bg(Strength::Strong.of(colors.control_edge))
                     .when(focused, |field| field.focus_ring_style(window, cx))
             })
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {

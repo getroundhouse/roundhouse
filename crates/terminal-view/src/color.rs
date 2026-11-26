@@ -8,6 +8,15 @@ pub(crate) fn to_hsla(color: Rgb) -> Hsla {
     rgb(color.hex()).into()
 }
 
+/// To paint a cell's faint text in, which a program asks for with SGR 2: at half its colour, as terminals draw it.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "a terminal's faint text, as terminals draw it, rather than the app's strengths"
+)]
+pub(crate) fn faint(color: Rgb) -> Hsla {
+    to_hsla(color).opacity(0.5)
+}
+
 /// One of the app's look's, for the terminal to draw a cell that sets none in, to the nearest of client-core's.
 pub(crate) fn to_rgb(color: Hsla) -> Rgb {
     let rgba = color.to_rgb();

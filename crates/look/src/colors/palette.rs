@@ -5,6 +5,7 @@ use super::made::Made::{Grey, Text, Wash};
 use super::made::{Recipe, color};
 use super::ramp::{Chroma, Lightness, Ramp, Stop};
 use super::srgb::Srgb;
+use super::strength::Strength;
 
 /// Declares the roles once, with how the dark theme makes each, so the struct, the list the spec's table and the
 /// sheet are checked against, and the dark theme can't disagree about which roles there are. A role is a stop on the
@@ -238,26 +239,26 @@ impl Global for Colors {}
 
 /// How strongly the brand's copper shows behind what's selected: as strongly as the kit lets a selection show, which
 /// it holds its own to.
-const SELECTION: f32 = 0.3;
+const SELECTION: Strength = Strength::Strong;
 /// How strongly what's found shows behind the text: faint, so the matches read as a trail through it without hiding
 /// it, and the match being shown more strongly, so it stands out from the rest.
-const FOUND: f32 = 0.22;
-const FOUND_HERE: f32 = 0.55;
+const FOUND: Strength = Strength::Medium;
+const FOUND_HERE: Strength = Strength::XStrong;
 
 impl Colors {
     /// Behind what's selected in text: the brand's copper, faint.
     pub fn selection(&self) -> Hsla {
-        self.brand.opacity(SELECTION)
+        SELECTION.of(self.brand)
     }
 
     /// Behind each match of what's being found: the colour of the chat showing, faint.
     pub fn found(&self) -> Hsla {
-        self.current.opacity(FOUND)
+        FOUND.of(self.current)
     }
 
     /// Behind the match being shown, in the brand's copper.
     pub fn found_here(&self) -> Hsla {
-        self.brand.opacity(FOUND_HERE)
+        FOUND_HERE.of(self.brand)
     }
 }
 

@@ -8,7 +8,7 @@ use std::f32::consts::PI;
 
 use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Point, Styled, canvas, point, px};
 
-use crate::colors::colors;
+use crate::colors::{Strength, colors};
 use crate::fan::{self, as_f32};
 use crate::shape::Corner;
 
@@ -26,18 +26,22 @@ const STRONGEST: f32 = 0.29;
 const FADE: f32 = 0.8;
 /// How much copper the composer's surface takes, and its edge over that: a little over half, so it's quieter than the
 /// full copper of keyboard focus, which the composer's edge also shows while files are dragged over it.
-const WASH: f32 = 0.10;
-const EDGE: f32 = 0.55;
+const WASH: Strength = Strength::XSoft;
+const EDGE: Strength = Strength::XStrong;
 
 /// The surface and edge of the composer while it's planning, when its own surface is `surface`.
 pub fn plan_colors(surface: Hsla, cx: &App) -> (Hsla, Hsla) {
     let copper = colors(cx).brand;
-    let planning = surface.blend(copper.opacity(WASH));
-    (planning, planning.blend(copper.opacity(EDGE)))
+    let planning = surface.blend(WASH.of(copper));
+    (planning, planning.blend(EDGE.of(copper)))
 }
 
 /// Fills its parent, which it lies under, on the surface [`plan_colors`] gives. `corner` is the parent's corner, which
 /// the dots stay inside.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the texture's own drawing, whose dots fade toward the composer's bottom"
+)]
 pub fn plan_texture(cx: &App, corner: Corner) -> impl IntoElement + use<> {
     let copper = colors(cx).brand;
     canvas(

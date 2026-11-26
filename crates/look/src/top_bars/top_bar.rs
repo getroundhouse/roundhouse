@@ -149,7 +149,7 @@ impl RenderOnce for TopBar {
                     .aria_label(self.title)
                     .py(Space::XSmall)
                     .corners(Corner::Control);
-                crate::menus::under_the_title(drawn, colors.text.opacity(PRESSED), move |menu, window, cx| {
+                crate::menus::under_the_title(drawn, PRESSED.of(colors.text), move |menu, window, cx| {
                     build(menu, window, cx)
                 })
                 .into_any_element()

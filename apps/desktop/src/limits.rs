@@ -51,7 +51,7 @@ fn window(limit: &UsageLimit) -> Option<String> {
 pub(crate) fn bar(left_percent: u8, reserve: Option<Reserve>, tall: Pixels, cx: &App) -> Div {
     let colors = look::colors(cx);
     let left = f32::from(left_percent.min(100)) / 100.;
-    let track = || div().h_full().rounded_full().bg(colors.text.opacity(0.12));
+    let track = || div().h_full().rounded_full().bg(look::Strength::Soft.of(colors.text));
     let filled = |share: f32, fill| div().h_full().rounded_full().bg(fill).w(relative(share.clamp(0., 1.)));
     let Some(reserve) = reserve else {
         return track().w_full().h(tall).child(filled(left, colors.text));

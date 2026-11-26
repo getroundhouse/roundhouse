@@ -87,7 +87,7 @@ pub use clock::{
 };
 #[cfg(any(test, feature = "testing"))]
 pub use colors::NamedColor;
-pub use colors::{Colors, colors};
+pub use colors::{Colors, Strength, colors};
 pub use control_sizes::ControlSize;
 pub use controls::{Button, ButtonKind, MenuButton, Side, Sizing, button, glyph_button, icon_button, stop_button};
 pub use copy::{copy_button, copy_button_shown_while_over};

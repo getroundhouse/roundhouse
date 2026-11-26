@@ -134,7 +134,7 @@ fn ring(used: f32, cx: &App) -> impl IntoElement {
         move |_, bounds, window, _| {
             let outer = bounds.size.width.min(bounds.size.height).as_f32() / 2.;
             let arc = Arc::new().inner_radius(outer - LINE).outer_radius(outer);
-            arc.paint(&ArcData::new(&(), 0, 1., 0., TAU), color.opacity(0.25), &bounds, window);
+            arc.paint(&ArcData::new(&(), 0, 1., 0., TAU), look::Strength::Medium.of(color), &bounds, window);
             if used > 0. {
                 arc.paint(&ArcData::new(&(), 1, used, 0., used * TAU), color, &bounds, window);
             }
@@ -152,7 +152,7 @@ fn bars(each: &[Bar], cx: &App) -> impl IntoElement {
     let bar = move |bar: &Bar| {
         let fill = if bar.in_reserve { warning } else { color };
         let filled = div().h_full().w(relative(bar.left.clamp(0., 1.))).rounded_full().bg(fill);
-        div().w(RING).h(LIMIT).rounded_full().bg(color.opacity(0.25)).child(filled)
+        div().w(RING).h(LIMIT).rounded_full().bg(look::Strength::Medium.of(color)).child(filled)
     };
     div().flex().flex_col().gap(between_limits(each.len())).children(each.iter().map(bar))
 }

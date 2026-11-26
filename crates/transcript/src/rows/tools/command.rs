@@ -21,7 +21,7 @@ use crate::rows::shown::Gather;
 use crate::selection::Pieces;
 
 /// How strongly the command is drawn, so it reads as a caption to what it printed.
-const STRENGTH: f32 = 0.7;
+const STRENGTH: look::Strength = look::Strength::XXStrong;
 /// What the command's area is called for hovering, which shows the button that copies it.
 const GROUP: &str = "command";
 
@@ -110,7 +110,7 @@ fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
         .id(ElementId::from((id.clone(), "text")))
         .role(Role::Label)
         .aria_label(full.clone())
-        .opacity(STRENGTH)
+        .opacity(STRENGTH.share())
         .child(drawn)
         .test_support();
     let part = div()

@@ -47,7 +47,7 @@ pub(super) fn draft_card(
         .p(look::Space::XSmall)
         .corners(look::Corner::Control)
         .border(look::EDGE)
-        .border_color(colors.brand.opacity(0.6))
+        .border_color(look::Strength::XStrong.of(colors.brand))
         .bg(colors.pane)
         .relative()
         .child(Textarea::new(input).appearance(false))

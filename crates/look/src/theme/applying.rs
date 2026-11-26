@@ -1,4 +1,4 @@
-use crate::colors::Colors;
+use crate::colors::{Colors, Strength};
 use crate::shape::Corner;
 use crate::traits::Reach;
 use crate::typography::{mono_size, rem};
@@ -10,14 +10,14 @@ use std::rc::Rc;
 
 /// How much of the text's colour washes what's under the pointer and can be pressed, such as a borderless button or a
 /// menu's row, so it shows on whatever ground it's on.
-pub(crate) const UNDER_POINTER: f32 = 0.06;
+pub(crate) const UNDER_POINTER: Strength = Strength::XXSoft;
 /// How much washes it while it's pressed.
-pub(crate) const PRESSED: f32 = 0.12;
+pub(crate) const PRESSED: Strength = Strength::Soft;
 /// How much washes what's on or chosen, such as a borderless button that's on or a list's row that's chosen.
-pub(crate) const CHOSEN: f32 = 0.09;
+pub(crate) const CHOSEN: Strength = Strength::XSoft;
 // What's chosen is washed more than what's under the pointer, and less than what's pressed, so a row that's chosen
 // reads as chosen with the pointer on another, as a borderless button that's on does.
-const _: () = assert!(UNDER_POINTER < CHOSEN && CHOSEN < PRESSED);
+const _: () = assert!(UNDER_POINTER.share() < CHOSEN.share() && CHOSEN.share() < PRESSED.share());
 
 /// Installs the app's colours, and its theme as the kit's dark theme, and switches to it, with the rem and code's size
 /// of the reach the process draws for, which [`Reach::choose`] chooses before this, and starts the clock its marks move
@@ -127,13 +127,13 @@ fn controls(c: &Colors) -> Vec<(&'static str, String)> {
         ("button.primary.active.background", hex(c.main_pressed)),
         // A borderless button: a wash of the text's colour, under the pointer, pressed and on, so it shows on whatever
         // ground the button is on, as `components.md` says.
-        ("button.ghost.hover.background", hex(c.text.opacity(UNDER_POINTER))),
-        ("button.ghost.active.background", hex(c.text.opacity(PRESSED))),
-        ("button.ghost.selected.background", hex(c.text.opacity(CHOSEN))),
+        ("button.ghost.hover.background", hex(UNDER_POINTER.of(c.text))),
+        ("button.ghost.active.background", hex(PRESSED.of(c.text))),
+        ("button.ghost.selected.background", hex(CHOSEN.of(c.text))),
         // An outlined button: clear at rest, so only its edge shows, then washed as a borderless one is.
         ("button.outline.background", "#00000000".into()),
-        ("button.outline.hover.background", hex(c.text.opacity(UNDER_POINTER))),
-        ("button.outline.active.background", hex(c.text.opacity(PRESSED))),
+        ("button.outline.hover.background", hex(UNDER_POINTER.of(c.text))),
+        ("button.outline.active.background", hex(PRESSED.of(c.text))),
         ("input.border", hex(c.control_edge)),
         // A toggle's knob is the pane's while it's on, on the main action's light fill, and muted while it's off, so an
         // off toggle still reads as one, as `components.md` says.

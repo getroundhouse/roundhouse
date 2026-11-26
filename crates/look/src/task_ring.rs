@@ -64,6 +64,10 @@ fn paint_at(ring: TaskRing, t: Option<f64>, bounds: Bounds<Pixels>, window: &mut
     t.is_some()
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the ring's own drawing, as the mark's, whose dots are as bright as its motion makes them"
+)]
 fn paint(bounds: Bounds<Pixels>, ring: TaskRing, color: Hsla, light: Hsla, turned: f32, window: &mut Window) {
     let width = bounds.size.width;
     let center = point(bounds.origin.x + width * 0.5, bounds.origin.y + bounds.size.height * 0.5);

@@ -1,6 +1,6 @@
 use gpui_kit::Hsla;
 
-use crate::colors::Colors;
+use crate::colors::{Colors, Strength};
 use crate::named::named;
 
 named! {
@@ -25,9 +25,9 @@ named! {
 }
 
 /// How much of its colour a card in the chat that's in one is washed with, over the pane, as a banner is.
-pub(crate) const WASH: f32 = 0.09;
+pub(crate) const WASH: Strength = Strength::XSoft;
 /// How much of its colour a line on a card washed in one is, so it reads as the card's own rather than a grey stain.
-const LINE_ON_A_WASH: f32 = 0.2;
+const LINE_ON_A_WASH: Strength = Strength::Medium;
 
 impl CardKind {
     /// What it's filled with.
@@ -35,8 +35,8 @@ impl CardKind {
         match self {
             CardKind::Over | CardKind::InPlace => colors.raised,
             CardKind::Chat => colors.inset,
-            CardKind::NeedsYou => colors.needs_you.opacity(WASH),
-            CardKind::Stopped => colors.stopped.opacity(WASH),
+            CardKind::NeedsYou => WASH.of(colors.needs_you),
+            CardKind::Stopped => WASH.of(colors.stopped),
         }
     }
 
@@ -62,7 +62,7 @@ impl CardKind {
     /// The colour a line on it is: its wash's, stronger, on one washed in a colour, and the edge's on the rest.
     pub(crate) fn line(self, colors: &Colors) -> Hsla {
         match self.tint(colors) {
-            Some(tint) => tint.opacity(LINE_ON_A_WASH),
+            Some(tint) => LINE_ON_A_WASH.of(tint),
             None => colors.edge,
         }
     }

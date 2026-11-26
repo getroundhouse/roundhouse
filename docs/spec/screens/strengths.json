@@ -1,0 +1,46 @@
+{
+  "look::Strength": {
+    "Medium": {
+      "x": 212,
+      "y": 287,
+      "width": 280,
+      "height": 48
+    },
+    "Soft": {
+      "x": 212,
+      "y": 207,
+      "width": 280,
+      "height": 48
+    },
+    "Strong": {
+      "x": 212,
+      "y": 367,
+      "width": 280,
+      "height": 48
+    },
+    "XSoft": {
+      "x": 212,
+      "y": 127,
+      "width": 280,
+      "height": 48
+    },
+    "XStrong": {
+      "x": 212,
+      "y": 447,
+      "width": 280,
+      "height": 48
+    },
+    "XXSoft": {
+      "x": 212,
+      "y": 47,
+      "width": 280,
+      "height": 48
+    },
+    "XXStrong": {
+      "x": 212,
+      "y": 527,
+      "width": 280,
+      "height": 48
+    }
+  }
+}

@@ -1,20 +1,20 @@
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role, SharedString,
+    App, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
 };
 use written_counts::whole;
 
 use super::LinesKind;
 use crate::baseline::Placed;
-use crate::colors::colors;
+use crate::colors::{Strength, colors};
 use crate::space::Space;
 use crate::typography::Typeset;
 
 /// How strongly lines last read some time ago are drawn, rather than kept current: enough of their colours to tell
 /// green from red, faint enough that they don't read as now.
-const AS_LAST_READ: f32 = 0.55;
+const AS_LAST_READ: Strength = Strength::XStrong;
 
 /// The lines added and removed of `kind`, `+12 −3`, leaving out whichever is none.
 pub fn lines_changed(kind: LinesKind, added: usize, removed: usize) -> LinesChanged {
@@ -73,17 +73,15 @@ impl LinesChanged {
 impl RenderOnce for LinesChanged {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let colors = colors(cx);
-        let strength = if self.as_last_read { AS_LAST_READ } else { 1. };
+        let shown = |color: Hsla| if self.as_last_read { AS_LAST_READ.of(color) } else { color };
         let (added, removed) = self.written();
         let drawn = h_flex()
             .flex_none()
             .gap(Space::XSmall)
             .typeset_code(cx)
             .when(self.kind.stronger(), Typeset::emphasis)
-            .when_some(added, |d, added| d.child(div().text_color(colors.added.opacity(strength)).child(added)))
-            .when_some(removed, |d, removed| {
-                d.child(div().text_color(colors.removed.opacity(strength)).child(removed))
-            });
+            .when_some(added, |d, added| d.child(div().text_color(shown(colors.added)).child(added)))
+            .when_some(removed, |d, removed| d.child(div().text_color(shown(colors.removed)).child(removed)));
         let drawn = match self.placed {
             Some(placed) => placed.set(drawn),
             None => drawn,

@@ -14,6 +14,7 @@ use gpui_kit::{
     MouseDownEvent, ParentElement as _, Pixels, RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
 
+use super::kinds::filled_states;
 use super::{ButtonKind, Sizing as _};
 use crate::ControlSize;
 use crate::colors::colors;
@@ -252,11 +253,12 @@ impl Button {
             // press still change. Not while it's off, since the kit lays the button's own style over its greyed-out
             // one, which would keep the fill.
             (Some(fill), _) => {
+                let (under_the_pointer, pressed) = filled_states(fill);
                 let style = ButtonCustomVariant::new(cx)
                     .color(fill)
                     .foreground(colors.on_main)
-                    .hover(fill.opacity(0.85))
-                    .active(fill.opacity(0.7));
+                    .hover(under_the_pointer)
+                    .active(pressed);
                 kit.custom(style).when(!off, |kit| kit.bg(fill))
             }
             (None, Some(work)) if kind == ButtonKind::Outlined => {

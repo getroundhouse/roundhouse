@@ -84,6 +84,7 @@ pub(crate) fn still(width: Pixels, color: Hsla) -> impl IntoElement {
 }
 
 /// A turntable, or a ring's hub, with nothing to say: in the dots' colour, and quieter than them.
+#[expect(clippy::disallowed_methods, reason = "the mark's own drawing, whose hub is its fan's colour, quieter")]
 pub(crate) fn unlit(fan: Hsla) -> Hsla {
     fan.opacity(0.6)
 }
@@ -100,6 +101,10 @@ struct Painted {
 
 impl Painted {
     /// A mark of `work` saying `signal`, as it is now.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the mark's own drawing, whose hub glows while it's at work in the background"
+    )]
     fn now(signal: Signal, work: Work, cx: &App) -> Self {
         let colors = colors(cx);
         // Only the pull request colours the fan, so its colour means one thing. A reply nobody has read, or a question
@@ -142,6 +147,10 @@ fn drawn(painted: Painted, width: Pixels) -> impl IntoElement {
     sized(drawn, width)
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the mark's own drawing, whose dots are as bright as its motion makes them"
+)]
 fn paint(bounds: Bounds<Pixels>, signal: Signal, color: Hsla, hub: Hsla, light: Hsla, t: f64, window: &mut Window) {
     let fan = Fan::within(bounds);
     for dot in fan.dots() {

@@ -1,6 +1,6 @@
 use gpui_kit::Hsla;
 
-use crate::colors::Colors;
+use crate::colors::{Colors, Strength};
 use crate::named::named;
 
 named! {
@@ -20,7 +20,7 @@ impl PillKind {
     pub(super) fn colors(self, colors: &Colors) -> (Hsla, Hsla) {
         match self {
             PillKind::Plain => (colors.text_muted, colors.raised),
-            PillKind::Failure => (colors.error, colors.error.opacity(0.09)),
+            PillKind::Failure => (colors.error, Strength::XSoft.of(colors.error)),
         }
     }
 

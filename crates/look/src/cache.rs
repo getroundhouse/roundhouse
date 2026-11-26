@@ -10,6 +10,7 @@ use gpui_kit::{
     Window, canvas, div, point, px, quad, size, transparent_black,
 };
 
+use crate::colors::Strength;
 use crate::fan;
 
 const MINUTE_MS: i64 = 60_000;
@@ -36,7 +37,7 @@ pub fn cache_mark(mark: CacheMark, color: Hsla) -> impl IntoElement {
             let center = bounds.center();
             match mark {
                 CacheMark::Left(left) => {
-                    fan::disc(window, center, radius, color.opacity(0.25));
+                    fan::disc(window, center, radius, Strength::Medium.of(color));
                     let left = left.clamp(0., 1.);
                     if left > 0. {
                         let wedge = Arc::new().inner_radius(0.).outer_radius(radius.as_f32());

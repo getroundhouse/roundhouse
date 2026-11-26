@@ -4,12 +4,12 @@
 use gpui_kit::Hsla;
 use gpui_kit::assets::IconName;
 
-use crate::colors::Colors;
+use crate::colors::{Colors, Strength};
 
 /// How strongly a pull request's colour shows through the bar behind it.
-const TINT: f32 = 0.12;
+const TINT: Strength = Strength::Soft;
 /// How strongly it shows in the outline of a button that opens the pull request.
-const EDGE: f32 = 0.35;
+const EDGE: Strength = Strength::Strong;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Work {
@@ -51,12 +51,12 @@ impl Work {
 
     /// The bar behind it.
     pub fn tint(self, colors: &Colors) -> Hsla {
-        self.hue(colors).map_or(colors.sidebar, |hue| hue.opacity(TINT))
+        self.hue(colors).map_or(colors.sidebar, |hue| TINT.of(hue))
     }
 
     /// The outline of the button that opens the pull request.
     pub fn edge(self, colors: &Colors) -> Hsla {
-        self.hue(colors).map_or(colors.control_edge, |hue| hue.opacity(EDGE))
+        self.hue(colors).map_or(colors.control_edge, |hue| EDGE.of(hue))
     }
 }
 

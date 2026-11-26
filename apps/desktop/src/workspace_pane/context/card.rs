@@ -193,7 +193,7 @@ fn bar_with_room_kept_back(used: f32, kept_back: f32, cx: &App) -> Div {
     let color = look::colors(cx).text;
     let usable = (1. - kept_back).clamp(0.01, 1.);
     let filled = div().h_full().rounded_full().bg(color).w(relative((used / usable).clamp(0., 1.)));
-    let track = || div().h_full().rounded_full().bg(color.opacity(0.12));
+    let track = || div().h_full().rounded_full().bg(look::Strength::Soft.of(color));
     h_flex()
         .w_full()
         .h(crate::limits::BAR_IN_A_CARD)
