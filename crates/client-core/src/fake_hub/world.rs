@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use protocol::client::ApiError;
 use protocol::client::tool_server_checks::ToolServerChecked;
+use protocol::client::tool_server_saves::ToolServerSaved;
 use protocol::client::tool_sign_ins::ToolSignInBegun;
 use protocol::event::SessionEvent;
 use protocol::model::{
@@ -99,6 +100,8 @@ pub struct World {
     pub tool_server_add_refused: Option<ApiError>,
     /// What checking a tool server comes to, each time it's asked.
     pub tool_server_check: ToolServerCheckWorld,
+    /// What saving a tool server comes to, each time it's asked.
+    pub tool_server_save: ToolServerSaveWorld,
     /// What starting a sign-in to a tool server comes to, as the hub answers each time it's asked. `None` refuses it, as
     /// the rest of what would change what the hub holds.
     pub tool_sign_in_answer: Option<Result<ToolSignInBegun, ApiError>>,
@@ -143,6 +146,19 @@ pub enum ToolServerCheckWorld {
     /// The hub goes on asking the server.
     Asking,
     Answers(Result<ToolServerChecked, ApiError>),
+}
+
+/// What adding or saving a tool server comes to.
+#[derive(Clone, Default)]
+pub enum ToolServerSaveWorld {
+    /// The hub knows no save, as one from before it, so a client has the server checked, then adds or edits it itself.
+    #[default]
+    TooOld,
+    /// The hub goes on asking the server.
+    Asking,
+    /// What one to be saved once it lists its tools comes to. One saved anyway is refused, as the rest of what would
+    /// change what the hub holds. A cancel is taken, and does nothing.
+    Answers(Result<ToolServerSaved, ApiError>),
 }
 
 /// A hub's build, other than the app's.

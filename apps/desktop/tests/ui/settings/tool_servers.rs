@@ -14,7 +14,7 @@ use hub::{ToolServerAsks, ToolServerScript};
 use protocol::model::{ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerId, ToolServerKey};
 
 use super::git_app::label_of;
-use super::tool_server_check::filled_in_on;
+use super::tool_server_saves::filled_in_on;
 use super::{open_settings, settings_showing};
 use crate::support::{MENU, Serving, Stack, Ui, files_holding};
 

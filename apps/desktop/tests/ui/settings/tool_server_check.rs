@@ -1,18 +1,15 @@
 //! A server asked for its tools as it's added or edited in Settings: what the panel says and does while it's asked and
-//! once it hasn't listed them, and where its key is meanwhile. Against a real hub and a stand-in for the server, and
-//! against a fake hub for one from before checks. Every server and key is plainly made up.
+//! once it hasn't listed them, what's typed meanwhile, and where its key is. Against a real hub and a stand-in for the
+//! server, and against a fake hub in `tool_server_saves`. Every server and key is plainly made up.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
+use std::time::Duration;
 
-use client_core::fake_hub::{ToolServerCheckWorld, World};
-use gpui_kit::{ScrollDelta, TestAppContext, point, px};
+use gpui_kit::TestAppContext;
 use hub::{ToolServerAsks, ToolServerGate, ToolServerScript};
-use protocol::client::tool_server_checks::{NoToolList, ToolServerChecked};
-use protocol::client::{ApiError, ErrorCode};
-use protocol::fixtures::tool_server;
-use protocol::model::{ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerName};
+use protocol::model::{ToolServerAuth, ToolServerAuthGiven};
 
 use super::git_app::label_of;
 use super::open_settings;
@@ -21,13 +18,13 @@ use super::tool_servers::{
     KEY, KEY_WAY, NONE_WAY, added_elsewhere, choose, fill_in, in_servers, more, named, open_to_anyone, the_hubs,
     type_in, with_key,
 };
-use super::tool_sign_in::{WORKS, refused, says};
-use crate::support::{FakeHub, Serving, Stack, Ui, files_holding};
+use super::tool_sign_in::{refused, says};
+use crate::support::{Serving, Stack, Ui, files_holding};
 
 const REFUSED_KEY: &str = "Runbooks refused this key.";
 
 /// What its main button says, and whether there's one beside it that goes on anyway.
-fn buttons(ui: &mut Ui<'_>) -> (String, Option<String>) {
+pub(super) fn buttons(ui: &mut Ui<'_>) -> (String, Option<String>) {
     let goes = label_of(ui, "mcp-panel-go");
     (goes, ui.has("mcp-anyway").then(|| label_of(ui, "mcp-anyway")))
 }
@@ -48,16 +45,20 @@ fn fill_in_with_a_key(ui: &mut Ui<'_>, serving: &Serving) {
     ui.input(KEY);
 }
 
-/// Cancelled, then as a field changes, then as Settings closes, and the last time let go on.
-#[gpui_kit::test]
-fn a_server_is_asked_for_its_tools_before_its_added_and_nothing_is_added_once_thats_let_go_of(cx: &mut TestAppContext) {
-    let gate = ToolServerGate::closed();
-    let script = ToolServerScript {
+/// A server anyone can use, which holds its answers back until `gate` opens.
+fn held_by(gate: &ToolServerGate) -> Serving {
+    Serving::with(ToolServerScript {
         asks: ToolServerAsks::Nothing,
         server_after: Some(gate.clone()),
         ..ToolServerScript::default()
-    };
-    let (stack, serving) = (Stack::new(), Serving::with(script));
+    })
+}
+
+/// Cancelled, then as a field changes, and as the way does, then as Settings closes, and the last time let go on.
+#[gpui_kit::test]
+fn a_server_is_asked_for_its_tools_before_its_added_and_nothing_is_added_once_thats_let_go_of(cx: &mut TestAppContext) {
+    let gate = ToolServerGate::closed();
+    let (stack, serving) = (Stack::new(), held_by(&gate));
     let mut ui = in_servers(cx, &stack);
     let url = serving.url();
     let host = url.strip_prefix("http://").unwrap().split('/').next().unwrap();
@@ -78,11 +79,20 @@ fn a_server_is_asked_for_its_tools_before_its_added_and_nothing_is_added_once_th
     fill_in(&mut ui, "Docs", &url);
     choose(&mut ui, NONE_WAY);
     asks(&mut ui);
+    let let_go = |ui: &mut Ui<'_>| {
+        ui.wait("the hub to say it let go of it", |ui| ui.on("mcp-panel-go"));
+        assert_eq!(buttons(ui), ("Add".to_string(), None), "rather than once the server didn't answer in time");
+    };
     type_in(&mut ui, "mcp-name", "Guides");
-    assert!(!ui.has("mcp-asking") && ui.on("mcp-panel-go"));
+    assert!(!ui.has("mcp-asking"));
+    let_go(&mut ui);
+    asks(&mut ui);
+    choose(&mut ui, KEY_WAY);
+    choose(&mut ui, NONE_WAY);
+    let_go(&mut ui);
     gate.open();
     ui.wait_for_every_call();
-    assert_eq!(the_hubs(&stack), Vec::<String>::new(), "an answer lands on no panel but its own, as it was");
+    assert_eq!(the_hubs(&stack), Vec::<String>::new(), "nothing is added once it's let go of");
     assert!(ui.on("mcp-panel-go"));
 
     let gate = ToolServerGate::closed();
@@ -101,6 +111,32 @@ fn a_server_is_asked_for_its_tools_before_its_added_and_nothing_is_added_once_th
     ui.click("mcp-panel-go");
     added(&mut ui, "Docs");
     assert_eq!(the_hubs(&stack), ["Docs"]);
+}
+
+/// The hub has added it by the time its name changes, so the panel becomes the edit of what was added, with what's
+/// typed in it, and saving that renames it.
+#[gpui_kit::test]
+fn a_change_made_once_the_hub_has_begun_to_add_it_is_kept_and_saved_after(cx: &mut TestAppContext) {
+    let gate = ToolServerGate::closed();
+    let (stack, serving) = (Stack::new(), held_by(&gate));
+    let mut ui = in_servers(cx, &stack);
+    fill_in(&mut ui, "Docs", &serving.url());
+    choose(&mut ui, NONE_WAY);
+    ui.click("mcp-panel-go");
+    ui.click("mcp-name");
+    ui.press("end");
+
+    gate.open();
+    // Without letting the app take the hub's answer, which it does only after what's typed.
+    waiting::thread::until(Duration::from_secs(10), "the hub to add it", || the_hubs(&stack) == ["Docs"]);
+    ui.input(" Two");
+
+    ui.wait("the panel to be on again", |ui| ui.on("mcp-panel-go"));
+    let a_new_name = "Running agents have the new name from their next start.";
+    assert_eq!((label_of(&mut ui, "mcp-panel-go"), says(&mut ui)), ("Save".to_string(), a_new_name.to_string()));
+    ui.click("mcp-panel-go");
+    added(&mut ui, "Docs Two");
+    assert_eq!(the_hubs(&stack), ["Docs Two"]);
 }
 
 /// Tried again with Enter, then changed, then added anyway. What's typed of the key stays throughout, is sent as it's
@@ -231,135 +267,4 @@ fn a_server_that_cant_be_reached_says_so_and_one_the_hub_wont_have_is_refused_as
     ui.wait("the hub's refusal", |ui| !ui.has("mcp-anyway"));
     assert_eq!(refused(&mut ui), taken);
     assert_eq!(buttons(&mut ui), ("Add".to_string(), None));
-}
-
-/// The window on a fake hub that holds `world`, with Add's panel filled in, with a key.
-pub(super) fn filled_in_on(cx: &mut TestAppContext, world: World) -> (FakeHub, Ui<'_>) {
-    let fake = FakeHub::holding(world);
-    let mut ui = Ui::open_on(cx, &fake);
-    open_settings(&mut ui);
-    ui.click("settings-page-mcp");
-    ui.wait("Add server to be on", |ui| ui.on("mcp-add"));
-    fill_in(&mut ui, "Runbooks", "https://mcp.example.com/mcp");
-    choose(&mut ui, KEY_WAY);
-    ui.input(KEY);
-    (fake, ui)
-}
-
-#[gpui_kit::test]
-fn a_hub_from_before_checks_is_asked_to_add_it_at_once(cx: &mut TestAppContext) {
-    let mut world = World::default();
-    let refuses = ApiError::new(ErrorCode::Conflict, "another MCP server is called Runbooks");
-    world.tool_server_add_refused = Some(refuses);
-    let asked = world.asked.clone();
-    let (_fake, mut ui) = filled_in_on(cx, world);
-
-    ui.click("mcp-panel-go");
-
-    assert_eq!(refused(&mut ui), "Couldn't add it: another MCP server is called Runbooks");
-    assert_eq!(buttons(&mut ui), ("Add".to_string(), None));
-    assert_eq!((asked.count("tool_server_check"), asked.count("tool_server_add")), (1, 1));
-}
-
-#[gpui_kit::test]
-fn a_check_the_hub_refuses_adds_nothing(cx: &mut TestAppContext) {
-    let mut world = World::default();
-    let refuses = ApiError::new(ErrorCode::Unavailable, "too many are being asked");
-    world.tool_server_check = ToolServerCheckWorld::Answers(Err(refuses));
-    let asked = world.asked.clone();
-    let (_fake, mut ui) = filled_in_on(cx, world);
-
-    ui.click("mcp-panel-go");
-
-    assert_eq!(refused(&mut ui), "Couldn't add it: too many are being asked");
-    assert_eq!(buttons(&mut ui), ("Add".to_string(), None));
-    assert_eq!((asked.count("tool_server_check"), asked.count("tool_server_add")), (1, 0));
-}
-
-/// So that running agents are asked to connect to it again. The fake hub saves neither.
-#[gpui_kit::test]
-fn an_edit_thats_saved_anyway_says_so_to_the_hub(cx: &mut TestAppContext) {
-    let mut world = World::default();
-    world.tool_servers = vec![tool_server("runbooks")];
-    let refused_key = ToolServerChecked::NotListed { why: NoToolList::KeyRefused { status: 401 } };
-    world.tool_server_check = ToolServerCheckWorld::Answers(Ok(refused_key));
-    let asked = world.asked.clone();
-    let fake = FakeHub::holding(world);
-    let mut ui = Ui::open_on(cx, &fake);
-    open_settings(&mut ui);
-    ui.click("settings-page-mcp");
-    ui.wait("its row", |ui| ui.has("mcp-more-runbooks"));
-    let saved_anyway = || {
-        let edit = asked.last("tool_server_edit").unwrap();
-        (edit["id"].as_str().unwrap().to_owned(), edit["saved_anyway"].as_bool())
-    };
-
-    edit(&mut ui, &"runbooks".into());
-    type_in(&mut ui, "mcp-name", "Northwind");
-    ui.click("mcp-panel-go");
-    refused(&mut ui);
-    assert_eq!(saved_anyway(), ("runbooks".into(), None), "where the server isn't asked");
-    type_in(&mut ui, "mcp-key", KEY);
-    ui.click("mcp-panel-go");
-    assert_eq!(refused(&mut ui), "Northwind refused this key.");
-    ui.click("mcp-anyway");
-
-    ui.wait("the hub's refusal", |ui| !ui.has("mcp-anyway"));
-    assert_eq!(saved_anyway(), ("runbooks".into(), Some(true)));
-}
-
-/// Under the last row of more servers than fit, where the panel's end is at the page's end as it opens.
-#[gpui_kit::test]
-fn a_panel_thats_longer_with_the_reason_why_has_its_end_in_sight(cx: &mut TestAppContext) {
-    let mut world = World::default();
-    world.tool_servers = (1..=16).map(|at| tool_server(&format!("server-{at:02}"))).collect();
-    let refused_key = ToolServerChecked::NotListed { why: NoToolList::KeyRefused { status: 401 } };
-    world.tool_server_check = ToolServerCheckWorld::Answers(Ok(refused_key));
-    let fake = FakeHub::holding(world);
-    let mut ui = Ui::open_on(cx, &fake);
-    open_settings(&mut ui);
-    ui.click("settings-page-mcp");
-    ui.wait("their rows", |ui| ui.has("mcp-more-server-16"));
-    ui.scroll("settings-body", ScrollDelta::Pixels(point(px(0.), px(-10_000.))));
-    let ends = |ui: &mut Ui<'_>| (ui.bounds("mcp-panel").bottom(), ui.bounds("settings-body").bottom());
-    edit(&mut ui, &"server-16".into());
-    ui.bring_the_next_frame();
-    let (panel, page) = ends(&mut ui);
-    assert!(panel <= page, "as it opens: {panel:?}, {page:?}");
-    type_in(&mut ui, "mcp-key", KEY);
-
-    ui.click("mcp-panel-go");
-    ui.wait("the hub's answer", |ui| ui.has("mcp-anyway"));
-    assert_eq!(buttons(&mut ui), ("Try again".to_string(), Some("Save anyway".to_string())));
-    ui.bring_the_next_frame();
-
-    let (panel, page) = ends(&mut ui);
-    assert!(panel <= page, "with the reason: {panel:?}, {page:?}");
-}
-
-/// One that's signed in to, whose query is changed, and one whose name is. The fake hub saves neither.
-#[gpui_kit::test]
-fn an_edit_that_asks_nothing_of_its_server_is_saved_at_once(cx: &mut TestAppContext) {
-    let mut world = World::default();
-    let signed_in = ToolServer { name: ToolServerName::stored("Linear".into()), auth: WORKS, ..tool_server("linear") };
-    let keyed = ToolServer { name: ToolServerName::stored("Runbooks".into()), ..tool_server("runbooks") };
-    world.tool_servers = vec![signed_in, keyed];
-    let asked = world.asked.clone();
-    let fake = FakeHub::holding(world);
-    let mut ui = Ui::open_on(cx, &fake);
-    open_settings(&mut ui);
-    ui.click("settings-page-mcp");
-    ui.wait("their rows", |ui| ui.has("mcp-more-runbooks"));
-
-    for (server, field, typed) in [("linear", "mcp-url", "?tools=a"), ("runbooks", "mcp-name", " two")] {
-        edit(&mut ui, &server.into());
-        ui.click(field);
-        ui.press("end");
-        ui.input(typed);
-        ui.click("mcp-panel-go");
-        assert_eq!(refused(&mut ui), "Couldn't save it: this hub can't do that until it's updated", "{server}");
-        ui.click("mcp-cancel");
-    }
-
-    assert_eq!((asked.count("tool_server_check"), asked.count("tool_server_edit")), (0, 2));
 }

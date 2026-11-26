@@ -1,15 +1,66 @@
-//! What checking a tool server comes to, as it's to be added or edited, in words for a person: that it's being asked,
-//! and why it listed no tools. They're of the name and the URL the person typed and of what the hub says came of it,
-//! so never of anything the server said.
+//! What adding or saving a tool server comes to, once the hub has asked it for its tools, and what checking it comes to
+//! for a hub from before that, in words for a person: that it's being asked, and why it listed no tools. They're of the
+//! name and the URL the person typed and of what the hub says came of it, so never of anything the server said.
 
-use protocol::client::tool_server_checks::{NoToolList, ToolServerChecked, ToolServerUnreached};
-use protocol::model::ToolServerUrl;
+use protocol::client::tool_server_checks::{NoToolList, ToolServerChecked, ToolServerToCheck, ToolServerUnreached};
+use protocol::client::tool_server_saves::ToolServerSaved;
+use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
+use protocol::model::{ToolServer, ToolServerUrl};
 
 use crate::Result;
 
-/// What a check comes to, for a client that then adds or edits the server.
+/// What's to be added or saved.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ToSave {
+    Add(ToolServerAdd),
+    /// An edit, whose own `saved_anyway` is the save's to say.
+    Edit(ToolServerEdit),
+}
+
+impl From<ToSave> for ToolServerToCheck {
+    fn from(of: ToSave) -> Self {
+        match of {
+            ToSave::Add(add) => ToolServerToCheck::Add(add),
+            ToSave::Edit(edit) => ToolServerToCheck::Edit(edit),
+        }
+    }
+}
+
+/// When it's added or saved, as the person chose.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum When {
+    /// Once the server has listed its tools, or at once where there's nothing to ask it.
+    Listed,
+    /// At once, without asking it anything, as the person chose once it didn't list them.
+    Anyway,
+}
+
+/// What a save comes to.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Saved {
+    /// It was added, or the edit was saved, and this is its record.
+    Saved(ToolServer),
+    /// It wasn't, since it didn't list its tools, as this says, for a person, whose choice it is whether to save it
+    /// anyway.
+    NotListed(String),
+    /// It was let go of before the hub began to save it, so nothing changed.
+    LetGo,
+}
+
+/// What the hub's answer to a save comes to, for the server called `name` at `url`, as the person typed them.
+pub(crate) fn saved(answer: ToolServerSaved, name: &str, url: &str) -> Saved {
+    let name = name.trim();
+    match answer {
+        ToolServerSaved::Saved { server } => Saved::Saved(server),
+        ToolServerSaved::NotListed { why } => Saved::NotListed(not_listed(why, name, &host(url))),
+        ToolServerSaved::Cancelled => Saved::LetGo,
+        ToolServerSaved::Unknown => Saved::NotListed(newer(name)),
+    }
+}
+
+/// What a check comes to, for a client of a hub from before saves, which then adds or edits the server itself.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Checked {
+pub(crate) enum Checked {
     /// There's nothing to say before it's added or edited: it listed its tools, there was nothing to ask, or the hub is
     /// too old to check one.
     Fine,
@@ -19,7 +70,7 @@ pub enum Checked {
 
 /// What `answer` comes to, for the server called `name` at `url`, as the person typed them. An error is one to refuse
 /// what's checked with.
-pub fn came_to(answer: Result<ToolServerChecked>, name: &str, url: &str) -> Result<Checked> {
+pub(crate) fn came_to(answer: Result<ToolServerChecked>, name: &str, url: &str) -> Result<Checked> {
     let checked = match answer {
         Err(e) if e.is_unsupported() => return Ok(Checked::Fine),
         answer => answer?,
@@ -28,10 +79,13 @@ pub fn came_to(answer: Result<ToolServerChecked>, name: &str, url: &str) -> Resu
     Ok(match checked {
         ToolServerChecked::NothingToAsk | ToolServerChecked::Listed { tools: _ } => Checked::Fine,
         ToolServerChecked::NotListed { why } => Checked::Not(not_listed(why, name, &host(url))),
-        ToolServerChecked::Unknown => {
-            Checked::Not(format!("{name} was asked for its tools. Update this app to see what came of it."))
-        }
+        ToolServerChecked::Unknown => Checked::Not(newer(name)),
     })
+}
+
+/// What's said of the server called `name` when a newer hub says what came of asking it.
+fn newer(name: &str) -> String {
+    format!("{name} was asked for its tools. Update this app to see what came of it.")
 }
 
 /// That the server at `url`, as the person typed it, is being asked.
@@ -168,6 +222,24 @@ mod tests {
         assert_eq!(
             of(Ok(ToolServerChecked::Unknown)),
             Checked::Not("Runbooks was asked for its tools. Update this app to see what came of it.".into())
+        );
+    }
+
+    /// Why one listed no tools is said as it is of a check, above.
+    #[test]
+    fn what_a_save_comes_to_is_its_record_why_it_listed_no_tools_or_that_it_was_let_go_of() {
+        let server = protocol::fixtures::tool_server("runbooks");
+        let of = |answer| saved(answer, " Runbooks ", URL);
+
+        assert_eq!(of(ToolServerSaved::Saved { server: server.clone() }), Saved::Saved(server));
+        assert_eq!(
+            of(ToolServerSaved::NotListed { why: NoToolList::KeyRefused { status: 401 } }),
+            Saved::NotListed("Runbooks refused this key.".into())
+        );
+        assert_eq!(of(ToolServerSaved::Cancelled), Saved::LetGo);
+        assert_eq!(
+            of(ToolServerSaved::Unknown),
+            Saved::NotListed("Runbooks was asked for its tools. Update this app to see what came of it.".into())
         );
     }
 }

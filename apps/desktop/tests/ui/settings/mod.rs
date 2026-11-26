@@ -18,6 +18,7 @@ mod permissions;
 mod search;
 mod tool_server_check;
 mod tool_server_edit;
+mod tool_server_saves;
 mod tool_servers;
 mod tool_sign_in;
 

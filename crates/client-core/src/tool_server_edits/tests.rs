@@ -213,3 +213,21 @@ fn an_edit_sends_only_what_changed_as_it_was_typed() {
     assert_eq!(sent(open(), typed("Runbooks", URL, TypedAuth::Neither)), nothing);
     assert_eq!(sent(keyed(), typed("Runbooks", URL, TypedAuth::SignIn)), nothing, "it's signed in to first");
 }
+
+/// As `docs/spec/settings.md` has it, for what's said while the hub saves it.
+#[test]
+fn a_server_is_asked_for_its_tools_unless_its_signed_in_to_or_its_name_alone_is_changed() {
+    let (keyed, works) = (keyed(), signed_in(ToolSignInStatus::Works));
+    for (row, typed, was, asked) in [
+        ("added with a key", typed("Runbooks", URL, key("Authorization", KEY)), None, true),
+        ("added with neither", typed("Runbooks", URL, TypedAuth::Neither), None, true),
+        ("added by signing in", typed("Runbooks", URL, TypedAuth::SignIn), None, false),
+        ("its name", typed("Northwind", URL, kept()), Some(&keyed), false),
+        ("its query, signed in to", typed("Runbooks", QUERIED, TypedAuth::SignIn), Some(&works), false),
+        ("its query, with its key", typed("Runbooks", QUERIED, kept()), Some(&keyed), true),
+        ("its header", typed("Runbooks", URL, key("X-Key", "")), Some(&keyed), true),
+        ("neither, for its key", typed("Runbooks", URL, TypedAuth::Neither), Some(&keyed), true),
+    ] {
+        assert_eq!(typed.is_asked(was), asked, "{row}");
+    }
+}

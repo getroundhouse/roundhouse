@@ -4,9 +4,9 @@
 //! that.
 
 use client_core::new_tool_server_id;
+use client_core::tool_server_checks::ToSave;
 use client_core::tool_server_edits::{Does, Edit, Sent, Typed, TypedAuth, Way};
 use gpui_kit::{App, Context, Window};
-use protocol::client::tool_server_checks::ToolServerToCheck;
 use protocol::client::tool_servers::ToolServerEdit;
 use protocol::model::{ToolServer, ToolServerAuth, ToolServerId, ToolServerKey};
 
@@ -110,15 +110,20 @@ impl Form {
 
     /// What the hub is asked to add, or to save of what it has, which is only what's changed. `None` for a server to
     /// add by signing in to it, which is the person's to approve first.
-    pub(super) fn asks_for(&self, cx: &App) -> Option<ToolServerToCheck> {
+    pub(super) fn to_save(&self, cx: &App) -> Option<ToSave> {
         let typed = self.typed(cx);
         Some(match &self.of {
-            Of::New(id) => ToolServerToCheck::Add(typed.added(id)?),
+            Of::New(id) => ToSave::Add(typed.added(id)?),
             Of::Had(was) => {
                 let Sent { name, url, auth } = typed.edit_of(was).into_sent();
-                ToolServerToCheck::Edit(ToolServerEdit { id: was.id.clone(), name, url, auth, saved_anyway: false })
+                ToSave::Edit(ToolServerEdit { id: was.id.clone(), name, url, auth, saved_anyway: false })
             }
         })
+    }
+
+    /// Whether the hub asks the server for its tools before it's added or saved.
+    pub(super) fn is_asked(&self, cx: &App) -> bool {
+        self.typed(cx).is_asked(self.had())
     }
 }
 
@@ -202,7 +207,7 @@ impl Kept {
         cx.notify();
     }
 
-    /// Something was typed in a field, so what was checked is no longer what's there.
+    /// Something was typed in a field, so what was sent is no longer what's there.
     fn typed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(form) = self.form_mut() {
             form.stands.field_changed();
@@ -212,7 +217,7 @@ impl Kept {
     }
 
     /// Says in the key's field whether there's one to keep, which there isn't for another server.
-    fn say_whether_kept(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn say_whether_kept(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(form) = self.form() else { return };
         let AuthFields::Key { key, .. } = &form.auth else { return };
         let keeps = form.edit(cx).is_some_and(|edit| edit.keeps_a_key());
