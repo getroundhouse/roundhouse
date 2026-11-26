@@ -1,10 +1,11 @@
-//! The requests for a session's agent: a prompt sent now, the answer to what it asked, cancelling its turn, and
-//! compacting its conversation. A prompt queued for later is in [`super::queue`].
+//! The requests for a session's agent: a prompt sent now, the answer to what it asked, cancelling its turn, compacting
+//! its conversation, and reloading one of its tool servers. A prompt queued for later is in [`super::queue`].
 
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::capability::approvals::Decision;
+use crate::capability::setup::ServerName;
 use crate::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SessionId};
 use crate::prompt::Prompt;
 
@@ -92,5 +93,27 @@ impl Request for SessionCompact {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::SessionCompact(self)
+    }
+}
+
+/// Has the session's run connect again to the tool server `server`, as the run names it, the hub's or its CLI's own,
+/// whether or not it's on a turn. It starts no run. Resolves once the run has been asked, and what comes of it is what
+/// the run then says of its servers. Sent again before the run has said anything of them since, it's asked once.
+///
+/// Refused, changing nothing, with `NotFound` for a server the run hasn't said it has, which Roundhouse's own is, with
+/// `Conflict` for one that's starting or turned off, or of which nothing is known, and with no run going, and with
+/// `InvalidRequest` for a run that doesn't claim it can: `ToolServerReload` for one it's connected to, and
+/// `ToolServerReconnect` for one it isn't. `Unsupported` is only a hub's that doesn't know the request.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SessionReloadToolServer {
+    pub id: SessionId,
+    pub server: ServerName,
+}
+
+impl Request for SessionReloadToolServer {
+    type Reply = ();
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::SessionReloadToolServer(self)
     }
 }

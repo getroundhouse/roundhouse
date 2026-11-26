@@ -14,6 +14,7 @@ use crate::tool_sign_in::ToolSigningIn;
 use crate::warnings::Warning;
 use attaching::{Composed, Waiting};
 use client_core::records::InWorkspace;
+use client_core::tool_servers::Reloads;
 use client_core::{Client, Drafts, RecordsFeed};
 use conversation::Conversations;
 use file_tab::FileTab;
@@ -127,6 +128,7 @@ pub struct WorkspacePane {
     /// The hub's view's sign-in to an MCP server, which every chat's card says how it stands. The view draws the window
     /// again as it changes.
     pub(super) tool_sign_in: Entity<ToolSigningIn>,
+    pub(super) tool_reloads: Reloads,
     /// The chat whose conversation mode is waiting on dictation and speech, while its card shows how they stand. The
     /// mode starts once both are ready, unless the card has closed.
     pub(super) setting_up: Option<super::setting_up::SettingUp>,
@@ -191,6 +193,7 @@ impl WorkspacePane {
             typed_before_talking: None,
             conversations,
             tool_sign_in,
+            tool_reloads: Reloads::default(),
             setting_up: None,
             after_dictation: dictation_ui::Pending::default(),
             composer,
@@ -260,6 +263,7 @@ impl WorkspacePane {
         self.model_lookup.reset();
         self.client = client.clone();
         self.hub = composer::Hub::Here;
+        self.tool_reloads = Reloads::default();
         self.showing_changed(cx);
         for transcript in self.every_transcript() {
             transcript.update(cx, |t, cx| t.reconnect(client, cx));

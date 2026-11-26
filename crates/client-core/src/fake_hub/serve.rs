@@ -304,6 +304,7 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         R::ToolServerAdd(_) => {
             Err(world.tool_server_add_refused.clone().unwrap_or_else(|| read_only("change anything")))
         }
+        R::SessionReloadToolServer(_) => world.tool_server_reload_refused.clone().map_or_else(|| reply(C::Ok), Err),
         R::ToolServerCheck(_) => match world.tool_server_check.clone() {
             ToolServerCheckWorld::TooOld => Err(ApiError::new(ErrorCode::Unsupported, "a hub from before checks")),
             ToolServerCheckWorld::Asking => Ok(Outcome::Never),

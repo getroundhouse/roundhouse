@@ -20,7 +20,7 @@ use crate::settings::open_settings;
 use crate::support::{Serving, Stack, Ui, one_chat, open_on_the_chat, renewing_often};
 
 /// Whether the plug is there, saying `said` to assistive apps, which is as much as its colour says.
-fn plug_says(ui: &mut Ui<'_>, said: &str) -> bool {
+pub(crate) fn plug_says(ui: &mut Ui<'_>, said: &str) -> bool {
     ui.labelled(said).iter().any(|plug| plug.path().last().is_some_and(|id| *id == "mcp".into()))
 }
 
@@ -73,11 +73,11 @@ fn the_card_follows_the_hubs_servers_and_what_the_agent_says_of_them(cx: &mut Te
     );
 }
 
-fn named(name: &str, server: ToolServer) -> ToolServer {
+pub(crate) fn named(name: &str, server: ToolServer) -> ToolServer {
     ToolServer { name: ToolServerName::stored(name.into()), ..server }
 }
 
-fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolServerState {
+pub(crate) fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolServerState {
     ToolServerState {
         name: name.into(),
         hubs: hubs.map(Into::into),
@@ -104,7 +104,7 @@ fn the_line_of_a_background_task_of_an_mcp_servers_tool_has_the_persons_name_for
 }
 
 /// A chat whose agent has answered once.
-fn chat() -> (World, SessionId) {
+pub(crate) fn chat() -> (World, SessionId) {
     let events = first_turn(user_prompt("say:hello"), [text("msg-1", "hello"), replied("hello", 2, 0.01)]);
     one_chat(SessionStatus::Idle, events)
 }
@@ -155,7 +155,7 @@ fn a_chat_with_only_its_clis_servers_has_a_quiet_plug(cx: &mut TestAppContext) {
 }
 
 /// Rests the pointer on the plug until its card shows.
-fn open_card(ui: &mut Ui<'_>) {
+pub(crate) fn open_card(ui: &mut Ui<'_>) {
     ui.hover("mcp");
     ui.wait_out_a_tooltip();
     assert!(ui.visible("mcp-card"));

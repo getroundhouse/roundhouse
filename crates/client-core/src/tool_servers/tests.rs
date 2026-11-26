@@ -3,24 +3,25 @@ use protocol::capability::setup::{ServerState, ToolServerState};
 use protocol::client::listed::SessionRecords;
 use protocol::fixtures::{self, observed};
 use protocol::model::{
-    Records, Rev, RunCapabilities, RunId, Session, SessionId, ToolServer, ToolServerAuth, ToolServerName,
+    Observation, Records, Rev, RunCapabilities, RunId, Session, SessionId, ToolServer, ToolServerAuth, ToolServerName,
     ToolServerUrl, ToolSignInStatus,
 };
 
 use super::{
-    ChatToolServer, ChatToolServers, OwnToolServers, SignIn, SignInFor, SignInStands, Stands, Tone, ToolServerNames,
+    ChatToolServer, ChatToolServers, OwnToolServers, Reloads, SignIn, SignInFor, SignInStands, Stands, Tone,
+    ToolServerNames,
 };
 use crate::records::{HubRecords, Snapshot};
 
-fn named(id: &str, name: &str) -> ToolServer {
+pub(super) fn named(id: &str, name: &str) -> ToolServer {
     ToolServer { name: ToolServerName::stored(name.into()), ..fixtures::tool_server(id) }
 }
 
-fn needing_sign_in(id: &str, name: &str) -> ToolServer {
+pub(super) fn needing_sign_in(id: &str, name: &str) -> ToolServer {
     ToolServer { name: ToolServerName::stored(name.into()), ..fixtures::tool_server_needing_sign_in(id) }
 }
 
-fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolServerState {
+pub(super) fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolServerState {
     ToolServerState {
         name: name.into(),
         hubs: hubs.map(Into::into),
@@ -32,8 +33,20 @@ fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolServerState {
 }
 
 /// What a client holds of a hub with `servers`, whose chat's agent has said it has `said`, if it's said.
-fn held(servers: Vec<ToolServer>, said: Option<Vec<ToolServerState>>) -> Snapshot {
-    let observations = said.map(|said| observed::tool_servers("s", said)).into_iter().collect();
+pub(super) fn held(servers: Vec<ToolServer>, said: Option<Vec<ToolServerState>>) -> Snapshot {
+    held_as(Rev::new(1), servers, said)
+}
+
+/// The same, where the agent said it at `rev`.
+pub(super) fn held_as(rev: Rev, servers: Vec<ToolServer>, said: Option<Vec<ToolServerState>>) -> Snapshot {
+    let as_said = |said| {
+        let mut observation = observed::tool_servers("s", said);
+        if let Observation::SessionToolServers { rev: of, .. } = &mut observation {
+            *of = rev;
+        }
+        observation
+    };
+    let observations = said.map(as_said).into_iter().collect();
     let mut held = HubRecords::default();
     held.apply_list(Records { tool_servers: servers, ..Records::default() });
     held.want_session(&"s".into());
@@ -43,7 +56,7 @@ fn held(servers: Vec<ToolServer>, said: Option<Vec<ToolServerState>>) -> Snapsho
         proposals: Vec::new(),
         replies_heard: Vec::new(),
         observations,
-        rev: Rev::new(1),
+        rev,
     });
     held.snapshot()
 }
@@ -79,7 +92,7 @@ fn a_chat_has_the_hubs_servers_by_the_persons_names_and_its_clis_by_theirs() {
         said("Old_one", Some("t-9"), ServerState::Connected),
     ];
 
-    let servers = ChatToolServers::of(&held(hub, Some(agents)), &chat(true), None).unwrap();
+    let servers = ChatToolServers::of(&held(hub, Some(agents)), &chat(true), None, &Reloads::default()).unwrap();
 
     assert_eq!(
         listed(&servers.hubs),
@@ -107,7 +120,8 @@ fn one_thats_moved_since_the_agent_connected_to_it_is_from_its_next_start() {
     let stands = |at: &str, connected_to: Option<&str>, state| {
         let connected_to = connected_to.map(|at| url(at).place());
         let agents = vec![ToolServerState { connected_to, tools: Some(2), ..said("Docs", Some("t-1"), state) }];
-        let servers = ChatToolServers::of(&held(vec![server(at)], Some(agents)), &chat(true), None).unwrap();
+        let servers =
+            ChatToolServers::of(&held(vec![server(at)], Some(agents)), &chat(true), None, &Reloads::default()).unwrap();
         servers.hubs[0].stands.clone()
     };
 
@@ -125,7 +139,9 @@ fn one_thats_moved_since_the_agent_connected_to_it_is_from_its_next_start() {
 fn one_of_the_hubs_that_only_the_agent_says_to_sign_in_to_cant_be_reached_and_one_of_the_clis_never_needs_you() {
     let agents = vec![said("Docs", Some("t-1"), ServerState::NeedsSignIn), said("own", None, ServerState::NeedsSignIn)];
 
-    let servers = ChatToolServers::of(&held(vec![named("t-1", "Docs")], Some(agents)), &chat(true), None).unwrap();
+    let servers =
+        ChatToolServers::of(&held(vec![named("t-1", "Docs")], Some(agents)), &chat(true), None, &Reloads::default())
+            .unwrap();
 
     assert_eq!(listed(&servers.hubs), [("Docs", Stands::CantBeReached { why: None })]);
     assert!(!servers.needs_sign_in());
@@ -144,7 +160,7 @@ fn one_that_wants_more_access_is_signed_in_to_again_for_it() {
     let held = held(hub, Some(agents));
     let linear = |stands: Option<SignInStands>| {
         let sign_in = stands.map(|stands| SignIn { to: "t-1".into(), stands });
-        let servers = ChatToolServers::of(&held, &chat(true), sign_in.as_ref()).unwrap();
+        let servers = ChatToolServers::of(&held, &chat(true), sign_in.as_ref(), &Reloads::default()).unwrap();
         assert!(servers.needs_sign_in());
         assert_eq!(servers.said(), "MCP servers, Notion needs you to sign in, Docs, Linear want more access");
         let stands = &servers.hubs[1].stands;
@@ -178,7 +194,9 @@ fn a_sign_in_is_said_of_the_server_its_to_while_the_hubs_record_says_it_needs_on
     let hub =
         held(vec![needing_sign_in("t-1", "Linear"), needing_sign_in("t-2", "Notion"), named("t-3", "Docs")], None);
     let of = |to: &str, stands| {
-        let servers = ChatToolServers::of(&hub, &chat(true), Some(&SignIn { to: to.into(), stands })).unwrap();
+        let servers =
+            ChatToolServers::of(&hub, &chat(true), Some(&SignIn { to: to.into(), stands }), &Reloads::default())
+                .unwrap();
         assert_eq!(servers.said(), "MCP servers, Linear, Notion need you to sign in");
         let said = |server: &ChatToolServer| {
             let offered = server.stands.to_sign_in_to().is_some();
@@ -202,14 +220,16 @@ fn a_sign_in_is_said_of_the_server_its_to_while_the_hubs_record_says_it_needs_on
 /// Not known, rather than none, until the agent has said, and of an agent that never says.
 #[test]
 fn a_chat_whose_agent_hasnt_said_has_the_hubs_with_nothing_said_of_them() {
-    let unsaid = |says| ChatToolServers::of(&held(vec![named("t-1", "Docs")], None), &chat(says), None).unwrap();
+    let unsaid = |says| {
+        ChatToolServers::of(&held(vec![named("t-1", "Docs")], None), &chat(says), None, &Reloads::default()).unwrap()
+    };
 
     assert_eq!(listed(&unsaid(true).hubs), [("Docs", Stands::NotSaid)]);
     assert_eq!(unsaid(true).own, OwnToolServers::NotKnown);
     assert_eq!(listed(&unsaid(false).hubs), [("Docs", Stands::NotSaid)]);
     assert_eq!(unsaid(false).own, OwnToolServers::NeverSaid);
 
-    let nothing = |said| ChatToolServers::of(&held(Vec::new(), said), &chat(true), None);
+    let nothing = |said| ChatToolServers::of(&held(Vec::new(), said), &chat(true), None, &Reloads::default());
     assert_eq!(nothing(None), None);
     assert_eq!(nothing(Some(Vec::new())), None);
     let own = nothing(Some(vec![said("own", None, ServerState::Starting)])).unwrap();

@@ -38,7 +38,8 @@ impl AgentProcess for CodexProcess {
             // Codex reads nothing to keep, which its claims say, so none is sent.
             Control::Compact { asked, .. } => compact(&self.shared, *asked).await,
             Control::Reconnect { server } => super::tool_servers::reload(&self.shared, server).await,
-            Control::Note { .. }
+            Control::Reload { .. }
+            | Control::Note { .. }
             | Control::Aside { .. }
             | Control::Overrule { .. }
             | Control::Rewind { .. }

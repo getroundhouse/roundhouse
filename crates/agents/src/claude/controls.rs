@@ -19,7 +19,7 @@ pub(super) async fn apply(process: &ClaudeProcess, control: &Control) -> Result<
             process.interaction(*mode).await;
             Ok(())
         }
-        Control::Reconnect { server } => process.reconnect(server).await,
+        Control::Reconnect { server } | Control::Reload { server } => process.reconnect(server).await,
         Control::Note { .. }
         | Control::Aside { .. }
         | Control::Overrule { .. }

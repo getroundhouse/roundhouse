@@ -24,23 +24,24 @@ use crate::session::{Item, LiveSession};
 use crate::tool_servers::tests::{again, named, signed_in};
 use crate::worker_link::{Answer, WorkerLink};
 
-type Answered = Result<WorkerResponse, ApiError>;
+pub(super) type Answered = Result<WorkerResponse, ApiError>;
 
 /// What an answer waits for, if a test has it wait.
 type Held<T> = Arc<Mutex<Option<oneshot::Receiver<T>>>>;
 
 /// A stand-in for `w`'s worker, as the hub's own link to one is once it has opened.
-struct Worker {
-    link: Arc<WorkerLink>,
-    /// Each set of the tool servers, as `set`, and each server its agent was asked to connect to again, by its name, with
-    /// what a test has said beside them, in order.
+pub(super) struct Worker {
+    pub(super) link: Arc<WorkerLink>,
+    /// Each set of the tool servers, as `set`, and each server its agent was asked to connect to again, by its name, after
+    /// `reload` for one it's connected to, with what a test has said beside them, in order.
     told: Arc<Mutex<Vec<String>>>,
-    /// What the next set's answer, or the next launch's, waits for.
+    /// What the next set's answer, the next launch's, or the next of the agent's waits for.
     next_set: Held<Answered>,
     next_start: Held<()>,
+    pub(super) next_control: Held<Answered>,
 }
 
-fn claims_reconnecting() -> Capabilities {
+pub(super) fn claims_reconnecting() -> Capabilities {
     let mut claims = claimed();
     claims.setup.tool_servers = Some(Claimed {});
     claims.setup.tool_server_reconnect = Some(Claimed {});
@@ -49,19 +50,28 @@ fn claims_reconnecting() -> Capabilities {
 
 impl Worker {
     /// Whose agent claims `claims`, and which answers being asked to connect again with `answers`.
-    async fn serving(hub: &Arc<Hub>, claims: Capabilities, answers: impl Fn() -> Answered + Send + 'static) -> Self {
+    pub(super) async fn serving(
+        hub: &Arc<Hub>,
+        claims: Capabilities,
+        answers: impl Fn() -> Answered + Send + 'static,
+    ) -> Self {
         let told = Arc::<Mutex<Vec<String>>>::default();
         let (next_set, next_start) = (Held::<Answered>::default(), Held::<()>::default());
+        let next_control = Held::<Answered>::default();
         let (telling, set, start) = (Arc::clone(&told), Arc::clone(&next_set), Arc::clone(&next_start));
+        let control = Arc::clone(&next_control);
         let link = WorkerLink::answering_in_time(move |request| {
             if let WorkerRequest::ToolServersSet(_) = request {
                 telling.lock().push("set".into());
                 let held = set.lock().take();
                 return Some(held.map_or(Answer::Now(Ok(WorkerResponse::Ok)), Answer::Later));
             }
-            if let WorkerRequest::AgentControl(AgentControl { control: Control::Reconnect { server }, .. }) = request {
-                telling.lock().push(server.to_string());
-                return Some(Answer::Now(answers()));
+            if let WorkerRequest::AgentControl(AgentControl { control: asked, .. }) = &request {
+                let reload = matches!(asked, Control::Reload { .. });
+                let (Control::Reconnect { server } | Control::Reload { server }) = asked else { panic!("{asked:?}") };
+                telling.lock().push(if reload { format!("reload {server}") } else { server.to_string() });
+                let held = control.lock().take();
+                return Some(held.map_or_else(|| Answer::Now(answers()), Answer::Later));
             }
             let WorkerRequest::AgentStart(spec) = request else { return Some(Answer::Now(Ok(taken(&request)))) };
             let answer = Ok(WorkerResponse::AgentStarted(AgentStarted {
@@ -81,7 +91,7 @@ impl Worker {
         });
         serving(hub, &link);
         link.set_as_opened(hub, "w".into()).await;
-        Self { link, told, next_set, next_start }
+        Self { link, told, next_set, next_start, next_control }
     }
 
     /// The same, whose agent claims it can connect again, and does.
@@ -89,14 +99,14 @@ impl Worker {
         Self::serving(hub, claims_reconnecting(), || Ok(WorkerResponse::Ok)).await
     }
 
-    fn told(&self) -> Vec<String> {
+    pub(super) fn told(&self) -> Vec<String> {
         self.told.lock().clone()
     }
 }
 
 /// Once everything under way has come to rest.
 #[expect(clippy::disallowed_methods, reason = "on tokio's paused clock, which moves once nothing else can")]
-async fn settled(live: &LiveSession) {
+pub(super) async fn settled(live: &LiveSession) {
     flushed(live).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
 }
@@ -107,7 +117,7 @@ async fn says(live: &LiveSession, run: RunId, state: ServerState) {
 }
 
 /// The same, of the one it knows as `name`, which is `hubs` of the hub's if it's any, as its worker says.
-async fn says_of(live: &LiveSession, run: RunId, hubs: Option<&str>, name: &str, state: ServerState) {
+pub(super) async fn says_of(live: &LiveSession, run: RunId, hubs: Option<&str>, name: &str, state: ServerState) {
     let server = ToolServerState {
         name: name.into(),
         hubs: hubs.map(Into::into),

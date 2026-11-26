@@ -2,8 +2,9 @@ use protocol::capability::{
     Capabilities, Claimed, approvals, background, context, conversation, output, settings, turns,
 };
 
-/// It claims neither `tool_servers` nor `tool_server_reconnect`: `agy acp` says nothing of its servers, and tries one that
-/// failed again by itself at each prompt, so it's never asked to.
+/// It claims none of `tool_servers`, `tool_server_reconnect` and `tool_server_reload`: `agy acp` says nothing of its
+/// servers, tries one that failed again by itself at each prompt, and has no way to connect to one again, so it's never
+/// asked to.
 pub(super) fn claims() -> Capabilities {
     let mut claims = Capabilities::default();
     claims.conversation.resume = Some(conversation::Resume { ids: conversation::ConversationIds::Chosen });

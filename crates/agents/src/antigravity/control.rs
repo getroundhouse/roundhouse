@@ -56,6 +56,7 @@ impl AgentProcess for AntigravityProcess {
             | Control::StopTask { .. }
             | Control::ReadTaskOutput { .. }
             | Control::Reconnect { .. }
+            | Control::Reload { .. }
             | Control::SignInToServer { .. }
             | Control::SetGoal { .. }
             | Control::PauseGoal

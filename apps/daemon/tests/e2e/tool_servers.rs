@@ -34,7 +34,7 @@ pub(crate) const CALL: &str = "mcp:Linear_Northwind/find_issue {}";
 /// A request a stand-in took: its method, and the key it came with.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Took {
-    method: String,
+    pub(crate) method: String,
     pub(crate) key: String,
 }
 
@@ -54,7 +54,7 @@ pub(crate) fn stand_in() -> (String, Receiver<Took>) {
 }
 
 /// Answers one connection's one request, and closes it.
-fn serve(mut stream: &TcpStream, took: &Sender<Took>) {
+pub(crate) fn serve(mut stream: &TcpStream, took: &Sender<Took>) {
     let mut from = BufReader::new(stream);
     let mut lines = Vec::new();
     loop {
@@ -282,7 +282,7 @@ fn signed_in_again_for_more_access(script: ToolServerScript) -> [String; 2] {
 }
 
 /// How the chat's agent last said each of its servers is, where the hub knows.
-fn states(client: &Client, chat: &SessionId) -> Vec<(String, ServerState)> {
+pub(crate) fn states(client: &Client, chat: &SessionId) -> Vec<(String, ServerState)> {
     let listed = session_records(client, chat).observations.into_iter();
     let servers = listed.filter_map(|observation| match observation {
         Observation::SessionToolServers { servers: Observed::AsOf { value, .. }, .. } => Some(value),

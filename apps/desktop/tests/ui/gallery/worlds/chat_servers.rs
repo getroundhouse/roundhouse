@@ -6,7 +6,9 @@ use client_core::fake_hub::World;
 use protocol::capability::setup::{ServerState, ToolServerState};
 use protocol::event::EventBody;
 use protocol::fixtures::{observed, tool_server, tool_server_needing_sign_in, tool_server_wanting_more_access};
-use protocol::model::{AgentKind, ModelName, SessionStatus, ToolServer, ToolServerName, ToolServerUrl};
+use protocol::model::{
+    AgentKind, ModelName, RunCapabilities, RunId, SessionStatus, ToolServer, ToolServerName, ToolServerUrl,
+};
 
 use super::super::codex_screens::models;
 use super::scenarios::{chat_world, context};
@@ -25,6 +27,7 @@ pub(in super::super) fn chat_servers() -> World {
     world.offer_models(AgentKind::Codex, &models());
     let chat = world.sessions.last_mut().unwrap();
     chat.agent = AgentKind::Codex;
+    chat.agent_capabilities = running(AgentKind::Codex);
     chat.model = ModelName::named("gpt-6.1-sol");
     world
 }
@@ -70,9 +73,17 @@ fn with_servers(linear: ToolServer, mut said_of: Vec<ToolServerState>) -> World 
     world.tool_servers =
         vec![linear, named("Notion", tool_server("notion")), named("Runbooks", tool_server("runbooks"))];
     said_of.extend([said("docs-search", None, ServerState::NeedsSignIn), with_tools("browser", None, 3)]);
-    let chat = world.sessions.last().unwrap().id.clone();
+    let chat = world.sessions.last_mut().unwrap();
+    chat.agent_capabilities = running(AgentKind::Claude);
+    let chat = chat.id.clone();
     world.observe(observed::tool_servers(chat, said_of));
     world
+}
+
+/// What `agent`'s run claims, which says what can be reloaded.
+fn running(agent: AgentKind) -> Option<RunCapabilities> {
+    let description = agents::descriptions().into_iter().find(|description| description.kind == agent)?;
+    Some(RunCapabilities::new(RunId::new(1), description.capabilities))
 }
 
 fn named(name: &str, server: ToolServer) -> ToolServer {

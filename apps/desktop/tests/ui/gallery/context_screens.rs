@@ -1,5 +1,6 @@
 //! The screens about the context and the account, beside Send: the plug's card, quiet, and while one of the hub's MCP
-//! servers needs you to sign in to it, as its sign-in goes on, once it has come to nothing, and for more access, then
+//! servers needs you to sign in to it, as one that works is pointed at, as a sign-in goes on, once it has come to nothing,
+//! and for more access, then
 //! the ring's card, as it usually is, when a setting caps the context and when it's the one card to say whose account
 //! it is, for a login on the machine and for one the hub holds, then the limits' card, with a model's own weekly limit
 //! too, with the menu that moves the chat to another account, and on an account that's using what it reserves of its
@@ -40,6 +41,18 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::WaitFor("usage"),
             Step::Hover { on: Target::Id("mcp"), shows: Region::ToolServersCard.id() },
+        ],
+    },
+    Screen {
+        name: "mcp-servers-reload",
+        spec: "chats.md",
+        world: Some(chat_servers_to_sign_in_to),
+        frame: TOOL_SERVERS,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::WaitFor("usage"),
+            Step::Hover { on: Target::Id("mcp"), shows: Region::ToolServersCard.id() },
+            Step::Point("mcp-hubs-1"),
         ],
     },
     Screen {

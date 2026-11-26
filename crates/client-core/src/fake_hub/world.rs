@@ -102,6 +102,9 @@ pub struct World {
     /// What starting a sign-in to a tool server comes to, as the hub answers each time it's asked. `None` refuses it, as
     /// the rest of what would change what the hub holds.
     pub tool_sign_in_answer: Option<Result<ToolSignInBegun, ApiError>>,
+    /// Why the hub wouldn't reload a chat's tool server, as it answers each time it's asked. `None` takes it, and says
+    /// nothing of what comes of it.
+    pub tool_server_reload_refused: Option<ApiError>,
     /// Why the hub couldn't look for where an app of your own is installed, as it answers each time it's asked. `None`
     /// refuses it, as the rest of what would change what the hub holds.
     pub app_look_refused: Option<ApiError>,

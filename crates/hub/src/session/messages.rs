@@ -3,6 +3,7 @@
 use protocol::attachment::NewAttachment;
 use protocol::capability::Report;
 use protocol::capability::approvals::Decision;
+use protocol::capability::setup::ServerName;
 use protocol::client::ApiError;
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{ApprovalId, AttachmentId, ClientDevice, ClientMessageId, RunId, Seq, Session};
@@ -83,6 +84,11 @@ pub(crate) enum Command {
     },
     Compact {
         keeping: Option<String>,
+        reply: oneshot::Sender<Result<(), ApiError>>,
+    },
+    /// Asks the run to connect again to one of its tool servers, by the name the run has it under.
+    ReloadToolServer {
+        server: ServerName,
         reply: oneshot::Sender<Result<(), ApiError>>,
     },
     Stop {

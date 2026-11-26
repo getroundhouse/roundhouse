@@ -35,12 +35,13 @@ async fn the_servers_init_lists_are_a_report_after_its_event() {
 /// adapter doesn't wait for it, since the CLI can take a while to.
 #[tokio::test]
 async fn connecting_to_a_server_again_is_asked_of_the_cli_and_what_it_answers_is_reported() {
-    let answers = [
-        (r#""subtype":"success","request_id":"%s""#, ServerState::Connected),
-        (r#""subtype":"error","request_id":"%s","error":"Sign in to it in Settings.""#, ServerState::Failed),
-    ];
+    let works = (r#""subtype":"success","request_id":"%s""#, ServerState::Connected);
+    let fails = (r#""subtype":"error","request_id":"%s","error":"Sign in to it in Settings.""#, ServerState::Failed);
+    let reconnect = || Control::Reconnect { server: "linear".into() };
+    let reload = || Control::Reload { server: "docs".into() };
 
-    for (answer, came_to) in answers {
+    for (asks, (answer, came_to)) in [(reconnect(), works), (reconnect(), fails), (reload(), works), (reload(), fails)]
+    {
         let dir = tempfile::tempdir().unwrap();
         let (tx, mut rx) = mpsc::channel(16);
         let init = r#"{"type":"system","subtype":"init","session_id":"s","tools":["mcp__docs__find"],"mcp_servers":[{"name":"docs","status":"connected"},{"name":"linear","status":"failed"}]}"#;
@@ -54,12 +55,13 @@ printf '{{"type":"control_response","response":{{{answer}}}}}\n' "$id""#
         let agent = spawn_at(script(dir.path(), &body), spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
 
         let init = servers_said(&mut rx).await;
-        agent.control(&Control::Reconnect { server: "linear".into() }).await.unwrap();
+        agent.control(&asks).await.unwrap();
 
         let seen = until_exit(&mut rx).await;
         let asked: serde_json::Value =
             serde_json::from_slice(&std::fs::read(dir.path().join("asked")).unwrap()).unwrap();
-        let expected = serde_json::json!({"subtype": "mcp_reconnect", "serverName": "linear"});
+        let (Control::Reconnect { server } | Control::Reload { server }) = &asks else { panic!("{asks:?}") };
+        let expected = serde_json::json!({"subtype": "mcp_reconnect", "serverName": server});
         assert_eq!((&asked["type"], &asked["request"]), (&"control_request".into(), &expected));
         let says = |name: &str, state, tools| ToolServerState {
             name: name.into(),
@@ -69,10 +71,17 @@ printf '{{"type":"control_response","response":{{{answer}}}}}\n' "$id""#
             error: None,
             tools,
         };
-        let of = |linear| vec![says("docs", ServerState::Connected, Some(1)), says("linear", linear, None)];
+        let listed = vec![says("docs", ServerState::Connected, Some(1)), says("linear", ServerState::Failed, None)];
+        // The one asked for has no tools known from then on, and the other is as it was.
+        let with_it = |state| {
+            let one = |one: &ToolServerState| {
+                if one.name == *server { says(server.as_str(), state, None) } else { one.clone() }
+            };
+            listed.iter().map(one).collect::<Vec<_>>()
+        };
         let mut reported = vec![init];
         reported.extend(seen.into_iter().filter_map(servers_of));
-        assert_eq!(reported, [ServerState::Failed, ServerState::Starting, came_to].map(of), "{answer}");
+        assert_eq!(reported, [listed.clone(), with_it(ServerState::Starting), with_it(came_to)], "{asks:?} {answer}");
     }
 }
 

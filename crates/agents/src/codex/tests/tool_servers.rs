@@ -73,14 +73,6 @@ async fn the_agents_servers_are_reported_as_codex_says_them_and_with_what_it_ans
     agent.prompt(Seq::FIRST, &Prompt::new("Look it up")).await.unwrap();
 
     assert_eq!(reported(&mut h).await, [], "none, as the turn starts");
-    let is = |name: &str, state, error: Option<&str>, tools| ToolServerState {
-        name: name.into(),
-        hubs: None,
-        connected_to: None,
-        state,
-        error: error.map(str::to_owned),
-        tools,
-    };
     assert_eq!(reported(&mut h).await, [is("tickets", ServerState::Starting, None, None)]);
     let whole = [
         is("docs", ServerState::Connected, None, Some(2)),
@@ -102,6 +94,11 @@ async fn the_agents_servers_are_reported_as_codex_says_them_and_with_what_it_ans
         .collect();
     asked.sort();
     assert_eq!(asked, ["docs", "gone", "tickets"], "each once, in its own thread, and never Roundhouse's own");
+}
+
+fn is(name: &str, state: ServerState, error: Option<&str>, tools: Option<u32>) -> ToolServerState {
+    let error = error.map(str::to_owned);
+    ToolServerState { name: name.into(), hubs: None, connected_to: None, state, error, tools }
 }
 
 /// Codex says again how every server is, and only the one asked for is said to be starting, and to have connected.
@@ -136,33 +133,28 @@ async fn connecting_to_a_server_again_is_a_reload_which_says_only_what_changed()
     ]));
     let agent = h.started().await;
     agent.prompt(Seq::FIRST, &Prompt::new("Look it up")).await.unwrap();
-    let is = |name: &str, state, tools| ToolServerState {
-        name: name.into(),
-        hubs: None,
-        connected_to: None,
-        state,
-        error: None,
-        tools,
-    };
-    let why = || Some("Sign in to it in Settings.".to_owned());
-    let (docs, gone) = (
-        is("docs", ServerState::Connected, Some(2)),
-        ToolServerState { error: why(), ..is("gone", ServerState::Failed, None) },
-    );
-    let before =
-        [docs.clone(), gone.clone(), ToolServerState { error: why(), ..is("tickets", ServerState::Failed, None) }];
+    let failed = |name| is(name, ServerState::Failed, Some("Sign in to it in Settings."), None);
+    let (docs, gone) = (is("docs", ServerState::Connected, None, Some(2)), failed("gone"));
+    let before = [docs.clone(), gone.clone(), failed("tickets")];
     while reported(&mut h).await != before {}
 
     agent.control(&Control::Reconnect { server: "tickets".into() }).await.unwrap();
 
     let (reports, lines) = until_ready(&mut h, &before).await;
-    let tickets = |state| vec![docs.clone(), gone.clone(), is("tickets", state, None)];
-    assert_eq!(reports, [ServerState::Starting, ServerState::Connected].map(tickets), "only the one asked for starts");
+    let tickets = |state| vec![docs.clone(), gone.clone(), is("tickets", state, None, None)];
+    assert_eq!(reports, [ServerState::Starting, ServerState::Connected].map(tickets), "only the one asked for");
     assert!(lines.is_empty(), "those that failed again are nothing new: {lines:?}");
 
     assert!(agent.control(&Control::Reconnect { server: "gone".into() }).await.is_err());
-    let (_, lines) = until_ready(&mut h, &before).await;
+    let (mut reports, lines) = until_ready(&mut h, &before).await;
     assert!(lines.is_empty(), "a refusal is only answered: {lines:?}");
+    let connected = is("tickets", ServerState::Connected, None, None);
+    if reports.len() == 1 {
+        reports.push(reported(&mut h).await);
+    }
+    let of = |gone: &ToolServerState| vec![docs.clone(), gone.clone(), connected.clone()];
+    assert_eq!(reports, [of(&is("gone", ServerState::Starting, None, None)), of(&gone)], "it's as it was");
+    assert!(agent.control(&Control::Reload { server: "docs".into() }).await.is_err(), "it claims no such thing");
     let sent = std::fs::read_to_string(h.room.path().join("native-requests.jsonl")).unwrap();
     let mut sent = sent.lines().map(|line| serde_json::from_str::<Value>(line).unwrap());
     let reload = sent.find(|request| request["method"] == "config/mcpServer/reload").unwrap();

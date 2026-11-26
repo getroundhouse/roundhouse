@@ -204,11 +204,11 @@ Observed on 0.171.0 through `thread/start`, with a `CODEX_HOME` of the trial's o
 
 Observed on 0.171.0 with a scripted model, and a `HOME` and `CODEX_HOME` of the trial's own.
 
-- **`config/mcpServer/reload` retries every server that failed,** and adds what's in `config.toml` to the thread's own `config`. It takes no parameters and answers before they've started. Connected servers and their running calls are left alone. The model has the tools from its next call to `exec`, in the same turn too. Each server that fails again is reported again, and a `config.toml` that doesn't parse fails it with `-32603`.
+- **`config/mcpServer/reload` retries every server that failed,** and adds what's in `config.toml` to the thread's own `config`. It takes no parameters and answers before they've started. Connected servers and their running calls are left alone, while their config, as Codex merges it, is what it was: one whose `url`, `http_headers` or `enabled` changed in a `config.toml` starts again. One that's left alone is reported as ready all the same. The model has the tools from its next call to `exec`, in the same turn too. Each server that fails again is reported again, and a `config.toml` that doesn't parse fails it with `-32603`.
 - **`thread/resume` of a running thread ignores its `config`,** with no error. After `thread/unsubscribe`, between turns, it's applied, and the thread's background commands are killed.
 - **`notifications/tools/list_changed` is ignored** unless `features.mcp_tool_list_changed` is on, which is under development.
 
-`mcpServer/oauth/login` is in the generated schema, and wasn't tried.
+`mcpServer/oauth/login` asked a stand-in for its OAuth metadata and tried to register there, and failed, and left the connection as it was. No sign-in that works was tried.
 
 ### What it says of them
 

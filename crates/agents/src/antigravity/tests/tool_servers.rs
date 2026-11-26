@@ -11,9 +11,12 @@ async fn a_server_is_never_asked_to_be_connected_to_again() {
     let mut h = Harness::on_model(&json!([]), "gemini-4-carbon");
     let agent = h.started().await;
 
-    assert_eq!(agent.capabilities().setup.tool_server_reconnect, None);
-    let refused = agent.control(&Control::Reconnect { server: "docs".into() }).await;
+    let setup = agent.capabilities().setup;
+    assert_eq!((setup.tool_server_reconnect, setup.tool_server_reload), (None, None));
+    for control in [Control::Reconnect { server: "docs".into() }, Control::Reload { server: "docs".into() }] {
+        let refused = agent.control(&control).await;
+        assert!(matches!(refused, Err(AgentError::UnknownRequest(_))), "{refused:?}");
+    }
 
-    assert!(matches!(refused, Err(AgentError::UnknownRequest(_))), "{refused:?}");
     agent.stop().await;
 }

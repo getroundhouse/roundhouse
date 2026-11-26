@@ -118,6 +118,7 @@ fn every_control_a_run_of_this_build_claims_keeps_its_form() {
             json!({"control":"change","model":"opus","mode":null,"effort":"high","speed":null,"thinking":null,
                 "persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null}),
         ),
+        (Control::Reload { server: "docs".into() }, json!({"control":"reload","server":"docs"})),
         (
             decide(Decision::Allow { remember: Remember::Once }),
             json!({"control":"decide","approval":"a","decision":{"decision":"allow","remember":{"remember":"once"}}}),

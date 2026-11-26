@@ -26,6 +26,7 @@ impl LiveSession {
             Report::Todos(todos) => self.agent_said::<SessionTodos>(run, todos, "the agent's to-do list").await,
             Report::ToolServers { servers } => {
                 self.agent_said::<SessionToolServers>(run, servers, "the agent's tool servers").await;
+                self.said_its_servers(run);
                 self.wake_reconnects();
             }
             // Sent when the hub took it, by the hub's clock, less how long the model took to start answering.
