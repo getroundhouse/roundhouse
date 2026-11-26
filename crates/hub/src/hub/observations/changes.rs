@@ -11,7 +11,7 @@ use super::kept::{Change, Said, Step, Table};
 use super::kinds::{Kind, Owner, SessionKey};
 use super::tables::Gone;
 use crate::hub::Hub;
-use crate::store::Store;
+use crate::store::{Store, now_ms};
 
 impl Hub {
     /// Keeps that the observation of `of` was read at `read_at_ms`, by the hub's clock, and found `value`. It's current
@@ -87,21 +87,6 @@ impl Hub {
         self.changed_observation_held::<K>(of, |_| Change::WorkedOut { value, as_of_ms: read_at_ms }).await
     }
 
-    /// Keeps that nothing watches the observation of `of` any more, since `as_of_ms`, by the hub's clock, so one that
-    /// was current is as of then, which clients are told: what watched it, such as a worker watching a worktree, would
-    /// have said of any change before. For what's kept up to date by reading it again, see
-    /// [`Hub::observation_no_longer_read_again`].
-    pub(crate) async fn observation_let_go<K: Kind>(&self, of: K::Of, as_of_ms: i64) -> Result<(), ApiError> {
-        self.change_observation::<K>(of, |_| Change::LetGo { as_of_ms }).await
-    }
-
-    /// Keeps that the hub no longer reads the observation of `of` again to keep it up to date, as GitHub's are while a
-    /// client follows them, so one that was current is as of its last read, which clients are told. Unlike
-    /// [`Hub::observation_let_go`], nothing said of a change between the last read and now, so it's as of no later.
-    pub(crate) async fn observation_no_longer_read_again<K: Kind>(&self, of: K::Of) -> Result<(), ApiError> {
-        self.change_observation::<K>(of, |_| Change::NoLongerReadAgain).await
-    }
-
     /// What the observation of `of` says, however fresh it is, for what the hub decides from it. `None` where it isn't
     /// known, which is never taken for "none".
     pub(crate) fn observation_value<K: Kind>(&self, of: &K::Of) -> Option<K::Value> {
@@ -117,19 +102,20 @@ impl Hub {
     }
 
     /// Keeps that the hub no longer reads the observations of kind `K` again on its schedule, as
-    /// [`Hub::observations_kept_current`] said it did, as when it stops, so each that was current is as of its last read,
-    /// which clients are told, as [`Hub::observation_no_longer_read_again`] does for one.
-    pub(crate) async fn observations_no_longer_read_again<K: Kind>(&self) {
+    /// [`Hub::observations_kept_current`] said it did, as when it stops, so each that was current is as its kind says
+    /// once unkept, which clients are told, as [`Hub::observation_no_longer_kept_by`] does for one.
+    pub(crate) async fn observations_no_longer_kept<K: Kind>(&self) {
         {
             let _changing = self.observations.changing.lock().await;
             K::table(&mut self.observations.tables.lock()).all_kept_current = false;
         }
         for of in self.observations.kept_of::<K>() {
-            if let Err(e) = self.change_observation::<K>(of, |_| Change::NoLongerReadAgain).await {
+            let at_ms = now_ms();
+            if let Err(e) = self.change_observation::<K>(of, |_| Change::NoLongerKeptWithItsKind { at_ms }).await {
                 warn!(
                     name: "observation.read_unsaid",
                     error = e.message,
-                    "Couldn't say an observation is as of its last read"
+                    "Couldn't say an observation is no longer kept current"
                 );
             }
         }

@@ -88,12 +88,12 @@ pub(super) enum Change<V> {
     /// `keeper` keeps it from now on, so what's read of it from now is current if [`Keeper::keeps_current`] says so.
     /// Another that kept it stops at `at_ms`, so it's as its kind says once unkept.
     KeptBy { keeper: Keeper, at_ms: i64 },
-    /// Nothing keeps it up to date any more, since `as_of_ms`, so it's as of then: what kept it up to date would have
-    /// said of any change before. As of its last read where that's later, as one that landed since can be.
-    LetGo { as_of_ms: i64 },
-    /// Nothing reads it again to keep it up to date any more, so it's as of its last read, since nothing would have
-    /// said of a change since.
-    NoLongerReadAgain,
+    /// `keeper` no longer keeps it, from `at_ms`, so it's as its kind says once unkept. Changes nothing where another
+    /// keeps it.
+    NoLongerKeptBy { keeper: Keeper, at_ms: i64 },
+    /// What kept every observation of its kind no longer does, from `at_ms`, so it's as its kind says once unkept,
+    /// unless a keeper of its own keeps it current.
+    NoLongerKeptWithItsKind { at_ms: i64 },
     /// What it's of is gone.
     Gone,
 }
@@ -150,14 +150,11 @@ impl<K: Kind> Table<K> {
             }
             Change::Merged { value, heard_at_ms } => self.merged(of, value, heard_at_ms),
             Change::KeptBy { keeper, at_ms } => self.kept_by(of, keeper, at_ms),
-            Change::LetGo { as_of_ms } => {
-                self.keepers.remove(of);
-                self.unkept(of, Unkeeping::AsOf(as_of_ms))
+            Change::NoLongerKeptBy { keeper, at_ms } => self.no_longer_kept_by(of, keeper, at_ms),
+            Change::NoLongerKeptWithItsKind { at_ms } if !self.kept_current_by_its_keeper(of) => {
+                self.unkept(of, K::UNKEPT.at(at_ms))
             }
-            Change::NoLongerReadAgain => {
-                self.keepers.remove(of);
-                self.unkept(of, Unkeeping::AsOfItsLastRead)
-            }
+            Change::NoLongerKeptWithItsKind { .. } => Step::Same,
             Change::Gone => {
                 self.keepers.remove(of);
                 self.unkept(of, Unkeeping::Gone)

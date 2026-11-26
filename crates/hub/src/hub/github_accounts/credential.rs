@@ -61,11 +61,11 @@ impl Hub {
             async move { hub.check_github_logins(now_ms).await }
         })
         .await;
-        self.observations_no_longer_read_again::<GithubUsername>().await;
-        self.observations_no_longer_read_again::<GithubProfile>().await;
-        self.observations_no_longer_read_again::<GithubAppSaid>().await;
-        self.observations_no_longer_read_again::<GithubAppBot>().await;
-        self.observations_no_longer_read_again::<InstalledOn>().await;
+        self.observations_no_longer_kept::<GithubUsername>().await;
+        self.observations_no_longer_kept::<GithubProfile>().await;
+        self.observations_no_longer_kept::<GithubAppSaid>().await;
+        self.observations_no_longer_kept::<GithubAppBot>().await;
+        self.observations_no_longer_kept::<InstalledOn>().await;
     }
 
     /// Stops checking the GitHub logins, as the hub stops, and waits for `watching`, the task

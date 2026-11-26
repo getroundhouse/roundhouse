@@ -19,6 +19,20 @@ impl Hub {
         self.change_observation::<K>(of, |_| Change::KeptBy { keeper, at_ms: now_ms() }).await
     }
 
+    /// Keeps that `keeper` no longer keeps the observation of `of`, from `at_ms`, by the hub's clock, though it hasn't
+    /// gone, such as a worker that stops watching its worktree, or the hub once no client follows what it read again.
+    /// So it's as its kind says once unkept, as [`Kind::UNKEPT`] says, which clients are told: as of `at_ms` for a kind
+    /// that's as of then, so what one keeper lets go of together is as of one time. Changes nothing where another keeps
+    /// it.
+    pub(crate) async fn observation_no_longer_kept_by<K: Kind>(
+        &self,
+        of: K::Of,
+        keeper: Keeper,
+        at_ms: i64,
+    ) -> Result<(), ApiError> {
+        self.change_observation::<K>(of, |_| Change::NoLongerKeptBy { keeper, at_ms }).await
+    }
+
     /// Keeps that `keeper` said `value` of `of`, read at `read_at_ms`, by the hub's clock, and keeps it from now on, as
     /// [`Hub::observation_kept_by`] and [`Hub::observation_read`] do, if `wanted` says it's still wanted, which it's
     /// asked under the lock every change takes. So what `keeper` says as it goes, such as a worker that's no longer the
