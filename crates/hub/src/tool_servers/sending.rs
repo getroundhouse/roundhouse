@@ -17,7 +17,7 @@ use crate::store::StoreError;
 
 /// The tool servers workers are sent, with their keys, and those they aren't, and why. Not `Debug`, since nothing but a
 /// worker is told of the first.
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Clone, Default)]
 pub(crate) struct SentToolServers {
     sent: Vec<ProxiedServer>,
     as_sent: ServersAsSent,
@@ -35,6 +35,12 @@ impl SentToolServers {
     /// How each is, for a worker that's set them to have them so.
     pub(crate) fn as_sent(&self) -> &ServersAsSent {
         &self.as_sent
+    }
+
+    /// Whether workers would be sent the same as `other` has them sent, and have them as the same, whatever is left out
+    /// and why.
+    fn sends_as(&self, other: &SentToolServers) -> bool {
+        self.sent == other.sent && self.as_sent == other.as_sent
     }
 
     /// Adds `server`, known by the sign-in `signed_in_by` if it's signed in to, to what workers are sent after `before`,
@@ -127,15 +133,16 @@ impl ToolServers {
                 return;
             }
         };
+        // A change only in which are left out, or why, sends workers nothing, and is only logged.
         self.sent.send_if_modified(|current| {
-            if *current == worked_out {
-                return false;
-            }
-            for (id, why) in &worked_out.left_out {
-                warn!(name: "tool_servers.left_out", %id, %why, "Workers aren't sent a tool server");
+            let modified = !current.sends_as(&worked_out);
+            if modified || current.left_out != worked_out.left_out {
+                for (id, why) in &worked_out.left_out {
+                    warn!(name: "tool_servers.left_out", %id, %why, "Workers aren't sent a tool server");
+                }
             }
             *current = worked_out;
-            true
+            modified
         });
     }
 

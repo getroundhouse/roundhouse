@@ -5,7 +5,7 @@ use agents::HubToolServer;
 use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::SessionId;
+use protocol::model::{RunId, SessionId};
 use protocol::worker::ToolsToken;
 use std::collections::HashMap;
 use std::io;
@@ -81,9 +81,9 @@ impl Tools {
         Self { asks, build, wait_poll, tokens, proxy: Proxy::default(), serving }
     }
 
-    /// Lets calls carrying `token` through, as `caller`'s, whose agent starts.
-    pub(crate) fn admit(&self, token: ToolsToken, caller: Caller) {
-        self.proxy.starts(&caller.session_id);
+    /// Lets calls carrying `token` through, as `caller`'s, whose agent starts as `run`.
+    pub(crate) fn admit(&self, token: ToolsToken, caller: Caller, run: RunId) {
+        self.proxy.starts(&caller.session_id, run);
         self.tokens.lock().insert(token, Arc::new(caller));
     }
 

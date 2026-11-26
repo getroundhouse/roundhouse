@@ -498,7 +498,7 @@ The app's own settings, and where they're shown.
 
   ![Adding an MCP server, with an amber line under its URL](screens/settings-mcp-key-in-url.png)
 
-- **A server's menu has Sign in again, where it's signed in to, Edit and Remove.** Sign in again signs in to that server as adding it did, and changes nothing until it's approved. Edit is off while a panel is open, and isn't there for a server that knows you in a way only a newer hub has. Remove asks first, as disconnecting a GitHub account does, and then the hub forgets the server with its sign-in or its key, which isn't revoked at the server. What the hub couldn't do is said under the row, in red. *Unconfirmed.*
+- **A server's menu has Sign in again, where it's signed in to, Edit and Remove.** Sign in again signs in to that server as adding it did, and changes nothing until it's approved. Edit is off while a panel is open, and isn't there for a server that knows you in a way only a newer hub has. Remove asks first, as disconnecting a GitHub account does, and then the hub forgets the server with its sign-in or its key, which isn't revoked at the server. What the hub couldn't do is said under the row, in red. *Unconfirmed.* A running agent that has the server is refused each call to it from then on, with `Roundhouse can't use this MCP server now. It may have been removed, or its key or sign-in can't be read.`, since its worker can't tell a server that's removed from one the hub can't send it, as when it can't read the server's key. A stream the server had open to the agent ends, as it does for a server that's moved, and a call under way finishes there. *Unconfirmed:* the words, and ending the stream.
 
   **The menu of a server that's signed in to.** *Unconfirmed.*
 

@@ -169,7 +169,7 @@ async fn tools_for(state: &State, spec: &mut AgentSpec, config: PathBuf) -> Resu
         return Err(ApiError::new(ErrorCode::Worker, why));
     };
     let caller = crate::tools::Caller { session_id: spec.session_id.clone(), worktree: PathBuf::from(&spec.cwd) };
-    state.tools.admit(token.clone(), caller);
+    state.tools.admit(token.clone(), caller, spec.run);
     Ok(Some(ToolServers { tools_url, hubs, token, config }))
 }
 
@@ -211,6 +211,7 @@ async fn forward_output(
                         agents.remove(&session_id);
                     }
                 }
+                state.tools.proxy.ended(&session_id, run);
                 let body = AgentOutput::exit_event(code, signal, stderr_tail, requested);
                 WorkerFrame::AgentEvent {
                     session_id: session_id.clone(),

@@ -4,7 +4,7 @@ use hyper::Uri;
 use hyper::header::{HeaderName, HeaderValue};
 use parking_lot::Mutex;
 use protocol::capability::setup::{ServerName, ToolServerState};
-use protocol::model::{SessionId, ToolServerId, ToolServerName, ToolServerPlace};
+use protocol::model::{RunId, SessionId, ToolServerId, ToolServerName, ToolServerPlace};
 use protocol::worker::{ProxiedServer, ServerHeader, ServerSignIn, TokenNumber};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,7 +15,7 @@ use tokio::sync::watch;
 #[derive(Default)]
 pub(crate) struct Proxy {
     servers: Mutex<Vec<Arc<Server>>>,
-    /// Where each is, for a stream of one's to end as it's moved.
+    /// Where each is, for a stream of one's to end as it's moved or removed.
     places: watch::Sender<HashMap<ToolServerId, ToolServerPlace>>,
     pub(super) connections: Connections,
     pub(super) upstream: Upstream,
@@ -30,9 +30,14 @@ impl Proxy {
         self.places.send_replace(places);
     }
 
-    /// An agent of `session_id` starts, so nothing is known of where it's connected.
-    pub(in super::super) fn starts(&self, session_id: &SessionId) {
-        self.connections.forget(session_id);
+    /// The agent of `session_id` starts, as its `run`, so nothing is known of where it's connected.
+    pub(in super::super) fn starts(&self, session_id: &SessionId, run: RunId) {
+        self.connections.starts(session_id, run);
+    }
+
+    /// The agent of `session_id` that started as `run` has exited, so what's known of where it was connected goes.
+    pub(crate) fn ended(&self, session_id: &SessionId, run: RunId) {
+        self.connections.ended(session_id, run);
     }
 
     /// `said`, what the agent of `session_id` says of its servers, with where it last connected to each of the hub's.
@@ -43,13 +48,13 @@ impl Proxy {
         said
     }
 
-    /// Until `server` is at another place than it is.
-    pub(super) fn moved(&self, server: &Server) -> impl Future<Output = ()> + Send + 'static {
+    /// Until `server` is at another place than it is, or isn't one of the hub's.
+    pub(super) fn gone(&self, server: &Server) -> impl Future<Output = ()> + Send + 'static {
         let (mut places, id, place) = (self.places.subscribe(), server.id.clone(), server.place.clone());
         async move {
-            let elsewhere = |places: &HashMap<_, _>| places.get(&id).is_some_and(|now| *now != place);
+            let gone = |places: &HashMap<_, _>| places.get(&id) != Some(&place);
             // An error says the worker has stopped serving.
-            let _moved = places.wait_for(elsewhere).await;
+            let _gone = places.wait_for(gone).await;
         }
     }
 

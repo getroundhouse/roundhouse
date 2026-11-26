@@ -8,9 +8,11 @@ use crate::model::{ToolServerHeader, ToolServerId, ToolServerName, ToolServerUrl
 
 /// Sets the tool servers the worker's agents reach through it, all of them each time, so sending it twice is the same
 /// as once. An agent started after the answer is given every server in it, and a call to one that's no longer in it is
-/// told it was removed. One to a server that's another now, by its URL's
+/// told Roundhouse doesn't have it now, since the hub leaves out one it can't send whole, such as one whose key it can't
+/// read, as well as one the person removed. One to a server that's another now, by its URL's
 /// [`place`](crate::model::ToolServerUrl::place), is refused until its agent connects to it afresh, so what was meant
-/// for one server is never sent to another. A call already under way goes on as it began.
+/// for one server is never sent to another. A call already under way goes on as it began, but a stream of the server's
+/// events, which stays open for as long as an agent is connected, ends once the server is another or isn't in the set.
 ///
 /// The worker keeps them in memory and in no file, so each hub that connects sets them again. It applies a set on its
 /// connection's own loop, before it reads the next frame, as it does a

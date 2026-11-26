@@ -1,10 +1,9 @@
 use super::Asked;
+use super::message::Message;
 use hyper::header::{HeaderMap, HeaderName, HeaderValue};
 use hyper::{Method, StatusCode};
 use parking_lot::Mutex;
-use protocol::model::{SessionId, ToolServerId, ToolServerPlace};
-use serde::Deserialize;
-use std::borrow::Cow;
+use protocol::model::{RunId, SessionId, ToolServerId, ToolServerPlace};
 use std::collections::{HashMap, HashSet};
 
 /// Which of a 2025 server's sessions a request is of, which the server gave the agent as it connected.
@@ -22,9 +21,16 @@ const HANDSHAKES: [&str; 2] = ["server/discover", "initialize"];
 ///
 /// An agent can have several connections to a server, as each of Codex's threads has, so a session given by the server
 /// before is kept out after another connection has connected to it where it is.
+///
+/// What's known of an agent goes as its run ends, or as the session's next run starts.
 #[derive(Default)]
-pub(super) struct Connections {
-    by_agent: Mutex<HashMap<(SessionId, ToolServerId), Connection>>,
+pub(super) struct Connections(Mutex<Known>);
+
+#[derive(Default)]
+struct Known {
+    by_agent: HashMap<(SessionId, ToolServerId), Connection>,
+    /// The run of each session's agent that started last, whose end is the end of what's known of it.
+    runs: HashMap<SessionId, RunId>,
 }
 
 struct Connection {
@@ -58,8 +64,8 @@ impl Connections {
         place: &ToolServerPlace,
         asked: &Asked<'_>,
     ) -> Result<LetIn, CutOff> {
-        let mut by_agent = self.by_agent.lock();
-        let Some(connection) = by_agent.get_mut(&key(id, asked)) else { return Ok(LetIn::AsConnected) };
+        let mut known = self.0.lock();
+        let Some(connection) = known.by_agent.get_mut(&key(id, asked)) else { return Ok(LetIn::AsConnected) };
         let session = asked.headers.get(MCP_SESSION);
         if connection.place == *place && session.is_none_or(|session| connection.sessions.contains(session)) {
             return Ok(LetIn::AsConnected);
@@ -83,9 +89,9 @@ impl Connections {
         if !status.is_success() {
             return;
         }
-        let mut by_agent = self.by_agent.lock();
+        let mut known = self.0.lock();
         let here = || Connection { place: place.clone(), sessions: HashSet::new(), cut_off: false };
-        let connection = by_agent.entry(key(id, asked)).or_insert_with(here);
+        let connection = known.by_agent.entry(key(id, asked)).or_insert_with(here);
         match let_in {
             LetIn::Connecting if connection.place != *place => *connection = here(),
             LetIn::Connecting => connection.cut_off = false,
@@ -99,12 +105,30 @@ impl Connections {
 
     /// Where the agent of `session_id` last connected to the server `id`.
     pub(super) fn place(&self, session_id: &SessionId, id: &ToolServerId) -> Option<ToolServerPlace> {
-        Some(self.by_agent.lock().get(&(session_id.clone(), id.clone()))?.place.clone())
+        Some(self.0.lock().by_agent.get(&(session_id.clone(), id.clone()))?.place.clone())
     }
 
-    /// An agent of `session_id` starts, and has connected to nothing.
-    pub(super) fn forget(&self, session_id: &SessionId) {
-        self.by_agent.lock().retain(|(of, _), _| of != session_id);
+    /// The agent of `session_id` starts, as its `run`, and has connected to nothing.
+    pub(super) fn starts(&self, session_id: &SessionId, run: RunId) {
+        let mut known = self.0.lock();
+        known.forget(session_id);
+        known.runs.insert(session_id.clone(), run);
+    }
+
+    /// The agent of `session_id` that started as `run` has ended, so nothing is known of it any more, unless another of
+    /// the session's has started since.
+    pub(super) fn ended(&self, session_id: &SessionId, run: RunId) {
+        let mut known = self.0.lock();
+        if known.runs.get(session_id) == Some(&run) {
+            known.forget(session_id);
+            known.runs.remove(session_id);
+        }
+    }
+}
+
+impl Known {
+    fn forget(&mut self, session_id: &SessionId) {
+        self.by_agent.retain(|(of, _), _| of != session_id);
     }
 }
 
@@ -115,16 +139,5 @@ fn key(id: &ToolServerId, asked: &Asked<'_>) -> (SessionId, ToolServerId) {
 /// Whether `asked` has an agent connect to a server afresh, in no session of one.
 fn connects(asked: &Asked<'_>) -> bool {
     let afresh = *asked.method == Method::POST && !asked.headers.contains_key(MCP_SESSION);
-    afresh && method_of(&asked.body).is_some_and(|method| HANDSHAKES.contains(&&*method))
-}
-
-#[derive(Deserialize)]
-struct Message<'a> {
-    #[serde(borrow)]
-    method: Cow<'a, str>,
-}
-
-/// What the message `body` asks for, in JSON-RPC's words.
-pub(super) fn method_of(body: &[u8]) -> Option<Cow<'_, str>> {
-    Some(serde_json::from_slice::<Message<'_>>(body).ok()?.method)
+    afresh && Message::of(&asked.body).is_some_and(|message| HANDSHAKES.contains(&&*message.method))
 }

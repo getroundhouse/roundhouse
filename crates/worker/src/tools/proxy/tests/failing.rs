@@ -125,9 +125,10 @@ async fn an_agent_that_hangs_up_ends_its_call_to_the_server() {
     assert!(rest.is_empty());
 }
 
-/// By its ID, so a new header moves nothing, and an agent launched with a server that's since been removed is told so.
+/// By its ID, so a new header moves nothing, and an agent launched with a server that's since gone from the set is told
+/// Roundhouse can't use it. The hub leaves out one whose key it can't read as well, so it isn't said to be removed.
 #[tokio::test]
-async fn a_server_keeps_its_path_as_its_header_changes_and_says_once_its_removed() {
+async fn a_server_keeps_its_path_as_its_header_changes_and_says_once_its_not_set() {
     let server = StandIn::answering(|_| refusing(StatusCode::OK)).await;
     let agent = Agent::with(vec![server.as_set()]).await;
     let path = agent.path().await;
@@ -140,7 +141,9 @@ async fn a_server_keeps_its_path_as_its_header_changes_and_says_once_its_removed
     assert_eq!(changed, path);
     let (id, said) = removed.error();
     assert_eq!(id, json!("call-7"));
-    assert_eq!(said, "This MCP server was removed from Roundhouse, so its tools can't be used.");
+    let not_set =
+        "Roundhouse can't use this MCP server now. It may have been removed, or its key or sign-in can't be read.";
+    assert_eq!(said, not_set);
     assert!(server.heard().is_empty());
 }
 
