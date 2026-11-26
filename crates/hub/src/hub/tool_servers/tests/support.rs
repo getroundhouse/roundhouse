@@ -2,12 +2,16 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use protocol::client::tool_server_checks::ToolServerToCheck;
+use protocol::client::tool_server_saves::{SaveWhen, ToolServerSave, ToolServerSaved};
 use protocol::client::tool_sign_ins::{
     ToolSignInBegun, ToolSignInFinish, ToolSignInPage, ToolSignInReturned, ToolSignInStart, ToolSignInTo, redirect,
 };
 use protocol::client::{ApiError, HubNotice};
 use protocol::model::{ToolServer, ToolServerAuth, ToolSignInStatus};
 use serde_json::Value;
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tool_sign_in::{AuthorizationPage, StandIn};
 
 use crate::hub::{Hub, Notices};
@@ -81,4 +85,17 @@ pub(super) fn told(feed: &mut Notices) -> Vec<ToolServer> {
 pub(super) async fn until_asked_for_tokens(stand_in: &StandIn, times: usize) {
     let asked = || stand_in.asked_for("POST /token").len() == times;
     waiting::task::until(Duration::from_secs(10), "its tokens weren't asked for", asked).await;
+}
+
+/// A save under way, on a task of its own, and what closes its connection.
+pub(super) struct Saving {
+    pub(super) closing: watch::Sender<bool>,
+    pub(super) saved: JoinHandle<Result<ToolServerSaved, ApiError>>,
+}
+
+/// Saving `of`, as `id`, `when` it says, on a connection of its own, or why it's refused at once.
+pub(super) fn save(hub: &Arc<Hub>, id: &str, of: ToolServerToCheck, when: SaveWhen) -> Result<Saving, ApiError> {
+    let (closing, closed) = watch::channel(false);
+    let saving = hub.tool_server_save(ToolServerSave { id: id.into(), of, when }, closed)?;
+    Ok(Saving { closing, saved: tokio::spawn(saving) })
 }

@@ -11,6 +11,7 @@ use super::editing::{Becomes, Editing};
 use super::secret::{ToolServerSecret, refused};
 use super::sending::{Known, LeftOut, knows_by, secret};
 use super::servers::{Adding, ToAdd};
+use crate::login_files::Locked;
 
 /// What there is to ask of a server that's checked.
 #[derive(Debug, PartialEq, Eq)]
@@ -29,11 +30,19 @@ pub(crate) struct ToAsk {
 }
 
 impl ToolServers {
-    /// What there is to ask of a server to check it, refused as `ToolServerCheck` says. A key the server has is read
-    /// with where the server is, under the lock, so it's only ever asked of the server it was given for.
+    /// What there is to ask of a server to check it, refused as `ToolServerCheck` says.
     pub(crate) fn checking(&self, asked: ToolServerCheck) -> Result<Checking, ApiError> {
-        let files = self.files.lock();
-        match asked.of {
+        self.checking_in(&self.files.lock(), asked.of)
+    }
+
+    /// What there is to ask of a server before `of` is done, under the servers' lock, `files`. A key the server has is
+    /// read with where the server is, under the lock, so it's only ever asked of the server it was given for.
+    pub(super) fn checking_in(
+        &self,
+        files: &Locked<'_, ToolServerSecret>,
+        of: ToolServerToCheck,
+    ) -> Result<Checking, ApiError> {
+        match of {
             ToolServerToCheck::Add(add) => Ok(match self.adding(add)? {
                 ToAdd::There(_) => Checking::Nothing,
                 ToAdd::New(Adding { url, auth, secret, .. }) => {
@@ -42,7 +51,7 @@ impl ToolServers {
             }),
             ToolServerToCheck::Edit(edit) => {
                 let Editing { server, file, changes, becomes } = self.editing(edit)?;
-                let kept = || secret(&files, file.as_ref());
+                let kept = || secret(files, file.as_ref());
                 let url = changes.url_of(&server).clone();
                 let as_it_was = url == server.url;
                 let known = match becomes {

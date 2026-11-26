@@ -3,6 +3,7 @@
 
 use parking_lot::Mutex;
 use protocol::client::ClientResponse;
+use protocol::client::tool_server_saves::ToolServerSaved;
 use protocol::model::Record;
 
 use super::super::follow::{Following, Reach};
@@ -63,7 +64,8 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         ClientResponse::GithubAccount(account) => vec![Record::GithubAccount(account.clone())],
         ClientResponse::GithubSignIn(sign_in) => vec![Record::GithubSignIn(sign_in.clone())],
         ClientResponse::GithubApp(app) => vec![Record::GithubApp(app.clone())],
-        ClientResponse::ToolServer(server) => vec![Record::ToolServer(server.clone())],
+        ClientResponse::ToolServer(server)
+        | ClientResponse::ToolServerSaved(ToolServerSaved::Saved { server }) => vec![Record::ToolServer(server.clone())],
         ClientResponse::Terminal(terminal) => vec![Record::Terminal(terminal.clone())],
         ClientResponse::Proposal(proposal) => vec![Record::Proposal(proposal.clone())],
         ClientResponse::Repos(_)
@@ -102,6 +104,9 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::AttachmentData(_)
         | ClientResponse::GithubAppManifest(_)
         | ClientResponse::ToolServerChecked(_)
+        | ClientResponse::ToolServerSaved(
+            ToolServerSaved::NotListed { .. } | ToolServerSaved::Cancelled | ToolServerSaved::Unknown,
+        )
         | ClientResponse::ToolSignInBegun(_)
         | ClientResponse::WorktreeFiles(_)
         | ClientResponse::FileContents(_)

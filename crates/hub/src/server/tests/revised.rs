@@ -4,6 +4,7 @@
 //! goes through [`checked`], so every test of what a connection is sent checks this too.
 
 use protocol::client::listed::Listed;
+use protocol::client::tool_server_saves::ToolServerSaved;
 use protocol::client::{ClientResponse, HubFrame, HubNotice, ObservationNotice, RecordNotice, ReplyOutcome};
 use protocol::model::{Observation, Record, Records, Rev};
 
@@ -120,10 +121,15 @@ fn records_in(response: &ClientResponse) -> Vec<Record> {
         C::GithubAccount(account) => vec![Record::GithubAccount(account.clone())],
         C::GithubSignIn(sign_in) => vec![Record::GithubSignIn(sign_in.clone())],
         C::GithubApp(app) => vec![Record::GithubApp(app.clone())],
-        C::ToolServer(server) => vec![Record::ToolServer(server.clone())],
+        C::ToolServer(server) | C::ToolServerSaved(ToolServerSaved::Saved { server }) => {
+            vec![Record::ToolServer(server.clone())]
+        }
         C::Terminal(terminal) => vec![Record::Terminal(terminal.clone())],
         // What isn't a record, or holds none.
         C::ToolServerChecked(_)
+        | C::ToolServerSaved(
+            ToolServerSaved::NotListed { .. } | ToolServerSaved::Cancelled | ToolServerSaved::Unknown,
+        )
         | C::ToolSignInBegun(_)
         | C::Paired(_)
         | C::Devices(_)

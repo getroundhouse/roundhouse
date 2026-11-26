@@ -7,9 +7,10 @@ use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{ToolServer, ToolServerAuthEdit, ToolServerAuthGiven, ToolServerId};
 
 /// Adds a tool server, and answers with its record. The hub keeps its key, if it has one, in a file of its own, and
-/// never sends it to a client. The hub asks the server nothing as it's added: a client has that done first, with
-/// [`ToolServerCheck`](super::tool_server_checks::ToolServerCheck). The name, the URL, the header and the key are
-/// trimmed.
+/// never sends it to a client. The hub asks the server nothing as it's added:
+/// [`ToolServerSave`](super::tool_server_saves::ToolServerSave) adds one once it has, and a client of a hub from before
+/// that has it done first, with [`ToolServerCheck`](super::tool_server_checks::ToolServerCheck). The name, the URL, the
+/// header and the key are trimmed.
 ///
 /// `id` is the client's own, so sending it again is the same server, and answers with its record as it is then, however
 /// the rest of the request differs. Once the server has been removed, the same `id` adds a new one.

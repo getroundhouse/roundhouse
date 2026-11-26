@@ -1,12 +1,13 @@
-//! Checking a server: that it's asked, with what, and what's answered and logged. What's asked of one, and what's made
-//! of what it does, is tested in the `tool-sign-in` crate, and whether there's anything to ask, in
-//! `crate::tool_servers`.
+//! Checking a server: that it's asked, with what, and what's answered and logged, and how many may be asked at once,
+//! saves among them. What's asked of one, and what's made of what it does, is tested in the `tool-sign-in` crate, and
+//! whether there's anything to ask, in `crate::tool_servers`.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use logging::testing::Logs;
 use protocol::client::tool_server_checks::{NoToolList, ToolServerCheck, ToolServerChecked, ToolServerToCheck};
+use protocol::client::tool_server_saves::{SaveWhen, ToolServerSaved};
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{ToolServerAuthEdit, ToolServerAuthGiven, ToolServerKey};
@@ -14,7 +15,7 @@ use tokio::task::JoinHandle;
 use tool_sign_in::{Asks, Gate, Query, Script, StandIn};
 
 use super::super::check_calls::MOST_CHECKING;
-use super::support::{servers, told};
+use super::support::{Saving, save, servers, told};
 use crate::hub::Hub;
 use crate::hub::tests::hub_in;
 
@@ -114,16 +115,27 @@ fn open_to_add(stand_in: &StandIn) -> ToolServerCheck {
     to_add(add("t", "Linear", &url(stand_in), ToolServerAuthGiven::Neither))
 }
 
-/// As many checks of `held`, which holds its answers back, as there may be at once, each once it has been asked.
-async fn as_many_as_may_be(hub: &Arc<Hub>, held: &StandIn) -> Vec<JoinHandle<Result<ToolServerChecked, ApiError>>> {
+/// Adding `stand_in` as Docs, once it has listed its tools, as `id`.
+fn saving_docs(hub: &Arc<Hub>, id: &str, stand_in: &StandIn) -> Saving {
+    let of = ToolServerToCheck::Add(add("docs", "Docs", &url(stand_in), ToolServerAuthGiven::Neither));
+    save(hub, id, of, SaveWhen::Listed).unwrap()
+}
+
+/// As many asked of `held`, which holds its answers back, as there may be at once, each once it has been asked: checks,
+/// and a save, which takes a place as a check does.
+async fn as_many_as_may_be(
+    hub: &Arc<Hub>,
+    held: &StandIn,
+) -> (Vec<JoinHandle<Result<ToolServerChecked, ApiError>>>, Saving) {
     let begin = |_| {
         let (hub, check) = (hub.clone(), open_to_add(held));
         tokio::spawn(async move { hub.tool_server_check(check).await })
     };
-    let checks = (0..MOST_CHECKING).map(begin).collect();
+    let checks = (1..MOST_CHECKING).map(begin).collect();
+    let saving = saving_docs(hub, "s", held);
     let all_asked = || held.asked().len() == MOST_CHECKING;
     waiting::task::until(Duration::from_secs(10), "they weren't asked", all_asked).await;
-    checks
+    (checks, saving)
 }
 
 #[tokio::test]
@@ -132,16 +144,19 @@ async fn as_many_are_asked_at_once_as_may_be_and_one_thats_answered_makes_room()
     let gate = Gate::closed();
     let script = Script { asks: Asks::Nothing, server_after: Some(gate.clone()), ..Script::default() };
     let (hub, held, free) = (hub_in(dir.path()), StandIn::with(script).await, open("a=1").await);
-    let checks = as_many_as_may_be(&hub, &held).await;
+    let (checks, saving) = as_many_as_may_be(&hub, &held).await;
 
     let over = hub.tool_server_check(open_to_add(&free)).await.unwrap_err();
+    let save_over = saving_docs(&hub, "over", &free).saved.await.unwrap().unwrap_err();
     gate.open();
     for held in checks {
         assert_eq!(held.await.unwrap().unwrap(), ToolServerChecked::Listed { tools: 2 });
     }
+    let saved = saving.saved.await.unwrap().unwrap();
 
-    assert_eq!(over.code, ErrorCode::Unavailable);
+    assert_eq!((over.code, save_over.code), (ErrorCode::Unavailable, ErrorCode::Unavailable));
     assert!(free.asked().is_empty());
+    assert_eq!(saved, ToolServerSaved::Saved { server: servers(&hub).remove(0) });
     assert_eq!(hub.tool_server_check(open_to_add(&free)).await.unwrap(), ToolServerChecked::Listed { tools: 2 });
 }
 
@@ -151,15 +166,19 @@ async fn a_server_that_doesnt_answer_in_15_seconds_is_given_up_on_and_makes_room
     let dir = tempfile::tempdir().unwrap();
     let script = Script { asks: Asks::Nothing, server_after: Some(Gate::closed()), ..Script::default() };
     let (hub, held, free) = (hub_in(dir.path()), StandIn::with(script).await, open("a=1").await);
-    let checks = as_many_as_may_be(&hub, &held).await;
+    let (checks, saving) = as_many_as_may_be(&hub, &held).await;
 
     tokio::time::pause();
     tokio::time::advance(Duration::from_secs(15)).await;
     tokio::time::resume();
 
+    let timed_out = NoToolList::TimedOut;
     for given_up in checks {
         let given_up = tokio::time::timeout(Duration::from_secs(10), given_up).await.expect("it wasn't given up on");
-        assert_eq!(given_up.unwrap().unwrap(), ToolServerChecked::NotListed { why: NoToolList::TimedOut });
+        assert_eq!(given_up.unwrap().unwrap(), ToolServerChecked::NotListed { why: timed_out });
     }
+    let given_up = tokio::time::timeout(Duration::from_secs(10), saving.saved).await.expect("it wasn't given up on");
+    assert_eq!(given_up.unwrap().unwrap(), ToolServerSaved::NotListed { why: timed_out });
+    assert_eq!(servers(&hub), []);
     assert_eq!(hub.tool_server_check(open_to_add(&free)).await.unwrap(), ToolServerChecked::Listed { tools: 2 });
 }

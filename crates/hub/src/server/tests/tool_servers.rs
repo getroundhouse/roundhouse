@@ -1,5 +1,6 @@
-//! The tool servers a hub has of its own, as clients check, add and remove them on connections of their own. What's
-//! kept, in what order, and what's refused is tested in `crate::tool_servers`.
+//! The tool servers a hub has of its own, as clients check, save, add and remove them on connections of their own.
+//! What's kept, in what order, and what's refused is tested in `crate::tool_servers`, and what a save does, in
+//! `crate::hub`.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -7,6 +8,7 @@ use std::sync::Arc;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe, Subscription};
 use protocol::client::tool_server_checks::{ToolServerCheck, ToolServerChecked, ToolServerToCheck};
+use protocol::client::tool_server_saves::{SaveWhen, ToolServerSave, ToolServerSaveCancel, ToolServerSaved};
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit, ToolServerRemove};
 use protocol::client::tool_sign_ins::{
     REDIRECT_PORTS, ToolSignInBegun, ToolSignInCancel, ToolSignInFinish, ToolSignInReturned, ToolSignInStart,
@@ -16,9 +18,9 @@ use protocol::client::{
     CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, Request,
 };
 use protocol::model::{RecordKey, ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerKey, ToolSignInStatus};
-use tool_sign_in::{Asks, AuthorizationPage, Script, StandIn};
+use tool_sign_in::{Asks, AuthorizationPage, Gate, Script, StandIn};
 
-use super::Connection;
+use super::{Connection, WAIT};
 use crate::hub::Hub;
 use crate::hub::tests::{hub_in, hub_in_again};
 
@@ -106,6 +108,70 @@ async fn a_client_is_answered_with_what_a_check_comes_to_and_nothing_is_added() 
 
     let ReplyOutcome::Response(ClientResponse::ToolServerChecked(checked)) = reply else { panic!("{reply:?}") };
     assert_eq!(checked, ToolServerChecked::Listed { tools: 2 });
+    assert_eq!(following(&hub).await.1, []);
+}
+
+/// Adding `stand_in` as Linear, as the save `id`, once it has listed its tools.
+fn save(id: &str, stand_in: &StandIn) -> ClientRequest {
+    let url = stand_in.server().as_str().to_string();
+    let of = ToolServerToCheck::Add(ToolServerAdd { url, ..add("t", "Linear", ToolServerAuthGiven::Neither) });
+    ToolServerSave { id: id.into(), of, when: SaveWhen::Listed }.into_request()
+}
+
+/// One that holds its answers back until `gate` opens, which nothing here does.
+async fn held(gate: &Gate) -> StandIn {
+    StandIn::with(Script { asks: Asks::Nothing, server_after: Some(gate.clone()), ..Script::default() }).await
+}
+
+/// Sent without waiting for the save's reply, as a client sends one as the person types. The save is under way as the
+/// connection reads it, before the next request, so the cancel finds it.
+#[tokio::test]
+async fn a_save_cancelled_straight_after_its_sent_is_let_go_of_and_adds_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let gate = Gate::closed();
+    let (hub, held) = (hub_in(dir.path()), held(&gate).await);
+    let mut client = client(&hub).await;
+
+    client.write(2, &save("s", &held)).await;
+    client.write(3, &ToolServerSaveCancel { id: "s".into() }.into_request()).await;
+    let saved = client.reply_to(2).await;
+    let cancelled = |frame: &HubFrame| {
+        matches!(frame, HubFrame::Reply { id: 3, outcome: ReplyOutcome::Response(ClientResponse::Ok) })
+    };
+    client.until("the cancel's reply", |sent| sent.iter().any(cancelled)).await;
+
+    assert!(
+        matches!(saved, ReplyOutcome::Response(ClientResponse::ToolServerSaved(ToolServerSaved::Cancelled))),
+        "{saved:?}"
+    );
+    assert_eq!(following(&hub).await.1, []);
+}
+
+/// Another save of its ID is refused while it's under way, so once one isn't, it has ended, though its server hasn't
+/// answered.
+#[tokio::test]
+async fn a_save_whose_connection_closes_while_its_server_is_asked_is_let_go_of() {
+    let dir = tempfile::tempdir().unwrap();
+    let gate = Gate::closed();
+    let (hub, held) = (hub_in(dir.path()), held(&gate).await);
+    let mut goes = client(&hub).await;
+    goes.write(2, &save("s", &held)).await;
+    waiting::task::until(WAIT, "it wasn't asked", || held.asked().len() == 1).await;
+
+    drop(goes);
+    let unknown = ToolServerSave { id: "s".into(), of: ToolServerToCheck::Unknown, when: SaveWhen::Listed };
+    let again = waiting::task::until_ok_async(WAIT, || {
+        let (hub, unknown) = (hub.clone(), unknown.clone().into_request());
+        async move {
+            match client(&hub).await.reply(2, &unknown).await {
+                ReplyOutcome::Error(e) if e.code == ErrorCode::Conflict => Err("the save is still under way"),
+                other @ (ReplyOutcome::Response(_) | ReplyOutcome::Error(_)) => Ok(other),
+            }
+        }
+    })
+    .await;
+
+    assert!(matches!(&again, ReplyOutcome::Error(e) if e.code == ErrorCode::InvalidRequest), "{again:?}");
     assert_eq!(following(&hub).await.1, []);
 }
 

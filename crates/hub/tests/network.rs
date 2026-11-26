@@ -6,6 +6,10 @@ use std::time::{Duration, Instant};
 
 use client_core::{Client, ClientError};
 use protocol::client::ErrorCode;
+use protocol::client::tool_server_checks::ToolServerToCheck;
+use protocol::client::tool_server_saves::{SaveWhen, ToolServerSave, ToolServerSaveCancel};
+use protocol::client::tool_servers::ToolServerAdd;
+use protocol::model::ToolServerAuthGiven;
 use protocol::pairing::Fingerprint;
 
 struct Running {
@@ -96,6 +100,14 @@ fn paired_clients_read_records_but_cannot_administer_and_revocation_closes_them(
     // A paired device may update a hub installed as a service, which this one isn't, so it's past what's local only.
     let update = remote.call(protocol::client::admin::HubUpdateTo { version: "0.1.9".into() }).unwrap_err();
     assert_eq!(code(update), ErrorCode::InvalidRequest);
+    // So are the hub's MCP servers, since a desktop on another machine adds and edits them: each past what's local
+    // only, to a refusal of what it asks.
+    let add =
+        ToolServerAdd { id: "t".into(), name: String::new(), url: String::new(), auth: ToolServerAuthGiven::Neither };
+    let save = ToolServerSave { id: "s".into(), of: ToolServerToCheck::Unknown, when: SaveWhen::Listed };
+    assert_eq!(code(remote.call(add).unwrap_err()), ErrorCode::InvalidRequest);
+    assert_eq!(code(remote.call(save).unwrap_err()), ErrorCode::InvalidRequest);
+    remote.call(ToolServerSaveCancel { id: "s".into() }).unwrap();
     assert_eq!(code(client_core::pair(&pairing.link, "Second use").unwrap_err()), ErrorCode::Unauthorized);
     assert_eq!(running.local.pairing_wait(&pairing.code).unwrap().id, hub.device_id);
     // It said no device in its hello, and is taken to be the one it paired as: past the device, to the chat.

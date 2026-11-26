@@ -118,7 +118,7 @@ pub use ids::{
     AccountId, AgentSessionId, ApprovalId, AskKey, AttachmentId, BranchName, ChildWorktreeId, ClientMessageId,
     ClientRequestId, CommentId, CommitId, DeviceId, GithubAccountId, GithubAppSlug, GithubSignInId, GithubUserCode,
     GithubUsername, HubId, InstanceId, MessageId, ProposalId, ProviderName, RemoteName, RepoId, SessionId, SubagentId,
-    TaskId, TerminalId, ToolServerId, ToolSignInId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
+    TaskId, TerminalId, ToolServerId, ToolServerSaveId, ToolSignInId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
 };
 mod repo;
 pub use repo::{Repo, RepoOrigin, RepoUrl, RepoUrlError};
