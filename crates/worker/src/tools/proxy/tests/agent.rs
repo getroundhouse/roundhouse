@@ -14,6 +14,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 
+use super::super::Upstream;
+use super::super::private::Lookup;
 use super::stand_in::KEY;
 use crate::asks::Asks;
 use crate::tools::{Caller, Tools};
@@ -32,10 +34,24 @@ impl Agent {
     /// One whose worker's hub answers what the worker asks as `answer` says.
     pub(super) async fn whose_hub(
         servers: Vec<ProxiedServer>,
+        answer: impl FnMut(WorkerAsk) -> AskOutcome + Send + 'static,
+    ) -> Self {
+        Self::reaching(servers, Upstream::default(), answer).await
+    }
+
+    /// One whose worker finds where a server signed in to over `http` is with `lookup`.
+    pub(super) async fn looking_up(servers: Vec<ProxiedServer>, lookup: Lookup) -> Self {
+        Self::reaching(servers, Upstream::looking_up(lookup), |ask| panic!("{ask:?}")).await
+    }
+
+    async fn reaching(
+        servers: Vec<ProxiedServer>,
+        upstream: Upstream,
         mut answer: impl FnMut(WorkerAsk) -> AskOutcome + Send + 'static,
     ) -> Self {
         let (frames, mut sent) = mpsc::channel(8);
-        let tools = Tools::new(Arc::new(Asks::new(frames)), Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll);
+        let mut tools = Tools::new(Arc::new(Asks::new(frames)), Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll);
+        tools.proxy.upstream = upstream;
         let caller = Caller { session_id: "s".into(), worktree: "/no/worktree".into() };
         tools.admit(ToolsToken::new("token-s"), caller);
         tools.proxy.set(servers);

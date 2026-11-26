@@ -1,10 +1,11 @@
 use std::io;
 use std::net::SocketAddr;
 
+use protocol::tool_server_http::is_private;
 use thiserror::Error;
 use url::Url;
 
-use super::{Names, is_special};
+use super::Names;
 use crate::ServerUrl;
 
 /// Why something isn't fetched.
@@ -30,7 +31,7 @@ pub(crate) struct Reach {
 impl Reach {
     pub(super) async fn of(server: &ServerUrl, names: &Names) -> io::Result<Self> {
         let addresses = names.look_up(server.url()).await?;
-        let private = !addresses.is_empty() && addresses.iter().all(|address| is_special(address.ip()));
+        let private = !addresses.is_empty() && addresses.iter().all(|address| is_private(address.ip()));
         Ok(Self { host: host(server.url()), private })
     }
 
@@ -57,7 +58,7 @@ impl Reach {
         // A server taken to be on a private network has to be found there when it's asked too. Otherwise one on the
         // internet, whose name came to a private address for a moment, could have Roundhouse fetch from the network.
         let only_private = url.scheme() == "http" || (self.private && host(url) == self.host);
-        let taken = |address: &SocketAddr| if is_special(address.ip()) { self.private } else { !only_private };
+        let taken = |address: &SocketAddr| if is_private(address.ip()) { self.private } else { !only_private };
         let vetted: Vec<_> = addresses.into_iter().filter(taken).collect();
         if vetted.is_empty() { Err(NotFetched::Address) } else { Ok(vetted) }
     }

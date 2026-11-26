@@ -5,7 +5,8 @@
 //! 401, is asked once more, with the access token the hub has for it then, before the agent is told anything. One that
 //! answers 403 since it wants more access fails that call alone, once the hub has been told what it wants. And an agent
 //! that's connected to a server the person has since moved to another URL is cut off from it until it connects to it
-//! there.
+//! there. A request that carries a sign-in's access token goes over plain `http` only to a private address, as
+//! `private` says.
 
 #[cfg(test)]
 mod tests;
@@ -16,6 +17,7 @@ mod forwarding;
 mod headers;
 mod passed_on;
 mod path;
+mod private;
 mod server;
 mod upstream;
 

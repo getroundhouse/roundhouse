@@ -1,6 +1,8 @@
-use super::Failure;
+use super::private::{Lookup, NotPrivate, PrivateAddresses, PrivateOnly};
+use super::{Failure, Sent};
 use http_body_util::Full;
 use hyper::body::{Bytes, Incoming};
+use hyper::http::uri::Scheme;
 use hyper::{Request, Response, Uri};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use hyper_util::client::legacy::Client;
@@ -33,20 +35,46 @@ const IDLE_FOR: Duration = Duration::from_secs(30);
 const IDLE_PER_SERVER: usize = 2;
 
 type HttpClient = Client<ConnectsInTime<HttpsConnector<HttpConnector>>, Full<Bytes>>;
+type PrivateClient = Client<ConnectsInTime<PrivateOnly>, Full<Bytes>>;
 
-/// The client that reaches the hub's tool servers, made the first time one is asked, since reading the system's
-/// certificates takes a moment, and a workspace may have no call to make.
-#[derive(Default)]
-pub(super) struct Upstream(OnceCell<HttpClient>);
+/// The clients that reach the hub's tool servers. One is for a request that carries a sign-in's access token over plain
+/// `http`, and connects only to private addresses, with connections of its own, so none made for a key or for nothing
+/// is used for a token. The other is for every other request, over `https` or `http`, made the first time one is
+/// asked, since reading the system's certificates takes a moment, and a workspace may have no call to make.
+pub(super) struct Upstream {
+    any: OnceCell<HttpClient>,
+    private: PrivateClient,
+}
+
+impl Default for Upstream {
+    fn default() -> Self {
+        Self::looking_up(Lookup::default())
+    }
+}
 
 impl Upstream {
-    /// Sends a request, whose URL is whole, and returns the answer once its headers have come.
-    pub(super) async fn send(&self, request: Request<Full<Bytes>>) -> Result<Response<Incoming>, Failure> {
-        let client = self.0.get_or_try_init(made).await.map_err(|e| {
-            warn!(name: "tool_server.certificates_unread", error = %e, "Couldn't read the system's certificates");
-            Failure::NoCertificates
-        })?;
-        client.request(request).await.map_err(|e| {
+    /// One whose client for private addresses looks names up with `lookup`.
+    pub(super) fn looking_up(lookup: Lookup) -> Self {
+        let private = PrivateOnly(configured(HttpConnector::new_with_resolver(PrivateAddresses(lookup))));
+        Self { any: OnceCell::new(), private: pooled(private) }
+    }
+
+    /// Sends a request, whose URL is whole and which carries `sent`, and returns the answer once its headers have come.
+    pub(super) async fn send(&self, request: Request<Full<Bytes>>, sent: Sent) -> Result<Response<Incoming>, Failure> {
+        let answered = if sent == Sent::AccessToken && request.uri().scheme() != Some(&Scheme::HTTPS) {
+            self.private.request(request).await
+        } else {
+            let client = self.any.get_or_try_init(made).await.map_err(|e| {
+                warn!(name: "tool_server.certificates_unread", error = %e, "Couldn't read the system's certificates");
+                Failure::NoCertificates
+            })?;
+            client.request(request).await
+        };
+        answered.map_err(|e| {
+            // Its caller logs it, with which server it is.
+            if caused_by_not_private(&e) {
+                return Failure::NotPrivate;
+            }
             warn!(name: "tool_server.unanswered", error = with_causes(&e), "A tool server didn't answer");
             if e.is_connect() { Failure::Unreachable } else { Failure::Lost }
         })
@@ -58,20 +86,46 @@ async fn made() -> io::Result<HttpClient> {
 }
 
 fn client() -> io::Result<HttpClient> {
-    let mut http = HttpConnector::new();
+    let mut http = configured(HttpConnector::new());
     http.enforce_http(false);
-    http.set_nodelay(true);
-    http.set_keepalive(Some(KEEPALIVE_AFTER));
-    http.set_keepalive_interval(Some(KEEPALIVE_EVERY));
-    http.set_keepalive_retries(Some(KEEPALIVE_TIMES));
     let https = HttpsConnectorBuilder::new()
         .with_provider_and_native_roots(rustls::crypto::ring::default_provider())?
         .https_or_http()
         .enable_http1()
         .wrap_connector(http);
+    Ok(pooled(https))
+}
+
+/// `http` as every connection to a tool server is made.
+fn configured<R>(mut http: HttpConnector<R>) -> HttpConnector<R> {
+    http.set_nodelay(true);
+    http.set_keepalive(Some(KEEPALIVE_AFTER));
+    http.set_keepalive_interval(Some(KEEPALIVE_EVERY));
+    http.set_keepalive_retries(Some(KEEPALIVE_TIMES));
+    http
+}
+
+/// A client that connects with `connector` in time, and keeps connections as every client to tool servers does.
+fn pooled<C>(connector: C) -> Client<ConnectsInTime<C>, Full<Bytes>>
+where
+    C: Service<Uri> + Clone + Send + Sync + 'static,
+    ConnectsInTime<C>: hyper_util::client::legacy::connect::Connect,
+{
     let mut client = Client::builder(TokioExecutor::new());
     client.pool_timer(TokioTimer::new()).pool_idle_timeout(IDLE_FOR).pool_max_idle_per_host(IDLE_PER_SERVER);
-    Ok(client.build(ConnectsInTime(https)))
+    client.build(ConnectsInTime(connector))
+}
+
+/// Whether `e` came of a request that carries a sign-in going nowhere private.
+fn caused_by_not_private(e: &(dyn Error + 'static)) -> bool {
+    let mut cause = Some(e);
+    while let Some(error) = cause {
+        if error.is::<NotPrivate>() {
+            return true;
+        }
+        cause = error.source();
+    }
+    false
 }
 
 /// An error with what caused it, none of which has the URL's query or a header: hyper says what it was doing, and
