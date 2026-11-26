@@ -4,7 +4,7 @@
 
 use crate::error::Error;
 use crate::files::{CanvasPath, File};
-use crate::status::Status;
+use crate::status::{BADGE, Status};
 
 /// The index's own canvas, which isn't listed in it.
 pub const INDEX: &str = "Index";
@@ -48,8 +48,12 @@ fn entries(canvases: &[File<CanvasPath>]) -> Result<Vec<(CanvasPath, Status)>, E
     let mut entries = others
         .map(|canvas| {
             let level = Level::of(&canvas.path).ok_or_else(|| Error::NoLevel(canvas.path.clone()))?;
-            let status = Status::first_in(&canvas.text).ok_or_else(|| Error::NoBadge(canvas.path.clone()))?;
-            Ok((level, canvas.path.clone(), status))
+            let badges: Vec<Status> = canvas.text.lines().filter_map(Status::of_badge).collect();
+            match badges[..] {
+                [status] => Ok((level, canvas.path.clone(), status)),
+                [] => Err(Error::NoBadge(canvas.path.clone())),
+                _ => Err(Error::Badges(canvas.path.clone())),
+            }
         })
         .collect::<Result<Vec<_>, Error>>()?;
     entries.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
@@ -87,7 +91,7 @@ pub fn index(canvases: &[File<CanvasPath>]) -> Result<String, Error> {
             id(&format!("{path} name")),
             id(&format!("{path} name fill")),
         ));
-        rows.push(format!("    {} inst(\"{status}\",canvas(Board/Status)) \"Status\"", id(&format!("{path} status"))));
+        rows.push(format!("    {} inst(\"{status}\",canvas(Board/Status)) \"{BADGE}\"", id(&format!("{path} status"))));
     }
     rows.push("bp:end".to_string());
     Ok(rows.join("\n") + "\n")
@@ -101,7 +105,7 @@ pub fn listed(index: &str) -> Vec<(CanvasPath, Status)> {
     let entries = starts.filter_map(|(at, row)| {
         let name = row.rsplit('"').nth(1)?;
         let under = rows[at + 1..].iter().take_while(|row| row.starts_with("    "));
-        let status = under.copied().find_map(Status::first_in)?;
+        let status = under.copied().find_map(Status::of_badge)?;
         Some((CanvasPath::new(name), status))
     });
     entries.collect()
@@ -149,14 +153,25 @@ mod tests {
     }
 
     #[test]
-    fn a_canvas_outside_the_levels_or_without_a_badge_is_refused() {
+    fn a_canvas_outside_the_levels_or_without_a_badge_or_with_two_is_refused() {
         let outside = index(&[canvas("Sketches/Idea", "Status Exploring")]);
         let loose = index(&[canvas("Idea", "Status Exploring")]);
         let unbadged = index(&[File { path: CanvasPath::new("Components/Chip"), text: String::new() }]);
+        let mut twice = canvas("Components/Chip", "Status Ready");
+        twice.text.push_str("\n2 inst(\"Status Exploring\",canvas(Board/Status)) \"Status\"");
 
         assert!(matches!(outside, Err(Error::NoLevel(_))), "{outside:?}");
         assert!(matches!(loose, Err(Error::NoLevel(_))), "{loose:?}");
         assert!(matches!(unbadged, Err(Error::NoBadge(_))), "{unbadged:?}");
+        assert!(matches!(index(&[twice]), Err(Error::Badges(_))));
+    }
+
+    #[test]
+    fn a_copy_of_a_badge_in_an_option_comes_before_the_canvass_own_and_is_not_read_as_it() {
+        let mut deciding = canvas("Components/Chip", "Status Ready for review");
+        deciding.text.insert_str(0, "1 inst(\"Status Ready\",canvas(Board/Status)) \"Option A\"\n");
+
+        assert_eq!(entries(&[deciding]).unwrap(), [(CanvasPath::new("Components/Chip"), Status::ReadyForReview)]);
     }
 
     #[test]
