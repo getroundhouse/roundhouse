@@ -5,7 +5,7 @@ use http_body_util::{Either, Full};
 use protocol::client::tool_server_checks::NoToolList;
 use serde_json::{Value, json};
 
-use super::{Heard, Reply, StandIn, as_json, as_stream, listed, status};
+use super::{Heard, Reply, StandIn, as_json, as_stream, listed, status, with_key, with_none};
 
 fn error() -> Value {
     json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -32603, "message": "made up"}})
@@ -23,7 +23,7 @@ fn page(code: u16) -> Reply {
 /// What a server that answers everything with `answer` comes to, asked with a key and with none.
 async fn always(answer: fn() -> Reply) -> [Result<u32, NoToolList>; 2] {
     let server = StandIn::answering(move |_| answer()).await;
-    [server.with_key().await, server.with_none().await]
+    [with_key(&server).await, with_none(&server).await]
 }
 
 #[tokio::test]
@@ -80,7 +80,7 @@ async fn a_server_that_connects_and_wont_list_its_tools_is_said_to() {
             };
             let server = StandIn::answering(answer).await;
 
-            assert_eq!(server.with_none().await, Err(NoToolList::WontList), "{connects_to}");
+            assert_eq!(with_none(&server).await, Err(NoToolList::WontList), "{connects_to}");
         }
     }
 }
@@ -111,7 +111,7 @@ async fn a_refusal_counts_wherever_it_comes() {
         };
         let server = StandIn::answering(answer).await;
 
-        assert_eq!(server.with_key().await, Err(NoToolList::KeyRefused { status: 401 }), "{refuses}");
+        assert_eq!(with_key(&server).await, Err(NoToolList::KeyRefused { status: 401 }), "{refuses}");
         assert_eq!(server.asked().last().unwrap(), refuses, "and nothing more is asked");
     }
 }

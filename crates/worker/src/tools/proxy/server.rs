@@ -1,11 +1,9 @@
 use super::path::path_of;
 use super::{Connections, Failure, Sent, UnderWay, Upstream};
-use hyper::Uri;
-use hyper::header::{HeaderName, HeaderValue};
 use parking_lot::Mutex;
 use protocol::capability::setup::{ServerName, ToolServerState};
 use protocol::model::{RunId, SessionId, ToolServerId, ToolServerName, ToolServerPlace};
-use protocol::worker::{ProxiedServer, ServerHeader, ServerSignIn, TokenNumber};
+use protocol::worker::{ProxiedServer, ServerSignIn, TokenNumber};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -85,16 +83,18 @@ impl Server {
         let place = url.place();
         let target = match sign_in {
             Some(ServerSignIn::NeedsSignIn) => Err(Failure::NeedsSignIn),
-            sign_in => Target::new(url.as_str(), header, sign_in).ok_or(Failure::Unusable),
+            sign_in => {
+                let server = tool_server_http::Server::new(&url, header.as_ref());
+                server.map(|server| Target { server, sign_in }).ok_or(Failure::Unusable)
+            }
         };
         Self { id, name, label, place, target }
     }
 }
 
-/// Where a server is, and the header that says who's asking.
+/// Where a server is, the header that says who's asking, and whether that's an access token of a sign-in.
 pub(super) struct Target {
-    pub(super) uri: Uri,
-    pub(super) header: Option<(HeaderName, HeaderValue)>,
+    pub(super) server: tool_server_http::Server,
     sign_in: Option<ServerSignIn>,
 }
 
@@ -108,31 +108,10 @@ impl Target {
     }
 
     pub(super) fn sent(&self) -> Sent {
-        match (&self.sign_in, &self.header) {
+        match (&self.sign_in, self.server.keyed()) {
             (Some(_), _) => Sent::AccessToken,
-            (None, Some(_)) => Sent::Key,
-            (None, None) => Sent::Nothing,
+            (None, true) => Sent::Key,
+            (None, false) => Sent::Nothing,
         }
     }
-
-    /// `None` for a URL that isn't HTTP's, or a header HTTP can't carry.
-    fn new(url: &str, header: Option<ServerHeader>, sign_in: Option<ServerSignIn>) -> Option<Self> {
-        let uri: Uri = url.parse().ok()?;
-        uri.host()?;
-        if !matches!(uri.scheme_str(), Some("http" | "https")) {
-            return None;
-        }
-        let header = match header {
-            Some(header) => Some(sent(&header)?),
-            None => None,
-        };
-        Some(Self { uri, header, sign_in })
-    }
-}
-
-fn sent(header: &ServerHeader) -> Option<(HeaderName, HeaderValue)> {
-    let name = HeaderName::from_bytes(header.name.as_str().as_bytes()).ok()?;
-    let mut value = HeaderValue::from_str(header.value.as_str()).ok()?;
-    value.set_sensitive(true);
-    Some((name, value))
 }

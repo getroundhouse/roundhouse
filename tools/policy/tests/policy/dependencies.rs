@@ -56,6 +56,7 @@ fn nothing_outside_the_ui_depends_on_gpui() {
         "hub",
         "github",
         "tool-sign-in",
+        "tool-server-http",
         "worker",
         "agents",
         "providers",
@@ -77,7 +78,7 @@ fn clients_only_reach_the_hub_through_the_protocol() {
     let metadata = metadata();
     for package in ["client-core", "local-hub", "cli", "mobile-ios"] {
         let closure = runtime_closure(metadata, package);
-        for banned in ["hub", "github", "tool-sign-in", "worker", "agents", "providers"] {
+        for banned in ["hub", "github", "tool-sign-in", "tool-server-http", "worker", "agents", "providers"] {
             assert!(!closure.contains(banned), "{package} depends on {banned}");
         }
     }

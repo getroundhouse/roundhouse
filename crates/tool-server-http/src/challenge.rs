@@ -2,9 +2,9 @@
 
 use std::mem;
 
-use crate::model::ToolScopes;
 use http::HeaderMap;
 use http::header::WWW_AUTHENTICATE;
+use protocol::model::ToolScopes;
 
 /// What RFC 6750, section 3.1, calls a token that's good, and isn't allowed what was asked.
 const INSUFFICIENT_SCOPE: &str = "insufficient_scope";

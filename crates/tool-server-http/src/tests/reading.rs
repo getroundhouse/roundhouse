@@ -1,7 +1,7 @@
-use super::{Challenge, access_wanted, is_private};
-use crate::model::ToolScopes;
+use crate::{Challenge, access_wanted, is_private};
 use http::HeaderMap;
 use http::header::WWW_AUTHENTICATE;
+use protocol::model::ToolScopes;
 use std::net::IpAddr;
 
 fn scopes(text: &str) -> ToolScopes {

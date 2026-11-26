@@ -8,8 +8,7 @@ use protocol::model::ToolScopes;
 use protocol::worker::{AskForToolAccess, AskReply, ServerSignIn, TokenNumber, ToolAccess, WorkerAsk};
 
 use super::signed_in::{CALL, FIRST, answered_by, renewing, with};
-use super::stand_in::Heard;
-use super::{Reply, StandIn};
+use super::{Heard, Reply, StandIn, as_set};
 
 const WANTS: &str =
     r#"Bearer error="insufficient_scope", scope="made-up:read made-up:write", error_description="made-up""#;
@@ -102,7 +101,7 @@ async fn no_other_403_is_told_to_the_hub() {
     let mut newer = with(&server, "made-up-first", FIRST);
     newer.sign_in = Some(ServerSignIn::Unknown);
 
-    for set in [with(&plain, "made-up-first", FIRST), server.as_set(), newer] {
+    for set in [with(&plain, "made-up-first", FIRST), as_set(&server), newer] {
         let (agent, asks) = answered_by(set, |_| Ok(SIGNS_IN_AGAIN)).await;
 
         let (_, said) = agent.post(CALL).await.error();

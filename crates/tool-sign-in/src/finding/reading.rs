@@ -1,11 +1,11 @@
 use serde::de::DeserializeOwned;
+use tool_server_http::Challenge;
 use url::Url;
 
 use super::metadata::{AuthorizationServerMetadata, ServerMetadata};
 use super::well_known::{host_of, of_authorization_server, of_server};
 use crate::fetch::{Caller, json};
 use crate::{Failure, ServerUrl};
-use protocol::tool_server_http::Challenge;
 
 /// What's read of some metadata.
 pub(super) enum Read<T> {

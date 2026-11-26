@@ -8,12 +8,12 @@ use protocol::worker::ProxiedServer;
 use serde_json::json;
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpListener;
+use tool_server_http::CONNECT_WITHIN;
 
-use super::stand_in::{KEY, url};
-use super::{Agent, Answer, Reply, StandIn};
+use super::stand_in::url;
+use super::{Agent, Answer, KEY, Reply, StandIn, as_set};
 use crate::tools::proxy::path::path_of;
 use crate::tools::proxy::server_in;
-use crate::tools::proxy::upstream::CONNECT_WITHIN;
 
 const CALL: &str = r#"{"jsonrpc":"2.0","id":"call-7","method":"tools/call","params":{"name":"list"}}"#;
 const NOTIFICATION: &str = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
@@ -45,10 +45,10 @@ async fn told(server: ProxiedServer) -> String {
 async fn a_server_that_refuses_is_said_to_have_rather_than_its_401_or_403_passed_on() {
     for status in [StatusCode::UNAUTHORIZED, StatusCode::FORBIDDEN] {
         let server = StandIn::answering(move |_| refusing(status)).await;
-        let keyless = ProxiedServer { header: None, ..server.as_set() };
+        let keyless = ProxiedServer { header: None, ..as_set(&server) };
         let code = status.as_u16();
 
-        let with_a_key = told(server.as_set()).await;
+        let with_a_key = told(as_set(&server)).await;
         let without = told(keyless).await;
 
         let refused = "Linear (Northwind) refused the key Roundhouse sent it";
@@ -60,7 +60,7 @@ async fn a_server_that_refuses_is_said_to_have_rather_than_its_401_or_403_passed
 
 #[tokio::test]
 async fn a_server_that_isnt_there_or_goes_before_it_answers_is_said_to_have() {
-    let server = StandIn::answering(|_| refusing(StatusCode::OK)).await.as_set();
+    let server = as_set(&StandIn::answering(|_| refusing(StatusCode::OK)).await);
     // A port the system gives nobody who asks for any.
     let isnt_there = ProxiedServer { url: url("http://127.0.0.1:1/?made-up"), ..server.clone() };
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
@@ -87,7 +87,7 @@ async fn a_server_that_isnt_there_or_goes_before_it_answers_is_said_to_have() {
 async fn a_server_that_never_finishes_connecting_is_given_up_on() {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    let server = StandIn::answering(|_| refusing(StatusCode::OK)).await.as_set();
+    let server = as_set(&StandIn::answering(|_| refusing(StatusCode::OK)).await);
     let stuck = ProxiedServer { url: url(&format!("https://127.0.0.1:{port}/?made-up")), ..server };
     let agent = Agent::with(vec![stuck]).await;
 
@@ -107,7 +107,7 @@ async fn a_server_that_never_finishes_connecting_is_given_up_on() {
 async fn an_agent_that_hangs_up_ends_its_call_to_the_server() {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    let server = StandIn::answering(|_| refusing(StatusCode::OK)).await.as_set();
+    let server = as_set(&StandIn::answering(|_| refusing(StatusCode::OK)).await);
     let agent = Agent::with(vec![ProxiedServer { url: url(&format!("http://127.0.0.1:{port}/")), ..server }]).await;
     let within = Duration::from_secs(10);
 
@@ -130,10 +130,10 @@ async fn an_agent_that_hangs_up_ends_its_call_to_the_server() {
 #[tokio::test]
 async fn a_server_keeps_its_path_as_its_header_changes_and_says_once_its_not_set() {
     let server = StandIn::answering(|_| refusing(StatusCode::OK)).await;
-    let agent = Agent::with(vec![server.as_set()]).await;
+    let agent = Agent::with(vec![as_set(&server)]).await;
     let path = agent.path().await;
 
-    agent.tools.proxy.set(vec![ProxiedServer { header: None, ..server.as_set() }]);
+    agent.tools.proxy.set(vec![ProxiedServer { header: None, ..as_set(&server) }]);
     let changed = agent.path().await;
     agent.tools.proxy.set(vec![]);
     let removed = Answer::of(agent.request(Method::POST, &path, &[], CALL).await).await;
@@ -154,7 +154,7 @@ type Refused = (Method, String, &'static [(&'static str, &'static str)], StatusC
 #[tokio::test]
 async fn only_a_request_from_one_of_this_workers_agents_reaches_a_server() {
     let server = StandIn::answering(|_| refusing(StatusCode::OK)).await;
-    let agent = Agent::with(vec![server.as_set()]).await;
+    let agent = Agent::with(vec![as_set(&server)]).await;
     let path = agent.path().await;
     let refused: [Refused; 9] = [
         (Method::POST, path.clone(), &[("authorization", "Bearer another-session's")], StatusCode::UNAUTHORIZED),
@@ -184,7 +184,7 @@ async fn only_a_request_from_one_of_this_workers_agents_reaches_a_server() {
 #[tokio::test]
 async fn a_message_too_large_to_hold_is_refused_and_one_larger_than_the_workers_own_tools_take_isnt() {
     let server = StandIn::answering(|_| refusing(StatusCode::OK)).await;
-    let agent = Agent::with(vec![ProxiedServer { header: None, ..server.as_set() }]).await;
+    let agent = Agent::with(vec![ProxiedServer { header: None, ..as_set(&server) }]).await;
     let path = agent.path().await;
 
     agent.request(Method::POST, &path, &[], vec![b' '; 2 * 1024 * 1024]).await;

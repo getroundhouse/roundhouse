@@ -63,10 +63,11 @@ One Cargo workspace. Each crate's own doc comment says more.
 
 ```
 crates/
-  protocol/        The client, worker and provider protocols' types, and how an MCP server's refusals and redirects are read, by the hub and the worker alike
+  protocol/        The client, worker and provider protocols' types
   hub/             The hub
   github/          The hub's calls to GitHub
   tool-sign-in/    The hub's signing in to MCP servers, as an OAuth client, and asking one for its tools
+  tool-server-http/ Sending an MCP server a request, and reading its refusals and redirects, by the hub and the worker alike
   worker/          The worker
   agents/          An adapter for each agent's CLI
   providers/       The trait a provider implements, and the local provider

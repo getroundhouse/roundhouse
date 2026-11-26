@@ -9961,6 +9961,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "009dbb7700f11c55ef83aebbe4c0e9cf1f1ac0844bd8d6f00dc38f302026e13a"
 
 [[package]]
+name = "tool-server-http"
+version = "0.1.0"
+dependencies = [
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "parking_lot",
+ "protocol",
+ "rustls",
+ "serde_json",
+ "tokio",
+ "tower-service",
+]
+
+[[package]]
 name = "tool-sign-in"
 version = "0.1.0"
 dependencies = [
@@ -9969,7 +9986,6 @@ dependencies = [
  "http",
  "http-body-util",
  "hyper",
- "hyper-rustls",
  "hyper-util",
  "parking_lot",
  "protocol",
@@ -9981,7 +9997,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tokio-rustls",
- "tower-service",
+ "tool-server-http",
  "url",
  "waiting",
 ]
@@ -11728,7 +11744,6 @@ dependencies = [
  "base64 0.23.1",
  "http-body-util",
  "hyper",
- "hyper-rustls",
  "hyper-util",
  "jiff",
  "logging",
@@ -11742,7 +11757,6 @@ dependencies = [
  "process",
  "proptest",
  "protocol",
- "rustls",
  "serde",
  "serde_json",
  "sha1_smol",
@@ -11751,7 +11765,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "toml 1.2.1+spec-1.1.0",
- "tower-service",
+ "tool-server-http",
  "tracing",
  "uuid",
  "waiting",

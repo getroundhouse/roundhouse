@@ -14,7 +14,6 @@ base64.workspace = true
 http.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
-hyper-rustls.workspace = true
 hyper-util = { workspace = true, features = ["client-legacy", "http1"] }
 protocol.workspace = true
 ring.workspace = true
@@ -23,7 +22,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-tower-service.workspace = true
+tool-server-http.workspace = true
 url.workspace = true
 parking_lot = { workspace = true, optional = true }
 waiting = { workspace = true, optional = true }
@@ -39,6 +38,8 @@ rcgen.workspace = true
 tokio-rustls.workspace = true
 # For tests that pause time, so a timeout passes without being waited for.
 tokio = { workspace = true, features = ["test-util"] }
+# A stand-in for an MCP server, and a lookup of names made up.
+tool-server-http = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true

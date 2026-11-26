@@ -1,7 +1,8 @@
+use tool_server_http::Challenge;
+
 use crate::fetch::Caller;
 use crate::messages::{Message, refuses_what_was_asked};
 use crate::{Failure, ServerUrl};
-use protocol::tool_server_http::Challenge;
 
 /// Asks `server` something as nobody, as a client of this version would first, and, where it refuses that for what was
 /// asked rather than who asked, as one of the last version with a handshake would, the order MCP gives. A server may

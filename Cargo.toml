@@ -9,6 +9,7 @@ members = [
     "crates/worker",
     "crates/github",
     "crates/tool-sign-in",
+    "crates/tool-server-http",
     "crates/hub",
     "crates/client-core",
     "crates/local-hub",
@@ -68,6 +69,7 @@ default-members = [
     "crates/worker",
     "crates/github",
     "crates/tool-sign-in",
+    "crates/tool-server-http",
     "crates/hub",
     "crates/client-core",
     "crates/local-hub",
@@ -134,6 +136,7 @@ providers = { path = "crates/providers" }
 worker = { path = "crates/worker" }
 github = { path = "crates/github" }
 tool-sign-in = { path = "crates/tool-sign-in" }
+tool-server-http = { path = "crates/tool-server-http" }
 hub = { path = "crates/hub" }
 daemon = { path = "apps/daemon" }
 client-core = { path = "crates/client-core" }
