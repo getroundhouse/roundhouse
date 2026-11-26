@@ -1,11 +1,13 @@
 use super::connections::CutOff;
+use super::passed_on::{Of, is_for_events};
 use super::server::Server;
+use super::under_way::TooMany;
 use super::{Failure, PassedOn, Proxy, Target, failure, headers};
 use crate::asks::Asks;
 use crate::tools::http::AnswerBody;
 use http_body_util::{Either, Full};
 use hyper::body::{Bytes, Incoming};
-use hyper::header::HeaderMap;
+use hyper::header::{CONNECTION, HeaderMap, HeaderValue};
 use hyper::{Method, Request, Response, StatusCode, Uri};
 use protocol::model::{SessionId, ToolServerId};
 use protocol::tool_server_http::{MOST_REDIRECTS_WITHIN, Redirected, access_wanted, redirected};
@@ -46,11 +48,22 @@ impl Proxy {
                 return Failure::Moved.answer(server.label.as_str(), &asked.body);
             }
         };
+        let counted = match self.under_way.counted(&server.id) {
+            Ok(counted) => counted,
+            Err(TooMany { first }) => return too_many(&server, &asked, first),
+        };
         match self.answered(&server, &asked).await {
             Ok(response) => {
                 let said = (response.status(), response.headers());
                 self.connections.answered(&server.id, &server.place, &asked, let_in, said);
-                passed_on(response, |body| PassedOn::new(body, &asked, self.gone(&server)))
+                // A stream of events stays open for as long as the agent is connected, so it counts only until it's
+                // begun.
+                let of = if is_for_events(&asked) {
+                    Of::Events(Some(Box::pin(self.gone(&server))))
+                } else {
+                    Of::Call { _counted: counted }
+                };
+                passed_on(response, |body| PassedOn::new(body, of))
             }
             Err(failure) => {
                 warn!(name: "tool_server.request_failed", server_id = %server.id, ?failure, "A request to a tool server failed");
@@ -86,6 +99,18 @@ impl Proxy {
         }
         Err(Failure::Redirected)
     }
+}
+
+/// The answer to a request to `server`, which has as many under way as it may. The agent's connection is closed with it,
+/// so a CLI that keeps its connections open, and goes on asking, doesn't hold one more of those the worker takes for
+/// each request that's refused. Logged only if it's the `first` since one ended, since a CLI can go on asking.
+fn too_many(server: &Server, asked: &Asked<'_>, first: bool) -> Response<AnswerBody> {
+    if first {
+        warn!(name: "tool_server.too_many_under_way", server_id = %server.id, "A tool server is sent nothing more for now");
+    }
+    let mut refused = Failure::TooManyUnderWay.answer(server.label.as_str(), &asked.body);
+    refused.headers_mut().insert(CONNECTION, HeaderValue::from_static("close"));
+    refused
 }
 
 /// Where `server` is now that it has refused the access token `target` has, if the hub has another for it.

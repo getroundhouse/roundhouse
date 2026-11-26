@@ -20,6 +20,7 @@ mod passed_on;
 mod path;
 mod private;
 mod server;
+mod under_way;
 mod upstream;
 
 use connections::Connections;
@@ -29,4 +30,5 @@ pub(super) use passed_on::PassedOn;
 pub(super) use path::server_in;
 pub(crate) use server::Proxy;
 use server::Target;
+use under_way::UnderWay;
 use upstream::Upstream;

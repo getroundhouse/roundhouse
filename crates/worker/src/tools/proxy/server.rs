@@ -1,5 +1,5 @@
 use super::path::path_of;
-use super::{Connections, Failure, Sent, Upstream};
+use super::{Connections, Failure, Sent, UnderWay, Upstream};
 use hyper::Uri;
 use hyper::header::{HeaderName, HeaderValue};
 use parking_lot::Mutex;
@@ -18,6 +18,8 @@ pub(crate) struct Proxy {
     /// Where each is, for a stream of one's to end as it's moved or removed.
     places: watch::Sender<HashMap<ToolServerId, ToolServerPlace>>,
     pub(super) connections: Connections,
+    /// The calls under way to each, kept here rather than on each server, which each set makes again.
+    pub(super) under_way: UnderWay,
     pub(super) upstream: Upstream,
 }
 

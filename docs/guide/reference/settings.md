@@ -256,7 +256,7 @@ A server can want more than you allowed when you signed in, as when an agent cha
 
 ### When a server refuses a call
 
-If the server refuses its key, an agent gets an error in place of its tools, or of what a call was to answer, such as `Linear refused the key Roundhouse sent it (401)`. A Codex chat's plug says it too, as [Chats](chats.md#the-chats-mcp-servers) says. To give the server another key, choose **Edit** in its row's **…** menu. One that can't be reached from an agent's machine says so in the same way.
+If the server refuses its key, an agent gets an error in place of its tools, or of what a call was to answer, such as `Linear refused the key Roundhouse sent it (401)`. A Codex chat's plug says it too, as [Chats](chats.md#the-chats-mcp-servers) says. To give the server another key, choose **Edit** in its row's **…** menu. One that can't be reached from an agent's machine says so in the same way, and so does one that has 8 calls under way that it hasn't answered, which is sent no more from that workspace until one of them ends.
 
 ### Where an agent's CLI has a server of the same name
 
