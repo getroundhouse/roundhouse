@@ -225,7 +225,7 @@ The server isn't added, and the panel says why, such as that it refused the key 
 - **Add anyway** adds it as it is, such as when it's down for now, or only an agent's machine can reach it, since the hub asks from its own.
 - **Cancel** adds nothing, and you can cancel while it's being asked.
 
-What you type while it's being asked stays, and the hub stops asking. If the hub had added it already, the panel becomes its **Edit** panel, with what you typed, and **Save** saves that.
+While the hub adds it, the panel's fields are off, so what it adds is what you sent.
 
 Change what's wrong in the panel, and the button is **Add** again. [Saving an edit](#edit) of a server's URL, key or header asks it in the same way. A server you sign in to isn't asked, and nor is one whose name alone you change.
 

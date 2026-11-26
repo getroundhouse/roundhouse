@@ -91,8 +91,7 @@ impl From<SharedString> for Says {
 }
 
 /// A field `called` something, of what `input` holds, with what goes in it said under it. `id` is its own, for tests to
-/// find it by, and what's said under it by that and `-says`. It's a setting's, so it's a regular one, as tall as the
-/// panel's buttons.
+/// find it by, and what's said under it by that and `-says`.
 pub(super) fn labelled(
     called: &'static str,
     id: &'static str,
@@ -100,8 +99,13 @@ pub(super) fn labelled(
     says: impl Into<Says>,
     cx: &App,
 ) -> Div {
-    let input = look::field(id, input, look::FieldKind::Boxed, look::ControlSize::Regular).accessibility_label(called);
-    captioned(called, id, input, says, cx)
+    captioned(called, id, setting_field(called, id, input), says, cx)
+}
+
+/// The field of what `input` holds, `called` something, as [`labelled`] draws it, for a panel that turns it off. It's a
+/// setting's, so it's a regular one, as tall as the panel's buttons.
+pub(super) fn setting_field(called: &'static str, id: &'static str, input: &Entity<InputState>) -> look::Field {
+    look::field(id, input, look::FieldKind::Boxed, look::ControlSize::Regular).accessibility_label(called)
 }
 
 /// A control `called` something, such as a dropdown among the panel's fields, with what it does said under it, laid out

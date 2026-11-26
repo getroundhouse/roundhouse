@@ -9,7 +9,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, px,
 };
 
-use super::super::field::{FIELDS_WIDTH, Field, captioned, labelled};
+use super::super::field::{FIELDS_WIDTH, Field, Says, captioned, setting_field};
 use super::super::panel::{self, Closes, Framed, button, buttons};
 use super::Drawing;
 use super::form::{AuthFields, Form, Of};
@@ -48,8 +48,9 @@ pub(super) fn draw(drawing: &Drawing<'_>, open: &Panel, cx: &App) -> AnyElement 
 }
 
 /// The panel a server is added or edited in: its name, its URL and how it knows the person, with the header and the key
-/// it takes for a key, that the server is being asked for its tools while it is, and its buttons. A URL that's already
-/// there says which server it is, and one that looks like it has a key in it says so, and neither stops anything.
+/// it takes for a key, which are off while the hub saves it, that the server is being asked for its tools while it is,
+/// and its buttons. A URL that's already there says which server it is, and one that looks like it has a key in it says
+/// so, and neither stops anything.
 fn form(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Framed {
     let (url, edit, chosen) = (form.url.value(cx), form.edit(cx), form.auth.way());
     let had = match &form.of {
@@ -57,16 +58,20 @@ fn form(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Framed {
         Of::Had(was) => Some(&**was),
     };
     let there = drawing.records.tool_server_at(&url, had.map(|was| &was.id)).map(|server| &server.name);
+    // Nothing in it changes what was sent while the hub saves it.
+    let off = form.stands.is_waiting();
     let key = match &form.auth {
-        AuthFields::Key { header, key } => Some(key_row(header, key, tool_server_edits::key_says(edit.as_ref()), cx)),
+        AuthFields::Key { header, key } => {
+            Some(key_row(header, key, tool_server_edits::key_says(edit.as_ref()), off, cx))
+        }
         AuthFields::SignIn | AuthFields::Neither => None,
     };
     let asking = form.stands.asks(|| form.is_asked(cx)).then(|| self::asking(&url, cx));
-    let way = h_flex().child(ways(drawing, chosen));
+    let way = h_flex().child(ways(drawing, chosen, off));
     let fields = v_flex()
         .gap(look::Space::Large)
-        .child(labelled("Name", "mcp-name", &form.name.input, words::name_says(there), cx))
-        .child(labelled("URL", "mcp-url", &form.url.input, words::url_says(&url, there), cx))
+        .child(labelled("Name", "mcp-name", &form.name, words::name_says(there), off, cx))
+        .child(labelled("URL", "mcp-url", &form.url, words::url_says(&url, there), off, cx))
         .child(captioned(AUTHENTICATION, "mcp-way", way, tool_server_edits::way_says(chosen, edit.as_ref()), cx))
         .children(key)
         .children(asking);
@@ -104,20 +109,19 @@ fn form_buttons(drawing: &Drawing<'_>, form: &Form, closes: &Closes, cx: &App) -
             let anyway = button("mcp-anyway", words::anyway(does), false, off, drawing.act(Kept::go_anyway));
             (Some(anyway), words::TRY_AGAIN)
         }
-        FormStands::Open | FormStands::Saving { .. } | FormStands::LettingGo { .. } | FormStands::Refused(_) => {
-            (None, does)
-        }
+        FormStands::Open | FormStands::Saving { .. } | FormStands::Refused(_) => (None, does),
     };
     let cancel = closes.button("mcp-cancel", "Cancel", false);
     buttons().child(cancel).children(anyway).child(button("mcp-panel-go", goes, true, off, drawing.act(Kept::go)))
 }
 
-/// The dropdown of the ways a server can know the person, with `chosen` in it.
-fn ways(drawing: &Drawing<'_>, chosen: Way) -> look::MenuButton {
+/// The dropdown of the ways a server can know the person, with `chosen` in it, greyed out while `off`.
+fn ways(drawing: &Drawing<'_>, chosen: Way, off: bool) -> look::MenuButton {
     let kept = drawing.kept.clone();
     look::button("mcp-way", look::ButtonKind::Outlined, look::ControlSize::Regular, words::way_called(chosen))
         .accessibility_label(format!("{AUTHENTICATION}: {}", words::way_called(chosen)))
         .width(WAY_WIDTH)
+        .off(off)
         .menu(Anchor::TopLeft, move |menu: look::Menu, _, _| {
             Way::ALL.into_iter().fold(menu.width(WAYS_WIDTH), |menu, way| {
                 let kept = kept.clone();
@@ -129,10 +133,11 @@ fn ways(drawing: &Drawing<'_>, chosen: Way) -> look::MenuButton {
         })
 }
 
-/// The header a key is sent in and the key, which `key_says` is said under, in a row as wide as the fields over it.
-fn key_row(header: &Field, key: &Field, key_says: &'static str, cx: &App) -> Div {
-    let header = labelled("Header", "mcp-header", &header.input, words::HEADER_SAYS, cx);
-    let key = labelled("Key", "mcp-key", &key.input, key_says, cx);
+/// The header a key is sent in and the key, which `key_says` is said under, in a row as wide as the fields over it, both
+/// greyed out while `off`.
+fn key_row(header: &Field, key: &Field, key_says: &'static str, off: bool, cx: &App) -> Div {
+    let header = labelled("Header", "mcp-header", header, words::HEADER_SAYS, off, cx);
+    let key = labelled("Key", "mcp-key", key, key_says, off, cx);
     h_flex()
         .items_start()
         .w_full()
@@ -140,4 +145,10 @@ fn key_row(header: &Field, key: &Field, key_says: &'static str, cx: &App) -> Div
         .gap(look::Space::Large)
         .child(div().flex_none().w(WAY_WIDTH).child(header))
         .child(div().flex_1().min_w_0().child(key))
+}
+
+/// `field`, `called` something, with what goes in it said under it, greyed out while `off`, as Settings' fields are
+/// laid out.
+fn labelled(called: &'static str, id: &'static str, field: &Field, says: impl Into<Says>, off: bool, cx: &App) -> Div {
+    captioned(called, id, setting_field(called, id, &field.input).off(off), says, cx)
 }
