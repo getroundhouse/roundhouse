@@ -4,11 +4,16 @@
 use std::collections::BTreeMap;
 
 use protocol::client::github::MOST_REFERENCES_SHOWN;
-use protocol::model::ReferenceAsk;
+use protocol::client::listed::Listed;
+use protocol::client::subscriptions::Follow;
+use protocol::model::{Level, ReferenceAsk};
+
+use crate::client::at_level::AtLevel;
+use crate::records::HubRecords;
 
 /// Which chips each view shows.
 #[derive(Default)]
-pub(super) struct GithubHeld {
+pub(in crate::client) struct GithubHeld {
     /// By ID, which is in the order they were made, so all they show is said in the same order each time.
     views: BTreeMap<u64, Vec<ReferenceAsk>>,
 }
@@ -43,5 +48,41 @@ impl GithubHeld {
         }
         all.truncate(MOST_REFERENCES_SHOWN);
         all
+    }
+}
+
+/// An issue or a pull request a chip shows, whose list the hub may send after it answers the request that follows it.
+impl AtLevel for ReferenceAsk {
+    type Wanted = GithubHeld;
+
+    const LISTED_BEFORE_ANSWER: bool = false;
+
+    fn wanted(wanted: &GithubHeld) -> Vec<Self> {
+        wanted.shown()
+    }
+
+    fn follow(self) -> Follow {
+        Follow::Reference { reference: self }
+    }
+
+    fn level(self) -> Level {
+        Level::Reference { reference: self }
+    }
+
+    fn at(level: Level) -> Option<Self> {
+        match level {
+            Level::Reference { reference } => Some(reference),
+            Level::Hub | Level::Workspace { .. } | Level::Session { .. } | Level::Terminal { .. } | Level::Unknown => {
+                None
+            }
+        }
+    }
+
+    fn take_list(records: &mut HubRecords, listed: Listed) -> bool {
+        match listed {
+            Listed::Reference(observations) => records.apply_reference_list(observations),
+            // Of a level this doesn't follow.
+            Listed::Hub(_) | Listed::Workspace(_) | Listed::Session(_) | Listed::Unknown => false,
+        }
     }
 }

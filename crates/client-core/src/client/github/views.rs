@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use protocol::model::ReferenceAsk;
 
 use super::held::GithubHeld;
-use super::source::GithubSource;
 use crate::client::Client;
+use crate::client::at_level::LevelSource;
 use crate::client::follow::{Following, Reach};
 use crate::records::HubRecords;
 
@@ -25,7 +25,7 @@ impl GithubFeed {
     /// Starts following, on a thread of its own, with no chip shown until a view says what it shows, writing what's
     /// sent in `records`, the copy of the same hub's records.
     pub(in crate::client) fn start(client: &Client, records: Reach<HubRecords>) -> GithubFeed {
-        let follow = Following::start(client, GithubHeld::default(), move || GithubSource::new(records));
+        let follow = Following::start(client, GithubHeld::default(), move || LevelSource::<ReferenceAsk>::new(records));
         GithubFeed { follow, next_view: Arc::new(AtomicU64::new(0)) }
     }
 

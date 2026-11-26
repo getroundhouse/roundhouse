@@ -4,7 +4,6 @@
 //! does. A view reads all of it from a [`crate::Snapshot`].
 
 mod held;
-mod source;
 #[cfg(test)]
 mod tests;
 mod views;

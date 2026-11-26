@@ -2,11 +2,12 @@
 
 use std::collections::BTreeMap;
 
+use protocol::client::listed::Listed;
 use protocol::client::subscriptions::Follow;
-use protocol::model::WorkspaceId;
+use protocol::model::{Level, WorkspaceId};
 
-use super::source::WorkspacesSource;
 use crate::client::Client;
+use crate::client::at_level::{AtLevel, LevelSource};
 use crate::client::follow::{Following, Reach};
 use crate::records::HubRecords;
 
@@ -14,12 +15,44 @@ use crate::records::HubRecords;
 #[derive(Default)]
 pub(in crate::client) struct Wanted(BTreeMap<WorkspaceId, usize>);
 
-impl Wanted {
-    /// What to follow, which is each workspace once, however many handles are kept on it.
-    pub(super) fn follows(&self) -> Vec<Follow> {
-        self.0.keys().map(|id| Follow::Workspace { id: id.clone() }).collect()
+/// A workspace, which the hub lists before it answers the request that follows it.
+impl AtLevel for WorkspaceId {
+    type Wanted = Wanted;
+
+    const LISTED_BEFORE_ANSWER: bool = true;
+
+    /// Each workspace once, however many handles are kept on it.
+    fn wanted(wanted: &Wanted) -> Vec<Self> {
+        wanted.0.keys().cloned().collect()
     }
 
+    fn follow(self) -> Follow {
+        Follow::Workspace { id: self }
+    }
+
+    fn level(self) -> Level {
+        Level::Workspace { id: self }
+    }
+
+    fn at(level: Level) -> Option<Self> {
+        match level {
+            Level::Workspace { id } => Some(id),
+            Level::Hub | Level::Session { .. } | Level::Terminal { .. } | Level::Reference { .. } | Level::Unknown => {
+                None
+            }
+        }
+    }
+
+    fn take_list(records: &mut HubRecords, listed: Listed) -> bool {
+        match listed {
+            Listed::Workspace(observations) => records.apply_workspace_list(observations),
+            // Of a level this doesn't follow.
+            Listed::Hub(_) | Listed::Session(_) | Listed::Reference(_) | Listed::Unknown => false,
+        }
+    }
+}
+
+impl Wanted {
     pub(super) fn want(&mut self, id: WorkspaceId) {
         *self.0.entry(id).or_default() += 1;
     }
@@ -45,7 +78,7 @@ impl Workspaces {
     /// Starts following, on a thread of its own, with nothing followed until a handle is asked for. What's sent goes
     /// into `records`.
     pub(in crate::client) fn start(client: &Client, records: Reach<HubRecords>) -> Self {
-        let follow = Following::start(client, Wanted::default(), move || WorkspacesSource::new(records));
+        let follow = Following::start(client, Wanted::default(), move || LevelSource::<WorkspaceId>::new(records));
         Workspaces { follow }
     }
 

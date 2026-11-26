@@ -4,7 +4,6 @@
 //! hub's records, which views read.
 
 mod followed;
-mod source;
 #[cfg(test)]
 mod tests;
 
