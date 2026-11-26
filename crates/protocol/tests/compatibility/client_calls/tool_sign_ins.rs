@@ -49,7 +49,7 @@ fn every_request_about_a_sign_in_to_a_tool_server_keeps_its_form() {
 
 #[test]
 fn what_a_start_comes_to_keeps_its_form() {
-    let issuer = || "https://auth.example.com".to_string();
+    let host = || "auth.example.com:8443".to_string();
     let no_way = |why| ToolSignInBegun::NoWay { why };
 
     for (begun, form) in [
@@ -60,31 +60,28 @@ fn what_a_start_comes_to_keeps_its_form() {
         (ToolSignInBegun::NoSignIn, r#""kind":"no_sign_in""#),
         (no_way(NoToolSignIn::NoAuthorizationServer), r#""kind":"no_way","why":{"kind":"no_authorization_server"}"#),
         (
-            no_way(NoToolSignIn::OnlyRegisteredClients { authorization_server: issuer() }),
-            r#""kind":"no_way","why":{"kind":"only_registered_clients","authorization_server":"https://auth.example.com"}"#,
+            no_way(NoToolSignIn::OnlyRegisteredClients { host: host() }),
+            r#""kind":"no_way","why":{"kind":"only_registered_clients","authorization_server":"auth.example.com:8443"}"#,
         ),
         (
-            no_way(NoToolSignIn::OnlyClientsWithSecrets { authorization_server: issuer() }),
-            r#""kind":"no_way","why":{"kind":"only_clients_with_secrets","authorization_server":"https://auth.example.com"}"#,
+            no_way(NoToolSignIn::OnlyClientsWithSecrets { host: host() }),
+            r#""kind":"no_way","why":{"kind":"only_clients_with_secrets","authorization_server":"auth.example.com:8443"}"#,
         ),
         (
-            no_way(NoToolSignIn::NotRegistered { authorization_server: issuer(), error: None }),
-            r#""kind":"no_way","why":{"kind":"not_registered","authorization_server":"https://auth.example.com"}"#,
+            no_way(NoToolSignIn::NotRegistered { host: host(), error: None }),
+            r#""kind":"no_way","why":{"kind":"not_registered","authorization_server":"auth.example.com:8443"}"#,
         ),
         (
-            no_way(NoToolSignIn::NotRegistered {
-                authorization_server: issuer(),
-                error: Some("invalid_redirect_uri".into()),
-            }),
-            r#""kind":"no_way","why":{"kind":"not_registered","authorization_server":"https://auth.example.com","error":"invalid_redirect_uri"}"#,
+            no_way(NoToolSignIn::NotRegistered { host: host(), error: Some("invalid_redirect_uri".into()) }),
+            r#""kind":"no_way","why":{"kind":"not_registered","authorization_server":"auth.example.com:8443","error":"invalid_redirect_uri"}"#,
         ),
         (
             no_way(NoToolSignIn::OtherServer { host: "other.example".into() }),
             r#""kind":"no_way","why":{"kind":"other_server","said":"other.example"}"#,
         ),
         (
-            no_way(NoToolSignIn::NoS256 { authorization_server: issuer() }),
-            r#""kind":"no_way","why":{"kind":"no_s256","authorization_server":"https://auth.example.com"}"#,
+            no_way(NoToolSignIn::NoS256 { host: host() }),
+            r#""kind":"no_way","why":{"kind":"no_s256","authorization_server":"auth.example.com:8443"}"#,
         ),
     ] {
         answered(ClientResponse::ToolSignInBegun(begun), &format!(r#"{{"result":"tool_sign_in_begun",{form}}}"#));

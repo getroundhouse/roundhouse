@@ -20,6 +20,7 @@ use super::script::{Asks, Query, Script, ServerMetadataAt, Wants};
 use super::tokens::Tokens;
 use super::{Asked, metadata, registering};
 use crate::AuthorizationPage;
+use crate::failure::host_of;
 
 /// The stand-in, serving until the runtime it was started on ends.
 pub struct StandIn {
@@ -96,6 +97,11 @@ impl StandIn {
     /// Its authorization server's name.
     pub fn issuer(&self) -> String {
         self.state.at.issuer(&self.state.script.lock())
+    }
+
+    /// Its authorization server's host and port, as why there's no sign-in names it.
+    pub fn issuer_host(&self) -> String {
+        host_of(&self.issuer()).unwrap()
     }
 
     /// Answers otherwise from now on.

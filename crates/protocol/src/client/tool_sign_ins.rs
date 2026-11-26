@@ -105,21 +105,30 @@ pub enum ToolSignInBegun {
     Unknown,
 }
 
-/// Why a server has no way that Roundhouse could sign in to it. Each address is the server's own word, cut short where
-/// it's longer than any address is.
+/// Why a server has no way that Roundhouse could sign in to it. Each `host` is only the host of an address the server
+/// gave, with its port where it names one, so none of its own words are shown as Roundhouse's. Where it's of the
+/// authorization server, it's `authorization_server` on the wire, where a hub from before sent the whole address, cut
+/// short.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum NoToolSignIn {
     /// It asks for a sign-in, and doesn't say where, or that doesn't say how.
     NoAuthorizationServer,
-    /// Its authorization server takes only clients registered with it, and has nowhere to register.
-    OnlyRegisteredClients { authorization_server: String },
-    /// Its authorization server takes only clients with a secret, which Roundhouse has none of.
-    OnlyClientsWithSecrets { authorization_server: String },
-    /// Its authorization server takes clients that register with it, and wouldn't register Roundhouse. `error` is what
-    /// OAuth calls why, such as `invalid_redirect_uri`, where it said.
+    /// Its authorization server, at `host`, takes only clients registered with it, and has nowhere to register.
+    OnlyRegisteredClients {
+        #[serde(rename = "authorization_server")]
+        host: String,
+    },
+    /// Its authorization server, at `host`, takes only clients with a secret, which Roundhouse has none of.
+    OnlyClientsWithSecrets {
+        #[serde(rename = "authorization_server")]
+        host: String,
+    },
+    /// Its authorization server, at `host`, takes clients that register with it, and wouldn't register Roundhouse.
+    /// `error` is what OAuth calls why, such as `invalid_redirect_uri`, where it said.
     NotRegistered {
-        authorization_server: String,
+        #[serde(rename = "authorization_server")]
+        host: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
@@ -130,8 +139,12 @@ pub enum NoToolSignIn {
         #[serde(rename = "said")]
         host: String,
     },
-    /// Its authorization server doesn't say it takes PKCE with S256, without which MCP has a client refuse it.
-    NoS256 { authorization_server: String },
+    /// Its authorization server, at `host`, doesn't say it takes PKCE with S256, without which MCP has a client refuse
+    /// it.
+    NoS256 {
+        #[serde(rename = "authorization_server")]
+        host: String,
+    },
     /// From a newer hub.
     #[serde(other)]
     Unknown,

@@ -23,11 +23,11 @@ fn registers(registers: Registers) -> Script {
 /// How an authorization server says a client can say who it is.
 type AuthMethods = Option<Vec<&'static str>>;
 
-/// Why its way to sign in is none, at the authorization server given.
+/// Why its way to sign in is none, at the authorization server of the host given.
 type Why = fn(String) -> NoToolSignIn;
 
-const WITH_SECRETS: Why = |authorization_server| NoToolSignIn::OnlyClientsWithSecrets { authorization_server };
-const REGISTERED: Why = |authorization_server| NoToolSignIn::OnlyRegisteredClients { authorization_server };
+const WITH_SECRETS: Why = |host| NoToolSignIn::OnlyClientsWithSecrets { host };
+const REGISTERED: Why = |host| NoToolSignIn::OnlyRegisteredClients { host };
 
 async fn found(stand_in: &StandIn) -> Found {
     ToolSignIn::new(CLIENT).find(&stand_in.server()).await.unwrap()
@@ -88,7 +88,7 @@ async fn the_document_comes_first_then_registering_with_no_secret_and_finding_ou
                 assert_eq!(client.registration().is_some(), is_registered, "{said}");
                 assert_eq!(times_asked(&stand_in), usize::from(is_registered), "{said}");
             }
-            (Found::NoWay(why), Err(expected)) => assert_eq!(why, expected(stand_in.issuer()), "{said}"),
+            (Found::NoWay(why), Err(expected)) => assert_eq!(why, expected(stand_in.issuer_host()), "{said}"),
             (found, _) => panic!("{said}: {found:?}"),
         }
     }
@@ -215,7 +215,7 @@ async fn a_client_thats_given_is_taken_only_with_an_id_that_can_be_one_and_witho
         let taken = asked(&stand_in, REDIRECT, None).await;
 
         let Ok(TakenAs::NoWay(why)) = taken else { panic!("{method}: {taken:?}") };
-        assert_eq!(why, WITH_SECRETS(stand_in.issuer()), "{method}");
+        assert_eq!(why, WITH_SECRETS(stand_in.issuer_host()), "{method}");
     }
     let no_method =
         StandIn::with(registers(Registers::Says(201, json!({"client_id": "a", "client_secret": "b"})))).await;
@@ -243,8 +243,8 @@ async fn a_refusal_to_register_says_so_with_oauths_name_for_why_and_what_may_pas
 
         let Ok(TakenAs::NoWay(why)) = taken else { panic!("{status}: {taken:?}") };
         assert!(!format!("{why:?}").contains("ade up"), "{why:?}");
-        let NoToolSignIn::NotRegistered { authorization_server, error } = why else { panic!("{status}: {why:?}") };
-        assert_eq!(authorization_server, stand_in.issuer());
+        let NoToolSignIn::NotRegistered { host, error } = why else { panic!("{status}: {why:?}") };
+        assert_eq!(host, stand_in.issuer_host());
         assert_eq!(error.as_deref(), named, "{status}");
     }
 

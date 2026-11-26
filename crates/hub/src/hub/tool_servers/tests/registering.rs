@@ -15,7 +15,7 @@ use crate::hub::Hub;
 use crate::hub::tests::{hub_in, hub_in_again};
 use crate::store::now_ms;
 
-/// Why a server whose authorization server is the one given can't be signed in to.
+/// Why a server whose authorization server is at the host given can't be signed in to.
 type Why = fn(String) -> NoToolSignIn;
 
 fn registers(registers: Registers) -> Script {
@@ -282,18 +282,14 @@ async fn one_cancelled_as_its_server_is_asked_registers_nothing() {
 async fn one_that_wont_register_roundhouse_says_why_and_waits_for_nothing_and_one_that_cant_now_may_be_asked_again() {
     let refusal = |error: &str| Registers::Says(400, json!({"error": error, "error_description": "made up"}));
     let no_way: [(Script, Why); 3] = [
-        (registers(refusal("invalid_redirect_uri")), |authorization_server| NoToolSignIn::NotRegistered {
-            authorization_server,
+        (registers(refusal("invalid_redirect_uri")), |host| NoToolSignIn::NotRegistered {
+            host,
             error: Some("invalid_redirect_uri".into()),
         }),
-        (registers(Registers::Says(403, json!({}))), |authorization_server| NoToolSignIn::NotRegistered {
-            authorization_server,
-            error: None,
+        (registers(Registers::Says(403, json!({}))), |host| NoToolSignIn::NotRegistered { host, error: None }),
+        (Script { client_auth_methods: Some(vec!["client_secret_post"]), ..registers(Registers::Anyone) }, |host| {
+            NoToolSignIn::OnlyClientsWithSecrets { host }
         }),
-        (
-            Script { client_auth_methods: Some(vec!["client_secret_post"]), ..registers(Registers::Anyone) },
-            |authorization_server| NoToolSignIn::OnlyClientsWithSecrets { authorization_server },
-        ),
     ];
     for (script, expected) in no_way {
         let dir = tempfile::tempdir().unwrap();
@@ -301,7 +297,7 @@ async fn one_that_wont_register_roundhouse_says_why_and_waits_for_nothing_and_on
 
         let begun = hub.tool_sign_in_start(new("i", &stand_in)).await.unwrap();
 
-        assert_eq!(begun, ToolSignInBegun::NoWay { why: expected(stand_in.issuer()) });
+        assert_eq!(begun, ToolSignInBegun::NoWay { why: expected(stand_in.issuer_host()) });
         assert!(hub.tool_sign_ins.waiting.get(&"i".into(), now_ms()).is_none());
     }
 
