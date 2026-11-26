@@ -23,27 +23,51 @@ fn id(number: usize) -> ToolSignInId {
     format!("i-{number}").into()
 }
 
+/// Nothing cancels the sign-in of an app that quits, so one more than may wait forgets the one that has waited longest,
+/// rather than having everyone wait until it has waited as long as one does.
 #[test]
-fn as_many_wait_as_may_and_one_that_ends_is_cancelled_or_has_waited_long_enough_makes_room() {
+fn as_many_wait_as_may_and_one_more_forgets_the_one_that_has_waited_longest() {
     let waiting = Waiting::default();
-    for number in 0..MOST_WAITING {
-        waiting.begin(&id(number), to(), 0).unwrap();
-    }
-    let over = || waiting.begin(&id(MOST_WAITING), to(), 1).map(|_| ());
+    let begun: Vec<_> = (0..MOST_WAITING).map(|number| waiting.begin(&id(number), to(), 0).unwrap()).collect();
     let late_ms = later_ms(0, SIGN_IN_WAITS);
 
-    assert_eq!(over().unwrap_err().code, ErrorCode::Unavailable);
     let first = waiting.begin(&id(0), to(), 1).unwrap();
-    assert!(waiting.holds(&id(0), &first), "one that waits is begun again as it is");
+    assert!(Arc::ptr_eq(&first, &begun[0]), "one that waits is begun again as it is");
     waiting.cancel(&id(0));
     assert!(!waiting.holds(&id(0), &first) && !waiting.keep(&id(0), &first));
-    over().unwrap();
-    let second = waiting.get(&id(1), late_ms - 1).unwrap();
-    waiting.end(&id(1), &second);
-    assert!(waiting.get(&id(1), late_ms - 1).is_none());
-    assert!(waiting.get(&id(2), late_ms - 1).is_some());
-    assert!(waiting.get(&id(2), late_ms).is_none());
+    waiting.begin(&id(MOST_WAITING), to(), 1).unwrap();
+    assert!((1..=MOST_WAITING).all(|number| waiting.get(&id(number), 1).is_some()), "a cancelled one made room");
+    let more = waiting.begin(&id(MOST_WAITING + 1), to(), 2).unwrap();
+    assert!(!waiting.holds(&id(1), &begun[1]), "the first of those that began together is forgotten");
+    assert!(waiting.holds(&id(2), &begun[2]) && waiting.holds(&id(MOST_WAITING + 1), &more));
+    let second = waiting.get(&id(2), late_ms - 1).unwrap();
+    waiting.end(&id(2), &second);
+    assert!(waiting.get(&id(2), late_ms - 1).is_none());
+    assert!(waiting.get(&id(3), late_ms - 1).is_some());
+    assert!(waiting.get(&id(3), late_ms).is_none());
     assert!(waiting.get(&id(MOST_WAITING), late_ms).is_some(), "it waits from when it was started");
+}
+
+/// Which is for moments, so a start is refused rather than have it forgotten as its server is told.
+#[test]
+fn one_more_than_may_wait_is_refused_while_each_that_waits_is_being_kept() {
+    let waiting = Waiting::default();
+    let last = MOST_WAITING - 1;
+    for number in 0..MOST_WAITING {
+        let sign_in = waiting.begin(&id(number), to(), 0).unwrap();
+        assert!(number == last || waiting.keep(&id(number), &sign_in));
+    }
+
+    let more = waiting.begin(&id(MOST_WAITING), to(), 1).unwrap();
+    assert!(waiting.keep(&id(MOST_WAITING), &more));
+    let over = waiting.begin(&id(MOST_WAITING + 1), to(), 1).map(|_| ());
+
+    assert!(
+        waiting.get(&id(last), 1).is_none(),
+        "the one that wasn't being kept is forgotten, of those that began first"
+    );
+    assert_eq!(over.unwrap_err().code, ErrorCode::Unavailable);
+    assert!((0..last).chain([MOST_WAITING]).all(|number| waiting.get(&id(number), 1).is_some()));
 }
 
 #[test]
