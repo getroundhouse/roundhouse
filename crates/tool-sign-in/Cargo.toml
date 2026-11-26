@@ -34,6 +34,9 @@ fetching = { workspace = true, features = ["testing"] }
 # What the `testing` feature brings in, which the tests have without it.
 parking_lot.workspace = true
 waiting.workspace = true
+# For a server whose certificate this machine doesn't trust.
+rcgen.workspace = true
+tokio-rustls.workspace = true
 # For tests that pause time, so a timeout passes without being waited for.
 tokio = { workspace = true, features = ["test-util"] }
 

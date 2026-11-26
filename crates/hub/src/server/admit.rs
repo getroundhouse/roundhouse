@@ -300,6 +300,7 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::GithubAppMake(..)
         | R::GithubAppInstallationsConnect(..)
         | R::GithubAppRemove(..)
+        | R::ToolServerCheck(..)
         | R::ToolServerAdd(..)
         | R::ToolServerEdit(..)
         | R::ToolServerRemove(..)

@@ -146,7 +146,12 @@ impl State {
         self.asked.lock().push(asked.clone());
         let script = self.script.lock().clone();
         match asked.line.as_str() {
-            "POST /mcp" => self.mcp(&asked, &script),
+            "POST /mcp" => {
+                if let Some(gate) = &script.server_after {
+                    gate.opened().await;
+                }
+                self.mcp(&asked, &script)
+            }
             "POST /token" => {
                 let reply = self.tokens.lock().answer(&asked, &script);
                 if let Some(gate) = &script.answers_after {

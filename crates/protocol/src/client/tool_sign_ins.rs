@@ -151,7 +151,8 @@ impl Reply for ToolSignInBegun {
 /// other refusal ends it: with `InvalidRequest` when the person refused it, or the authorization server did, with
 /// `Unavailable` when that couldn't be reached, and with `Conflict` when another server has taken the name meanwhile, as
 /// [`ToolServerAdd`](super::tool_servers::ToolServerAdd) says, or the server being signed in to has been removed, moved
-/// to another, or given another key or another way to know the person.
+/// to another, or given another way to know the person, or another key with anything else of it changed. One that was
+/// only given another key is signed in to, and that key is forgotten as the one before would have been.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ToolSignInFinish {
     pub id: ToolSignInId,

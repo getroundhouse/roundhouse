@@ -23,11 +23,16 @@ impl Names {
             Some(Host::Domain(name)) => name,
             None => return Err(io::Error::other("an address with no host")),
         };
+        self.of(name, port).await
+    }
+
+    /// Every address `host` comes to, which can be one, with `port`.
+    pub(crate) async fn of(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
         match self {
-            Names::System => Ok(tokio::net::lookup_host((name, port)).await?.collect()),
+            Names::System => Ok(tokio::net::lookup_host((host, port)).await?.collect()),
             #[cfg(test)]
             Names::Fixed(names) => {
-                let found = names.get(name).ok_or_else(|| io::Error::other("no such name"))?;
+                let found = names.get(host).ok_or_else(|| io::Error::other("no such name"))?;
                 Ok(found.iter().map(|address| (*address, port).into()).collect())
             }
         }

@@ -124,6 +124,7 @@ struct Message<'a> {
     method: Cow<'a, str>,
 }
 
-fn method_of(body: &[u8]) -> Option<Cow<'_, str>> {
+/// What the message `body` asks for, in JSON-RPC's words.
+pub(super) fn method_of(body: &[u8]) -> Option<Cow<'_, str>> {
     Some(serde_json::from_slice::<Message<'_>>(body).ok()?.method)
 }

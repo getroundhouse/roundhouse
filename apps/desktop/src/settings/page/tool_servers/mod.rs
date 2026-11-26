@@ -7,6 +7,7 @@ use super::{Asking, Body, OfHub, Page, PageId, Within};
 mod added;
 mod edits;
 mod form;
+mod going;
 mod kept;
 mod panels;
 mod server_menu;

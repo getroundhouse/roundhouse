@@ -56,7 +56,7 @@ impl Service<Name> for Vetted {
 /// Sends `request` over a connection of its own, to one of `addresses`, so nothing else is connected to, and no call
 /// uses another's connection. The connector connects to a host that's an address without asking what it comes to, and
 /// `addresses` is then that address alone.
-pub(super) async fn send(
+pub(crate) async fn send(
     tls: &OnceCell<Tls>,
     addresses: Vec<SocketAddr>,
     request: Request<Full<Bytes>>,

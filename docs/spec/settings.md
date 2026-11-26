@@ -396,7 +396,7 @@ The app's own settings, and where they're shown.
   ![MCP servers with none added](screens/settings-mcp-none.png)
 
 - **Each server has one sign-in, so a second account at the same server is a second server,** with a name of its own, such as `Linear (Northwind)`. A server's key is its own in the same way.
-- **Adding a server is one panel: its name, its URL, and a dropdown, Authentication, of how it knows who you are, which is Sign in, Key or None, as the owner decided.** It opens on Sign in, with the cursor in the name, and has more fields only where the choice needs them. Key has the header, `Authorization` unless changed, and the key, in one row, with the header as wide as the dropdown and the key taking the rest. Under the dropdown is what the choice means, which for Key says that only the hub keeps it, said once in the panel, and each row of the dropdown's menu has a note that says it in a few words. The panel's button is Sign in for Sign in, and Add otherwise. Choosing another way keeps the name and the URL, drops what was typed as a key and clears a refusal, and choosing Key puts the cursor in the key. A URL that's already there says so, and which server it is, the first by name where there are two, and stops nothing. What the hub refuses is said in red in the panel, which stays open. The key shows only as dots, and what's typed there is dropped as it's sent, so after a refusal it's typed again. Adding a server with Key or None asks nothing of it. *Unconfirmed:* the panel's words, the menu's notes, the header and the key sharing a row, where the panel says that only the hub keeps the key, what choosing another way keeps and where choosing Key puts the cursor, what None asks for, and which of two servers is said.
+- **Adding a server is one panel: its name, its URL, and a dropdown, Authentication, of how it knows who you are, which is Sign in, Key or None, as the owner decided.** It opens on Sign in, with the cursor in the name, and has more fields only where the choice needs them. Key has the header, `Authorization` unless changed, and the key, in one row, with the header as wide as the dropdown and the key taking the rest. Under the dropdown is what the choice means, which for Key says that only the hub keeps it, said once in the panel, and each row of the dropdown's menu has a note that says it in a few words. The panel's button is Sign in for Sign in, and Add otherwise. Choosing another way keeps the name and the URL, drops what was typed as a key and clears a refusal, and choosing Key puts the cursor in the key. A URL that's already there says so, and which server it is, the first by name where there are two, and stops nothing. What the hub refuses is said in red in the panel, which stays open. The key shows only as dots. *Unconfirmed:* the panel's words, the menu's notes, the header and the key sharing a row, where the panel says that only the hub keeps the key, what choosing another way keeps and where choosing Key puts the cursor, and which of two servers is said.
 - **A key for `Authorization` with no space in it is sent as `Bearer` and the key,** since a server gives out a key alone and the header holds its scheme too. One with a space has its scheme already, such as `Basic`, and is sent as it is, as a key in any other header is. *Unconfirmed.*
 
   **Adding a server, with the dropdown open.** *Unconfirmed.*
@@ -418,6 +418,47 @@ The app's own settings, and where they're shown.
   **Adding a server with None, refused, since its name is taken.** *Unconfirmed.*
 
   ![Adding an MCP server, refused in red in the panel](screens/settings-mcp-refused.png)
+
+- **Before a server with Key or None is added or saved, the hub connects to it and asks for its tools, for at most 15 seconds, as the owner decided.** A server that's signed in to isn't asked, and nor is one whose name alone is changed. While it's asked the panel says `Asking HOST for its tools`, with its host and a spinner, Add or Save is off, and Cancel works. Cancelling, or closing the panel, adds and saves nothing. Once it answers, it's added or saved. What the hub refuses, such as a name that's taken, it refuses before it asks the server. A hub too old to ask adds or saves it at once. *Unconfirmed:* asking nothing of a server whose kept key this hub can't read, four asked at once at most, and that changing a field, or the way, lets go of asking.
+- **A server that doesn't list its tools isn't added or saved. Why is said in red, where a refusal is, and the buttons become Cancel, Add anyway or Save anyway, and Try again, which is the main one, as the owner decided.** Changing any field brings back Add or Save and takes the reason away, and Enter does what the main button does. The panel's end is scrolled into sight as that comes. *Unconfirmed:* the scroll. The reason has no words of the server's, and no key, and neither does an error or the log.
+
+  | What came of it | Words |
+  |---|---|
+  | 401 or 403, with a key | `Runbooks refused this key.` |
+  | 401, with None | `Runbooks asks who you are, so it needs a sign-in or a key.` |
+  | It can't be reached | `The hub can't reach mcp.northwind.example.`, and why where that's known, as `Connection refused.` |
+  | It answers, and isn't MCP | `mcp.northwind.example isn't an MCP server at this URL.` |
+  | 5xx | `mcp.northwind.example has a problem of its own (503).` |
+  | It connects, and answers with an error when it's asked for its tools | `Runbooks connected, and wouldn't list its tools.` |
+  | Its host isn't found. *Unconfirmed* | `The hub can't reach mcp.northwind.example. There's no such host.` |
+  | There's no way to its host. *Unconfirmed* | `The hub can't reach mcp.northwind.example. There's no way to it from the hub's machine.` |
+  | Its certificate isn't trusted. *Unconfirmed* | `The hub can't reach mcp.northwind.example. The hub's machine doesn't trust its certificate.` |
+  | It doesn't speak TLS. *Unconfirmed* | `The hub can't reach mcp.northwind.example. It doesn't speak https there.` |
+  | The hub's machine has no list of certificates. *Unconfirmed* | `The hub can't reach mcp.northwind.example. The hub's machine doesn't say which certificates it trusts.` |
+  | Not in 15 seconds. *Unconfirmed* | `mcp.northwind.example didn't answer in time.` |
+  | The connection ends first. *Unconfirmed* | `The hub lost its connection to mcp.northwind.example before it answered.` |
+  | A redirect that isn't followed. *Unconfirmed* | `mcp.northwind.example sends the hub on to another URL. Type that one if it's this server's.` |
+  | 403, with None. *Unconfirmed* | `Runbooks doesn't let the hub in (403). It may need a sign-in or a key.` |
+  | 404. *Unconfirmed* | `mcp.northwind.example has nothing at this URL (404).` |
+  | 429. *Unconfirmed* | `mcp.northwind.example has had too many requests for now (429).` |
+  | More than 4 MB. *Unconfirmed* | `mcp.northwind.example answered with more than the hub reads.` |
+  | It's MCP, and won't start a session. *Unconfirmed* | `Runbooks answered, and wouldn't connect.` |
+  | Something only a newer hub says. *Unconfirmed* | `Runbooks didn't list its tools. Update this app to see why.`, or `Runbooks was asked for its tools. Update this app to see what came of it.` |
+
+- **The server is asked at the URL that was typed, with what agents' calls would carry,** over plain HTTP and on a private network too. A kept key goes only to the server it was given for, and a redirect is followed only where an agent's call would be, within the same scheme, host and port. The hub asks, so whether an agent on another machine can reach the server is still for its chat to say.
+- **What's typed as a key stays in its field until the server is added or saved,** so trying again, or adding it anyway, takes no typing it again. Nothing of it stays once the hub has taken it, after Cancel, or once the panel is closed.
+
+  **Adding a server, while it's asked for its tools.** Drawn from an approved mock. *Unconfirmed.*
+
+  ![Adding an MCP server, with a line that it's being asked for its tools](screens/settings-mcp-asking.png)
+
+  **A server that refuses its key, as it's added.** Drawn from an approved mock. *Unconfirmed.*
+
+  ![Adding an MCP server that refuses its key, with Add anyway and Try again](screens/settings-mcp-key-refused.png)
+
+  **A server that can't be reached where it's moved to, as it's edited.** *Unconfirmed.*
+
+  ![Editing an MCP server that can't be reached, with Save anyway and Try again](screens/settings-mcp-edit-unreached.png)
 
 - **A server's name can be whatever you like, up to 64 characters on one line, and the app always shows it as you typed it.** Agents call the server by a name Roundhouse makes from it, which every agent's CLI takes: its ASCII letters, digits and `-` as they are, with each run of anything else as one `_`, and no `_` or `-` at either end, so `Linear (Northwind)` is `Linear_Northwind`. That name is at most 32 characters, and `server` when nothing is left. A new name is what an agent calls the server from the agent's next start. A name whose agents' name another server has, in any case, is refused, saying which server, and that agents would call both the same where the names differ, and so is one that agents would call `roundhouse`, which Roundhouse's own tools are. *Unconfirmed:* the 32 characters, `server`, and refusing a name that agents would call the same.
 - **Signing in opens the server's page in the browser on this device, and the panel waits, with a button that opens it again.** Nothing is added until it's approved. It works for a hub on another machine too, since the browser sends you back to this device, at a port the app listens on only while it waits. The hub first asks the server how it's signed in to, which can take half a minute, and the panel says so. A server that anyone can use, and that has a sign-in too, is signed in to when you choose to sign in to it. *Unconfirmed:* signing in to a server that anyone can use.

@@ -1,17 +1,18 @@
-//! MCP servers in Settings, against a real hub: one another client adds, adding one with a key and one with neither, a
-//! name that's taken, changing the way before one is added, and removing one, which asks first. Every server and key is
-//! plainly made up.
+//! MCP servers in Settings, against a real hub, and a stand-in for one that's asked for its tools as it's added: one
+//! another client adds, adding one with a key and one with neither, a name that's taken, changing the way before one is
+//! added, and removing one, which asks first. Every server and key is plainly made up.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
 
 use gpui_kit::{SharedString, TestAppContext};
+use hub::{ToolServerAsks, ToolServerScript};
 use protocol::model::{ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerId, ToolServerKey};
 
 use super::git_app::label_of;
 use super::open_settings;
-use crate::support::{Stack, Ui, files_holding};
+use crate::support::{Serving, Stack, Ui, files_holding};
 
 pub(super) const URL: &str = "https://mcp.example.com/mcp";
 pub(super) const KEY: &str = "a-made-up-key";
@@ -34,8 +35,19 @@ pub(super) fn in_servers<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a
 }
 
 /// A server another client adds.
-pub(super) fn added_elsewhere(stack: &Stack, id: &str, name: &str, auth: ToolServerAuthGiven) -> ToolServerId {
-    stack.client().tool_server_add(&id.into(), name, URL, auth).unwrap().id
+pub(super) fn added_elsewhere(
+    stack: &Stack,
+    id: &str,
+    name: &str,
+    url: &str,
+    auth: ToolServerAuthGiven,
+) -> ToolServerId {
+    stack.client().tool_server_add(&id.into(), name, url, auth).unwrap().id
+}
+
+/// A server that anyone can use, with a key or with none.
+pub(super) fn open_to_anyone() -> Serving {
+    Serving::with(ToolServerScript { asks: ToolServerAsks::Nothing, ..ToolServerScript::default() })
 }
 
 pub(super) fn with_key() -> ToolServerAuthGiven {
@@ -87,13 +99,13 @@ pub(super) fn choose(ui: &mut Ui<'_>, way: &str) {
 fn a_server_is_added_with_a_key_only_the_hub_keeps_or_with_neither_and_a_name_thats_taken_says_so(
     cx: &mut TestAppContext,
 ) {
-    let stack = Stack::new();
+    let (stack, serving) = (Stack::new(), open_to_anyone());
     let mut ui = in_servers(cx, &stack);
     assert!(ui.has("mcp-none-added"));
-    let linear = added_elsewhere(&stack, "elsewhere", "Linear", ToolServerAuthGiven::Neither);
+    let linear = added_elsewhere(&stack, "elsewhere", "Linear", URL, ToolServerAuthGiven::Neither);
     ui.wait("the server another client added", |ui| ui.has(row(&linear)) && !ui.has("mcp-none-added"));
 
-    fill_in(&mut ui, "linear", URL);
+    fill_in(&mut ui, "linear", &serving.url());
     assert!(ui.off("mcp-add"), "while a panel is open");
     choose(&mut ui, KEY_WAY);
     assert!(ui.off("mcp-panel-go"), "until there's a key");
@@ -102,10 +114,9 @@ fn a_server_is_added_with_a_key_only_the_hub_keeps_or_with_neither_and_a_name_th
     ui.wait("the hub's refusal", |ui| ui.has("mcp-refused"));
     let refused = "Couldn't add it: agents would call linear and the MCP server Linear the same, Linear";
     assert!(ui.shows_label("mcp-panel", refused));
-    assert!(ui.off("mcp-panel-go"), "a name that's taken: the key's field is empty");
+    assert!(serving.stand_in.asked().is_empty(), "a name that's taken: nothing is asked");
     assert_eq!(the_hubs(&stack), ["Linear"], "a name that's taken: nothing is added");
 
-    type_in(&mut ui, "mcp-key", KEY);
     type_in(&mut ui, "mcp-name", "Runbooks");
     ui.press("enter");
     ui.wait("the server with a key", |ui| named(ui, "Runbooks").is_some() && !ui.has("mcp-panel"));
@@ -116,7 +127,7 @@ fn a_server_is_added_with_a_key_only_the_hub_keeps_or_with_neither_and_a_name_th
     assert_eq!(files_holding(everything, KEY, "tool-servers"), Vec::<PathBuf>::new(), "nothing else has the key");
     assert_eq!(files_holding(everything, KEY, "").len(), 1, "the hub's tool servers do");
 
-    fill_in(&mut ui, "Docs", URL);
+    fill_in(&mut ui, "Docs", &serving.url());
     choose(&mut ui, NONE_WAY);
     assert!(!ui.has("mcp-key") && !ui.has("mcp-header"));
     ui.click("mcp-panel-go");
@@ -128,11 +139,11 @@ fn a_server_is_added_with_a_key_only_the_hub_keeps_or_with_neither_and_a_name_th
 /// The name that's kept is taken, so the hub's refusal of it says it was.
 #[gpui_kit::test]
 fn changing_how_a_server_knows_you_keeps_its_name_and_url_and_drops_the_key_and_a_refusal(cx: &mut TestAppContext) {
-    let stack = Stack::new();
+    let (stack, serving) = (Stack::new(), open_to_anyone());
     let mut ui = in_servers(cx, &stack);
-    let linear = added_elsewhere(&stack, "elsewhere", "Linear", ToolServerAuthGiven::Neither);
+    let linear = added_elsewhere(&stack, "elsewhere", "Linear", URL, ToolServerAuthGiven::Neither);
     ui.wait("the server another client added", |ui| ui.has(row(&linear)));
-    fill_in(&mut ui, "linear", URL);
+    fill_in(&mut ui, "linear", &serving.url());
     choose(&mut ui, KEY_WAY);
     ui.input(KEY);
     assert!(ui.on("mcp-panel-go"));
@@ -156,15 +167,15 @@ fn changing_how_a_server_knows_you_keeps_its_name_and_url_and_drops_the_key_and_
     ui.press("enter");
     ui.wait("the server", |ui| named(ui, "Docs").is_some() && !ui.has("mcp-panel"));
     let docs = named(&ui, "Docs").unwrap();
-    assert_eq!((docs.url.as_str(), docs.auth), (URL, ToolServerAuth::Neither));
+    assert_eq!((docs.url.as_str(), docs.auth), (serving.url().as_str(), ToolServerAuth::Neither));
 }
 
 #[gpui_kit::test]
 fn a_servers_menu_removes_it_once_asked_forgetting_its_key(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_servers(cx, &stack);
-    added_elsewhere(&stack, "docs", "Docs", ToolServerAuthGiven::Neither);
-    let server = added_elsewhere(&stack, "runbooks", "Runbooks", with_key());
+    added_elsewhere(&stack, "docs", "Docs", URL, ToolServerAuthGiven::Neither);
+    let server = added_elsewhere(&stack, "runbooks", "Runbooks", URL, with_key());
     ui.wait("its row", |ui| ui.has(more(&server)));
 
     let keys = stack.hub.paths.data_dir.join("tool-servers");

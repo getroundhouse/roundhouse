@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use protocol::client::ApiError;
+use protocol::client::tool_server_checks::ToolServerChecked;
 use protocol::client::tool_sign_ins::ToolSignInBegun;
 use protocol::event::SessionEvent;
 use protocol::model::{
@@ -96,6 +97,8 @@ pub struct World {
     /// Why the hub couldn't add a tool server, as it answers each time it's asked. `None` refuses it, as the rest of
     /// what would change what the hub holds.
     pub tool_server_add_refused: Option<ApiError>,
+    /// What checking a tool server comes to, each time it's asked.
+    pub tool_server_check: ToolServerCheckWorld,
     /// What starting a sign-in to a tool server comes to, as the hub answers each time it's asked. `None` refuses it, as
     /// the rest of what would change what the hub holds.
     pub tool_sign_in_answer: Option<Result<ToolSignInBegun, ApiError>>,
@@ -126,6 +129,17 @@ pub struct World {
 #[derive(Clone, Copy)]
 pub struct PairingWorld {
     pub paired_device: Option<&'static str>,
+}
+
+/// What checking a tool server comes to.
+#[derive(Clone, Default)]
+pub enum ToolServerCheckWorld {
+    /// The hub knows no check, as one from before it.
+    #[default]
+    TooOld,
+    /// The hub goes on asking the server.
+    Asking,
+    Answers(Result<ToolServerChecked, ApiError>),
 }
 
 /// A hub's build, other than the app's.

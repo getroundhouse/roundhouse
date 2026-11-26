@@ -20,6 +20,7 @@ use crate::tools::Caller;
 const INITIALIZE: &str = r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{}}"#;
 const DISCOVER: &str = r#"{"jsonrpc":"2.0","id":0,"method":"server/discover"}"#;
 const CALL: &str = r#"{"jsonrpc":"2.0","id":"call-7","method":"tools/call","params":{"name":"list"}}"#;
+const LISTEN: &str = r#"{"jsonrpc":"2.0","id":"listen-1","method":"subscriptions/listen","params":{}}"#;
 const NOTIFICATION: &str = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
 const MOVED: &str = "Linear (Northwind) has been moved to another URL in Roundhouse since this agent connected to it, so nothing was sent to it. This agent has it from its next start.";
 
@@ -171,34 +172,36 @@ async fn an_agent_that_starts_has_each_server_where_it_is() {
     assert_eq!(send(&agent, Method::POST, "", CALL).await.body, CALL);
 }
 
-/// Its messages come from the server before, and it's open for as long as the agent runs. A call under way goes on.
+/// Its messages come from the server before, and it's open for as long as the agent runs, whichever way its protocol
+/// has it asked for. A call under way goes on.
 #[tokio::test]
 async fn a_servers_stream_ends_as_its_moved_and_a_calls_answer_goes_on() {
     let after = giving("after").await;
-    let (get, get_sent) = mpsc::channel(1);
-    let (post, post_sent) = mpsc::channel(1);
-    let streams = Mutex::new((Some(get_sent), Some(post_sent)));
-    let before = StandIn::answering(move |asked| {
-        let mut streams = streams.lock();
-        let body = if asked.method == Method::GET { streams.0.take() } else { streams.1.take() };
+    let (senders, streams): (Vec<_>, Vec<_>) = (0..3).map(|_| mpsc::channel(1)).unzip();
+    let [get, listening, call] = <[_; 3]>::try_from(senders).unwrap();
+    let streams = Mutex::new(streams.into_iter());
+    let before = StandIn::answering(move |_| {
         Response::builder()
             .header("content-type", "text/event-stream")
-            .body(Either::Right(Events(body.unwrap())))
+            .body(Either::Right(Events(streams.lock().next().unwrap())))
             .unwrap()
     })
     .await;
     let agent = Agent::with(vec![before.as_set()]).await;
     let path = agent.path().await;
-    let mut stream = agent.request(Method::GET, &path, &[], "").await;
+    let got = agent.request(Method::GET, &path, &[], "").await;
+    let listened = agent.request(Method::POST, &path, &[], LISTEN).await;
     let mut answer = agent.request(Method::POST, &path, &[], CALL).await;
     let within = Duration::from_secs(10);
 
     move_to(&agent, &after);
 
-    let ended = timeout(within, stream.frame()).await.expect("the stream to end");
-    assert!(ended.is_none(), "{ended:?}");
-    timeout(within, get.closed()).await.expect("the server's end of it to end");
-    post.send(Bytes::from_static(b"data: 1\n\n")).await.unwrap();
+    for (mut stream, servers) in [(got, get), (listened, listening)] {
+        let ended = timeout(within, stream.frame()).await.expect("the stream to end");
+        assert!(ended.is_none(), "{ended:?}");
+        timeout(within, servers.closed()).await.expect("the server's end of it to end");
+    }
+    call.send(Bytes::from_static(b"data: 1\n\n")).await.unwrap();
     let event = timeout(within, answer.frame()).await.expect("the answer").unwrap().unwrap();
     assert_eq!(event.into_data().unwrap(), "data: 1\n\n");
 }

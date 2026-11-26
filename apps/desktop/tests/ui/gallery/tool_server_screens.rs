@@ -1,5 +1,5 @@
 //! MCP servers' screens in Settings, each of a state its rules in `settings.md` say: the servers, none yet, adding one
-//! each way, signing in to one, a row's menu, and editing one.
+//! each way, one asked for its tools first, signing in to one, a row's menu, and editing one.
 
 #![cfg(test)]
 
@@ -8,7 +8,8 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::{
     chat_servers_wanting_more_access, conversation, no_tool_sign_in, one_tool_server, open_tool_server,
-    tool_server_refused, tool_servers, tool_servers_to_edit, tool_sign_in_refused, tool_sign_in_waiting,
+    tool_server_asked, tool_server_key_refused, tool_server_refused, tool_server_unreached, tool_servers,
+    tool_servers_to_edit, tool_sign_in_refused, tool_sign_in_waiting,
 };
 use client_core::fake_hub::World;
 
@@ -193,6 +194,62 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Type("https://docs.northwind.example/mcp"),
             WAYS,
             Step::ClickItem("None, Anyone can use it"),
+            GO,
+            Step::WaitFor("mcp-refused"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-asking",
+        tool_server_asked,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            ADD,
+            Step::Type("Docs"),
+            URL,
+            Step::Type("https://docs.northwind.example/mcp"),
+            WAYS,
+            Step::ClickItem("None, Anyone can use it"),
+            GO,
+            Step::WaitFor("mcp-asking"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-key-refused",
+        tool_server_key_refused,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            ADD,
+            Step::Type("Runbooks"),
+            URL,
+            Step::Type("https://mcp.northwind.example/mcp"),
+            WAYS,
+            Step::ClickItem("Key, Sent with every request"),
+            Step::Type("a-made-up-key"),
+            GO,
+            Step::WaitFor("mcp-refused"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-edit-unreached",
+        tool_server_unreached,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            RUNBOOKS,
+            EDIT,
+            URL,
+            ALL,
+            Step::Type("https://mcp.contoso.example/mcp"),
+            Step::Click("mcp-key"),
+            Step::Type("a-made-up-key"),
             GO,
             Step::WaitFor("mcp-refused"),
             AWAY,

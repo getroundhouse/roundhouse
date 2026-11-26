@@ -1,11 +1,12 @@
-//! The tool servers a hub has of its own, as clients add and remove them on connections of their own. What's kept, in
-//! what order, and what's refused is tested in `crate::tool_servers`.
+//! The tool servers a hub has of its own, as clients check, add and remove them on connections of their own. What's
+//! kept, in what order, and what's refused is tested in `crate::tool_servers`.
 
 use std::path::Path;
 use std::sync::Arc;
 
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::{Follow, Subscribe, Subscription};
+use protocol::client::tool_server_checks::{ToolServerCheck, ToolServerChecked, ToolServerToCheck};
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit, ToolServerRemove};
 use protocol::client::tool_sign_ins::{
     REDIRECT_PORTS, ToolSignInBegun, ToolSignInCancel, ToolSignInFinish, ToolSignInReturned, ToolSignInStart,
@@ -15,7 +16,7 @@ use protocol::client::{
     CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, Request,
 };
 use protocol::model::{RecordKey, ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerKey, ToolSignInStatus};
-use tool_sign_in::{AuthorizationPage, Script, StandIn};
+use tool_sign_in::{Asks, AuthorizationPage, Script, StandIn};
 
 use super::Connection;
 use crate::hub::Hub;
@@ -88,6 +89,23 @@ async fn a_server_one_client_adds_edits_and_removes_reaches_another() {
     assert_eq!(listed, []);
     assert_eq!(edited.name.as_str(), "Sentry");
     assert_eq!(removed, edited);
+}
+
+/// What's asked, and what's made of the answer, is tested in `crate::hub` and the `tool-sign-in` crate.
+#[tokio::test]
+async fn a_client_is_answered_with_what_a_check_comes_to_and_nothing_is_added() {
+    let dir = tempfile::tempdir().unwrap();
+    let script = Script { asks: Asks::Nothing, ..Script::default() };
+    let (hub, stand_in) = (hub_in(dir.path()), StandIn::with(script).await);
+    let mut client = client(&hub).await;
+    let url = stand_in.server().as_str().to_string();
+    let of = ToolServerToCheck::Add(ToolServerAdd { url, ..add("t", "Linear", a_key()) });
+
+    let reply = client.reply(2, &ToolServerCheck { of }.into_request()).await;
+
+    let ReplyOutcome::Response(ClientResponse::ToolServerChecked(checked)) = reply else { panic!("{reply:?}") };
+    assert_eq!(checked, ToolServerChecked::Listed { tools: 2 });
+    assert_eq!(following(&hub).await.1, []);
 }
 
 /// How it's waited for, finished and refused is tested in `crate::hub`.

@@ -1,16 +1,19 @@
 //! The page's panels: the one a server is added or edited in, with what the way it knows the person takes, and the
 //! sign-in's.
 
+use client_core::tool_server_checks;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
-    Anchor, AnyElement, App, Div, Entity, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div, px,
+    Anchor, AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, px,
 };
 
 use super::super::field::{FIELDS_WIDTH, Field, captioned, labelled};
-use super::super::panel::{self, Framed, button, buttons};
+use super::super::panel::{self, Framed, button, buttons, waiting_line};
 use super::Drawing;
 use super::edits::Edits;
 use super::form::{AuthFields, Form, Of, Way};
+use super::going::FormStands;
 use super::kept::{Kept, Panel, Shows};
 use super::{sign_in_panel, words};
 
@@ -44,9 +47,8 @@ pub(super) fn draw(drawing: &Drawing<'_>, open: &Panel, cx: &App) -> AnyElement 
 }
 
 /// The panel a server is added or edited in: its name, its URL and how it knows the person, with the header and the key
-/// it takes for a key, and Add, Save or Sign in, which is off until there's each, and while the hub hasn't answered. A
-/// URL that's already there says which server it is, and one that looks like it has a key in it says so, and neither
-/// stops anything.
+/// it takes for a key, that the server is being asked for its tools while it is, and its buttons. A URL that's already
+/// there says which server it is, and one that looks like it has a key in it says so, and neither stops anything.
 fn form(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Framed {
     let (url, edits, chosen) = (form.url.value(cx), form.edits(cx), form.auth.way());
     let had = match &form.of {
@@ -58,29 +60,54 @@ fn form(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Framed {
         AuthFields::Key { header, key } => Some(key_row(header, key, edits, cx)),
         AuthFields::SignIn | AuthFields::Neither => None,
     };
+    let asking = match &form.stands {
+        FormStands::AskingServer { .. } => Some(self::asking(&url, cx)),
+        FormStands::Open | FormStands::AskingHub { .. } | FormStands::Refused(_) | FormStands::NotListed(_) => None,
+    };
     let way = h_flex().child(ways(drawing, chosen));
     let fields = v_flex()
         .gap(look::Space::Large)
         .child(labelled("Name", "mcp-name", &form.name.input, words::name_says(there), cx))
         .child(labelled("URL", "mcp-url", &form.url.input, words::url_says(&url, there), cx))
         .child(captioned(AUTHENTICATION, "mcp-way", way, words::way_says(chosen, edits), cx))
-        .children(key);
+        .children(key)
+        .children(asking);
     let (title, lead) = match had.zip(edits) {
         None => ("Add an MCP server".into(), words::ADD),
         Some((was, edits)) => (words::edit_title(&was.name).into(), words::edit_says(edits)),
     };
-    let act = drawing.kept.clone();
-    let off = !drawing.kept.read(cx).can_go(cx);
-    let go = button("mcp-panel-go", words::does(form.does(cx)), true, off, move |window, cx| {
-        act.update(cx, |kept, cx| kept.go(window, cx));
-    });
     Framed {
         title,
         lead: lead.into(),
         body: Some(fields.into_any_element()),
-        refused: form.refused.clone(),
-        buttons: buttons().child(cancel(drawing.kept)).child(go),
+        refused: form.stands.why_not().map(str::to_string),
+        buttons: form_buttons(drawing, form, cx),
     }
+}
+
+/// That the server at `url` is being asked for its tools, as assistive apps say it, and tests find it.
+fn asking(url: &str, cx: &App) -> AnyElement {
+    let said = SharedString::from(tool_server_checks::asking(url));
+    let line = waiting_line(said.clone(), cx);
+    line.id("mcp-asking").role(Role::Status).aria_label(said).test_support().into_any_element()
+}
+
+/// Cancel, and the form's main button, which is off while it can't be pressed. Once the server hasn't listed its tools,
+/// that's Try again, with a button beside it that adds or saves it anyway.
+fn form_buttons(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Div {
+    let off = !drawing.kept.read(cx).can_go(cx);
+    let does = words::does(form.does(cx));
+    let (anyway, goes) = match &form.stands {
+        FormStands::NotListed(_) => {
+            let anyway = button("mcp-anyway", words::anyway(does), false, off, drawing.act(Kept::go_anyway));
+            (Some(anyway), words::TRY_AGAIN)
+        }
+        FormStands::Open | FormStands::AskingServer { .. } | FormStands::AskingHub { .. } | FormStands::Refused(_) => {
+            (None, does)
+        }
+    };
+    let cancel = button("mcp-cancel", "Cancel", false, false, drawing.act(Kept::put_away_panel));
+    buttons().child(cancel).children(anyway).child(button("mcp-panel-go", goes, true, off, drawing.act(Kept::go)))
 }
 
 /// The dropdown of the ways a server can know the person, with `chosen` in it.
@@ -111,12 +138,4 @@ fn key_row(header: &Field, key: &Field, edits: Option<Edits>, cx: &App) -> Div {
         .gap(look::Space::Large)
         .child(div().flex_none().w(WAY_WIDTH).child(header))
         .child(div().flex_1().min_w_0().child(key))
-}
-
-/// Cancel, which puts the panel away, and any wait for the hub's answer with it.
-fn cancel(kept: &Entity<Kept>) -> look::Button {
-    let kept = kept.clone();
-    button("mcp-cancel", "Cancel", false, false, move |window, cx| {
-        kept.update(cx, |kept, cx| kept.put_away_panel(window, cx));
-    })
 }

@@ -38,7 +38,8 @@ mod tests {
     use crate::capability::conversation::Start;
     use crate::capability::settings::Settings;
     use crate::client::{
-        ClientRequest, ClientResponse, accounts, devices, github_accounts, github_apps, tool_servers, tool_sign_ins,
+        ClientRequest, ClientResponse, accounts, devices, github_accounts, github_apps, tool_server_checks,
+        tool_servers, tool_sign_ins,
     };
     use crate::model::{
         AgentKind, AgentLogin, GithubToken, LoginToken, RunId, ToolServerAuthGiven, ToolServerHeader, ToolServerKey,
@@ -124,6 +125,8 @@ mod tests {
         let make = github_apps::GithubAppMake { code: github_apps::GithubManifestCode::new(SECRET) };
         let auth = ToolServerAuthGiven::Key { header: "X-Key".into(), key: ToolServerKey::new(SECRET) };
         let add = tool_servers::ToolServerAdd { id: "t".into(), name: "Docs".into(), url: "u".into(), auth };
+        let of = tool_server_checks::ToolServerToCheck::Add(add.clone());
+        let check = tool_server_checks::ToolServerCheck { of };
         let begun = tool_sign_ins::ToolSignInBegun::Page { page: tool_sign_ins::ToolSignInPage::new(SECRET) };
         let returned = tool_sign_ins::ToolSignInReturned::new(SECRET);
         let finish = tool_sign_ins::ToolSignInFinish { id: "i".into(), returned };
@@ -134,6 +137,7 @@ mod tests {
             carrier("AccountConnect", &ClientRequest::AccountConnect(connect)),
             carrier("GithubAccountConnect", &ClientRequest::GithubAccountConnect(github)),
             carrier("GithubAppMake", &ClientRequest::GithubAppMake(make)),
+            carrier("ToolServerCheck", &ClientRequest::ToolServerCheck(check)),
             carrier("ToolServerAdd", &ClientRequest::ToolServerAdd(add)),
             carrier("ToolSignInBegun", &ClientResponse::ToolSignInBegun(begun)),
             carrier("ToolSignInFinish", &ClientRequest::ToolSignInFinish(finish)),

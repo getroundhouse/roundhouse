@@ -7,7 +7,7 @@ use crate::fetch::{Names, Tls};
 /// documents, as its `client_id`. It can't move while a sign-in made with it lasts.
 pub const CLIENT_DOCUMENT: &str = "https://getroundhouse.dev/oauth/client.json";
 
-/// Roundhouse as an OAuth client of MCP servers.
+/// Roundhouse as a client of MCP servers, and of the authorization servers they're signed in to at.
 pub struct ToolSignIn {
     /// What it's known as where its client document is taken, which is the document's address.
     pub(crate) document: ClientId,

@@ -66,7 +66,7 @@ crates/
   protocol/        The client, worker and provider protocols' types
   hub/             The hub
   github/          The hub's calls to GitHub
-  tool-sign-in/    The hub's signing in to MCP servers, as an OAuth client, and reading their refusals, which the worker does too
+  tool-sign-in/    The hub's signing in to MCP servers, as an OAuth client, asking one for its tools, and reading their refusals, which the worker does too
   worker/          The worker
   agents/          An adapter for each agent's CLI
   providers/       The trait a provider implements, and the local provider

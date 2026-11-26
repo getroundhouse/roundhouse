@@ -56,6 +56,7 @@ pinned! {
     "client_calls/github_apps.rs" => [
         GithubAppManifestWrite(_), GithubAppMake(_), GithubAppInstallationsConnect(_), GithubAppRemove(_),
     ],
+    "client_calls/tool_server_checks.rs" => [ToolServerCheck(_)],
     "client_calls/tool_servers.rs" => [ToolServerAdd(_), ToolServerEdit(_), ToolServerRemove(_)],
     "client_calls/tool_sign_ins.rs" => [ToolSignInStart(_), ToolSignInFinish(_), ToolSignInCancel(_)],
     "replies_heard.rs" => [SessionReplyHeard(_), SessionSpeaking(_)],

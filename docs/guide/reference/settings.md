@@ -199,7 +199,7 @@ The MCP servers the hub has of its own, each signed in to, with a key or with ne
 2. Leave **Authentication** on **Sign in**. If the server gave you a key, choose **Key** instead, or **None** if anyone who can reach the server can use it.
 3. With **Key**, paste it, and change the header it's sent in if the server wants another than `Authorization`.
 4. Click **Sign in**, or **Add**.
-5. Signing in, approve Roundhouse on the page your browser opens, and go back to the app. The server is added then.
+5. Signing in, approve Roundhouse on the page your browser opens, and go back to the app. The server is added then. With **Add**, the hub asks the server for its tools, for at most 15 seconds, and the server is added once it lists them.
 
 ![Adding an MCP server with a key](../../spec/screens/settings-mcp-key.png)
 
@@ -207,13 +207,25 @@ An agent has the server from its next start, so one already running goes on with
 
 In `Authorization`, a key on its own is sent as `Bearer` and the key. One that names its scheme, such as `Basic`, is sent as it is, and so is a key in any other header.
 
-The app hands the key to the hub, which keeps it in its own data, as [Where data is kept](where-data-is-kept.md) says. The app writes it nowhere, and forgets it as it's sent or as you choose another way in **Authentication**, so if the hub refuses to add the server, you paste the key again. No agent is given the key: its calls go through Roundhouse on its machine, which adds it.
+The app hands the key to the hub, which keeps it in its own data, as [Where data is kept](where-data-is-kept.md) says. The app writes it nowhere, and forgets it once the server is added, or as you close the panel or choose another way in **Authentication**. No agent is given the key: its calls go through Roundhouse on its machine, which adds it.
 
 The name is whatever you like, up to 64 characters. Agents call the server by a name made from it, such as `Linear_Northwind` for `Linear (Northwind)`, so two servers can't have names that come to the same. The panel says so if they do, and which server has it.
 
 Every app connected to the hub shows the URL. If it looks like it has a key in it, the panel says so, and lets you go on. If the server takes a key in a header, use **Key** instead.
 
 For a second account at the same server, add it again under another name. The panel says which server already has the URL, and lets you go on.
+
+### If the server doesn't list its tools
+
+The server isn't added, and the panel says why, such as that it refused the key or can't be reached.
+
+![A server that refuses its key, with Add anyway and Try again](../../spec/screens/settings-mcp-key-refused.png)
+
+- **Try again** asks it again, with the same key.
+- **Add anyway** adds it as it is, such as when it's down for now, or only an agent's machine can reach it, since the hub asks from its own.
+- **Cancel** adds nothing, and you can cancel while it's being asked.
+
+Change what's wrong in the panel, and the button is **Add** again. [Saving an edit](#edit) of a server's URL, key or header asks it in the same way. A server you sign in to isn't asked, and nor is one whose name alone you change.
 
 ### Sign in
 
@@ -264,6 +276,7 @@ Choose **Edit** in the row's **…** menu, change what you want in the panel und
 | **Authentication,** or the key | Is forgotten once you've saved another | Use the new one at once |
 
 - **To keep the key,** leave its field empty. You can change its header and keep the key.
+- **If the server doesn't list its tools,** nothing is saved, and **Save anyway** does it all the same, as [adding one](#if-the-server-doesnt-list-its-tools) says.
 - **Where it takes a sign-in,** the button is **Sign in,** and nothing changes until you've approved it in your browser.
 
 ### Remove

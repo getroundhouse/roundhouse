@@ -123,7 +123,8 @@ fn records_in(response: &ClientResponse) -> Vec<Record> {
         C::ToolServer(server) => vec![Record::ToolServer(server.clone())],
         C::Terminal(terminal) => vec![Record::Terminal(terminal.clone())],
         // What isn't a record, or holds none.
-        C::ToolSignInBegun(_)
+        C::ToolServerChecked(_)
+        | C::ToolSignInBegun(_)
         | C::Paired(_)
         | C::Devices(_)
         | C::Pairing(_)

@@ -46,6 +46,8 @@ pub struct Script {
     /// Whether each renewal gives a new refresh token, with the last refused from then on.
     pub rotates: bool,
     pub refreshing: Refreshing,
+    /// What holds back each answer of its server.
+    pub server_after: Option<Gate>,
     /// What holds back each piece of its metadata.
     pub metadata_after: Option<Gate>,
     /// What holds back each answer of its authorization server for tokens, and to a client that asks to be registered,
@@ -79,6 +81,7 @@ impl Default for Script {
             lasts: Some(3600),
             rotates: true,
             refreshing: Refreshing::Works,
+            server_after: None,
             metadata_after: None,
             answers_after: None,
         }

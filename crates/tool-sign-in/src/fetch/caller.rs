@@ -12,6 +12,7 @@ use url::form_urlencoded::Serializer;
 use super::reach::host;
 use super::sending::{self, Tls};
 use super::{Names, Reach};
+use crate::messages::Message;
 use crate::{Failure, ServerUrl, ToolSignIn};
 
 /// How long a call has, from looking up where to ask to the end of its answer, redirects included. A server answers in
@@ -118,8 +119,7 @@ impl Caller<'_> {
         headers: &[(&str, &str)],
         message: &serde_json::Value,
     ) -> Result<Answer, Failure> {
-        let every = [(ACCEPT.as_str(), "application/json, text/event-stream"), (CONTENT_TYPE.as_str(), JSON)];
-        let headers: Vec<_> = every.iter().chain(headers).copied().collect();
+        let headers: Vec<_> = Message::EVERY_HAS.iter().chain(headers).copied().collect();
         let sent =
             Sent { method: Method::POST, headers: &headers, body: message.to_string().into(), reading: Reading::Head };
         within(&host(url), self.ask(url, &sent)).await
