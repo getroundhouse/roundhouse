@@ -124,6 +124,7 @@ fn in_its_section(role: &NamedColor) -> String {
         "What happened" => "status",
         "A pull request" => "PR",
         "The window" => "window",
+        "Code" => "code",
         group => panic!("{group} has no section in the design"),
     };
     // Brilliant heads a section with its name, so this one's is in capitals there.

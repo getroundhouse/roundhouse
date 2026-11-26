@@ -1,5 +1,6 @@
 //! Syntax highlighting for the diff, the transcript's tool calls and the code blocks of every text the kit draws, with
-//! syntect and bat's syntax collection (two-face), in the colours of Visual Studio's dark theme.
+//! syntect and bat's syntax collection (two-face), in Visual Studio's Dark+ with each of its colours taken from the role
+//! that stands for it in `look::Colors`.
 //!
 //! gpui-kit's `syntect` feature pulls these crates in, but its `highlight_code` is `pub(crate)`, so they're used
 //! directly here. A large diff is highlighted on a background thread, which can wait for the syntaxes to load. A
@@ -11,11 +12,13 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui_kit::base::text::editor_host::CodeBlock;
-use gpui_kit::{HighlightStyle, Rgba};
+use gpui_kit::{HighlightStyle, Hsla, Rgba};
 use syntect::easy::HighlightLines;
-use syntect::highlighting::Theme;
+use syntect::highlighting::{Color, Theme};
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 use syntect::util::LinesWithEndings;
+
+use crate::Colors;
 
 static SYNTAXES: OnceLock<SyntaxSet> = OnceLock::new();
 static THEME: OnceLock<Theme> = OnceLock::new();
@@ -29,9 +32,67 @@ fn syntaxes() -> &'static SyntaxSet {
     SYNTAXES.get_or_init(two_face::syntax::extra_newlines)
 }
 
-#[expect(deprecated, reason = "two-face will rename this variant in 0.5")]
 fn theme() -> &'static Theme {
-    THEME.get_or_init(|| two_face::theme::extra().get(two_face::theme::EmbeddedThemeName::VisualStudioDarkPlus).clone())
+    THEME.get_or_init(|| in_roles(dark_plus(), &Colors::dark()))
+}
+
+#[expect(deprecated, reason = "two-face will rename this variant in 0.5")]
+fn dark_plus() -> Theme {
+    two_face::theme::extra().get(two_face::theme::EmbeddedThemeName::VisualStudioDarkPlus).clone()
+}
+
+/// `theme` with each colour it draws code in swapped for the role that stands for it. Its colours for a git gutter,
+/// which no syntax gives, stand for nothing, so what draws with them goes.
+fn in_roles(mut theme: Theme, colors: &Colors) -> Theme {
+    theme.settings.foreground = Some(syntect_color(colors.text));
+    theme.scopes = (theme.scopes.into_iter())
+        .filter_map(|mut item| {
+            if let Some(drawn) = item.style.foreground {
+                item.style.foreground = Some(syntect_color(role(drawn, colors)?));
+            }
+            Some(item)
+        })
+        .collect();
+    theme
+}
+
+/// The role that stands for a colour Dark+ draws code in, by Dark+'s value for it. Its plain colour, and what it draws
+/// as plain, such as an operator, is `text`.
+fn role(dark_plus: Color, c: &Colors) -> Option<Hsla> {
+    Some(match u32::from_be_bytes([0, dark_plus.r, dark_plus.g, dark_plus.b]) {
+        0xdc_dcdc => c.text,
+        0xc5_86c0 => c.code_keyword,
+        0x56_9cd6 => c.code_storage,
+        0x60_8b4e => c.code_comment,
+        0xd6_9d85 => c.code_string,
+        0xe3_bbab => c.code_escape,
+        0xb5_cea8 => c.code_number,
+        0xb4_cea8 => c.code_constant,
+        0xdc_dcaa => c.code_function,
+        0x4e_c9b0 => c.code_type,
+        0x9c_dcfe => c.code_variable,
+        0x92_caf4 => c.code_attribute,
+        0x80_8080 => c.code_tag,
+        0xc8_c8c8 => c.code_value,
+        0xd7_ba7d => c.code_selector,
+        0x87_cefa => c.code_at_rule,
+        0x9b_9b9b => c.code_preprocessor,
+        0x68_685b => c.code_processing,
+        0x68_7687 => c.code_js_operator,
+        0x70_727e => c.code_method_storage,
+        _ => return None,
+    })
+}
+
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a channel is between 0 and 1, so it rounds to a byte"
+)]
+fn syntect_color(color: Hsla) -> Color {
+    let Rgba { r, g, b, a } = color.into();
+    let [r, g, b, a] = [r, g, b, a].map(|channel| (channel.clamp(0., 1.) * 255.).round() as u8);
+    Color { r, g, b, a }
 }
 
 /// Loads the syntaxes and the theme, and the languages most often shown. Deserializing the syntax set takes tens of
@@ -110,7 +171,7 @@ fn find_syntax<'a>(syntaxes: &'a SyntaxSet, language: &str) -> Option<&'a Syntax
         .filter(|syntax| syntax.name != "Plain Text")
 }
 
-fn color(c: syntect::highlighting::Color) -> HighlightStyle {
+fn color(c: Color) -> HighlightStyle {
     let rgba = Rgba { r: f32::from(c.r) / 255.0, g: f32::from(c.g) / 255.0, b: f32::from(c.b) / 255.0, a: 1.0 };
     HighlightStyle { color: Some(rgba.into()), ..HighlightStyle::default() }
 }
@@ -133,6 +194,7 @@ fn push_span(out: &mut Spans, range: Range<usize>, style: HighlightStyle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use syntect::highlighting::ThemeItem;
 
     #[test]
     fn code_is_highlighted_only_once_the_syntaxes_are_ready() {
@@ -169,6 +231,42 @@ mod tests {
         assert_eq!(found("Python"), Some("Python"), "by its name, whatever its case");
         for language in ["csharp", "c#", "jsonc", "mdx", "ejs", "make", "shell", "zsh"] {
             assert!(found(language).is_some(), "{language}");
+        }
+    }
+
+    /// Whether `item` is one of Dark+'s colours for a git gutter, which no syntax gives.
+    fn a_gutters(item: &ThemeItem) -> bool {
+        let scopes = item.scope.selectors.iter().flat_map(|selector| selector.path.as_slice());
+        scopes.map(|scope| scope.build_string()).any(|scope| scope.ends_with(".git_gutter"))
+    }
+
+    #[test]
+    fn dark_pluss_colours_and_the_roles_for_code_are_one_set() {
+        let colors = Colors::dark();
+        let drawn = dark_plus().scopes.into_iter().filter(|item| !a_gutters(item));
+        let of_dark_plus: Vec<Color> = drawn.filter_map(|item| item.style.foreground).collect();
+
+        let unnamed: Vec<_> = of_dark_plus.iter().filter(|colour| role(**colour, &colors).is_none()).collect();
+        assert!(unnamed.is_empty(), "colours of Dark+'s that no role stands for: {unnamed:?}");
+        let named: Vec<Hsla> = of_dark_plus.iter().filter_map(|colour| role(*colour, &colors)).collect();
+        let code = colors.roles().into_iter().filter(|role| role.group == "Code");
+        let unused: Vec<_> = code.filter(|role| !named.contains(&role.color)).map(|role| role.name).collect();
+        assert!(unused.is_empty(), "roles for code that stand for none of Dark+'s colours: {unused:?}");
+    }
+
+    #[test]
+    fn code_is_in_dark_pluss_colours_but_plain_code_is_in_text() {
+        let text = syntect_color(Colors::dark().text);
+        let plain = Color { r: 0xdc, g: 0xdc, b: 0xdc, a: 0xff };
+        let dark_plus = dark_plus();
+        let kept: Vec<_> = dark_plus.scopes.iter().filter(|item| !a_gutters(item)).collect();
+
+        assert_eq!(dark_plus.settings.foreground, Some(plain));
+        assert_eq!(theme().settings.foreground, Some(text));
+        assert_eq!(kept.len(), theme().scopes.len());
+        for (theirs, ours) in kept.into_iter().zip(&theme().scopes) {
+            let expected = theirs.style.foreground.map(|colour| if colour == plain { text } else { colour });
+            assert_eq!((&ours.scope, ours.style.foreground), (&theirs.scope, expected));
         }
     }
 
