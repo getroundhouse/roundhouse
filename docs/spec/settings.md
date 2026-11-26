@@ -485,7 +485,7 @@ The app's own settings, and where they're shown.
   ![Waiting for a sign-in to an MCP server](screens/settings-mcp-waiting.png)
 
 - **A sign-in that comes to nothing says why, in red, with a way to try again,** whether it was refused, it failed, nobody approved it within 15 minutes, the hub no longer has it, or its server's name was taken meanwhile. For a server that's added or edited, that's the panel it was started from, with what was typed still in it. For one that's signed in to again, it's the sign-in's own, with Try again. *Unconfirmed:* all but the 15 minutes.
-- **The app has one sign-in to a hub's servers at a time, and it goes on with Settings closed.** MCP servers shows it wherever it was started. Starting another cancels it, and so does Cancel, after which nothing listens. If the connection to the hub is lost once you've approved it, it's finished when the connection is back. A hub has four sign-ins waiting at most, of all its apps, and starting another forgets the one that has waited longest, so an app that quit as it waited holds up no one. *Unconfirmed:* that MCP servers shows it wherever it was started, and that nothing listens after Cancel.
+- **The app has one sign-in to a hub's servers at a time, and it goes on with Settings closed.** MCP servers shows it wherever it was started. Starting another cancels it, and so does Cancel, after which nothing listens. If the connection to the hub is lost once you've approved it, it's finished when the connection is back. *Unconfirmed:* that MCP servers shows it wherever it was started, and that nothing listens after Cancel.
 
   **A sign-in refused, in the panel it was started from.** *Unconfirmed.*
 

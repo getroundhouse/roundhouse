@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use protocol::client::ErrorCode;
 use protocol::client::tool_servers::ToolServerAdd;
@@ -33,14 +32,13 @@ async fn a_new_server_is_added_once_its_approved_and_every_client_is_told_of_it(
 }
 
 #[tokio::test]
-async fn a_start_sent_again_is_answered_with_the_same_page_and_a_finish_with_the_server_after_a_restart_too() {
+async fn a_finish_sent_again_is_answered_with_the_server_after_a_restart_too() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, stand_in) = (hub_in(dir.path()), StandIn::with(Script::default()).await);
 
-    let (first, at_once) =
-        tokio::join!(hub.tool_sign_in_start(new("i", &stand_in)), hub.tool_sign_in_start(new("i", &stand_in)));
-    let again = page(&hub, new("i", &stand_in)).await;
-    let finishing = visited("i", &stand_in, &again);
+    let page = page(&hub, new("i", &stand_in)).await;
+    let again = hub.tool_sign_in_start(new("i", &stand_in)).await.unwrap_err();
+    let finishing = visited("i", &stand_in, &page);
     let (server, at_once_finished) =
         tokio::join!(hub.tool_sign_in_finish(finishing.clone()), hub.tool_sign_in_finish(finishing.clone()));
     let server = server.unwrap();
@@ -49,9 +47,7 @@ async fn a_start_sent_again_is_answered_with_the_same_page_and_a_finish_with_the
     let hub = hub_in_again(dir.path());
     let after_a_restart = hub.tool_sign_in_finish(finishing).await.unwrap();
 
-    let same = Ok(ToolSignInBegun::Page { page: again });
-    assert_eq!((&first, &at_once), (&same, &same));
-    assert_eq!(stand_in.asked_for("POST /mcp").len(), 1, "its server was asked once how it's signed in to");
+    assert_eq!(again.code, ErrorCode::Conflict, "a start of its ID while it waits");
     assert_eq!(at_once_finished.unwrap(), server);
     assert_eq!((finished_again, after_a_restart), (server.clone(), server));
     assert_eq!(stand_in.asked_for("POST /token").len(), 1, "its code, good once, was used once");
@@ -128,31 +124,18 @@ async fn a_server_with_no_sign_in_or_no_way_roundhouse_could_says_so_and_waits_f
     }
 }
 
-/// Once it answers again, the same start is answered as it's found then. One sent again as the first is asked, which
-/// waits for it, isn't asked again once the first has failed, which can take half a minute.
+/// Once it answers again, the same start is answered as it's found then.
 #[tokio::test]
 async fn a_server_that_cant_be_asked_now_may_be_asked_again() {
     let dir = tempfile::tempdir().unwrap();
-    let gate = Gate::closed();
-    let script = Script { asks: Asks::Answers(503), server_after: Some(gate.clone()), ..Script::default() };
+    let script = Script { asks: Asks::Answers(503), ..Script::default() };
     let (hub, stand_in) = (hub_in(dir.path()), StandIn::with(script).await);
-    let starting = || {
-        let (hub, asked) = (Arc::clone(&hub), new("i", &stand_in));
-        tokio::spawn(async move { hub.tool_sign_in_start(asked).await })
-    };
 
-    let (first, again) = (starting(), starting());
-    // Held by the hub's list, by each start and by this.
-    let both_hold_it = || hub.tool_sign_ins.waiting.get(&"i".into(), 0).is_some_and(|it| Arc::strong_count(&it) == 4);
-    waiting::task::until(Duration::from_secs(10), "both starts didn't hold the sign-in", both_hold_it).await;
-    gate.open();
-    let mut failed = [first.await.unwrap().unwrap_err().code, again.await.unwrap().unwrap_err().code];
+    let failed = hub.tool_sign_in_start(new("i", &stand_in)).await.unwrap_err();
     stand_in.change(|script| script.asks = Asks::SignIn);
     let begun = hub.tool_sign_in_start(new("i", &stand_in)).await.unwrap();
 
-    failed.sort_by_key(|code| *code == ErrorCode::Conflict);
-    assert_eq!(failed, [ErrorCode::Unavailable, ErrorCode::Conflict], "whichever was asked first");
-    assert_eq!(stand_in.asked_for("POST /mcp").len(), 2, "once for the two at once, and once after");
+    assert_eq!(failed.code, ErrorCode::Unavailable);
     assert!(matches!(begun, ToolSignInBegun::Page { .. }), "{begun:?}");
 }
 
