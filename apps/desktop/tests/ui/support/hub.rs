@@ -34,6 +34,13 @@ impl Ui<'_> {
         self.cx.update_window(self.handle, |_, window, cx| click(window, id, cx)).unwrap();
     }
 
+    /// Stops the hub, and waits for the app to find it can't start another, as for a stack
+    /// [`without_a_daemon`](Stack::without_a_daemon).
+    pub(crate) fn lose_the_hub(&mut self, stack: &Stack) {
+        client_core::stop_hub(&stack.hub.paths.socket).unwrap();
+        self.wait("the app to find no hub", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
+    }
+
     /// Waits for the app to be connected again, to a hub other than the one with this pid. It asks with
     /// `Client::connect`, never `stack.client()`, which would start that hub itself if it asked before the app had
     /// noticed the old one go. The test would then carry on while the app was still reconnecting.

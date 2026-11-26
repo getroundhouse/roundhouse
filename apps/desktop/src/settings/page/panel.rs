@@ -130,7 +130,8 @@ pub(super) fn buttons() -> Div {
     h_flex().justify_end().gap(look::Space::Small)
 }
 
-/// That a panel waits, beside a still circle.
+/// That a panel waits: `said`, muted, after a loader's circle, which stays still rather than turning as the kit's
+/// `Spinner` does.
 pub(super) fn waiting_line(said: impl Into<SharedString>, cx: &App) -> Div {
     h_flex()
         .gap(look::Space::Small)

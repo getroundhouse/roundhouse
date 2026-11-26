@@ -1,12 +1,13 @@
 //! MCP servers in Settings, against a real hub, and a stand-in for one that's asked for its tools as it's added: one
 //! another client adds, adding one with a key and one with neither, a name that's taken, changing the way before one is
-//! added, and removing one, which asks first. Every server and key is plainly made up.
+//! added, the hub going while one is typed, and removing one, which asks first. Every server and key is plainly made up.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
 
-use gpui_kit::{SharedString, TestAppContext};
+use desktop::app::AppView;
+use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use hub::{ToolServerAsks, ToolServerScript};
 use protocol::model::{ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerId, ToolServerKey};
 
@@ -168,6 +169,33 @@ fn changing_how_a_server_knows_you_keeps_its_name_and_url_and_drops_the_key_and_
     ui.wait("the server", |ui| named(ui, "Docs").is_some() && !ui.has("mcp-panel"));
     let docs = named(&ui, "Docs").unwrap();
     assert_eq!((docs.url.as_str(), docs.auth), (serving.url().as_str(), ToolServerAuth::Neither));
+}
+
+/// The hub stops while a key is typed, and the app can't start another, so the panel waits, with what's typed, until
+/// there's a hub to ask again.
+#[gpui_kit::test]
+fn a_panel_keeps_whats_typed_while_theres_no_hub_and_adds_it_once_theres_one_again(cx: &mut TestAppContext) {
+    let (mut stack, serving) = (Stack::new(), open_to_anyone());
+    // Started for the app to connect to, since the app then has no daemon to start one with.
+    stack.client();
+    let daemon = stack.without_a_daemon();
+    let mut ui = in_servers(cx, &stack);
+    fill_in(&mut ui, "Runbooks", &serving.url());
+    choose(&mut ui, KEY_WAY);
+    ui.input(KEY);
+    assert!(ui.on("mcp-panel-go"));
+
+    ui.lose_the_hub(&stack);
+
+    ui.wait("no hub to ask", |ui| ui.off("mcp-panel-go"));
+    assert!(ui.has("mcp-panel"), "the panel stays");
+    local_hub::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
+    // As Try again does, which Settings covers.
+    ui.cx.update_entity(&ui.view.clone(), AppView::connect);
+    ui.wait("a hub to ask", |ui| ui.on("mcp-panel-go"));
+    ui.click("mcp-panel-go");
+    ui.wait("it to be added", |ui| named(ui, "Runbooks").is_some() && !ui.has("mcp-panel"));
+    assert_eq!(files_holding(stack.dir.path(), KEY, "").len(), 1, "with the key that was typed");
 }
 
 #[gpui_kit::test]
