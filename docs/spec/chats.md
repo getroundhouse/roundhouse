@@ -720,7 +720,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
 - **A request to use a tool with no kind of its own, such as an MCP server's, shows all that the tool would be given,** since that's what's allowed. Its header is the tool's name made readable, then the MCP server it's from, such as `Create issue · GitHub (Northwind)`, then the subagent that asks, when one does. The server has the name a call to it shows, as it is now, even when that changes while the request waits. A tool from no server has no such part. Its text is `Use this tool?`. Under it is the whole input as JSON, in the block a command has, and no block where there's no input.
 
-  **An MCP server's tool waiting to be allowed, in a chat that's planning: the tool and its server, then all that it would be given.** *Unconfirmed.*
+  **An MCP server's tool waiting to be allowed: the tool and its server, then all that it would be given.** *Unconfirmed.*
 
   ![An MCP server's tool waiting to be allowed, with its input](screens/approval-mcp.png)
 
@@ -897,21 +897,21 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![The amber plug's card, with Linear's Sign in button](screens/mcp-servers-sign-in.png)
 
-- **Sign in opens the server's page in the browser, as signing in from Settings does, and the button gives way to `Signing in` until you've approved it.** It's the app's one sign-in to the hub's servers, so it shows in every chat's card and in Settings, wherever it was started, and starting another cancels it. The plug stays amber, and the card's other servers say what they did, until the hub says the server works. The button is off with no hub to ask. *Unconfirmed.*
+- **Sign in opens the server's page in the browser, as signing in from Settings does, and the button gives way to `Signing in` until you've approved it.** It's the app's one sign-in to the hub's servers, so it shows in every chat's card and in Settings, wherever it was started, and starting another cancels it. The plug stays amber, and the card's other servers say what they did, until the hub says the server works. The button is off with no hub to ask. *Unconfirmed:* all but its being the app's one sign-in, which starting another cancels.
 
   **The card, while the sign-in waits to be approved.** *Unconfirmed.*
 
   ![The plug's card, saying Linear is being signed in to](screens/mcp-servers-signing-in.png)
 
-- **A sign-in that comes to nothing has the button again, with why on the line under it,** cut off if it's long, which Settings says in full. *Unconfirmed.*
+- **A sign-in that comes to nothing has the button again, with why on the line under it,** cut off if it's long, which Settings says in full.
 
-  **The card, where signing in to Linear failed.** *Unconfirmed.*
+  **The card, where signing in to Linear failed.**
 
   ![The plug's card, with Sign in again and why it failed](screens/mcp-servers-sign-in-refused.png)
 
-- **A server that works and wants more access than its sign-in has, as `settings.md` says, has the same Sign in button, with `Wants more access` on the line under it.** The button is in place of how many tools it has, until you've signed in. *Unconfirmed.*
+- **A server that works and wants more access than its sign-in has, as `settings.md` says, has the same Sign in button, with `Wants more access` on the line under it.** The button is in place of how many tools it has, until you've signed in.
 
-  **The card, where Linear wants more access.** *Unconfirmed.*
+  **The card, where Linear wants more access.**
 
   ![The amber plug's card, with Linear's Sign in button and Wants more access](screens/mcp-servers-more-access.png)
 
@@ -934,11 +934,11 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 - **Codex tries every server that failed, whichever one's Reload is pressed,** and each says what came of it.
 - **Claude reads nothing else while it connects,** so Stop and a prompt wait for it, up to 30 seconds, as the owner decided.
 - **The keyboard reaches the card's buttons through the plug,** which is one of Tab's stops and shows its card as the focus comes to it, as `components.md` says of a hover card. A press on the plug leaves the focus in the composer. *Unconfirmed.*
-- **There's a plug only in a chat with a server to list,** the hub's or the CLI's own. *Unconfirmed.*
-- **A card of more servers than fit in 360px scrolls,** about ten, so it stays in the window. *Unconfirmed.*
+- **There's a plug only in a chat with a server to list,** the hub's or the CLI's own.
+- **A card of more servers than fit in 360px scrolls,** about ten, so it stays in the window.
 - **The hub's are listed by the names you gave them, and the CLI's own by what the CLI calls them,** each by name, under whose they are, with where they're kept: in Roundhouse, or on the machine the agent runs on, as the workspace's card says it. *Unconfirmed:* the order.
 - **A server's words are at its line's end, but where a button is in their place.** Besides its tools, `Can't be reached` and `Sign in from its CLI`: `Connected`, where the agent doesn't say how many tools it has, `Starting`, as while the agent connects to one you've signed in to, edited or reloaded, `Turned off` for one the CLI's own settings turn off, `From its next start`, for one of the hub's the agent wasn't launched with, or that the hub says it has from then, since it's connected to it where it was before it was moved, so it's cut off from it, and can't be asked to connect to it again, as `settings.md` says, and `Removed`, for one it was launched with that the hub has since removed, which is listed last, by what the agent calls it. Why one can't be reached is on a line under it, cut off if it's long, where the agent says: Codex does, and Claude doesn't. One of the hub's that only the agent says to sign in to says `Can't be reached`, since the hub's record is what says whether you need to. *Unconfirmed.*
-- **Nothing is said of a server the agent has said nothing of.** Until the agent has said which servers it has, as before its first turn and while it isn't running, the hub's are listed with nothing said of them, but for one that needs you to sign in, and the CLI's own say `Not known yet`. An agent that never says, which is Antigravity, has only the hub's listed. *Unconfirmed.*
+- **Nothing is said of a server the agent has said nothing of.** Until the agent has said which servers it has, as before its first turn and while it isn't running, the hub's are listed with nothing said of them, but for one that needs you to sign in, and the CLI's own say `Not known yet`. An agent that never says, which is Antigravity, has only the hub's listed. *Unconfirmed:* that an agent that never says has only the hub's listed.
 
 ## Compacting
 

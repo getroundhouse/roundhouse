@@ -7,7 +7,7 @@ These rules cover how an observation, the hub's copy of what others own, reaches
 - **What a worker watches reaches the hub only from the workspace's current worker, and each report replaces the one before it whole.** A report from a worker that's been replaced is dropped, and nothing is merged. For example, a worker sends every branch of its worktree each time one moves. *Unconfirmed.*
 - **What an agent says only part of at a time is merged with what's kept, rather than replacing it, each part as it was last heard, with when.** So a part heard earlier, as one a worker sends again to a hub that connects, never replaces one heard later, and a hearing that says the same again of each part tells no client. For example, an agent says some of its account's usage limits at a time, and each window is kept as it was last said. *Unconfirmed.*
 - **What an agent says outside its log, such as how full its context is, is as of when it said it, and never current, though the run that said it goes on.** Only what the session's current run says counts. *Unconfirmed.*
-- **What's only true of a run, such as which tool servers its agent has, goes as the run ends and as another starts.** It's then not known, until the next run says. *Unconfirmed.*
+- **What's only true of a run, such as which tool servers its agent has, goes as the run ends and as another starts.** It's then not known, until the next run says.
 
 ## Where the hub keeps it
 
