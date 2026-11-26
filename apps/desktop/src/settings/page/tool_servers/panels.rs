@@ -10,12 +10,13 @@ use gpui_kit::{
 };
 
 use super::super::field::{FIELDS_WIDTH, Field, captioned, labelled};
-use super::super::panel::{self, Closes, Framed, button, buttons, waiting_line};
+use super::super::panel::{self, Closes, Framed, button, buttons};
 use super::Drawing;
 use super::form::{AuthFields, Form, Of};
 use super::going::FormStands;
 use super::kept::{Kept, Panel, Shows};
 use super::{sign_in_panel, words};
+use crate::waiting_line::waiting_line;
 
 /// The page's name, which its panels' parts are known by.
 const PAGE: &str = "mcp";

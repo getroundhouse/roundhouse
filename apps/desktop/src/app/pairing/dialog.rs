@@ -11,11 +11,12 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Role,
     SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Task, TestSupportExt as _, Window, div,
 };
-use look::{Corner, EDGE, IconSize, IconSizing as _, Shaped as _, Space, TaskRing, Type, Typeset as _};
+use look::{Corner, EDGE, IconSize, IconSizing as _, Shaped as _, Space, Type, Typeset as _};
 use protocol::pairing::PairingLink;
 
 use super::words::{ParsedInput, connect_failure, parse_input};
 use crate::app::{device_name, hubs, saved_hubs};
+use crate::waiting_line::waiting_line;
 
 struct ConnectHub {
     data_dir: PathBuf,
@@ -163,7 +164,7 @@ impl ConnectHub {
                     .off(connecting),
             )
             .children(preview)
-            .when_some(connect.connecting_to.as_deref(), |d, hub| d.child(reaching_line(hub, cx)))
+            .when_some(connect.connecting_to.as_deref(), |d, hub| d.child(waiting_line(format!("Reaching {hub}…"), cx)))
             .when_some(feedback, |d, msg| d.child(feedback_alert(msg, cx)))
             .test_support();
         let (submitting, closing) = (this.clone(), this.clone());
@@ -183,16 +184,6 @@ impl ConnectHub {
             })
             .on_close(move |_, cx| closing.update(cx, ConnectHub::closed))
     }
-}
-
-fn reaching_line(hub: &str, cx: &App) -> AnyElement {
-    h_flex()
-        .gap(Space::Small)
-        .items_center()
-        .text_color(look::colors(cx).text_muted)
-        .child(look::task_ring(TaskRing::Running, cx))
-        .child(format!("Reaching {hub}…"))
-        .into_any_element()
 }
 
 fn feedback_alert(msg: String, cx: &App) -> AnyElement {

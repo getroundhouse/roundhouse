@@ -19,7 +19,8 @@ use crate::timers::Timers;
 use super::app_panel::{AppPanel, AppStep, Choosing, OnGithub};
 use super::app_words;
 use super::kept::{Kept, Panel};
-use super::panel::{Closes, Framed, button, buttons, framed, refusal, waiting_line};
+use super::panel::{Closes, Framed, button, buttons, framed, refusal};
+use crate::waiting_line::waiting_line;
 
 /// How far a step has got.
 #[derive(Clone, Copy, PartialEq, Eq)]

@@ -13,12 +13,13 @@ use gpui_kit::{
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Task, TestSupportExt as _,
     Window, div,
 };
-use look::{Corner, EDGE, IconSize, IconSizing as _, Shaped as _, Space, TaskRing, Type, Typeset as _};
+use look::{Corner, EDGE, IconSize, IconSizing as _, Shaped as _, Space, Type, Typeset as _};
 use protocol::pairing::{Device, Pairing};
 
 use super::qr::{self, QrMatrix};
 use crate::app::hubs;
 use crate::names::MACHINE;
+use crate::waiting_line::waiting_line;
 
 enum State {
     Creating,
@@ -165,7 +166,7 @@ impl ShareHub {
                 let shown = v_flex()
                     .gap(Space::Large)
                     .child(ready_row(&pairing.link.to_string(), qr.as_ref(), cx))
-                    .child(waiting_line(&status, cx));
+                    .child(waiting_line(status, cx));
                 let copying = sharing.clone();
                 let copy =
                     answer("copy-pairing-link", look::ButtonKind::Main, if copied { "Copied" } else { "Copy link" })
@@ -300,15 +301,5 @@ fn paired_body(device_name: &str, cx: &App) -> AnyElement {
                 .text_color(colors.text_faint)
                 .child("To remove access later, run roundhouse phone revoke in a terminal."),
         )
-        .into_any_element()
-}
-
-fn waiting_line(words: &str, cx: &App) -> AnyElement {
-    h_flex()
-        .gap(Space::Small)
-        .items_center()
-        .text_color(look::colors(cx).text_muted)
-        .child(look::task_ring(TaskRing::Running, cx))
-        .child(words.to_string())
         .into_any_element()
 }
