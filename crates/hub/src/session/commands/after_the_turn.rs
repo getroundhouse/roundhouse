@@ -35,6 +35,13 @@ impl LiveState {
         self.progress.status.in_turn()
     }
 
+    /// Whether a turn runs, or is about to, with a prompt the agent has been given and hasn't taken. One kept for the turn's
+    /// end it hasn't been given.
+    pub(in super::super) fn on_a_turn(&self) -> bool {
+        let kept = |seq: &Seq| self.after_the_turn.iter().any(|prompt| prompt.seq == *seq);
+        self.in_turn() || self.progress.queue.untaken().iter().any(|seq| !kept(seq))
+    }
+
     /// Whether a prompt is kept for the turn's end, which one recorded after it has to follow.
     fn keeps_any(&self) -> bool {
         !self.after_the_turn.is_empty()

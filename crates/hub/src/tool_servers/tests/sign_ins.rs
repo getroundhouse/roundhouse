@@ -7,7 +7,7 @@ use protocol::client::tool_sign_ins::ToolSignInTo;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{ToolServer, ToolServerAuth, ToolSignInStatus};
 use serde_json::json;
-use tool_sign_in::{AccessToken, Granted, RefreshToken, Registration, SignedIn};
+use tool_sign_in::{AccessToken, Granted, RefreshToken, Registration, Renewal, SignedIn};
 
 use super::super::secret::ToolServerSecret;
 use super::super::{SigningIn, ToolServerChange, ToolServers};
@@ -68,6 +68,20 @@ pub(super) fn signed_in_for(servers: &ToolServers, id: &str, name: &str, granted
 pub(crate) fn again(servers: &ToolServers, id: &str) -> Result<ToolServerChange, ApiError> {
     let to = servers.signing_in(ToolSignInTo::Again { id: id.into() })?;
     servers.keep_sign_in("again".into(), &to, as_first(granted("made-up-again")), GIVEN_AT_MS)
+}
+
+/// Signing in to the server `id`, by the sign-in `edit`, to have it at `url`.
+pub(crate) fn edited_by_signing_in(servers: &ToolServers, id: &str, url: &str) {
+    let to = ToolSignInTo::Edit { id: id.into(), name: None, url: Some(url.into()) };
+    let to = servers.signing_in(to).unwrap();
+    servers.keep_sign_in("edit".into(), &to, as_first(granted("made-up-edit")), GIVEN_AT_MS).unwrap();
+}
+
+/// The one sign-in there is, renewed as its access token ends.
+pub(crate) fn renewed(servers: &ToolServers) {
+    let ends_at_ms = crate::store::later_ms(GIVEN_AT_MS, LASTS);
+    let due = servers.check_sign_ins(ends_at_ms).unwrap().due.remove(0);
+    servers.renewed(&due, Renewal::Renewed(granted("made-up-renewed")), ends_at_ms).unwrap();
 }
 
 /// What the record of the server `id` says of its sign-in.

@@ -19,6 +19,7 @@ mod controls;
 mod conversation;
 mod cover_lines;
 mod decisions;
+mod had_servers;
 mod ingest;
 mod limits;
 mod messages;

@@ -57,7 +57,7 @@ impl ToolServers {
     pub(crate) fn new(store: Arc<Store>, data_dir: &Path) -> Self {
         let servers =
             Self { store, files: LoginFiles::new(data_dir), sent: watch::Sender::new(SentToolServers::default()) };
-        servers.publish(&servers.files.lock());
+        servers.publish(&servers.files.lock(), None);
         servers
     }
 

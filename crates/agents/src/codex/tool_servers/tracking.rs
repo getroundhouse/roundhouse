@@ -164,6 +164,7 @@ impl ToolServers {
             state: server.state,
             error: server.error.clone(),
             tools: server.tools,
+            connects_again: None,
         });
         AgentOutput::Report(Report::ToolServers { servers: servers.collect() })
     }

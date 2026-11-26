@@ -52,8 +52,9 @@ fn every_request_about_a_tool_server_keeps_its_form() {
 fn an_edit_of_a_tool_server_holds_only_what_changes_and_keeps_its_form() {
     let edit = |name: Option<&str>, url: Option<&str>, auth| {
         let (name, url) = (name.map(str::to_string), url.map(str::to_string));
-        ClientRequest::ToolServerEdit(ToolServerEdit { id: "t".into(), name, url, auth })
+        ToolServerEdit { id: "t".into(), name, url, auth, saved_anyway: false }
     };
+    let asked = |edit, line: &str| asked(ClientRequest::ToolServerEdit(edit), line);
     let key = |key: Option<&str>| ToolServerAuthEdit::Key {
         header: "X-Key".to_string(),
         key: key.map(ToolServerKey::new),
@@ -73,6 +74,9 @@ fn an_edit_of_a_tool_server_holds_only_what_changes_and_keeps_its_form() {
         edit(None, None, Some(key(None))),
         &of(r#","auth":{"kind":"key","header":"X-Key","url":"https://mcp.example.com/mcp"}"#),
     );
+    // Left out where it wasn't, as an older client's edit, which says nothing of it, reads.
+    let anyway = ToolServerEdit { saved_anyway: true, ..edit(Some("Sentry"), None, None) };
+    asked(anyway, &of(r#","name":"Sentry","saved_anyway":true"#));
 }
 
 #[test]

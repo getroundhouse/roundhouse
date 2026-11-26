@@ -74,7 +74,9 @@ fn form(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Framed {
         .children(asking);
     let (title, lead) = match had.zip(edits) {
         None => ("Add an MCP server".into(), words::ADD),
-        Some((was, edits)) => (words::edit_title(&was.name).into(), words::edit_says(edits)),
+        Some((was, edits)) => {
+            (words::edit_title(&was.name).into(), words::edit_says(edits, form.stands.saves_anyway()))
+        }
     };
     Framed {
         title,

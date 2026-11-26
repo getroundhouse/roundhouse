@@ -73,7 +73,8 @@ async fn a_server_one_client_adds_edits_and_removes_reaches_another() {
 
     let added = ask(&mut adds, 2, add("t", "Linear", a_key())).await;
     told(&mut second, &HubNotice::ToolServer(added.clone())).await;
-    let rename = ToolServerEdit { id: "t".into(), name: Some("Sentry".into()), url: None, auth: None };
+    let rename =
+        ToolServerEdit { id: "t".into(), name: Some("Sentry".into()), url: None, auth: None, saved_anyway: false };
     let edited = ask(&mut adds, 3, rename).await;
     told(&mut second, &HubNotice::ToolServer(edited.clone())).await;
     let removed = ask(&mut adds, 4, ToolServerRemove { id: "t".into() }).await;

@@ -49,8 +49,8 @@ impl Failure {
         match self {
             Failure::Removed => "This MCP server was removed from Roundhouse, so its tools can't be used.".into(),
             Failure::Moved => format!(
-                "{label} has been moved to another URL in Roundhouse since this agent connected to it, so nothing was \
-                 sent to it. This agent has it from its next start."
+                "{label} has been moved to another URL in Roundhouse, so nothing is sent to it until this agent connects \
+                 to it again."
             ),
             Failure::Unusable => {
                 format!("Roundhouse can't use the URL or the header {label} has. Edit it in Settings › MCP servers.")

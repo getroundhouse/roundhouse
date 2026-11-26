@@ -33,7 +33,7 @@ fn to_add(add: ToolServerAdd) -> ToolServerCheck {
 }
 
 fn to_edit(url: &str, auth: Option<ToolServerAuthEdit>) -> ToolServerCheck {
-    let edit = ToolServerEdit { id: "t".into(), name: None, url: Some(url.into()), auth };
+    let edit = ToolServerEdit { id: "t".into(), name: None, url: Some(url.into()), auth, saved_anyway: false };
     ToolServerCheck { of: ToolServerToCheck::Edit(edit) }
 }
 
@@ -97,7 +97,13 @@ async fn what_cant_be_added_or_edited_is_refused_before_anything_is_asked_and_a_
     ] {
         assert_eq!(hub.tool_server_check(check).await.unwrap_err().code, code);
     }
-    let named = ToolServerEdit { id: "t".into(), name: Some("Linear (Ada)".into()), url: None, auth: None };
+    let named = ToolServerEdit {
+        id: "t".into(),
+        name: Some("Linear (Ada)".into()),
+        url: None,
+        auth: None,
+        saved_anyway: false,
+    };
     let nothing = hub.tool_server_check(ToolServerCheck { of: ToolServerToCheck::Edit(named) }).await.unwrap();
 
     assert_eq!(nothing, ToolServerChecked::NothingToAsk);

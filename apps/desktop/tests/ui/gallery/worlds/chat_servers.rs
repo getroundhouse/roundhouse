@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use client_core::fake_hub::World;
-use protocol::capability::setup::{ServerState, ToolServerState};
+use protocol::capability::setup::{ConnectsAgain, ServerState, ToolServerState};
 use protocol::event::EventBody;
 use protocol::fixtures::{observed, tool_server, tool_server_needing_sign_in, tool_server_wanting_more_access};
 use protocol::model::{
@@ -60,6 +60,19 @@ pub(in super::super) fn chat_servers_wanting_more_access() -> World {
     with_servers(linear, said_of)
 }
 
+/// A Claude chat on a turn, where one of the hub's has been edited so that its agent connects to it again once that ends.
+pub(in super::super) fn chat_servers_edited() -> World {
+    let linear = named("Linear", tool_server("linear"));
+    let waits = ToolServerState {
+        connects_again: Some(ConnectsAgain::WhenItsTurnEnds),
+        ..with_tools("Linear", Some("linear"), 23)
+    };
+    let said_of = vec![waits, with_tools("Notion", Some("notion"), 14), with_tools("Runbooks", Some("runbooks"), 2)];
+    let mut world = with_servers(linear, said_of);
+    world.sessions.last_mut().unwrap().status = SessionStatus::Running;
+    world
+}
+
 /// A chat of `events`, in `status`, on a hub that has a server the person called `GitHub (Northwind)`.
 pub(in super::super) fn chat_with_a_server(status: SessionStatus, events: Vec<EventBody>) -> World {
     let mut world = chat_world(status, events);
@@ -98,6 +111,7 @@ fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolServerState {
         state,
         error: None,
         tools: None,
+        connects_again: None,
     }
 }
 

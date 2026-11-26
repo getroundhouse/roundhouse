@@ -16,12 +16,12 @@ use protocol::model::{ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServe
 
 use super::git_app::label_of;
 use super::open_settings;
-use super::tool_server_edit::edit;
+use super::tool_server_edit::{TOOLS, edit};
 use super::tool_servers::{
     KEY, KEY_WAY, NONE_WAY, added_elsewhere, choose, fill_in, in_servers, more, named, open_to_anyone, the_hubs,
     type_in, with_key,
 };
-use super::tool_sign_in::{WORKS, refused};
+use super::tool_sign_in::{WORKS, refused, says};
 use crate::support::{FakeHub, Serving, Stack, Ui, files_holding};
 
 const REFUSED_KEY: &str = "Runbooks refused this key.";
@@ -173,7 +173,8 @@ fn a_server_that_takes_its_key_the_next_time_is_added_and_a_key_goes_as_its_pane
     assert!(asked.iter().all(|asked| asked.headers["authorization"] == key.as_str()), "each with the key");
 }
 
-/// A key that's kept, then a server that has none. Its name alone is saved without asking it anything.
+/// A key that's kept, then a server that has none. Its name alone is saved without asking it anything. One saved anyway
+/// has its tools listed again, where the agent can, and the panel says so once that's on offer.
 #[gpui_kit::test]
 fn an_edit_is_checked_where_it_changes_what_the_server_is_sent_and_is_saved_anyway(cx: &mut TestAppContext) {
     let (stack, serving) = (Stack::new(), refusing());
@@ -189,9 +190,11 @@ fn an_edit_is_checked_where_it_changes_what_the_server_is_sent_and_is_saved_anyw
 
     edit(&mut ui, &runbooks);
     type_in(&mut ui, "mcp-header", "X-Key");
+    assert_eq!(says(&mut ui), "Running agents have the change at once.");
     ui.press("enter");
     assert_eq!(refused(&mut ui), "Northwind refused this key.");
     assert_eq!(buttons(&mut ui), ("Try again".to_string(), Some("Save anyway".to_string())));
+    assert_eq!(says(&mut ui), format!("Running agents have the change at once. {TOOLS}"));
     assert_eq!(serving.stand_in.asked()[0].headers["x-key"], KEY);
     let header = |ui: &Ui<'_>| match named(ui, "Northwind").unwrap().auth {
         ToolServerAuth::Key { header } => header.as_str().to_owned(),
@@ -271,6 +274,38 @@ fn a_check_the_hub_refuses_adds_nothing(cx: &mut TestAppContext) {
     assert_eq!(refused(&mut ui), "Couldn't add it: too many are being asked");
     assert_eq!(buttons(&mut ui), ("Add".to_string(), None));
     assert_eq!((asked.count("tool_server_check"), asked.count("tool_server_add")), (1, 0));
+}
+
+/// So that running agents are asked to connect to it again. The fake hub saves neither.
+#[gpui_kit::test]
+fn an_edit_thats_saved_anyway_says_so_to_the_hub(cx: &mut TestAppContext) {
+    let mut world = World::default();
+    world.tool_servers = vec![tool_server("runbooks")];
+    let refused_key = ToolServerChecked::NotListed { why: NoToolList::KeyRefused { status: 401 } };
+    world.tool_server_check = ToolServerCheckWorld::Answers(Ok(refused_key));
+    let asked = world.asked.clone();
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    open_settings(&mut ui);
+    ui.click("settings-page-mcp");
+    ui.wait("its row", |ui| ui.has("mcp-more-runbooks"));
+    let saved_anyway = || {
+        let edit = asked.last("tool_server_edit").unwrap();
+        (edit["id"].as_str().unwrap().to_owned(), edit["saved_anyway"].as_bool())
+    };
+
+    edit(&mut ui, &"runbooks".into());
+    type_in(&mut ui, "mcp-name", "Northwind");
+    ui.click("mcp-panel-go");
+    refused(&mut ui);
+    assert_eq!(saved_anyway(), ("runbooks".into(), None), "where the server isn't asked");
+    type_in(&mut ui, "mcp-key", KEY);
+    ui.click("mcp-panel-go");
+    assert_eq!(refused(&mut ui), "Northwind refused this key.");
+    ui.click("mcp-anyway");
+
+    ui.wait("the hub's refusal", |ui| !ui.has("mcp-anyway"));
+    assert_eq!(saved_anyway(), ("runbooks".into(), Some(true)));
 }
 
 /// Under the last row of more servers than fit, where the panel's end is at the page's end as it opens.

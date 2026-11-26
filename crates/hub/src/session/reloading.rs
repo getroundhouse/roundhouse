@@ -1,5 +1,5 @@
 //! Having the run connect again to one of its tool servers, whoever asks: the person, for one that can't be reached or
-//! whose tools changed, and the hub, once the person has signed in to one, as [`super::reconnecting`] says.
+//! whose tools changed, and the hub, once the person has signed in to one or edited it, as [`super::reconnecting`] says.
 
 use std::collections::BTreeSet;
 
@@ -51,8 +51,11 @@ impl LiveSession {
     }
 
     /// Asks `run`, on `link`, to connect again to `server`, which it last said is as this says, unless it has been asked to
-    /// and hasn't said anything of its servers since. It counts as having had the server by what it's signed in to by now,
-    /// so it isn't asked again for that. What comes of it is what the run says of its servers.
+    /// and hasn't said anything of its servers since. An ask that reached the agent counts as its having had the server
+    /// as it is now, so it isn't asked again for that: one it took, and one it refused, as Codex refuses one it can't
+    /// connect to, which asking again would only have refused again. One that didn't reach it, as where it isn't running,
+    /// is on a turn, or its worker's connection was lost, doesn't count. What comes of it is what the run says of its
+    /// servers.
     pub(super) async fn connect_again(
         &self,
         link: &WorkerLink,
@@ -71,19 +74,17 @@ impl LiveSession {
         if !control.allowed(&claims) {
             return Err(ApiError::new(ErrorCode::InvalidRequest, "the agent can't connect to that MCP server again"));
         }
-        let signed_in_by = server.hubs.as_ref().and_then(|id| link.signed_in().borrow().by(id).cloned());
+        let now = server.hubs.as_ref().and_then(|id| Some((id, link.tool_servers().borrow().of(id)?.clone())));
         {
             let mut state = self.state.lock();
             if state.agent != Some(AgentRun { link: link.id, run }) {
                 return Err(not_running());
             }
-            if let (Some(id), Some(by)) = (&server.hubs, signed_in_by) {
-                state.has_had(run, id, by);
-            }
             let reloading = state.reloading.get_or_insert_with(|| Reloading::of(run));
             if reloading.run != run {
                 *reloading = Reloading::of(run);
             }
+            // Asked when its worker may have had it as it was before, so nothing of how it has it now is had by that.
             if !reloading.asked.insert(name.clone()) {
                 return Ok(());
             }
@@ -92,10 +93,23 @@ impl LiveSession {
             // Only a hub that doesn't know a client's request says so to it.
             if e.code == ErrorCode::Unsupported { ApiError::new(ErrorCode::Worker, e.message) } else { e }
         });
+        let had = |now: Option<(&_, _)>| {
+            if let Some((id, now)) = now {
+                self.state.lock().has_had(run, id, now);
+            }
+        };
         let refused = match asked {
-            Ok(Delivery::Delivered) => return Ok(()),
+            Ok(Delivery::Delivered) => {
+                had(now);
+                return Ok(());
+            }
             Ok(Delivery::AgentNotRunning) => not_running(),
             Ok(Delivery::AfterTheTurn) => conflict("the agent won't connect to it again while its turn runs"),
+            // Its worker answered, so the agent was asked.
+            Err(e) if link.is_open() => {
+                had(now);
+                e
+            }
             Err(e) => e,
         };
         if let Some(reloading) = self.state.lock().reloading.as_mut().filter(|reloading| reloading.run == run) {

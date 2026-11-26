@@ -31,11 +31,12 @@ pub(crate) const ANOTHER: &str = "made-up-other-key-of-a-person";
 
 pub(crate) const CALL: &str = "mcp:Linear_Northwind/find_issue {}";
 
-/// A request a stand-in took: its method, and the key it came with.
+/// A request a stand-in took: its method, the key it came with, and its path, with its query.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Took {
     pub(crate) method: String,
     pub(crate) key: String,
+    pub(crate) path: String,
 }
 
 /// An MCP server with one tool, which refuses a request without [`KEY`] or [`ANOTHER`], and says each with one. It's
@@ -76,7 +77,8 @@ pub(crate) fn serve(mut stream: &TcpStream, took: &Sender<Took>) {
     from.read_exact(&mut body).unwrap();
     let asked: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let (status, result) = if let Some(key) = field("x-key").filter(|key| [KEY, ANOTHER].contains(&key.as_str())) {
-        let _ = took.send(Took { method: asked["method"].as_str().unwrap().to_string(), key });
+        let path = lines[0].split(' ').nth(1).unwrap().to_string();
+        let _ = took.send(Took { method: asked["method"].as_str().unwrap().to_string(), key, path });
         let result = match asked["method"].as_str() {
             Some("tools/list") => serde_json::json!({ "tools": [{ "name": "find_issue" }] }),
             Some("tools/call") => serde_json::json!({ "content": [{ "type": "text", "text": "Found issue 7" }] }),
@@ -126,7 +128,7 @@ fn an_agent_calls_a_server_the_person_added_with_their_key_which_neither_it_nor_
     let answered = calls::run(&client, &chat.id, CALL, 1);
 
     assert_eq!(answered, [("Found issue 7".to_string(), false)]);
-    let took = Took { method: "tools/call".into(), key: KEY.into() };
+    let took = Took { method: "tools/call".into(), key: KEY.into(), path: "/mcp".into() };
     assert_eq!(heard.try_iter().last(), Some(took), "it took the key from the worker");
     let kept = stack.agent_state().join("last-mcp-config");
     assert!(std::fs::read_to_string(kept).unwrap().contains("Linear_Northwind"), "what's searched below");
@@ -314,7 +316,15 @@ fn a_running_agent_is_connected_to_a_server_once_the_person_signs_in_to_it() {
     let second = client.session_create(&workspace.id, AgentKind::Claude, Settings::default(), None).unwrap();
     failed(&second.id);
 
-    client.call(ToolServerEdit { id: "t".into(), name: Some("Linear".into()), url: None, auth: None }).unwrap();
+    client
+        .call(ToolServerEdit {
+            id: "t".into(),
+            name: Some("Linear".into()),
+            url: None,
+            auth: None,
+            saved_anyway: false,
+        })
+        .unwrap();
     sign_in(&client, &stand_in, ToolSignInTo::Again { id: "t".into() });
 
     for chat in [first.id, second.id] {

@@ -46,7 +46,7 @@ impl WorkerLink {
         let mut servers = Following::new(Arc::clone(self), Servers::new(hub.sent_tool_servers()));
         let answer = servers.queue().await.unwrap();
         servers.answered(answer).await.unwrap();
-        tokio::spawn(Arc::clone(hub).reconnect_as_signed_in(workspace_id, Arc::clone(self)));
+        tokio::spawn(Arc::clone(hub).reconnect_as_changed(workspace_id, Arc::clone(self)));
         tokio::spawn(servers.follow());
     }
 
@@ -91,7 +91,7 @@ impl WorkerLink {
             left: AtomicBool::new(false),
             build: OnceLock::new(),
             version: OnceLock::from(version),
-            signed_in: watch::Sender::default(),
+            tool_servers: watch::Sender::default(),
         });
         let gone = Gone(Arc::downgrade(&link));
         tokio::spawn(async move {

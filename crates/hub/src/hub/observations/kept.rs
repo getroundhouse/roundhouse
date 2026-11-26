@@ -201,7 +201,12 @@ impl<K: Kind> Table<K> {
 
     /// What the observation of `of` says, however fresh it is.
     pub(super) fn value(&self, of: &K::Of) -> Option<&K::Value> {
-        self.kept.get(of).map(|kept| &kept.said.value)
+        self.said(of).map(|said| &said.value)
+    }
+
+    /// What the observation of `of` says, and when it was read.
+    pub(super) fn said(&self, of: &K::Of) -> Option<&Said<K::Value>> {
+        self.kept.get(of).map(|kept| &kept.said)
     }
 
     /// Keeps that the observation of `of` says `value`, as of `read_at_ms`, at `rev`, as the cache file kept it, since

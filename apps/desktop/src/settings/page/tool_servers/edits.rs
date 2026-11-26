@@ -12,9 +12,18 @@ pub(super) struct Edits {
     pub(super) name: bool,
     /// Its URL is another server's.
     pub(super) moved: bool,
-    /// Anything else: its URL's query, or how it knows the person.
-    pub(super) rest: bool,
+    pub(super) rest: Rest,
     pub(super) takes: Takes,
+}
+
+/// What's changed of a server at the same place, besides its name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Rest {
+    Nothing,
+    /// How it knows the person alone.
+    Auth,
+    /// Its URL's query, by which it may have other tools.
+    Query,
 }
 
 /// What saving an edit takes for the server to know the person, by the way that's chosen.
@@ -34,8 +43,13 @@ impl Edits {
     pub(super) fn of(edited: &EditedServer, auth: &AuthFields, cx: &App) -> Edits {
         let moved = edited.is_moved();
         let takes = takes(edited, auth.way(), moved);
-        let auth_changed = takes == Takes::SignIn || self::auth(edited, auth, cx).is_some();
-        let rest = edited.new_url().is_some() || auth_changed;
+        let rest = if edited.new_url().is_some() && !moved {
+            Rest::Query
+        } else if takes == Takes::SignIn || self::auth(edited, auth, cx).is_some() {
+            Rest::Auth
+        } else {
+            Rest::Nothing
+        };
         Edits { name: edited.new_name().is_some(), moved, rest, takes }
     }
 

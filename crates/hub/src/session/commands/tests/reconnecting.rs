@@ -32,11 +32,14 @@ type Held<T> = Arc<Mutex<Option<oneshot::Receiver<T>>>>;
 /// A stand-in for `w`'s worker, as the hub's own link to one is once it has opened.
 pub(super) struct Worker {
     pub(super) link: Arc<WorkerLink>,
-    /// Each set of the tool servers, as `set`, and each server its agent was asked to connect to again, by its name, after
-    /// `reload` for one it's connected to, with what a test has said beside them, in order.
+    /// Each set of the tool servers, as `set`, each server its agent was asked to connect to again, by its name, after
+    /// `reload` for one it's connected to, and each prompt it was given, as `prompt`, with what a test has said beside
+    /// them, in order.
     told: Arc<Mutex<Vec<String>>>,
+    /// The run its agent is of already, if it runs.
+    running: Arc<Mutex<Option<RunId>>>,
     /// What the next set's answer, the next launch's, or the next of the agent's waits for.
-    next_set: Held<Answered>,
+    pub(super) next_set: Held<Answered>,
     next_start: Held<()>,
     pub(super) next_control: Held<Answered>,
 }
@@ -59,7 +62,8 @@ impl Worker {
         let (next_set, next_start) = (Held::<Answered>::default(), Held::<()>::default());
         let next_control = Held::<Answered>::default();
         let (telling, set, start) = (Arc::clone(&told), Arc::clone(&next_set), Arc::clone(&next_start));
-        let control = Arc::clone(&next_control);
+        let running = Arc::<Mutex<Option<RunId>>>::default();
+        let (control, found) = (Arc::clone(&next_control), Arc::clone(&running));
         let link = WorkerLink::answering_in_time(move |request| {
             if let WorkerRequest::ToolServersSet(_) = request {
                 telling.lock().push("set".into());
@@ -67,17 +71,24 @@ impl Worker {
                 return Some(held.map_or(Answer::Now(Ok(WorkerResponse::Ok)), Answer::Later));
             }
             if let WorkerRequest::AgentControl(AgentControl { control: asked, .. }) = &request {
-                let reload = matches!(asked, Control::Reload { .. });
-                let (Control::Reconnect { server } | Control::Reload { server }) = asked else { panic!("{asked:?}") };
-                telling.lock().push(if reload { format!("reload {server}") } else { server.to_string() });
+                if let Control::Prompt { .. } = asked {
+                    telling.lock().push("prompt".into());
+                } else {
+                    let reload = matches!(asked, Control::Reload { .. });
+                    let (Control::Reconnect { server } | Control::Reload { server }) = asked else {
+                        panic!("{asked:?}")
+                    };
+                    telling.lock().push(if reload { format!("reload {server}") } else { server.to_string() });
+                }
                 let held = control.lock().take();
                 return Some(held.map_or_else(|| Answer::Now(answers()), Answer::Later));
             }
             let WorkerRequest::AgentStart(spec) = request else { return Some(Answer::Now(Ok(taken(&request)))) };
+            let running = *found.lock();
             let answer = Ok(WorkerResponse::AgentStarted(AgentStarted {
                 pid: 7,
-                run: spec.run,
-                already_running: false,
+                run: running.unwrap_or(spec.run),
+                already_running: running.is_some(),
                 capabilities: Box::new(claims.clone()),
             }));
             let waits_for = start.lock().take();
@@ -91,12 +102,24 @@ impl Worker {
         });
         serving(hub, &link);
         link.set_as_opened(hub, "w".into()).await;
-        Self { link, told, next_set, next_start, next_control }
+        Self { link, told, running, next_set, next_start, next_control }
     }
 
     /// The same, whose agent claims it can connect again, and does.
     async fn reconnecting(hub: &Arc<Hub>) -> Self {
         Self::serving(hub, claims_reconnecting(), || Ok(WorkerResponse::Ok)).await
+    }
+
+    /// The same, whose agent is of `run`, and runs already.
+    pub(super) async fn running(hub: &Arc<Hub>, claims: Capabilities, run: RunId) -> Self {
+        let worker = Self::serving(hub, claims, || Ok(WorkerResponse::Ok)).await;
+        *worker.running.lock() = Some(run);
+        worker
+    }
+
+    /// That `mark` came after whatever it's been asked.
+    pub(super) fn mark(&self, mark: &str) {
+        self.told.lock().push(mark.into());
     }
 
     pub(super) fn told(&self) -> Vec<String> {
@@ -125,7 +148,13 @@ pub(super) async fn says_of(live: &LiveSession, run: RunId, hubs: Option<&str>, 
         state,
         error: None,
         tools: None,
+        connects_again: None,
     };
+    says_server(live, run, server).await;
+}
+
+/// The same, as `server` says.
+pub(super) async fn says_server(live: &LiveSession, run: RunId, server: ToolServerState) {
     live.send_item(Item::Report { run, report: Report::ToolServers { servers: vec![server] }, seq: None }).await;
     settled(live).await;
 }
@@ -154,7 +183,7 @@ async fn an_agent_is_asked_once_for_each_sign_in_only_once_its_worker_has_the_to
     *worker.next_set.lock() = Some(held);
     again(servers, "t").unwrap();
     says(&live, run, ServerState::Failed).await;
-    worker.told.lock().push("has the token".into());
+    worker.mark("has the token");
     answer.send(Ok(WorkerResponse::Ok)).unwrap();
     settled(&live).await;
     says(&live, run, ServerState::Failed).await;

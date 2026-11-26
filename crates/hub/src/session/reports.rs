@@ -24,7 +24,8 @@ impl LiveSession {
                 self.tell_cache_worth_telling().await;
             }
             Report::Todos(todos) => self.agent_said::<SessionTodos>(run, todos, "the agent's to-do list").await,
-            Report::ToolServers { servers } => {
+            Report::ToolServers { mut servers } => {
+                self.mark_waiting(run, &mut servers);
                 self.agent_said::<SessionToolServers>(run, servers, "the agent's tool servers").await;
                 self.said_its_servers(run);
                 self.wake_reconnects();

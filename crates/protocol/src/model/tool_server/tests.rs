@@ -185,6 +185,12 @@ fn two_urls_are_of_one_server_when_they_differ_in_their_query_at_most() {
     }
     let place = serde_json::to_string(&url("HTTPS://MCP.Example.com/mcp?tools=a").place()).unwrap();
     assert_eq!(place, r#""https://mcp.example.com:443/mcp""#, "with no query, which can hold a key");
+    let queries =
+        ["https://mcp.example.com/mcp?tools=a?b", "https://mcp.example.com/mcp?", "https://mcp.example.com/mcp"];
+    assert_eq!(
+        queries.map(|text| url(text).query().map(str::to_owned)),
+        [Some("tools=a?b".into()), Some(String::new()), None]
+    );
 }
 
 /// Near misses are the same but for one thing.

@@ -16,20 +16,21 @@ use super::reconnecting::{Answered, Worker, claims_reconnecting, says_of, settle
 use crate::hub::Hub;
 use crate::hub::tests::{hub_with_worktree, tool_servers_of};
 use crate::session::{Item, LiveSession};
+use crate::tool_servers::ToolServers;
 use crate::tool_servers::tests::signed_in;
 
-fn claims_reloading() -> protocol::capability::Capabilities {
+pub(super) fn claims_reloading() -> protocol::capability::Capabilities {
     let mut claims = claims_reconnecting();
     claims.setup.tool_server_reload = Some(Claimed {});
     claims
 }
 
 /// A hub, its stand-in worker, whose agent can connect to a server again however it is, and the chat, with its run.
-struct Running {
-    hub: Arc<Hub>,
-    worker: Worker,
-    live: Arc<LiveSession>,
-    run: RunId,
+pub(super) struct Running {
+    pub(super) hub: Arc<Hub>,
+    pub(super) worker: Worker,
+    pub(super) live: Arc<LiveSession>,
+    pub(super) run: RunId,
     _dir: tempfile::TempDir,
 }
 
@@ -42,8 +43,18 @@ impl Running {
         claims: protocol::capability::Capabilities,
         answers: impl Fn() -> Answered + Send + 'static,
     ) -> Self {
+        Self::claiming_with(claims, answers, |_| {}).await
+    }
+
+    /// The same, whose hub has had `with` done to its tool servers before anything starts.
+    pub(super) async fn claiming_with(
+        claims: protocol::capability::Capabilities,
+        answers: impl Fn() -> Answered + Send + 'static,
+        with: impl FnOnce(&ToolServers),
+    ) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let hub = hub_with_worktree(dir.path());
+        with(tool_servers_of(&hub));
         let worker = Worker::serving(&hub, claims, answers).await;
         let live = hub.live_session(&"s".into()).await.unwrap();
         live.ensure_agent().await.unwrap();
@@ -57,7 +68,7 @@ impl Running {
     }
 
     /// What a client asking for the server the run has as `name` is answered, once all that comes of it has.
-    async fn reload(&self, name: &str) -> Result<(), ErrorCode> {
+    pub(super) async fn reload(&self, name: &str) -> Result<(), ErrorCode> {
         let answer = self.asked(name).await.unwrap();
         settled(&self.live).await;
         answer.map_err(|e| e.code)
@@ -70,7 +81,7 @@ impl Running {
     }
 
     /// What it's been asked since it launched, but for the sets of the servers.
-    fn told(&self) -> Vec<String> {
+    pub(super) fn told(&self) -> Vec<String> {
         self.worker.told().into_iter().filter(|told| told != "set").collect()
     }
 }

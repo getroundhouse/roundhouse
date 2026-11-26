@@ -105,6 +105,27 @@ async fn what_is_worked_out_replaces_what_was_though_it_was_read_earlier() {
     assert_eq!(listed(&hub).await.0, [changed], "as of the one that found it");
 }
 
+/// A part of it can change with no read, so it stays as of the read, and what was never read isn't made up.
+#[tokio::test]
+async fn what_is_worked_out_again_stays_as_of_its_read_and_is_nothing_where_nothing_is_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let mut feed = hub.subscribe_feed();
+    let another = |kept: &mut _| *kept = lines(4, 0);
+
+    hub.observation_worked_out_again::<WorkspaceLines>("w".into(), another).await.unwrap();
+    assert_eq!(told(&mut feed), []);
+    hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
+    let read = told_copy(&mut feed);
+    hub.observation_worked_out_again::<WorkspaceLines>("w".into(), another).await.unwrap();
+
+    let changed = told_copy(&mut feed);
+    assert_eq!(changed, of_w(as_of(lines(4, 0), 1_000), changed.rev()));
+    assert!(changed.rev() > read.rev());
+    hub.observation_worked_out_again::<WorkspaceLines>("w".into(), another).await.unwrap();
+    assert_eq!(told(&mut feed), [], "the same, worked out again");
+}
+
 /// What the hub kept up to date by reading it again, as it reads GitHub while a client follows it, is as of its last
 /// read once it no longer does, since nothing would have said of a change since, unlike what was watched.
 #[tokio::test]

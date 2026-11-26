@@ -78,8 +78,6 @@ fn a_server_is_edited_once_its_signed_in_to_however_it_knew_the_person_and_what_
             (expected.url.clone(), "Bearer made-up-edit")
         );
         assert_eq!(servers.signed_in_by(&"edit".into()).unwrap(), Some(expected), "so it's finished again by it");
-        // Which is what has a run that couldn't connect to it asked to again.
-        assert_eq!(servers.sent().borrow().signed_in().by(&id.into()), Some(&"edit".into()));
     }
 }
 

@@ -7,7 +7,7 @@ use protocol::model::{GithubAccountId, GithubAppId, WorkspaceId};
 use tracing::warn;
 
 use super::file::Write;
-use super::kept::{Change, Changed, Step, Table};
+use super::kept::{Change, Changed, Said, Step, Table};
 use super::kinds::{Kind, Owner, SessionKey};
 use super::tables::Gone;
 use crate::hub::Hub;
@@ -70,6 +70,21 @@ impl Hub {
         as_of_ms: i64,
     ) -> Result<(), ApiError> {
         self.change_observation::<K>(of, |_| Change::WorkedOut { value, as_of_ms }).await
+    }
+
+    /// Keeps the observation of `of` as `again` leaves what it says, as of when that was read, for a part of what's read
+    /// that the hub works out from other state, as that changes. Under the lock every change takes, so a read that lands
+    /// meanwhile isn't undone. Where nothing is kept, there's nothing to work out again.
+    pub(crate) async fn observation_worked_out_again<K: Kind>(
+        &self,
+        of: K::Of,
+        again: impl FnOnce(&mut K::Value),
+    ) -> Result<(), ApiError> {
+        let _changing = self.observations.changing.lock().await;
+        let kept = K::table(&mut self.observations.tables.lock()).said(&of).cloned();
+        let Some(Said { mut value, read_at_ms, .. }) = kept else { return Ok(()) };
+        again(&mut value);
+        self.changed_observation_held::<K>(of, |_| Change::WorkedOut { value, as_of_ms: read_at_ms }).await
     }
 
     /// Keeps that something keeps the observation of `of` up to date from now on, such as the hub reading again what a
