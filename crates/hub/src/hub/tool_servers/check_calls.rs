@@ -31,8 +31,8 @@ impl Checks {
 }
 
 impl Hub {
-    /// Checks a tool server, as `ToolServerCheck` says. It's on its request's own task, which goes on if its client
-    /// goes, within the time limit on asking.
+    /// Checks a tool server for a client from before saves, as `ToolServerCheck` says. It's on its request's own task,
+    /// which goes on if its client goes, within the time limit on asking.
     pub(crate) async fn tool_server_check(&self, asked: ToolServerCheck) -> Result<ToolServerChecked, ApiError> {
         let servers = Arc::clone(&self.tool_servers);
         let to_ask = match off_thread(move || servers.checking(asked)).await? {

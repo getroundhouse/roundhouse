@@ -75,7 +75,9 @@ pub struct ToolServerEdit {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth: Option<ToolServerAuthEdit>,
     /// The person saved it though the hub couldn't use the server as it would be, so what a running agent has of it may
-    /// be no use.
+    /// be no use. A client from before [`ToolServerSave`](super::tool_server_saves::ToolServerSave) sent it so. No
+    /// client of this build does, since a save's `when` says it, and the hub reads it until the client protocol's next
+    /// break.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub saved_anyway: bool,
 }

@@ -1,11 +1,12 @@
-//! Checking a tool server as it's added and edited: a running hub asks it for its tools with what workers would send
-//! it, and nothing it's asked with is kept. The server is a stand-in in the test's process.
+//! Checking a tool server as it's added and edited, as a client from before saves has the hub do: a running hub asks it
+//! for its tools with what workers would send it, and nothing it's asked with is kept. The server is a stand-in in the
+//! test's process.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
 
-use protocol::client::tool_server_checks::{NoToolList, ToolServerChecked, ToolServerToCheck};
+use protocol::client::tool_server_checks::{NoToolList, ToolServerCheck, ToolServerChecked, ToolServerToCheck};
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
 use protocol::model::{ToolServerAuthEdit, ToolServerAuthGiven, ToolServerKey};
 
@@ -38,18 +39,18 @@ fn a_server_is_asked_with_the_key_its_to_have_and_whats_checked_is_neither_kept_
         })
     };
 
-    assert_eq!(client.tool_server_check(to_add(WRONG)).unwrap(), REFUSED);
-    assert_eq!(client.tool_server_check(to_add(KEY)).unwrap(), LISTED);
+    assert_eq!(client.call(ToolServerCheck { of: to_add(WRONG) }).unwrap(), REFUSED);
+    assert_eq!(client.call(ToolServerCheck { of: to_add(KEY) }).unwrap(), LISTED);
 
     assert!(heard.try_iter().all(|took| took.key == KEY));
     assert_eq!(client.records().unwrap().tool_servers, []);
     assert_eq!(holding(&stack.path(""), KEY), Vec::<PathBuf>::new());
 
     add(&client, url.clone());
-    assert_eq!(client.tool_server_check(to_edit(Some(WRONG))).unwrap(), REFUSED);
-    assert_eq!(client.tool_server_check(to_edit(Some(ANOTHER))).unwrap(), LISTED);
+    assert_eq!(client.call(ToolServerCheck { of: to_edit(Some(WRONG)) }).unwrap(), REFUSED);
+    assert_eq!(client.call(ToolServerCheck { of: to_edit(Some(ANOTHER)) }).unwrap(), LISTED);
     assert!(heard.try_iter().all(|took| took.key == ANOTHER));
-    assert_eq!(client.tool_server_check(to_edit(None)).unwrap(), LISTED, "with the one it keeps");
+    assert_eq!(client.call(ToolServerCheck { of: to_edit(None) }).unwrap(), LISTED, "with the one it keeps");
 
     let (_, chat) = stack.workspace(&client);
     assert_eq!(calls::run(&client, &chat.id, CALL, 1), [("Found issue 7".to_string(), false)]);

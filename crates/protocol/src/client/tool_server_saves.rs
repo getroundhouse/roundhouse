@@ -28,8 +28,7 @@ use crate::model::{ToolServer, ToolServerSaveId};
 /// Sending it again adds or saves nothing more, since an add is of the server's own ID and an edit changes only what
 /// differs. Refused with `Conflict` while a save of the same `id` is under way.
 ///
-/// A hub from before it refuses it with `Unsupported`. A client then has the server checked with `ToolServerCheck`,
-/// and adds or edits it itself.
+/// A hub from before it refuses it with `Unsupported`, and a client then says that the hub has to be updated.
 ///
 /// *Unconfirmed:* this request's shape, and that a save the hub has begun is saved whatever comes after.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

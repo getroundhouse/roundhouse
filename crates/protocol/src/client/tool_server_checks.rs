@@ -1,7 +1,7 @@
 //! The request that checks a tool server as it's to be added or edited, by asking it for its tools, and what came of
-//! it. It changes nothing. The client adds or edits the server itself, whatever this is answered with. A client sends it
-//! only to a hub from before [`ToolServerSave`](super::tool_server_saves::ToolServerSave), which checks a server as it
-//! adds or saves it.
+//! it. It changes nothing. A client from before [`ToolServerSave`](super::tool_server_saves::ToolServerSave) sent it,
+//! then added or edited the server itself. No client of this build sends it, and the hub answers it until the client
+//! protocol's next break, as `docs/principles/versions.md` keeps every request until then.
 
 use serde::{Deserialize, Serialize};
 

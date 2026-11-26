@@ -5,7 +5,6 @@
 use std::collections::HashMap;
 
 use protocol::client::ApiError;
-use protocol::client::tool_server_checks::ToolServerChecked;
 use protocol::client::tool_server_saves::ToolServerSaved;
 use protocol::client::tool_sign_ins::ToolSignInBegun;
 use protocol::event::SessionEvent;
@@ -95,11 +94,6 @@ pub struct World {
     pub github_apps: Vec<GithubApp>,
     /// The tool servers the hub has of its own.
     pub tool_servers: Vec<ToolServer>,
-    /// Why the hub couldn't add a tool server, as it answers each time it's asked. `None` refuses it, as the rest of
-    /// what would change what the hub holds.
-    pub tool_server_add_refused: Option<ApiError>,
-    /// What checking a tool server comes to, each time it's asked.
-    pub tool_server_check: ToolServerCheckWorld,
     /// What saving a tool server comes to, each time it's asked.
     pub tool_server_save: ToolServerSaveWorld,
     /// What starting a sign-in to a tool server comes to, as the hub answers each time it's asked. `None` refuses it, as
@@ -137,23 +131,12 @@ pub struct PairingWorld {
     pub paired_device: Option<&'static str>,
 }
 
-/// What checking a tool server comes to.
-#[derive(Clone, Default)]
-pub enum ToolServerCheckWorld {
-    /// The hub knows no check, as one from before it.
-    #[default]
-    TooOld,
-    /// The hub goes on asking the server.
-    Asking,
-    Answers(Result<ToolServerChecked, ApiError>),
-}
-
 /// What adding or saving a tool server comes to.
 #[derive(Clone, Default)]
 pub enum ToolServerSaveWorld {
-    /// The hub knows no save, as one from before it, so a client has the server checked, then adds or edits it itself.
+    /// It's refused, as the rest of what would change what the hub holds.
     #[default]
-    TooOld,
+    Refused,
     /// The hub goes on asking the server.
     Asking,
     /// What one to be saved once it lists its tools comes to. One saved anyway is refused, as the rest of what would

@@ -1,12 +1,11 @@
 //! What the app asks of the hub as a server is added or edited in Settings, and what the panel shows as the hub answers,
-//! against a fake hub: one that saves, and ones from before saves and from before checks. Every server and key is
-//! plainly made up.
+//! against a fake hub. Every server and key is plainly made up.
 
 #![cfg(test)]
 
-use client_core::fake_hub::{ToolServerCheckWorld, ToolServerSaveWorld, World};
+use client_core::fake_hub::{ToolServerSaveWorld, World};
 use gpui_kit::{ScrollDelta, TestAppContext, point, px};
-use protocol::client::tool_server_checks::{NoToolList, ToolServerChecked};
+use protocol::client::tool_server_checks::NoToolList;
 use protocol::client::tool_server_saves::ToolServerSaved;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::fixtures::tool_server;
@@ -31,52 +30,19 @@ pub(super) fn filled_in_on(cx: &mut TestAppContext, world: World) -> (FakeHub, U
     (fake, ui)
 }
 
+/// It's refused as any request the hub doesn't know is, which client-core's `refusals` words, and nothing else is
+/// asked of it.
 #[gpui_kit::test]
-fn a_hub_from_before_checks_is_asked_to_add_it_at_once(cx: &mut TestAppContext) {
+fn a_hub_from_before_saves_is_to_be_updated_to_add_a_server(cx: &mut TestAppContext) {
     let mut world = World::default();
-    let refuses = ApiError::new(ErrorCode::Conflict, "another MCP server is called Runbooks");
-    world.tool_server_add_refused = Some(refuses);
-    let asked = world.asked.clone();
-    let (_fake, mut ui) = filled_in_on(cx, world);
-
-    ui.click("mcp-panel-go");
-
-    assert_eq!(refused(&mut ui), "Couldn't add it: another MCP server is called Runbooks");
-    assert_eq!(buttons(&mut ui), ("Add".to_string(), None));
-    let asked_each = ["tool_server_save", "tool_server_check", "tool_server_add"].map(|method| asked.count(method));
-    assert_eq!(asked_each, [1, 1, 1]);
-}
-
-/// Its check says the server refused the key, and it's added anyway, which the fake hub refuses.
-#[gpui_kit::test]
-fn a_hub_from_before_saves_has_it_checked_then_asked_to_add_it(cx: &mut TestAppContext) {
-    let mut world = World::default();
-    let refused_key = ToolServerChecked::NotListed { why: NoToolList::KeyRefused { status: 401 } };
-    world.tool_server_check = ToolServerCheckWorld::Answers(Ok(refused_key));
-    world.tool_server_add_refused = Some(ApiError::new(ErrorCode::Conflict, "another MCP server is called Runbooks"));
-    let asked = world.asked.clone();
-    let (_fake, mut ui) = filled_in_on(cx, world);
-
-    ui.click("mcp-panel-go");
-    assert_eq!(refused(&mut ui), "Runbooks refused this key.");
-    ui.click("mcp-anyway");
-
-    assert_eq!(refused(&mut ui), "Couldn't add it: another MCP server is called Runbooks");
-    let asked_each = ["tool_server_save", "tool_server_check", "tool_server_add"].map(|method| asked.count(method));
-    assert_eq!(asked_each, [2, 1, 1]);
-}
-
-#[gpui_kit::test]
-fn a_save_the_hub_refuses_adds_nothing(cx: &mut TestAppContext) {
-    let mut world = World::default();
-    let refuses = ApiError::new(ErrorCode::Unavailable, "too many are being asked");
+    let refuses = ApiError::new(ErrorCode::Unsupported, "a hub from before saves");
     world.tool_server_save = ToolServerSaveWorld::Answers(Err(refuses));
     let asked = world.asked.clone();
     let (_fake, mut ui) = filled_in_on(cx, world);
 
     ui.click("mcp-panel-go");
 
-    assert_eq!(refused(&mut ui), "Couldn't add it: too many are being asked");
+    assert_eq!(refused(&mut ui), "Couldn't add it: this hub can't do that until it's updated");
     assert_eq!(buttons(&mut ui), ("Add".to_string(), None));
     let asked_each = ["tool_server_save", "tool_server_check", "tool_server_add"].map(|method| asked.count(method));
     assert_eq!(asked_each, [1, 0, 0]);
@@ -160,5 +126,5 @@ fn the_panel_says_the_server_is_asked_only_where_the_hub_asks_it_and_cancel_lets
     ui.click("mcp-cancel");
 
     ui.wait("it to be let go of", |_| asked.count("tool_server_save_cancel") == 1);
-    assert_eq!((asked.count("tool_server_save"), asked.count("tool_server_check")), (1, 0));
+    assert_eq!(asked.count("tool_server_save"), 1);
 }
