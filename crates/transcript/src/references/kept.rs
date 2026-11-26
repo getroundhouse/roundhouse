@@ -127,8 +127,8 @@ impl<W: Waiter> References<W> {
     /// since the records last taken in, once the update this is called in is done, since what drew it may be in it.
     pub(crate) fn records_changed(&self, records: &Snapshot, cx: &mut App) {
         let earlier = self.0.heard_from.lock().replace(records.clone());
-        let changes = earlier.as_ref().map(|earlier| records.changes_since(earlier));
-        let changed = |ask: &ReferenceAsk| changes.as_ref().is_none_or(|changes| changes.reference_said(ask));
+        let since = earlier.as_ref().map(|earlier| records.changes_since(earlier));
+        let changed = |ask: &ReferenceAsk| since.as_ref().is_none_or(|since| since.reference_said(ask));
         let drawers = self.0.known.lock().heard(|ask| changed(ask).then(|| said(records, ask)).flatten());
         if drawers.is_empty() {
             return;
