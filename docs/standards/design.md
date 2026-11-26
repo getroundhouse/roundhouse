@@ -49,11 +49,11 @@ The design is a Brilliant project in `design/`. It's branched, reviewed and merg
 - **A canvas holds one component, pattern or screen,** so that branches seldom change the same file.
 - **A canvas is placed and named before others use it.** A copy of a component names its master's canvas by path, so moving one rewrites every canvas with a copy of it, which conflicts with each branch that changed one of those.
 - **A film is in a `Motion/` folder beside the canvas it plays, and names that canvas by its path,** so that it's found with the part that moves. Brilliant plays a film only from a folder of that name, and writes one there only when it names its canvas by its path.
-- **A film's states are frames on the canvas of the part that moves,** beside the part's own. *Unconfirmed.*
+- **A film's states are frames on the canvas of the part that moves,** beside the part's own.
 - **The design system has a value for each reach,** as `look` has, in a mode of its own, `reach`, whose values are `desk` and `handheld`. A token that's different on a handheld has both, and one that's the same has one. A handheld's screen sets its frame to the handheld with `ds(, reach(handheld))`, and what's in it takes the handheld's values, copies of components too. Its canvas isn't switched as a whole, since Brilliant doesn't lay out again what's already on it.
 - **What's drawn and what's built have the same names.** A token is named as `look` names it, a component and its kinds, sizes and states as `look`'s types are, and a screen's frame as its image in the gallery. So each can be found from the other, and checked against it.
 - **A canvas draws with roles,** the `color.` tokens, and never with the palettes they're made from, since Brilliant makes steps of a palette that nobody chose. A test refuses one that doesn't.
-- **Text is in SF Pro Text, with the letter spacing that makes it as wide as the system font,** since Brilliant can't draw the system font by name. *Unconfirmed.*
+- **Text is in SF Pro Text, with the letter spacing that makes it as wide as the system font,** since Brilliant can't draw the system font by name.
 - **Content is made up,** as a fixture's is, since the repo is public.
 - **Thumbnails, caches and exports aren't committed.** Brilliant makes them again.
 - **No font file is committed.** Each machine installs its own.
@@ -61,7 +61,7 @@ The design is a Brilliant project in `design/`. It's branched, reviewed and merg
 
 ## Deciding
 
-Each canvas has a status badge at its top, a copy of one in `Board/Status`, and the `Index` canvas lists every canvas with its status. `cargo run -p design` writes the index from the badges, so that it's written again after a merge rather than merged, and a test refuses an index that isn't as the badges have it. The status isn't in a canvas's name, since other canvases find a component by its path.
+Each canvas has a status badge at its top, a copy of one in `Board/Status` named `Status`, and the `Index` canvas lists every canvas with its status. Only the canvas's own badge has that name, so a badge shown in an option of `To decide` is named for the option. `cargo run -p design` writes the index from the badges, so that it's written again after a merge rather than merged, and a test refuses an index that isn't as the badges have it. The status isn't in a canvas's name, since other canvases find a component by its path.
 
 | Status | Meaning |
 |---|---|

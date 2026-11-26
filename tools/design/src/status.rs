@@ -14,6 +14,9 @@ pub enum Status {
     Ready,
 }
 
+/// The name of a canvas's own badge, which no other copy of a status's master on it has.
+pub(crate) const BADGE: &str = "Status";
+
 impl Status {
     pub const ALL: [Status; 3] = [Status::Exploring, Status::ReadyForReview, Status::Ready];
 
@@ -26,11 +29,11 @@ impl Status {
         }
     }
 
-    /// The status of the first badge in `text`, a canvas or its rows: the first copy of a status's master.
-    pub fn first_in(text: &str) -> Option<Status> {
-        text.split("inst(\"").skip(1).find_map(|after| {
-            Status::ALL.into_iter().find(|status| after.starts_with(&format!("{}\"", status.master())))
-        })
+    /// The status of `row`, a row of a canvas, if it's the canvas's own badge: a copy of a status's master that's named
+    /// [`BADGE`]. A copy named otherwise, such as one in an option of a `To decide` section, isn't the canvas's badge.
+    pub fn of_badge(row: &str) -> Option<Status> {
+        let copied = row.trim_end().strip_suffix(&format!(" \"{BADGE}\""))?.split_once("inst(\"")?.1;
+        Status::ALL.into_iter().find(|status| copied.starts_with(&format!("{}\"", status.master())))
     }
 }
 
@@ -45,14 +48,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_canvas_has_the_status_of_its_first_badge() {
-        let canvas = "1 inst(\"Card\") \"Card\"\n2 inst(\"Status Ready for review\",canvas(Board/Status)) \"Status\"\n3 inst(\"Status Ready\")";
-
-        assert_eq!(Status::first_in(canvas), Some(Status::ReadyForReview));
+    fn a_row_is_the_canvass_badge_when_it_copies_a_statuss_master_and_is_named_as_the_badge() {
+        assert_eq!(
+            Status::of_badge("  2 inst(\"Status Ready for review\",canvas(Board/Status)) p(0,0) \"Status\""),
+            Some(Status::ReadyForReview)
+        );
+        assert_eq!(
+            Status::of_badge("1 inst(\"Status Ready\",canvas(Board/Status)) \"Option A\""),
+            None,
+            "named otherwise"
+        );
+        assert_eq!(
+            Status::of_badge("1 inst(\"Card\",canvas(Components/Card)) \"Status\""),
+            None,
+            "not a status's master"
+        );
     }
 
     #[test]
     fn a_master_whose_name_only_starts_as_a_statuss_is_not_a_badge() {
-        assert_eq!(Status::first_in("1 inst(\"Status Ready later\")"), None);
+        assert_eq!(Status::of_badge("1 inst(\"Status Ready later\") \"Status\""), None);
     }
 }
