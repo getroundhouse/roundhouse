@@ -17,7 +17,7 @@ use update_feed::HubArchive;
 
 use super::reading::{UpdateFeed, read};
 use crate::hub::Hub;
-use crate::hub::observations::ReleaseOffered;
+use crate::hub::observations::{Keeper, ReleaseOffered};
 use crate::store::{Store, now_ms};
 
 /// How long the hub waits to read a feed again whose signature didn't match, as one being published can be, as the
@@ -147,7 +147,7 @@ impl Hub {
         let kept = match read {
             Ok(newer) => {
                 let offered = ReleaseOffer { version: newer.as_ref().map(|(version, _)| version.clone()) };
-                match self.observation_kept_current::<ReleaseOffered>(()).await {
+                match self.observation_kept_by::<ReleaseOffered>((), Keeper::Hub).await {
                     Ok(()) => self.observation_read::<ReleaseOffered>((), offered, now_ms()).await,
                     Err(e) => Err(e),
                 }

@@ -2,6 +2,7 @@
 
 use protocol::model::{Observation, ObservationKey, Observed, ReleaseOffer, Rev};
 
+use super::keepers::Unkept;
 use super::kept::Table;
 use super::kinds::{Form, Kind};
 use super::tables::Tables;
@@ -16,6 +17,7 @@ impl Kind for ReleaseOffered {
     type Value = ReleaseOffer;
     const FORM: Form = Form { table: "release_offered", version: 1 };
     const IN_MEMORY_ALONE: bool = true;
+    const UNKEPT: Unkept = Unkept::AsOfItsLastRead;
 
     fn observation((): &(), offered: Observed<ReleaseOffer>, rev: Rev) -> Option<Observation> {
         Some(Observation::ReleaseOffered { offered, rev })

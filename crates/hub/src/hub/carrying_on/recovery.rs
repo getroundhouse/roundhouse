@@ -1,6 +1,5 @@
 use super::super::Hub;
 use crate::error::provider_failed;
-use crate::hub::SessionToolServers;
 use crate::session::{CarriedOver, Item, LiveSession, Progress, Starting};
 use crate::spans;
 use crate::store::{Store, StoreError, cancelled_approval};
@@ -65,13 +64,10 @@ impl Hub {
             self.write(move |store| interrupt(store, &id, prompts)).await;
         }
         carrying.join_all().await;
-        // Every agent still running has been carried on with, so whatever the rest claimed, and the tool servers they
-        // had, are gone with them.
+        // Every agent still running has been carried on with, so whatever the rest claimed, and what was only true of
+        // them, such as the tool servers they had, are gone with them.
+        self.unkept_observations_gone().await;
         let running: Vec<SessionId> = self.sessions.lock().live.keys().cloned().collect();
-        if let Err(e) = self.observations_gone_where::<SessionToolServers>(|of| !running.contains(&of.session_id)).await
-        {
-            warn!(name: "carrying_on.tool_servers_kept", error = e.message, "Couldn't forget gone agents' tool servers");
-        }
         self.write(move |store| store.clear_claims_but(&running)).await;
         // A session that wasn't at work, and whose agent isn't running, never will take these.
         let untaken = std::mem::take(&mut *untaken.lock());
@@ -208,8 +204,7 @@ impl Hub {
                 }
             }
             if link.is_another_build(self.build) {
-                self.worker_build_heard(&workspace_id, &link).await;
-                self.replace_once_idle(workspace_id, link);
+                self.replace_once_idle(workspace_id, link).await;
             }
         } else if being_moved {
             // Only this worker can say how far that got while it's still at it, so it's kept for the hub to ask once
@@ -245,13 +240,17 @@ impl Hub {
             let carried = CarriedOver { link, run, recorded, untaken };
             self.sessions.lock().keep(id, || LiveSession::start(self, starting, Some(carried)))
         });
-        if let Err(e) = started {
-            warn!(
-                name: "recovery.session_failed",
-                session_id = %id,
-                error = e.message,
-                "Couldn't carry on with a session"
-            );
+        match started {
+            // What it said that's only its own is kept, as the earlier hub kept it.
+            Ok(live) => live.run_keeps_its_own(self, run).await,
+            Err(e) => {
+                warn!(
+                    name: "recovery.session_failed",
+                    session_id = %id,
+                    error = e.message,
+                    "Couldn't carry on with a session"
+                );
+            }
         }
     }
 

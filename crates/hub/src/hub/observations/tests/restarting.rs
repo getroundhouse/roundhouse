@@ -2,6 +2,7 @@ use protocol::model::{IssueNumber, Level, Observation, Observed, PullRequest, Re
 use rusqlite::Connection;
 
 use super::super::file::prepare_forms;
+use super::super::keepers::Keeper;
 use super::super::kinds::{Form, Kind, WorkspaceChanges, WorkspaceLines};
 use super::seen::{as_of, changes, lines, listed, of_w};
 use crate::github_cache::Item;
@@ -15,7 +16,7 @@ use crate::store::columns::OneValue;
 async fn an_observation_is_kept_across_a_restart_as_of_its_last_read_under_a_newer_revision() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_kept_current::<WorkspaceLines>("w".into()).await.unwrap();
+    hub.observation_kept_by::<WorkspaceLines>("w".into(), Keeper::Hub).await.unwrap();
     hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
     hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 2_000).await.unwrap();
     let (_, before) = listed(&hub).await;

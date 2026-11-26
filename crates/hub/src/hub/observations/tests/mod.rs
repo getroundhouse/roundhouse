@@ -2,6 +2,7 @@
 
 mod changing;
 mod forgetting;
+mod keeping;
 mod listing;
 mod restarting;
 mod seen;

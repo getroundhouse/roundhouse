@@ -12,6 +12,8 @@ use protocol::model::{
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
+use super::file::Write;
+use super::keepers::{Keeper, Unkeeping};
 use super::kinds::{Kind, Owner};
 use super::tables::Tables;
 use super::writer::Writer;
@@ -32,8 +34,9 @@ pub(crate) struct Observations {
 /// What's kept of one kind of observation.
 pub(crate) struct Table<K: Kind> {
     pub(super) kept: HashMap<K::Of, Kept<K::Value>>,
-    /// What something keeps up to date now, such as a worker watching a worktree, so what's read of it is current.
-    pub(super) kept_current: HashSet<K::Of>,
+    /// What keeps each observation it keeps now, such as a worker watching a worktree, so what's read of it is current,
+    /// as [`Keeper::keeps_current`] says, and it's let go of as its kind says once that goes.
+    pub(super) keepers: HashMap<K::Of, Keeper>,
     /// Whether something keeps every observation of the kind up to date now, as the hub's own reads on a schedule do,
     /// such as of every GitHub account's username each day, so what's read of any is current, whatever it's of.
     pub(super) all_kept_current: bool,
@@ -41,7 +44,7 @@ pub(crate) struct Table<K: Kind> {
 
 impl<K: Kind> Default for Table<K> {
     fn default() -> Self {
-        Self { kept: HashMap::new(), kept_current: HashSet::new(), all_kept_current: false }
+        Self { kept: HashMap::new(), keepers: HashMap::new(), all_kept_current: false }
     }
 }
 
@@ -56,11 +59,11 @@ pub(super) struct Kept<V> {
 pub(super) struct Said<V> {
     pub(super) value: V,
     /// Whether it's read as something keeps it up to date.
-    current: bool,
+    pub(super) current: bool,
     /// When it was read, as clients are told while it isn't current: the read that found what it says, or, once
     /// nothing keeps it current, when nothing did any more. A later read that finds the same moves no revision, so it moves this
     /// neither, and every client of one revision is told the same.
-    as_of_ms: i64,
+    pub(super) as_of_ms: i64,
     /// When it was last read, which the cache file keeps.
     pub(super) read_at_ms: i64,
 }
@@ -82,8 +85,9 @@ pub(super) enum Change<V> {
     /// are, each kept as it was last heard. It's as of the newest hearing, and never dropped as a late read, since the
     /// merge keeps each part as it was last heard, however late a hearing lands.
     Merged { value: V, heard_at_ms: i64 },
-    /// Something keeps it up to date from now on, so what's read of it from now is current.
-    KeptCurrent,
+    /// `keeper` keeps it from now on, so what's read of it from now is current if [`Keeper::keeps_current`] says so.
+    /// Another that kept it stops at `at_ms`, so it's as its kind says once unkept.
+    KeptBy { keeper: Keeper, at_ms: i64 },
     /// Nothing keeps it up to date any more, since `as_of_ms`, so it's as of then: what kept it up to date would have
     /// said of any change before. As of its last read where that's later, as one that landed since can be.
     LetGo { as_of_ms: i64 },
@@ -145,50 +149,35 @@ impl<K: Kind> Table<K> {
                 }
             }
             Change::Merged { value, heard_at_ms } => self.merged(of, value, heard_at_ms),
-            Change::KeptCurrent => {
-                // What was read before isn't current, so it's not said to be until the next read.
-                self.kept_current.insert(of.clone());
-                Step::Same
-            }
+            Change::KeptBy { keeper, at_ms } => self.kept_by(of, keeper, at_ms),
             Change::LetGo { as_of_ms } => {
-                self.kept_current.remove(of);
-                match kept {
-                    Some(kept) if kept.current => {
-                        let at = as_of_ms.max(kept.read_at_ms);
-                        Step::Changed(Changed::Says(Said {
-                            current: false,
-                            as_of_ms: at,
-                            read_at_ms: at,
-                            ..kept.clone()
-                        }))
-                    }
-                    Some(_) | None => Step::Same,
-                }
+                self.keepers.remove(of);
+                self.unkept(of, Unkeeping::AsOf(as_of_ms))
             }
             Change::NoLongerReadAgain => {
-                self.kept_current.remove(of);
-                match kept {
-                    Some(kept) if kept.current => {
-                        Step::Changed(Changed::Says(Said { current: false, as_of_ms: kept.read_at_ms, ..kept.clone() }))
-                    }
-                    Some(_) | None => Step::Same,
-                }
+                self.keepers.remove(of);
+                self.unkept(of, Unkeeping::AsOfItsLastRead)
             }
             Change::Gone => {
-                self.kept_current.remove(of);
-                if kept.is_some() { Step::Changed(Changed::Gone) } else { Step::Same }
+                self.keepers.remove(of);
+                self.unkept(of, Unkeeping::Gone)
             }
         }
     }
 
     /// Whether something keeps the observation of `of` up to date now, on its own or with every one of its kind.
     pub(super) fn kept_current(&self, of: &K::Of) -> bool {
-        self.all_kept_current || self.kept_current.contains(of)
+        self.all_kept_current || self.kept_current_by_its_keeper(of)
+    }
+
+    /// Whether what keeps the observation of `of` keeps it up to date, as [`Keeper::keeps_current`] says.
+    fn kept_current_by_its_keeper(&self, of: &K::Of) -> bool {
+        self.keepers.get(of).is_some_and(|keeper| keeper.keeps_current())
     }
 
     /// What a [`Change::Merged`] of `value`, heard at `heard_at_ms`, makes of the observation of `of`.
     fn merged(&self, of: &K::Of, value: K::Value, heard_at_ms: i64) -> Step<K::Value> {
-        let (kept, current) = (self.kept.get(of).map(|kept| &kept.said), self.kept_current.contains(of));
+        let (kept, current) = (self.kept.get(of).map(|kept| &kept.said), self.kept_current_by_its_keeper(of));
         let at = kept.map_or(heard_at_ms, |kept| kept.read_at_ms.max(heard_at_ms));
         match kept {
             Some(kept) if kept.value == value && kept.read_at_ms == at => Step::Same,
@@ -223,16 +212,24 @@ impl<K: Kind> Table<K> {
         }
     }
 
-    /// Keeps what `changed` made of the observation of `of`, at `rev`, and returns what clients are to be told of it,
-    /// which is nothing for a kind sent nowhere.
-    pub(super) fn change(&mut self, of: &K::Of, changed: Changed<K::Value>, rev: Rev) -> Option<ObservationNotice> {
+    /// Keeps what `changed` made of the observation of `of`, at `rev`, queues its write to the file on `writer`, and
+    /// returns what clients are to be told of it, which is nothing for a kind sent nowhere.
+    pub(super) fn change(
+        &mut self,
+        of: &K::Of,
+        changed: Changed<K::Value>,
+        rev: Rev,
+        writer: &Writer,
+    ) -> Option<ObservationNotice> {
         match changed {
             Changed::Says(said) => {
+                writer.write::<K>(of.clone(), Write::Says { value: said.value.clone(), read_at_ms: said.read_at_ms });
                 let observation = K::observation(of, said.observed(), rev);
                 self.kept.insert(of.clone(), Kept { said, rev });
                 observation.map(ObservationNotice::Copy)
             }
             Changed::Gone => {
+                writer.write::<K>(of.clone(), Write::Gone);
                 self.kept.remove(of);
                 K::key(of).map(|observation| ObservationNotice::Removed { observation, rev })
             }

@@ -5,6 +5,7 @@ use protocol::model::{Observation, ObservationKey, Observed, Rev};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use super::keepers::Unkept;
 use super::kept::Table;
 use super::subjects::Subject;
 use super::tables::Tables;
@@ -24,6 +25,9 @@ pub(crate) trait Kind: Sized + 'static {
     /// build a workspace's worker is doesn't, which the hub hears again of each worker it carries on with. Its
     /// [`Kind::FORM`] then only names it, in what the hub logs.
     const IN_MEMORY_ALONE: bool = false;
+    /// What it is once nothing keeps it, as when the worker that watched it goes. A kind nothing keeps is as of its
+    /// last read all the same.
+    const UNKEPT: Unkept;
 
     /// It, as a client is sent it, or `None` for a kind the hub keeps and sends nowhere, which no list has, and whose
     /// change and removal tell nobody anything.

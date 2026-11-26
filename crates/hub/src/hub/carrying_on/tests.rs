@@ -153,7 +153,7 @@ async fn a_starting_hub_holds_a_run_it_carries_on_with_to_what_its_worker_says_i
 /// go.
 #[tokio::test]
 async fn a_starting_hub_leaves_the_claims_and_tool_servers_of_a_chat_it_carried_on_with() {
-    use crate::hub::tests::{carried_on, claimed, hub_in, stand_in_worker};
+    use crate::hub::tests::{claimed, hub_in, stand_in_worker};
     use protocol::model::RunCapabilities;
 
     let dir = tempfile::tempdir().unwrap();
@@ -163,7 +163,7 @@ async fn a_starting_hub_leaves_the_claims_and_tool_servers_of_a_chat_it_carried_
     let held = RunCapabilities::new(run, claimed());
     hub.store.set_claims(&id, &held).unwrap();
     hub.observation_read::<SessionToolServers>(servers_of_s(), Vec::new(), 1).await.unwrap();
-    carried_on(&hub, &link, run);
+    hub.carry_on_session(&id, link.id, run, Vec::new(), None).await;
 
     hub.carry_on(LeftAtWork::read(&hub.store).unwrap()).await;
 

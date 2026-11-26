@@ -13,7 +13,7 @@ use tracing::error;
 use super::conversation::{left_conversation, set_interaction};
 use super::progress::{Next, Step};
 use super::{LiveItem, LiveSession, LiveState, Origin, publish};
-use crate::hub::Hub;
+use crate::hub::{Hub, Keeper};
 use crate::store::{Appended, SessionChange, TurnEdge};
 
 /// The ID a prompt was sent under, which the store records it once under.
@@ -231,10 +231,11 @@ impl LiveSession {
         }
     }
 
-    /// Forgets what was only the run's that ended, if `appended` says one did.
+    /// Lets go of what each run whose exit `appended` has kept, as [`Hub::keeper_went`] says.
     async fn after_an_exit(&self, hub: &Hub, appended: &[&Appended]) {
-        if appended.iter().any(|appended| matches!(appended.event.body, EventBody::AgentExited { .. })) {
-            self.tool_servers_of_no_run_gone(hub).await;
+        let exited = appended.iter().filter(|appended| matches!(appended.event.body, EventBody::AgentExited { .. }));
+        for run in exited.filter_map(|appended| appended.event.run) {
+            hub.keeper_went(Keeper::Run(run)).await;
         }
     }
 

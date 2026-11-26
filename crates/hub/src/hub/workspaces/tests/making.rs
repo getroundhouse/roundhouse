@@ -11,6 +11,7 @@ use protocol::model::{
 };
 use protocol::worker::{PrepareWorkspace, RepoSource, SetupDone, WorkerRequest, WorkerResponse, WorktreeThereReply};
 
+use crate::hub::WorkspaceWorkerBuild;
 use crate::hub::stand_in_workers::{TIMEOUT, hub_whose_stand_ins_answer_first, hub_with_stand_in_workers};
 use crate::hub::tests::{described, hub_looking_often, serving};
 use crate::store::{Ended, Move};
@@ -106,7 +107,7 @@ async fn a_request_sent_again_gets_what_it_made_however_things_have_changed_sinc
 ///
 /// Then its worker is dealt with as the workspace now is: an archived one's is asked to stop, and a ready one's to
 /// watch the worktree's branches, as one the hub carries on with is, and to stop once nothing is at work in it, if
-/// it's another build's. Each is asked once: a restore that put the worktree back has it watch them as it's recorded,
+/// it's another build's, which build it is said meanwhile. Each is asked once: a restore that put the worktree back has it watch them as it's recorded,
 /// as one that wasn't cut short does, and not again once it's settled.
 #[tokio::test]
 async fn a_move_cut_short_is_settled_by_whether_its_worker_says_the_worktree_is_there() {
@@ -150,6 +151,9 @@ async fn a_move_cut_short_is_settled_by_whether_its_worker_says_the_worktree_is_
         let got = (workspace.status, workspace.branch.as_str(), set_up_again);
         if got != settled {
             wrong.push(format!("{name}: {got:?}, not {settled:?}"));
+        }
+        if hub.observations.keeps::<WorkspaceWorkerBuild>(&id) != build.is_some() {
+            wrong.push(format!("{name}: which build its worker is wasn't said while it's kept to be replaced"));
         }
         if waiting::task::up_to(TIMEOUT, || *asked.lock() == dealt_with).await {
             settled_by.push((name, dir, hub, asked, dealt_with));

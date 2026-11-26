@@ -10,7 +10,7 @@ use protocol::worker::{WatchChanges, WorkerFrame};
 use tracing::{Instrument as _, debug, warn};
 
 use super::watches::{Answer, Told, Turn};
-use crate::hub::observations::{WorkspaceChanges, WorkspaceLines};
+use crate::hub::observations::{Keeper, WorkspaceChanges, WorkspaceLines};
 use crate::hub::{Followed, Hub};
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
@@ -64,7 +64,7 @@ impl Hub {
             }
         }
         // Before it's asked, so its first summary, which may come before the reply, is current.
-        self.changes_kept_current(id).await;
+        self.changes_kept_current(id, &link).await;
         let asked = WatchChanges { path: ready.path().to_owned(), base_ref: base_ref.clone(), watching: true };
         match link.call_at_once(asked).await {
             Ok(Ok(())) => *told = Some(Told { link: link.id, base_ref, answer: Answer::Watching }),
@@ -104,12 +104,12 @@ impl Hub {
         }
     }
 
-    /// Takes in that `link`, the workspace's worker, has gone, so nothing watches its worktree.
+    /// Takes in that `link`, the workspace's worker, has gone, so nothing watches its worktree, and the next worker is
+    /// told to. What it watched is let go of as it goes, with all else it kept, as [`Hub::keeper_went`] says.
     pub(crate) async fn changes_watcher_gone(&self, id: &WorkspaceId, link: &WorkerLink) {
         let mut told = self.changes_watches.turn(id).await;
         if told.as_ref().is_some_and(|was| was.link == link.id) {
             *told = None;
-            self.changes_let_go(id).await;
         }
     }
 
@@ -156,10 +156,11 @@ impl Hub {
         }
     }
 
-    /// Keeps that the worker watching the workspace's worktree keeps both observations of its changes up to date from
-    /// now on: its lines, and its changed files.
-    async fn changes_kept_current(&self, id: &WorkspaceId) {
-        if let Err(e) = self.observation_kept_current::<WorkspaceLines>(id.clone()).await {
+    /// Keeps that `link`, the worker watching the workspace's worktree, keeps both observations of its changes up to
+    /// date from now on, until it goes: its lines, and its changed files.
+    async fn changes_kept_current(&self, id: &WorkspaceId, link: &WorkerLink) {
+        let keeper = Keeper::Worker(link.id);
+        if let Err(e) = self.observation_kept_by::<WorkspaceLines>(id.clone(), keeper).await {
             warn!(
                 name: "changes.lines_watch_unkept",
                 workspace_id = %id,
@@ -167,7 +168,7 @@ impl Hub {
                 "Couldn't keep that the workspace's lines are watched"
             );
         }
-        if let Err(e) = self.observation_kept_current::<WorkspaceChanges>(id.clone()).await {
+        if let Err(e) = self.observation_kept_by::<WorkspaceChanges>(id.clone(), keeper).await {
             warn!(
                 name: "changes.files_watch_unkept",
                 workspace_id = %id,

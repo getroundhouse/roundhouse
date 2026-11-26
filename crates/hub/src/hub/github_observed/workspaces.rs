@@ -12,7 +12,9 @@ use super::observing::logged;
 use super::reads::{Heard, ReadEnded, ReadWent};
 use crate::github_cache::{Item, Told};
 use crate::hub::Hub;
-use crate::hub::observations::{Kind, WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen};
+use crate::hub::observations::{
+    Keeper, Kind, WorkspacePullRequest, WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
+};
 use crate::hub::pull_requests::read_in_turn;
 use crate::store::now_ms;
 
@@ -68,7 +70,7 @@ impl Hub {
     /// Keeps the observation `K` of `id` current from now, or as of its last read.
     async fn keep_current_or_not<K: Kind<Of = WorkspaceId>>(&self, id: &WorkspaceId, current: bool) {
         let kept = if current {
-            self.observation_kept_current::<K>(id.clone()).await
+            self.observation_kept_by::<K>(id.clone(), Keeper::Hub).await
         } else {
             self.observation_no_longer_read_again::<K>(id.clone()).await
         };

@@ -14,7 +14,7 @@ use protocol::worker::{GitStatus, WorkerRequest, WorkerResponse, previous};
 use tokio::sync::broadcast::error::TryRecvError;
 
 use super::*;
-use crate::hub::observations::WorkspaceWorkerBuild;
+use crate::hub::observations::{Keeper, SessionToolServers, WorkspaceWorkerBuild};
 use crate::hub::setup::SetupGate;
 use crate::hub::tests::{carried_on, flushed, hub_in, hub_with_worktree, serving, stand_in_worker, terminal_in_w};
 use crate::session::{Item, LiveSession, Origin};
@@ -48,14 +48,20 @@ fn carrying_on(dir: &Path) -> (Arc<Hub>, Arc<WorkerLink>, Arc<LiveSession>) {
 }
 
 /// Stopping the worker brings its agent's exit, which is of an agent the session has let go of, so a prompt recorded
-/// first goes on to the next worker, rather than the chat being interrupted and its queue held.
+/// first goes on to the next worker, rather than the chat being interrupted and its queue held. What only its run kept,
+/// its tool servers, goes as the session lets go of it, before any exit, which may never reach the hub.
 #[tokio::test]
 async fn a_prompt_recorded_as_the_worker_is_replaced_isnt_interrupted_by_its_agent_stopping() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, link, live) = carrying_on(dir.path());
+    let servers = live.observed_as();
+    let said =
+        hub.observation_said_by_while::<SessionToolServers>(servers.clone(), Keeper::Run(RUN), Vec::new(), 1, || true);
+    said.await.unwrap();
 
     assert!(hub.replace_if_idle(&w(), &link).await, "nothing was at work");
     assert!(hub.existing_worker(&w()).is_none(), "the worker is still the workspace's");
+    assert!(!hub.observations.keeps::<SessionToolServers>(&servers), "its run's tool servers outlived it");
     live.record(Origin::Hub, prompt(), None).await.unwrap();
     let body = Box::new(EventBody::AgentExited {
         reason: ExitReason::Requested,
@@ -130,11 +136,9 @@ async fn a_worker_of_another_build_is_replaced_once_two_looks_in_a_row_find_noth
     let halfway_after = |look: u32| start + every * look + every / 2;
     let current = |hub: &Hub| hub.workers.lock().get(&w()).is_some_and(|current| Arc::ptr_eq(current, &link));
 
-    // As carrying on with it keeps, before the looks start.
-    hub.worker_build_heard(&w(), &link).await;
-    assert!(hub.observations.keeps::<WorkspaceWorkerBuild>(&w()));
+    hub.replace_once_idle(w(), link.clone()).await;
+    assert!(hub.observations.keeps::<WorkspaceWorkerBuild>(&w()), "which build it is, kept before the looks start");
     let mut feed = hub.subscribe_feed();
-    hub.replace_once_idle(w(), link.clone());
     sleep_until(halfway_after(1)).await;
     assert!(current(&hub), "replaced after one look");
     hub.setup_gates.lock().insert(w(), SetupGate::running());
@@ -151,7 +155,10 @@ async fn a_worker_of_another_build_is_replaced_once_two_looks_in_a_row_find_noth
         assert!(Instant::now() < deadline, "not replaced after two looks in a row that found nothing at work");
         tokio::task::yield_now().await;
     }
-    // The next worker is the hub's own build, so which build it was is forgotten, and every client hears it.
+    // The next worker is the hub's own build, so which build it was is forgotten as it goes, and every client hears it.
+    let workspace = hub.workspace(&w()).await.unwrap();
+    let provider = hub.provider(&workspace.provider).unwrap();
+    hub.worker_gone(&w(), &link, provider.as_ref(), &workspace.instance_id).await;
     let gone = ObservationKey::WorkspaceWorkerBuild { workspace_id: w() };
     loop {
         match feed.try_recv().map(std::sync::Arc::unwrap_or_clone) {

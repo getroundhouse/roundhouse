@@ -1,9 +1,9 @@
 use super::super::Hub;
-use crate::hub::observations::WorkspaceWorkerBuild;
+use crate::hub::observations::{Keeper, WorkspaceWorkerBuild};
 use crate::spans;
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
-use protocol::model::{OtherBuild, WorkspaceId};
+use protocol::model::{OtherBuild, RunId, WorkspaceId};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use tracing::{Instrument as _, debug, info, warn};
@@ -11,12 +11,17 @@ use tracing::{Instrument as _, debug, info, warn};
 impl Hub {
     /// Replaces `link`, the workspace's worker, which is another build, once two looks in a row find nothing in the
     /// workspace at work. Gives up once the worker has gone, or been replaced, or the hub is stopping. Which build it
-    /// is is known until then, as [`Hub::worker_build_heard`] keeps it.
+    /// is is kept first, as [`Hub::worker_build_heard`] says, so every caller says it.
     #[expect(
         clippy::disallowed_methods,
         reason = "how often a worker of another build is looked at, to replace it once nothing in its workspace is at work"
     )]
-    pub(in super::super) fn replace_once_idle(self: &Arc<Self>, workspace_id: WorkspaceId, link: Arc<WorkerLink>) {
+    pub(in super::super) async fn replace_once_idle(
+        self: &Arc<Self>,
+        workspace_id: WorkspaceId,
+        link: Arc<WorkerLink>,
+    ) {
+        self.worker_build_heard(&workspace_id, &link).await;
         let hub = self.clone();
         let span = spans::workspace(&workspace_id);
         tokio::spawn(
@@ -43,44 +48,26 @@ impl Hub {
                     }
                     idle_before = idle;
                 }
-                // The next worker is the hub's own build. A hub that's stopping leaves it, as it keeps it in memory
-                // alone.
-                if !hub.shutting_down.load(Ordering::SeqCst) {
-                    hub.worker_build_gone(&workspace_id).await;
-                }
             }
             .instrument(span),
         );
     }
 
-    /// Keeps that the workspace's worker, `link`, which the hub carries on with, is another build than the hub's, as its
-    /// hello said, current while it's connected, so every client can say which build its agents are on. One too old to
+    /// Keeps that the workspace's worker, `link`, is another build than the hub's, as its hello said, current while
+    /// it's the workspace's, so every client can say which build its agents are on, and gone with it, since the next is
+    /// the hub's own. One that's no longer the workspace's isn't kept, so nothing is kept after it went. One too old to
     /// name its build is another all the same.
-    pub(crate) async fn worker_build_heard(&self, workspace_id: &WorkspaceId, link: &WorkerLink) {
+    pub(crate) async fn worker_build_heard(&self, workspace_id: &WorkspaceId, link: &Arc<WorkerLink>) {
         let build = OtherBuild { said: link.said_build().map(str::to_string) };
-        let id = workspace_id.clone();
-        let kept = async {
-            self.observation_kept_current::<WorkspaceWorkerBuild>(id.clone()).await?;
-            self.observation_read::<WorkspaceWorkerBuild>(id, build, now_ms()).await
-        };
+        let (id, keeper) = (workspace_id.clone(), Keeper::Worker(link.id));
+        let still_its = || link.is_current(&self.workers.lock(), workspace_id);
+        let kept = self.observation_said_by_while::<WorkspaceWorkerBuild>(id, keeper, build, now_ms(), still_its);
         if let Err(e) = kept.await {
             warn!(
                 name: "worker.build_unkept",
                 %workspace_id,
                 error = e.message,
                 "Couldn't keep which build its worker is"
-            );
-        }
-    }
-
-    /// Forgets which build the workspace's worker was, once it's gone, since the next is the hub's own.
-    pub(crate) async fn worker_build_gone(&self, workspace_id: &WorkspaceId) {
-        if let Err(e) = self.observation_gone::<WorkspaceWorkerBuild>(workspace_id.clone()).await {
-            warn!(
-                name: "worker.build_unforgotten",
-                %workspace_id,
-                error = e.message,
-                "Couldn't forget which build its worker was"
             );
         }
     }
@@ -120,9 +107,15 @@ impl Hub {
             workers.remove(workspace_id);
         }
         // So each agent's exit, which stopping it brings, is of an agent its session has let go of, and changes nothing
-        // even if a prompt is recorded first.
-        for session in self.sessions.lock().live.values().filter(|session| &session.workspace_id == workspace_id) {
-            session.let_go_of_agent_on(link.id);
+        // even if a prompt is recorded first. What each run kept goes now, since its exit may never reach the hub, and
+        // one that does finds nothing kept by it.
+        let let_go: Vec<RunId> = {
+            let sessions = self.sessions.lock();
+            let here = sessions.live.values().filter(|session| &session.workspace_id == workspace_id);
+            here.filter_map(|session| session.let_go_of_agent_on(link.id)).collect()
+        };
+        for run in let_go {
+            self.keeper_went(Keeper::Run(run)).await;
         }
         info!(
             name: "worker.other_build_stopped",

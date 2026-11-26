@@ -1,6 +1,7 @@
 use protocol::client::HubNotice;
 use protocol::model::{ObservationKey, Observed};
 
+use super::super::keepers::Keeper;
 use super::super::kinds::WorkspaceLines;
 use super::seen::{as_of, lines, listed, of_w, told, told_copy};
 use crate::hub::tests::hub_in;
@@ -42,7 +43,7 @@ async fn an_observation_is_current_while_something_keeps_it_up_to_date_and_then_
     hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
     let mut feed = hub.subscribe_feed();
 
-    hub.observation_kept_current::<WorkspaceLines>("w".into()).await.unwrap();
+    hub.observation_kept_by::<WorkspaceLines>("w".into(), Keeper::Hub).await.unwrap();
 
     assert_eq!(told(&mut feed), [], "read before, so not current");
 
@@ -132,7 +133,7 @@ async fn what_is_worked_out_again_stays_as_of_its_read_and_is_nothing_where_noth
 async fn an_observation_no_longer_read_again_is_as_of_its_last_read() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    hub.observation_kept_current::<WorkspaceLines>("w".into()).await.unwrap();
+    hub.observation_kept_by::<WorkspaceLines>("w".into(), Keeper::Hub).await.unwrap();
     hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.unwrap();
     hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 2_000).await.unwrap();
     let mut feed = hub.subscribe_feed();

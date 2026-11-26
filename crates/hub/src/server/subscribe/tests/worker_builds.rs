@@ -6,7 +6,8 @@ use protocol::model::{Observation, ObservationKey, Observed, OtherBuild};
 use rusqlite::Connection as Database;
 
 use super::given::{mark, ok, start};
-use crate::hub::tests::{hub_in, hub_in_again};
+use crate::hub::Keeper;
+use crate::hub::tests::{hub_in, hub_in_again, serving};
 use crate::server::tests::Connection;
 use crate::store::BEFORE_WORKER_BUILD_OBSERVED;
 use crate::store::columns::OneValue;
@@ -37,9 +38,12 @@ async fn which_build_a_worker_is_is_sent_as_an_observation_and_its_removal() {
     ok(&mut client, 1, Subscribe { stop: Vec::new(), start: vec![start(1, Follow::Hub)] }).await;
     client.until("the list", |sent| sent.iter().any(|frame| matches!(frame, HubFrame::Listed { .. }))).await;
 
-    hub.worker_build_heard(&"w".into(), &WorkerLink::unconnected().of_build("0.9.0")).await;
-    hub.worker_build_gone(&"w".into()).await;
-    hub.worker_build_heard(&"w".into(), &WorkerLink::unconnected()).await;
+    let (first, next) = (WorkerLink::unconnected().of_build("0.9.0"), WorkerLink::unconnected());
+    serving(&hub, &first);
+    hub.worker_build_heard(&"w".into(), &first).await;
+    hub.keeper_went(Keeper::Worker(first.id)).await;
+    serving(&hub, &next);
+    hub.worker_build_heard(&"w".into(), &next).await;
     mark(&hub, &mut client).await;
 
     let said = |said: Option<&str>| Some(Observed::Current { value: OtherBuild { said: said.map(str::to_string) } });
@@ -53,7 +57,9 @@ async fn which_build_a_worker_is_is_not_known_after_a_restart_nor_from_a_databas
     let dir = tempfile::tempdir().unwrap();
     drop(store_from_before(dir.path(), BEFORE_WORKER_BUILD_OBSERVED, "UPDATE workspaces SET worker_build = '0.9.0';"));
     let hub = hub_in_again(dir.path());
-    hub.worker_build_heard(&"w".into(), &WorkerLink::unconnected().of_build("0.9.0")).await;
+    let link = WorkerLink::unconnected().of_build("0.9.0");
+    serving(&hub, &link);
+    hub.worker_build_heard(&"w".into(), &link).await;
     hub.observations_written().await;
     drop(hub);
 

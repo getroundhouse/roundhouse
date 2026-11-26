@@ -7,7 +7,7 @@ use protocol::model::{ReferenceAsk, ReferenceSaid};
 use super::observing::logged;
 use crate::github_cache::{Item, KeptSummary, Told};
 use crate::hub::Hub;
-use crate::hub::observations::Referenced;
+use crate::hub::observations::{Keeper, Referenced};
 
 /// The chips the task last saw clients follow, and which of them the cache has kept a read of since.
 #[derive(Default)]
@@ -39,7 +39,7 @@ impl Hub {
         };
         let Some(said) = ReferenceSaid::of(found.as_ref()) else { return };
         let keeping = if current && !failed_since {
-            self.observation_kept_current::<Referenced>(ask.clone()).await
+            self.observation_kept_by::<Referenced>(ask.clone(), Keeper::Hub).await
         } else {
             self.observation_no_longer_read_again::<Referenced>(ask.clone()).await
         };
