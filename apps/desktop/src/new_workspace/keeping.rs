@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 
-use client_core::{CameBack, Client, DraftChange, DraftKey, Drafts, FilesFor, KeptDraft, ReadBack};
+use client_core::{CameBack, Client, DraftChange, DraftKey, Drafts, FilesFor, Hub, KeptDraft, ReadBack};
 use gpui_kit::{App, Context, Window};
 use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, NewWorkspaceDraft, NewWorkspaceDraftToKeep};
@@ -13,10 +13,10 @@ use protocol::prompt::says_or_carries;
 use super::{DialogEvent, NewWorkspaceDialog};
 use crate::attached::read_back;
 
-/// What keeps the dialog on the hub, and the connection its files are read back on.
-#[derive(Default)]
+/// What keeps the dialog on the hub, which its files are read back from, and the connection it asks the hub on.
 pub(crate) struct Keeping {
-    keeper: Option<Drafts>,
+    hub: Hub,
+    keeper: Drafts,
     client: Option<Client>,
     /// The hub's record as it was last told of, to compare what's here with.
     kept: NewWorkspaceDraft,
@@ -25,8 +25,9 @@ pub(crate) struct Keeping {
 }
 
 impl Keeping {
-    pub(crate) fn new(keeper: Option<Drafts>, client: Option<Client>) -> Self {
-        Self { keeper, client, ..Self::default() }
+    pub(crate) fn new(hub: Hub, client: Option<Client>) -> Self {
+        let keeper = hub.drafts();
+        Self { hub, keeper, client, kept: NewWorkspaceDraft::default(), restoring: Vec::new() }
     }
 
     /// The connection there is, which the dialog asks the hub on.
@@ -39,7 +40,7 @@ impl NewWorkspaceDialog {
     /// Has the hub keep what's in the dialog, once typing pauses, or at once for a change nobody's still typing, such
     /// as something picked, or the dialog emptied by Create. Each file the hub hasn't been given goes first.
     pub(super) fn keep(&mut self, at_once: bool, cx: &App) {
-        let Some(keeper) = self.keeping.keeper.clone() else { return };
+        let keeper = self.keeping.keeper.clone();
         for file in self.attached.not_yet_given(&FilesFor::NewWorkspace) {
             keeper.attach(FilesFor::NewWorkspace, file);
         }
@@ -55,7 +56,7 @@ impl NewWorkspaceDialog {
     /// workspace being made takes with it. It does so after the draft that no longer names them, since the hub keeps a
     /// file that's named.
     pub(super) fn let_go_of(&self, files: &[AttachmentId]) {
-        let Some(keeper) = &self.keeping.keeper else { return };
+        let keeper = &self.keeping.keeper;
         for file in files {
             keeper.detach(FilesFor::NewWorkspace, file);
         }
@@ -102,9 +103,9 @@ impl NewWorkspaceDialog {
     /// the dialog as each change reaches it. Whatever comes in its place is the hub's already, so none of it is kept
     /// again, and this client says it shows it, as taking a chat's draft does.
     pub(crate) fn take_kept(&mut self, kept: NewWorkspaceDraft, window: &mut Window, cx: &mut Context<Self>) {
-        let keeper = self.keeping.keeper.as_ref();
-        let elsewhere = keeper.is_some_and(|keeper| keeper.from_elsewhere(&KeptDraft::new_workspace(&kept)));
-        if let Some(keeper) = keeper.filter(|_| elsewhere) {
+        let keeper = &self.keeping.keeper;
+        let elsewhere = keeper.from_elsewhere(&KeptDraft::new_workspace(&kept));
+        if elsewhere {
             keeper.took(KeptDraft::new_workspace(&kept));
         }
         let taken = elsewhere && !self.has_kept(&kept, cx);
@@ -144,21 +145,25 @@ impl NewWorkspaceDialog {
         cx.notify();
     }
 
-    /// Carries on on a new connection, reading back any files the last one couldn't.
+    /// Carries on on a new connection, asking it for the models it offers.
     pub(crate) fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.model_lookup.reset();
         self.keeping.client = Some(client.clone());
         self.follow_models(false, cx);
+    }
+
+    /// For when a connection to the hub has caught up on its records, to read back any files that couldn't be before.
+    pub(crate) fn hub_came_back(&mut self, cx: &mut Context<Self>) {
         self.bring_back(cx);
     }
 
     /// Reads back the files the record names that aren't here, off the main thread.
     fn bring_back(&self, cx: &mut Context<Self>) {
-        let (Some(client), files) = (self.keeping.client.clone(), self.keeping.restoring.clone()) else { return };
+        let files = self.keeping.restoring.clone();
         if files.is_empty() {
             return;
         }
-        read_back(client, FilesFor::NewWorkspace, files, Self::brought_back, cx);
+        read_back(self.keeping.hub.clone(), FilesFor::NewWorkspace, files, Self::brought_back, cx);
     }
 
     /// Puts the files read back in the dialog, before any attached since, then has the hub keep what's here if that
@@ -180,8 +185,8 @@ impl NewWorkspaceDialog {
 
     /// Answers once what's handed to the keeper so far is kept, or once that's as far as it can get, such as without a
     /// connection, which Create waits for, so the hub makes the workspace from what's asked for.
-    pub(super) fn kept_once_flushed(&self) -> Option<flume::Receiver<()>> {
-        self.keeping.keeper.as_ref().map(Drafts::flushed)
+    pub(super) fn kept_once_flushed(&self) -> flume::Receiver<()> {
+        self.keeping.keeper.flushed()
     }
 
     /// Stops reading back the files the record names that aren't here, as Create takes them with it, and returns them.
@@ -209,7 +214,7 @@ impl NewWorkspaceDialog {
 
     /// Whether anything is typed or attached that quitting or restarting would lose, because the hub hasn't had it.
     pub(crate) fn would_lose(&self, cx: &App) -> bool {
-        let unkept = self.keeping.keeper.as_ref().is_none_or(|keeper| keeper.unkept(&DraftKey::NewWorkspace));
+        let unkept = self.keeping.keeper.unkept(&DraftKey::NewWorkspace);
         unkept && says_or_carries(&self.prompt.read(cx).text().to_string(), self.attached.len())
     }
 }

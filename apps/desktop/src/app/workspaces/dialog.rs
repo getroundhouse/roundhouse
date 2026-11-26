@@ -33,9 +33,9 @@ impl AppView {
             return dialog.clone();
         }
         // The connection there is, even one still catching up, which a dialog made now would otherwise hear of only on
-        // the next, so it couldn't read back its files until then.
+        // the next, so it couldn't follow models until then.
         let client = self.link.state().connected().cloned();
-        let (offer, keeping) = (self.offer(), Keeping::new(self.drafts.clone(), client));
+        let (offer, keeping) = (self.offer(), Keeping::new(self.linked.clone(), client));
         let dialog = cx.new(|cx| NewWorkspaceDialog::new(repo, offer, keeping, window, cx));
         if let Some(kept) = self.feed().and_then(|feed| feed.snapshot().new_workspace_draft().cloned()) {
             dialog.update(cx, |dialog, cx| dialog.take_kept(kept, window, cx));
@@ -94,10 +94,17 @@ impl AppView {
         });
     }
 
-    /// Has the dialog read back on a new connection what the last couldn't.
+    /// Has the dialog carry on on a new connection.
     pub(in crate::app) fn reconnect_dialog(&self, client: &Client, cx: &mut Context<Self>) {
         if let Some(dialog) = &self.new_workspace {
             dialog.update(cx, |dialog, cx| dialog.reconnect(client, cx));
+        }
+    }
+
+    /// Has the dialog read back what it couldn't before, once a new connection has caught up.
+    pub(in crate::app) fn dialog_came_back(&self, cx: &mut Context<Self>) {
+        if let Some(dialog) = &self.new_workspace {
+            dialog.update(cx, NewWorkspaceDialog::hub_came_back);
         }
     }
 

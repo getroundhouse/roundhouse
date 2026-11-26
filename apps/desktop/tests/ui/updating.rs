@@ -129,7 +129,7 @@ fn start_a_comment(ui: &mut Ui<'_>, stack: &Stack) -> Frozen {
     let diff = ui.open_changes();
     ui.open_diff_of(&diff, "a.txt");
     ui.start_comment(&diff, "a.txt", 2);
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     let frozen = ui.freeze_hub(stack);
     ui.input("Why this word?");
     frozen
@@ -187,7 +187,7 @@ fn restarting_to_update_waits_for_whats_on_its_way_to_the_hub(cx: &mut TestAppCo
     let stack = Stack::new();
     let mut ui = typing_with_an_update_ready(cx, &stack, "say:kept");
     let chat = ui.active_chat();
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     // Once the hub has answered a change, the one after it waits for typing to pause. One letter, as typing several
     // can take longer than the pause in a test.
     ui.input("!");

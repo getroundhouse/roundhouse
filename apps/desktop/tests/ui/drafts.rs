@@ -53,7 +53,7 @@ fn whats_typed_and_attached_is_there_when_the_app_opens_again_with_whats_typed_s
     ui.cx.update_window(ui.handle, |_, window, cx| window.click(sidebar_row(&drafted), cx)).unwrap();
     ui.cx.update_window(ui.handle, |_, window, cx| window.input(" a thought", cx)).unwrap();
     assert_eq!((ui.composer_text(), ui.attached()), ("half a thought".to_string(), vec![]), "what was typed is back");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     assert_eq!(kept(&stack, &chat), "half a thought", "what's typed as the file comes back is kept");
     assert_eq!(names(&kept_files(&stack, &chat)), ["build.log"], "the draft goes on naming the file");
     ui.wait("the file to come back", |ui| ui.attached() == ["build.log"]);
@@ -120,7 +120,7 @@ fn a_file_taken_out_or_whose_chat_closes_is_let_go_of_even_one_still_on_its_way(
     assert_eq!(ui.attached(), Vec::<String>::new(), "they don't go to the chat that shows instead");
     let on_disk = stack.hub.paths.attachments_dir.join(closing.as_str());
     let files_left = || std::fs::read_dir(&on_disk).map_or(0, Iterator::count);
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     ui.wait("the hub to let go of the one on its way", |_| files_left() == 0);
 }
 
@@ -135,13 +135,13 @@ fn a_change_made_elsewhere_to_a_chats_draft_shows_in_it_whether_its_showing_or_n
     let chat = ui.active_chat();
     let elsewhere = stack.client();
     ui.input("typed here");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
 
     elsewhere.session_draft(&chat, &DraftToKeep::new("typed elsewhere"), None).unwrap();
 
     ui.wait("what was typed elsewhere", |ui| ui.composer_text() == "typed elsewhere");
     ui.input(" and here");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     assert_eq!(kept(&stack, &chat), "typed elsewhere and here", "typing here carries on from it");
     elsewhere.session_draft(&chat, &DraftToKeep::default(), None).unwrap();
     ui.wait("the composer to empty, as sending it elsewhere does", |ui| ui.composer_text().is_empty());
@@ -163,7 +163,7 @@ fn a_change_made_elsewhere_to_a_chats_draft_shows_in_it_whether_its_showing_or_n
     ui.press("secondary-a");
     ui.input("typed here before it hid");
     ui.new_chat();
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     assert_eq!(kept(&stack, &chat), "typed here before it hid");
     elsewhere.session_draft(&chat, &DraftToKeep::new("typed elsewhere while it hid"), None).unwrap();
 
@@ -171,7 +171,7 @@ fn a_change_made_elsewhere_to_a_chats_draft_shows_in_it_whether_its_showing_or_n
     ui.frame();
 
     ui.wait("what was typed elsewhere while it hid", |ui| ui.composer_text() == "typed elsewhere while it hid");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     assert_eq!(kept(&stack, &chat), "typed elsewhere while it hid", "showing it didn't keep it again");
 }
 
@@ -185,7 +185,7 @@ fn a_record_that_changes_for_something_else_leaves_the_composer_as_it_is(cx: &mu
     ui.new_workspace();
     let chat = ui.active_chat();
     ui.input("typed here");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     ui.open_again(&stack);
     ui.wait("what was typed", |ui| ui.composer_text() == "typed here");
     // As text being composed is put in, without a change for the pane to hand over.
@@ -213,7 +213,7 @@ fn a_draft_changed_elsewhere_as_the_chat_showing_closes_brings_each_file_once(cx
     let next = ui.new_chat();
     ui.attach_a_file("build.log", "error at line 42\n");
     ui.input("look");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     ui.show_chat(&showing);
     let files = kept_files(&stack, &next).into_iter().map(|file| file.id).collect();
     let records = ui.view().feed().unwrap();
@@ -247,7 +247,7 @@ fn a_change_made_elsewhere_while_something_from_here_is_on_its_way_shows_once_it
     ui.wait_for_the_sidebar_of_changes();
     let chat = ui.active_chat();
     ui.input("typed here");
-    let drafts = ui.view().drafts().unwrap();
+    let drafts = ui.view().drafts();
     drafts.flushed().recv().unwrap();
     let pid = stack.client().hub_status().unwrap().pid;
     stack.client().session_draft(&chat, &DraftToKeep::new("typed elsewhere"), None).unwrap();

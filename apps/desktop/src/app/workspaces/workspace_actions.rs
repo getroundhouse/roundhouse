@@ -24,10 +24,10 @@ impl AppView {
             if !crate::sidebar::lists(shown.workspace()) {
                 return;
             }
-            let (Some(records), Some(drafts)) = (self.feed(), self.drafts.clone()) else { return };
+            let Some(records) = self.feed() else { return };
             let (conversations, tool_sign_in) = (self.conversations.clone(), self.tool_sign_in.clone());
             let linked = self.linked.clone();
-            let of_hub = OfHub { linked, client, records, drafts, conversations, tool_sign_in };
+            let of_hub = OfHub { linked, client, records, conversations, tool_sign_in };
             let pane = cx.new(|cx| WorkspacePane::new(of_hub, shown, window, cx));
             let (busy, retitling) = (self.busy.clone(), self.retitling.contains(&id));
             pane.update(cx, |pane, cx| {

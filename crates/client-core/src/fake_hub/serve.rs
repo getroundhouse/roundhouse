@@ -63,6 +63,12 @@ fn serve_requests(world: &World, connection: u64, stream: UnixStream) {
         let Ok(ClientFrame { id, request }) = frame::decode::<ClientFrame>(&line) else { return };
         world.asked.heard(&request);
         let lists_the_hub = follows_the_hub(&request);
+        let reads_a_file =
+            matches!(request, ClientRequest::AttachmentRead(_) | ClientRequest::NewWorkspaceDraftFileRead(_));
+        if reads_a_file && world.hangs_up_reading.now() {
+            world.held_list.hold();
+            return;
+        }
         let (first, outcome, then) = match answer(world, connection, request) {
             Ok(Outcome::Reply { first, response, then }) => (first, ReplyOutcome::Response(response), then),
             Ok(Outcome::Never) => continue,
@@ -184,8 +190,11 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
             let at = protocol::model::ChangedFileAt { untracked, path };
             reply(C::FileDiff(reads_of(world, &id)?.file_diff(at, first_line)?))
         }
-        // The world's dialog names no files.
-        R::NewWorkspaceDraftFileRead(_) => Err(not_found("file")),
+        // The files the world's dialog names, which are among its attachments.
+        R::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id }) => {
+            let data = world.attachments.get(&id).ok_or_else(|| not_found("file"))?;
+            reply(C::AttachmentData(attachments::AttachmentData { data: AttachmentBytes::new(data.clone()) }))
+        }
         R::SessionEnsure(sessions::SessionEnsure { workspace_id, .. }) => {
             let open = world.sessions_listed(&workspace_id).into_iter().rfind(Session::is_open);
             reply(C::Session(open.ok_or_else(|| read_only("give this workspace a chat"))?))

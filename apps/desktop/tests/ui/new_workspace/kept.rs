@@ -104,7 +104,7 @@ fn a_change_made_to_the_dialog_elsewhere_shows_in_it(cx: &mut TestAppContext) {
     let mut ui = open_with_a_repo(cx, &stack);
     ui.open_new_workspace();
     ui.input("typed here");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     let elsewhere = stack.client();
     let notes = FileToSend::checked("notes.txt", MediaType::Text, b"a line\n".to_vec()).unwrap();
     let file = notes.attachment.id.clone();
@@ -138,7 +138,7 @@ fn a_change_made_to_the_dialog_elsewhere_while_something_from_here_is_on_its_way
     let mut ui = open_with_a_repo(cx, &stack);
     ui.open_new_workspace();
     ui.input("typed here");
-    let drafts = ui.view().drafts().unwrap();
+    let drafts = ui.view().drafts();
     drafts.flushed().recv().unwrap();
     let pid = stack.client().hub_status().unwrap().pid;
     stack.client().new_workspace_draft_keep(&typed_elsewhere("typed elsewhere")).unwrap();
@@ -163,7 +163,7 @@ fn a_change_made_to_the_dialog_elsewhere_while_something_from_here_is_on_its_way
 /// next comes before the read can run.
 fn kept_elsewhere_with_a_file(ui: &mut Ui<'_>, stack: &Stack, typed: &str) {
     ui.open_new_workspace();
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     let elsewhere = stack.client();
     let notes = FileToSend::checked("notes.txt", MediaType::Text, b"a line\n".to_vec()).unwrap();
     let file = notes.attachment.id.clone();

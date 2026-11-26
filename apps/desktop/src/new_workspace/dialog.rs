@@ -228,7 +228,7 @@ impl NewWorkspaceDialog {
         cx.notify();
         let agent = self.chosen_agent.unwrap_or_else(|| self.offer.agents.for_new_chat());
         let prompt = Prompt::carrying(text, files);
-        Request { repo, prompt, coming_back, agent, model, effort, mode, made_of, kept }
+        Request { repo, prompt, coming_back, agent, model, effort, mode, made_of, kept: Some(kept) }
     }
 
     /// Puts back a prompt for a workspace that couldn't be made, before anything typed or attached since, and plan

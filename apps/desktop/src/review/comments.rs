@@ -27,16 +27,16 @@ impl Review {
         self.show_comments(cx);
     }
 
-    /// Saves the comment being written, as a new one on its line, or as the text of the one it changes, once `kept`
-    /// answers. It shows once client-core's copy has it, like any other change. Saving takes it off the hub as what's
-    /// being written, so one that couldn't be saved is given back, with why.
-    pub fn save_comment(&mut self, saving: CommentDraft, kept: flume::Receiver<()>, cx: &mut Context<Self>) {
+    /// Saves the comment being written, as a new one on its line, or as the text of the one it changes, once what's
+    /// typed has been kept. It shows once client-core's copy has it, like any other change. Saving takes it off the hub
+    /// as what's being written, so one that couldn't be saved is given back, with why.
+    pub fn save_comment(&mut self, saving: CommentDraft, cx: &mut Context<Self>) {
         let CommentDraft { editing, path, side, line, text } = saving.clone();
         let saved = if let Some(id) = editing {
-            self.hub.ask_after(kept, CommentEdit { id, text })
+            self.hub.ask_once_kept(CommentEdit { id, text })
         } else {
             let (workspace_id, client_request_id) = (self.workspace_id.clone(), Some(client_core::new_request_id()));
-            self.hub.ask_after(kept, CommentAdd { workspace_id, path, side, line, text, client_request_id })
+            self.hub.ask_once_kept(CommentAdd { workspace_id, path, side, line, text, client_request_id })
         };
         cx.spawn(async move |this, cx| {
             let saved = saved.recv().await;

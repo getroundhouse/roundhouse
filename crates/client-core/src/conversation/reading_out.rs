@@ -7,14 +7,15 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use parking_lot::Mutex;
 use protocol::event::SessionEvent;
 use protocol::model::{Session, SessionId};
 use protocol::tail::Tail;
 
 use super::reading::Reading;
 use super::telling::{Do, FromVoice, ToHub, ToVoice};
-use crate::client::{Client, LiveItem, LiveLog, Reply, Result};
+use crate::Hub;
+use crate::client::{ClientError, LiveItem, LiveLog, Reply, Result};
+use protocol::client::conversation::{SessionConversationEnd, SessionReplyHeard, SessionSpeaking};
 
 /// The voice an app reads with, such as Phonon through the speakers, as the `conversation` crate gives it.
 pub trait Voice: Send + 'static {
@@ -62,31 +63,28 @@ const A_REPLY: u8 = 2;
 /// Made once this device has the chat's conversation, and dropped once it hasn't. The hub settles what it hadn't said
 /// the end of then, as the mode moves or ends, or the connection goes.
 pub struct ReadingOut {
-    log: LiveLog,
-    client: Arc<Mutex<Client>>,
     commands: flume::Sender<Command>,
     reading: Arc<AtomicU8>,
-    /// Says there's a new connection, to tell the hub on what a connection that went lost.
-    reconnected: flume::Sender<()>,
+    /// Held while it's there, so what tells the hub what it heard stops waiting for a connection once it's gone.
+    _here: flume::Sender<()>,
 }
 
 impl ReadingOut {
-    /// Starts reading out the replies to come in `session`, with `voice`, telling the hub on `client`, and saying on
-    /// `tell` when what it reads changes.
-    pub fn start(client: &Client, session: &Session, voice: impl Voice, tell: flume::Sender<()>) -> Self {
-        let log = LiveLog::start(client, session);
-        let client = Arc::new(Mutex::new(client.clone()));
+    /// Starts reading out the replies to come in `session`, with `voice`, telling `hub`, and saying on `tell` when
+    /// what it reads changes.
+    pub fn start(hub: &Hub, session: &Session, voice: impl Voice, tell: flume::Sender<()>) -> Self {
+        let log = hub.open_live_log(session);
         let (commands, take) = flume::unbounded();
         let reading = Arc::new(AtomicU8::new(NOTHING));
         let (to_hub, outbox) = flume::unbounded();
-        let (reconnected, connection) = flume::bounded(1);
-        let (id, telling) = (session.id.clone(), client.clone());
+        let (here, gone) = flume::bounded(1);
+        let (id, telling, rounds) = (session.id.clone(), hub.clone(), hub.rounds());
         // A thread that can't start leaves the hub to settle what it'd have said.
         let _ = thread::Builder::new()
             .name("telling-the-hub-what-was-heard".into())
-            .spawn(move || tell_the_hub(&id, &telling, &outbox, &connection));
+            .spawn(move || tell_the_hub(&id, &telling, &outbox, &Waiting { rounds, gone }));
         let follower = Follower {
-            log: log.clone(),
+            log,
             voice,
             commands: take,
             to_hub,
@@ -98,14 +96,7 @@ impl ReadingOut {
         };
         // One that can't start reads nothing, as with no voice.
         let _ = thread::Builder::new().name("reading-out".into()).spawn(move || follower.run());
-        Self { log, client, commands, reading, reconnected }
-    }
-
-    /// Carries on, on a new connection to the hub.
-    pub fn reconnect(&self, client: &Client) {
-        *self.client.lock() = client.clone();
-        self.log.reconnect(client);
-        let _ = self.reconnected.try_send(());
+        Self { commands, reading, _here: here }
     }
 
     /// Stops what's being read, as Stop and typing do, as [`Reading::stop`] says.
@@ -304,29 +295,38 @@ impl<V: Voice> Follower<V> {
     }
 }
 
-/// Tells the hub each of `outbox` in turn, so how a reply ended lands after how far it got, and before the mode ends.
-/// What a connection that went lost is told again on the next, once `connection` says there's one, except how far a
-/// reply has got, which the next says anyway. What the hub refuses isn't told again: it settles what the device
-/// doesn't say.
-fn tell_the_hub(
-    id: &SessionId,
-    client: &Mutex<Client>,
-    outbox: &flume::Receiver<Tell>,
-    connection: &flume::Receiver<()>,
-) {
+/// What telling the hub waits on for a connection that has caught up: each new one, and the reading out going.
+struct Waiting {
+    rounds: flume::Receiver<()>,
+    gone: flume::Receiver<()>,
+}
+
+impl Waiting {
+    /// Waits for the next connection that has caught up, and says whether one came before the reading out went.
+    fn next_round(&self) -> bool {
+        flume::Selector::new().recv(&self.rounds, |round| round.is_ok()).recv(&self.gone, |_| false).wait()
+    }
+}
+
+/// Tells the hub each of `outbox` in turn, so how a reply ended lands after how far it got, and before the mode ends,
+/// on the connection that has caught up, as [`Hub::call`] does. What there was no such connection for, or what one
+/// that went lost, is told again once the next has caught up, except how far a reply has got, which the next says
+/// anyway. What the hub refuses isn't told again: it settles what the device doesn't say.
+fn tell_the_hub(id: &SessionId, hub: &Hub, outbox: &flume::Receiver<Tell>, waiting: &Waiting) {
     while let Ok(what) = outbox.recv() {
         let told = loop {
-            let client = client.lock().clone();
             let told = match &what {
-                Tell::Hub(ToHub::Speaking(through)) => client.session_speaking(id, through.clone()).map(drop),
-                Tell::Hub(ToHub::Heard { message, ending }) => {
-                    client.session_reply_heard(id, message.clone(), *ending).map(drop)
+                Tell::Hub(ToHub::Speaking(through)) => {
+                    hub.call(SessionSpeaking { id: id.clone(), through: through.clone() }).map(drop)
                 }
-                Tell::End(_) => client.session_conversation_end(id).map(drop),
+                Tell::Hub(ToHub::Heard { message, ending }) => {
+                    hub.call(SessionReplyHeard { id: id.clone(), message: message.clone(), ending: *ending })
+                }
+                Tell::End(_) => hub.call(SessionConversationEnd { id: id.clone() }).map(drop),
             };
-            let lost = told.is_err() && client.is_disconnected() && !matches!(what, Tell::Hub(ToHub::Speaking(_)));
-            // Once the reading out has gone, no new connection will be said.
-            if !lost || connection.recv().is_err() {
+            let lost = matches!(told, Err(ClientError::Disconnected)) && !matches!(what, Tell::Hub(ToHub::Speaking(_)));
+            // Once the reading out has gone, no new connection is waited for.
+            if !lost || !waiting.next_round() {
                 break told;
             }
         };

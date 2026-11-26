@@ -31,7 +31,7 @@ mod world;
 pub use asked::Asked;
 pub use following::Following;
 pub use github::GithubSays;
-pub use held_list::HeldList;
+pub use held_list::{HangsUp, HeldList};
 pub use serve::serve;
 pub use stand_in::{BUILD, BUILD_NUMBER};
 pub use worker_reads::WorkerReads;

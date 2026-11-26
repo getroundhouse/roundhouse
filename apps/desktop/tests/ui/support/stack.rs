@@ -108,7 +108,7 @@ impl<'a> Ui<'a> {
     }
 
     /// Opens the app's main window on `hub`, told it was built from `checkout`.
-    pub(super) fn open_window(cx: &'a mut TestAppContext, hub: HubSource, checkout: Option<Checkout>) -> Self {
+    pub(crate) fn open_window(cx: &'a mut TestAppContext, hub: HubSource, checkout: Option<Checkout>) -> Self {
         // A hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
         cx.executor().allow_parking();
         // Shutting down waits on those threads, such as for a prompt's call to the hub, for as long by the system's

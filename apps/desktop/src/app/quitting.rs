@@ -159,8 +159,8 @@ impl AppView {
 
     /// What keeps drafts on the hub, for a test to wait until nothing is waiting to be kept.
     #[cfg(any(test, feature = "testing"))]
-    pub fn drafts(&self) -> Option<Drafts> {
-        self.drafts.clone()
+    pub fn drafts(&self) -> Drafts {
+        self.linked.drafts()
     }
 }
 

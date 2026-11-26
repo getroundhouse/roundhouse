@@ -58,6 +58,12 @@ pub struct World {
     pub asked: super::Asked,
     /// What holds back the list of the hub's records on a connection, which a test shares in the same way.
     pub held_list: super::HeldList,
+    /// What the hub keeps of the new-workspace dialog, whose files are the world's `attachments`. None by default, as a
+    /// hub starts out.
+    pub new_workspace_draft: Option<protocol::model::NewWorkspaceDraft>,
+    /// What has the next read of a file the hub keeps close its connection, and hold back the list on the next, which a
+    /// test shares in the same way, so a connection goes while a read is on its way.
+    pub hangs_up_reading: super::HangsUp,
     /// The bytes of the files the hub keeps, by attachment: the files prompts carry, the images tools send back, and
     /// the images and videos the agent's text points to.
     pub attachments: HashMap<AttachmentId, Vec<u8>>,

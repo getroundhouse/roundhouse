@@ -133,7 +133,7 @@ fn a_comment_written_elsewhere_shows_in_the_box_on_the_diff_and_one_that_couldnt
     let diff = open_a_diff(&mut ui);
     ui.start_comment(&diff, "a.txt", 2);
     ui.input("Why this word?");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     let changed = CommentDraft { line: 1, text: "Why not another?".to_string(), ..writing(&ui, &diff).unwrap() };
 
     stack.client().workspace_comment_draft(&workspace, Some(&changed)).unwrap();
@@ -141,7 +141,7 @@ fn a_comment_written_elsewhere_shows_in_the_box_on_the_diff_and_one_that_couldnt
     ui.wait("what was typed elsewhere", |ui| writing(ui, &diff).as_ref() == Some(&changed));
     ui.input(" Or this?");
     assert_eq!(writing(&ui, &diff).unwrap().text, "Why not another? Or this?", "typing goes on in the box");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     stack.client().workspace_comment_draft(&workspace, None).unwrap();
     ui.wait("the box to go once it's put away elsewhere", |ui| writing(ui, &diff).is_none());
 
@@ -171,7 +171,7 @@ fn a_comment_that_couldnt_be_saved_comes_back_in_its_box(
     ui.wait("the refusal", |ui| ui.view().error.is_some());
     assert!(ui.view().error.clone().unwrap().contains("Couldn't save that comment"));
     ui.wait("the box to come back", |ui| writing(ui, diff).as_ref() == Some(&kept));
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     assert_eq!(kept_comment(stack, at), Some(kept), "the hub still keeps it");
 }
 
@@ -221,12 +221,12 @@ fn an_answer_changed_elsewhere_shows_in_the_question_and_going_to_the_typing_row
     stack.client().session_decision_draft(&chat, Some(&chosen)).unwrap();
 
     ui.wait("what was chosen elsewhere", |ui| so_far(ui).as_ref() == Some(&chosen));
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     let kept = stack.client().session_get(&chat).unwrap().decision_draft;
     assert_eq!(kept.as_ref(), Some(&chosen), "nothing from here replaced it");
 
     ui.click(id("question-answer-0"));
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.view().drafts().flushed().recv().unwrap();
     let elsewhere = AnswerSoFar { picked: Vec::new(), typed: "Friday".to_string(), other: true };
     let typed = answering(&question, elsewhere);
     stack.client().session_decision_draft(&chat, Some(&typed)).unwrap();

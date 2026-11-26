@@ -8,7 +8,7 @@ use crate::tool_sign_in::ToolSigningIn;
 use crate::workspace_pane::WorkspacePane;
 use client_core::link::Link;
 use client_core::records::Snapshot;
-use client_core::{Client, Drafts, Hub, RecordsFeed};
+use client_core::{Client, Hub, RecordsFeed};
 use gpui_kit::{AnyWindowHandle, AppContext as _, Context, Entity, FocusHandle, ScrollHandle, Task, Window};
 use hub_source::HubSource;
 use protocol::client::HubStatus;
@@ -50,6 +50,9 @@ pub struct AppView {
     /// The hub the link connects to, as every view of it holds it: its records, what's asked of it and what's opened
     /// from it, kept over every connection.
     pub(super) linked: Hub,
+    /// Showing in each pane a draft made elsewhere once one typed here has reached the hub, from the first connection
+    /// on, before which nothing typed here has.
+    pub(super) following_drafts: Option<Task<()>>,
     /// What's shown of how the link stands. Set by [`Self::set_connection`], so the panes are told, and by
     /// `link_changed` once a new connection is ready.
     pub(super) connection: Connection,
@@ -58,8 +61,6 @@ pub struct AppView {
     /// Client-core's copy of the hub's records, which `records` shows.
     /// The hub's chats' conversations on this Mac, which every pane of its draws the bar of.
     pub(super) conversations: Entity<conversation::Conversations>,
-    /// Keeps what's typed in each chat on the hub, for every pane, across connections.
-    pub(super) drafts: Option<Drafts>,
     pub(super) restartable_hub: Option<restarts::OlderHub>,
     /// What's shown of the hub's records, as of client-core's last change to them.
     pub(super) records: Snapshot,
@@ -137,9 +138,12 @@ impl AppView {
         let tool_sign_in = cx.new(|_| ToolSigningIn::default());
         cx.observe(&tool_sign_in, |_, _, cx| cx.notify()).detach();
         let link = Link::start(hub.clone());
+        let linked = link.hub();
         let mut this = Self {
             hub,
-            linked: link.hub(),
+            conversations: crate::conversing::conversations(linked.clone(), cx),
+            linked,
+            following_drafts: None,
             link,
             visible: true,
             presentation: Vec::new(),
@@ -147,8 +151,6 @@ impl AppView {
             connection: Connection::Connecting,
             // Until the window says it's in front, so nothing is read that may not have been seen.
             in_front: false,
-            conversations: crate::conversing::conversations(cx),
-            drafts: None,
             restartable_hub: None,
             records: Snapshot::default(),
             selection: Selection::default(),

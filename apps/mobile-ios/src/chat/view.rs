@@ -91,7 +91,8 @@ impl ChatView {
                 cx.notify();
             }
         });
-        let Ready { hub, client, feed, drafts } = hub;
+        let Ready { hub, client, feed } = hub;
+        let kept = Kept::new(hub.drafts());
         let agents = feed.snapshot().agents().clone();
         let mut chat = ChatView {
             workspace,
@@ -102,7 +103,7 @@ impl ChatView {
             shown: None,
             over: Over::default(),
             composer,
-            kept: Kept::new(drafts),
+            kept,
             read: ChatReading::new(window),
             models: client_ui::FollowedModels::default(),
             error: None,

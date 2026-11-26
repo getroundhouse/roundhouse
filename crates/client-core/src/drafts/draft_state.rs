@@ -179,18 +179,24 @@ pub(super) enum Request {
 }
 
 impl Drafts {
-    /// Starts keeping drafts on `client`'s hub.
+    /// Starts keeping drafts on `client`'s hub, for a client of its own, such as a test's playing another client. A
+    /// view keeps its drafts with its [`Hub`](crate::Hub)'s.
     pub fn start(client: &Client) -> Self {
+        Self::started(Some(client))
+    }
+
+    /// Starts keeping drafts on `connection`, or holding them until one is given to [`Drafts::reconnect`].
+    pub(crate) fn started(connection: Option<&Client>) -> Self {
         let (requests, received) = flume::unbounded();
         let (catching_up, caught_up) = flume::bounded(1);
         let counts = Counts::default();
-        keeper::start(client.clone(), received, counts.clone(), catching_up);
+        keeper::start(connection.cloned(), received, counts.clone(), catching_up);
         Self { requests, counts, caught_up }
     }
 
     /// Carries on on a new connection, keeping first what the last one couldn't. It may be to another hub, whose
     /// revisions can be lower, and the dialog is the same draft on every hub, so its copy agreed on goes.
-    pub fn reconnect(&self, client: &Client) {
+    pub(crate) fn reconnect(&self, client: &Client) {
         self.counts.lock().agreed.remove(&DraftKey::NewWorkspace);
         let _ = self.requests.send(Request::Reconnect(client.clone()));
     }

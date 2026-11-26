@@ -157,7 +157,8 @@ pub struct WorkspacePane {
 impl WorkspacePane {
     /// The pane for the workspace `shown` is part of, as the hub's records had it.
     pub(crate) fn new(of_hub: OfHub, shown: InWorkspace, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let OfHub { linked, client, records, drafts: keeper, conversations, tool_sign_in } = of_hub;
+        let OfHub { linked, client, records, conversations, tool_sign_in } = of_hub;
+        let keeper = linked.drafts();
         let (composer, on_enter) = composer::new_input(window, cx);
         let (about, on_event) = (Self::composer_about, Self::dictation_event);
         let place = dictation_ui::Place::Composer;
@@ -262,7 +263,6 @@ impl WorkspacePane {
         self.reload_request = ReloadRequest::Known;
         self.showing_changed(cx);
         self.behind = true;
-        self.bring_back_files(cx);
         // What it draws of what the last connection said, such as which tool servers can be reloaded, changes.
         cx.notify();
     }
