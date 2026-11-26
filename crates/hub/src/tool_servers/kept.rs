@@ -1,5 +1,3 @@
-use std::ops::Not;
-
 use protocol::model::{ToolScopes, ToolSignInId, ToolSignInStatus};
 use protocol::worker::TokenNumber;
 use serde::{Deserialize, Serialize};
@@ -29,11 +27,6 @@ pub(super) struct KeptSignIn {
     /// when none was.
     #[serde(default, skip_serializing_if = "ToolScopes::is_empty")]
     pub(super) wants: ToolScopes,
-    /// Whether it was signed in to only for what the sign-in before it had been asked to allow as well, and which its
-    /// server wanted all the same. The person may have left that out the first time, so it's asked for again, and that's
-    /// once: a server that still wants what this one was asked for has nothing more to be given. *Unconfirmed.*
-    #[serde(default, skip_serializing_if = "Not::not")]
-    pub(super) asked_again: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -64,12 +57,11 @@ impl KeptSignIn {
         let SignedIn { renewable, granted, registration } = signed_in;
         // What was wanted at another authorization server is nothing to this one.
         let before = before.filter(|before| before.renewable.issuer() == renewable.issuer());
-        let asked_again = before.is_some_and(KeptSignIn::would_ask_again);
         let (tokens, granted) = KeptTokens::given(granted, given_at_ms);
         let granted = granted.unwrap_or_default();
         // What was wanted after this one was asked for is still to ask for, unless it was granted all the same.
         let wants = before.map_or_default(|before| before.wants.clone().without(renewable.scopes()).without(&granted));
-        Self { made_by, renewable, registration, number, tokens: Some(tokens), granted, wants, asked_again }
+        Self { made_by, renewable, registration, number, tokens: Some(tokens), granted, wants }
     }
 
     /// What signing in again asks to be allowed, beyond what its server says then, so nothing that worked stops
@@ -79,16 +71,10 @@ impl KeptSignIn {
         self.renewable.scopes().clone().and(&self.granted).and(&self.wants)
     }
 
-    /// Whether its server wanted only what it had been asked for all the same. What was granted without being asked for
-    /// doesn't count, since asking for that by name may change something. One nothing has been wanted of is what the
-    /// one before it made it.
-    fn would_ask_again(&self) -> bool {
-        if self.wants.is_empty() { self.asked_again } else { self.renewable.scopes().has_all(&self.wants) }
-    }
-
-    /// Whether its server `wants` only what has been asked for again already, so asking for it once more changes nothing.
+    /// Whether its server `wants` only what this sign-in was asked for, so signing in again would change nothing. What was
+    /// granted without being asked for doesn't count, since asking for that by name may change something.
     pub(super) fn wants_in_vain(&self, wants: &ToolScopes) -> bool {
-        self.asked_again && self.renewable.scopes().has_all(wants)
+        self.renewable.scopes().has_all(wants)
     }
 
     /// The same, renewed for `granted`, given at `given_at_ms`. One that doesn't say what it granted granted the same.

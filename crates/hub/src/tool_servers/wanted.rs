@@ -30,8 +30,8 @@ impl Wanted {
 impl ToolServers {
     /// Keeps what the server `asked` of wants, and answers with the server's record, which says so, as
     /// [`AskForToolAccess`] says. Nothing is kept of a token that isn't the one the hub has, since that one may be allowed
-    /// more. Nor is what the sign-in has been asked again for already, as [`KeptSignIn::asked_again`] says, so a server
-    /// that never takes its sign-in as enough doesn't have the person sign in without end.
+    /// more. Nor is what the sign-in was asked for already, as [`KeptSignIn::wants_in_vain`] says, so a server that never
+    /// takes its sign-in as enough doesn't have the person sign in without end.
     pub(crate) fn wants_access(&self, asked: &AskForToolAccess) -> Result<Wanted, ApiError> {
         self.changing(|files| self.wants_access_in(files, asked))
     }
