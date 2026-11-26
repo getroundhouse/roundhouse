@@ -250,6 +250,7 @@ pub(super) async fn handle(
         WorkerRequest::Hello(_)
         | WorkerRequest::Stop
         | WorkerRequest::GitCredentialSet(_)
+        | WorkerRequest::ToolServersSet(_)
         | WorkerRequest::TerminalTyped(_)
         | WorkerRequest::TerminalFit(_) => {
             Err(ApiError::new(ErrorCode::Internal, "the connection answers this itself"))

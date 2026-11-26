@@ -15,7 +15,7 @@ use tokio::task::JoinHandle;
 
 use crate::antigravity::launch::Purpose;
 use crate::antigravity::running::{AntigravityProcess, start_conversation};
-use crate::{AgentError, AgentOptions, AgentOutput, BinaryLookup, ToolServer};
+use crate::{AgentError, AgentOptions, AgentOutput, BinaryLookup, ToolServers};
 
 pub(super) static PROGRAM: process::testing::Example = process::testing::Example::new("native_standin");
 
@@ -31,7 +31,7 @@ impl Harness {
         Self::with_tools(rules, mode, start, None)
     }
 
-    pub(super) fn with_tools(rules: &Value, mode: ApprovalMode, start: Start, tools: Option<ToolServer>) -> Self {
+    pub(super) fn with_tools(rules: &Value, mode: ApprovalMode, start: Start, tools: Option<ToolServers>) -> Self {
         Self::launching(rules, mode, start, tools, |_| {}, None)
     }
 
@@ -58,7 +58,7 @@ impl Harness {
         rules: &Value,
         mode: ApprovalMode,
         start: Start,
-        tools: Option<ToolServer>,
+        tools: Option<ToolServers>,
         seed: impl FnOnce(&std::path::Path),
         model: Option<ModelName>,
     ) -> Self {

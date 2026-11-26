@@ -19,19 +19,22 @@ base64.workspace = true
 jiff.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
-hyper-util.workspace = true
+hyper-rustls.workspace = true
+hyper-util = { workspace = true, features = ["client-legacy", "http1"] }
 markdown.workspace = true
 memchr.workspace = true
 notify.workspace = true
 percent-encoding.workspace = true
 portable-pty.workspace = true
 toml.workspace = true
+rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha1_smol.workspace = true
 terminal-state.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tower-service.workspace = true
 tracing.workspace = true
 uuid = { workspace = true, features = ["v5"] }
 

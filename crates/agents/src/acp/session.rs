@@ -3,7 +3,7 @@ use protocol::prompt::Prompt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::ToolServer;
+use crate::ToolServers;
 
 const PROTOCOL_VERSION: u32 = 1;
 
@@ -21,15 +21,12 @@ pub(crate) fn initialize_params(client_name: &str, client_version: &str) -> Valu
     })
 }
 
-/// An HTTP MCP server entry for ACP `session/new` and `session/resume`, keeping the bearer token off the command line
-/// and off disk.
-pub(crate) fn mcp_http_server(name: &str, tools: &ToolServer) -> Value {
-    json!({
-        "type": "http",
-        "name": name,
-        "url": tools.url,
-        "headers": [{ "name": "Authorization", "value": format!("Bearer {}", tools.token.as_str()) }]
-    })
+/// The HTTP MCP server entries for ACP `session/new` and `session/resume`, one for each server, keeping the bearer token
+/// off the command line and off disk.
+pub(crate) fn mcp_http_servers(tools: &ToolServers) -> Vec<Value> {
+    let headers = json!([{ "name": "Authorization", "value": tools.authorization() }]);
+    let server = |(name, url)| json!({ "type": "http", "name": name, "url": url, "headers": headers });
+    tools.named().map(server).collect()
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]

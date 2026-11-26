@@ -19,6 +19,7 @@ pub mod previous;
 mod repo_source;
 mod repo_url;
 mod terminals;
+mod tool_servers;
 mod tools;
 mod workspaces;
 mod worktree;
@@ -43,6 +44,7 @@ pub use terminals::{
     RunningTerminal, RunningTerminals, RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalRows, TerminalStart,
     TerminalStop, TerminalText, TerminalTyped, TerminalWatch,
 };
+pub use tool_servers::{ProxiedServer, ServerHeader, ServerHeaderValue, ToolServersSet};
 pub use tools::{ServeTools, TOOLS_SERVER, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};
 pub use workspaces::{
     ArchiveScript, CancelSetup, NamesGitHas, NamesGitHasReply, PrepareWorkspace, RemoveWorkspace, RestoreWorkspace,

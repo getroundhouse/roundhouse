@@ -5,9 +5,9 @@ use std::path::PathBuf;
 use crate::AgentOptions;
 
 /// The record of a run's process, so the provider can stop it if the worker is killed, the file that tells its CLI
-/// where the worker's tools are, which holds the agent's token, and the one its CLI reads Roundhouse's instructions
-/// from. Removed when this is dropped: as the run ends, when it never started, and when supervising it panicked. A
-/// launch started again writes them again, where they were.
+/// where its worker's tool servers are, which holds the agent's token, and the one its CLI reads Roundhouse's
+/// instructions from. Removed when this is dropped: as the run ends, when it never started, and when supervising it
+/// panicked. A launch started again writes them again, where they were.
 pub(super) struct RunFiles {
     pid_file: Option<PathBuf>,
     tools_config: Option<PathBuf>,

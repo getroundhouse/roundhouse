@@ -212,6 +212,14 @@ Observed on 0.171.0, with a `HOME` and a `CODEX_HOME` of the trial's own and sta
 - **A connected server's `tools` has each by its name.** `toolsError` says why where there's no list.
 - **`error` and `toolsError` can hold secrets.** Of one it can't reach, they hold its URL with its query, and of a reply it can't use, the status and the reply's body. Each says so twice, among the names of Rust types. The adapter keeps a URL's origin and a reply's status.
 
+## The hub's tool servers, through the worker
+
+Observed on 0.171.0 as above, with stand-in servers given an `Authorization` header in `http_headers`.
+
+- **It asks such a server for no OAuth metadata,** whether the server starts or fails, and reports its `authStatus` as `bearerToken`. Given no header, it does ask, as `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`, at the root and under the server's path.
+- **A server that answers `initialize` with a JSON-RPC error fails to start, and `mcpServer/startupStatus/updated` gives the error's message,** so the worker's words for a key that was refused reach the chat's notice.
+- **It sent no GET for a stream,** and `initialize` again as `mcpServerStatus/list` was asked.
+
 ## Compacting when asked
 
 Read from 0.170.0 against a scripted model, with the isolation of the conformance binding's scripted trials. `thread/compact/start` takes only `threadId`, so there's nothing to say what to keep, and answers `{}`. Codex then compacts in a turn of its own: `turn/started`, a `contextCompaction` item started and completed, and `turn/completed`, with no `userMessage` item and no `thread/compacted`, which the schema calls deprecated in favor of the item. A `turn/steer` sent once that turn had ended was refused as `no active turn to steer`, as any is between turns.

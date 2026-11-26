@@ -5,16 +5,17 @@ use serde_json::{Value, json};
 
 use super::*;
 
-fn tools(config: &Path) -> ToolServer {
-    ToolServer {
-        url: "http://127.0.0.1:50123/mcp".into(),
+fn tools(config: &Path) -> ToolServers {
+    ToolServers {
+        tools_url: "http://127.0.0.1:50123/mcp".into(),
+        hubs: vec![HubToolServer { name: "linear".into(), url: "http://127.0.0.1:50123/tool-servers/t-1".into() }],
         token: ToolsToken::new("token-s"),
         config: config.to_path_buf(),
     }
 }
 
 #[test]
-fn the_cli_is_given_a_file_naming_the_server_and_its_token_which_only_its_user_can_read() {
+fn the_cli_is_given_a_file_naming_each_server_and_the_token_which_only_its_user_can_read() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("agents/s-1.mcp.json");
 
@@ -22,12 +23,15 @@ fn the_cli_is_given_a_file_naming_the_server_and_its_token_which_only_its_user_c
 
     assert_eq!(args, ["--mcp-config".into(), config.clone().into_os_string()]);
     let written: Value = serde_json::from_slice(&std::fs::read(&config).unwrap()).unwrap();
-    let server = json!({
-        "type": "http",
-        "url": "http://127.0.0.1:50123/mcp",
-        "headers": { "Authorization": "Bearer token-s" },
-    });
-    assert_eq!(written, json!({ "mcpServers": { "roundhouse": server } }));
+    let server = |path: &str| {
+        json!({
+            "type": "http",
+            "url": format!("http://127.0.0.1:50123/{path}"),
+            "headers": { "Authorization": "Bearer token-s" },
+        })
+    };
+    let servers = json!({ "roundhouse": server("mcp"), "linear": server("tool-servers/t-1") });
+    assert_eq!(written, json!({ "mcpServers": servers }));
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;

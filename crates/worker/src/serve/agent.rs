@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use agents::{AgentOptions, AgentOutput, BinaryLookup, DrainGrace, Instructions, ToolServer};
+use agents::{AgentOptions, AgentOutput, BinaryLookup, DrainGrace, HubToolServer, Instructions, ToolServers};
 use protocol::attachment::NewAttachment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{AgentKind, AgentLogin, RunId, SessionId};
@@ -154,19 +154,21 @@ async fn make_context_folder(session_id: &SessionId, worktree: &Path) {
     }
 }
 
-/// Where the agent reaches the worker's tools: at the address they're served on, with the token its hub gave it, which
-/// lets its calls through from then on, told to its CLI in `config`. `None` when the hub gave it none. An agent its hub
-/// gave a token never starts without the tools, so one is refused while they aren't served, as once the worker is
-/// stopping, which a hub that had it serve them just before can still find.
-async fn tools_for(state: &State, spec: &mut AgentSpec, config: PathBuf) -> Result<Option<ToolServer>, ApiError> {
+/// Where the agent reaches the worker's tools, and the hub's tool servers as it last set them: at the addresses they're
+/// served on, with the token its hub gave it, which lets its calls through from then on, told to its CLI in `config`.
+/// `None` when the hub gave it none. An agent its hub gave a token never starts without the tools, so one is refused
+/// while they aren't served, as once the worker is stopping, which a hub that had it serve them just before can still
+/// find.
+async fn tools_for(state: &State, spec: &mut AgentSpec, config: PathBuf) -> Result<Option<ToolServers>, ApiError> {
     let Some(token) = spec.tools_token.take() else { return Ok(None) };
-    let Some(url) = state.tools.url().await else {
+    let Some(crate::tools::Addresses { tools: tools_url, servers }) = state.tools.addresses().await else {
         let why = "the worker doesn't serve Roundhouse's tools, so it starts no agent that was given a token for them";
         return Err(ApiError::new(ErrorCode::Worker, why));
     };
     let caller = crate::tools::Caller { session_id: spec.session_id.clone(), worktree: PathBuf::from(&spec.cwd) };
     state.tools.admit(token.clone(), caller);
-    Ok(Some(ToolServer { url, token, config }))
+    let hubs = servers.into_iter().map(|(name, url)| HubToolServer { name, url }).collect();
+    Ok(Some(ToolServers { tools_url, hubs, token, config }))
 }
 
 /// Sends on what the agent says, in order, with the images its text points to in `worktree`.

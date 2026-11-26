@@ -26,10 +26,12 @@ mod tap;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 mod title;
+mod tool_servers;
 
 pub use error::{AgentError, CallFailed, NoAccount, NoTitle};
 pub use interface::AgentProcess;
-pub use options::{AgentOptions, BinaryLookup, DrainGrace, Instructions, ToolServer};
+pub use options::{AgentOptions, BinaryLookup, DrainGrace, Instructions};
 pub use output::AgentOutput;
 pub use protocol::paths::{ENV_ANTIGRAVITY_BIN, ENV_CLAUDE_BIN, ENV_CODEX_BIN};
 pub use registry::{account, descriptions, spawn, title_for};
+pub use tool_servers::{HubToolServer, ToolServers};

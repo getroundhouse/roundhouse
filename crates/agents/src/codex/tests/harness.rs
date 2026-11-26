@@ -12,7 +12,7 @@ use tokio::task::JoinHandle;
 
 use crate::codex::launch::Purpose;
 use crate::codex::running::{CodexProcess, start_conversation};
-use crate::{AgentOptions, AgentOutput};
+use crate::{AgentOptions, AgentOutput, ToolServers};
 
 pub(super) static PROGRAM: process::testing::Example = process::testing::Example::new("native_standin");
 
@@ -24,6 +24,10 @@ pub(super) struct Harness {
 
 impl Harness {
     pub(super) fn new(rules: &Value) -> Self {
+        Self::with_tools(rules, None)
+    }
+
+    pub(super) fn with_tools(rules: &Value, tools: Option<ToolServers>) -> Self {
         let room = tempfile::tempdir().unwrap();
         let bin = PROGRAM.path();
         std::fs::write(room.path().join("native-script.json"), serde_json::to_vec(rules).unwrap()).unwrap();
@@ -45,7 +49,7 @@ impl Harness {
             repository: None,
             interaction: protocol::model::InteractionMode::Typing,
         };
-        let options = AgentOptions { pid_file: Some(room.path().join("pid")), ..Default::default() };
+        let options = AgentOptions { pid_file: Some(room.path().join("pid")), tools, ..Default::default() };
         let (tx, rx) = mpsc::channel(1024);
         let launch =
             tokio::spawn(

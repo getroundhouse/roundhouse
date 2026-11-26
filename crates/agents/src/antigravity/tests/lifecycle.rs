@@ -9,7 +9,7 @@ use protocol::worker::ToolsToken;
 use serde_json::{Value, json};
 
 use super::harness::{Harness, PROGRAM};
-use crate::{AgentOptions, AgentOutput, AgentProcess, BinaryLookup, ToolServer};
+use crate::{AgentOptions, AgentOutput, AgentProcess, BinaryLookup, HubToolServer, ToolServers};
 
 #[tokio::test]
 async fn title_for_returns_title_in_plan_mode_without_asking_and_cleans_up_session_files() {
@@ -30,8 +30,9 @@ async fn title_for_returns_title_in_plan_mode_without_asking_and_cleans_up_sessi
 
     let options = AgentOptions {
         binary: BinaryLookup { explicit: Some(PROGRAM.path()), home: Some(home), ..Default::default() },
-        tools: Some(ToolServer {
-            url: "http://127.0.0.1:9/mcp".into(),
+        tools: Some(ToolServers {
+            tools_url: "http://127.0.0.1:9/mcp".into(),
+            hubs: vec![HubToolServer { name: "linear".into(), url: "http://127.0.0.1:9/tool-servers/t-1".into() }],
             token: ToolsToken::new("secret-token"),
             config: room.path().join("mcp.json"),
         }),
@@ -78,10 +79,11 @@ fn seed_title_session_files(home: &Path, id: &str) -> PathBuf {
 }
 
 #[tokio::test]
-async fn agent_launch_passes_roundhouse_mcp_server_in_session_new_with_bearer_header() {
+async fn agent_launch_passes_each_tool_server_in_session_new_with_bearer_header() {
     let room = tempfile::tempdir().unwrap();
-    let tools = ToolServer {
-        url: "http://127.0.0.1:50123/mcp".into(),
+    let tools = ToolServers {
+        tools_url: "http://127.0.0.1:50123/mcp".into(),
+        hubs: vec![HubToolServer { name: "linear".into(), url: "http://127.0.0.1:50123/tool-servers/t-1".into() }],
         token: ToolsToken::new("tok-123"),
         config: room.path().join("mcp.json"),
     };
@@ -97,12 +99,20 @@ async fn agent_launch_passes_roundhouse_mcp_server_in_session_new_with_bearer_he
     let session_new = h.request("session/new").await;
     assert_eq!(
         session_new["params"]["mcpServers"],
-        json!([{
-            "type": "http",
-            "name": "roundhouse",
-            "url": "http://127.0.0.1:50123/mcp",
-            "headers": [{"name": "Authorization", "value": "Bearer tok-123"}]
-        }])
+        json!([
+            {
+                "type": "http",
+                "name": "roundhouse",
+                "url": "http://127.0.0.1:50123/mcp",
+                "headers": [{"name": "Authorization", "value": "Bearer tok-123"}]
+            },
+            {
+                "type": "http",
+                "name": "linear",
+                "url": "http://127.0.0.1:50123/tool-servers/t-1",
+                "headers": [{"name": "Authorization", "value": "Bearer tok-123"}]
+            }
+        ])
     );
     let init_version = loop {
         if let AgentOutput::Event { body: EventBody::AgentInit { agent_version, .. }, .. } = h.next().await {

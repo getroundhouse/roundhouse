@@ -1,5 +1,6 @@
-//! The worker's tools, which it serves to its agents over MCP, on 127.0.0.1, and answers by asking its hub. Each agent
-//! is given a token by its hub, which says whose a call is, so the server is for this worker's agents alone.
+//! The worker's tools, which it serves to its agents over MCP, on 127.0.0.1, and answers by asking its hub, and the
+//! hub's tool servers, which it passes their calls on to. Each agent is given a token by its hub, which says whose a
+//! call is, so the server is for this worker's agents alone.
 
 #[cfg(test)]
 use crate::asks::Asks;
@@ -18,6 +19,7 @@ mod diff_comments;
 mod http;
 mod mcp;
 mod proposals;
+mod proxy;
 mod pull_request;
 mod pull_requests;
 #[cfg(test)]
@@ -26,6 +28,6 @@ mod wait;
 
 mod server;
 use server::PATH;
-pub(crate) use server::{Caller, Tools};
+pub(crate) use server::{Addresses, Caller, Tools};
 #[cfg(test)]
 use server::{Serving, answered, listen};
