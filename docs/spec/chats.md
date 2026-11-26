@@ -891,7 +891,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![The plug's card, with the hub's servers and then Codex's own](screens/mcp-servers.png)
 
-- **The plug is amber while one of the hub's servers needs you to sign in, and otherwise as quiet as the ring.** No line above the composer says so, since every chat has every server, and most don't use most of them. One of the CLI's own never turns it amber, since it can't be signed in to from the app.
+- **The plug is amber while one of the hub's servers needs you to sign in, as one that wants more access does, and otherwise as quiet as the ring.** No line above the composer says so, since every chat has every server, and most don't use most of them. One of the CLI's own never turns it amber, since it can't be signed in to from the app.
 
   **The plug and its card, where Linear needs you to sign in to it.** *Unconfirmed.*
 
@@ -908,6 +908,12 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
   **The card, where signing in to Linear failed.** *Unconfirmed.*
 
   ![The plug's card, with Sign in again and why it failed](screens/mcp-servers-sign-in-refused.png)
+
+- **A server that works and wants more access than its sign-in has, as `settings.md` says, has the same Sign in button, with `Wants more access` on the line under it.** The button is in place of how many tools it has, until you've signed in. *Unconfirmed.*
+
+  **The card, where Linear wants more access.** *Unconfirmed.*
+
+  ![The amber plug's card, with Linear's Sign in button and Wants more access](screens/mcp-servers-more-access.png)
 
 - **There's a plug only in a chat with a server to list,** the hub's or the CLI's own. *Unconfirmed.*
 - **A card of more servers than fit in 360px scrolls,** about ten, so it stays in the window. *Unconfirmed.*

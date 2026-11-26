@@ -34,6 +34,8 @@ sha1_smol.workspace = true
 terminal-state.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+# For what a server's refusal says it wants, which the hub's signing in reads too.
+tool-sign-in.workspace = true
 tower-service.workspace = true
 tracing.workspace = true
 uuid = { workspace = true, features = ["v5"] }

@@ -1,4 +1,4 @@
-use crate::{NotAServerUrl, Scopes, ServerUrl};
+use crate::{NotAServerUrl, ServerUrl};
 
 #[test]
 fn a_servers_address_is_a_bare_one_over_http_and_reads_back_as_it_was_kept() {
@@ -20,12 +20,4 @@ fn a_servers_address_is_a_bare_one_over_http_and_reads_back_as_it_was_kept() {
         assert_eq!(ServerUrl::parse(other), Err(NotAServerUrl), "{other}");
     }
     assert!(serde_json::from_str::<ServerUrl>(r#""ftp://tools.example""#).is_err());
-}
-
-#[test]
-fn scopes_are_each_once_and_none_that_isnt_one() {
-    let scopes = Scopes::from("read  write read \"quoted\" a\\b".to_string());
-
-    assert_eq!(scopes.to_string(), "read write");
-    assert_eq!(scopes.and(&Scopes::from("write admin".to_string())).to_string(), "read write admin");
 }

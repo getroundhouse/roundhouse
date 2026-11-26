@@ -30,17 +30,22 @@ pub(super) fn granted(access: &str) -> Granted {
     }
 }
 
-/// What a person signed in, given `granted`.
-fn given(granted: Granted) -> SignedIn {
+/// What a person signed in at the authorization server `issuer`, asked to allow `scopes` and given `granted`.
+pub(super) fn given(scopes: &str, issuer: &str, granted: Granted) -> SignedIn {
     let renewable = json!({
         "server": "https://mcp.example.com/mcp",
         "resource": "https://mcp.example.com/mcp",
-        "issuer": "https://auth.example.com",
+        "issuer": issuer,
         "token_endpoint": "https://auth.example.com/token",
         "client_id": "https://client.example/client.json",
-        "scopes": "read",
+        "scopes": scopes,
     });
     SignedIn { renewable: serde_json::from_value(renewable).unwrap(), granted }
+}
+
+/// What a person signed in, asked to allow `read`, as each server here first is.
+fn as_first(granted: Granted) -> SignedIn {
+    given("read", "https://auth.example.com", granted)
 }
 
 fn new(id: &str, name: &str) -> ToolSignInTo {
@@ -55,13 +60,13 @@ pub(super) fn signed_in(servers: &ToolServers, id: &str, name: &str) -> ToolServ
 /// The same, given `granted`.
 pub(super) fn signed_in_for(servers: &ToolServers, id: &str, name: &str, granted: Granted) -> ToolServer {
     let to = servers.signing_in(new(id, name)).unwrap();
-    servers.keep_sign_in(id.into(), &to, given(granted), GIVEN_AT_MS).unwrap().server
+    servers.keep_sign_in(id.into(), &to, as_first(granted), GIVEN_AT_MS).unwrap().server
 }
 
 /// Signing in to the server `id` again, by the sign-in `again`, with the access token `made-up-again`.
 pub(super) fn again(servers: &ToolServers, id: &str) -> Result<ToolServerChange, ApiError> {
     let to = servers.signing_in(ToolSignInTo::Again { id: id.into() })?;
-    servers.keep_sign_in("again".into(), &to, given(granted("made-up-again")), GIVEN_AT_MS)
+    servers.keep_sign_in("again".into(), &to, as_first(granted("made-up-again")), GIVEN_AT_MS)
 }
 
 /// What the record of the server `id` says of its sign-in.
@@ -124,7 +129,7 @@ fn a_new_server_whose_name_or_id_was_taken_as_it_was_signed_in_to_is_refused_and
     let before = store.list_records().unwrap();
 
     for to in [&name_taken, &id_taken] {
-        let kept = servers.keep_sign_in("i".into(), to, given(granted("made-up")), GIVEN_AT_MS);
+        let kept = servers.keep_sign_in("i".into(), to, as_first(granted("made-up")), GIVEN_AT_MS);
 
         assert_eq!(refused(kept), ErrorCode::Conflict);
     }
@@ -158,7 +163,7 @@ fn a_server_removed_as_it_was_signed_in_to_again_stays_removed_and_so_does_one_a
     let (servers, store) = servers_in(dir.path());
     signed_in(&servers, "t", "Linear");
     let to = servers.signing_in(ToolSignInTo::Again { id: "t".into() }).unwrap();
-    let keep = || refused(servers.keep_sign_in("again".into(), &to, given(granted("made-up-again")), GIVEN_AT_MS));
+    let keep = || refused(servers.keep_sign_in("again".into(), &to, as_first(granted("made-up-again")), GIVEN_AT_MS));
 
     servers.remove(&"t".into()).unwrap();
     let removed = keep();

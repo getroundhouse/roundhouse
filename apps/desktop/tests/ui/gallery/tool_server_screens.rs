@@ -7,8 +7,8 @@ use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::{
-    conversation, no_tool_sign_in, one_tool_server, tool_server_refused, tool_servers, tool_sign_in_refused,
-    tool_sign_in_waiting,
+    chat_servers_wanting_more_access, conversation, no_tool_sign_in, one_tool_server, tool_server_refused,
+    tool_servers, tool_sign_in_refused, tool_sign_in_waiting,
 };
 use client_core::fake_hub::World;
 
@@ -35,6 +35,11 @@ const fn mcp(name: &'static str, world: fn() -> World, steps: &'static [Step]) -
 
 pub(crate) const SCREENS: &[Screen] = &[
     mcp("settings-mcp", tool_servers, &[Step::Select(FOCUS), Step::OpenSettings, SERVERS]),
+    mcp(
+        "settings-mcp-more-access",
+        chat_servers_wanting_more_access,
+        &[Step::Select(FOCUS), Step::OpenSettings, SERVERS],
+    ),
     mcp("settings-mcp-none", conversation, &[Step::Select(FOCUS), Step::OpenSettings, SERVERS]),
     mcp("settings-mcp-choosing", conversation, &[Step::Select(FOCUS), Step::OpenSettings, SERVERS, ADD, AWAY]),
     mcp(

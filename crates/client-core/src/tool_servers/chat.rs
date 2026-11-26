@@ -1,7 +1,7 @@
 use protocol::capability::setup::ToolServerState;
 use protocol::model::Session;
 
-use super::{SignIn, Stands};
+use super::{SignIn, SignInFor, Stands};
 use crate::records::Snapshot;
 
 /// The tool servers a chat has, as its card lists them.
@@ -39,23 +39,27 @@ impl ChatToolServers {
         (own || !servers.hubs.is_empty()).then_some(servers)
     }
 
-    /// Whether one of the hub's needs the person to sign in to it, which it does until its record says otherwise.
+    /// Whether one of the hub's needs the person to sign in to it, to be used or to be used for more, which it does until
+    /// its record says otherwise.
     pub fn needs_sign_in(&self) -> bool {
-        self.needing_sign_in().next().is_some()
+        self.hubs.iter().any(|server| server.stands.sign_in_for().is_some())
     }
 
     /// What it all comes to in words, which is as much as the plug's colour says.
     pub fn said(&self) -> String {
-        let names: Vec<&str> = self.needing_sign_in().map(|server| server.name.as_str()).collect();
-        match names.as_slice() {
-            [] => "MCP servers".to_string(),
-            [one] => format!("MCP servers, {one} needs you to sign in"),
-            several => format!("MCP servers, {} need you to sign in", several.join(", ")),
-        }
-    }
-
-    fn needing_sign_in(&self) -> impl Iterator<Item = &ChatToolServer> {
-        self.hubs.iter().filter(|server| matches!(server.stands, Stands::NeedsSignIn { .. }))
+        let of = |wanted, one_does, several_do| {
+            let needing = self.hubs.iter().filter(|server| server.stands.sign_in_for() == Some(wanted));
+            let names: Vec<&str> = needing.map(|server| server.name.as_str()).collect();
+            match names.as_slice() {
+                [] => None,
+                [one] => Some(format!("{one} {one_does}")),
+                several => Some(format!("{} {several_do}", several.join(", "))),
+            }
+        };
+        let needing = of(SignInFor::Use, "needs you to sign in", "need you to sign in");
+        let wanting = of(SignInFor::MoreAccess, "wants more access", "want more access");
+        let said: Vec<String> = [Some("MCP servers".to_string()), needing, wanting].into_iter().flatten().collect();
+        said.join(", ")
     }
 }
 

@@ -1,4 +1,6 @@
-use protocol::model::{ToolSignInId, ToolSignInStatus};
+use std::ops::Not;
+
+use protocol::model::{ToolScopes, ToolSignInId, ToolSignInStatus};
 use protocol::worker::TokenNumber;
 use serde::{Deserialize, Serialize};
 use tool_sign_in::{AccessToken, Granted, RefreshToken, Renewable, SignedIn};
@@ -15,6 +17,15 @@ pub(super) struct KeptSignIn {
     /// `None` once it's gone, after which only the person signing in again brings it back, with what it was asked to
     /// allow.
     pub(super) tokens: Option<KeptTokens>,
+    /// What its server refused a call for the lack of, with a token of this sign-in, for signing in again to ask for. Empty
+    /// when none was.
+    #[serde(default, skip_serializing_if = "ToolScopes::is_empty")]
+    pub(super) wants: ToolScopes,
+    /// Whether it was signed in to only for what the sign-in before it had been asked to allow as well, and which its
+    /// server wanted all the same. The person may have left that out the first time, so it's asked for again, and that's
+    /// once: a server that still wants what this one was asked for has nothing more to be given. *Unconfirmed.*
+    #[serde(default, skip_serializing_if = "Not::not")]
+    pub(super) asked_again: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -38,7 +49,24 @@ impl KeptSignIn {
     ) -> Self {
         let SignedIn { renewable, granted } = signed_in;
         let number = before.map_or(TokenNumber::FIRST, |before| before.number.next());
-        Self { made_by, renewable, number, tokens: Some(KeptTokens::given(granted, given_at_ms)) }
+        // What was wanted at another authorization server is nothing to this one.
+        let before = before.filter(|before| before.renewable.issuer() == renewable.issuer());
+        // What was wanted after this one was asked for is still to ask for.
+        let wants = before.map_or_default(|before| before.wants.clone().without(renewable.scopes()));
+        let asked_again = before.is_some_and(KeptSignIn::would_ask_again);
+        let tokens = Some(KeptTokens::given(granted, given_at_ms));
+        Self { made_by, renewable, number, tokens, wants, asked_again }
+    }
+
+    /// Whether signing in again asks for no more than this one was asked for, which its server wanted all the same. One
+    /// nothing has been wanted of is what the one before it made it.
+    fn would_ask_again(&self) -> bool {
+        if self.wants.is_empty() { self.asked_again } else { self.renewable.scopes().has_all(&self.wants) }
+    }
+
+    /// Whether its server `wants` only what has been asked for again already, so asking for it once more changes nothing.
+    pub(super) fn wants_in_vain(&self, wants: &ToolScopes) -> bool {
+        self.asked_again && self.renewable.scopes().has_all(wants)
     }
 
     /// The same, renewed for `granted`, given at `given_at_ms`.
@@ -54,7 +82,8 @@ impl KeptSignIn {
     /// What the server's record says of it.
     pub(super) fn status(&self) -> ToolSignInStatus {
         match self.tokens {
-            Some(_) => ToolSignInStatus::Works,
+            Some(_) if self.wants.is_empty() => ToolSignInStatus::Works,
+            Some(_) => ToolSignInStatus::NeedsMoreAccess,
             None => ToolSignInStatus::NeedsSignIn,
         }
     }

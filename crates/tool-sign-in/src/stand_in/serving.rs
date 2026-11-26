@@ -15,7 +15,7 @@ use url::Url;
 
 use super::authorization::visited;
 use super::replies::{Reply, said, status};
-use super::script::{Asks, Script, ServerMetadataAt};
+use super::script::{Asks, Script, ServerMetadataAt, Wants};
 use super::tokens::Tokens;
 use super::{Asked, metadata};
 use crate::{AuthorizationPage, ServerUrl};
@@ -138,7 +138,7 @@ impl State {
         }
     }
 
-    /// What its MCP server, which has one tool, answers anyone it doesn't ask for a sign-in, and whoever has one.
+    /// What its MCP server, which has two tools, answers anyone it doesn't ask for a sign-in, and whoever has one.
     fn mcp(&self, asked: &Asked, script: &Script) -> Reply {
         let message: Value = serde_json::from_str(&asked.body).unwrap();
         if script.refuses_method.is_some_and(|refused| message["method"] == refused) {
@@ -148,11 +148,22 @@ impl State {
             return status(answered);
         }
         let token = asked.headers.get(AUTHORIZATION).and_then(|value| value.to_str().ok()?.strip_prefix("Bearer "));
-        if script.asks != Asks::Nothing && !token.is_some_and(|token| self.tokens.lock().takes(token)) {
+        let allowed = token.and_then(|token| self.tokens.lock().allowed(token));
+        if script.asks != Asks::Nothing && allowed.is_none() {
             return metadata::unauthorized(script, &self.at);
         }
+        let tool = message["params"]["name"].as_str();
+        let lacks = |wants: &&Wants| {
+            tool == Some(wants.tool) && !allowed.as_ref().is_some_and(|allowed| allowed.has(wants.scope))
+        };
+        if let Some(Wants { scope, .. }) = script.wants.iter().find(lacks) {
+            return metadata::forbidden(scope);
+        }
         let result = match message["method"].as_str() {
-            Some("tools/list") => json!({"tools": [{"name": "find_issue"}]}),
+            Some("tools/list") => json!({"tools": [{"name": "find_issue"}, {"name": "close_issue"}]}),
+            Some("tools/call") if tool == Some("close_issue") => {
+                json!({"content": [{"type": "text", "text": "Closed issue 7"}]})
+            }
             Some("tools/call") => json!({"content": [{"type": "text", "text": "Found issue 7"}]}),
             _ => json!({}),
         };

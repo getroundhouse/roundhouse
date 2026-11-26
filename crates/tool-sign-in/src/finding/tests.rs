@@ -1,14 +1,14 @@
 use std::time::Duration;
 
-use http::HeaderMap;
-use http::header::{COOKIE, WWW_AUTHENTICATE};
+use http::header::COOKIE;
+use protocol::model::ToolScopes;
 use tokio::time::Instant;
 use url::Url;
 
-use super::{Challenge, FIND_WITHIN, of_authorization_server, of_server};
+use super::{FIND_WITHIN, of_authorization_server, of_server};
 use crate::tests::CLIENT;
 use crate::{
-    Asks, Failure, Found, Issuer, MetadataAt, NoWay, Says, Scopes, Script, ServerMetadataAt, StandIn, ToolSignIn, Way,
+    Asks, Failure, Found, Issuer, MetadataAt, NoWay, Says, Script, ServerMetadataAt, StandIn, ToolSignIn, Way,
 };
 
 /// Far longer than a stand-in takes to be asked, on a busy machine.
@@ -29,8 +29,8 @@ async fn way_with(script: Script) -> Way {
     *way
 }
 
-fn scopes(text: &str) -> Scopes {
-    Scopes::from(text.to_string())
+fn scopes(text: &str) -> ToolScopes {
+    ToolScopes::from(text.to_string())
 }
 
 /// One that answers anyone is looked at in the same places, but for where a 401 says.
@@ -205,43 +205,15 @@ async fn what_to_ask_to_be_allowed_is_what_the_401_says_or_else_the_metadata_and
     let (said, supported) = (Some("read write"), Some(vec!["read", "admin"]));
     let offline = Some(vec!["openid", "offline_access"]);
     let cases = [
-        (said, supported.clone(), None, "read write"),
-        (None, supported, None, "read admin"),
-        (None, None, None, ""),
-        (said, None, offline.clone(), "read write offline_access"),
-        (None, None, offline, ""),
+        (said, supported.clone(), None, "read write", false),
+        (None, supported, None, "read admin", false),
+        (None, None, None, "", false),
+        (None, None, offline, "", true),
     ];
-    for (challenge_scope, server_scopes, authorization_scopes, asked) in cases {
+    for (challenge_scope, server_scopes, authorization_scopes, asked, offline) in cases {
         let script = Script { challenge_scope, server_scopes, authorization_scopes, ..Script::default() };
         let way = way_with(script.clone()).await;
-        assert_eq!(way.scopes(), &scopes(asked), "{script:?}");
-    }
-}
-
-#[test]
-fn a_401_says_where_to_look_and_what_to_ask_for_among_whatever_else_it_says() {
-    let place = "https://tools.example/.well-known/oauth-protected-resource";
-    let said = |scope: &str| Challenge { resource_metadata: Some(place.to_string()), scope: Some(scopes(scope)) };
-    let cases = [
-        (vec![format!(r#"Bearer resource_metadata="{place}", scope="read write""#)], said("read write")),
-        (vec![format!(r#"bearer error="invalid_token",scope=read ,Resource_Metadata = "{place}""#)], said("read")),
-        (
-            vec![format!(
-                r#"Basic realm="a, \"b\", c", Bearer realm="d, scope=other", scope="read", resource_metadata="{place}""#
-            )],
-            said("read"),
-        ),
-        (vec!["Negotiate".into(), format!(r#"Bearer scope="read", resource_metadata="{place}""#)], said("read")),
-        (vec![format!(r#"Bearer scope="read", DPoP resource_metadata="{place}", scope="other""#)], said("read")),
-        (vec![r#"Digest scope="other", Basic"#.into(), "Bearer".into()], Challenge::default()),
-        (vec![], Challenge::default()),
-    ];
-    for (values, expected) in cases {
-        let mut headers = HeaderMap::new();
-        for value in &values {
-            headers.append(WWW_AUTHENTICATE, value.parse().unwrap());
-        }
-        assert_eq!(Challenge::of(&headers), expected, "{values:?}");
+        assert_eq!((way.scopes(), way.offline), (&scopes(asked), offline), "{script:?}");
     }
 }
 

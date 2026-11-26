@@ -1,7 +1,7 @@
 use super::super::{ProxiedServer, WorkerRequest};
 use super::{
-    DiffComments, ProposalRecord, Propose, ReadProposal, ReadPullRequests, RenewToolServer, Revise,
-    StartPullRequestWait, Withdraw,
+    AskForToolAccess, DiffComments, ProposalRecord, Propose, ReadProposal, ReadPullRequests, RenewToolServer, Revise,
+    StartPullRequestWait, ToolAccess, Withdraw,
 };
 use super::{pull_requests, worktrees};
 use crate::client::Outcome;
@@ -121,6 +121,7 @@ pub enum WorkerAsk {
     Withdraw(Withdraw),
     ReadProposal(ReadProposal),
     RenewToolServer(RenewToolServer),
+    AskForToolAccess(AskForToolAccess),
     #[serde(other)]
     Unknown,
 }
@@ -139,6 +140,7 @@ pub enum AskReply {
     DiffComments(DiffComments),
     Proposal(ProposalRecord),
     ToolServer(ProxiedServer),
+    ToolAccess(ToolAccess),
 }
 
 impl AskReply {
@@ -156,6 +158,7 @@ impl AskReply {
             AskReply::DiffComments(_) => "diff_comments",
             AskReply::Proposal(_) => "proposal",
             AskReply::ToolServer(_) => "tool_server",
+            AskReply::ToolAccess(_) => "tool_access",
         }
     }
 }

@@ -6,7 +6,6 @@
 mod tests;
 
 mod asking;
-mod challenge;
 mod found;
 pub use found::{Found, NoWay};
 mod looking;
@@ -17,7 +16,5 @@ mod reading;
 mod way;
 pub use way::{Issuer, Way};
 mod well_known;
-#[cfg(test)]
-use challenge::Challenge;
 #[cfg(test)]
 use well_known::{of_authorization_server, of_server};

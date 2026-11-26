@@ -108,13 +108,9 @@ impl Hub {
         })
     }
 
-    /// Starts signing in by `way`, asking to be allowed what the server was signed in with before too, so nothing that
-    /// worked stops working. What another authorization server was asked to allow is nothing to this one.
+    /// Starts signing in by `way`, asking to be allowed what the server was signed in with before, and has wanted since, too.
     fn begin_sign_in(&self, way: Way, to: &SigningIn, redirect: RedirectUri) -> Result<Started, Failure> {
-        let mut scopes = way.scopes().clone();
-        if let Some(before) = to.before().filter(|before| before.issuer() == way.issuer()) {
-            scopes = scopes.and(before.scopes());
-        }
+        let scopes = way.scopes().clone().and(&to.asked_before(way.issuer()));
         self.tool_sign_ins.client.begin(way, scopes, redirect)
     }
 }

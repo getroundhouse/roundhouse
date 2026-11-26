@@ -235,6 +235,8 @@ The hub renews a sign-in by itself, until the service no longer lets it, such as
 
 Choose **Sign in again** in the row's **…** menu, or **Sign in** on [a chat's plug](chats.md#the-chats-mcp-servers), and approve it as before. The server keeps its name, so agents go on calling it what they did.
 
+A server can want more than you allowed when you signed in, as when an agent changes an issue and you allowed only reading. That call fails, the agent is told why, and its other calls work as before. The row says **Sign in for more access**, and signing in again asks for what you allowed before and what the server wants.
+
 ### When a server refuses a call
 
 If the server refuses its key, an agent gets an error in place of its tools, or of what a call was to answer, such as `Linear refused the key Roundhouse sent it (401)`. A Codex chat's plug says it too, as [Chats](chats.md#the-chats-mcp-servers) says. To give the server another key, remove it and add it again. One that can't be reached from an agent's machine says so in the same way.

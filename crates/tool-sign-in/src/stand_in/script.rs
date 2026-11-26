@@ -11,6 +11,8 @@ pub struct Script {
     pub server_metadata_at: ServerMetadataAt,
     /// What its 401 says to ask to be allowed.
     pub challenge_scope: Option<&'static str>,
+    /// What its server refuses calls for the lack of, with a 403 that says so.
+    pub wants: Vec<Wants>,
     /// What its server's metadata says to.
     pub server_scopes: Option<Vec<&'static str>>,
     /// Who its server's metadata says it's of.
@@ -45,6 +47,7 @@ impl Default for Script {
             refuses_method: None,
             server_metadata_at: ServerMetadataAt::Said,
             challenge_scope: Some("read write"),
+            wants: vec![],
             server_scopes: None,
             resource: Says::Itself,
             issuer_path: "",
@@ -61,6 +64,13 @@ impl Default for Script {
             answers_after: None,
         }
     }
+}
+
+/// The scope a token has to be allowed for a call of `tool`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Wants {
+    pub tool: &'static str,
+    pub scope: &'static str,
 }
 
 /// Whether its server asks for a sign-in.

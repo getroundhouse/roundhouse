@@ -11,4 +11,5 @@ mod server_calls;
 mod sign_in_calls;
 mod sign_ins;
 mod waiting;
+mod wanted;
 pub(super) use sign_ins::ToolSignIns;

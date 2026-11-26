@@ -2,9 +2,14 @@ use protocol::capability::Claimed;
 use protocol::capability::setup::{ServerState, ToolServerState};
 use protocol::client::listed::SessionRecords;
 use protocol::fixtures::{self, observed};
-use protocol::model::{Records, Rev, RunCapabilities, RunId, Session, SessionId, ToolServer, ToolServerName};
+use protocol::model::{
+    Records, Rev, RunCapabilities, RunId, Session, SessionId, ToolServer, ToolServerAuth, ToolServerName,
+    ToolSignInStatus,
+};
 
-use super::{ChatToolServer, ChatToolServers, OwnToolServers, SignIn, SignInStands, Stands, Tone, ToolServerNames};
+use super::{
+    ChatToolServer, ChatToolServers, OwnToolServers, SignIn, SignInFor, SignInStands, Stands, Tone, ToolServerNames,
+};
 use crate::records::{HubRecords, Snapshot};
 
 fn named(id: &str, name: &str) -> ToolServer {
@@ -75,7 +80,7 @@ fn a_chat_has_the_hubs_servers_by_the_persons_names_and_its_clis_by_theirs() {
             ("Docs", Stands::FromItsNextStart),
             ("Linear (Northwind)", Stands::Tools(1)),
             ("Mail", Stands::NotSaid),
-            ("Notion", Stands::NeedsSignIn { server: "t-4".into(), sign_in: None }),
+            ("Notion", Stands::NeedsSignIn { server: "t-4".into(), wanted: SignInFor::Use, sign_in: None }),
             ("runbooks", Stands::CantBeReached { why: Some("refused".into()) }),
             ("Old_one", Stands::Removed),
         ],
@@ -96,6 +101,42 @@ fn one_of_the_hubs_that_only_the_agent_says_to_sign_in_to_cant_be_reached_and_on
     assert_eq!(listed(&servers.hubs), [("Docs", Stands::CantBeReached { why: None })]);
     assert!(!servers.needs_sign_in());
     assert_eq!(servers.said(), "MCP servers");
+}
+
+/// It works, so the plug's words and its own say what it wants, and whatever its agent says of it waits.
+#[test]
+fn one_that_wants_more_access_is_signed_in_to_again_for_it() {
+    let wanting = |id, name: &str| ToolServer {
+        name: ToolServerName::stored(name.into()),
+        ..fixtures::tool_server_wanting_more_access(id)
+    };
+    let hub = vec![wanting("t-1", "Linear"), needing_sign_in("t-2", "Notion"), wanting("t-3", "Docs")];
+    let agents = vec![ToolServerState { tools: Some(14), ..said("Linear", Some("t-1"), ServerState::Connected) }];
+    let held = held(hub, Some(agents));
+    let linear = |stands: Option<SignInStands>| {
+        let sign_in = stands.map(|stands| SignIn { to: "t-1".into(), stands });
+        let servers = ChatToolServers::of(&held, &chat(true), sign_in.as_ref()).unwrap();
+        assert!(servers.needs_sign_in());
+        assert_eq!(servers.said(), "MCP servers, Notion needs you to sign in, Docs, Linear want more access");
+        let stands = &servers.hubs[1].stands;
+        (stands.words(), stands.why().map(str::to_owned), stands.to_sign_in_to().is_some())
+    };
+    let again = || Some("Needs you to sign in again".to_owned());
+
+    assert_eq!(linear(None), (again(), Some("Wants more access".into()), true));
+    assert_eq!(linear(Some(SignInStands::UnderWay)), (Some("Signing in".into()), None, false));
+    assert_eq!(linear(Some(came_to_nothing())), (again(), Some("It was refused".into()), true));
+}
+
+#[test]
+fn only_a_sign_in_thats_gone_or_wants_more_access_is_the_persons_to_do() {
+    let wanted = |status| SignInFor::of(&ToolServerAuth::SignIn { status });
+
+    assert_eq!(wanted(ToolSignInStatus::NeedsSignIn), Some(SignInFor::Use));
+    assert_eq!(wanted(ToolSignInStatus::NeedsMoreAccess), Some(SignInFor::MoreAccess));
+    assert_eq!(wanted(ToolSignInStatus::Works), None);
+    assert_eq!(wanted(ToolSignInStatus::Unknown), None, "a newer hub's");
+    assert_eq!([SignInFor::of(&ToolServerAuth::Neither), SignInFor::of(&ToolServerAuth::Unknown)], [None, None]);
 }
 
 fn came_to_nothing() -> SignInStands {
@@ -148,7 +189,7 @@ fn a_chat_whose_agent_hasnt_said_has_the_hubs_with_nothing_said_of_them() {
 
 #[test]
 fn each_state_is_said_in_a_few_words_and_only_whats_in_the_way_is_a_problem() {
-    let to_sign_in_to = |sign_in| Stands::NeedsSignIn { server: "t-1".into(), sign_in };
+    let to_sign_in_to = |sign_in| Stands::NeedsSignIn { server: "t-1".into(), wanted: SignInFor::Use, sign_in };
     let of = |state, tools| Stands::of_its_own(&ToolServerState { tools, ..said("own", None, state) });
     let cases = [
         (of(ServerState::Connected, Some(1)), Some("1 tool"), Tone::Plain),

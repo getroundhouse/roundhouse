@@ -7,7 +7,8 @@ use hyper::body::{Bytes, Incoming};
 use hyper::header::HeaderMap;
 use hyper::{Method, Request, Response, StatusCode, Uri};
 use protocol::model::{SessionId, ToolServerId};
-use protocol::worker::RenewToolServer;
+use protocol::worker::{AskForToolAccess, RenewToolServer, ToolAccess};
+use tool_sign_in::access_wanted;
 use tracing::warn;
 
 /// What MCP's streamable HTTP asks a server: a message, its stream of events, and to end a session.
@@ -41,29 +42,18 @@ impl Proxy {
         }
     }
 
-    /// The server's answer. One that refuses its access token is asked once more, if the hub has another for it.
+    /// The server's answer, unless it refuses. One that refuses its access token is asked once more, if the hub has another
+    /// for it.
     async fn answered(&self, server: &Server, asked: &Asked<'_>) -> Result<Response<Incoming>, Failure> {
         let target = server.target.as_ref().map_err(|unusable| *unusable)?;
-        let answered = self.ask(target, asked).await;
-        let (Err(refusal @ Failure::Refused { status: StatusCode::UNAUTHORIZED, .. }), Some(refused)) =
-            (&answered, target.token())
-        else {
-            return answered;
-        };
-        let renewing = RenewToolServer { server: server.id.clone(), refused };
-        let renewed = match asked.asks.ask(asked.session_id.clone(), renewing).await {
-            Ok(renewed) => Server::new(renewed).target?,
-            Err(e) => {
-                warn!(
-                    name: "tool_server.not_renewed",
-                    server_id = %server.id,
-                    error = e.message,
-                    "The hub gave no other access token for a tool server that refused its own"
-                );
-                return Err(*refusal);
-            }
-        };
-        if renewed.token() == Some(refused) { Err(*refusal) } else { self.ask(&renewed, asked).await }
+        let response = self.ask(target, asked).await?;
+        if response.status() == StatusCode::UNAUTHORIZED
+            && let Some(renewed) = renewed(server, target, asked).await?
+        {
+            let response = self.ask(&renewed, asked).await?;
+            return unless_refused(server, &renewed, response, asked).await;
+        }
+        unless_refused(server, target, response, asked).await
     }
 
     /// The server's answer, following a redirect that keeps the method and the body, within its origin.
@@ -72,9 +62,6 @@ impl Proxy {
         for _ in 0..=MAX_REDIRECTS {
             let response = self.upstream.send(request(target, &to, asked)).await?;
             match response.status() {
-                status @ (StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) => {
-                    return Err(Failure::Refused { sent: target.sent(), status });
-                }
                 StatusCode::TEMPORARY_REDIRECT | StatusCode::PERMANENT_REDIRECT => {
                     to = redirect::at_same_origin(&to, response.headers()).ok_or(Failure::Redirected)?;
                 }
@@ -84,6 +71,67 @@ impl Proxy {
         }
         Err(Failure::Redirected)
     }
+}
+
+/// Where `server` is now that it has refused the access token `target` has, if the hub has another for it.
+async fn renewed(server: &Server, target: &Target, asked: &Asked<'_>) -> Result<Option<Target>, Failure> {
+    let Some(refused) = target.token() else { return Ok(None) };
+    let renewing = RenewToolServer { server: server.id.clone(), refused };
+    match asked.asks.ask(asked.session_id.clone(), renewing).await {
+        Ok(renewed) => {
+            let renewed = Server::new(renewed).target?;
+            Ok((renewed.token() != Some(refused)).then_some(renewed))
+        }
+        Err(e) => {
+            warn!(
+                name: "tool_server.not_renewed",
+                server_id = %server.id,
+                error = e.message,
+                "The hub gave no other access token for a tool server that refused its own"
+            );
+            Ok(None)
+        }
+    }
+}
+
+/// What `server`, at `target`, answered, unless that's a 401 or a 403.
+async fn unless_refused(
+    server: &Server,
+    target: &Target,
+    response: Response<Incoming>,
+    asked: &Asked<'_>,
+) -> Result<Response<Incoming>, Failure> {
+    let status = response.status();
+    if !matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
+        return Ok(response);
+    }
+    // Only what it says of a token the hub gave is the hub's to do something about.
+    if status == StatusCode::FORBIDDEN
+        && let Some(refused) = target.token()
+        && let Some(wants) = access_wanted(response.headers())
+    {
+        let wants = AskForToolAccess { server: server.id.clone(), refused, wants };
+        return Err(Failure::WantsAccess(access_to(wants, asked).await));
+    }
+    Err(Failure::Refused { sent: target.sent(), status })
+}
+
+/// What the hub makes of a server that `wants` more access. The hub isn't told of one that doesn't say which, since
+/// signing in again would ask for nothing more. One the hub couldn't be told of now it's told of at the next call.
+async fn access_to(wants: AskForToolAccess, asked: &Asked<'_>) -> ToolAccess {
+    if wants.wants.is_empty() {
+        return ToolAccess::NotAskedFor;
+    }
+    let server_id = wants.server.clone();
+    asked.asks.ask(asked.session_id.clone(), wants).await.unwrap_or_else(|e| {
+        warn!(
+            name: "tool_server.access_not_asked_for",
+            %server_id,
+            error = e.message,
+            "The hub couldn't be told of a tool server that wants more access"
+        );
+        ToolAccess::SignInAgain
+    })
 }
 
 /// What the server is sent: the agent's request without the session's token, which isn't among the headers passed on,

@@ -23,7 +23,7 @@ In it:
 | `bundles/` | Unpushed commits saved when archiving workspaces whose provider destroys clones on archive, removed once restored |
 | `logins/` | The tokens of the logins you've added in [Settings](settings.md#agents), a file each, which only you can open. Disconnecting one removes its file |
 | `github-logins/` | The tokens of the GitHub accounts you've added in [Settings](settings.md#git), and the key of each app of your own, a file each, which only you can open. For `gh`'s login, only which GitHub user it's for, since the hub reads its token from `gh`. Disconnecting an account, or removing an app, removes its file |
-| `tool-servers/` | The keys of the MCP servers you've added in [Settings](settings.md#mcp-servers), and the sign-ins to them, which are the tokens that keep you signed in and where they're renewed, a file each, which only you can open. Removing a server removes its file. Each machine agents are on has the keys, and the tokens that end soon, in memory, to send them, and in no file |
+| `tool-servers/` | The keys of the MCP servers you've added in [Settings](settings.md#mcp-servers), and the sign-ins to them, which are the tokens that keep you signed in, where they're renewed and what else a server wants to be allowed, a file each, which only you can open. Removing a server removes its file. Each machine agents are on has the keys, and the tokens that end soon, in memory, to send them, and in no file |
 | `hub.log` | The hub's log, a line of JSON for each thing it says. Once it's over 10 MB, the hub next starts a new one, and keeps the last as `hub.log.1` |
 | `app.log` | The app's log, kept the same way |
 | `worker-logs/` | Each workspace's worker's log, kept the same way |

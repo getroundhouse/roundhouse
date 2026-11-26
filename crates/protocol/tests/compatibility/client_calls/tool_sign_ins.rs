@@ -67,6 +67,7 @@ fn a_signed_in_servers_way_of_knowing_the_person_keeps_its_form() {
     for (status, form) in [
         (ToolSignInStatus::Works, r#"{"kind":"sign_in","status":"works"}"#),
         (ToolSignInStatus::NeedsSignIn, r#"{"kind":"sign_in","status":"needs_sign_in"}"#),
+        (ToolSignInStatus::NeedsMoreAccess, r#"{"kind":"sign_in","status":"needs_more_access"}"#),
     ] {
         let auth = ToolServerAuth::SignIn { status };
 

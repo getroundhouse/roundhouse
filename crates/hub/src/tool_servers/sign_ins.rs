@@ -4,9 +4,9 @@
 use protocol::client::tool_sign_ins::ToolSignInTo;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    ToolServer, ToolServerAuth, ToolServerId, ToolServerName, ToolServerUrl, ToolSignInId, ToolSignInStatus,
+    ToolScopes, ToolServer, ToolServerAuth, ToolServerId, ToolServerName, ToolServerUrl, ToolSignInId, ToolSignInStatus,
 };
-use tool_sign_in::{Renewable, SignedIn};
+use tool_sign_in::{Issuer, Renewable, SignedIn};
 use tracing::warn;
 
 use super::kept::KeptSignIn;
@@ -22,7 +22,14 @@ use crate::store::AddingToolServer;
 pub(crate) struct SigningIn {
     to: To,
     url: ToolServerUrl,
-    before: Option<Renewable>,
+    before: Option<Before>,
+}
+
+/// The sign-in a server had as it's signed in to again.
+#[derive(Debug)]
+struct Before {
+    renewable: Renewable,
+    wants: ToolScopes,
 }
 
 #[derive(Debug)]
@@ -43,9 +50,11 @@ impl SigningIn {
         &self.url
     }
 
-    /// What renewed the sign-in the server had, for what to ask to be allowed again.
-    pub(crate) fn before(&self) -> Option<&Renewable> {
-        self.before.as_ref()
+    /// What the server was signed in with before, and has wanted since, which `issuer` is to be asked to allow too, so
+    /// nothing that worked stops working. What another authorization server was asked to allow is nothing to this one.
+    pub(crate) fn asked_before(&self, issuer: &Issuer) -> ToolScopes {
+        let before = self.before.as_ref().filter(|before| before.renewable.issuer() == issuer);
+        before.map_or_default(|before| before.renewable.scopes().clone().and(&before.wants))
     }
 }
 
@@ -64,7 +73,8 @@ impl ToolServers {
                 let (ToolServerAuth::SignIn { .. }, Some(file)) = (server.auth, file) else {
                     return Err(ApiError::new(ErrorCode::InvalidRequest, "that MCP server has no sign-in"));
                 };
-                let before = kept_in(&files, &id, &file).map(|kept| kept.renewable);
+                let kept = kept_in(&files, &id, &file);
+                let before = kept.map(|KeptSignIn { renewable, wants, .. }| Before { renewable, wants });
                 Ok(SigningIn { to: To::Again { id, file }, url: server.url, before })
             }
             // Not `Unsupported`, which says the hub signs in to no server at all.
@@ -169,8 +179,9 @@ impl ToolServers {
     /// build knows is left as it is.
     pub(super) fn say_as_kept(&self, files: &Locked<'_, ToolServerSecret>) -> Result<(), ApiError> {
         for (server, file) in self.signed_in()? {
-            let ToolServerAuth::SignIn { status: ToolSignInStatus::Works | ToolSignInStatus::NeedsSignIn } =
-                server.auth
+            let ToolServerAuth::SignIn {
+                status: ToolSignInStatus::Works | ToolSignInStatus::NeedsSignIn | ToolSignInStatus::NeedsMoreAccess,
+            } = server.auth
             else {
                 continue;
             };

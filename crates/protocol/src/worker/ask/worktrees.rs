@@ -101,7 +101,8 @@ impl Answer for WorktreeRemoval {
             | AskReply::Worktrees(_)
             | AskReply::DiffComments(_)
             | AskReply::Proposal(_)
-            | AskReply::ToolServer(_) => Err(reply),
+            | AskReply::ToolServer(_)
+            | AskReply::ToolAccess(_) => Err(reply),
         }
     }
 }

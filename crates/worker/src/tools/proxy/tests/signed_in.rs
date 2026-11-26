@@ -6,15 +6,13 @@ use http_body_util::{Either, Full};
 use hyper::{Response, StatusCode};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::worker::{
-    AskOutcome, AskReply, ProxiedServer, RenewToolServer, ServerHeader, ServerSignIn, TokenNumber, WorkerAsk,
-};
+use protocol::worker::{AskReply, ProxiedServer, RenewToolServer, ServerHeader, ServerSignIn, TokenNumber, WorkerAsk};
 
 use super::stand_in::Heard;
 use super::{Agent, Reply, StandIn};
 
-const CALL: &str = r#"{"jsonrpc":"2.0","id":"call-7","method":"tools/call","params":{"name":"list"}}"#;
-const FIRST: TokenNumber = TokenNumber::FIRST;
+pub(super) const CALL: &str = r#"{"jsonrpc":"2.0","id":"call-7","method":"tools/call","params":{"name":"list"}}"#;
+pub(super) const FIRST: TokenNumber = TokenNumber::FIRST;
 const REFUSED: &str = "Linear (Northwind) refused the sign-in Roundhouse has to it (401). Sign in to it again from Settings › MCP servers.";
 const NEEDS_SIGN_IN: &str = "Linear (Northwind) needs you to sign in to it. Sign in from Settings › MCP servers.";
 
@@ -32,7 +30,7 @@ fn reply(status: StatusCode, asked: &Heard) -> Reply {
     Response::builder().status(status).body(Either::Left(Full::new(asked.body.clone()))).unwrap()
 }
 
-fn with(server: &StandIn, access_token: &str, token: TokenNumber) -> ProxiedServer {
+pub(super) fn with(server: &StandIn, access_token: &str, token: TokenNumber) -> ProxiedServer {
     let sign_in = Some(ServerSignIn::Works { token });
     ProxiedServer { header: Some(ServerHeader::bearer(access_token)), sign_in, ..server.as_set() }
 }
@@ -43,20 +41,26 @@ fn needing_sign_in(server: &StandIn) -> ProxiedServer {
 
 /// An agent whose server is `set`, and its worker's asks, each answered with `answer`.
 async fn agent(set: ProxiedServer, answer: Result<ProxiedServer, ApiError>) -> (Agent, Arc<Mutex<Vec<WorkerAsk>>>) {
-    let (asks, kept) = (Arc::default(), Mutex::new(answer));
+    answered_by(set, move |_| answer.clone().map(AskReply::ToolServer)).await
+}
+
+/// An agent whose server is `set`, and its worker's asks, each answered as `answer` says.
+pub(super) async fn answered_by(
+    set: ProxiedServer,
+    answer: impl Fn(&WorkerAsk) -> Result<AskReply, ApiError> + Send + 'static,
+) -> (Agent, Arc<Mutex<Vec<WorkerAsk>>>) {
+    let asks = Arc::default();
     let asked: Arc<Mutex<Vec<WorkerAsk>>> = Arc::clone(&asks);
     let agent = Agent::whose_hub(vec![set], move |ask| {
+        let answer = answer(&ask);
         asked.lock().push(ask);
-        match kept.lock().clone() {
-            Ok(server) => AskOutcome::Response(AskReply::ToolServer(server)),
-            Err(e) => AskOutcome::Error(e),
-        }
+        answer.into()
     })
     .await;
     (agent, asks)
 }
 
-fn renewing(refused: TokenNumber) -> WorkerAsk {
+pub(super) fn renewing(refused: TokenNumber) -> WorkerAsk {
     WorkerAsk::RenewToolServer(RenewToolServer { server: "t-1".into(), refused })
 }
 
@@ -109,7 +113,8 @@ async fn an_agent_is_told_to_have_the_person_sign_in_when_the_hub_says_so_and_be
     assert_eq!((asks.lock().len(), others.lock().len()), (1, 0));
 }
 
-/// A 403 says it knew who was asking, a server with a key has no other, and nothing says which a newer hub's is.
+/// A 403 that wants no more access says it knew who was asking, a server with a key has no other, and nothing says
+/// which a newer hub's is.
 #[tokio::test]
 async fn nothing_else_a_server_refuses_is_asked_about() {
     let forbidding = StandIn::answering(|asked| reply(StatusCode::FORBIDDEN, asked)).await;

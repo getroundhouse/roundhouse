@@ -1,15 +1,17 @@
 use std::time::Duration;
 
+use protocol::model::ToolScopes;
 use tokio::time::{Instant, timeout_at};
 
 use super::asking::as_nobody;
-use super::challenge::Challenge;
 use super::metadata::{AuthorizationServerMetadata, ServerMetadata};
 use super::reading::{Read, authorization_server_metadata, server_metadata};
 use super::{Found, Issuer, NoWay, Way};
+use crate::challenge::Challenge;
 use crate::failure::shown;
 use crate::fetch::Caller;
-use crate::{Failure, Scopes, ServerUrl, ToolSignIn};
+use crate::offline_access::has_offline;
+use crate::{Failure, ServerUrl, ToolSignIn};
 
 /// How long finding out has in all, which is several calls, each of which is answered in well under a second.
 pub(super) const FIND_WITHIN: Duration = Duration::from_secs(30);
@@ -80,9 +82,9 @@ fn way(
         return Ok(Found::NoWay(NoWay::NoS256(issuer)));
     }
     let says_iss = authorization_server.says_iss();
-    let supported = |scopes: Option<Vec<String>>| Scopes::of(scopes.unwrap_or_default());
+    let supported = |scopes: Option<Vec<String>>| ToolScopes::of(scopes.unwrap_or_default());
     let scopes = challenge.scope.unwrap_or_else(|| supported(metadata.scopes_supported));
-    let offline = supported(authorization_server.scopes_supported).has_offline();
+    let offline = has_offline(&supported(authorization_server.scopes_supported));
     Ok(Found::SignIn(Box::new(Way {
         server: server.clone(),
         resource: metadata.resource,
@@ -90,6 +92,7 @@ fn way(
         authorization_endpoint: calls.address(&authorization_server.authorization_endpoint)?,
         token_endpoint: calls.address(&authorization_server.token_endpoint)?,
         says_iss,
-        scopes: if offline { scopes.offline() } else { scopes },
+        scopes,
+        offline,
     })))
 }

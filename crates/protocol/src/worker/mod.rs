@@ -27,11 +27,11 @@ mod worktree;
 pub use agents::{AgentControl, AgentSpec, AgentStarted, AgentStop, Delivery};
 pub use archived::{ArchivedBranch, ArchivedBundle, ArchivedGit, CaptureArchive, MAX_ARCHIVED_BUNDLE_BYTES};
 pub use ask::{
-    Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, CancelWait, CreateWorktree, DiffComments, ListWorktrees,
-    ListedChild, NewWorktreeOn, OwnWorktree, ProposalRecord, Propose, PullRequestAnswer, PullRequestWaitUntil,
-    ReadDiffComments, ReadProposal, ReadPullRequest, ReadPullRequests, ReadWait, RemoveWorktree, RenewToolServer,
-    Revise, StartPullRequestWait, ToWorker, WaitAnswer, Withdraw, WorkerAsk, WorktreeCreated, WorktreeRemoval,
-    WorktreeRemoved, Worktrees, WouldLose,
+    Answer, Ask, AskAnswer, AskForToolAccess, AskId, AskOutcome, AskReply, CancelWait, CreateWorktree, DiffComments,
+    ListWorktrees, ListedChild, NewWorktreeOn, OwnWorktree, ProposalRecord, Propose, PullRequestAnswer,
+    PullRequestWaitUntil, ReadDiffComments, ReadProposal, ReadPullRequest, ReadPullRequests, ReadWait, RemoveWorktree,
+    RenewToolServer, Revise, StartPullRequestWait, ToWorker, ToolAccess, WaitAnswer, Withdraw, WorkerAsk,
+    WorktreeCreated, WorktreeRemoval, WorktreeRemoved, Worktrees, WouldLose,
 };
 pub use children::{AddChildWorktree, ChildBranch, ChildWorktreeAdded, WatchChildBranches};
 pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, RunningAgentsReply, Stop};

@@ -381,11 +381,15 @@ The app's own settings, and where they're shown.
 
 ## MCP servers
 
-- **MCP servers lists the servers the hub has of its own, in a list, Added, each a row in the design of Git's: its name, its address, and what else there is to say.** Every agent in every project has them, whichever machine it's on, beside the ones its own CLI has. The address is the host in its URL, with the port if it has one. A row says only what isn't plain: `Key` for a server a key is sent to, and `Needs you to sign in`, in red, for one whose sign-in is missing or no longer works. Whether a server can be reached depends on the machine an agent is on, so a chat says that and this page doesn't. A hub too old to have servers of its own says it has to be updated as one is added. *Unconfirmed:* the address being the host, and what a hub that's too old says.
+- **MCP servers lists the servers the hub has of its own, in a list, Added, each a row in the design of Git's: its name, its address, and what else there is to say.** Every agent in every project has them, whichever machine it's on, beside the ones its own CLI has. The address is the host in its URL, with the port if it has one. A row says only what isn't plain: `Key` for a server a key is sent to, `Needs you to sign in`, in red, for one whose sign-in is missing or no longer works, and `Sign in for more access`, in red, for one that works and wants more access than its sign-in has. Whether a server can be reached depends on the machine an agent is on, so a chat says that and this page doesn't. A hub too old to have servers of its own says it has to be updated as one is added. *Unconfirmed:* the address being the host, the words for more access, and what a hub that's too old says.
 
   **MCP servers, with two accounts at one server, one of which needs you to sign in, one server anyone can use, and one of a company's own.** *Unconfirmed.*
 
   ![MCP servers, with four added](screens/settings-mcp.png)
+
+  **MCP servers, where Linear wants more access.** *Unconfirmed.*
+
+  ![MCP servers, with Linear to sign in to again for more access](screens/settings-mcp-more-access.png)
 
   **MCP servers on a hub with none.** *Unconfirmed.*
 
@@ -438,6 +442,7 @@ The app's own settings, and where they're shown.
 
   ![Signing in to an MCP server again, refused, with Try again](screens/settings-mcp-again-refused.png)
 
+- **A server that wants more access than its sign-in has fails only the call it wants it for,** as when an agent changes an issue and only reading was allowed. The agent is told that the server wants more access and to sign in to it again from Settings › MCP servers, and its other calls work as before. Signing in again asks to be allowed all that was asked for before and what the server has wanted since. A server that wants something that was already asked for has it asked for once more, since it may have been left out on the server's page, and after that only the agent is told, as it is of one that doesn't say what it wants. The server's row and each chat's plug say so until then. *Unconfirmed:* being told and not asked during the turn, and asking once more.
 - **A server's menu has Sign in again, where it's signed in to, and Remove.** Sign in again signs in to that server as adding it did, and changes nothing until it's approved. Remove asks first, as disconnecting a GitHub account does, and then the hub forgets the server with its sign-in or its key, which isn't revoked at the server. What the hub couldn't do is said under the row, in red. *Unconfirmed.*
 
   **The menu of a server that's signed in to.** *Unconfirmed.*

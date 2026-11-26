@@ -2,10 +2,13 @@
 //! server takes a sign-in and where, the page a person approves it on, the code for tokens, and renewing them.
 //! Roundhouse is the client that its document at [`CLIENT_DOCUMENT`] describes, and registers with no server. Each call
 //! is within a time limit, and fetches only what [`NotFetched`] leaves. It keeps nothing, and knows nothing of the hub,
-//! which is to keep what the calls return, as `docs/decisions/hub-holds-tool-servers.md` says.
+//! which is to keep what the calls return, as `docs/decisions/hub-holds-tool-servers.md` says. A worker, which signs in to
+//! nothing, only reads with [`access_wanted`] why a server refused a call it passed on.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+mod challenge;
+pub use challenge::access_wanted;
 mod client;
 pub use client::{CLIENT_DOCUMENT, ToolSignIn};
 mod failure;
@@ -14,10 +17,9 @@ mod fetch;
 pub use fetch::NotFetched;
 mod finding;
 pub use finding::{Found, Issuer, NoWay, Way};
+mod offline_access;
 mod renewing;
 pub use renewing::{Renewable, Renewal};
-mod scopes;
-pub use scopes::Scopes;
 mod secrets;
 pub use secrets::{AccessToken, AuthorizationCode, AuthorizationPage, RefreshToken, SignInState};
 mod server_url;
@@ -29,6 +31,8 @@ pub use token_endpoint::Granted;
 #[cfg(any(test, feature = "testing"))]
 mod stand_in;
 #[cfg(any(test, feature = "testing"))]
-pub use stand_in::{Asked, Asks, Gate, Iss, MetadataAt, Person, Refreshing, Says, Script, ServerMetadataAt, StandIn};
+pub use stand_in::{
+    Asked, Asks, Gate, Iss, MetadataAt, Person, Refreshing, Says, Script, ServerMetadataAt, StandIn, Wants,
+};
 #[cfg(test)]
 mod tests;

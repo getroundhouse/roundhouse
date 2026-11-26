@@ -1,6 +1,7 @@
 //! What a hub that starts makes of what one that stopped partway left.
 
-use protocol::model::ToolSignInStatus;
+use protocol::model::{ToolScopes, ToolSignInStatus};
+use protocol::worker::{AskForToolAccess, TokenNumber};
 
 use super::sign_ins::{signed_in, status_of};
 use super::support::{KEY_FILE, files_in, path, servers_in, with_key, with_neither};
@@ -29,23 +30,33 @@ fn tidying_removes_a_server_whose_key_is_gone_and_a_file_no_server_names_and_kee
 }
 
 /// As a hub that stopped once it had written a sign-in's file, and not its server's record, left them: one signed in to
-/// again, and one whose sign-in is gone.
+/// again, one of those that had wanted more access, one that wants more now, and one whose sign-in is gone.
 #[test]
 fn tidying_has_a_sign_ins_record_say_what_its_file_does() {
     let dir = tempfile::tempdir().unwrap();
     let (servers, store) = servers_in(dir.path());
     let works = signed_in(&servers, "works", "Linear");
     let gone = signed_in(&servers, "gone", "Docs");
+    let had_wanted = signed_in(&servers, "had-wanted", "Figma");
+    let wants = signed_in(&servers, "wants", "Notion");
     let same = signed_in(&servers, "same", "Sentry");
     let file = path(dir.path(), &store, &gone.id);
     let kept = std::fs::read_to_string(&file).unwrap();
     let (rest, _tokens) = kept.split_once(r#""tokens":"#).unwrap();
     std::fs::write(file, format!(r#"{rest}"tokens":null}}"#)).unwrap();
+    let refused = TokenNumber::FIRST;
+    servers
+        .wants_access(&AskForToolAccess { server: wants.id.clone(), refused, wants: ToolScopes::of(["write"]) })
+        .unwrap();
+    servers.say(&wants.id, ToolSignInStatus::Works).unwrap();
+    servers.say(&had_wanted.id, ToolSignInStatus::NeedsMoreAccess).unwrap();
     servers.say(&works.id, ToolSignInStatus::NeedsSignIn).unwrap();
 
     servers.tidy().unwrap();
 
     assert_eq!(status_of(&store, "works"), ToolSignInStatus::Works);
+    assert_eq!(status_of(&store, "had-wanted"), ToolSignInStatus::Works);
+    assert_eq!(status_of(&store, "wants"), ToolSignInStatus::NeedsMoreAccess);
     assert_eq!(status_of(&store, "gone"), ToolSignInStatus::NeedsSignIn);
     assert_eq!(store.tool_server(&same.id).unwrap().unwrap().0, same, "one that agrees is left as it is");
 }
