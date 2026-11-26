@@ -1,5 +1,7 @@
 //! Holds the design system in `design/Styles/default.ds` to the app's values of the same names, both ways, so a colour,
-//! a space, a corner or a kind of text can't be one thing in the design and another in the app.
+//! a space, a corner or a kind of text can't be one thing in the design and another in the app. Each is held at each
+//! reach, which the design has as a mode: a token that's the same at both has one value, and one that isn't has the
+//! desk's as its default and the handheld's beside it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -50,22 +52,37 @@ const OF_THEIR_OWN: &[(&str, &[&str])] = &[
     ("typography", &["Emphasis", "Strong", "InlineCode"]),
 ];
 
-/// The tokens in `group` that the group's test holds, which is all of them but those [`OF_THEIR_OWN`] names.
-fn the_designs(group: &str) -> BTreeMap<String, String> {
+/// The tokens in `group` at `reach` that the group's test holds, which is all of them but those [`OF_THEIR_OWN`] names.
+fn the_designs(group: &str, reach: Reach) -> BTreeMap<String, String> {
     let only = OF_THEIR_OWN.iter().find(|(named, _)| *named == group).map_or(&[][..], |(_, names)| names);
-    let mut tokens = tokens(group);
+    let mut tokens = tokens(group, reach);
     tokens.retain(|name, _| !only.contains(&name.as_str()));
     tokens
 }
 
-/// The tokens in the design whose names start with `group` and a dot, by the rest of their names.
-fn tokens(group: &str) -> BTreeMap<String, String> {
+/// The tokens in the design whose names start with `group` and a dot, by the rest of their names, at `reach`: on a line
+/// such as `size.icon.Small: 12`, the same at both, and on one such as `size.icon.Small { $default: 12,
+/// reach.handheld: 14 }`, the default at a desk and the handheld's on a handheld.
+fn tokens(group: &str, reach: Reach) -> BTreeMap<String, String> {
     let prefix = format!("{group}.");
-    DESIGN
-        .lines()
-        .filter_map(|line| line.strip_prefix(&prefix)?.split_once(": "))
-        .map(|(name, value)| (name.to_string(), resolved(value.trim())))
-        .collect()
+    let named = DESIGN.lines().filter_map(|line| {
+        let rest = line.strip_prefix(&prefix)?;
+        match rest.split_once(" { ") {
+            Some((name, modes)) if !name.contains(':') => Some((name, at(modes.strip_suffix(" }")?, reach)?)),
+            _ => rest.split_once(": "),
+        }
+    });
+    named.map(|(name, value)| (name.to_string(), resolved(value.trim()))).collect()
+}
+
+/// The value at `reach` of a token's `modes`, such as `$default: 12, reach.handheld: 14`: its own, or the default.
+fn at(modes: &str, reach: Reach) -> Option<&str> {
+    let mode = |key: &str| modes.split(", ").find_map(|mode| mode.strip_prefix(key));
+    let own = match reach {
+        Reach::Desk => None,
+        Reach::Handheld => mode("reach.handheld: "),
+    };
+    own.or_else(|| mode("$default: "))
 }
 
 /// What `value` is: itself, the colour it names, such as `amber`, or the colour of the palette's step it names, such as
@@ -128,25 +145,29 @@ fn the_apps(named: impl IntoIterator<Item = (String, String)>) -> BTreeMap<Strin
 }
 
 /// A token in a group that nothing here knows isn't held to anything, so it's refused. A name with no dot is a palette,
-/// a colour of its own or a scale, which what's made from it holds.
+/// a colour of its own or a scale, which what's made from it holds, as a palette's pinned step is, on a line such as
+/// `grey.soft { $default: #201b18 }`.
 #[test]
 fn every_token_but_the_fonts_is_in_a_group_that_is_held_to_the_apps() {
     let known = |name: &str| {
         let after = |group: &str| name.strip_prefix(group).map(|rest| rest.is_empty() || rest.starts_with('.'));
         HELD.iter().chain(THE_FONTS).any(|group| after(group) == Some(true))
     };
+    let palettes: BTreeSet<&str> = DESIGN.lines().filter_map(|line| Some(line.split_once(": boldness(")?.0)).collect();
     let named = DESIGN.lines().filter(|line| line.starts_with(|first: char| first.is_ascii_alphabetic()));
-    let tokens = named.filter_map(|line| Some(line.split_once(": ")?.0)).filter(|name| name.contains('.'));
+    let tokens = named.filter_map(|line| line.split([':', ' ']).next()).filter(|name| name.contains('.'));
 
-    // A pinned step of a palette, on a line such as `grey.soft { $default: #201b18 }`, is held by what names it.
-    let unknown: Vec<_> = tokens.filter(|name| !name.contains('{') && !known(name)).collect();
+    let a_step = |name: &str| name.split('.').next().is_some_and(|palette| palettes.contains(palette));
+    let unknown: Vec<_> = tokens.filter(|name| !a_step(name) && !known(name)).collect();
     assert!(unknown.is_empty(), "held to nothing: {unknown:?}");
 }
 
 #[test]
 fn every_colour_in_the_design_is_the_apps_of_the_same_name() {
     let the_apps = the_apps(Colors::dark().roles().into_iter().map(|role| (in_its_section(&role), role.hex())));
-    assert_eq!(the_designs("color"), the_apps);
+    for reach in Reach::ALL {
+        assert_eq!(the_designs("color", reach), the_apps, "{reach:?}");
+    }
 }
 
 #[test]
@@ -156,9 +177,11 @@ fn every_space_in_the_design_is_the_apps_step_in_its_place() {
 
     assert_eq!(STEPS.len(), Space::ALL.len());
     assert_eq!(scale("spacing"), space);
-    let at_a_controls_ends =
-        ControlSize::ALL.iter().map(|size| (format!("control.{size:?}"), points(size.padding_at(Reach::Desk))));
-    assert_eq!(the_designs("spacing"), the_apps(at_a_controls_ends));
+    for reach in Reach::ALL {
+        let at_a_controls_ends =
+            ControlSize::ALL.iter().map(|size| (format!("control.{size:?}"), points(size.padding_at(reach))));
+        assert_eq!(the_designs("spacing", reach), the_apps(at_a_controls_ends), "{reach:?}");
+    }
 }
 
 /// The lengths beside the scale that the app makes of its own: a chip's, and what a part with an edge has inside, which
@@ -169,8 +192,8 @@ fn a_chips_lengths_and_an_edged_parts_are_the_apps() {
     let large = Space::Large.size();
     let lengths = [("Chip", INSIDE), ("ChipStart", INSIDE + EDGE), ("ChipEnd", small + EDGE), ("Edged", large + EDGE)];
 
-    for (name, length) in lengths {
-        assert_eq!(tokens("spacing")[name], points(length), "{name}");
+    for (reach, (name, length)) in Reach::ALL.into_iter().flat_map(|reach| lengths.map(|length| (reach, length))) {
+        assert_eq!(tokens("spacing", reach)[name], points(length), "{name} at {reach:?}");
     }
 }
 
@@ -178,22 +201,26 @@ fn a_chips_lengths_and_an_edged_parts_are_the_apps() {
 /// they're in.
 #[test]
 fn what_is_a_share_of_body_text_is_the_apps_share_of_it() {
-    let body = Type::Body.size(rem(Reach::Desk));
+    for reach in Reach::ALL {
+        let body = Type::Body.size_at(reach, rem(reach));
 
-    assert_eq!(tokens("spacing")["ListItem"], points(body * LIST_ITEM_GAP));
-    assert_eq!(tokens("font.size")["InlineCode"], points(body * INLINE_CODE));
+        assert_eq!(tokens("spacing", reach)["ListItem"], points(body * LIST_ITEM_GAP), "{reach:?}");
+        assert_eq!(tokens("font.size", reach)["InlineCode"], points(body * INLINE_CODE), "{reach:?}");
+    }
 }
 
-/// How big an icon is, and how tall a control, a bar and a row are, at a desk.
+/// How big an icon is, and how tall a control, a bar and a row are.
 #[test]
 fn every_size_in_the_design_is_the_apps_of_the_same_name() {
-    let icons = IconSize::ALL.iter().map(|size| (format!("icon.{size:?}"), size.size_at(Reach::Desk)));
-    let controls = ControlSize::ALL.iter().map(|size| (format!("control.{size:?}"), size.height_at(Reach::Desk)));
-    let bars = BarSize::ALL.iter().map(|size| (format!("bar.{size:?}"), size.height_at(Reach::Desk)));
-    let rows = RowSize::ALL.iter().map(|size| (format!("row.{size:?}"), size.height_at(Reach::Desk)));
-    let sizes = icons.chain(controls).chain(bars).chain(rows);
+    for reach in Reach::ALL {
+        let icons = IconSize::ALL.iter().map(|size| (format!("icon.{size:?}"), size.size_at(reach)));
+        let controls = ControlSize::ALL.iter().map(|size| (format!("control.{size:?}"), size.height_at(reach)));
+        let bars = BarSize::ALL.iter().map(|size| (format!("bar.{size:?}"), size.height_at(reach)));
+        let rows = RowSize::ALL.iter().map(|size| (format!("row.{size:?}"), size.height_at(reach)));
+        let sizes = icons.chain(controls).chain(bars).chain(rows).map(|(name, size)| (name, points(size)));
 
-    assert_eq!(the_designs("size"), the_apps(sizes.map(|(name, size)| (name, points(size)))));
+        assert_eq!(the_designs("size", reach), the_apps(sizes), "{reach:?}");
+    }
 }
 
 /// Every line's thickness: the app's own, and an icon's at each of its sizes, as the kit's icons are drawn.
@@ -203,54 +230,61 @@ fn every_line_in_the_design_is_as_thick_as_the_apps() {
         let value = ICON.split(&format!("{named}=\"")).nth(1).and_then(|rest| rest.split('"').next());
         value.expect(named).parse().expect(named)
     };
-    let icons = IconSize::ALL.iter().map(|size| {
-        let thick = f64::from(size.size_at(Reach::Desk)) * of_the_icon("stroke-width") / of_the_icon("width");
-        (format!("icon.{size:?}"), ((thick * 10_000.).round() / 10_000.).to_string())
-    });
-    let own = [("Edge", EDGE), ("QuoteRule", QUOTE_RULE), ("TabLine", TAB_LINE)];
-    let own = own.into_iter().map(|(name, thick)| (name.to_string(), points(thick)));
+    for reach in Reach::ALL {
+        let icons = IconSize::ALL.iter().map(|size| {
+            let thick = f64::from(size.size_at(reach)) * of_the_icon("stroke-width") / of_the_icon("width");
+            (format!("icon.{size:?}"), ((thick * 10_000.).round() / 10_000.).to_string())
+        });
+        let own = [("Edge", EDGE), ("QuoteRule", QUOTE_RULE), ("TabLine", TAB_LINE)];
+        let own = own.into_iter().map(|(name, thick)| (name.to_string(), points(thick)));
 
-    assert_eq!(the_designs("stroke.width"), the_apps(icons.chain(own)));
+        assert_eq!(the_designs("stroke.width", reach), the_apps(icons.chain(own)), "{reach:?}");
+    }
 }
 
 #[test]
 fn every_corner_in_the_design_is_the_apps_of_the_same_name() {
     let corner = the_apps(Corner::ALL.iter().map(|corner| (format!("{corner:?}"), points(corner.radius()))));
 
-    assert_eq!(tokens("radius"), corner);
+    for reach in Reach::ALL {
+        assert_eq!(tokens("radius", reach), corner, "{reach:?}");
+    }
 }
 
 #[test]
 fn every_kind_of_text_in_the_design_is_as_big_as_the_apps() {
-    let sizes = the_apps(
-        Type::ALL.iter().map(|kind| (format!("{kind:?}"), kind.written()[2].trim_end_matches("px").to_string())),
-    );
+    for reach in Reach::ALL {
+        let sizes =
+            the_apps(Type::ALL.iter().map(|kind| (format!("{kind:?}"), points(kind.size_at(reach, rem(reach))))));
 
-    assert_eq!(the_designs("font.size"), sizes);
+        assert_eq!(the_designs("font.size", reach), sizes, "{reach:?}");
+    }
 }
 
 /// How far apart the design's lines are, in points, is the app's: body text's is the golden ratio of its size, drawn to
 /// the nearest pixel at two to a point.
 #[test]
 fn lines_of_text_are_as_far_apart_in_the_design_as_in_the_app() {
-    let rem = rem(Reach::Desk);
-    let size = |kind: Type| kind.size(rem);
-    let body = px((f32::from(phi().to_pixels(size(Type::Body).into(), rem)) * 2.).round() / 2.);
-    let of_its_own = |kind: Type| kind.line(rem).expect("lines of its own");
-    let lines = [
-        ("Body", Type::Body, body),
-        ("CodeFile", Type::Code, CodeLines::File.height()),
-        ("CodeChat", Type::Code, CodeLines::Chat.height()),
-        ("Key", Type::Key, of_its_own(Type::Key)),
-        ("KeyHeld", Type::KeyHeld, of_its_own(Type::KeyHeld)),
-    ];
+    for reach in Reach::ALL {
+        let size = |kind: Type| kind.size_at(reach, rem(reach));
+        let body = px((f32::from(phi().to_pixels(size(Type::Body).into(), rem(reach))) * 2.).round() / 2.);
+        let of_its_own = |kind: Type| kind.line_at(reach).expect("lines of its own");
+        let lines = [
+            ("Body", Type::Body, body),
+            ("CodeFile", Type::Code, CodeLines::File.height()),
+            ("CodeChat", Type::Code, CodeLines::Chat.height()),
+            ("Key", Type::Key, of_its_own(Type::Key)),
+            ("KeyHeld", Type::KeyHeld, of_its_own(Type::KeyHeld)),
+        ];
 
-    let in_the_design = the_designs("font.lineHeight");
-    assert_eq!(in_the_design.len(), lines.len(), "{in_the_design:?}");
-    for (name, kind, apart) in lines {
-        let over_the_size: f32 = in_the_design[name].parse().unwrap();
-        let drawn = over_the_size * f32::from(size(kind));
-        assert!((drawn - f32::from(apart)).abs() < 0.01, "{name}: {drawn} in the design, {apart:?} in the app");
+        let in_the_design = the_designs("font.lineHeight", reach);
+        assert_eq!(in_the_design.len(), lines.len(), "{in_the_design:?}");
+        for (name, kind, apart) in lines {
+            let over_the_size: f32 = in_the_design[name].parse().unwrap();
+            let drawn = over_the_size * f32::from(size(kind));
+            let both = format!("{drawn} in the design, {apart:?} in the app");
+            assert!((drawn - f32::from(apart)).abs() < 0.01, "{name} at {reach:?}: {both}");
+        }
     }
 }
 
@@ -258,11 +292,11 @@ fn lines_of_text_are_as_far_apart_in_the_design_as_in_the_app() {
 #[test]
 fn every_kind_of_text_has_a_style_in_the_design_as_the_app_sets_it() {
     let kinds: BTreeSet<_> = Type::ALL.iter().map(|kind| format!("{kind:?}")).collect();
-    assert_eq!(the_designs("typography").into_keys().collect::<BTreeSet<_>>(), kinds);
+    assert_eq!(the_designs("typography", Reach::Desk).into_keys().collect::<BTreeSet<_>>(), kinds);
 
     for kind in Type::ALL {
         let [name, font, _, weight, _] = kind.written();
-        let style = tokens("typography").remove(&name).unwrap_or_else(|| panic!("{name} has no style"));
+        let style = tokens("typography", Reach::Desk).remove(&name).unwrap_or_else(|| panic!("{name} has no style"));
         let part =
             |named: &str| style.split(&format!("{named}: ")).nth(1).and_then(|rest| rest.split([',', ' ']).next());
 
@@ -277,14 +311,14 @@ fn every_kind_of_text_has_a_style_in_the_design_as_the_app_sets_it() {
 /// own.
 #[test]
 fn every_style_of_text_that_stands_out_is_set_as_the_app_sets_it() {
-    let body = &tokens("typography")["Body"];
+    let body = &tokens("typography", Reach::Desk)["Body"];
     let emphasis = body.replace("font.weight.regular", "font.weight.emphasis");
     let strong = body.replace("font.weight.regular", "font.weight.strong");
 
-    assert_eq!(tokens("typography")["Emphasis"], emphasis);
-    assert_eq!(tokens("typography")["Strong"], strong);
+    assert_eq!(tokens("typography", Reach::Desk)["Emphasis"], emphasis);
+    assert_eq!(tokens("typography", Reach::Desk)["Strong"], strong);
     let code = "{ fontFamily: font.family.code, fontSize: font.size.InlineCode, fontWeight: font.weight.regular }";
-    assert_eq!(tokens("typography")["InlineCode"], code);
+    assert_eq!(tokens("typography", Reach::Desk)["InlineCode"], code);
 }
 
 /// Emphasis is medium, which is 500 wherever it's drawn. On a Mac the app asks for a little more, so GPUI finds that
@@ -294,7 +328,9 @@ fn the_weights_in_the_design_are_the_apps() {
     let weights = [("regular", FontWeight::NORMAL), ("emphasis", FontWeight::MEDIUM), ("strong", STRONG)];
     let weights = the_apps(weights.map(|(name, weight)| (name.to_string(), weight.0.to_string())));
 
-    assert_eq!(tokens("font.weight"), weights);
+    for reach in Reach::ALL {
+        assert_eq!(tokens("font.weight", reach), weights, "{reach:?}");
+    }
 }
 
 /// The one shadow is the app's, layer by layer: how far below, how far it blurs, which Brilliant has as twice what GPUI
@@ -306,7 +342,7 @@ fn the_shadow_in_the_design_is_the_apps() {
         format!("drop(y: {below}, blur: {blur}, color: rgba(0, 0, 0, {}))", layer.color.a)
     });
 
-    assert_eq!(the_designs("shadow").into_keys().collect::<Vec<_>>(), ["Raised"]);
+    assert_eq!(the_designs("shadow", Reach::Desk).into_keys().collect::<Vec<_>>(), ["Raised"]);
     let start = DESIGN.lines().position(|line| line.starts_with("shadow.Raised: [")).expect("the shadow");
     let drawn = DESIGN.lines().skip(start + 1).take_while(|line| *line != "]");
     let layers: Vec<_> = drawn.map(|line| line.trim().trim_end_matches(',').to_string()).collect();
@@ -318,7 +354,9 @@ fn the_shadow_in_the_design_is_the_apps() {
 fn the_wash_is_needs_you_at_the_apps_strength() {
     let wash = Colors::dark().needs_you.opacity(WASH);
 
-    assert_eq!(tokens("color")["status.needs_you_wash"], crate::theme::hex(wash));
+    for reach in Reach::ALL {
+        assert_eq!(tokens("color", reach)["status.needs_you_wash"], crate::theme::hex(wash), "{reach:?}");
+    }
 }
 
 #[test]
@@ -326,7 +364,9 @@ fn what_moves_takes_as_long_in_the_design_as_in_the_app() {
     let lengths = [("Panel", PANEL), ("Fade", FADE), ("Scroll", SCROLL)];
     let lengths = lengths.map(|(name, length)| (name.to_string(), length.as_millis().to_string()));
 
-    assert_eq!(the_designs("motion"), the_apps(lengths));
+    for reach in Reach::ALL {
+        assert_eq!(the_designs("motion", reach), the_apps(lengths.clone()), "{reach:?}");
+    }
 }
 
 /// A film's change takes as long as the app's panel does, and slows toward its end as the app's does.

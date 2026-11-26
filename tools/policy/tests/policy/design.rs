@@ -26,11 +26,15 @@ fn used(canvas: &str) -> BTreeSet<String> {
 /// What Brilliant names a scale's steps, from the smallest.
 const STEPS: [&str; 6] = ["xs", "sm", "md", "lg", "xl", "2xl"];
 
-/// The names the design system has: `color.text.faint` for a line `color.text.faint: #7c7671`, and, for a line such as
+/// The names the design system has: `color.text.faint` for a line `color.text.faint: #7c7671`, `font.size.Body` for one
+/// with a value for each mode, `font.size.Body { $default: 14, reach.handheld: 17 }`, and, for a line such as
 /// `spacing: tshirt(number([4, 8]), min: { none: 0 })`, a step for each of its numbers, and the step it starts at.
 /// Brilliant makes more steps of some scales than they're given, such as `radius.xl`, and those aren't the design's.
 fn defined(system: &str) -> BTreeSet<String> {
-    let lines = system.lines().filter_map(|line| line.split_once(": "));
+    let lines = system.lines().filter_map(|line| match line.split_once(" { ") {
+        Some((name, modes)) if !name.contains(':') => Some((name, modes)),
+        _ => line.split_once(": "),
+    });
     lines
         .flat_map(|(name, value)| {
             let name = name.trim();
@@ -51,6 +55,14 @@ fn a_scale_has_a_step_for_each_number_it_is_given_and_no_other() {
         names,
         ["radius", "radius.xs", "radius.sm", "spacing", "spacing.xs", "spacing.none"].map(String::from).into()
     );
+}
+
+#[test]
+fn a_token_with_a_value_for_each_mode_is_named_once() {
+    let names =
+        defined("font.size.Body { $default: 14, reach.handheld: 17 }\ntypography.Body: { fontSize: font.size.Body }");
+
+    assert_eq!(names, ["font.size.Body", "typography.Body"].map(String::from).into());
 }
 
 /// Every canvas of the design, as the path it's shown by and its text.
