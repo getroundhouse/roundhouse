@@ -99,28 +99,32 @@ async fn one_refused_for_good_needs_signing_in_to_as_every_client_is_told_and_si
     assert_eq!(told(&mut feed), [again]);
 }
 
-/// Each token lasts a minute, so it's due at every check.
+/// Each token lasts a minute, so it's due at every check. `invalid_client` of the client document is what a service says
+/// while it can't fetch the document, as after a bad deploy of the site, so the refresh token is kept for when it can.
 #[tokio::test]
 async fn one_that_fails_for_now_is_left_as_it_is_and_tried_again_after_waits_that_grow() {
-    let dir = tempfile::tempdir().unwrap();
-    let script = Script { lasts: Some(60), refreshing: Refreshing::Answers(503), ..Script::default() };
-    let (hub, stand_in) = hub_signed_in(dir.path(), script).await;
-    let (before, records) = (kept(dir.path()), servers(&hub));
-    let seconds = |seconds| after(Duration::from_secs(seconds));
-    let asked = || stand_in.asked_for("POST /token").len() - 1;
+    for refreshing in [Refreshing::Answers(503), Refreshing::Refused("invalid_client")] {
+        let dir = tempfile::tempdir().unwrap();
+        let script = Script { lasts: Some(60), refreshing, ..Script::default() };
+        let (hub, stand_in) = hub_signed_in(dir.path(), script).await;
+        let (before, records) = (kept(dir.path()), servers(&hub));
+        let seconds = |seconds| after(Duration::from_secs(seconds));
+        let asked = || stand_in.asked_for("POST /token").len() - 1;
 
-    let mut tried = Vec::new();
-    for check in [seconds(0), seconds(30), seconds(65), seconds(100), seconds(125)] {
-        checked(&hub, check).await;
-        tried.push(asked());
+        let mut tried = Vec::new();
+        for check in [seconds(0), seconds(30), seconds(65), seconds(100), seconds(125)] {
+            checked(&hub, check).await;
+            tried.push(asked());
+        }
+        let (after_failing, records_after) = (kept(dir.path()), servers(&hub));
+        stand_in.change(|script| script.refreshing = Refreshing::Works);
+        checked(&hub, seconds(300)).await;
+
+        assert_eq!(tried, [1, 1, 2, 2, 3], "{refreshing:?}: a minute after the first, and two after the second");
+        assert_eq!((after_failing, records_after), (before.clone(), records), "{refreshing:?}");
+        assert_ne!(kept(dir.path()), before, "{refreshing:?}");
+        assert!(kept(dir.path())["tokens"]["refresh"].is_string(), "{refreshing:?}");
     }
-    let (after_failing, records_after) = (kept(dir.path()), servers(&hub));
-    stand_in.change(|script| script.refreshing = Refreshing::Works);
-    checked(&hub, seconds(300)).await;
-
-    assert_eq!(tried, [1, 1, 2, 2, 3], "a minute after the first, and two after the second");
-    assert_eq!((after_failing, records_after), (before.clone(), records));
-    assert_ne!(kept(dir.path()), before);
 }
 
 /// The authorization server holds its answer, as one that's slow does.

@@ -45,7 +45,8 @@ pub enum Failure {
     /// The authorization server refused the sign-in at its page.
     #[error("the authorization server refused the sign-in: {0}")]
     RefusedAtPage(OauthError),
-    /// The authorization server gave no tokens for the code.
+    /// The authorization server gave no tokens for the code, or, of a renewal, said `invalid_client` of the client
+    /// document, which may pass.
     #[error("the authorization server gave no tokens: {0}")]
     NoTokens(OauthError),
     /// The system gave no randomness to make a sign-in's secrets from.
@@ -67,7 +68,7 @@ pub fn shown(said: &str) -> String {
 pub struct OauthError(String);
 
 /// What OAuth calls a client the authorization server doesn't know, by RFC 6749, section 5.2.
-pub(crate) const INVALID_CLIENT: &str = "invalid_client";
+const INVALID_CLIENT: &str = "invalid_client";
 
 /// Longer than any name OAuth has for an error.
 const LONGEST: usize = 64;

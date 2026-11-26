@@ -46,17 +46,19 @@ async fn a_refresh_token_that_isnt_replaced_goes_on_renewing() {
     assert_eq!(renewed(&client, &renewable, &first).await.refresh, Some(first));
 }
 
+/// `invalid_client` is for good only of a registered client, whose registration the authorization server holds, as
+/// `registering`'s tests have it. Of the client document, it's what a service says that can't fetch the document for
+/// now.
 #[tokio::test]
 async fn a_refusal_for_good_means_signing_in_again_and_anything_else_may_pass() {
     let (client, stand_in, renewable, refresh) = signed_in(Script::default()).await;
 
-    for error in ["invalid_grant", "invalid_client"] {
-        stand_in.change(|script| script.refreshing = Refreshing::Refused(error));
-        let renewal = client.renew(&renewable, &refresh).await.unwrap();
-        let Renewal::SignInAgain(said) = renewal else { panic!("{renewal:?}") };
-        assert_eq!(said.as_str(), error);
-    }
+    stand_in.change(|script| script.refreshing = Refreshing::Refused("invalid_grant"));
+    let renewal = client.renew(&renewable, &refresh).await.unwrap();
+    let Renewal::SignInAgain(said) = renewal else { panic!("{renewal:?}") };
+    assert_eq!(said.as_str(), "invalid_grant");
     let for_now = [
+        (Refreshing::Refused("invalid_client"), ErrorCode::InvalidRequest),
         (Refreshing::Answers(503), ErrorCode::Unavailable),
         (Refreshing::Answers(429), ErrorCode::Unavailable),
         (Refreshing::Answers(307), ErrorCode::InvalidRequest),
