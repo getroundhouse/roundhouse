@@ -18,22 +18,12 @@ use crate::tool_servers::SigningIn;
 
 impl Hub {
     /// Starts a sign-in to a tool server, as `ToolSignInStart` says. It waits from before its server is asked how to sign
-    /// in to it, so one cancelled meanwhile has no page, and one sent again meanwhile is answered with the same one.
+    /// in to it, so one cancelled meanwhile has no page.
     pub(crate) async fn tool_sign_in_start(&self, asked: ToolSignInStart) -> Result<ToolSignInBegun, ApiError> {
         let ToolSignInStart { id, to, redirect } = asked;
-        let sign_in = if let Some(sign_in) = self.tool_sign_ins.waiting.get(&id, now_ms()) {
-            sign_in
-        } else {
-            let servers = Arc::clone(&self.tool_servers);
-            let to = off_thread(move || servers.signing_in(to)).await?;
-            self.tool_sign_ins.waiting.begin(&id, to, now_ms())?
-        };
-        let mut stage = sign_in.stage.lock().await;
-        // One sent again as the first was finding, which has failed since, isn't asked again only to be refused.
-        self.waits_still(&id, &sign_in)?;
-        if let Stage::OnPage { page, .. } = &*stage {
-            return Ok(ToolSignInBegun::Page { page: page.clone() });
-        }
+        let servers = Arc::clone(&self.tool_servers);
+        let to = off_thread(move || servers.signing_in(to)).await?;
+        let sign_in = self.tool_sign_ins.waiting.begin(&id, to, now_ms())?;
         let found = self.find_sign_in(&id, &sign_in, &redirect).await;
         self.waits_still(&id, &sign_in)?;
         match found {
@@ -41,7 +31,7 @@ impl Hub {
                 if let Some((server, registration)) = used_again(&sign_in.to, &pending) {
                     self.tool_sign_ins.in_doubt.used(server, registration);
                 }
-                *stage = Stage::OnPage { page: page.clone(), pending };
+                *sign_in.stage.lock().await = Stage::OnPage { pending };
                 Ok(ToolSignInBegun::Page { page })
             }
             Ok(Begun::Not(why)) => {
@@ -61,9 +51,9 @@ impl Hub {
         let Some(sign_in) = self.tool_sign_ins.waiting.get(&id, now_ms()) else {
             return self.finished_before(id).await;
         };
-        // Held until it's kept, so one sent again meanwhile is answered with what this comes to.
+        // Held until it has ended, so one sent again meanwhile is answered with what this comes to.
         let stage = sign_in.stage.lock().await;
-        let Stage::OnPage { pending, .. } = &*stage else { return Err(no_sign_in()) };
+        let Stage::OnPage { pending } = &*stage else { return Err(no_sign_in()) };
         if !self.tool_sign_ins.waiting.holds(&id, &sign_in) {
             return self.finished_before(id).await;
         }
@@ -85,10 +75,11 @@ impl Hub {
                 return Err(e.into());
             }
         };
-        let given_at_ms = now_ms();
-        if !self.tool_sign_ins.waiting.keep(&id, &sign_in) {
+        // Cancelled as its tokens were asked for. One cancelled from here on is finished all the same.
+        if !self.tool_sign_ins.waiting.holds(&id, &sign_in) {
             return Err(no_sign_in());
         }
+        let given_at_ms = now_ms();
         let (servers, made_by, to) = (Arc::clone(&self.tool_servers), id.clone(), Arc::clone(&sign_in));
         let kept = off_thread(move || servers.keep_sign_in(made_by, &to.to, signed_in, given_at_ms)).await;
         self.tool_sign_ins.waiting.end(&id, &sign_in);

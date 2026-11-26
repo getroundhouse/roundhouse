@@ -173,10 +173,11 @@ async fn a_registration_in_doubt_stays_so_until_the_server_is_signed_in_to() {
     let (hub, stand_in) = hub_signed_in(dir.path()).await;
     let first = client(dir.path());
 
-    let mut asked = Vec::new();
+    let (mut asked, mut pages) = (Vec::new(), Vec::new());
     for id in ["first", "second", "third"] {
         let page = page(&hub, again(id)).await;
         asked.push(times_asked(&stand_in));
+        pages.push(page.clone());
         if id == "second" {
             // Which says nothing of the one in doubt, since this isn't it.
             stand_in.change(|script| script.person = Person::Refuses);
@@ -184,8 +185,7 @@ async fn a_registration_in_doubt_stays_so_until_the_server_is_signed_in_to() {
             stand_in.change(|script| script.person = Person::Approves);
         }
     }
-    let waited = page(&hub, again("first")).await;
-    hub.tool_sign_in_finish(visited("first", &stand_in, &waited)).await.unwrap();
+    hub.tool_sign_in_finish(visited("first", &stand_in, &pages[0])).await.unwrap();
     page(&hub, again("fourth")).await;
 
     assert_eq!(asked, [1, 2, 3]);

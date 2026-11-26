@@ -41,15 +41,13 @@ pub fn redirect(port: u16) -> String {
 /// changed until the sign-in is finished. The hub asks the server, and then its authorization server, which can take as
 /// long as 30 seconds, and as long again where that has Roundhouse register with it first.
 ///
-/// `id` is the client's own, so sending it again is the same sign-in, and answers with the same page while it waits,
-/// however the rest of the request differs. It waits [`SIGN_IN_WAITS`].
+/// `id` is the client's own, and the sign-in waits [`SIGN_IN_WAITS`] under it.
 ///
 /// Refused as [`ToolServerAdd`](super::tool_servers::ToolServerAdd) says of a name and a URL, and with `Conflict` when
-/// the hub has a server of the new one's ID. Refused with `NotFound` when it has no record of the server to sign in to
-/// again or to edit, and with `InvalidRequest` when the one to sign in to again isn't signed in to. Starting one when
-/// as many sign-ins as may wait are waiting forgets the one that has waited longest. Refused with `Unavailable` when
-/// each of those is being finished, which is for moments, and when the server or its authorization server can't be
-/// reached, which may pass, and with `InvalidRequest` when what they say can't be right.
+/// the hub has a server of the new one's ID, or a sign-in of the same `id` waits. Refused with `NotFound` when it has no
+/// record of the server to sign in to again or to edit, and with `InvalidRequest` when the one to sign in to again isn't
+/// signed in to. Refused with `Unavailable` when the server or its authorization server can't be reached, which may
+/// pass, and with `InvalidRequest` when what they say can't be right.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ToolSignInStart {
     pub id: ToolSignInId,
