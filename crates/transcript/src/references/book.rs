@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use protocol::model::{ReferenceAsk, ReferenceRead};
+use protocol::model::{ReferenceAsk, ReferenceSaid};
 
 use crate::linked_images::Waiter;
 
@@ -23,7 +23,7 @@ pub(super) struct Book<W> {
 
 struct Known<W> {
     /// What the hub said, as it was last drawn, or `None` until it has.
-    read: Option<ReferenceRead>,
+    said: Option<ReferenceSaid>,
     /// What's drawn it since it was last told it changed.
     drawn_by: Vec<W>,
 }
@@ -40,20 +40,20 @@ impl<W: Waiter> Book<W> {
         &mut self,
         ask: &ReferenceAsk,
         drawer: W,
-        said: Option<ReferenceRead>,
-    ) -> (Option<ReferenceRead>, bool) {
-        let known = self.known.entry(ask.clone()).or_insert_with(|| Known { read: None, drawn_by: Vec::new() });
+        said: Option<ReferenceSaid>,
+    ) -> (Option<ReferenceSaid>, bool) {
+        let known = self.known.entry(ask.clone()).or_insert_with(|| Known { said: None, drawn_by: Vec::new() });
         if !known.drawn_by.contains(&drawer) {
             known.drawn_by.push(drawer);
         }
         if said.is_some() {
-            known.read = said;
+            known.said = said;
         }
-        let read = known.read.clone();
+        let said = known.said.clone();
         if !self.this_frame.iter().any(|(drawn, by)| drawn == ask && *by == drawer) {
             self.this_frame.push((ask.clone(), drawer));
         }
-        (read, !std::mem::replace(&mut self.settling, true))
+        (said, !std::mem::replace(&mut self.settling, true))
     }
 
     /// Ends this frame: what it drew in sight, as `in_sight` says of what drew each, is what's shown from now on, or
@@ -74,14 +74,14 @@ impl<W: Waiter> Book<W> {
     }
 
     /// Takes in what the hub says of each now, `said`, and returns what drew those that changed, each once.
-    pub(super) fn heard(&mut self, said: impl Fn(&ReferenceAsk) -> Option<ReferenceRead>) -> Vec<W> {
+    pub(super) fn heard(&mut self, said: impl Fn(&ReferenceAsk) -> Option<ReferenceSaid>) -> Vec<W> {
         let mut drawers = Vec::new();
         for (ask, known) in &mut self.known {
             let Some(now) = said(ask) else { continue };
-            if known.read.as_ref() == Some(&now) {
+            if known.said.as_ref() == Some(&now) {
                 continue;
             }
-            known.read = Some(now);
+            known.said = Some(now);
             for drawer in std::mem::take(&mut known.drawn_by) {
                 if !drawers.contains(&drawer) {
                     drawers.push(drawer);
@@ -102,8 +102,8 @@ mod tests {
         ReferenceAsk { repository: GithubRepositoryName::named("o/r"), number: IssueNumber::try_from(number).unwrap() }
     }
 
-    fn found(title: &str) -> ReferenceRead {
-        ReferenceRead::Found { reference: Box::new(protocol::fixtures::issue("o/r", 12, title)) }
+    fn found(title: &str) -> ReferenceSaid {
+        ReferenceSaid::of(Some(&protocol::fixtures::issue("o/r", 12, title))).unwrap()
     }
 
     /// What a frame draws is what's shown once it's drawn, and only when that changes is it said again.

@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use client_core::records::WorkspacePullRequest;
 use desktop::busy::Busy;
 use desktop::pull_request::{self, Lookup};
 use gpui_kit::component::{h_flex, v_flex};
@@ -14,7 +15,8 @@ use gpui_kit::{
     Styled as _, Window, div, px, size,
 };
 use protocol::model::{
-    Local, MergeState, OwnPullRequest, PrState, QueueState, Review, Standing, Summary, WorkspaceStatus,
+    Local, MergeState, Observed, OwnPullRequest, OwnSummary, PrState, PullRequestDetail, QueueState, RepositoryUnseen,
+    Review, Standing, Summary, WorkspaceStatus,
 };
 
 use super::capture::Picture;
@@ -48,17 +50,45 @@ pub(crate) fn checked(own: OwnPullRequest, passed: usize, failed: usize, pending
 }
 
 /// [`open`], with its summary changed by `change`.
-fn with(change: impl FnOnce(&mut Summary)) -> Lookup {
+fn with(change: impl FnOnce(&mut Summary)) -> Said {
     let mut own = open();
     change(&mut own.pull_request.summary.said);
-    Lookup::Found(Some(Box::new(own)))
+    Said::found(&own)
 }
 
 /// [`open`], changed by `change`.
-fn with_own(change: impl FnOnce(&mut OwnPullRequest)) -> Lookup {
+fn with_own(change: impl FnOnce(&mut OwnPullRequest)) -> Said {
     let mut own = open();
     change(&mut own);
-    Lookup::Found(Some(Box::new(own)))
+    Said::found(&own)
+}
+
+/// What the hub could say of a workspace's pull request, for the bar to find. Boxed, as a pull request is many times the
+/// size of the rest.
+enum Said {
+    Looking,
+    NoPullRequest,
+    Unseen(Box<RepositoryUnseen>),
+    Found(Box<(OwnSummary, PullRequestDetail)>),
+}
+
+impl Said {
+    /// `own`, as the hub sends it.
+    fn found(own: &OwnPullRequest) -> Self {
+        Said::Found(Box::new((OwnSummary::of(own), PullRequestDetail::of(&own.pull_request))))
+    }
+
+    fn lookup(&self) -> Lookup<'_> {
+        match self {
+            Said::Looking => Lookup::Looking,
+            Said::NoPullRequest => Lookup::Found(None),
+            Said::Unseen(unseen) => Lookup::Unseen(unseen),
+            Said::Found(found) => {
+                let (own, detail) = &**found;
+                Lookup::Found(Some(WorkspacePullRequest { own, detail: Observed::Current { value: detail } }))
+            }
+        }
+    }
 }
 
 /// In the order the app looks for them, after the three with no pull request to show, the last of them a repository
@@ -68,9 +98,9 @@ fn with_own(change: impl FnOnce(&mut OwnPullRequest)) -> Lookup {
 fn states() -> Vec<State> {
     let merged = || with(|pr| pr.state = PrState::Merged);
     let free = [
-        Lookup::Looking,
-        Lookup::Found(None),
-        Lookup::Unseen(Box::new(super::unseen_screens::signed_in_unseen())),
+        Said::Looking,
+        Said::NoPullRequest,
+        Said::Unseen(Box::new(super::unseen_screens::signed_in_unseen())),
         merged(),
         with(|pr| pr.state = PrState::Closed),
         with(|pr| pr.queue = Some(QueueState::AwaitingChecks)),
@@ -92,7 +122,7 @@ fn states() -> Vec<State> {
         with(|_| {}),
         with(|pr| pr.merge_state = MergeState::Unknown),
     ];
-    let mut states: Vec<_> = free.into_iter().map(|lookup| (lookup, Busy::Free, WorkspaceStatus::Ready)).collect();
+    let mut states: Vec<_> = free.into_iter().map(|said| (said, Busy::Free, WorkspaceStatus::Ready)).collect();
     states.insert(4, (merged(), Busy::Moving, WorkspaceStatus::Ready));
     states.insert(5, (merged(), Busy::Moving, WorkspaceStatus::Archiving));
     states
@@ -136,13 +166,13 @@ kinds![
 
 /// The kinds of standing the picture doesn't draw.
 pub(crate) fn missing() -> Vec<&'static str> {
-    let drawn: Vec<&str> = states().iter().filter_map(|(lookup, ..)| lookup.standing()).map(kind).collect();
+    let drawn: Vec<&str> = states().iter().filter_map(|(said, ..)| said.lookup().standing()).map(kind).collect();
     KINDS.iter().copied().filter(|k| !drawn.contains(k)).collect()
 }
 
 /// A pull request as the bar finds it, what the app is waiting on the hub for, and the status of the workspace the bar
 /// is for.
-type State = (Lookup, Busy, WorkspaceStatus);
+type State = (Said, Busy, WorkspaceStatus);
 
 struct Sheet {
     states: Vec<State>,
@@ -152,8 +182,9 @@ impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = look::colors(cx);
         let (pane, sidebar) = (colors.pane, colors.sidebar);
-        let rows = self.states.iter().enumerate().map(|(index, (lookup, busy, status))| {
+        let rows = self.states.iter().enumerate().map(|(index, (said, busy, status))| {
             let doing = client_core::moving::doing(*status);
+            let lookup = &said.lookup();
             let bar = pull_request::bar(lookup, busy, doing, |_, _, _| {}, cx);
             let controls = pull_request::controls(lookup, busy, doing, |_, _, _| {}, cx);
             h_flex()

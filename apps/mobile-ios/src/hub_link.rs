@@ -1,15 +1,15 @@
 //! The connection to the hub this phone paired with, which client-core's [`Link`] makes again whenever it goes, the
-//! records it keeps from it, with what the hub says of the pull requests of the workspaces the phone lists, and what
-//! has the hub keep what's typed and not sent.
+//! records it keeps from it, with what the hub says of each workspace's pull request, and what has the hub keep what's
+//! typed and not sent.
 
 use std::sync::Arc;
 
 use client_core::link::{Connect, Link, Lost, Refused, Waits};
 use client_core::records::Snapshot;
-use client_core::{Client, ClientError, Drafts, GithubView, OlderSide, RecordsFeed, RemoteHub, ShownOfGithub};
+use client_core::{Client, ClientError, Drafts, OlderSide, RecordsFeed, RemoteHub};
 use client_ui::{NeedsUpdating, needs_updating};
 use gpui_kit::{Context, EventEmitter, Task};
-use protocol::model::{PullRequestFound, Workspace, WorkspaceStatus};
+use protocol::model::{Workspace, WorkspaceStatus};
 
 /// What the hub's list of clients calls the app.
 const CLIENT_NAME: &str = "roundhouse-ios";
@@ -49,9 +49,6 @@ pub(crate) struct HubLink {
     state: LinkState,
     /// The connection, while there is one that's caught up.
     client: Option<Client>,
-    /// The pull requests of the workspaces listed, which the hub sends as they change, once the link has the hub's
-    /// records, and the task that draws them again.
-    marks: Option<(GithubView, Task<()>)>,
     /// What has the hub keep what's typed and not sent, from the first connection on, and the task that shows a draft
     /// made elsewhere once one typed here has reached the hub.
     drafts: Option<(Drafts, Task<()>)>,
@@ -126,15 +123,7 @@ impl HubLink {
                 }
             }
         });
-        HubLink {
-            hub,
-            link,
-            state: LinkState::Connecting,
-            client: None,
-            marks: None,
-            drafts: None,
-            _following: following,
-        }
+        HubLink { hub, link, state: LinkState::Connecting, client: None, drafts: None, _following: following }
     }
 
     pub(crate) fn hub(&self) -> &RemoteHub {
@@ -153,11 +142,6 @@ impl HubLink {
     /// What client-core holds of the hub's records, once it has followed them at all.
     pub(crate) fn snapshot(&self) -> Option<Snapshot> {
         self.link.feed().map(|feed| feed.snapshot())
-    }
-
-    /// `workspace`'s pull request, as the hub sent it. `None` until the hub has looked.
-    pub(crate) fn pull_request_of(&self, workspace: &Workspace) -> Option<PullRequestFound> {
-        self.marks.as_ref()?.0.feed().pull_request(workspace)
     }
 
     /// The connection, the records and the drafts, while there's a connection that's caught up.
@@ -181,7 +165,7 @@ impl HubLink {
         }
     }
 
-    /// Draws how the link stands, hands any new connection on, and shows the hub which workspaces are listed.
+    /// Draws how the link stands, and what it has of the hub, and hands any new connection on.
     fn link_changed(&mut self, cx: &mut Context<Self>) {
         if let Some((client, ())) = self.link.take_connection() {
             self.keep_drafts_on(&client, cx);
@@ -202,11 +186,6 @@ impl HubLink {
         };
         // Following goes on whatever went wrong while it did, which nothing here shows.
         drop(self.link.take_errors());
-        if let Some(feed) = self.link.feed() {
-            let (marks, _) = self.marks.get_or_insert_with(|| hear(&feed, cx));
-            let listed = feed.snapshot().workspaces().iter().filter(|w| listed(w)).map(|w| w.id.clone()).collect();
-            marks.show(ShownOfGithub { workspaces: listed, references: Vec::new() });
-        }
         cx.notify();
     }
 
@@ -220,20 +199,6 @@ impl HubLink {
             self.drafts = Some((drafts, shown));
         }
     }
-}
-
-/// Follows what the hub says of the pull requests of the workspaces shown, drawing them again as they change.
-fn hear(feed: &RecordsFeed, cx: &mut Context<HubLink>) -> (GithubView, Task<()>) {
-    let marks = feed.github().view();
-    let changed = marks.changed().clone();
-    let hearing = cx.spawn(async move |this, cx| {
-        while changed.recv_async().await.is_ok() {
-            if this.update(cx, |_, cx| cx.notify()).is_err() {
-                return;
-            }
-        }
-    });
-    (marks, hearing)
 }
 
 /// Shows the records again whenever no draft has anything of this client's on its way, so a draft made elsewhere,

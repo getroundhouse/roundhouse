@@ -6,15 +6,15 @@ use std::time::Duration;
 use protocol::client::listed::{ReferenceObservations, WorkspaceObservations};
 use protocol::client::{HubNotice, ObservationNotice};
 use protocol::model::{
-    GithubLoginKind, GithubRepositoryName, IssueNumber, Local, Observation, ObservationKey, Observed, OwnPullRequest,
-    OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PrState, PullRequestDetail, ReferenceAsk, ReferenceRead,
+    GithubLoginKind, GithubRepositoryName, IssueNumber, Local, Observation, Observed, OwnPullRequest,
+    OwnPullRequestDetail, OwnPullRequestSaid, OwnSummary, PrState, PullRequestDetail, ReferenceAsk, ReferenceSaid,
     RepositoryUnseen, Rev, SessionStatus, WorkspaceId,
 };
 
-use super::super::held::{GithubHeld, HeldObservations, github_keys, notice_key};
+use super::super::held::{GithubHeld, github_keys, notice_key};
 use crate::fake_hub::{World, serve};
-use crate::records::HubRecords;
-use crate::{Client, FollowedWorkspace, GithubFeed, RecordsFeed, ShownOfGithub};
+use crate::records::{HubRecords, Snapshot};
+use crate::{Client, FollowedWorkspace, RecordsFeed, ShownOfGithub};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -71,7 +71,7 @@ fn read_once_said(client: &Client) -> (Read, RecordsFeed, (Vec<FollowedWorkspace
     let elm = workspaces.iter().find(|id| records.snapshot().workspace(id).unwrap().name == "elm").unwrap().clone();
     let followed = workspaces.iter().map(|id| records.follow_workspace(id)).collect();
     view.show(ShownOfGithub { workspaces, references: vec![twelve()] });
-    let read = || Read::of(&feed, &records, &elm);
+    let read = || Read::of(&records.snapshot(), &elm);
     waiting::thread::until(TIMEOUT, "the pull request with its checks, the unseen repository and the chip", || {
         let read = read();
         read.checks.is_some() && read.unseen.is_some() && read.chip.is_some()
@@ -79,7 +79,7 @@ fn read_once_said(client: &Client) -> (Read, RecordsFeed, (Vec<FollowedWorkspace
     (read(), records, (followed, view))
 }
 
-/// What views read of GitHub, in the forms they read it in, and each of which form the hub sent.
+/// What views read of GitHub, and whether the hub said the pull request is kept current.
 #[derive(Clone, Debug, PartialEq)]
 struct Read {
     state: Option<PrState>,
@@ -87,27 +87,33 @@ struct Read {
     checks: Option<usize>,
     unseen: Option<RepositoryUnseen>,
     chip: Option<String>,
-    said: bool,
+    current: bool,
 }
 
 impl Read {
-    fn of(feed: &GithubFeed, records: &RecordsFeed, elm: &WorkspaceId) -> Self {
-        let snapshot = records.snapshot();
-        let workspace = |id: &WorkspaceId| snapshot.workspace(id).unwrap().clone();
-        let oak = snapshot.workspaces().iter().find(|workspace| workspace.name == "oak").unwrap().clone();
-        let own = feed.pull_request(&workspace(elm)).and_then(|found| found.pull_request);
-        let chip = match feed.reference(&twelve()) {
-            Some(ReferenceRead::Found { reference }) => reference.about().map(|about| about.title.clone()),
-            _ => None,
-        };
+    fn of(snapshot: &Snapshot, elm: &WorkspaceId) -> Self {
+        let oak = snapshot.workspaces().iter().find(|workspace| workspace.name == "oak").unwrap().id.clone();
+        let said = snapshot.workspace_pull_request(elm);
+        let own = said_of(&said).and_then(Option::as_ref);
+        let detail = own.and_then(|own| said_of(&own.detail));
         Read {
-            state: own.as_ref().map(|own| own.pull_request.said().state),
-            local: own.as_ref().map(|own| own.local),
-            checks: own.as_ref().and_then(|own| own.pull_request.checks_said()).map(|checks| checks.checks.len()),
-            unseen: feed.unseen(&oak),
-            chip,
-            said: feed.said_pull_request(&workspace(elm)),
+            state: own.map(|own| own.own.pull_request.summary.state),
+            local: own.map(|own| own.own.local),
+            checks: detail.and_then(|detail| detail.checks.as_ref()).map(|checks| checks.checks.len()),
+            unseen: said_of(snapshot.workspace_repository_unseen(&oak)).cloned().flatten(),
+            chip: said_of(snapshot.reference_said(&twelve()))
+                .and_then(ReferenceSaid::about)
+                .map(|about| about.title.clone()),
+            current: matches!(said, Observed::Current { .. }),
         }
+    }
+}
+
+/// What `observed` says, however fresh.
+fn said_of<T>(observed: &Observed<T>) -> Option<&T> {
+    match observed {
+        Observed::Current { value } | Observed::AsOf { value, .. } => Some(value),
+        Observed::NotKnown | Observed::Unknown => None,
     }
 }
 
@@ -125,7 +131,7 @@ fn a_view_reads_github_from_the_hubs_observations() {
         checks: Some(1),
         unseen: Some(unseen()),
         chip: Some("Decide".into()),
-        said: true,
+        current: true,
     };
     assert_eq!(read, expected);
 }
@@ -189,11 +195,18 @@ impl Holding {
         self.held.observed(&keys, changed);
     }
 
-    fn pull_request(&self, w: &str) -> Option<OwnPullRequest> {
+    /// The checks, history and stack read with `w`'s pull request, and how fresh they are.
+    fn detail(&self, w: &str) -> Observed<PullRequestDetail> {
         let snapshot = self.records.snapshot();
-        let of = |key: &ObservationKey| snapshot.observation(key);
-        let observed = HeldObservations { of: &of, hub_listed: snapshot.hub_listed() };
-        GithubHeld::pull_request(&w.into(), &observed).and_then(|found| found.pull_request)
+        let Observed::Current { value: Some(own) } = snapshot.workspace_pull_request(&w.into()) else {
+            panic!("w's pull request is current")
+        };
+        match own.detail {
+            Observed::Current { value } => Observed::Current { value: value.clone() },
+            Observed::AsOf { value, as_of_ms } => Observed::AsOf { value: value.clone(), as_of_ms },
+            Observed::NotKnown => Observed::NotKnown,
+            Observed::Unknown => Observed::Unknown,
+        }
     }
 }
 
@@ -205,15 +218,36 @@ fn the_detail_goes_with_the_summary_only_at_its_head() {
     holding.notice(stands("w", "head-8", PrState::Open, 5));
     holding.workspace_list("w", vec![detail("w", "head-7", 4)], 4);
 
-    let pushed = holding.pull_request("w").unwrap();
-
-    assert_eq!(pushed.pull_request.checks, None, "the checks of the commit before");
-    assert_eq!((pushed.pull_request.history, pushed.pull_request.stack), (None, None));
+    assert_eq!(holding.detail("w"), Observed::NotKnown, "the checks of the commit before");
 
     holding.notice(detail("w", "head-8", 6));
 
-    let read = holding.pull_request("w").unwrap();
-    assert!(read.pull_request.checks.is_some() && read.pull_request.stack.is_some());
+    let Observed::Current { value: read } = holding.detail("w") else { panic!("{:?}", holding.detail("w")) };
+    assert!(read.checks.is_some() && read.stack.is_some());
+}
+
+/// What a view last looked at tells it whether what the hub says of a chip has changed since, without comparing what
+/// it says, and only of the chip it changed.
+#[test]
+fn a_view_tells_which_chip_changed_since_it_last_looked() {
+    let mut holding = Holding::default();
+    let said = |rev: u64| Observation::Reference {
+        reference: twelve(),
+        said: Observed::Current { value: ReferenceSaid::Missing },
+        rev: Rev::new(rev),
+    };
+    let thirteen = ReferenceAsk { number: IssueNumber::try_from(13).unwrap(), ..twelve() };
+    let before = holding.records.snapshot();
+
+    holding.reference_list(vec![said(7)], 7);
+
+    let after = holding.records.snapshot();
+    let changes = after.changes_since(&before);
+    assert_eq!((changes.reference_said(&twelve()), changes.reference_said(&thirteen)), (true, false));
+
+    holding.notice(said(7));
+
+    assert!(!holding.records.snapshot().changes_since(&after).reference_said(&twelve()), "the same again");
 }
 
 /// A view is told of a change to an observation of what it shows, and isn't told of one of what it doesn't show, or
@@ -240,7 +274,7 @@ fn a_view_is_told_of_a_change_to_what_it_shows_and_of_nothing_else() {
 
     let chip = Observation::Reference {
         reference: twelve(),
-        said: Observed::Current { value: protocol::model::ReferenceSaid::Missing },
+        said: Observed::Current { value: ReferenceSaid::Missing },
         rev: Rev::new(7),
     };
     holding.reference_list(vec![chip], 7);

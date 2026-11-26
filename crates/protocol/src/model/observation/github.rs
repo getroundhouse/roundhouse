@@ -6,8 +6,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    Checks, CommitId, GithubRepositoryName, History, IssueNumber, IssueSummary, Local, OwnPullRequest, PullRequest,
-    PullRequestNumber, Reference, Stack, Summary,
+    About, Checks, CommitId, GithubRepositoryName, History, IssueNumber, IssueSummary, Local, OwnPullRequest,
+    PullRequest, PullRequestNumber, Reference, ReferenceAsk, Stack, Summary,
 };
 
 /// What GitHub says of an issue or a pull request a chip names.
@@ -101,6 +101,30 @@ impl ReferenceSaid {
             Some(Reference::PullRequest(pull_request)) => ReferenceSaid::PullRequest(PullRequestSaid::of(pull_request)),
             Some(Reference::Unknown) => return None,
         })
+    }
+
+    /// Its repository and number, as an ask for it names it. `None` where none was found, and for one of a kind this
+    /// build doesn't know.
+    pub fn asked(&self) -> Option<ReferenceAsk> {
+        match self {
+            ReferenceSaid::Issue(issue) => {
+                Some(ReferenceAsk { repository: issue.repository.clone(), number: issue.number })
+            }
+            ReferenceSaid::PullRequest(pull_request) => Some(ReferenceAsk {
+                repository: pull_request.repository.clone(),
+                number: IssueNumber::try_from(pull_request.number.get()).ok()?,
+            }),
+            ReferenceSaid::Missing | ReferenceSaid::Unknown => None,
+        }
+    }
+
+    /// What it says of itself. `None` where none was found, and for one of a kind this build doesn't know.
+    pub fn about(&self) -> Option<&About> {
+        match self {
+            ReferenceSaid::Issue(issue) => Some(&issue.summary.about),
+            ReferenceSaid::PullRequest(pull_request) => Some(&pull_request.summary.about),
+            ReferenceSaid::Missing | ReferenceSaid::Unknown => None,
+        }
     }
 }
 

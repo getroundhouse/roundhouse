@@ -1,15 +1,15 @@
 use look::{ChipKind, GithubState, PullRequestState};
-use protocol::model::{PrState, QueueState, Reference};
+use protocol::model::{PrState, PullRequestSaid, QueueState, ReferenceSaid};
 
 use super::card::said_of;
 use super::drawing::kind_and_state;
 
 /// A pull request in `state`, a draft or not, at `queue` in the merge queue or out of it.
-fn pull_request(state: PrState, is_draft: bool, queue: Option<QueueState>) -> Reference {
-    let mut pull_request = protocol::fixtures::pull_request(1021);
-    let said = &mut pull_request.summary.said;
+fn pull_request(state: PrState, is_draft: bool, queue: Option<QueueState>) -> ReferenceSaid {
+    let mut pull_request = PullRequestSaid::of(&protocol::fixtures::pull_request(1021));
+    let said = &mut pull_request.summary;
     (said.state, said.is_draft, said.queue) = (state, is_draft, queue);
-    Reference::PullRequest(pull_request)
+    ReferenceSaid::PullRequest(pull_request)
 }
 
 /// Merged and closed come before the queue, and the queue before whether it's a draft, as the bar takes them, and a

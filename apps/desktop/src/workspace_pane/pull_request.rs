@@ -1,8 +1,7 @@
-//! The workspace's pull request: taking it as the hub sends it, and doing what its bar offers.
+//! The workspace's pull request: reading it as the hub sent it, and doing what its bar offers.
 
-use client_core::GithubFeed;
 use gpui_kit::Context;
-use protocol::model::Workspace;
+use protocol::model::Observed;
 
 use super::{PaneEvent, WorkspacePane};
 use crate::pull_request::{Action, Ask, Lookup};
@@ -33,31 +32,25 @@ impl WorkspacePane {
 
     /// The branch the pull request merges into, or the one the workspace started from while there's none to say.
     fn base(&self) -> &str {
-        if let Some(pr) = self.pull_request.pull_request() {
-            return pr.said().base_branch.as_str();
+        if let Some(pr) = self.pull_request().pull_request() {
+            return pr.summary.base_branch.as_str();
         }
         let from = self.workspace().base_ref.as_deref().unwrap_or("the default branch");
         from.trim_prefix("origin/")
     }
 
-    /// The workspace's pull request and its warnings, as the hub last said them in `github`.
-    pub(super) fn known(github: &GithubFeed, workspace: &Workspace) -> (Lookup, Vec<Warning>) {
-        let unseen = github.unseen(workspace);
-        let warnings = unseen.iter().map(Warning::unseen).collect();
-        (Lookup::of(github.pull_request(workspace), unseen), warnings)
+    /// The workspace's pull request, as the hub last said it in the records the pane holds.
+    pub fn pull_request(&self) -> Lookup<'_> {
+        let (records, id) = (self.shown.all(), &self.workspace().id);
+        Lookup::of(records.workspace_pull_request(id), records.workspace_repository_unseen(id))
     }
 
-    /// Takes the pull request as the hub sent it, once the hub has said anything of it: looking where it said it hasn't
-    /// looked, as once its cache has forgotten it. Until then the bar keeps what it showed, as between connecting and
-    /// the hub's first word.
-    pub(crate) fn take_pull_request(&mut self, cx: &mut Context<Self>) {
-        let github = self.records.github();
-        if github.said_pull_request(self.workspace()) {
-            let (lookup, warnings) = Self::known(&github, self.workspace());
-            if lookup != self.pull_request || warnings != self.warnings {
-                (self.pull_request, self.warnings) = (lookup, warnings);
-                cx.notify();
-            }
+    /// What's wrong that the workspace can't put right itself, which the card its name opens says, as the hub last
+    /// said: GitHub showing none of the repository where its pull requests are.
+    pub(super) fn warnings(&self) -> Vec<Warning> {
+        match self.shown.all().workspace_repository_unseen(&self.workspace().id) {
+            Observed::Current { value } | Observed::AsOf { value, .. } => value.iter().map(Warning::unseen).collect(),
+            Observed::NotKnown | Observed::Unknown => Vec::new(),
         }
     }
 }

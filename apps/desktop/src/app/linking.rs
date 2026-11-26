@@ -88,7 +88,7 @@ impl AppView {
         if self.shown.is_none()
             && let Some(feed) = self.feed()
         {
-            self.show_pull_requests(&feed, cx);
+            self.start_showing(&feed);
         }
         self.conversations.update(cx, |conversations, _| conversations.connected(client));
         // Every pane stays as it was, with whatever's typed in it, and carries on here.

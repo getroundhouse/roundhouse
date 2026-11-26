@@ -21,6 +21,7 @@ use crate::selection::{Scrolled, Selection, Way};
 use crate::step_keys::{Steps, with_step_keys};
 use crate::stops::{Within, stop_beside};
 use crate::texts::{Of, TextAt, Texts};
+use client_core::records::Snapshot;
 use client_core::{Client, RecordsFeed};
 
 /// What a proposal's line in the chat starts with, and its tab: a way that splits in two, for the options it offers.
@@ -110,9 +111,16 @@ impl ProposalView {
         self.linked.reconnect(client, cx);
     }
 
-    /// Reads which workspace a pull request the page names is in from `records` from now on.
+    /// Reads which workspace a pull request the page names is in, and what the hub says of it, from `records` from now
+    /// on.
     pub fn follow_records(&self, records: RecordsFeed) {
         self.references.follow_records(records);
+    }
+
+    /// Takes what the client holds now of what the hub says of the issues and pull requests the page's chips name,
+    /// drawing again those it changed. A client calls this whenever its records change.
+    pub fn records_changed(&self, records: &Snapshot, cx: &mut App) {
+        self.references.records_changed(records, cx);
     }
 
     /// The record whose newest revision the page shows, which isn't the hub's newest while that's held back.

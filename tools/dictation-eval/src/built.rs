@@ -7,7 +7,7 @@ use client_core::session_log::SessionLog;
 use protocol::capability::asking::{Choose, Question, QuestionOption, TypedAnswer};
 use protocol::event::{ContentBlock, EventBody};
 use protocol::fixtures;
-use protocol::model::{Place, ProposalOption, ProposalQuestion, Proposed, PullRequest, Records, Repo, Rev, Seq};
+use protocol::model::{Place, ProposalOption, ProposalQuestion, Proposed, PullRequestSaid, Records, Repo, Rev, Seq};
 use protocol::prompt::{Prompt, PromptFrom};
 
 use crate::case::{Case, ChatEntry, FieldKind, Invalid, ProposalCase, QuestionCase, WorkspaceCase};
@@ -16,7 +16,7 @@ use crate::case::{Case, ChatEntry, FieldKind, Invalid, ProposalCase, QuestionCas
 pub(crate) struct Built<'c> {
     case: &'c Case,
     shown: Option<InWorkspace>,
-    pull_request: Option<PullRequest>,
+    pull_request: Option<PullRequestSaid>,
     chat: Option<SessionLog>,
     question: Option<Question>,
     proposal: Option<Proposed>,
@@ -104,10 +104,10 @@ fn in_workspace(case: &WorkspaceCase) -> InWorkspace {
     records.snapshot().in_workspace(&"w1".into()).unwrap_or_else(|| unreachable!("the workspace was just listed"))
 }
 
-fn pull_request(title: &str) -> PullRequest {
-    let mut pull_request = fixtures::pull_request(1);
-    title.clone_into(&mut pull_request.summary.said.about.title);
-    pull_request
+fn pull_request(title: &str) -> PullRequestSaid {
+    let mut said = PullRequestSaid::of(&fixtures::pull_request(1));
+    title.clone_into(&mut said.summary.about.title);
+    said
 }
 
 fn chat(entries: &[ChatEntry]) -> SessionLog {

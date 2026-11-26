@@ -57,7 +57,7 @@ fn in_workspace(workspace: &Workspace<'_>) -> hint_words::Workspace {
         branches,
         repo: shown.all().repo(&record.repo_id).map(|repo| repo.name.clone()),
         commented: shown.comments().iter().rev().map(|comment| comment.path.clone()).collect(),
-        pull_request: workspace.pull_request.map(|pull_request| pull_request.said().about.title.clone()),
+        pull_request: workspace.pull_request.map(|pull_request| pull_request.summary.about.title.clone()),
     }
 }
 

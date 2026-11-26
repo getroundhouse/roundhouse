@@ -3,7 +3,7 @@
 
 use hint_words::{Picked, PickedFrom};
 use protocol::capability::asking::Question;
-use protocol::model::{Proposed, PullRequest};
+use protocol::model::{Proposed, PullRequestSaid};
 
 use super::{pick, picked_from};
 use crate::records::InWorkspace;
@@ -34,7 +34,7 @@ pub struct Around<'a> {
 /// What a workspace hints: its record, its pull request, then its changed files.
 pub struct Workspace<'a> {
     pub shown: &'a InWorkspace,
-    pub pull_request: Option<&'a PullRequest>,
+    pub pull_request: Option<&'a PullRequestSaid>,
     pub changed: Vec<&'a str>,
 }
 
