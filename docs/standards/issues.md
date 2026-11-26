@@ -74,6 +74,7 @@ Labels answer five questions, each with a prefix of its own, so any common searc
 | Label | What it is | It closes when |
 |---|---|---|
 | `kind/bug` | Something built that behaves wrongly, including under failure | It's fixed, with a test |
+| `kind/flake` | A test that sometimes fails with nothing changed, whether the cause is in the test or the product | Its cause is fixed, and repeating the test confirms it, as "A flaky test" in `docs/standards/merging.md` says |
 | `kind/feature` | Something a person using the product would notice is missing | It's built |
 | `kind/task` | Work no user sees: tooling, docs, setup, refactors, code brought up to a standard | It's done |
 | `kind/question` | Something not settled, whether a design or a decision | It's answered, and the outcome is in a doc |
