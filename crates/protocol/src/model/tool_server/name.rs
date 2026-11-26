@@ -29,10 +29,10 @@ pub enum ToolServerNameError {
 }
 
 /// The longest name agents call a server by, which leaves room beside it for a tool's name, since a CLI makes each
-/// tool's name from both. *Unconfirmed.*
+/// tool's name from both.
 const MOST_FOR_AGENTS: usize = 32;
 
-/// What agents call a server whose name has nothing they can take, such as one in Japanese. *Unconfirmed.*
+/// What agents call a server whose name has nothing they can take, such as one in Japanese.
 const NOTHING_TO_TAKE: &str = "server";
 
 impl ToolServerName {
@@ -85,7 +85,7 @@ impl ToolServerName {
         ServerName::from(if taken.is_empty() { NOTHING_TO_TAKE } else { taken })
     }
 
-    /// Whether agents would call the two the same, in any case, so a hub can't have both. *Unconfirmed.*
+    /// Whether agents would call the two the same, in any case, so a hub can't have both.
     pub fn is_same_for_agents(&self, other: &ToolServerName) -> bool {
         self.for_agents().as_str().eq_ignore_ascii_case(other.for_agents().as_str())
     }
