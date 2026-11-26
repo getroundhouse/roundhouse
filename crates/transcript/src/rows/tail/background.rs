@@ -4,6 +4,7 @@
 
 use client_core::calls::UNDESCRIBED;
 use client_core::tasks::Says;
+use client_core::tool_servers::ToolServerNames;
 use client_core::waits;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -25,14 +26,20 @@ use crate::transcript::OpenWait;
 use crate::transcript::Transcript;
 
 /// The lines for the tasks the agent runs in the background, as `crate::task_lines` lists them.
-pub(super) fn lines(tasks: &[AgentTask], folds: &Folds, shared: &Shared, cx: &App) -> Vec<AnyElement> {
+pub(super) fn lines(
+    tasks: &[AgentTask],
+    folds: &Folds,
+    names: &ToolServerNames,
+    shared: &Shared,
+    cx: &App,
+) -> Vec<AnyElement> {
     let line = |line| match line {
-        TaskLine::Task(group, task) => going(group, task, shared, cx).into_any_element(),
-        TaskLine::Several { group, tasks, open } => several(group, &tasks, open, shared, cx),
+        TaskLine::Task(group, task) => going(group, task, names, shared, cx).into_any_element(),
+        TaskLine::Several { group, tasks, open } => several(group, &tasks, open, names, shared, cx),
         // Set in by a mark's width and the line's own gap, so its mark starts where the group's words do.
         TaskLine::Under(group, task) => tail_line(cx)
             .child(div().flex_none().w(look::Size::Inline.width()))
-            .child(going(group, task, shared, cx).flex_1().min_w_0())
+            .child(going(group, task, names, shared, cx).flex_1().min_w_0())
             .into_any_element(),
     };
     task_lines(tasks, folds).into_iter().map(line).collect()
@@ -53,7 +60,14 @@ fn mark(group: TaskGroup, shared: &Shared, cx: &App) -> (AnyElement, &'static st
 /// One line for several tasks of a group: the mark each of them has, so the line says as much as theirs would about
 /// whether anything is running, how many there are, and while it's closed, what each is for, fainter, as far as the
 /// line has room. Clicking it opens it to their own lines, and closes it again, as a call's line does.
-fn several(group: TaskGroup, tasks: &[&AgentTask], open: bool, shared: &Shared, cx: &App) -> AnyElement {
+fn several(
+    group: TaskGroup,
+    tasks: &[&AgentTask],
+    open: bool,
+    names: &ToolServerNames,
+    shared: &Shared,
+    cx: &App,
+) -> AnyElement {
     let colors = look::colors(cx);
     let (mark, pointed_at) = mark(group, shared, cx);
     let count = format!("{} {}", tasks.len(), group.name());
@@ -66,15 +80,15 @@ fn several(group: TaskGroup, tasks: &[&AgentTask], open: bool, shared: &Shared, 
         .says(pointed_at, cx)
         .child(lead(mark, look::Size::Inline.width(), open, cx))
         .child(div().flex_none().child(count))
-        .when(!open, |line| line.child(clipped(what_for(tasks)).min_w_0().text_color(colors.text_faint)))
+        .when(!open, |line| line.child(clipped(what_for(tasks, names)).min_w_0().text_color(colors.text_faint)))
         .test_support()
         .into_any_element()
 }
 
 /// What each of `tasks` is for, one after another, as far as a line could have room for.
-fn what_for(tasks: &[&AgentTask]) -> String {
+fn what_for(tasks: &[&AgentTask], names: &ToolServerNames) -> String {
     let mut said = String::new();
-    for what in tasks.iter().filter_map(|task| Says::of(task)).map(Says::into_words) {
+    for what in tasks.iter().filter_map(|task| Says::of(task, names)).map(Says::into_words) {
         if said.len() >= START_CHARS {
             break;
         }
@@ -86,17 +100,17 @@ fn what_for(tasks: &[&AgentTask]) -> String {
     said
 }
 
-/// A background task's line: its group's mark, and what the agent said it's for, or else the command it runs, as that
-/// command's own line says it. A subagent has the robot its call's
+/// A background task's line: its group's mark, and what it's for, or else the command it runs, as that command's own
+/// line says it. A subagent has the robot its call's
 /// line has, so its line reads as that call, and it ends with the button that opens the subagent tab, as its call's
 /// line does, once the agent has said which subagent it is, or which call started it.
-fn going(group: TaskGroup, task: &AgentTask, shared: &Shared, cx: &App) -> Div {
+fn going(group: TaskGroup, task: &AgentTask, names: &ToolServerNames, shared: &Shared, cx: &App) -> Div {
     let (mark, pointed_at) = mark(group, shared, cx);
     let open = Opens::task(task).map(|opens| {
         let id = ElementId::Name(format!("background-open/{}", task.id).into());
-        open_tab(id, opens, &tab_title(task), &shared.this)
+        open_tab(id, opens, &tab_title(task, names), &shared.this)
     });
-    let says = Says::of(task).unwrap_or_else(|| Says::For(group.one().to_string()));
+    let says = Says::of(task, names).unwrap_or_else(|| Says::For(group.one().to_string()));
     in_the_background(("background", task.id.as_str()), mark, says, pointed_at, open, cx)
 }
 

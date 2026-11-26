@@ -11,6 +11,7 @@ use crate::texts::{Style, TextAt, Written};
 use crate::transcript::{AtWork, Model};
 use crate::{attachments, find};
 use client_core::session_log::SessionLog;
+use client_core::tool_servers::ToolServerNames;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -36,6 +37,8 @@ pub(in super::super) struct EndOfChat<'a> {
     /// How each of the agent's replies read out loud ended, as the hub records it, which dims what of one still being
     /// written wasn't heard.
     pub(in super::super) heard: &'a HashMap<MessageId, Arc<ReplyHeard>>,
+    /// What the person calls each of the hub's tool servers, which a background task's line says.
+    pub(in super::super) tool_servers: &'a ToolServerNames,
 }
 
 /// A prompt the agent hasn't read yet, which is drawn after what it's still writing, as it will be once it's read.
@@ -64,7 +67,7 @@ pub(in super::super) fn waiting(log: &SessionLog, m: &Model) -> Vec<Waiting> {
 /// running, and the working line says the agent is at work. A subagent's line opens the subagent tab. Nothing's found
 /// at the end of the chat, since it isn't counted, so nothing's marked there either.
 pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, cx: &App) -> AnyElement {
-    let EndOfChat { tail, waiting, at_work, folds, heard } = *end;
+    let EndOfChat { tail, waiting, at_work, folds, heard, tool_servers } = *end;
     let (written, placed) = still_writing(tail, heard, shared, folds.thinking_open(), cx);
     let mut after: Vec<AnyElement> = Vec::new();
     if at_work.working {
@@ -72,7 +75,7 @@ pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, cx: &App) 
         after.push(line.into_any_element());
     }
     // Left going by a turn, or started during one.
-    after.extend(background::lines(&at_work.background, folds, shared, cx));
+    after.extend(background::lines(&at_work.background, folds, tool_servers, shared, cx));
     let wait = at_work.waits.iter().map(|open| background::wait_line(open, shared, cx));
     after.extend(wait.map(IntoElement::into_any_element));
     if waiting.is_empty() {

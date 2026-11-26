@@ -52,8 +52,8 @@ Either way, the request takes the composer's place, as a question does, and is a
 
 ![A removal waiting to be allowed, asked about with full access](../../../spec/screens/approval-full-access.png)
 
-- **Its header says what the call is,** such as `Command` or `Edit`, or the tool's name where it has no kind of its own, then what the subagent that asks is for, when one does.
-- **Under what the agent says it's for is the command, whole.** A long one scrolls. An edit, or a file to write, shows what it would change, under the file's path. A patch of several files, as Codex makes, says how many, and shows each file's path over what it would change. Another tool shows its main input, such as a URL.
+- **Its header says what the call is,** such as `Command` or `Edit`, or the tool's name where it has no kind of its own, with the MCP server it's from, by the name you gave it if it's one of Roundhouse's, such as `Create issue · GitHub (Northwind)`. Then it says what the subagent that asks is for, when one does.
+- **Under what the agent says it's for is the command, whole.** A long one scrolls. An edit, or a file to write, shows what it would change, under the file's path. A patch of several files, as Codex makes, says how many, and shows each file's path over what it would change. A fetch or a search shows its main input, such as a URL. A tool with no kind of its own, such as an MCP server's, shows its whole input, as JSON.
 - **Under that is why the agent asks,** in its own words, when it says.
 - **`1` allows it and `2` denies it,** and `Enter` or the arrow sends what's chosen.
 - **`0` goes to the row for saying what to do instead, when the agent accepts a written denial.** What's typed there denies the request, and the agent is told in those words. `Enter` there sends only what's typed, so it never allows.

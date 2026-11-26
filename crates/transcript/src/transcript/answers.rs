@@ -9,7 +9,7 @@ use protocol::event::EventBody;
 use protocol::model::{ApprovalId, Seq, Session, SubagentId};
 
 use super::{Model, Transcript, TranscriptEvent};
-use crate::questions::{Asks, QuestionPanel};
+use crate::questions::{AroundRequest, Asks, QuestionPanel};
 
 /// A request waiting to be asked in the composer's place.
 struct Waiting {
@@ -81,13 +81,20 @@ impl Transcript {
         self.tell_the_panel(cx);
     }
 
-    /// Tells the panel what's around its request: what the subagent that asks is for, by its record, and how many
-    /// more requests wait behind it. Both can change while the request waits, as a record comes or another agent asks.
+    /// Tells the panel what's around its request: what the person calls the MCP server its tool is from, what the
+    /// subagent that asks is for, by its record, and how many more requests wait behind it. Each can change while the
+    /// request waits, as a server is added or removed, a record comes or another agent asks.
     pub(super) fn tell_the_panel(&self, cx: &mut Context<Self>) {
         let Some(panel) = &self.asking else { return };
-        let asker = panel.read(cx).asked_by().map(|subagent| self.model.borrow().subagent_called(subagent));
-        let more_waiting = self.waiting.len().saturating_sub(1);
-        panel.update(cx, |panel, cx| panel.set_around(asker, more_waiting, cx));
+        let around = {
+            let (panel, m) = (panel.read(cx), self.model.borrow());
+            AroundRequest {
+                server: panel.server().map(|server| m.tool_servers.shown(server).to_string()),
+                asker: panel.asked_by().map(|subagent| m.subagent_called(subagent)),
+                more_waiting: self.waiting.len().saturating_sub(1),
+            }
+        };
+        panel.update(cx, |panel, cx| panel.set_around(around, cx));
     }
 
     /// The requests waiting that are asked in the composer's place, oldest first: every one but a plan.

@@ -1,16 +1,21 @@
 use super::super::Approval;
-use crate::calls::{EditFile, Recorded, ToolCall, WriteFile};
+use crate::calls::{EditFile, Recorded, ToolCall, WriteFile, typed};
 use protocol::capability::approvals::Decision;
 use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::calls::call::Patch;
+use protocol::capability::setup::ServerName;
 use protocol::event::EventBody;
 use protocol::model::{SubagentId, UseChoice};
+use serde_json::{Map, Value};
 
 /// A tool's use the agent asks about.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ToolUseAsked<'a> {
     /// The tool, by a name to show: the agent's own for one of its tools, and a readable one for any other.
     pub tool: String,
+    /// The MCP server the tool is from, as its agent calls it, which [`crate::tool_servers::ToolServerNames`] says how
+    /// to show. A client names it after the tool. `None` for a tool from none.
+    pub server: Option<&'a ServerName>,
     /// What the use is for, which for a command is the agent's own line about it. `None` where it says nothing, which
     /// leaves what the tool was given to say it.
     pub about: Option<&'a str>,
@@ -32,6 +37,8 @@ pub enum Given<'a> {
     Write(WriteFile<'a>),
     /// Files changed at once, each added, deleted, or changed and maybe moved, with each change.
     Patch(&'a Patch),
+    /// All that a tool with no kind of its own was given, such as one of an MCP server's, as JSON over several lines.
+    Input(String),
     /// The input that matters most to any other tool, on one line, such as a URL.
     MainInput(String),
 }
@@ -45,7 +52,7 @@ impl Given<'_> {
                 [file] => Some(&file.path),
                 _ => None,
             },
-            Given::Command(_) | Given::MainInput(_) => None,
+            Given::Command(_) | Given::Input(_) | Given::MainInput(_) => None,
         }
     }
 }
@@ -96,18 +103,22 @@ impl<'a> ToolUseAsked<'a> {
     /// event.
     pub fn of(body: &'a EventBody) -> Option<Self> {
         let EventBody::ApprovalRequested { asked_by, request, .. } = body else { return None };
-        let Recorded::Typed(typed) = Recorded::asked(body)?;
-        let call = ToolCall::read(Recorded::Typed(typed));
+        let recorded = Recorded::asked(body)?;
+        let Recorded::Typed(typed) = recorded;
+        let call = ToolCall::read(recorded);
         let summary = call.summary();
-        let tool = crate::calls::typed::title(typed);
+        let tool = typed::title(typed);
         let (tool, about, given) = match call {
             ToolCall::Command(command) => (tool, command.described(), Some(Given::Command(command.command))),
             ToolCall::Edit(edit) => (tool, None, Some(Given::Edit(edit))),
             ToolCall::Write(write) => (tool, None, Some(Given::Write(write))),
             ToolCall::Patch(patch) => (tool, None, Some(Given::Patch(patch))),
             // Asked about by its typed input, which holds what it puts in the cell.
-            ToolCall::NotebookEdit(_) => (tool, None, Some(Given::MainInput(crate::calls::typed::input(typed)))),
-            ToolCall::Other(other) => (other.name().to_string(), None, summary.map(Given::MainInput)),
+            ToolCall::NotebookEdit(_) => (tool, None, Some(Given::MainInput(typed::input(typed)))),
+            ToolCall::Other(other) => {
+                let given = gives_something(recorded.input()).then(|| Given::Input(typed::input(typed)));
+                (other.name().to_string(), None, given)
+            }
             ToolCall::Read(_)
             | ToolCall::Search(_)
             | ToolCall::Agent(_)
@@ -119,8 +130,14 @@ impl<'a> ToolUseAsked<'a> {
             | ToolCall::Advisor => (tool, None, summary.map(Given::MainInput)),
         };
         let about = about.map(str::trim).filter(|about| !about.is_empty());
-        Some(Self { tool, about, given, reason: request.why.as_deref(), asked_by: asked_by.as_ref() })
+        let (server, reason) = (recorded.server(), request.why.as_deref());
+        Some(Self { tool, server, about, given, reason, asked_by: asked_by.as_ref() })
     }
+}
+
+/// Whether `input`, a tool's whole input, gives it anything.
+fn gives_something(input: &Value) -> bool {
+    !input.is_null() && !input.as_object().is_some_and(Map::is_empty)
 }
 
 impl Approval<'_> {

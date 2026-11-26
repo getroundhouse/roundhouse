@@ -6,6 +6,7 @@ use gpui_kit::{AnyElement, App};
 use protocol::capability::Capabilities;
 use protocol::capability::approvals::{Decision, DecisionPart};
 use protocol::capability::asking::{Question, QuestionAnswer};
+use protocol::capability::setup::ServerName;
 use protocol::event::EventBody;
 use protocol::model::{AnswerSoFar, SoFar, SubagentId};
 
@@ -40,6 +41,14 @@ impl Asks {
     pub(crate) fn asked_by(body: &EventBody) -> Option<&SubagentId> {
         let EventBody::ApprovalRequested { asked_by, .. } = body else { return None };
         asked_by.as_ref()
+    }
+
+    /// The MCP server the tool asked about is from, as its agent calls it.
+    pub(super) fn server(&self) -> Option<&ServerName> {
+        match self {
+            Asks::Questions(_) => None,
+            Asks::ToolUse(tool_use) => tool_use.server(),
+        }
     }
 
     pub(super) fn secret(&self, question: usize) -> bool {

@@ -1,6 +1,7 @@
 use super::super::{Printer, about};
 use crate::run::short;
 use client_core::calls::first_line;
+use client_core::tool_servers::ToolServerNames;
 use client_core::{Answered, Approval, Given, ToolUseAsked};
 use protocol::capability::approvals::{Asks, Decision};
 use protocol::capability::asking::Question;
@@ -15,7 +16,7 @@ impl Printer {
         {
             self.asked.insert(approval_id.clone(), questions.to_vec());
         }
-        for line in requested(event, &approval) {
+        for line in requested(event, &approval, &self.servers) {
             self.line(event.seq, &line);
         }
     }
@@ -30,8 +31,8 @@ impl Printer {
     }
 }
 
-/// The lines for the request `event`, which asks what `approval` says.
-pub(super) fn requested(event: &SessionEvent, approval: &Approval) -> Vec<String> {
+/// The lines for the request `event`, which asks what `approval` says, naming an MCP server as `servers` does.
+pub(super) fn requested(event: &SessionEvent, approval: &Approval, servers: &ToolServerNames) -> Vec<String> {
     let EventBody::ApprovalRequested { approval_id, .. } = &event.body else { return Vec::new() };
     let session = &event.session_id;
     match approval.asks() {
@@ -48,15 +49,16 @@ pub(super) fn requested(event: &SessionEvent, approval: &Approval) -> Vec<String
             lines
         }
         Asks::Call { .. } | Asks::Network { .. } | Asks::Access { .. } | Asks::Server(_) | Asks::Unknown => {
-            tool_use(event)
+            tool_use(event, servers)
         }
     }
 }
 
-/// The lines for a request to use a tool: the tool and what the use is for, then what the tool was given where the
-/// first line doesn't already say all of it, why the agent asks, and the subagent that asks, by the call that started
-/// it. An edit or a write is given by its file, then what it takes out and puts in.
-fn tool_use(event: &SessionEvent) -> Vec<String> {
+/// The lines for a request to use a tool: the tool, the MCP server it's from, as `servers` names it, if it's from one,
+/// and what the use is for, then what the tool was given where the first line doesn't already say all of it, why the
+/// agent asks, and the subagent that asks, by the call that started it. An edit or a write is given by its file, then
+/// what it takes out and puts in, and a tool with no kind of its own by its whole input.
+fn tool_use(event: &SessionEvent, servers: &ToolServerNames) -> Vec<String> {
     let (EventBody::ApprovalRequested { approval_id, .. }, Some(asked)) = (&event.body, ToolUseAsked::of(&event.body))
     else {
         return Vec::new();
@@ -65,10 +67,12 @@ fn tool_use(event: &SessionEvent) -> Vec<String> {
         Some(Given::Command(command)) => Some(*command),
         Some(Given::MainInput(input)) => Some(input.as_str()),
         Some(given @ (Given::Edit(_) | Given::Write(_) | Given::Patch(_))) => given.path(),
-        None => None,
+        Some(Given::Input(_)) | None => None,
     };
     let first = asked.about.or(said.map(first_line)).map(str::to_string);
-    let mut lines = vec![format!("APPROVAL NEEDED: {}", about(&asked.tool, first.clone()))];
+    let tool = [Some(asked.tool.as_str()), asked.server.map(|server| servers.shown(server))];
+    let tool = tool.into_iter().flatten().collect::<Vec<_>>().join(" · ");
+    let mut lines = vec![format!("APPROVAL NEEDED: {}", about(&tool, first.clone()))];
     let marked = |mark: &str, text: &str| -> Vec<String> {
         text.lines().map(|line| format!("  {mark} {line}").trim_end().to_string()).collect()
     };
@@ -91,6 +95,7 @@ fn tool_use(event: &SessionEvent) -> Vec<String> {
                 lines.extend(patched(&file.change, marked));
             }
         }
+        Some(Given::Input(input)) => lines.extend(input.lines().map(|line| format!("  {line}"))),
         Some(Given::Command(_) | Given::MainInput(_)) | None => {
             if let Some(said) = said.filter(|said| first.as_deref() != Some(*said)) {
                 lines.extend(marked("$", said));

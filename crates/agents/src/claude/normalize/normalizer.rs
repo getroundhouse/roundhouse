@@ -1,8 +1,10 @@
+use super::super::tool_servers::Servers;
 use super::super::typed;
 use super::{
-    blocks, calls, compaction, denied, limits, own_turns, pending, prompt, request, retrying, said, subagents,
+    blocks, calls, compaction, denied, limits, own_turns, pending, prompt, retrying, said, streaming, subagents,
     surrogates, tasks, turn_end, user,
 };
+use crate::ToolServers;
 use calls::OpenCalls;
 use compaction::Compactions;
 use own_turns::OwnTurns;
@@ -13,7 +15,7 @@ use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::approvals::Asks;
 use protocol::event::{AgentRunState, EventBody, TurnOutcome};
 use protocol::model::{CacheRequest, MessageId, SubagentId, ToolUseId, UsageLimit};
-use protocol::tail::{BlockKind, DeltaChange, Retrying, StreamDelta};
+use protocol::tail::{DeltaChange, Retrying, StreamDelta};
 use said::FailedRequests;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -78,6 +80,8 @@ pub struct Normalizer {
     pub(super) streaming: HashMap<MessageId, (u32, Option<SubagentId>)>,
     pub(super) calls: OpenCalls,
     pub(super) tasks: Tasks,
+    /// The MCP servers the CLI has, which a task of a tool's is read by.
+    pub(super) servers: Servers,
     pub(super) pending_calls: PendingCalls,
     pub(super) models: TurnModels,
     pub(super) subagents: Subagents,
@@ -89,6 +93,11 @@ pub struct Normalizer {
 }
 
 impl Normalizer {
+    /// Reads a CLI launched with `servers`.
+    pub(crate) fn launched_with(servers: Option<&ToolServers>) -> Self {
+        Self { servers: Servers::launched_with(servers), ..Self::default() }
+    }
+
     pub fn line(&mut self, line: &str) -> Normalized {
         let Some(value) = value_of(line) else {
             return Normalized { dropped: Vec::new(), parsed: unparsed(), after: None };
@@ -97,6 +106,7 @@ impl Normalizer {
         let dropped = self.pending_calls.note(&value);
         let own_turn = self.own_turns.note(&value, &self.tasks);
         let noted = self.tasks.note(&value, &self.calls);
+        self.servers.note(&value);
         let in_foreground = self.tasks.in_foreground(&value);
         if let Some(body) = self.subagents.read(&value) {
             let relisted = noted.map(|mut list| {
@@ -111,7 +121,8 @@ impl Normalizer {
         }
         let mut parsed = match noted {
             Some(list) => Parsed::Event(list),
-            None => tasks::changed(&value, in_foreground).unwrap_or_else(|| parse_value(&value, &self.subagents)),
+            None => tasks::changed(&value, in_foreground)
+                .unwrap_or_else(|| parse_value(&value, &self.subagents, &self.servers)),
         };
         if let Parsed::Event(body) = &mut parsed {
             self.list(body);
@@ -193,7 +204,7 @@ impl Normalizer {
 /// block sits in its message, and which background tasks are monitors or were stopped.
 #[cfg(test)]
 pub(super) fn parse_line(line: &str) -> Parsed {
-    value_of(line).map_or_else(unparsed, |value| parse_value(&value, &Subagents::default()))
+    value_of(line).map_or_else(unparsed, |value| parse_value(&value, &Subagents::default(), &Servers::default()))
 }
 
 /// A line as JSON, with what the CLI can write that JSON can't hold repaired.
@@ -209,16 +220,16 @@ fn unparsed() -> Parsed {
     Parsed::Event(EventBody::AgentOther { kind: "unparsed".into(), subagent: None })
 }
 
-/// What `value` says, naming the subagent whose line it is as `subagents` know it.
-fn parse_value(value: &Value, subagents: &Subagents) -> Parsed {
+/// What `value` says, naming the subagent whose line it is as `subagents` know it, and a tool's server as `servers` do.
+fn parse_value(value: &Value, subagents: &Subagents, servers: &Servers) -> Parsed {
     let kind = str_of(value, "type").unwrap_or("unknown");
     let from = subagents.of_line(value);
     match kind {
         "assistant" => Parsed::Event(said::message(value, from.clone()).unwrap_or_else(|| assistant(value, from))),
         "user" => user::line(value, from),
         "result" => Parsed::Event(turn_ended(value)),
-        "system" => system(value),
-        "stream_event" => stream_event(value, from),
+        "system" => system(value, servers),
+        "stream_event" => streaming::event(value, from),
         "control_request" => control_request(value),
         "control_cancel_request" => match str_of(value, "request_id") {
             // Nobody decided it.
@@ -281,7 +292,7 @@ fn control_reply(value: &Value) -> Parsed {
     }
 }
 
-fn system(value: &Value) -> Parsed {
+fn system(value: &Value, servers: &Servers) -> Parsed {
     let subtype = str_of(value, "subtype").unwrap_or("unknown");
     match subtype {
         "init" => Parsed::Event(EventBody::AgentInit {
@@ -300,7 +311,7 @@ fn system(value: &Value) -> Parsed {
                 _ => AgentRunState::Unknown,
             },
         }),
-        "background_tasks_changed" => tasks::listed(value),
+        "background_tasks_changed" => tasks::listed(value, servers),
         "status" => match (str_of(value, "permissionMode"), str_of(value, "status")) {
             (Some(mode), _) => Parsed::Event(EventBody::AgentMode { mode: super::super::mode::mode(mode) }),
             // Sent as each request to the model starts, which the run's state already says is under way. Noting
@@ -347,53 +358,5 @@ fn control_request(value: &Value) -> Parsed {
         tool_use_id: id_of(request, "tool_use_id"),
         // A Normalizer knows it from the subagents it's heard start.
         asked_by: None,
-    })
-}
-
-fn stream_event(value: &Value, subagent: Option<SubagentId>) -> Parsed {
-    let event = value.get("event").unwrap_or(&Value::Null);
-    if let Some(request) = request::request(value, event) {
-        return Parsed::Request(request);
-    }
-    let message_id =
-        string_of(value, "api_message_id").or_else(|| event.get("message").and_then(|m| string_of(m, "id")));
-    let Some(message_id) = message_id else {
-        return Parsed::Drop;
-    };
-    let index = event.get("index").and_then(Value::as_u64).and_then(|i| u32::try_from(i).ok());
-    let change = match (str_of(event, "type"), index) {
-        (Some("content_block_start"), Some(index)) => {
-            let block = event.get("content_block").unwrap_or(&Value::Null);
-            let kind = match str_of(block, "type") {
-                Some("text") => BlockKind::Text,
-                Some("thinking") => BlockKind::Thinking,
-                Some("tool_use" | "server_tool_use") => BlockKind::ToolUse,
-                _ => BlockKind::Unknown,
-            };
-            DeltaChange::BlockStart { index, kind, tool_name: string_of(block, "name") }
-        }
-        (Some("content_block_delta"), Some(index)) => {
-            let delta = event.get("delta").unwrap_or(&Value::Null);
-            match str_of(delta, "type") {
-                Some("text_delta") => DeltaChange::Text { index, text: string_of(delta, "text").unwrap_or_default() },
-                Some("thinking_delta") => {
-                    DeltaChange::Thinking { index, text: string_of(delta, "thinking").unwrap_or_default() }
-                }
-                Some("input_json_delta") => {
-                    DeltaChange::ToolInput { index, json: string_of(delta, "partial_json").unwrap_or_default() }
-                }
-                _ => return Parsed::Drop,
-            }
-        }
-        (Some("message_stop"), _) => DeltaChange::MessageStop,
-        // A subagent's message_start, content_block_stop and message_delta add nothing to the tail.
-        _ => return Parsed::Drop,
-    };
-    Parsed::Delta(StreamDelta {
-        // The hub knows the run, and sets it.
-        run: None,
-        message_id: message_id.into(),
-        subagent,
-        change,
     })
 }

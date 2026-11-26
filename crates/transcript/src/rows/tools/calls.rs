@@ -64,7 +64,7 @@ pub(in super::super) fn call(toggle: &Toggle, recorded: Recorded<'_>, drawing: &
         ToolCall::NotebookEdit(edit) => notebook::draw(edit, answer, toggle, cx),
         ToolCall::MakeImage(made) => image::draw(made, answer, toggle, cx),
         ToolCall::Typed(call) => super::typed::draw(call, answer, toggle, cx),
-        ToolCall::Other(other) => other::draw(&other, input, answer, toggle, cx),
+        ToolCall::Other(other) => other::draw(&other, drawing.server.as_ref(), input, answer, toggle, cx),
     }
 }
 

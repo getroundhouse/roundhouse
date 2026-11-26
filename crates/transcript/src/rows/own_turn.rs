@@ -6,11 +6,13 @@
 
 use client_core::calls::UNDESCRIBED;
 use client_core::tasks::Says;
+use client_core::tool_servers::ToolServerNames;
 use client_core::waits::{watched, why_it_ended};
 use gpui_kit::assets::IconName;
 use gpui_kit::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _};
 use protocol::event::{EndedTask, SessionEvent, TaskKind, TaskOutcome};
 
+use super::around::Around;
 use super::line::{Line, Part};
 use super::tools::{agent, command, typed};
 use super::{Shared, empty, row};
@@ -19,18 +21,25 @@ use crate::item_key::ItemKey;
 use crate::task_lines::TaskGroup;
 
 /// The lines for `tasks`, which the turn the agent started by itself at `event` took in, one under another as calls'
-/// lines are, each at the time the turn started, since that's when the agent heard.
-pub(super) fn lines(event: &SessionEvent, tasks: &[EndedTask], shared: &Shared, cx: &App) -> AnyElement {
+/// lines are, each at the time the turn started, since that's when the agent heard. A task of an MCP server's tool names
+/// the server as `around` says the person does.
+pub(super) fn lines(
+    event: &SessionEvent,
+    tasks: &[EndedTask],
+    around: &Around,
+    shared: &Shared,
+    cx: &App,
+) -> AnyElement {
     if tasks.is_empty() {
         return empty();
     }
     let at = look::day_and_time(event.ts_ms, cx);
     let lines = tasks.iter().enumerate().map(|(ix, ended)| {
-        let (line, label) = line(ended, at.as_deref());
+        let (line, label) = line(ended, &around.tool_servers, at.as_deref());
         let task = &ended.task;
         let open = agent::Opens::task(task).map(|opens| {
             let id = ItemKey::Event(event.seq, ix).element("ended-task-open");
-            agent::open_tab(id, opens, &agent::tab_title(task), &shared.this)
+            agent::open_tab(id, opens, &agent::tab_title(task, &around.tool_servers), &shared.this)
         });
         let line = match open {
             Some(open) => line.action(open),
@@ -44,8 +53,8 @@ pub(super) fn lines(event: &SessionEvent, tasks: &[EndedTask], shared: &Shared, 
 
 /// The line for `ended`, which says what the task was for, then how it ended, and `at`, when the agent heard, and what
 /// it says to a screen reader.
-pub(super) fn line(ended: &EndedTask, at: Option<&str>) -> (Line, String) {
-    let (icon, says, how) = words(ended);
+pub(super) fn line(ended: &EndedTask, names: &ToolServerNames, at: Option<&str>) -> (Line, String) {
+    let (icon, says, how) = words(ended, names);
     let note = at.map_or_else(|| how.to_string(), |at| format!("{how} \u{b7} {at}"));
     let line = match &says {
         Says::For(what) => Line::new(icon, what.clone()),
@@ -61,7 +70,7 @@ pub(super) fn line(ended: &EndedTask, at: Option<&str>) -> (Line, String) {
 /// A task's icon, what it says the task was, and how it ended. A wait says which pull requests it waited on, and why it
 /// ended, from the hub's record of it, since the agent's word for what a wait is for is its tool's name, and for how it
 /// ended, only that its tool answered.
-fn words(ended: &EndedTask) -> (IconName, Says, &'static str) {
+fn words(ended: &EndedTask, names: &ToolServerNames) -> (IconName, Says, &'static str) {
     let (task, how) = (&ended.task, how_it_ended(ended.outcome));
     let (icon, group) = match task.kind {
         TaskKind::Subagent => (agent::ICON, TaskGroup::Subagents),
@@ -76,7 +85,7 @@ fn words(ended: &EndedTask) -> (IconName, Says, &'static str) {
             return (IconName::GitPullRequest, Says::For(format!("Waited on {what}")), how);
         }
     };
-    (icon, Says::of(task).unwrap_or_else(|| Says::For(group.one().to_string())), how)
+    (icon, Says::of(task, names).unwrap_or_else(|| Says::For(group.one().to_string())), how)
 }
 
 fn how_it_ended(outcome: TaskOutcome) -> &'static str {
@@ -90,8 +99,10 @@ fn how_it_ended(outcome: TaskOutcome) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use protocol::event::{AgentTask, EndedTask, TaskKind, TaskOutcome};
+    use protocol::event::{AgentTask, EndedTask, TaskKind, TaskOutcome, TaskTool};
     use protocol::model::{EndedWait, WaitEnd, WaitEnded};
+
+    use client_core::tool_servers::ToolServerNames;
 
     use super::words;
 
@@ -107,7 +118,7 @@ mod tests {
     #[test]
     fn a_tasks_line_says_what_the_agent_said_its_for_and_how_it_ended() {
         let said = |task: &EndedTask| {
-            let (_, title, how) = words(task);
+            let (_, title, how) = words(task, &ToolServerNames::default());
             (title.into_words(), how)
         };
         let review = ended(TaskKind::Subagent, Some("Review the depot's design"), TaskOutcome::Stopped);
@@ -122,12 +133,30 @@ mod tests {
         assert_eq!(said(&watch), unknown, "an outcome this build doesn't know");
     }
 
+    #[test]
+    fn the_line_of_an_mcp_tools_task_has_the_persons_name_for_the_server() {
+        let northwind = protocol::model::ToolServer {
+            name: protocol::model::ToolServerName::stored("Linear (Northwind)".into()),
+            ..protocol::fixtures::tool_server("t")
+        };
+        let mut held = client_core::records::HubRecords::default();
+        held.apply_list(protocol::model::Records { tool_servers: vec![northwind], ..Default::default() });
+        let mut task = ended(TaskKind::Command, Some("Linear_Northwind/export_issues"), TaskOutcome::Finished);
+        task.task.tool = Some(TaskTool { server: "Linear_Northwind".into(), tool: "export_issues".into() });
+
+        assert_eq!(
+            words(&task, held.snapshot().tool_server_names()).1.into_words(),
+            "Linear (Northwind): Export issues"
+        );
+    }
+
     /// The agent describes a wait by its tool's name, and hears only that its tool answered, so its line says what the
     /// hub keeps of it.
     #[test]
     fn a_waits_line_says_what_it_waited_on_and_why_it_ended_from_the_hubs_record() {
         let mut wait = protocol::fixtures::pull_request_wait("w1");
         let mut task = ended(TaskKind::Wait, Some("roundhouse/wait_for_pull_requests"), TaskOutcome::Finished);
+        let words = |task: &EndedTask| super::words(task, &ToolServerNames::default());
         assert_eq!(words(&task).1.into_words(), "Waited on a pull request", "without the hub's record");
 
         wait.ended = Some(WaitEnded { at_ms: 2, how: WaitEnd::ChecksFailed });

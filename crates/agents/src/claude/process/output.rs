@@ -17,9 +17,14 @@ use crate::AgentOutput;
 use crate::claude::approvals::Waiting;
 use crate::claude::normalize::{Normalized, Normalizer, Parsed, PromptProgress};
 
-pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output: mpsc::Sender<AgentOutput>) {
+/// Reads what the CLI writes to `stdout` until it's done, as `normalizer`, which is new, makes of it.
+pub(super) async fn read_stdout(
+    mut stdout: Output,
+    mut normalizer: Normalizer,
+    shared: Arc<Shared>,
+    output: mpsc::Sender<AgentOutput>,
+) {
     let mut buffer = Vec::new();
-    let mut normalizer = Normalizer::default();
     let mut answering = Answering::default();
     while let Some(line) = stdout.next(&mut buffer).await {
         if let Some(tap) = &shared.tap {

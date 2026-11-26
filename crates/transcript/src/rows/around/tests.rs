@@ -208,6 +208,30 @@ fn with_an_image(id: &str) -> EventBody {
 }
 
 #[test]
+fn a_call_to_an_mcp_servers_tool_has_the_persons_name_for_the_server() {
+    let call = |server: &str| {
+        let call = Call::Mcp { server: server.into(), tool: "find".into(), input: serde_json::Value::Null };
+        let blocks = vec![protocol::fixtures::typed_call("a", call)];
+        EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None }
+    };
+    let northwind = protocol::model::ToolServer {
+        name: protocol::model::ToolServerName::stored("Linear (Northwind)".into()),
+        ..protocol::fixtures::tool_server("t")
+    };
+    let mut held = client_core::records::HubRecords::default();
+    held.apply_list(protocol::model::Records { tool_servers: vec![northwind], ..Default::default() });
+    let m = Model { tool_servers: held.snapshot().tool_server_names().clone(), ..Model::default() };
+    let shown = |body: EventBody| {
+        let log = log([event(Seq::FIRST, body.clone())]);
+        Around::read(&log, &m, Seq::FIRST, &body).blocks[0].server.clone()
+    };
+
+    assert_eq!(shown(call("Linear_Northwind")).as_deref(), Some("Linear (Northwind)"));
+    assert_eq!(shown(call("docs")).as_deref(), Some("docs"));
+    assert_eq!(shown(calls(&["a"])), None);
+}
+
+#[test]
 fn a_call_s_images_are_fetched_only_once_it_s_open() {
     let log = log([event(Seq::new(1), calls(&["a"])), event(Seq::new(2), with_an_image("a"))]);
     let mut m = Model::default();

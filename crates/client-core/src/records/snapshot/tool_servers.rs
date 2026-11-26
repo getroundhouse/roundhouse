@@ -1,13 +1,19 @@
-//! The tool servers the hub has of its own, as views read them.
+//! The tool servers the hub has of its own, as views read them, which [`crate::tool_servers`] says what's shown of.
 
 use protocol::model::{ToolServer, ToolServerId, ToolServerUrl};
 
 use super::Snapshot;
+use crate::tool_servers::ToolServerNames;
 
 impl Snapshot {
     /// Every tool server the hub has of its own, by name. Empty until they've arrived.
     pub fn tool_servers(&self) -> &[ToolServer] {
         &self.records.tool_servers
+    }
+
+    /// What the person calls each, where an agent's name for it would show.
+    pub fn tool_server_names(&self) -> &ToolServerNames {
+        &self.records.tool_server_names
     }
 
     /// The record of the tool server `id`, until it's removed.

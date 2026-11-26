@@ -9,7 +9,7 @@ use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, HubStart, HubStatus,
     ReplyOutcome, records,
 };
-use protocol::event::{AgentTask, EventBody, SessionEvent, TaskKind};
+use protocol::event::{AgentTask, EventBody, SessionEvent, TaskKind, TaskTool};
 use protocol::frame;
 use protocol::model::{LimitWindow, ModelLabel, ModelName, Place, RecordKey, Rev};
 use protocol::tail::{StreamDelta, Tail};
@@ -273,6 +273,19 @@ fn a_background_task_that_names_no_call_no_command_and_no_subagent_has_none() {
     assert_eq!((unnamed.call, unnamed.command, unnamed.part_of), (None, None, None));
     assert_eq!((&task.call, task.command.as_deref()), (&Some("toolu_1".into()), Some("ls")));
     assert_eq!(task.part_of, Some("a1".into()));
+    assert_eq!(serde_json::to_string(&task).unwrap(), newer);
+}
+
+/// A list from an older worker, or in a log, names no task's tool, as does a task that isn't a call to an MCP server's,
+/// so its line says its description. One that names one keeps it, which an older reader leaves out.
+#[test]
+fn a_background_task_that_names_no_tool_has_none() {
+    let unnamed: AgentTask = serde_json::from_str(r#"{"id":"t1","description":"docs/find","kind":"command"}"#).unwrap();
+    let newer = r#"{"id":"t1","description":"docs/find","kind":"command","tool":{"server":"docs","tool":"find"}}"#;
+    let task: AgentTask = serde_json::from_str(newer).unwrap();
+
+    let tool = TaskTool { server: "docs".into(), tool: "find".into() };
+    assert_eq!((unnamed.tool, task.tool.clone()), (None, Some(tool)));
     assert_eq!(serde_json::to_string(&task).unwrap(), newer);
 }
 

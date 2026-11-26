@@ -2,6 +2,7 @@
 //! failures in a row, the same failure each time, as the hub says of each, are one card: it says how many times, and
 //! what started each try.
 
+use client_core::tool_servers::ToolServerNames;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::{
@@ -59,7 +60,7 @@ pub(super) fn card(
                 .gap(look::Space::Large)
                 .pt(look::Space::Small)
                 .line_over_on(look::CardKind::Stopped, cx)
-                .child(v_flex().flex_1().min_w_0().children(lines(seq, tries, shared, cx)))
+                .child(v_flex().flex_1().min_w_0().children(lines(seq, tries, &around.tool_servers, shared, cx)))
                 .children(retry),
         ),
         None => {
@@ -104,10 +105,10 @@ fn how_many(times: u32) -> Option<String> {
 /// The card's lines, under the CLI's words: the fold of the earlier tries, when there are more than it shows, then a
 /// line for what started each try it shows, oldest first, as the agent's line for a turn it started by itself says it:
 /// what it was, then how it ended, and when.
-fn lines(seq: Seq, tries: &Tries, shared: &Shared, cx: &App) -> Vec<AnyElement> {
+fn lines(seq: Seq, tries: &Tries, names: &ToolServerNames, shared: &Shared, cx: &App) -> Vec<AnyElement> {
     let earlier = tries.earlier();
     let fold = (earlier > 0).then(|| fold(seq, tries, earlier, shared, cx));
-    let each = tries.shown().iter().flat_map(|one| lines_of(one, cx)).enumerate().map(|(ix, (line, label))| {
+    let each = tries.shown().iter().flat_map(|one| lines_of(one, names, cx)).enumerate().map(|(ix, (line, label))| {
         line.still(ItemKey::Event(seq, ix).element("failed-try"), label, &shared.line_text, cx)
     });
     fold.into_iter().chain(each).collect()
@@ -115,10 +116,12 @@ fn lines(seq: Seq, tries: &Tries, shared: &Shared, cx: &App) -> Vec<AnyElement> 
 
 /// The lines that say what started `one`, with what each says to a screen reader: one for each task a turn the agent
 /// started by itself heard had ended, or one for the rest. A subagent's has no Open button, which its call's line has.
-fn lines_of(one: &Try, cx: &App) -> Vec<(Line, String)> {
+fn lines_of(one: &Try, names: &ToolServerNames, cx: &App) -> Vec<(Line, String)> {
     let at = look::day_and_time(one.at_ms, cx);
     let (icon, title) = match &one.started {
-        Started::Tasks(ended) => return ended.iter().map(|ended| own_turn::line(ended, at.as_deref())).collect(),
+        Started::Tasks(ended) => {
+            return ended.iter().map(|ended| own_turn::line(ended, names, at.as_deref())).collect();
+        }
         Started::Prompt => (IconName::MessageSquare, "Your prompt"),
         Started::Partway => (IconName::Activity, "Partway through the turn"),
         Started::ByItself => (IconName::CornerDownRight, "Picked up by itself"),

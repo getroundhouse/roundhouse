@@ -1,6 +1,6 @@
 //! Chats whose agent asks to be allowed to use a tool, and their screens: one that's planning, which asks before it
-//! runs a command, one with full access, whose subagents want to run a removal it asks about in any mode, and one that
-//! asks to edit a file.
+//! runs a command, one with full access, whose subagents want to run a removal it asks about in any mode, ones that
+//! ask to edit files, and one that asks to use an MCP server's tool.
 
 #![cfg(test)]
 
@@ -15,7 +15,7 @@ use super::frame::{CHAT, QUESTION};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::typed_chats;
-use super::worlds::{chat_world, in_plan_mode};
+use super::worlds::{chat_with_a_server, chat_world, in_plan_mode};
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{
     command, denied as denied_with, first_turn, launched, replied, subagent, subagent_started, subagents_listed, text,
@@ -71,7 +71,27 @@ pub(crate) const SCREENS: &[Screen] = &[
         frame: QUESTION,
         steps: &[Step::Select(FOCUS)],
     },
+    Screen {
+        name: "approval-mcp",
+        spec: "chats.md",
+        world: Some(|| in_plan_mode(chat_with_a_server(SessionStatus::WaitingApproval, filing()))),
+        frame: QUESTION,
+        steps: &[Step::Select(FOCUS)],
+    },
 ];
+
+/// Waiting to be allowed to file an issue with an MCP server's tool.
+fn filing() -> Vec<EventBody> {
+    let call = typed_chats::filing_an_issue();
+    first_turn(
+        user_prompt("File the idea about saying why a train stopped."),
+        [
+            text("msg-1", "I'll file it."),
+            typed_call("msg-2", "mcp-1", call.clone()),
+            typed_request("approval-1", "mcp-1", call),
+        ],
+    )
+}
 
 /// A Codex chat waiting to be allowed [`patched`], on a hub that describes its agents as the app's own does, so the
 /// request is asked as Codex takes an answer, which is without words.

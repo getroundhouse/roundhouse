@@ -44,8 +44,7 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
         Call::MessageSubagent(to) => ToolCall::ToSubagents(to.into()),
         Call::WaitForSubagents(wait) => ToolCall::ToSubagents(wait.into()),
         Call::StopSubagent(stop) => ToolCall::ToSubagents(stop.into()),
-        Call::Mcp { server, tool, input } => ToolCall::Other(Other::typed(Some(server.as_str()), tool, input)),
-        Call::Other { tool, input } => ToolCall::Other(Other::typed(None, tool, input)),
+        Call::Mcp { tool, input, .. } | Call::Other { tool, input } => ToolCall::Other(Other::typed(tool, input)),
         Call::Advisor => ToolCall::Advisor,
         // Drawn as any typed call until each is drawn as its kind.
         Call::WriteInput(_)

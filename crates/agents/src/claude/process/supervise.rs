@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use crate::claude::login_check::Output;
+use crate::claude::normalize::Normalizer;
 use protocol::capability::approvals::ApprovalMode;
 use protocol::event::EventBody;
 use protocol::worker::AgentSpec;
@@ -36,7 +37,9 @@ pub(super) async fn supervise(
     output: mpsc::Sender<AgentOutput>,
 ) {
     let (status, stderr_tail) = loop {
-        let out_task = tokio::spawn(read_stdout(stdout, shared.clone(), output.clone()).in_current_span());
+        let normalizer = Normalizer::launched_with(options.tools.as_ref());
+        let reading = read_stdout(stdout, normalizer, shared.clone(), output.clone());
+        let out_task = tokio::spawn(reading.in_current_span());
         let err_task = stderr;
         let status = child.wait().await;
         // No stop may signal a reaped PID while a replacement is being verified.

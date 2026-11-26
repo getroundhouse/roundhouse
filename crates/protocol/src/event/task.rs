@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{EventBody, TaskOutcome};
+use crate::capability::setup::ServerName;
 use crate::model::{EndedWait, SubagentId, TaskId, ToolUseId};
 
 /// Work an agent started in the background, such as a command or a subagent. It carries on after the turn that
@@ -32,13 +33,34 @@ pub struct AgentTask {
     /// for one whose subagent has ended, which is then left with the agent, and from an agent that doesn't say.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_of: Option<SubagentId>,
+    /// The MCP server's tool whose call it is, so its line can name the server as the person does. None for any other
+    /// task, from an agent that doesn't say, and in a list recorded before tasks named their tools, whose line says the
+    /// `description`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<TaskTool>,
 }
 
 impl AgentTask {
     /// One its agent has said nothing of but its ID and its kind.
     pub fn new(id: impl Into<TaskId>, kind: TaskKind) -> Self {
-        Self { id: id.into(), description: None, command: None, kind, call: None, subagent: None, part_of: None }
+        Self {
+            id: id.into(),
+            description: None,
+            command: None,
+            kind,
+            call: None,
+            subagent: None,
+            part_of: None,
+            tool: None,
+        }
     }
+}
+
+/// A tool of an MCP server, with each name as its agent has it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct TaskTool {
+    pub server: ServerName,
+    pub tool: String,
 }
 
 /// What a background task is, which says whether it's the agent's own work and whether it's doing anything.

@@ -1,5 +1,5 @@
 use protocol::capability::turns::OwnTurn;
-use protocol::event::{AgentTask, EndedTask, EventBody, TaskKind, TaskOutcome};
+use protocol::event::{AgentTask, EndedTask, EventBody, TaskKind, TaskOutcome, TaskTool};
 use serde_json::json;
 
 use super::super::Normalizer;
@@ -97,7 +97,8 @@ fn a_process_started_again_starts_a_turn_for_a_task_that_ends_before_any_prompt(
     normalizer.line(&ended("k3", "c3", "completed"));
     let started = normalizer.line(&init());
 
-    let wait = task("k3", TaskKind::Wait, "roundhouse/wait_for_pull_requests", "c3", TaskOutcome::Finished);
+    let mut wait = task("k3", TaskKind::Wait, "roundhouse/wait_for_pull_requests", "c3", TaskOutcome::Finished);
+    wait.task.tool = Some(TaskTool { server: "roundhouse".into(), tool: "wait_for_pull_requests".into() });
     assert_eq!(started.after, Some(own_turn(vec![wait])));
 }
 

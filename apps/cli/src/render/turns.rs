@@ -2,14 +2,16 @@
 //! failed request, with how many times in a row it has failed.
 
 use client_core::tasks::Says;
+use client_core::tool_servers::ToolServerNames;
 use client_core::waits::{watched, why_it_ended};
 use protocol::event::{Again, AgentTask, EndedTask, RequestFailure, TaskKind};
 
 use super::printer::how_it_ended;
 
-/// That the agent picked up by itself, and which of its tasks it heard had ended, each named as its list named it, but
-/// for a wait, which says which pull requests it waited on and why it ended, from the hub's record, as the app does.
-pub(super) fn own_turn(ended: &[EndedTask]) -> String {
+/// That the agent picked up by itself, and which of its tasks it heard had ended, each named as its list named it, an
+/// MCP server's as `servers` does, but for a wait, which says which pull requests it waited on and why it ended, from
+/// the hub's record, as the app does.
+pub(super) fn own_turn(ended: &[EndedTask], servers: &ToolServerNames) -> String {
     let each = ended.iter().map(|ended| {
         if ended.task.kind == TaskKind::Wait {
             let how = how_it_ended(ended.outcome);
@@ -19,7 +21,7 @@ pub(super) fn own_turn(ended: &[EndedTask]) -> String {
             };
             return format!("waited on {what} ({why})");
         }
-        let what = named(&ended.task);
+        let what = named(&ended.task, servers);
         format!("{what} {}", how_it_ended(ended.outcome))
     });
     let each: Vec<String> = each.collect();
@@ -37,7 +39,8 @@ pub(super) fn request_failed(failure: &RequestFailure, again: Option<Again>) -> 
     }
 }
 
-/// What a background task is called: what it's for, or the command it runs, or failing both, its ID.
-pub(super) fn named(task: &AgentTask) -> String {
-    Says::of(task).map_or_else(|| task.id.to_string(), Says::into_words)
+/// What a background task is called: what it's for, an MCP server's tool by the server as `servers` shows it, or the
+/// command it runs, or failing both, its ID.
+pub(super) fn named(task: &AgentTask, servers: &ToolServerNames) -> String {
+    Says::of(task, servers).map_or_else(|| task.id.to_string(), Says::into_words)
 }

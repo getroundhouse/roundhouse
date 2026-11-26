@@ -11,6 +11,7 @@ use gpui_kit::{
 use look::{Shaped as _, Typeset as _};
 use protocol::capability::approvals::Decision;
 use protocol::capability::asking::{Choose, Question, QuestionAnswer, QuestionOption, TypedAnswer};
+use protocol::capability::setup::ServerName;
 use protocol::event::EventBody;
 
 /// What the typing row says while it's empty.
@@ -32,6 +33,9 @@ pub(crate) struct ToolUse {
     /// What it asks, which makes the decision that answers it.
     pub(super) approval: Approval<'static>,
     pub(in super::super) can_type: bool,
+    /// The MCP server the tool is from, as its agent calls it, which the header shows after the tool by the name the
+    /// transcript passes on, so it isn't part of the question.
+    pub(super) server: Option<ServerName>,
     /// The question it's asked as: the tool as its header, what the use is for as its text, and a row for each of
     /// [`ToolUseAnswer::ALL`] as its options.
     pub(super) question: Question,
@@ -43,7 +47,7 @@ pub(crate) struct ToolUse {
 
 /// What a tool was given, as it's shown.
 pub(super) enum Shown {
-    /// A command, or another tool's main input, as it was given.
+    /// A command, as it was given, or another tool's whole input, as JSON, or its main one.
     Text(String),
     /// What an edit or a write would change, under its file.
     Change(ChangeAsked),
@@ -69,6 +73,7 @@ impl ToolUse {
                 };
                 (about.unwrap_or(asks).to_string(), change.map(Shown::Change))
             }
+            (about, Some(Given::Input(input))) => (about.unwrap_or(USE_THIS).to_string(), Some(Shown::Text(input))),
             (Some(about), Some(Given::MainInput(input))) => (about.to_string(), Some(Shown::Text(input))),
             // With nothing said of what it's for, its main input is what's asked about.
             (None, Some(Given::MainInput(input))) => (input, None),
@@ -85,7 +90,13 @@ impl ToolUse {
         let options = ToolUseAnswer::ALL.iter().map(option).collect();
         let typed = if can_type { TypedAnswer::Yes } else { TypedAnswer::No };
         let question = Question { text, header: Some(asked.tool), options, choose: Choose::One, typed };
-        Some(Self { approval, can_type, question, given, reason: asked.reason.map(str::to_string) })
+        let (server, reason) = (asked.server.cloned(), asked.reason.map(str::to_string));
+        Some(Self { approval, can_type, server, question, given, reason })
+    }
+
+    /// The MCP server the tool is from, as its agent calls it.
+    pub(in super::super) fn server(&self) -> Option<&ServerName> {
+        self.server.as_ref()
     }
 
     pub(in super::super) fn question(&self) -> &Question {

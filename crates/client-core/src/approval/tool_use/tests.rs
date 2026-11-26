@@ -5,7 +5,7 @@ use protocol::capability::calls::call::{Command, Edit, Fetch, Replace, Replaces,
 use protocol::event::EventBody;
 use protocol::fixtures::{self, ApprovalRequest, allow_once, approval_request, asking, deny, plan};
 use protocol::model::UseChoice;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::{Given, ToolUseAnswer, ToolUseAsked};
 use crate::approval::Approval;
@@ -65,17 +65,35 @@ fn an_edit_or_a_write_is_given_what_it_would_change_and_another_tool_its_main_in
     assert_eq!((edit.given.unwrap().path(), write.given.unwrap().path()), (Some("src/lib.rs"), Some("notes.md")));
     let fetch = ToolUseAsked::of(&fetch).unwrap();
     assert_eq!(fetch.given, Some(Given::MainInput("https://example.com".into())));
+    assert_eq!((edit.server, fetch.server), (None, None));
 }
 
+/// What's allowed is all of what it was given, so that's what it's asked about by, whatever the input says it's for.
 #[test]
-fn a_tool_with_no_kind_of_its_own_has_a_readable_name_and_its_main_input() {
-    let post = Call::Mcp { server: "team".into(), tool: "post_message".into(), input: json!({ "path": "notes.md" }) };
+fn a_tool_with_no_kind_of_its_own_has_a_readable_name_its_server_and_its_whole_input() {
+    let input = json!({ "path": "notes.md", "description": "Post the notes", "labels": ["a"] });
+    let post = Call::Mcp { server: "team".into(), tool: "post_message".into(), input: input.clone() };
     let body: EventBody = request(post).into();
 
     let asked = ToolUseAsked::of(&body).unwrap();
 
-    assert_eq!(asked.tool, "Post message");
-    assert_eq!((asked.about, asked.given), (None, Some(Given::MainInput("notes.md".into()))));
+    assert_eq!((asked.tool.as_str(), asked.server), ("Post message", Some(&"team".into())));
+    assert_eq!((asked.about, asked.given.as_ref().and_then(Given::path)), (None, None));
+    let Some(Given::Input(given)) = asked.given else { panic!("{:?}", asked.given) };
+    assert_eq!(serde_json::from_str::<Value>(&given).unwrap(), input);
+    assert_eq!(given.lines().count(), 7, "a line for each thing in it");
+
+    let read = |call: Call| -> (String, Option<String>, bool) {
+        let body: EventBody = request(call).into();
+        let asked = ToolUseAsked::of(&body).unwrap();
+        (asked.tool, asked.server.map(ToString::to_string), asked.given.is_some())
+    };
+    let of_none = read(Call::Other { tool: "list_open_PR".into(), input: json!({ "query": "signals" }) });
+    assert_eq!(of_none, ("List open PR".into(), None, true), "from no server");
+    for nothing in [json!({}), Value::Null] {
+        let unnamed = read(Call::Mcp { server: "team".into(), tool: " ".into(), input: nothing });
+        assert_eq!(unnamed, ("Unknown tool".into(), Some("team".into()), false), "given nothing");
+    }
 }
 
 #[test]

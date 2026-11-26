@@ -1,12 +1,13 @@
 use client_core::calls::{Recorded, Returned};
+use client_core::tool_servers::ToolServerNames;
 use protocol::capability::calls::call::{Read, Search, Shows};
 use protocol::capability::calls::output::Ended;
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{
-    Again, AgentTask, ContentBlock, Denied, EndedTask, FailureKind, RequestFailure, TaskKind, TaskOutcome,
+    Again, AgentTask, ContentBlock, Denied, EndedTask, FailureKind, RequestFailure, TaskKind, TaskOutcome, TaskTool,
 };
 use protocol::fixtures;
-use protocol::model::{EndedWait, RevisionNumber, Seq, WaitEnd, WaitEnded};
+use protocol::model::{EndedWait, Records, RevisionNumber, Seq, ToolServer, ToolServerName, WaitEnd, WaitEnded};
 use protocol::prompt::PromptFrom;
 use serde_json::json;
 
@@ -27,6 +28,22 @@ fn a_list_of_background_tasks_said_again_with_a_kind_changed_prints_once() {
     assert_eq!(printer.newly_running(&listed[..1]).as_deref(), Some("running in the background: Do a"));
     assert_eq!(printer.newly_running(&[]).as_deref(), Some("running in the background: nothing"));
     assert_eq!(printer.newly_running(&listed[..1]).as_deref(), Some("running in the background: Do a"));
+}
+
+#[test]
+fn a_background_task_of_an_mcp_servers_tool_prints_the_persons_name_for_the_server() {
+    let northwind =
+        ToolServer { name: ToolServerName::stored("Linear (Northwind)".into()), ..fixtures::tool_server("t") };
+    let records = crate::run::held(Records { tool_servers: vec![northwind], ..Records::default() });
+    let names = records.tool_server_names();
+    let mut export = task("a", TaskKind::Command);
+    export.tool = Some(TaskTool { server: "Linear_Northwind".into(), tool: "export_issues".into() });
+    let printed = Printer::naming(names.clone()).newly_running(std::slice::from_ref(&export));
+
+    assert_eq!(printed.as_deref(), Some("running in the background: Linear (Northwind): Export issues"));
+    let ended = EndedTask { task: export, outcome: TaskOutcome::Finished, wait: None };
+    let said = "the agent picked up by itself, after: Linear (Northwind): Export issues finished";
+    assert_eq!(own_turn(&[ended], names), said);
 }
 
 /// So the terminal reads a call as the app does: by its kind, and one of no kind a client knows by its tool's name.
@@ -126,8 +143,10 @@ fn a_turn_the_agent_started_by_itself_says_which_tasks_it_heard_had_ended() {
         wait: None,
     };
 
+    let said_of = |ended: &[EndedTask]| own_turn(ended, &ToolServerNames::default());
+
     let said =
-        own_turn(&[ended("b1", Some("Run the tests"), TaskOutcome::Failed), ended("b2", None, TaskOutcome::Finished)]);
+        said_of(&[ended("b1", Some("Run the tests"), TaskOutcome::Failed), ended("b2", None, TaskOutcome::Finished)]);
 
     assert_eq!(
         said, "the agent picked up by itself, after: Run the tests failed; b2 finished",
@@ -136,13 +155,13 @@ fn a_turn_the_agent_started_by_itself_says_which_tasks_it_heard_had_ended() {
     let mut wait = ended("k3", Some("roundhouse/wait_for_pull_requests"), TaskOutcome::Failed);
     wait.task.kind = TaskKind::Wait;
     let unrecorded = "the agent picked up by itself, after: waited on a pull request (failed)";
-    assert_eq!(own_turn(std::slice::from_ref(&wait)), unrecorded, "not by its tool's name");
+    assert_eq!(said_of(std::slice::from_ref(&wait)), unrecorded, "not by its tool's name");
     let mut kept = fixtures::pull_request_wait("k3");
     kept.ended = Some(WaitEnded { at_ms: 2, how: WaitEnd::CalledOffByPerson });
     wait.wait = Some(EndedWait::from(&kept));
     let as_the_app_says = "the agent picked up by itself, after: waited on #7 for required checks (Stopped)";
-    assert_eq!(own_turn(&[wait]), as_the_app_says, "from the hub's record, not the agent's word");
-    assert_eq!(own_turn(&[]), "the agent picked up by itself");
+    assert_eq!(said_of(&[wait]), as_the_app_says, "from the hub's record, not the agent's word");
+    assert_eq!(said_of(&[]), "the agent picked up by itself");
 }
 
 #[test]
