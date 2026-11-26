@@ -2,7 +2,9 @@
 //! has of its own. What's said of each, and whether a reload is offered, is `client_core::tool_servers`'s, and signing in
 //! to one is the hub's view's, in `crate::tool_sign_in`, so every chat's card says the same of it.
 
-use client_core::tool_servers::{ChatToolServer, ChatToolServers, Offered, OwnToolServers, Reload, Tone};
+use client_core::tool_servers::{
+    ChatToolServer, ChatToolServers, Offered, OwnToolServers, Reload, ReloadRequest, Tone,
+};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::{
@@ -13,8 +15,8 @@ use look::{CardKind, IconSizing as _, Lined as _, Region, Typeset as _};
 use protocol::capability::setup::ServerName;
 use protocol::model::ToolServerId;
 
-use super::super::WorkspacePane;
 use super::super::composer::{Hub, Slot, middle};
+use super::super::{PaneEvent, WorkspacePane};
 use super::card::surface;
 use super::usage::card_over;
 use crate::tool_sign_in::{SignInTo, UnderWay};
@@ -27,7 +29,7 @@ impl WorkspacePane {
     /// while one of the hub's needs the person to sign in to it. It's one of Tab's stops, since its card has buttons.
     pub(in super::super) fn plug(&self, cx: &mut Context<Self>) -> Option<Slot> {
         let sign_in = self.tool_sign_in.read(cx).under_way().and_then(UnderWay::of_a_server);
-        let servers = ChatToolServers::of(self.shown.all(), self.session()?, sign_in.as_ref(), &self.tool_reloads)?;
+        let servers = ChatToolServers::of(self.shown.all(), self.session()?, sign_in.as_ref(), self.reload_request)?;
         let colors = look::colors(cx);
         let color = if servers.needs_sign_in() { colors.warning } else { colors.text_muted };
         let icon = Icon::new(IconName::Plug).sized(look::IconSize::Large).text_color(color);
@@ -62,21 +64,22 @@ impl WorkspacePane {
         }
     }
 
-    /// Has the chat's agent connect again to the server it has as `server`. The row says how that goes.
+    /// Has the chat's agent connect again to the server it has as `server`. The row says how that goes, as the agent says
+    /// it's starting and then what came of it, and what the hub refuses is said as the pane's other refusals are.
     fn reload_tool_server(&mut self, server: ServerName, cx: &mut Context<Self>) {
         let Some(session) = self.session().map(|session| session.id.clone()) else { return };
-        self.tool_reloads.ask(self.shown.all(), &session, &server);
-        let (id, asked) = (session.clone(), server.clone());
-        let asking = self.client.start(move |client| client.session_reload_tool_server(&id, &asked));
+        let asking = self.client.start(move |client| client.session_reload_tool_server(&session, &server));
         cx.spawn(async move |this, cx| {
-            let answer = asking.recv().await;
+            let Err(e) = asking.recv().await else { return };
             let _ = this.update(cx, |pane, cx| {
-                pane.tool_reloads.answered(&session, &server, &answer);
-                cx.notify();
+                if e.is_unsupported() {
+                    pane.reload_request = ReloadRequest::UnknownToTheHub;
+                    cx.notify();
+                }
+                cx.emit(PaneEvent::Error(client_core::refusals::couldnt("reload it", &e)));
             });
         })
         .detach();
-        cx.notify();
     }
 }
 
@@ -112,7 +115,7 @@ impl Offers {
                     .shown_while_over(row.clone())
             }
         };
-        button.accessibility_label(format!("Reload {name}")).off(self.off || reload.asked).on_click(move |_, _, cx| {
+        button.accessibility_label(format!("Reload {name}")).off(self.off).on_click(move |_, _, cx| {
             let _ = pane.update(cx, |pane, cx| pane.reload_tool_server(server.clone(), cx));
         })
     }
@@ -200,7 +203,7 @@ fn row(id: SharedString, server: &ChatToolServer, offers: &Offers, cx: &App) -> 
         .aria_label(server.said())
         .group(id)
         .child(line)
-        .children(under(words_under, server.why(), cx))
+        .children(under(words_under, server.stands.why(), cx))
         .test_support()
 }
 

@@ -142,16 +142,6 @@ fn the_plugs_card_shows_once_the_pointer_rests_and_the_plug_says_whats_to_be_sig
     ui.wait("the card to go", |ui| !ui.has("mcp-card"));
 }
 
-/// One of the CLI's own never needs the person, since no client can sign in to it.
-#[gpui_kit::test]
-fn a_chat_with_only_its_clis_servers_has_a_quiet_plug(cx: &mut TestAppContext) {
-    let (mut world, chat) = chat();
-    world.observe(observed::tool_servers(chat.clone(), vec![said("tickets", None, ServerState::NeedsSignIn)]));
-    let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
-
-    ui.wait("the plug", |ui| plug_says(ui, "MCP servers"));
-}
-
 /// Rests the pointer on the plug until its card shows.
 pub(crate) fn open_card(ui: &mut Ui<'_>) {
     ui.hover("mcp");

@@ -928,8 +928,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![The amber plug's card, with Notion's round arrow, and a Reload button on two servers that don't work](screens/mcp-servers-reload.png)
 
-- **Pressed, its server says `Starting`, then whatever the agent says of it,** so one that still can't be reached says so again, with Reload again. The agent can lose a server that worked, where the server can't be reached now. *Unconfirmed:* that the button is off from the press until the agent says more of its servers, and with no hub to ask, and that one pressed in two windows is connected to once.
-- **What the hub refuses is on the line under the server,** such as `Couldn't reload it: the chat's agent isn't running`, until the agent says more of its servers or it's pressed again. *Unconfirmed.*
+- **Pressed, its server says `Starting`, then whatever the agent says of it,** so one that still can't be reached says so again, with Reload again. The agent can lose a server that worked, where the server can't be reached now. *Unconfirmed:* that the button is off with no hub to ask, and that one pressed in two windows is connected to once.
 - **There's no Reload where the agent isn't running or can't do it,** as Antigravity can't, or on a hub that doesn't know the request, which the first press finds out. *Unconfirmed:* that it's found out so.
 - **Codex tries every server that failed, whichever one's Reload is pressed,** and each says what came of it.
 - **Claude reads nothing else while it connects,** so Stop and a prompt wait for it, up to 30 seconds, as the owner decided.

@@ -111,7 +111,7 @@ third_party/       Copies of other projects' code, as `third_party/README.md` sa
 | The hub | Sessions and their logs, workspaces, comments, proposals, waits, drafts, what's read, its settings, and which instances it asked for |
 | A workspace's worker, and its machine | Running agents and terminals, and the worktree's files |
 | A provider | Whether an instance exists, and whether it's running |
-| A client | What's open and scrolled where, the app's settings and preferences, the window's place, dictation, and, of a sign-in to a tool server, what it's to, how it stands and what listens for where the browser is sent back, until it ends, and the reloads of a chat's MCP servers it has asked for, until the agent says more of them |
+| A client | What's open and scrolled where, the app's settings and preferences, the window's place, dictation, and, of a sign-in to a tool server, what it's to, how it stands and what listens for where the browser is sent back, until it ends, and whether the hub knows the request to reload a chat's MCP server, once it has said it doesn't |
 | Git and GitHub | Code, pull requests and CI |
 
 ## Which kind each thing a hub holds is

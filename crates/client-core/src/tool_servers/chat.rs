@@ -1,8 +1,7 @@
 use protocol::capability::setup::ToolServerState;
 use protocol::model::Session;
 
-use super::reload::OfReload;
-use super::{Reload, Reloads, SignIn, SignInFor, Stands};
+use super::{Reload, ReloadRequest, SignIn, SignInFor, Stands};
 use crate::records::Snapshot;
 
 /// The tool servers a chat has, as its card lists them.
@@ -20,26 +19,20 @@ pub struct ChatToolServer {
     pub stands: Stands,
     /// What a client offers of having its agent connect to it again, if it does.
     pub reload: Option<Reload>,
-    /// Why the hub refused this client that, if it did.
-    pub(super) reload_refused: Option<String>,
 }
 
 impl ChatToolServer {
     /// All that's said of it, as it's read out.
     pub fn said(&self) -> String {
         let words = self.stands.words();
-        let said: Vec<&str> = [Some(self.name.as_str()), words.as_deref(), self.why()].into_iter().flatten().collect();
+        let said = [Some(self.name.as_str()), words.as_deref(), self.stands.why()];
+        let said: Vec<&str> = said.into_iter().flatten().collect();
         said.join(", ")
     }
 
     /// Whether there's something to press for it: a sign-in, or a reload.
     fn offers(&self) -> bool {
         self.reload.is_some() || self.stands.to_sign_in_to().is_some()
-    }
-
-    /// What's said on the line under it: why the hub refused to have it connected to again, or what [`Stands::why`] says.
-    pub fn why(&self) -> Option<&str> {
-        self.reload_refused.as_deref().or_else(|| self.stands.why())
     }
 }
 
@@ -56,13 +49,12 @@ pub enum OwnToolServers {
 impl ChatToolServers {
     /// What `records` has to say of the servers of `session`'s agent, or `None` for nothing: where neither the hub nor the
     /// agent is known to have any. `sign_in` is the one this client has, if it has one, whichever chat it was started in,
-    /// and `reloads` those it has asked for.
-    pub fn of(records: &Snapshot, session: &Session, sign_in: Option<&SignIn>, reloads: &Reloads) -> Option<Self> {
+    /// and `request` whether the hub knows the request to reload one.
+    pub fn of(records: &Snapshot, session: &Session, sign_in: Option<&SignIn>, request: ReloadRequest) -> Option<Self> {
         let said = records.tool_servers_said(&session.id);
         let row = |name: String, agents: Option<&ToolServerState>, stands: Stands| {
-            let agents = agents.map(|said| OfReload::of(records, session, &said.name, &stands, reloads));
-            let OfReload { reload, refused } = agents.unwrap_or_default();
-            ChatToolServer { name, stands, reload, reload_refused: refused }
+            let reload = agents.and_then(|said| Reload::of(session, &said.name, &stands, request));
+            ChatToolServer { name, stands, reload }
         };
         let servers = Self { hubs: hubs(records, said, sign_in, &row), own: own(records, session, said, &row) };
         let own = matches!(&servers.own, OwnToolServers::Listed(own) if !own.is_empty());

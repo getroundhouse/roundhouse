@@ -96,7 +96,6 @@ async fn a_server_is_connected_to_again_only_where_the_run_says_it_has_it_and_cl
         ("one that's connected", &all, connect, ServerState::Connected, Ok(reload)),
         ("one that failed", &all, connect, ServerState::Failed, Ok(connect)),
         ("one that needs signing in to", &all, connect, ServerState::NeedsSignIn, Ok(connect)),
-        ("one that's starting", &all, connect, ServerState::Starting, Err(ErrorCode::Conflict)),
         ("one that's turned off", &all, connect, ServerState::Disabled, Err(ErrorCode::Conflict)),
         ("one nothing is known of", &all, connect, ServerState::Unknown, Err(ErrorCode::Conflict)),
         ("one the run doesn't have", &all, "Notion", ServerState::Failed, Err(ErrorCode::NotFound)),
@@ -140,7 +139,7 @@ async fn a_server_asked_for_twice_is_connected_to_again_once_and_again_once_the_
     assert_eq!((one.await.unwrap(), other.await.unwrap()), (Ok(()), Ok(())), "each was asked for");
     assert_eq!(running.reload("Linear").await, Ok(()), "one client twice");
     running.says("Linear", ServerState::Starting).await;
-    assert_eq!(running.reload("Linear").await, Err(ErrorCode::Conflict));
+    assert_eq!(running.reload("Linear").await, Ok(()), "it's doing what was asked");
     assert_eq!(running.told(), ["reload Linear"]);
 
     running.says("Linear", ServerState::Failed).await;

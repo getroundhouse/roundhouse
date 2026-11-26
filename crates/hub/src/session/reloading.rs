@@ -50,8 +50,8 @@ impl LiveSession {
         self.connect_again(&link, run, server).await
     }
 
-    /// Asks `run`, on `link`, to connect again to `server`, which it last said is as this says, unless it has been asked to
-    /// and hasn't said anything of its servers since. An ask that reached the agent counts as its having had the server
+    /// Asks `run`, on `link`, to connect again to `server`, which it last said is as this says, unless it says it's starting,
+    /// or it has been asked to and hasn't said anything of its servers since. An ask that reached the agent counts as its having had the server
     /// as it is now, so it isn't asked again for that: one it took, and one it refused, as Codex refuses one it can't
     /// connect to, which asking again would only have refused again. One that didn't reach it, as where it isn't running,
     /// is on a turn, or its worker's connection was lost, doesn't count. What comes of it is what the run says of its
@@ -66,7 +66,8 @@ impl LiveSession {
         let control = match server.state {
             ServerState::Connected => Control::Reload { server: name.clone() },
             ServerState::Failed | ServerState::NeedsSignIn => Control::Reconnect { server: name.clone() },
-            ServerState::Starting => return Err(conflict("the agent is connecting to that MCP server already")),
+            // Doing what it was asked, whoever asked.
+            ServerState::Starting => return Ok(()),
             ServerState::Disabled => return Err(conflict("that MCP server is turned off in the CLI's own settings")),
             ServerState::Unknown => return Err(conflict("the agent hasn't said how that MCP server is")),
         };
