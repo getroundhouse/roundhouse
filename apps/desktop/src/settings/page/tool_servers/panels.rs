@@ -75,11 +75,9 @@ fn form(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Framed {
         .child(captioned(AUTHENTICATION, "mcp-way", way, tool_server_edits::way_says(chosen, edit.as_ref()), cx))
         .children(key)
         .children(asking);
-    let (title, lead) = match had.zip(edit.as_ref()) {
+    let (title, lead) = match had {
         None => ("Add an MCP server".into(), words::ADD),
-        Some((was, edit)) => {
-            (words::edit_title(&was.name).into(), tool_server_edits::edit_says(edit, form.stands.saves_anyway()))
-        }
+        Some(was) => (words::edit_title(&was.name).into(), words::EDIT),
     };
     let closes = Closes::new(drawing.act(Kept::put_away_panel));
     Framed {

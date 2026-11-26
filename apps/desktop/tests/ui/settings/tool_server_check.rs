@@ -12,12 +12,12 @@ use protocol::model::{ToolServerAuth, ToolServerAuthGiven};
 
 use super::git_app::label_of;
 use super::open_settings;
-use super::tool_server_edit::{TOOLS, edit};
+use super::tool_server_edit::edit;
 use super::tool_servers::{
     KEY, KEY_WAY, NONE_WAY, added_elsewhere, choose, fill_in, in_servers, more, named, open_to_anyone, the_hubs,
     type_in, with_key,
 };
-use super::tool_sign_in::{refused, says};
+use super::tool_sign_in::refused;
 use crate::support::{Serving, Stack, Ui, files_holding};
 
 const REFUSED_KEY: &str = "Runbooks refused this key.";
@@ -179,8 +179,8 @@ fn a_server_that_takes_its_key_the_next_time_is_added_and_a_key_goes_as_its_pane
     assert!(asked.iter().all(|asked| asked.headers["authorization"] == key.as_str()), "each with the key");
 }
 
-/// A key that's kept, then a server that has none. Its name alone is saved without asking it anything. One saved anyway
-/// has its tools listed again, where the agent can, and the panel says so once that's on offer.
+/// A key that's kept, then a server that has none. Its name alone is saved without asking it anything, and a header the
+/// server refuses is saved anyway.
 #[gpui_kit::test]
 fn an_edit_is_checked_where_it_changes_what_the_server_is_sent_and_is_saved_anyway(cx: &mut TestAppContext) {
     let (stack, serving) = (Stack::new(), refusing());
@@ -196,11 +196,9 @@ fn an_edit_is_checked_where_it_changes_what_the_server_is_sent_and_is_saved_anyw
 
     edit(&mut ui, &runbooks);
     type_in(&mut ui, "mcp-header", "X-Key");
-    assert_eq!(says(&mut ui), "Running agents have the change at once.");
     ui.press("enter");
     assert_eq!(refused(&mut ui), "Northwind refused this key.");
     assert_eq!(buttons(&mut ui), ("Try again".to_string(), Some("Save anyway".to_string())));
-    assert_eq!(says(&mut ui), format!("Running agents have the change at once. {TOOLS}"));
     assert_eq!(serving.stand_in.asked()[0].headers["x-key"], KEY);
     let header = |ui: &Ui<'_>| match named(ui, "Northwind").unwrap().auth {
         ToolServerAuth::Key { header } => header.as_str().to_owned(),

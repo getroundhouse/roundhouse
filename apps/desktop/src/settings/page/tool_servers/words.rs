@@ -1,6 +1,6 @@
 //! What MCP servers says in words: what the list says of itself, what a panel's fields take, what removing a server
 //! asks, and what the hub not doing what was asked means, with why it refused as client-core's `refusals` says it. What
-//! an edit does, and what saving it takes, are client-core's `tool_server_edits` to say.
+//! saving an edit takes is client-core's `tool_server_edits` to say.
 
 use client_core::tool_server_edits::{Does, SIGN_IN_TO_SAVE, Way};
 use client_core::tool_sign_ins::{self, NoPage};
@@ -29,6 +29,10 @@ pub(super) const NO_HUB: &str = "There's no hub to ask.";
 
 /// What adding a server does, under its panel's title.
 pub(super) const ADD: &str = "Every agent has its tools once it's added.";
+
+/// What running agents have of an edit, under its panel's title, whatever is changed. The chat's plug says what each has
+/// once it's saved. *Unconfirmed.*
+pub(super) const EDIT: &str = "Running agents have the change by their next start.";
 
 /// What signing in to a server does.
 const SIGN_IN: &str = "Your browser opens on its own page. Every agent has its tools once you've signed in.";

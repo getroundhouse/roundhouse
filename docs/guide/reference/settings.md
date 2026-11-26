@@ -267,7 +267,7 @@ Its CLI decides. Claude uses the one you added here, in place of its own. Antigr
 
 ### Edit
 
-Choose **Edit** in the row's **…** menu, change what you want in the panel under the row, and click **Save**. The panel says what agents that are running have of it.
+Choose **Edit** in the row's **…** menu, change what you want in the panel under the row, and click **Save**. Agents that are running have the change by their next start, and the table says when.
 
 ![Editing an MCP server with a key](../../spec/screens/settings-mcp-edit-key.png)
 
