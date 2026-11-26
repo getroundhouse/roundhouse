@@ -157,7 +157,8 @@ impl ChatView {
         }
     }
 
-    /// Passes the chat's subagents and proposals on to what's open over it.
+    /// Passes the chat's subagents and proposals, and what the hub says of what its chips name, on to what's open over
+    /// it.
     pub(super) fn over_records_changed(&mut self, records: &Snapshot, cx: &mut Context<Self>) {
         let Some(session) = self.session().cloned() else { return };
         match self.over.screen_mut() {
@@ -174,6 +175,7 @@ impl ChatView {
                 if let Some(newer) = records.proposal(&session, &id) {
                     screen.view.update(cx, |view, cx| view.set_proposal(newer.clone(), cx));
                 }
+                screen.view.update(cx, |view, cx| view.records_changed(records, cx));
             }
             None => {}
         }

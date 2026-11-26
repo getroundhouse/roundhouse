@@ -20,7 +20,7 @@ pub(crate) fn standing(app: &AppView, workspace: &Workspace, cx: &App) -> Standi
     let chats = app.records().sessions(&workspace.id);
     let needs_a_look = needs_a_look(app, workspace, cx);
     let signal = client_ui::workspace_signal(workspace, chats);
-    let work = client_ui::recorded_work(app.pull_request_of(workspace).as_ref()).unwrap_or(Work::NoPr);
+    let work = client_ui::recorded_work(&app.records().workspace_pull_request(&workspace.id));
     Standing { signal, work, needs_a_look }
 }
 

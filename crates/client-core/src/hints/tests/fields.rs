@@ -2,7 +2,7 @@
 
 use protocol::capability::asking::{Choose, Question, QuestionOption, TypedAnswer};
 use protocol::fixtures;
-use protocol::model::{ProposalOption, ProposalQuestion, Proposed, PullRequest};
+use protocol::model::{ProposalOption, ProposalQuestion, Proposed, PullRequestSaid};
 
 use super::context::{sample_log, sample_workspace, texts};
 use crate::hints::{Around, Field, Workspace};
@@ -11,13 +11,13 @@ use crate::session_log::SessionLog;
 
 const CHANGED: &str = "crates/relay/src/tunnel.rs";
 
-fn pull_request() -> PullRequest {
-    let mut pull_request = fixtures::pull_request(7);
-    pull_request.summary.said.about.title = "Keep the Ardmore relay up".into();
-    pull_request
+fn pull_request() -> PullRequestSaid {
+    let mut said = PullRequestSaid::of(&fixtures::pull_request(7));
+    said.summary.about.title = "Keep the Ardmore relay up".into();
+    said
 }
 
-fn around<'a>(shown: &'a InWorkspace, pull_request: &'a PullRequest, chat: &'a SessionLog) -> Around<'a> {
+fn around<'a>(shown: &'a InWorkspace, pull_request: &'a PullRequestSaid, chat: &'a SessionLog) -> Around<'a> {
     let workspace = Workspace { shown, pull_request: Some(pull_request), changed: vec![CHANGED] };
     Around { workspace: Some(workspace), chat: Some(chat) }
 }

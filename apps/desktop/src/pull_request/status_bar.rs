@@ -2,6 +2,7 @@ use super::words;
 use crate::busy::Busy;
 use crate::sides;
 use crate::sides::AtTheTop;
+use client_core::records::WorkspacePullRequest;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::{
@@ -9,41 +10,49 @@ use gpui_kit::{
     Styled as _, TestSupportExt as _, Window, div,
 };
 use look::{IconSizing as _, Sign, Typeset as _, Work};
-use protocol::model::{OwnPullRequest, PullRequest, PullRequestFound, RepositoryUnseen, Standing};
+use protocol::model::{Observed, PullRequestSaid, RepositoryUnseen, Standing};
 use std::rc::Rc;
 use words::Action;
 
 use crate::warnings::{self, OpenGit, Warning};
 
-/// What the app knows of a workspace's pull request.
+/// What the app knows of a workspace's pull request, as the hub last said it, however long ago.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Lookup {
+pub enum Lookup<'a> {
     /// Not asked yet. Saying so, rather than offering to create one, keeps a workspace that has one from offering it.
     Looking,
-    /// Boxed, as a pull request is many times the size of the rest.
-    Found(Option<Box<OwnPullRequest>>),
+    Found(Option<WorkspacePullRequest<'a>>),
     /// GitHub showed the default no repository where the branch's pull requests are, and none was known before, so
-    /// whether it has one can't be said. Boxed, as `Found` is.
-    Unseen(Box<RepositoryUnseen>),
+    /// whether it has one can't be said.
+    Unseen(&'a RepositoryUnseen),
 }
 
-impl Lookup {
-    /// What the hub `found`, which is `None` until it has looked, and whether GitHub showed it the repository, as
-    /// `unseen` says. A pull request known before still shows, since it's still the workspace's, and a workspace's
-    /// warning says it can't be read now.
-    pub fn of(found: Option<PullRequestFound>, unseen: Option<RepositoryUnseen>) -> Self {
-        match (found, unseen) {
-            (Some(PullRequestFound { pull_request: Some(own) }), _) => Lookup::Found(Some(Box::new(own))),
-            (_, Some(unseen)) => Lookup::Unseen(Box::new(unseen)),
-            (Some(PullRequestFound { pull_request: None }), None) => Lookup::Found(None),
-            (None, None) => Lookup::Looking,
+impl<'a> Lookup<'a> {
+    /// What the hub said of the pull request, `said`, and whether GitHub showed it the repository, as `unseen` says.
+    /// A pull request known before still shows, since it's still the workspace's, and a workspace's warning says it
+    /// can't be read now.
+    pub fn of(
+        said: Observed<Option<WorkspacePullRequest<'a>>>,
+        unseen: &'a Observed<Option<RepositoryUnseen>>,
+    ) -> Self {
+        let unseen = match unseen {
+            Observed::Current { value } | Observed::AsOf { value, .. } => value.as_ref(),
+            Observed::NotKnown | Observed::Unknown => None,
+        };
+        match (said, unseen) {
+            (Observed::Current { value: Some(own) } | Observed::AsOf { value: Some(own), .. }, _) => {
+                Lookup::Found(Some(own))
+            }
+            (_, Some(unseen)) => Lookup::Unseen(unseen),
+            (Observed::Current { value: None } | Observed::AsOf { value: None, .. }, None) => Lookup::Found(None),
+            (Observed::NotKnown | Observed::Unknown, None) => Lookup::Looking,
         }
     }
 
-    pub fn pull_request(&self) -> Option<&PullRequest> {
+    pub fn pull_request(&self) -> Option<&'a PullRequestSaid> {
         match self {
             Lookup::Looking | Lookup::Unseen(_) => None,
-            Lookup::Found(own) => own.as_ref().map(|own| &own.pull_request),
+            Lookup::Found(own) => own.as_ref().map(|found| &found.own.pull_request),
         }
     }
 
@@ -52,16 +61,20 @@ impl Lookup {
         match self {
             Lookup::Looking | Lookup::Unseen(_) => None,
             Lookup::Found(None) => Some(Standing::NoPullRequest),
-            Lookup::Found(Some(own)) => {
-                Some(Standing::of(own.pull_request.said(), own.local, own.pull_request.checks_said()))
+            Lookup::Found(Some(found)) => {
+                let checks = match &found.detail {
+                    Observed::Current { value } | Observed::AsOf { value, .. } => value.checks.as_ref(),
+                    Observed::NotKnown | Observed::Unknown => None,
+                };
+                Some(Standing::of(&found.own.pull_request.summary, found.own.local, checks))
             }
         }
     }
 
     pub fn work(&self) -> Work {
         match self {
-            Lookup::Looking | Lookup::Unseen(_) => Work::NoPr,
-            Lookup::Found(pr) => client_ui::work(pr.as_deref()),
+            Lookup::Looking | Lookup::Unseen(_) => client_ui::work_not_known(),
+            Lookup::Found(_) => client_ui::work(self.pull_request()),
         }
     }
 }
@@ -71,7 +84,7 @@ impl Lookup {
 /// app is making, archiving or restoring a workspace, and it says what the workspace it's for is `doing` in its place,
 /// such as `Archiving…`, as [`client_core::moving::doing`] reads it from its record.
 pub fn bar(
-    lookup: &Lookup,
+    lookup: &Lookup<'_>,
     busy: &Busy,
     doing: Option<&'static str>,
     on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
@@ -98,7 +111,7 @@ pub fn bar(
             .into_any_element();
     };
     let pr = lookup.pull_request();
-    let title = client_core::standing::title(standing, pr.map(|pr| pr.said().base_branch.as_str()));
+    let title = client_core::standing::title(standing, pr.map(|pr| pr.summary.base_branch.as_str()));
     let sign = client_ui::sign(standing);
     let text = if pr.is_some() { Sign::words(sign, work, colors) } else { colors.text_muted };
     let words = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title);
@@ -167,7 +180,7 @@ fn giving_way(number: Option<AnyElement>, title: Div) -> impl IntoElement {
 /// sidebar has room for and the header doesn't. What's in the way shows by its sign beside the number, so a problem
 /// shows there too. Nothing while it can't be seen, since the workspace's name has the warning's sign beside it then.
 pub fn controls(
-    lookup: &Lookup,
+    lookup: &Lookup<'_>,
     busy: &Busy,
     doing: Option<&'static str>,
     on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
@@ -193,8 +206,8 @@ fn signed(sign: Sign, work: Work, cx: &App) -> Icon {
 }
 
 /// The pull request's number, outlined as a button that opens something is, which opens it on GitHub.
-fn number(pr: &PullRequest, work: Work) -> AnyElement {
-    let about = &pr.said().about;
+fn number(pr: &PullRequestSaid, work: Work) -> AnyElement {
+    let about = &pr.summary.about;
     let url = about.url.clone();
     let size = look::ControlSize::Regular;
     look::button("pull-request", look::ButtonKind::Outlined, size, format!("#{}", pr.number.get()))

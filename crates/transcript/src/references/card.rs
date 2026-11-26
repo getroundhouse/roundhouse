@@ -4,7 +4,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{Anchor, AnyElement, App, ClipboardItem, IntoElement, ParentElement as _, Styled as _, div, rgb};
 use look::{CardKind, CardWidth, GithubState, IssueState, Menu, PullRequestState, Region, Space, Type, Typeset as _};
-use protocol::model::{About, ChecksRollup, QueueState, Reference, Review};
+use protocol::model::{About, ChecksRollup, QueueState, ReferenceSaid, Review};
 
 use super::kept::{References, Tie};
 use crate::linked_images::Waiter;
@@ -13,7 +13,7 @@ use crate::linked_images::Waiter;
 /// stands under it, who opened it and when, then its labels, where a pull request's checks stand, the workspace it's
 /// in, and the start of what it says.
 pub(super) fn card<W: Waiter>(
-    reference: &Reference,
+    reference: &ReferenceSaid,
     state: GithubState,
     tie: &Tie,
     references: &References<W>,
@@ -25,8 +25,8 @@ pub(super) fn card<W: Waiter>(
     let (Some(about), Some(ask)) = (reference.about(), reference.asked()) else { return div().into_any_element() };
     let number = ask.number;
     let pull_request = match reference {
-        Reference::PullRequest(pull_request) => Some(pull_request.said()),
-        Reference::Issue(_) | Reference::Unknown => None,
+        ReferenceSaid::PullRequest(pull_request) => Some(&pull_request.summary),
+        ReferenceSaid::Issue(_) | ReferenceSaid::Missing | ReferenceSaid::Unknown => None,
     };
     let (kind, word) = said_of(state, pull_request.and_then(|pull_request| pull_request.queue));
     let stands = detail()
@@ -173,7 +173,7 @@ fn tie_line(tie: &Tie, cx: &App) -> Option<AnyElement> {
 /// touch, as the menu puts every row that copies. An archived workspace is named but can't be gone to, since it's
 /// brought back from Home.
 pub(super) fn menu<W: Waiter>(
-    reference: &Reference,
+    reference: &ReferenceSaid,
     tie: &Tie,
     references: &References<W>,
     list: Menu,

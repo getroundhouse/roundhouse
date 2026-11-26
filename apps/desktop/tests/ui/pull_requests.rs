@@ -13,12 +13,13 @@ use hub::GithubPullRequestState::{Merged, Open};
 
 use crate::support::{Stack, Ui};
 
-fn lookup(ui: &Ui<'_>) -> Lookup {
-    ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.pull_request.clone())
+/// What `read` makes of the pull request as the pane showing has it.
+fn lookup<T>(ui: &Ui<'_>, read: impl FnOnce(&Lookup<'_>) -> T) -> T {
+    ui.cx.read_entity(&ui.pane().unwrap(), |p, _| read(&p.pull_request()))
 }
 
 fn state(ui: &Ui<'_>) -> Option<PrState> {
-    lookup(ui).pull_request().map(|pr| pr.said().state)
+    lookup(ui, |lookup| lookup.pull_request().map(|pr| pr.summary.state))
 }
 
 /// The hub reads the pull request showing as often as the app shows it, so the app asks nothing itself, and shows
@@ -30,7 +31,7 @@ fn the_pull_request_showing_is_what_the_hub_last_read(cx: &mut TestAppContext) {
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     let id = ui.new_workspace();
     let (branch, _) = ui.push(&id);
-    ui.wait("it to have no pull request", |ui| lookup(ui) == Lookup::Found(None));
+    ui.wait("it to have no pull request", |ui| lookup(ui, |lookup| *lookup == Lookup::Found(None)));
 
     github.pull_requests.set_from(7, Open, &branch);
     stack.client().workspace_pull_request(&id).unwrap();
@@ -61,7 +62,7 @@ fn a_repository_github_doesnt_show_has_a_bar_that_says_so_and_opens_git(cx: &mut
         _ => None,
     };
     assert_eq!(code, Some(ErrorCode::Unavailable), "not the none known before the branch was pushed");
-    assert!(matches!(lookup(&ui), Lookup::Unseen(_)), "{:?}", lookup(&ui));
+    lookup(&ui, |lookup| assert!(matches!(lookup, Lookup::Unseen(_)), "{lookup:?}"));
     assert!(ui.shows_label("pull-request-bar", "Open Settings"), "and offers no Create PR");
     ui.click("pull-request-action");
     ui.wait("Git in Settings", |ui| ui.has("git-connect"));

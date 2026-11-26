@@ -132,7 +132,7 @@ impl WorkspacePane {
             Sidebar::Hidden => {
                 let on_action = cx.listener(|t, action, _, cx| t.act(*action, cx));
                 let doing = client_core::moving::doing(self.workspace().status);
-                crate::pull_request::controls(&self.pull_request, &self.busy, doing, on_action, cx)
+                crate::pull_request::controls(&self.pull_request(), &self.busy, doing, on_action, cx)
             }
         };
         look::bar(look::BarKind::Words, look::BarSize::Regular)
@@ -174,7 +174,8 @@ impl WorkspacePane {
         let title = words().id("workspace-title").role(gpui_kit::Role::Heading).aria_label(title.clone()).child(title);
         let title = body.set(title).emphasis().test_support();
         // A warning's sign after the name says there's one in the card the name opens.
-        let title = if self.warnings.is_empty() {
+        let warnings = self.warnings();
+        let title = if warnings.is_empty() {
             title.into_any_element()
         } else {
             h_flex().min_w_0().gap(look::Space::Small).child(title).child(warnings::sign(cx)).into_any_element()
@@ -183,8 +184,7 @@ impl WorkspacePane {
         let open_git: warnings::OpenGit = Rc::new(move |_, cx| {
             let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::OpenGit));
         });
-        let said =
-            workspace_card::Said::of(self.shown.all(), self.workspace(), self.client.hub_version(), &self.warnings);
+        let said = workspace_card::Said::of(self.shown.all(), self.workspace(), self.client.hub_version(), &warnings);
         let title = workspace_card::card(title, said, open_git);
         let branch = words().text_color(muted).child(self.workspace().branch.to_string());
         let base = words().text_color(faint);

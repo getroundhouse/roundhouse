@@ -19,7 +19,9 @@ mod of_session;
 mod snapshot;
 
 pub use of_session::subagent_named;
-pub use snapshot::{AccountIdentity, Changes, GithubName, InWorkspace, ListOfModels, Snapshot, WorkerBuild};
+pub use snapshot::{
+    AccountIdentity, Changes, GithubName, InWorkspace, ListOfModels, Snapshot, WorkerBuild, WorkspacePullRequest,
+};
 
 mod cache;
 pub use cache::HubRecords;

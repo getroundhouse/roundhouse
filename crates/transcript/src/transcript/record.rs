@@ -124,10 +124,11 @@ impl Transcript {
     }
 
     /// Takes what the client holds now of the chat's records, its session's, its subagents', its proposals' and how its
-    /// replies read out loud ended, and of the hub's tool servers. Each is taken only if it changed, so a client can
-    /// call this whenever its records do. The client has all but the session's and the hub's only while it follows the
-    /// chat's. The subagent tab's transcript takes whether it's at work from its subagent's record, not the chat's, and
-    /// what that has in the background from the chat's.
+    /// replies read out loud ended, of the hub's tool servers, and what the hub says of the issues and pull requests its
+    /// chips name. Each is taken only if it changed, so a client can call this whenever its records do. The client has
+    /// all but the session's and the hub's only while it follows the chat's. The subagent tab's transcript takes
+    /// whether it's at work from its subagent's record, not the chat's, and what that has in the background from the
+    /// chat's.
     pub fn records_changed(&mut self, records: &Snapshot, cx: &mut Context<Self>) {
         let id = self.session_id.clone();
         let session = records.session(&id);
@@ -141,6 +142,7 @@ impl Transcript {
         self.set_proposals(records.proposals(&id), cx);
         self.set_replies_heard(records.replies_heard(&id), cx);
         self.set_tool_servers(&records.tool_server_names(&id), cx);
+        self.references.records_changed(records, cx);
     }
 
     /// Takes what the person calls each of the hub's tool servers, and draws every row again if that changed, which only

@@ -81,7 +81,7 @@ impl Driver {
         self.wait("the chat, the sidebar of changes and the pull request to load", |view, cx| {
             selected_pane(view).is_some_and(|pane| {
                 let pane = pane.read(cx);
-                chat_loaded(pane, cx) && sidebar_loaded(pane, cx) && pane.pull_request != Lookup::Looking
+                chat_loaded(pane, cx) && sidebar_loaded(pane, cx) && pane.pull_request() != Lookup::Looking
             })
         });
     }

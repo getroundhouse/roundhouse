@@ -7,11 +7,9 @@ use crate::busy::Busy;
 use crate::changes::Changes;
 use crate::file_diff::FileDiff;
 use crate::file_view::FileView;
-use crate::pull_request::Lookup;
 use crate::review::Review;
 use crate::sidebar_tabs::TabShown;
 use crate::tool_sign_in::ToolSigningIn;
-use crate::warnings::Warning;
 use attaching::{Composed, Waiting};
 use client_core::records::InWorkspace;
 use client_core::tool_servers::ReloadRequest;
@@ -139,10 +137,6 @@ pub struct WorkspacePane {
     pub(super) subagents: subagent_tab::Subagents,
     pub(super) terminals: terminals::Terminals,
     pub(super) proposals: proposal_tab::Proposals,
-    pub pull_request: Lookup,
-    /// What's wrong that the workspace can't put right itself, which the card its name opens says, as the hub last
-    /// said.
-    pub(super) warnings: Vec<Warning>,
     /// How many times the pull request has been asked for, so only the newest answer is shown.
     pub setup_log: Option<String>,
     /// Keeps the open log current while setup runs.
@@ -170,7 +164,6 @@ impl WorkspacePane {
         // The microphone is as dictation stands.
         let on_dictation = crate::dictating::observe(cx, |_, cx| cx.notify());
         let [needs_dictation, needs_speech] = crate::conversing::observe_needs(window, cx, Self::start_once_ready);
-        let (pull_request, warnings) = Self::known(&records.github(), shown.workspace());
         let mut this = Self {
             client,
             records,
@@ -202,8 +195,6 @@ impl WorkspacePane {
             subagents: subagent_tab::Subagents::default(),
             terminals: terminals::Terminals::default(),
             proposals: proposal_tab::Proposals::default(),
-            pull_request,
-            warnings,
             setup_log: None,
             setup_log_refresh: None,
             cache_clock: None,
@@ -289,11 +280,9 @@ impl WorkspacePane {
         }
     }
 
-    /// For each time the pane is shown. Reads again what the sidebar of changes and the file tab show of the worktree,
-    /// and takes its pull request as the hub has sent it. The hub reads that as the app shows it.
+    /// For each time the pane is shown. Reads again what the sidebar of changes and the file tab show of the worktree.
     pub fn shown(&mut self, cx: &mut Context<Self>) {
         self.behind = false;
-        self.take_pull_request(cx);
         self.load_changes(cx);
     }
 
@@ -302,13 +291,16 @@ impl WorkspacePane {
         let earlier = std::mem::replace(&mut self.shown, shown);
         let (id, now) = (self.workspace().id.clone(), self.shown.all().clone());
         let changes = now.changes_since(earlier.all());
-        // Each transcript takes what changed of its chat's records, before the pane decides which chats and tabs stay.
+        // Each transcript takes what changed of its chat's records, and the proposal tab what's said of what its chips
+        // name, before the pane decides which chats and tabs stay.
         for transcript in self.every_transcript() {
             transcript.update(cx, |t, cx| t.records_changed(&now, cx));
         }
+        if let Some(view) = self.proposals.view() {
+            view.update(cx, |view, cx| view.records_changed(&now, cx));
+        }
         if changes.workspace(&id) {
             self.tell_review_whether_readable(cx);
-            self.take_pull_request(cx);
             // Picks up the last lines of the log once setup has finished, while there's a worktree to read it from.
             if self.setup_log.is_some() && self.workspace().status == WorkspaceStatus::Ready {
                 self.load_setup_log(cx);

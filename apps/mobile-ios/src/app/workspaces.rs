@@ -9,14 +9,13 @@ use gpui_kit::{
     AnyElement, AppContext as _, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
     StatefulInteractiveElement as _, Styled as _, Window, div,
 };
-use look::{RowSize, Space, Type, Typeset as _, Work};
+use look::{RowSize, Space, Type, Typeset as _};
 use protocol::model::{Repo, Session, Workspace, WorkspaceId};
-use std::collections::HashMap;
 
 use super::{Followed, MobileApp, Panel};
 use crate::chat::ChatView;
 use crate::chrome;
-use crate::hub_link::{HubLink, listed};
+use crate::hub_link::listed;
 
 /// A workspace's row: its mark and its name, as the desktop's sidebar has them, in a list's regular row.
 const ROW: RowSize = RowSize::Regular;
@@ -43,10 +42,7 @@ impl MobileApp {
             Some(records) if !records.workspaces().iter().any(listed) => {
                 chrome::empty("No workspaces", "Tap + to start one.")
             }
-            Some(records) => {
-                let works = Works::read(&records, link);
-                self.list(&records, &works, ready, crate::safe_area::insets(window, cx).safe_area.bottom, cx)
-            }
+            Some(records) => self.list(&records, ready, crate::safe_area::insets(window, cx).safe_area.bottom, cx),
         };
         // Such as the vault failing to keep the hub just paired with.
         let error = self.error.clone().map(chrome::error);
@@ -55,14 +51,7 @@ impl MobileApp {
 
     /// The repositories by name, as client-core keeps them, and in each its workspaces in the order the desktop's
     /// sidebar starts in, last active first.
-    fn list(
-        &self,
-        records: &Snapshot,
-        works: &Works,
-        ready: bool,
-        bottom: Pixels,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    fn list(&self, records: &Snapshot, ready: bool, bottom: Pixels, cx: &mut Context<Self>) -> AnyElement {
         let muted = look::colors(cx).text_muted;
         let mut sections = v_flex().w_full().px(look::ROWS_INSET).pb(bottom);
         let workspaces = records.workspaces();
@@ -75,7 +64,7 @@ impl MobileApp {
             Sort::default().sort(&mut shown, workspaces);
             sections = sections.child(heading(repo, muted));
             for workspace in shown.into_iter().map(|w| &workspaces[w]) {
-                sections = sections.child(self.row(workspace, records, works.of(workspace), ready, cx));
+                sections = sections.child(self.row(workspace, records, ready, cx));
             }
         }
         div().id("workspaces").flex_1().min_h_0().w_full().overflow_y_scroll().child(sections).into_any_element()
@@ -83,15 +72,9 @@ impl MobileApp {
 
     /// A workspace's row, which opens its chat, and whose menu, on a long press, offers what its row's menu does on the
     /// desktop. Its name is muted until it needs a look, as in the desktop's sidebar, so the ones that do stand out.
-    fn row(
-        &self,
-        workspace: &Workspace,
-        records: &Snapshot,
-        work: Work,
-        ready: bool,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
+    fn row(&self, workspace: &Workspace, records: &Snapshot, ready: bool, cx: &mut Context<Self>) -> AnyElement {
         let colors = look::colors(cx);
+        let work = client_ui::recorded_work(&records.workspace_pull_request(&workspace.id));
         let chats = records.sessions(&workspace.id);
         let signal = client_ui::workspace_signal(workspace, chats);
         let needs_a_look = client_core::marking::needs_a_look(workspace, chats, Session::unread);
@@ -126,27 +109,6 @@ impl MobileApp {
         let session = Session::last_worked_in(records.sessions(id).iter().filter(|s| s.is_open())).cloned();
         let chat = cx.new(|cx| ChatView::new(workspace, session, hub, window, cx));
         self.open_chat(chat, window, cx);
-    }
-}
-
-/// Where each listed workspace's pull request stands, as the hub sent it, for its mark.
-struct Works(HashMap<WorkspaceId, Work>);
-
-impl Works {
-    fn read(records: &Snapshot, link: &HubLink) -> Self {
-        let listed = records.workspaces().iter().filter(|workspace| listed(workspace));
-        Self(
-            listed
-                .filter_map(|workspace| {
-                    let work = client_ui::recorded_work(link.pull_request_of(workspace).as_ref())?;
-                    Some((workspace.id.clone(), work))
-                })
-                .collect(),
-        )
-    }
-
-    fn of(&self, workspace: &Workspace) -> Work {
-        self.0.get(&workspace.id).copied().unwrap_or(Work::NoPr)
     }
 }
 

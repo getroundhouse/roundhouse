@@ -198,7 +198,7 @@ impl WorkspacePane {
         let shown = Side::Right.shown(cx)?;
         let act = cx.listener(|t, action, _, cx| t.act(*action, cx));
         let doing = client_core::moving::doing(self.workspace().status);
-        let bar = crate::pull_request::bar(&self.pull_request, &self.busy, doing, act, cx);
+        let bar = crate::pull_request::bar(&self.pull_request(), &self.busy, doing, act, cx);
         let changed = diff.review.read(cx).listing().map(Listing::changed);
         let chosen = diff.sidebar_tab.tab();
         let (controls, list) = match chosen {

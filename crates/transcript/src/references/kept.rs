@@ -2,12 +2,13 @@
 //! last frame are what it shows, while it's shown, which the hub reads and sends again as they change, and those it drew
 //! are drawn again.
 
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
+use client_core::records::Snapshot;
 use client_core::{GithubView, RecordsFeed, ShownOfGithub};
-use gpui_kit::{App, Task, WeakEntity};
+use gpui_kit::{App, WeakEntity};
 use parking_lot::Mutex;
-use protocol::model::{Reference, ReferenceAsk, ReferenceRead, Seq, WorkspaceId};
+use protocol::model::{Observed, ReferenceAsk, ReferenceSaid, Seq, WorkspaceId};
 
 use super::book::Book;
 use crate::linked_images::Waiter;
@@ -31,8 +32,11 @@ struct Shared<W> {
     /// Client-core's copy of the hub's records, whose workspaces say which a pull request is in, and whose part of
     /// what the hub says of GitHub has what's drawn, once it's given one.
     records: Mutex<Option<RecordsFeed>>,
-    /// What this shows of GitHub, once it's drawn with the records followed, and what listens for it changing.
-    github: Mutex<Option<Following>>,
+    /// What this shows of GitHub, once it's drawn with the records followed.
+    github: Mutex<Option<GithubView>>,
+    /// The records last heard from, against which [`References::records_changed`] tells what the hub's word changed
+    /// on.
+    heard_from: Mutex<Option<Snapshot>>,
     /// Tells what drew one that what's known of it changed.
     changed: Changed<W>,
     /// Whether what drew one is in sight, as a row out of sight is when it's drawn only to be measured.
@@ -44,11 +48,6 @@ struct Shared<W> {
 type Changed<W> = Box<dyn Fn(Vec<W>, &mut App) + Send + Sync>;
 type InSight<W> = Box<dyn Fn(&W, &App) -> bool + Send + Sync>;
 type GoTo = Box<dyn Fn(WorkspaceId, &mut App) + Send + Sync>;
-
-struct Following {
-    view: GithubView,
-    _listening: Task<()>,
-}
 
 /// Which workspace a pull request is in, as the hub's records say.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -99,6 +98,7 @@ impl<W: Waiter> References<W> {
             known: Mutex::new(Book::new()),
             records: Mutex::new(None),
             github: Mutex::new(None),
+            heard_from: Mutex::new(None),
             changed: Box::new(changed),
             go_to: Box::new(go_to),
             in_sight: Box::new(in_sight),
@@ -113,13 +113,28 @@ impl<W: Waiter> References<W> {
 
     /// What the hub said of `ask`, which `drawer` draws, or `None` until it has. What's drawn in a frame is what's
     /// shown once it's drawn, which the hub reads, and sends again as it changes.
-    pub(crate) fn read(&self, ask: &ReferenceAsk, drawer: W, cx: &mut App) -> Option<ReferenceRead> {
-        let said = self.0.github.lock().as_ref().and_then(|following| following.view.feed().reference(ask));
-        let (read, first) = self.0.known.lock().drawn(ask, drawer, said);
+    pub(crate) fn read(&self, ask: &ReferenceAsk, drawer: W, cx: &mut App) -> Option<ReferenceSaid> {
+        let records = self.0.records.lock().as_ref().map(RecordsFeed::snapshot);
+        let said = records.and_then(|records| said(&records, ask));
+        let (said, first) = self.0.known.lock().drawn(ask, drawer, said);
         if first {
             self.settle_after(cx);
         }
-        read
+        said
+    }
+
+    /// Takes in what the hub says of what's drawn, as `records` has it, telling what drew each whose hub's word changed
+    /// since the records last taken in, once the update this is called in is done, since what drew it may be in it.
+    pub(crate) fn records_changed(&self, records: &Snapshot, cx: &mut App) {
+        let earlier = self.0.heard_from.lock().replace(records.clone());
+        let since = earlier.as_ref().map(|earlier| records.changes_since(earlier));
+        let changed = |ask: &ReferenceAsk| since.as_ref().is_none_or(|since| since.reference_said(ask));
+        let drawers = self.0.known.lock().heard(|ask| changed(ask).then(|| said(records, ask)).flatten());
+        if drawers.is_empty() {
+            return;
+        }
+        let shared = self.0.clone();
+        cx.defer(move |cx| (shared.changed)(drawers, cx));
     }
 
     /// Says a frame is being drawn, so what's shown once it's drawn is what it draws, even when that's none.
@@ -144,8 +159,8 @@ impl<W: Waiter> References<W> {
             (again, hides)
         };
         // Apart from the book's lock, as hearing from the hub takes them the other way round.
-        if hides && let Some(following) = &*self.0.github.lock() {
-            following.view.show(ShownOfGithub::default());
+        if hides && let Some(view) = &*self.0.github.lock() {
+            view.show(ShownOfGithub::default());
         }
         again
     }
@@ -156,31 +171,14 @@ impl<W: Waiter> References<W> {
         cx.defer(move |cx| {
             let in_sight = |by: &W| (references.0.in_sight)(by, cx);
             let Some(shown) = references.0.known.lock().settled(in_sight) else { return };
-            references.follow_github(cx);
-            if let Some(following) = &*references.0.github.lock() {
-                following.view.show(ShownOfGithub { references: shown, ..ShownOfGithub::default() });
+            let mut github = references.0.github.lock();
+            if github.is_none() {
+                *github = references.0.records.lock().as_ref().map(|records| records.github().view());
+            }
+            if let Some(view) = &*github {
+                view.show(ShownOfGithub { references: shown, ..ShownOfGithub::default() });
             }
         });
-    }
-
-    /// Starts listening for what the hub says of what's shown changing, once the records are followed.
-    fn follow_github(&self, cx: &mut App) {
-        let mut github = self.0.github.lock();
-        if github.is_some() {
-            return;
-        }
-        let Some(records) = self.0.records.lock().clone() else { return };
-        let view = records.github().view();
-        let changed = view.changed().clone();
-        let shared = Arc::downgrade(&self.0);
-        let listening = cx.spawn(async move |cx| {
-            while changed.recv_async().await.is_ok() {
-                if !cx.update(|cx| heard(&shared, cx)) {
-                    return;
-                }
-            }
-        });
-        *github = Some(Following { view, _listening: listening });
     }
 
     /// How a chip names what `ask` asks for: `#1021` in the repository the chat's workspace is on, as the hub's records
@@ -201,7 +199,7 @@ impl<W: Waiter> References<W> {
     }
 
     /// Which workspace `reference` is in, if it's a pull request one of the hub's workspaces is on.
-    pub(crate) fn tie(&self, reference: &Reference) -> Tie {
+    pub(crate) fn tie(&self, reference: &ReferenceSaid) -> Tie {
         let Some(records) = self.0.records.lock().clone() else { return Tie::None };
         let Some(about) = reference.about() else { return Tie::None };
         let snapshot = records.snapshot();
@@ -228,17 +226,15 @@ impl<W: Waiter> References<W> {
     }
 }
 
-/// Tells what drew each reference whose hub's word changed. Returns false once the references have gone.
-fn heard<W: Waiter>(shared: &Weak<Shared<W>>, cx: &mut App) -> bool {
-    let Some(shared) = shared.upgrade() else { return false };
-    let drawers = {
-        let github = shared.github.lock();
-        let Some(following) = &*github else { return true };
-        let feed = following.view.feed();
-        shared.known.lock().heard(|ask| feed.reference(ask))
-    };
-    if !drawers.is_empty() {
-        (shared.changed)(drawers, cx);
+/// What `records` says the hub said of `ask`, however long ago, or `None` while that isn't known. One of a kind this
+/// build doesn't know is drawn as one that isn't known, as [`ReferenceSaid::Unknown`] says, so it's `None` too, and
+/// what's drawn keeps what was known before.
+fn said(records: &Snapshot, ask: &ReferenceAsk) -> Option<ReferenceSaid> {
+    match records.reference_said(ask) {
+        Observed::Current { value: ReferenceSaid::Unknown }
+        | Observed::AsOf { value: ReferenceSaid::Unknown, .. }
+        | Observed::NotKnown
+        | Observed::Unknown => None,
+        Observed::Current { value } | Observed::AsOf { value, .. } => Some(value.clone()),
     }
-    true
 }

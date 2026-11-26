@@ -10,7 +10,7 @@ use gpui_kit::{
     Window, div,
 };
 use look::{ChipKind, GithubState, IssueState, PullRequestState, RightClickMenu as _, Typeset as _};
-use protocol::model::{Phase, Reference, ReferenceRead};
+use protocol::model::{Phase, ReferenceSaid};
 
 use super::card::{card, menu};
 use super::kept::References;
@@ -52,11 +52,9 @@ impl<W: Waiter> MarkdownPlugin for DrawsReferences<W> {
         cx: &mut App,
     ) -> Option<InlineElement> {
         let named = node.data::<Named>()?.clone();
-        let Some(ReferenceRead::Found { reference }) = self.references.read(&named.ask, self.drawer, cx) else {
-            return None;
-        };
+        let said = self.references.read(&named.ask, self.drawer, cx)?;
         let at = node.source_range().map_or(0, |at| at.start);
-        let chip = chip(&named, *reference, at, self.references.clone())?;
+        let chip = chip(&named, said, at, self.references.clone())?;
         // It's drawn as the link, among the words around it, whose underline, and any bold, italics or line through
         // them, the chip, its card and its menu would take.
         let chip = div().apart_from_its_text().child(chip);
@@ -68,7 +66,7 @@ impl<W: Waiter> MarkdownPlugin for DrawsReferences<W> {
 /// pointer rests on it, and its menu. `None` for what this version can't draw.
 fn chip<W: Waiter>(
     named: &Named,
-    reference: Reference,
+    reference: ReferenceSaid,
     at: usize,
     references: References<W>,
 ) -> Option<gpui_kit::AnyElement> {
@@ -102,11 +100,11 @@ fn chip<W: Waiter>(
 
 /// The kind of chip `reference` is drawn as, and its state, or `None` for a kind or a state this version doesn't
 /// know, which is drawn as it was written.
-pub(super) fn kind_and_state(reference: &Reference) -> Option<(ChipKind, GithubState)> {
+pub(super) fn kind_and_state(reference: &ReferenceSaid) -> Option<(ChipKind, GithubState)> {
     use protocol::model::IssueState as Issue;
     match reference {
-        Reference::Issue(issue) => {
-            let state = match issue.summary.said.state {
+        ReferenceSaid::Issue(issue) => {
+            let state = match issue.summary.state {
                 Issue::Open => IssueState::Open,
                 Issue::Done => IssueState::Done,
                 Issue::NotPlanned => IssueState::NotPlanned,
@@ -114,8 +112,8 @@ pub(super) fn kind_and_state(reference: &Reference) -> Option<(ChipKind, GithubS
             };
             Some((ChipKind::Issue, state.into()))
         }
-        Reference::PullRequest(pull_request) => {
-            let state = match pull_request.phase() {
+        ReferenceSaid::PullRequest(pull_request) => {
+            let state = match pull_request.summary.phase() {
                 Phase::Open => PullRequestState::Open,
                 Phase::Draft => PullRequestState::Draft,
                 Phase::Queued(_) => PullRequestState::Queued,
@@ -125,6 +123,6 @@ pub(super) fn kind_and_state(reference: &Reference) -> Option<(ChipKind, GithubS
             };
             Some((ChipKind::PullRequest, state.into()))
         }
-        Reference::Unknown => None,
+        ReferenceSaid::Missing | ReferenceSaid::Unknown => None,
     }
 }

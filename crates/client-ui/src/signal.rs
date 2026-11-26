@@ -3,12 +3,11 @@
 //! mark, as `client_core::marking` works out. Every app shows them the same way.
 
 use client_core::marking::Mark;
+use client_core::records::WorkspacePullRequest;
 use gpui_kit::assets::IconName;
 use look::{Sign, Signal, Work};
 use protocol::event::TaskKind;
-use protocol::model::{
-    OwnPullRequest, Phase, PullRequestFound, Session, SessionStatus, SetupStatus, Standing, Workspace,
-};
+use protocol::model::{Observed, Phase, PullRequestSaid, Session, SessionStatus, SetupStatus, Standing, Workspace};
 
 /// A workspace's mark, of its record and its chats: being set up, until it is, and then the open chat with the most
 /// going on speaks for it. A reply nobody has read isn't on the mark,
@@ -48,18 +47,22 @@ pub fn chat_signal(session: &Session) -> Signal {
     }
 }
 
-/// The colour of a workspace's work, as what the hub `found` of its pull request says, for its mark. `None` until the
-/// hub has looked.
-pub fn recorded_work(found: Option<&PullRequestFound>) -> Option<Work> {
-    found.map(|found| work(found.pull_request.as_ref()))
+/// The colour of a workspace's work for its mark, as what the hub said of its pull request says, however long ago.
+pub fn recorded_work(pull_request: &Observed<Option<WorkspacePullRequest<'_>>>) -> Work {
+    match pull_request {
+        Observed::Current { value } | Observed::AsOf { value, .. } => {
+            work(value.as_ref().map(|found| &found.own.pull_request))
+        }
+        Observed::NotKnown | Observed::Unknown => work_not_known(),
+    }
 }
 
 /// The colour `pull_request` is shown in, on a workspace's mark and the desktop's pull request bar: what it is, as
 /// GitHub colours it, whatever's in the way of merging it, which the bar's [`sign`] and words say. So a draft with
 /// conflicts is a draft's grey, and an open one with failed checks is green.
-pub fn work(pull_request: Option<&OwnPullRequest>) -> Work {
-    let Some(own) = pull_request else { return Work::NoPr };
-    match own.pull_request.phase() {
+pub fn work(pull_request: Option<&PullRequestSaid>) -> Work {
+    let Some(said) = pull_request else { return Work::NoPr };
+    match said.summary.phase() {
         Phase::Merged => Work::Merged,
         Phase::Closed => Work::Closed,
         Phase::Queued(_) => Work::Queued,
@@ -67,6 +70,12 @@ pub fn work(pull_request: Option<&OwnPullRequest>) -> Work {
         // A state this version doesn't know is still a pull request on GitHub, as far as anyone here knows.
         Phase::Open | Phase::Unknown => Work::Open,
     }
+}
+
+/// The colour of a workspace's work while whether it has a pull request isn't known, as before the hub has looked, or
+/// while GitHub shows none of the repository where it would be: as with none, since any other colour says what it is.
+pub fn work_not_known() -> Work {
+    Work::NoPr
 }
 
 /// What kind of thing `standing` is in the way of merging, which the bar shows before its words. None for work in the
@@ -105,14 +114,15 @@ pub fn mark_row(mark: Mark) -> look::MenuRow {
 
 #[cfg(test)]
 mod tests {
+    use client_core::records::WorkspacePullRequest;
     use look::{Sign, Signal, Work};
     use protocol::event::{AgentTask, TaskKind, TurnOutcome};
     use protocol::model::{
-        CheckState, Local, MergeState, OwnPullRequest, PrState, PullRequest, QueueState, Seq, Session, SessionStatus,
-        SetupStatus, Standing, Workspace,
+        Local, MergeState, Observed, OwnSummary, PrState, PullRequestSaid, QueueState, Seq, Session, SessionStatus,
+        SetupStatus, Standing, Summary, Workspace,
     };
 
-    use super::{chat_signal as chat, sign, work};
+    use super::{chat_signal as chat, recorded_work, sign, work};
 
     fn workspace(chats: &[Session]) -> Signal {
         super::workspace_signal(&protocol::fixtures::workspace("w"), chats)
@@ -203,31 +213,46 @@ mod tests {
 
     #[test]
     fn a_pull_request_is_coloured_by_what_it_is_whatever_is_in_its_way() {
-        let open = protocol::fixtures::pull_request(7);
-        let with = |change: fn(&mut PullRequest)| {
-            let mut pull_request = open.clone();
-            change(&mut pull_request);
-            OwnPullRequest { pull_request, local: Local::default() }
+        let open = PullRequestSaid::of(&protocol::fixtures::pull_request(7));
+        let with = |change: fn(&mut Summary)| {
+            let mut said = open.clone();
+            change(&mut said.summary);
+            said
         };
-        let passed = |pr: &mut PullRequest| pr.checks.as_mut().unwrap().said.checks[0].state = CheckState::Passed;
         let cases = [
             (with(|_| {}), Work::Open),
-            (with(passed), Work::Open),
-            (with(|pr| pr.checks = None), Work::Open),
-            (
-                with(|pr| (pr.summary.said.is_draft, pr.summary.said.merge_state) = (true, MergeState::Dirty)),
-                Work::Draft,
-            ),
-            (with(|pr| pr.summary.said.queue = Some(QueueState::Mergeable)), Work::Queued),
-            (with(|pr| pr.summary.said.state = PrState::Merged), Work::Merged),
-            (with(|pr| pr.summary.said.state = PrState::Closed), Work::Closed),
-            (with(|pr| pr.summary.said.state = PrState::Unknown), Work::Open),
+            (with(|pr| pr.merge_state = MergeState::Dirty), Work::Open),
+            (with(|pr| (pr.is_draft, pr.merge_state) = (true, MergeState::Dirty)), Work::Draft),
+            (with(|pr| pr.queue = Some(QueueState::Mergeable)), Work::Queued),
+            (with(|pr| pr.state = PrState::Merged), Work::Merged),
+            (with(|pr| pr.state = PrState::Closed), Work::Closed),
+            (with(|pr| pr.state = PrState::Unknown), Work::Open),
         ];
 
         let worked: Vec<Work> = cases.iter().map(|(pr, _)| work(Some(pr))).collect();
 
         assert_eq!(worked, cases.map(|(_, work)| work));
         assert_eq!(work(None), Work::NoPr);
+    }
+
+    /// A mark is coloured by what the hub said of the pull request however long ago it said it, and as one with none
+    /// while that isn't known.
+    #[test]
+    fn a_mark_is_coloured_by_what_the_hub_said_and_as_none_until_it_has() {
+        let said = PullRequestSaid::of(&protocol::fixtures::pull_request(7));
+        let own = OwnSummary { pull_request: said, local: Local::default() };
+        let found = Some(WorkspacePullRequest { own: &own, detail: Observed::NotKnown });
+        let cases = [
+            (Observed::Current { value: found.clone() }, Work::Open),
+            (Observed::AsOf { value: found, as_of_ms: 1 }, Work::Open),
+            (Observed::Current { value: None }, Work::NoPr),
+            (Observed::NotKnown, Work::NoPr),
+            (Observed::Unknown, Work::NoPr),
+        ];
+
+        let worked = cases.each_ref().map(|(pull_request, _)| recorded_work(pull_request));
+
+        assert_eq!(worked, cases.map(|(_, work)| work));
     }
 
     /// What has to be fixed is a problem, what waits on GitHub or someone else is waiting, and what the worktree has

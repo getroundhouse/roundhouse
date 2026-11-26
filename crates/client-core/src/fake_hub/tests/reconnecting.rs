@@ -4,8 +4,8 @@
 use std::time::Duration;
 
 use protocol::model::{
-    ChangeSummary, Ending, LineCounts, MessageId, Observation, Observed, ReferenceRead, ReplyHeard, ReplyPlace, Rev,
-    SessionId, SessionStatus, SettledBy, WorkspaceId,
+    ChangeSummary, Ending, LineCounts, MessageId, Observation, Observed, ReplyHeard, ReplyPlace, Rev, SessionId,
+    SessionStatus, SettledBy, WorkspaceId,
 };
 
 use super::super::World;
@@ -61,9 +61,11 @@ impl Read {
             Some(Observed::Current { value } | Observed::AsOf { value, .. }) => Some(value.base_commit.to_string()),
             Some(Observed::NotKnown | Observed::Unknown) | None => None,
         };
-        let chip = match feed.github().reference(&twelve()) {
-            Some(ReferenceRead::Found { reference }) => reference.about().map(|about| about.title.clone()),
-            _ => None,
+        let chip = match snapshot.reference_said(&twelve()) {
+            Observed::Current { value } | Observed::AsOf { value, .. } => {
+                value.about().map(|about| about.title.clone())
+            }
+            Observed::NotKnown | Observed::Unknown => None,
         };
         Read {
             name: snapshot.workspace(elm).map(|workspace| workspace.name.clone()),

@@ -118,7 +118,7 @@ impl WorkspacePane {
         let listing = self.diff.as_ref().and_then(|diff| diff.review.read(cx).listing());
         let changed =
             listing.into_iter().flat_map(|listing| listing.rows.iter()).map(|file| file.path.as_ref()).collect();
-        Workspace { shown: &self.shown, pull_request: self.pull_request.pull_request(), changed }
+        Workspace { shown: &self.shown, pull_request: self.pull_request().pull_request(), changed }
     }
 
     #[cfg(any(test, feature = "testing"))]

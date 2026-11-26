@@ -1,5 +1,8 @@
+use client_core::records::WorkspacePullRequest;
 use look::Work;
-use protocol::model::{CheckCounts, QueueState, Standing};
+use protocol::model::{
+    CheckCounts, Local, Observed, OwnSummary, PullRequestDetail, PullRequestSaid, QueueState, Standing,
+};
 
 use super::words::action;
 use super::{Action, Ask, Lookup};
@@ -42,20 +45,40 @@ fn an_unseen_repository_hides_only_what_isn_t_known() {
         said: "Could not resolve to a Repository with the name 'o/r'.".into(),
         approve_at: None,
     };
-    let own = protocol::model::OwnPullRequest {
-        pull_request: protocol::fixtures::pull_request(7),
-        local: protocol::model::Local::default(),
-    };
-    let none = protocol::model::PullRequestFound { pull_request: None };
-    let found = protocol::model::PullRequestFound { pull_request: Some(own.clone()) };
+    let pull_request = protocol::fixtures::pull_request(7);
+    let own = OwnSummary { pull_request: PullRequestSaid::of(&pull_request), local: Local::default() };
+    let found = WorkspacePullRequest { own: &own, detail: Observed::NotKnown };
+    let (unseen, seen) = (Observed::AsOf { value: Some(unseen), as_of_ms: 1 }, Observed::Current { value: None });
 
     let lookups = [
-        Lookup::of(None, Some(unseen.clone())),
-        Lookup::of(Some(none), Some(unseen.clone())),
-        Lookup::of(Some(found), Some(unseen.clone())),
+        Lookup::of(Observed::NotKnown, &unseen),
+        Lookup::of(Observed::Current { value: None }, &unseen),
+        Lookup::of(Observed::AsOf { value: Some(found.clone()), as_of_ms: 1 }, &unseen),
+        Lookup::of(Observed::NotKnown, &seen),
+        Lookup::of(Observed::Current { value: None }, &Observed::NotKnown),
     ];
 
-    let unseen = Lookup::Unseen(Box::new(unseen));
-    assert_eq!(lookups, [unseen.clone(), unseen, Lookup::Found(Some(Box::new(own)))]);
+    let Observed::AsOf { value: Some(unseen), .. } = &unseen else { unreachable!() };
+    let expected = [
+        Lookup::Unseen(unseen),
+        Lookup::Unseen(unseen),
+        Lookup::Found(Some(found)),
+        Lookup::Looking,
+        Lookup::Found(None),
+    ];
+    assert_eq!(lookups, expected);
     assert_eq!((lookups[0].standing(), lookups[0].work()), (None, Work::NoPr), "nothing to judge, and no colour");
+}
+
+/// What's in the way of merging it is read from its checks, which until they're known are being read.
+#[test]
+fn the_standing_takes_the_checks_from_the_detail_where_they_re_known() {
+    let pull_request = protocol::fixtures::pull_request(7);
+    let own = OwnSummary { pull_request: PullRequestSaid::of(&pull_request), local: Local::default() };
+    let detail = PullRequestDetail::of(&pull_request);
+    let standing = |detail| Lookup::Found(Some(WorkspacePullRequest { own: &own, detail })).standing();
+    let running = CheckCounts { passed: 0, failed: 0, pending: 1 };
+
+    assert_eq!(standing(Observed::NotKnown), Some(Standing::Reading));
+    assert_eq!(standing(Observed::AsOf { value: &detail, as_of_ms: 1 }), Some(Standing::ChecksRunning(running)));
 }

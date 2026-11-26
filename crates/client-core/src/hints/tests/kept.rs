@@ -7,7 +7,7 @@ use protocol::event::EventBody;
 use protocol::fixtures;
 use protocol::model::{
     Branch, Branches, DiffComment, DiffSide, Head, OptionPlace, Place, ProposalOption, ProposalQuestion, Proposed,
-    PullRequest, Recommendation, Records, Repo, Rev, Seq,
+    PullRequestSaid, Recommendation, Records, Repo, Rev, Seq,
 };
 use protocol::prompt::{Prompt, PromptFrom};
 
@@ -46,10 +46,10 @@ fn workspace() -> InWorkspace {
     records.snapshot().in_workspace(&"w1".into()).unwrap()
 }
 
-fn pull_request() -> PullRequest {
-    let mut pull_request = fixtures::pull_request(7);
-    pull_request.summary.said.about.title = "Keep the Ardmore relay up".into();
-    pull_request
+fn pull_request() -> PullRequestSaid {
+    let mut said = PullRequestSaid::of(&fixtures::pull_request(7));
+    said.summary.about.title = "Keep the Ardmore relay up".into();
+    said
 }
 
 fn question() -> Question {
