@@ -4,6 +4,7 @@ use std::sync::Arc;
 use agents::HubToolServer;
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
+use hyper::client::conn::http1::SendRequest;
 use hyper::header::{HOST, HeaderMap, HeaderName, HeaderValue};
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
@@ -84,8 +85,20 @@ impl Agent {
         headers: &[(&'static str, &str)],
         body: impl Into<Bytes>,
     ) -> Response<Incoming> {
+        self.keeping(method, path, headers, body).await.unwrap().0
+    }
+
+    /// The same, on a connection that's kept open for as long as what's returned with the answer is held, as a CLI that
+    /// doesn't close its connections keeps it. An error where the worker didn't take the connection.
+    pub(super) async fn keeping(
+        &self,
+        method: Method,
+        path: &str,
+        headers: &[(&'static str, &str)],
+        body: impl Into<Bytes>,
+    ) -> hyper::Result<(Response<Incoming>, SendRequest<Full<Bytes>>)> {
         let stream = TcpStream::connect((Ipv4Addr::LOCALHOST, self.port)).await.unwrap();
-        let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream)).await.unwrap();
+        let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream)).await?;
         tokio::spawn(connection);
         let mut request = Request::new(Full::new(body.into()));
         *request.method_mut() = method;
@@ -100,14 +113,14 @@ impl Agent {
                 request.headers_mut().insert(name, HeaderValue::from_str(value).unwrap());
             }
         }
-        sender.send_request(request).await.unwrap()
+        Ok((sender.send_request(request).await?, sender))
     }
 
-    /// The connection a message was sent on, with no answer read, which ends as it's dropped.
-    pub(super) async fn raw(&self, path: &str, body: &str) -> TcpStream {
+    /// The connection a request was sent on, with no answer read, which ends as it's dropped.
+    pub(super) async fn raw(&self, method: &Method, path: &str, body: &str) -> TcpStream {
         let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, self.port)).await.unwrap();
         let headers = format!("Host: 127.0.0.1:{}\r\nAuthorization: Bearer token-s", self.port);
-        let request = format!("POST {path} HTTP/1.1\r\n{headers}\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+        let request = format!("{method} {path} HTTP/1.1\r\n{headers}\r\nContent-Length: {}\r\n\r\n{body}", body.len());
         stream.write_all(request.as_bytes()).await.unwrap();
         stream
     }

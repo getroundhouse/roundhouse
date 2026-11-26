@@ -111,7 +111,7 @@ async fn an_agent_that_hangs_up_ends_its_call_to_the_server() {
     let agent = Agent::with(vec![ProxiedServer { url: url(&format!("http://127.0.0.1:{port}/")), ..server }]).await;
     let within = Duration::from_secs(10);
 
-    let calling = agent.raw(&agent.path().await, CALL).await;
+    let calling = agent.raw(&Method::POST, &agent.path().await, CALL).await;
     let (mut asked, _) = tokio::time::timeout(within, listener.accept()).await.expect("the call").unwrap();
     let mut heard = Vec::new();
     while !heard.ends_with(CALL.as_bytes()) {

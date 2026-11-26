@@ -1,4 +1,5 @@
 use super::message::Message;
+use super::under_way::MOST_UNDER_WAY;
 use crate::tools::http::{AnswerBody, whole};
 use hyper::header::HeaderValue;
 use hyper::{Response, StatusCode};
@@ -29,6 +30,8 @@ pub(super) enum Failure {
     Unreachable,
     /// It was connected to, and went before it answered.
     Lost,
+    /// It has as many calls under way as it may, so it wasn't sent another.
+    TooManyUnderWay,
     /// Nothing says which servers this machine trusts.
     NoCertificates,
 }
@@ -95,6 +98,10 @@ impl Failure {
             Failure::Lost => format!(
                 "{label} closed the connection before it answered, so what was asked of it may or may not have been \
                  done."
+            ),
+            Failure::TooManyUnderWay => format!(
+                "{label} has {MOST_UNDER_WAY} calls under way that it hasn't answered, so Roundhouse sends it no more \
+                 until one of them ends."
             ),
             Failure::NoCertificates => {
                 format!("{label} couldn't be reached, since this machine's certificates couldn't be read.")

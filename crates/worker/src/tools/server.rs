@@ -31,8 +31,9 @@ const ACCEPT_PAUSE: Duration = Duration::from_millis(100);
 /// servers one for a call under way and one for its stream of events, if it has one, so four agents with ten servers
 /// keep 88. More would use up descriptors that the agents, git and scripts need too: a connection to one of the hub's
 /// servers takes a second for the worker's own to it, so this many take 192, of the 256 a Mac gives a process it starts
-/// that doesn't ask for more.
-const MAX_CONNECTIONS: usize = 96;
+/// that doesn't ask for more. A server that takes calls and never answers them holds only a few of these, since the proxy
+/// sends each server only so many calls at once.
+pub(super) const MAX_CONNECTIONS: usize = 96;
 
 /// Whose a call is: the agent in a session, which works in a worktree, where what it writes points to images.
 #[derive(Debug)]
