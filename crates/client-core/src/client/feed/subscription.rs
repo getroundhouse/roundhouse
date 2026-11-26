@@ -1,5 +1,4 @@
 use super::super::follow::{FollowError, Following, Reach, Source};
-use super::super::github::{github_keys, notice_key};
 use super::super::workspace_level::{FollowedWorkspace, Workspaces};
 use super::super::{Client, ClientError, GithubFeed, Result, Subscription, SubscriptionItem};
 use crate::Agents;
@@ -15,7 +14,7 @@ use protocol::model::WorkspaceId;
 #[derive(Clone)]
 pub struct RecordsFeed {
     pub(super) follow: Following<HubRecords>,
-    /// What the same hub says of GitHub, which the hub's level sends of every workspace's own pull request.
+    /// What follows the chips views show, into the same copy.
     github: GithubFeed,
     /// What follows the workspaces followed at their own level, into the same copy.
     workspaces: Workspaces,
@@ -31,9 +30,8 @@ impl RecordsFeed {
     pub fn start(client: &Client) -> RecordsFeed {
         let records = Following::unstarted(HubRecords::default());
         let github = GithubFeed::start(client, records.reach());
-        let workspaces = Workspaces::start(client, records.reach(), github.clone());
-        let source = RecordsSource { github: github.clone() };
-        let follow = records.start(client, move || source);
+        let workspaces = Workspaces::start(client, records.reach());
+        let follow = records.start(client, || RecordsSource);
         let feed = RecordsFeed { follow, github, workspaces };
         client.inner.folding.reach(&feed.follow);
         feed
@@ -90,7 +88,7 @@ impl RecordsFeed {
         self.follow.reach()
     }
 
-    /// What the same hub says of GitHub, of every workspace's own pull request and of what views show.
+    /// What follows the chips views show, for a view to say which it shows.
     pub fn github(&self) -> GithubFeed {
         self.github.clone()
     }
@@ -106,10 +104,7 @@ impl RecordsFeed {
     }
 }
 
-struct RecordsSource {
-    /// Where what the hub says of each workspace's own pull request goes.
-    github: GithubFeed,
-}
+struct RecordsSource;
 
 impl Source for RecordsSource {
     type Held = HubRecords;
@@ -138,23 +133,11 @@ impl Source for RecordsSource {
     fn apply(&mut self, _: &Client, held: &Mutex<HubRecords>, item: SubscriptionItem) -> Result<bool> {
         Ok(match item {
             SubscriptionItem::Listed(listed) => match *listed {
-                Listed::Hub(records) => {
-                    let keys = github_keys(&records.observations);
-                    let changed = held.lock().apply_list(*records);
-                    self.github.observed(&keys, changed);
-                    changed
-                }
+                Listed::Hub(records) => held.lock().apply_list(*records),
                 // Of another level, which this doesn't follow.
                 Listed::Session(_) | Listed::Workspace(_) | Listed::Reference(_) | Listed::Unknown => false,
             },
-            SubscriptionItem::Notice(notice) => {
-                let key = notice_key(&notice);
-                let changed = held.lock().apply_notice(*notice);
-                if let Some(key) = key {
-                    self.github.observed(&[key], changed);
-                }
-                changed
-            }
+            SubscriptionItem::Notice(notice) => held.lock().apply_notice(*notice),
             SubscriptionItem::Event(_)
             | SubscriptionItem::Tail(_)
             | SubscriptionItem::Delta(_)

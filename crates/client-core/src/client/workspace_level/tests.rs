@@ -11,7 +11,7 @@ use protocol::model::{Rev, WorkspaceId};
 use super::followed::Wanted;
 use super::source::WorkspacesSource;
 use crate::client::follow::{Following, Source as _, Unstarted};
-use crate::client::{Client, GithubFeed, SubscriptionItem};
+use crate::client::{Client, SubscriptionItem};
 use crate::records::HubRecords;
 use crate::stand_in_hub::{self, Does, refusing_every_start, starts};
 
@@ -24,8 +24,7 @@ fn source_of(
     let heard = stand_in_hub::listen(socket, move |request| Does::Answers(Box::new(answers(&request))));
     let client = Client::connect(socket, "test").unwrap();
     let records = Following::unstarted(HubRecords::default());
-    let github = GithubFeed::start(&client, records.reach());
-    let source = WorkspacesSource::new(records.reach(), github);
+    let source = WorkspacesSource::new(records.reach());
     (client, source, records, heard)
 }
 
@@ -52,8 +51,9 @@ fn a_refused_workspace_is_asked_for_again_only_once_the_workspaces_followed_chan
     assert_eq!(starts(&heard), [2], "both, once the workspaces followed changed");
 }
 
-/// What a workspace's level sends that was already on its way as the last handle on it went, such as its list after
-/// falling behind, is dropped, so nothing brings back what letting go of it let go of.
+/// What a workspace's level sends goes into the copy of the hub's records, whose readers are told, but for what was
+/// already on its way as the last handle on it went, such as its list after falling behind, which is dropped, so
+/// nothing brings back what letting go of it let go of.
 #[test]
 fn what_s_sent_of_a_workspace_no_longer_followed_is_dropped() {
     let dir = tempfile::tempdir().unwrap();
@@ -67,8 +67,10 @@ fn what_s_sent_of_a_workspace_no_longer_followed_is_dropped() {
         SubscriptionItem::Listed(Box::new(Listed::Workspace(listed)))
     };
     let w_listed = || records.reach().read(|records| records.snapshot().workspace_changes(&w).is_some()).unwrap();
+    while records.changed().try_recv().is_ok() {}
     source.apply(&client, &wanted, listed()).unwrap();
     assert!(w_listed(), "followed");
+    assert!(records.changed().try_recv().is_ok(), "the records' readers are told");
 
     wanted.lock().unwant(&w);
     source.asked(Some(&client), &wanted, &|| {}).unwrap();

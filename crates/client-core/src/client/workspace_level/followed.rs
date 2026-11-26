@@ -6,8 +6,8 @@ use protocol::client::subscriptions::Follow;
 use protocol::model::WorkspaceId;
 
 use super::source::WorkspacesSource;
+use crate::client::Client;
 use crate::client::follow::{Following, Reach};
-use crate::client::{Client, GithubFeed};
 use crate::records::HubRecords;
 
 /// Every workspace a handle is kept on, each with how many, and so what's followed.
@@ -43,9 +43,9 @@ pub(in crate::client) struct Workspaces {
 
 impl Workspaces {
     /// Starts following, on a thread of its own, with nothing followed until a handle is asked for. What's sent goes
-    /// into `records`, and what GitHub says there into `github`, the GitHub feed of the same hub.
-    pub(in crate::client) fn start(client: &Client, records: Reach<HubRecords>, github: GithubFeed) -> Self {
-        let follow = Following::start(client, Wanted::default(), move || WorkspacesSource::new(records, github));
+    /// into `records`.
+    pub(in crate::client) fn start(client: &Client, records: Reach<HubRecords>) -> Self {
+        let follow = Following::start(client, Wanted::default(), move || WorkspacesSource::new(records));
         Workspaces { follow }
     }
 
@@ -65,8 +65,8 @@ impl Workspaces {
 /// A workspace followed at its own level, from [`crate::RecordsFeed::follow_workspace`], until this is dropped, and
 /// every other handle on the same workspace. While it's followed, the hub sends what only its own pane draws, which
 /// the copy of the hub's records holds, such as its changed files, as [`crate::Snapshot::workspace_changes`] reads
-/// them, and its pull request's checks, as [`crate::GithubFeed::pull_request`] reads them. The hub's worker watches
-/// its files, and the hub reads GitHub of it more often. Once nothing follows it, the copy holds none of that.
+/// them, and its pull request's checks, as [`crate::Snapshot::workspace_pull_request`] reads them. The hub's worker
+/// watches its files, and the hub reads GitHub of it more often. Once nothing follows it, the copy holds none of that.
 pub struct FollowedWorkspace {
     follow: Following<Wanted>,
     id: WorkspaceId,

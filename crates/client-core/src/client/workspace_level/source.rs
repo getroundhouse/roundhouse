@@ -1,8 +1,6 @@
 //! Following every workspace a handle is kept on, through one subscription, and taking what each sends into the copy of
 //! the hub's records.
 
-use std::cell::Cell;
-
 use parking_lot::Mutex;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::Follow;
@@ -10,18 +8,14 @@ use protocol::model::{Level, WorkspaceId};
 
 use super::followed::Wanted;
 use crate::client::follow::{Reach, Source};
-use crate::client::github::{github_keys, notice_key};
 use crate::client::subscribing::Changing;
-use crate::client::{Client, GithubFeed, Result, Subscription, SubscriptionItem};
+use crate::client::{Client, Result, Subscription, SubscriptionItem};
 use crate::records::HubRecords;
 
 /// What changes what the subscription on this connection follows, and where what it sends goes. What's held through a
 /// workspace is let go of once it isn't followed.
 pub(super) struct WorkspacesSource {
     records: Reach<HubRecords>,
-    /// The same hub's GitHub feed, which reads what GitHub says of a workspace's pull request from the copy, and is told
-    /// when that changes.
-    github: GithubFeed,
     changing: Option<Changing>,
     /// What was last asked for on this connection, which isn't asked for again until it changes, so a start the hub
     /// refused isn't sent again each time a handle comes or goes on a workspace already followed.
@@ -31,8 +25,8 @@ pub(super) struct WorkspacesSource {
 }
 
 impl WorkspacesSource {
-    pub(super) fn new(records: Reach<HubRecords>, github: GithubFeed) -> Self {
-        WorkspacesSource { records, github, changing: None, asked_for: Vec::new(), followed: Vec::new() }
+    pub(super) fn new(records: Reach<HubRecords>) -> Self {
+        WorkspacesSource { records, changing: None, asked_for: Vec::new(), followed: Vec::new() }
     }
 
     /// Takes `wanted` to be what's followed now, letting go of what was held only through a workspace no longer in it.
@@ -85,36 +79,21 @@ impl Source for WorkspacesSource {
         Ok(subscription)
     }
 
-    /// Takes what a workspace's level sends into the copy of the hub's records, telling the GitHub feed what it took in
-    /// of what GitHub says. What's sent of a workspace no longer followed, which was already on its way as it was let
-    /// go of, is dropped, so nothing brings back what letting go of it let go of.
+    /// Takes what a workspace's level sends into the copy of the hub's records, which tells its own readers when that
+    /// changes it. What's sent of a workspace no longer followed, which was already on its way as it was let go of, is
+    /// dropped, so nothing brings back what letting go of it let go of.
     fn apply(&mut self, _: &Client, _: &Mutex<Wanted>, item: SubscriptionItem) -> Result<bool> {
         let Some(Level::Workspace { id }) = item.level() else { return Ok(false) };
         if !self.followed.contains(&id) {
             return Ok(false);
         }
-        // Whether the copy changed, which it tells its own readers of.
-        let changed = Cell::new(false);
-        let change = |change: &dyn Fn(&mut HubRecords) -> bool| {
-            self.records.change(|records| {
-                let changed_it = change(records);
-                changed.set(changed.get() || changed_it);
-                changed_it
-            });
-        };
         match item {
             SubscriptionItem::Listed(listed) => {
                 let Listed::Workspace(observations) = *listed else { return Ok(false) };
-                let keys = github_keys(&observations.observations);
-                change(&|records| records.apply_workspace_list(observations.clone()));
-                self.github.observed(&keys, changed.get());
+                self.records.change(|records| records.apply_workspace_list(observations));
             }
             SubscriptionItem::Notice(notice) => {
-                let key = notice_key(&notice);
-                change(&|records| records.apply_notice((*notice).clone()));
-                if let Some(key) = key {
-                    self.github.observed(&[key], changed.get());
-                }
+                self.records.change(|records| records.apply_notice(*notice));
             }
             SubscriptionItem::Event(_)
             | SubscriptionItem::Tail(_)

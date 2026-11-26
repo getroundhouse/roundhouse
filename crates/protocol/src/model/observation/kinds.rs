@@ -307,16 +307,4 @@ impl ObservationKey {
             ObservationKey::Unknown => None,
         }
     }
-
-    /// Whether it's of what GitHub says of a pull request or an issue: a workspace's own, or one a chip shows. `false`
-    /// for one of a kind this build doesn't know.
-    pub fn is_github(&self) -> bool {
-        matches!(
-            self,
-            ObservationKey::WorkspacePullRequest { .. }
-                | ObservationKey::WorkspacePullRequestDetail { .. }
-                | ObservationKey::WorkspaceRepositoryUnseen { .. }
-                | ObservationKey::Reference { .. }
-        )
-    }
 }

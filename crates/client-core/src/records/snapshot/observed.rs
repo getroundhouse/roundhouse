@@ -16,8 +16,6 @@ pub(in super::super) struct ObservationsListed {
     held: HashMap<ObservationKey, (Arc<Observation>, Taken)>,
     /// The workspaces whose own level the hub has listed since they were followed.
     workspaces_listed: HashSet<WorkspaceId>,
-    /// Whether the hub's level has been listed, after which an observation of it the client lacks isn't known.
-    hub_listed: bool,
 }
 
 /// What a view reads of an observation the client doesn't hold.
@@ -27,15 +25,13 @@ const NOT_KNOWN: Observed<LineCounts> = Observed::NotKnown;
 const CHANGES_NOT_KNOWN: Observed<ChangeSummary> = Observed::NotKnown;
 
 impl ObservationsListed {
-    /// From every observation held, with when each was taken in, the workspaces whose own level has been listed, and
-    /// whether the hub's has.
+    /// From every observation held, with when each was taken in, and the workspaces whose own level has been listed.
     pub(in super::super) fn of(
         held: impl Iterator<Item = (Arc<Observation>, Taken)>,
         workspaces_listed: HashSet<WorkspaceId>,
-        hub_listed: bool,
     ) -> Self {
         let held = held.map(|(observation, taken)| (observation.key(), (observation, taken))).collect();
-        ObservationsListed { held, workspaces_listed, hub_listed }
+        ObservationsListed { held, workspaces_listed }
     }
 
     /// Those of a kind `of` picks out, in no order.
@@ -53,11 +49,6 @@ impl Snapshot {
     /// The observation `key` names, if the client holds it.
     pub(crate) fn observation(&self, key: &ObservationKey) -> Option<&Observation> {
         self.observations.held.get(key).map(|(observation, _)| observation.as_ref())
-    }
-
-    /// Whether the hub has listed its own level, after which one of its observations the client lacks isn't known.
-    pub(crate) fn hub_listed(&self) -> bool {
-        self.observations.hub_listed
     }
 
     /// How many lines the workspace's changes add and remove against its base, in all. Not known until the hub has
