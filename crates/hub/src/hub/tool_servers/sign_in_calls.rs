@@ -74,11 +74,11 @@ impl Hub {
                 if e.is_invalid_client() {
                     self.forget_registration(&sign_in, pending).await;
                 }
-                // Which it sends the person back to say only of a client it knows.
-                if matches!(e, Failure::RefusedByPerson)
+                // Its page sends the person back only to a client it knows.
+                if e.was_sent_back()
                     && let Some((server, _)) = used_again(&sign_in.to, pending)
                 {
-                    self.tool_sign_ins.in_doubt.finished(server);
+                    self.tool_sign_ins.in_doubt.settled(server);
                 }
                 return Err(e.into());
             }
@@ -91,7 +91,7 @@ impl Hub {
         let kept = off_thread(move || servers.keep_sign_in(made_by, &to.to, signed_in, given_at_ms)).await;
         self.tool_sign_ins.waiting.end(&id, &sign_in);
         let server = self.announce_tool_server(kept?);
-        self.tool_sign_ins.in_doubt.finished(&server.id);
+        self.tool_sign_ins.in_doubt.settled(&server.id);
         info!(name: "tool_sign_in.signed_in", server_id = %server.id, "Signed in to a tool server");
         Ok(server)
     }
