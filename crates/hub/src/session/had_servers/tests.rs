@@ -3,7 +3,7 @@
 use protocol::capability::setup::{ConnectsAgain, ServerState, ToolServerState};
 use protocol::capability::{Capabilities, Claimed};
 use protocol::client::tool_servers::ToolServerEdit;
-use protocol::model::{RunId, ToolServerAuthEdit, ToolServerId, ToolServerKey, ToolServerUrl};
+use protocol::model::{RunId, ToolServerAuthEdit, ToolServerId, ToolServerKey};
 
 use super::{HadServers, Running};
 use crate::store::tests::open_in;
@@ -80,13 +80,8 @@ fn idle() -> Running {
 }
 
 fn says(state: ServerState) -> Vec<ToolServerState> {
-    says_at(state, None)
-}
-
-fn says_at(state: ServerState, connected_to: Option<&str>) -> Vec<ToolServerState> {
-    let connected_to = connected_to.map(|url| ToolServerUrl::typed(url).unwrap().place());
     let (name, hubs) = ("Linear".into(), Some("t".into()));
-    vec![ToolServerState { name, hubs, connected_to, state, error: None, tools: None, connects_again: None }]
+    vec![ToolServerState { name, hubs, state, error: None, tools: None, connects_again: None }]
 }
 
 /// How many `running` is asked to connect to, as `had` it, and as it has them from now on, where each ask is delivered.
@@ -109,30 +104,14 @@ fn undelivered(
     had.take(looked)
 }
 
-/// How many it's to connect to again `when`, whatever was said of that before.
-fn marked(
-    had: &HadServers,
-    now: &ServersAsSent,
-    said: &[ToolServerState],
-    running: &Running,
-    when: ConnectsAgain,
-) -> usize {
+/// How many it's to connect to once its turn ends, whatever was said of that before.
+fn waits(had: &HadServers, now: &ServersAsSent, said: &[ToolServerState], running: &Running) -> usize {
     let (mut said, looked) = (said.to_vec(), had.look(now, said, running));
     for said in &mut said {
         said.connects_again = Some(ConnectsAgain::Unknown);
     }
     looked.mark(&mut said);
-    said.iter().filter(|said| said.connects_again == Some(when)).count()
-}
-
-/// How many it's to connect to once its turn ends.
-fn waits(had: &HadServers, now: &ServersAsSent, said: &[ToolServerState], running: &Running) -> usize {
-    marked(had, now, said, running, ConnectsAgain::WhenItsTurnEnds)
-}
-
-/// How many it's cut off from until its next start.
-fn cut_off(had: &HadServers, now: &ServersAsSent, said: &[ToolServerState], running: &Running) -> usize {
-    marked(had, now, said, running, ConnectsAgain::AtItsNextStart)
+    said.iter().filter(|said| said.connects_again == Some(ConnectsAgain::WhenItsTurnEnds)).count()
 }
 
 #[test]
@@ -176,7 +155,7 @@ fn what_changed_how_the_run_stands_and_what_it_claims_decide_whether_its_asked()
             let case = format!("{edited}, {state:?}, reconnects: {reconnects}, reloads: {reloads}");
             let servers = Servers::new();
             let mut had = HadServers::new(RUN, servers.now());
-            let said = says_at(state, (state == ServerState::Connected).then_some(URL));
+            let said = says(state);
             let now = edit(&servers);
             let on_a_turn = running(claims(reconnects, reloads), true);
             let idle = running(claims(reconnects, reloads), false);
@@ -197,11 +176,10 @@ fn what_changed_how_the_run_stands_and_what_it_claims_decide_whether_its_asked()
 fn a_server_counts_as_had_only_once_its_ask_reaches_the_agent() {
     let servers = Servers::new();
     let mut had = HadServers::new(RUN, servers.now());
-    let said = says_at(ServerState::Connected, Some(URL));
+    let said = says(ServerState::Connected);
     let moved = servers.moved();
 
     assert_eq!(undelivered(&mut had, &moved, &said, &idle()).len(), 1);
-    assert_eq!(cut_off(&had, &moved, &said, &idle()), 0, "it can be asked");
     assert_eq!(undelivered(&mut had, &moved, &said, &idle()).len(), 1, "asked again");
     assert_eq!(asks(&mut had, &moved, &said, &idle()), 1);
     assert_eq!(asks(&mut had, &moved, &said, &idle()), 0, "once it's delivered");
@@ -211,7 +189,7 @@ fn a_server_counts_as_had_only_once_its_ask_reaches_the_agent() {
 fn what_waits_for_a_turns_end_is_asked_once_then_whatever_else_changed_meanwhile() {
     let servers = Servers::new();
     let mut had = HadServers::new(RUN, servers.now());
-    let said = says_at(ServerState::Connected, Some(URL));
+    let said = says(ServerState::Connected);
     let on_a_turn = running(claims(true, true), true);
 
     assert_eq!(asks(&mut had, &servers.queried(), &said, &on_a_turn), 0);
@@ -231,63 +209,24 @@ fn what_a_connected_run_has_by_its_calls_isnt_asked_for_once_it_fails() {
     let mut had = HadServers::new(RUN, servers.now());
     let codex = running(claims(true, false), false);
 
-    for now in [servers.another_key(), servers.queried()] {
-        assert_eq!(asks(&mut had, &now, &says_at(ServerState::Connected, Some(URL)), &codex), 0);
+    for now in [servers.another_key(), servers.queried(), servers.moved()] {
+        assert_eq!(asks(&mut had, &now, &says(ServerState::Connected), &codex), 0);
         assert_eq!(asks(&mut had, &now, &says(ServerState::Failed), &codex), 0);
     }
 }
 
-/// It's cut off, which clients are told, on a turn or not, and so hasn't it as it is.
+/// As of one carried on with from an earlier hub. A failed one is asked once more, and one that's connected has its
+/// calls go as the server is.
 #[test]
-fn a_moved_server_a_connected_run_cant_be_asked_for_is_asked_for_once_it_isnt_connected() {
-    let servers = Servers::new();
-    let mut had = HadServers::new(RUN, servers.now());
-    let (codex, on_a_turn) = (running(claims(true, false), false), running(claims(true, false), true));
-    let moved = servers.moved();
-    let connected = says_at(ServerState::Connected, Some(URL));
-
-    assert_eq!(cut_off(&had, &moved, &connected, &codex), 1);
-    assert_eq!(cut_off(&had, &moved, &connected, &on_a_turn), 1);
-    assert_eq!(waits(&had, &moved, &connected, &on_a_turn), 0);
-    assert_eq!(asks(&mut had, &moved, &connected, &codex), 0);
-    assert_eq!(cut_off(&had, &moved, &connected, &codex), 1, "for as long as it's connected there");
-    assert_eq!(cut_off(&had, &moved, &says_at(ServerState::Failed, Some(URL)), &codex), 0);
-    assert_eq!(asks(&mut had, &moved, &says_at(ServerState::Failed, Some(URL)), &codex), 1);
-    assert_eq!(asks(&mut had, &moved, &says_at(ServerState::Failed, Some(URL)), &codex), 0);
-}
-
-/// Where its worker says it connected comes before what it had, such as for one moved as it started, which it
-/// connected to where it is, or one an older worker says nothing of.
-#[test]
-fn a_run_connected_where_the_server_is_now_isnt_asked_for_a_move_and_an_older_workers_goes_by_what_it_had() {
-    for (connected_to, expected) in [(Some(ELSEWHERE), 0), (Some(URL), 1), (None, 1)] {
+fn a_run_nothing_is_known_of_is_asked_for_a_failed_server_alone() {
+    for (state, expected) in [(ServerState::Failed, 1), (ServerState::Connected, 0)] {
         let servers = Servers::new();
-        let mut had = HadServers::new(RUN, servers.now());
-
-        let found = asks(&mut had, &servers.moved(), &says_at(ServerState::Connected, connected_to), &idle());
-
-        assert_eq!(found, expected, "{connected_to:?}");
-    }
-}
-
-/// As of one carried on with from an earlier hub. A failed one is asked once more, and one that's connected goes by
-/// where it connected alone.
-#[test]
-fn a_run_nothing_is_known_of_is_asked_for_a_failed_server_or_one_moved_since_it_connected() {
-    let cases = [
-        (ServerState::Failed, None, 1),
-        (ServerState::Connected, Some(URL), 0),
-        (ServerState::Connected, Some(ELSEWHERE), 1),
-        (ServerState::Connected, None, 0),
-    ];
-    for (state, connected_to, expected) in cases {
-        let servers = Servers::new();
-        let now = servers.queried();
+        let now = servers.moved();
         let mut had = HadServers::new(RUN, ServersAsSent::default());
-        let said = says_at(state, connected_to);
+        let said = says(state);
 
-        assert_eq!(asks(&mut had, &now, &said, &idle()), expected, "{state:?} {connected_to:?}");
-        assert_eq!(asks(&mut had, &now, &said, &idle()), 0, "once: {state:?} {connected_to:?}");
+        assert_eq!(asks(&mut had, &now, &said, &idle()), expected, "{state:?}");
+        assert_eq!(asks(&mut had, &now, &said, &idle()), 0, "once: {state:?}");
     }
 }
 

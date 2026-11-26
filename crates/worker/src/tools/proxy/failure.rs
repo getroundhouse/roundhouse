@@ -12,8 +12,6 @@ const INTERNAL_ERROR: i32 = -32603;
 /// Why a request got no answer from its server, or one that isn't passed on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Failure {
-    /// The person has moved it to another URL since the agent connected to it.
-    Moved,
     /// Its URL or its header isn't one HTTP can be sent with.
     Unusable,
     /// It's signed in to, and needs the person to again, so it wasn't asked.
@@ -49,10 +47,6 @@ impl Failure {
     /// holds no key, and nothing of a URL.
     fn said(self, label: &str) -> String {
         match self {
-            Failure::Moved => format!(
-                "{label} has been moved to another URL in Roundhouse, so nothing is sent to it until this agent connects \
-                 to it again."
-            ),
             Failure::Unusable => {
                 format!("Roundhouse can't use the URL or the header {label} has. Edit it in Settings › MCP servers.")
             }

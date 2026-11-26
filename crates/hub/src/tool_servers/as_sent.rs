@@ -88,15 +88,10 @@ impl ServersAsSent {
 }
 
 impl ServerAsSent {
-    /// Which server it is.
-    pub(crate) fn place(&self) -> &ToolServerPlace {
-        &self.place
-    }
-
-    /// Whether an agent that's connected to it and has had it as `had`, at the same place, has to list its tools again: it
-    /// may have others by another query, and may have none where the hub couldn't use it. What it's known by changes none
-    /// of them, and goes with the agent's next call.
+    /// Whether an agent that's connected to it and has had it as `had` has to list its tools again: it may have others at
+    /// another place or by another query, and may have none where the hub couldn't use it. What it's known by changes
+    /// none of them, and goes with the agent's next call.
     pub(crate) fn lists_other_tools_than(&self, had: &ServerAsSent) -> bool {
-        self.query != had.query || self.saved_anyway > had.saved_anyway
+        self.place != had.place || self.query != had.query || self.saved_anyway > had.saved_anyway
     }
 }

@@ -33,8 +33,7 @@ pub enum Stands {
     WhenItsTurnEnds {
         connected: bool,
     },
-    /// One of the hub's that the agent wasn't launched with, or one the hub says it has from its next start, as one it's
-    /// connected to where it was before it was moved to another URL, so its worker has cut the agent off from it.
+    /// One of the hub's that the agent wasn't launched with.
     FromItsNextStart,
     /// One the agent has that the hub no longer does.
     Removed,
@@ -86,7 +85,6 @@ impl Stands {
             Some(ConnectsAgain::WhenItsTurnEnds) => {
                 Stands::WhenItsTurnEnds { connected: said.state == ServerState::Connected }
             }
-            Some(ConnectsAgain::AtItsNextStart) => Stands::FromItsNextStart,
             Some(ConnectsAgain::Unknown) | None => Self::said(said),
         }
     }

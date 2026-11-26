@@ -1,6 +1,6 @@
 use super::passed_on::{Of, is_for_events};
-use super::refusals::Refused;
 use super::server::Server;
+use super::under_way::TooMany;
 use super::{Failure, PassedOn, Proxy, Target, failure, headers};
 use crate::asks::Asks;
 use crate::tools::http::AnswerBody;
@@ -11,7 +11,7 @@ use hyper::{Method, Response, StatusCode};
 use protocol::model::{SessionId, ToolServerId};
 use protocol::worker::{AskForToolAccess, RenewToolServer, ToolAccess};
 use tool_server_http::{Redirected, access_wanted};
-use tracing::{info, warn};
+use tracing::warn;
 
 /// What MCP's streamable HTTP asks a server: a message, its stream of events, and to end a session.
 pub(in super::super) const METHODS: [Method; 3] = [Method::POST, Method::GET, Method::DELETE];
@@ -31,29 +31,12 @@ impl Proxy {
     /// Passes a request on to its server, and the answer back as it comes, or says why there's none.
     pub(in super::super) async fn forward(&self, id: &ToolServerId, asked: Asked<'_>) -> Response<AnswerBody> {
         let Some(server) = self.server(id) else { return failure::not_set(&asked.body) };
-        let let_in = match self.connections.lets_in(&server.id, &server.place, &asked) {
-            Ok(let_in) => let_in,
-            Err(Refused { first }) => {
-                if first {
-                    let session_id = asked.session_id;
-                    info!(
-                        name: "tool_server.cut_off",
-                        server_id = %server.id,
-                        %session_id,
-                        "An agent is cut off from a tool server that was moved"
-                    );
-                }
-                return Failure::Moved.answer(server.label.as_str(), &asked.body);
-            }
-        };
         let counted = match self.under_way.counted(&server.id) {
             Ok(counted) => counted,
-            Err(Refused { first }) => return too_many(&server, &asked, first),
+            Err(TooMany { first }) => return too_many(&server, &asked, first),
         };
         match self.answered(&server, &asked).await {
             Ok(response) => {
-                let said = (response.status(), response.headers());
-                self.connections.answered(&server.id, &server.place, &asked, let_in, said);
                 // A stream of events stays open for as long as the agent is connected, so it counts only until it's
                 // begun.
                 let of = if is_for_events(&asked) {
@@ -96,7 +79,7 @@ impl Proxy {
 
 /// The answer to a request to `server`, which has as many under way as it may. The agent's connection is closed with it,
 /// so a CLI that keeps its connections open, and goes on asking, doesn't hold one more of those the worker takes for
-/// each request that's refused. Logged only if it's the `first` since one ended.
+/// each request that's refused. Logged only if it's the `first` since one ended, since a CLI can go on asking.
 fn too_many(server: &Server, asked: &Asked<'_>, first: bool) -> Response<AnswerBody> {
     if first {
         warn!(name: "tool_server.too_many_under_way", server_id = %server.id, "A tool server is sent nothing more for now");
@@ -112,11 +95,7 @@ async fn renewed(server: &Server, target: &Target, asked: &Asked<'_>) -> Result<
     let renewing = RenewToolServer { server: server.id.clone(), refused };
     match asked.asks.ask(asked.session_id.clone(), renewing).await {
         Ok(renewed) => {
-            let renewed = Server::new(renewed);
-            if renewed.place != server.place {
-                return Err(Failure::Moved);
-            }
-            let renewed = renewed.target?;
+            let renewed = Server::new(renewed).target?;
             Ok((renewed.token() != Some(refused)).then_some(renewed))
         }
         Err(e) => {

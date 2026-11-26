@@ -1,4 +1,3 @@
-use super::refusals::{Refusals, Refused};
 use parking_lot::Mutex;
 use protocol::model::ToolServerId;
 use std::collections::HashMap;
@@ -18,8 +17,8 @@ pub(super) struct UnderWay(Arc<Mutex<HashMap<ToolServerId, Count>>>);
 #[derive(Default)]
 struct Count {
     under_way: usize,
-    /// Those refused since the last that ended.
-    refusals: Refusals,
+    /// Whether one has been refused since the last that ended, so the log says so once.
+    refused: bool,
 }
 
 /// A request to one server, counted until it's dropped.
@@ -28,13 +27,18 @@ pub(super) struct Counted {
     id: ToolServerId,
 }
 
+/// A request that isn't sent. `first` is whether it's the first since one ended.
+pub(super) struct TooMany {
+    pub(super) first: bool,
+}
+
 impl UnderWay {
     /// A request to the server `id`, unless it has as many under way as it may.
-    pub(super) fn counted(&self, id: &ToolServerId) -> Result<Counted, Refused> {
+    pub(super) fn counted(&self, id: &ToolServerId) -> Result<Counted, TooMany> {
         let mut counts = self.0.lock();
         let count = counts.entry(id.clone()).or_default();
         if count.under_way >= MOST_UNDER_WAY {
-            return Err(count.refusals.refused());
+            return Err(TooMany { first: !std::mem::replace(&mut count.refused, true) });
         }
         count.under_way += 1;
         Ok(Counted { counts: self.0.clone(), id: id.clone() })
@@ -46,7 +50,7 @@ impl Drop for Counted {
         let mut counts = self.counts.lock();
         if let Some(count) = counts.get_mut(&self.id) {
             count.under_way -= 1;
-            count.refusals = Refusals::default();
+            count.refused = false;
             if count.under_way == 0 {
                 counts.remove(&self.id);
             }

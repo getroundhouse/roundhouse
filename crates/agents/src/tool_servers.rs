@@ -52,7 +52,6 @@ impl ToolServers {
                 said.push(ToolServerState {
                     name: hubs.name.clone(),
                     hubs: Some(hubs.id.clone()),
-                    connected_to: None,
                     state: ServerState::Unknown,
                     error: None,
                     tools: None,
@@ -77,7 +76,6 @@ mod tests {
         ToolServerState {
             name: name.into(),
             hubs: hubs.map(Into::into),
-            connected_to: None,
             state,
             error: None,
             tools: None,

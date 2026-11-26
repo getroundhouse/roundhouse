@@ -7,8 +7,7 @@ use protocol::capability::setup::{ConnectsAgain, ServerState, ToolServerState};
 use protocol::client::listed::{Listed, SessionRecords};
 use protocol::client::{HubFrame, HubNotice};
 use protocol::model::{
-    CacheTtl, ContextUsage, ConversationCache, Observation, ObservationKey, Observed, PromptCache, Rev, ToolServerUrl,
-    WaitRead,
+    CacheTtl, ContextUsage, ConversationCache, Observation, ObservationKey, Observed, PromptCache, Rev, WaitRead,
 };
 
 use crate::keeps_its_form;
@@ -81,7 +80,6 @@ fn a_session_s_tool_servers_keep_their_form_as_a_notice_and_a_removal() {
     let docs = ToolServerState {
         name: "docs".into(),
         hubs: Some("t-1".into()),
-        connected_to: Some(ToolServerUrl::typed("https://docs.example.com/mcp").unwrap().place()),
         state: ServerState::Connected,
         error: None,
         tools: Some(2),
@@ -90,7 +88,6 @@ fn a_session_s_tool_servers_keep_their_form_as_a_notice_and_a_removal() {
     let gone = ToolServerState {
         name: "gone".into(),
         hubs: None,
-        connected_to: None,
         state: ServerState::Failed,
         error: Some("connection refused".into()),
         tools: None,
@@ -98,7 +95,7 @@ fn a_session_s_tool_servers_keep_their_form_as_a_notice_and_a_removal() {
     };
     let copy = Observation::SessionToolServers {
         session_id: "s".into(),
-        servers: Observed::AsOf { value: vec![docs, gone], as_of_ms: 1_795_230_000_000 },
+        servers: Observed::AsOf { value: vec![docs.clone(), gone], as_of_ms: 1_795_230_000_000 },
         rev: Rev::new(5),
     };
     let removed = HubNotice::ObservationRemoved {
@@ -110,7 +107,7 @@ fn a_session_s_tool_servers_keep_their_form_as_a_notice_and_a_removal() {
         &HubNotice::Observation(copy),
         concat!(
             r#"{"notice":"observation","kind":"session_tool_servers","session_id":"s","servers":{"freshness":"as_of","#,
-            r#""value":[{"name":"docs","hubs":"t-1","connected_to":"https://docs.example.com:443/mcp","state":"connected","#,
+            r#""value":[{"name":"docs","hubs":"t-1","state":"connected","#,
             r#""tools":2},{"name":"gone","state":"failed","error":"connection refused","#,
             r#""connects_again":"when_its_turn_ends"}],"as_of_ms":1795230000000},"rev":5}"#
         ),
@@ -122,6 +119,13 @@ fn a_session_s_tool_servers_keep_their_form_as_a_notice_and_a_removal() {
     let newer = r#"{"name":"docs","state":"connected","connects_again":"when_it_is_asked"}"#;
     let newer: ToolServerState = serde_json::from_str(newer).unwrap();
     assert_eq!(newer.connects_again, Some(ConnectsAgain::Unknown), "a newer hub's word");
+    let older = concat!(
+        r#"{"name":"docs","hubs":"t-1","connected_to":"https://docs.example.com:443/mcp","state":"connected","#,
+        r#""tools":2,"connects_again":"at_its_next_start"}"#
+    );
+    let older: ToolServerState = serde_json::from_str(older).unwrap();
+    let as_now = ToolServerState { connects_again: Some(ConnectsAgain::Unknown), ..docs };
+    assert_eq!(older, as_now, "where an older worker says it connected, and when an older hub says it connects");
 }
 
 /// What the API's cache holds of a session's conversation, which a hub sends at its own level to a client of a version

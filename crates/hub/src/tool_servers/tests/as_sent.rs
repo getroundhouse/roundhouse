@@ -34,10 +34,10 @@ fn anyway(edit: ToolServerEdit) -> ToolServerEdit {
     ToolServerEdit { saved_anyway: true, ..edit }
 }
 
-/// Each edit after the one before it: whether it leaves the server as it was, and, where it's at the same place, whether
-/// an agent connected to it has its tools to list again.
+/// Each edit after the one before it: whether it leaves the server as it was, and whether an agent connected to it has
+/// its tools to list again.
 #[test]
-fn an_edit_changes_a_server_but_where_it_leaves_it_as_it_was_and_its_tools_by_its_query_or_saved_anyway() {
+fn an_edit_changes_a_server_but_where_it_leaves_it_as_it_was_and_its_tools_by_where_it_is_its_query_or_saved_anyway() {
     const SAME: (bool, bool) = (false, false);
     const CALLS: (bool, bool) = (true, false);
     const TOOLS: (bool, bool) = (true, true);
@@ -64,7 +64,7 @@ fn an_edit_changes_a_server_but_where_it_leaves_it_as_it_was_and_its_tools_by_it
         (
             "where it is",
             ToolServerEdit { url: Some(ELSEWHERE.into()), ..keyed("X-Key", Some("fifth"), ELSEWHERE) },
-            CALLS,
+            TOOLS,
         ),
     ];
     for (edited, edit, (changes, lists)) in edits {
@@ -74,7 +74,6 @@ fn an_edit_changes_a_server_but_where_it_leaves_it_as_it_was_and_its_tools_by_it
 
         let now = as_sent(&servers).unwrap();
         assert_eq!((now != before, now.lists_other_tools_than(&before)), (changes, lists), "{edited}");
-        assert_eq!(now.place() != before.place(), edited == "where it is", "{edited}");
     }
     assert!(!format!("{:?}", servers.sent().borrow().as_sent()).contains("fifth"), "nor any key");
     assert_eq!(holding(dir.path(), "fifth"), ["tool-servers"]);

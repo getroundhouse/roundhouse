@@ -275,7 +275,7 @@ Choose **Edit** in the row's **…** menu, change what you want in the panel und
 |---|---|---|
 | The name | Is kept | Call it by the new name from their next start |
 | What's after the `?` in the URL, such as which tools to have | Is kept | Use the new URL at once. Claude lists its tools again once its turn ends, and other agents at their next start |
-| The rest of the URL, which is another server | Is asked for again | Claude loses the server until its turn ends, then connects to it there. Other agents lose it until their next start. A call to it meanwhile fails, and says why |
+| The rest of the URL, which is another server | Is asked for again | Use the new URL at once. Claude lists its tools again once its turn ends, and other agents at their next start |
 | **Authentication,** or the key | Is forgotten once you've saved another | Use the new one at once |
 
 A running agent that couldn't connect to the server tries again once you've saved anything but its name and its turn has ended. Antigravity does at your next prompt. An agent on no turn connects as you save. To have one connect in the middle of a turn, press **Reload** on [the chat's plug](chats.md#the-chats-mcp-servers).
