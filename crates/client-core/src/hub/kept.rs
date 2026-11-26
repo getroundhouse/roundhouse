@@ -14,6 +14,9 @@ pub(crate) struct Kept {
     feed: RecordsFeed,
     /// Whether there's been a connection, before which the records are no copy of the hub's.
     connected_once: AtomicBool,
+    /// Whether the newest connection reached the hub on this machine, by its socket, which where the hub is doesn't
+    /// change with its connection, so it holds once that connection has gone.
+    on_this_machine: AtomicBool,
     /// The connection, while there's one that has caught up on the records, which is the only one asked anything.
     ready: Mutex<Option<Client>>,
     /// How many connections have caught up.
@@ -35,6 +38,7 @@ impl Kept {
         Kept {
             feed: RecordsFeed::started(None),
             connected_once: AtomicBool::new(false),
+            on_this_machine: AtomicBool::new(false),
             ready: Mutex::new(None),
             round: AtomicU64::new(0),
             opened: Mutex::default(),
@@ -51,6 +55,11 @@ impl Kept {
         &self.feed
     }
 
+    /// Whether the newest connection reached the hub on this machine, false before there's been one.
+    pub(crate) fn on_this_machine(&self) -> bool {
+        self.on_this_machine.load(Ordering::SeqCst)
+    }
+
     pub(crate) fn ready(&self) -> Option<Client> {
         self.ready.lock().clone()
     }
@@ -64,6 +73,7 @@ impl Kept {
     pub(crate) fn connected(&self, client: &Client) -> RecordsFeed {
         self.feed.reconnect(client);
         self.connected_once.store(true, Ordering::SeqCst);
+        self.on_this_machine.store(client.hub_on_this_machine(), Ordering::SeqCst);
         let mut opened = self.opened.lock();
         opened.connection = Some(client.clone());
         opened.each.retain(|open| open.carry_on(client));

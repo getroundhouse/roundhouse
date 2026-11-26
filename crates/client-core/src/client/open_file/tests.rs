@@ -11,6 +11,7 @@ use protocol::client::{ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
 use protocol::model::{CommitId, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorkspaceId};
 
 use super::{OpenFile, Opening};
+use crate::Hub;
 use crate::client::Client;
 use crate::client::open_session::tests::{refused, start_hub_answering};
 
@@ -40,8 +41,11 @@ fn page(index: u32) -> FilePage {
     FilePage { index, lines: lines.collect() }
 }
 
-fn start(socket: &Path) -> OpenFile {
-    OpenFile::start(&Client::connect(socket, "test").unwrap(), &WorkspaceId::from("w"), &CommitId::from("c"), "f")
+/// The file, opened from a hub on `socket`, with the hub.
+fn start(socket: &Path) -> (Hub, OpenFile) {
+    let hub = Hub::caught_up_on(&Client::connect(socket, "test").unwrap());
+    let open = hub.open_file(&WorkspaceId::from("w"), &CommitId::from("c"), "f");
+    (hub, open)
 }
 
 /// Waits for `open` to say it changed, until `done` holds of what it holds.
@@ -72,7 +76,7 @@ fn the_pages_a_view_wants_are_fetched_once_and_it_hears_when_they_come() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let asked = start_hub_answering(&socket, |request| Some(answered(request)));
-    let open = start(&socket);
+    let (_hub, open) = start(&socket);
     wait_for(&open, "the file to open", |opening| matches!(opening, Opening::Text(_)));
 
     open.want(&run(300..310));
@@ -90,15 +94,16 @@ fn the_pages_a_view_wants_are_fetched_once_and_it_hears_when_they_come() {
 }
 
 #[test]
-fn a_file_that_couldnt_be_opened_is_opened_on_the_next_connection() {
+fn a_file_that_couldnt_be_opened_is_opened_again_on_the_next_connection() {
     let dir = tempfile::tempdir().unwrap();
     let (failing, newer) = (dir.path().join("1.sock"), dir.path().join("2.sock"));
     start_hub_answering(&failing, |_| Some(refused(ErrorCode::Internal, "no")));
     start_hub_answering(&newer, |request| Some(answered(request)));
-    let failed = start(&failing);
+    let (hub, failed) = start(&failing);
 
     wait_for(&failed, "it to fail", |opening| matches!(opening, Opening::Failed));
-    assert!(failed.reconnect(&Client::connect(&newer, "test").unwrap()), "opened again");
+    hub.carry_on_to(&Client::connect(&newer, "test").unwrap());
+    assert!(failed.open_again(), "opened again");
 
     wait_for(&failed, "it to open", |opening| matches!(opening, Opening::Text(_)));
     assert_eq!(failed.take_errors().len(), 1, "what went wrong the first time");
@@ -114,7 +119,7 @@ fn a_page_that_couldnt_be_fetched_is_fetched_when_its_next_wanted() {
         let fails = matches!(request, ClientRequest::WorkspaceFilePages(_)) && !failing.swap(true, Ordering::SeqCst);
         Some(if fails { refused(ErrorCode::Internal, "no") } else { answered(request) })
     });
-    let open = start(&socket);
+    let (_hub, open) = start(&socket);
     wait_for(&open, "the file to open", |opening| matches!(opening, Opening::Text(_)));
 
     open.want(&run(1..2));

@@ -280,3 +280,21 @@ fn a_webm_whose_frames_don_t_decode_is_for_the_system_s_player(cx: &mut TestAppC
     assert!(!here, "10 bits aren't decoded");
     assert!(said.starts_with("WebM · "), "{said}");
 }
+
+/// A video playing in the tab as the app connects again stops where it was, and lets go of its decoder, once the new
+/// connection has caught up, since what it was reading went with the last.
+#[gpui_kit::test]
+fn a_video_playing_in_the_tab_stops_where_it_was_on_a_new_connection(cx: &mut TestAppContext) {
+    let (_hub, mut ui) = opened(cx, "demo.webm", MediaType::Webm, TWO_SECONDS);
+    ui.click_labelled("Play", 0);
+    play_until(&mut ui, "a second in", |ui| ui.texts_shown().contains("0:01 / 0:02"));
+
+    crate::catching_up::connect_again(&mut ui);
+    ui.wait("the new connection to catch up", |ui| {
+        matches!(ui.view().connection(), desktop::app::Connection::Ready(_)) && ui.labelled("Play").len() == 1
+    });
+
+    let (frame, decodes) = drawn(&ui);
+    assert!(frame.is_some_and(|time| time < Duration::from_millis(1900)), "stopped short of its end: {frame:?}");
+    assert!(!decodes, "and let go of its decoder");
+}

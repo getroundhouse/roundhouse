@@ -108,7 +108,7 @@ impl Review {
     }
 
     /// Lists again what Changes shows, from what's listed.
-    pub(super) fn list_again(&mut self, cx: &mut Context<Self>) {
+    fn list_again(&mut self, cx: &mut Context<Self>) {
         self.listing = self.listed.as_ref().map(|listed| match &listed.summarized {
             Some(summarized) => Listing {
                 rows: by_path(summarized.files.iter().map(summarized_row).collect()),

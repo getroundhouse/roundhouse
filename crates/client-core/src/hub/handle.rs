@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use protocol::client::Request;
-use protocol::model::{AttachmentId, Session, SessionId, TerminalId};
+use protocol::model::{AttachmentId, CommitId, Session, SessionId, TerminalId, WorkspaceId};
 
 use super::Kept;
-use crate::{Client, ClientError, OpenSession, OpenTerminal, RecordsFeed, Reply, Result, View};
+use crate::{Client, ClientError, OpenFile, OpenSession, OpenTerminal, RecordsFeed, Reply, Result, View};
 
 /// The hub a view shows, for as long as the pairing lasts, whichever connection its
 /// [`Link`](crate::link::Link) has: what a view reads its records from, asks the hub through, and opens what it
@@ -55,6 +55,38 @@ impl Hub {
             Ok(client) => client.start(move |client| client.call(request)),
             Err(e) => Reply::now(Err(e)),
         }
+    }
+
+    /// Asks the hub `request` once `first` has answered, or gone, as once what's typed has been kept, on a thread of
+    /// its own, and returns at once. It's asked on the connection that has caught up as this is called, so it fails
+    /// at once without one, as [`Hub::ask`] does, and fails with [`ClientError::Disconnected`] if that connection
+    /// goes while it waits. It runs to the end whatever the caller does next, as [`Hub::ask`] says.
+    pub fn ask_after<R>(&self, first: flume::Receiver<()>, request: R) -> Reply<R::Reply>
+    where
+        R: Request + Send + 'static,
+        R::Reply: Send + 'static,
+    {
+        match self.ready() {
+            Ok(client) => client.start(move |client| {
+                // An answer, whether it's kept or as far as it could get, so a hub that's gone can't hold this forever.
+                let _ = first.recv();
+                client.call(request)
+            }),
+            Err(e) => Reply::now(Err(e)),
+        }
+    }
+
+    /// Whether the hub is on this machine, which a client reaches by its socket rather than over the network, as the
+    /// newest connection said, whether or not it's still there, since where a hub is doesn't change with its
+    /// connection. False before there's been one.
+    pub fn on_this_machine(&self) -> bool {
+        self.kept.on_this_machine()
+    }
+
+    /// The file at `path` as `commit` held it, in the workspace `id`'s repository, as [`OpenFile`] says, read as
+    /// [`Hub::call`] reads, until every clone of what this returns has gone.
+    pub fn open_file(&self, id: &WorkspaceId, commit: &CommitId, path: &str) -> OpenFile {
+        OpenFile::start(self, id, commit, path)
     }
 
     /// Asks the hub `request` and waits for its reply, on the caller's thread, for one that can wait, such as one reading

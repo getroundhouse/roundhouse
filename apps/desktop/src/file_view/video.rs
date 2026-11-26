@@ -4,7 +4,6 @@
 //! picks what opens a file by its name. Otherwise it opens a copy, read from the hub a part at a time and named for its
 //! kind, of which the tab keeps one at a time, in the system's temporary files.
 
-use client_core::Client;
 use gpui_kit::component::v_flex;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, Global, IntoElement, ParentElement as _, Styled as _, div, px,
@@ -71,10 +70,11 @@ impl FileVideo {
             .join(" · ")
     }
 
-    /// Has the video playing in the tab carry on on `client`'s connection, and says whether it's one that does.
-    pub(super) fn reconnect(&self, client: &Client, cx: &mut App) -> bool {
+    /// Stops the video playing in the tab where it was, as a new connection does, and says whether it's one that plays
+    /// there.
+    pub(super) fn stop_for_new_connection(&self, cx: &mut App) -> bool {
         let Plays::Here(player) = &self.plays else { return false };
-        player.update(cx, |player, cx| player.reconnect(client, cx));
+        player.update(cx, VideoPlayer::stop_for_new_connection);
         true
     }
 
@@ -140,15 +140,15 @@ impl FileView {
             return;
         }
         let media_type = video.media_type;
-        let here = self.worktree_here.as_ref().filter(|_| self.client.hub_on_this_machine());
+        let here = self.worktree_here.as_ref().filter(|_| self.hub.on_this_machine());
         if let Some(worktree) = here.filter(|_| named_for(&path, media_type)) {
             open_with_system(&worktree.join(path.as_ref()), cx);
             return;
         }
         *opening = Opening::Copying;
         cx.notify();
-        let (client, workspace) = (self.client.clone(), self.workspace_id.clone());
-        let source = VideoSource::Worktree { client, workspace, path: path.to_string() };
+        let (hub, workspace) = (self.hub.clone(), self.workspace_id.clone());
+        let source = VideoSource::Worktree { hub, workspace, path: path.to_string() };
         cx.spawn(async move |this, cx| {
             let copied = cx.background_spawn(async move { copy(&source, media_type) }).await;
             let _ = this.update(cx, |view, cx| {

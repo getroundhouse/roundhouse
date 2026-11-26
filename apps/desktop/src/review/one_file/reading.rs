@@ -49,10 +49,9 @@ impl Review {
         let Some(summary) = &mut self.listed else { return };
         summary.file = Some(OneFile { entry: entry.clone(), key, read: Read::Reading { previous } });
         self.one_file_asks += 1;
-        let (asked, client, id) = (self.one_file_asks, self.client.clone(), self.workspace_id.clone());
+        let (asked, hub, id) = (self.one_file_asks, self.hub.clone(), self.workspace_id.clone());
         cx.spawn(async move |this, cx| {
-            let read =
-                cx.background_spawn(async move { every_page(&client, &id, &at, from.as_deref(), listed.as_ref()) });
+            let read = cx.background_spawn(async move { every_page(&hub, &id, &at, from.as_deref(), listed.as_ref()) });
             let read = read.await;
             let _ = this.update(cx, |t, cx| t.took_one_file(asked, read, cx));
         })

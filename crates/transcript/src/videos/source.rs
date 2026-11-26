@@ -1,5 +1,6 @@
-use client_core::{Client, Hub};
+use client_core::Hub;
 use protocol::client::attachments::AttachmentReadRange;
+use protocol::client::files::WorkspaceFileReadRange;
 use protocol::model::{AttachmentId, MAX_RANGE_BYTES, SessionId, WorkspaceId};
 use std::io;
 use std::num::NonZeroU32;
@@ -20,19 +21,10 @@ pub enum VideoSource {
     /// The copy the hub kept of one an agent's text pointed to, as the chat it's in has it.
     Kept { hub: Hub, session: SessionId, id: AttachmentId },
     /// One in a workspace's worktree, as it is now.
-    Worktree { client: Client, workspace: WorkspaceId, path: String },
+    Worktree { hub: Hub, workspace: WorkspaceId, path: String },
 }
 
 impl VideoSource {
-    /// The same video, read on `client`'s connection, if it's read on one. One a chat's text pointed to is read from
-    /// its hub, whichever connection there is.
-    pub(crate) fn on(&self, client: Client) -> Self {
-        match self.clone() {
-            kept @ VideoSource::Kept { .. } => kept,
-            VideoSource::Worktree { workspace, path, .. } => VideoSource::Worktree { client, workspace, path },
-        }
-    }
-
     /// Opens it, reading what it has to of it from the hub, so it's for a thread that can wait.
     pub(super) fn open(&self) -> Result<WebmVideo<Parts<VideoSource>>, OpenError> {
         let parts = self.parts().map_err(|e| OpenError::Read(e.into()))?;
@@ -62,8 +54,8 @@ impl Fetch for VideoSource {
             VideoSource::Kept { hub, session, id } => {
                 hub.call(AttachmentReadRange { session_id: session.clone(), id: id.clone(), start, length })
             }
-            VideoSource::Worktree { client, workspace, path } => {
-                client.workspace_file_read_range(workspace, path, start, length)
+            VideoSource::Worktree { hub, workspace, path } => {
+                hub.call(WorkspaceFileReadRange { id: workspace.clone(), path: path.clone(), start, length })
             }
         };
         let range = read.map_err(io::Error::other)?;
