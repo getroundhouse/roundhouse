@@ -2,6 +2,7 @@
 //! sign-in's.
 
 use client_core::tool_server_checks;
+use client_core::tool_server_edits::{self, Way};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
@@ -11,8 +12,7 @@ use gpui_kit::{
 use super::super::field::{FIELDS_WIDTH, Field, captioned, labelled};
 use super::super::panel::{self, Framed, button, buttons, waiting_line};
 use super::Drawing;
-use super::edits::Edits;
-use super::form::{AuthFields, Form, Of, Way};
+use super::form::{AuthFields, Form, Of};
 use super::going::FormStands;
 use super::kept::{Kept, Panel, Shows};
 use super::{sign_in_panel, words};
@@ -50,14 +50,14 @@ pub(super) fn draw(drawing: &Drawing<'_>, open: &Panel, cx: &App) -> AnyElement 
 /// it takes for a key, that the server is being asked for its tools while it is, and its buttons. A URL that's already
 /// there says which server it is, and one that looks like it has a key in it says so, and neither stops anything.
 fn form(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Framed {
-    let (url, edits, chosen) = (form.url.value(cx), form.edits(cx), form.auth.way());
+    let (url, edit, chosen) = (form.url.value(cx), form.edit(cx), form.auth.way());
     let had = match &form.of {
         Of::New(_) => None,
         Of::Had(was) => Some(&**was),
     };
     let there = drawing.records.tool_server_at(&url, had.map(|was| &was.id)).map(|server| &server.name);
     let key = match &form.auth {
-        AuthFields::Key { header, key } => Some(key_row(header, key, edits, cx)),
+        AuthFields::Key { header, key } => Some(key_row(header, key, tool_server_edits::key_says(edit.as_ref()), cx)),
         AuthFields::SignIn | AuthFields::Neither => None,
     };
     let asking = match &form.stands {
@@ -69,13 +69,13 @@ fn form(drawing: &Drawing<'_>, form: &Form, cx: &App) -> Framed {
         .gap(look::Space::Large)
         .child(labelled("Name", "mcp-name", &form.name.input, words::name_says(there), cx))
         .child(labelled("URL", "mcp-url", &form.url.input, words::url_says(&url, there), cx))
-        .child(captioned(AUTHENTICATION, "mcp-way", way, words::way_says(chosen, edits), cx))
+        .child(captioned(AUTHENTICATION, "mcp-way", way, tool_server_edits::way_says(chosen, edit.as_ref()), cx))
         .children(key)
         .children(asking);
-    let (title, lead) = match had.zip(edits) {
+    let (title, lead) = match had.zip(edit.as_ref()) {
         None => ("Add an MCP server".into(), words::ADD),
-        Some((was, edits)) => {
-            (words::edit_title(&was.name).into(), words::edit_says(edits, form.stands.saves_anyway()))
+        Some((was, edit)) => {
+            (words::edit_title(&was.name).into(), tool_server_edits::edit_says(edit, form.stands.saves_anyway()))
         }
     };
     Framed {
@@ -129,10 +129,10 @@ fn ways(drawing: &Drawing<'_>, chosen: Way) -> look::MenuButton {
         })
 }
 
-/// The header a key is sent in and the key, in a row as wide as the fields over it.
-fn key_row(header: &Field, key: &Field, edits: Option<Edits>, cx: &App) -> Div {
+/// The header a key is sent in and the key, which `key_says` is said under, in a row as wide as the fields over it.
+fn key_row(header: &Field, key: &Field, key_says: &'static str, cx: &App) -> Div {
     let header = labelled("Header", "mcp-header", &header.input, words::HEADER_SAYS, cx);
-    let key = labelled("Key", "mcp-key", &key.input, words::key_says(edits), cx);
+    let key = labelled("Key", "mcp-key", &key.input, key_says, cx);
     h_flex()
         .items_start()
         .w_full()

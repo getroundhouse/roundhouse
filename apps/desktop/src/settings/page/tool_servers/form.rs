@@ -4,13 +4,13 @@
 //! that.
 
 use client_core::new_tool_server_id;
+use client_core::tool_server_edits::{Does, Edit, Sent, Typed, TypedAuth, Way};
 use gpui_kit::{App, Context, Window};
 use protocol::client::tool_server_checks::ToolServerToCheck;
-use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
-use protocol::model::{ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerId, ToolServerKey};
+use protocol::client::tool_servers::ToolServerEdit;
+use protocol::model::{ToolServer, ToolServerAuth, ToolServerId, ToolServerKey};
 
 use super::super::field::Field;
-use super::edits::{self, Edits};
 use super::going::FormStands;
 use super::kept::{Kept, Shows};
 use super::words;
@@ -35,15 +35,6 @@ pub(super) enum Of {
     Had(Box<ToolServer>),
 }
 
-/// What a form's main button does, as what's typed has it.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Does {
-    Add,
-    Save,
-    /// Signs in, and adds or saves the server once that's approved.
-    SignIn,
-}
-
 /// How the server is to know the person, as it was chosen, with the fields that takes.
 pub(super) enum AuthFields {
     SignIn,
@@ -55,29 +46,6 @@ pub(super) enum AuthFields {
     Neither,
 }
 
-/// A way a server can know the person, as the panel's dropdown has them.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Way {
-    SignIn,
-    Key,
-    Neither,
-}
-
-impl Way {
-    /// Every way, in the dropdown's order.
-    pub(super) const ALL: [Way; 3] = [Way::SignIn, Way::Key, Way::Neither];
-
-    /// The one `auth` is, or `None` for one only a newer hub has.
-    pub(super) fn of(auth: &ToolServerAuth) -> Option<Way> {
-        match auth {
-            ToolServerAuth::SignIn { .. } => Some(Way::SignIn),
-            ToolServerAuth::Key { .. } => Some(Way::Key),
-            ToolServerAuth::Neither => Some(Way::Neither),
-            ToolServerAuth::Unknown => None,
-        }
-    }
-}
-
 impl AuthFields {
     pub(super) fn way(&self) -> Way {
         match self {
@@ -86,13 +54,35 @@ impl AuthFields {
             AuthFields::Neither => Way::Neither,
         }
     }
+
+    fn typed(&self, cx: &App) -> TypedAuth {
+        match self {
+            AuthFields::SignIn => TypedAuth::SignIn,
+            AuthFields::Key { header, key } => {
+                TypedAuth::Key { header: header.value(cx), key: ToolServerKey::new(key.value(cx)) }
+            }
+            AuthFields::Neither => TypedAuth::Neither,
+        }
+    }
 }
 
 impl Form {
-    /// The server as it's typed, held against what it was, for one the hub has.
-    pub(super) fn edits(&self, cx: &App) -> Option<Edits> {
-        let Of::Had(was) = &self.of else { return None };
-        Some(Edits::of(&self.edited(was, cx), &self.auth, cx))
+    /// What's typed in it, for client-core's `tool_server_edits` to say what comes of it.
+    fn typed(&self, cx: &App) -> Typed {
+        Typed { name: self.name.value(cx), url: self.url.value(cx), auth: self.auth.typed(cx) }
+    }
+
+    /// The server the hub has, for a form that edits one.
+    fn had(&self) -> Option<&ToolServer> {
+        match &self.of {
+            Of::Had(was) => Some(was),
+            Of::New(_) => None,
+        }
+    }
+
+    /// What's typed, as an edit of the server the hub has, for a form that edits one.
+    pub(super) fn edit(&self, cx: &App) -> Option<Edit> {
+        self.had().map(|was| self.typed(cx).edit_of(was))
     }
 
     fn edited(&self, was: &ToolServer, cx: &App) -> EditedServer {
@@ -100,23 +90,12 @@ impl Form {
     }
 
     pub(super) fn does(&self, cx: &App) -> Does {
-        match self.edits(cx) {
-            None if self.auth.way() == Way::SignIn => Does::SignIn,
-            None => Does::Add,
-            Some(edits) if edits.signs_in() => Does::SignIn,
-            Some(_) => Does::Save,
-        }
+        self.typed(cx).does(self.had())
     }
 
     /// Whether it has what adding or saving the server takes.
     pub(super) fn filled(&self, cx: &App) -> bool {
-        let auth = match &self.auth {
-            AuthFields::Key { header, key } => {
-                header.filled(cx) && (key.filled(cx) || self.edits(cx).is_some_and(Edits::keeps_a_key))
-            }
-            AuthFields::SignIn | AuthFields::Neither => true,
-        };
-        self.url.filled(cx) && self.name.filled(cx) && auth
+        self.typed(cx).is_complete(self.had())
     }
 
     /// What its sign-in is to.
@@ -132,33 +111,14 @@ impl Form {
     /// What the hub is asked to add, or to save of what it has, which is only what's changed. `None` for a server to
     /// add by signing in to it, which is the person's to approve first.
     pub(super) fn asks_for(&self, cx: &App) -> Option<ToolServerToCheck> {
+        let typed = self.typed(cx);
         Some(match &self.of {
-            Of::New(id) => ToolServerToCheck::Add(ToolServerAdd {
-                id: id.clone(),
-                name: self.name.value(cx),
-                url: self.url.value(cx),
-                auth: self.given(cx)?,
-            }),
+            Of::New(id) => ToolServerToCheck::Add(typed.added(id)?),
             Of::Had(was) => {
-                let edited = self.edited(was, cx);
-                let auth = edits::auth(&edited, &self.auth, cx);
-                let (name, url) = (edited.new_name(), edited.new_url());
+                let Sent { name, url, auth } = typed.edit_of(was).into_sent();
                 ToolServerToCheck::Edit(ToolServerEdit { id: was.id.clone(), name, url, auth, saved_anyway: false })
             }
         })
-    }
-
-    /// How a new server is to know the person, as it's given to the hub. `None` for a sign-in, which is the person's to
-    /// approve first.
-    fn given(&self, cx: &App) -> Option<ToolServerAuthGiven> {
-        match &self.auth {
-            AuthFields::SignIn => None,
-            AuthFields::Key { header, key } => {
-                let key = ToolServerKey::new(key.value(cx));
-                Some(ToolServerAuthGiven::Key { header: header.value(cx), key })
-            }
-            AuthFields::Neither => Some(ToolServerAuthGiven::Neither),
-        }
     }
 }
 
@@ -255,7 +215,7 @@ impl Kept {
     fn say_whether_kept(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(form) = self.form() else { return };
         let AuthFields::Key { key, .. } = &form.auth else { return };
-        let keeps = form.edits(cx).is_some_and(Edits::keeps_a_key);
+        let keeps = form.edit(cx).is_some_and(|edit| edit.keeps_a_key());
         let says = if keeps { words::KEPT } else { "" };
         key.input.clone().update(cx, |input, cx| input.set_placeholder(says, window, cx));
     }
