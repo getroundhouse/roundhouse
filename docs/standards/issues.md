@@ -61,8 +61,6 @@ For example, an issue that opens:
 2. What's known, from the code, a test or a doc.
 3. Two to four options, each with what it costs, the recommended one first.
 
-**A risk:** what could go wrong, what would show it happening, and what would mitigate it.
-
 **A plan:** what the work achieves, in a paragraph, then its parts as sub-issues or a checklist, in the order they go, with why when the order isn't obvious.
 
 ## Labels and fields
@@ -78,8 +76,9 @@ Labels answer five questions, each with a prefix of its own, so any common searc
 | `kind/feature` | Something a person using the product would notice is missing | It's built |
 | `kind/task` | Work no user sees: tooling, docs, setup, refactors, code brought up to a standard | It's done |
 | `kind/question` | Something not settled, whether a design or a decision | It's answered, and the outcome is in a doc |
-| `kind/risk` | Something that could go wrong, watched rather than worked on | It's mitigated or accepted |
 | `kind/plan` | An issue that breaks work into parts, or orders other issues | What it holds is closed |
+
+Something that could go wrong has no kind of its own, since "watched" has no end. In our code it's a bug, seen or predicted, and is fixed, filed or dropped as "When to file" says. Outside it, such as an agent's CLI or a limit of GitHub's, it's `needs/upstream` when there's something to ask for there, or a question when there are options to weigh. One that's accepted closes as not planned, with why, and gets a sentence where the code or a reference doc needs to know.
 
 **Area: one or more.** Areas follow the parts in `docs/reference/layout.md`, such as `area/hub` and `area/transcript`, and small or unbuilt parts share one, such as `area/mobile` for the iOS app and the relay. Each area's description on GitHub says what it covers. Four cover what isn't a part: `area/install` for building, installing and updating the app, `area/dev` for developing Roundhouse itself, `area/docs`, and `area/project` for the license, scope and overall plans. Nothing else becomes an area.
 

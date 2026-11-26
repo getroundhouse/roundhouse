@@ -128,7 +128,7 @@ roundhouse --help
 | **Windows** | A first preview. An installer is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-amd64-Setup.exe) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe). It's unsigned, so Windows warns about it, and the only checks that run on Windows are a lint and a hub starting and stopping. |
 | **Linux** | A first preview. An AppImage is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-amd64.AppImage) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-arm64.AppImage). Make it executable and open it, and it updates itself. It needs glibc 2.35 or newer, as on Ubuntu 22.04 and later, Vulkan and FUSE. The only checks that run on Linux are the tests and a hub starting and stopping. |
 
-What's left is on GitHub: [issues](https://github.com/getroundhouse/roundhouse/issues) for features, bugs, tasks, questions and risks, and [milestones](https://github.com/getroundhouse/roundhouse/milestones) for the build order.
+What's left is on GitHub: [issues](https://github.com/getroundhouse/roundhouse/issues) for features, bugs, flaky tests, tasks and questions, and [milestones](https://github.com/getroundhouse/roundhouse/milestones) for the build order.
 
 ## How it fits together
 

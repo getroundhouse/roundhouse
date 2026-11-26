@@ -44,7 +44,7 @@ A decision record is written once, with its date, and only its status changes af
 |---|---|---|
 | Work | What to build, fix or do | Issues |
 | Questions and decisions | Anything not settled yet, and the discussion that settles it | Issues |
-| Risks | What could go wrong | Issues |
+| Risks | What could go wrong | Issues, as bugs or questions |
 | Plans | What comes next, in what order, and why | Milestones, and issues that order other issues |
 | Status and results | Progress, and what a run, measurement or review found | Issue comments and PRs |
 
