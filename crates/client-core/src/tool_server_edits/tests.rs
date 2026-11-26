@@ -14,18 +14,6 @@ const ELSEWHERE: &str = "https://mcp.contoso.example/mcp";
 const PARTWAY: &str = "https:/";
 const KEY: &str = "a-made-up-key";
 
-/// What's said of running agents, as `docs/spec/settings.md` has it.
-const NOTHING: &str = "Change its name, its URL or how it knows you.";
-const NAME: &str = "Running agents have the new name from their next start.";
-const AT_ONCE: &str = "Running agents have the change at once.";
-const NAME_AND_REST: &str = "Running agents have the new name from their next start, and the rest at once.";
-const LISTS_AGAIN: &str =
-    "Those that can list its tools again do so once their turn ends, and others at their next start.";
-const LOSE_IT: &str =
-    "that can list its tools again lose this server until their turn ends, and others until their next start.";
-const SIGNED: &str = "Once you've signed in, running agents have the change at once";
-const AND_NAME: &str = "and the new name from their next start.";
-
 /// What's said under the way and the key.
 const STAY: &str = "You stay signed in.";
 const RENEWS: &str = "Your browser opens on its own page, and the hub renews the sign-in by itself.";
@@ -66,11 +54,6 @@ fn typed(name: &str, url: &str, auth: TypedAuth) -> Typed {
     Typed { name: name.into(), url: url.into(), auth }
 }
 
-/// What running agents are said to have of `was` edited to what's typed, saved `anyway` or not.
-fn says(was: &ToolServer, name: &str, url: &str, auth: TypedAuth, anyway: bool) -> &'static str {
-    edit_says(&typed(name, url, auth).edit_of(was), anyway)
-}
-
 /// What's said under the way and under the key of `was` edited to what's typed, what its button does, and whether it
 /// has what that takes.
 fn takes(was: &ToolServer, url: &str, auth: TypedAuth) -> (&'static str, &'static str, Does, bool) {
@@ -78,58 +61,6 @@ fn takes(was: &ToolServer, url: &str, auth: TypedAuth) -> (&'static str, &'stati
     let edit = typed.edit_of(was);
     let said = (way_says(typed.auth.way(), Some(&edit)), key_says(Some(&edit)));
     (said.0, said.1, typed.does(Some(was)), typed.is_complete(Some(was)))
-}
-
-/// Each row of the spec's table of what a change does, alone and with its name.
-#[test]
-fn what_running_agents_have_of_an_edit_is_said_by_what_it_changes() {
-    let (keyed, works) = (keyed(), signed_in(ToolSignInStatus::Works));
-    let both = format!("{NAME_AND_REST} {LISTS_AGAIN}");
-    let moved = format!("Running agents {LOSE_IT}");
-    let at_once_and_again = format!("{AT_ONCE} {LISTS_AGAIN}");
-    let a_key = || key("Authorization", KEY);
-    for (row, said, expected) in [
-        ("nothing", says(&keyed, "Runbooks", URL, kept(), false), NOTHING),
-        ("its name", says(&keyed, "Northwind", URL, kept(), false), NAME),
-        ("its query", says(&works, "Runbooks", QUERIED, TypedAuth::SignIn, false), at_once_and_again.as_str()),
-        ("its name and its query", says(&keyed, "Northwind", QUERIED, kept(), false), both.as_str()),
-        ("another server", says(&keyed, "Runbooks", ELSEWHERE, a_key(), false), moved.as_str()),
-        ("the key", says(&keyed, "Runbooks", URL, a_key(), false), AT_ONCE),
-        ("its header", says(&keyed, "Runbooks", URL, key("X-Key", ""), false), AT_ONCE),
-        ("how it knows you", says(&keyed, "Runbooks", URL, TypedAuth::Neither, false), AT_ONCE),
-        ("its name and how it knows you", says(&keyed, "Northwind", URL, TypedAuth::Neither, false), NAME_AND_REST),
-    ] {
-        assert_eq!(said, expected, "{row}");
-    }
-}
-
-/// Its tools are listed again besides where another way is saved anyway, as the hub has it.
-#[test]
-fn an_edit_that_takes_a_sign_in_or_is_saved_anyway_says_so() {
-    let (keyed, works) = (keyed(), signed_in(ToolSignInStatus::Works));
-    let sign_in = || TypedAuth::SignIn;
-    let moved = format!("Once you've signed in, running agents {LOSE_IT}");
-    let at_once_and_again = format!("{AT_ONCE} {LISTS_AGAIN}");
-    for (row, said, expected) in [
-        ("another server", says(&works, "Runbooks", ELSEWHERE, sign_in(), false), moved),
-        ("another way", says(&keyed, "Runbooks", URL, sign_in(), false), format!("{SIGNED}.")),
-        ("its name", says(&keyed, "Northwind", URL, sign_in(), false), format!("{SIGNED}, {AND_NAME}")),
-        ("its query", says(&keyed, "Runbooks", QUERIED, sign_in(), false), format!("{SIGNED}. {LISTS_AGAIN}")),
-        (
-            "its name and its query",
-            says(&keyed, "Northwind", QUERIED, sign_in(), false),
-            format!("{SIGNED}, {AND_NAME} {LISTS_AGAIN}"),
-        ),
-        ("its header, saved anyway", says(&keyed, "Runbooks", URL, key("X-Key", ""), true), at_once_and_again),
-        (
-            "a key and its name, saved anyway",
-            says(&open(), "Northwind", URL, kept(), true),
-            format!("{NAME_AND_REST} {LISTS_AGAIN}"),
-        ),
-        ("its name alone, saved anyway", says(&keyed, "Northwind", URL, kept(), true), NAME.into()),
-    ] {
-        assert_eq!(said, expected, "{row}");
-    }
 }
 
 /// A key kept, one for another server, and signing in: as it was, where it moves, and where it's another way.
@@ -165,11 +96,9 @@ fn what_saving_an_edit_takes_is_said_under_its_way_and_its_key_and_by_its_button
 fn a_url_typed_partway_is_said_as_the_one_the_server_has_and_still_sent() {
     let (keyed, works) = (keyed(), signed_in(ToolSignInStatus::Works));
 
-    assert_eq!(says(&keyed, "Runbooks", PARTWAY, kept(), false), NOTHING);
-    assert_eq!(says(&keyed, "Northwind", PARTWAY, kept(), false), NAME);
-    assert_eq!(says(&works, "Runbooks", "", TypedAuth::SignIn, false), NOTHING, "nothing typed of it");
     assert_eq!(takes(&works, PARTWAY, TypedAuth::SignIn), (STAY, GAVE, Does::Save, true));
     assert_eq!(takes(&keyed, PARTWAY, kept()), (KEY_WAY, KEEP, Does::Save, true));
+    assert_eq!(takes(&works, "", TypedAuth::SignIn), (STAY, GAVE, Does::Save, false), "nothing typed of it");
     let sent = typed("Runbooks", PARTWAY, kept()).edit_of(&keyed).into_sent();
     assert_eq!(sent, Sent { name: None, url: Some(PARTWAY.into()), auth: None });
 }

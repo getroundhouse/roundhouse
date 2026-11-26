@@ -25,15 +25,12 @@ pub struct Sent {
 /// What's typed of a server's URL, held against the one it has.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Url {
-    AsItWas,
-    /// The same server's, as another query, by which it may have other tools.
-    AnotherQuery,
+    /// The same server's, as it was or by another query, or nothing that's a URL yet, as while one is typed. That's
+    /// taken as the one the server has for what the edit takes, since the hub refuses it and so it changes nothing, and
+    /// so what's said of the rest doesn't change with each key. It's still sent, for the hub to say why it's refused.
+    SameServer,
     /// Another server's.
     Moved,
-    /// Nothing that's a URL yet, as while one is typed. It's taken as the one the server has for what the edit changes
-    /// and takes, since the hub refuses it and so it changes nothing, and so what's said of the rest doesn't change with
-    /// each key. It's still sent, for the hub to say why it's refused.
-    Invalid,
 }
 
 /// What saving an edit takes for the server to know the person, by the way that's chosen.
@@ -74,26 +71,13 @@ impl Edit {
     pub fn into_sent(self) -> Sent {
         self.sent
     }
-
-    pub(super) fn changes_name(&self) -> bool {
-        self.sent.name.is_some()
-    }
-
-    /// Whether it changes how the server knows the person, by signing in or as the hub is sent it.
-    pub(super) fn changes_auth(&self) -> bool {
-        self.signs_in() || self.sent.auth.is_some()
-    }
 }
 
 impl Url {
     fn of(typed: &str, was: &ToolServerUrl) -> Url {
-        if typed.trim() == was.as_str() {
-            return Url::AsItWas;
-        }
         match ToolServerUrl::typed(typed) {
-            Err(_) => Url::Invalid,
-            Ok(url) if url.is_same_server(was) => Url::AnotherQuery,
-            Ok(_) => Url::Moved,
+            Ok(url) if !url.is_same_server(was) => Url::Moved,
+            Ok(_) | Err(_) => Url::SameServer,
         }
     }
 }

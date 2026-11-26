@@ -36,14 +36,6 @@ impl FormStands {
         }
     }
 
-    /// Whether it's to be saved anyway, since the server didn't list its tools.
-    pub(super) fn saves_anyway(&self) -> bool {
-        match self {
-            FormStands::NotListed(_) => true,
-            FormStands::Open | FormStands::Saving { .. } | FormStands::Refused(_) => false,
-        }
-    }
-
     /// Why it wasn't added or saved when it was last tried.
     pub(super) fn why_not(&self) -> Option<&str> {
         match self {

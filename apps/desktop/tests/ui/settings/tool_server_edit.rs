@@ -1,6 +1,5 @@
-//! Editing an MCP server in Settings, against a real hub, and stand-ins for servers: what's kept,
-//! what's asked for again, and what the panel says running agents have of it. Every server, key and sign-in is plainly
-//! made up.
+//! Editing an MCP server in Settings, against a real hub, and stand-ins for servers: what's kept, what's asked for
+//! again, and what the panel says of it. Every server, key and sign-in is plainly made up.
 
 #![cfg(test)]
 
@@ -18,11 +17,8 @@ use super::tool_sign_in::{NEEDS_SIGN_IN, WORKS, auth_of, page_opened, refused, s
 use crate::support::{Serving, Stack, Ui, files_holding, renewing_often};
 
 const ANOTHER_SIGN_IN: &str = "That's another server, so you sign in to it. Nothing changes until you have.";
-/// What running agents do of a server that's moved, after who.
-const LOSE_IT: &str = "that can list its tools again lose this server until their turn ends, and others until their \
-                       next start.";
-pub(super) const TOOLS: &str =
-    "Those that can list its tools again do so once their turn ends, and others at their next start.";
+/// What the panel says running agents have of an edit, whatever is changed.
+const EDIT_SAYS: &str = "Running agents have the change by their next start.";
 
 pub(super) fn edit(ui: &mut Ui<'_>, id: &ToolServerId) {
     ui.click(more(id));
@@ -68,21 +64,19 @@ fn a_server_is_edited_under_its_row_and_its_new_name_is_for_agents_next_start(cx
 
     edit(&mut ui, &server);
 
-    assert_eq!(says(&mut ui), "Change its name, its URL or how it knows you.");
+    assert_eq!(says(&mut ui), EDIT_SAYS);
     assert!(ui.bounds("mcp-panel").origin.y > ui.bounds(more(&server)).origin.y, "under its row");
     assert!(ui.off("mcp-add"), "while a panel is open");
     assert_eq!(label_of(&mut ui, "mcp-way"), "Authentication: None");
     assert_eq!(label_of(&mut ui, "mcp-url-says"), "You've already added this one, as Docs.");
     ui.press("secondary-a");
     ui.input("Docs");
-    assert_eq!(says(&mut ui), "Running agents have the new name from their next start.");
     ui.press("enter");
     let taken = "Couldn't save it: another MCP server is called Docs";
     assert_eq!(refused(&mut ui), taken);
     type_in(&mut ui, "mcp-name", "Northwind runbooks");
     type_in(&mut ui, "mcp-url", &format!("{url}?tools=a"));
-    let says_both = format!("Running agents have the new name from their next start, and the rest at once. {TOOLS}");
-    assert_eq!(says(&mut ui), says_both);
+    assert_eq!(says(&mut ui), EDIT_SAYS, "whatever is typed");
     save(&mut ui);
 
     ui.wait("its new name", |ui| named(ui, "Northwind runbooks").is_some());
@@ -108,7 +102,6 @@ fn a_server_is_edited_under_its_row_and_its_new_name_is_for_agents_next_start(cx
     stack.client().tool_server_remove(&server).unwrap();
     ui.wait("its row gone", |ui| !ui.has(row(&server)));
     assert!(ui.bounds("mcp-panel").origin.y < ui.bounds(more(&docs)).origin.y, "under Added's heading");
-    assert_eq!(says(&mut ui), "Running agents have the new name from their next start.", "with what's typed");
     ui.click("mcp-panel-go");
     assert_eq!(refused(&mut ui), "The hub no longer has this MCP server.");
 }
@@ -130,9 +123,7 @@ fn a_key_left_empty_is_kept_until_its_for_another_server(cx: &mut TestAppContext
     assert_eq!(label_of(&mut ui, "mcp-key-says"), "Leave it empty to keep the one you gave.");
     type_in(&mut ui, "mcp-header", "X-Key");
     type_in(&mut ui, "mcp-name", "Northwind runbooks");
-    assert_eq!(says(&mut ui), "Running agents have the new name from their next start, and the rest at once.");
     type_in(&mut ui, "mcp-name", "Runbooks");
-    assert_eq!(says(&mut ui), "Running agents have the change at once.");
     save(&mut ui);
     ui.wait("its header", |ui| header(ui) == "X-Key");
     assert_eq!(kept(&stack, KEY), 1);
@@ -140,7 +131,6 @@ fn a_key_left_empty_is_kept_until_its_for_another_server(cx: &mut TestAppContext
     edit(&mut ui, &server);
     type_in(&mut ui, "mcp-url", &elsewhere);
     assert_eq!(label_of(&mut ui, "mcp-key-says"), "That's another server, so give it its key.");
-    assert_eq!(says(&mut ui), format!("Running agents {LOSE_IT}"));
     assert!(ui.off("mcp-panel-go"), "until there's its key");
     type_in(&mut ui, "mcp-url", &format!("{url}?tools=a"));
     assert!(ui.on("mcp-panel-go"), "it's the same server again");
@@ -166,7 +156,6 @@ fn a_server_stays_signed_in_to_as_its_query_changes_and_until_another_way_is_sav
     assert_eq!(label_of(&mut ui, "mcp-way-says"), "You stay signed in.");
     type_in(&mut ui, "mcp-url", &queried);
     assert_eq!(label_of(&mut ui, "mcp-way-says"), "You stay signed in.");
-    assert_eq!(says(&mut ui), format!("Running agents have the change at once. {TOOLS}"));
     ui.click(more(&linear));
     ui.press("down");
     ui.press("enter");
@@ -229,7 +218,6 @@ fn a_server_thats_signed_in_to_moves_once_its_signed_in_to_where_it_moves(cx: &m
     type_in(&mut ui, "mcp-name", "Linear (Europe)");
     let typed = |ui: &mut Ui<'_>| {
         assert_eq!(label_of(ui, "mcp-way-says"), ANOTHER_SIGN_IN);
-        assert_eq!(says(ui), format!("Once you've signed in, running agents {LOSE_IT}"));
         assert_eq!(label_of(ui, "mcp-panel-go"), "Sign in");
         assert!(ui.bounds("mcp-panel").origin.y > ui.bounds(more(&linear)).origin.y, "under its row");
     };
@@ -266,11 +254,6 @@ fn a_server_with_a_key_is_signed_in_to_from_its_edit_and_then_its_key_is_forgott
     choose(&mut ui, SIGN_IN_WAY);
     let until = "Your browser opens on its own page. Nothing changes until you've signed in.";
     assert_eq!(label_of(&mut ui, "mcp-way-says"), until);
-    assert_eq!(says(&mut ui), "Once you've signed in, running agents have the change at once.");
-    type_in(&mut ui, "mcp-url", &format!("{}?toolsets=core", serving.url()));
-    let queried = format!("Once you've signed in, running agents have the change at once. {TOOLS}");
-    assert_eq!(says(&mut ui), queried);
-    type_in(&mut ui, "mcp-url", &serving.url());
 
     ui.click("mcp-panel-go");
     let no_sign_in = "This server has no sign-in. Anyone who can reach it can use it. To save it, choose None, or Key if \
