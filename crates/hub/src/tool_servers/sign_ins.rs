@@ -6,7 +6,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
     ToolScopes, ToolServer, ToolServerAuth, ToolServerId, ToolServerName, ToolServerUrl, ToolSignInId, ToolSignInStatus,
 };
-use tool_sign_in::{Issuer, Registration, Renewable, SignedIn};
+use tool_sign_in::{Issuer, Registration, SignedIn};
 use tracing::warn;
 
 use super::kept::KeptSignIn;
@@ -28,8 +28,9 @@ pub(crate) struct SigningIn {
 /// The sign-in a server had as it's signed in to again.
 #[derive(Debug)]
 struct Before {
-    renewable: Renewable,
-    wants: ToolScopes,
+    issuer: Issuer,
+    /// What signing in again asks `issuer` to allow.
+    asks: ToolScopes,
     registration: Option<Registration>,
 }
 
@@ -51,11 +52,12 @@ impl SigningIn {
         &self.url
     }
 
-    /// What the server was signed in with before, and has wanted since, which `issuer` is to be asked to allow too, so
-    /// nothing that worked stops working. What another authorization server was asked to allow is nothing to this one.
+    /// What the sign-in before was asked for and granted, and its server has wanted since, which `issuer` is to be
+    /// asked to allow too, as [`KeptSignIn::to_ask_for`] says. What's of another authorization server is nothing to
+    /// this one.
     pub(crate) fn asked_before(&self, issuer: &Issuer) -> ToolScopes {
-        let before = self.before.as_ref().filter(|before| before.renewable.issuer() == issuer);
-        before.map_or_default(|before| before.renewable.scopes().clone().and(&before.wants))
+        let before = self.before.as_ref().filter(|before| before.issuer == *issuer);
+        before.map_or_default(|before| before.asks.clone())
     }
 
     /// The server there is that it's to, and the registration that was signed in to with before, where it was with one.
@@ -81,9 +83,10 @@ impl ToolServers {
                     return Err(ApiError::new(ErrorCode::InvalidRequest, "that MCP server has no sign-in"));
                 };
                 let kept = kept_in(&files, &id, &file);
-                let before = kept.map(|kept| {
-                    let KeptSignIn { renewable, wants, registration, .. } = kept;
-                    Before { renewable, wants, registration }
+                let before = kept.map(|kept| Before {
+                    issuer: kept.renewable.issuer().clone(),
+                    asks: kept.to_ask_for(),
+                    registration: kept.registration,
                 });
                 Ok(SigningIn { to: To::Again { id, file }, url: server.url, before })
             }

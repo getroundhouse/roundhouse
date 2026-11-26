@@ -220,3 +220,26 @@ fn scopes_are_each_once_and_none_that_isnt_one() {
     assert_eq!(serde_json::to_string(&read).unwrap(), "\"read write\"");
     assert_eq!(serde_json::from_str::<ToolScopes>("\"read \\\" write\"").unwrap(), read);
 }
+
+/// Where a server's own text is all read, or none of it is.
+#[test]
+fn what_another_machine_said_is_read_whole_where_its_all_scopes_and_few_enough_of_them() {
+    let of = |count: usize| (0..count).map(|n| format!("scope:{n}")).collect::<Vec<_>>().join(" ");
+    let (most, longest) = (of(32), "x".repeat(200));
+    let read = [
+        ("read", "read"),
+        (" read  write read ", "read write"),
+        (&most, &most),
+        (&format!("{most} scope:0"), &most),
+        (&longest, &longest),
+    ];
+    for (said, scopes) in read {
+        assert_eq!(ToolScopes::said(said).map(String::from).as_deref(), Some(scopes), "{said:?}");
+    }
+
+    let (too_many, too_long) = (of(33), format!("read {longest}x"));
+    let not_read = ["", " ", "\"", "read \"write\"", "read a\\b", "read\twrite", "read caf\u{e9}", "read \u{7f}"];
+    for said in not_read.into_iter().chain([too_many.as_str(), &too_long]) {
+        assert_eq!(ToolScopes::said(said), None, "{said:?}");
+    }
+}

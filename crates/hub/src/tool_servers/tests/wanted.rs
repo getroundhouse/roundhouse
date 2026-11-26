@@ -12,7 +12,7 @@ use super::super::{SigningIn, ToolServers, Wanted};
 use super::sign_ins::{GIVEN_AT_MS, given, granted, signed_in, status_of};
 use super::support::{files_in, holding, refused, servers_in, with_key};
 
-const FIRST: TokenNumber = TokenNumber::FIRST;
+pub(super) const FIRST: TokenNumber = TokenNumber::FIRST;
 
 fn scopes(text: &str) -> ToolScopes {
     ToolScopes::from(text.to_string())
@@ -23,21 +23,21 @@ fn ask(id: &str, refused: TokenNumber, wants: &str) -> AskForToolAccess {
 }
 
 /// What came of the server `t` wanting `wants` of its sign-in's token `refused`.
-fn wants(servers: &ToolServers, refused: TokenNumber, wants: &str) -> Wanted {
+pub(super) fn wants(servers: &ToolServers, refused: TokenNumber, wants: &str) -> Wanted {
     servers.wants_access(&ask("t", refused, wants)).unwrap()
 }
 
-fn starts(servers: &ToolServers) -> SigningIn {
+pub(super) fn starts(servers: &ToolServers) -> SigningIn {
     servers.signing_in(ToolSignInTo::Again { id: "t".into() }).unwrap()
 }
 
 /// What `to` asks to be allowed beyond what its server says, at the authorization server `issuer`.
-fn asks(to: &SigningIn, issuer: &str) -> String {
+pub(super) fn asks(to: &SigningIn, issuer: &str) -> String {
     let issuer: Issuer = serde_json::from_value(issuer.into()).unwrap();
     to.asked_before(&issuer).to_string()
 }
 
-const ISSUER: &str = "https://auth.example.com";
+pub(super) const ISSUER: &str = "https://auth.example.com";
 
 /// Finishes `to`, which asks for what it's to.
 fn finishes(servers: &ToolServers, to: &SigningIn) {

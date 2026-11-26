@@ -1,5 +1,6 @@
 //! What's kept of a tool server, where, what's refused, and what workers are sent.
 
+mod granted;
 mod keeping;
 mod renewals;
 mod sending;

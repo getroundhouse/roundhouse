@@ -8,7 +8,7 @@ use serde_json::json;
 
 use super::Asked;
 use super::replies::{Reply, oauth_error, said, status};
-use super::script::{Refreshing, Script};
+use super::script::{Refreshing, SaysAllowed, Script};
 
 /// What the authorization server has given, and still takes.
 #[derive(Default)]
@@ -142,14 +142,20 @@ impl Tokens {
 
     fn give(&mut self, scopes: ToolScopes, refresh: Option<String>, script: &Script) -> Reply {
         let access = self.next("access");
-        self.access.insert(access.clone(), scopes);
-        let mut given = json!({"access_token": access, "token_type": "Bearer"});
+        let allowed = script.allows.map_or(scopes, |allows| ToolScopes::of(allows.split(' ')));
+        let mut given = json!({"access_token": &access, "token_type": "Bearer"});
         if let Some(refresh) = refresh {
             given["refresh_token"] = refresh.into();
         }
         if let Some(lasts) = script.lasts {
             given["expires_in"] = lasts.into();
         }
+        match &script.says_allowed {
+            SaysAllowed::Nothing => {}
+            SaysAllowed::WhatItAllows => given["scope"] = allowed.to_string().into(),
+            SaysAllowed::Else(said) => given["scope"] = said.clone(),
+        }
+        self.access.insert(access, allowed);
         said(200, &given)
     }
 

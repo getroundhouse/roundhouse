@@ -9,7 +9,8 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 
 use client_core::{Client, RecordsFeed};
 use hub::{
-    ToolServerPage, ToolServerRefreshing, ToolServerRegisters, ToolServerScript, ToolServerStandIn, ToolServerWants,
+    ToolServerPage, ToolServerRefreshing, ToolServerRegisters, ToolServerSaysAllowed, ToolServerScript,
+    ToolServerStandIn, ToolServerWants,
 };
 use protocol::capability::settings::Settings;
 use protocol::capability::setup::ServerState;
@@ -153,13 +154,14 @@ fn new(stand_in: &ToolServerStandIn) -> ToolSignInTo {
     ToolSignInTo::New { id: "t".into(), name: "Linear (Northwind)".into(), url }
 }
 
-/// Signs in `to` the stand-in's server, as the person does in their browser.
-fn sign_in(client: &Client, stand_in: &ToolServerStandIn, to: ToolSignInTo) {
+/// Signs in `to` the stand-in's server, as the person does in their browser, and gives the page they did on.
+fn sign_in(client: &Client, stand_in: &ToolServerStandIn, to: ToolSignInTo) -> String {
     let id = client_core::new_tool_sign_in_id();
     let begun = client.tool_sign_in_start(&id, to, redirect(17867)).unwrap();
     let ToolSignInBegun::Page { page } = begun else { panic!("{begun:?}") };
     let returned = stand_in.visit(&ToolServerPage::new(page.as_str()));
     client.tool_sign_in_finish(&id, ToolSignInReturned::new(returned)).unwrap();
+    page.as_str().to_string()
 }
 
 /// Its server takes no token from before, as once each has ended, which no check had renewed.
@@ -207,14 +209,36 @@ fn a_server_whose_service_has_apps_register_is_signed_in_to_and_renewed() {
 /// Its other tool works before and after, for which it wants what it was first asked for.
 #[test]
 fn a_tool_that_wants_more_access_fails_alone_and_works_once_the_person_signs_in_again() {
+    let [first, again] = signed_in_again_for_more_access(ToolServerScript::default());
+
+    assert!(first.ends_with("&scope=read+write"), "{first}");
+    assert!(again.ends_with("&scope=read+write+admin"), "{again}");
+}
+
+/// Its first request names no scope, so its service grants its own default, and says so, which signing in again would
+/// lose if it asked only for what's wanted.
+#[test]
+fn a_tool_that_wants_more_access_than_its_services_default_gets_it_and_the_default_with_it() {
+    let (allows, says_allowed) = (Some("read write"), ToolServerSaysAllowed::WhatItAllows);
+    let script = ToolServerScript { challenge_scope: None, allows, says_allowed, ..ToolServerScript::default() };
+
+    let [first, again] = signed_in_again_for_more_access(script);
+
+    assert!(!first.contains("scope="), "{first}");
+    assert!(again.ends_with("&scope=read+write+admin"), "{again}");
+}
+
+/// Has an agent call both tools of a server that answers as `script` says, one of which wants `admin` besides, before
+/// and after the person signs in again. Gives each sign-in's page.
+fn signed_in_again_for_more_access(script: ToolServerScript) -> [String; 2] {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let wants = |tool, scope| ToolServerWants { tool, scope };
     let wants = vec![wants("find_issue", "read"), wants("close_issue", "admin")];
-    let stand_in = runtime.block_on(ToolServerStandIn::with(ToolServerScript { wants, ..ToolServerScript::default() }));
+    let stand_in = runtime.block_on(ToolServerStandIn::with(ToolServerScript { wants, ..script }));
     let stack = Stack::start();
     let client = stack.client();
     let feed = RecordsFeed::start(&client);
-    sign_in(&client, &stand_in, new(&stand_in));
+    let first = sign_in(&client, &stand_in, new(&stand_in));
     let (_, chat) = stack.workspace(&client);
     let both = format!("mcp:Linear_Northwind/close_issue {{}}; {CALL}");
     let is = |status| {
@@ -225,9 +249,9 @@ fn a_tool_that_wants_more_access_fails_alone_and_works_once_the_person_signs_in_
 
     let before = calls::run(&client, &chat.id, &both, 1);
     wait_until("the record says it wants more access", || is(ToolSignInStatus::NeedsMoreAccess));
-    // So only what the hub kept says what to ask for.
-    stand_in.change(|script| script.challenge_scope = None);
-    sign_in(&client, &stand_in, ToolSignInTo::Again { id: "t".into() });
+    // So only what the hub kept says what to ask for, and only that is granted.
+    stand_in.change(|script| (script.challenge_scope, script.allows) = (None, None));
+    let again = sign_in(&client, &stand_in, ToolSignInTo::Again { id: "t".into() });
     wait_until("the record says it works", || is(ToolSignInStatus::Works));
     // Its worker is sent the new token while it runs.
     let (mut turn, mut after) = (1, Vec::new());
@@ -243,6 +267,7 @@ fn a_tool_that_wants_more_access_fails_alone_and_works_once_the_person_signs_in_
     assert!(said.contains(expected), "{said}");
     assert_eq!(*found_before, found);
     assert_eq!(after, [("Closed issue 7".to_string(), false), found]);
+    [first, again]
 }
 
 /// How the chat's agent last said each of its servers is, where the hub knows.

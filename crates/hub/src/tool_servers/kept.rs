@@ -21,6 +21,10 @@ pub(super) struct KeptSignIn {
     /// `None` once it's gone, after which only the person signing in again brings it back, with what it was asked to
     /// allow.
     pub(super) tokens: Option<KeptTokens>,
+    /// What its authorization server last said it granted, for signing in again to ask for too. Empty where it hasn't
+    /// said, which means what it was asked for, and in a file from a build that didn't keep it.
+    #[serde(default, skip_serializing_if = "ToolScopes::is_empty")]
+    pub(super) granted: ToolScopes,
     /// What its server refused a call for the lack of, with a token of this sign-in, for signing in again to ask for. Empty
     /// when none was.
     #[serde(default, skip_serializing_if = "ToolScopes::is_empty")]
@@ -55,15 +59,24 @@ impl KeptSignIn {
         let number = before.map_or(TokenNumber::FIRST, |before| before.number.next());
         // What was wanted at another authorization server is nothing to this one.
         let before = before.filter(|before| before.renewable.issuer() == renewable.issuer());
-        // What was wanted after this one was asked for is still to ask for.
-        let wants = before.map_or_default(|before| before.wants.clone().without(renewable.scopes()));
         let asked_again = before.is_some_and(KeptSignIn::would_ask_again);
-        let tokens = Some(KeptTokens::given(granted, given_at_ms));
-        Self { made_by, renewable, registration, number, tokens, wants, asked_again }
+        let (tokens, granted) = KeptTokens::given(granted, given_at_ms);
+        let granted = granted.unwrap_or_default();
+        // What was wanted after this one was asked for is still to ask for, unless it was granted all the same.
+        let wants = before.map_or_default(|before| before.wants.clone().without(renewable.scopes()).without(&granted));
+        Self { made_by, renewable, registration, number, tokens: Some(tokens), granted, wants, asked_again }
     }
 
-    /// Whether signing in again asks for no more than this one was asked for, which its server wanted all the same. One
-    /// nothing has been wanted of is what the one before it made it.
+    /// What signing in again asks to be allowed, beyond what its server says then, so nothing that worked stops
+    /// working. What was granted may be more than was asked for, such as what its authorization server grants when it's
+    /// asked for nothing, and less, where the person left some of it out, which is still asked for.
+    pub(super) fn to_ask_for(&self) -> ToolScopes {
+        self.renewable.scopes().clone().and(&self.granted).and(&self.wants)
+    }
+
+    /// Whether its server wanted only what it had been asked for all the same. What was granted without being asked for
+    /// doesn't count, since asking for that by name may change something. One nothing has been wanted of is what the
+    /// one before it made it.
     fn would_ask_again(&self) -> bool {
         if self.wants.is_empty() { self.asked_again } else { self.renewable.scopes().has_all(&self.wants) }
     }
@@ -73,9 +86,11 @@ impl KeptSignIn {
         self.asked_again && self.renewable.scopes().has_all(wants)
     }
 
-    /// The same, renewed for `granted`, given at `given_at_ms`.
+    /// The same, renewed for `granted`, given at `given_at_ms`. One that doesn't say what it granted granted the same.
     pub(super) fn renewed(self, granted: Granted, given_at_ms: i64) -> Self {
-        Self { number: self.number.next(), tokens: Some(KeptTokens::given(granted, given_at_ms)), ..self }
+        let (tokens, granted) = KeptTokens::given(granted, given_at_ms);
+        let granted = granted.unwrap_or(self.granted);
+        Self { number: self.number.next(), tokens: Some(tokens), granted, ..self }
     }
 
     /// The same, gone.
@@ -99,8 +114,10 @@ impl KeptSignIn {
 }
 
 impl KeptTokens {
-    fn given(granted: Granted, given_at_ms: i64) -> Self {
-        let Granted { access, lasts, refresh } = granted;
-        Self { access, ends_at_ms: lasts.map(|lasts| later_ms(given_at_ms, lasts)), refresh }
+    /// Those of `granted`, given at `given_at_ms`, and what it says they're allowed, which isn't theirs alone to keep,
+    /// since it outlasts them.
+    fn given(granted: Granted, given_at_ms: i64) -> (Self, Option<ToolScopes>) {
+        let Granted { access, lasts, refresh, scopes } = granted;
+        (Self { access, ends_at_ms: lasts.map(|lasts| later_ms(given_at_ms, lasts)), refresh }, scopes)
     }
 }
