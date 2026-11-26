@@ -1,11 +1,10 @@
 //! A server asked for its tools as it's added or edited in Settings: what the panel says and does while it's asked and
-//! once it hasn't listed them, what's typed meanwhile, and where its key is. Against a real hub and a stand-in for the
+//! once it hasn't listed them, and where its key is. Against a real hub and a stand-in for the
 //! server, and against a fake hub in `tool_server_saves`. Every server and key is plainly made up.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
-use std::time::Duration;
 
 use gpui_kit::TestAppContext;
 use hub::{ToolServerAsks, ToolServerGate, ToolServerScript};
@@ -54,89 +53,60 @@ fn held_by(gate: &ToolServerGate) -> Serving {
     })
 }
 
-/// Cancelled, then as a field changes, and as the way does, then as Settings closes, and the last time let go on.
+/// Cancelled, then as Settings closes, and the last time typed in while it's asked, which changes nothing of what's
+/// then added anyway.
 #[gpui_kit::test]
-fn a_server_is_asked_for_its_tools_before_its_added_and_nothing_is_added_once_thats_let_go_of(cx: &mut TestAppContext) {
+fn a_server_is_asked_for_its_tools_before_its_added_with_its_panel_off_and_nothing_is_added_once_thats_let_go_of(
+    cx: &mut TestAppContext,
+) {
     let gate = ToolServerGate::closed();
     let (stack, serving) = (Stack::new(), held_by(&gate));
     let mut ui = in_servers(cx, &stack);
     let url = serving.url();
     let host = url.strip_prefix("http://").unwrap().split('/').next().unwrap();
     let says = format!("Asking {host} for its tools");
-    let asks = |ui: &mut Ui<'_>| {
-        ui.click("mcp-panel-go");
+    let asked = |ui: &mut Ui<'_>| {
         assert_eq!(label_of(ui, "mcp-asking"), says);
-        assert!(ui.off("mcp-panel-go"));
+        assert!(ui.off("mcp-panel-go") && ui.off("mcp-way"));
         assert_eq!(buttons(ui), ("Add".to_string(), None));
     };
 
     fill_in(&mut ui, "Docs", &url);
     choose(&mut ui, NONE_WAY);
-    asks(&mut ui);
+    ui.click("mcp-panel-go");
+    asked(&mut ui);
     ui.click("mcp-cancel");
     assert!(!ui.has("mcp-panel") && ui.on("mcp-add"));
 
     fill_in(&mut ui, "Docs", &url);
     choose(&mut ui, NONE_WAY);
-    asks(&mut ui);
-    let let_go = |ui: &mut Ui<'_>| {
-        ui.wait("the hub to say it let go of it", |ui| ui.on("mcp-panel-go"));
-        assert_eq!(buttons(ui), ("Add".to_string(), None), "rather than once the server didn't answer in time");
-    };
-    type_in(&mut ui, "mcp-name", "Guides");
-    assert!(!ui.has("mcp-asking"));
-    let_go(&mut ui);
-    asks(&mut ui);
-    choose(&mut ui, KEY_WAY);
-    choose(&mut ui, NONE_WAY);
-    let_go(&mut ui);
-    gate.open();
-    ui.wait_for_every_call();
-    assert_eq!(the_hubs(&stack), Vec::<String>::new(), "nothing is added once it's let go of");
-    assert!(ui.on("mcp-panel-go"));
-
-    let gate = ToolServerGate::closed();
-    serving.stand_in.change(|script| script.server_after = Some(gate.clone()));
-    asks(&mut ui);
+    ui.click("mcp-panel-go");
+    asked(&mut ui);
     ui.click("settings-back");
     open_settings(&mut ui);
     ui.click("settings-page-mcp");
     assert!(!ui.has("mcp-panel"));
     gate.open();
     ui.wait_for_every_call();
-    assert_eq!(the_hubs(&stack), Vec::<String>::new());
+    assert_eq!(the_hubs(&stack), Vec::<String>::new(), "nothing is added once it's let go of");
 
+    let gate = ToolServerGate::closed();
+    serving.stand_in.change(|script| {
+        script.server_after = Some(gate.clone());
+        script.asks = ToolServerAsks::Answers(401);
+    });
     fill_in(&mut ui, "Docs", &url);
     choose(&mut ui, NONE_WAY);
-    ui.click("mcp-panel-go");
-    added(&mut ui, "Docs");
-    assert_eq!(the_hubs(&stack), ["Docs"]);
-}
-
-/// The hub has added it by the time its name changes, so the panel becomes the edit of what was added, with what's
-/// typed in it, and saving that renames it.
-#[gpui_kit::test]
-fn a_change_made_once_the_hub_has_begun_to_add_it_is_kept_and_saved_after(cx: &mut TestAppContext) {
-    let gate = ToolServerGate::closed();
-    let (stack, serving) = (Stack::new(), held_by(&gate));
-    let mut ui = in_servers(cx, &stack);
-    fill_in(&mut ui, "Docs", &serving.url());
-    choose(&mut ui, NONE_WAY);
-    ui.click("mcp-panel-go");
     ui.click("mcp-name");
     ui.press("end");
-
-    gate.open();
-    // Without letting the app take the hub's answer, which it does only after what's typed.
-    waiting::thread::until(Duration::from_secs(10), "the hub to add it", || the_hubs(&stack) == ["Docs"]);
+    ui.press("enter");
+    asked(&mut ui);
     ui.input(" Two");
-
-    ui.wait("the panel to be on again", |ui| ui.on("mcp-panel-go"));
-    let a_new_name = "Running agents have the new name from their next start.";
-    assert_eq!((label_of(&mut ui, "mcp-panel-go"), says(&mut ui)), ("Save".to_string(), a_new_name.to_string()));
-    ui.click("mcp-panel-go");
-    added(&mut ui, "Docs Two");
-    assert_eq!(the_hubs(&stack), ["Docs Two"]);
+    gate.open();
+    assert_eq!(refused(&mut ui), "Docs asks who you are, so it needs a sign-in or a key.");
+    ui.click("mcp-anyway");
+    added(&mut ui, "Docs");
+    assert_eq!(the_hubs(&stack), ["Docs"], "as it was typed before it was asked");
 }
 
 /// Tried again with Enter, then changed, then added anyway. What's typed of the key stays throughout, is sent as it's

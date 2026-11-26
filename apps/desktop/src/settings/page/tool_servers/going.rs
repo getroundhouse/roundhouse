@@ -2,17 +2,14 @@
 //! first, and one that doesn't list them is added or saved only if the person has it done anyway. What a save comes to
 //! is client-core's `tool_server_checks` to say, and the save is let go of as it goes with the form's state.
 //!
-//! What's typed while the hub saves is kept. A change lets go of the save, and the button is off until the hub has
-//! answered. If the hub had begun to save it, the form becomes the edit of what it saved, with what's typed in it, so
-//! saving it again saves what's changed since.
+//! Nothing in the panel changes what was sent while the hub saves it: its fields and its dropdown are off, as its button
+//! is, and Cancel, or the panel going, lets go of the save.
 
 use client_core::ToolServerSaving;
 use client_core::tool_server_checks::{Saved, When};
 use client_core::tool_server_edits::Does;
 use gpui_kit::{App, Context, Task, Window};
-use protocol::model::ToolServer;
 
-use super::form::Of;
 use super::kept::Kept;
 use super::words;
 
@@ -23,10 +20,7 @@ pub(super) enum FormStands {
     Open,
     /// The hub is adding or saving it, as `when` says, once it has asked the server for its tools where it asks. The
     /// save is let go of if it goes before the hub has answered, as it does with the panel.
-    Saving { when: When, _saving: ToolServerSaving, wait: Task<()> },
-    /// It changed while the hub was saving it, so the save was let go of, and the hub's answer says whether that was
-    /// too late.
-    LettingGo { _wait: Task<()> },
+    Saving { when: When, _saving: ToolServerSaving, _wait: Task<()> },
     /// It wasn't added or saved, for this reason, for the person to read.
     Refused(String),
     /// The server didn't list its tools, for this reason, for the person to read. They choose whether to go on anyway.
@@ -34,9 +28,10 @@ pub(super) enum FormStands {
 }
 
 impl FormStands {
-    fn is_waiting(&self) -> bool {
+    /// Whether the hub is adding or saving it, while which nothing in the panel can be changed.
+    pub(super) fn is_waiting(&self) -> bool {
         match self {
-            FormStands::Saving { .. } | FormStands::LettingGo { .. } => true,
+            FormStands::Saving { .. } => true,
             FormStands::Open | FormStands::Refused(_) | FormStands::NotListed(_) => false,
         }
     }
@@ -45,9 +40,7 @@ impl FormStands {
     pub(super) fn saves_anyway(&self) -> bool {
         match self {
             FormStands::NotListed(_) => true,
-            FormStands::Open | FormStands::Saving { .. } | FormStands::LettingGo { .. } | FormStands::Refused(_) => {
-                false
-            }
+            FormStands::Open | FormStands::Saving { .. } | FormStands::Refused(_) => false,
         }
     }
 
@@ -55,27 +48,24 @@ impl FormStands {
     pub(super) fn why_not(&self) -> Option<&str> {
         match self {
             FormStands::Refused(why) | FormStands::NotListed(why) => Some(why),
-            FormStands::Open | FormStands::Saving { .. } | FormStands::LettingGo { .. } => None,
+            FormStands::Open | FormStands::Saving { .. } => None,
         }
     }
 
-    /// Why it wasn't added or saved goes, since it may be for the way there was, and a save under way is let go of.
+    /// Why it wasn't added or saved goes, since it may be for the way there was.
     pub(super) fn way_chosen(&mut self) {
-        *self = match std::mem::replace(self, FormStands::Open) {
-            FormStands::Saving { wait, .. } | FormStands::LettingGo { _wait: wait } => {
-                FormStands::LettingGo { _wait: wait }
-            }
-            FormStands::Open | FormStands::Refused(_) | FormStands::NotListed(_) => FormStands::Open,
-        };
+        match self {
+            FormStands::Refused(_) | FormStands::NotListed(_) => *self = FormStands::Open,
+            FormStands::Open | FormStands::Saving { .. } => {}
+        }
     }
 
-    /// What was sent isn't what's in the form any more, so what came of it goes, and a save under way is let go of.
+    /// What was sent isn't what's in the form any more, so a server that didn't list its tools is to be asked again.
     pub(super) fn field_changed(&mut self) {
-        *self = match std::mem::replace(self, FormStands::Open) {
-            FormStands::Saving { wait, .. } => FormStands::LettingGo { _wait: wait },
-            FormStands::NotListed(_) => FormStands::Open,
-            stands @ (FormStands::Open | FormStands::LettingGo { .. } | FormStands::Refused(_)) => stands,
-        };
+        match self {
+            FormStands::NotListed(_) => *self = FormStands::Open,
+            FormStands::Open | FormStands::Saving { .. } | FormStands::Refused(_) => {}
+        }
     }
 
     /// Whether the hub is asking the server for its tools, as far as the app can tell, for a form that `is_asked`. The
@@ -85,7 +75,6 @@ impl FormStands {
             FormStands::Saving { when: When::Listed, .. } => is_asked(),
             FormStands::Saving { when: When::Anyway, .. }
             | FormStands::Open
-            | FormStands::LettingGo { .. }
             | FormStands::Refused(_)
             | FormStands::NotListed(_) => false,
         }
@@ -138,35 +127,20 @@ impl Kept {
             let answer = answer.recv().await;
             let _ = this.update_in(cx, |this, window, cx| this.answered(answer, window, cx));
         });
-        self.stand(FormStands::Saving { when, _saving: saving, wait }, cx);
+        self.stand(FormStands::Saving { when, _saving: saving, _wait: wait }, cx);
     }
 
     /// Closes the panel once the hub has added or saved it, and what's typed of a key goes with it, and otherwise says
-    /// why it didn't. Once the form has changed, what came of the save is of what it was, so the form is to be sent
-    /// again, as an edit of what was saved where it was. The panel is the one that asked, since the wait goes with it.
+    /// why it didn't. The panel is the one that asked, since the wait goes with it.
     fn answered(&mut self, answer: client_core::Result<Saved>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(form) = self.form() else { return };
-        let changed = match form.stands {
-            FormStands::LettingGo { .. } => true,
-            FormStands::Saving { .. } | FormStands::Open | FormStands::Refused(_) | FormStands::NotListed(_) => false,
-        };
         let does = form.does(cx);
-        match (answer, changed) {
-            (Ok(Saved::Saved(_)), false) => self.put_away_panel(window, cx),
-            (Ok(Saved::Saved(server)), true) => self.saved_before_it_changed(server, window, cx),
-            (Ok(Saved::NotListed(why)), false) => self.stand(FormStands::NotListed(why), cx),
-            (Err(e), false) => self.stand(FormStands::Refused(words::couldnt(words::to_do(does), &e)), cx),
-            (Ok(Saved::LetGo), _) | (Ok(Saved::NotListed(_)) | Err(_), true) => self.stand(FormStands::Open, cx),
+        match answer {
+            Ok(Saved::Saved(_)) => self.put_away_panel(window, cx),
+            Ok(Saved::NotListed(why)) => self.stand(FormStands::NotListed(why), cx),
+            Ok(Saved::LetGo) => self.stand(FormStands::Open, cx),
+            Err(e) => self.stand(FormStands::Refused(words::couldnt(words::to_do(does), &e)), cx),
         }
-    }
-
-    /// The hub saved what was sent before the form changed, so the form is the edit of `server`, as it was saved.
-    fn saved_before_it_changed(&mut self, server: ToolServer, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(form) = self.form_mut() {
-            form.of = Of::Had(Box::new(server));
-        }
-        self.say_whether_kept(window, cx);
-        self.stand(FormStands::Open, cx);
     }
 
     fn stand(&mut self, stands: FormStands, cx: &mut Context<Self>) {

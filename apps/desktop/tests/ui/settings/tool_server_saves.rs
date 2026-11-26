@@ -10,13 +10,12 @@ use protocol::client::tool_server_checks::{NoToolList, ToolServerChecked};
 use protocol::client::tool_server_saves::ToolServerSaved;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::fixtures::tool_server;
-use protocol::model::{ToolServer, ToolServerName};
 
 use super::open_settings;
 use super::tool_server_check::buttons;
 use super::tool_server_edit::edit;
 use super::tool_servers::{KEY, KEY_WAY, choose, fill_in, type_in};
-use super::tool_sign_in::{WORKS, refused};
+use super::tool_sign_in::refused;
 use crate::support::{FakeHub, Ui};
 
 /// The window on a fake hub that holds `world`, with Add's panel filled in, with a key.
@@ -138,46 +137,28 @@ fn a_panel_thats_longer_with_the_reason_why_has_its_end_in_sight(cx: &mut TestAp
     assert!(panel <= page, "with the reason: {panel:?}, {page:?}");
 }
 
-/// One that's signed in to, whose query is changed, and one whose name is, which the hub saves without asking the
-/// server anything, and one whose query is changed, which it asks, and which is changed again while it's asked. The
-/// fake hub goes on saving each, so never says whether it was let go of in time.
+/// The hub saves a server's name alone without asking it anything, which client-core's `is_asked` table has with the
+/// rest, so the panel doesn't say it's asked. The fake hub goes on saving it.
 #[gpui_kit::test]
-fn the_panel_says_the_server_is_asked_only_where_the_hub_asks_it_and_waits_once_its_changed(cx: &mut TestAppContext) {
+fn the_panel_says_the_server_is_asked_only_where_the_hub_asks_it_and_cancel_lets_go_of_the_save(
+    cx: &mut TestAppContext,
+) {
     let mut world = World::default();
-    let signed_in = ToolServer { name: ToolServerName::stored("Linear".into()), auth: WORKS, ..tool_server("linear") };
-    let keyed = ToolServer { name: ToolServerName::stored("Runbooks".into()), ..tool_server("runbooks") };
-    world.tool_servers = vec![signed_in, keyed];
+    world.tool_servers = vec![tool_server("runbooks")];
     world.tool_server_save = ToolServerSaveWorld::Asking;
     let asked = world.asked.clone();
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
     open_settings(&mut ui);
     ui.click("settings-page-mcp");
-    ui.wait("their rows", |ui| ui.has("mcp-more-runbooks"));
+    ui.wait("its row", |ui| ui.has("mcp-more-runbooks"));
 
-    let edits = [
-        ("linear", "mcp-url", "?tools=a", false),
-        ("runbooks", "mcp-name", " two", false),
-        ("runbooks", "mcp-url", "?tools=a", true),
-    ];
-    for (server, field, typed, asks) in edits {
-        edit(&mut ui, &server.into());
-        ui.click(field);
-        ui.press("end");
-        ui.input(typed);
-        ui.click("mcp-panel-go");
-        assert!(ui.off("mcp-panel-go"), "{server}: while the hub saves it");
-        assert_eq!(ui.has("mcp-asking"), asks, "{server}, {field}");
-        ui.click("mcp-cancel");
-    }
     edit(&mut ui, &"runbooks".into());
-    type_in(&mut ui, "mcp-key", KEY);
+    type_in(&mut ui, "mcp-name", "Northwind");
     ui.click("mcp-panel-go");
-    ui.click("mcp-key");
-    ui.input("s");
-    assert!(!ui.has("mcp-asking") && ui.off("mcp-panel-go"), "until the hub says whether it was let go of in time");
+    assert!(ui.off("mcp-panel-go") && !ui.has("mcp-asking"));
     ui.click("mcp-cancel");
 
-    ui.wait("each to be let go of", |_| asked.count("tool_server_save_cancel") == 4);
-    assert_eq!((asked.count("tool_server_save"), asked.count("tool_server_check")), (4, 0));
+    ui.wait("it to be let go of", |_| asked.count("tool_server_save_cancel") == 1);
+    assert_eq!((asked.count("tool_server_save"), asked.count("tool_server_check")), (1, 0));
 }
