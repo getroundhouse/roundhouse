@@ -1,6 +1,25 @@
 # Issues
 
-How an issue is written, labelled, scheduled and linked to others. `docs/standards/documentation.md` says what goes in an issue rather than a doc, and `docs/standards/writing.md` how any text is worded.
+When an issue is filed and when it closes, and how it's written, labelled, scheduled and linked to others. `docs/standards/documentation.md` says what goes in an issue rather than a doc, and `docs/standards/writing.md` how any text is worded.
+
+## When to file
+
+An issue is work someone would choose to schedule, or a decision someone has to make, so the open issues are mostly what the product doesn't do yet rather than what a change could have finished. Something a change leaves undone ends in one of three ways, and filing is the last:
+
+- **Finish it,** in the same PR or one stacked on it. That's the default for whatever the change caused or made worse, such as a case it doesn't handle, a test it didn't write, or a doc it left wrong. It's also the default, in a PR of its own, for a fix nearby that takes under about an hour, such as a race seen while reading the code.
+- **Drop it,** when it isn't worth the time it would take, such as a rename no reader would miss, or a race no test or person has made happen and that would cost little if it did. Say so under **Left open:** in the PR, with why, so the owner can disagree.
+- **File it,** when it's a feature someone using the product would notice is missing, a bug a person could hit that's too large to fix in this change, a decision only the owner can make, or work that waits on something outside the repo, such as a dependency's release. Work no user sees that's too large to do now is filed only when leaving it costs something specific, such as a test that fails at random or a workaround the next change in that code would copy, and dropped otherwise. Search the open issues first, and add to one that already covers it rather than filing another.
+
+Dropping a feature, or anything an owner doc asks for, is the owner's to decide, as `docs/standards/who-decides.md` says, so an agent files those rather than dropping them.
+
+## When it closes
+
+An issue closes as soon as what it asks is true, and whoever makes it true closes it.
+
+- **Before opening a PR, search the open issues for the files, functions and types it changes,** since an issue names its code, such as `gh issue list --search "SessionSource in:body"`. Name each one it finishes in the PR, as `docs/standards/pull-requests.md` says, so merging closes it. A finished issue left open looks like work, and the next agent repeats it or works around it.
+- **A PR that does only part of an issue rewrites the issue's description to say what's left,** as "The description" below says, and the PR that does the last part closes it.
+- **A plan closes with its last part.** The PR that closes the last sub-issue, or ticks the last box of its checklist, closes the plan too, and a stack that does everything its issue asks closes that issue in its top PR.
+- **An issue found done, overtaken by another change, or a duplicate is closed when it's found,** by whoever finds it, with a comment naming the commit or the issue that settled it.
 
 ## The description
 

@@ -48,7 +48,7 @@ A decision record is written once, with its date, and only its status changes af
 | Plans | What comes next, in what order, and why | Milestones, and issues that order other issues |
 | Status and results | Progress, and what a run, measurement or review found | Issue comments and PRs |
 
-Anything left open gets an issue, so it isn't dropped, even when a chat or a PR mentions it. A local agent review is the exception: it reports its findings to whoever asked for it and files nothing, and they decide what's worth tracking.
+What a change leaves undone is finished, dropped with a reason, or filed, as "When to file" in `docs/standards/issues.md` says. What's filed is an issue, even when a chat or a PR mentions it. A local agent review files nothing: it reports its findings to whoever asked for it, and they decide.
 
 An issue's description says where things stand, and changes when they do. Its comments are the record, and each one says what it holds, not where it came from.
 
