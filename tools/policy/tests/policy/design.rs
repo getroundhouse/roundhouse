@@ -7,22 +7,6 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Every canvas under `folder`, but for what Brilliant keeps for itself, in folders that start with a dot.
-fn canvases(folder: &Path, found: &mut Vec<PathBuf>) {
-    for entry in fs::read_dir(folder).expect("the design folder") {
-        let path = entry.expect("an entry").path();
-        let hidden = path.file_name().is_some_and(|name| name.to_string_lossy().starts_with('.'));
-        if hidden {
-            continue;
-        }
-        if path.is_dir() {
-            canvases(&path, found);
-        } else if path.extension().is_some_and(|extension| extension == "bl") {
-            found.push(path);
-        }
-    }
-}
-
 /// The names `marker` is followed by in `canvas`, up to the first character a token's name can't have.
 fn named_after(canvas: &str, marker: &str) -> Vec<String> {
     canvas
@@ -71,16 +55,8 @@ fn a_scale_has_a_step_for_each_number_it_is_given_and_no_other() {
 
 /// Every canvas of the design, as the path it's shown by and its text.
 fn the_designs_canvases() -> Vec<(String, String)> {
-    let design = design();
-    let mut found = Vec::new();
-    canvases(&design, &mut found);
-    found
-        .into_iter()
-        .map(|path| {
-            let file = path.strip_prefix(&design).expect("a path in it").display().to_string();
-            (file, fs::read_to_string(&path).expect("a canvas"))
-        })
-        .collect()
+    let canvases = design::canvases(&design()).expect("the design's canvases");
+    canvases.into_iter().map(|canvas| (format!("{}.bl", canvas.path), canvas.text)).collect()
 }
 
 fn design() -> PathBuf {

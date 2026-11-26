@@ -24,5 +24,6 @@ How the product looks and what a person does with it are designed in Brilliant, 
 - **Nothing it draws goes in the app,** which is Rust on GPUI.
 - **Brilliant is young.** `docs/reference/brilliant.md` has what's been found, such as fonts that stay wrong until it restarts.
 - **Git merges a canvas by line,** so some changes that could both stand conflict, and the branch that comes second makes its own again.
+- **A canvas is found by its path,** so moving one rewrites every canvas that uses it, and conflicts with the branches that changed those. The design's folders are settled first, so moves are rare.
 - **A contributor needs Brilliant,** and Apple's fonts, to change a design.
 - **The design is ahead of the app,** while it's made again from the ground up from what's there.

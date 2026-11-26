@@ -1,0 +1,20 @@
+bp:v1
+canvas:
+  backgroundEnabled: false
+  writer: 1
+  gen: 1795628756915
+---
+b2847aee7a5ed03f al(v,g(24:$spacing.xl),pad(24:$spacing.xl)) p(0,0) s(960,hug) f[(feed5c188b184d4e,tok(color.surface.pane,#140F0C))] "Type"
+  c128c123bf6a8e5b al(h,x(sb),y(c)) p(24,24) s(fill,hug) ext(912,) f[] "Top"
+    5a35241ce7c9a69a t("Type",SF Pro Text:$font.family,24:$font.size.PageTitle,m:$font.weight.emphasis,align(l),lh(auto,1.21)) p(0,0) s(hug,hug) f[(6473a09ae17dd592,tok(color.text,#EEE6E1))] "Heading"
+    ab3caea5ae4fdca7 inst("Status Exploring",canvas(Board/Status),emb,al(h,x(c),y(c),pad(0:$spacing.none,8:$spacing.sm,0:$spacing.none,8:$spacing.sm))) mid(c7a5b4f8f8055dc1) p(867.38,4.5) s(hug,20) f[(209d95507c6651bc,tok(color.surface.raised,#26211E))] rd(4:$radius.InlineControl) "Status"
+      e9235e738f447d16 t("Draft",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) mref(3a72af35029a84f9) p(8,3) s(hug:28.62,hug:14) f[(f8c24a9ab855765e,tok(color.text.muted,#B8B1AC))] $typography.Detail "Words"
+  abe5f4f9d6798159 al(v,g(8:$spacing.sm)) p(24,77) s(fill,hug:162) ext(912,) f[] "Type"
+    3b60a049e1a8723c t("PageTitle: The sidebar shows each pull request",SF Pro Text:$font.family,24:$font.size.PageTitle,m:$font.weight.emphasis,align(l),lh(auto,1.21)) p(0,0) s(hug:543.22,hug:29) f[(ff3a2f5e98c22181,tok(color.text,#EEE6E1))] "PageTitle"
+    9096d9d4014dadc6 t("Heading: The sidebar shows each pull request",SF Pro Text:$font.family,16:$font.size.Heading,m:$font.weight.emphasis,align(l),lh(auto,1.19)) p(0,37) s(hug:355.49,hug:19) f[(cf0bc71d918c8558,tok(color.text,#EEE6E1))] "Heading"
+    e38c2d773005b654 t("Body: The sidebar shows each pull request",SF Pro Text:$font.family,14:$font.size.Body,r:$font.weight.regular,align(l),lh(auto,1.21)) p(0,64) s(hug:282.9,hug:17) f[(ef1fa9e287122f82,tok(color.text,#EEE6E1))] "Body"
+    aa9bc878042da142 t("Detail: The sidebar shows each pull request",SF Pro Text:$font.family,12:$font.size.Detail,r:$font.weight.regular,align(l),lh(auto,1.17)) p(0,89) s(hug:246.17,hug:14) f[(81b76b4951422a4e,tok(color.text,#EEE6E1))] "Detail"
+    3b304ee7285f79fe t("Key: The sidebar shows each pull request",SF Pro Text:$font.family,10:$font.size.Key,r:$font.weight.regular,align(l),lh(auto,1.2)) p(0,111) s(hug:195.26,hug:12) f[(46c15cdee0a2eed5,tok(color.text,#EEE6E1))] "Key"
+    0371de5848f1630f t("KeyHeld: The sidebar shows each pull request",SF Pro Text:$font.family,7.5:$font.size.KeyHeld,r:$font.weight.regular,align(l),lh(auto,1.2)) p(0,131) s(hug:162.8,hug:9) f[(37a3699cd03c99ab,tok(color.text,#EEE6E1))] "KeyHeld"
+    3721489a450c7487 t("Code: rg -n HubNotice",Menlo,12,r,align(l),lh(auto,1.17),ls(0px)) p(0,148) s(hug:151.72,hug:14) f[(260abfea7c55e7d0,tok(color.text,#EEE6E1))] $typography.Code "Code"
+bp:end

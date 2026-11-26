@@ -14,6 +14,7 @@ ROUNDHOUSE_UPDATE_SCREENS=1 cargo test -p desktop --test ui gallery   # Accepts 
 cargo test -p desktop --test ui gallery::clips:: -- --ignored   # Records every clip, a short video of the app from made-up data, a frame at a time, into .context/clips/, as the gallery's clips/mod.rs says. Add the end of a clip's test's name to record only it. On a Mac, and never in CI
 cargo test -p mobile-ios --test ui gallery   # Every screen of the iPhone app, and the handheld's components, against its image in docs/spec/screens/phone. Accepted the same way
 cargo run -p guide -- OUT         # Builds docs/guide as the site's /docs/ pages in OUT, which mustn't exist, and refuses a link or a picture that isn't there. Run it after changing a page, as tools/guide/README.md says, since CI does
+cargo run -p design               # Writes design/Index.bl, every canvas of the design with its status, from the badge at each one's top. Run it after adding a canvas or changing a badge, and after a merge, since a test refuses an index that's behind
 cargo run -p spec-page            # The spec as a page in .context/spec/, each area's screens beside its rules, and which are confirmed, and the design system's page, its foundations to look one up and then its components. Open the paths it prints
 tools/install.sh                  # Installs this commit as the app to use every day, outside target/. Run it by hand
 git rev-list --reverse main | sed -n 50p   # The commit a published version was built from, here 0.1.50's, which is the 50th on main

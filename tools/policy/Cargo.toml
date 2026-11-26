@@ -10,6 +10,8 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dev-dependencies]
+# To read the design's canvases and films as its index does.
+design.workspace = true
 kit-sync.workspace = true
 # To read the dependency graph once for every test of a run.
 process = { workspace = true, features = ["testing"] }
