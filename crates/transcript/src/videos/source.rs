@@ -1,4 +1,5 @@
-use client_core::Client;
+use client_core::{Client, Hub};
+use protocol::client::attachments::AttachmentReadRange;
 use protocol::model::{AttachmentId, MAX_RANGE_BYTES, SessionId, WorkspaceId};
 use std::io;
 use std::num::NonZeroU32;
@@ -17,16 +18,17 @@ const THREADS: NonZeroU32 = NonZeroU32::new(2).unwrap();
 #[derive(Clone)]
 pub enum VideoSource {
     /// The copy the hub kept of one an agent's text pointed to, as the chat it's in has it.
-    Kept { client: Client, session: SessionId, id: AttachmentId },
+    Kept { hub: Hub, session: SessionId, id: AttachmentId },
     /// One in a workspace's worktree, as it is now.
     Worktree { client: Client, workspace: WorkspaceId, path: String },
 }
 
 impl VideoSource {
-    /// The same video, read on `client`'s connection.
+    /// The same video, read on `client`'s connection, if it's read on one. One a chat's text pointed to is read from
+    /// its hub, whichever connection there is.
     pub(crate) fn on(&self, client: Client) -> Self {
         match self.clone() {
-            VideoSource::Kept { session, id, .. } => VideoSource::Kept { client, session, id },
+            kept @ VideoSource::Kept { .. } => kept,
             VideoSource::Worktree { workspace, path, .. } => VideoSource::Worktree { client, workspace, path },
         }
     }
@@ -57,7 +59,9 @@ impl VideoSource {
 impl Fetch for VideoSource {
     fn fetch(&mut self, start: u64, length: u32) -> io::Result<Part> {
         let read = match self {
-            VideoSource::Kept { client, session, id } => client.attachment_read_range(session, id, start, length),
+            VideoSource::Kept { hub, session, id } => {
+                hub.call(AttachmentReadRange { session_id: session.clone(), id: id.clone(), start, length })
+            }
             VideoSource::Worktree { client, workspace, path } => {
                 client.workspace_file_read_range(workspace, path, start, length)
             }

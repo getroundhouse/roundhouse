@@ -8,10 +8,10 @@ use client_core::link::Waits;
 use client_core::this_device::Preferences;
 use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, GestureTuning, InputEvent as _, Pixels, Point,
+    AnyWindowHandle, App, AppContext as _, Bounds, ElementId, Entity, GestureTuning, InputEvent as _, Pixels, Point,
     SharedString, TestAppContext, TouchEvent, TouchId, TouchPhase, WindowBounds, WindowOptions, point, px, size,
 };
-use mobile::{MemoryVault, MobileApp, Vault as _};
+use mobile::{MemoryVault, MobileApp, Vault};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Seq, Workspace};
 use protocol::pairing::PairingLink;
@@ -29,6 +29,9 @@ const RETRY_WAITS: Waits = Waits::retrying(Duration::from_millis(20), Duration::
 pub(crate) fn id(name: &str) -> SharedString {
     SharedString::from(name.to_string())
 }
+
+/// What opening the app's window gives.
+pub(super) type Opened = anyhow::Result<(AnyWindowHandle, Entity<MobileApp>)>;
 
 pub(crate) struct Phone<'a> {
     pub(crate) cx: &'a mut TestAppContext,
@@ -63,7 +66,18 @@ impl<'a> Phone<'a> {
     /// The app as it opens on a phone that keeps the hub it's paired with in `vault`, and where it was left in
     /// `preferences`.
     pub(crate) fn open(cx: &'a mut TestAppContext, vault: Arc<MemoryVault>, preferences: Preferences) -> Phone<'a> {
-        // A real hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
+        Phone::opening(cx, vault, |vault, opened, options, cx| {
+            mobile::open_window(vault, preferences, opened, options, cx)
+        })
+    }
+
+    /// The app as `open` opens its window, on a phone that keeps the hub it's paired with in `vault`.
+    pub(super) fn opening(
+        cx: &'a mut TestAppContext,
+        vault: Arc<MemoryVault>,
+        open: impl FnOnce(Arc<dyn Vault>, flume::Receiver<String>, WindowOptions, &mut App) -> Opened,
+    ) -> Phone<'a> {
+        // A hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
         cx.executor().allow_parking();
         cx.update(gpui_kit::init);
         // Tried again by the system's clock, which a test can't move, so it would sit through the phone's waits.
@@ -72,8 +86,8 @@ impl<'a> Phone<'a> {
         // An iPhone's screen, in points.
         let screen = Bounds::new(point(px(0.), px(0.)), size(px(402.), px(874.)));
         let options = WindowOptions { window_bounds: Some(WindowBounds::Windowed(screen)), ..Default::default() };
-        let (handle, app) =
-            cx.update(|cx| mobile::open_window(vault.clone(), preferences, opened, options, cx)).unwrap();
+        let shared: Arc<dyn Vault> = vault.clone();
+        let (handle, app) = cx.update(|cx| open(shared, opened, options, cx)).unwrap();
         // In front, as an app the person just opened is.
         cx.update_window(handle, |_, window, _| window.activate_window()).unwrap();
         Phone { cx, handle, app, vault, links, seen_approval: Seq::default() }
@@ -233,6 +247,11 @@ impl<'a> Phone<'a> {
     /// The phone's own record of the chat shown, which can be behind the hub's.
     pub(crate) fn shown_record(&self) -> Option<protocol::model::Session> {
         self.cx.read_entity(&self.app, MobileApp::shown_record)
+    }
+
+    /// What the open chat says went wrong, while it says it.
+    pub(crate) fn chat_says(&self) -> Option<String> {
+        self.cx.read_entity(&self.app, MobileApp::chat_says)
     }
 
     /// What's typed in the open chat's composer.

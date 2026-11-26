@@ -5,6 +5,7 @@ use client_core::Approval;
 use client_core::session_log::RecordedApprovals;
 use gpui_kit::{AppContext as _, Context, Entity, Focusable as _};
 use protocol::capability::approvals::Decision;
+use protocol::client::agent::SessionDecide;
 use protocol::event::EventBody;
 use protocol::model::{ApprovalId, Seq, Session, SubagentId};
 
@@ -134,7 +135,7 @@ impl Transcript {
     pub fn answer_approval(&mut self, approval_id: ApprovalId, decision: Decision, cx: &mut Context<Self>) {
         let id = self.session_id.clone();
         let answering_id = approval_id.clone();
-        let answering = self.client.start(move |client| client.session_decide(&id, &approval_id, decision));
+        let answering = self.hub.ask(SessionDecide { id, approval_id, decision });
         cx.spawn(async move |this, cx| {
             if let Err(e) = answering.recv().await {
                 let _ = this.update(cx, |t, cx| {

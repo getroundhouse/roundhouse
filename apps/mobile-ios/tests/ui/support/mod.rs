@@ -4,6 +4,7 @@
 
 #![cfg(test)]
 
+mod fake;
 mod phone;
 mod stack;
 

@@ -4,7 +4,6 @@
 //! screens to go back through. Going back to the chat keeps it, as the desktop's tab stays open behind the chat, so an
 //! answer chosen and not sent is there when the proposal's line is tapped again.
 
-use client_core::Client;
 use client_core::records::{Snapshot, subagent_named};
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -95,10 +94,10 @@ impl ChatView {
             subagent_named(records.subagents(&shown.session.id), &subagent).map_or(subagent, |named| named.id.clone());
         let open = matches!(self.over.screen(), Some(Screen::Subagent(screen)) if screen.subagent == subagent);
         if !open {
-            let (client, feed, session) = (self.client.clone(), self.feed.clone(), shown.session.clone());
+            let (hub, feed, session) = (self.hub.clone(), self.feed.clone(), shown.session.clone());
             let id = subagent.clone();
             let transcript = cx.new(|cx| {
-                let mut transcript = Transcript::subagent(client, &feed, &session, id, cx);
+                let mut transcript = Transcript::subagent(hub, &feed, &session, id, cx);
                 transcript.records_changed(&records, cx);
                 transcript
             });
@@ -132,8 +131,8 @@ impl ChatView {
         let open = matches!(self.over.screen(), Some(Screen::Proposal(screen)) if screen.view.read(cx).proposal().id == *proposal);
         if !open {
             let Some(record) = self.feed.snapshot().proposal(&shown.session.id, proposal).cloned() else { return };
-            let client = self.client.clone();
-            let view = cx.new(|cx| ProposalView::new(record, client, cx));
+            let hub = self.hub.clone();
+            let view = cx.new(|cx| ProposalView::new(record, hub, cx));
             view.read(cx).follow_records(self.feed.clone());
             let answers = cx.subscribe(&view, |chat, _, event: &ProposalEvent, cx| match event {
                 ProposalEvent::Error(message) => chat.say(message, cx),
@@ -144,17 +143,6 @@ impl ChatView {
         self.over.bring_in_front();
         self.read_showing(cx);
         cx.notify();
-    }
-
-    /// Carries what's open over the chat on over a new connection.
-    pub(super) fn reconnect_over(&self, client: &Client, cx: &mut Context<Self>) {
-        match self.over.screen() {
-            Some(Screen::Subagent(screen)) => {
-                screen.transcript.update(cx, |transcript, cx| transcript.reconnect(client, cx));
-            }
-            Some(Screen::Proposal(screen)) => screen.view.update(cx, |view, cx| view.reconnect(client, cx)),
-            None => {}
-        }
     }
 
     /// Passes the chat's subagents and proposals, and what the hub says of what its chips name, on to what's open over

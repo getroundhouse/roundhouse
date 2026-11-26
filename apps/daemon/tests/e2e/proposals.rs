@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use client_core::{Client, OpenSession, RecordsFeed, View};
+use client_core::{Client, RecordsFeed, View};
 use protocol::client::proposals::{ProposalAnotherRound, ProposalAnswer};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{
@@ -49,9 +49,10 @@ fn a_proposal_is_kept_for_the_call_that_made_it_shown_to_a_client_following_its_
     let stack = Stack::start();
     let client = stack.client();
     let (_, chat) = stack.workspace(&client);
-    let feed = RecordsFeed::start(&client);
+    let hub = stack.hub();
+    let feed = hub.hub().records().unwrap();
     // The chat open, as a client that shows it has it, which follows its session, and with it the session's records.
-    let _open = OpenSession::start(&client, &feed, &chat, View::Own);
+    let _open = hub.hub().open_session(&chat, View::Own);
     wait_until("the feed to follow", || feed.connected());
 
     let proposed = calls(&client, &chat.id, PROPOSE, 1);

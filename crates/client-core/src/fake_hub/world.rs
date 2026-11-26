@@ -56,6 +56,8 @@ pub struct World {
     pub following: super::Following,
     /// What clients asked, which a test shares in the same way, to tell what a client read.
     pub asked: super::Asked,
+    /// What holds back the list of the hub's records on a connection, which a test shares in the same way.
+    pub held_list: super::HeldList,
     /// The bytes of the files the hub keeps, by attachment: the files prompts carry, the images tools send back, and
     /// the images and videos the agent's text points to.
     pub attachments: HashMap<AttachmentId, Vec<u8>>,

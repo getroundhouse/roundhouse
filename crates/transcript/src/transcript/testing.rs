@@ -5,11 +5,17 @@ use client_core::session_log::{Position, PromptState, Row, SessionLog};
 use gpui_kit::{Bounds, Context, Pixels, Window};
 use protocol::capability::setup::ServerName;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{PromptLine, Seq};
+use protocol::model::{AttachmentId, PromptLine, Seq};
 
 use super::{Transcript, rows_and_loaded};
+use crate::attachments::Picture;
 
 impl Transcript {
+    /// Whether the picture `id`, which a prompt carries, couldn't be read, so it's drawn saying it can't be shown.
+    pub fn picture_unreadable(&self, id: &AttachmentId) -> bool {
+        matches!(self.model.borrow().pictures.get(id), Some(Picture::Unreadable))
+    }
+
     /// The event at a row, if it's loaded in the session's log, which can be ahead of what the transcript draws until
     /// it hears the log has changed, as [`Transcript::drawn_event_at`] says.
     pub fn event_at(&self, row: usize) -> Option<SessionEvent> {

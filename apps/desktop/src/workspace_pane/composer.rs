@@ -55,10 +55,20 @@ pub(super) fn new_input(window: &mut Window, cx: &mut Context<WorkspacePane>) ->
 
 impl WorkspacePane {
     /// For when the app starts connecting to a hub again, with this still on screen, so what's typed meanwhile isn't
-    /// lost. Until [`Self::reconnect`], nothing typed is sent, and it stays in the composer: the hub may be one that's
+    /// lost. Until [`Self::hub_came_back`], nothing typed is sent, and it stays in the composer: the hub may be one that's
     /// being stopped, which would take a prompt and then cut its agent off.
     pub fn hub_went_away(&mut self, cx: &mut Context<Self>) {
         self.hub = Hub::Away;
+        cx.notify();
+    }
+
+    /// For when a connection to the hub has caught up on its records, after [`Self::hub_went_away`], so what's typed is
+    /// sent again, and the chat showing read. Until then, what's typed waits, as it does with no connection, since the hub's first list on a new
+    /// connection may be about to replace what the pane shows.
+    pub fn hub_came_back(&mut self, cx: &mut Context<Self>) {
+        self.hub = Hub::Here;
+        // The chat showing is read now, if it's being read, which it wasn't while the hub was away.
+        self.showing_changed(cx);
         cx.notify();
     }
 

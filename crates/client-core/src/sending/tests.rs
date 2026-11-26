@@ -1,6 +1,7 @@
 // Against a stand-in hub on a Unix socket.
 #![cfg(unix)]
 
+use crate::Hub;
 use std::path::Path;
 
 use protocol::attachment::{Attachment, MediaType};
@@ -9,8 +10,8 @@ use protocol::model::QueuedPrompt;
 use protocol::prompt::Prompt;
 
 use super::*;
+use crate::View;
 use crate::stand_in_hub::{self, Does};
-use crate::{RecordsFeed, View};
 
 #[test]
 fn a_prompt_the_hub_never_takes_comes_back_with_its_files() {
@@ -80,12 +81,12 @@ fn a_prompt_being_sent_shows_in_its_chat_and_stays_once_the_hub_has_recorded_it(
             duplicate: false,
         }))))
     });
-    let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start(&client, &feed, &protocol::fixtures::session("s"), View::Own);
+    let hub = Hub::caught_up_on(&client);
+    let open = hub.open_session(&protocol::fixtures::session("s"), View::Own);
     let written = Written::new(Prompt::new("next"));
     let shown = written.on_its_way();
 
-    let sending = open.start_sending(&client, written);
+    let sending = open.start_sending(written);
 
     assert_eq!(on_its_way_in(&open), std::slice::from_ref(&shown));
     answer.send(()).unwrap();
@@ -106,10 +107,10 @@ fn a_prompt_the_hub_refuses_stops_showing_though_nothing_waits_to_hear() {
         let _ = answered.recv();
         Does::Answers(Box::new(ReplyOutcome::Error(ApiError::new(ErrorCode::Conflict, "the workspace is archived"))))
     });
-    let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start(&client, &feed, &protocol::fixtures::session("s"), View::Own);
+    let hub = Hub::caught_up_on(&client);
+    let open = hub.open_session(&protocol::fixtures::session("s"), View::Own);
 
-    drop(open.start_sending(&client, Written::new(Prompt::new("next"))));
+    drop(open.start_sending(Written::new(Prompt::new("next"))));
 
     assert_eq!(on_its_way_in(&open).len(), 1);
     answer.send(()).unwrap();

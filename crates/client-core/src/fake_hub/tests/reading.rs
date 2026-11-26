@@ -1,5 +1,6 @@
 //! What a client reads of the hub's records, observations, logs and terminals from a fake hub.
 
+use crate::Hub;
 use std::time::Duration;
 
 use protocol::client::listed::{Listed, SessionRecords};
@@ -88,7 +89,8 @@ fn a_client_holds_the_observations_the_hub_lists_and_its_feed_tells_of() {
     ];
     let (_dir, client) = served(world);
 
-    let feed = RecordsFeed::start(&client);
+    let hub = Hub::caught_up_on(&client);
+    let feed = hub.records().unwrap();
     let gone = || feed.connected() && *feed.snapshot().workspace_lines(&"ash".into()) == Observed::NotKnown;
     waiting::thread::until(Duration::from_secs(10), "the feed's removal never arrived", gone);
 
@@ -313,11 +315,12 @@ fn a_session_s_records_go_into_the_copy_its_view_is_handed() {
     let chat =
         world.chat(&workspace, SessionStatus::Running, vec![subagent_started("toolu_1", "explore", "Look", "Look")]);
     let session = world.sessions.iter().find(|session| session.id == chat).unwrap().clone();
-    let (dir, client) = served(world);
+    let (dir, _client) = served(world);
     let elsewhere = Client::connect(&dir.path().join("hub"), "test").unwrap();
-    let feed = RecordsFeed::start(&elsewhere);
+    let hub = Hub::caught_up_on(&elsewhere);
+    let feed = hub.records().unwrap();
 
-    let _open = OpenSession::start(&client, &feed, &session, View::Own);
+    let _open = hub.open_session(&session, View::Own);
 
     let held = || feed.snapshot().subagents(&chat).len();
     waiting::thread::until(Duration::from_secs(10), "the chat's subagent to be held", || held() == 1);
@@ -336,12 +339,10 @@ fn a_client_that_stops_following_a_session_lets_go_of_its_records() {
     let session = world.sessions.iter().find(|session| session.id == chat).unwrap().clone();
     let following = world.following.clone();
     let (_dir, client) = served(world);
-    let feed = RecordsFeed::start(&client);
+    let hub = Hub::caught_up_on(&client);
+    let feed = hub.records().unwrap();
     let held = |feed: &RecordsFeed| feed.snapshot().subagents(&chat).len();
-    let (chat_open, subagent_tab) = (
-        OpenSession::start(&client, &feed, &session, View::Own),
-        OpenSession::start(&client, &feed, &session, View::Own),
-    );
+    let (chat_open, subagent_tab) = (hub.open_session(&session, View::Own), hub.open_session(&session, View::Own));
     waiting::thread::until(Duration::from_secs(10), "the chat's subagent to be held", || held(&feed) == 1);
     // Each says it keeps the session's records once the hub has answered its follow, which is after the hub counts it
     // as following, and takes in what the subscription sends after that: the records, then the session's one event.

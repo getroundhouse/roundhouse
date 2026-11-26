@@ -1,7 +1,7 @@
 //! The chat's own screen: its transcript, and the composer under it.
 
 use client_core::records::Snapshot;
-use client_core::{Agents, Client, RecordsFeed};
+use client_core::{Agents, Client, Hub, RecordsFeed};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::{h_flex, v_flex};
@@ -38,6 +38,8 @@ pub(crate) enum ChatEvent {
 
 pub(crate) struct ChatView {
     pub(super) workspace: Workspace,
+    /// What the chat, and what's open over it, are opened from, and what they ask the hub through.
+    pub(super) hub: Hub,
     pub(super) client: Client,
     /// What client-core holds of the hub's records, which follows the shown chat's subagents and proposals.
     pub(super) feed: RecordsFeed,
@@ -89,10 +91,11 @@ impl ChatView {
                 cx.notify();
             }
         });
-        let Ready { client, feed, drafts } = hub;
+        let Ready { hub, client, feed, drafts } = hub;
         let agents = feed.snapshot().agents().clone();
         let mut chat = ChatView {
             workspace,
+            hub,
             client,
             feed,
             agents,
@@ -114,12 +117,11 @@ impl ChatView {
         chat
     }
 
-    /// Carries on over a new connection, keeping what's shown and what's typed.
+    /// Carries on over a new connection, keeping what's shown and what's typed. The transcript, and what's open over
+    /// it, carry on by themselves, from the hub they were opened from.
     pub(crate) fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.client = client.clone();
-        if let Some(shown) = &self.shown {
-            shown.transcript.update(cx, |transcript, cx| transcript.reconnect(client, cx));
-            self.reconnect_over(client, cx);
+        if self.shown.is_some() {
             // The new connection's hub may hold other lists.
             self.models.reset();
             self.follow_models(false, cx);
@@ -179,6 +181,12 @@ impl ChatView {
         self.workspace.label()
     }
 
+    /// What it says went wrong, while it says it.
+    #[cfg(feature = "testing")]
+    pub(crate) fn said(&self) -> Option<String> {
+        self.error.as_ref().map(ToString::to_string)
+    }
+
     #[cfg(feature = "testing")]
     pub(crate) fn typed(&self, cx: &App) -> String {
         self.composer.read(cx).value().to_string()
@@ -221,10 +229,10 @@ impl ChatView {
         if !keep_typed {
             self.take_draft(&session);
         }
-        let (client, records, feed) = (self.client.clone(), self.feed.snapshot(), self.feed.clone());
+        let (hub, records, feed) = (self.hub.clone(), self.feed.snapshot(), self.feed.clone());
         let agent = self.agents.of(session.agent);
         let transcript = cx.new(|cx| {
-            let mut transcript = Transcript::new(client, &feed, &session, cx);
+            let mut transcript = Transcript::new(hub, &feed, &session, cx);
             transcript.set_agent(agent, cx);
             transcript.records_changed(&records, cx);
             transcript

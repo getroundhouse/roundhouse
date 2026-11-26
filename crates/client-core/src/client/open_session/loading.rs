@@ -1,7 +1,8 @@
-use super::super::follow::{FollowError, Following};
+use super::super::follow::{Carried, FollowError, Following};
 use super::super::{Client, RecordsFeed};
 use super::search;
 use super::source::SessionSource;
+use crate::Hub;
 use crate::session_log::{Changes, RecordedApprovals, SessionLog};
 use protocol::find::Needle;
 use protocol::model::{ClientMessageId, Place, QueuedPrompt, Session, SessionId, SubagentId};
@@ -29,11 +30,13 @@ impl View {
 }
 
 /// A session someone has open, kept current until every clone of this has gone. It fetches the history a
-/// view is looking at, and carries on from a new connection given to [`OpenSession::reconnect`]. It holds the log as
-/// versions, as [`OpenSession::version`] says.
+/// view is looking at, and carries on on each new connection its [`Hub`] makes. It holds the log as versions, as
+/// [`OpenSession::version`] says.
 #[derive(Clone)]
 pub struct OpenSession {
     pub(super) follow: Following<Arc<SessionLog>>,
+    /// What it's opened from, which what's asked through it is sent on.
+    pub(crate) hub: Hub,
     pub(super) session_id: SessionId,
     /// The view asked for, which is what a search looks through.
     pub(super) view: View,
@@ -41,11 +44,18 @@ pub struct OpenSession {
 }
 
 impl OpenSession {
-    /// Starts following the events `view` takes, on a thread of its own, so this doesn't wait for the hub. Once it has
-    /// subscribed, it asks for the session's prompts, unless it follows a subagent, whose events hold none. `records`,
-    /// the copy of the same hub's records, holds the session's own records, its subagents, proposals and how its replies
-    /// were heard, as its subscription sends them, until every clone of this has gone.
-    pub fn start(client: &Client, records: &RecordsFeed, session: &Session, view: View) -> OpenSession {
+    /// Starts following the events `view` takes, on a thread of its own, so this doesn't wait for the hub, on
+    /// `connection`, or on the first `hub` carries it on to if there's none yet. Once it has subscribed, it asks for the
+    /// session's prompts, unless it follows a subagent, whose events hold none. `records`, the copy of the same hub's
+    /// records, holds the session's own records, its subagents, proposals and how its replies were heard, as its
+    /// subscription sends them, until every clone of this has gone. A view opens one from its [`Hub`].
+    pub(crate) fn start(
+        hub: &Hub,
+        connection: Option<&Client>,
+        records: &RecordsFeed,
+        session: &Session,
+        view: View,
+    ) -> OpenSession {
         // It doesn't know how far it goes until the hub says.
         let mut log = SessionLog::new(Place::default());
         // What waits is asked about wherever it was asked, from the start. A subagent's view asks nothing.
@@ -56,16 +66,16 @@ impl OpenSession {
             session_id: session.id.clone(),
             view: view.clone(),
             placed: false,
-            read_from: client.hub_version().to_string(),
+            read_from: connection.map(|client| client.hub_version().to_string()),
             records: records.reach(),
         };
         source.records.change(|records| {
             records.want_session(&session.id);
             false
         });
-        let follow = Following::start(Some(client), Arc::new(log), move || source);
+        let follow = Following::start(connection, Arc::new(log), move || source);
         follow.wake();
-        OpenSession { follow, session_id: session.id.clone(), view, searches: Arc::default() }
+        OpenSession { follow, hub: hub.clone(), session_id: session.id.clone(), view, searches: Arc::default() }
     }
 
     /// Says that something changed. It holds one signal at a time, so changes a view hasn't looked at yet
@@ -132,17 +142,18 @@ impl OpenSession {
         &self.session_id
     }
 
-    /// Carries on on a new connection, from the last event it received.
-    pub fn reconnect(&self, client: &Client) {
-        self.follow.reconnect(client);
+    /// What carries it on to a new connection, from the last event it received, for as long as a view has it open.
+    pub(crate) fn carried(&self) -> Box<dyn Carried> {
+        Box::new(self.follow.giver())
     }
 
     /// Looks through all of what the view follows for `needle`, which the log holds only a window of, on a thread of
     /// its own, and says when there's more through [`OpenSession::changed`]. The hub says which events hold it, by
     /// place, and the search reads each with what's within `around` places of it, a stretch at a time, for a view to
     /// count what the rows it doesn't hold draw. Events the log holds, and those it's given from now on, a view looks
-    /// through itself. The search stops once it has gone, and `client` is the connection it asks on.
-    pub fn search(&self, client: &Client, needle: Needle, around: usize) -> Search {
+    /// through itself. The search stops once it has gone. It asks on the connection that has caught up as it starts,
+    /// and fails at once without one, as [`Hub::ask`] says.
+    pub fn search(&self, needle: Needle, around: usize) -> Search {
         if self.follow.read(|log| log.holds_every_event()) {
             return Search::finished(Searched::Done);
         }
@@ -150,7 +161,14 @@ impl OpenSession {
             return Search::finished(Searched::TooShort);
         }
         let asking = search::Asking { session_id: self.session_id.clone(), view: self.view.clone(), needle, around };
-        search::Job::start(client, asking, &self.searches, self.follow.teller())
+        match self.hub.ready() {
+            Ok(client) => search::Job::start(&client, asking, &self.searches, self.follow.teller()),
+            Err(e) => {
+                // As a search that fails on its thread says so, so a view hears of it.
+                self.follow.teller().tell();
+                Search::failed(e)
+            }
+        }
     }
 
     pub fn take_errors(&self) -> Vec<FollowError> {

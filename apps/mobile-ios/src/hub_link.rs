@@ -107,6 +107,7 @@ pub(crate) fn listed(workspace: &Workspace) -> bool {
 /// What a screen that works on the hub needs of it, while there's a connection that's caught up.
 #[derive(Clone)]
 pub(crate) struct Ready {
+    pub(crate) hub: Hub,
     pub(crate) client: Client,
     pub(crate) feed: RecordsFeed,
     pub(crate) drafts: Drafts,
@@ -156,7 +157,7 @@ impl HubLink {
     /// The connection, the records and the drafts, while there's a connection that's caught up.
     pub(crate) fn ready(&self) -> Option<Ready> {
         let (client, feed, (drafts, _)) = (self.client()?, self.hub.records()?, self.drafts.as_ref()?);
-        Some(Ready { client, feed, drafts: drafts.clone() })
+        Some(Ready { hub: self.hub.clone(), client, feed, drafts: drafts.clone() })
     }
 
     /// Connects again now, such as when the app comes back to the front, since a phone that slept may hold a

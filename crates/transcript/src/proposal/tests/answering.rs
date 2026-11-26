@@ -8,7 +8,7 @@ use protocol::model::{OptionLetter, OptionPlace, Response, RevisionNumber};
 
 use super::super::ProposalView;
 use super::super::answering::Choosing;
-use super::support::{Hub, answered, answers, responded, sent_anything, stand_in, until_heard, view, view_on};
+use super::support::{Hub, answered, answers, responded, sent_anything, until_heard, view, view_on};
 
 /// One that couldn't be sent goes again as the same request, so if the hub kept it after all, it's kept once.
 #[gpui_kit::test]
@@ -115,24 +115,6 @@ fn an_answer_on_its_way_isnt_sent_again(cx: &mut TestAppContext) {
     // The client sends requests side by side, so a second would reach the hub while the first waits.
     waiting::thread::for_what_mustnt_happen(Duration::from_millis(200));
     assert_eq!(asked.len(), 1);
-}
-
-/// After a reconnect, the answer goes on the connection the view was given last, since the one before may be gone, as
-/// a phone's is once it has slept.
-#[gpui_kit::test]
-fn an_answer_goes_on_the_connection_given_last(cx: &mut TestAppContext) {
-    let (view, first) = view(cx);
-    let (client, last) = stand_in(Hub::Refuses, cx);
-
-    view.update(cx, |view, cx| {
-        view.reconnect(&client, cx);
-        view.choose(0, Some(OptionPlace(1)), cx);
-        view.send(cx);
-    });
-    until_heard(1, &view, &last, cx);
-
-    assert_eq!(answers(&last).len(), 1);
-    assert_eq!(first.len(), 0, "nothing goes to the hub it was given first");
 }
 
 /// Once the person's asked for another round, or responded in a way only a newer hub knows, the cards offer nothing to

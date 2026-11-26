@@ -41,14 +41,14 @@ pub(super) enum Hub {
 
 /// The view, on a hub that answers what it sends as `hub` says, and everything that hub hears the view send.
 pub(super) fn view_on(hub: Hub, cx: &mut TestAppContext) -> (Entity<ProposalView>, Heard) {
-    let (client, heard) = stand_in(hub, cx);
+    let (hub, heard) = stand_in(hub, cx);
     let proposal = Arc::new(protocol::fixtures::proposal("p"));
-    let view = cx.update(|cx| cx.new(|cx| ProposalView::new(proposal, client, cx)));
+    let view = cx.update(|cx| cx.new(|cx| ProposalView::new(proposal, hub, cx)));
     (view, heard)
 }
 
-/// A connection to a hub that answers what the view sends as `hub` says, and everything that hub hears.
-pub(super) fn stand_in(hub: Hub, cx: &mut TestAppContext) -> (client_core::Client, Heard) {
+/// A hub that answers what the view sends as `hub` says, and everything that hub hears.
+pub(super) fn stand_in(hub: Hub, cx: &mut TestAppContext) -> (client_core::Hub, Heard) {
     // The hub answers on a thread of its own.
     cx.executor().allow_parking();
     let dir = tempfile::tempdir().unwrap();
@@ -75,7 +75,7 @@ pub(super) fn stand_in(hub: Hub, cx: &mut TestAppContext) -> (client_core::Clien
             }
         }
     });
-    (client, Heard { requests, _dir: Arc::new(dir) })
+    (client_core::Hub::caught_up_on(&client), Heard { requests, _dir: Arc::new(dir) })
 }
 
 /// Whether the view has sent anything, which it says the moment it does.

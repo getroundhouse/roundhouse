@@ -130,6 +130,7 @@ impl Transcript {
     /// whether it's at work from its subagent's record, not the chat's, and what that has in the background from the
     /// chat's.
     pub fn records_changed(&mut self, records: &Snapshot, cx: &mut Context<Self>) {
+        self.caught_up_again(cx);
         let id = self.session_id.clone();
         let session = records.session(&id);
         if self.model.borrow().alone.is_none()

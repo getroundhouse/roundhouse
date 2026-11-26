@@ -3,7 +3,7 @@ use crate::attachments::image_format;
 use crate::diagrams::{self, Palette};
 use crate::transcript::Transcript;
 use crate::videos::{Still, VideoPlayer, VideoSource, still};
-use client_core::Client;
+use client_core::{Hub, Round};
 use gpui_kit::component::text::MarkdownExtensions;
 use gpui_kit::{
     App, AppContext as _, Entity, Image, ImageCacheError, ImageFormat, ImageSource, RenderImage, SharedUri, WeakEntity,
@@ -40,8 +40,10 @@ impl<W: Copy + PartialEq + Send + Sync + 'static> Waiter for W {}
 
 pub(super) struct Shared<W> {
     pub(super) session: SessionId,
-    /// Replaced when its owner reconnects.
-    pub(super) client: Mutex<Client>,
+    /// What the images are read from.
+    pub(super) hub: Hub,
+    /// The hub's round when what couldn't be read was last let go of, so it's asked for again once on each new one.
+    pub(super) round: Mutex<Round>,
     pub(super) images: Mutex<HashMap<Source, Linked<W>>>,
     /// Tells what waited for an image that it has come, so each draws it at its size.
     pub(super) arrived: Arrived<W>,
@@ -58,7 +60,8 @@ pub(super) enum Linked<W> {
     /// A video, which plays where it's drawn alone, and whose still is drawn anywhere else, with how many pixels it
     /// covers.
     Video(Entity<VideoPlayer>, Drawn),
-    /// The hub couldn't give it, or it isn't an image, so it's not asked for again on this connection.
+    /// The hub couldn't give it, or it isn't an image, so it's not asked for again until a new connection has caught
+    /// up.
     Unreadable,
 }
 
@@ -81,8 +84,8 @@ pub(super) enum Source {
 impl LinkedImages<Seq> {
     /// The images the texts of the transcript `transcript` point to, each of whose rows is measured again when one it
     /// waited for comes.
-    pub(crate) fn of_transcript(client: Client, session: SessionId, transcript: WeakEntity<Transcript>) -> Self {
-        Self::new(client, session, move |waiting, cx| {
+    pub(crate) fn of_transcript(hub: Hub, session: SessionId, transcript: WeakEntity<Transcript>) -> Self {
+        Self::new(hub, session, move |waiting, cx| {
             let _ = transcript.update(cx, |transcript, cx| {
                 for seq in waiting {
                     transcript.remeasure(seq, cx);
@@ -95,19 +98,23 @@ impl LinkedImages<Seq> {
 impl<W: Waiter> LinkedImages<W> {
     /// The images the texts of the chat `session` point to, where `arrived` tells what waited for one that it came.
     pub(crate) fn new(
-        client: Client,
+        hub: Hub,
         session: SessionId,
         arrived: impl Fn(Vec<W>, &mut App) + Send + Sync + 'static,
     ) -> Self {
-        let images = Mutex::new(HashMap::new());
-        Self(Arc::new(Shared { session, client: Mutex::new(client), images, arrived: Box::new(arrived) }))
+        let (images, round) = (Mutex::new(HashMap::new()), Mutex::new(hub.round()));
+        Self(Arc::new(Shared { session, hub, round, images, arrived: Box::new(arrived) }))
     }
 
-    /// Carries on on a new connection, and asks again for what couldn't be read, in case the connection was why. A
-    /// diagram that couldn't be drawn isn't drawn again, since nothing it's drawn from has changed. A video's player
-    /// carries on on the new connection too.
-    pub(crate) fn reconnect(&self, client: &Client, cx: &mut App) {
-        *self.0.client.lock() = client.clone();
+    /// Once a new connection has caught up, as the hub's round says, asks again for what couldn't be read, in case the
+    /// connection was why, and stops each video playing, since what it was reading went with the last. A diagram that
+    /// couldn't be drawn isn't drawn again, since nothing it's drawn from has changed. Its owner calls this whenever
+    /// it's told something changed.
+    pub(crate) fn caught_up_again(&self, cx: &mut App) {
+        let round = self.0.hub.round();
+        if std::mem::replace(&mut *self.0.round.lock(), round) == round {
+            return;
+        }
         let mut players = Vec::new();
         self.0.images.lock().retain(|source, linked| match linked {
             Linked::Video(player, _) => {
@@ -118,7 +125,7 @@ impl<W: Waiter> LinkedImages<W> {
             Linked::Ready(..) | Linked::Loading(_) => true,
         });
         for player in players {
-            player.update(cx, |player, cx| player.reconnect(client, cx));
+            player.update(cx, VideoPlayer::stop_for_new_connection);
         }
     }
 
@@ -207,13 +214,14 @@ impl<W: Waiter> LinkedImages<W> {
     }
 
     pub(super) fn load(&self, source: Source, cx: &mut App) {
-        let (images, client, session) = (self.clone(), self.0.client.lock().clone(), self.0.session.clone());
+        let (images, hub, session) = (self.clone(), self.0.hub.clone(), self.0.session.clone());
+        let round = hub.round();
         let (renderer, reading) = (cx.svg_renderer(), source.clone());
         let loading = cx.background_spawn(async move {
             let bytes = match reading {
-                Source::Kept(id) => client.attachment_read(&session, &id).ok(),
+                Source::Kept(id) => hub.read_attachment(&session, &id).ok(),
                 Source::Video(id) => {
-                    let video = VideoSource::Kept { client, session, id };
+                    let video = VideoSource::Kept { hub, session, id };
                     return still(&video).map(|still| Read::Video(video, still));
                 }
                 Source::Embedded(uri) => embedded(&uri),
@@ -229,14 +237,23 @@ impl<W: Waiter> LinkedImages<W> {
         cx.spawn(async move |cx| {
             let read = loading.await;
             let linked = cx.update(|cx| match read {
-                Some(Read::Image(image, covers)) => Linked::Ready(image, covers),
+                Some(Read::Image(image, covers)) => Some(Linked::Ready(image, covers)),
                 Some(Read::Video(video, still)) => {
                     let drawn = (still.image.clone(), still.covers);
-                    Linked::Video(cx.new(|cx| VideoPlayer::new(video, still, cx)), drawn)
+                    Some(Linked::Video(cx.new(|cx| VideoPlayer::new(video, still, cx)), drawn))
                 }
-                None => Linked::Unreadable,
+                // Read on a connection before the one that has caught up now, so it's asked for again as it's next
+                // drawn, rather than kept as unreadable.
+                None if images.0.hub.round() != round => None,
+                None => Some(Linked::Unreadable),
             });
-            let waiting = match images.0.images.lock().insert(source, linked) {
+            let mut held = images.0.images.lock();
+            let was = match linked {
+                Some(linked) => held.insert(source, linked),
+                None => held.remove(&source),
+            };
+            drop(held);
+            let waiting = match was {
                 Some(Linked::Loading(waiting)) => waiting,
                 _ => Vec::new(),
             };

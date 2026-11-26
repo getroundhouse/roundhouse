@@ -65,6 +65,12 @@ impl Search {
         Self { progress: Arc::new(Mutex::new(Progress { searched, error: None })), stretches }
     }
 
+    /// One that failed before it asked the hub anything, with `error`.
+    pub(in super::super) fn failed(error: ClientError) -> Self {
+        let (_, stretches) = flume::bounded(1);
+        Self { progress: Arc::new(Mutex::new(Progress { searched: Searched::Failed, error: Some(error) })), stretches }
+    }
+
     /// How far it has got. It's done once the last stretch has been taken.
     pub fn searched(&self) -> Searched {
         let searched = self.progress.lock().searched;

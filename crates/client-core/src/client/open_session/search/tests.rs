@@ -1,5 +1,6 @@
 //! Searching a session on a hub that answers as a test says.
 
+use crate::Hub;
 use std::time::Duration;
 
 use protocol::client::{ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, log};
@@ -12,7 +13,6 @@ use super::super::tests::{
     LAST_PLACE, answered_simply, answers, refused, requests_until_unsubscribed, session, start_hub_answering, until,
 };
 use super::*;
-use crate::RecordsFeed;
 use crate::session_log::SessionLog;
 use crate::stand_in_hub::{self, Does};
 
@@ -93,8 +93,8 @@ fn connect(socket: &std::path::Path) -> Client {
 
 /// The chat's own events, followed by place, as the app follows them.
 fn own(client: &Client) -> OpenSession {
-    let feed = RecordsFeed::start(client);
-    OpenSession::start(client, &feed, &session(), View::Own)
+    let hub = Hub::caught_up_on(client);
+    hub.open_session(&session(), View::Own)
 }
 
 #[test]
@@ -106,15 +106,15 @@ fn what_the_hub_names_is_read_with_what_s_around_it_a_stretch_at_a_time() {
     });
     let client = connect(&socket);
     let helper: SubagentId = "helper".into();
-    let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start(&client, &feed, &session(), View::Subagent(helper.clone()));
+    let hub = Hub::caught_up_on(&client);
+    let open = hub.open_session(&session(), View::Subagent(helper.clone()));
     let mut heard = Vec::new();
     let starts = |reads: Vec<(u64, Option<SubagentId>)>| -> Vec<u64> {
         assert!(reads.iter().all(|(_, of)| of.as_ref() == Some(&helper)), "{reads:?}");
         reads.into_iter().map(|(from, _)| from).collect()
     };
 
-    let search = open.search(&client, needle("parser"), 64);
+    let search = open.search(needle("parser"), 64);
     until("two stretches are read", || reads_from(&requests, &mut heard).len() == 2);
     waiting::thread::for_what_mustnt_happen(A_WHILE);
 
@@ -154,10 +154,10 @@ fn a_chat_has_one_search_at_the_hub_at_a_time_and_one_typed_over_isn_t_asked() {
         queries_asked(&heard).len()
     };
 
-    let first = open.search(&client, needle("pa"), 64);
+    let first = open.search(needle("pa"), 64);
     until("the first is asked", || finds() == 1);
-    drop(open.search(&client, needle("par"), 64));
-    let third = open.search(&client, needle("pars"), 64);
+    drop(open.search(needle("par"), 64));
+    let third = open.search(needle("pars"), 64);
     waiting::thread::for_what_mustnt_happen(A_WHILE);
 
     assert_eq!(finds(), 1, "the others wait while the first is at the hub");
@@ -183,8 +183,8 @@ fn a_query_too_short_isn_t_asked_and_a_failure_says_why_once() {
     let client = connect(&socket);
     let open = own(&client);
 
-    let short = open.search(&client, needle(" a "), 64);
-    let failing = open.search(&client, needle("parser"), 64);
+    let short = open.search(needle(" a "), 64);
+    let failing = open.search(needle("parser"), 64);
     until("the failure is heard", || failing.searched() == Searched::Failed);
 
     assert_eq!(short.searched(), Searched::TooShort);
@@ -216,12 +216,12 @@ fn a_log_that_holds_every_event_needs_no_hub_once_it_knows_how_far_they_go() {
     let parser = EventBody::Notice { level: NoticeLevel::Info, message: "parser".into(), subagent: None };
     let only = SessionEvent { place: Place::new(1), ..protocol::fixtures::event(Seq::new(1), parser) };
 
-    let before = open.search(&client, needle("parser"), 64);
+    let before = open.search(needle("parser"), 64);
     answer.send(()).unwrap();
     until("it knows how far they go", || open.read(SessionLog::last) == at(1));
     open.follow.update(|log| std::sync::Arc::make_mut(log).apply_event(only));
 
-    assert_eq!(open.search(&client, needle("parser"), 64).searched(), Searched::Done);
+    assert_eq!(open.search(needle("parser"), 64).searched(), Searched::Done);
     until("the first is answered", || before.searched() == Searched::Done);
     drop(open);
     let requests = requests_until_unsubscribed(&requests, 1);

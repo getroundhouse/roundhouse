@@ -1,13 +1,14 @@
 //! Following a session whose record says a request waits that no page the view loads holds, as one a subagent in the
 //! background asked long before.
 
+use crate::Hub;
 use protocol::client::{ClientRequest, ClientResponse, ReplyOutcome, log};
 use protocol::model::{OpenApproval, Seq, Session};
 
-use super::super::{OpenSession, View};
+use super::super::View;
 use super::{LAST_SEQ, answered_simply, session, start_hub_answering, until};
+use crate::Client;
 use crate::session_log::RecordedApprovals;
-use crate::{Client, RecordsFeed};
 
 /// Pages before the newest two, which a view opened at the end doesn't load.
 const ASKED_AT: Seq = Seq::new(9);
@@ -37,8 +38,8 @@ fn a_chat_opened_while_a_request_from_long_before_waits_fetches_that_request() {
     let recorded = RecordedApprovals::of(&session);
 
     let client = Client::connect(&socket, "test").unwrap();
-    let feed = RecordsFeed::start(&client);
-    let open = OpenSession::start(&client, &feed, &session, View::Own);
+    let hub = Hub::caught_up_on(&client);
+    let open = hub.open_session(&session, View::Own);
 
     let asked = || open.read(|log| log.open_approvals(&recorded).iter().map(|e| e.seq).collect::<Vec<_>>());
     until("the request is fetched", || asked() == [ASKED_AT]);

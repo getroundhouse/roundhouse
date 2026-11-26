@@ -60,9 +60,9 @@ pub use agents::Agents;
 pub use approval::{Answered, Approval, Given, ToolUseAnswer, ToolUseAsked, claims_of_the_asker};
 pub use attachments::{FileToSend, NotAttached};
 pub use drafts::{CameBack, DraftChange, DraftKey, Drafts, FilesFor, KeptDraft, NotReadBack, ReadBack};
-pub use hub::Hub;
 #[cfg(any(test, feature = "testing"))]
 pub use hub::OnSocket;
+pub use hub::{Hub, Round};
 pub use new_chat::new_chat_settings;
 pub use sending::{NotTaken, Taking, Written};
 

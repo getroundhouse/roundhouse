@@ -11,7 +11,7 @@ use crate::selection::{Asked, Selection};
 use crate::texts::{Of, Texts};
 use client_core::hints::Around;
 use client_core::session_log::{RecordedApprovals, SessionLog};
-use client_core::{Client, OpenSession, RecordsFeed, View};
+use client_core::{Hub, OpenSession, RecordsFeed, Round, View};
 use events::TranscriptEvent;
 use find::Finding;
 use gpui_kit::{
@@ -30,7 +30,10 @@ use std::sync::Arc;
 use crate::DictationHints;
 
 pub struct Transcript {
-    pub(super) client: Client,
+    /// What its session is opened from, and what it asks the hub through.
+    pub(super) hub: Hub,
+    /// The hub's round as it last let go of what it couldn't read or find, which it does once on each new one.
+    pub(super) round: Round,
     pub(super) session_id: SessionId,
     /// What its list is known by, which differs between a chat and the subagent tab showing its work.
     pub(super) list_id: String,
@@ -71,29 +74,29 @@ impl EventEmitter<TranscriptEvent> for Transcript {}
 impl Transcript {
     /// A chat: the agent's own events, with each subagent's call drawn from its record, which `records`, the copy of
     /// the hub's records it's from, keeps, as it does the chat's other records while this shows it.
-    pub fn new(client: Client, records: &RecordsFeed, session: &Session, cx: &mut Context<Self>) -> Self {
+    pub fn new(hub: Hub, records: &RecordsFeed, session: &Session, cx: &mut Context<Self>) -> Self {
         let at_work = AtWork::of(&records.snapshot(), session);
-        Self::start(client, records, session, View::Own, at_work, cx)
+        Self::start(hub, records, session, View::Own, at_work, cx)
     }
 
     /// The work of `subagent`, alone, for the subagent tab, with the chat's records kept in `records`, as
     /// [`Transcript::new`] says. Whether it's at work is its record's to say, and what it has in the background the
     /// chat's, once [`Transcript::records_changed`] passes them on.
     pub fn subagent(
-        client: Client,
+        hub: Hub,
         records: &RecordsFeed,
         session: &Session,
         subagent: SubagentId,
         cx: &mut Context<Self>,
     ) -> Self {
         let view = View::Subagent(subagent.clone());
-        let transcript = Self::start(client, records, session, view, AtWork::default(), cx);
+        let transcript = Self::start(hub, records, session, view, AtWork::default(), cx);
         transcript.model.borrow_mut().alone = Some(subagent);
         transcript
     }
 
     pub(super) fn start(
-        client: Client,
+        hub: Hub,
         records: &RecordsFeed,
         session: &Session,
         view: View,
@@ -104,7 +107,7 @@ impl Transcript {
             View::Subagent(call) => format!("{}-{call}", session.id),
             View::Own => session.id.to_string(),
         };
-        let open = OpenSession::start(&client, records, session, view);
+        let open = hub.open_session(session, view);
         let log = open.version();
         let (rows, loaded) = rows_and_loaded(&log);
         let this = cx.weak_entity();
@@ -114,7 +117,7 @@ impl Transcript {
         let selection = Selection::new(texts.clone(), cx.focus_handle());
         let list = TranscriptList::new(selection.clone(), cx);
         list.set_rows(rows, loaded);
-        let linked = LinkedImages::of_transcript(client.clone(), session.id.clone(), cx.weak_entity());
+        let linked = LinkedImages::of_transcript(hub.clone(), session.id.clone(), cx.weak_entity());
         let references = References::of_transcript(session.workspace_id.clone(), cx.weak_entity());
         references.follow_records(records.clone());
         let ticking = tick(&at_work, cx);
@@ -134,7 +137,8 @@ impl Transcript {
             }
         });
         Self {
-            client,
+            round: hub.round(),
+            hub,
             session_id: session.id.clone(),
             list_id,
             session: open,
@@ -189,15 +193,20 @@ impl Transcript {
         &self.list
     }
 
-    /// Carries on on a new connection to the hub, keeping what's shown and where.
-    pub fn reconnect(&mut self, client: &Client, cx: &mut App) {
-        self.session.reconnect(client);
-        self.client = client.clone();
+    /// Once a new connection has caught up, as the hub's round says, asks again for what failed on the one before, in
+    /// case the connection was why: a search, and the pictures, as every row is drawn again. It's called whenever the
+    /// session or the records change, which they do once a new connection has caught up.
+    pub(super) fn caught_up_again(&mut self, cx: &mut Context<Self>) {
+        let round = self.hub.round();
+        if std::mem::replace(&mut self.round, round) == round {
+            return;
+        }
         self.find_on_new_connection();
-        // Asked for again the next time they're drawn, in case the connection was what failed. The session says it
-        // changed once it has caught up on the new connection, or lost it, and the transcript is drawn again then.
         self.model.borrow_mut().pictures.retain(|_, picture| !matches!(picture, Picture::Unreadable));
-        self.linked.reconnect(client, cx);
+        self.linked.caught_up_again(cx);
+        // A row asks for its pictures as it's drawn, and the list keeps each row it has drawn until it's out of date.
+        self.list.all_out_of_date();
+        cx.notify();
     }
 
     /// The approvals waiting on an answer, newest last.
@@ -236,6 +245,7 @@ impl Transcript {
     /// with what changed since, and tells the list of its rows, so every frame until the next is drawn from a log
     /// whose changes the list has been told of.
     pub(super) fn catch_up(&mut self, cx: &mut Context<Self>) {
+        self.caught_up_again(cx);
         let (log, changes) = self.session.catch_up();
         self.log = log;
         let errors = self.session.take_errors();
@@ -325,18 +335,23 @@ impl Transcript {
     /// row's height: one a tool sent back is as tall as its shape makes it, and a prompt's is as wide as its shape
     /// makes it, which can take the next one onto another line.
     pub(crate) fn load_picture(&mut self, seq: Option<Seq>, attachment: Attachment, cx: &mut Context<Self>) {
-        let (client, session) = (self.client.clone(), self.session_id.clone());
+        let (hub, session) = (self.hub.clone(), self.session_id.clone());
         cx.spawn(async move |this, cx| {
             let id = attachment.id.clone();
-            let picture = cx
+            let (picture, round) = cx
                 .background_spawn(async move {
-                    client
-                        .attachment_read(&session, &attachment.id)
-                        .map_or(Picture::Unreadable, |bytes| Picture::read(attachment.media_type, bytes))
+                    let round = hub.round();
+                    let read = hub.read_attachment(&session, &attachment.id);
+                    (read.map_or(Picture::Unreadable, |bytes| Picture::read(attachment.media_type, bytes)), round)
                 })
                 .await;
             let _ = this.update(cx, |t, cx| {
-                t.model.borrow_mut().pictures.insert(id, picture);
+                // One that couldn't be read before a new connection caught up is asked for again as it's next drawn.
+                if matches!(picture, Picture::Unreadable) && t.hub.round() != round {
+                    t.model.borrow_mut().pictures.remove(&id);
+                } else {
+                    t.model.borrow_mut().pictures.insert(id, picture);
+                }
                 match seq {
                     Some(seq) => t.remeasure(seq, cx),
                     None => cx.notify(),

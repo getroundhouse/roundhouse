@@ -22,7 +22,7 @@ use crate::step_keys::{Steps, with_step_keys};
 use crate::stops::{Within, stop_beside};
 use crate::texts::{Of, TextAt, Texts};
 use client_core::records::Snapshot;
-use client_core::{Client, RecordsFeed};
+use client_core::{Hub, RecordsFeed};
 
 /// What a proposal's line in the chat starts with, and its tab: a way that splits in two, for the options it offers.
 pub const ICON: gpui_kit::assets::IconName = gpui_kit::assets::IconName::Split;
@@ -47,7 +47,7 @@ pub struct ProposalView {
     /// proposal's workspace's repository.
     references: References<()>,
     /// What answers are sent to the hub through.
-    pub(super) client: Client,
+    pub(super) hub: Hub,
     pub(super) selection: Selection,
     /// The selection's, which a press on the page's text takes, so a copy and a select all come to it.
     focus: FocusHandle,
@@ -62,15 +62,15 @@ pub struct ProposalView {
 }
 
 impl ProposalView {
-    /// Shows `proposal`, reading the images it points to from the hub through `client`, and sending its answer there.
-    pub fn new(proposal: Arc<Proposal>, client: Client, cx: &mut Context<Self>) -> Self {
+    /// Shows `proposal`, reading the images it points to from `hub`, and sending its answer there.
+    pub fn new(proposal: Arc<Proposal>, hub: Hub, cx: &mut Context<Self>) -> Self {
         let this = cx.weak_entity();
         // A long text parsed on another thread is drawn once it's in.
         let texts = Texts::new(move |_, cx| {
             let _ = this.update(cx, |_, cx| cx.notify());
         });
         let this = cx.weak_entity();
-        let linked = LinkedImages::new(client.clone(), proposal.session_id.clone(), move |_, cx| {
+        let linked = LinkedImages::new(hub.clone(), proposal.session_id.clone(), move |_, cx| {
             let _ = this.update(cx, |_, cx| cx.notify());
         });
         let (changed, go_to) = (cx.weak_entity(), cx.weak_entity());
@@ -95,7 +95,7 @@ impl ProposalView {
             texts,
             linked,
             references,
-            client,
+            hub,
             selection,
             starts: Vec::new(),
             focus,
@@ -105,12 +105,6 @@ impl ProposalView {
         }
     }
 
-    /// Carries on on a new connection to the hub, and asks again for what couldn't be read.
-    pub fn reconnect(&mut self, client: &Client, cx: &mut App) {
-        self.client = client.clone();
-        self.linked.reconnect(client, cx);
-    }
-
     /// Reads which workspace a pull request the page names is in, and what the hub says of it, from `records` from now
     /// on.
     pub fn follow_records(&self, records: RecordsFeed) {
@@ -118,8 +112,10 @@ impl ProposalView {
     }
 
     /// Takes what the client holds now of what the hub says of the issues and pull requests the page's chips name,
-    /// drawing again those it changed. A client calls this whenever its records change.
+    /// drawing again those it changed, and asks again for the images it couldn't read, once a new connection has caught
+    /// up. A client calls this whenever its records change, which they do once a new connection has caught up.
     pub fn records_changed(&self, records: &Snapshot, cx: &mut App) {
+        self.linked.caught_up_again(cx);
         self.references.records_changed(records, cx);
     }
 

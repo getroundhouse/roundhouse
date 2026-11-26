@@ -2,6 +2,8 @@
 
 use client_core::{FileToSend, NotTaken, Written};
 use gpui_kit::Context;
+use protocol::client::agent::{SessionCancel, SessionCompact};
+use protocol::client::waits::SessionCallOffWait;
 use protocol::model::WaitId;
 use protocol::prompt::Prompt;
 
@@ -43,7 +45,7 @@ impl Transcript {
                 m.pictures.insert(file.attachment.id.clone(), picture);
             }
         }
-        let sending = self.session.start_sending(&self.client, written);
+        let sending = self.session.start_sending(written);
         self.catch_up(cx);
         self.list.go_to_latest();
         cx.notify();
@@ -77,7 +79,7 @@ impl Transcript {
     /// a [`TranscriptEvent::Error`].
     pub fn compact(&mut self, keeping: Option<String>, typed: Option<String>, cx: &mut Context<Self>) {
         let id = self.session_id.clone();
-        let asking = self.client.start(move |client| client.session_compact(&id, keeping.as_deref()));
+        let asking = self.hub.ask(SessionCompact { id, keeping });
         cx.spawn(async move |this, cx| {
             let Err(e) = asking.recv().await else { return };
             let message = client_core::refusals::couldnt("compact", &e);
@@ -92,7 +94,7 @@ impl Transcript {
     /// Calls off the agent's wait `wait` on its pull request, as its line's Stop does.
     pub fn call_off_wait(&mut self, wait: WaitId, cx: &mut Context<Self>) {
         let id = self.session_id.clone();
-        let calling_off = self.client.start(move |client| client.session_call_off_wait(&id, &wait));
+        let calling_off = self.hub.ask(SessionCallOffWait { id, wait });
         cx.spawn(async move |this, cx| {
             if let Err(e) = calling_off.recv().await {
                 let message = client_core::refusals::couldnt("stop the wait", &e);
@@ -104,7 +106,7 @@ impl Transcript {
 
     pub fn cancel(&mut self, cx: &mut Context<Self>) {
         let id = self.session_id.clone();
-        let stopping = self.client.start(move |client| client.session_cancel(&id));
+        let stopping = self.hub.ask(SessionCancel { id });
         cx.spawn(async move |this, cx| {
             if let Err(e) = stopping.recv().await {
                 let _ = this.update(cx, |_, cx| {

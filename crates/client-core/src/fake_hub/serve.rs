@@ -4,9 +4,11 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use parking_lot::Mutex;
 use protocol::attachment::AttachmentBytes;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::log::ReadLimit;
+use protocol::client::subscriptions::Follow;
 use protocol::client::tool_server_saves::SaveWhen;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome, admin,
@@ -55,22 +57,41 @@ fn serve_connection(world: &World, stream: UnixStream) {
 static NEXT_CONNECTION: AtomicU64 = AtomicU64::new(0);
 
 fn serve_requests(world: &World, connection: u64, stream: UnixStream) {
-    let mut writer = stream.try_clone().unwrap();
+    let writer = Arc::new(Mutex::new(stream.try_clone().unwrap()));
     for line in BufReader::new(stream).split(b'\n') {
         let Ok(line) = line else { return };
         let Ok(ClientFrame { id, request }) = frame::decode::<ClientFrame>(&line) else { return };
         world.asked.heard(&request);
+        let lists_the_hub = follows_the_hub(&request);
         let (first, outcome, then) = match answer(world, connection, request) {
             Ok(Outcome::Reply { first, response, then }) => (first, ReplyOutcome::Response(response), then),
             Ok(Outcome::Never) => continue,
             Err(error) => (Vec::new(), ReplyOutcome::Error(error), Vec::new()),
         };
-        for frame in first.into_iter().chain(std::iter::once(HubFrame::Reply { id, outcome })).chain(then) {
-            if writer.write_all(&frame::encode(&frame).unwrap()).is_err() {
-                return;
-            }
+        let (now, later) =
+            if lists_the_hub && world.held_list.holds_back() { (Vec::new(), then) } else { (then, Vec::new()) };
+        if !write(&writer, first.into_iter().chain(std::iter::once(HubFrame::Reply { id, outcome })).chain(now)) {
+            return;
+        }
+        if !later.is_empty() {
+            let (writer, held) = (writer.clone(), world.held_list.clone());
+            std::thread::spawn(move || {
+                held.wait();
+                write(&writer, later);
+            });
         }
     }
+}
+
+/// Whether `request` starts following the hub, whose list of its records follows the answer.
+fn follows_the_hub(request: &ClientRequest) -> bool {
+    matches!(request, ClientRequest::Subscribe(subscribe) if subscribe.start.iter().any(|start| start.follow == Follow::Hub))
+}
+
+/// Writes each of `frames` in turn, whole, and says whether the client was still there for all of them.
+fn write(writer: &Mutex<UnixStream>, frames: impl IntoIterator<Item = HubFrame>) -> bool {
+    let mut writer = writer.lock();
+    frames.into_iter().all(|frame| writer.write_all(&frame::encode(&frame).unwrap()).is_ok())
 }
 
 pub(super) type Answer = Result<Outcome, ApiError>;

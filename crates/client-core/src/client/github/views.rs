@@ -24,9 +24,9 @@ pub struct GithubFeed {
 impl GithubFeed {
     /// Starts following, on a thread of its own, with no chip shown until a view says what it shows, writing what's
     /// sent in `records`, the copy of the same hub's records.
-    pub(in crate::client) fn start(client: &Client, records: Reach<HubRecords>) -> GithubFeed {
+    pub(in crate::client) fn start(connection: Option<&Client>, records: Reach<HubRecords>) -> GithubFeed {
         let follow =
-            Following::start(Some(client), GithubHeld::default(), move || LevelSource::<ReferenceAsk>::new(records));
+            Following::start(connection, GithubHeld::default(), move || LevelSource::<ReferenceAsk>::new(records));
         GithubFeed { follow, next_view: Arc::new(AtomicU64::new(0)) }
     }
 

@@ -9,7 +9,7 @@ mod on_socket;
 #[cfg(test)]
 mod tests;
 
-pub use handle::Hub;
+pub use handle::{Hub, Round};
 pub(crate) use kept::Kept;
 #[cfg(any(test, feature = "testing"))]
 pub use on_socket::OnSocket;

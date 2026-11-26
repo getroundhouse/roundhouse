@@ -20,10 +20,10 @@ fn a_step_takes_over_from_what_was_being_brought_into_view(cx: &mut TestAppConte
         gpui_kit::init(cx);
         look::apply(cx);
     });
-    let (client, _heard) = stand_in(Hub::Waits, cx);
+    let (hub, _heard) = stand_in(Hub::Waits, cx);
     let mut proposal = protocol::fixtures::proposal("p");
     proposal.current.proposed.context = "Why the index matters.".into();
-    let (view, cx) = cx.add_window_view(|_, cx| ProposalView::new(Arc::new(proposal), client, cx));
+    let (view, cx) = cx.add_window_view(|_, cx| ProposalView::new(Arc::new(proposal), hub, cx));
     cx.run_until_parked();
     view.update(cx, |view, _| view.selection.reveal().want(Wanted::End, Of::Document(0)));
 

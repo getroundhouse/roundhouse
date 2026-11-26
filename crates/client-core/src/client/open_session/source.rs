@@ -17,8 +17,8 @@ pub(super) struct SessionSource {
     pub(super) view: View,
     /// The hub has said how far the events go.
     pub(super) placed: bool,
-    /// The build of the hub its events were read from, as the hub's hello said.
-    pub(super) read_from: String,
+    /// The build of the hub its events were read from, as the hub's hello said, once there's been a connection.
+    pub(super) read_from: Option<String>,
     /// The copy of the hub's records the session's own records go into, as its subscription sends them, which wants
     /// them from when the session is opened until it ends.
     pub(super) records: Reach<HubRecords>,
@@ -39,9 +39,13 @@ impl SessionSource {
     /// The cost is that every update reads each open chat's window again, once, though few updates rewrite an event.
     fn read_again_on_another_build(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>) {
         let build = client.hub_version();
-        if self.read_from != build {
-            build.clone_into(&mut self.read_from);
-            change(held).read_again();
+        match &self.read_from {
+            Some(read_from) if read_from == build => {}
+            Some(_) => {
+                self.read_from = Some(build.to_string());
+                change(held).read_again();
+            }
+            None => self.read_from = Some(build.to_string()),
         }
     }
 
