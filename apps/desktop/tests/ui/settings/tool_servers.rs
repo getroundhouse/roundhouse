@@ -15,7 +15,7 @@ const URL: &str = "https://mcp.example.com/mcp";
 const KEY: &str = "a-made-up-key";
 
 /// Opens MCP servers in Settings, once the hub's records have arrived, so Add server is on.
-fn in_servers<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
+pub(super) fn in_servers<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     let mut ui = Ui::open(cx, stack);
     open_settings(&mut ui);
     ui.click("settings-page-mcp");
@@ -32,26 +32,26 @@ fn with_key() -> ToolServerAuthGiven {
     ToolServerAuthGiven::Key { header: "Authorization".into(), key: ToolServerKey::new(KEY) }
 }
 
-fn row(id: &ToolServerId) -> SharedString {
+pub(super) fn row(id: &ToolServerId) -> SharedString {
     format!("mcp-server-{id}").into()
 }
 
-fn more(id: &ToolServerId) -> SharedString {
+pub(super) fn more(id: &ToolServerId) -> SharedString {
     format!("mcp-more-{id}").into()
 }
 
 /// The server the app shows by this name.
-fn named(ui: &Ui<'_>, name: &str) -> Option<ToolServer> {
+pub(super) fn named(ui: &Ui<'_>, name: &str) -> Option<ToolServer> {
     ui.view().records().tool_servers().iter().find(|server| server.name.as_str() == name).cloned()
 }
 
 /// Every server the hub has, by name, as it says when asked, rather than as the app shows it.
-fn the_hubs(stack: &Stack) -> Vec<String> {
+pub(super) fn the_hubs(stack: &Stack) -> Vec<String> {
     stack.client().records().unwrap().tool_servers.iter().map(|server| server.name.to_string()).collect()
 }
 
 /// Types into the field `id`, in place of what's in it.
-fn type_in(ui: &mut Ui<'_>, id: &'static str, typed: &str) {
+pub(super) fn type_in(ui: &mut Ui<'_>, id: &'static str, typed: &str) {
     ui.click(id);
     ui.press("secondary-a");
     ui.input(typed);

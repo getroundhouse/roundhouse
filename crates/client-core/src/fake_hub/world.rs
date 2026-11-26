@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use protocol::client::ApiError;
+use protocol::client::tool_sign_ins::ToolSignInBegun;
 use protocol::event::SessionEvent;
 use protocol::model::{
     Account, AttachmentId, DiffComment, FileContents, GitDiff, GithubAccount, GithubApp, GithubSettings, GithubSignIn,
@@ -95,6 +96,9 @@ pub struct World {
     /// Why the hub couldn't add a tool server, as it answers each time it's asked. `None` refuses it, as the rest of
     /// what would change what the hub holds.
     pub tool_server_add_refused: Option<ApiError>,
+    /// What starting a sign-in to a tool server comes to, as the hub answers each time it's asked. `None` refuses it, as
+    /// the rest of what would change what the hub holds.
+    pub tool_sign_in_answer: Option<Result<ToolSignInBegun, ApiError>>,
     /// Why the hub couldn't look for where an app of your own is installed, as it answers each time it's asked. `None`
     /// refuses it, as the rest of what would change what the hub holds.
     pub app_look_refused: Option<ApiError>,

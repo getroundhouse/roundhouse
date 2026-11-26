@@ -5,6 +5,7 @@
 //! keeps it in memory and tells no client of it. One the hub has no more, as once it has stopped, is started again.
 
 use std::net::Ipv4Addr;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +28,10 @@ pub const REDIRECT_PORTS: [u16; 3] = [17867, 17868, 17869];
 /// The path it listens for them at.
 pub const REDIRECT_PATH: &str = "/callback";
 
+/// How long a sign-in waits, from when it's started, which is as long as GitHub's codes last, and enough for someone to
+/// find a password first. The hub forgets one that has, and a client stops listening for it. *Unconfirmed.*
+pub const SIGN_IN_WAITS: Duration = Duration::from_mins(15);
+
 /// Where a person is sent back to a client listening on `port`, as [`ToolSignInStart::redirect`] is given it.
 pub fn redirect(port: u16) -> String {
     format!("http://{}:{port}{REDIRECT_PATH}", Ipv4Addr::LOCALHOST)
@@ -37,7 +42,7 @@ pub fn redirect(port: u16) -> String {
 /// long as 30 seconds.
 ///
 /// `id` is the client's own, so sending it again is the same sign-in, and answers with the same page while it waits,
-/// however the rest of the request differs. It waits 15 minutes.
+/// however the rest of the request differs. It waits [`SIGN_IN_WAITS`].
 ///
 /// Refused as [`ToolServerAdd`](super::tool_servers::ToolServerAdd) says of a name and a URL, and with `Conflict` when
 /// the hub has a server of the new one's ID. Refused with `NotFound` when it has no record of the server to sign in to

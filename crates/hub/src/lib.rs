@@ -46,7 +46,10 @@ pub use github::{
     PullRequests as GithubPullRequests, Script as GithubScript, StandIn as GithubStandIn,
 };
 #[cfg(any(test, feature = "testing"))]
-pub use tool_sign_in::{AuthorizationPage as ToolServerPage, Script as ToolServerScript, StandIn as ToolServerStandIn};
+pub use tool_sign_in::{
+    AuthorizationPage as ToolServerPage, Person as ToolServerPerson, Refreshing as ToolServerRefreshing,
+    Script as ToolServerScript, StandIn as ToolServerStandIn,
+};
 
 /// The names the hub picks a new workspace's from, so a test can have git hold every one.
 #[cfg(any(test, feature = "testing"))]

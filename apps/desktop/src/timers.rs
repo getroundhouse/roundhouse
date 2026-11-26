@@ -4,6 +4,7 @@
 use std::time::Duration;
 
 use gpui_kit::{App, Global};
+use protocol::client::tool_sign_ins::SIGN_IN_WAITS;
 
 /// The app as it runs has [`Timers::DEFAULT`], and only a test gives it others.
 #[derive(Clone, Copy, Debug)]
@@ -13,6 +14,8 @@ pub struct Timers {
     pub keeping: Duration,
     /// How long the app waits for GitHub to send the person back once its page has opened.
     pub github_sends_back: Duration,
+    /// How long the app waits for a server's page to send the person back, once a sign-in to an MCP server has opened it.
+    pub tool_sign_in_sends_back: Duration,
 }
 
 impl Global for Timers {}
@@ -25,6 +28,8 @@ impl Timers {
         // Time to sign in to GitHub and look over the form, but not so long that a page left open stays a way in.
         // *Unconfirmed.*
         github_sends_back: Duration::from_mins(30),
+        // As long as the hub has a sign-in wait.
+        tool_sign_in_sends_back: SIGN_IN_WAITS,
     };
 
     /// Those the app was given.

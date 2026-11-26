@@ -19,7 +19,7 @@ use crate::timers::Timers;
 use super::app_panel::{AppPanel, AppStep, Choosing, OnGithub};
 use super::app_words;
 use super::kept::{Kept, Panel};
-use super::panel::{Framed, button, buttons, framed, refusal};
+use super::panel::{Framed, button, buttons, framed, refusal, waiting_line};
 
 /// How far a step has got.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -222,15 +222,6 @@ fn install(
 /// What a step says, muted, with what follows it under it.
 fn column(says: String, cx: &App) -> Div {
     v_flex().gap(look::Space::Large).child(div().text_color(look::colors(cx).text_muted).child(says))
-}
-
-/// That a step waits, beside a still circle.
-fn waiting_line(said: impl Into<SharedString>, cx: &App) -> Div {
-    h_flex()
-        .gap(look::Space::Small)
-        .text_color(look::colors(cx).text_muted)
-        .child(Icon::new(Lucide::LoaderCircle).sized(look::IconSize::Regular).flex_none())
-        .child(said.into())
 }
 
 /// What the panel says first: where the app's installation is, once there's one, and otherwise what making one does,

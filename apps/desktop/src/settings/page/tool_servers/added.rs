@@ -6,7 +6,7 @@ use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{AnyElement, App, Div, IntoElement as _, ParentElement as _, SharedString, Styled as _, div};
 use protocol::model::ToolServer;
 
-use super::super::account_row::{self, Detail, Picture, Row, Tone};
+use super::super::account_row::{self, Detail, Picture, Row};
 use super::super::lists::{heading, list as rows_of, said_in_the_list};
 use super::kept::{Kept, Shows};
 use super::servers_page::COLUMNS;
@@ -39,7 +39,7 @@ fn server_row(drawing: &Drawing<'_>, server: &ToolServer, cx: &App) -> AnyElemen
         dim: false,
         default: false,
         how: Some(server.url.host().to_string().into()),
-        detail: words::known_by(&server.auth).map(|said| Detail::Said(said.to_string(), Tone::Plain)),
+        detail: words::known_by(&server.auth).map(|(said, tone)| Detail::Said(said.to_string(), tone)),
         menu: Some(server_menu::menu(drawing, server, cx)),
         card: None,
         under: failed.into_iter().collect(),

@@ -6,7 +6,8 @@
 
 #![cfg(test)]
 
-use desktop::github_app_browsing::{come_back, fetch, form};
+use desktop::browsing::fetch;
+use desktop::github_app_browsing::{come_back, form};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, TestAppContext};
 use hub::{GithubAnswer, GithubScript};
@@ -39,7 +40,7 @@ pub(super) fn on_adalabs() -> GithubAnswer {
 }
 
 /// What the element `id` is labelled, as it tells assistive apps.
-fn label_of(ui: &mut Ui<'_>, id: &'static str) -> String {
+pub(super) fn label_of(ui: &mut Ui<'_>, id: &'static str) -> String {
     ui.frame();
     ui.cx.update_window(ui.handle, |_, window, _| window.find(id).label().unwrap().to_string()).unwrap()
 }

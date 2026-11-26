@@ -46,7 +46,10 @@ impl AppView {
             crate::updates::keep_without_the_hub(self.hub.build_version, cx);
         }
         match shown(state) {
-            Some(Connection::Ready(client)) => self.connection = Connection::Ready(client),
+            Some(Connection::Ready(client)) => {
+                self.connection = Connection::Ready(client);
+                self.tell_tool_sign_in(cx);
+            }
             Some(connection) if !same(&self.connection, &connection) => {
                 // The hub said its status, so the app has heard which release it's on. One newer than the app, which
                 // the app needs to update to talk to, would otherwise hold back every update that says the oldest

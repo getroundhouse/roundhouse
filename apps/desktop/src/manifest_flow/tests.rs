@@ -6,11 +6,12 @@ use std::time::Duration;
 use protocol::client::github_apps::GithubManifestCode;
 use serde_json::json;
 
-use super::answering::Asked;
-use super::browsing::{come_back, fetch, form};
+use super::browsing::{come_back, form};
 use super::listening::Listening;
 use super::page;
-use super::{Bound, Heard, Organization, Under};
+use super::{Bound, Ended, Organization, Under};
+use crate::loopback::browsing::fetch;
+use crate::loopback::page::said;
 
 /// Longer than any test here waits for what it's waiting on.
 const NEVER: Duration = Duration::from_secs(600);
@@ -40,17 +41,6 @@ fn until_refused(address: SocketAddr) {
 }
 
 #[test]
-fn it_listens_only_on_loopback_on_a_port_the_system_picks() {
-    let bound = Bound::new().unwrap();
-
-    let address = address_of(&bound.redirect_url());
-
-    assert_eq!(address.ip().to_string(), "127.0.0.1", "not every address this machine has");
-    assert_ne!(address.port(), 0);
-    assert!(bound.redirect_url().ends_with("/made"), "{}", bound.redirect_url());
-}
-
-#[test]
 fn its_page_posts_the_manifest_it_was_given_to_the_form_under_the_account_or_organization_chosen() {
     let adalabs = Under::Organization(Organization::parse("adalabs").unwrap());
 
@@ -74,19 +64,19 @@ fn its_page_posts_the_manifest_it_was_given_to_the_form_under_the_account_or_org
 #[test]
 fn it_takes_the_code_github_sends_back_with_its_state_and_then_stops() {
     let (listening, _, address) = serving(&Under::Account, NEVER);
-    let heard = listening.heard();
+    let ended = listening.ended();
 
     let back = come_back(listening.page_url(), "a-made-up-code");
 
-    assert_eq!((back.status, back.body), (200, page::said(page::BACK)));
-    assert_eq!(heard.recv_timeout(SOON).unwrap(), Heard::Code(GithubManifestCode::new("a-made-up-code")));
+    assert_eq!((back.status, back.body), (200, said(page::BACK)));
+    assert_eq!(ended.recv_timeout(SOON).unwrap(), Ended::Heard(GithubManifestCode::new("a-made-up-code")));
     until_refused(address);
 }
 
 #[test]
 fn it_refuses_another_state_or_none_and_goes_on_listening() {
     let (listening, _, address) = serving(&Under::Account, NEVER);
-    let heard = listening.heard();
+    let ended = listening.ended();
     let at = |target: &str| format!("http://{address}{target}");
 
     let refused = [
@@ -99,54 +89,8 @@ fn it_refuses_another_state_or_none_and_goes_on_listening() {
     for url in refused {
         assert_eq!(fetch(&url).status, 400, "{url}");
     }
-    assert!(heard.try_recv().is_err(), "it took none of them");
+    assert!(ended.try_recv().is_err(), "it took none of them");
     assert_eq!(come_back(listening.page_url(), "a-made-up-code").status, 200, "and still takes the right one");
-}
-
-#[test]
-fn it_refuses_any_other_path_or_method_and_goes_on_listening() {
-    let (listening, _, address) = serving(&Under::Account, NEVER);
-    let heard = listening.heard();
-    let state = form(&fetch(listening.page_url()).body).state().to_string();
-
-    for target in ["/", "/favicon.ico", &format!("/made/again?code=c&state={state}"), &format!("/?state={state}")] {
-        assert_eq!(fetch(&format!("http://{address}{target}")).status, 404, "{target}");
-    }
-    let posted = Asked::of(&format!("POST /made?code=c&state={state} HTTP/1.1"));
-    assert_eq!(posted, Asked::Elsewhere, "nor by another method");
-    assert_eq!(Asked::of(&format!("GET /made?code=c&state={state} HTTP/2")), Asked::Elsewhere);
-    assert!(heard.try_recv().is_err());
-    assert_eq!(come_back(listening.page_url(), "a-made-up-code").status, 200);
-}
-
-#[test]
-fn what_a_request_asks_is_read_as_a_forms_encoding_has_it() {
-    let asked = Asked::of("GET /made?code=a%2Bb+c&state=s&state=another HTTP/1.1");
-
-    let read = Asked::Made { code: Some(GithubManifestCode::new("a+b c")), state: Some("s".to_string()) };
-    assert_eq!(asked, read, "and the first of two");
-}
-
-#[test]
-fn it_stops_once_its_let_go_of_having_heard_nothing() {
-    let (listening, _, address) = serving(&Under::Account, NEVER);
-    let heard = listening.heard();
-
-    drop(listening);
-
-    until_refused(address);
-    assert_eq!(heard.recv_timeout(SOON), Err(flume::RecvTimeoutError::Disconnected), "it says nothing as it goes");
-}
-
-#[test]
-fn it_stops_once_its_limit_has_passed_saying_so() {
-    let (listening, _, address) = serving(&Under::Account, Duration::from_millis(50));
-    let heard = listening.heard();
-
-    assert_eq!(heard.recv_timeout(SOON).unwrap(), Heard::TimedOut);
-
-    until_refused(address);
-    drop(listening);
 }
 
 #[test]

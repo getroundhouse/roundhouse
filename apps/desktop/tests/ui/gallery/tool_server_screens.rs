@@ -1,22 +1,30 @@
 //! MCP servers' screens in Settings, each of a state its rules in `settings.md` say: the servers, none yet, adding one,
-//! and a row's menu.
+//! signing in to one, and a row's menu.
 
 #![cfg(test)]
 
 use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::worlds::{conversation, one_tool_server, tool_server_refused, tool_servers};
+use super::worlds::{
+    conversation, no_tool_sign_in, one_tool_server, tool_server_refused, tool_servers, tool_sign_in_refused,
+    tool_sign_in_waiting,
+};
 use client_core::fake_hub::World;
 
 /// Shows MCP servers, once Settings is open.
 const SERVERS: Step = Step::Click("settings-page-mcp");
 /// Opens Add server's panel.
 const ADD: Step = Step::Click("mcp-add");
+/// Opens the panel for signing in to a server, from Add server's, with the cursor in its URL.
+const SIGN_IN: Step = Step::Click("mcp-sign-in");
 /// Opens the panel for adding a server a key is sent to, from Add server's, with the cursor in its URL.
 const KEY: Step = Step::Click("mcp-use-key");
 /// Puts the cursor in a name's field.
 const NAME: Step = Step::Click("mcp-name");
+
+/// Adds what a panel's fields say, or starts signing in to it.
+const GO: Step = Step::Click("mcp-panel-add");
 
 /// Rests the pointer on what the panel says under its title, which has no hover of its own.
 const AWAY: Step = Step::Point("mcp-panel-says");
@@ -54,10 +62,89 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::OpenSettings,
             SERVERS,
             ADD,
-            KEY,
+            SIGN_IN,
             Step::Type("https://mcp.linear.app/mcp"),
             NAME,
             Step::Type("Linear (Northwind)"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-sign-in",
+        one_tool_server,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            ADD,
+            SIGN_IN,
+            Step::Type("https://mcp.notion.example/mcp"),
+            NAME,
+            Step::Type("Notion"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-waiting",
+        tool_sign_in_waiting,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            ADD,
+            SIGN_IN,
+            Step::Type("https://mcp.notion.example/mcp"),
+            NAME,
+            Step::Type("Notion"),
+            GO,
+            Step::WaitFor("mcp-open-page"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-no-sign-in",
+        no_tool_sign_in,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            ADD,
+            SIGN_IN,
+            Step::Type("https://mcp.northwind.example/mcp"),
+            NAME,
+            Step::Type("Runbooks"),
+            GO,
+            Step::WaitFor("mcp-key-instead"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-sign-in-refused",
+        tool_sign_in_refused,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            ADD,
+            SIGN_IN,
+            Step::Type("https://mcp.linear.app/mcp"),
+            NAME,
+            Step::Type("Linear (Ada)"),
+            GO,
+            Step::WaitFor("mcp-refused"),
+            AWAY,
+        ],
+    ),
+    mcp(
+        "settings-mcp-again-refused",
+        tool_sign_in_refused,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            SERVERS,
+            Step::Click("mcp-more-linear"),
+            Step::ClickItem("Sign in again"),
+            Step::WaitFor("mcp-refused"),
             AWAY,
         ],
     ),
@@ -73,7 +160,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Type("https://docs.northwind.example/mcp"),
             NAME,
             Step::Type("Linear"),
-            Step::Click("mcp-panel-add"),
+            GO,
             Step::WaitFor("mcp-refused"),
             AWAY,
         ],

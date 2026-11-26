@@ -1,5 +1,5 @@
 //! What signing in to a tool server comes to, in words for a person: why its server has no page to sign in on, and why
-//! it couldn't be started or finished. "MCP servers" in `docs/spec/settings.md` plans the panels that will say it.
+//! it couldn't be started or finished.
 
 use protocol::client::ErrorCode;
 use protocol::client::tool_sign_ins::{NoToolSignIn, ToolSignInBegun, ToolSignInPage};

@@ -2,16 +2,16 @@
 //! button that copies it, and one that opens where to type it, and then how it ended.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::{Icon, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, TestSupportExt as _, div,
 };
-use look::{IconSizing as _, Shaped as _, Typeset as _};
+use look::{Shaped as _, Typeset as _};
 use protocol::model::GithubUserCode;
 
 use super::Drawing;
 use super::kept::Panel;
-use super::panel::{Framed, button, buttons, framed};
+use super::panel::{Framed, button, buttons, framed, waiting_line};
 use super::sign_in::SignInPanel;
 use super::sign_in_words::{self, Stands};
 
@@ -86,11 +86,7 @@ fn waiting(code: &GithubUserCode, address: &str, until: Option<&str>, cx: &App) 
     )
     .icon(Lucide::ExternalLink)
     .on_click(move |_, _, cx| cx.open_url(&address));
-    let line = h_flex()
-        .gap(look::Space::Small)
-        .text_color(colors.text_muted)
-        .child(Icon::new(Lucide::LoaderCircle).sized(look::IconSize::Regular).flex_none())
-        .child(sign_in_words::waiting(until));
+    let line = waiting_line(sign_in_words::waiting(until), cx);
     v_flex()
         .gap(look::Space::Large)
         .child(h_flex().items_center().gap(look::Space::Medium).child(code).child(open))

@@ -295,7 +295,6 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         | R::GithubAppMake(_)
         | R::GithubAppRemove(_)
         | R::ToolServerRemove(_)
-        | R::ToolSignInStart(_)
         | R::ToolSignInFinish(_)
         | R::ToolSignInCancel(_)
         | R::NewWorkspaceDraftKeep(_)
@@ -303,6 +302,10 @@ fn answer(world: &World, connection: u64, request: ClientRequest) -> Answer {
         | R::NewWorkspaceDraftFileRemove(_) => Err(read_only("change anything")),
         R::ToolServerAdd(_) => {
             Err(world.tool_server_add_refused.clone().unwrap_or_else(|| read_only("change anything")))
+        }
+        R::ToolSignInStart(_) => {
+            let answer = world.tool_sign_in_answer.clone();
+            reply(C::ToolSignInBegun(answer.unwrap_or_else(|| Err(read_only("change anything")))?))
         }
         R::GithubAccountConnectGh => github::connect_gh(world),
         R::HubGhLogin => github::gh_login(world),

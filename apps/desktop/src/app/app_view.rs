@@ -4,11 +4,12 @@ use super::{home, hub_source, keeping_workers, menu_button, notifying, quitting,
 use crate::busy::Busy;
 use crate::checkout::Checkout;
 use crate::new_workspace::NewWorkspaceDialog;
+use crate::tool_sign_in::ToolSigningIn;
 use crate::workspace_pane::WorkspacePane;
 use client_core::link::Link;
 use client_core::records::Snapshot;
 use client_core::{Client, Drafts, RecordsFeed};
-use gpui_kit::{AnyWindowHandle, Context, Entity, FocusHandle, ScrollHandle, Task, Window};
+use gpui_kit::{AnyWindowHandle, AppContext as _, Context, Entity, FocusHandle, ScrollHandle, Task, Window};
 use hub_source::HubSource;
 use protocol::client::HubStatus;
 use protocol::model::{SessionId, Workspace, WorkspaceId};
@@ -89,6 +90,8 @@ pub struct AppView {
     pub(super) settings: Option<settings::Shown>,
     /// Where keys go while Settings shows.
     pub(super) settings_focus: FocusHandle,
+    /// Signing in to one of the hub's MCP servers, which goes on whatever the window shows.
+    pub(super) tool_sign_in: Entity<ToolSigningIn>,
     pub(super) window: AnyWindowHandle,
     /// Listening to the link, held so it stops when the view goes away.
     pub(super) following: Option<Task<()>>,
@@ -133,6 +136,8 @@ impl AppView {
         crate::settings::observe(cx, |_, cx| cx.notify()).detach();
         Self::observe_activation(window, cx);
         quitting::ask_first(window, cx);
+        let tool_sign_in = cx.new(|_| ToolSigningIn::default());
+        cx.observe(&tool_sign_in, |_, _, cx| cx.notify()).detach();
         let link = Link::start(hub.clone());
         let mut this = Self {
             hub,
@@ -164,6 +169,7 @@ impl AppView {
             focus,
             settings: None,
             settings_focus: cx.focus_handle(),
+            tool_sign_in,
             window: window.window_handle(),
             following: None,
             update_question: None,
@@ -211,10 +217,17 @@ impl AppView {
     /// records have caught up with it.
     pub(super) fn set_connection(&mut self, connection: Connection, cx: &mut Context<Self>) {
         self.connection = connection;
+        self.tell_tool_sign_in(cx);
         for pane in self.panes.values() {
             pane.update(cx, WorkspacePane::hub_went_away);
         }
         self.read_on_screen(self.in_front, cx);
+    }
+
+    /// Tells a sign-in to an MCP server which hub to ask from now on, if there's one.
+    pub(super) fn tell_tool_sign_in(&self, cx: &mut Context<Self>) {
+        let hub = self.client();
+        self.tool_sign_in.update(cx, |signing_in, cx| signing_in.hub_is(hub, cx));
     }
 
     pub fn client(&self) -> Option<Client> {

@@ -19,7 +19,7 @@ impl AppView {
     /// What Settings shows of the hub, and the hub it asks for a change.
     pub(super) fn settings_of_hub(&self) -> OfHub {
         let asking = self.client().zip(self.feed()).map(|(client, feed)| Asking { client, feed });
-        OfHub { records: self.records.clone(), asking }
+        OfHub { records: self.records.clone(), asking, tool_sign_in: self.tool_sign_in.clone() }
     }
 
     pub(super) fn settings_open(&self) -> bool {

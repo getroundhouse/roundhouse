@@ -50,13 +50,13 @@ thiserror.workspace = true
 velopack.workspace = true
 update-feed.workspace = true
 flume.workspace = true
-percent-encoding.workspace = true
 qrcode.workspace = true
 parking_lot.workspace = true
 ring.workspace = true
 # The copy of a video from another machine that the system's player opens, which goes once it's done with.
 tempfile.workspace = true
 tracing.workspace = true
+url.workspace = true
 # Turns a pasted image an agent can't be given, such as a TIFF, into a PNG, and decodes the images the file tab draws
 # and compares. GPUI already builds these.
 image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }

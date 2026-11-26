@@ -17,6 +17,7 @@ mod made_up;
 mod permissions;
 mod search;
 mod tool_servers;
+mod tool_sign_in;
 
 mod changing;
 pub(crate) use changing::open_settings;
