@@ -8,7 +8,7 @@ An issue is work someone would choose to schedule, or a decision someone has to 
 
 - **Finish it,** in the same PR or one stacked on it. That's the default for whatever the change caused or made worse, such as a case it doesn't handle, a test it didn't write, or a doc it left wrong. It's also the default, in a PR of its own, for a fix nearby that takes under about an hour, such as a race seen while reading the code.
 - **Drop it,** when it isn't worth the time it would take, such as a rename no reader would miss, or a race no test or person has made happen and that would cost little if it did. Say so under **Left open:** in the PR, with why, so the owner can disagree.
-- **File it,** when it's a feature someone using the product would notice is missing, a bug a person could hit that's too large to fix in this change, a decision only the owner can make, or work that waits on something outside the repo, such as a dependency's release. Work no user sees that's too large to do now is filed only when leaving it costs something specific, such as a test that fails at random or a workaround the next change in that code would copy, and dropped otherwise. Search the open issues first, and add to one that already covers it rather than filing another.
+- **File it,** when it's a feature someone using the product would notice is missing, a bug a person could hit that's too large to fix in this change, a decision only the owner can make, or work that waits on something outside the repo, such as a dependency's release, which is labelled `needs/upstream`. Work no user sees that's too large to do now is filed only when leaving it costs something specific, such as a test that fails at random or a workaround the next change in that code would copy, and dropped otherwise. Search the open issues first, and add to one that already covers it rather than filing another.
 
 Dropping a feature, or anything an owner doc asks for, is the owner's to decide, as `docs/standards/who-decides.md` says, so an agent files those rather than dropping them.
 
@@ -67,7 +67,7 @@ For example, an issue that opens:
 
 ## Labels and fields
 
-Labels answer three questions, so any common search is one filter: what kind of issue it is, which part of the system it's in, and whether only the owner can move it.
+Labels answer five questions, each with a prefix of its own, so any common search is one filter: what kind of issue it is, which part of the system it's in, who has to move it next, which platform it's on, and what it's a concern for. A new label takes one of these prefixes, or the question it answers becomes a sixth.
 
 **Kind: exactly one.** It says how the issue closes. An issue with no kind hasn't been triaged.
 
@@ -82,7 +82,14 @@ Labels answer three questions, so any common search is one filter: what kind of 
 
 **Area: one or more.** Areas follow the parts in `docs/reference/layout.md`, such as `area/hub` and `area/transcript`, and small or unbuilt parts share one, such as `area/mobile` for the iOS app and the relay. Each area's description on GitHub says what it covers. Four cover what isn't a part: `area/install` for building, installing and updating the app, `area/dev` for developing Roundhouse itself, `area/docs`, and `area/project` for the license, scope and overall plans. Nothing else becomes an area.
 
-**`needs/owner`:** only the owner can move it, because it needs their decision, their account or device, or their judgment by hand. Agents leave these alone. A PR that changes an owner doc, or a file that enforces a standard, gets it too, and waits for the owner's approval.
+**Needs: at most one,** when someone other than an agent has to move it next. Agents leave these alone until that happens.
+
+- **`needs/owner`:** only the owner can move it, because it needs their decision, their account or device, or their judgment by hand. A PR that changes an owner doc, or a file that enforces a standard, gets it too, and waits for the owner's approval.
+- **`needs/upstream`:** it waits on a project this repo doesn't own, such as a change of ours to offer gpui-kit or Zed, or a release of an agent's CLI. The issue says where it stands there, such as the link to the pull request it was offered in.
+
+**Platform: only when it's on one.** `platform/windows` or `platform/linux`, for an issue that happens there and not on a Mac. The iPhone app is already `area/mobile`.
+
+**Concern: when it cuts across areas.** `concern/security`, for anything that would let someone else read what's yours or act as you. A concern is added when there's a search someone would run for it, not ahead of one.
 
 Everything else uses GitHub's own fields rather than a label:
 
