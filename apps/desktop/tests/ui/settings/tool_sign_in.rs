@@ -6,13 +6,15 @@
 use std::path::PathBuf;
 
 use gpui_kit::TestAppContext;
-use hub::{ToolServerPerson, ToolServerRefreshing, ToolServerScript};
+use hub::{ToolServerAsks, ToolServerPerson, ToolServerRefreshing, ToolServerScript};
 use protocol::model::{ToolServerAuth, ToolSignInStatus};
 use url::Url;
 
 use super::git_app::label_of;
 use super::open_settings;
-use super::tool_servers::{in_servers, more, named, row, the_hubs, type_in};
+use super::tool_servers::{
+    KEY_WAY, NONE_WAY, SIGN_IN_CHOSEN, choose, fill_in, in_servers, more, named, row, the_hubs, type_in,
+};
 use crate::support::{SentBack, Serving, Stack, Ui, files_holding, redirect_of, renewing_often, wait_until};
 
 const WORKS: ToolServerAuth = ToolServerAuth::SignIn { status: ToolSignInStatus::Works };
@@ -23,15 +25,6 @@ fn until_stopped(page: &str) {
     let to = Url::parse(&redirect_of(page)).unwrap();
     let at = (to.host_str().unwrap().to_string(), to.port().unwrap());
     wait_until("the listener to stop", || std::net::TcpStream::connect(&at).is_err());
-}
-
-/// Opens the panel for signing in to a new server, and types its URL and its name.
-fn fill_in(ui: &mut Ui<'_>, url: &str, name: &str) {
-    ui.click("mcp-add");
-    ui.click("mcp-sign-in");
-    ui.input(url);
-    assert!(ui.off("mcp-panel-add"), "until there's a name");
-    type_in(ui, "mcp-name", name);
 }
 
 /// Waits for the browser to be opened on a page, other than `before`, and for the panel to wait there.
@@ -60,8 +53,8 @@ fn auth_of(ui: &Ui<'_>, name: &str) -> Option<ToolServerAuth> {
 fn a_server_is_added_once_its_sign_in_is_approved_in_the_browser_whatever_the_window_shows(cx: &mut TestAppContext) {
     let (stack, serving) = (Stack::new(), Serving::with(ToolServerScript::default()));
     let mut ui = in_servers(cx, &stack);
-    fill_in(&mut ui, &serving.url(), "Linear");
-    assert_eq!(says(&mut ui), "Your browser opens on its own page. Every agent has its tools once you've signed in.");
+    fill_in(&mut ui, "Linear", &serving.url());
+    assert_eq!(says(&mut ui), "Every agent has its tools once it's added.");
 
     ui.click("mcp-panel-add");
 
@@ -101,7 +94,7 @@ fn a_sign_in_thats_refused_says_so_and_can_be_changed_and_tried_again(cx: &mut T
     let script = ToolServerScript { person: ToolServerPerson::Refuses, ..ToolServerScript::default() };
     let (stack, serving) = (Stack::new(), Serving::with(script));
     let mut ui = in_servers(cx, &stack);
-    fill_in(&mut ui, "mcp.example.com/mcp", "Linear");
+    fill_in(&mut ui, "Linear", "mcp.example.com/mcp");
     ui.press("enter");
     let not_a_url = "Couldn't sign in: an MCP server's URL starts with http:// or https://";
     assert_eq!(refused(&mut ui), not_a_url, "before the hub asks anyone");
@@ -122,34 +115,82 @@ fn a_sign_in_thats_refused_says_so_and_can_be_changed_and_tried_again(cx: &mut T
     ui.wait("the server", |ui| auth_of(ui, "Linear") == Some(WORKS) && !ui.has("mcp-panel"));
 }
 
+/// One that anyone can use, then one that can't be signed in to, each added as the panel says it may be.
 #[gpui_kit::test]
-fn a_server_with_no_way_to_sign_in_says_so_and_takes_a_key_in_its_place(cx: &mut TestAppContext) {
-    let script = ToolServerScript { client_documents: false, ..ToolServerScript::default() };
-    let (stack, serving) = (Stack::new(), Serving::with(script));
+fn a_new_server_with_no_sign_in_says_so_in_the_panel_it_was_typed_in_and_is_added_another_way(cx: &mut TestAppContext) {
+    let open = ToolServerScript { asks: ToolServerAsks::Nothing, ..ToolServerScript::default() };
+    let registered = ToolServerScript { client_documents: false, ..ToolServerScript::default() };
+    let (stack, open, registered) = (Stack::new(), Serving::with(open), Serving::with(registered));
+    let only_registered = format!(
+        "Roundhouse can't sign in to this server. {}, where it's signed in to, takes only apps registered with it. It \
+         may take a key.",
+        registered.stand_in.issuer()
+    );
+    let no_sign_in = "This server has no sign-in. Anyone who can reach it can use it. To add it, choose None, or Key if \
+                      it gave you one.";
     let mut ui = in_servers(cx, &stack);
-    fill_in(&mut ui, &serving.url(), "Runbooks");
+    let refused_as_it_was_typed = |ui: &mut Ui<'_>, name: &str, serving: &Serving, why: &str| {
+        fill_in(ui, name, &serving.url());
+        ui.click("mcp-panel-add");
+        assert_eq!(refused(ui), why);
+        assert_eq!(label_of(ui, "mcp-way"), SIGN_IN_CHOSEN, "it doesn't move by itself");
+        assert!(ui.on("mcp-panel-add"), "what was typed is there");
+        assert_eq!(ui.cx.opened_url(), None);
+        assert!(named(ui, name).is_none(), "nothing is added");
+    };
 
+    refused_as_it_was_typed(&mut ui, "Docs", &open, no_sign_in);
+
+    choose(&mut ui, NONE_WAY);
+    assert!(!ui.has("mcp-refused"));
     ui.click("mcp-panel-add");
+    ui.wait("the server anyone can use", |ui| named(ui, "Docs").is_some() && !ui.has("mcp-panel"));
+    let docs = named(&ui, "Docs").unwrap();
+    assert_eq!((docs.url.as_str(), docs.auth), (open.url().as_str(), ToolServerAuth::Neither));
 
-    ui.wait("the offer of a key", |ui| ui.has("mcp-key-instead"));
-    let says = says(&mut ui);
-    assert!(says.starts_with("Roundhouse can't sign in to this server."), "{says}");
-    assert!(says.ends_with("Nothing was added. It may take a key."), "{says}");
-    assert_eq!(ui.cx.opened_url(), None);
-    ui.click("mcp-key-instead");
+    refused_as_it_was_typed(&mut ui, "Runbooks", &registered, &only_registered);
+
+    choose(&mut ui, KEY_WAY);
     ui.input("a-made-up-key");
     ui.press("enter");
-    ui.wait("the server", |ui| named(ui, "Runbooks").is_some() && !ui.has("mcp-panel"));
+    ui.wait("the server with a key", |ui| named(ui, "Runbooks").is_some() && !ui.has("mcp-panel"));
     let runbooks = named(&ui, "Runbooks").unwrap();
-    assert_eq!(runbooks.url.as_str(), serving.url(), "what was typed was kept");
+    assert_eq!(runbooks.url.as_str(), registered.url());
     assert!(matches!(runbooks.auth, ToolServerAuth::Key { .. }));
+}
+
+/// Its server is the hub's already, so there's no way to choose.
+#[gpui_kit::test]
+fn a_server_signed_in_to_again_with_no_way_to_says_only_why_and_closes(cx: &mut TestAppContext) {
+    let (stack, serving) = (Stack::new(), Serving::with(ToolServerScript::default()));
+    let mut ui = in_servers(cx, &stack);
+    let linear = serving.signed_in_elsewhere(&stack);
+    ui.wait("the server", |ui| ui.has(more(&linear)));
+    let only_why = |ui: &mut Ui<'_>, why: &str| {
+        ui.click(more(&linear));
+        ui.click_menu_item("Sign in again");
+        ui.wait("why", |ui| ui.has("mcp-close"));
+        assert_eq!(says(ui), why);
+        assert!(!ui.has("mcp-refused") && !ui.has("mcp-way") && !ui.has("mcp-try-again"));
+        ui.click("mcp-close");
+        assert!(!ui.has("mcp-panel"));
+    };
+    let only_registered = format!(
+        "Roundhouse can't sign in to this server. {}, where it's signed in to, takes only apps registered with it.",
+        serving.stand_in.issuer()
+    );
+
+    serving.stand_in.change(|script| script.client_documents = false);
+    only_why(&mut ui, &only_registered);
+    serving.stand_in.change(|script| script.asks = ToolServerAsks::Nothing);
+    only_why(&mut ui, "This server has no sign-in. Anyone who can reach it can use it.");
 }
 
 #[gpui_kit::test]
 fn cancelling_a_sign_in_that_waits_puts_its_panel_away_and_nothing_listens(cx: &mut TestAppContext) {
     let (stack, serving) = (Stack::new(), Serving::with(ToolServerScript::default()));
     let mut ui = in_servers(cx, &stack);
-    fill_in(&mut ui, &serving.url(), "Linear");
+    fill_in(&mut ui, "Linear", &serving.url());
     ui.click("mcp-panel-add");
     let page = page_opened(&mut ui, None);
 

@@ -1,5 +1,6 @@
-//! Adding a server, by signing in to it, with a key or with neither. A key is handed to the hub and kept nowhere else:
-//! not on disk, not in a log and not in the app's settings. Its field is made anew as it's sent, so nothing of it stays.
+//! Adding a server, in one panel, by signing in to it, with a key or with neither. A key is handed to the hub and kept
+//! nowhere else: not on disk, not in a log and not in the app's settings. Its field is made anew as it's sent, so nothing
+//! of it stays.
 
 use client_core::new_tool_server_id;
 use gpui_kit::{App, Context, Task, Window};
@@ -18,7 +19,7 @@ pub(super) struct AddPanel {
     pub(super) url: Field,
     pub(super) name: Field,
     pub(super) auth: AuthFields,
-    /// What the hub said when it last refused, for the person to read.
+    /// Why it wasn't added when it was last tried, for the person to read.
     pub(super) refused: Option<String>,
     /// The wait for what the hub answers, while it hasn't. It goes with the panel, so an answer to a panel that was
     /// closed, or replaced by another, lands on none.
@@ -37,7 +38,28 @@ pub(super) enum AuthFields {
     Neither,
 }
 
+/// A way a server can know the person, as the panel's dropdown has them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Way {
+    SignIn,
+    Key,
+    Neither,
+}
+
+impl Way {
+    /// Every way, in the dropdown's order.
+    pub(super) const ALL: [Way; 3] = [Way::SignIn, Way::Key, Way::Neither];
+}
+
 impl AuthFields {
+    pub(super) fn way(&self) -> Way {
+        match self {
+            AuthFields::SignIn => Way::SignIn,
+            AuthFields::Key { .. } => Way::Key,
+            AuthFields::Neither => Way::Neither,
+        }
+    }
+
     fn filled(&self, cx: &App) -> bool {
         match self {
             AuthFields::Key { header, key } => header.filled(cx) && key.filled(cx),
@@ -61,13 +83,14 @@ impl AuthFields {
 }
 
 impl Kept {
-    /// Opens the panel for signing in to a new server, with the cursor in its URL.
-    pub(super) fn open_sign_in(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_adding(AuthFields::SignIn, nothing_typed(), window, cx);
+    /// Opens the panel for adding a server, with the cursor in its name.
+    pub(super) fn open_add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let nothing_typed = NewServer { id: new_tool_server_id(), name: String::new(), url: String::new() };
+        self.open_adding(nothing_typed, None, window, cx);
     }
 
-    /// Opens the panel for signing in to a new server, with what was `typed` of one the hub couldn't sign in to, and
-    /// `why`.
+    /// Opens the panel for adding a server as its sign-in was started from, with what was `typed` of it, and `why` that
+    /// came to nothing.
     pub(super) fn open_sign_in_refused(
         &mut self,
         typed: NewServer,
@@ -75,37 +98,33 @@ impl Kept {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.open_adding(AuthFields::SignIn, typed, window, cx);
-        if let Some(panel) = self.adding_mut() {
-            panel.refused = Some(why);
-        }
+        self.open_adding(typed, Some(why), window, cx);
     }
 
-    /// Opens the panel for adding a server a key is sent to, with the cursor in its URL.
-    pub(super) fn open_key(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_adding(key_fields(window, cx), nothing_typed(), window, cx);
-    }
-
-    /// Opens the panel for adding a server a key is sent to, with what was `typed` of it, and the cursor in its key.
-    pub(super) fn open_key_for(&mut self, typed: NewServer, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_adding(key_fields(window, cx), typed, window, cx);
-        if let Some(AuthFields::Key { key, .. }) = self.adding().map(|panel| &panel.auth) {
-            key.input.update(cx, |input, cx| input.focus(window, cx));
-        }
-    }
-
-    /// Opens the panel for adding a server that doesn't know the person, with the cursor in its URL.
-    pub(super) fn open_neither(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_adding(AuthFields::Neither, nothing_typed(), window, cx);
-    }
-
-    fn open_adding(&mut self, auth: AuthFields, typed: NewServer, window: &mut Window, cx: &mut Context<Self>) {
+    fn open_adding(&mut self, typed: NewServer, refused: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         let NewServer { id, name, url } = typed;
-        let name = Field::new(window, cx, |input| input.default_value(name), Kept::add);
-        // The last made, so it has the cursor.
         let url = Field::new(window, cx, |input| input.default_value(url), Kept::add);
-        let panel = AddPanel { id, url, name, auth, refused: None, adding: None };
+        // The last made, so it has the cursor.
+        let name = Field::new(window, cx, |input| input.default_value(name), Kept::add);
+        let panel = AddPanel { id, url, name, auth: AuthFields::SignIn, refused, adding: None };
         self.open(Shows::Adding(Box::new(panel)), cx);
+    }
+
+    /// Has the server know the person by `way`, with the fields that takes, and the cursor in the key where it's a key.
+    /// The name and the URL stay, and what was typed for another way goes.
+    pub(super) fn choose(&mut self, way: Way, window: &mut Window, cx: &mut Context<Self>) {
+        if self.adding().is_none_or(|panel| panel.auth.way() == way) {
+            return;
+        }
+        let auth = match way {
+            Way::SignIn => AuthFields::SignIn,
+            Way::Key => key_fields(window, cx),
+            Way::Neither => AuthFields::Neither,
+        };
+        if let Some(panel) = self.adding_mut() {
+            (panel.auth, panel.refused) = (auth, None);
+        }
+        cx.notify();
     }
 
     fn adding(&self) -> Option<&AddPanel> {
@@ -162,9 +181,4 @@ impl Kept {
 fn key_fields(window: &mut Window, cx: &mut Context<Kept>) -> AuthFields {
     let header = Field::new(window, cx, |input| input.default_value(words::HEADER), Kept::add);
     AuthFields::Key { header, key: Field::token(window, cx, Kept::add) }
-}
-
-/// A new server, with nothing typed of it.
-fn nothing_typed() -> NewServer {
-    NewServer { id: new_tool_server_id(), name: String::new(), url: String::new() }
 }

@@ -4,8 +4,8 @@
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::v_flex;
 use gpui_kit::{
-    App, AppContext as _, Context, Div, Entity, ParentElement as _, Pixels, SharedString, Styled as _, Subscription,
-    Window, div, px,
+    App, AppContext as _, Context, Div, Entity, IntoElement, ParentElement as _, Pixels, SharedString, Styled as _,
+    Subscription, Window, div, px,
 };
 use look::Typeset as _;
 
@@ -64,13 +64,23 @@ pub(super) fn labelled(
     says: impl Into<SharedString>,
     cx: &App,
 ) -> Div {
-    let colors = look::colors(cx);
     let input = look::field(id, input, look::FieldKind::Boxed, look::ControlSize::Regular).accessibility_label(called);
+    captioned(called, input, says, cx)
+}
+
+/// A control `called` something, such as a dropdown among the panel's fields, with what it does said under it, laid out
+/// as a [`labelled`] field is. An assistive app calls it what it calls itself.
+pub(super) fn captioned(
+    called: &'static str,
+    control: impl IntoElement,
+    says: impl Into<SharedString>,
+    cx: &App,
+) -> Div {
     v_flex()
         .w_full()
         .max_w(FIELDS_WIDTH)
         .gap(look::Space::Small)
         .child(div().emphasis().child(called))
-        .child(input)
-        .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child(says.into()))
+        .child(control)
+        .child(div().typeset(look::Type::Detail).text_color(look::colors(cx).text_faint).child(says.into()))
 }

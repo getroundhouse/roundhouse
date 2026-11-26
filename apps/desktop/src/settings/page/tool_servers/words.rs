@@ -1,13 +1,14 @@
 //! What MCP servers says in words: what the list says of itself, what a panel's fields take, what removing a server
 //! asks, and what the hub not doing what was asked means, with why it refused as client-core's `refusals` says it.
 
+use client_core::tool_sign_ins::NoPage;
 use client_core::{ClientError, refusals};
 use gpui_kit::SharedString;
 use protocol::model::{ToolServerAuth, ToolServerName, ToolSignInStatus};
 
 use super::super::account_row::Tone;
+use super::adding::Way;
 use crate::names::MACHINE;
-use crate::tool_sign_in::SignInTo;
 
 /// What a search finds the page by, besides its name.
 pub(super) const ABOUT: &str =
@@ -23,8 +24,8 @@ pub(super) const NONE_ADDED: &str = "None yet. Add one, and sign in to it once f
 /// What's said in place of a row's line when the page was to change something with no hub to ask.
 pub(super) const NO_HUB: &str = "There's no hub to ask.";
 
-/// What signing in to a server takes, among the ways one can know the person.
-pub(super) const SIGN_IN_CHOICE: &str = "Your browser opens on its own page, and the hub renews the sign-in by itself.";
+/// What adding a server does, under its panel's title.
+pub(super) const ADD: &str = "Every agent has its tools once it's added.";
 
 /// What signing in to a server does.
 pub(super) const SIGN_IN: &str = "Your browser opens on its own page. Every agent has its tools once you've signed in.";
@@ -35,14 +36,49 @@ pub(super) const WAITING: &str = "Waiting for you to approve it in your browser.
 /// What it says while the hub is getting what the person approved.
 pub(super) const FINISHING: &str = "Finishing the sign-in.";
 
-/// What a server that doesn't know the person is for.
-pub(super) const NEITHER: &str = "For a server that anyone who can reach it can use.";
-
 /// The header a key is sent in, unless it's changed.
 pub(super) const HEADER: &str = "Authorization";
 
+/// What goes in its field.
+pub(super) const HEADER_SAYS: &str = "Most servers want this one.";
+
 /// What goes in a key's field.
-pub(super) const KEY_SAYS: &str = "What the server gave you. Only the hub keeps it.";
+pub(super) const KEY_SAYS: &str = "What the server gave you.";
+
+/// What `way` is called in the panel's dropdown.
+pub(super) fn way_called(way: Way) -> &'static str {
+    match way {
+        Way::SignIn => "Sign in",
+        Way::Key => "Key",
+        Way::Neither => "None",
+    }
+}
+
+/// What the dropdown's menu says beside `way`.
+pub(super) fn way_note(way: Way) -> &'static str {
+    match way {
+        Way::SignIn => "In your browser",
+        Way::Key => "Sent with every request",
+        Way::Neither => "Anyone can use it",
+    }
+}
+
+/// What's said under the dropdown while `way` is chosen.
+pub(super) fn way_says(way: Way) -> &'static str {
+    match way {
+        Way::SignIn => "Your browser opens on its own page, and the hub renews the sign-in by itself.",
+        Way::Key => "Sent in a header with every request, such as an API key. Only the hub keeps it.",
+        Way::Neither => "For a server that anyone who can reach it can use.",
+    }
+}
+
+/// What the panel's main button does, by the way that's chosen.
+pub(super) fn add_does(way: Way) -> &'static str {
+    match way {
+        Way::SignIn => "Sign in",
+        Way::Key | Way::Neither => "Add",
+    }
+}
 
 /// What's said under a URL's field, where `there` is the name of the server that's at what's typed, if one is.
 pub(super) fn url_says(there: Option<&ToolServerName>) -> SharedString {
@@ -75,12 +111,13 @@ pub(super) fn approve_on(host: &str) -> String {
     format!("Approve Roundhouse on {host}, in the browser on this {MACHINE}. Roundhouse never sees your password.")
 }
 
-/// What a sign-in to what `to` says has no way, which is `why`, says.
-pub(super) fn no_way(why: &str, to: &SignInTo) -> String {
-    match to {
-        SignInTo::New(_) => format!("{why} Nothing was added. It may take a key."),
-        SignInTo::Again { .. } => why.to_string(),
-    }
+/// Why a new server wasn't signed in to, where there's no page to sign in on, with how else it may be added.
+pub(super) fn add_another_way(no_page: &NoPage) -> String {
+    let add = match no_page {
+        NoPage::NoSignIn => "To add it, choose None, or Key if it gave you one.",
+        NoPage::CantSignIn(_) => "It may take a key.",
+    };
+    format!("{} {add}", no_page.why())
 }
 
 /// What a row says of how its server knows the person, where that isn't plain, and how it's said.

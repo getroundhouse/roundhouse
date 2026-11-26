@@ -97,7 +97,7 @@ impl ToolSigningIn {
         let Stands::Starting(Starting { bound }) = stands else { return };
         let stands = match answer.map(begun) {
             Ok(Begun::Page(page)) => self.wait(&id, &page, bound, cx),
-            Ok(Begun::NoPage(why)) => Stands::NoWay(why),
+            Ok(Begun::NoPage(no_page)) => Stands::NoWay(no_page),
             Err(e) => Stands::Failed(couldnt_start(&e)),
         };
         self.under_way = Some(UnderWay { id, to, stands });

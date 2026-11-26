@@ -12,17 +12,36 @@ use crate::refusals::{couldnt, gone};
 pub enum Begun {
     /// The page to open in their browser.
     Page(ToolSignInPage),
-    /// There's none, and why, for a client to say beside its offer of a key.
-    NoPage(String),
+    /// There's none, for this reason.
+    NoPage(NoPage),
+}
+
+/// Why there's no page, which says what a client can offer in its place for a server that isn't added yet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NoPage {
+    /// The server has no sign-in, since anyone can use it.
+    NoSignIn,
+    /// It can't be signed in to, as this says, for a person.
+    CantSignIn(String),
+}
+
+impl NoPage {
+    /// Why, for a person.
+    pub fn why(&self) -> &str {
+        match self {
+            NoPage::NoSignIn => "This server has no sign-in. Anyone who can reach it can use it.",
+            NoPage::CantSignIn(why) => why,
+        }
+    }
 }
 
 /// What `begun` comes to.
 pub fn begun(begun: ToolSignInBegun) -> Begun {
     Begun::NoPage(match begun {
         ToolSignInBegun::Page { page } => return Begun::Page(page),
-        ToolSignInBegun::NoSignIn => "This server has no sign-in. Anyone who can reach it can use it.".to_string(),
-        ToolSignInBegun::NoWay { why } => no_way(&why),
-        ToolSignInBegun::Unknown => "Update this app to sign in to this server.".to_string(),
+        ToolSignInBegun::NoSignIn => NoPage::NoSignIn,
+        ToolSignInBegun::NoWay { why } => NoPage::CantSignIn(no_way(&why)),
+        ToolSignInBegun::Unknown => NoPage::CantSignIn("Update this app to sign in to this server.".to_string()),
     })
 }
 
@@ -66,43 +85,42 @@ mod tests {
     fn a_start_is_a_page_or_why_there_is_none() {
         let page = ToolSignInPage::new("https://auth.example.com");
         let said = |why| begun(ToolSignInBegun::NoWay { why });
-        let no_page = |said: &str| Begun::NoPage(said.to_string());
+        let cant_sign_in = |said: &str| Begun::NoPage(NoPage::CantSignIn(said.to_string()));
         let authorization_server = || "https://auth.example.com".to_string();
 
         assert_eq!(begun(ToolSignInBegun::Page { page: page.clone() }), Begun::Page(page));
-        assert_eq!(
-            begun(ToolSignInBegun::NoSignIn),
-            no_page("This server has no sign-in. Anyone who can reach it can use it.")
-        );
+        assert_eq!(begun(ToolSignInBegun::NoSignIn), Begun::NoPage(NoPage::NoSignIn));
+        assert_eq!(NoPage::NoSignIn.why(), "This server has no sign-in. Anyone who can reach it can use it.");
+        assert_eq!(NoPage::CantSignIn("Why".into()).why(), "Why");
         assert_eq!(
             said(NoToolSignIn::NoAuthorizationServer),
-            no_page(
+            cant_sign_in(
                 "Roundhouse can't sign in to this server. It asks for a sign-in, and doesn't say where to sign in."
             )
         );
         assert_eq!(
             said(NoToolSignIn::OnlyRegisteredClients { authorization_server: authorization_server() }),
-            no_page(
+            cant_sign_in(
                 "Roundhouse can't sign in to this server. https://auth.example.com, where it's signed in to, takes only \
                  apps registered with it."
             )
         );
         assert_eq!(
             said(NoToolSignIn::OtherServer { said: "https://other.example".into() }),
-            no_page(
+            cant_sign_in(
                 "Roundhouse can't sign in to this server. It says its sign-in is for https://other.example, which isn't \
                  its address."
             )
         );
         assert_eq!(
             said(NoToolSignIn::NoS256 { authorization_server: authorization_server() }),
-            no_page(
+            cant_sign_in(
                 "Roundhouse can't sign in to this server. https://auth.example.com, where it's signed in to, doesn't say \
                  it keeps a sign-in safe with PKCE."
             )
         );
-        assert_eq!(said(NoToolSignIn::Unknown), no_page("Roundhouse can't sign in to this server."));
-        assert_eq!(begun(ToolSignInBegun::Unknown), no_page("Update this app to sign in to this server."));
+        assert_eq!(said(NoToolSignIn::Unknown), cant_sign_in("Roundhouse can't sign in to this server."));
+        assert_eq!(begun(ToolSignInBegun::Unknown), cant_sign_in("Update this app to sign in to this server."));
     }
 
     #[test]

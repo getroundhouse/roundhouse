@@ -396,12 +396,12 @@ The app's own settings, and where they're shown.
   ![MCP servers with none added](screens/settings-mcp-none.png)
 
 - **Each server has one sign-in, so a second account at the same server is a second server,** with a name of its own, such as `Linear (Northwind)`. A server's key is its own in the same way.
-- **Adding a server asks first how it knows who you are, as Connect account does: a sign-in, a key, or neither.** Each choice then asks for the server's URL and a name, and a key also for its header, `Authorization` unless changed. A URL that's already there says so, and which server it is, the first by name where there are two, and stops nothing. What the hub refuses is said in red in the panel, which stays open. The key shows only as dots, and what's typed there is dropped as it's sent, so after a refusal it's typed again. Adding a server with a key or with neither asks nothing of it. *Unconfirmed:* what Neither asks for, and which of two servers is said.
+- **Adding a server is one panel: its name, its URL, and a dropdown, Authentication, of how it knows who you are, which is Sign in, Key or None, as the owner decided.** It opens on Sign in, with the cursor in the name, and has more fields only where the choice needs them. Key has the header, `Authorization` unless changed, and the key, in one row, with the header as wide as the dropdown and the key taking the rest. Under the dropdown is what the choice means, which for Key says that only the hub keeps it, said once in the panel, and each row of the dropdown's menu has a note that says it in a few words. The panel's button is Sign in for Sign in, and Add otherwise. Choosing another way keeps the name and the URL, drops what was typed as a key and clears a refusal, and choosing Key puts the cursor in the key. A URL that's already there says so, and which server it is, the first by name where there are two, and stops nothing. What the hub refuses is said in red in the panel, which stays open. The key shows only as dots, and what's typed there is dropped as it's sent, so after a refusal it's typed again. Adding a server with Key or None asks nothing of it. *Unconfirmed:* the panel's words, the menu's notes, the header and the key sharing a row, where the panel says that only the hub keeps the key, what choosing another way keeps and where choosing Key puts the cursor, what None asks for, and which of two servers is said.
 - **A key for `Authorization` with no space in it is sent as `Bearer` and the key,** since a server gives out a key alone and the header holds its scheme too. One with a space has its scheme already, such as `Basic`, and is sent as it is, as a key in any other header is. *Unconfirmed.*
 
-  **Add server, open, with the ways a server can know you.** *Unconfirmed.*
+  **Adding a server, with the dropdown open.** *Unconfirmed.*
 
-  ![Choosing how an MCP server knows who you are](screens/settings-mcp-choosing.png)
+  ![Choosing how an MCP server knows who you are](screens/settings-mcp-authentication.png)
 
   **Adding a server a key is sent to.** *Unconfirmed.*
 
@@ -415,22 +415,28 @@ The app's own settings, and where they're shown.
 
   ![Adding an MCP server whose URL is already there](screens/settings-mcp-second.png)
 
-  **Adding a server with neither, refused, since its name is taken.** *Unconfirmed.*
+  **Adding a server with None, refused, since its name is taken.** *Unconfirmed.*
 
   ![Adding an MCP server, refused in red in the panel](screens/settings-mcp-refused.png)
 
 - **A server's name can be whatever you like, up to 64 characters on one line, and the app always shows it as you typed it.** Agents call the server by a name Roundhouse makes from it, which every agent's CLI takes: its ASCII letters, digits and `-` as they are, with each run of anything else as one `_`, and no `_` or `-` at either end, so `Linear (Northwind)` is `Linear_Northwind`. That name is at most 32 characters, and `server` when nothing is left. A name whose agents' name another server has, in any case, is refused, saying which server, and that agents would call both the same where the names differ, and so is one that agents would call `roundhouse`, which Roundhouse's own tools are. *Unconfirmed:* the 32 characters, `server`, and refusing a name that agents would call the same.
-- **Signing in opens the server's page in the browser on this device, and the panel waits, with a button that opens it again.** Nothing is added until it's approved. It works for a hub on another machine too, since the browser sends you back to this device, at a port the app listens on only while it waits. The hub first asks the server how it's signed in to, which can take half a minute, and the panel says so. A server that turns out to have no way to sign in says why, with a button to use a key instead, which keeps the URL and the name. A server that anyone can use, and that has a sign-in too, is signed in to when you choose to sign in to it. *Unconfirmed:* signing in to a server that anyone can use.
+- **Signing in opens the server's page in the browser on this device, and the panel waits, with a button that opens it again.** Nothing is added until it's approved. It works for a hub on another machine too, since the browser sends you back to this device, at a port the app listens on only while it waits. The hub first asks the server how it's signed in to, which can take half a minute, and the panel says so. A server that anyone can use, and that has a sign-in too, is signed in to when you choose to sign in to it. *Unconfirmed:* signing in to a server that anyone can use.
+- **The dropdown never moves by itself, as the owner decided.** When a new server turns out to have no way to sign in, the panel is there again as it was typed, still on Sign in, with why in red where every other refusal is. A server that anyone can use says so, and to choose None, or Key if it gave you one. One that can't be signed in to says why, and that it may take a key. A server that's signed in to again and has no way says only why, in the sign-in's own panel, with Close. *Unconfirmed:* the words, and what signing in again says.
+
+  **Signing in to a new server that anyone can use.** *Unconfirmed.*
+
+  ![Adding an MCP server that has no sign-in, with the ways to add it said in red](screens/settings-mcp-open-server.png)
+
+  **Signing in to a new server that can't be signed in to.** *Unconfirmed.*
+
+  ![Adding an MCP server that can't be signed in to, with why in red](screens/settings-mcp-cant-sign-in.png)
+
 - **What the browser is sent back with goes to the hub alone,** and the app keeps none of it once the hub has answered. Only the first redirect with the sign-in's own state counts, and any other is dropped, with the sign-in still waiting. The browser's page says whether you approved it and to go back to Roundhouse. The app opens only a page on the web. *Unconfirmed.*
 - **A running agent is connected to a server once you sign in to it, or sign in again,** if it was started with the server and isn't connected to it. Claude and Codex connect to it then, in the middle of a turn too, and Antigravity at your next prompt. An agent started before the server was added has it from its next start. Nothing is written in the chat. *Unconfirmed.*
 
   **Waiting for a sign-in to be approved in the browser.** *Unconfirmed.*
 
   ![Waiting for a sign-in to an MCP server](screens/settings-mcp-waiting.png)
-
-  **A server with no way to sign in, with the offer of a key.** *Unconfirmed.*
-
-  ![An MCP server that can't be signed in to](screens/settings-mcp-no-sign-in.png)
 
 - **A sign-in that comes to nothing says why, in red, with a way to try again,** whether it was refused, it failed, nobody approved it within 15 minutes, the hub no longer has it, or its server's name was taken meanwhile. For a new server that's the panel it was started from, with what was typed still in it. For one there is, it's the sign-in's own, with Try again. *Unconfirmed.*
 - **The app has one sign-in to a hub's servers at a time, and it goes on with Settings closed.** MCP servers shows it wherever it was started. Starting another cancels it, and so does Cancel, after which nothing listens. If the connection to the hub is lost once you've approved it, it's finished when the connection is back. *Unconfirmed.*

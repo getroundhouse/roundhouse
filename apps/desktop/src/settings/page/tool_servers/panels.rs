@@ -1,24 +1,32 @@
-//! The page's panels: Add server's, with the ways a server can know the person, the one for what adding it that way
-//! takes, and the sign-in's.
+//! The page's panels: the one for adding a server, with what the way it knows the person takes, and the sign-in's.
 
-use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::v_flex;
-use gpui_kit::{AnyElement, App, Entity, IntoElement, ParentElement as _, Styled as _, Window, div};
+use gpui_kit::component::{h_flex, v_flex};
+use gpui_kit::{
+    Anchor, AnyElement, App, Div, Entity, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div, px,
+};
 
-use super::super::field::labelled;
-use super::super::panel::{self, Framed, button, buttons, choice, choices};
+use super::super::field::{FIELDS_WIDTH, Field, captioned, labelled};
+use super::super::panel::{self, Framed, button, buttons};
 use super::Drawing;
-use super::adding::{AddPanel, AuthFields};
+use super::adding::{AddPanel, AuthFields, Way};
 use super::kept::{Kept, Panel, Shows};
 use super::{sign_in_panel, words};
 
 /// The page's name, which its panels' parts are known by.
 const PAGE: &str = "mcp";
 
+/// What the dropdown of the ways a server can know the person is called.
+const AUTHENTICATION: &str = "Authentication";
+
+/// How wide that dropdown is, and the header's field under it, so their ends line up.
+const WAY_WIDTH: Pixels = px(200.);
+
+/// How wide the dropdown's menu is, for a way and its note.
+const WAYS_WIDTH: Pixels = px(320.);
+
 /// `open`, whichever it is.
 pub(super) fn draw(drawing: &Drawing<'_>, open: &Panel, cx: &App) -> AnyElement {
     let framed = match &open.shows {
-        Shows::Choosing => choosing(drawing, cx),
         Shows::Adding(adding) => add(drawing, adding, cx),
         Shows::SigningIn => match drawing.kept.read(cx).signing_in.read(cx).under_way() {
             Some(under_way) => sign_in_panel::sign_in(drawing, under_way, cx),
@@ -33,66 +41,64 @@ pub(super) fn draw(drawing: &Drawing<'_>, open: &Panel, cx: &App) -> AnyElement 
     panel::framed(PAGE, &open.place, framed, laid_out, cx)
 }
 
-/// Add server, open: each way a server can know the person.
-fn choosing(drawing: &Drawing<'_>, cx: &App) -> Framed {
-    let off = !drawing.can_ask(cx);
-    let (by_sign_in, with_key, with_neither) = (drawing.kept.clone(), drawing.kept.clone(), drawing.kept.clone());
-    let sign_in = button("mcp-sign-in", "Sign in", false, off, move |window, cx| {
-        by_sign_in.update(cx, |kept, cx| kept.open_sign_in(window, cx));
-    });
-    let key = button("mcp-use-key", "Paste a key", false, off, move |window, cx| {
-        with_key.update(cx, |kept, cx| kept.open_key(window, cx));
-    });
-    let neither = button("mcp-use-neither", "Add it", false, off, move |window, cx| {
-        with_neither.update(cx, |kept, cx| kept.open_neither(window, cx));
-    });
-    let says = "A header sent with every request, such as an API key. Only the hub keeps it.";
-    let ways = [
-        choice(Lucide::Globe, "Sign in to it", None, words::SIGN_IN_CHOICE, sign_in, cx),
-        choice(Lucide::KeyRound, "Use a key", None, says, key, cx),
-        choice(Lucide::Server, "Neither", None, words::NEITHER, neither, cx),
-    ];
-    Framed {
-        title: "Add an MCP server".into(),
-        lead: "How does it know who you are?".into(),
-        body: Some(choices(ways, cx).into_any_element()),
-        refused: None,
-        buttons: buttons().child(cancel(drawing.kept)),
-    }
-}
-
-/// The panel for adding a server: its URL and its name, the key and the header it's sent in, where it has one, and Add,
-/// or Sign in, which is off until there's each, and while the hub hasn't answered. A URL that's already there says which
-/// server it is, and stops nothing.
+/// The panel for adding a server: its name, its URL and how it knows the person, with the header and the key it takes
+/// for a key, and Add, or Sign in, which is off until there's each, and while the hub hasn't answered. A URL that's
+/// already there says which server it is, and stops nothing.
 fn add(drawing: &Drawing<'_>, adding: &AddPanel, cx: &App) -> Framed {
     let there = drawing.records.tool_server_at(&adding.url.value(cx)).map(|server| &server.name);
+    let chosen = adding.auth.way();
+    let key = match &adding.auth {
+        AuthFields::Key { header, key } => Some(key_row(header, key, cx)),
+        AuthFields::SignIn | AuthFields::Neither => None,
+    };
     let fields = v_flex()
         .gap(look::Space::Large)
+        .child(labelled("Name", "mcp-name", &adding.name.input, words::name_says(there), cx))
         .child(labelled("URL", "mcp-url", &adding.url.input, words::url_says(there), cx))
-        .child(labelled("Name", "mcp-name", &adding.name.input, words::name_says(there), cx));
-    let (title, lead, does, fields) = match &adding.auth {
-        AuthFields::SignIn => ("Sign in to a server", words::SIGN_IN, "Sign in", fields),
-        AuthFields::Key { header, key } => (
-            "Use a key",
-            "A header sent with every request agents make to the server.",
-            "Add",
-            fields
-                .child(labelled("Header", "mcp-header", &header.input, "Most servers want Authorization.", cx))
-                .child(labelled("Key", "mcp-key", &key.input, words::KEY_SAYS, cx)),
-        ),
-        AuthFields::Neither => ("Add an MCP server", words::NEITHER, "Add", fields),
-    };
+        .child(captioned(AUTHENTICATION, h_flex().child(ways(drawing, chosen)), words::way_says(chosen), cx))
+        .children(key);
     let act = drawing.kept.clone();
-    let add = button("mcp-panel-add", does, true, !drawing.kept.read(cx).can_add(cx), move |window, cx| {
+    let off = !drawing.kept.read(cx).can_add(cx);
+    let add = button("mcp-panel-add", words::add_does(chosen), true, off, move |window, cx| {
         act.update(cx, |kept, cx| kept.add(window, cx));
     });
     Framed {
-        title: title.into(),
-        lead: lead.into(),
+        title: "Add an MCP server".into(),
+        lead: words::ADD.into(),
         body: Some(fields.into_any_element()),
         refused: adding.refused.clone(),
         buttons: buttons().child(cancel(drawing.kept)).child(add),
     }
+}
+
+/// The dropdown of the ways a server can know the person, with `chosen` in it.
+fn ways(drawing: &Drawing<'_>, chosen: Way) -> look::MenuButton {
+    let kept = drawing.kept.clone();
+    look::button("mcp-way", look::ButtonKind::Outlined, look::ControlSize::Regular, words::way_called(chosen))
+        .accessibility_label(format!("{AUTHENTICATION}: {}", words::way_called(chosen)))
+        .width(WAY_WIDTH)
+        .menu(Anchor::TopLeft, move |menu: look::Menu, _, _| {
+            Way::ALL.into_iter().fold(menu.width(WAYS_WIDTH), |menu, way| {
+                let kept = kept.clone();
+                let row = look::menu_row(words::way_called(way)).note(words::way_note(way), look::NoteKind::Detail);
+                menu.row(row.chosen(way == chosen).on_choose(move |window, cx| {
+                    kept.update(cx, |kept, cx| kept.choose(way, window, cx));
+                }))
+            })
+        })
+}
+
+/// The header a key is sent in and the key, in a row as wide as the fields over it.
+fn key_row(header: &Field, key: &Field, cx: &App) -> Div {
+    let header = labelled("Header", "mcp-header", &header.input, words::HEADER_SAYS, cx);
+    let key = labelled("Key", "mcp-key", &key.input, words::KEY_SAYS, cx);
+    h_flex()
+        .items_start()
+        .w_full()
+        .max_w(FIELDS_WIDTH)
+        .gap(look::Space::Large)
+        .child(div().flex_none().w(WAY_WIDTH).child(header))
+        .child(div().flex_1().min_w_0().child(key))
 }
 
 /// Cancel, which puts the panel away, and any wait for the hub's answer with it.

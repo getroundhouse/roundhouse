@@ -1,5 +1,6 @@
 //! MCP servers in Settings, against a real hub: one another client adds, adding one with a key and one with neither, a
-//! name that's taken, and removing one, which asks first. Every server and key is plainly made up.
+//! name that's taken, changing the way before one is added, and removing one, which asks first. Every server and key is
+//! plainly made up.
 
 #![cfg(test)]
 
@@ -8,11 +9,20 @@ use std::path::PathBuf;
 use gpui_kit::{SharedString, TestAppContext};
 use protocol::model::{ToolServer, ToolServerAuth, ToolServerAuthGiven, ToolServerId, ToolServerKey};
 
+use super::git_app::label_of;
 use super::open_settings;
 use crate::support::{Stack, Ui, files_holding};
 
 const URL: &str = "https://mcp.example.com/mcp";
 const KEY: &str = "a-made-up-key";
+
+/// The dropdown's ways, as its menu lists them.
+const SIGN_IN_WAY: &str = "Sign in, In your browser";
+pub(super) const KEY_WAY: &str = "Key, Sent with every request";
+pub(super) const NONE_WAY: &str = "None, Anyone can use it";
+
+/// What the dropdown says while a sign-in is chosen.
+pub(super) const SIGN_IN_CHOSEN: &str = "Authentication: Sign in";
 
 /// Opens MCP servers in Settings, once the hub's records have arrived, so Add server is on.
 pub(super) fn in_servers<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
@@ -57,6 +67,21 @@ pub(super) fn type_in(ui: &mut Ui<'_>, id: &'static str, typed: &str) {
     ui.input(typed);
 }
 
+/// Opens the panel for adding a server, with the cursor in its name, and types its name and its URL.
+pub(super) fn fill_in(ui: &mut Ui<'_>, name: &str, url: &str) {
+    ui.click("mcp-add");
+    assert_eq!(label_of(ui, "mcp-way"), SIGN_IN_CHOSEN);
+    ui.input(name);
+    assert!(ui.off("mcp-panel-add"), "until there's a URL");
+    type_in(ui, "mcp-url", url);
+}
+
+/// Chooses how the server knows the person, from the dropdown.
+pub(super) fn choose(ui: &mut Ui<'_>, way: &str) {
+    ui.click("mcp-way");
+    ui.click_menu_item(way);
+}
+
 /// One walk through adding servers, with one another client adds first, whose name is then taken.
 #[gpui_kit::test]
 fn a_server_is_added_with_a_key_only_the_hub_keeps_or_with_neither_and_a_name_thats_taken_says_so(
@@ -68,13 +93,11 @@ fn a_server_is_added_with_a_key_only_the_hub_keeps_or_with_neither_and_a_name_th
     let linear = added_elsewhere(&stack, "elsewhere", "Linear", ToolServerAuthGiven::Neither);
     ui.wait("the server another client added", |ui| ui.has(row(&linear)) && !ui.has("mcp-none-added"));
 
-    ui.click("mcp-add");
+    fill_in(&mut ui, "linear", URL);
     assert!(ui.off("mcp-add"), "while a panel is open");
-    ui.click("mcp-use-key");
-    ui.input(URL);
-    type_in(&mut ui, "mcp-name", "linear");
+    choose(&mut ui, KEY_WAY);
     assert!(ui.off("mcp-panel-add"), "until there's a key");
-    type_in(&mut ui, "mcp-key", KEY);
+    ui.input(KEY);
     ui.click("mcp-panel-add");
     ui.wait("the hub's refusal", |ui| ui.has("mcp-refused"));
     let refused = "Couldn't add it: agents would call linear and the MCP server Linear the same, Linear";
@@ -93,15 +116,47 @@ fn a_server_is_added_with_a_key_only_the_hub_keeps_or_with_neither_and_a_name_th
     assert_eq!(files_holding(everything, KEY, "tool-servers"), Vec::<PathBuf>::new(), "nothing else has the key");
     assert_eq!(files_holding(everything, KEY, "").len(), 1, "the hub's tool servers do");
 
-    ui.click("mcp-add");
-    ui.click("mcp-use-neither");
+    fill_in(&mut ui, "Docs", URL);
+    choose(&mut ui, NONE_WAY);
     assert!(!ui.has("mcp-key") && !ui.has("mcp-header"));
-    ui.input(URL);
-    type_in(&mut ui, "mcp-name", "Docs");
     ui.click("mcp-panel-add");
     ui.wait("the server with neither", |ui| named(ui, "Docs").is_some() && !ui.has("mcp-panel"));
     assert_eq!(named(&ui, "Docs").unwrap().auth, ToolServerAuth::Neither);
     assert_eq!(the_hubs(&stack), ["Docs", "Linear", "Runbooks"]);
+}
+
+/// The name that's kept is taken, so the hub's refusal of it says it was.
+#[gpui_kit::test]
+fn changing_how_a_server_knows_you_keeps_its_name_and_url_and_drops_the_key_and_a_refusal(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_servers(cx, &stack);
+    let linear = added_elsewhere(&stack, "elsewhere", "Linear", ToolServerAuthGiven::Neither);
+    ui.wait("the server another client added", |ui| ui.has(row(&linear)));
+    fill_in(&mut ui, "linear", URL);
+    choose(&mut ui, KEY_WAY);
+    ui.input(KEY);
+    assert!(ui.on("mcp-panel-add"));
+
+    choose(&mut ui, SIGN_IN_WAY);
+
+    assert!(!ui.has("mcp-key") && !ui.has("mcp-header"));
+    assert!(ui.on("mcp-panel-add"), "with the name and the URL");
+    choose(&mut ui, KEY_WAY);
+    assert!(ui.off("mcp-panel-add"), "the key went");
+    ui.input(KEY);
+    ui.press("enter");
+    ui.wait("the hub's refusal", |ui| ui.has("mcp-refused"));
+    choose(&mut ui, NONE_WAY);
+    assert!(!ui.has("mcp-refused"), "it was of the way before");
+    ui.click("mcp-panel-add");
+    ui.wait("the same refusal", |ui| ui.has("mcp-refused"));
+    let refused = "Couldn't add it: agents would call linear and the MCP server Linear the same, Linear";
+    assert_eq!(label_of(&mut ui, "mcp-refused"), refused);
+    type_in(&mut ui, "mcp-name", "Docs");
+    ui.press("enter");
+    ui.wait("the server", |ui| named(ui, "Docs").is_some() && !ui.has("mcp-panel"));
+    let docs = named(&ui, "Docs").unwrap();
+    assert_eq!((docs.url.as_str(), docs.auth), (URL, ToolServerAuth::Neither));
 }
 
 #[gpui_kit::test]

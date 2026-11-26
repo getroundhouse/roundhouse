@@ -1,5 +1,6 @@
 //! The panel of the sign-in there is, as it stands: that the hub is finding out how, the page to approve it on, with a
-//! button that opens it again, or why it came to nothing, with what to do about that.
+//! button that opens it again, or why one to a server the hub has came to nothing, with what to do about that. One to a
+//! new server that came to nothing is the panel it was added from again.
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{h_flex, v_flex};
@@ -9,7 +10,7 @@ use super::super::panel::{Framed, button, buttons, waiting_line};
 use super::Drawing;
 use super::kept::Kept;
 use super::words;
-use crate::tool_sign_in::{SignInTo, Stands, UnderWay};
+use crate::tool_sign_in::{Stands, UnderWay};
 
 pub(super) fn sign_in(drawing: &Drawing<'_>, under_way: &UnderWay, cx: &App) -> Framed {
     let (to, stands) = (under_way.to(), under_way.stands());
@@ -24,7 +25,7 @@ pub(super) fn sign_in(drawing: &Drawing<'_>, under_way: &UnderWay, cx: &App) -> 
             (words::approve_on(waiting.host()), Some(body))
         }
         Stands::Finishing(_) => (words::SIGN_IN.to_string(), Some(waits(words::FINISHING.to_string(), cx))),
-        Stands::NoWay(why) => (words::no_way(why, to), None),
+        Stands::NoWay(no_page) => (no_page.why().to_string(), None),
         Stands::Failed(_) => (words::SIGN_IN.to_string(), None),
     };
     let refused = match stands {
@@ -40,21 +41,17 @@ pub(super) fn sign_in(drawing: &Drawing<'_>, under_way: &UnderWay, cx: &App) -> 
     }
 }
 
-/// Cancel while it's under way, and Close once it's not, with the way to go on there is: a key in its place for a new
-/// server that can't be signed in to, and another try for one that came to nothing.
+/// Cancel while it's under way, and Close once it's not, with another try for one that came to nothing.
 fn buttons_for(drawing: &Drawing<'_>, under_way: &UnderWay, cx: &App) -> Div {
     let off = !drawing.can_ask(cx);
     let put_away = |id, label| button(id, label, false, false, act(drawing.kept, Kept::put_away_sign_in));
-    let go_on = match (under_way.stands(), under_way.to()) {
-        (Stands::Starting(_) | Stands::Waiting(_) | Stands::Finishing(_), _) => {
+    let go_on = match under_way.stands() {
+        Stands::Starting(_) | Stands::Waiting(_) | Stands::Finishing(_) => {
             return buttons().child(put_away("mcp-cancel", "Cancel"));
         }
-        (Stands::NoWay(_), SignInTo::New(_)) => {
-            Some(button("mcp-key-instead", "Use a key", true, off, act(drawing.kept, Kept::use_a_key_instead)))
-        }
-        // It has a name and a URL already, which a key can't be given to.
-        (Stands::NoWay(_), SignInTo::Again { .. }) => None,
-        (Stands::Failed(_), _) => {
+        // It would come to the same, and the hub has the server already, which a key can't be given to.
+        Stands::NoWay(_) => None,
+        Stands::Failed(_) => {
             Some(button("mcp-try-again", "Try again", true, off, act(drawing.kept, Kept::try_sign_in_again)))
         }
     };
