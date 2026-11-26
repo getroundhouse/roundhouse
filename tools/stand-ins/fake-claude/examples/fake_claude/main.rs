@@ -341,6 +341,10 @@ fn control(out: &Out, value: &Value, conversation: &Path) -> Option<Input> {
         Some("get_usage") => {
             answer_control(out, &value["request_id"], Ok(account::usage(conversation)));
         }
+        Some("mcp_reconnect") => {
+            let server = value["request"]["serverName"].as_str().unwrap_or_default();
+            answer_control(out, &value["request_id"], mcp::reconnect(server));
+        }
         other => panic!("unexpected control request {other:?}"),
     }
     None

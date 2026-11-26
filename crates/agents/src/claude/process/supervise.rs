@@ -7,6 +7,7 @@ use std::sync::atomic::Ordering;
 
 use crate::claude::login_check::Output;
 use crate::claude::normalize::Normalizer;
+use crate::claude::tool_servers::ToolServers;
 use protocol::capability::approvals::ApprovalMode;
 use protocol::event::EventBody;
 use protocol::worker::AgentSpec;
@@ -62,6 +63,7 @@ pub(super) async fn supervise(
         let Some(resume) = recovery.correct(&stderr_tail, &output).await else { break (status, stderr_tail) };
         shared.held_output.lock().clear();
         shared.pending_controls.lock().clear();
+        *shared.tool_servers.lock() = ToolServers::default();
         shared.context.lock().relaunched();
         shared.usage.lock().relaunched();
         if let Some(tap) = &shared.tap {

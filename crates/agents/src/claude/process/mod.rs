@@ -20,6 +20,7 @@ mod launch;
 mod output;
 mod plan;
 mod prompt;
+mod reconnect;
 mod recovery;
 mod run_files;
 mod startup;

@@ -200,7 +200,15 @@ Observed on 0.171.0 through `thread/start`, with a `CODEX_HOME` of the trial's o
 - **A trusted project's `.codex/config.toml` adds its servers,** and its `url` is used over the user's for the same name.
 - **A server that refuses its `Authorization` header with 401 fails to start,** as `mcpServer/startupStatus/updated` says. The thread starts without it.
 
-`config/mcpServer/reload` and `mcpServer/oauth/login` are in the generated schema, and weren't tried.
+### While an agent runs
+
+Observed on 0.171.0 with a scripted model, and a `HOME` and `CODEX_HOME` of the trial's own.
+
+- **`config/mcpServer/reload` retries every server that failed,** and adds what's in `config.toml` to the thread's own `config`. It takes no parameters and answers before they've started. Connected servers and their running calls are left alone. The model has the tools from its next call to `exec`, in the same turn too. Each server that fails again is reported again, and a `config.toml` that doesn't parse fails it with `-32603`.
+- **`thread/resume` of a running thread ignores its `config`,** with no error. After `thread/unsubscribe`, between turns, it's applied, and the thread's background commands are killed.
+- **`notifications/tools/list_changed` is ignored** unless `features.mcp_tool_list_changed` is on, which is under development.
+
+`mcpServer/oauth/login` is in the generated schema, and wasn't tried.
 
 ### What it says of them
 
@@ -218,7 +226,7 @@ Observed on 0.171.0 as above, with stand-in servers given an `Authorization` hea
 
 - **It asks such a server for no OAuth metadata,** whether the server starts or fails, and reports its `authStatus` as `bearerToken`. Given no header, it does ask, as `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`, at the root and under the server's path.
 - **A server that answers `initialize` with a JSON-RPC error fails to start, and `mcpServer/startupStatus/updated` gives the error's message,** so the worker's words for a key that was refused reach the card of the chat's servers.
-- **It sent no GET for a stream,** and `initialize` again as `mcpServerStatus/list` was asked.
+- **It sends a GET for a stream only to a server that gives an `Mcp-Session-Id`.** It sent `initialize` again as `mcpServerStatus/list` was asked.
 
 ## Compacting when asked
 

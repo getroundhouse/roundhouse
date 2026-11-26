@@ -99,6 +99,15 @@ Observed on 1.5.16 as above, with stand-in servers given an `Authorization` head
 - **It asks for OAuth metadata even so:** `/.well-known/oauth-protected-resource`, under the server's path and at the root, without the header, whether the server connects or answers `initialize` with a JSON-RPC error. A 404 to each didn't stop the server connecting.
 - **`session/new` succeeds where a server answers `initialize` with a JSON-RPC error,** and says nothing of it.
 
+## Its MCP servers while an agent runs
+
+Observed on 1.5.16 with a scripted model, a `HOME` of the trial's own and stand-in servers.
+
+- **A server that failed is tried again at each `session/prompt`,** after a JSON-RPC error or a 401. The turn doesn't wait, so its tools come in that turn or the next. The model isn't told of the failure.
+- **`session/resume` and `session/load` in the same process connect servers they add,** and leave connected ones alone. One left out is dropped only if a resume or load added it. Mid-turn, either ends the turn as `cancelled`. A daemon survived a `session/resume` between turns.
+- **`notifications/tools/list_changed` is heard only over `subscriptions/listen`,** from a server on `2026-07-28`, and the model has the tools from the next turn. It opens no GET stream.
+- **Each server's `Authorization` header is kept in the conversation's `.db`,** under `~/.gemini/antigravity-cli/conversations/`.
+
 ## Resume, accounts, titles and local state
 
 - **Resume:** `agy` stores conversation state under `~/.gemini/antigravity-cli/` (`conversations/<sessionId>.db`, `annotations/<sessionId>.pbtxt` and `brain/<sessionId>/`). `session/resume` of a conversation whose `.db` file is gone, unreadable or corrupt, or that never existed, fails with `-32603` and `Failed to read session <id>; retry, or load it with session/load` in each case, on 1.5.9. So the adapter falls back to `session/new`, with a warning, only when that file is gone from the home it was given, and otherwise lets the launch fail rather than lose a conversation that may still be there. When a resumed conversation sends its next Gemini request, `agy` 1.5.9 appends a trailing `role: "user"` `<SYSTEM_MESSAGE>` notice (reporting that subagents and background tasks stopped across server restart) after the prompt's `<USER_REQUEST>` entry.

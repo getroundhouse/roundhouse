@@ -84,9 +84,21 @@ Observed on 2.1.330, with servers that say which config they came from, a config
 - **A server in `--mcp-config` replaces one of the same name on disk, whole,** so what `init` says of a server with the name of one of the hub's is said of the hub's. It did so over the user, local and project scopes at once. Without it, the local server was used over the project's and the user's, and the project's over the user's.
 - **Two names for one URL are two servers.** One in the user scope and one in `--mcp-config` both connected.
 - **`--strict-mcp-config` leaves only the servers in `--mcp-config`.**
-- **`mcp_set_servers`, a control request, adds servers to a running agent.** It connected a new one, and replaced the one of the same name that `--mcp-config` gave.
 - **A server in `--mcp-config` can have any name, and its tools' names aren't always its own.** Servers named `Linear (Northwind)`, `Café.docs` and `linear_dash-1` all connected. A tool's name is made from its server's, with what can't be in a tool's name as underscores. Of two servers whose names become a prefix of each other, `Linear (Northwind)` and `Linear  Northwind`, `mcp_status` listed one's tools under both.
 - **A server that refuses its configured `Authorization` header with 401 is `failed`.** The CLI doesn't try OAuth, as the table above says.
+
+### While an agent runs
+
+Observed on 2.1.330 with a scripted model, a home and config directory of the trial's own, and stand-in servers. Only `tengu_glowing_lark` was set among the flags the CLI fetches.
+
+- **`mcp_reconnect` with a `serverName` starts a server that failed,** and its reply holds no header. It answers `success`, or `error` with the server's own message. The model has the tools from its next request, in the same turn too, and `init` lists them from the next turn. A prompt sent meanwhile waits for it.
+- **A server that failed as the CLI started isn't tried again by itself,** in 4 s and a new turn. The model is told it failed, with the server's JSON-RPC error message.
+- **`mcp_set_servers` replaces only the servers earlier ones named.** One from `--mcp-config` is kept until a set names it, and then the next set without it removes it, so a set never names `roundhouse`. A server named again unchanged keeps its connection, calls and tasks. Dropping a server fails its running call. A `--resume` doesn't remember one.
+- **`mcp_set_servers`'s reply has no header in it,** as `mcp_status`'s does.
+- **`mcp_toggle` writes to `.claude.json`,** in `disabledMcpServers`, and a resume keeps the server off.
+- **Reconnecting a server with a task running stopped the CLI asking about it** for the 3 s watched.
+- **`notifications/tools/list_changed` makes it list a server's tools again,** over `subscriptions/listen` or a 2025 server's GET stream, where the server declares `listChanged`. It doesn't handshake again unless a 2025 session gets 404.
+- **No MCP tasks were offered with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` set.**
 
 ### What `init` says of them
 

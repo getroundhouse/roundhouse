@@ -1,9 +1,10 @@
 //! The MCP servers `--mcp-config` names, reached as the real CLI reaches one over HTTP, on protocol `2026-07-28`, with
 //! every header the version asks for. As it launches, it reads the file once, and asks each server `server/discover`
-//! and `tools/list`, and a server that refuses either has failed, as the real CLI marks it. `mcp:TOOL JSON` calls one of
-//! the worker's tools, and `mcp:SERVER/TOOL JSON` one of another server's, and what the tool says comes back as the
-//! call's result. With `CLAUDE_AUTO_BACKGROUND_TASKS=1`, a call
-//! offers to take an MCP task, and one answered with a task goes on in the background, as the real CLI's does.
+//! and `tools/list`, and a server that refuses either has failed, as the real CLI marks it, until `mcp_reconnect` has it
+//! asked again. Each `init` lists which is which. `mcp:TOOL JSON` calls one of the worker's tools, and
+//! `mcp:SERVER/TOOL JSON` one of another server's, and what the tool says comes back as the call's result. With
+//! `CLAUDE_AUTO_BACKGROUND_TASKS=1`, a call offers to take an MCP task, and one answered with a task goes on in the
+//! background, as the real CLI's does.
 //!
 //! `crates/worker/tests/serve/main.rs` writes the same request by hand, so a change to what the real CLI sends goes in
 //! both.
@@ -12,7 +13,7 @@ use std::collections::BTreeMap;
 use std::io::{Read as _, Write as _};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
@@ -48,8 +49,20 @@ fn poll_default_ms() -> u64 {
 /// the call that reached it, rather than the test waiting on the turn.
 const PATIENCE: Duration = Duration::from_secs(15);
 
-/// Each server by its name, once it has answered, or why it failed.
-static CONNECTED: OnceLock<BTreeMap<String, Result<Server, String>>> = OnceLock::new();
+/// Each server `--mcp-config` names.
+static SERVERS: Mutex<BTreeMap<String, Given>> = Mutex::new(BTreeMap::new());
+
+/// A server as `--mcp-config` spells it, and as it answered last, or why it failed.
+struct Given {
+    spelled: Value,
+    connected: Result<Arc<Server>, String>,
+}
+
+impl Given {
+    fn connect(name: &str, spelled: &Value) -> Self {
+        Self { spelled: spelled.clone(), connected: Server::connect(name, spelled).map(Arc::new) }
+    }
+}
 
 /// Held while the tasks kept beside the conversation are read and written again, since each is followed on a thread
 /// of its own.
@@ -75,19 +88,33 @@ pub(crate) fn connect(args: &[String], state: &Path) {
     std::fs::copy(&config, kept).unwrap();
     let config: Value = serde_json::from_slice(&std::fs::read(config).unwrap()).unwrap();
     let servers = config["mcpServers"].as_object().unwrap();
-    let connected = servers.iter().map(|(name, server)| (name.clone(), Server::connect(name, server)));
-    let _ = CONNECTED.set(connected.collect());
+    let given = servers.iter().map(|(name, spelled)| (name.clone(), Given::connect(name, spelled)));
+    *SERVERS.lock() = given.collect();
 }
 
-/// The servers it was launched with, and whether each connected, as the real CLI's `init` lists them, or `None` with only
-/// the worker's, so only a test that gives it another is told of any.
-pub(crate) fn listed() -> Option<Value> {
-    let connected = CONNECTED.get().filter(|connected| connected.keys().any(|name| name != SERVER))?;
-    let listed = connected.iter().map(|(name, server)| {
-        let status = if server.is_ok() { "connected" } else { "failed" };
-        json!({ "name": name, "status": status })
-    });
-    Some(listed.collect())
+/// Connects to the server `name` again, as `mcp_reconnect` asks, and answers once it has, or with why it failed, as the
+/// real CLI does.
+pub(crate) fn reconnect(name: &str) -> Result<Value, String> {
+    let spelled = SERVERS.lock().get(name).map(|given| given.spelled.clone());
+    let again = Given::connect(name, &spelled.ok_or(format!("Server not found: {name}"))?);
+    let answer = again.connected.clone().map(|_| Value::Null);
+    SERVERS.lock().insert(name.to_string(), again);
+    answer
+}
+
+/// The servers it was launched with, and whether each connected, with every server's tools, as the real CLI's `init` lists
+/// them, or `None` with only the worker's, so only a test that gives it another is told of any.
+pub(crate) fn listed() -> Option<(Vec<Value>, Vec<String>)> {
+    let given = SERVERS.lock();
+    given.keys().find(|name| *name != SERVER)?;
+    let (mut servers, mut tools) = (Vec::new(), Vec::new());
+    for (name, Given { connected, .. }) in &*given {
+        let status = if connected.is_ok() { "connected" } else { "failed" };
+        servers.push(json!({ "name": name, "status": status, "source": "dynamic" }));
+        let listed = connected.iter().flat_map(|server| &server.tools);
+        tools.extend(listed.map(|tool| format!("mcp__{name}__{tool}")));
+    }
+    Some((servers, tools))
 }
 
 /// Calls a tool, which the model knows as `mcp__SERVER__TOOL`, as the real CLI names a server's tools.
@@ -112,15 +139,16 @@ enum Answered {
 }
 
 /// The worker's server, as [`connected`] says.
-fn server() -> Result<&'static Server, String> {
+fn server() -> Result<Arc<Server>, String> {
     connected(SERVER)
 }
 
 /// The server `name`, once it has answered. `Err` with why when it can't be reached, as the real CLI says when a server
 /// isn't there.
-fn connected(name: &str) -> Result<&'static Server, String> {
-    let server = CONNECTED.get().and_then(|connected| connected.get(name)).ok_or("no such MCP server was given")?;
-    server.as_ref().map_err(|failed| format!("{name} failed: {failed}"))
+fn connected(name: &str) -> Result<Arc<Server>, String> {
+    let servers = SERVERS.lock();
+    let given = servers.get(name).ok_or("no such MCP server was given")?;
+    given.connected.clone().map_err(|failed| format!("{name} failed: {failed}"))
 }
 
 /// How `server` answered a call to `tool`, for the agent's call `tool_use_id`. `Err` with why when it can't be

@@ -53,7 +53,7 @@ fn new(id: &str, name: &str) -> ToolSignInTo {
 }
 
 /// The server `id`, called `name`, signed in to by the sign-in of the same ID, with the access token `made-up-{id}`.
-pub(super) fn signed_in(servers: &ToolServers, id: &str, name: &str) -> ToolServer {
+pub(crate) fn signed_in(servers: &ToolServers, id: &str, name: &str) -> ToolServer {
     signed_in_for(servers, id, name, granted(&format!("made-up-{id}")))
 }
 
@@ -64,7 +64,7 @@ pub(super) fn signed_in_for(servers: &ToolServers, id: &str, name: &str, granted
 }
 
 /// Signing in to the server `id` again, by the sign-in `again`, with the access token `made-up-again`.
-pub(super) fn again(servers: &ToolServers, id: &str) -> Result<ToolServerChange, ApiError> {
+pub(crate) fn again(servers: &ToolServers, id: &str) -> Result<ToolServerChange, ApiError> {
     let to = servers.signing_in(ToolSignInTo::Again { id: id.into() })?;
     servers.keep_sign_in("again".into(), &to, as_first(granted("made-up-again")), GIVEN_AT_MS)
 }

@@ -211,4 +211,6 @@ The hub reads these from a worker, or from its own machine, each time a client a
 | Where each login, key and device token is | `login_file` of `accounts` and `github_accounts`, `github_apps.key_file` and `made_from`, `tool_servers.secret_file`, and `devices.token_sha256` |
 | The sign-ins to tool servers in progress, and how the last renewal of each went | The hub's memory |
 | What workers are sent for the tool servers, with their keys and access tokens, which each worker has in memory too | The hub's memory, worked out from `tool_servers` and the files of their keys and sign-ins |
+| Which sign-in each run has had each of its tool servers by | The hub's memory |
+| Which sign-ins to tool servers each worker has the tokens of | The hub's memory, on the worker's link, from the sets it has applied |
 | What each client shows of GitHub, and when the hub reads GitHub next | The hub's memory |

@@ -4,13 +4,13 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use protocol::model::{ToolServer, ToolServerAuth, ToolServerId};
-use protocol::worker::{ProxiedServer, ServerHeader, ServerHeaderValue, ServerSignIn, ToolServersSet};
+use protocol::model::{ToolServer, ToolServerAuth, ToolServerId, ToolSignInId};
+use protocol::worker::{ProxiedServer, ServerHeader, ServerHeaderValue, ServerSignIn, TokenNumber, ToolServersSet};
 use tokio::sync::watch;
 use tracing::{error, warn};
 
-use super::ToolServers;
 use super::secret::ToolServerSecret;
+use super::{SignedInBy, ToolServers};
 use crate::login_files::{Locked, LoginFile, Stored};
 use crate::store::StoreError;
 
@@ -19,6 +19,7 @@ use crate::store::StoreError;
 #[derive(Clone, Default, PartialEq, Eq)]
 pub(crate) struct SentToolServers {
     sent: Vec<ProxiedServer>,
+    signed_in: SignedInBy,
     left_out: Vec<(ToolServerId, LeftOut)>,
 }
 
@@ -26,6 +27,11 @@ impl SentToolServers {
     /// What a worker is set.
     pub(crate) fn set(&self) -> ToolServersSet {
         ToolServersSet { servers: self.sent.clone() }
+    }
+
+    /// Those of them that are signed in to, so a worker that's set them has their tokens.
+    pub(crate) fn signed_in(&self) -> &SignedInBy {
+        &self.signed_in
     }
 }
 
@@ -111,7 +117,12 @@ impl ToolServers {
         for server in self.store.tool_servers()? {
             let file = secrets.get(&server.id).and_then(Option::as_ref);
             match knows_by(&server.auth, files, file) {
-                Ok(known) => worked_out.sent.push(proxied(server, known)),
+                Ok(known) => {
+                    if let Known::SignedIn { by, .. } = &known {
+                        worked_out.signed_in.set(server.id.clone(), by.clone());
+                    }
+                    worked_out.sent.push(proxied(server, known));
+                }
                 Err(why) => worked_out.left_out.push((server.id, why)),
             }
         }
@@ -123,8 +134,13 @@ impl ToolServers {
 enum Known {
     Not,
     By(ServerHeader),
-    /// With its access token, unless it needs signing in to.
-    SignedIn(Option<ServerHeader>, ServerSignIn),
+    /// Its access token, which is the token `number` of those it has had, given by a sign-in and what renewed it since.
+    SignedIn {
+        header: ServerHeader,
+        number: TokenNumber,
+        by: ToolSignInId,
+    },
+    NeedsSignIn,
 }
 
 /// What a server that knows the person by `auth` knows them by, with the key or the access token `file` holds.
@@ -142,11 +158,12 @@ fn knows_by(
         ToolServerAuth::SignIn { status: _ } => {
             let ToolServerSecret::SignIn(kept) = secret(files, file)? else { return Err(LeftOut::Gone) };
             Ok(match kept.tokens {
-                Some(tokens) => {
-                    let header = ServerHeader::bearer(tokens.access.as_str());
-                    Known::SignedIn(Some(header), ServerSignIn::Works { token: kept.number })
-                }
-                None => Known::SignedIn(None, ServerSignIn::NeedsSignIn),
+                Some(tokens) => Known::SignedIn {
+                    header: ServerHeader::bearer(tokens.access.as_str()),
+                    number: kept.number,
+                    by: kept.made_by,
+                },
+                None => Known::NeedsSignIn,
             })
         }
         ToolServerAuth::Neither => Ok(Known::Not),
@@ -167,7 +184,8 @@ fn proxied(server: ToolServer, known: Known) -> ProxiedServer {
     let (header, sign_in) = match known {
         Known::Not => (None, None),
         Known::By(header) => (Some(header), None),
-        Known::SignedIn(header, sign_in) => (header, Some(sign_in)),
+        Known::SignedIn { header, number, by: _ } => (Some(header), Some(ServerSignIn::Works { token: number })),
+        Known::NeedsSignIn => (None, Some(ServerSignIn::NeedsSignIn)),
     };
     let ToolServer { id, name, url, auth: _, rev: _ } = server;
     ProxiedServer { id, name: name.for_agents(), label: name, url, header, sign_in }

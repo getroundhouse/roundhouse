@@ -41,7 +41,7 @@ fn following(
         kept.send_modify(|sets| sets.push(set));
         answer()
     });
-    tokio::spawn(Following::new(Arc::clone(&link), Servers(Some(servers.sent()))).follow());
+    tokio::spawn(Following::new(Arc::clone(&link), Servers::new(servers.sent())).follow());
     (link, sets)
 }
 

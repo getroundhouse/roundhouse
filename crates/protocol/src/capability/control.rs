@@ -14,6 +14,7 @@ use super::{Capabilities, Capability, background, calls, context, conversation, 
 use crate::attachment::AttachmentFile;
 use crate::model::{ApprovalId, Seq, TaskId};
 use crate::prompt::Prompt;
+use crate::worker::TOOLS_SERVER;
 
 /// A request to a running agent, which the worker's `AgentControl` carries. What it names by a [`Seq`] is recorded
 /// first. A launch is `AgentSpec`, with a [`conversation::Start`] and [`Settings`].
@@ -84,7 +85,8 @@ pub enum Control {
     ReadTaskOutput {
         task: TaskId,
     },
-    /// Connect to a tool server that failed again. Nothing sends it, and every adapter refuses it.
+    /// Connect again to the tool server `server`, which the agent has and isn't connected to. Never Roundhouse's own, as
+    /// [`Control::allowed`] says.
     Reconnect {
         server: ServerName,
     },
@@ -141,7 +143,7 @@ impl Control {
             Control::RunCommand { .. } => one(calls::Capability::PersonCommands.into()),
             Control::StopTask { .. } => one(background::Capability::StopTasks.into()),
             Control::ReadTaskOutput { .. } => one(background::Capability::TaskOutput.into()),
-            Control::Reconnect { .. } => one(setup::Capability::ToolServers.into()),
+            Control::Reconnect { .. } => one(setup::Capability::ToolServerReconnect.into()),
             Control::SignInToServer { .. } => one(setup::Capability::ToolServerSignIn.into()),
             Control::SetGoal { .. } | Control::PauseGoal | Control::ClearGoal => one(turns::Capability::Goals.into()),
             Control::Review { .. } => one(turns::Capability::Reviews.into()),
@@ -154,8 +156,9 @@ impl Control {
 
     /// Whether a run that claims `claims` can be asked this: every capability it needs, and what its parameters ask
     /// of the claims, such as a decision's parts, a change's settings, and something to keep only for a compaction
-    /// that reads it. The hub refuses anything else before it's sent, so an adapter is never asked what it didn't
-    /// claim.
+    /// that reads it. No run is asked to connect again to [`TOOLS_SERVER`], since Claude no longer asks after that
+    /// server's tasks once it has. The hub refuses anything else before it's sent, so an adapter is never asked what it
+    /// didn't claim.
     pub fn allowed(&self, claims: &Capabilities) -> bool {
         if !claims.has_all(self.needs()) {
             return false;
@@ -169,6 +172,29 @@ impl Control {
         if let Control::Compact { keeping: Some(_), .. } = self {
             return claims.context.compaction.is_some_and(|compaction| compaction.keeping == Keeping::Read);
         }
+        if let Control::Reconnect { server } = self {
+            return server.as_str() != TOOLS_SERVER;
+        }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{Capabilities, Claimed};
+    use super::*;
+
+    #[test]
+    fn a_run_is_asked_to_connect_again_only_where_it_claims_it_can_and_never_to_roundhouses_own_server() {
+        let reconnect =
+            |server: &str, claims: &Capabilities| Control::Reconnect { server: server.into() }.allowed(claims);
+        let mut claims = Capabilities::default();
+        claims.setup.tool_servers = Some(Claimed {});
+        assert!(!reconnect("docs", &claims), "a run of an earlier build says how its servers stand, and refuses it");
+
+        claims.setup.tool_server_reconnect = Some(Claimed {});
+
+        assert!(reconnect("docs", &claims));
+        assert!(!reconnect(TOOLS_SERVER, &claims));
     }
 }

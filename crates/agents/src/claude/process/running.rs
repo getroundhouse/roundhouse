@@ -1,4 +1,5 @@
 use super::super::approvals::Waiting;
+use super::super::tool_servers::ToolServers;
 use super::launch::resolve_binary;
 use super::startup::begin;
 use super::{compact, context, prompt, tap, usage};
@@ -36,8 +37,9 @@ pub(super) struct Shared {
     /// Either a prompt is on the list before the swap or it's written after, never both.
     pub(super) stdin: tokio::sync::Mutex<Option<ChildStdin>>,
     /// The CLI's group, whether it's gone and whether its stop was asked for, which a relaunch carries on with the new
-    /// CLI's pid. Only the run's `Exited` goes out through it. What comes before goes out on the output the readers and
-    /// the supervisor hold, once `confirmed` lets it.
+    /// CLI's pid. Only the run's `Exited` goes out through it, and that a tool server is being connected to again, which
+    /// the CLI has listed by then. The rest goes out on the output the readers and the supervisor hold, once `confirmed`
+    /// lets it.
     pub(super) run: Run,
     /// True once the CLI has opened the conversation, which its `init` says, and so does its taking or dropping a
     /// prompt, since a launch with the wrong conversation flag exits without reading one. Before that, output is held
@@ -56,6 +58,8 @@ pub(super) struct Shared {
     /// Control requests of ours waiting on the CLI's answer. Emptied when the process exits, which
     /// tells whoever's waiting.
     pub(super) pending_controls: Mutex<HashMap<String, oneshot::Sender<Result<Value, String>>>>,
+    /// What the CLI last said of its tool servers, and which of them it's connecting to again.
+    pub(super) tool_servers: Mutex<ToolServers>,
     /// Where asking how full the context is has got to.
     pub(super) context: Mutex<ContextWatch>,
     /// Where asking what's left of the account's limits has got to.

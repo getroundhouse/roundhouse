@@ -28,7 +28,7 @@ The hub's servers are apart from those in a CLI's own settings, which Roundhouse
 
 - **An access token, or a key, is on the worker's machine,** where an agent with full access might reach it. The refresh token isn't.
 - **A server whose name is also in a CLI's own settings behaves differently in each CLI,** as `docs/reference/` says of each. Claude uses the hub's, Antigravity its own, and Codex merges the two. Codex starts no chat where its own is over stdio.
-- **An agent already running may not get a server signed in to after it launched,** since its CLI had no tools to list.
+- **An agent already running doesn't get a server added after it launched,** until its next start. It's connected to one it launched with once that's signed in to.
 - **An agent in any project can read and change what any server reaches,** such as a client's Linear from a personal project.
 - **Servers over stdio stay with the CLI's settings and the repository.**
 - **The site keeps Roundhouse's client document at `https://getroundhouse.dev/oauth/client.json`,** which can't move while any sign-in made with it lasts.

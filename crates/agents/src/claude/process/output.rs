@@ -41,6 +41,9 @@ pub(super) async fn read_stdout(
         let item = match parsed {
             Parsed::Drop => continue,
             Parsed::ControlReply { request_id, answer } => {
+                if !deliver_reconnected(&shared, &output, &request_id, answer.is_ok()).await {
+                    return;
+                }
                 if let Some(waiting) = shared.pending_controls.lock().remove(&request_id) {
                     let _ = waiting.send(answer);
                 }
@@ -80,6 +83,21 @@ pub(super) async fn read_stdout(
     }
 }
 
+/// Sends on the tool servers the CLI's answer to `request_id` says otherwise of, if it was asked there to connect to one
+/// again. False once nobody is reading.
+async fn deliver_reconnected(
+    shared: &Shared,
+    output: &mpsc::Sender<AgentOutput>,
+    request_id: &str,
+    connected: bool,
+) -> bool {
+    let servers = shared.tool_servers.lock().answered(request_id, connected);
+    match servers {
+        Some(servers) => deliver(shared, output, AgentOutput::Report(servers)).await,
+        None => true,
+    }
+}
+
 /// Sends on `item`, what a line said, and then what it showed without saying, `after`, and the tool servers it lists.
 /// What was held goes first, once it shows the CLI has opened the conversation. False once nobody is reading.
 async fn deliver_said(
@@ -93,7 +111,9 @@ async fn deliver_said(
         return false;
     }
     let servers = match &item {
-        AgentOutput::Event { body, raw: Some(line), .. } => tool_servers::said(body, line),
+        AgentOutput::Event { body, raw: Some(line), .. } => {
+            tool_servers::said(body, line).map(|servers| shared.tool_servers.lock().listed(servers))
+        }
         AgentOutput::Event { raw: None, .. }
         | AgentOutput::Delta(_)
         | AgentOutput::Retrying(_)

@@ -5,8 +5,10 @@ use std::sync::Weak;
 use tokio::sync::oneshot;
 
 use protocol::frame;
+use protocol::model::WorkspaceId;
 use protocol::worker::WorkerRequest;
 
+use super::following::{Following, Servers};
 use super::*;
 use crate::frames::FrameReader;
 
@@ -36,6 +38,16 @@ impl WorkerLink {
         Self::stand_in(versions::WORKERS.newest, ChildProcess::already_exited(), move |request| {
             answer(serde_json::from_value(request).expect("the hub sends requests"))
         })
+    }
+
+    /// Sets `hub`'s tool servers on the stand-in, as `workspace_id`'s worker, as they're set on a worker as its link opens
+    /// and from then on, as [`WorkerLink::open`] says.
+    pub(crate) async fn set_as_opened(self: &Arc<Self>, hub: &Arc<Hub>, workspace_id: WorkspaceId) {
+        let mut servers = Following::new(Arc::clone(self), Servers::new(hub.sent_tool_servers()));
+        let answer = servers.queue().await.unwrap();
+        servers.answered(answer).await.unwrap();
+        tokio::spawn(Arc::clone(hub).reconnect_as_signed_in(workspace_id, Arc::clone(self)));
+        tokio::spawn(servers.follow());
     }
 
     fn answering_as(
@@ -79,6 +91,7 @@ impl WorkerLink {
             left: AtomicBool::new(false),
             build: OnceLock::new(),
             version: OnceLock::from(version),
+            signed_in: watch::Sender::default(),
         });
         let gone = Gone(Arc::downgrade(&link));
         tokio::spawn(async move {

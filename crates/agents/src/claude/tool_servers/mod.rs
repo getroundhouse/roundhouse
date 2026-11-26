@@ -4,4 +4,4 @@ mod known;
 mod said;
 
 pub(super) use known::Servers;
-pub(super) use said::said;
+pub(super) use said::{ToolServers, said};

@@ -6,6 +6,7 @@ use crate::child_process::{ChildProcess, Spawned};
 use crate::error::internal;
 use crate::hub::Hub;
 use crate::spans;
+use crate::tool_servers::SignedInBy;
 use acks::Acks;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, error_chain};
@@ -47,6 +48,8 @@ pub(crate) struct WorkerLink {
     pub(super) build: OnceLock<Option<String>>,
     /// The version of the protocol its hello chose, once it has said hello.
     pub(super) version: OnceLock<u32>,
+    /// The tool servers signed in to that its worker has the tokens of.
+    pub(super) signed_in: watch::Sender<SignedInBy>,
 }
 
 fn lost() -> ApiError {
@@ -93,6 +96,7 @@ impl WorkerLink {
             left: AtomicBool::new(false),
             build: OnceLock::new(),
             version: OnceLock::new(),
+            signed_in: watch::Sender::default(),
         });
         let followings = Followings::of(&link, &hub, provider.as_ref());
         let span = spans::worker(&workspace_id, &instance_id);
@@ -110,9 +114,8 @@ impl WorkerLink {
         );
 
         let failure = match link.greet(hub.timers.hello_within, followings).await {
-            Ok(Followings { credential, tool_servers }) => {
-                tokio::spawn(credential.follow().instrument(span.clone()));
-                tokio::spawn(tool_servers.follow().instrument(span.clone()));
+            Ok(followings) => {
+                followings.follow(&hub, &link, &workspace_id, &span);
                 tokio::spawn(Arc::clone(&hub).read_repo_urls(workspace_id, Arc::clone(&link)).instrument(span));
                 return Ok(link);
             }
@@ -191,6 +194,7 @@ impl WorkerLink {
             left: AtomicBool::new(false),
             build: OnceLock::new(),
             version: OnceLock::new(),
+            signed_in: watch::Sender::default(),
         })
     }
 
@@ -199,6 +203,21 @@ impl WorkerLink {
     /// which is where it's checked before one is stopped.
     pub(crate) fn keep(&self) {
         self.kept.store(true, Ordering::Relaxed);
+    }
+
+    /// The tool servers signed in to that its worker has the tokens of, as they change, each once the worker has said it
+    /// applied the set they came in. So an agent asked on this link to connect to one again finds the token there.
+    pub(crate) fn signed_in(&self) -> watch::Receiver<SignedInBy> {
+        self.signed_in.subscribe()
+    }
+
+    /// Its worker has the tokens of `signed_in`.
+    pub(crate) fn has_signed_in(&self, signed_in: &SignedInBy) {
+        self.signed_in.send_if_modified(|current| {
+            let changed = current != signed_in;
+            current.clone_from(signed_in);
+            changed
+        });
     }
 
     /// Whether anything has wanted it, which one an earlier hub left running is not until something does.

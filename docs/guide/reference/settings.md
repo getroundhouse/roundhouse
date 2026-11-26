@@ -233,7 +233,7 @@ Some servers can't be signed in to. Roundhouse says who it is by [a document on 
 
 The hub renews a sign-in by itself, until the service no longer lets it, such as once you've taken Roundhouse off your account there. The server's row then says **Needs you to sign in**, and its tools fail in every chat.
 
-Choose **Sign in again** in the row's **…** menu, or **Sign in** on [a chat's plug](chats.md#the-chats-mcp-servers), and approve it as before. The server keeps its name, so agents go on calling it what they did.
+Choose **Sign in again** in the row's **…** menu, or **Sign in** on [a chat's plug](chats.md#the-chats-mcp-servers), and approve it as before. The server keeps its name, so agents go on calling it what they did. An agent that was started with the server connects to it once you've signed in, as [Chats](chats.md#the-chats-mcp-servers) says.
 
 A server can want more than you allowed when you signed in, as when an agent changes an issue and you allowed only reading. That call fails, the agent is told why, and its other calls work as before. The row says **Sign in for more access**, and signing in again asks for what you allowed before and what the server wants.
 
