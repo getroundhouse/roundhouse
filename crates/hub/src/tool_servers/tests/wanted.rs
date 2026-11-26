@@ -9,8 +9,8 @@ use protocol::worker::{AskForToolAccess, ServerSignIn, TokenNumber, ToolAccess};
 use tool_sign_in::{Issuer, OauthError, Renewal};
 
 use super::super::{SigningIn, ToolServers, Wanted};
-use super::sign_ins::{GIVEN_AT_MS, given, granted, signed_in, status_of};
-use super::support::{files_in, holding, refused, servers_in, with_key};
+use super::sign_ins::{FILE, GIVEN_AT_MS, given, granted, signed_in, status_of};
+use super::support::{files_in, holding, path, refused, servers_in, with_key};
 
 pub(super) const FIRST: TokenNumber = TokenNumber::FIRST;
 
@@ -167,33 +167,23 @@ fn what_is_wanted_is_kept_as_the_sign_in_is_renewed_and_once_its_gone() {
     assert_eq!(asks(&starts(&servers), ISSUER), "read write");
 }
 
-/// The person may have left out what was asked for, or an account may have none of it to give.
+/// The person may have left it out on the page, or the account may have none of it to give, and signing in again would
+/// ask for no more. From a file a build that asked for it once more wrote, too.
 #[test]
-fn a_server_that_wants_what_its_sign_in_was_asked_for_has_it_asked_for_once_more_and_then_no_more() {
+fn a_server_that_wants_only_what_its_sign_in_was_asked_for_isnt_asked_for_it_again() {
     let dir = tempfile::tempdir().unwrap();
     let (servers, store) = servers_in(dir.path());
     signed_in(&servers, "t", "Linear");
-    let mut number = FIRST;
-    let mut sign_in = || {
-        finishes(&servers, &starts(&servers));
-        number = number.next();
-        assert_eq!(status_of(&store, "t"), ToolSignInStatus::Works, "until a call is refused again");
-        number
-    };
+    let asked_again = format!(r#"{},"asked_again":true}}"#, FILE.strip_suffix('}').unwrap());
+    std::fs::write(path(dir.path(), &store, &"t".into()), asked_again).unwrap();
 
+    let first = wants(&servers, FIRST, "read");
     wants(&servers, FIRST, "write").change.unwrap();
-    let second = sign_in();
-    assert!(wants(&servers, second, "write").change.unwrap().changed, "it was asked for once");
-    let third = sign_in();
-    assert_eq!(wants(&servers, third, "write"), IN_VAIN);
-    assert!(kept(dir.path()).ends_with(r#""asked_again":true}"#), "{}", kept(dir.path()));
-    assert_eq!(status_of(&store, "t"), ToolSignInStatus::Works);
-    let fourth = sign_in();
-    assert_eq!(wants(&servers, fourth, "write"), IN_VAIN, "nor once the person signs in again themselves");
+    finishes(&servers, &starts(&servers));
+    let second = wants(&servers, FIRST.next(), "write");
 
-    wants(&servers, fourth, "admin").change.unwrap();
-    assert_eq!(status_of(&store, "t"), ToolSignInStatus::NeedsMoreAccess, "what hasn't been asked for is");
-    let fifth = sign_in();
-    assert!(wants(&servers, fifth, "admin").change.unwrap().changed);
-    assert_eq!(wants(&servers, sign_in(), "admin"), IN_VAIN);
+    assert_eq!((first, second), (IN_VAIN, IN_VAIN));
+    assert_eq!(status_of(&store, "t"), ToolSignInStatus::Works);
+    let more = wants(&servers, FIRST.next(), "write admin");
+    assert!(more.change.unwrap().changed, "what hasn't been asked for is");
 }

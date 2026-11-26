@@ -51,8 +51,8 @@ pub struct AskForToolAccess {
 pub enum ToolAccess {
     /// The server's record says it needs more access, and signing in to it again asks for it.
     SignInAgain,
-    /// Nothing is kept, since signing in again would change nothing: its sign-in was asked for these twice already, or
-    /// they're more than the hub keeps.
+    /// Nothing is kept, since signing in again would change nothing: its sign-in was asked for these already, or they're
+    /// more than the hub keeps.
     NotAskedFor,
     /// Nothing is kept, since the hub has another token than the one that was refused, which may be allowed more.
     OtherToken,

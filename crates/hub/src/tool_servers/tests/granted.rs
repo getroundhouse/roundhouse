@@ -122,52 +122,21 @@ fn signing_in_again_keeps_what_its_own_answer_says_and_has_asked_for_the_rest() 
     assert!(kept.contains(r#""scopes":"read write""#) && !kept.contains("granted"), "{kept}");
 }
 
-/// As when the person leaves it out on the page. It's asked for once more, and then no more, though each answer grants
-/// something else that nobody asked for, which signing in again then asks for too.
+/// Asking by name for what was granted without being asked for may change something, as where a server doesn't take
+/// it as enough. Once it's asked for, it isn't again, as when the person leaves it out on the page, whatever else is
+/// granted.
 #[test]
-fn a_scope_asked_for_and_not_granted_is_asked_for_once_more_and_then_no_more_whatever_else_is_granted() {
+fn a_scope_granted_without_being_asked_for_is_asked_for_by_name_once() {
     let dir = tempfile::tempdir().unwrap();
     let (servers, store) = servers_in(dir.path());
-    first(&servers, "read write", allowed("made-up-t", Some("read other:1")));
+    first(&servers, "read", allowed("made-up-t", Some("read write")));
 
-    wants(&servers, FIRST, "write").change.unwrap();
-    assert_eq!(asked_again_for(&servers), "read write other:1");
-    again(&servers, Some("read other:2"));
+    let granted_alone = wants(&servers, FIRST, "write").access;
+    again(&servers, Some("read other:1"));
+    let asked_and_left_out = wants(&servers, FIRST.next(), "write").access;
 
-    assert_eq!(wants(&servers, FIRST.next(), "write").access, ToolAccess::NotAskedFor);
+    assert_eq!((granted_alone, asked_and_left_out), (ToolAccess::SignInAgain, ToolAccess::NotAskedFor));
     assert_eq!(status_of(&store, "t"), ToolSignInStatus::Works);
-}
-
-/// A server may not take what it was granted as enough, and it was never asked for by name, which the person may then
-/// leave out. So it's asked for, then once more, as what's neither asked for nor granted is.
-#[test]
-fn a_scope_granted_without_being_asked_for_is_asked_for_by_name_then_once_more_and_then_no_more() {
-    let dir = tempfile::tempdir().unwrap();
-    let (servers, _store) = servers_in(dir.path());
-    let says = Some("read write");
-    first(&servers, "", allowed("made-up-t", says));
-    let mut number = FIRST;
-
-    for _ in 0..2 {
-        assert_eq!(wants(&servers, number, "write").access, ToolAccess::SignInAgain);
-        again(&servers, says);
-        number = number.next();
-    }
-
-    assert_eq!(wants(&servers, number, "write").access, ToolAccess::NotAskedFor);
-}
-
-/// Once each was asked for again in vain, only what hasn't been asked for is asked for, though it's been granted.
-#[test]
-fn what_is_granted_is_never_in_vain_until_its_asked_for() {
-    let dir = tempfile::tempdir().unwrap();
-    let (servers, _store) = servers_in(dir.path());
-    first(&servers, "read", allowed("made-up-t", None));
-    wants(&servers, FIRST, "read").change.unwrap();
-    again(&servers, Some("read extra"));
-
-    assert_eq!(wants(&servers, FIRST.next(), "read").access, ToolAccess::NotAskedFor);
-    assert_eq!(wants(&servers, FIRST.next(), "extra").access, ToolAccess::SignInAgain);
 }
 
 /// It was wanted after this sign-in was asked for.
