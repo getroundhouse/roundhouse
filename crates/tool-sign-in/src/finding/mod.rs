@@ -7,7 +7,7 @@ mod tests;
 
 mod asking;
 mod found;
-pub use found::{Found, NoWay};
+pub use found::Found;
 mod looking;
 #[cfg(test)]
 use looking::FIND_WITHIN;

@@ -1,13 +1,9 @@
 use std::sync::Arc;
 
-use protocol::client::tool_sign_ins::{
-    NoToolSignIn, ToolSignInBegun, ToolSignInFinish, ToolSignInPage, ToolSignInStart,
-};
+use protocol::client::tool_sign_ins::{ToolSignInBegun, ToolSignInFinish, ToolSignInPage, ToolSignInStart};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{ToolServer, ToolServerId, ToolSignInId};
-use tool_sign_in::{
-    Failure, Found, NoWay, Pending, RedirectUri, Registration, Returned, ServerUrl, Started, TakenAs, Way, shown,
-};
+use tool_sign_in::{Failure, Found, Pending, RedirectUri, Registration, Returned, Started, TakenAs, Way};
 use tracing::{info, warn};
 
 use super::super::{Hub, off_thread};
@@ -107,17 +103,16 @@ impl Hub {
         sign_in: &Arc<WaitingSignIn>,
         redirect: &str,
     ) -> Result<Begun, ApiError> {
-        let refused = |e: &dyn std::error::Error| ApiError::new(ErrorCode::InvalidRequest, e.to_string());
-        let redirect = RedirectUri::parse(redirect).map_err(|e| refused(&e))?;
-        let server = ServerUrl::parse(sign_in.to.url().as_str()).map_err(|e| refused(&e))?;
-        Ok(match self.tool_sign_ins.client.find(&server).await? {
+        let redirect =
+            RedirectUri::parse(redirect).map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
+        Ok(match self.tool_sign_ins.client.find(sign_in.to.url()).await? {
             Found::SignIn(way) => {
                 // Registering can't be undone, so one that was cancelled meanwhile doesn't.
                 self.waits_still(id, sign_in)?;
                 self.begin_sign_in(*way, &sign_in.to, redirect).await?
             }
             Found::NoSignIn => Begun::Not(ToolSignInBegun::NoSignIn),
-            Found::NoWay(why) => Begun::Not(ToolSignInBegun::NoWay { why: no_way(why) }),
+            Found::NoWay(why) => Begun::Not(ToolSignInBegun::NoWay { why }),
         })
     }
 
@@ -129,7 +124,7 @@ impl Hub {
         let taken = client.client_for(&way, &redirect, before.map(|(_, before)| before)).await?;
         let taken_as = match taken {
             TakenAs::Client(taken_as) => taken_as,
-            TakenAs::NoWay(why) => return Ok(Begun::Not(ToolSignInBegun::NoWay { why: no_way(why) })),
+            TakenAs::NoWay(why) => return Ok(Begun::Not(ToolSignInBegun::NoWay { why })),
         };
         let scopes = way.scopes().clone().and(&to.asked_before(way.issuer()));
         let Started { page, pending } = client.begin(way, taken_as, scopes, redirect)?;
@@ -177,22 +172,4 @@ fn used_again<'a>(to: &'a SigningIn, pending: &Pending) -> Option<(&'a ToolServe
 /// Why a finish finds no sign-in of its ID.
 fn no_sign_in() -> ApiError {
     ApiError::new(ErrorCode::NotFound, "that sign-in to an MCP server has ended")
-}
-
-fn no_way(why: NoWay) -> NoToolSignIn {
-    match why {
-        NoWay::NoAuthorizationServer => NoToolSignIn::NoAuthorizationServer,
-        NoWay::OnlyRegisteredClients(issuer) => {
-            NoToolSignIn::OnlyRegisteredClients { authorization_server: shown(issuer.as_str()) }
-        }
-        NoWay::OnlyClientsWithSecrets(issuer) => {
-            NoToolSignIn::OnlyClientsWithSecrets { authorization_server: shown(issuer.as_str()) }
-        }
-        NoWay::NotRegistered { issuer, error } => NoToolSignIn::NotRegistered {
-            authorization_server: shown(issuer.as_str()),
-            error: error.map(|error| error.to_string()),
-        },
-        NoWay::OtherResource { host } => NoToolSignIn::OtherServer { host: host.unwrap_or_default() },
-        NoWay::NoS256(issuer) => NoToolSignIn::NoS256 { authorization_server: shown(issuer.as_str()) },
-    }
 }

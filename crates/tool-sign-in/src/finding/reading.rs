@@ -4,8 +4,8 @@ use url::Url;
 
 use super::metadata::{AuthorizationServerMetadata, ServerMetadata};
 use super::well_known::{host_of, of_authorization_server, of_server};
+use crate::Failure;
 use crate::fetch::{Caller, json};
-use crate::{Failure, ServerUrl};
 
 /// What's read of some metadata.
 pub(super) enum Read<T> {
@@ -21,10 +21,9 @@ pub(super) enum Read<T> {
 /// The server's metadata, from where its 401 says, or else from the well-known places.
 pub(super) async fn server_metadata(
     calls: &Caller<'_>,
-    server: &ServerUrl,
+    server: &Url,
     challenge: &Challenge,
 ) -> Result<Read<ServerMetadata>, Failure> {
-    let server = server.url();
     let host = host_of(server);
     let said = challenge.resource_metadata.as_ref().map(|said| calls.address(said)).transpose()?;
     // What's at the host's own well-known place may be of the host, as RFC 9728, section 3.3, has it.

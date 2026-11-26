@@ -1,4 +1,5 @@
 use super::{CLIENT, approved, begun};
+use crate::fetch::url_of;
 use crate::{Returned, Script, StandIn, Started, ToolSignIn};
 
 /// Each is held as a token's type, so whatever holds one can be logged whole.
@@ -32,11 +33,11 @@ async fn no_secret_is_in_the_debug_output_of_what_holds_it() {
 async fn the_stand_ins_server_takes_the_tokens_its_authorization_server_gives_until_theyre_ended() {
     let (client, stand_in) = (ToolSignIn::new(CLIENT), StandIn::with(Script::default()).await);
     let granted = approved(&client, &stand_in).await.granted;
-    let calls = client.calls_for(&stand_in.server()).await.unwrap();
+    let server = url_of(&stand_in.server()).unwrap();
+    let calls = client.calls_for(&server).await.unwrap();
     let bearer = format!("Bearer {}", granted.access.as_str());
     let message = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
-    let server = stand_in.server();
-    let call = async || calls.post_message(server.url(), &[("authorization", &bearer)], &message).await;
+    let call = async || calls.post_message(&server, &[("authorization", &bearer)], &message).await;
 
     let taken = call().await.unwrap().status;
     stand_in.end_access_tokens();

@@ -58,7 +58,7 @@ pub enum Failure {
 const LONGEST_SHOWN: usize = 200;
 
 /// `said`, as a person is told it, such as an address that a server says is its own, cut short.
-pub fn shown(said: &str) -> String {
+pub(crate) fn shown(said: &str) -> String {
     said.chars().take(LONGEST_SHOWN).collect()
 }
 

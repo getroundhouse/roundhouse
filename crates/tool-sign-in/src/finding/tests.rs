@@ -1,15 +1,14 @@
 use std::time::Duration;
 
 use http::header::COOKIE;
+use protocol::client::tool_sign_ins::NoToolSignIn;
 use protocol::model::ToolScopes;
 use tokio::time::Instant;
 use url::Url;
 
 use super::{FIND_WITHIN, of_authorization_server, of_server};
 use crate::tests::{CLIENT, approved};
-use crate::{
-    Asks, Failure, Found, Issuer, MetadataAt, NoWay, Query, Says, Script, ServerMetadataAt, StandIn, ToolSignIn, Way,
-};
+use crate::{Asks, Failure, Found, MetadataAt, Query, Says, Script, ServerMetadataAt, StandIn, ToolSignIn, Way};
 
 /// Far longer than a stand-in takes to be asked, on a busy machine.
 const ASKED_WITHIN: Duration = Duration::from_secs(5);
@@ -75,7 +74,7 @@ async fn a_server_that_answers_anyone_and_one_that_asks_with_no_way_to_are_told_
 
     for script in nothing {
         let asks = found_with(script.clone()).await.unwrap();
-        assert!(matches!(asks, Found::NoWay(NoWay::NoAuthorizationServer)), "{asks:?}");
+        assert!(matches!(asks, Found::NoWay(NoToolSignIn::NoAuthorizationServer)), "{asks:?}");
         let anyone = found_with(Script { asks: Asks::Nothing, ..script }).await.unwrap();
         assert!(matches!(anyone, Found::NoSignIn), "{anyone:?}");
     }
@@ -98,13 +97,14 @@ async fn a_server_whose_sign_in_isnt_one_roundhouse_gives_says_why_and_metadata_
         let issuer = found_with(Script { issuer: Says::Another, ..script }).await.unwrap_err();
 
         let Found::NoWay(resource) = resource else { panic!("{resource:?}") };
-        assert_eq!(resource, NoWay::OtherResource { host: Some("other.example".to_string()) });
-        let said = "the server says its sign-in is for other.example, which isn't its address";
-        assert_eq!(resource.to_string(), said);
-        for (stand_in, no_way) in [(&registered, NoWay::OnlyRegisteredClients as fn(_) -> _), (&s256, NoWay::NoS256)] {
+        assert_eq!(resource, NoToolSignIn::OtherServer { host: "other.example".to_string() });
+        let registered_only: fn(String) -> NoToolSignIn =
+            |authorization_server| NoToolSignIn::OnlyRegisteredClients { authorization_server };
+        let no_s256: fn(String) -> NoToolSignIn = |authorization_server| NoToolSignIn::NoS256 { authorization_server };
+        for (stand_in, no_way) in [(&registered, registered_only), (&s256, no_s256)] {
             let found = find(stand_in).await.unwrap();
             let Found::NoWay(found) = found else { panic!("{found:?}") };
-            assert_eq!(found, no_way(Issuer::new(stand_in.issuer())));
+            assert_eq!(found, no_way(stand_in.issuer()));
         }
         let Failure::OtherIssuer { host, .. } = &issuer else { panic!("{issuer:?}") };
         assert_eq!(host.as_deref(), Some("other.example"));
@@ -128,7 +128,7 @@ async fn a_server_with_a_query_is_signed_in_to_as_its_metadata_names_it_with_the
     // Its host's, where its 401 says the metadata is, is less than its address.
     let script = Script { query: Query::LeftOut("tools=a"), resource: Says::ItsHost, ..Script::default() };
     let found = found_with(script).await.unwrap();
-    assert!(matches!(found, Found::NoWay(NoWay::OtherResource { .. })), "{found:?}");
+    assert!(matches!(found, Found::NoWay(NoToolSignIn::OtherServer { .. })), "{found:?}");
 }
 
 /// Time stands still once the authorization server has been asked, and moves only by tokio's paused clock, so nothing

@@ -15,4 +15,4 @@ pub(crate) use caller::{Answer, Caller, json};
 use caller::{LONGEST_ANSWER, MOST_REDIRECTS};
 mod reach;
 pub use reach::NotFetched;
-pub(crate) use reach::Reach;
+pub(crate) use reach::{Reach, url_of};

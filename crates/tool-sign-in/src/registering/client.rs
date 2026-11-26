@@ -2,8 +2,12 @@ use url::Url;
 
 use super::answer::{Answered, answered};
 use super::{Registration, client_metadata};
+use protocol::client::tool_sign_ins::NoToolSignIn;
+
+use crate::failure::shown;
+use crate::fetch::url_of;
 use crate::finding::Takes;
-use crate::{ClientId, Failure, NoWay, RedirectUri, ToolSignIn, Way};
+use crate::{ClientId, Failure, RedirectUri, ToolSignIn, Way};
 
 /// The client Roundhouse is to an authorization server.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -19,7 +23,7 @@ pub enum Client {
 pub enum TakenAs {
     Client(Client),
     /// The authorization server takes none that Roundhouse could be.
-    NoWay(NoWay),
+    NoWay(NoToolSignIn),
 }
 
 impl ToolSignIn {
@@ -47,15 +51,20 @@ impl ToolSignIn {
         if !redirect_uris.contains(redirect) {
             redirect_uris.push(redirect.clone());
         }
-        let calls = self.calls_for(&way.server).await?;
+        let calls = self.calls_for(&url_of(&way.server)?).await?;
         let answer = calls.post_json(endpoint, &client_metadata(&redirect_uris)).await?;
         let issuer = way.issuer.clone();
         Ok(match answered(answer)? {
             Answered::Registered(client_id) => {
                 TakenAs::Client(Client::Registered(Registration { client_id, issuer, redirect_uris }))
             }
-            Answered::WithSecret => TakenAs::NoWay(NoWay::OnlyClientsWithSecrets(issuer)),
-            Answered::Refused(error) => TakenAs::NoWay(NoWay::NotRegistered { issuer, error }),
+            Answered::WithSecret => {
+                TakenAs::NoWay(NoToolSignIn::OnlyClientsWithSecrets { authorization_server: shown(issuer.as_str()) })
+            }
+            Answered::Refused(error) => {
+                let (authorization_server, error) = (shown(issuer.as_str()), error.map(|error| error.to_string()));
+                TakenAs::NoWay(NoToolSignIn::NotRegistered { authorization_server, error })
+            }
         })
     }
 

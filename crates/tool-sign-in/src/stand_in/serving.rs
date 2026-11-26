@@ -9,6 +9,7 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use parking_lot::Mutex;
+use protocol::model::ToolServerUrl;
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use url::Url;
@@ -18,7 +19,7 @@ use super::replies::{Reply, said, status};
 use super::script::{Asks, Query, Script, ServerMetadataAt, Wants};
 use super::tokens::Tokens;
 use super::{Asked, metadata, registering};
-use crate::{AuthorizationPage, ServerUrl};
+use crate::AuthorizationPage;
 
 /// The stand-in, serving until the runtime it was started on ends.
 pub struct StandIn {
@@ -88,8 +89,8 @@ impl StandIn {
     }
 
     /// Its MCP server's address.
-    pub fn server(&self) -> ServerUrl {
-        ServerUrl::parse(&self.state.at.server(&self.state.script.lock())).unwrap()
+    pub fn server(&self) -> ToolServerUrl {
+        ToolServerUrl::typed(&self.state.at.server(&self.state.script.lock())).unwrap()
     }
 
     /// Its authorization server's name.

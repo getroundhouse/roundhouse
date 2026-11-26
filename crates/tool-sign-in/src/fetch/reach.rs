@@ -5,7 +5,9 @@ use thiserror::Error;
 use tool_server_http::{Names, is_private};
 use url::Url;
 
-use crate::ServerUrl;
+use protocol::model::ToolServerUrl;
+
+use crate::Failure;
 
 /// Why something isn't fetched.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
@@ -28,10 +30,10 @@ pub(crate) struct Reach {
 }
 
 impl Reach {
-    pub(super) async fn of(server: &ServerUrl, names: &Names) -> io::Result<Self> {
-        let addresses = addresses(names, server.url()).await?;
+    pub(super) async fn of(server: &Url, names: &Names) -> io::Result<Self> {
+        let addresses = addresses(names, server).await?;
         let private = !addresses.is_empty() && addresses.iter().all(|address| is_private(address.ip()));
-        Ok(Self { host: host(server.url()), private })
+        Ok(Self { host: host(server), private })
     }
 
     /// The server's own host.
@@ -76,4 +78,11 @@ pub(super) async fn addresses(names: &Names, url: &Url) -> io::Result<Vec<Socket
 /// `url`'s host, which an address that's fetched always has.
 pub(super) fn host(url: &Url) -> String {
     url.host_str().unwrap_or_default().to_string()
+}
+
+/// `server`'s address, as it's fetched from. `ToolServerUrl::typed` took it, so it reads as one but where it was kept by
+/// another build's rule.
+pub(crate) fn url_of(server: &ToolServerUrl) -> Result<Url, Failure> {
+    let what = "an address that isn't one";
+    Url::parse(server.as_str()).map_err(|_| Failure::Unreadable { host: server.host().to_string(), what })
 }
