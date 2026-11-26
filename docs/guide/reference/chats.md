@@ -64,7 +64,7 @@ While the chat has an MCP server, a plug sits before the limits' bars. Rest the 
 | `Signing in` | Its page waits in your browser for you to approve it, as [Settings](settings.md#sign-in) says |
 | `Sign in from its CLI`, with **Reload** | It's one of the CLI's own, which you sign in to there, such as with `codex mcp login`, then reload here |
 | `When its turn ends`, with **Reload** | You've signed in to it or edited it, and the agent connects to it again once its turn ends. **Reload** has it connect now |
-| `From its next start` | It was added to the hub after the agent started, or moved to another URL while an agent that can't connect to it again as it runs, such as Codex, was connected to it. Claude says `When its turn ends` instead |
+| `From its next start` | It was added to the hub after the agent started |
 | `Removed` | It was removed from the hub after the agent started |
 | `Turned off` | The CLI's own settings turn it off |
 | Nothing | The agent hasn't said |

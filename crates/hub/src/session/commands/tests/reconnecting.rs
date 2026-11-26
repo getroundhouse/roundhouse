@@ -144,7 +144,6 @@ pub(super) async fn says_of(live: &LiveSession, run: RunId, hubs: Option<&str>, 
     let server = ToolServerState {
         name: name.into(),
         hubs: hubs.map(Into::into),
-        connected_to: None,
         state,
         error: None,
         tools: None,

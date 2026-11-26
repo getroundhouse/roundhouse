@@ -7,7 +7,7 @@ use std::sync::Arc;
 use protocol::capability::setup::{ServerState, ToolServerState};
 use protocol::client::tool_servers::ToolServerEdit;
 use protocol::event::{AgentRunState, EventBody, TurnOutcome};
-use protocol::model::{RunId, Seq, ToolServerAuthEdit, ToolServerKey, ToolServerUrl};
+use protocol::model::{RunId, Seq, ToolServerAuthEdit, ToolServerKey};
 use protocol::prompt::Prompt;
 use protocol::worker::WorkerResponse;
 use tokio::sync::oneshot;
@@ -16,7 +16,7 @@ use super::launching::{current_run, exited};
 use super::reconnecting::{Answered, Worker, says_server, settled};
 use super::reloading::{Running, claims_reloading};
 use crate::hub::Hub;
-use crate::hub::tests::{carried_on, hub_with_worktree, started_again, tool_servers_of};
+use crate::hub::tests::tool_servers_of;
 use crate::session::queue::tests::ended;
 use crate::session::{Item, LiveSession};
 use crate::tool_servers::tests::{again, edit, edited_by_signing_in, renewed, signed_in, with_key};
@@ -43,11 +43,10 @@ fn edited(hub: &Arc<Hub>, asked: ToolServerEdit) {
     tool_servers_of(hub).edit(asked).unwrap();
 }
 
-/// What a run says of the server, which its worker says it last connected to at `url`.
-async fn says(live: &LiveSession, run: RunId, state: ServerState, url: &str) {
-    let connected_to = Some(ToolServerUrl::typed(url).unwrap().place());
+/// What a run says of the server.
+async fn says(live: &LiveSession, run: RunId, state: ServerState) {
     let (name, hubs) = ("Linear".into(), Some("t".into()));
-    let said = ToolServerState { name, hubs, connected_to, state, error: None, tools: None, connects_again: None };
+    let said = ToolServerState { name, hubs, state, error: None, tools: None, connects_again: None };
     says_server(live, run, said).await;
 }
 
@@ -71,19 +70,19 @@ pub(super) async fn given(claims: protocol::capability::Capabilities, state: Ser
         },
     );
     let running = running.await;
-    running.said(state, URL).await;
+    running.said(state).await;
     running
 }
 
 impl Running {
-    pub(super) async fn said(&self, state: ServerState, url: &str) {
-        says(&self.live, self.run, state, url).await;
+    pub(super) async fn said(&self, state: ServerState) {
+        says(&self.live, self.run, state).await;
     }
 
     /// It has connected, having been asked to.
-    pub(super) async fn connects(&self, url: &str) {
-        self.said(ServerState::Starting, url).await;
-        self.said(ServerState::Connected, url).await;
+    pub(super) async fn connects(&self) {
+        self.said(ServerState::Starting).await;
+        self.said(ServerState::Connected).await;
     }
 
     pub(super) async fn turn(&self, state: AgentRunState) {
@@ -120,7 +119,7 @@ async fn a_run_is_asked_once_its_turn_ends_or_at_once_where_its_on_none_and_only
     event(&running.live, running.run, ended(TurnOutcome::Success)).await;
 
     assert_eq!(running.told(), ["reload Linear"]);
-    running.connects(URL).await;
+    running.connects().await;
     running.turn(AgentRunState::Running).await;
     running.turn(AgentRunState::Idle).await;
     assert_eq!(running.told(), ["reload Linear"], "once");
@@ -136,7 +135,7 @@ async fn a_run_is_asked_only_once_its_worker_has_the_server_as_its_edited() {
         *running.worker.next_set.lock() = Some(held);
 
         running.edited(asked).await;
-        running.said(state, URL).await;
+        running.said(state).await;
         running.worker.mark("has it");
         answer.send(Ok(WorkerResponse::Ok)).unwrap();
         settled(&running.live).await;
@@ -214,7 +213,7 @@ async fn a_run_that_ends_with_something_due_leaves_nothing_to_ask_the_next() {
     event(&running.live, running.run, exited()).await;
     running.live.ensure_agent().await.unwrap();
     let next = current_run(&running.live);
-    says(&running.live, next, ServerState::Connected, URL).await;
+    says(&running.live, next, ServerState::Connected).await;
 
     assert_eq!(running.told(), Vec::<String>::new());
 }
@@ -237,7 +236,7 @@ async fn a_sign_in_is_asked_for_once_the_turn_ends_too_whether_or_not_it_carries
             },
         );
         let running = running.await;
-        running.said(state, URL).await;
+        running.said(state).await;
         running.turn(AgentRunState::Running).await;
 
         renewed(tool_servers_of(&running.hub));
@@ -264,7 +263,7 @@ async fn a_reload_the_person_presses_is_also_what_an_edit_before_it_is_due() {
     running.edited(at(QUERIED)).await;
 
     assert_eq!(running.reload("Linear").await, Ok(()));
-    running.connects(URL).await;
+    running.connects().await;
     running.turn(AgentRunState::Idle).await;
 
     assert_eq!(running.told(), ["reload Linear"]);
@@ -279,7 +278,7 @@ async fn a_second_press_while_the_first_is_under_way_isnt_what_an_edit_between_t
     assert_eq!(running.reload("Linear").await, Ok(()));
     running.edited(at(QUERIED)).await;
     assert_eq!(running.reload("Linear").await, Ok(()));
-    running.connects(URL).await;
+    running.connects().await;
     assert_eq!(running.told(), ["reload Linear"]);
     running.turn(AgentRunState::Idle).await;
 
@@ -298,36 +297,8 @@ async fn an_edit_saved_while_the_workers_link_is_down_is_asked_for_once_its_back
         let worker = Worker::running(&running.hub, claims_reloading(), running.run).await;
         running.live.ensure_agent().await.unwrap();
 
-        running.said(ServerState::Connected, URL).await;
+        running.said(ServerState::Connected).await;
 
         assert_eq!(worker.told().into_iter().filter(|told| told != "set").collect::<Vec<_>>(), told);
-    }
-}
-
-/// Only where it connected is known of it, so it's asked for a move, once, and nothing else it may have already.
-#[tokio::test(start_paused = true)]
-async fn a_run_carried_on_with_is_asked_for_a_server_moved_while_no_hub_ran_and_for_nothing_else_its_connected_to() {
-    for (asked, told) in [(moved(), vec!["reload Linear"]), (at(QUERIED), vec![])] {
-        let dir = tempfile::tempdir().unwrap();
-        let hub = hub_with_worktree(dir.path());
-        tool_servers_of(&hub).add(with_key("t", "Linear", "made-up")).unwrap();
-        edited(&hub, asked);
-        let run = RunId::new(4);
-        let worker = Worker::running(&hub, claims_reloading(), run).await;
-        let kept = protocol::model::RunCapabilities { run, claims: Box::new(claims_reloading()) };
-        hub.blocking(move |store| store.set_claims(&"s".into(), &kept)).await.unwrap();
-        let asked = || worker.told().into_iter().filter(|told| told != "set").collect::<Vec<_>>();
-
-        let live = carried_on(&hub, &worker.link, run);
-        says(&live, run, ServerState::Connected, URL).await;
-        assert_eq!(asked(), told);
-        let connected_to = if told.is_empty() { URL } else { ELSEWHERE };
-        says(&live, run, ServerState::Starting, URL).await;
-        says(&live, run, ServerState::Connected, connected_to).await;
-        let live = started_again(&hub, &worker.link, run);
-        settled(&live).await;
-        says(&live, run, ServerState::Connected, connected_to).await;
-
-        assert_eq!(asked(), told, "the next hub finds it there");
     }
 }

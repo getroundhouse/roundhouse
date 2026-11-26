@@ -106,6 +106,11 @@ Observed on 2.1.330 with a scripted model, a home and config directory of the tr
 - **`notifications/tools/list_changed` makes it list a server's tools again,** over `subscriptions/listen` or a 2025 server's GET stream, where the server declares `listChanged`. It doesn't handshake again unless a 2025 session gets 404.
 - **No MCP tasks were offered with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` set.**
 
+Observed on 2.1.330 on macOS, with a real model, of a 2025 server that gives sessions, moved mid-turn to another URL that doesn't know them, as the worker's proxy moves a server the person edits:
+
+- **A call in the old session that's answered 404 is followed by `initialize` with no session, and the same call again in the new one.** The model got the new server's answer and saw no error, and the CLI listed the new server's tools.
+- **A call that's answered 400 fails with the server's own message,** and the next went in the old session too, and failed. It didn't connect afresh by itself.
+
 ### What `init` says of them
 
 Observed on 2.1.330 with Roundhouse's streaming flags, a home and a config directory of the trial's own, a stand-in for the Messages API, and stand-in servers.

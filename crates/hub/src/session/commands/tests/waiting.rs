@@ -7,7 +7,7 @@ use protocol::model::Observation;
 use protocol::worker::WorkerResponse;
 use tokio::sync::oneshot;
 
-use super::edited::{ELSEWHERE, QUERIED, URL, at, connected, given, keyed, moved};
+use super::edited::{QUERIED, URL, at, connected, given, keyed, moved};
 use super::reconnecting::{Answered, claims_reconnecting, settled};
 use super::reloading::{Running, claims_reloading};
 use crate::hub::SessionToolServers;
@@ -15,24 +15,14 @@ use crate::hub::SessionToolServers;
 impl Running {
     /// Whether clients are told it's to connect to the server once its turn ends.
     pub(super) fn waits(&self) -> bool {
-        self.connects_again(ConnectsAgain::WhenItsTurnEnds)
-    }
-
-    /// Whether clients are told it's cut off from the server until its next start.
-    fn cut_off(&self) -> bool {
-        self.connects_again(ConnectsAgain::AtItsNextStart)
-    }
-
-    fn connects_again(&self, when: ConnectsAgain) -> bool {
         let said = self.hub.observation_value::<SessionToolServers>(&self.live.observed_as()).unwrap();
-        said.iter().any(|said| said.connects_again == Some(when))
+        said.iter().any(|said| said.connects_again == Some(ConnectsAgain::WhenItsTurnEnds))
     }
 }
 
-/// As it says how it stands in the turn too. Which servers wait, and which a run is cut off from, by what changed, how the
-/// run stands and what it claims, is `crate::session::had_servers`' to say, in
-/// `what_changed_how_the_run_stands_and_what_it_claims_decide_whether_its_asked` and
-/// `a_moved_server_a_connected_run_cant_be_asked_for_is_asked_for_once_it_isnt_connected`.
+/// As it says how it stands in the turn too. Which servers wait, by what changed, how the run stands and what it claims,
+/// is `crate::session::had_servers`' to say, in
+/// `what_changed_how_the_run_stands_and_what_it_claims_decide_whether_its_asked`.
 #[tokio::test(start_paused = true)]
 async fn clients_are_told_what_waits_for_the_turn_to_end_until_its_asked_for() {
     let running = given(claims_reloading(), ServerState::Failed).await;
@@ -41,7 +31,7 @@ async fn clients_are_told_what_waits_for_the_turn_to_end_until_its_asked_for() {
 
     running.edited(keyed(URL)).await;
     assert!(running.waits());
-    running.said(ServerState::Failed, URL).await;
+    running.said(ServerState::Failed).await;
     assert!(running.waits(), "as the run says how it stands");
     running.turn(AgentRunState::Idle).await;
 
@@ -56,7 +46,7 @@ async fn a_run_that_says_the_same_again_while_a_server_waits_tells_clients_nothi
     running.edited(keyed(URL)).await;
     let mut feed = running.hub.subscribe_feed();
 
-    running.said(ServerState::Failed, URL).await;
+    running.said(ServerState::Failed).await;
 
     let told = std::iter::from_fn(|| feed.try_recv().ok()).map(std::sync::Arc::unwrap_or_clone);
     let servers =
@@ -78,7 +68,7 @@ async fn what_waits_is_dropped_where_its_as_the_run_had_it_again_and_where_the_p
     reloaded.turn(AgentRunState::Running).await;
     reloaded.edited(at(QUERIED)).await;
     assert_eq!(reloaded.reload("Linear").await, Ok(()));
-    reloaded.connects(URL).await;
+    reloaded.connects().await;
     assert!(!reloaded.waits());
 }
 
@@ -101,8 +91,8 @@ async fn what_waits_still_does_where_a_reload_is_refused() {
     assert!(!running.waits());
 }
 
-/// It counts only once it reaches the agent, as a person's Reload does, so Claude isn't left connected where the server
-/// was. Here the worker says the agent is on a turn, as where its turn started as it was asked.
+/// It counts only once it reaches the agent, as a person's Reload does, so Claude isn't left with the tools of where the
+/// server was. Here the worker says the agent is on a turn, as where its turn started as it was asked.
 #[tokio::test(start_paused = true)]
 async fn a_moved_server_whose_ask_doesnt_reach_the_agent_is_asked_for_again_the_next_time() {
     let running = connected().await;
@@ -112,13 +102,12 @@ async fn a_moved_server_whose_ask_doesnt_reach_the_agent_is_asked_for_again_the_
 
     running.edited(moved()).await;
     assert_eq!(running.told(), ["reload Linear"]);
-    assert!(!running.cut_off(), "it can be asked again");
     running.turn(AgentRunState::Running).await;
     assert_eq!(running.told(), ["reload Linear"]);
     running.turn(AgentRunState::Idle).await;
 
     assert_eq!(running.told(), ["reload Linear", "reload Linear"]);
-    running.connects(ELSEWHERE).await;
+    running.connects().await;
     running.turn(AgentRunState::Running).await;
     running.turn(AgentRunState::Idle).await;
     assert_eq!(running.told(), ["reload Linear", "reload Linear"], "once it's delivered");
@@ -133,7 +122,7 @@ async fn a_server_whose_ask_the_agent_refuses_isnt_asked_for_again() {
     answer.send(Err(ApiError::new(ErrorCode::Worker, "Codex refused to connect to it again"))).unwrap();
 
     running.edited(keyed(URL)).await;
-    running.said(ServerState::Failed, URL).await;
+    running.said(ServerState::Failed).await;
     running.turn(AgentRunState::Running).await;
     running.turn(AgentRunState::Idle).await;
 

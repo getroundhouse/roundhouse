@@ -4,7 +4,7 @@ use protocol::client::listed::SessionRecords;
 use protocol::fixtures::{self, observed};
 use protocol::model::{
     Records, Rev, RunCapabilities, RunId, Session, SessionId, ToolServer, ToolServerAuth, ToolServerName,
-    ToolServerUrl, ToolSignInStatus,
+    ToolSignInStatus,
 };
 
 use super::{
@@ -25,7 +25,6 @@ pub(super) fn said(name: &str, hubs: Option<&str>, state: ServerState) -> ToolSe
     ToolServerState {
         name: name.into(),
         hubs: hubs.map(Into::into),
-        connected_to: None,
         state,
         error: None,
         tools: None,
@@ -101,27 +100,22 @@ fn a_chat_has_the_hubs_servers_by_the_persons_names_and_its_clis_by_theirs() {
     assert_eq!(servers.said(), "MCP servers, Notion needs you to sign in");
 }
 
-/// As the hub says, whatever the agent says and wherever its worker says it connected. A newer hub's word that this build
-/// doesn't know leaves what the agent says.
+/// A word of another hub's that this build doesn't know leaves what the agent says, as nothing from the hub does.
 #[test]
-fn one_the_hub_says_the_agent_has_from_its_next_start_says_so_and_nothing_else_does() {
-    let url = |url: &str| ToolServerUrl::stored(url.to_owned());
-    let server = ToolServer { url: url("https://eu.example.com/mcp"), ..named("t-1", "Docs") };
+fn one_the_hub_says_nothing_this_build_knows_of_says_what_the_agent_does() {
     let stands = |connects_again| {
-        let connected_to = Some(url("https://mcp.example.com/mcp").place());
         let said = said("Docs", Some("t-1"), ServerState::Connected);
-        let agents = vec![ToolServerState { connected_to, tools: Some(2), connects_again, ..said }];
-        let held = held(vec![server.clone()], Some(agents));
+        let agents = vec![ToolServerState { tools: Some(2), connects_again, ..said }];
+        let held = held(vec![named("t-1", "Docs")], Some(agents));
         let servers = ChatToolServers::of(&held, &chat(true), None, ReloadRequest::Known).unwrap();
         servers.hubs[0].stands.clone()
     };
 
-    assert_eq!(stands(Some(ConnectsAgain::AtItsNextStart)), Stands::FromItsNextStart);
-    assert_eq!(stands(None), Stands::Tools(2), "where it's connected isn't the client's to judge");
+    assert_eq!(stands(None), Stands::Tools(2));
     assert_eq!(stands(Some(ConnectsAgain::Unknown)), Stands::Tools(2));
 }
 
-/// Whatever the agent says of it, and wherever it connected. A sign-in is what there is to do first.
+/// Whatever the agent says of it. A sign-in is what there is to do first.
 #[test]
 fn one_the_agent_is_to_connect_to_again_once_its_turn_ends_says_so_unless_its_to_be_signed_in_to() {
     let says = |server: ToolServer, said: ToolServerState| {
@@ -132,10 +126,9 @@ fn one_the_agent_is_to_connect_to_again_once_its_turn_ends_says_so_unless_its_to
         (row.said(), row.stands.tone())
     };
     let failed = ToolServerState { error: Some("refused".into()), ..said("Docs", Some("t-1"), ServerState::Failed) };
-    let moved = Some(ToolServerUrl::stored("https://was.example.com/mcp".into()).place());
-    let moved = ToolServerState { connected_to: moved, ..said("Docs", Some("t-1"), ServerState::Connected) };
+    let connected = said("Docs", Some("t-1"), ServerState::Connected);
 
-    for said in [failed.clone(), moved] {
+    for said in [failed.clone(), connected] {
         assert_eq!(says(named("t-1", "Docs"), said), ("Docs, When its turn ends".into(), Tone::Coming));
     }
     let needing = says(needing_sign_in("t-1", "Docs"), failed);

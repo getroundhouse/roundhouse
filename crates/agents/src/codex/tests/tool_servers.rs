@@ -98,7 +98,7 @@ async fn the_agents_servers_are_reported_as_codex_says_them_and_with_what_it_ans
 
 fn is(name: &str, state: ServerState, error: Option<&str>, tools: Option<u32>) -> ToolServerState {
     let error = error.map(str::to_owned);
-    ToolServerState { name: name.into(), hubs: None, connected_to: None, state, error, tools, connects_again: None }
+    ToolServerState { name: name.into(), hubs: None, state, error, tools, connects_again: None }
 }
 
 /// Codex says again how every server is, and only the one asked for is said to be starting, and to have connected.

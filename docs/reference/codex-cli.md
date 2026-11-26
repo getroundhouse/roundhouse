@@ -208,6 +208,12 @@ Observed on 0.171.0 with a scripted model, and a `HOME` and `CODEX_HOME` of the 
 - **`thread/resume` of a running thread ignores its `config`,** with no error. After `thread/unsubscribe`, between turns, it's applied, and the thread's background commands are killed.
 - **`notifications/tools/list_changed` is ignored** unless `features.mcp_tool_list_changed` is on, which is under development.
 
+Observed on 0.171.0 on macOS, with a real model, of a 2025 server that gives sessions, moved mid-turn to another URL that doesn't know them, as the worker's proxy moves a server the person edits:
+
+- **A call in the old session that's answered 404 is followed by `initialize` with no session, and the same call again in the new one.** The model got the new server's answer and saw no error. Codex didn't list the new server's tools.
+- **A call that's answered 400 fails with the server's own message,** and the next went in the old session too, and failed. It didn't connect afresh by itself.
+- **As its run ended, it sent `DELETE` to the new server for both sessions,** the old server's and the new one's.
+
 `mcpServer/oauth/login` asked a stand-in for its OAuth metadata and tried to register there, and failed, and left the connection as it was. No sign-in that works was tried.
 
 ### What it says of them

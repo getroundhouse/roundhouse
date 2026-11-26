@@ -140,7 +140,6 @@ pub(super) async fn make(hub: &Hub, kind: &ObservationKey, round: u8) {
             let server = ToolServerState {
                 name: said.into(),
                 hubs: None,
-                connected_to: None,
                 state,
                 error: None,
                 tools: None,

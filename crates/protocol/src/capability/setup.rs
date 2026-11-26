@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Claimed;
 use super::area::area;
-use crate::model::{ToolServerId, ToolServerPlace, ids};
+use crate::model::{ToolServerId, ids};
 
 area! { "the agent's setup";
     /// Roundhouse's instructions reach the agent's system prompt at every launch, a resumed one included, and each of
@@ -56,11 +56,6 @@ pub struct ToolServerState {
     /// agent's CLI has of its own, and from an adapter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hubs: Option<ToolServerId>,
-    /// Where one of the hub's was as the agent last connected to it, which its worker says, as it passed the connection
-    /// on. A server that isn't there now has been moved since, so the worker refuses the agent's calls to it, until it
-    /// connects to it again. `None` for one it hasn't connected to.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub connected_to: Option<ToolServerPlace>,
     pub state: ServerState,
     /// Why, in the agent's words, for one that failed, on one line, without the secrets an agent's words can hold, such
     /// as a server's URL past its origin, which its adapter takes out.
@@ -82,9 +77,6 @@ pub struct ToolServerState {
 pub enum ConnectsAgain {
     /// Once its turn ends, when the hub asks it to.
     WhenItsTurnEnds,
-    /// Once it starts again, since it's connected to it where it was before it was moved, which its worker has cut it off
-    /// from, and it can't be asked to connect to it again.
-    AtItsNextStart,
     /// Something this build doesn't know.
     #[serde(other)]
     Unknown,

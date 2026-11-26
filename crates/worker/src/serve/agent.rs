@@ -169,12 +169,12 @@ async fn tools_for(state: &State, spec: &mut AgentSpec, config: PathBuf) -> Resu
         return Err(ApiError::new(ErrorCode::Worker, why));
     };
     let caller = crate::tools::Caller { session_id: spec.session_id.clone(), worktree: PathBuf::from(&spec.cwd) };
-    state.tools.admit(token.clone(), caller, spec.run);
+    state.tools.admit(token.clone(), caller);
     Ok(Some(ToolServers { tools_url, hubs, token, config }))
 }
 
 /// Sends on what the agent says, in order, with the images its text points to in `worktree`, and with which of its tool
-/// servers are the hub's, as it was launched with `tools`, and where it's connected to each.
+/// servers are the hub's, as it was launched with `tools`.
 async fn forward_output(
     state: Arc<State>,
     session_id: SessionId,
@@ -197,8 +197,7 @@ async fn forward_output(
             AgentOutput::Report(report) => {
                 let report = match (report, &tools) {
                     (Report::ToolServers { servers }, Some(tools)) => {
-                        let servers = tools.saying_which_are_the_hubs(servers);
-                        Report::ToolServers { servers: state.tools.proxy.saying_where(&session_id, servers) }
+                        Report::ToolServers { servers: tools.saying_which_are_the_hubs(servers) }
                     }
                     (report, _) => report,
                 };
@@ -211,7 +210,6 @@ async fn forward_output(
                         agents.remove(&session_id);
                     }
                 }
-                state.tools.proxy.ended(&session_id, run);
                 let body = AgentOutput::exit_event(code, signal, stderr_tail, requested);
                 WorkerFrame::AgentEvent {
                     session_id: session_id.clone(),

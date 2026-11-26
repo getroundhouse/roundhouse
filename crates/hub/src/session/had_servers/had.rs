@@ -33,8 +33,8 @@ impl Running {
 pub(in super::super) struct Looked {
     /// Those it hasn't had as they are, and has, or is to connect to now.
     had: Vec<Had>,
-    /// Those it's to connect to later, and when, which is what clients are told of each.
-    waiting: Vec<(ToolServerId, ConnectsAgain)>,
+    /// Those it's to connect to once its turn ends, which is what clients are told of each.
+    waiting: Vec<ToolServerId>,
 }
 
 struct Had {
@@ -59,7 +59,7 @@ impl Looked {
 
     fn waits(&self, said: &ToolServerState) -> Option<ConnectsAgain> {
         let id = said.hubs.as_ref()?;
-        self.waiting.iter().find(|(waiting, _)| waiting == id).map(|(_, when)| *when)
+        self.waiting.contains(id).then_some(ConnectsAgain::WhenItsTurnEnds)
     }
 }
 
@@ -86,8 +86,7 @@ impl HadServers {
             match due(now, had, said, &running.claims) {
                 Due::Nothing => looked.had.push(has(None)),
                 Due::Connecting if running.is_asked_now() => looked.had.push(has(Some(said.clone()))),
-                Due::Connecting => looked.waiting.push((id.clone(), ConnectsAgain::WhenItsTurnEnds)),
-                Due::CutOff => looked.waiting.push((id.clone(), ConnectsAgain::AtItsNextStart)),
+                Due::Connecting => looked.waiting.push(id.clone()),
                 Due::NotKnown => {}
             }
         }
@@ -119,9 +118,6 @@ enum Due {
     /// It has it.
     Nothing,
     Connecting,
-    /// It's connected to it where it was before it was moved, so its worker has cut it off from it, and it can't be asked
-    /// to connect to it again, so it has it from its next start.
-    CutOff,
     /// Until the run says otherwise how it stands, such as once it has failed to connect, or the person turns it on. One it
     /// can't be asked to connect to stays so as long as it runs, and its next start has the server as it is.
     NotKnown,
@@ -135,41 +131,11 @@ fn due(now: &ServerAsSent, had: Option<&ServerAsSent>, said: &ToolServerState, c
             if reconnects { Due::Connecting } else { Due::NotKnown }
         }
         ServerState::Connected => {
+            // Its calls go as the server is, wherever it is, so only the tools it lists may be others.
+            let lists_others = had.is_some_and(|had| now.lists_other_tools_than(had));
             let reloads = Control::Reload { server: said.name.clone() }.allowed(claims);
-            match (changed_while_connected(now, had, said), reloads) {
-                (Changed::Place | Changed::Tools, true) => Due::Connecting,
-                (Changed::Place, false) => Due::CutOff,
-                // Its calls go as the server is.
-                (Changed::Tools, false) | (Changed::KnownBy, _) => Due::Nothing,
-            }
+            if lists_others && reloads { Due::Connecting } else { Due::Nothing }
         }
         ServerState::Starting | ServerState::Disabled | ServerState::Unknown => Due::NotKnown,
-    }
-}
-
-/// What has changed most of a server a run is connected to, since the run had it.
-enum Changed {
-    Place,
-    /// The tools it lists may be others, which connecting again reads.
-    Tools,
-    /// Nothing that its calls don't have already, which go as its worker has the server.
-    KnownBy,
-}
-
-/// Where nothing says how the run had it, only where its worker says it connected does, so what else changed as no hub
-/// ran is taken as had. Where that's where it is now, the run has listed its tools there, whatever it had before.
-fn changed_while_connected(now: &ServerAsSent, had: Option<&ServerAsSent>, said: &ToolServerState) -> Changed {
-    let place = now.place();
-    let had_there = had.filter(|had| had.place() == place);
-    let moved = match &said.connected_to {
-        Some(connected_to) => connected_to != place,
-        None => had.is_some() && had_there.is_none(),
-    };
-    if moved {
-        Changed::Place
-    } else if had_there.is_some_and(|had| now.lists_other_tools_than(had)) {
-        Changed::Tools
-    } else {
-        Changed::KnownBy
     }
 }

@@ -10,7 +10,6 @@ use protocol::client::tool_servers::{ToolServerAdd, ToolServerEdit};
 use protocol::event::EventBody;
 use protocol::model::{
     Observation, Observed, SessionId, SessionStatus, ToolServerAuthEdit, ToolServerAuthGiven, ToolServerKey,
-    ToolServerUrl,
 };
 
 use crate::support::{Stack, calls, session_records, wait_for_status, wait_for_turn_end, wait_until};
@@ -60,10 +59,10 @@ fn a_running_agents_calls_have_a_servers_other_key_at_once_and_the_one_before_is
     assert_eq!(holding(&stack.path(""), ANOTHER).len(), 1);
 }
 
-/// Its worker is set the rest while it runs, and the agent, which was connected to where the server was, is refused in its
-/// turn, then connects to where it is, so neither server has anything that's the other's.
+/// Its worker is set the rest while it runs, so the call the agent makes in its turn goes where the server is now, and
+/// the agent lists its tools there once the turn ends.
 #[test]
-fn a_running_agent_is_cut_off_from_a_server_thats_moved_until_its_turn_ends_and_then_connected_to_it_there() {
+fn a_running_agent_has_a_server_thats_moved_at_once_and_lists_its_tools_there_once_its_turn_ends() {
     let (url, heard) = stand_in();
     let (moved, heard_moved) = stand_in();
     let stack = Stack::start();
@@ -71,9 +70,7 @@ fn a_running_agent_is_cut_off_from_a_server_thats_moved_until_its_turn_ends_and_
     add(&client, url.clone());
     let (_, chat) = stack.workspace(&client);
     let works = [("Found issue 7".to_string(), false)];
-    let place = |url: &str| Some(ToolServerUrl::typed(url).unwrap().place());
     assert_eq!(calls::run(&client, &chat.id, CALL, 1), works);
-    wait_until("where it's connected", || said(&client, &chat.id).connected_to == place(&url));
     let gate = stack.path("moved");
     client.session_prompt(&chat.id, &format!("hang-until:{}; {CALL}", gate.display()), None).unwrap();
     wait_for_status(&client, &chat.id, SessionStatus::Running);
@@ -82,23 +79,22 @@ fn a_running_agent_is_cut_off_from_a_server_thats_moved_until_its_turn_ends_and_
     wait_until("it to wait for the turn to end", || {
         said(&client, &chat.id).connects_again == Some(ConnectsAgain::WhenItsTurnEnds)
     });
-    assert_eq!(heard_moved.try_iter().count(), 0);
     std::fs::write(gate, "").unwrap();
 
     let events = wait_for_turn_end(&client, &chat.id, 2);
-    let results = calls::results(&events);
-    let (why, failed) = results.last().unwrap();
-    assert!(*failed && why.contains("has been moved to another URL"), "{why}");
+    assert_eq!(calls::results(&events).last(), Some(&works[0]));
+    let mut took = Vec::new();
+    wait_until("it to list its tools there", || {
+        took.extend(heard_moved.try_iter());
+        took.iter().any(|took| took.method == "tools/list")
+    });
+    let call = Took { method: "tools/call".into(), key: ANOTHER.into(), path: "/mcp".into() };
+    assert_eq!(took.first(), Some(&call), "in the turn, before it lists them: {took:?}");
     wait_until("it to be connected there", || {
         let said = said(&client, &chat.id);
-        said.connected_to == place(&moved) && said.state == ServerState::Connected && said.connects_again.is_none()
+        said.state == ServerState::Connected && said.connects_again.is_none()
     });
-    assert!(heard_moved.try_iter().all(|took| took.key == ANOTHER && took.method != "tools/call"));
-    assert_eq!(calls::run(&client, &chat.id, CALL, 3), works);
-    let call = Took { method: "tools/call".into(), key: ANOTHER.into(), path: "/mcp".into() };
-    assert_eq!(heard_moved.try_iter().last(), Some(call));
     assert!(heard.try_iter().all(|took| took.key == KEY), "the old server has nothing of the new one's");
-    let events = wait_for_turn_end(&client, &chat.id, 3);
     let started = events.iter().filter(|event| matches!(event.body, EventBody::AgentStarted { .. })).count();
     assert_eq!(started, 1, "the same agent");
 }

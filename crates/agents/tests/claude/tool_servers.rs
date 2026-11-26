@@ -66,7 +66,6 @@ printf '{{"type":"control_response","response":{{{answer}}}}}\n' "$id""#
         let says = |name: &str, state, tools| ToolServerState {
             name: name.into(),
             hubs: None,
-            connected_to: None,
             state,
             error: None,
             tools,

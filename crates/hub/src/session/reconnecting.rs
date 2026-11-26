@@ -2,12 +2,11 @@
 //! or edited.
 //!
 //! What's due is worked out from how things stand, each time one of them changes, rather than from the sign-in or the
-//! edit happening: how the run last said each server is, and which of the hub's each is and where it connected, as its
-//! worker says, how the run has had each, and how the worker has each, as its link says. So one that's saved as the agent
-//! starts, or while its worker's connection is down, isn't missed. A server the run says nothing of isn't one it was
-//! launched with. On a turn, what's due is only said of each server, for clients, as [`Looked::mark`](
-//! super::had_servers) does, and it's worked out again as the turn ends, and before each prompt. So is a server the run
-//! is cut off from until its next start, so that no client works that out for itself.
+//! edit happening: how the run last said each server is, and which of the hub's each is, as its worker says, how the run
+//! has had each, and how the worker has each, as its link says. So one that's saved as the agent starts, or while its
+//! worker's connection is down, isn't missed. A server the run says nothing of isn't one it was launched with. On a turn,
+//! what's due is only said of each server, for clients, as [`Looked::mark`](super::had_servers) does, so that no client
+//! works that out for itself, and it's worked out again as the turn ends, and before each prompt.
 
 use protocol::capability::setup::ToolServerState;
 use protocol::model::{RunId, ToolServerId};

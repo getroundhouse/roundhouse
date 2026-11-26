@@ -54,15 +54,7 @@ impl ToolServers {
     fn came_to(&mut self, name: ServerName, state: ServerState) -> Option<Report> {
         let server = self.last.iter_mut().find(|server| server.name == name)?;
         if server.state != state {
-            *server = ToolServerState {
-                name,
-                hubs: None,
-                connected_to: None,
-                state,
-                error: None,
-                tools: None,
-                connects_again: None,
-            };
+            *server = ToolServerState { name, hubs: None, state, error: None, tools: None, connects_again: None };
         }
         Some(Report::ToolServers { servers: self.last.clone() })
     }
@@ -85,7 +77,6 @@ pub(in crate::claude) fn said(body: &EventBody, line: &str) -> Option<Vec<ToolSe
         ToolServerState {
             name: (*name).into(),
             hubs: None,
-            connected_to: None,
             state,
             // `init` never says why one failed.
             error: None,
@@ -185,15 +176,7 @@ mod tests {
     }
 
     fn is(name: &str, state: ServerState, tools: Option<u32>) -> ToolServerState {
-        ToolServerState {
-            name: name.into(),
-            hubs: None,
-            connected_to: None,
-            state,
-            error: None,
-            tools,
-            connects_again: None,
-        }
+        ToolServerState { name: name.into(), hubs: None, state, error: None, tools, connects_again: None }
     }
 
     #[test]
