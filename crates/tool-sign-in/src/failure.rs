@@ -30,9 +30,9 @@ pub enum Failure {
     /// It's at an address Roundhouse doesn't fetch.
     #[error("Roundhouse doesn't fetch from {host}, since {why}")]
     NotFetched { host: String, why: NotFetched },
-    /// What the authorization server says of itself is said of another.
-    #[error("the authorization server {asked} says it's {said}")]
-    OtherIssuer { asked: String, said: String },
+    /// What the authorization server says of itself is said of another, at `host`, where what it said is an address.
+    #[error("the authorization server {asked} says it's {}", .host.as_deref().unwrap_or("another"))]
+    OtherIssuer { asked: String, host: Option<String> },
     /// What came back from the browser isn't of this sign-in, which is still waiting.
     #[error("what came back isn't of this sign-in")]
     WrongState,
@@ -60,6 +60,16 @@ const LONGEST_SHOWN: usize = 200;
 /// `said`, as a person is told it, such as an address that a server says is its own, cut short.
 pub fn shown(said: &str) -> String {
     said.chars().take(LONGEST_SHOWN).collect()
+}
+
+/// The host of the address a server `said`, with its port where it names one, as a person is told it. `None` where
+/// what it said isn't an address. A server's own text is never shown as Roundhouse's words, so only what an address
+/// is read as is: a host, which can't hold a sentence, and is written in ASCII.
+pub(crate) fn host_of(said: &str) -> Option<String> {
+    let url = url::Url::parse(said).ok()?;
+    let host = url.host_str().filter(|host| !host.is_empty())?;
+    let host = url.port().map_or_else(|| host.to_string(), |port| format!("{host}:{port}"));
+    Some(shown(&host))
 }
 
 /// What an authorization server said was wrong, as OAuth names it, such as `invalid_grant`. Its description is left
@@ -134,5 +144,28 @@ impl From<Failure> for ApiError {
             Failure::NoRandomness => ErrorCode::Internal,
         };
         ApiError::new(code, error_chain(&failure))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Whatever a server says, only an address's host is shown of it, so no sentence of its own is.
+    #[test]
+    fn only_the_host_of_what_a_server_says_is_shown_and_nothing_of_what_isnt_an_address() {
+        let cases = [
+            ("https://other.example/mcp?a=b#c", Some("other.example")),
+            ("https://Other.Example:8443/", Some("other.example:8443")),
+            ("https://other.example:443/", Some("other.example")),
+            ("https://bücher.example/", Some("xn--bcher-kva.example")),
+            ("http://user:secret@10.0.0.1/", Some("10.0.0.1")),
+            ("Sign in at evil.example instead", None),
+            ("mailto:someone@other.example", None),
+            ("", None),
+        ];
+        for (said, host) in cases {
+            assert_eq!(host_of(said).as_deref(), host, "{said}");
+        }
     }
 }

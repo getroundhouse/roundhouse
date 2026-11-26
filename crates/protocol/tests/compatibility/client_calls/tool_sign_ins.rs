@@ -79,8 +79,8 @@ fn what_a_start_comes_to_keeps_its_form() {
             r#""kind":"no_way","why":{"kind":"not_registered","authorization_server":"https://auth.example.com","error":"invalid_redirect_uri"}"#,
         ),
         (
-            no_way(NoToolSignIn::OtherServer { said: "https://other.example".into() }),
-            r#""kind":"no_way","why":{"kind":"other_server","said":"https://other.example"}"#,
+            no_way(NoToolSignIn::OtherServer { host: "other.example".into() }),
+            r#""kind":"no_way","why":{"kind":"other_server","said":"other.example"}"#,
         ),
         (
             no_way(NoToolSignIn::NoS256 { authorization_server: issuer() }),

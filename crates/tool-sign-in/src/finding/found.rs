@@ -30,9 +30,9 @@ pub enum NoWay {
     /// Its authorization server wouldn't register Roundhouse, for this of OAuth's errors where it said one.
     #[error("the authorization server {} wouldn't register Roundhouse", shown(issuer.as_str()))]
     NotRegistered { issuer: Issuer, error: Option<OauthError> },
-    /// What it says of its sign-in is said of another server.
-    #[error("the server says its sign-in is for {}, which isn't its address", shown(said))]
-    OtherResource { said: String },
+    /// What it says of its sign-in is said of another server, at `host`, where what it said is an address.
+    #[error("the server says its sign-in is for {}, which isn't its address", .host.as_deref().unwrap_or("another"))]
+    OtherResource { host: Option<String> },
     /// Its authorization server doesn't say it takes PKCE with S256, which MCP has a client refuse.
     #[error("the authorization server {} doesn't say it takes PKCE with S256", shown(.0.as_str()))]
     NoS256(Issuer),

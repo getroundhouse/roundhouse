@@ -110,7 +110,7 @@ async fn a_server_with_no_sign_in_or_no_way_roundhouse_could_says_so_and_waits_f
             why: NoToolSignIn::OnlyRegisteredClients { authorization_server },
         }),
         (Script { resource: Says::Another, ..Script::default() }, |_| ToolSignInBegun::NoWay {
-            why: NoToolSignIn::OtherServer { said: "https://other.example/mcp".into() },
+            why: NoToolSignIn::OtherServer { host: "other.example".into() },
         }),
         (Script { s256: false, ..Script::default() }, |authorization_server| ToolSignInBegun::NoWay {
             why: NoToolSignIn::NoS256 { authorization_server },

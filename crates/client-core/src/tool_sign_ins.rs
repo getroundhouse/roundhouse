@@ -60,7 +60,10 @@ fn no_way(why: &NoToolSignIn) -> String {
             let why = error.as_ref().map_or_default(|error| format!(": {error}"));
             format!("{authorization_server}, where it's signed in to, wouldn't register Roundhouse{why}.")
         }
-        NoToolSignIn::OtherServer { said } => format!("It says its sign-in is for {said}, which isn't its address."),
+        NoToolSignIn::OtherServer { host } if host.is_empty() => {
+            "It says its sign-in is for another server.".to_string()
+        }
+        NoToolSignIn::OtherServer { host } => format!("It says its sign-in is for {host}, which isn't its address."),
         NoToolSignIn::NoS256 { authorization_server } => {
             format!("{authorization_server}, where it's signed in to, doesn't say it keeps a sign-in safe with PKCE.")
         }
@@ -130,11 +133,15 @@ mod tests {
             assert_eq!(begun, cant_sign_in(&expected));
         }
         assert_eq!(
-            said(NoToolSignIn::OtherServer { said: "https://other.example".into() }),
+            said(NoToolSignIn::OtherServer { host: "other.example".into() }),
             cant_sign_in(
-                "Roundhouse can't sign in to this server. It says its sign-in is for https://other.example, which isn't \
-                 its address."
+                "Roundhouse can't sign in to this server. It says its sign-in is for other.example, which isn't its \
+                 address."
             )
+        );
+        assert_eq!(
+            said(NoToolSignIn::OtherServer { host: String::new() }),
+            cant_sign_in("Roundhouse can't sign in to this server. It says its sign-in is for another server.")
         );
         assert_eq!(
             said(NoToolSignIn::NoS256 { authorization_server: authorization_server() }),

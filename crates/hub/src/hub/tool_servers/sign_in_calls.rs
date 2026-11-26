@@ -201,7 +201,7 @@ fn no_way(why: NoWay) -> NoToolSignIn {
             authorization_server: shown(issuer.as_str()),
             error: error.map(|error| error.to_string()),
         },
-        NoWay::OtherResource { said } => NoToolSignIn::OtherServer { said: shown(&said) },
+        NoWay::OtherResource { host } => NoToolSignIn::OtherServer { host: host.unwrap_or_default() },
         NoWay::NoS256(issuer) => NoToolSignIn::NoS256 { authorization_server: shown(issuer.as_str()) },
     }
 }

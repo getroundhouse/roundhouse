@@ -98,16 +98,16 @@ async fn a_server_whose_sign_in_isnt_one_roundhouse_gives_says_why_and_metadata_
         let issuer = found_with(Script { issuer: Says::Another, ..script }).await.unwrap_err();
 
         let Found::NoWay(resource) = resource else { panic!("{resource:?}") };
-        let other = "https://other.example/mcp";
-        assert_eq!(resource, NoWay::OtherResource { said: other.to_string() });
-        let said = "the server says its sign-in is for https://other.example/mcp, which isn't its address";
+        assert_eq!(resource, NoWay::OtherResource { host: Some("other.example".to_string()) });
+        let said = "the server says its sign-in is for other.example, which isn't its address";
         assert_eq!(resource.to_string(), said);
         for (stand_in, no_way) in [(&registered, NoWay::OnlyRegisteredClients as fn(_) -> _), (&s256, NoWay::NoS256)] {
             let found = find(stand_in).await.unwrap();
             let Found::NoWay(found) = found else { panic!("{found:?}") };
             assert_eq!(found, no_way(Issuer::new(stand_in.issuer())));
         }
-        assert!(matches!(issuer, Failure::OtherIssuer { .. }), "{issuer:?}");
+        let Failure::OtherIssuer { host, .. } = &issuer else { panic!("{issuer:?}") };
+        assert_eq!(host.as_deref(), Some("other.example"));
     }
 }
 
