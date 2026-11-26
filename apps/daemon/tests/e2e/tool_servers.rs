@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use client_core::Client;
+use hub::{ToolServerPage, ToolServerScript, ToolServerStandIn};
 use protocol::client::tool_servers::{ToolServerAdd, ToolServerRemove};
+use protocol::client::tool_sign_ins::{ToolSignInBegun, ToolSignInReturned, ToolSignInTo, redirect};
 use protocol::model::{ToolServerAuthGiven, ToolServerKey};
 
 use crate::support::{Stack, calls, read_all, wait_until};
@@ -135,4 +137,33 @@ fn an_agent_that_has_a_server_the_person_removes_is_told_it_was_removed() {
         answered.iter().any(|(_, is_error)| *is_error)
     });
     assert!(answered[0].0.contains("was removed"), "{answered:?}");
+}
+
+/// Signs in to the stand-in's server as `Linear (Northwind)`, as the person does in their browser.
+fn sign_in(client: &Client, stand_in: &ToolServerStandIn) {
+    let id = client_core::new_tool_sign_in_id();
+    let url = stand_in.server().as_str().to_string();
+    let to = ToolSignInTo::New { id: "t".into(), name: "Linear (Northwind)".into(), url };
+    let begun = client.tool_sign_in_start(&id, to, redirect(17867)).unwrap();
+    let ToolSignInBegun::Page { page } = begun else { panic!("{begun:?}") };
+    let returned = stand_in.visit(&ToolServerPage::new(page.as_str()));
+    client.tool_sign_in_finish(&id, ToolSignInReturned::new(returned)).unwrap();
+}
+
+/// Its server takes no token from before, as once each has ended, which no check had renewed.
+#[test]
+fn an_agents_call_to_a_server_the_person_signed_in_to_goes_on_working_across_its_tokens_end() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let stand_in = runtime.block_on(ToolServerStandIn::with(ToolServerScript::default()));
+    let stack = Stack::start();
+    let client = stack.client();
+    sign_in(&client, &stand_in);
+    let (_, chat) = stack.workspace(&client);
+    let works = [("Found issue 7".to_string(), false)];
+
+    assert_eq!(calls::run(&client, &chat.id, CALL, 1), works);
+    stand_in.end_access_tokens();
+    assert_eq!(calls::run(&client, &chat.id, CALL, 2), works);
+
+    assert_eq!(stand_in.asked_for("POST /token").len(), 2, "a code, and one renewal");
 }

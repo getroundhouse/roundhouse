@@ -98,6 +98,7 @@ impl Asks {
             | WorkerAsk::Revise(_)
             | WorkerAsk::Withdraw(_)
             | WorkerAsk::ReadProposal(_)
+            | WorkerAsk::RenewToolServer(_)
             | WorkerAsk::Unknown => self.patience,
         }
     }

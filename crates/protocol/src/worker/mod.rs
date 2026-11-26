@@ -29,9 +29,9 @@ pub use archived::{ArchivedBranch, ArchivedBundle, ArchivedGit, CaptureArchive, 
 pub use ask::{
     Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, CancelWait, CreateWorktree, DiffComments, ListWorktrees,
     ListedChild, NewWorktreeOn, OwnWorktree, ProposalRecord, Propose, PullRequestAnswer, PullRequestWaitUntil,
-    ReadDiffComments, ReadProposal, ReadPullRequest, ReadPullRequests, ReadWait, RemoveWorktree, Revise,
-    StartPullRequestWait, ToWorker, WaitAnswer, Withdraw, WorkerAsk, WorktreeCreated, WorktreeRemoval, WorktreeRemoved,
-    Worktrees, WouldLose,
+    ReadDiffComments, ReadProposal, ReadPullRequest, ReadPullRequests, ReadWait, RemoveWorktree, RenewToolServer,
+    Revise, StartPullRequestWait, ToWorker, WaitAnswer, Withdraw, WorkerAsk, WorktreeCreated, WorktreeRemoval,
+    WorktreeRemoved, Worktrees, WouldLose,
 };
 pub use children::{AddChildWorktree, ChildBranch, ChildWorktreeAdded, WatchChildBranches};
 pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, RunningAgentsReply, Stop};
@@ -44,7 +44,7 @@ pub use terminals::{
     RunningTerminal, RunningTerminals, RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalRows, TerminalStart,
     TerminalStop, TerminalText, TerminalTyped, TerminalWatch,
 };
-pub use tool_servers::{ProxiedServer, ServerHeader, ServerHeaderValue, ToolServersSet};
+pub use tool_servers::{ProxiedServer, ServerHeader, ServerHeaderValue, ServerSignIn, TokenNumber, ToolServersSet};
 pub use tools::{ServeTools, TOOLS_SERVER, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};
 pub use workspaces::{
     ArchiveScript, CancelSetup, NamesGitHas, NamesGitHasReply, PrepareWorkspace, RemoveWorkspace, RestoreWorkspace,

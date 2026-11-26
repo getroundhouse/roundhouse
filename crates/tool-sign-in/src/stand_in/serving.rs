@@ -138,7 +138,7 @@ impl State {
         }
     }
 
-    /// What its MCP server answers: that it's one, to anyone it doesn't ask for a sign-in, and whoever has one.
+    /// What its MCP server, which has one tool, answers anyone it doesn't ask for a sign-in, and whoever has one.
     fn mcp(&self, asked: &Asked, script: &Script) -> Reply {
         let message: Value = serde_json::from_str(&asked.body).unwrap();
         if script.refuses_method.is_some_and(|refused| message["method"] == refused) {
@@ -151,6 +151,11 @@ impl State {
         if script.asks != Asks::Nothing && !token.is_some_and(|token| self.tokens.lock().takes(token)) {
             return metadata::unauthorized(script, &self.at);
         }
-        said(200, &json!({"jsonrpc": "2.0", "id": message["id"], "result": {}}))
+        let result = match message["method"].as_str() {
+            Some("tools/list") => json!({"tools": [{"name": "find_issue"}]}),
+            Some("tools/call") => json!({"content": [{"type": "text", "text": "Found issue 7"}]}),
+            _ => json!({}),
+        };
+        said(200, &json!({"jsonrpc": "2.0", "id": message["id"], "result": result}))
     }
 }

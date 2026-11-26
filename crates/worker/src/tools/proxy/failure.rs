@@ -15,8 +15,10 @@ pub(super) enum Failure {
     Removed,
     /// Its URL or its header isn't one HTTP can be sent with.
     Unusable,
-    /// It answered 401 or 403 to a request with its key, or to one without.
-    Refused { with_key: bool, status: StatusCode },
+    /// It's signed in to, and needs the person to again, so it wasn't asked.
+    NeedsSignIn,
+    /// It answered 401 or 403 to a request that carried `sent`.
+    Refused { sent: Sent, status: StatusCode },
     /// It sent the request somewhere else.
     Redirected,
     /// There was no connecting to it.
@@ -25,6 +27,14 @@ pub(super) enum Failure {
     Lost,
     /// Nothing says which servers this machine trusts.
     NoCertificates,
+}
+
+/// What a request told a server of who's asking.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Sent {
+    Nothing,
+    Key,
+    AccessToken,
 }
 
 impl Failure {
@@ -38,14 +48,24 @@ impl Failure {
                     "Roundhouse can't use the URL or the header {label} has. Add it again in Settings › MCP servers."
                 )
             }
-            Failure::Refused { with_key: true, status } => {
+            Failure::NeedsSignIn => {
+                format!("{label} needs you to sign in to it. Sign in from Settings › MCP servers.")
+            }
+            Failure::Refused { sent: Sent::AccessToken, status } => {
+                let status = status.as_u16();
+                format!(
+                    "{label} refused the sign-in Roundhouse has to it ({status}). Sign in to it again from Settings › MCP \
+                     servers."
+                )
+            }
+            Failure::Refused { sent: Sent::Key, status } => {
                 let status = status.as_u16();
                 format!(
                     "{label} refused the key Roundhouse sent it ({status}). Add it again with another in Settings › MCP \
                      servers."
                 )
             }
-            Failure::Refused { with_key: false, status } => {
+            Failure::Refused { sent: Sent::Nothing, status } => {
                 let status = status.as_u16();
                 format!(
                     "{label} refused a request without a key ({status}). Add it again with one in Settings › MCP \

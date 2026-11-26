@@ -1,6 +1,7 @@
 mod agent;
 mod failing;
 mod passing;
+mod signed_in;
 mod stand_in;
 
 use agent::{Agent, Answer};

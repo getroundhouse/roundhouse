@@ -1,4 +1,4 @@
-//! What the worker asks its hub, for its agents' calls to its tools, and the answers it waits for.
+//! What the worker asks its hub, for its agents' calls to its tools and those it passes on, and the answers it waits for.
 
 #[cfg(test)]
 use protocol::client::{ApiError, ErrorCode};

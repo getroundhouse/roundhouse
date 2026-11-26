@@ -3,6 +3,7 @@
 
 use protocol::client::tool_sign_ins::ToolSignInTo;
 use protocol::model::ToolSignInStatus;
+use protocol::worker::TokenNumber;
 use tool_sign_in::{Granted, OauthError, Renewal};
 
 use super::super::renewals::RENEWED_WITH_LEFT;
@@ -59,6 +60,35 @@ fn a_sign_in_is_due_once_its_token_has_little_left_if_something_renews_it_and_is
     assert_eq!(status_of(&store, "last"), ToolSignInStatus::NeedsSignIn);
     assert_eq!(holding(dir.path(), "made-up-last"), Vec::<String>::new(), "its token is forgotten");
     assert_eq!(status_of(&store, "endless"), ToolSignInStatus::Works);
+}
+
+/// The token the hub has, and no other of it, whether or not its end was said, and a server's that has no sign-in.
+#[test]
+fn a_token_its_server_refused_is_due_if_the_hub_has_it_and_something_renews_it_and_is_gone_if_nothing_does() {
+    let dir = tempfile::tempdir().unwrap();
+    let (servers, store) = servers_in(dir.path());
+    signed_in_for(&servers, "t", "Docs", Granted { lasts: None, ..granted("made-up-t") });
+    signed_in_for(&servers, "last", "Sentry", Granted { refresh: None, ..granted("made-up-last") });
+    servers.add(with_key("key", "Figma", "made-up")).unwrap();
+    let refused = |id: &str, number| {
+        let Checked { due, changed } = servers.refused(&id.into(), number).unwrap();
+        let of = |id: protocol::model::ToolServerId| id.to_string();
+        let due: Vec<_> = due.into_iter().map(|due| of(due.server)).collect();
+        let changed: Vec<_> = changed.into_iter().map(|server| of(server.id)).collect();
+        (due, changed)
+    };
+    let (nothing, first) = ((vec![], vec![]), TokenNumber::FIRST);
+
+    assert_eq!(refused("t", first.next()), nothing, "it was given no such token");
+    assert_eq!(refused("t", first), (vec!["t".to_string()], vec![]));
+    assert_eq!(refused("last", first), (vec![], vec!["last".to_string()]));
+    assert_eq!(refused("last", first), nothing, "it's gone once");
+    assert_eq!((refused("key", first), refused("none", first)), (nothing.clone(), nothing.clone()));
+    assert_eq!(status_of(&store, "last"), ToolSignInStatus::NeedsSignIn);
+    assert_eq!(holding(dir.path(), "made-up-last"), Vec::<String>::new());
+    again(&servers, "t").unwrap();
+    assert_eq!(refused("t", first), nothing, "the hub has another by now");
+    assert_eq!(refused("t", first.next()).0, ["t".to_string()]);
 }
 
 #[test]

@@ -2,6 +2,7 @@
 
 use logging::testing::Logs;
 use protocol::model::{ToolServerAuth, ToolServerName, ToolServerUrl};
+use protocol::worker::{ServerSignIn, TokenNumber};
 use tool_sign_in::{OauthError, Renewal};
 
 use super::super::ToolServers;
@@ -34,27 +35,34 @@ fn a_hub_that_starts_again_has_workers_sent_the_servers_it_had_with_their_keys()
     assert_eq!(sent(&again), expected);
 }
 
-/// Through a change to the sign-in, and to what the hub has of it, as much as to the server.
+/// Through a change to the sign-in, and to what the hub has of it, as much as to the server. Each token has a higher
+/// number than the last.
 #[test]
-fn a_signed_in_server_is_sent_with_its_access_token_and_each_new_one_until_the_last_is_forgotten() {
+fn a_signed_in_server_is_sent_with_each_access_token_and_which_it_is_and_with_none_once_it_needs_signing_in_to() {
     let dir = tempfile::tempdir().unwrap();
     let (servers, _) = servers_in(dir.path());
     let due = |now_ms| servers.check_sign_ins(now_ms).unwrap().due.remove(0);
-    let sent_token = || sent(&servers).pop().and_then(|(_, header)| header);
+    let expected = |token: &str, number| {
+        let header = format!("Authorization: Bearer {token}");
+        let works = ServerSignIn::Works { token: number };
+        (vec![("t".to_string(), Some(header))], Some(works))
+    };
+    let sent = || (sent(&servers), servers.sent_server(&"t".into()).unwrap().sign_in);
+    let second = TokenNumber::FIRST.next();
 
     signed_in(&servers, "t", "Linear");
-    assert_eq!(sent_token().as_deref(), Some("Authorization: Bearer made-up-t"));
+    assert_eq!(sent(), expected("made-up-t", TokenNumber::FIRST));
 
     let ends_at_ms = GIVEN_AT_MS + 3_600_000;
     servers.renewed(&due(ends_at_ms), Renewal::Renewed(granted("made-up-renewed")), ends_at_ms).unwrap();
-    assert_eq!(sent_token().as_deref(), Some("Authorization: Bearer made-up-renewed"));
+    assert_eq!(sent(), expected("made-up-renewed", second));
 
     again(&servers, "t").unwrap();
-    assert_eq!(sent_token().as_deref(), Some("Authorization: Bearer made-up-again"));
+    assert_eq!(sent(), expected("made-up-again", second.next()));
 
     let refused = Renewal::SignInAgain(OauthError::new("invalid_grant"));
     servers.renewed(&due(ends_at_ms), refused, ends_at_ms).unwrap();
-    assert_eq!(sent(&servers), []);
+    assert_eq!(sent(), (vec![("t".to_string(), None)], Some(ServerSignIn::NeedsSignIn)));
 }
 
 /// Each is kept, and the rest are sent, and the log says which and why, with no key, and no name or URL.

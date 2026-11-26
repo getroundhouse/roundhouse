@@ -170,7 +170,9 @@ mod tests {
                 name: ToolServerHeader::typed("Authorization").unwrap(),
                 value: worker::ServerHeaderValue::new(SECRET),
             }),
+            sign_in: None,
         };
+        let renewed = worker::AskReply::ToolServer(server.clone());
         vec![
             carrier("AgentLogin", &login()),
             carrier("AgentSpec", &WorkerRequest::AgentStart(launch())),
@@ -181,6 +183,7 @@ mod tests {
             ),
             carrier("GitCredential", &credential),
             carrier("GitCredentialSet", &WorkerRequest::GitCredentialSet(worker::GitCredentialSet { credential })),
+            carrier("ProxiedServer", &renewed),
             carrier("ToolServersSet", &WorkerRequest::ToolServersSet(worker::ToolServersSet { servers: vec![server] })),
         ]
     }

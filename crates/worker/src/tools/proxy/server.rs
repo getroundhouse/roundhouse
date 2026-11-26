@@ -1,11 +1,11 @@
 use super::path::path_of;
-use super::{Failure, Upstream};
+use super::{Failure, Sent, Upstream};
 use hyper::Uri;
 use hyper::header::{HeaderName, HeaderValue};
 use parking_lot::Mutex;
 use protocol::capability::setup::ServerName;
 use protocol::model::{ToolServerId, ToolServerName};
-use protocol::worker::{ProxiedServer, ServerHeader};
+use protocol::worker::{ProxiedServer, ServerHeader, ServerSignIn, TokenNumber};
 use std::sync::Arc;
 
 /// The hub's tool servers, as the hub last set them, and the client that reaches them.
@@ -40,9 +40,12 @@ pub(super) struct Server {
 }
 
 impl Server {
-    fn new(server: ProxiedServer) -> Self {
-        let ProxiedServer { id, name, label, url, header } = server;
-        let target = Target::new(url.as_str(), header).ok_or(Failure::Unusable);
+    pub(super) fn new(server: ProxiedServer) -> Self {
+        let ProxiedServer { id, name, label, url, header, sign_in } = server;
+        let target = match sign_in {
+            Some(ServerSignIn::NeedsSignIn) => Err(Failure::NeedsSignIn),
+            sign_in => Target::new(url.as_str(), header, sign_in).ok_or(Failure::Unusable),
+        };
         Self { id, name, label, target }
     }
 }
@@ -51,11 +54,28 @@ impl Server {
 pub(super) struct Target {
     pub(super) uri: Uri,
     pub(super) header: Option<(HeaderName, HeaderValue)>,
+    sign_in: Option<ServerSignIn>,
 }
 
 impl Target {
+    /// Which access token a request to it carries, if it's one the hub could have another of.
+    pub(super) fn token(&self) -> Option<TokenNumber> {
+        match self.sign_in? {
+            ServerSignIn::Works { token } => Some(token),
+            ServerSignIn::NeedsSignIn | ServerSignIn::Unknown => None,
+        }
+    }
+
+    pub(super) fn sent(&self) -> Sent {
+        match (&self.sign_in, &self.header) {
+            (Some(_), _) => Sent::AccessToken,
+            (None, Some(_)) => Sent::Key,
+            (None, None) => Sent::Nothing,
+        }
+    }
+
     /// `None` for a URL that isn't HTTP's, or a header HTTP can't carry.
-    fn new(url: &str, header: Option<ServerHeader>) -> Option<Self> {
+    fn new(url: &str, header: Option<ServerHeader>, sign_in: Option<ServerSignIn>) -> Option<Self> {
         let uri: Uri = url.parse().ok()?;
         uri.host()?;
         if !matches!(uri.scheme_str(), Some("http" | "https")) {
@@ -65,7 +85,7 @@ impl Target {
             Some(header) => Some(sent(&header)?),
             None => None,
         };
-        Some(Self { uri, header })
+        Some(Self { uri, header, sign_in })
     }
 }
 

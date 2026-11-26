@@ -1,11 +1,14 @@
 use std::sync::Arc;
 
-use protocol::client::error_chain;
+use protocol::client::{ApiError, ErrorCode, error_chain};
+use protocol::model::ToolServer;
+use protocol::worker::{ProxiedServer, RenewToolServer};
+use tool_sign_in::Renewal;
 use tracing::{error, warn};
 
 use super::super::wall_clock::check_by_the_wall_clock;
 use super::super::{Hub, off_thread};
-use super::renewing::UnderWay;
+use super::renewing::{Joined, UnderWay};
 use crate::store::now_ms;
 use crate::tool_servers::{Checked, Due, ToolServerChange};
 
@@ -33,9 +36,7 @@ impl Hub {
                 return;
             }
         };
-        for server in changed {
-            self.announce_tool_server(ToolServerChange { server, changed: true });
-        }
+        self.announce_tool_servers(changed);
         for due in due {
             if self.tool_sign_ins.renewing.has_waited(&due, now_ms) {
                 self.renew_tool_sign_in(due);
@@ -43,13 +44,52 @@ impl Hub {
         }
     }
 
-    /// Starts renewing `due`, unless a renewal of it is under way, on a task of its own, so nothing that asked for it
-    /// cuts it off: the authorization server may take no refresh token but the one it gives.
+    /// What a worker is to call a tool server with that refused its access token, as [`RenewToolServer`] says. One that
+    /// asks as the token is being renewed waits for that, and one whose token was renewed moments ago has what that came
+    /// to. `NotFound` when the server has been removed.
+    pub(crate) async fn tool_server_refused(
+        self: &Arc<Self>,
+        asked: RenewToolServer,
+    ) -> Result<ProxiedServer, ApiError> {
+        let RenewToolServer { server, refused } = asked;
+        loop {
+            let (servers, id) = (Arc::clone(&self.tool_servers), server.clone());
+            let Checked { due, changed } = off_thread(move || servers.refused(&id, refused)).await?;
+            self.announce_tool_servers(changed);
+            let Some(due) = due.into_iter().next() else { break };
+            match self.tool_sign_ins.renewing.join(&due, now_ms()) {
+                Joined::Begun(under_way, ends) => {
+                    self.start_renewal_of(due, under_way);
+                    ends.ended().await;
+                    break;
+                }
+                // It may be of tokens the server had before it was signed in to again, so this looks again.
+                Joined::UnderWay(ends) => ends.ended().await,
+                Joined::Nothing => break,
+            }
+        }
+        let gone = || ApiError::new(ErrorCode::NotFound, "the hub has no such MCP server to send a worker");
+        self.tool_servers.sent_server(&server).ok_or_else(gone)
+    }
+
+    fn announce_tool_servers(&self, changed: Vec<ToolServer>) {
+        for server in changed {
+            self.announce_tool_server(ToolServerChange { server, changed: true });
+        }
+    }
+
+    /// Starts renewing `due`, unless a renewal of it is under way.
     pub(super) fn renew_tool_sign_in(self: &Arc<Self>, due: Due) {
         if let Some(under_way) = self.tool_sign_ins.renewing.begin(&due.server) {
-            let hub = Arc::clone(self);
-            tokio::spawn(async move { hub.renewal_of(due, under_way).await });
+            self.start_renewal_of(due, under_way);
         }
+    }
+
+    /// Renews `due` on a task of its own, so nothing that asked for it cuts it off: the authorization server may take no
+    /// refresh token but the one it gives.
+    fn start_renewal_of(self: &Arc<Self>, due: Due, under_way: UnderWay) {
+        let hub = Arc::clone(self);
+        tokio::spawn(async move { hub.renewal_of(due, under_way).await });
     }
 
     /// Renews `due`: asks its authorization server, within its time limits, and then keeps what it answered, and tells
@@ -68,14 +108,18 @@ impl Hub {
             Ok(renewal) => renewal,
             Err(e) => return self.not_renewed(&due, &e),
         };
-        let (servers, renewed, answered_at_ms) = (Arc::clone(&self.tool_servers), Arc::clone(&due), now_ms());
-        match off_thread(move || servers.renewed(&renewed, renewal, answered_at_ms)).await {
-            Ok(change) => {
-                self.tool_sign_ins.renewing.settled(&due.server);
-                if let Some(change) = change {
-                    self.announce_tool_server(change);
+        let renewed = matches!(renewal, Renewal::Renewed(_));
+        let (servers, renewing, answered_at_ms) = (Arc::clone(&self.tool_servers), Arc::clone(&due), now_ms());
+        match off_thread(move || servers.renewed(&renewing, renewal, answered_at_ms)).await {
+            Ok(Some(change)) => {
+                if renewed {
+                    self.tool_sign_ins.renewing.renewed(&due, answered_at_ms);
+                } else {
+                    self.tool_sign_ins.renewing.gone(&due.server);
                 }
+                self.announce_tool_server(change);
             }
+            Ok(None) => self.tool_sign_ins.renewing.gone(&due.server),
             Err(e) => self.not_renewed(&due, &e),
         }
     }

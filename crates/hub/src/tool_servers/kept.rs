@@ -1,22 +1,9 @@
 use protocol::model::{ToolSignInId, ToolSignInStatus};
+use protocol::worker::TokenNumber;
 use serde::{Deserialize, Serialize};
 use tool_sign_in::{AccessToken, Granted, RefreshToken, Renewable, SignedIn};
 
 use crate::store::later_ms;
-
-/// Which of a server's access tokens one is. Each the server's sign-in is given has a higher one, through signing in to
-/// it again too, so it also says whether what the hub has is what it had.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(transparent)]
-pub(crate) struct TokenNumber(u64);
-
-impl TokenNumber {
-    const FIRST: TokenNumber = TokenNumber(1);
-
-    fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
-}
 
 /// A sign-in to a tool server, as its file holds it, whole.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

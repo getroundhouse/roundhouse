@@ -82,6 +82,7 @@ impl Hub {
                 let comments = self.comment_list(workspace_id.clone()).await?;
                 Ok(AskReply::DiffComments(DiffComments { comments }))
             }
+            WorkerAsk::RenewToolServer(asked) => self.tool_server_refused(asked).await.map(AskReply::ToolServer),
             WorkerAsk::Unknown => Err(self.unsupported(None)),
         }
     }

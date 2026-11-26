@@ -5,10 +5,11 @@ use std::time::Duration;
 
 use protocol::client::ApiError;
 use protocol::model::{ToolServer, ToolServerId};
+use protocol::worker::TokenNumber;
 use tool_sign_in::{RefreshToken, Renewable, Renewal};
 use tracing::{info, warn};
 
-use super::kept::{KeptSignIn, KeptTokens, TokenNumber};
+use super::kept::{KeptSignIn, KeptTokens};
 use super::secret::ToolServerSecret;
 use super::sign_ins::kept_in;
 use super::{ToolServerChange, ToolServers};
@@ -37,7 +38,14 @@ pub(crate) struct Held {
     number: TokenNumber,
 }
 
-/// What a check of the sign-ins found.
+impl Held {
+    /// Those renewing these gave.
+    pub(crate) fn renewed(&self) -> Self {
+        Self { file: self.file.clone(), number: self.number.next() }
+    }
+}
+
+/// What a check of the sign-ins found, or of one whose token its server refused.
 #[derive(Debug, Default)]
 pub(crate) struct Checked {
     pub(crate) due: Vec<Due>,
@@ -59,12 +67,9 @@ impl ToolServers {
             let Some(kept) = kept_in(files, &server.id, &file) else { continue };
             let Some(KeptTokens { ends_at_ms: Some(ends_at_ms), refresh, .. }) = &kept.tokens else { continue };
             match refresh {
-                Some(refresh) if *ends_at_ms < later_ms(now_ms, RENEWED_WITH_LEFT) => checked.due.push(Due {
-                    server: server.id,
-                    renewable: kept.renewable.clone(),
-                    refresh: refresh.clone(),
-                    of: Held { file, number: kept.number },
-                }),
+                Some(refresh) if *ends_at_ms < later_ms(now_ms, RENEWED_WITH_LEFT) => {
+                    checked.due.push(due(server, file, &kept, refresh));
+                }
                 None if *ends_at_ms <= now_ms => {
                     info!(name: "tool_sign_in.ended", server_id = %server.id, "A tool server's sign-in ended, and nothing renews it");
                     checked.changed.push(self.keep(files, &server.id, &file, kept.gone())?.server);
@@ -73,6 +78,30 @@ impl ToolServers {
             }
         }
         Ok(checked)
+    }
+
+    /// Checks the sign-in to the server `id`, which refused the access token `refused`. It's due when that's the token
+    /// the hub has, and gone when nothing renews it. A token the hub has another in place of is no news of that one.
+    pub(crate) fn refused(&self, id: &ToolServerId, refused: TokenNumber) -> Result<Checked, ApiError> {
+        self.changing(|files| {
+            let mut checked = Checked::default();
+            let Some((server, Some(file))) = self.store.tool_server(id)? else { return Ok(checked) };
+            let Some(kept) = kept_in(files, id, &file).filter(|kept| kept.number == refused) else {
+                return Ok(checked);
+            };
+            let Some(KeptTokens { refresh, .. }) = &kept.tokens else { return Ok(checked) };
+            if let Some(refresh) = refresh {
+                checked.due.push(due(server, file, &kept, refresh));
+            } else {
+                info!(
+                    name: "tool_sign_in.token_refused",
+                    server_id = %id,
+                    "A tool server refused its sign-in, and nothing renews it"
+                );
+                checked.changed.push(self.keep(files, id, &file, kept.gone())?.server);
+            }
+            Ok(checked)
+        })
     }
 
     /// Whether the hub still has the tokens of `due`, so it's worth asking with.
@@ -120,5 +149,15 @@ impl ToolServers {
         let holds = self.store.tool_server(&due.server)?.and_then(|(_, file)| file);
         let kept = holds.filter(|file| *file == due.of.file).and_then(|file| kept_in(files, &due.server, &file));
         Ok(kept.filter(|kept| kept.number == due.of.number && kept.tokens.is_some()))
+    }
+}
+
+/// `server`'s sign-in `kept`, in `file`, to renew with `refresh`.
+fn due(server: ToolServer, file: LoginFile, kept: &KeptSignIn, refresh: &RefreshToken) -> Due {
+    Due {
+        server: server.id,
+        renewable: kept.renewable.clone(),
+        refresh: refresh.clone(),
+        of: Held { file, number: kept.number },
     }
 }
