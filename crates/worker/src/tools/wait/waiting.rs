@@ -57,7 +57,10 @@ pub(in crate::tools) fn task(wait: &Wait, pull_request: Option<&OwnPullRequest>,
                 task["statusMessage"] = crate::tools::pull_requests::progress(watch).into();
                 return task;
             }
-            let standing = pull_request::standing(Standing::of(pull_request));
+            let standing = pull_request.map_or(Standing::NoPullRequest, |own| {
+                Standing::of(own.pull_request.said(), own.local, own.pull_request.checks_said())
+            });
+            let standing = pull_request::standing(standing);
             ("working", format!("Waiting on pull request #{}. {standing}", wait.number))
         }
         // The CLI says a task called off failed, and takes a turn to tell the agent what this says, but for one the

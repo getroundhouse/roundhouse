@@ -51,7 +51,10 @@ impl Lookup {
     pub fn standing(&self) -> Option<Standing> {
         match self {
             Lookup::Looking | Lookup::Unseen(_) => None,
-            Lookup::Found(pr) => Some(Standing::of(pr.as_deref())),
+            Lookup::Found(None) => Some(Standing::NoPullRequest),
+            Lookup::Found(Some(own)) => {
+                Some(Standing::of(own.pull_request.said(), own.local, own.pull_request.checks_said()))
+            }
         }
     }
 

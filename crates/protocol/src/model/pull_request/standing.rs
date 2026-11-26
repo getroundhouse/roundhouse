@@ -1,6 +1,6 @@
-use super::facets::{CheckCounts, PullRequest};
+use super::facets::{CheckCounts, Checks, Summary};
 use super::phase::Phase;
-use super::status::{MergeState, OwnPullRequest, QueueState, Review};
+use super::status::{Local, MergeState, QueueState, Review};
 
 /// Where a workspace's work stands against its pull request: the first thing in the way of merging it, or that
 /// nothing is.
@@ -37,12 +37,13 @@ pub enum Standing {
 }
 
 impl Standing {
-    /// Done comes first, then the queue, which merges it whatever else is true. Then what's here and not on
-    /// GitHub, since GitHub's answers are about an older commit until it's pushed. Then what GitHub says, the
-    /// problems it can't merge with before what it waits on.
-    pub fn of(own: Option<&OwnPullRequest>) -> Self {
-        let Some(OwnPullRequest { pull_request: pr, local }) = own else { return Standing::NoPullRequest };
-        if let Some(done_or_queued) = Self::done_or_queued(pr) {
+    /// Where a pull request stands, from what its summary says, how the worktree stands against it, `local`, and its
+    /// checks, `None` until they've been read. It reads only these, so the form a read of GitHub has and the form an
+    /// observation holds give the same. Done comes first, then the queue, which merges it whatever else is true. Then
+    /// what's here and not on GitHub, since GitHub's answers are about an older commit until it's pushed. Then what
+    /// GitHub says, the problems it can't merge with before what it waits on.
+    pub fn of(summary: &Summary, local: Local, checks: Option<&Checks>) -> Self {
+        if let Some(done_or_queued) = Self::done_or_queued(summary) {
             return done_or_queued;
         }
         if local.uncommitted > 0 {
@@ -54,16 +55,16 @@ impl Standing {
             (ahead, 0) => return Standing::Unpushed(ahead),
             _ => return Standing::Diverged,
         }
-        Self::on_github(pr)
+        Self::on_github(summary, checks)
     }
 
     /// Where it stands by what GitHub says alone, leaving out the worktree, which a wait on it goes by.
-    pub fn on_github_alone(pr: &PullRequest) -> Self {
-        Self::done_or_queued(pr).unwrap_or_else(|| Self::on_github(pr))
+    pub fn on_github_alone(summary: &Summary, checks: Option<&Checks>) -> Self {
+        Self::done_or_queued(summary).unwrap_or_else(|| Self::on_github(summary, checks))
     }
 
-    fn done_or_queued(pr: &PullRequest) -> Option<Self> {
-        match pr.phase() {
+    fn done_or_queued(summary: &Summary) -> Option<Self> {
+        match summary.phase() {
             Phase::Merged => Some(Standing::Merged),
             Phase::Closed => Some(Standing::Closed),
             Phase::Queued(queue) => Some(Standing::Queued(queue)),
@@ -72,19 +73,18 @@ impl Standing {
         }
     }
 
-    fn on_github(pr: &PullRequest) -> Self {
-        let said = pr.said();
+    fn on_github(said: &Summary, checks: Option<&Checks>) -> Self {
         if said.merge_state == MergeState::Dirty {
             return Standing::Conflicts;
         }
         if said.review == Review::ChangesRequested {
             return Standing::ChangesRequested;
         }
-        if pr.phase() == Phase::Draft {
+        if said.phase() == Phase::Draft {
             return Standing::Draft;
         }
-        let Some(checks) = &pr.checks else { return Standing::Reading };
-        let counts = checks.said.counts();
+        let Some(checks) = checks else { return Standing::Reading };
+        let counts = checks.counts();
         if counts.failed > 0 {
             return Standing::ChecksFailed(counts);
         }

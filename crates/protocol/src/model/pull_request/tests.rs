@@ -27,7 +27,12 @@ fn open() -> OwnPullRequest {
 fn standing(change: impl FnOnce(&mut OwnPullRequest)) -> Standing {
     let mut own = open();
     change(&mut own);
-    Standing::of(Some(&own))
+    of(&own)
+}
+
+/// Where `own` stands, from the parts of it [`Standing::of`] reads.
+fn of(own: &OwnPullRequest) -> Standing {
+    Standing::of(own.pull_request.said(), own.local, own.pull_request.checks_said())
 }
 
 /// What GitHub says of it, to change.
@@ -37,8 +42,7 @@ fn said(own: &mut OwnPullRequest) -> &mut Summary {
 
 #[test]
 fn an_open_pull_request_with_nothing_in_the_way_is_ready() {
-    assert_eq!(Standing::of(Some(&open())), Standing::Ready);
-    assert_eq!(Standing::of(None), Standing::NoPullRequest);
+    assert_eq!(of(&open()), Standing::Ready);
 }
 
 /// A wait goes by GitHub alone, so the worktree's files and commits don't stand in its way, while merged, closed and
@@ -50,7 +54,7 @@ fn on_github_alone_leaves_out_the_worktree() {
         own.local = Local { uncommitted: 2, ahead: 1, behind: 0 };
         own.pull_request.checks = Some(checks(1, 0, 2));
         change(said(&mut own));
-        Standing::on_github_alone(&own.pull_request)
+        Standing::on_github_alone(own.pull_request.said(), own.pull_request.checks_said())
     };
     let running = CheckCounts { passed: 1, failed: 0, pending: 2 };
 
@@ -260,13 +264,13 @@ proptest! {
             && matches!(said.review, Review::Approved | Review::NotRequired)
             && matches!(said.merge_state, MergeState::Clean | MergeState::HasHooks | MergeState::Unstable);
 
-        prop_assert_eq!(Standing::of(Some(&own)) == Standing::Ready, nothing_in_the_way);
+        prop_assert_eq!(of(&own) == Standing::Ready, nothing_in_the_way);
     }
 
     /// A merged or closed pull request is done, whatever else is true of it.
     #[test]
     fn done_comes_first(own in any_pull_request()) {
-        let standing = Standing::of(Some(&own));
+        let standing = of(&own);
 
         match own.pull_request.said().state {
             PrState::Merged => prop_assert_eq!(standing, Standing::Merged),
