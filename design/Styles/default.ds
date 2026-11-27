@@ -20,9 +20,9 @@ grey.strong { $default: #2d2724 }
 grey.intense { $default: #332d2a }
 // The brand's hue, from the palest. Only the pinned steps and the middle one are the app's.
 copper: boldness(color(#d08a5c))
-copper.faint { $default: #d8c2b3 }
-copper.subtle { $default: #e8b896 }
-copper.soft { $default: #dba27c }
+copper.faint { $default: #e3c0aa }
+copper.subtle { $default: #e1baa1 }
+copper.soft { $default: #d9a380 }
 copper.intense { $default: #36251a }
 
 // Colours of their own, with no steps.
@@ -56,9 +56,9 @@ color.text.faint: #7c7671
 
 // Buttons.
 color.button: grey.soft
-color.button.main: #f2eee9
-color.button.main_hover: #ffffff
-color.button.main_pressed: #ddd8d2
+color.button.main: #f5eee9
+color.button.main_hover: #fffdf9
+color.button.main_pressed: #dfd8d3
 color.button.on_main: grey.subtle
 
 // The brand.

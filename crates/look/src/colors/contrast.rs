@@ -1,5 +1,9 @@
 use super::srgb::Srgb;
 
+/// How many times [`least_reaching`] halves what it searches, which finds where a colour reaches a contrast far more
+/// finely than a byte of colour can show it.
+const HALVINGS: u32 = 40;
+
 /// How readable text is on what's behind it, as APCA's Lc measures it, in its version 0.0.98G-4g, without the sign
 /// that says which of the two is lighter. It's about 90 for body text at its best, at least 75 for body text, 60 for
 /// other text that's read, 30 for any text at all and 15 for what isn't text. It's used rather than WCAG 2's ratio,
@@ -23,6 +27,26 @@ impl Contrast {
         };
         Contrast((lc * 100.0).abs())
     }
+}
+
+/// The colour `along` gives at the least of `from` to `to` whose contrast on `page` reaches `contrast`, where the colours
+/// it gives grow further from the page from `from` to `to`, such as text from the page's lightness toward white.
+pub(super) fn least_reaching(
+    contrast: Contrast,
+    page: Srgb,
+    (from, to): (f64, f64),
+    along: impl Fn(f64) -> Srgb,
+) -> Srgb {
+    let (mut short, mut reaches) = (from, to);
+    for _ in 0..HALVINGS {
+        let middle = f64::midpoint(short, reaches);
+        if Contrast::of(along(middle), page) < contrast {
+            short = middle;
+        } else {
+            reaches = middle;
+        }
+    }
+    along(reaches)
 }
 
 /// How much light `color` gives, as APCA measures it, with its soft clamp near black, where the eye can't tell much

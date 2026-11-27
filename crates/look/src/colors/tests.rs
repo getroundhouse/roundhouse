@@ -51,6 +51,19 @@ proptest! {
         prop_assert!(has >= wanted, "Lc {has} for {wanted}");
         prop_assert!(has < wanted + 2.0, "Lc {has} for {wanted}");
     }
+
+    /// So a tint of the brand asked for at a contrast, from the brand's own to the text's, has it, and keeps as much
+    /// of the brand as it can.
+    #[test]
+    fn a_tint_reaches_the_contrast_it_is_made_for_and_little_more(wanted in 50.0..90.0_f64) {
+        let page = DARK.greys.grey(DARK.page);
+
+        let tint = DARK.tint(Contrast(wanted));
+
+        let Contrast(has) = Contrast::of(tint, page);
+        prop_assert!(has >= wanted, "Lc {has} for {wanted}");
+        prop_assert!(has < wanted + 2.0, "Lc {has} for {wanted}");
+    }
 }
 
 /// As CSS Color 4 gives sRGB's red, green and blue in Oklab, and white, which is all lightness.

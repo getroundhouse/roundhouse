@@ -1,6 +1,7 @@
 use gpui_kit::Hsla;
 
-use super::contrast::Contrast;
+use super::contrast::{Contrast, least_reaching};
+use super::oklab::Oklab;
 use super::palette::hsla;
 use super::ramp::{Ramp, Stop};
 use super::srgb::Srgb;
@@ -14,6 +15,9 @@ pub(super) enum Made {
     Text(Contrast),
     /// The brand's colour over the page, at a strength from 0 to 1.
     Wash(f64),
+    /// The brand's colour paled toward the text, the least of the way that reaches a contrast on the page, so it's as
+    /// readable as it needs to be and keeps as much of the brand as it can.
+    Tint(Contrast),
     /// A colour of its own, as `0xrrggbbaa`.
     Fixed(u32),
 }
@@ -25,6 +29,8 @@ pub(super) struct Recipe {
     /// The pane's stop, which text's contrast is measured on, and a wash is over.
     pub(super) page: Stop,
     pub(super) brand: Srgb,
+    /// What to read's contrast on the page, which is text's, and what a tint pales toward.
+    pub(super) text: Contrast,
 }
 
 /// The colour `made` is, from `recipe`. A colour of its own can be given as its `0xrrggbbaa`, or as an [`Srgb`].
@@ -34,7 +40,17 @@ pub(super) fn color(made: impl Into<Made>, recipe: &Recipe) -> Hsla {
         Made::Grey(stop) => recipe.greys.grey(stop).into(),
         Made::Text(contrast) => recipe.greys.text(contrast, page).into(),
         Made::Wash(strength) => recipe.brand.over(page, strength).into(),
+        Made::Tint(contrast) => recipe.tint(contrast).into(),
         Made::Fixed(rgba) => hsla(rgba),
+    }
+}
+
+impl Recipe {
+    /// The brand's colour paled toward the text, the least of the way that reaches `contrast` on the page.
+    pub(super) fn tint(&self, contrast: Contrast) -> Srgb {
+        let page = self.greys.grey(self.page);
+        let (brand, text) = (Oklab::from(self.brand), Oklab::from(self.greys.text(self.text, page)));
+        least_reaching(contrast, page, (0.0, 1.0), |share| brand.toward(text, share).srgb())
     }
 }
 

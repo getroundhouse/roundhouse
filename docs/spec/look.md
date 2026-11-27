@@ -39,8 +39,9 @@ Each colour means one thing.
 - **One shadow, under what opens over the rest,** such as a card, the outline, the find bar or what a hover shows, so it reads as on top of what it covers. It's soft, so it lifts what's over the rest without drawing the eye: black at 22.5%, 8px below and blurred by 12px, and black at 15%, 2px below and blurred by 3px, as GPUI measures a blur, which is half what CSS calls it. What's raised in place, such as a pill or the update card, has none. A menu, a tooltip and a dialog cast it too. *Not built:* the kit draws a dialog with a fainter shadow of its own.
 - **A dialog dims everything behind it to 40% of its brightness,** under 60% black, so it's plainly the one thing to deal with, and what's behind it reads as out of reach. *Unconfirmed.*
 - **Three text colours, each as readable on the pane as its job needs:** foreground `#eee6e1`, muted `#b8b1ac`, and faint `#7c7671` for meta, line numbers and hints. Each is made to a contrast on the pane as APCA measures it, which judges dark colours as the eye does where WCAG 2's ratio doesn't: the foreground at 92, where body text reads best, muted at 60, the least for text that's read, and faint at 30, the least for any text. They're on the greys' hue and chroma, past the lightest stop. On a lighter surface they have a little less, down to 89, 57 and 27 on something raised under the pointer. A word in a colour, such as an error's red, a link or code's colours, isn't held to a contrast, as the owner decided, so an error's words read at 46 and a comment in code at 33.
+- **The main action is light on the dark, made as text is,** at a contrast on the pane, so it follows the ramp, as the owner decided: `#f5eee9` at 97 at rest, `#fffdf9` at 107 under the pointer, the lightest the greys' hue reaches, and `#dfd8d3` at 83 pressed.
 - **Copper, `#d08a5c`, is the brand.** It's for the mark over an empty pane, the app icon, keyboard focus, the edge of a comment being written, the wash behind a prompt and, quieter, a composer that's planning, and never a status.
-- **Pale copper, `#d8c2b3`, marks the chat showing,** as the line under its tab. It's the brand's hue, paled toward the text, so it says where you are without reading as a status.
+- **Pale copper, `#e3c0aa`, marks the chat showing,** as the line under its tab. It's the brand's copper paled toward the text until it reads at 72 on the pane, so it says where you are without reading as a status. A link is paled the same way, to 58, `#d9a380`, and to 69 under the pointer, `#e1baa1`, so the brand's tints follow it, as the owner decided.
 - **A composer that's planning is in a quieter copper.** Its surface takes copper at `XSoft`, its edge is copper at `XStrong` over that, and its texture's dots are copper. It's the brand's own colour, so plan mode reads as a way of working you chose rather than a status, and its edge stays quieter than keyboard focus, which the composer also shows while files are dragged over it. `chats.md` has the texture. *Unconfirmed.*
 - **Amber is for the card that needs you, and red means the agent stopped short.** A plan waiting to be approved is washed in amber, with its heading in amber, and a failed request's card the same in red, as `components.md` says. A question isn't a card, and neither is a request to use a tool, since each takes the composer's place, and has the thin edge colour on the pane's own surface, as `chats.md` says. Amber isn't on the mark, where the merge queue's yellow would be taken for it.
 - **The diff uses the colours review tools do,** because they're about a file rather than about you or the agent: lines added and removed are green and red, and a modified file's icon is yellow.
@@ -76,15 +77,15 @@ Each colour means one thing.
 | `text_faint` | `#7c7671` | Line numbers, meta, hints, such as a field's placeholder, and a mark with no pull request |
 | **Buttons** | | |
 | `button` | `#201b18` | A button with an edge, such as a dialog's Cancel |
-| `main` | `#f2eee9` | An area's one main action, such as Send |
-| `main_hover` | `#ffffff` | The main action under the pointer |
-| `main_pressed` | `#ddd8d2` | The main action pressed |
+| `main` | `#f5eee9` | An area's one main action, such as Send |
+| `main_hover` | `#fffdf9` | The main action under the pointer |
+| `main_pressed` | `#dfd8d3` | The main action pressed |
 | `on_main` | `#1a1512` | What's on the main action, and on any other light fill |
 | **The brand** | | |
 | `brand` | `#d08a5c` | Copper: the mark over an empty pane, the icon, keyboard focus, the caret, a comment being written, a composer that's planning |
-| `current` | `#d8c2b3` | Pale copper: the line under the tab showing, and, faint, under a tab the pointer's over, and what's found |
-| `link` | `#dba27c` | A link |
-| `link_hover` | `#e8b896` | A link under the pointer |
+| `current` | `#e3c0aa` | Pale copper: the line under the tab showing, and, faint, under a tab the pointer's over, and what's found |
+| `link` | `#d9a380` | A link |
+| `link_hover` | `#e1baa1` | A link under the pointer |
 | **What happened** | | |
 | `needs_you` | `#e9b24c` | The card that needs you, such as an approval |
 | `warning` | `#e9b24c` | A warning, such as setup that failed |
