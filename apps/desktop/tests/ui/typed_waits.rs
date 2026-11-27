@@ -44,6 +44,8 @@ fn a_rename_waits(
     ui.wait("Rename to come on once it has caught up", |ui| !ui.off("rename-confirm"));
     ui.press("enter");
     ui.wait("the dialog to close", |ui| !ui.has_dialog());
+    // It's asked on a thread of its own, so the hub may not have it yet as the dialog closes.
+    crate::support::wait_until("the hub to be asked to rename it", || world_asked.count(method) > 0);
     let asked = world_asked.last(method).expect("the rename was asked");
     assert_eq!(asked["title"], "Kept while away", "what was typed while the hub was away");
 }
@@ -102,6 +104,8 @@ fn a_queued_prompt_s_edit_keeps_what_s_typed_while_a_new_connection_catches_up(c
     ui.press("enter");
 
     ui.wait("the editor to close", |ui| ui.has(id("queued")));
+    // It's asked on a thread of its own, so the hub may not have it yet as the editor closes.
+    crate::support::wait_until("the hub to be asked for the change", || asked.count("session_change_queued") > 0);
     let changed = asked.last("session_change_queued").expect("the change was asked");
     assert_eq!(changed["text"], "say:kept while away", "what was typed while the hub was away");
 }
