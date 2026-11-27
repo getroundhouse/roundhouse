@@ -22,12 +22,13 @@ use super::reading::ChatReading;
 use crate::chrome::{self, TAPPED};
 use crate::hub_link::Ready;
 
-/// How far apart the lines of what's read in the chat are, from one's top to the next's. The transcript takes it from
-/// what it's drawn in, where a desk's comes to 1.6 times its text's size. Here that would be 31 points, by the
-/// handheld's rem rather than its body text, which shows too little of a reply at once, so it's set for 17-point
-/// text: a little more than iOS's own 22, since a reply is read at length. *Not built:* the transcript taking its
-/// sizes from the foundations, as `docs/spec/look.md` says, which would set this for every handheld.
-pub(super) const PROSE_LINE: Pixels = gpui_kit::px(25.);
+/// How far apart the lines of what's read in the chat are, from one's top to the next's: body text's, where nothing
+/// sets them. The transcript takes them from what it's drawn in, where they'd otherwise be the golden ratio of the
+/// handheld's rem rather than of its body text. *Not built:* the transcript taking its sizes from the foundations, as
+/// `docs/spec/look.md` says, after which the chat needn't set them.
+pub(super) fn prose_lines() -> Pixels {
+    look::Type::Body.default_lines()
+}
 
 /// What the chat asks of the screen around it.
 pub(crate) enum ChatEvent {
@@ -381,7 +382,7 @@ pub(super) fn read(transcript: &Entity<Transcript>, cx: &App) -> AnyElement {
         .flex_1()
         .min_h_0()
         .w_full()
-        .line_height(PROSE_LINE)
+        .line_height(prose_lines())
         .child(Transcript::drawn(transcript, cx))
         .into_any_element()
 }

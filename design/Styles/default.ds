@@ -202,12 +202,12 @@ font.size.MarkdownHeading5 { $default: 13.0667, reach.handheld: 15.8667 }
 font.size.MarkdownHeading6 { $default: 12.1333, reach.handheld: 14.7333 }
 
 // How far apart lines are, over the size of their text, where nothing they're in sets them: the golden ratio of the
-// size, as GPUI spaces text, to the nearest device pixel, such as body text's 22.5 at a desk and 27.5 on a handheld;
-// code's by where it's read is `look::CodeLines`' at each; and what a key says and what's held with it are as tall as
-// the key.
+// size, as GPUI spaces text, to the nearest device pixel, such as body text's 22.5 at a desk, but for body text's own
+// 25 on a handheld; code's by where it's read is `look::CodeLines`' at each; and what a key says and what's held with
+// it are as tall as the key.
 font.lineHeight.PageTitle: 1.625
 font.lineHeight.Heading { $default: 1.625, reach.handheld: 1.6176 }
-font.lineHeight.Body { $default: 1.6071, reach.handheld: 1.6176 }
+font.lineHeight.Body { $default: 1.6071, reach.handheld: 1.4706 }
 font.lineHeight.Detail { $default: 1.625, reach.handheld: 1.6333 }
 font.lineHeight.Code { $default: 1.625, reach.handheld: 1.6071 }
 font.lineHeight.CodeFile { $default: 1.6667, reach.handheld: 1.5714 }

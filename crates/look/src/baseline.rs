@@ -1,6 +1,6 @@
 //! Text of different sizes or fonts along one row, on one baseline, as type is set.
 
-use gpui_kit::{App, Pixels, ScaledPixels, SharedString, Styled, TextRun, Window, font, phi, px};
+use gpui_kit::{App, Pixels, ScaledPixels, SharedString, Styled, TextRun, Window, font, px};
 
 use crate::typography::Type;
 
@@ -10,8 +10,8 @@ use crate::typography::Type;
 /// lines its text up along the top, rather than centring it, puts it on the baseline the same way, since each line's
 /// box then starts at the same place.
 ///
-/// Every line is spaced as GPUI spaces body text by default, so each line's box is as tall as the others, and body
-/// text that had that spacing stays where it was.
+/// Every line is spaced as body text is where nothing sets its lines, so each line's box is as tall as the others, and
+/// body text that had that spacing stays where it was.
 #[derive(Clone, Debug)]
 pub struct LineText {
     /// Body text, as [`Type::Body`] sets it.
@@ -28,7 +28,7 @@ impl LineText {
         let rem = window.rem_size();
         let body_size = Type::Body.size(rem);
         // Rounded to whole device pixels, as GPUI rounds a line's height before it lays the line out and draws it.
-        let line_height = window.pixel_snap(phi().to_pixels(body_size.into(), rem));
+        let line_height = window.pixel_snap(Type::Body.default_lines());
         let body = Placing { line_height, below_middle: below_middle(&Type::Body.family(cx), body_size, window) };
         let place = |kind: Type| body.place(kind.family(cx), kind.size(rem), window);
         Self { body: place(Type::Body), detail: place(Type::Detail), code: place(Type::Code) }

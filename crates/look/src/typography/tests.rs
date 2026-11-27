@@ -1,5 +1,5 @@
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::{AbsoluteLength, App, Div, Styled as _, TestAppContext, div};
+use gpui_kit::{AbsoluteLength, App, Div, Styled as _, TestAppContext, div, px};
 
 use super::styles::EMPHASIS;
 use super::{CodeLines, Type, Typeset as _};
@@ -40,15 +40,20 @@ fn each_kind_sets_its_size_its_weight_and_its_lines(cx: &mut TestAppContext) {
     });
 }
 
-/// What's held with a key is smaller than the key, and sits on its line.
+/// What's held with a key is smaller than the key, and sits on its line. Body text on a handheld has lines of its own
+/// too, and every other kind takes them from where it's set.
 #[test]
-fn only_a_keys_kinds_have_lines_of_their_own_as_tall_as_what_the_key_says() {
+fn only_a_keys_kinds_and_body_text_on_a_handheld_have_lines_of_their_own() {
     for reach in [Reach::Desk, Reach::Handheld] {
         let key = Type::Key.set_at(reach).size;
 
         for &kind in Type::ALL {
-            let on_a_key = matches!(kind, Type::Key | Type::KeyHeld);
-            assert_eq!(kind.set_at(reach).line, on_a_key.then(|| key.into()), "{kind:?} at {reach:?}");
+            let own = match kind {
+                Type::Key | Type::KeyHeld => Some(key.into()),
+                Type::Body if reach == Reach::Handheld => Some(px(25.).into()),
+                Type::PageTitle | Type::Heading | Type::Body | Type::Detail | Type::Code => None,
+            };
+            assert_eq!(kind.set_at(reach).line, own, "{kind:?} at {reach:?}");
         }
     }
 }
