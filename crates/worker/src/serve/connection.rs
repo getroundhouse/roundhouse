@@ -204,7 +204,8 @@ async fn next_line<R: AsyncRead + Unpin>(reader: &mut BufReader<R>, line: &mut V
     }
 }
 
-/// Writes each frame, and only then lets go of what it holds.
+/// Writes each frame, and only then lets go of what it holds. Once there are no more, it shuts `writer`, which waits
+/// until the hub has had everything written, where that's something to wait for, as on a stream a worker dialed.
 async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Receiver<Outgoing>) {
     while let Some(Outgoing { frame: item, written }) = frames.recv().await {
         let line = match frame::encode(item.as_ref()) {
@@ -219,5 +220,8 @@ async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Re
             debug!(name: "hub.unwritten", error = %e, "Couldn't write to the hub");
         }
         drop(written);
+    }
+    if let Err(e) = writer.shutdown().await {
+        debug!(name: "hub.unshut", error = %e, "Couldn't finish what goes to the hub");
     }
 }

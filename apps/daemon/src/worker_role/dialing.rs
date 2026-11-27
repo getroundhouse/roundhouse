@@ -72,7 +72,7 @@ pub(crate) fn dial(mut given: Given, Dial { ticket, port, advertise, detach }: D
                     Ok(Ok(Admitted { connection, send, recv, instance_id })) => {
                         info!(name: "hub.admitted", %instance_id, "The hub admitted this worker");
                         // The connection closes once it's dropped, so it goes with the stream the hub writes on.
-                        Ok((recv, Holding { send, _connection: connection }))
+                        Ok((recv, Holding::new(send, connection)))
                     }
                     Ok(Err(DialError::Refused(why))) => Err(DialFailed::Refused(why)),
                     Ok(Err(e)) => Err(DialFailed::Unreachable(e.to_string())),
@@ -106,10 +106,32 @@ fn start_detached(on_stdin: Option<&WorkerTicket>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The stream a worker writes to its hub on, with the connection it's on, which closes once both are dropped.
+/// The stream a worker writes to its hub on, with the connection it's on, which closes once both are dropped. Closing a
+/// connection drops whatever the hub hasn't yet acknowledged, such as what agents said as they stopped, so shutting
+/// this finishes the stream and then waits, up to [`HUB_HAS_IT_WITHIN`], until the hub has acknowledged all of it.
 struct Holding {
     send: dialing::SendStream,
     _connection: dialing::Connection,
+    acknowledged: Acknowledged,
+}
+
+/// How far shutting a [`Holding`] has got.
+enum Acknowledged {
+    /// Not started, so the stream is still to be finished.
+    Finishing,
+    /// Finished, and waiting for the hub to acknowledge it all.
+    Waiting(std::pin::Pin<Box<dyn Future<Output = ()> + Send>>),
+    Done,
+}
+
+/// How long a worker that's done waits for its hub to acknowledge the last of what it sent, which a hub that's there
+/// does within milliseconds, and one that's gone never does.
+const HUB_HAS_IT_WITHIN: Duration = Duration::from_secs(5);
+
+impl Holding {
+    fn new(send: dialing::SendStream, connection: dialing::Connection) -> Self {
+        Self { send, _connection: connection, acknowledged: Acknowledged::Finishing }
+    }
 }
 
 impl tokio::io::AsyncWrite for Holding {
@@ -132,6 +154,21 @@ impl tokio::io::AsyncWrite for Holding {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        std::pin::Pin::new(&mut self.send).poll_shutdown(cx)
+        if matches!(self.acknowledged, Acknowledged::Finishing) {
+            // Finishing a stream that's finished already, or that the hub stopped, leaves nothing to wait for.
+            if self.send.finish().is_err() {
+                self.acknowledged = Acknowledged::Done;
+                return std::task::Poll::Ready(Ok(()));
+            }
+            let stopped = self.send.stopped();
+            self.acknowledged = Acknowledged::Waiting(Box::pin(async move {
+                let _ = tokio::time::timeout(HUB_HAS_IT_WITHIN, stopped).await;
+            }));
+        }
+        if let Acknowledged::Waiting(acknowledged) = &mut self.acknowledged {
+            std::task::ready!(acknowledged.as_mut().poll(cx));
+            self.acknowledged = Acknowledged::Done;
+        }
+        std::task::Poll::Ready(Ok(()))
     }
 }
