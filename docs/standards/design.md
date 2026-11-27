@@ -61,7 +61,7 @@ The design is a Brilliant project in `design/`. It's branched, reviewed and merg
 
 ## Deciding
 
-Each canvas has a status badge at its top, a copy of one in `Board/Status` named `Status`, and the `Index` canvas lists every canvas with its status. Only the canvas's own badge has that name, so a badge shown in an option of `To decide` is named for the option. `cargo run -p design` writes the index from the badges, and a test refuses an index that isn't as the badges have it. The status isn't in a canvas's name, since other canvases find a component by its path.
+Each canvas has a status badge at its top, a copy of one in `Board/Status` named `Status`, and the `Index` canvas lists every canvas with its status. Only the canvas's own badge has that name, so a badge shown in an open question's option is named for the option. `cargo run -p design` writes the index from the badges, and a test refuses an index that isn't as the badges have it. The status isn't in a canvas's name, since other canvases find a component by its path.
 
 | Status | Meaning |
 |---|---|
@@ -71,8 +71,8 @@ Each canvas has a status badge at its top, a copy of one in `Board/Status` named
 
 Only the owner marks a canvas ready, or agrees to changing one that is.
 
-- **An open question is drawn, with its options side by side,** made of the real components, in a `To decide` section of the canvas of the part it's about: at its top, or in a foundation board's rail. Each has an ID, what it's between, what each costs, and the one the agent recommends with its reasons. A question for later is on the issue.
-- **The owner decides there or in the chat.** The decision is applied to the design, and the question becomes a line of the `Decided` log under `To decide`: its ID and name, the choice and why, the date and its PR. Its options' pictures go.
+- **An open question is a board of its own beside the part's, with its options side by side at their size,** made of the real components. Each has an ID, what it's between, what each costs, and the one the agent recommends with its reasons. The part's board lists them by ID and name under `To decide`, at its top or in its rail. A question for later is on the issue.
+- **The owner decides there or in the chat.** The decision is applied and the question's board deleted, leaving a line of the `Decided` log under `To decide`: its ID and name, the choice and why, the date and its PR.
 - **A foundation's board says its approach and how its values are made, then shows each of the spec's groups in a specimen,** beside its rail, as `Foundations/Colours` does. A test refuses one that doesn't draw each of its tokens.
 - **The issue tracks the work.** It names the questions, and its closing comment says what was decided, so that it's found from GitHub.
 - **When the design contradicts itself, the spec or the code, don't pick a side.** Put it on the board.

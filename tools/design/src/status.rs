@@ -30,7 +30,7 @@ impl Status {
     }
 
     /// The status of `row`, a row of a canvas, if it's the canvas's own badge: a copy of a status's master that's named
-    /// [`BADGE`]. A copy named otherwise, such as one in an option of a `To decide` section, isn't the canvas's badge.
+    /// [`BADGE`]. A copy named otherwise, such as one in an open question's option, isn't the canvas's badge.
     pub fn of_badge(row: &str) -> Option<Status> {
         let copied = row.trim_end().strip_suffix(&format!(" \"{BADGE}\""))?.split_once("inst(\"")?.1;
         Status::ALL.into_iter().find(|status| copied.starts_with(&format!("{}\"", status.master())))
