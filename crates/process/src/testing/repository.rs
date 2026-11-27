@@ -21,11 +21,11 @@ static KEPT: LazyLock<Option<PathBuf>> = LazyLock::new(|| kept("repository", mak
 /// If `at` is there already, or can't be made.
 pub fn repository_with_a_commit(at: &Path) {
     assert!(!at.exists(), "{} is there already", at.display());
-    match &*KEPT {
-        Some(kept) => copy(kept, at),
-        None => make(at),
-    }
-    .unwrap_or_else(|e| panic!("couldn't make {}: {e}", at.display()));
+    let made = match &*KEPT {
+        Some(kept) => copy(kept, at).map_err(|e| format!("couldn't copy {} to {}: {e}", kept.display(), at.display())),
+        None => make(at).map_err(|e| format!("couldn't make {}: {e}", at.display())),
+    };
+    made.unwrap_or_else(|why| panic!("{why}"));
 }
 
 fn make(at: &Path) -> io::Result<()> {
