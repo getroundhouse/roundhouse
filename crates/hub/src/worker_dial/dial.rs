@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use dialing::{HubEndpoint, Relays};
@@ -46,6 +47,8 @@ pub(crate) struct WorkerDial {
     /// Whose instances' records say which worker to admit.
     store: Arc<Store>,
     arrivals: Arc<Arrivals>,
+    /// Set once the hub is letting go of its workers, as it stops, from when it refuses every worker that dials.
+    refusing: Arc<AtomicBool>,
 }
 
 /// One of the hub's endpoints, and where its key is kept.
@@ -64,6 +67,7 @@ impl WorkerDial {
             relayed: one(WORKER_ENDPOINT_FILE, relays),
             store,
             arrivals: Arc::default(),
+            refusing: Arc::default(),
         }
     }
 
@@ -80,7 +84,8 @@ impl WorkerDial {
         one.bound
             .get_or_try_init(|| async {
                 let bound = Arc::new(HubEndpoint::bind(&one.key_file, one.relays).await?);
-                tokio::spawn(super::admitting::admit(bound.clone(), self.store.clone(), self.arrivals.clone()));
+                let (store, arrivals, refusing) = (self.store.clone(), self.arrivals.clone(), self.refusing.clone());
+                tokio::spawn(super::admitting::admit(bound.clone(), store, arrivals, refusing));
                 Ok::<_, dialing::DialError>(bound)
             })
             .await
@@ -112,6 +117,13 @@ impl WorkerDial {
     /// The instance's worker, once it has dialed and been admitted, if it does within `within`.
     pub(crate) async fn worker(&self, instance_id: &InstanceId, within: Duration) -> Option<Dialed> {
         self.arrivals.take(instance_id, within).await
+    }
+
+    /// Refuses every worker that dials from now on, as the hub stops, before it leaves or stops its workers. A worker
+    /// the hub leaves for the next dials again as soon as its connection ends, and one admitted then would be cut off
+    /// as the hub goes, and dial the next hub only after that. Refused, it dials until the next hub is there.
+    pub(crate) fn refuse_more(&self) {
+        self.refusing.store(true, Ordering::SeqCst);
     }
 
     /// Closes every worker's connection, as the hub stops, telling each so.
