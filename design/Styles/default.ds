@@ -122,9 +122,9 @@ strength.XXStrong: 0.75
 // `look::Space`'s steps: XSmall is `xs`, and so on to XXLarge, `2xl`.
 spacing: tshirt(number([4, 8, 12, 16, 24, 32]), min: { none: 0 }, transforms: none)
 
-// The room at each end of a control, by its size.
-spacing.control.Small { $default: spacing.sm, reach.handheld: spacing.md }
-spacing.control.Regular { $default: spacing.md, reach.handheld: 14 }
+// The room at each end of a control, by its size, a step of space, so the same at both reaches.
+spacing.control.Small: spacing.sm
+spacing.control.Regular: spacing.md
 spacing.control.Large: spacing.lg
 
 // Lengths that aren't steps of `look::Space`: a chip's inside, and what the text sets, between paragraphs, which is
@@ -147,19 +147,19 @@ radius.Card: 10
 stroke.width.Edge: 1
 stroke.width.QuoteRule: 2
 stroke.width.TabLine: 2
-stroke.width.icon.Small { $default: 1, reach.handheld: 1.1667 }
-stroke.width.icon.Regular { $default: 1.1667, reach.handheld: 1.5 }
+stroke.width.icon.Small { $default: 1, reach.handheld: 1.25 }
+stroke.width.icon.Regular { $default: 1.1667, reach.handheld: 1.4167 }
 stroke.width.icon.Large { $default: 1.3333, reach.handheld: 1.8333 }
 
 // How big an icon is, and how tall a control, a bar and a row are, by `look`'s names for each. A bar's has the edge
 // under it. The room at a control's ends is with the spaces.
-size.icon.Small { $default: 12, reach.handheld: 14 }
-size.icon.Regular { $default: 14, reach.handheld: 18 }
+size.icon.Small { $default: 12, reach.handheld: 15 }
+size.icon.Regular { $default: 14, reach.handheld: 17 }
 size.icon.Large { $default: 16, reach.handheld: 22 }
 size.control.Small { $default: 24, reach.handheld: 32 }
 size.control.Regular { $default: 28, reach.handheld: 36 }
 size.control.Large { $default: 32, reach.handheld: 44 }
-size.bar.Small { $default: 32, reach.handheld: 36 }
+size.bar.Small { $default: 32, reach.handheld: 40 }
 size.bar.Regular { $default: 40, reach.handheld: 44 }
 size.row.Small { $default: 28, reach.handheld: 36 }
 size.row.Regular { $default: 36, reach.handheld: 44 }

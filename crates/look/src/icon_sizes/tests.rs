@@ -7,6 +7,8 @@ use gpui_kit::{
 use super::{IconSize, IconSizing as _};
 use crate::ControlSize;
 use crate::spec_table;
+use crate::traits::Reach;
+use crate::typography::{Type, rem};
 
 #[test]
 fn the_specs_table_has_every_icon_size_in_order_as_the_app_sizes_it() {
@@ -16,11 +18,16 @@ fn the_specs_table_has_every_icon_size_in_order_as_the_app_sizes_it() {
     assert_eq!(table, sized, "docs/spec/look.md's table of icon sizes, against crates/look/src/icon_sizes/sizing.rs");
 }
 
-/// The rule has an icon that stands for what its row is as big as a mark beside text, since it's in the mark's place,
-/// and the lines of a chat that start with either line their words up by it.
+/// An icon set among text is as big as a detail among a detail's or code's, and as big as body text among it, at each
+/// reach.
 #[test]
-fn a_large_icon_is_as_big_as_a_mark_beside_text() {
-    assert_eq!(IconSize::Large.size(), crate::Size::Inline.width());
+fn an_icon_among_text_is_as_big_as_the_text() {
+    for reach in Reach::ALL {
+        let text = |kind: Type| kind.size_at(reach, rem(reach));
+
+        assert_eq!(IconSize::Small.size_at(reach), text(Type::Detail), "{reach:?}");
+        assert_eq!(IconSize::Regular.size_at(reach), text(Type::Body), "{reach:?}");
+    }
 }
 
 /// One icon, in a box that's as big as what it draws, so the box's bounds are the icon's.

@@ -4,6 +4,7 @@ use crate::traits::Reach;
 
 use crate::icon_sizes::IconSize;
 use crate::named::named;
+use crate::space::Space;
 use crate::typography::Type;
 
 named! {
@@ -48,26 +49,14 @@ impl ControlSize {
         }
     }
 
-    /// The room at each end of a control, between its edge and what it says, such as a button's words. Something that
-    /// lines the words up with an edge past the button, such as a quiet button under a card's text, takes the button
-    /// out by this.
-    pub fn padding(self) -> Pixels {
-        self.padding_at(Reach::now())
-    }
-
-    /// The room at each end at `reach`.
-    pub const fn padding_at(self, reach: Reach) -> Pixels {
-        match reach {
-            Reach::Desk => match self {
-                ControlSize::Small => px(8.),
-                ControlSize::Regular => px(12.),
-                ControlSize::Large => px(16.),
-            },
-            Reach::Handheld => match self {
-                ControlSize::Small => px(12.),
-                ControlSize::Regular => px(14.),
-                ControlSize::Large => px(16.),
-            },
+    /// The room at each end of a control, between its edge and what it says, such as a button's words. It's a step of
+    /// space, so it's the same at both reaches, as the owner decided. Something that lines the words up with an edge
+    /// past the button, such as a quiet button under a card's text, takes the button out by this.
+    pub const fn padding(self) -> Pixels {
+        match self {
+            ControlSize::Small => Space::Small.size(),
+            ControlSize::Regular => Space::Medium.size(),
+            ControlSize::Large => Space::Large.size(),
         }
     }
 
@@ -105,19 +94,17 @@ impl ControlSize {
         }
     }
 
-    /// How the spec's table writes it: its name, how tall it is and the room at its ends at a desk, its kind of text,
-    /// and how tall it is and the room at its ends on a handheld.
+    /// How the spec's table writes it: its name, how tall it is at a desk, the room at its ends, its kind of text, and
+    /// how tall it is on a handheld.
     #[cfg(any(test, feature = "testing"))]
-    pub fn written(self) -> [String; 6] {
+    pub fn written(self) -> [String; 5] {
         let pixels = |pixels: Pixels| format!("{}px", f32::from(pixels));
-        let (desk, handheld) = (Reach::Desk, Reach::Handheld);
         [
             format!("{self:?}"),
-            pixels(self.height_at(desk)),
-            pixels(self.padding_at(desk)),
+            pixels(self.height_at(Reach::Desk)),
+            pixels(self.padding()),
             format!("{:?}", self.text()),
-            pixels(self.height_at(handheld)),
-            pixels(self.padding_at(handheld)),
+            pixels(self.height_at(Reach::Handheld)),
         ]
     }
 }

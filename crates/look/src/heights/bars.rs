@@ -33,7 +33,7 @@ impl BarSize {
                 BarSize::Regular => px(40.),
             },
             Reach::Handheld => match self {
-                BarSize::Small => px(36.),
+                BarSize::Small => px(40.),
                 BarSize::Regular => px(44.),
             },
         }
