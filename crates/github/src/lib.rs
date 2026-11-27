@@ -40,4 +40,4 @@ pub use references::ReferencesRead;
 #[cfg(any(test, feature = "testing"))]
 mod stand_in;
 #[cfg(any(test, feature = "testing"))]
-pub use stand_in::{Answer, Gate, PullRequestState, PullRequests, References, Script, StandIn};
+pub use stand_in::{Answer, Gate, Installed, PullRequestState, PullRequests, References, Script, StandIn};

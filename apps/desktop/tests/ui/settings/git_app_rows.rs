@@ -10,8 +10,11 @@ use protocol::client::github_apps::GithubManifestCode;
 use protocol::model::{GithubAccountId, GithubApp};
 
 use super::git::{default, in_git};
-use super::git_app::{CODE, making, nowhere, on_adalabs};
+use super::git_app::{CODE, installed_as_set, making, on_adalabs};
 use crate::support::{MENU, Stack, Ui};
+
+/// How the hub asks GitHub where an app is installed, as the stand-in has the request.
+const LOOKED: &str = "get /app/installations?";
 
 /// The app, made as GitHub sent the person back with [`CODE`].
 fn made(stack: &Stack) -> GithubApp {
@@ -102,11 +105,13 @@ fn removing_an_app_asks_first_and_the_hub_forgets_it_leaving_its_installation_th
 #[gpui_kit::test]
 fn an_app_installed_nowhere_says_so_and_installing_it_from_its_row_waits_for_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let _github = stack.start_hub_with_stand_in_github(making(vec![nowhere(), on_adalabs()]));
+    let (installed, script) = installed_as_set();
+    let github = stack.start_hub_with_stand_in_github(script);
     let app = made(&stack);
     let mut ui = in_git(cx, &stack);
     let row = format!("git-app-{}", app.id);
-    ui.wait("its row", |ui| ui.has(row.clone()));
+    let looked = |_: &mut Ui<'_>| format!("GitHub was asked for its installations {} times", github.asked(LOOKED));
+    ui.wait_saying("its row", |ui| ui.has(row.clone()), looked);
     assert!(ui.shows_label(&row, "Not installed"));
 
     open_menu(&mut ui, format!("git-more-app-{}", app.id));
@@ -115,6 +120,7 @@ fn an_app_installed_nowhere_says_so_and_installing_it_from_its_row_waits_for_it(
 
     assert_eq!(ui.cx.opened_url().as_deref(), Some("https://github.com/apps/ada-roundhouse/installations/new"));
     assert!(ui.has("git-check-again"), "the panel waits for it");
+    installed.set(on_adalabs());
     ui.click("git-check-again");
     ui.wait("Done", |ui| ui.has("git-close"));
     assert!(!ui.has(row), "it's installed, so its installation's row has its place");

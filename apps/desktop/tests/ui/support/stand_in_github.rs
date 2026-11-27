@@ -18,7 +18,7 @@ const TOKEN: &str = "gho_made_up_for_ada";
 /// dropped in order, so it never calls a stand-in that has gone.
 pub(crate) struct StandInGithub {
     _hub: HubAhead,
-    _github: GithubStandIn,
+    github: GithubStandIn,
     _serving: tokio::runtime::Runtime,
 }
 
@@ -28,7 +28,7 @@ impl Stack {
         let serving = tokio::runtime::Runtime::new().unwrap();
         let github = serving.block_on(GithubStandIn::with(script));
         let hub = self.start_hub_ahead(hub_environment().set(protocol::testing::ENV_TEST_GITHUB_API, github.api()));
-        StandInGithub { _hub: hub, _github: github, _serving: serving }
+        StandInGithub { _hub: hub, github, _serving: serving }
     }
 }
 
@@ -41,6 +41,13 @@ pub(crate) struct ReadingStandInGithub {
     pub(crate) pull_requests: GithubPullRequests,
     _github: GithubStandIn,
     _serving: tokio::runtime::Runtime,
+}
+
+impl StandInGithub {
+    /// How many requests it was sent whose request line starts with `line`, lowercased, such as `get /app/installations`.
+    pub(crate) fn asked(&self, line: &str) -> usize {
+        self.github.asked().iter().filter(|asked| asked.starts_with(line)).count()
+    }
 }
 
 impl Stack {

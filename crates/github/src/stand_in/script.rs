@@ -1,6 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use super::Answer;
+use super::apps::Installed;
 use super::apps::{as_the_app, named, numbered};
 use super::pull_requests::PullRequests;
 use super::references::References;
@@ -31,6 +32,9 @@ pub struct Script {
     /// `GET /app/installations`, in turn, to a JWT signed with [`MADE_UP_APP_KEY`](super::MADE_UP_APP_KEY) that
     /// hasn't ended. Any other JWT is a 401, as GitHub answers one it doesn't take.
     pub installations: Vec<Answer>,
+    /// `GET /app/installations`, as `installations` takes it, answered from these as they are when it's asked, in place
+    /// of `installations`, for a hub that looks when it likes, as it does as it checks its logins.
+    pub installed: Option<Installed>,
     /// `POST /app/installations/{id}/access_tokens`, in turn, by the installation, to a JWT as `installations` takes
     /// one. Any other installation is a 404, as GitHub answers one that's gone.
     pub minted: Vec<(u64, Vec<Answer>)>,
@@ -58,6 +62,7 @@ pub(super) struct Answering {
     pub(super) numbered: HashMap<u64, VecDeque<Answer>>,
     pub(super) apps: VecDeque<Answer>,
     pub(super) installations: VecDeque<Answer>,
+    pub(super) installed: Option<Installed>,
     pub(super) minted: HashMap<u64, VecDeque<Answer>>,
     pushes: HashMap<&'static str, VecDeque<Answer>>,
     graphql: VecDeque<Answer>,
@@ -78,6 +83,7 @@ impl Answering {
             numbered: script.numbered.into_iter().map(|(number, answers)| (number, answers.into())).collect(),
             apps: script.apps.into(),
             installations: script.installations.into(),
+            installed: script.installed,
             minted: script.minted.into_iter().map(|(id, answers)| (id, answers.into())).collect(),
             pushes: script.pushes.into_iter().map(|(repository, answers)| (repository, answers.into())).collect(),
             graphql: script.graphql.into(),
