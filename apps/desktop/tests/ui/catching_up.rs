@@ -29,7 +29,7 @@ pub(crate) fn connect_again(ui: &mut Ui<'_>) {
 }
 
 /// For as long as the app could take to take up a new connection, checks `holds` holds on each frame.
-fn throughout(ui: &mut Ui<'_>, what: &str, mut holds: impl FnMut(&mut Ui<'_>) -> bool) {
+pub(crate) fn throughout(ui: &mut Ui<'_>, what: &str, mut holds: impl FnMut(&mut Ui<'_>) -> bool) {
     let until = Instant::now() + LONG_ENOUGH;
     while Instant::now() < until {
         ui.frame();

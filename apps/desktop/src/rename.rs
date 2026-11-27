@@ -1,15 +1,18 @@
 //! Renaming a workspace or a chat, in a dialog with its title in a field, selected, so typing replaces it, and what
 //! to say when a title asked of the hub doesn't come.
 
-use client_core::ClientError;
+use client_core::{ClientError, Hub};
 use gpui_kit::component::input::InputState;
 use gpui_kit::{App, AppContext as _, ParentElement as _, Window};
 use protocol::model::{Title, TitleError};
 
 /// Opens the dialog over the window. `rename` gets what was typed once it's confirmed, for the hub to tidy. A title
-/// that would be empty keeps the dialog open, and any other the hub refuses comes back as an error from it.
+/// that would be empty keeps the dialog open, and any other the hub refuses comes back as an error from it. Without a
+/// connection to `hub` that has caught up, Rename is off and confirming keeps the dialog open with what's typed, as it
+/// reads each time it's drawn, so Rename comes on once one has.
 pub(crate) fn open(
     what: Renaming,
+    hub: Hub,
     current: &str,
     window: &mut Window,
     cx: &mut App,
@@ -20,14 +23,15 @@ pub(crate) fn open(
     let rename = std::rc::Rc::new(rename);
     let field = input.clone();
     look::open_dialog(window, cx, move |_, _| {
-        let (typed, rename) = (field.clone(), rename.clone());
+        let (typed, rename, hub) = (field.clone(), rename.clone(), hub.clone());
+        let confirm = look::button("rename-confirm", look::ButtonKind::Main, look::ControlSize::Large, "Rename");
         look::dialog(format!("Rename {}", what.noun()))
             .child(look::field("rename-field", &field, look::FieldKind::Boxed, look::ControlSize::Large))
             .closes(look::button("rename-cancel", look::ButtonKind::Edged, look::ControlSize::Large, "Cancel"))
-            .confirms(look::button("rename-confirm", look::ButtonKind::Main, look::ControlSize::Large, "Rename"))
+            .confirms(confirm.off(!hub.caught_up()))
             .on_confirm(move |_, cx| {
                 let title = typed.read(cx).value().to_string();
-                if Title::typed(&title) == Err(TitleError::Empty) {
+                if !hub.caught_up() || Title::typed(&title) == Err(TitleError::Empty) {
                     return false;
                 }
                 rename(title, cx);
