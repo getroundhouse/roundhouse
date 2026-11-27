@@ -219,6 +219,8 @@ fn the_button_signs_in_to_its_own_server_and_starting_another_takes_its_place(cx
     ui.click("mcp-sign-in-linear");
     ui.wait("the other", |ui| ui.shows_label("mcp-card", "Linear, Signing in"));
     assert!(ui.on("mcp-sign-in-notion") && ui.shows_label("mcp-card", "Notion, Needs you to sign in"));
+    // It's asked on a thread of its own, so the hub may not have it yet as the card says it's signing in.
+    crate::support::wait_until("the hub to be asked to start the second", || asked.count("tool_sign_in_start") >= 2);
     assert_eq!(asked.count("tool_sign_in_start"), 2);
 }
 
