@@ -85,6 +85,8 @@ colors! {
         /// hover shows, or sits in place, such as a pill, a file's header, the update card, or an open pull request's
         /// bar while there's something to do first.
         raised = Grey(Stop(6)),
+        /// Behind code within a line of text, which the kit draws as its accent.
+        inline_code = Grey(Stop(7)),
         /// A prompt's bubble: a wash of the brand's copper over the pane, so what was asked is easy to find when
         /// scrolling past the agent's work.
         prompt = Wash(PROMPT),
@@ -92,12 +94,8 @@ colors! {
         icon_tile_top = 0x211d_1bff,
     }
     "Under the pointer, pressed or chosen" {
-        /// The kit's list's row under the pointer. A list's rows are washed, as `look::ListRow` draws them.
-        row_hover = Grey(Stop(4)),
         /// A call's line under the pointer, and the compaction's.
         line_hover = Grey(Stop(2)),
-        /// Behind code within a line of text, which the kit draws in its accent's grey.
-        menu_hover = Grey(Stop(7)),
         /// Something raised, under the pointer.
         raised_hover = Grey(Stop(8)),
         /// Something raised, pressed, such as the hub switcher.

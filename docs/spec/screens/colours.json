@@ -14,7 +14,7 @@
     },
     "button": {
       "x": 32,
-      "y": 1272,
+      "y": 1216,
       "width": 40,
       "height": 40
     },
@@ -134,7 +134,7 @@
     },
     "control_edge": {
       "x": 32,
-      "y": 880,
+      "y": 824,
       "width": 40,
       "height": 40
     },
@@ -158,7 +158,7 @@
     },
     "edge": {
       "x": 32,
-      "y": 824,
+      "y": 768,
       "width": 40,
       "height": 40
     },
@@ -170,7 +170,13 @@
     },
     "icon_tile_top": {
       "x": 32,
-      "y": 376,
+      "y": 432,
+      "width": 40,
+      "height": 40
+    },
+    "inline_code": {
+      "x": 32,
+      "y": 320,
       "width": 40,
       "height": 40
     },
@@ -200,25 +206,19 @@
     },
     "main": {
       "x": 32,
-      "y": 1328,
+      "y": 1272,
       "width": 40,
       "height": 40
     },
     "main_hover": {
       "x": 32,
-      "y": 1384,
+      "y": 1328,
       "width": 40,
       "height": 40
     },
     "main_pressed": {
       "x": 32,
-      "y": 1440,
-      "width": 40,
-      "height": 40
-    },
-    "menu_hover": {
-      "x": 32,
-      "y": 600,
+      "y": 1384,
       "width": 40,
       "height": 40
     },
@@ -236,7 +236,7 @@
     },
     "on_main": {
       "x": 32,
-      "y": 1496,
+      "y": 1440,
       "width": 40,
       "height": 40
     },
@@ -284,7 +284,7 @@
     },
     "prompt": {
       "x": 32,
-      "y": 320,
+      "y": 376,
       "width": 40,
       "height": 40
     },
@@ -296,25 +296,19 @@
     },
     "raised_hover": {
       "x": 32,
-      "y": 656,
+      "y": 600,
       "width": 40,
       "height": 40
     },
     "raised_pressed": {
       "x": 32,
-      "y": 712,
+      "y": 656,
       "width": 40,
       "height": 40
     },
     "removed": {
       "x": 632,
       "y": 712,
-      "width": 40,
-      "height": 40
-    },
-    "row_hover": {
-      "x": 32,
-      "y": 488,
       "width": 40,
       "height": 40
     },
@@ -332,7 +326,7 @@
     },
     "shadow": {
       "x": 32,
-      "y": 936,
+      "y": 880,
       "width": 40,
       "height": 40
     },
@@ -350,19 +344,19 @@
     },
     "text": {
       "x": 32,
-      "y": 1048,
+      "y": 992,
       "width": 40,
       "height": 40
     },
     "text_faint": {
       "x": 32,
-      "y": 1160,
+      "y": 1104,
       "width": 40,
       "height": 40
     },
     "text_muted": {
       "x": 32,
-      "y": 1104,
+      "y": 1048,
       "width": 40,
       "height": 40
     },
