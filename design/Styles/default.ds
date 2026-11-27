@@ -194,10 +194,15 @@ font.size.Key { $default: 10, reach.handheld: 12 }
 font.size.KeyHeld { $default: 7.5, reach.handheld: 9 }
 font.size.InlineCode { $default: 12.25, reach.handheld: 14.875 }
 
-// How far apart lines are, over the size of their text: body text's is the golden ratio of its size, to the nearest
-// device pixel, 22.5 at a desk and 27.5 on a handheld; code's is `look::CodeLines`', which is the same at both; and what
-// a key says and what's held with it are as tall as the key.
+// How far apart lines are, over the size of their text, where nothing they're in sets them: the golden ratio of the
+// size, as GPUI spaces text, to the nearest device pixel, such as body text's 22.5 at a desk and 27.5 on a handheld;
+// code's is `look::CodeLines`', which is the same at both; and what a key says and what's held with it are as tall as
+// the key.
+font.lineHeight.PageTitle: 1.625
+font.lineHeight.Heading { $default: 1.625, reach.handheld: 1.6176 }
 font.lineHeight.Body { $default: 1.6071, reach.handheld: 1.6176 }
+font.lineHeight.Detail { $default: 1.625, reach.handheld: 1.6333 }
+font.lineHeight.Code { $default: 1.625, reach.handheld: 1.6071 }
 font.lineHeight.CodeFile { $default: 1.6667, reach.handheld: 1.4286 }
 font.lineHeight.CodeChat { $default: 1.4167, reach.handheld: 1.2143 }
 font.lineHeight.Key: 1
@@ -214,11 +219,11 @@ font.letterSpacing.Key: 0.0117
 font.letterSpacing.KeyHeld: 0.0293
 
 // `look::Type`'s kinds, in its order, then what body text is when it stands out, and inline code.
-typography.PageTitle: { fontFamily: font.family.title, fontSize: font.size.PageTitle, fontWeight: font.weight.emphasis, letterSpacing: font.letterSpacing.PageTitle }
-typography.Heading: { fontFamily: font.family, fontSize: font.size.Heading, fontWeight: font.weight.emphasis, letterSpacing: font.letterSpacing.Heading }
+typography.PageTitle: { fontFamily: font.family.title, fontSize: font.size.PageTitle, fontWeight: font.weight.emphasis, letterSpacing: font.letterSpacing.PageTitle, lineHeight: font.lineHeight.PageTitle }
+typography.Heading: { fontFamily: font.family, fontSize: font.size.Heading, fontWeight: font.weight.emphasis, letterSpacing: font.letterSpacing.Heading, lineHeight: font.lineHeight.Heading }
 typography.Body: { fontFamily: font.family, fontSize: font.size.Body, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.Body, lineHeight: font.lineHeight.Body }
-typography.Detail: { fontFamily: font.family, fontSize: font.size.Detail, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.Detail }
-typography.Code: { fontFamily: font.family.code, fontSize: font.size.Code, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.Code }
+typography.Detail: { fontFamily: font.family, fontSize: font.size.Detail, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.Detail, lineHeight: font.lineHeight.Detail }
+typography.Code: { fontFamily: font.family.code, fontSize: font.size.Code, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.Code, lineHeight: font.lineHeight.Code }
 typography.Key: { fontFamily: font.family, fontSize: font.size.Key, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.Key, lineHeight: font.lineHeight.Key }
 typography.KeyHeld: { fontFamily: font.family, fontSize: font.size.KeyHeld, fontWeight: font.weight.regular, letterSpacing: font.letterSpacing.KeyHeld, lineHeight: font.lineHeight.KeyHeld }
 typography.Emphasis: { fontFamily: font.family, fontSize: font.size.Body, fontWeight: font.weight.emphasis, letterSpacing: font.letterSpacing.Body, lineHeight: font.lineHeight.Body }

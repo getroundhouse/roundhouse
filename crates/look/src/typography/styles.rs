@@ -130,6 +130,14 @@ impl Type {
         self.set().size.to_pixels(rem)
     }
 
+    /// How far apart its lines are where a place sets them `share` of its size apart, such as a question: at the size
+    /// it's set at for the reach this process draws for, so they follow the reach as its size does. They're in whole
+    /// pixels, which the text system's rounding to the screen's pixels leaves as they are, so what's beside a line and
+    /// as tall, such as a question's number, is as tall as the line on every screen.
+    pub fn lines(self, share: f32) -> Pixels {
+        (self.set().size.to_pixels(rem(Reach::now())) * share).round()
+    }
+
     /// How big it is at `reach`, in a window whose rem is `rem`, for a test of what has to fit somewhere.
     #[cfg(test)]
     pub(crate) fn size_at(self, reach: Reach, rem: Pixels) -> Pixels {

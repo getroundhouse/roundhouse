@@ -5,7 +5,7 @@ use gpui_kit::component::input::{Escape, Input, Textarea};
 use gpui_kit::component::{Icon, IconName, Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+    AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
 use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
@@ -54,11 +54,12 @@ pub(super) fn list(
         .into_any_element()
 }
 
-/// The height of a row's first line, at body size, which its number and check are centred on.
-const LINE: f32 = 20.;
+/// How far apart a row's lines are, over the size of its text, at body size: 20px at a desk. Its number and check are
+/// centred on its first.
+const LINES: f32 = 1.43;
 
-/// The height of a line of description, at the kit's extra-small size.
-const DESCRIPTION_LINE: f32 = 16.;
+/// How far apart a description's lines are, over the size of its text, a detail: 16px at a desk.
+const DESCRIPTION_LINES: f32 = 1.33;
 
 /// How far the typing row's text sits in from its edge, at its smallest size.
 const TYPING_INSET: f32 = 4.;
@@ -72,7 +73,7 @@ fn number(n: usize, muted: Hsla) -> impl IntoElement {
     div()
         .flex_none()
         .w(px(12.))
-        .h(px(LINE))
+        .h(line())
         .flex()
         .items_center()
         .typeset(look::Type::Detail)
@@ -86,13 +87,18 @@ fn row(id: impl Into<ElementId>, chosen: bool) -> look::ListRow {
 
 /// What a row says, beside its number, on lines as tall as its number's.
 fn words() -> gpui_kit::Div {
-    v_flex().flex_1().min_w_0().line_height(px(LINE))
+    v_flex().flex_1().min_w_0().line_height(line())
+}
+
+/// How tall a row's line is, which its number and check are as tall as.
+fn line() -> Pixels {
+    look::Type::Body.lines(LINES)
 }
 
 fn check(muted: Hsla) -> impl IntoElement {
     let check = Icon::new(IconName::Check).sized(look::IconSize::Regular).text_color(muted);
     // As wide as the checkbox of the row to type in, so the two are in line down the rows' ends.
-    div().flex_none().w(px(CHECKBOX)).h(px(LINE)).flex().items_center().justify_center().child(check)
+    div().flex_none().w(px(CHECKBOX)).h(line()).flex().items_center().justify_center().child(check)
 }
 
 fn option_row(
@@ -108,7 +114,7 @@ fn option_row(
         div()
             .mt(look::Space::XSmall)
             .typeset(look::Type::Detail)
-            .line_height(px(DESCRIPTION_LINE))
+            .line_height(look::Type::Detail.lines(DESCRIPTION_LINES))
             .text_color(colors.muted)
             .child(description)
     });
@@ -133,7 +139,7 @@ fn other_row(
     let checkbox = div()
         .id("question-other-check")
         .flex_none()
-        .mt(px((LINE - CHECKBOX) / 2.))
+        .mt((line() - px(CHECKBOX)) / 2.)
         .size(px(CHECKBOX))
         .flex()
         .items_center()

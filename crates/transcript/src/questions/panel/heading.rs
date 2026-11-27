@@ -3,18 +3,18 @@
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement, Role, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
+    StatefulInteractiveElement as _, Styled, TestSupportExt as _, div,
 };
 use look::Typeset as _;
 use protocol::capability::asking::Question;
 
 use super::{AroundRequest, QuestionPanel};
 
-/// The height of the header's line, at the kit's extra-small size.
-const HEADER_LINE: f32 = 16.;
+/// How tall the header's line is, over the size of its text, a detail: 16px at a desk.
+const HEADER_LINE: f32 = 1.33;
 
-/// The height of a line of the question, at body size.
-const QUESTION_LINE: f32 = 20.;
+/// How far apart the question's lines are, over the size of its text, at body size: 20px at a desk.
+const QUESTION_LINES: f32 = 1.43;
 
 /// Between the parts of the header.
 const BETWEEN: &str = " · ";
@@ -41,7 +41,7 @@ pub(super) fn heading(
         said("question-text", question.text.clone())
             .w_full()
             .typeset(look::Type::Body)
-            .line_height(px(QUESTION_LINE))
+            .line_height(look::Type::Body.lines(QUESTION_LINES))
             .test_support()
     });
     v_flex()
@@ -50,7 +50,7 @@ pub(super) fn heading(
         .child(
             h_flex()
                 .w_full()
-                .h(px(HEADER_LINE))
+                .h(look::Type::Detail.lines(HEADER_LINE))
                 .gap(look::Space::Small)
                 .child(
                     said("question-header", header)
