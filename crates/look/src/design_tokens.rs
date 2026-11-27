@@ -10,7 +10,7 @@ use gpui_kit::{FontWeight, Pixels, phi, px};
 use crate::chips::INSIDE;
 use crate::motion::{FADE, PANEL, SCROLL};
 use crate::traits::Reach;
-use crate::typography::{CodeLines, INLINE_CODE, LIST_ITEM_GAP, STRONG, Type, rem};
+use crate::typography::{CodeLines, INLINE_CODE, LIST_ITEM_GAP, MARKDOWN_HEADINGS, STRONG, Type, rem};
 use crate::{
     BarSize, Colors, ControlSize, Corner, EDGE, IconSize, NamedColor, QUOTE_RULE, RowSize, Space, Strength, TAB_LINE,
 };
@@ -48,7 +48,18 @@ const THE_FONTS: &[&str] = &["font.family", "font.letterSpacing"];
 /// part with an edge and a list have inside, inline code's size, and the styles of text that stands out.
 const OF_THEIR_OWN: &[(&str, &[&str])] = &[
     ("spacing", &["Chip", "ListItem", "Edged", "ChipStart", "ChipEnd"]),
-    ("font.size", &["InlineCode"]),
+    (
+        "font.size",
+        &[
+            "InlineCode",
+            "MarkdownHeading1",
+            "MarkdownHeading2",
+            "MarkdownHeading3",
+            "MarkdownHeading4",
+            "MarkdownHeading5",
+            "MarkdownHeading6",
+        ],
+    ),
     ("typography", &["Emphasis", "Strong", "InlineCode"]),
 ];
 
@@ -198,8 +209,8 @@ fn a_chips_lengths_and_an_edged_parts_are_the_apps() {
     }
 }
 
-/// How far apart a list's items are, and how big inline code is, are the app's shares of the size of the body text
-/// they're in.
+/// How far apart a list's items are, how big inline code is and how big Markdown's headings are, are the app's shares
+/// of the size of the body text they're in.
 #[test]
 fn what_is_a_share_of_body_text_is_the_apps_share_of_it() {
     for reach in Reach::ALL {
@@ -207,6 +218,11 @@ fn what_is_a_share_of_body_text_is_the_apps_share_of_it() {
 
         assert_eq!(tokens("spacing", reach)["ListItem"], points(body * LIST_ITEM_GAP), "{reach:?}");
         assert_eq!(tokens("font.size", reach)["InlineCode"], points(body * INLINE_CODE), "{reach:?}");
+        for (level, share) in (1..).zip(MARKDOWN_HEADINGS) {
+            let drawn: f32 = tokens("font.size", reach)[&format!("MarkdownHeading{level}")].parse().unwrap();
+            let apps = f32::from(body * share);
+            assert!((drawn - apps).abs() < 0.001, "a heading of level {level} at {reach:?}: {drawn} against {apps}");
+        }
     }
 }
 

@@ -22,6 +22,7 @@ pub struct TextViewStyle {
     paragraph_gap: Rems,
     list_item_gap: f32,
     heading: Arc<dyn Fn(u8) -> StyleRefinement + Send + Sync + 'static>,
+    heading_scales: [f32; 6],
     code_block: StyleRefinement,
     table: StyleRefinement,
     table_head: StyleRefinement,
@@ -57,6 +58,7 @@ impl PartialEq for TextViewStyle {
             && self.border == other.border
             && (Arc::ptr_eq(&self.heading, &other.heading)
                 || (1..=6).all(|level| (self.heading)(level) == (other.heading)(level)))
+            && self.heading_scales == other.heading_scales
             && self.code_block == other.code_block
             && self.table == other.table
             && self.table_head == other.table_head
@@ -104,6 +106,7 @@ impl TextViewStyle {
             paragraph_gap: rems(0.75),
             list_item_gap: 0.25,
             heading: Arc::new(|_| StyleRefinement::default()),
+            heading_scales: [1.8, 4. / 3., 17. / 15., 1., 14. / 15., 13. / 15.],
             code_block: StyleRefinement::default(),
             table: StyleRefinement::default(),
             table_head: StyleRefinement::default(),
@@ -177,6 +180,21 @@ impl TextViewStyle {
         F: Fn(u8) -> StyleRefinement + Send + Sync + 'static,
     {
         self.heading = Arc::new(heading);
+        self
+    }
+
+    /// Sets how big a heading is at each level, from 1 to 6, as a share of the
+    /// size of the body text.
+    ///
+    /// 1.8, 4/3, 17/15, 1, 14/15 and 13/15 by default. A font size given to
+    /// [`Self::with_heading`] takes precedence. A non-finite or non-positive
+    /// share leaves its level as it was.
+    pub fn with_heading_scales(mut self, scales: [f32; 6]) -> Self {
+        for (scale, given) in self.heading_scales.iter_mut().zip(scales) {
+            if given.is_finite() && given > 0. {
+                *scale = given;
+            }
+        }
         self
     }
 
@@ -359,6 +377,12 @@ impl TextViewStyle {
     /// The style refinement for a heading at `level` (1-6).
     pub fn heading(&self, level: u8) -> StyleRefinement {
         (self.heading)(level)
+    }
+
+    /// How big a heading at `level` (1-6) is, as a share of the size of the
+    /// body text. A level past 6 is sized as 6.
+    pub fn heading_scale(&self, level: u8) -> f32 {
+        self.heading_scales[usize::from(level.clamp(1, 6)) - 1]
     }
 
     /// The style refinement for code blocks.
@@ -629,6 +653,22 @@ mod tests {
             StyleRefinement::default().pt(rems(1.)).pb(rems(0.5))
         );
         assert_eq!(style.heading(2), StyleRefinement::default().pb(rems(0.25)));
+        assert!(style != base);
+    }
+
+    #[test]
+    fn heading_scales_default_to_the_kits_and_ignore_an_unusable_share() {
+        let base = TextViewStyle::default();
+        assert_eq!(base.heading_scale(1), 1.8);
+        assert_eq!(base.heading_scale(9), 13. / 15.);
+
+        let style = base
+            .clone()
+            .with_heading_scales([2., f32::NAN, 1.2, 0., 1., 0.9]);
+        assert_eq!(style.heading_scale(1), 2.);
+        assert_eq!(style.heading_scale(2), 4. / 3.);
+        assert_eq!(style.heading_scale(3), 1.2);
+        assert_eq!(style.heading_scale(4), 1.);
         assert!(style != base);
     }
 

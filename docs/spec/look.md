@@ -159,19 +159,32 @@ Six strengths have names of their own, since several places draw with them: what
 - **Code's lines are 20px apart where they're read line by line, and 17px apart among the chat's prose,** as the owner chose from pictures of three ways: a file, a diff and a call's numbered lines are read one line at a time, often beside their numbers, and a code block in a reply, or what a call was given and put out, is glanced at, where denser shows more. The same output is spaced the same however long it is. The terminal lays out a grid of its own. On a handheld, where code is 14px, they're 22px and 19px, as the owner decided: 19px is the lines iOS sets its own text on at that size, and code read line by line is a desk's 3px further apart. `look::CodeLines` holds them. *Unconfirmed.*
 - **Every kind of text the app sets has a name for what it's for,** so a size means the same wherever it's set, and two kinds that are the same size today, such as details and code, can change apart. What's set takes one of them by its name, rather than a font or a size by its value, and text that stands out from what's around it takes emphasis rather than a weight. `look::Type` holds them, and the kit's theme is given the rem and code's size from there, and gives code's font back, so the kit's own parts agree.
 - **A kind of text takes its lines from where it's set, as it takes its weight, and a place sets them as a share of the text's size, never in pixels,** as the owner decided, so they follow the reach as the size does. Each of a field, a menu's row, a diff or a question sets how far apart its lines are: a question's are 1.43 of body text's size, 20px at a desk and 24px on a handheld. Where nothing sets them, they're the golden ratio of the size, as GPUI spaces text, to the nearest pixel of the screen. `look::Type::lines` gives a place's in whole pixels, so what's as tall as a line beside it, such as a question's number, is as tall. A key's kinds have lines of their own, as tall as what the key says, since it's set on its cap, and what's held with it sits on the key's line. Code's lines are below.
+- **What someone wrote in Markdown, such as the agent's reply, has its headings and inline code sized as shares of the text they're in,** as the owner decided, so they keep their places against it at any size. They aren't kinds of the app's own text. A heading steps down gently from 1.8 times the text at the top level, and stands out by its weight, as the rule on semibold says. Inline code is 0.875 of the text. `look::MARKDOWN_HEADINGS` and `look::INLINE_CODE` hold them, and the kit's text view takes them from there.
 - **Text in different sizes or fonts along one line sits on one baseline,** as the words of a sentence do, such as the workspace header's title beside its branch, in the code font, and where that started, both smaller. Centred one by one, smaller text would ride higher than what's beside it. An icon stays centred, and so does text on a shape, such as a pill, a chip or a button, since it's the shape that's lined up. `look::LineText` sets them. *Unconfirmed.*
 
 **Every kind of text, by its name.** Each is a kind in `look::Type`, at a desk at the app's scale, where a rem is 16px, and on a handheld in pixels, as iOS's own kinds of text are, in the system font or the code font. One with no weight of its own takes what's around it, which is regular unless it's given emphasis.
 
 | Name | Font | Size | Weight | On a handheld | For |
 |---|---|---|---|---|---|
-| `PageTitle` | System | 24px | Medium | 28px | A page's name, such as each of Settings' pages: the largest kind, since it says where you are |
+| `PageTitle` | System | 24px | Medium | 28px | A page's name, such as each of Settings' pages: the largest of the app's own text, since it says where you are |
 | `Heading` | System | 16px | Medium | 17px | What an empty pane says is missing or went wrong, above why |
 | `Body` | System | 14px | As around it | 17px | What to read: what the agent wrote, a prompt, a call's line, a row's name, and most of the rest |
 | `Detail` | System | 12px | As around it | 15px | Details beside or under what to read, such as a time, a count, a hint or a heading over a list |
 | `Code` | Code | 12px | As around it | 14px | Code: a command, a path, a file, or what a call put out |
 | `Key` | System | 10px | As around it | 12px | What a key says, such as the `F` of Settings' `⌘ F` |
 | `KeyHeld` | System | 7.5px | As around it | 9px | What's held with a key, such as Settings' `⌘`, smaller than the key that's pressed, as on the keys themselves |
+
+**Markdown's headings and inline code, as shares of the text they're in,** at body text's size at a desk and on a handheld.
+
+| Name | At a desk | On a handheld | Share of the text |
+|---|---|---|---|
+| Heading 1 | 25.2px | 30.6px | 1.8 |
+| Heading 2 | 18.67px | 22.67px | 4/3 |
+| Heading 3 | 15.87px | 19.27px | 17/15 |
+| Heading 4 | 14px | 17px | 1 |
+| Heading 5 | 13.07px | 15.87px | 14/15 |
+| Heading 6 | 12.13px | 14.73px | 13/15 |
+| Inline code | 12.25px | 14.88px | 0.875 |
 
 **Every kind of text, as the app sets it.**
 

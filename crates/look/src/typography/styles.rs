@@ -34,6 +34,10 @@ pub const STRONG: FontWeight = FontWeight::SEMIBOLD;
 
 /// How big inline code is, such as a path in a reply, as a share of the size of the text around it.
 pub const INLINE_CODE: f32 = 0.875;
+/// How big the headings of what someone wrote in Markdown are, such as the agent's `#` and `##`, at each level from 1
+/// to 6, as shares of the size of the text they're in. They step down gently from 1.8 and stand out by their weight,
+/// [`STRONG`], so they keep their places against the text at any size, and aren't kinds of the app's own text.
+pub const MARKDOWN_HEADINGS: [f32; 6] = [1.8, 4. / 3., 17. / 15., 1., 14. / 15., 13. / 15.];
 /// How far apart the items of a list someone wrote are, as a share of the size of its text: less than paragraphs are.
 pub const LIST_ITEM_GAP: f32 = 0.25;
 
