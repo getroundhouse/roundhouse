@@ -9,7 +9,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 | Component | Decided by | What changes |
 |---|---|---|
 | Buttons, toggles, switches, fields, bars, cards in the page, small things in a line, the status mark, lines, banners, empty states, the app icon | Shared | Their sizes, by reach |
-| A list's row | Shared | Under touch it's washed when pressed, not under the pointer. Its chevron is a compact layout's |
+| A list's row | Shared | Under touch it's washed when pressed, at 12%, as a pointer's press washes it, as the owner decided, and not under the pointer. Its chevron is a compact layout's |
 | A menu | Shared | Beside what opened it, at every width. Under touch a right-click menu opens on a long press |
 | A copy button shown under the pointer | Input | Under touch, Copy is first in what a long press opens |
 | A tooltip, the pointing hand, a key | Input: a pointer | Nothing under touch |
@@ -19,7 +19,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 | A dialog | Width: regular and wide | A compact layout opens a sheet, or the whole screen for a task of several steps |
 | Tabs | Width: regular and wide | In a compact layout the screen's title opens a menu of what the tabs hold |
 
-*Not built:* a list's row washed when it's pressed under touch, rather than under the pointer, as `look.md` says.
+*Not built:* a list's row washed when it's pressed under touch, rather than under the pointer, as `look.md` says, which #2883 has.
 
 ## Buttons
 
