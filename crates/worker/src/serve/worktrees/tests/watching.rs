@@ -14,7 +14,7 @@ use super::support::{Served, added, committed, ends, next_frame, served, watch};
 use crate::branch_watch::Whose;
 use crate::git::tests::run;
 #[cfg(unix)]
-use crate::serve::listen::without_hub;
+use crate::serve::dialing::without_hub;
 use crate::serve::{Outgoing, handle};
 use crate::testing::given;
 

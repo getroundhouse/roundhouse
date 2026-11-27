@@ -1,14 +1,13 @@
-//! A worker that can outlive its hub, served on a Unix socket, with hubs played by the tests.
+//! A worker that dials its hub, and outlives it, with hubs played by the tests, each on a stream in memory that the
+//! worker's dial takes, as it takes the connection a hub admits it on.
 
 #![cfg(test)]
 #![cfg(unix)]
 
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::Build;
-use protocol::client::ErrorCode;
 use protocol::event::EventBody;
 use protocol::frame;
 use protocol::model::{AgentKind, RunId};
@@ -16,23 +15,29 @@ use protocol::worker::{
     AgentSpec, AgentStarted, Hello, Received, RunningAgent, RunningAgentsReply, WORKER_PROTOCOL_VERSION, WorkerCall,
     WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
 };
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
-use tokio::net::UnixStream;
-use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, ReadHalf, WriteHalf};
+use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
-use worker::{Config, CredentialHelper, Deleter, listen};
+use worker::{Config, CredentialHelper, Deleter, DialFailed, serve_dialing};
 
 const WAIT: Duration = Duration::from_secs(10);
 
-/// A worker listening in a directory of its own, whose agent runs until a file named `done` appears beside it.
-struct Listening {
+/// How much a stream in memory holds before a write waits, plenty for any frame these send.
+const STREAM_BYTES: usize = 1 << 20;
+
+/// The worker's end of a hub's stream.
+type Dialed = (ReadHalf<DuplexStream>, WriteHalf<DuplexStream>);
+
+/// A worker in a directory of its own, whose agent runs until a file named `done` appears beside it, and which dials
+/// whichever hub a test has waiting next.
+struct Dialing {
     dir: tempfile::TempDir,
-    socket: PathBuf,
+    hubs: mpsc::UnboundedSender<Dialed>,
     running: JoinHandle<std::io::Result<()>>,
 }
 
-impl Listening {
+impl Dialing {
     /// With no test to stop with, as a worker of the product's has.
     fn start(idle_limit: Duration) -> Self {
         Self::stopping_with(idle_limit, std::future::pending())
@@ -40,20 +45,6 @@ impl Listening {
 
     /// Stopping with a test once `test_gone` returns, as a test's worker does.
     fn stopping_with(idle_limit: Duration, test_gone: impl Future<Output = ()> + Send + 'static) -> Self {
-        Self::start_with(idle_limit, test_gone, worker::Timers::DEFAULT)
-    }
-
-    /// Giving the hub connected `within` to go once another connects.
-    fn with_hubs_going_within(within: Duration) -> Self {
-        let timers = worker::Timers { hub_goes_within: within, ..worker::Timers::DEFAULT };
-        Self::start_with(WAIT, std::future::pending(), timers)
-    }
-
-    fn start_with(
-        idle_limit: Duration,
-        test_gone: impl Future<Output = ()> + Send + 'static,
-        timers: worker::Timers,
-    ) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let cli = dir.path().join("fake-cli");
         process::testing::write_program(&cli, "#!/bin/sh\nwhile [ ! -e done ]; do sleep 0.02; done\n").unwrap();
@@ -74,12 +65,27 @@ impl Listening {
             credential_helper: CredentialHelper::new("/bin/false", ["--"]),
             machine: process::testing::git_environment().given(),
             refused: None,
-            timers,
+            timers: worker::Timers::DEFAULT,
         };
-        let socket = dir.path().join("worker.sock");
-        let path = socket.clone();
-        let running = tokio::spawn(async move { listen(&path, config, idle_limit, test_gone).await });
-        Self { dir, socket, running }
+        let (hubs, waiting) = mpsc::unbounded_channel::<Dialed>();
+        let waiting = Arc::new(Mutex::new(waiting));
+        let dial = move || {
+            let waiting = waiting.clone();
+            async move {
+                let next = waiting.lock().await.recv().await;
+                next.ok_or_else(|| DialFailed::Unreachable("no hub is coming".into()))
+            }
+        };
+        let running = tokio::spawn(serve_dialing(dial, config, idle_limit, test_gone));
+        Self { dir, hubs, running }
+    }
+
+    /// A hub the worker dials next, once it dials.
+    fn hub(&self) -> Hub {
+        let (hub_end, worker_end) = tokio::io::duplex(STREAM_BYTES);
+        self.hubs.send(tokio::io::split(worker_end)).unwrap();
+        let (frames, calls) = tokio::io::split(hub_end);
+        Hub { calls, frames: BufReader::new(frames).lines(), next_id: 1 }
     }
 
     fn start_spec(&self) -> WorkerRequest {
@@ -103,31 +109,17 @@ impl Listening {
     }
 }
 
-/// A hub, played by the test, connected to the worker.
+/// A hub, played by the test, on the stream the worker dialed.
 struct Hub {
-    calls: OwnedWriteHalf,
-    frames: Lines<BufReader<OwnedReadHalf>>,
+    calls: WriteHalf<DuplexStream>,
+    frames: Lines<BufReader<ReadHalf<DuplexStream>>>,
     next_id: u64,
 }
 
 impl Hub {
-    async fn connect(socket: &Path) -> Self {
-        let stream = waiting::task::until_ok_async(WAIT, || async move {
-            UnixStream::connect(socket).await.map_err(|e| format!("the worker's socket: {e}"))
-        })
-        .await;
-        let (frames, calls) = stream.into_split();
-        Self { calls, frames: BufReader::new(frames).lines(), next_id: 1 }
-    }
-
-    /// Connects, and says hello, as [`Hub::say_hello`] does.
-    async fn greet(socket: &Path, keep_running_without_hub: bool) -> (Self, Vec<WorkerFrame>, Vec<RunningAgent>) {
-        Self::connect(socket).await.say_hello(keep_running_without_hub).await
-    }
-
     /// Says hello, and returns whatever the worker sent after its reply to that, up to its reply to a call that lists
     /// its agents, with that list.
-    async fn say_hello(mut self, keep_running_without_hub: bool) -> (Self, Vec<WorkerFrame>, Vec<RunningAgent>) {
+    async fn greet(mut self, keep_running_without_hub: bool) -> (Self, Vec<WorkerFrame>, Vec<RunningAgent>) {
         let hello = WorkerRequest::Hello(Hello {
             protocol_version: WORKER_PROTOCOL_VERSION,
             oldest_protocol_version: None,
@@ -190,16 +182,16 @@ fn exited(frames: &[WorkerFrame]) -> Vec<Option<u64>> {
 }
 
 /// A hub restarting, as for an update, asks its workers to keep running without it, so their agents carry on, and the
-/// next hub gets what the agents said meanwhile, until a hub says it has recorded it.
+/// next hub the worker dials gets what the agents said meanwhile, until a hub says it has recorded it.
 #[tokio::test]
 async fn a_worker_asked_to_keep_running_carries_on_without_its_hub_and_sends_the_next_what_it_missed() {
-    let worker = Listening::start(WAIT);
-    let (mut first, _, _) = Hub::greet(&worker.socket, true).await;
+    let worker = Dialing::start(WAIT);
+    let (mut first, _, _) = worker.hub().greet(true).await;
     let (started, _) = first.call(worker.start_spec()).await;
     assert!(matches!(started, WorkerOutcome::Response(WorkerResponse::AgentStarted(_))), "{started:?}");
     first.go().await;
 
-    let (mut second, _, agents) = Hub::greet(&worker.socket, true).await;
+    let (mut second, _, agents) = worker.hub().greet(true).await;
     assert_eq!(agents.len(), 1, "it outlived the first hub: {agents:?}");
     assert_eq!((&agents[0].session_id, agents[0].run), (&"s".into(), RunId::new(4)));
     let claude = agents::claude::description().capabilities;
@@ -208,10 +200,10 @@ async fn a_worker_asked_to_keep_running_carries_on_without_its_hub_and_sends_the
     // Never recorded, since this hub goes without saying so.
     let missed = second.until_exited().await;
     second.go().await;
-    let (mut third, replayed, agents) = Hub::greet(&worker.socket, true).await;
+    let (mut third, replayed, agents) = worker.hub().greet(true).await;
     let (received, _) = third.call(WorkerRequest::Received(Received { through: 1 })).await;
     third.go().await;
-    let (mut fourth, after_recording, _) = Hub::greet(&worker.socket, true).await;
+    let (mut fourth, after_recording, _) = worker.hub().greet(true).await;
     let (stopped, _) = fourth.call(WorkerRequest::Stop).await;
     fourth.go().await;
 
@@ -223,73 +215,16 @@ async fn a_worker_asked_to_keep_running_carries_on_without_its_hub_and_sends_the
     worker.stopped().await;
 }
 
-/// As a hub from before workers could outlive it, and one that's stopping for good, expect.
+/// As a hub that's stopping for good expects, and one from before workers could outlive it.
 #[tokio::test]
 async fn a_hub_that_didnt_ask_the_worker_to_keep_running_stops_it_by_going() {
-    let worker = Listening::start(WAIT);
-    let (mut hub, _, _) = Hub::greet(&worker.socket, false).await;
+    let worker = Dialing::start(WAIT);
+    let (mut hub, _, _) = worker.hub().greet(false).await;
     hub.call(worker.start_spec()).await;
 
     let rest = hub.go().await;
 
     assert_eq!(exited(&rest), [None], "it stopped the agent, and sent on what it said as it did, unnumbered");
-    assert!(!worker.socket.exists(), "a hub connecting next starts another worker");
-    worker.stopped().await;
-}
-
-/// So no other user can tell the worker what to run.
-#[tokio::test]
-async fn only_this_user_can_connect_to_the_worker() {
-    let worker = Listening::start(WAIT);
-    let (hub, _, _) = Hub::greet(&worker.socket, false).await;
-
-    let mode = std::fs::metadata(&worker.socket).unwrap().permissions().mode() & 0o777;
-
-    assert_eq!(mode, 0o600);
-    hub.go().await;
-    worker.stopped().await;
-}
-
-/// So a hub that asks twice for its connection to the worker learns there's one already, rather than taking the worker
-/// from itself.
-#[tokio::test]
-async fn a_second_hub_is_refused_while_one_is_connected() {
-    let worker = Listening::with_hubs_going_within(Duration::from_millis(100));
-    let (mut first, _, _) = Hub::greet(&worker.socket, true).await;
-    let mut second = Hub::connect(&worker.socket).await;
-
-    let (refused, _) = second.call(WorkerRequest::RunningAgents).await;
-    let (still, _) = first.call(WorkerRequest::RunningAgents).await;
-
-    assert!(matches!(&refused, WorkerOutcome::Error(e) if e.code == ErrorCode::Conflict), "{refused:?}");
-    assert!(matches!(still, WorkerOutcome::Response(WorkerResponse::RunningAgents(_))), "{still:?}");
-    first.call(WorkerRequest::Stop).await;
-    first.go().await;
-    worker.stopped().await;
-}
-
-/// The worker can notice that a hub crashed only after the next has connected, and the next would end a worker that
-/// refused it, with its agents.
-#[tokio::test]
-async fn a_hub_that_connects_before_the_last_is_noticed_to_have_gone_carries_on_with_its_agents() {
-    let worker = Listening::with_hubs_going_within(Duration::from_mins(10));
-    let (mut first, _, _) = Hub::greet(&worker.socket, true).await;
-    let (started, _) = first.call(worker.start_spec()).await;
-    assert!(matches!(started, WorkerOutcome::Response(WorkerResponse::AgentStarted(_))), "{started:?}");
-
-    // Only the last to connect waits, so its reply to the one before it says the worker has taken both, with the first
-    // still connected.
-    let mut crashed = Hub::connect(&worker.socket).await;
-    let next = Hub::connect(&worker.socket).await;
-    let (refused, _) = crashed.call(WorkerRequest::RunningAgents).await;
-    first.go().await;
-    let (mut next, _, agents) = next.say_hello(true).await;
-
-    assert!(matches!(&refused, WorkerOutcome::Error(e) if e.code == ErrorCode::Conflict), "{refused:?}");
-    assert_eq!(agents.len(), 1, "{agents:?}");
-    assert_eq!((&agents[0].session_id, agents[0].run), (&"s".into(), RunId::new(4)));
-    next.call(WorkerRequest::Stop).await;
-    next.go().await;
     worker.stopped().await;
 }
 
@@ -300,11 +235,11 @@ async fn a_worker_left_without_a_hub_stops_its_agents_in_time_or_with_its_test()
     for with_its_test in [false, true] {
         let (test, test_going) = tokio::sync::oneshot::channel::<()>();
         let worker = if with_its_test {
-            Listening::stopping_with(Duration::from_mins(10), async move { drop(test_going.await) })
+            Dialing::stopping_with(Duration::from_mins(10), async move { drop(test_going.await) })
         } else {
-            Listening::start(Duration::from_millis(500))
+            Dialing::start(Duration::from_millis(500))
         };
-        let (mut hub, _, _) = Hub::greet(&worker.socket, true).await;
+        let (mut hub, _, _) = worker.hub().greet(true).await;
         let (started, _) = hub.call(worker.start_spec()).await;
         let WorkerOutcome::Response(WorkerResponse::AgentStarted(AgentStarted { pid, .. })) = started else {
             panic!("{started:?}")

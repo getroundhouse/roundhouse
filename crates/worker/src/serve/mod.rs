@@ -5,8 +5,6 @@ mod connection;
 #[cfg(unix)]
 mod dialing;
 mod hello;
-#[cfg(unix)]
-mod listen;
 mod moves;
 mod outbox;
 mod scripts;
@@ -14,8 +12,6 @@ mod worktrees;
 
 #[cfg(unix)]
 pub use dialing::{DialFailed, serve_dialing};
-#[cfg(unix)]
-pub use listen::listen;
 pub(crate) use outbox::{HubConnection, Outbox, Outgoing};
 
 mod worker;

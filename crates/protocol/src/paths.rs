@@ -45,9 +45,10 @@ pub const WORKER_RECORD_FILE: &str = "worker.pid";
 /// the agent's CLI where the worker's tools are. Everything in it is a run's, so the provider stops what's recorded and
 /// removes all of it after a killed worker.
 pub const AGENTS_DIR: &str = "agents";
-/// Where a local worker that can outlive its hub listens for it, in its state directory. The worker runs in that
-/// directory, and both it and what connects to it name the socket relative to it, since the whole path can be longer
-/// than a socket's may be, which is 103 bytes on macOS.
+/// Where a local worker of an earlier build, which outlived its hub by listening rather than dialing, listens for it, in
+/// its state directory. That worker ran in that directory, and what connects to it names the socket relative to it,
+/// since the whole path can be longer than a socket's may be, which is 103 bytes on macOS. It goes at the next break of
+/// the worker protocol, as `docs/decisions/hub-speaks-previous-version.md` says.
 pub const WORKER_SOCKET_FILE: &str = "worker.sock";
 /// The key of the hub's endpoint that the workers on its own machine dial, on loopback, and the port it keeps, in its
 /// data directory.
