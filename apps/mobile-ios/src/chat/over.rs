@@ -14,7 +14,7 @@ use gpui_kit::{
 use protocol::model::{ProposalId, SubagentId};
 use transcript::{ProposalEvent, ProposalView, Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
-use super::view::{ChatEvent, ChatView, PROSE_LINE, read};
+use super::view::{ChatEvent, ChatView, prose_lines, read};
 use crate::chrome;
 
 /// The screen a line in the chat last opened, if any, and whether it's in front of the chat.
@@ -198,7 +198,7 @@ impl ChatView {
                     .flex_1()
                     .min_h_0()
                     .w_full()
-                    .line_height(PROSE_LINE)
+                    .line_height(prose_lines())
                     .child(screen.view.clone())
                     .into_any_element();
                 (title, Some("Proposal".to_string()), body)

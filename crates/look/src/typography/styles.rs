@@ -3,7 +3,7 @@ use crate::traits::Reach;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{
     AbsoluteLength, App, DefiniteLength, FontStyle, FontWeight, Pixels, SharedString, StrikethroughStyle, Styled,
-    UnderlineStyle, px, rems,
+    UnderlineStyle, phi, px, rems,
 };
 
 /// How big a rem is at a desk. The kit's theme is given it, and the window measures the kinds that are in rems by it.
@@ -88,7 +88,8 @@ impl Type {
     /// sizes. *Unconfirmed.*
     ///
     /// A key's lines are as tall as what it says, since it's set on its cap, and what's held with it is on the key's
-    /// line.
+    /// line. Body text on a handheld has lines of its own, 25px: a little further apart than iOS's own 22, since a reply
+    /// is read at length, and closer than the golden ratio's 27.5, which shows less of one.
     pub(super) fn set_at(self, reach: Reach) -> Set {
         let read = |size: AbsoluteLength| Set { font: Font::System, size, weight: None, line: None };
         let on_a_key = |size: AbsoluteLength, key: AbsoluteLength| Set { line: Some(key.into()), ..read(size) };
@@ -110,7 +111,7 @@ impl Type {
                 match self {
                     Type::PageTitle => Set { weight: Some(EMPHASIS), ..read(px(28.).into()) },
                     Type::Heading => Set { weight: Some(EMPHASIS), ..read(px(17.).into()) },
-                    Type::Body => read(px(17.).into()),
+                    Type::Body => Set { line: Some(px(25.).into()), ..read(px(17.).into()) },
                     Type::Detail => read(px(15.).into()),
                     Type::Code => Set { font: Font::Code, ..read(px(14.).into()) },
                     Type::Key => on_a_key(key, key),
@@ -132,6 +133,14 @@ impl Type {
     /// How big it is, in a window whose rem is `rem`.
     pub fn size(self, rem: Pixels) -> Pixels {
         self.set().size.to_pixels(rem)
+    }
+
+    /// How far apart its lines are where nothing it's in sets them: its own, where it has them, such as a key's, or
+    /// else the golden ratio of its size, as GPUI spaces text. GPUI rounds them to the screen's pixels.
+    pub fn default_lines(self) -> Pixels {
+        let set = self.set();
+        let size = set.size.to_pixels(rem(Reach::now()));
+        set.line.unwrap_or_else(phi).to_pixels(size.into(), rem(Reach::now()))
     }
 
     /// How far apart its lines are where a place sets them `share` of its size apart, such as a question: at the size
