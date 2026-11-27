@@ -11,6 +11,7 @@ use super::super::kinds::{Kind, WorkspaceChanges, WorkspaceLines};
 use super::seen::{as_of, changes, lines, listed, of_w, told, told_copy};
 use crate::hub::Hub;
 use crate::hub::tests::{hub_in, hub_in_again};
+use crate::store::tests::another_workspace;
 
 /// How long a test gives a change, or a list, to finish while what it waits for is held, which it mustn't.
 const HELD_FOR: Duration = Duration::from_millis(200);
@@ -150,6 +151,7 @@ async fn each_level_is_listed_only_its_own_observations() {
 
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
+    another_workspace(&hub.store, "v");
     for workspace in ["w", "v"] {
         hub.observation_read::<WorkspaceLines>(workspace.into(), lines(3, 1), 1_000).await.result().unwrap();
         hub.observation_read::<WorkspaceChanges>(workspace.into(), changes(3, 1), 1_000).await.result().unwrap();

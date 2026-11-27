@@ -7,13 +7,14 @@ use parking_lot::Mutex;
 use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
-    AgentKind, Branch, Branches, ClientRequestId, Head, RecordKey, SetupStatus, WorkspaceId, WorkspaceStatus,
+    AgentKind, Branch, Branches, ClientRequestId, Head, ObservationKey, RecordKey, SetupStatus, WorkspaceId,
+    WorkspaceStatus,
 };
 use protocol::worker::{PrepareWorkspace, RepoSource, SetupDone, WorkerRequest, WorkerResponse, WorktreeThereReply};
 
-use crate::hub::WorkspaceWorkerBuild;
 use crate::hub::stand_in_workers::{TIMEOUT, hub_whose_stand_ins_answer_first, hub_with_stand_in_workers};
 use crate::hub::tests::{described, hub_looking_often, serving};
+use crate::hub::{WorkspaceBranches, WorkspaceWorkerBuild};
 use crate::store::{Ended, Move};
 use crate::timers::Timers;
 use crate::worker_link::WorkerLink;
@@ -169,6 +170,35 @@ async fn a_move_cut_short_is_settled_by_whether_its_worker_says_the_worktree_is_
         }
     }
     assert!(wrong.is_empty(), "status, branch, whether it was set up again, and what its worker was asked: {wrong:#?}");
+}
+
+/// A restore put back leaves the workspace archived, so what was said of its worktree while it was being restored,
+/// which was kept, since the worktree was on its way back, is forgotten, and clients are told.
+#[tokio::test]
+async fn a_restore_put_back_forgets_what_was_said_of_the_worktree_meanwhile() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_looking_often(dir.path());
+    let id = WorkspaceId::from("w");
+    hub.store.workspace_ready(&id, "/ws/alder", &"alder".into(), "main").unwrap();
+    hub.store.start_move(&id, Move::Archive).unwrap();
+    hub.store.end_move(&id, Move::Archive, Ended::Done).unwrap();
+    hub.store.start_move(&id, Move::Restore).unwrap();
+    let branches = Branches { head: Head::Detached { commit: "c1".into() }, had: Vec::new() };
+    hub.branches_known(&id, branches).await;
+    let kept_while_restoring = hub.observations.keeps::<WorkspaceBranches>(&id);
+    let (link, _) = worker_saying(Ok(WorkerResponse::WorktreeThere(WorktreeThereReply { there: false })));
+    serving(&hub, &link);
+    let mut feed = hub.subscribe_feed();
+
+    hub.clone().settle_moves(vec![(id.clone(), Move::Restore)]).await;
+
+    assert!(kept_while_restoring, "said while it was being restored");
+    assert_eq!(hub.store.get_workspace(&id).unwrap().status, WorkspaceStatus::Archived, "put back");
+    assert!(!hub.observations.keeps::<WorkspaceBranches>(&id), "forgotten as it was put back");
+    let removed = std::iter::from_fn(|| feed.try_recv().ok()).any(|notice| {
+        matches!(&*notice, HubNotice::ObservationRemoved { observation: ObservationKey::WorkspaceBranches { .. }, .. })
+    });
+    assert!(removed, "clients told");
 }
 
 /// One of what a worker is asked that says what becomes of it: to watch the worktree's branches.

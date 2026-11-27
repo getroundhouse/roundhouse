@@ -4,12 +4,12 @@ use std::collections::HashSet;
 
 use protocol::client::{ApiError, ObservationNotice};
 use protocol::model::{GithubAccountId, GithubAppId, WorkspaceId};
-use tracing::warn;
+use tracing::{debug, warn};
 
 use super::failing::{self, Keeping};
 use super::file::Write;
-use super::kept::{Change, Said, Step, Table};
-use super::kinds::{Kind, Owner, SessionKey};
+use super::kept::{Change, Changed, Said, Step, Table};
+use super::kinds::{GoesWith, Kind, SessionKey};
 use super::tables::Gone;
 use crate::hub::Hub;
 use crate::store::{Store, now_ms};
@@ -19,7 +19,8 @@ impl Hub {
     /// if something keeps it up to date, as [`Hub::observation_kept_by`] says, and otherwise as of `read_at_ms`. A
     /// read that finds what's kept tells clients nothing and moves no revision, and the file keeps only that it was
     /// read then, so a hub that starts again has it as of this read. One that began before the read kept, and lands
-    /// after it, is dropped.
+    /// after it, is dropped, and so is one of what goes with a record that isn't there any more, as
+    /// [`Hub::change_observation`] says.
     pub(crate) async fn observation_read<K: Kind>(&self, of: K::Of, value: K::Value, read_at_ms: i64) -> Keeping {
         self.change_observation::<K>(of, |_| Change::Read { value, read_at_ms }).await
     }
@@ -133,14 +134,14 @@ impl Hub {
         Ok(()).into()
     }
 
-    /// Forgets every observation of workspace `id`, and of its other worktrees and its sessions, of every kind, since the
+    /// Forgets every observation of workspace `id`, and of its worktrees and its sessions, of every kind, since the
     /// workspace is gone, and tells clients. One operation, so no kind is left out. Called where a workspace is
-    /// discarded, and again by whatever may have kept one of it as it went, as a read that lands after can. A failure,
-    /// which only a database that gives no revision has, is only logged, and
+    /// discarded, once its record is, so a read that lands after is never kept, as [`Hub::observation_read`] says. A
+    /// failure, which only a database that gives no revision has, is only logged, and
     /// [`Hub::observations_of_no_workspace_gone`] forgets what's left.
     pub(crate) async fn workspace_observations_gone(&self, id: &WorkspaceId) {
         let _changing = self.observations.changing.lock().await;
-        if let Err(e) = self.forget_observations_of(&|owner| owner.workspace() == Some(id)).await {
+        if let Err(e) = self.forget_observations_of(&|goes_with| goes_with.workspace() == Some(id)).await {
             warn!(
                 name: "observation.workspace_unforgotten",
                 workspace_id = %id,
@@ -150,13 +151,30 @@ impl Hub {
         }
     }
 
-    /// Forgets every observation of the GitHub account `id`, of every kind, since the account is gone, and tells clients,
-    /// as [`Hub::workspace_observations_gone`] does for a workspace. Called where an account is removed, and again by
-    /// whatever may have kept one of it as it went, as a read of its username that lands after can. What a failure
+    /// Forgets every observation of workspace `id` that goes with its own worktree, of every kind, such as its lines,
+    /// its changed files and its branches, since the workspace is archived, and tells clients, as
+    /// [`Hub::workspace_observations_gone`] does for all of a workspace's. Called once its record says it's archived,
+    /// so a read that lands after is never kept, and what its worker says once it's restored is. What a failure
     /// leaves is forgotten as the hub next starts.
+    pub(crate) async fn worktree_observations_gone(&self, id: &WorkspaceId) {
+        let _changing = self.observations.changing.lock().await;
+        if let Err(e) = self.forget_observations_of(&|goes_with| goes_with == GoesWith::Worktree(id)).await {
+            warn!(
+                name: "observation.worktree_unforgotten",
+                workspace_id = %id,
+                error = e.message,
+                "Couldn't forget the observations of an archived workspace's worktree"
+            );
+        }
+    }
+
+    /// Forgets every observation of the GitHub account `id`, of every kind, since the account is gone, and tells clients,
+    /// as [`Hub::workspace_observations_gone`] does for a workspace. Called where an account is removed, once its record
+    /// is, so a read of its username that lands after is never kept. What a failure leaves is forgotten as the hub next
+    /// starts.
     pub(crate) async fn github_account_observations_gone(&self, id: &GithubAccountId) {
         let _changing = self.observations.changing.lock().await;
-        if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::GithubAccount(id)).await {
+        if let Err(e) = self.forget_observations_of(&|goes_with| goes_with == GoesWith::GithubAccount(id)).await {
             warn!(
                 name: "observation.account_unforgotten",
                 account = %id,
@@ -171,7 +189,7 @@ impl Hub {
     /// hub next starts.
     pub(crate) async fn app_observations_gone(&self, id: GithubAppId) {
         let _changing = self.observations.changing.lock().await;
-        if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::App(&id)).await {
+        if let Err(e) = self.forget_observations_of(&|goes_with| goes_with == GoesWith::App(&id)).await {
             warn!(
                 name: "observation.app_unforgotten",
                 app = %id,
@@ -196,7 +214,7 @@ impl Hub {
                 );
             }
         };
-        let gone = |owner: Owner<'_>| matches!(owner, Owner::GithubAccount(id) if !have.contains(id));
+        let gone = |goes_with: GoesWith<'_>| matches!(goes_with, GoesWith::GithubAccount(id) if !have.contains(id));
         if let Err(e) = self.forget_observations_of(&gone).await {
             warn!(
                 name: "observation.accounts_unforgotten",
@@ -207,9 +225,9 @@ impl Hub {
     }
 
     /// Forgets every observation of a workspace the hub doesn't have, and of its sessions, and tells clients: what a
-    /// hub that stopped between removing a workspace and forgetting its observations left, or a working-out kept after
-    /// a removal it missed. The workspaces are listed under the lock every change takes, so none made since has one
-    /// yet.
+    /// hub that stopped between removing a workspace and forgetting its observations left, where the store couldn't
+    /// read which records are there as it opened. The workspaces are listed under the lock every change takes, so none
+    /// made since has one yet.
     pub(crate) async fn observations_of_no_workspace_gone(&self) {
         let _changing = self.observations.changing.lock().await;
         let workspaces = match self.workspace_list(true).await {
@@ -223,7 +241,7 @@ impl Hub {
             }
         };
         let have: HashSet<WorkspaceId> = workspaces.into_iter().map(|workspace| workspace.id).collect();
-        let gone = |owner: Owner<'_>| owner.workspace().is_some_and(|id| !have.contains(id));
+        let gone = |goes_with: GoesWith<'_>| goes_with.workspace().is_some_and(|id| !have.contains(id));
         if let Err(e) = self.forget_observations_of(&gone).await {
             warn!(
                 name: "observation.workspaces_unforgotten",
@@ -237,7 +255,7 @@ impl Hub {
     /// [`Hub::workspace_observations_gone`] does a workspace's.
     pub(crate) async fn session_observations_gone(&self, key: &SessionKey) {
         let _changing = self.observations.changing.lock().await;
-        if let Err(e) = self.forget_observations_of(&|owner| owner == Owner::Session(key)).await {
+        if let Err(e) = self.forget_observations_of(&|goes_with| goes_with == GoesWith::Session(key)).await {
             warn!(
                 name: "observation.session_unforgotten",
                 session_id = %key.session_id,
@@ -247,12 +265,15 @@ impl Hub {
         }
     }
 
-    /// Forgets every observation of an owner that `gone` picks out, under one revision, since a client compares a
-    /// removal's revision only with what it holds of that observation and with its level's list. The caller holds the
-    /// lock every change takes. Changes nothing where there's no revision to give.
+    /// Forgets every observation that goes with what `gone` picks out, under one revision, since a client compares a
+    /// removal's revision only with what it holds of that observation and with its level's list, and what keeps each,
+    /// including one that has said nothing yet. The caller holds the lock every change takes. Changes nothing it would
+    /// tell of where there's no revision to give.
     async fn forget_observations_of(&self, gone: Gone<'_>) -> Result<(), ApiError> {
         let observations = &self.observations;
         if !observations.tables.lock().keep_of(gone) {
+            // Nothing said to forget, nor tell of, but what keeps any goes with it all the same.
+            observations.tables.lock().forget_of(gone, &observations.writer);
             return Ok(());
         }
         let rev = self.blocking(Store::next_rev).await?;
@@ -271,8 +292,10 @@ impl Hub {
     /// Makes `change` to the observation of `of`, under the lock every change takes, from before it takes a revision
     /// until clients are told, so a list of records has every change its revision takes in. Its write to the file is
     /// queued under the lock too, so the file is written in the order the changes are made, and made after, so no list
-    /// waits on the file. Fails only where the database gives no revision, which is logged, and then changes nothing
-    /// but whether something keeps it current.
+    /// waits on the file. A change to what it says keeps nothing where the record it goes with isn't there, as
+    /// [`Kind::goes_with`] says, which the database says as it gives the revision, so a word that lands after a
+    /// workspace was removed, or its worktree archived, is never kept, whoever said it. Fails only where the database
+    /// gives no revision, which is logged, and then changes nothing but whether something keeps it current.
     pub(super) async fn change_observation<K: Kind>(
         &self,
         of: K::Of,
@@ -325,7 +348,20 @@ impl Hub {
             }
             Step::Changed(changed) => changed,
         };
-        let rev = self.blocking(Store::next_rev).await.inspect_err(|e| failing::logged::<K>(&of, doing, e))?;
+        // What it says is kept only while the record it goes with is there, which the database says as it gives the
+        // revision. Forgetting it needs no record.
+        let there = match &changed {
+            Changed::Says(_) => K::goes_with(&of).and_then(GoesWith::record),
+            Changed::Gone => None,
+        };
+        let rev = self.blocking(move |store| store.next_rev_while_there(there.as_ref())).await;
+        let Some(rev) = rev.inspect_err(|e| failing::logged::<K>(&of, doing, e))? else {
+            // A word about what's gone, as a read that lands after its workspace was removed or archived, of which
+            // nothing is kept, not even what would keep it current.
+            K::table(&mut observations.tables.lock()).keepers.remove(&of);
+            debug!(name: "observation.of_nothing_there", table = K::FORM.table, "Kept nothing of a record that's gone");
+            return Ok(());
+        };
         let notice = K::table(&mut observations.tables.lock()).change(&of, changed, rev, &observations.writer);
         if let Some(notice) = notice {
             self.tell_of_observation(notice);

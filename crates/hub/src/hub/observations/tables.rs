@@ -9,8 +9,8 @@ use super::hub_kinds::ReleaseOffered;
 use super::keepers::Keeper;
 use super::kept::{Changed, Step, Table};
 use super::kinds::{
-    AccountIdentity, AccountLimits, Form, Kind, ModelCatalog, Owner, Referenced, SessionCache, SessionContext,
-    SessionTodos, SessionToolServers, Subject, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
+    AccountIdentity, AccountLimits, Form, GoesWith, Kind, ModelCatalog, Referenced, SessionCache, SessionContext,
+    SessionTodos, SessionToolServers, WaitRead, WorkspaceChanges, WorkspaceLines, WorkspacePullRequest,
     WorkspacePullRequestDetail, WorkspaceRepositoryUnseen,
 };
 use super::workspace_kinds::{ChildWorktreeBranches, WorkspaceBranches, WorkspaceWorkerBuild};
@@ -46,8 +46,8 @@ pub(crate) struct Tables {
     pub(super) github_profile: Table<GithubProfile>,
 }
 
-/// Which owners' observations are to be forgotten, since they're gone.
-pub(super) type Gone<'a> = &'a (dyn Fn(Owner<'_>) -> bool + Sync);
+/// Which records' observations are to be forgotten, since they're gone, by what each goes with.
+pub(super) type Gone<'a> = &'a (dyn Fn(GoesWith<'_>) -> bool + Sync);
 
 /// What the store does with every kind's table alike.
 pub(super) trait AnyTable {
@@ -58,9 +58,9 @@ pub(super) trait AnyTable {
     /// Keeps what the cache file kept, each as of when it was read, at `rev`, which is nothing of a kind kept in memory
     /// alone.
     fn load(&mut self, file: &CacheFile, rev: Rev) -> rusqlite::Result<()>;
-    /// Whether it keeps an observation of an owner that `gone` picks out.
+    /// Whether it keeps an observation that goes with what `gone` picks out.
     fn keeps_of(&self, gone: Gone<'_>) -> bool;
-    /// Forgets each observation of an owner that `gone` picks out, and that anything keeps it current, and queues its
+    /// Forgets each observation that goes with what `gone` picks out, and that anything keeps it current, and queues its
     /// removal from the file on `writer`. Returns which it forgot, as clients are told of each.
     fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey>;
     /// Whether `keeper` going at `at_ms` changes what any observation it keeps says, as [`AnyTable::keeper_went`] would.
@@ -97,12 +97,12 @@ impl<K: Kind> AnyTable for Table<K> {
     }
 
     fn keeps_of(&self, gone: Gone<'_>) -> bool {
-        self.kept.keys().any(|of| of.owner().is_some_and(gone))
+        self.kept.keys().any(|of| K::goes_with(of).is_some_and(gone))
     }
 
     fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey> {
-        self.keepers.retain(|of, _| !of.owner().is_some_and(gone));
-        let forgotten: Vec<K::Of> = self.kept.keys().filter(|of| of.owner().is_some_and(gone)).cloned().collect();
+        self.keepers.retain(|of, _| !K::goes_with(of).is_some_and(gone));
+        let forgotten: Vec<K::Of> = self.kept.keys().filter(|of| K::goes_with(of).is_some_and(gone)).cloned().collect();
         for of in &forgotten {
             self.kept.remove(of);
             writer.write::<K>(of.clone(), Write::Gone);
@@ -198,12 +198,12 @@ impl Tables {
         self.each().iter().flat_map(|table| table.listed(level)).collect()
     }
 
-    /// Whether any kind keeps an observation of an owner that `gone` picks out.
+    /// Whether any kind keeps an observation that goes with what `gone` picks out.
     pub(super) fn keep_of(&mut self, gone: Gone<'_>) -> bool {
         self.each().iter().any(|table| table.keeps_of(gone))
     }
 
-    /// Forgets every observation of an owner that `gone` picks out, of every kind, as [`AnyTable::forget_of`] does.
+    /// Forgets every observation that goes with what `gone` picks out, of every kind, as [`AnyTable::forget_of`] does.
     pub(super) fn forget_of(&mut self, gone: Gone<'_>, writer: &Writer) -> Vec<ObservationKey> {
         self.each().into_iter().flat_map(|table| table.forget_of(gone, writer)).collect()
     }

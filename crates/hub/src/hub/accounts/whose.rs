@@ -31,7 +31,8 @@ impl Hub {
     /// Keeps what an agent under `account` heard of its limits at `heard_at_ms`, which holds every model's own week the
     /// account has when `every_models_week` says so, merged with what's kept, as [`merged`] says, as an observation,
     /// and tells every client, since every session under the account shows it. An account nobody has launched an agent
-    /// under since the hub's database was made gets a record, which owns what's heard of it.
+    /// under since the hub's database was made gets a record first, which what's heard of it goes with, as the store
+    /// keeps nothing of an account without one.
     pub(crate) async fn hear_limits(
         &self,
         account: AccountId,

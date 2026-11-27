@@ -103,18 +103,14 @@ impl Hub {
         }
     }
 
-    /// Keeps what the hub `heard` of who a GitHub account is, as observations. One heard as the account was removed is
-    /// forgotten with it. Then works out what workers are sent again, since the default's is made from it, and the
-    /// check of reach follows that, so it reads nothing as an account whose username it didn't know.
+    /// Keeps what the hub `heard` of who a GitHub account is, as observations, which keep nothing of an account removed
+    /// as it was heard. Then works out what workers are sent again, since the default's is made from it, and the check
+    /// of reach follows that, so it reads nothing as an account whose username it didn't know.
     pub(super) async fn github_user_heard(&self, heard: Heard) -> Result<(), ApiError> {
         let Heard { account, username, profile, at_ms } = heard;
         self.observation_read::<GithubUsername>(account.clone(), username, at_ms).await.result()?;
         if let Some(profile) = profile {
-            self.observation_read::<GithubProfile>(account.clone(), profile, at_ms).await.result()?;
-        }
-        let id = account.clone();
-        if self.blocking(move |store| store.github_account(&id)).await?.is_none() {
-            self.github_account_observations_gone(&account).await;
+            self.observation_read::<GithubProfile>(account, profile, at_ms).await.result()?;
         }
         let logins = Arc::clone(&self.github_logins);
         off_thread(move || logins.heard_of(now_ms())).await

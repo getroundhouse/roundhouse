@@ -35,6 +35,10 @@ impl Hub {
         };
         let mut observing = Observing::default();
         observing.all_again(&self).await;
+        // What the store kept of a workspace that's gone, where it couldn't read which are there as it opened. Last, so
+        // the task takes in what's followed before it waits on the database: a chip read while it waited would be told
+        // as of that read first, and as current only once the task heard of the read.
+        self.observations_of_no_workspace_gone().await;
         loop {
             tokio::select! {
                 changed = followers.changed() => {
@@ -60,7 +64,7 @@ impl Hub {
                         observing.workspaces.recorded(&self, workspace_id).await;
                     }
                     Ok(HubNotice::Removed { record: RecordKey::Workspace { id }, .. }) => {
-                        observing.workspaces.removed(&self, id).await;
+                        observing.workspaces.removed(id);
                     }
                     Ok(_) => {}
                     Err(RecvError::Lagged(_)) => observing.all_again(&self).await,

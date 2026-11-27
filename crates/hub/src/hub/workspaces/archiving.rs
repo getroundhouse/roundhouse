@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{BranchName, Workspace, WorkspaceId};
+use protocol::model::{BranchName, Workspace, WorkspaceId, WorkspaceStatus};
 use protocol::worker::{ArchiveScript, CancelSetup, GitStatus, RemoveWorkspace, RestoreWorkspace};
 use tokio::sync::oneshot;
 use tracing::{error, warn};
@@ -46,7 +46,8 @@ impl Hub {
     }
 
     /// Records that the workspace is archived, on `branch` if its worktree said which it was on, as
-    /// [`Hub::end_move`] does, and forgets its lines and the files it changed, as [`Hub::changes_forgotten`] says.
+    /// [`Hub::end_move`] does, which forgets what goes with its worktree. Its record keeps the branch it had checked
+    /// out.
     pub(super) async fn record_archived(
         self: &Arc<Self>,
         id: &WorkspaceId,
@@ -56,14 +57,9 @@ impl Hub {
             let archived = id.clone();
             self.blocking(move |store| store.set_workspace_branch(&archived, &branch)).await?;
         }
-        let forgetting = async |_| {
-            // Before it's announced, so the copy announced, read again after, is the newest, and says no branches.
-            self.branches_forgotten(id).await;
-            self.workspace(id).await
-        };
-        let workspace = self.end_move(id, Move::Archive, Ended::Done, forgetting).await?;
-        self.changes_forgotten(id).await;
-        Ok(workspace)
+        // Read again after what went with its worktree is forgotten, so the copy announced is the newest, and says no
+        // branches.
+        self.end_move(id, Move::Archive, Ended::Done, async |_| self.workspace(id).await).await
     }
 
     /// Everything archiving does but record it: refuses if work would be lost, in the workspace's own worktree or any
@@ -259,11 +255,11 @@ impl Hub {
         why
     }
 
-    /// Ends the workspace's move as `ended`, the one place every move ends: records it, gives the workspace as recorded
-    /// to `before_announcing`, announces the workspace that gives back, and tells the workspace's worker again whether
-    /// to watch its worktree. Its worker watches only while the workspace is ready, and only a move changes that once
-    /// the workspace is made, so a move that ended anywhere else could leave a workspace a client shows unwatched.
-    /// Returns the workspace as announced.
+    /// Ends the workspace's move as `ended`, the one place every move ends: records it, forgets what goes with its
+    /// worktree where it's recorded archived, gives the workspace as recorded to `before_announcing`, announces the
+    /// workspace that gives back, and tells the workspace's worker again whether to watch its worktree. Its worker
+    /// watches only while the workspace is ready, and only a move changes that once the workspace is made, so a move
+    /// that ended anywhere else could leave a workspace a client shows unwatched. Returns the workspace as announced.
     async fn end_move(
         self: &Arc<Self>,
         id: &WorkspaceId,
@@ -273,6 +269,12 @@ impl Hub {
     ) -> Result<Workspace, ApiError> {
         let owned = id.clone();
         let recorded = self.blocking(move |store| store.end_move(&owned, moving, ended)).await?;
+        // Archived, or back to it as a restore that failed is, so its worktree is gone, and nothing said of it is kept
+        // from now, as `crate::hub::observations` asks the database. Its worker says it again once it's restored. What
+        // GitHub says of it stays, since Home draws an archived workspace's pull request.
+        if recorded.status == WorkspaceStatus::Archived {
+            self.worktree_observations_gone(id).await;
+        }
         let announced = before_announcing(recorded).await;
         if let Ok(workspace) = &announced {
             self.notify(HubNotice::Workspace(workspace.clone()));

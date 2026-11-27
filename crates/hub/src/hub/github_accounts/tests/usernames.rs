@@ -134,3 +134,24 @@ async fn who_an_account_is_that_the_hub_couldnt_keep_fails() {
     assert!(renamed.is_err(), "a new username");
     assert!(reprofiled.is_err(), "a new profile");
 }
+
+/// What's heard of who an account is that lands once the account was removed, as a read that raced its disconnecting
+/// does, keeps nothing, and tells no client of it.
+#[tokio::test]
+async fn who_an_account_is_heard_once_it_was_removed_keeps_nothing() {
+    let github = github_of_ada().await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github(dir.path(), github.api());
+    let account = connected(&hub).await;
+    hub.github_account_disconnect(account.id.clone()).await.unwrap();
+    let mut feed = hub.subscribe_feed();
+    let profile = github::GithubProfile { name: Some("Ada King".into()), email: None };
+    let heard = Heard { account: account.id.clone(), username: "ada".into(), profile: Some(profile), at_ms: now_ms() };
+
+    hub.github_user_heard(heard).await.unwrap();
+
+    assert_eq!(listed(&hub, account.id.as_str()).await, (None, None));
+    assert!(!hub.observations.keeps::<crate::hub::GithubProfile>(&account.id), "nor its profile");
+    let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok()).collect();
+    assert!(!told.iter().any(|notice| matches!(**notice, protocol::client::HubNotice::Observation(_))), "{told:?}");
+}

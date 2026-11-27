@@ -140,11 +140,9 @@ impl Workspaces {
     }
 
     /// Takes in that the workspace `id` is gone.
-    pub(super) async fn removed(&mut self, hub: &Hub, id: &WorkspaceId) {
+    pub(super) fn removed(&mut self, id: &WorkspaceId) {
         self.linked.remove(id);
         self.read.remove(id);
-        // Again, since a read kept as it went may have worked it out after it was forgotten.
-        hub.workspace_observations_gone(id).await;
     }
 
     /// Takes in how a read of a workspace's pull request went, and what it heard of the repository: one made and
@@ -165,10 +163,9 @@ impl Workspaces {
         hub.keep_unseen(&id, heard, at_ms).await;
     }
 
-    /// Works out every workspace again, as as the hub starts, or after missing some of what it's told, once every
-    /// observation of a workspace that's gone is forgotten, as one worked out after a removal the task missed is.
+    /// Works out every workspace again, as as the hub starts, or after missing some of what it's told. What it worked
+    /// out of one removed since isn't kept, as `crate::hub::observations` says.
     pub(super) async fn all_again(&mut self, hub: &Hub) {
-        hub.observations_of_no_workspace_gone().await;
         let Ok(workspaces) = hub.workspace_list(true).await else { return };
         self.linked.retain(|id, _| workspaces.iter().any(|workspace| workspace.id == *id));
         for workspace in workspaces {

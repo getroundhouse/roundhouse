@@ -1,24 +1,21 @@
 //! What the store keeps of each observation in memory, and what a change to one makes of it.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ObservationNotice};
-use protocol::model::{
-    AccountId, ChildWorktreeId, GithubAccountId, GithubAppId, Level, Observation, Observed, RepoId, Rev, SessionId,
-    WaitId, WorkspaceId,
-};
+use protocol::model::{Level, Observation, Observed, Rev};
 use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
 use super::file::Write;
 use super::keepers::{Keeper, Unkeeping};
-use super::kinds::{Kind, Owner};
+use super::kinds::{GoesWith, Kind};
 use super::tables::Tables;
 use super::writer::Writer;
 use crate::cache_file::CacheFile;
-use crate::store::{Store, StoreError};
+use crate::store::Store;
 
 /// Every observation the hub holds, in memory, and in the cache file.
 pub(crate) struct Observations {
@@ -238,9 +235,10 @@ impl Observations {
     /// The store kept in `file`, opened with [`PART`](super::PART), with each observation it kept from before as of
     /// when it was read, under one revision newer than any a client holds, since a client of the hub before can hold
     /// any revision that hub gave. Where there's no revision to give, as when the database fails, it starts with none
-    /// of them, as the log says, and each is not known until it's read again. Those of a workspace, another worktree, a session, an
-    /// agent's account, a repository, a GitHub account, an app of your own or an open wait the database doesn't have are forgotten, as one
-    /// a hub stopped before forgetting, or a file refused to, leaves, so no client is listed them.
+    /// of them, as the log says, and each is not known until it's read again. Those that go with a workspace, its own
+    /// worktree, another worktree, a session, an agent's account, a repository, a GitHub account, an app of your own or
+    /// an open wait the database doesn't have are forgotten, as one a hub stopped before forgetting, or a file refused
+    /// to, leaves, so no client is listed them. A workspace's own worktree isn't there once it's archived.
     pub(crate) fn open(file: Arc<CacheFile>, store: &Store) -> Self {
         let mut tables = Tables::default();
         match store.next_rev() {
@@ -266,20 +264,10 @@ impl Observations {
             }
         }
         let writer = Writer::new(file);
-        match owners(store) {
-            Ok(Owners { workspaces, child_worktrees, sessions, waits, accounts, repos, github_accounts, apps }) => {
-                let gone = |owner: Owner<'_>| match owner {
-                    Owner::Workspace(id) => !workspaces.contains(id),
-                    Owner::ChildWorktree(key) => !child_worktrees.contains(&key.id),
-                    Owner::Session(key) => !sessions.contains(&key.session_id),
-                    Owner::Wait(key) => !waits.contains(&key.wait),
-                    Owner::Account(id) => !accounts.contains(id),
-                    Owner::Repo(id) => !repos.contains(id),
-                    Owner::GithubAccount(id) => !github_accounts.contains(id),
-                    Owner::App(id) => !apps.contains(id),
-                    // Never gone: what it owns goes only as the hub lets go of it.
-                    Owner::Hub => false,
-                };
+        match store.records_there() {
+            Ok(there) => {
+                // What goes with the hub itself, which has no record, is never gone: it goes only as the hub lets go.
+                let gone = |goes_with: GoesWith<'_>| goes_with.record().is_some_and(|record| !there.has(&record));
                 tables.forget_of(&gone, &writer);
             }
             // The task that works out GitHub's observations forgets those of workspaces, and their sessions', as it
@@ -364,31 +352,4 @@ impl Observations {
     pub(crate) fn kept_of<K: Kind>(&self) -> Vec<K::Of> {
         K::table(&mut self.tables.lock()).kept.keys().cloned().collect()
     }
-}
-
-/// Each owner the database has, of each kind an observation can be of but the hub.
-struct Owners {
-    workspaces: HashSet<WorkspaceId>,
-    /// Those removed too, whose branches are kept with their workspace.
-    child_worktrees: HashSet<ChildWorktreeId>,
-    sessions: HashSet<SessionId>,
-    waits: HashSet<WaitId>,
-    accounts: HashSet<AccountId>,
-    repos: HashSet<RepoId>,
-    github_accounts: HashSet<GithubAccountId>,
-    apps: HashSet<GithubAppId>,
-}
-
-/// Each owner `store` has, as [`Observations::open`] forgets the observations of the rest.
-fn owners(store: &Store) -> Result<Owners, StoreError> {
-    Ok(Owners {
-        workspaces: store.list_workspaces(true)?.into_iter().map(|workspace| workspace.id).collect(),
-        child_worktrees: store.child_worktree_ids()?,
-        sessions: store.session_ids()?,
-        waits: store.open_wait_ids()?,
-        accounts: store.account_ids()?,
-        repos: store.list_repos()?.into_iter().map(|repo| repo.id).collect(),
-        github_accounts: store.github_account_ids()?,
-        apps: store.github_app_ids()?,
-    })
 }

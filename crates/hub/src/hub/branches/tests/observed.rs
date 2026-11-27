@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 
+use protocol::fixtures;
 use protocol::model::{Branches, Head, Level, Observation, Observed, WorkspaceId};
 use protocol::worker::WorkerFrame;
 use rusqlite::Connection;
@@ -15,6 +16,7 @@ use crate::store::BEFORE_BRANCHES_OBSERVED;
 use crate::store::columns::OneValue;
 use crate::store::now_ms;
 use crate::store::older::store_from_before;
+use crate::store::tests::another_workspace;
 use crate::worker_link::WorkerLink;
 
 fn on(name: &str) -> Branches {
@@ -112,11 +114,15 @@ async fn a_workspace_from_before_opens_with_its_branches_not_known_and_its_link_
 async fn branches_are_forgotten_as_the_workspace_is_removed_and_with_what_the_database_lacks() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
+    another_workspace(&hub.store, "gone");
+    for id in ["c", "d"] {
+        hub.store.insert_child(&fixtures::child_worktree(id), &id.into()).unwrap();
+    }
     let child = |workspace_id: &str, id: &str| ChildWorktreeKey { workspace_id: workspace_id.into(), id: id.into() };
     hub.branches_known(&"w".into(), on("aspen")).await;
     hub.child_branches_known(&"w".into(), "c".into(), on("alder/x")).await;
 
-    hub.branches_forgotten(&"w".into()).await;
+    hub.worktree_observations_gone(&"w".into()).await;
     let archiving = (hub.branches_of(&"w".into()), hub.observations.keeps::<ChildWorktreeBranches>(&child("w", "c")));
     hub.branches_known(&"gone".into(), on("birch")).await;
     hub.child_branches_known(&"gone".into(), "d".into(), on("birch/x")).await;
@@ -124,6 +130,8 @@ async fn branches_are_forgotten_as_the_workspace_is_removed_and_with_what_the_da
     let removing = hub.observations.keeps::<ChildWorktreeBranches>(&child("w", "c"));
     hub.observations_written().await;
     drop(hub);
+    let db = Connection::open(dir.path().join("hub.db")).unwrap();
+    db.execute_batch("DELETE FROM child_worktrees WHERE id = 'd'; DELETE FROM workspaces WHERE id = 'gone';").unwrap();
     let again = hub_in_again(dir.path());
 
     assert_eq!(archiving, (None, true));

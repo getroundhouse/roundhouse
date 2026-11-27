@@ -9,6 +9,7 @@ use super::given::{Given, ok, start};
 use crate::hub::tests::changes;
 use crate::hub::{WorkspaceChanges, WorkspaceLines};
 use crate::server::tests::{Connection, WAIT};
+use crate::store::tests::another_workspace;
 
 /// The subscriptions' IDs: one that follows the hub, one that follows the session `s`, and one that follows the
 /// workspace `w`.
@@ -78,6 +79,7 @@ async fn a_workspace_s_files_are_listed_before_the_reply_and_sent_only_to_whoeve
     let dir = tempfile::tempdir().unwrap();
     let given = Given::new(dir.path()).await;
     let hub = &given.hub;
+    another_workspace(crate::hub::tests::store_of(hub), "v");
     let lines = |added, removed| LineCounts { added, removed };
     for workspace in ["w", "v"] {
         hub.observation_read::<WorkspaceChanges>(workspace.into(), changes(3, 1), 1_000).await.result().unwrap();

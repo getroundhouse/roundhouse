@@ -9,6 +9,7 @@ use crate::github_cache::Item;
 use crate::hub::Hub;
 use crate::hub::tests::{hub_in, hub_in_again};
 use crate::store::columns::OneValue;
+use crate::store::tests::another_workspace;
 
 /// A hub that starts again lists each observation as of its last read, under a revision newer than any the hub before
 /// gave, so a client of that hub takes it, and nothing loaded is current, since nothing keeps it up to date yet.
@@ -154,10 +155,14 @@ fn rows(conn: &Connection, table: &str) -> i64 {
 async fn a_hub_that_starts_again_forgets_the_observations_of_a_workspace_that_s_gone() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
+    another_workspace(&hub.store, "gone");
     hub.observation_read::<WorkspaceLines>("w".into(), lines(3, 1), 1_000).await.result().unwrap();
     hub.observation_read::<WorkspaceLines>("gone".into(), lines(4, 0), 1_000).await.result().unwrap();
     hub.observation_read::<WorkspaceChanges>("gone".into(), changes(4, 0), 1_000).await.result().unwrap();
+    hub.observations_written().await;
     drop(hub);
+    let db = Connection::open(dir.path().join("hub.db")).unwrap();
+    db.execute("DELETE FROM workspaces WHERE id = 'gone'", []).unwrap();
 
     let again = hub_in_again(dir.path());
 

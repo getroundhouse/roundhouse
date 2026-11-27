@@ -1,10 +1,9 @@
 use protocol::fixtures;
-use std::collections::HashSet;
 
-use protocol::model::{BranchName, ChildStatus, ChildWorktree, ChildWorktreeId};
+use protocol::model::{BranchName, ChildStatus, ChildWorktree};
 
 use crate::store::tests::{idle_session, store_with_session};
-use crate::store::{Made, current_rev, lock};
+use crate::store::{Made, Record, current_rev, lock};
 
 /// One of `w`'s, made by `s`'s agent, as the hub records it before asking for it.
 fn child(id: &str, path: &str) -> ChildWorktree {
@@ -47,8 +46,9 @@ fn an_ask_makes_one_record_and_a_path_is_one_worktree_s_until_it_s_removed() {
     assert_eq!(ids(store.children_of(&"w".into()).unwrap()), ["d".into(), "e".into()]);
     assert_eq!(ids(store.every_child_of(&"w".into()).unwrap()), ["a".into(), "d".into(), "e".into()]);
     assert_eq!(store.child_at(&"w".into(), "/c/x").unwrap().map(|c| c.id), Some("d".into()));
-    let every: HashSet<ChildWorktreeId> = ["a", "d", "e"].into_iter().map(ChildWorktreeId::from).collect();
-    assert_eq!(store.child_worktree_ids().unwrap(), every, "those removed too");
+    let there = store.records_there().unwrap();
+    let is_there = |id: &str| there.has(&Record::ChildWorktree(id.into()));
+    assert_eq!(["a", "b", "d", "e"].map(is_there), [true, false, true, true], "those removed too");
 }
 
 /// One discarded moves the revision, as a removed record does, so a client following the records hears it's gone.
