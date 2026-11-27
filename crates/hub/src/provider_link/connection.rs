@@ -6,6 +6,7 @@ use crate::{child_process, versions};
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, error_chain};
+use protocol::dialing::WorkerTicket;
 use protocol::model::{HubId, InstanceId};
 use protocol::provider::{
     ANSWERED_WITHIN, Connect, Create, Destroy, EndWorker, Hello, HelloReply, KillWorker, List, MakeBaseImage,
@@ -326,8 +327,15 @@ impl Provider for AdapterProvider {
         self.call(Create { instance_id: instance_id.clone(), from: from.cloned(), size }).await
     }
 
-    async fn start(&self, instance_id: &InstanceId, workers: &[WorkerBinary]) -> Result<(), ProviderError> {
-        self.call(Start { instance_id: instance_id.clone(), workers: workers.to_vec() }).await
+    async fn start(
+        &self,
+        instance_id: &InstanceId,
+        workers: &[WorkerBinary],
+        ticket: Option<&WorkerTicket>,
+    ) -> Result<(), ProviderError> {
+        // The hub gives every adapter's start a ticket, and only the local provider's goes without.
+        let ticket = ticket.cloned().ok_or(ProviderError::Unsupported("start a worker without a ticket"))?;
+        self.call(Start { instance_id: instance_id.clone(), workers: workers.to_vec(), ticket }).await
     }
 
     async fn end_worker(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {

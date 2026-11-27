@@ -71,6 +71,7 @@ crates/
   worker/          The worker
   agents/          An adapter for each agent's CLI
   providers/       The trait a provider implements, and the local provider
+  dialing/         The iroh endpoints a worker dials its hub with, and the hub admits it on
   process/         Starting, signalling and recording processes
   private-files/   Files and sockets only their user can open
   client-core/     A client's connection, its copy of each hub's state, and what an app keeps on its device

@@ -1,0 +1,24 @@
+[package]
+name = "dialing"
+description = "How a worker dials its hub over iroh: the endpoint each side binds, and a ticket's address as iroh reads it."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+iroh.workspace = true
+private-files.workspace = true
+protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

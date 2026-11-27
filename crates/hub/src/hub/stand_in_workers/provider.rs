@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use parking_lot::Mutex;
 use protocol::capability::{context, settings, turns};
 use protocol::client::ApiError;
+use protocol::dialing::WorkerTicket;
 use protocol::model::{AgentAccount, CacheTtl, ChangeSummary, InstanceId, ProviderName, Workspace};
 use protocol::worker::{
     AgentStarted, ArchivedBranch, ArchivedBundle, ArchivedGit, AttachmentWritten, NamesGitHasReply, ServeTools,
@@ -236,7 +237,7 @@ impl Provider for WithWorkers {
         Ok(())
     }
 
-    async fn start(&self, _: &InstanceId, _: &[WorkerBinary]) -> Result<(), ProviderError> {
+    async fn start(&self, _: &InstanceId, _: &[WorkerBinary], _: Option<&WorkerTicket>) -> Result<(), ProviderError> {
         self.asked.starts.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }

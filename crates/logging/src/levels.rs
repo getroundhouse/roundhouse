@@ -5,7 +5,7 @@ use tracing_subscriber::EnvFilter;
 /// The crates whose events are ours, by the name each one's events are from, logged at `info`. What they're built on is
 /// logged at `warn`. A policy test holds the list to the crates that log.
 pub const OURS: &[&str] =
-    &["agents", "daemon", "desktop", "dictation_ui", "github", "hub", "logging", "providers", "worker"];
+    &["agents", "daemon", "desktop", "dialing", "dictation_ui", "github", "hub", "logging", "providers", "worker"];
 
 /// What's logged, and at which levels.
 pub struct Levels {

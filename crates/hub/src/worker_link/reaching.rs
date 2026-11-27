@@ -1,15 +1,13 @@
 //! Reaching a worker: starting its instance, if it's to be started, and running the command its provider gives.
 
-use std::time::Duration;
-
 use protocol::client::{ApiError, ErrorCode, error_chain};
-use protocol::model::InstanceId;
-use providers::{Provider, WorkerBinary};
+use protocol::model::{InstanceId, ProviderName};
+use providers::Provider;
 use tracing::warn;
 
 use crate::child_process::{self, Spawned, Stderr};
 use crate::error::provider_failed;
-use crate::machine_environment::MachineEnvironment;
+use crate::hub::Hub;
 
 /// The worker a link is opened to.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -23,21 +21,27 @@ pub(crate) enum Opening {
     LeftRunning,
 }
 
-/// Runs the command that reaches the instance's worker, starting the instance first if it's to be started, with
-/// `workers` for the provider to put there. On failure nothing is left running that the hub started. `before_serving`
-/// is how long the provider has to say how to reach a worker [`Opening::LeftRunning`].
+/// Runs the command that reaches the instance's worker, starting the instance first if it's to be started, with the
+/// hub's worker builds for the provider to put there, and a ticket for the worker. On failure nothing is left running
+/// that the hub started. The provider has the hub's `before_serving` to say how to reach a worker
+/// [`Opening::LeftRunning`].
 pub(super) async fn reach(
+    hub: &Hub,
     provider: &dyn Provider,
     instance_id: &InstanceId,
-    workers: &[WorkerBinary],
     log: &std::path::Path,
     opening: Opening,
-    before_serving: Duration,
-    machine: &MachineEnvironment,
 ) -> Result<Spawned, ApiError> {
+    let (before_serving, machine) = (hub.timers.before_serving, &hub.machine);
     let command = match opening {
         Opening::Started => {
-            provider.start(instance_id, workers).await.map_err(|e| provider_failed(&e))?;
+            // The local provider's workers don't dial the hub yet.
+            let ticket = match provider.name() {
+                ProviderName::LOCAL => None,
+                _ => Some(hub.worker_ticket(instance_id).await?),
+            };
+            let workers = hub.worker_builds();
+            provider.start(instance_id, workers, ticket.as_ref()).await.map_err(|e| provider_failed(&e))?;
             provider.connect(instance_id).await.map_err(|e| provider_failed(&e))
         }
         Opening::LeftRunning => match tokio::time::timeout(before_serving, provider.connect(instance_id)).await {

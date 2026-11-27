@@ -25,6 +25,7 @@ mod client_calls;
 mod comments;
 mod compactions;
 mod cover_lines;
+mod dialing;
 mod events;
 mod every_facet;
 mod git_credentials;

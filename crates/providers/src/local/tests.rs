@@ -153,7 +153,7 @@ async fn every_request_is_safe_to_repeat() {
 
     for _ in 0..2 {
         provider.create(&id, None, None).await.unwrap();
-        provider.start(&id, &[]).await.unwrap();
+        provider.start(&id, &[], None).await.unwrap();
     }
     let first = provider.connect(&id).await.unwrap();
     let second = provider.connect(&id).await.unwrap();
@@ -234,7 +234,7 @@ async fn starting_leaves_a_running_instance_alone() {
     let mut agent = orphan(dir.path());
     let agent_record = record_agent(&instance, "s.pid", agent.id(), &process::start_time(agent.id()).unwrap());
 
-    provider.start(&id, &[]).await.unwrap();
+    provider.start(&id, &[], None).await.unwrap();
 
     assert!(worker.try_wait().unwrap().is_none(), "the worker serving it was ended");
     assert!(agent.try_wait().unwrap().is_none(), "the worker's agent was ended");
@@ -258,7 +258,7 @@ async fn starting_clears_what_a_killed_worker_left() {
     // listed, and the start would wait out the agent's grace for it.
     let reaper = std::thread::spawn(move || agent.wait().unwrap());
 
-    provider.start(&id, &[]).await.unwrap();
+    provider.start(&id, &[], None).await.unwrap();
 
     assert!(reaper.join().unwrap().signal().is_some(), "the agent it left behind should have been stopped");
     assert!(!agent_record.exists());

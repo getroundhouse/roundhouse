@@ -16,6 +16,7 @@ fn main() -> anyhow::Result<ExitCode> {
         hub_timers: hub::Timers::from_env(var),
         worker_timers: worker::Timers::from_env(var),
         github: hub::GithubConfig::from_env(var),
+        relays: if var(protocol::testing::ENV_TEST_NO_RELAYS).is_some() { hub::Relays::None } else { hub::Relays::N0 },
         stops_with: Box::pin(TestProcess::until_gone(TestProcess::from_env(var))),
         also_forgotten: &protocol::testing::ENV_TEST,
         ..Config::new(build)

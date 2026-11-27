@@ -1,4 +1,5 @@
-use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, now_ms, text_at, text_of};
+use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock, now_ms, text_at, text_of};
+use protocol::dialing::TicketSecret;
 use protocol::model::{InstanceId, ProviderName};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
@@ -82,6 +83,53 @@ impl Store {
         let destroying = text_of(&InstanceStage::Destroying);
         lock(&self.writer).execute("UPDATE instances SET stage = ? WHERE id = ?", params![destroying, id.as_str()])?;
         Ok(())
+    }
+
+    /// Before the ticket whose secret is `secret` is given to its provider, so a worker can dial with it, as the hub
+    /// restarts too. It replaces any ticket of the instance's that no worker has dialed with, so only the newest
+    /// admits one. False for an instance that isn't recorded, or is being destroyed, which no ticket is for.
+    pub fn instance_ticket(&self, id: &InstanceId, secret: &TicketSecret) -> Result<bool, StoreError> {
+        let destroying = text_of(&InstanceStage::Destroying);
+        let changed = lock(&self.writer).execute(
+            "UPDATE instances SET ticket = ?1 WHERE id = ?2 AND stage != ?3",
+            params![secret.as_str(), id.as_str(), destroying],
+        )?;
+        Ok(changed == 1)
+    }
+
+    /// The instance a worker that proved it holds `key` is admitted to: the one whose worker it was admitted as before,
+    /// or else the one whose unused ticket's secret is `secret`, whose ticket is then used, and whose worker it is from
+    /// then on, in place of any before it. `None` for neither, and for an instance being destroyed.
+    pub fn admit_worker(&self, secret: &TicketSecret, key: &str) -> Result<Option<InstanceId>, StoreError> {
+        let destroying = text_of(&InstanceStage::Destroying);
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction()?;
+        let again: Option<String> = tx
+            .query_row(
+                "SELECT id FROM instances WHERE worker_key = ?1 AND stage != ?2",
+                params![key, destroying],
+                OneValue::read,
+            )
+            .optional()?;
+        let admitted = match again {
+            Some(id) => Some(id),
+            None => tx
+                .query_row(
+                    "UPDATE instances SET ticket = NULL, worker_key = ?1 WHERE ticket = ?2 AND stage != ?3 RETURNING id",
+                    params![key, secret.as_str(), destroying],
+                    OneValue::read,
+                )
+                .optional()?,
+        };
+        tx.commit()?;
+        Ok(admitted.map(InstanceId::from))
+    }
+
+    /// Whether any instance has a worker that dials the hub, or a ticket a worker could dial with.
+    pub fn has_dialing_workers(&self) -> Result<bool, StoreError> {
+        let conn = lock(&self.reader);
+        let sql = "SELECT EXISTS (SELECT 1 FROM instances WHERE ticket IS NOT NULL OR worker_key IS NOT NULL)";
+        Ok(conn.query_row(sql, [], OneValue::read)?)
     }
 
     /// Once its provider says it's gone.

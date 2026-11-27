@@ -17,9 +17,20 @@ pub(crate) struct HubDirs {
     /// Where a hub installed as a service keeps its builds, beside which an update places the next.
     pub(crate) service_builds: PathBuf,
     pub(crate) network_address: std::net::SocketAddr,
+    /// Which relays the endpoint that workers dial uses.
+    pub(crate) relays: dialing::Relays,
 }
 
 impl HubDirs {
+    /// Where paired devices reach the hub, and its certificate and key for them, in the data directory.
+    pub(crate) fn remote(&self) -> crate::remote::RemoteConfig {
+        crate::remote::RemoteConfig {
+            address: self.network_address,
+            certificate: self.data.join("hub-cert.der"),
+            certificate_key: self.data.join("hub-key.der"),
+        }
+    }
+
     /// Where `paths` has each.
     pub(crate) fn of(paths: &Paths) -> Self {
         Self {
@@ -30,6 +41,7 @@ impl HubDirs {
             data: paths.data_dir.clone(),
             service_builds: paths.service_builds_dir(),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+            relays: dialing::Relays::N0,
         }
     }
 
@@ -44,6 +56,7 @@ impl HubDirs {
             data: dir.to_path_buf(),
             service_builds: dir.join("service"),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+            relays: dialing::Relays::None,
         }
     }
 }

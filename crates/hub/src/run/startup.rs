@@ -25,6 +25,8 @@ pub struct HubConfig {
     pub build: Build,
     /// Where paired devices can reach this hub, once pairing is enabled.
     pub network_address: std::net::SocketAddr,
+    /// Which relays the endpoint that workers dial uses.
+    pub relays: dialing::Relays,
     pub paths: Paths,
     /// The binary that runs a worker, which the local provider starts, and which the login shell runs to print the
     /// environment the profile gives, as [`process::PRINTS_ENVIRONMENT`] asks.
@@ -140,7 +142,7 @@ pub enum Ended {
 /// Runs until asked to stop or signalled, or until `stops_with` returns, and says whether another hub is to start. Returns an error if another hub
 /// is using these paths.
 pub async fn run(config: HubConfig, stops_with: impl Future<Output = ()>) -> Result<Ended, HubError> {
-    let update_feed = config.update_feed;
+    let (update_feed, relays) = (config.update_feed, config.relays);
     let HubConfig {
         network_address, build, paths, worker_exe, shell, home, path, start, agents, timers, github, ..
     } = config;
@@ -159,7 +161,7 @@ pub async fn run(config: HubConfig, stops_with: impl Future<Output = ()>) -> Res
     let machine = read_machine_environment(shell.as_deref(), home.as_deref(), &worker_exe, path.as_deref()).await;
     let providers = load_providers(build, &paths, worker_exe, &machine, &store, &timers)?;
     let github = Github::new(github);
-    let dirs = HubDirs { network_address, ..HubDirs::of(&paths) };
+    let dirs = HubDirs { network_address, relays, ..HubDirs::of(&paths) };
     let hub = Arc::new(Hub::new(build, store, dirs, providers, github, machine, agents, start, timers));
     // Before any client is served, so none is told the hub doesn't read the feed while it's starting to.
     read_update_feed(&hub, update_feed, build);
@@ -236,13 +238,16 @@ async fn read_machine_environment(
 /// Leaves `hub`'s workers running for the next hub, if it was asked to restart and no signal asked it to go, and stops
 /// them otherwise, with their agents.
 async fn end_workers(hub: &Arc<Hub>, signalled: bool) -> Ended {
-    if hub.restarting() && !signalled {
+    let ended = if hub.restarting() && !signalled {
         hub.leave_workers().await;
         Ended::Restarting
     } else {
         hub.stop_all_workers().await;
         Ended::Stopped
-    }
+    };
+    // Once they've been left or stopped, so a worker left for the next hub dials that one.
+    hub.dial.close().await;
+    ended
 }
 
 /// What `hub` watches while it serves, each a task of `serving`: its waits' deadlines, its pull requests, what's sent

@@ -26,6 +26,7 @@ github.workspace = true
 logging.workspace = true
 parking_lot.workspace = true
 private-files.workspace = true
+dialing.workspace = true
 process.workspace = true
 protocol.workspace = true
 providers.workspace = true

@@ -3,6 +3,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use process::{ProcessRecord, Signal, signal_group};
+use protocol::dialing::WorkerTicket;
 use protocol::model::{InstanceId, ProviderName};
 use protocol::paths::{AGENTS_DIR, WORKER_RECORD_FILE};
 use std::path::{Path, PathBuf};
@@ -186,8 +187,15 @@ impl Provider for LocalProvider {
     }
 
     /// Its workers run the hub's own executable, so there's none to put in place. A running instance is left as it
-    /// is, and one is running while a worker is. Ending that is the hub's to ask for, with `end_worker`.
-    async fn start(&self, instance_id: &InstanceId, _workers: &[WorkerBinary]) -> Result<(), ProviderError> {
+    /// is, and one is running while a worker is. Ending that is the hub's to ask for, with `end_worker`. The hub gives
+    /// it no ticket, since it reaches its workers through `connect`, but an adapter that serves it, as a test's does,
+    /// passes on the one it's given, which goes unused.
+    async fn start(
+        &self,
+        instance_id: &InstanceId,
+        _workers: &[WorkerBinary],
+        _ticket: Option<&WorkerTicket>,
+    ) -> Result<(), ProviderError> {
         let dir = self.instance_dir(instance_id);
         create_dir(&dir)?;
         if running_worker(&dir).await.is_none() {

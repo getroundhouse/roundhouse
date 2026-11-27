@@ -108,7 +108,7 @@ async fn a_worker_refused_its_instance_leaves_the_one_serving_it_running() {
         dir.path(),
         &format!("read call\ncat '{}'\ncat >/dev/null", dir.path().join("refusal").display()),
     );
-    let instance_id: InstanceId = "i".into();
+    let instance_id: InstanceId = "w".into();
     provider.create(&instance_id, None, None).await.unwrap();
     let mut serving = std::process::Command::new("sleep").arg("100").process_group(0).spawn().unwrap();
     ProcessRecord::write(&dir.path().join("instances/i").join(WORKER_RECORD_FILE), serving.id()).unwrap();
@@ -130,7 +130,7 @@ async fn a_reply_this_hub_cant_read_fails_its_call_rather_than_leaving_it_waitin
     let dir = tempfile::tempdir().unwrap();
     let reply = r#"{"frame":"reply","id":1,"response":{"result":"from_a_newer_worker"}}"#;
     let provider = provider_running(dir.path(), &format!("read call\necho '{reply}'\ncat >/dev/null"));
-    let instance_id: InstanceId = "i".into();
+    let instance_id: InstanceId = "w".into();
     provider.create(&instance_id, None, None).await.unwrap();
     // A time limit far longer than the test waits, so a call that waits for it rather than failing fails the test.
     let hub = hub_timed(dir.path(), &provider, Timers { hello_within: Duration::from_mins(10), ..Timers::DEFAULT });
@@ -162,7 +162,7 @@ async fn a_worker_that_chose_another_version_is_not_used() {
     let dir = tempfile::tempdir().unwrap();
     let reply = r#"{"frame":"reply","id":1,"response":{"result":"hello","protocol_version":9999}}"#;
     let provider = provider_running(dir.path(), &format!("read call\necho '{reply}'\ncat >/dev/null"));
-    let instance_id: InstanceId = "i".into();
+    let instance_id: InstanceId = "w".into();
     provider.create(&instance_id, None, None).await.unwrap();
     let hub = hub_using(dir.path(), &provider);
 
@@ -199,14 +199,14 @@ async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_t
         answer_to_file(dir.path())
     );
     let provider = provider_running(dir.path(), &script);
-    provider.create(&"i".into(), None, None).await.unwrap();
+    provider.create(&"w".into(), None, None).await.unwrap();
     let hub = hub_reading(dir.path(), &provider, github.api());
 
     let link = WorkerLink::open(
         hub.clone(),
         provider,
         "w".into(),
-        "i".into(),
+        "w".into(),
         &dir.path().join("logs/i.log"),
         Opening::Started,
     )
@@ -233,11 +233,11 @@ async fn an_ask_this_hub_cant_read_is_refused() {
     let greeted = greeted(dir.path(), WorkerOutcome::Response(WorkerResponse::Ok));
     let script = format!("{greeted}echo '{ask}'\n{}", answer_to_file(dir.path()));
     let provider = provider_running(dir.path(), &script);
-    provider.create(&"i".into(), None, None).await.unwrap();
+    provider.create(&"w".into(), None, None).await.unwrap();
     let hub = hub_using(dir.path(), &provider);
 
     let link =
-        WorkerLink::open(hub, provider, "w".into(), "i".into(), &dir.path().join("logs/i.log"), Opening::Started)
+        WorkerLink::open(hub, provider, "w".into(), "w".into(), &dir.path().join("logs/i.log"), Opening::Started)
             .await
             .unwrap();
 
@@ -277,7 +277,7 @@ async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>
     let d = dir.display();
     let next = format!("read -r next\nprintf '%s\\n' \"$next\" > '{d}/next'\ncat '{d}/done'\ncat >/dev/null");
     let provider = provider_running(dir, &format!("{}{next}", greeted(dir, set_answer)));
-    provider.create(&"i".into(), None, None).await.unwrap();
+    provider.create(&"w".into(), None, None).await.unwrap();
     // Short, so a hub that waits for the hello's answer before it sets the credential fails soon.
     let hub = hub_timed(dir, &provider, Timers { hello_within: Duration::from_secs(2), ..Timers::DEFAULT });
     let docs = ToolServerAdd {
@@ -289,7 +289,7 @@ async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>
     hub.tool_server_add(docs).await.unwrap();
     let credential = hub.git_credential().borrow().for_workers();
     let log = dir.join("logs/i.log");
-    let opening = WorkerLink::open(hub, provider, "w".into(), "i".into(), &log, Opening::Started);
+    let opening = WorkerLink::open(hub, provider, "w".into(), "w".into(), &log, Opening::Started);
     let opened = tokio::time::timeout(Duration::from_secs(5), opening).await.expect("the link to open");
     (opened.unwrap(), credential)
 }

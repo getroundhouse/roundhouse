@@ -16,6 +16,7 @@ pub mod serve;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use protocol::dialing::WorkerTicket;
 use protocol::model::InstanceId;
 pub use protocol::provider::{
     Capabilities, ClonePersistence, Feature, Instance, InstanceState, OpenPreflight, Size, WorkerBinary, WorkerCommand,
@@ -45,8 +46,16 @@ pub trait Provider: Send + Sync {
         size: Option<Size>,
     ) -> Result<(), ProviderError>;
     /// Starts it, or does nothing to one that's running, whatever runs there. First puts in place the one of `workers`
-    /// built for the instance's target, if it holds a different one.
-    async fn start(&self, instance_id: &InstanceId, workers: &[WorkerBinary]) -> Result<(), ProviderError>;
+    /// built for the instance's target, if it holds a different one. A worker it starts is given `ticket`, which it
+    /// dials the hub with. The hub gives every provider one but the local one, whose workers it reaches through
+    /// `connect`. *Not built:* the local provider's workers dialing too, as `docs/decisions/workers-dial-the-hub.md`
+    /// has it.
+    async fn start(
+        &self,
+        instance_id: &InstanceId,
+        workers: &[WorkerBinary],
+        ticket: Option<&WorkerTicket>,
+    ) -> Result<(), ProviderError>;
     /// Ends whatever runs on it, which can be a worker an earlier hub left, and leaves it awake. The hub has closed its
     /// own worker's stream and given it time to stop first. Safe on an instance that isn't running or doesn't exist.
     async fn end_worker(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;

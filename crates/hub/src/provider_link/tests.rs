@@ -103,7 +103,7 @@ async fn it_answers_what_the_adapters_provider_answers() {
     assert!(provider.capabilities().has(Feature::FilesystemSurvivesStop), "as the adapter's hello said");
 
     provider.create(&id, None, None).await.unwrap();
-    provider.start(&id, &[]).await.unwrap();
+    provider.start(&id, &[], Some(&a_ticket())).await.unwrap();
     let command = provider.connect(&id).await.unwrap();
     assert_eq!(command, local(dir.path()).connect(&id).await.unwrap(), "the hub runs what the provider says");
     let listed = provider.list().await.unwrap();
@@ -144,7 +144,7 @@ async fn a_request_whose_adapter_exits_before_answering_is_asked_again_of_a_new_
     });
     let provider = started(open).await;
 
-    provider.start(&"i".into(), &[]).await.unwrap();
+    provider.start(&"i".into(), &[], Some(&a_ticket())).await.unwrap();
 
     assert_eq!(opens.load(Ordering::SeqCst), 2);
     let asked = asked.lock();
@@ -239,7 +239,7 @@ async fn a_request_an_adapter_never_answers_is_given_up_on() {
     let provider = started(open).await;
     let asked = tokio::time::Instant::now();
 
-    let started = tokio::time::timeout(ANSWERED_WITHIN * 2, provider.start(&"i".into(), &[])).await;
+    let started = tokio::time::timeout(ANSWERED_WITHIN * 2, provider.start(&"i".into(), &[], Some(&a_ticket()))).await;
     let Err(ProviderError::Io { source, .. }) = started.expect("no time limit") else { panic!("answered") };
 
     assert_eq!(source.kind(), io::ErrorKind::TimedOut);
@@ -346,9 +346,14 @@ async fn a_reply_this_hub_cant_read_fails_its_request_rather_than_leaving_it_wai
     let provider = started(open).await;
     let asked = tokio::time::Instant::now();
 
-    let started = provider.start(&"i".into(), &[]).await;
+    let started = provider.start(&"i".into(), &[], Some(&a_ticket())).await;
 
     let Err(ProviderError::Adapter(e)) = started else { panic!("{started:?}") };
     assert_eq!(e.code, ErrorCode::Worker, "{e:?}");
     assert!(asked.elapsed() < ANSWERED_WITHIN, "it waited for the time limit");
+}
+
+/// What these adapters are given at a start, which they pass on to the local provider, whose workers don't dial yet.
+fn a_ticket() -> protocol::dialing::WorkerTicket {
+    String::new().into()
 }
