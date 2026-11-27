@@ -28,6 +28,7 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [workers-dial-the-hub.md](workers-dial-the-hub.md) | Every worker dials its hub, with a ticket the hub gives it, and no provider sits between them. Partly built |
 | [remote-workspace-vm.md](remote-workspace-vm.md) | A remote workspace runs in a VM of its own, not a container. Not built |
 | [base-image-is-an-instance.md](base-image-is-an-instance.md) | A base image is an instance, built through a worker. Not built |
+| [microsandbox-adapter.md](microsandbox-adapter.md) | The microsandbox adapter embeds microsandbox's library, rather than driving `msb`, and each sandbox's worker dials the hub through a forwarded port. Built in part |
 | [velopack.md](velopack.md) | Velopack packages, installs and updates the app |
 | [linux-appimage.md](linux-appimage.md) | The Linux app is an AppImage |
 | [publish-every-merge.md](publish-every-merge.md) | Every merge to `main` is published, as version `0.1.<commits on main>` |

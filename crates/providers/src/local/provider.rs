@@ -47,18 +47,23 @@ impl LocalProvider {
 
     /// Ends the instance's worker, if one is still running, and then whatever a worker left behind.
     pub(super) async fn end(&self, instance_id: &InstanceId, grace: Duration) {
-        let dir = self.instance_dir(instance_id);
-        if let Some(worker) = running_worker(&dir).await {
-            info!(
-                name: "worker.left_running",
-                pid = worker.pid,
-                %instance_id,
-                "Ending a worker still running in its instance"
-            );
-            stop_groups(&[worker], grace).await;
-        }
-        stop_orphans(&dir, ORPHAN_GRACE).await;
+        end_in(&self.instance_dir(instance_id), grace).await;
     }
+}
+
+/// Ends the worker whose state directory is `dir`, if one is still running, giving it `grace` to stop by itself, and
+/// then whatever a worker left behind there, such as its agents. What `roundhoused end-worker` does on a machine of any
+/// provider's, so finding and ending a worker's processes has one home.
+pub async fn end_worker_in(dir: &Path, now: bool) {
+    end_in(dir, if now { Duration::ZERO } else { ORPHAN_GRACE }).await;
+}
+
+async fn end_in(dir: &Path, grace: Duration) {
+    if let Some(worker) = running_worker(dir).await {
+        info!(name: "worker.left_running", pid = worker.pid, dir = %dir.display(), "Ending a worker still running in its instance");
+        stop_groups(&[worker], grace).await;
+    }
+    stop_orphans(dir, ORPHAN_GRACE).await;
 }
 
 /// The worker serving the instance in `dir`, which records itself there once it holds the instance's lock.

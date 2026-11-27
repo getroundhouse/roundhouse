@@ -1,0 +1,28 @@
+[package]
+name = "microsandbox-adapter"
+description = "The adapter of the microsandbox provider, which runs each workspace in a microVM on the hub's machine."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "roundhouse-microsandbox"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+logging.workspace = true
+protocol.workspace = true
+
+# microsandbox runs VMs on a Mac with Apple silicon and on Linux with KVM, so the provider is only there, and elsewhere
+# the adapter only says so.
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+async-trait.workspace = true
+microsandbox.workspace = true
+providers.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

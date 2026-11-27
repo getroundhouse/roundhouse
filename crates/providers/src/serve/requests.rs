@@ -15,8 +15,9 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 use tokio::sync::mpsc;
 use tracing::warn;
 
-/// Makes the provider once the hub has said which hub it is, since an adapter works only with that hub's instances.
-pub type MakeProvider = Box<dyn FnOnce(&HubId) -> Result<Arc<dyn Provider>, ProviderError> + Send>;
+/// Makes the provider once the hub's hello has said which hub it is, since an adapter works only with that hub's
+/// instances, and which build, which the workers it starts are to be.
+pub type MakeProvider = Box<dyn FnOnce(&Hello) -> Result<Arc<dyn Provider>, ProviderError> + Send>;
 
 /// Until the hub closes `reader`. Each request is answered as it finishes, so a slow one, such as starting a VM,
 /// doesn't hold up the rest. Replies still being worked out when the hub goes are dropped, since the next hub asks
@@ -55,9 +56,8 @@ where
         };
         let reply = move |outcome| ProviderFrame::Reply { id, outcome };
         match (request, &serving) {
-            (Ok(ProviderRequest::Hello(Hello { protocol_version, oldest_protocol_version, hub_id, .. })), _) => {
-                let theirs = Versions::from_hello(protocol_version, Some(oldest_protocol_version));
-                let outcome = hello_outcome(&mut make, &mut serving, theirs, hub_id, build).await;
+            (Ok(ProviderRequest::Hello(hub)), _) => {
+                let outcome = hello_outcome(&mut make, &mut serving, &hub, build).await;
                 let _ = frames.send(reply(outcome)).await;
             }
             (_, None) => {
@@ -123,11 +123,10 @@ async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Re
 async fn hello_outcome(
     make: &mut Option<MakeProvider>,
     serving: &mut Option<(HubId, Arc<dyn Provider>)>,
-    theirs: Versions,
-    hub_id: HubId,
+    hub: &Hello,
     build: &str,
 ) -> ProviderOutcome {
-    let (provider, chosen) = match hello(make, serving, theirs, hub_id) {
+    let (provider, chosen) = match hello(make, serving, hub) {
         Ok(ready) => ready,
         Err(e) => return ProviderOutcome::Error(e),
     };
@@ -149,23 +148,23 @@ async fn hello_outcome(
 fn hello(
     make: &mut Option<MakeProvider>,
     serving: &mut Option<(HubId, Arc<dyn Provider>)>,
-    theirs: Versions,
-    hub_id: HubId,
+    hub: &Hello,
 ) -> Result<(Arc<dyn Provider>, u32), ApiError> {
+    let theirs = Versions::from_hello(hub.protocol_version, Some(hub.oldest_protocol_version));
     let ours = Versions::only(PROVIDER_PROTOCOL_VERSION);
     let Some(chosen) = ours.newest_shared(theirs) else {
         let message = format!("this adapter speaks {ours} of the provider protocol, and the hub {theirs}");
         return Err(ApiError::new(ErrorCode::VersionMismatch, message));
     };
     if let Some((serving_id, provider)) = serving {
-        if *serving_id != hub_id {
+        if *serving_id != hub.hub_id {
             return Err(ApiError::new(ErrorCode::Conflict, format!("this adapter is serving hub {serving_id}")));
         }
         return Ok((provider.clone(), chosen));
     }
     let make = make.take().ok_or_else(|| ApiError::new(ErrorCode::Internal, "the provider couldn't be made"))?;
-    let provider = make(&hub_id).map_err(|e| e.to_api_error())?;
-    *serving = Some((hub_id, provider.clone()));
+    let provider = make(hub).map_err(|e| e.to_api_error())?;
+    *serving = Some((hub.hub_id.clone(), provider.clone()));
     Ok((provider, chosen))
 }
 

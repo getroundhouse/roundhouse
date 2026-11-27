@@ -30,12 +30,17 @@ pub(crate) struct Dial {
     pub(crate) port: Option<u16>,
     /// Where the hub can reach it directly, such as the host's end of that forwarded port.
     pub(crate) advertise: Option<SocketAddr>,
+    /// Whether to start it in a session of its own, and return once it has started.
+    pub(crate) detach: bool,
 }
 
 /// In the worker's state directory, which it claims first, so a second worker started there by mistake leaves the
 /// first to serve it.
-pub(crate) fn dial(mut given: Given, Dial { ticket, port, advertise }: Dial) -> anyhow::Result<()> {
+pub(crate) fn dial(mut given: Given, Dial { ticket, port, advertise, detach }: Dial) -> anyhow::Result<()> {
     let ticket = ticket.read().context("reading the ticket")?;
+    if detach {
+        return start_detached();
+    }
     std::fs::create_dir_all(&given.state_dir).with_context(|| format!("creating {}", given.state_dir.display()))?;
     let Some(_claim) = worker::claim_to_serve(&given.state_dir)? else {
         info!(name: "worker.instance_taken", "Another worker has the instance");
@@ -66,6 +71,22 @@ pub(crate) fn dial(mut given: Given, Dial { ticket, port, advertise }: Dial) -> 
         endpoint.close().await;
         served.map_err(anyhow::Error::from)
     })?
+}
+
+/// This command again, without `--detach`, in a session of its own, so nothing that ends what ran this reaches it. It
+/// writes its log to the file `--log` names, and nothing to what this was given.
+fn start_detached() -> anyhow::Result<()> {
+    let exe = std::env::current_exe().context("finding this binary to start the worker with")?;
+    let mut command = std::process::Command::new(exe);
+    command
+        .args(std::env::args_os().skip(1).filter(|arg| arg != "--detach"))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    process::detach(&mut command);
+    let started = command.spawn().context("starting the worker")?;
+    info!(name: "worker.detached", pid = started.id(), "Started the worker in a session of its own");
+    Ok(())
 }
 
 /// The stream a worker writes to its hub on, with the connection it's on, which closes once both are dropped.

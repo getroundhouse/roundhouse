@@ -63,6 +63,16 @@ enum Role {
         agent: protocol::model::AgentKind,
         checkout: PathBuf,
     },
+    /// Ends the worker whose state directory is `state_dir`, if one is running, and whatever it left there, such as its
+    /// agents, giving them a few seconds to stop by themselves, or none with `--now`. Run by a provider's adapter on
+    /// the machine the worker runs on.
+    #[command(hide = true)]
+    EndWorker {
+        #[arg(long)]
+        state_dir: PathBuf,
+        #[arg(long)]
+        now: bool,
+    },
     /// Runs agents and git for a workspace. Started by a hub's provider.
     #[command(group(clap::ArgGroup::new("transport").required(true)))]
     Worker {
@@ -71,6 +81,10 @@ enum Role {
         /// Where the worker writes its log, in place of stderr, added to the end.
         #[arg(long)]
         log: Option<PathBuf>,
+        /// Start the worker in a session of its own, and return once it has started, so it outlives whatever ran this,
+        /// such as a command run in a VM, whose session ends with it. It logs to `--log`.
+        #[arg(long, requires_all = ["ticket", "log"])]
+        detach: bool,
         /// Where worktrees go.
         #[arg(long)]
         workspaces_root: PathBuf,
@@ -125,7 +139,11 @@ fn start_log(role: &Role) -> anyhow::Result<()> {
     }
     let has_a_file = match role {
         Role::Hub { .. } | Role::Worker { .. } | Role::Delete { .. } => !std::io::stderr().is_terminal(),
-        Role::GitCredential { .. } | Role::WorkerVersions | Role::PrintEnvironment | Role::Preflight { .. } => false,
+        Role::GitCredential { .. }
+        | Role::WorkerVersions
+        | Role::PrintEnvironment
+        | Role::Preflight { .. }
+        | Role::EndWorker { .. } => false,
     };
     Ok(if has_a_file { log.json_to(std::io::stderr) } else { log.text_to(std::io::stderr) }.start()?)
 }
@@ -221,10 +239,13 @@ pub fn run(config: Config) -> anyhow::Result<ExitCode> {
         )?),
         Role::Preflight { agent, checkout } => preflight::run(agent, &checkout, claude_bin, codex_bin, antigravity_bin),
         Role::WorkerVersions => say_worker_versions(),
+        Role::EndWorker { state_dir, now } => {
+            Ok(crate::runtime::run_to_end(providers::local::end_worker_in(&state_dir, now))?)
+        }
         Role::PrintEnvironment => Ok(process::print_environment(std::env::vars_os(), &mut std::io::stdout().lock())?),
         Role::Delete { paths } => delete(&paths),
-        Role::Worker { reach, log: _, workspaces_root, state_dir, clones_dir } => worker_role::run(
-            reach.transport()?,
+        Role::Worker { reach, log: _, detach, workspaces_root, state_dir, clones_dir } => worker_role::run(
+            reach.transport(detach)?,
             worker_role::Given {
                 workspaces_root,
                 state_dir,

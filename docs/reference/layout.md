@@ -101,6 +101,7 @@ apps/
   cli/             `roundhouse`, the command-line client
   desktop/         `roundhouse-desktop`, the desktop app
   mobile-ios/      `roundhouse-ios`, the iPhone app
+  microsandbox-adapter/  `roundhouse-microsandbox`, the adapter of the provider that runs each workspace in a microVM
 tools/             Checks, builds and packaging, as `docs/reference/commands.md` lists
 third_party/       Copies of other projects' code, as `third_party/README.md` says
 ```
