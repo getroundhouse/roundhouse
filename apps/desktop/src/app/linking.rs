@@ -117,8 +117,8 @@ impl AppView {
 fn shown(state: LinkState<Unconnected>) -> Option<Connection> {
     match state {
         LinkState::Connecting(None) => Some(Connection::Connecting),
-        LinkState::CatchingUp(_) => None,
-        LinkState::Ready(_) => Some(Connection::Ready),
+        LinkState::CatchingUp => None,
+        LinkState::Ready => Some(Connection::Ready),
         LinkState::Connecting(Some(unconnected))
         | LinkState::Waiting(unconnected)
         | LinkState::Stopped(unconnected) => Some(match unconnected {

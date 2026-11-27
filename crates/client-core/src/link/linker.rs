@@ -128,8 +128,8 @@ impl<C: Connect> Linker<C> {
     fn connected(&mut self, client: Client, with: C::With) -> Stand<C::Failure> {
         let feed = self.shared.kept.connected(&client);
         self.feed.get_or_insert(feed);
-        *self.shared.connection.lock() = Some((client.clone(), with));
-        self.set(LinkState::CatchingUp(client.clone()));
+        *self.shared.connected.lock() = Some(with);
+        self.set(LinkState::CatchingUp);
         Stand::Connected { client, catching_up_until: Some(Instant::now() + self.waits.catch_up()) }
     }
 
@@ -166,7 +166,8 @@ impl<C: Connect> Linker<C> {
         if feed.connected() {
             if catching_up_until.is_some() {
                 self.failures = 0;
-                self.set(LinkState::Ready(client.clone()));
+                self.set_caught_up(Some(client.clone()));
+                self.set(LinkState::Ready);
             }
             self.shared.errors.lock().extend(errors);
             return Stand::Connected { client, catching_up_until: None };
@@ -183,8 +184,15 @@ impl<C: Connect> Linker<C> {
         Stand::Connected { client, catching_up_until }
     }
 
+    /// The connection that has caught up, or `None` while there isn't one, set before the state that says so.
+    fn set_caught_up(&self, ready: Option<Client>) {
+        self.shared.kept.set_ready(ready);
+    }
+
     fn set(&self, state: LinkState<C::Failure>) {
-        self.shared.kept.set_ready(state.ready().cloned());
+        if !state.is_ready() {
+            self.set_caught_up(None);
+        }
         *self.shared.state.lock() = state;
         self.shared.tell();
     }

@@ -1,7 +1,7 @@
 //! The chat's own screen: its transcript, and the composer under it.
 
 use client_core::records::Snapshot;
-use client_core::{Agents, Client, Hub, RecordsFeed};
+use client_core::{Agents, Hub, RecordsFeed, Round};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::{h_flex, v_flex};
@@ -12,6 +12,7 @@ use gpui_kit::{
     div,
 };
 use look::{ButtonKind, Lined as _, Space};
+use protocol::client::sessions::SessionEnsure;
 use protocol::model::{Session, SessionId, Workspace, WorkspaceId};
 use transcript::{Transcript, TranscriptEvent};
 
@@ -41,7 +42,8 @@ pub(crate) struct ChatView {
     pub(super) workspace: Workspace,
     /// What the chat, and what's open over it, are opened from, and what they ask the hub through.
     pub(super) hub: Hub,
-    pub(super) client: Client,
+    /// The hub's round when the chat last carried on on a connection, so it knows when the next has caught up.
+    round: Round,
     /// What client-core holds of the hub's records, which follows the shown chat's subagents and proposals.
     pub(super) feed: RecordsFeed,
     /// What the hub says of each kind of agent, for the chat's to say what it can do.
@@ -92,13 +94,13 @@ impl ChatView {
                 cx.notify();
             }
         });
-        let Ready { hub, client, feed } = hub;
+        let Ready { hub, feed } = hub;
         let kept = Kept::new(hub.drafts());
         let agents = feed.snapshot().agents().clone();
         let mut chat = ChatView {
             workspace,
+            round: hub.round(),
             hub,
-            client,
             feed,
             agents,
             shown: None,
@@ -119,24 +121,16 @@ impl ChatView {
         chat
     }
 
-    /// Carries on over a new connection, keeping what's shown and what's typed. The transcript, and what's open over
+    /// Takes what the hub's records now say of the workspace, such as the title it gives it, of the chat, such as
+    /// whether the agent is working, and of its agents. Once a new connection has caught up, as the hub's round says,
+    /// a chat that couldn't be found or started on the last is asked for again. The transcript, and what's open over
     /// it, carry on by themselves, from the hub they were opened from.
-    pub(crate) fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
-        self.client = client.clone();
-        if self.shown.is_some() {
-            // The new connection's hub may hold other lists.
-            self.models.reset();
-            self.follow_models(false, cx);
-        } else {
-            // Asked again on the new connection, since one asked on the old would fail with it.
+    pub(crate) fn records_changed(&mut self, records: &Snapshot, cx: &mut Context<Self>) {
+        let round = self.hub.round();
+        if std::mem::replace(&mut self.round, round) != round && self.shown.is_none() {
             self.error = None;
             self.ensure_chat(cx);
         }
-    }
-
-    /// Takes what the hub's records now say of the workspace, such as the title it gives it, of the chat, such as
-    /// whether the agent is working, and of its agents.
-    pub(crate) fn records_changed(&mut self, records: &Snapshot, cx: &mut Context<Self>) {
         if let Some(workspace) = records.workspace(&self.workspace.id)
             && *workspace != self.workspace
         {
@@ -209,7 +203,7 @@ impl ChatView {
     /// making a second.
     fn ensure_chat(&mut self, cx: &mut Context<Self>) {
         let (id, agent) = (self.workspace.id.clone(), self.agents.for_new_chat());
-        let found = self.client.start(move |client| client.session_ensure(&id, agent));
+        let found = self.hub.ask(SessionEnsure { workspace_id: id, agent });
         self.opening = Some(cx.spawn(async move |this, cx| {
             let found = found.recv().await;
             let _ = this.update(cx, |chat, cx| {

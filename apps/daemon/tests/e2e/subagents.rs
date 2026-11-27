@@ -156,7 +156,7 @@ fn a_view_holds_only_the_agents_own_events_or_one_subagents_and_the_feed_keeps_t
     wait_until("the feed to keep its record", || finished(&feed).is_some());
     assert_eq!(finished(&feed).unwrap().report.as_deref(), Some("There's a README here."));
     // Nor stop the feed on a new connection.
-    feed.reconnect(&stack.client());
+    hub.hub().carry_on_to(&stack.client());
     wait_until("the feed to follow again", || feed.connected());
     assert!(feed.take_errors().is_empty(), "{:?}", feed.take_errors());
 }

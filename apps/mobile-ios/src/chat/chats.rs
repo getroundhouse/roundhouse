@@ -2,6 +2,7 @@
 //! checked where it's the one shown, then starting another, then those closed, to reopen, most recently closed first,
 //! with how long ago.
 
+use protocol::client::sessions::{SessionCreate, SessionReopen};
 use std::cmp::Reverse;
 
 use client_core::refusals::couldnt;
@@ -100,9 +101,8 @@ impl ChatView {
         let shown = self.shown.as_ref().map(|shown| &shown.session);
         let agent = shown.map_or_else(|| self.agents.for_new_chat(), |session| session.agent);
         let (id, settings) = (self.workspace.id.clone(), client_core::new_chat_settings(shown, agent));
-        let made = self
-            .client
-            .start(move |client| client.session_create(&id, agent, settings, Some(client_core::new_request_id())));
+        let client_request_id = Some(client_core::new_request_id());
+        let made = self.hub.ask(SessionCreate { workspace_id: id, agent, settings, client_request_id });
         self.opening = Some(cx.spawn(async move |this, cx| {
             let made = made.recv().await;
             let _ = this.update(cx, |chat, cx| match made {
@@ -114,7 +114,7 @@ impl ChatView {
 
     /// Opens a closed chat again, and shows it.
     fn reopen(&mut self, id: SessionId, cx: &mut Context<Self>) {
-        let reopened = self.client.start(move |client| client.session_reopen(&id));
+        let reopened = self.hub.ask(SessionReopen { id });
         self.opening = Some(cx.spawn(async move |this, cx| {
             let reopened = reopened.recv().await;
             let _ = this.update(cx, |chat, cx| match reopened {

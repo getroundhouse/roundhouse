@@ -76,7 +76,7 @@ fn a_request_is_sent_only_on_a_connection_that_has_caught_up() {
     let (client, heard) = hub_that_lists_after(&dir.path().join("hub.sock"), listed);
     let link = Link::start_waiting(Tries::of(vec![Ok(client)]), Waits::retrying(NEVER, NEVER));
     let hub = link.hub();
-    let catching_up = || matches!(link.state(), LinkState::CatchingUp(_));
+    let catching_up = || matches!(link.state(), LinkState::CatchingUp);
     waiting::thread::until(TIMEOUT, "never connected", catching_up);
     let chat = hub.open_session(&protocol::fixtures::session("s"), View::Own);
     let round_catching_up = hub.round();

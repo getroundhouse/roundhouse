@@ -104,7 +104,7 @@ fn across_a_break(speaks: Option<Versions>) -> ClientError {
 }
 
 fn ready_on<C: Connect>(link: &Link<C>, which: &str) {
-    waiting::thread::until(TIMEOUT, format!("never ready on {which}"), || link.state().ready().is_some());
+    waiting::thread::until(TIMEOUT, format!("never ready on {which}"), || link.state().is_ready());
 }
 
 #[test]
@@ -173,14 +173,14 @@ fn a_connection_that_goes_is_made_again_at_once_and_the_records_carry_on_on_the_
     let tries = Tries::of(vec![Ok(first.clone()), Ok(second)]);
     let link = Link::start_waiting(tries.clone(), Waits::retrying(NEVER, NEVER));
     ready_on(&link, "the first");
-    let (_, which) = link.take_connection().unwrap();
+    let which = link.take_connected().unwrap();
     let feed = link.hub().records().unwrap();
 
     let _ = first.repo_list();
 
     waiting::thread::until(TIMEOUT, "never connected again", || tries.count() == 2);
     ready_on(&link, "the second");
-    assert_eq!((which, link.take_connection().map(|(_, which)| which)), (1, Some(2)));
+    assert_eq!((which, link.take_connected()), (1, Some(2)));
     assert!(feed.connected(), "the same records, on the new connection");
 }
 

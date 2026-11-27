@@ -8,6 +8,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, Window, div,
 };
 use look::{IconSize, IconSizing as _, RowSize, Type, Typeset as _};
+use protocol::client::new_workspace::NewWorkspaceCreate;
 use protocol::client::new_workspace::NewWorkspaceMade;
 use protocol::model::{NewWorkspaceDraftToKeep, Repo, RepoId};
 
@@ -72,12 +73,13 @@ impl MobileApp {
     /// Otherwise the workspace waits in the list. It's the followed hub's, so forgetting or replacing the hub stops it.
     fn create_workspace(&mut self, repo: RepoId, window: &mut Window, cx: &mut Context<Self>) {
         let Some(followed) = &mut self.followed else { return };
-        let Some(client) = followed.link.read(cx).client() else { return };
+        let link = followed.link.read(cx);
+        let Some(hub) = link.is_ready().then(|| link.hub().clone()) else { return };
         if followed.creating.is_some() {
             return;
         }
         let made_of = NewWorkspaceDraftToKeep { repo_id: Some(repo.clone()), ..NewWorkspaceDraftToKeep::default() };
-        let made = client.start(move |client| client.new_workspace_create(&made_of, client_core::new_request_id()));
+        let made = hub.ask(NewWorkspaceCreate { made_of, client_request_id: client_core::new_request_id() });
         let task = cx.spawn_in(window, async move |this, cx| {
             let made = made.recv().await;
             let _ = this.update_in(cx, |app, window, cx| app.created(made, window, cx));
