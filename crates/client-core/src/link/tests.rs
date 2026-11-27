@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use protocol::client::listed::Listed;
+use protocol::client::subscriptions::Follow;
 use protocol::client::{
     ApiError, CLIENT_PROTOCOL_VERSION, ClientRequest, ErrorCode, HubFrame, HubRefusing, ReplyOutcome,
 };
@@ -241,4 +242,78 @@ fn what_comes_before_connecting_again_failing_waits_for_a_person() {
         || matches!(link.state(), LinkState::Stopped(why) if why == "couldn't stop it"),
     );
     assert_eq!(tries.count(), 1);
+}
+
+/// A stand-in hub on `socket` that lists its records once `list` is sent something, and sends nothing of any other
+/// level, such as a terminal, which a test opens to hear when what's open has been carried on to it. With everything it
+/// hears.
+fn hub_listing_after(socket: &Path, list: flume::Receiver<()>) -> (Client, flume::Receiver<ClientRequest>) {
+    let heard = stand_in_hub::listen(socket, move |request| {
+        let ClientRequest::Subscribe(subscribe) = &request else {
+            return Does::Answers(Box::new(ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "refused"))));
+        };
+        let of_the_hub = subscribe.start.iter().any(|start| start.follow == Follow::Hub);
+        let listed = stand_in_hub::subscribed(subscribe, |subscription_id, _| {
+            Vec::from_iter(
+                of_the_hub.then(|| HubFrame::Listed { subscription_id, listed: Listed::Hub(Box::default()) }),
+            )
+        });
+        if of_the_hub { Does::After(list.clone(), Box::new(listed)) } else { listed }
+    });
+    (Client::connect(socket, "test").unwrap(), heard)
+}
+
+/// Whether `request` starts following `follow`.
+fn follows(request: &ClientRequest, follow: impl Fn(&Follow) -> bool) -> bool {
+    matches!(request, ClientRequest::Subscribe(subscribe) if subscribe.start.iter().any(|start| follow(&start.follow)))
+}
+
+/// A new connection made while the one before is still catching up, as Try again or the phone coming to the front can,
+/// isn't caught up on while its own list is held back, even once the one before has caught up as it went. So nothing
+/// is sent on it before then.
+#[test]
+fn a_connection_made_while_the_one_before_catches_up_is_caught_up_on_only_once_its_own_list_is_in() {
+    let dir = tempfile::tempdir().unwrap();
+    // The first lists its records at once, and answers what it offers only once the test lets it, so the records are
+    // on their way to catching up on it, with its list in, as the next connection is made.
+    let (offer, offered) = flume::bounded(1);
+    let first_socket = dir.path().join("first.sock");
+    let first_heard = stand_in_hub::listen(&first_socket, move |request| {
+        if let ClientRequest::Subscribe(subscribe) = &request {
+            stand_in_hub::subscribed(subscribe, |subscription_id, _| {
+                vec![HubFrame::Listed { subscription_id, listed: Listed::Hub(Box::default()) }]
+            })
+        } else if request == ClientRequest::AgentList {
+            let refused = ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "refused"));
+            Does::After(offered.clone(), Box::new(Does::Answers(Box::new(refused))))
+        } else {
+            Does::Nothing
+        }
+    });
+    let first = Client::connect(&first_socket, "test").unwrap();
+    let (list, listed) = flume::bounded(1);
+    let (next, next_heard) = hub_listing_after(&dir.path().join("next.sock"), listed);
+    let link = Link::start_waiting(Tries::of(vec![Ok(first), Ok(next)]), Waits::retrying(NEVER, NEVER));
+    let hub = link.hub();
+    let _terminal = hub.open_terminal(&"t".into());
+    waiting::thread::until(TIMEOUT, "the first never asked what it offers", || {
+        first_heard.try_iter().any(|request| request == ClientRequest::AgentList)
+    });
+
+    // Without letting the first go, as a hub that's being stopped is kept for the stopping. The terminal, carried on
+    // after the records, says the next connection has been handed to them.
+    link.connect_after(|_| Ok(()));
+    waiting::thread::until(TIMEOUT, "what's open was never carried on to the next", || {
+        next_heard.try_iter().any(|request| follows(&request, |follow| matches!(follow, Follow::Terminal { .. })))
+    });
+    offer.send(()).unwrap();
+    waiting::thread::until(TIMEOUT, "the records were never followed on the next", || {
+        next_heard.try_iter().any(|request| follows(&request, |follow| *follow == Follow::Hub))
+    });
+    let (records, caught_up) = (hub.records().unwrap().connected(), hub.caught_up());
+    list.send(()).unwrap();
+
+    assert!(!records, "the records said they'd caught up, as on the first, while the next's list was held");
+    assert!(!caught_up, "caught up on the next while its list was held");
+    waiting::thread::until(TIMEOUT, "never caught up once its list was in", || hub.caught_up());
 }

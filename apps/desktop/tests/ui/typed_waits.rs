@@ -35,7 +35,16 @@ fn a_rename_waits(
     held: &client_core::fake_hub::HeldList,
     method: &str,
 ) {
-    throughout(ui, "Rename stays off while the connection catches up", |ui| ui.off("rename-confirm"));
+    throughout(ui, "Rename stays off while the connection catches up", |ui| {
+        let off = ui.off("rename-confirm");
+        if !off {
+            // Not off is either drawn on or not drawn at all, so it says which, and how the connection stood.
+            let drawn = if ui.on("rename-confirm") { "drawn on" } else { "not drawn" };
+            let records = ui.view().feed().is_some_and(|feed| feed.connected());
+            panic!("Rename {drawn}; the records caught up: {records}; lists held: {}", held.held());
+        }
+        off
+    });
     ui.press("enter");
 
     assert!(ui.has_dialog(), "Enter left the dialog open");

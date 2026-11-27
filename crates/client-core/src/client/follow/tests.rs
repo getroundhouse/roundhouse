@@ -118,3 +118,51 @@ fn a_source_not_wanted_is_let_go_until_it_is_wanted_again_on_the_connection_it_t
     assert_eq!(after_reconnecting.iter().filter(|seen| **seen == Seen::Resumed).count(), 1, "{after_reconnecting:?}");
     assert!(starts(&watched_again), "{watched_again:?}");
 }
+
+/// Resumes on each connection only once a test lets it, saying as it starts each, so a test can hold it partway,
+/// as a source is while it waits for a connection's list.
+struct Gated {
+    entered: flume::Sender<()>,
+    gate: flume::Receiver<()>,
+}
+
+impl Source for Gated {
+    type Held = Wanted;
+
+    fn resume(&mut self, client: &Client, _: &Mutex<Wanted>) -> Result<Subscription> {
+        let _ = self.entered.send(());
+        let _ = self.gate.recv();
+        client.follow(Follow::Terminal { id: "t".into() })
+    }
+
+    fn apply(&mut self, _: &Client, _: &Mutex<Wanted>, _: SubscriptionItem) -> Result<bool> {
+        Ok(false)
+    }
+
+    fn asked(&mut self, _: Option<&Client>, _: &Mutex<Wanted>, _: &dyn Fn()) -> Result<bool> {
+        Ok(false)
+    }
+}
+
+/// A follow handed a second connection while it's still catching up on the first doesn't say it has caught up when
+/// the first's resume then ends well, but only once it has caught up on the second.
+#[test]
+fn a_follow_says_it_has_caught_up_only_on_the_newest_connection() {
+    let dir = tempfile::tempdir().unwrap();
+    let (first, second) = (dir.path().join("first.sock"), dir.path().join("second.sock"));
+    let (_first_asked, _second_asked) = (start_hub(&first), start_hub(&second));
+    let (entered, resuming) = flume::unbounded();
+    let (open, gate) = flume::unbounded();
+    let gated = Gated { entered, gate };
+    let follow = Following::start(Some(&Client::connect(&first, "test").unwrap()), Wanted::default(), move || gated);
+    resuming.recv_timeout(WAIT).expect("it never resumed on the first");
+
+    follow.reconnect(&Client::connect(&second, "test").unwrap());
+    open.send(()).unwrap();
+    resuming.recv_timeout(WAIT).expect("it never resumed on the second");
+    let while_the_second_catches_up = follow.connected();
+    open.send(()).unwrap();
+
+    assert!(!while_the_second_catches_up, "caught up, as the first said, while the second catches up");
+    waiting::thread::until(WAIT, "it never caught up on the second", || follow.connected());
+}
