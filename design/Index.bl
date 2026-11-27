@@ -12,7 +12,7 @@ canvas:
     cdd2b64f3c415fde inst("Status Exploring",canvas(Board/Status)) "Status"
   66569ed22907fb16 al(h,x(sb),y(c)) s(fill,28) f[] "Foundations/Type"
     8152db75083a2c11 t("Foundations / Type") s(hug,hug) f[(514b4040f13ceef2,tok(color.text))] $typography.Body "Name"
-    a536c140ef848d34 inst("Status Exploring",canvas(Board/Status)) "Status"
+    a536c140ef848d34 inst("Status Ready for review",canvas(Board/Status)) "Status"
   b791bc760e34d4b3 al(h,x(sb),y(c)) s(fill,28) f[] "Screens/Desktop/Chats/Plan to approve"
     237734bce899599e t("Screens / Desktop / Chats / Plan to approve") s(hug,hug) f[(f056c6b224a49a67,tok(color.text))] $typography.Body "Name"
     d8efad67b6067d07 inst("Status Ready for review",canvas(Board/Status)) "Status"
