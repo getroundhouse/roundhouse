@@ -253,7 +253,7 @@ impl Button {
             // press still change. Not while it's off, since the kit lays the button's own style over its greyed-out
             // one, which would keep the fill.
             (Some(fill), _) => {
-                let (under_the_pointer, pressed) = filled_states(fill);
+                let (under_the_pointer, pressed) = filled_states(fill, colors);
                 let style = ButtonCustomVariant::new(cx)
                     .color(fill)
                     .foreground(colors.on_main)
