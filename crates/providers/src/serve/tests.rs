@@ -9,7 +9,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, 
 use tokio::sync::Notify;
 
 use super::*;
-use crate::{Capabilities, Feature, Instance, Size, WorkerBinary, WorkerCommand, WorkerEnvironment};
+use crate::{Capabilities, Feature, Instance, Size, WorkerBinary, WorkerEnvironment};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -51,15 +51,7 @@ impl Provider for Fake {
         Err(ProviderError::NotFound(id.clone()))
     }
     async fn list(&self) -> Result<Vec<Instance>, ProviderError> {
-        Ok(vec![Instance {
-            instance_id: "i".into(),
-            state: InstanceState::Running,
-            base_image: false,
-            worker_running: true,
-        }])
-    }
-    async fn connect(&self, _: &InstanceId) -> Result<WorkerCommand, ProviderError> {
-        Ok(WorkerCommand { program: "true".into(), args: vec![], env: vec![] })
+        Ok(vec![Instance { instance_id: "i".into(), state: InstanceState::Running, base_image: false }])
     }
     async fn make_base_image(&self, _: &InstanceId) -> Result<(), ProviderError> {
         Err(ProviderError::Unsupported("make one in a test"))

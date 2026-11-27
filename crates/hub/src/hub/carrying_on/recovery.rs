@@ -3,7 +3,7 @@ use crate::error::provider_failed;
 use crate::session::{CarriedOver, Item, LiveSession, Progress, Starting};
 use crate::spans;
 use crate::store::{Store, StoreError, cancelled_approval};
-use crate::worker_link::{WorkerLink, WorkerLinkId};
+use crate::worker_link::{WorkerLink, WorkerLinkId, dials_its_hub};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
@@ -78,27 +78,32 @@ impl Hub {
         }
     }
 
-    /// Those of `workspaces` whose instance their provider says a worker serves, which may be one an earlier hub left.
-    pub(super) async fn with_workers_running(&self, workspaces: &[Workspace]) -> Vec<WorkspaceId> {
+    /// Those of `workspaces` whose instance a worker may serve, which may be one an earlier hub left: one the hub
+    /// admitted a dialing worker to, which dials again, or one the local provider says a worker serves.
+    pub(in super::super) async fn with_workers_running(&self, workspaces: &[Workspace]) -> Vec<WorkspaceId> {
         let mut by_provider: HashMap<&ProviderName, Vec<&Workspace>> = HashMap::new();
         for workspace in workspaces {
             by_provider.entry(&workspace.provider).or_default().push(workspace);
         }
         let (within, mut running) = (self.timers.before_serving, Vec::new());
+        let dialed: HashSet<InstanceId> = match self.blocking(Store::instances_with_dialing_workers).await {
+            Ok(dialed) => dialed.into_iter().collect(),
+            Err(e) => {
+                warn!(name: "dialed.unread", error = e.message, "Couldn't read which instances have workers that dial the hub");
+                HashSet::new()
+            }
+        };
         for (name, workspaces) in by_provider {
             let listed = match self.provider(name) {
-                Ok(provider) => match tokio::time::timeout(within, provider.list()).await {
-                    Ok(listed) => listed.map_err(|e| provider_failed(&e)),
+                Ok(provider) if dials_its_hub(provider.as_ref()) => Ok(dialed.clone()),
+                Ok(provider) => match tokio::time::timeout(within, provider.workers_running()).await {
+                    Ok(listed) => listed.map(|running| running.into_iter().collect()).map_err(|e| provider_failed(&e)),
                     Err(_) => Err(ApiError::new(ErrorCode::Worker, format!("no answer within {within:?}"))),
                 },
                 Err(e) => Err(e),
             };
             let instances: HashSet<InstanceId> = match listed {
-                Ok(instances) => instances
-                    .into_iter()
-                    .filter(|instance| instance.worker_running)
-                    .map(|instance| instance.instance_id)
-                    .collect(),
+                Ok(instances) => instances,
                 Err(e) => {
                     warn!(
                         name: "recovery.instances_unlisted",

@@ -189,7 +189,7 @@ async fn connect_answers_with_the_hubs_own_worker_for_the_instance() {
 
 /// A directory is never asleep, so every instance is running, and a worker is on the one it's recorded in.
 #[tokio::test]
-async fn list_says_which_instances_have_a_worker_running() {
+async fn it_says_which_instances_have_a_worker_running() {
     let dir = tempfile::tempdir().unwrap();
     let provider = provider(dir.path());
     for id in ["a", "b"] {
@@ -199,10 +199,12 @@ async fn list_says_which_instances_have_a_worker_running() {
     record_worker(&dir.path().join("instances/a"), &worker);
 
     let mut instances = provider.list().await.unwrap();
+    let running = provider.workers_running().await.unwrap();
 
     instances.sort_by(|x, y| x.instance_id.cmp(&y.instance_id));
-    let states: Vec<_> = instances.iter().map(|i| (i.instance_id.as_str(), i.state, i.worker_running)).collect();
-    assert_eq!(states, [("a", InstanceState::Running, true), ("b", InstanceState::Running, false)]);
+    let states: Vec<_> = instances.iter().map(|i| (i.instance_id.as_str(), i.state)).collect();
+    assert_eq!(states, [("a", InstanceState::Running), ("b", InstanceState::Running)]);
+    assert_eq!(running, [InstanceId::from("a")]);
     worker.kill().unwrap();
     worker.wait().unwrap();
 }

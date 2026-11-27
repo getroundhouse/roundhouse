@@ -4,7 +4,7 @@ use protocol::frame;
 use protocol::frame::Call;
 use protocol::model::HubId;
 use protocol::provider::{
-    ANSWERED_WITHIN, Connect, Create, Destroy, EndWorker, Hello, HelloReply, Instances, KillWorker, MakeBaseImage,
+    ANSWERED_WITHIN, Create, Destroy, EndWorker, Hello, HelloReply, Instances, KillWorker, MakeBaseImage,
     PROVIDER_PROTOCOL_VERSION, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse, Start,
 };
 use protocol::versions::Versions;
@@ -186,9 +186,6 @@ async fn answer(provider: &dyn Provider, request: ProviderRequest) -> Result<Pro
         }
         ProviderRequest::OpenPreflight(launch) => {
             return Ok(ProviderResponse::Command(provider.open_preflight(&launch).await?));
-        }
-        ProviderRequest::Connect(Connect { instance_id }) => {
-            return Ok(ProviderResponse::Command(provider.connect(&instance_id).await?));
         }
         // Answered before any request reaches here.
         ProviderRequest::Hello(_) => return Err(ProviderError::Unsupported("say hello twice")),

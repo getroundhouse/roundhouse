@@ -1,6 +1,6 @@
 //! What a hub says to a provider's adapter, over the adapter's stdin and stdout. The adapter makes and ends the
-//! provider's instances, and the hub reaches each instance's worker itself, by running the command `Connect` answers
-//! with, as "Workers and providers" in `docs/principles/parts.md` says.
+//! provider's instances, and starts a worker on each with the ticket the hub gives it, which the worker dials the hub
+//! with, as `docs/decisions/workers-dial-the-hub.md` says, so no adapter is in a worker's stream.
 //!
 //! Requests are safe to repeat. An instance operation names its instance, and a preflight names its prospective
 //! launch. The hub can ask again if the adapter restarts before answering. Requests can overlap, and each reply names
@@ -18,8 +18,8 @@ pub use preflight::OpenPreflight;
 
 pub use hello::{Capabilities, ClonePersistence, Feature, Hello, HelloReply, WorkerEnvironment, WorkerFilesystem};
 pub use instances::{
-    Command, Connect, Create, Destroy, EndWorker, Instance, InstanceState, Instances, KillWorker, List, MakeBaseImage,
-    Size, Start, WorkerBinary, WorkerCommand,
+    Command, Create, Destroy, EndWorker, Instance, InstanceState, Instances, KillWorker, List, MakeBaseImage, Size,
+    Start, WorkerBinary,
 };
 
 mod messages;

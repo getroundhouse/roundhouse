@@ -2,8 +2,10 @@
 //! and nothing in the hub treats it as special.
 //!
 //! [`Provider`] is the provider protocol in `protocol::provider` as a Rust trait, one method for each request, with
-//! the same rules: every request is safe to repeat, and `connect` answers with the command the hub runs to reach the
-//! worker, so a provider is never in a worker's stream. "Workers and providers" in `docs/principles/parts.md` has the
+//! the same rules: every request is safe to repeat, and a provider is never in a worker's stream. A worker a provider
+//! other than the local one starts dials the hub with its ticket. The local provider is the one the hub runs in itself,
+//! and it answers two more, which no adapter does: `connect`, the command the hub runs to reach its worker, and
+//! `workers_running`. *Not built:* its workers dialing too. "Workers and providers" in `docs/principles/parts.md` has the
 //! rules a provider follows, and `docs/decisions/provider-adapters-over-stdio.md` why an adapter is a program of its
 //! own.
 
@@ -19,9 +21,12 @@ use async_trait::async_trait;
 use protocol::dialing::WorkerTicket;
 use protocol::model::InstanceId;
 pub use protocol::provider::{
-    Capabilities, ClonePersistence, Feature, Instance, InstanceState, OpenPreflight, Size, WorkerBinary, WorkerCommand,
+    Capabilities, ClonePersistence, Feature, Instance, InstanceState, OpenPreflight, Size, WorkerBinary,
     WorkerEnvironment, WorkerFilesystem,
 };
+
+/// The command the hub runs to reach one of the local provider's workers, whose stdin and stdout are its stream.
+pub type WorkerCommand = protocol::provider::Command;
 
 pub use error::ProviderError;
 
@@ -64,8 +69,16 @@ pub trait Provider: Send + Sync {
     /// Safe on an instance that doesn't exist.
     async fn destroy(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
     async fn list(&self) -> Result<Vec<Instance>, ProviderError>;
-    /// The command whose stdin and stdout are the worker's stream, which the hub runs. Can be asked again.
-    async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError>;
+    /// The command whose stdin and stdout are the worker's stream, which the hub runs. Can be asked again. Only the
+    /// local provider's, since every other provider's workers dial the hub.
+    async fn connect(&self, _instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError> {
+        Err(ProviderError::Unsupported("reach a worker but by its dialing the hub"))
+    }
+    /// The instances a worker serves, which may be one an earlier hub left, so a hub that starts carries on with it.
+    /// Only the local provider's, since the hub knows every other provider's workers by their dialing it.
+    async fn workers_running(&self) -> Result<Vec<InstanceId>, ProviderError> {
+        Err(ProviderError::Unsupported("say which workers run but by their dialing the hub"))
+    }
     /// Opens a stream to run preflight in the prospective launch environment.
     async fn open_preflight(&self, _launch: &OpenPreflight) -> Result<protocol::provider::Command, ProviderError> {
         Err(ProviderError::Unsupported("open preflight"))

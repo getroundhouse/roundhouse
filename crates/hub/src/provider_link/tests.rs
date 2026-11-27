@@ -104,17 +104,15 @@ async fn it_answers_what_the_adapters_provider_answers() {
 
     provider.create(&id, None, None).await.unwrap();
     provider.start(&id, &[], Some(&a_ticket())).await.unwrap();
-    let command = provider.connect(&id).await.unwrap();
-    assert_eq!(command, local(dir.path()).connect(&id).await.unwrap(), "the hub runs what the provider says");
+    let connected = provider.connect(&id).await;
+    assert!(matches!(connected, Err(ProviderError::Unsupported(_))), "its workers dial the hub: {connected:?}");
     let listed = provider.list().await.unwrap();
     assert_eq!(listed.iter().map(|i| i.instance_id.as_str()).collect::<Vec<_>>(), ["i"]);
     provider.end_worker(&id).await.unwrap();
     provider.destroy(&id).await.unwrap();
 
-    let Err(ProviderError::Adapter(e)) = provider.connect(&id).await else { panic!("it's gone") };
-    assert_eq!(e.code, ErrorCode::NotFound, "the adapter's code comes through: {e:?}");
     let Err(ProviderError::Adapter(e)) = provider.make_base_image(&id).await else { panic!("local makes none") };
-    assert_eq!(e.code, ErrorCode::Unsupported);
+    assert_eq!(e.code, ErrorCode::Unsupported, "the adapter's code comes through: {e:?}");
 }
 
 #[tokio::test]

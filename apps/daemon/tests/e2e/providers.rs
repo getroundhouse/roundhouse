@@ -1,11 +1,12 @@
-//! Providers other than the local one, which a hub reaches through their adapters.
+//! Providers other than the local one, which a hub reaches through their adapters, and whose workers dial it.
 
 use std::time::Duration;
 
 use hub::Timers;
+use protocol::event::EventBody;
 use protocol::model::WorkspaceStatus;
 
-use crate::support::{Stack, git, wait_until};
+use crate::support::{Stack, assistant_text, git, is_alive, read_all, started_pid, wait_for_turn_end, wait_until};
 
 /// The hub waits for an adapter's hello, which mustn't keep clients waiting for the hub. Its limit here is far longer
 /// than the test waits for the hub to serve, so a hub that waited for the hello first fails the wait, however fast or
@@ -127,4 +128,82 @@ fn a_hub_gives_an_adapter_the_worker_builds_its_providers_file_names() {
         sha256: "d9b8a662b18f6103eb2f4eae615868208ea5b44b00ab571fc8ad6582480597e2".into(),
     };
     assert_eq!(stack.workers_started(), [vec![given]]);
+}
+
+/// So a hub restarting for an update leaves an adapter's workers at work, as it does the local provider's: each dials
+/// the next hub, which admits it by its key and carries on with its agent.
+#[test]
+fn an_adapters_worker_dials_the_next_hub_after_a_restart_and_its_agent_carries_on() {
+    let mut stack = Stack::start();
+    stack.make_through_an_adapter();
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    assert_eq!(workspace.provider.as_str(), "recording");
+    let (go, finished) = (stack.path("go"), stack.path("finished"));
+    let script = format!("say:before; hang-until:{}; say:after; tool:touch {}", go.display(), finished.display());
+    client.session_prompt(&session.id, &script, None).unwrap();
+    wait_until("the agent to start its tool", || assistant_text(&read_all(&client, &session.id)) == "before");
+    let agent = started_pid(&read_all(&client, &session.id)).unwrap();
+    drop(client);
+
+    crate::carrying_on::restart(&mut stack);
+    assert!(is_alive(agent), "the restart left the agent running");
+    std::fs::write(&go, "").unwrap();
+    wait_until("the agent to run its last call", || finished.exists());
+    stack.start_hub();
+
+    let events = wait_for_turn_end(&stack.client(), &session.id, 1);
+    assert_eq!(assistant_text(&events), "beforeafter", "{events:#?}");
+    let started = events.iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count();
+    assert_eq!(started, 1, "the same agent carried on: {events:#?}");
+    assert_eq!(stack.tickets_given().len(), 1, "the worker dialed the next hub without a ticket of its own");
+}
+
+/// A ticket admits one worker, once, so a second worker given the ticket an adapter was given is refused, and says so
+/// as it exits, while the first serves on.
+#[test]
+fn a_ticket_an_adapter_was_given_admits_no_second_worker() {
+    let mut stack = Stack::start();
+    stack.make_through_an_adapter();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let (_, ticket) = stack.tickets_given().pop().unwrap();
+
+    let second = process::testing::WholeEnvironment::for_a_test(&stack.path("second-home"))
+        .command(env!("CARGO_BIN_EXE_roundhoused"))
+        .args(["worker", "--ticket", &ticket, "--workspaces-root"])
+        .arg(stack.path("second-workspaces"))
+        .arg("--state-dir")
+        .arg(stack.path("second-instance"))
+        .arg("--clones-dir")
+        .arg(stack.path("second-clones"))
+        .output()
+        .unwrap();
+    client.session_prompt(&session.id, "say:still here", None).unwrap();
+
+    assert!(!second.status.success(), "{second:?}");
+    let said = String::from_utf8_lossy(&second.stderr);
+    assert!(said.contains("the hub refused this worker"), "{said}");
+    assert_eq!(assistant_text(&wait_for_turn_end(&client, &session.id, 1)), "still here");
+}
+
+/// So a worker that dials its hub is sent the hub's tool servers as one the hub runs itself is, and its agent calls
+/// one with the person's key.
+#[test]
+fn an_adapters_worker_that_dials_is_sent_the_hubs_tool_servers() {
+    use crate::tool_servers::{CALL, KEY, Took, add, stand_in};
+
+    let (url, heard) = stand_in();
+    let mut stack = Stack::start();
+    stack.make_through_an_adapter();
+    let client = stack.client();
+    add(&client, url);
+    let (workspace, chat) = stack.workspace(&client);
+
+    let answered = crate::support::calls::run(&client, &chat.id, CALL, 1);
+
+    assert_eq!(workspace.provider.as_str(), "recording");
+    assert_eq!(answered, [("Found issue 7".to_string(), false)]);
+    let took = Took { method: "tools/call".into(), key: KEY.into(), path: "/mcp".into() };
+    assert_eq!(heard.try_iter().last(), Some(took), "it took the key from the worker");
 }

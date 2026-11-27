@@ -1,8 +1,10 @@
 use super::WorkerLinkId;
+use super::carrier::Carrier;
 use super::greeting::Followings;
 use super::{acks, reaching, reading};
 use crate::calls::{Calls, NotSent};
-use crate::child_process::{ChildProcess, Spawned};
+#[cfg(test)]
+use crate::child_process::ChildProcess;
 use crate::error::internal;
 use crate::hub::Hub;
 use crate::spans;
@@ -15,7 +17,7 @@ use protocol::worker::{
     AskAnswer, Reply, Request, RunningAgent, RunningAgents, Stop, WorkerCall, WorkerFrame, WorkerResponse,
 };
 use providers::Provider;
-use reaching::{Opening, reach};
+use reaching::{Opening, Reached, reach};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -36,8 +38,8 @@ pub(crate) struct WorkerLink {
     pub(super) closed: watch::Sender<bool>,
     /// Something has wanted it since it was found running, so it's kept running.
     pub(super) kept: AtomicBool,
-    /// The command the hub runs to reach the worker.
-    pub(super) process: ChildProcess,
+    /// The command the hub runs to reach the worker, or the connection it dialed.
+    pub(super) carrier: Carrier,
     /// What the worker has sent, but for its replies, while it's held, which [`WorkerLink::release`] ends. `None` once
     /// it has been, or if it never was. Held while each frame is passed on, so they go in the order they came.
     pub(super) held: AsyncMutex<Option<Vec<WorkerFrame>>>,
@@ -75,13 +77,13 @@ impl WorkerLink {
         log: &std::path::Path,
         opening: Opening,
     ) -> Result<Arc<WorkerLink>, ApiError> {
-        let Spawned { process, reader, writer } = reach(&hub, provider.as_ref(), &instance_id, log, opening).await?;
+        let Reached { carrier, reader, writer } = reach(&hub, provider.as_ref(), &instance_id, log, opening).await?;
         let link = Arc::new(WorkerLink {
             id: WorkerLinkId::next(),
             calls: Calls::new(writer),
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
-            process,
+            carrier,
             held: AsyncMutex::new((opening == Opening::LeftRunning).then(Vec::new)),
             acks: Acks::default(),
             left: AtomicBool::new(false),
@@ -179,7 +181,7 @@ impl WorkerLink {
             calls,
             closed: watch::channel(true).0,
             kept: AtomicBool::new(false),
-            process: ChildProcess::already_exited(),
+            carrier: Carrier::Command(ChildProcess::already_exited()),
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),
@@ -290,13 +292,13 @@ impl WorkerLink {
     /// does once its agents have stopped, and ends it if it hasn't.
     pub(crate) async fn stop(&self, grace: Duration) {
         self.close().await;
-        self.process.end(grace).await;
+        self.carrier.end(grace).await;
     }
 
     /// Closes its stdin and ends the worker's command at once. Its provider ends the worker.
     pub(crate) fn kill(&self) {
         self.calls.close();
-        self.process.kill();
+        self.carrier.kill();
     }
 
     /// The agents the worker is running.

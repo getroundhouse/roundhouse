@@ -7,7 +7,6 @@ use protocol::model::InstanceId;
 use tokio::sync::watch;
 
 /// A worker the hub admitted, with the stream it said so on, which carries the worker protocol from then on.
-#[expect(dead_code, reason = "the hub reaches a dialed worker through these in the next PR of #2478's stack")]
 pub(crate) struct Dialed {
     pub(crate) instance_id: InstanceId,
     pub(crate) connection: Connection,
@@ -37,7 +36,9 @@ impl Arrivals {
         let mut arrived = self.arrived.subscribe();
         let waiting = async {
             loop {
-                if let Some(dialed) = self.waiting.lock().remove(instance_id) {
+                // One whose connection has closed since, such as a worker the hub has ended, is no use.
+                let dialed = self.waiting.lock().remove(instance_id);
+                if let Some(dialed) = dialed.filter(|dialed| dialed.connection.close_reason().is_none()) {
                     return Some(dialed);
                 }
                 arrived.changed().await.ok()?;

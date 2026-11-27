@@ -62,8 +62,7 @@ impl Hub {
 
     /// A ticket for the instance's next worker, which its provider's `start` gives a worker it starts there.
     pub(crate) async fn worker_ticket(&self, id: &InstanceId) -> Result<WorkerTicket, ApiError> {
-        // Boxed, since every future that can start a worker holds it, and binding an endpoint is a large one.
-        Box::pin(self.dial.ticket(id)).await
+        self.dial.ticket(id).await
     }
 
     /// Destroys an instance the hub recorded. It's marked as being destroyed first, so a destroy cut short is finished
