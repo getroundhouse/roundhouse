@@ -52,7 +52,8 @@ nav a {
   color: var(--text);
   text-decoration: none;
 }
-nav a:hover { background: var(--row_hover); color: var(--text); }
+/* Washed as the app washes a row: the text's colour at XXSoft, 6%, under the pointer, and at XSoft, 9%, chosen. */
+nav a:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
 nav .count { color: var(--text_faint); font-size: 12px; }
 main { padding: 8px 40px 128px; max-width: 1280px; }
 .intro { color: var(--text_muted); max-width: 848px; }
@@ -90,7 +91,7 @@ tr.group th {
   text-align: left;
 }
 tr.name td { padding: 8px 12px; border-bottom: 1px solid var(--edge); vertical-align: middle; }
-tr.name:target td { background: var(--row_hover); }
+tr.name:target td { background: color-mix(in srgb, var(--text) 9%, transparent); }
 td.picture { width: 1%; padding-left: 0; }
 .cut { display: block; background-repeat: no-repeat; }
 .no-picture { color: var(--text_faint); font-size: 12px; white-space: nowrap; }

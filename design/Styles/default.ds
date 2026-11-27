@@ -35,13 +35,12 @@ color.surface.pane: grey.hint
 color.surface.sidebar: grey.faint
 color.surface.inset: grey.soft
 color.surface.raised: grey.firm
+color.surface.inline_code: grey.bold
 color.surface.prompt: copper.intense
 color.surface.icon_tile_top: #211d1b
 
 // Under the pointer, pressed or chosen.
-color.pointer.row_hover: grey.soft
 color.pointer.line_hover: grey.subtle
-color.pointer.menu_hover: grey.bold
 color.pointer.raised_hover: grey.strong
 color.pointer.raised_pressed: grey.intense
 

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use gpui_kit::TestAppContext;
 use gpui_kit::component::{ActiveTheme as _, try_parse_color};
 
-use super::{Colors, config, kit_colors};
+use super::{Colors, UNDER_POINTER, config, hex, kit_colors};
 use crate::colors::colors;
 use crate::shape::Corner;
 
@@ -47,7 +47,8 @@ fn the_kits_theme_draws_with_the_apps_colours(cx: &mut TestAppContext) {
         assert_eq!(theme.border, colors.edge);
         assert_eq!(theme.warning, colors.warning);
         assert_eq!(theme.popover, colors.raised);
-        assert_eq!(theme.list_hover, colors.row_hover);
+        // The kit's list takes the wash as a hex, which holds its strength to the nearest byte.
+        assert_eq!(hex(theme.list_hover), hex(UNDER_POINTER.of(colors.text)));
         assert_eq!(theme.ring, colors.brand);
         assert_eq!(theme.selection, colors.selection());
         assert_eq!(theme.radius, Corner::Control.radius());

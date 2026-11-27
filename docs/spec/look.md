@@ -59,12 +59,11 @@ Each colour means one thing.
 | `sidebar` | `#17120f` | The sidebars |
 | `inset` | `#201b18` | What's set into a surface: the composer, a prompt waiting in the queue, a call's output, a code block |
 | `raised` | `#26211e` | Anything raised, whether it opens over the rest, such as a card, a menu, a tooltip or what a hover shows, or sits in place, such as a pill, a file's header or the update card |
+| `inline_code` | `#2a2421` | Behind code within a line of text, which the kit draws as its accent |
 | `prompt` | `#36251a` | A prompt's bubble |
 | `icon_tile_top` | `#211d1b` | The top of the app icon's tile, the icon's own colour rather than a stop on the ramp, since it's there to make the icon look right |
 | **Under the pointer, pressed or chosen** | | |
-| `row_hover` | `#201b18` | The kit's list's row under the pointer. A list's rows, such as Home's, a file's or a question's option, were once this, and are now washed as a borderless button is, as `components.md` says |
 | `line_hover` | `#1a1512` | A call's line under the pointer, and the compaction's |
-| `menu_hover` | `#2a2421` | Behind code within a line of text, which the kit draws in its accent's grey. A menu's row and a page in Settings' sidebar were once this, and are now washed as a borderless button is, as `components.md` says |
 | `raised_hover` | `#2d2724` | Something raised, under the pointer |
 | `raised_pressed` | `#332d2a` | Something raised, pressed, such as the hub switcher |
 | **Edges and the shadow** | | |

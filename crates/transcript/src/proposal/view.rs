@@ -9,7 +9,6 @@ use gpui_kit::{
     ParentElement as _, Render, ScrollHandle, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _,
     Window, div, point, px,
 };
-use look::{Hand as _, Shaped as _, Typeset as _};
 use protocol::model::Proposal;
 
 use super::answering::{Answering, Choosing, ProposalEvent};
@@ -28,6 +27,9 @@ use client_core::{Hub, RecordsFeed};
 pub const ICON: gpui_kit::assets::IconName = gpui_kit::assets::IconName::Split;
 /// How wide the outline is, which is as wide as an option's label needs to be read at a glance.
 const OUTLINE_WIDTH: f32 = 220.;
+
+/// How much further in a part under its question is set than the question, so it reads as the question's.
+const UNDER: look::Space = look::Space::Medium;
 /// How wide the page's column is at most, as the chat's is, so its lines are as easy to read.
 pub(super) const COLUMN: f32 = 848.;
 
@@ -144,26 +146,18 @@ impl ProposalView {
         let at_top = self.scroll.top_item();
         let rows = parts.iter().enumerate().map(|(ix, part)| {
             let here = ix == at_top;
-            div()
-                .id(("proposal-outline", ix))
-                .w_full()
-                .h(look::RowSize::Regular.height())
-                .flex()
-                .items_center()
-                .px(look::Space::Small)
-                .when(part.under, |row| row.pl(look::Space::XLarge))
-                .corners(look::Corner::Control)
+            let label = div()
+                .min_w_0()
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
-                .typeset(look::Type::Body)
                 .text_color(if here { colors.text } else { colors.text_muted })
-                .when(here, |row| row.bg(colors.menu_hover))
-                .hover(|row| row.bg(colors.menu_hover))
-                .hand()
+                .child(part.label.clone());
+            look::list_row(("proposal-outline", ix), look::RowSize::Regular)
+                .chosen(here)
+                .when(part.under, |row| row.indent(UNDER.size()))
                 .on_click(cx.listener(move |this, _, _, cx| this.go_to_part(ix, cx)))
-                .child(part.label.clone())
-                .test_support()
+                .child(label)
         });
         v_flex()
             .id("proposal-outline")
