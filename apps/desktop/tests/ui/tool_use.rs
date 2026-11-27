@@ -4,7 +4,6 @@
 
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{command, first_turn, user_prompt};
-use client_core::records::HubRecords;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ClipboardItem, TestAppContext, point, px};
 use protocol::capability::approvals::{Asks, Decision};
@@ -14,7 +13,7 @@ use protocol::event::EventBody;
 use protocol::fixtures::{
     ApprovalRequest, allow_once, approval_request, deny, tool_server, typed_command, typed_request,
 };
-use protocol::model::{Records, SessionStatus, ToolServer, ToolServerName};
+use protocol::model::{Record, RecordKey, Rev, SessionStatus, ToolServer, ToolServerName};
 use serde_json::json;
 
 use crate::support::{FakeHub, Stack, Ui, id, one_chat, open_on_the_chat};
@@ -146,6 +145,7 @@ fn a_request_to_use_a_servers_tool_names_it_as_the_person_does_and_follows_the_h
     let (mut world, chat) = one_chat(SessionStatus::WaitingApproval, events);
     let named = |id: &str, name: &str| ToolServer { name: ToolServerName::stored(name.into()), ..tool_server(id) };
     world.tool_servers.push(named("github", "GitHub (Northwind)"));
+    let (added, removed) = (world.after(), Rev::new(world.after().get() + 1));
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
 
     let whole = "{\n  \"title\": \"Signals should say why a train stopped\"\n}";
@@ -156,14 +156,19 @@ fn a_request_to_use_a_servers_tool_names_it_as_the_person_does_and_follows_the_h
     let transcript = ui.transcript().unwrap();
     let panel = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.question().unwrap().entity_id());
     let before = panel(&ui);
-    let mut follow = |tool_servers: Vec<ToolServer>, shown: &str| {
-        let mut held = HubRecords::default();
-        held.apply_list(Records { tool_servers, ..Records::default() });
-        ui.cx.update_entity(&transcript, |t, cx| t.records_changed(&held.snapshot(), cx));
-        assert!(ui.shows_label("question-header", shown), "{shown}");
+    // The fake hub's servers never change, so client-core is told of each change as the hub's feed would tell it, and
+    // the window hands the transcript the servers as it does in the app.
+    let feed = ui.view().feed().unwrap();
+    let gone = |id: &str, rev| feed.take_removal(RecordKey::ToolServer { id: id.into() }, rev);
+    let mut follow = |shown: &str| {
+        let found = |ui: &mut Ui<'_>| format!("the header says {:?}", ui.labels_in("question-header"));
+        ui.wait_saying(shown, |ui| ui.shows_label("question-header", shown), found);
     };
-    follow(vec![named("github-2", "GitHub, Northwind")], "Create issue · GitHub, Northwind");
-    follow(Vec::new(), "Create issue · GitHub_Northwind");
+    gone("github", added);
+    feed.take_record(Record::ToolServer(ToolServer { rev: added, ..named("github-2", "GitHub, Northwind") }));
+    follow("Create issue · GitHub, Northwind");
+    gone("github-2", removed);
+    follow("Create issue · GitHub_Northwind");
     assert_eq!(panel(&ui), before);
 }
 

@@ -64,6 +64,13 @@ impl RecordsFeed {
         self.follow.update(|records| records.apply_record(record));
     }
 
+    /// Takes in that the record `record` is gone as of `rev`, as though the hub had told of it, as
+    /// [`RecordsFeed::take_record`] takes in a record.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn take_removal(&self, record: protocol::model::RecordKey, rev: protocol::model::Rev) {
+        self.follow.update(|records| records.apply_notice(protocol::client::HubNotice::Removed { record, rev }));
+    }
+
     /// Takes in a copy of `observation` as though the hub had told of it, as [`RecordsFeed::take_record`] does a record.
     #[cfg(any(test, feature = "testing"))]
     pub fn take_observation(&self, observation: protocol::model::Observation) {

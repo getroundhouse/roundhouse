@@ -88,6 +88,19 @@ impl Ui<'_> {
             .unwrap()
     }
 
+    /// The labels the last frame gave the element with ID `id` and what's inside it, in the order the window lists
+    /// them, for a failure to say what [`Ui::shows_label`] found instead.
+    pub(crate) fn labels_in(&mut self, id: &str) -> Vec<String> {
+        let element = ElementId::Name(id.to_string().into());
+        self.frame();
+        self.cx
+            .update_window(self.handle, |_, window, _| {
+                let inside = window.elements().into_iter().filter(|found| found.path().contains(&element));
+                inside.filter_map(|found| found.label().map(str::to_owned)).collect()
+            })
+            .unwrap()
+    }
+
     /// Each element drawn with this label, in the order it was drawn.
     pub(crate) fn labelled(&mut self, label: &str) -> Vec<ElementSnapshot> {
         self.frame();
