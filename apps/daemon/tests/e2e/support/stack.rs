@@ -2,9 +2,10 @@
 
 use super::examples;
 use super::processes::Hub;
-use client_core::{Connection, OnSocket, Subscription, SubscriptionItem};
+use client_core::{Connection, OnSocket, SubscriptionItem};
 use examples::fake_agent;
 use hub::Timers;
+#[cfg(unix)]
 use local_hub::Daemon;
 use process::testing::WholeEnvironment;
 pub(crate) use process::testing::git;
@@ -14,11 +15,10 @@ use protocol::client::listed::{Listed, SessionRecords};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{AgentKind, Seq, Session, SessionId, SessionStatus, Workspace, WorkspaceId};
 use protocol::paths::Paths;
-use protocol::tail::Tail;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tempfile::TempDir;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
@@ -49,6 +49,7 @@ impl Stack {
 
     /// With its hub's data directory and database left for the hub to make, as a hub started by hand on a machine that
     /// has never run one makes them, for a test of what it makes.
+    #[cfg(unix)]
     pub(crate) fn start_from_nothing() -> Stack {
         let mut stack = Stack::unstarted(Vec::new());
         stack.start_hub();
@@ -75,8 +76,9 @@ impl Stack {
         self.path("repo")
     }
 
+    /// The hub's socket, or on Windows its pipe.
     pub(crate) fn socket(&self) -> PathBuf {
-        self.path("home/hub.sock")
+        self.paths().socket
     }
 
     /// Where a client looks for this stack's hub, and starts one if there's none.
@@ -107,6 +109,7 @@ impl Stack {
 
     /// The daemon at `path`, for a client to start a hub from, which runs in the stack's environment as the stack's
     /// own hubs do.
+    #[cfg(unix)]
     pub(crate) fn daemon(&self, path: impl Into<PathBuf>) -> Daemon {
         Daemon::in_place(path).in_environment(self.env.vars())
     }
@@ -293,6 +296,7 @@ pub(crate) fn started_pid(events: &[SessionEvent]) -> Option<u32> {
     })
 }
 
+#[cfg(unix)]
 pub(crate) fn latest_started_pid(events: &[SessionEvent]) -> Option<u32> {
     events.iter().rev().find_map(|e| match &e.body {
         EventBody::AgentStarted { pid, .. } => Some(*pid),
@@ -318,50 +322,6 @@ pub(crate) fn assistant_text(events: &[SessionEvent]) -> String {
         }
     }
     text
-}
-
-/// What a client would hold after reading a subscription: its events, and its streaming tail.
-#[derive(Default)]
-pub(crate) struct Follower {
-    pub(crate) events: Vec<SessionEvent>,
-    pub(crate) tail: Tail,
-}
-
-impl Follower {
-    pub(crate) fn apply(&mut self, item: SubscriptionItem) {
-        match item {
-            SubscriptionItem::Event(event) => {
-                self.tail.on_event(event.seq, event.run, &event.body);
-                self.events.push(*event);
-            }
-            SubscriptionItem::Tail(tail) => self.tail = tail,
-            SubscriptionItem::Delta(delta) => self.tail.apply(&delta),
-            SubscriptionItem::Notice(_)
-            | SubscriptionItem::Listed(_)
-            | SubscriptionItem::Terminal(_)
-            | SubscriptionItem::TerminalPicture(_) => {}
-        }
-    }
-
-    pub(crate) fn drain_until(
-        &mut self,
-        subscription: &Subscription,
-        what: &str,
-        mut done: impl FnMut(&Follower) -> bool,
-    ) {
-        let deadline = Instant::now() + TIMEOUT;
-        while !done(self) {
-            let wait = deadline.saturating_duration_since(Instant::now());
-            match subscription.items.recv_timeout(wait) {
-                Ok(item) => self.apply(item),
-                Err(e) => panic!("timed out waiting for {what}: {e}"),
-            }
-        }
-    }
-
-    pub(crate) fn tail_text(&self) -> String {
-        self.tail.messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect()
-    }
 }
 
 /// Commits Conductor-style settings to the test repository.

@@ -1,27 +1,26 @@
-//! A worker binary that misbehaves. A script stands in for it, which can't dial, so these hubs reach their local
-//! workers on their stdin and stdout, as a hub on Windows does.
+//! A worker binary that misbehaves once its hub has admitted it. `misbehaving_worker` stands in for it, as the stack's
+//! `MISBEHAVING_WORKER` says.
 
 #![cfg(test)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Duration;
 
 use client_core::Connection;
 use hub::Timers;
-use protocol::testing::ENV_TEST_WORKERS_ON_STDIO;
+use process::ProcessRecord;
 
-use crate::support::{Stack, TIMEOUT, assistant_text, patient_with_workers, signal, wait_for_turn_end, wait_until};
+use crate::support::{Stack, TIMEOUT, assistant_text, patient_with_workers, wait_for_turn_end, wait_until};
 
-/// The stack's hubs reach their workers on their stdin and stdout, as [`ENV_TEST_WORKERS_ON_STDIO`] says.
-fn on_stdio() -> (&'static str, String) {
-    (ENV_TEST_WORKERS_ON_STDIO, "1".to_string())
+/// The stack's workers, once a test has put the stand-in in place, misbehave as `how` says.
+fn misbehaving(how: &str) -> (&'static str, String) {
+    ("MISBEHAVING_WORKER", how.to_string())
 }
 
 /// Runs the hub from a copy of its binary, so a test can replace what it starts next.
 fn hub_from_copy(stack: &mut Stack) -> PathBuf {
     stack.kill_hub();
-    let exe = stack.path("roundhoused-copy");
+    let exe = stack.path(&format!("roundhoused-copy{}", std::env::consts::EXE_SUFFIX));
     process::testing::install_program(crate::support::daemon(), &exe).unwrap();
     stack.hub = Some(stack.command_at(&exe).spawn().unwrap().into());
     wait_until("the hub", || Connection::connect(&stack.socket(), "test").is_ok());
@@ -32,21 +31,23 @@ fn restore_real_worker(exe: &Path) {
     process::testing::install_program(crate::support::daemon(), exe).unwrap();
 }
 
-fn replace_with_script(exe: &Path, body: &str) {
-    process::testing::write_program(exe, format!("#!/bin/sh\n{body}\n")).unwrap();
+fn replace_with_misbehaving(exe: &Path) {
+    process::testing::install_program(crate::support::misbehaving_worker(), exe).unwrap();
 }
 
-/// What the hub runs to reach each of its workers, which is a worker whose binary a test replaced.
-fn children_of(parent: u32) -> Vec<u32> {
-    let out = Command::new("pgrep").args(["-P", &parent.to_string()]).output().unwrap();
-    String::from_utf8_lossy(&out.stdout).split_whitespace().map(|pid| pid.parse().unwrap()).collect()
+/// The worker running on each of the stack's instances, as it recorded itself once it had claimed it.
+fn workers(stack: &Stack) -> Vec<ProcessRecord> {
+    let instances = std::fs::read_dir(stack.paths().instances_dir).unwrap().flatten();
+    let recorded = instances
+        .filter_map(|instance| ProcessRecord::read(&instance.path().join(protocol::paths::WORKER_RECORD_FILE)));
+    recorded.filter(ProcessRecord::is_running).collect()
 }
 
-/// Kills what the hub runs to reach each of its workers, and waits until the hub has noticed. A worker it reached
-/// that way stops too, since this hub didn't ask it to keep running without one.
+/// Kills each of the stack's workers, and waits until the hub has noticed, which it does once a worker's connection
+/// has gone quiet.
 fn kill_workers(stack: &Stack, client: &Connection) {
-    for pid in children_of(stack.hub_pid()) {
-        signal(pid, libc::SIGKILL);
+    for worker in workers(stack) {
+        process::signal_group(worker.pid, process::Signal::Kill);
     }
     wait_until("the hub to notice", || client.hub_status().unwrap().workers == 0);
 }
@@ -63,18 +64,13 @@ fn answer<T: Send + 'static>(call: impl FnOnce() -> T + Send + 'static) -> Optio
 
 #[test]
 fn a_worker_speaking_another_version_only_blocks_until_it_is_replaced() {
-    let mut stack = Stack::start_with(vec![on_stdio()]);
+    let mut stack = Stack::start_with(vec![misbehaving("another-version")]);
     let exe = hub_from_copy(&mut stack);
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
     client.workspace_status(&workspace.id).unwrap();
 
-    replace_with_script(
-        &exe,
-        r#"read line
-printf '%s\n' '{"frame":"reply","id":1,"error":{"code":"version_mismatch","message":"stub speaks another version"}}'
-cat > /dev/null"#,
-    );
+    replace_with_misbehaving(&exe);
     kill_workers(&stack, &client);
 
     let err = client.workspace_status(&workspace.id).unwrap_err();
@@ -93,7 +89,7 @@ cat > /dev/null"#,
 #[test]
 fn a_worker_that_never_answers_holds_up_neither_the_hub_nor_another_workspace() {
     let patient = Timers { hello_within: Duration::from_mins(10), ..patient_with_workers() };
-    let mut stack = Stack::start_with(vec![patient.env(), on_stdio()]);
+    let mut stack = Stack::start_with(vec![patient.env(), misbehaving("silent")]);
     let exe = hub_from_copy(&mut stack);
     let client = stack.client();
     let (hung, _) = stack.workspace(&client);
@@ -103,15 +99,13 @@ fn a_worker_that_never_answers_holds_up_neither_the_hub_nor_another_workspace() 
     client.workspace_status(&fine.id).unwrap();
 
     // The next workers to start never say hello.
-    replace_with_script(&exe, "exec sleep 1000");
+    replace_with_misbehaving(&exe);
     for id in [hung.id.clone(), also_hung.id.clone()] {
         let socket = stack.socket();
         std::thread::spawn(move || Connection::connect(&socket, "test").unwrap().workspace_status(&id).map(drop));
     }
     // Both starts are under way at once, so neither waits for the other.
-    wait_until("both of them to be starting a worker, beside the one that's fine", || {
-        children_of(stack.hub_pid()).len() == 3
-    });
+    wait_until("both of them to be starting a worker, beside the one that's fine", || workers(&stack).len() == 3);
 
     let socket = stack.socket();
     let status = answer(move || Connection::connect(&socket, "test").unwrap().hub_status().unwrap());
@@ -128,21 +122,22 @@ fn a_worker_that_never_answers_its_hello_is_given_up_on_and_ended() {
     // Long enough for every real worker this test starts, the last of them the first run of a binary just copied into
     // place, which macOS checks first.
     let hello = Duration::from_secs(3);
-    let mut stack = Stack::start_with(vec![Timers { hello_within: hello, ..patient_with_workers() }.env(), on_stdio()]);
+    let mut stack =
+        Stack::start_with(vec![Timers { hello_within: hello, ..patient_with_workers() }.env(), misbehaving("silent")]);
     let exe = hub_from_copy(&mut stack);
     let client = stack.client();
     let (hung, _) = stack.workspace(&client);
     kill_workers(&stack, &client);
 
     // The next worker to start never says hello.
-    replace_with_script(&exe, "exec sleep 1000");
+    replace_with_misbehaving(&exe);
     let (socket, hung_id) = (stack.socket(), hung.id.clone());
     let status = answer(move || Connection::connect(&socket, "test").unwrap().workspace_status(&hung_id).map(drop));
 
     let err = status.expect("its start never gave up on it").unwrap_err();
     assert!(err.to_string().contains("didn't answer within"), "{err}");
     // It's ended as its start gives up, long before the hub would end it as a worker that didn't stop.
-    wait_until("the worker that never answered to be gone", || children_of(stack.hub_pid()).is_empty());
+    wait_until("the worker that never answered to be gone", || workers(&stack).is_empty());
 
     restore_real_worker(&exe);
     client.workspace_status(&hung.id).unwrap();

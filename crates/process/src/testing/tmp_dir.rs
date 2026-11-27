@@ -1,7 +1,7 @@
-//! A test's directory in `/tmp`, and removing those that tests which died left there.
+//! A test's directory in a temporary folder, and removing those that tests which died left there.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 
@@ -10,25 +10,31 @@ use crate::ProcessRecord;
 /// The file in a test's directory that says which test process made it.
 const MADE_BY: &str = "made-by";
 
-/// A new directory in `/tmp`, named from `prefix`, for a test whose hub's socket is in it, since a path under Cargo's
-/// target directory can be longer than a socket's path can be. It says which process made it, so once that has gone
-/// without removing it, as a test that's killed, interrupted or timed out goes, the next to make one from `prefix`
-/// removes it. One that doesn't say, such as from a build before this, is left alone, since it can be a test's that's
-/// still running, in another checkout.
+/// A new directory in [`parent`], named from `prefix`, for a test whose hub's socket is in it. It says which process
+/// made it, so once that has gone without removing it, as a test that's killed, interrupted or timed out goes, the next
+/// to make one from `prefix` removes it. One that doesn't say, such as from a build before this, is left alone, since
+/// it can be a test's that's still running, in another checkout.
 ///
 /// # Panics
 ///
 /// If it can't be made, which a test can't go on without.
 pub fn tmp_dir(prefix: &str) -> TempDir {
-    let tmp = Path::new("/tmp");
-    remove_those_of_tests_gone(tmp, prefix);
+    let tmp = parent();
+    remove_those_of_tests_gone(&tmp, prefix);
     let dir = tempfile::Builder::new()
         .prefix(prefix)
-        .tempdir_in(tmp)
+        .tempdir_in(&tmp)
         .unwrap_or_else(|e| panic!("making a {prefix} directory: {e}"));
     ProcessRecord::write(&dir.path().join(MADE_BY), std::process::id())
         .unwrap_or_else(|e| panic!("saying which process made {}: {e}", dir.path().display()));
     dir
+}
+
+/// Where a test's directory goes: on Unix `/tmp`, since a path under Cargo's target directory, or in the temporary
+/// folder a Mac gives each user, can be longer than a socket's path can be, and elsewhere the temporary folder, as on
+/// Windows, where a hub's pipe is a name rather than a path.
+fn parent() -> PathBuf {
+    if cfg!(unix) { PathBuf::from("/tmp") } else { std::env::temp_dir() }
 }
 
 /// Removes each directory in `parent` named from `prefix` whose process has gone. One another test is removing at the

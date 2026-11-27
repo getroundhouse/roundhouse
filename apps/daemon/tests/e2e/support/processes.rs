@@ -1,26 +1,45 @@
 //! Signalling the processes a stack runs, asking about them, and stopping its hub.
 
 use std::ops::{Deref, DerefMut};
-use std::process::{Child, Command};
+use std::path::Path;
+use std::process::Child;
+#[cfg(unix)]
+use std::process::Command;
 use std::time::Duration;
 
 use super::Stack;
 
 /// Returns what `kill` did. Signal 0 only checks that the process exists.
+#[cfg(unix)]
 pub(crate) fn signal(pid: u32, signal: i32) -> i32 {
     // SAFETY: `kill` takes any PID and signal, and touches no memory of ours.
     unsafe { libc::kill(i32::try_from(pid).unwrap(), signal) }
 }
 
+#[cfg(unix)]
 pub(crate) fn terminate(pid: u32) {
     signal(pid, libc::SIGTERM);
 }
 
 pub(crate) use process::testing::is_running as is_alive;
 
+#[cfg(unix)]
 pub(crate) fn parent_of(pid: u32) -> u32 {
     let out = Command::new("ps").args(["-o", "ppid=", "-p", &pid.to_string()]).output().unwrap();
     String::from_utf8_lossy(&out.stdout).trim().parse().unwrap()
+}
+
+/// Asks `hub`, at `socket`, to stop: with SIGTERM, as a service manager asks it.
+#[cfg(unix)]
+fn ask_to_stop(hub: &Hub, _socket: &Path) {
+    terminate(hub.id());
+}
+
+/// Asks `hub`, at `socket`, to stop: with `hub stop` on its pipe, since Windows sends Ctrl-Break, its nearest to
+/// SIGTERM, only to a process on the sender's own console.
+#[cfg(windows)]
+fn ask_to_stop(_hub: &Hub, socket: &Path) {
+    let _ = client_core::stop_hub(socket);
 }
 
 /// A hub a stack started. Dropped while it's still running, it's killed, and waited for, so it's never left behind,
@@ -78,11 +97,11 @@ impl Stack {
         self.kill_what_hubs_left_running();
     }
 
-    /// With SIGTERM, which stops its workers and their agents, so the next hub starts the next agent afresh, and waits
-    /// for it to exit, or kills it, as dropping it does, if it takes too long.
+    /// Asks it to stop, which stops its workers and their agents, so the next hub starts the next agent afresh, and
+    /// waits for it to exit, or kills it, as dropping it does, if it takes too long.
     pub(crate) fn stop_hub(&mut self) {
         let Some(mut hub) = self.hub.take() else { return };
-        terminate(hub.id());
+        ask_to_stop(&hub, &self.socket());
         waiting::thread::up_to(Duration::from_secs(10), || !matches!(hub.try_wait(), Ok(None)));
     }
 

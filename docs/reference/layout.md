@@ -39,8 +39,7 @@ A map for finding your way before reading code: the parts and what connects them
                               ▼
  WORKERS  ──▶ worker protocol: JSON lines over a QUIC stream the worker dials the hub on,
               with its ticket, through iroh, so no adapter sits in a worker's stream. The
-              local provider's dial an endpoint on loopback alone, and on Windows are
-              over the stdio of a command the hub runs, for now
+              local provider's dial an endpoint on loopback alone
  ┌──────────────────────────────────────────────────────────────────────┐
  │ `roundhoused worker`, one per workspace                              │
  │ git and the worktree, setup and archive scripts, files and diffs     │

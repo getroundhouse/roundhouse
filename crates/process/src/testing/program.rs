@@ -39,11 +39,25 @@ pub fn install_program(source: &Path, path: &Path) -> io::Result<()> {
 
 /// Copies the program at `source` to `path`, replacing any there, which can be run once this returns. A child Windows
 /// starts inherits only what it's handed, so nothing holds the copy once it's written. What was at `path` is removed
-/// first, rather than written over, since a process may be running it.
+/// first, rather than written over, since a process may be running it, and one Windows won't remove while it runs is
+/// renamed aside, which Windows allows.
 #[cfg(windows)]
 pub fn install_program(source: &Path, path: &Path) -> io::Result<()> {
-    removed(path)?;
+    if removed(path).is_err() {
+        fs::rename(path, aside(path))?;
+    }
     fs::copy(source, path).map(drop)
+}
+
+/// A name beside `path` that nothing has yet.
+#[cfg(windows)]
+fn aside(path: &Path) -> std::path::PathBuf {
+    let named = |n: u32| {
+        let mut name = OsString::from(path.as_os_str());
+        name.push(format!(".replaced-{n}"));
+        std::path::PathBuf::from(name)
+    };
+    (0..u32::MAX).map(named).find(|aside| !aside.exists()).unwrap_or_default()
 }
 
 /// Removes the file at `path`, if there's one.

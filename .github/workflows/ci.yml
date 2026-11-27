@@ -305,7 +305,7 @@ jobs:
             target/gpui-kit/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
-  # Holds a break in the worker protocol back until each platform whose apps step has published a release with the last
+  # Holds a break in the worker protocol back until each platform has published a release with the last
   # one, so an app with that one's workers at work has a release to step to, as "A break in the worker protocol" in
   # docs/standards/merging.md says. The one check that reads something from outside the repo, the published feeds, so it
   # runs only for a change to what it reads. A PR's run that passed holds for the queue too, since a feed only gets

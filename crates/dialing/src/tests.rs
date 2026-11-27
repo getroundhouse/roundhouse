@@ -60,3 +60,15 @@ async fn a_worker_dials_the_address_a_ticket_names_and_the_hub_sees_its_key() {
     assert_eq!(remote_key(&dialed.unwrap()), hub.address().await.key);
     assert_eq!(remote_key(&accepted), worker.key());
 }
+
+/// A worker whose hub is on its own machine, on loopback, stays off the network too, so no firewall asks about it.
+#[tokio::test]
+async fn a_worker_whose_hub_is_on_loopback_binds_only_to_loopback() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = HubEndpoint::bind(&dir.path().join("endpoint.json"), Relays::None).await.unwrap();
+
+    let worker = WorkerEndpoint::bind(&hub.address().await, None, None).await.unwrap();
+
+    let bound = worker.endpoint.bound_sockets();
+    assert!(!bound.is_empty() && bound.iter().all(|socket| socket.ip().is_loopback()), "{bound:?}");
+}

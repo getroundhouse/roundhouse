@@ -33,7 +33,9 @@ pub fn signal_group(leader: u32, signal: Signal) {
 /// On Unix it starts in a session of its own, which it leads, so nothing sent to this process's group or its
 /// terminal's reaches it, and it leads a process group of its own too, as [`own_group`] would make it. On Windows it
 /// gets a console of its own, with no window: it needs one, or everything it starts would open a console window each,
-/// where this way they share its hidden one. And there [`keep_stdio_from_children`](crate::keep_stdio_from_children)
+/// where this way they share its hidden one. It leaves the job object this process is in, if the job lets it, so
+/// whatever ends that job's processes, such as an SSH session that closes, doesn't end it. A job that doesn't let it
+/// leave keeps it, as it keeps this process. And there [`keep_stdio_from_children`](crate::keep_stdio_from_children)
 /// runs first, or it would hold this process's own input and output for as long as it runs. That keeps them from
 /// everything this process starts from then on, not only from `command`.
 pub fn detach(command: &mut Command) {

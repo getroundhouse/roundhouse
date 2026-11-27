@@ -29,7 +29,6 @@ pub(crate) enum Ended {
 
 /// A connection the hub has stopped sending on, which can still send the hub whatever is on its way.
 pub(crate) struct Closing {
-    #[cfg_attr(not(unix), expect(dead_code, reason = "only a worker that dials carries on once its hub has gone"))]
     pub(crate) ended: Ended,
     frames: mpsc::Sender<Outgoing>,
     writer: JoinHandle<()>,
@@ -44,7 +43,6 @@ impl Closing {
     }
 
     /// Without what hasn't gone yet. The outbox keeps that for the next hub, if this one asked.
-    #[cfg(unix)]
     pub(crate) fn abandon(self) {
         self.writer.abort();
     }

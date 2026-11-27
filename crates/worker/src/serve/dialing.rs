@@ -1,7 +1,6 @@
 //! A worker that dials its hub, rather than being reached by it, and dials again whenever the connection drops, so it
 //! outlives a hub that restarts, as `docs/decisions/workers-dial-the-hub.md` says. How it dials, over iroh with its
-//! ticket, is its caller's, so this crate needs no transport of its own. Only on Unix, since a worker that outlives
-//! its hub is built only there.
+//! ticket, is its caller's, so this crate needs no transport of its own.
 
 use std::io;
 use std::time::Duration;

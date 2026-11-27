@@ -3,13 +3,16 @@
 use std::process::Command;
 
 /// Whether a process is running. One that has exited and that nothing has waited for yet isn't, though it still has
-/// its PID.
+/// its PID. Windows says so without running anything.
 ///
 /// # Panics
 ///
 /// If `ps` can't be run, rather than answering that it isn't, which a test waiting for a process to go would take for
 /// what it waited for.
 pub fn is_running(pid: u32) -> bool {
+    if cfg!(windows) {
+        return crate::start_time(pid).is_some();
+    }
     let state = Command::new("ps")
         .args(["-o", "stat=", "-p", &pid.to_string()])
         .output()

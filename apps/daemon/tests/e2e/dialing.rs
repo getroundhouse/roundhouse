@@ -16,10 +16,9 @@ use crate::support::TIMEOUT;
 
 /// In a process group of its own, as a provider starts one, so ending it ends what it started too.
 fn start_worker(dir: &Path, ticket: &WorkerTicket) -> Child {
-    use std::os::unix::process::CommandExt as _;
-    WholeEnvironment::for_a_test(&dir.join("home"))
-        .command(crate::support::daemon())
-        .process_group(0)
+    let mut command = WholeEnvironment::for_a_test(&dir.join("home")).command(crate::support::daemon());
+    process::own_group(&mut command);
+    command
         .args(["worker", "--ticket", ticket.as_str(), "--log"])
         .arg(dir.join("worker.log"))
         .arg("--workspaces-root")
@@ -188,12 +187,14 @@ fn a_worker_started_detached_returns_at_once_and_dials_from_its_port() {
             .output()
             .unwrap();
         let (_connection, mut send, mut recv, _, _) = tokio::time::timeout(TIMEOUT, admit(&hub)).await.unwrap();
-        let bound = std::net::UdpSocket::bind(("127.0.0.1", port));
+        // On every address, as the worker binds it, since Windows lets one address take a port bound on every address,
+        // and then has that one's datagrams.
+        let bound = std::net::UdpSocket::bind(("0.0.0.0", port)).is_ok();
         let stopped = call(&mut send, &mut recv, 1, WorkerRequest::Stop).await;
         send.finish().unwrap();
 
         assert!(started.status.success(), "{started:?}");
-        assert!(bound.is_err(), "the worker holds the port it was given");
+        assert!(!bound, "the worker holds the port it was given");
         assert_eq!(stopped, WorkerOutcome::Response(WorkerResponse::Ok));
         assert!(std::fs::read_to_string(dir.path().join("worker.log")).unwrap().contains("\"event\":\"hub.dialing\""));
     });

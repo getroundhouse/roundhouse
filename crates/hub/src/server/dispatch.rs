@@ -65,7 +65,7 @@ pub(super) async fn handle(
         }
         R::HubRestart => {
             // Counted as it's read, so this request is among those under way until its reply has gone.
-            hub.request_restart(1)?;
+            hub.request_restart(1);
             C::Ok
         }
         R::HubUpdateTo(admin::HubUpdateTo { version }) => {

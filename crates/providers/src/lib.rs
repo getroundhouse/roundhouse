@@ -37,7 +37,8 @@ pub enum WorkerReach {
     /// are all this reaches nothing beyond loopback. The local provider's.
     Loopback,
     /// They don't dial: the hub runs the command `connect` gives, whose stdin and stdout are the worker's stream, and
-    /// the worker stops with it. The local provider's on Windows, where a worker doesn't dial yet, and a test's.
+    /// the worker stops with it. Only the hub's own tests' providers, which stand a script in for a worker, or have no
+    /// workers.
     Command,
 }
 

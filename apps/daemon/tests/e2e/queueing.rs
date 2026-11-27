@@ -10,7 +10,7 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, QueuedPrompt, Seq, SessionId, SessionStatus};
 use protocol::prompt::Prompt;
 
-use crate::steering::wait_for_tool;
+use crate::support::calls::wait_for_tool;
 use crate::support::{Gate, Stack, assistant_text, wait_for_status, wait_for_turn_end, wait_until};
 use protocol::prompt::PromptFrom;
 

@@ -32,14 +32,16 @@ pub struct Admitted {
 /// A worker's end, which dials its hub at the address its ticket names, with a key of its own that lasts as long as
 /// the process does, which the hub knows it by once it has been admitted.
 pub struct WorkerEndpoint {
-    endpoint: Endpoint,
+    pub(crate) endpoint: Endpoint,
     hub: EndpointAddr,
 }
 
 impl WorkerEndpoint {
     /// Binds the UDP `port`, or any if it's `None`, and advertises `external`, if it's given, as an address the hub can
     /// reach it at directly, such as the host's end of a port forwarded into a VM. It uses the relay the hub does, or
-    /// none if the ticket names none.
+    /// none if the ticket names none. A worker given neither, whose hub is only on loopback with no relay, as a local
+    /// worker's is, binds only to loopback, as that hub does, so it's never on the network, where Windows' firewall
+    /// would ask whether each build's copy of the program may take connections.
     pub async fn bind(hub: &HubAddress, port: Option<u16>, external: Option<SocketAddr>) -> Result<Self, DialError> {
         let ticket = |e: &dyn std::fmt::Display| DialError::Ticket(e.to_string());
         let id: EndpointId = hub.key.parse().map_err(|e| ticket(&e))?;
@@ -48,6 +50,11 @@ impl WorkerEndpoint {
             addr = addr.with_ip_addr(*direct);
         }
         let relay = hub.relay.as_deref().map(str::parse::<RelayUrl>).transpose().map_err(|e| ticket(&e))?;
+        let on_loopback = port.is_none()
+            && external.is_none()
+            && relay.is_none()
+            && !hub.direct.is_empty()
+            && hub.direct.iter().all(|direct| direct.ip().is_loopback());
         let builder = Endpoint::builder(presets::Minimal);
         let builder = if let Some(relay) = relay {
             addr = addr.with_relay_url(relay.clone());
@@ -61,9 +68,12 @@ impl WorkerEndpoint {
                 .portmapper_config(PortmapperConfig::Disabled)
                 .transport_config(transport.build())
         };
-        let mut builder = builder
-            .bind_addr(SocketAddr::from((Ipv4Addr::UNSPECIFIED, port.unwrap_or(0))))
-            .map_err(|e| DialError::Bind(e.to_string()))?;
+        let builder = if on_loopback {
+            builder.clear_ip_transports().bind_addr(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+        } else {
+            builder.bind_addr(SocketAddr::from((Ipv4Addr::UNSPECIFIED, port.unwrap_or(0))))
+        };
+        let mut builder = builder.map_err(|e| DialError::Bind(e.to_string()))?;
         if let Some(external) = external {
             builder = builder.external_addr(external);
         }

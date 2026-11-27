@@ -15,6 +15,13 @@ use protocol::testing::ENV_TEST_PROCESS;
 const KEPT: &[&str] =
     if cfg!(windows) { &["PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "TEMP", "TMP"] } else { &["PATH", "TMPDIR"] };
 
+/// The name [`KEPT`] gives `name`, if it's one it keeps. Windows takes a name in any case as the same, and has some in
+/// mixed case, such as `SystemRoot` and often `Path`, so there it's found in any case, and kept as [`KEPT`] spells it,
+/// so a test that sets `PATH` sets the one kept. A process started without `SystemRoot` can't open a socket.
+fn kept_as(name: &OsStr) -> Option<&'static str> {
+    KEPT.iter().copied().find(|kept| if cfg!(windows) { name.eq_ignore_ascii_case(kept) } else { name == *kept })
+}
+
 /// Where a process finds its user's home.
 const HOME: &str = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
 
@@ -41,10 +48,10 @@ impl WholeEnvironment {
         environment
     }
 
-    /// Only what [`KEPT`] names of this process's environment.
+    /// Only what [`KEPT`] names of this process's environment, each by the name [`KEPT`] gives it.
     pub(super) fn kept() -> Self {
-        let vars = std::env::vars_os().filter(|(name, _)| KEPT.iter().any(|kept| name == kept)).collect();
-        Self { vars }
+        let vars = std::env::vars_os().filter_map(|(name, value)| Some((OsString::from(kept_as(&name)?), value)));
+        Self { vars: vars.collect() }
     }
 
     /// Gives `name` as `value`, in place of any value it had.
@@ -113,6 +120,8 @@ mod tests {
         let given = [HOME, "SHELL", ENV_TEST_PROCESS];
         assert!(names.iter().all(|name| KEPT.iter().chain(&given).any(|kept| name == kept)), "{names:?}");
         assert_eq!(environment.get("PATH"), std::env::var_os("PATH").as_deref());
+        // Windows names it `SystemRoot`, and reads it in any case.
+        assert_eq!(environment.get("SYSTEMROOT"), std::env::var_os("SYSTEMROOT").as_deref());
         assert_eq!(environment.get(HOME), Some(home.as_os_str()));
         assert_eq!(environment.get("SHELL"), Some(OsStr::new(SAYS_NOTHING)));
         assert_eq!(environment.get(ENV_TEST_PROCESS), Some(OsStr::new(&std::process::id().to_string())));

@@ -30,7 +30,7 @@ pub(crate) struct Dial {
     pub(crate) port: Option<u16>,
     /// Where the hub can reach it directly, such as the host's end of that forwarded port.
     pub(crate) advertise: Option<SocketAddr>,
-    /// Whether to start it in a session of its own, and return once it has started.
+    /// Whether to start it apart from whatever ran this, and return once it has started.
     pub(crate) detach: bool,
 }
 
@@ -86,9 +86,11 @@ pub(crate) fn dial(mut given: Given, Dial { ticket, port, advertise, detach }: D
     })?
 }
 
-/// This command again, without `--detach`, in a session of its own, so nothing that ends what ran this reaches it. It
-/// writes its log to the file `--log` names, and nothing to what this was given. `on_stdin`, the ticket this read from
-/// its stdin, goes on the worker's, which the same arguments have it read from.
+/// This command again, without `--detach`, apart from this process, as `process::detach` starts it, so nothing that
+/// ends what ran this reaches it: on Unix in a session of its own, and on Windows with a console of its own, out of the
+/// job object whatever ran this is in, where the job lets it. It writes its log to the file `--log` names, and nothing
+/// to what this was given. `on_stdin`, the ticket this read from its stdin, goes on the worker's, which the same
+/// arguments have it read from.
 fn start_detached(on_stdin: Option<&WorkerTicket>) -> anyhow::Result<()> {
     let exe = std::env::current_exe().context("finding this binary to start the worker with")?;
     let mut command = std::process::Command::new(exe);
@@ -102,7 +104,7 @@ fn start_detached(on_stdin: Option<&WorkerTicket>) -> anyhow::Result<()> {
     if let (Some(mut stdin), Some(ticket)) = (started.stdin.take(), on_stdin) {
         std::io::Write::write_all(&mut stdin, ticket.as_str().as_bytes()).context("giving the worker its ticket")?;
     }
-    info!(name: "worker.detached", pid = started.id(), "Started the worker in a session of its own");
+    info!(name: "worker.detached", pid = started.id(), "Started the worker apart from what ran this");
     Ok(())
 }
 

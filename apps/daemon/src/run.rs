@@ -81,8 +81,8 @@ enum Role {
         /// Where the worker writes its log, in place of stderr, added to the end.
         #[arg(long)]
         log: Option<PathBuf>,
-        /// Start the worker in a session of its own, and return once it has started, so it outlives whatever ran this,
-        /// such as a command run in a VM, whose session ends with it. It logs to `--log`.
+        /// Start the worker apart from whatever ran this, and return once it has started, so it outlives it, such as a
+        /// hub that restarts, or a command run in a VM, whose session ends with it. It logs to `--log`.
         #[arg(long, requires_all = ["ticket", "log"])]
         detach: bool,
         /// Where worktrees go.
@@ -245,7 +245,7 @@ pub fn run(config: Config) -> anyhow::Result<ExitCode> {
         Role::PrintEnvironment => Ok(process::print_environment(std::env::vars_os(), &mut std::io::stdout().lock())?),
         Role::Delete { paths } => delete(&paths),
         Role::Worker { reach, log: _, detach, workspaces_root, state_dir, clones_dir } => worker_role::run(
-            reach.transport(detach)?,
+            reach.transport(detach),
             worker_role::Given {
                 workspaces_root,
                 state_dir,

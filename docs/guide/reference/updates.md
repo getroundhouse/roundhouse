@@ -37,7 +37,7 @@ Check for Updates looks right away: in the question mark's menu at the bottom of
 
 ## When the card says Finishing update
 
-A hub from before agents could outlive a restart still has to wait for its agents, and so does a hub on Windows, which waits for its terminals too, since restarting it ends their shells. Then the card says `Finishing update`, and how many agents it's waiting on and how many terminals are open, such as `1 terminal is open`, or `Waiting on other work` when what it waits for is a setup script.
+A hub from before agents could outlive a restart still has to wait for its agents, and for its terminals, since restarting it ends their shells. Then the card says `Finishing update`, and how many agents it's waiting on and how many terminals are open, such as `1 terminal is open`, or `Waiting on other work` when what it waits for is a setup script.
 
 ![The card while an update finishes](../../spec/screens/finishing-update.png)
 

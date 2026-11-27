@@ -21,7 +21,7 @@ const KILLED_GRACE: Duration = Duration::from_secs(2);
 const STARTS_OR_STOPS_WITHIN: Duration = Duration::from_secs(3 * (ORPHAN_GRACE.as_secs() + KILLED_GRACE.as_secs()));
 
 pub struct LocalConfig {
-    /// The binary that runs a worker, as `worker --ticket` or `worker --stdio`.
+    /// The binary that runs a worker, as `worker --ticket`, or `worker --stdio` where they don't dial.
     pub worker_exe: PathBuf,
     /// One directory per instance, holding its worker's records.
     pub instances_dir: PathBuf,
@@ -32,15 +32,10 @@ pub struct LocalConfig {
     pub worker_logs_dir: PathBuf,
     /// What a worker it starts is given over what it inherits from the hub, which is the machine's environment.
     pub environment: Environment,
-    /// Whether its workers dial the hub, at its endpoint on loopback, and outlive it, as [`LocalConfig::DIALS`] says
-    /// for the hub's own, or the hub runs `worker --stdio` and they stop with it, as for a test's script.
+    /// Whether its workers dial the hub, at its endpoint on loopback, and outlive it, as every hub's do, or the hub
+    /// runs `worker --stdio` and they stop with it. Only the hub's own tests turn it off, to stand a script in for a
+    /// worker on its stdin and stdout, which couldn't dial.
     pub dials: bool,
-}
-
-impl LocalConfig {
-    /// Whether the local provider's workers dial their hub here. Not on Windows: what claims an instance to serve it,
-    /// and a worker that dials, are built only for Unix, and nothing that checks Windows runs a worker there.
-    pub const DIALS: bool = cfg!(unix);
 }
 
 pub struct LocalProvider {
@@ -277,9 +272,9 @@ impl Provider for LocalProvider {
         Ok(running)
     }
 
-    /// `worker --stdio` for a worker that doesn't dial, or, where they dial, `worker --attach`, which reaches one an
-    /// earlier build left listening on a socket in its state directory, and starts none. That one goes at the next
-    /// break of the worker protocol, as `docs/decisions/hub-speaks-previous-version.md` says.
+    /// `worker --attach`, which reaches a worker an earlier build left listening on a socket in its state directory,
+    /// and starts none, since every worker this build starts dials the hub. It goes at the next break of the worker
+    /// protocol, as `docs/decisions/hub-speaks-previous-version.md` says. `worker --stdio` where workers don't dial.
     async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError> {
         let dir = self.instance_dir(instance_id);
         if !dir.is_dir() {

@@ -3,20 +3,11 @@
 #![cfg(test)]
 
 use client_core::Connection;
-use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{Seq, SessionId};
 
+use crate::support::calls::wait_for_tool;
 use crate::support::{Gate, Stack, assistant_text, parent_of, read_all, signal, wait_for_turn_end, wait_until};
-
-/// Waits until the agent is running a tool, which is when a prompt sent now has to wait.
-pub(crate) fn wait_for_tool(client: &Connection, session_id: &SessionId) {
-    wait_until("a tool to start", || {
-        read_all(client, session_id).iter().any(|e| {
-            matches!(&e.body, EventBody::Assistant { blocks, .. }
-                if blocks.iter().any(|b| matches!(b, ContentBlock::Call { .. })))
-        })
-    });
-}
 
 fn position(events: &[SessionEvent], wanted: impl Fn(&EventBody) -> bool) -> Option<Seq> {
     events.iter().find(|e| wanted(&e.body)).map(|e| e.seq)

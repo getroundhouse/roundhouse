@@ -29,8 +29,8 @@ has a feed of its own, `releases.<channel>.json`, and all are in the one bucket.
       newer one, so the update stops none of its workers and its hub can migrate its database.
   publish.py bridge --version VERSION --work DIR
       For a channel that took over from an older one, writes the older channel's feed to sign, listing only the full
-      package of VERSION the feed in DIR/feed has and, on a channel whose apps step, the full packages that feed keeps
-      for them to step to, and prints its path. Prints nothing for any other channel.
+      package of VERSION the feed in DIR/feed has and the full packages that feed keeps for apps to step to, and prints
+      its path. Prints nothing for any other channel.
   publish.py upload --store STORE --key KEY --version VERSION --work DIR
       Uploads the new packages, the hub's archive and what people download, then the signed feed, reads the feed
       back, then the older channel's feed, if `bridge` wrote one, and then deletes the packages and archives that left
@@ -107,12 +107,6 @@ CHANNELS = {
 }
 
 
-# The channels whose apps step through each break in the worker protocol: those whose hubs keep their workers through
-# an update, as KEEPS_WORKERS in crates/hub/src/hub/coordinator.rs has it. A Windows hub's workers stop with it, so its
-# apps take the newest. tools/update-steps checks the same ones in the merge queue.
-STEPS = {"macos-arm64", "linux-amd64", "linux-arm64"}
-
-
 # The channels whose releases publish the hub as an archive of its own, those where `roundhouse hub install` installs it
 # as a service. Each archive is `Roundhouse-<version>-<channel>-hub.tar.gz`, as `hub_archive` in vpk.sh makes it, and
 # the newest is also what people download, without the version.
@@ -122,8 +116,8 @@ HUBS = {"macos-arm64", "linux-amd64", "linux-arm64"}
 # The channel each one took over from. An app looks for updates in the channel it was packaged for, and a hub installed
 # as a service in the one it was built for, so one from before the change still reads the older channel's feed. Each
 # release also signs that feed, listing its own full package, which was packaged for the newer channel, so such an app
-# or hub takes it and looks there from then on. Where apps step, it also lists the full packages the newer channel keeps
-# for them to step to, so one with older workers at work steps as it would have. Those can be the older channel's,
+# or hub takes it and looks there from then on. It also lists the full packages the newer channel keeps for apps to
+# step to, so one with older workers at work steps as it would have. Those can be the older channel's,
 # since the newer channel's first release starts from that one's feed. amd64 Windows was `win` before 0.1.245, and the
 # Mac was `osx`, Velopack's default, before `macos-arm64`. *Unconfirmed.*
 TAKES_OVER = {"win-amd64": "win", "macos-arm64": "osx"}
@@ -434,8 +428,7 @@ def kept(assets: list[dict], keep: int) -> list[dict]:
 def steps_from(assets: list[dict], version: str, floors: dict) -> None:
     """Refuses `version`, with these floors, if an app on the newest published release couldn't take it, so it would
     have no release to step to, as "A break in the worker protocol" in `docs/standards/merging.md` says. That's where
-    its hub doesn't speak that release's workers, on a channel whose apps step, or where that release is older than the
-    oldest one it updates from. `tools/update-steps` holds such a change back in the merge queue, so this only catches
+    its hub doesn't speak that release's workers, or where that release is older than the oldest one it updates from. `tools/update-steps` holds such a change back in the merge queue, so this only catches
     one that got past it. A release from before releases said what they speak says nothing to check."""
     fulls = [asset for asset in assets if asset["Type"] == "Full"]
     if not fulls:
@@ -443,7 +436,7 @@ def steps_from(assets: list[dict], version: str, floors: dict) -> None:
     latest = max(fulls, key=version_of)
     if UPDATES_FROM in floors:
         floor_is_a_step(assets, version, floors)
-    if CHANNEL not in STEPS or WORKER_VERSIONS not in latest:
+    if WORKER_VERSIONS not in latest:
         return
     if floors[WORKER_VERSIONS]["oldest"] > latest[WORKER_VERSIONS]["newest"]:
         raise Refused(f"{version}'s hub doesn't speak workers of protocol {latest[WORKER_VERSIONS]['newest']}, which "
@@ -454,16 +447,14 @@ def steps_from(assets: list[dict], version: str, floors: dict) -> None:
 
 def floor_is_a_step(assets: list[dict], version: str, floors: dict) -> None:
     """Refuses `version` unless the oldest release it updates from is one this channel's feed keeps for apps to step
-    to, so a person whose hub refuses a database that old can still install it. Where apps step, that release can be
-    no newer than the last whose hub doesn't speak the oldest workers `version`'s hub does, since only those carry an
-    app from before releases said what they update from through it: such an app takes `version` only once its hub's
-    workers are that new, and the database it has is then from a release at least as new."""
+    to, so a person whose hub refuses a database that old can still install it. That release can be no newer than the
+    last whose hub doesn't speak the oldest workers `version`'s hub does, since only those carry an app from before
+    releases said what they update from through it: such an app takes `version` only once its hub's workers are that
+    new, and the database it has is then from a release at least as new."""
     floor = floors[UPDATES_FROM]
     if parse_version(floor) not in stepped_to(assets):
         raise Refused(f"{version} updates from {floor} and nothing older, but the feed doesn't keep {floor} for apps to "
                       "step to, so an app on a release before it would have none")
-    if CHANNEL not in STEPS:
-        return
     oldest = floors[WORKER_VERSIONS]["oldest"]
     before = [asset for asset in assets if asset["Type"] == "Full" and WORKER_VERSIONS in asset
               and asset[WORKER_VERSIONS]["newest"] < oldest]
@@ -515,13 +506,13 @@ def full_of(feed: bytes, version: str) -> list[dict]:
 
 
 def offered_on_older(feed: bytes, version: str) -> list[dict]:
-    """What the older channel's feed offers, as `feed` has it: `version`'s full package and, on a channel whose apps
-    step, each release's they step to, which an app with older workers at work takes first. Only full packages, since a
-    delta starts from the release before it in this channel, not the app's."""
+    """What the older channel's feed offers, as `feed` has it: `version`'s full package and each release's that apps
+    step to, which an app with older workers at work takes first. Only full packages, since a delta starts from the
+    release before it in this channel, not the app's."""
     if len(full_of(feed, version)) != 1:
         raise Refused(f"the feed to publish doesn't list one full package for {version}")
     assets = assets_of(feed)
-    steps = stepped_to(assets) if CHANNEL in STEPS else set()
+    steps = stepped_to(assets)
     return [asset for asset in assets
             if asset["Type"] == "Full" and (asset["Version"] == version or version_of(asset) in steps)]
 
@@ -546,8 +537,8 @@ def bridged(key: str, version: str, feed: bytes, work: Path) -> tuple[bytes, byt
     if not signed(*older, key):
         raise Refused(f"{OLDER_FEED} isn't signed with the app's key")
     if assets_of(older[0]) != offered_on_older(feed, version):
-        raise Refused(f"{OLDER_FEED} should offer only {version}'s full package, and where apps step the ones they "
-                      "step to, as the signed feed has them")
+        raise Refused(f"{OLDER_FEED} should offer only {version}'s full package, and the ones apps step to, as the "
+                      "signed feed has them")
     return older
 
 

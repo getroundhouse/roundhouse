@@ -10,10 +10,10 @@ use tokio::io::AsyncWriteExt as _;
 use super::provider::LocalConfig;
 use crate::ProviderError;
 
-/// Runs `worker --detach` with `ticket`, which starts the worker in a session of its own, so it outlives the hub,
-/// and returns once it has. The ticket goes on its stdin, as `--ticket -` reads it, and not in its arguments,
-/// which any user on the machine can read: on its stdin it reaches only the worker, where the environment would
-/// reach everything the worker starts, and a file could outlast it.
+/// Runs `worker --detach` with `ticket`, which starts the worker apart from the hub, so it outlives it, and returns
+/// once it has. The ticket goes on its stdin, as `--ticket -` reads it, and not in its arguments, which any user on
+/// the machine can read: on its stdin it reaches only the worker, where the environment would reach everything the
+/// worker starts, and a file could outlast it.
 pub(super) async fn start_dialing(
     config: &LocalConfig,
     instance_id: &InstanceId,

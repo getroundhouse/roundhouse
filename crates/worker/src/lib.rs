@@ -31,12 +31,8 @@ mod worktree_file;
 pub use agents::{ENV_ANTIGRAVITY_BIN, ENV_CLAUDE_BIN, ENV_CODEX_BIN};
 #[cfg(unix)]
 pub use attach::attach;
-#[cfg(unix)]
-pub use claim::claim_to_serve;
-pub use claim::{ClaimError, InstanceClaim, claim_instance};
+pub use claim::{ClaimError, InstanceClaim, claim_instance, claim_to_serve};
 pub use deleting::{Deleter, delete_trees};
 pub use git_credential::{CredentialHelper, answer_credential_request};
-pub use serve::{Config, serve};
-#[cfg(unix)]
-pub use serve::{DialFailed, serve_dialing};
+pub use serve::{Config, DialFailed, serve, serve_dialing};
 pub use timers::Timers;

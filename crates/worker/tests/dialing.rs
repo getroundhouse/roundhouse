@@ -2,6 +2,7 @@
 //! worker's dial takes, as it takes the connection a hub admits it on.
 
 #![cfg(test)]
+// Its agent is a shell script, which only a Unix runs. The daemon's end-to-end tests have a worker dial on Windows.
 #![cfg(unix)]
 
 use std::sync::Arc;
