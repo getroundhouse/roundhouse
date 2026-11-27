@@ -19,7 +19,7 @@ fn the_specs_table_has_every_icon_size_in_order_as_the_app_sizes_it() {
 }
 
 /// An icon set among text is as big as a detail among a detail's or code's, and as big as body text among it, at each
-/// reach.
+/// reach, at the app's own scale.
 #[test]
 fn an_icon_among_text_is_as_big_as_the_text() {
     for reach in Reach::ALL {
