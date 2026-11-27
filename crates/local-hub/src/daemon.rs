@@ -1,7 +1,7 @@
 use super::old_copies;
 #[cfg(any(test, feature = "testing"))]
 use crate::StartedHubs;
-use client_core::{Client, Introduction, Result, hub_is_missing};
+use client_core::{Connection, Introduction, Result, hub_is_missing};
 use protocol::paths::{DAEMON_NAME, Paths, daemon_file};
 use protocol::{Build, StampedBuild};
 #[cfg(any(test, feature = "testing"))]
@@ -17,16 +17,16 @@ use std::time::{Duration, Instant};
 /// Connects, starting a hub first if none is running. The hub is a separate process that outlives this client, which
 /// is why closing a client doesn't stop its agents. Once a hub this started is up, it removes the copies of the daemon
 /// in the data directory that nothing runs from anymore.
-pub fn connect_or_start(paths: &Paths, daemon: &Daemon, introduction: impl Into<Introduction>) -> Result<Client> {
+pub fn connect_or_start(paths: &Paths, daemon: &Daemon, introduction: impl Into<Introduction>) -> Result<Connection> {
     let introduction = introduction.into();
-    match Client::connect(&paths.socket, introduction.clone()) {
+    match Connection::connect(&paths.socket, introduction.clone()) {
         Ok(client) => return Ok(client),
         Err(e) if hub_is_missing(&e) => {}
         Err(e) => return Err(e),
     }
     if let Err(couldnt) = start_hub(paths, daemon) {
         // Another client may have started one meanwhile, and removed the copy this one was about to start.
-        return Client::connect(&paths.socket, introduction).map_err(|_| couldnt.into());
+        return Connection::connect(&paths.socket, introduction).map_err(|_| couldnt.into());
     }
     let client = connect_once_started(&paths.socket, &introduction)?;
     // A client starts a hub once the one before has gone, as for an update, which is when a copy goes out of use.
@@ -43,10 +43,10 @@ pub fn connect_or_start(paths: &Paths, daemon: &Daemon, introduction: impl Into<
     clippy::disallowed_methods,
     reason = "the pace connecting looks again at while the hub just started begins to listen"
 )]
-fn connect_once_started(socket: &Path, introduction: &Introduction) -> Result<Client> {
+fn connect_once_started(socket: &Path, introduction: &Introduction) -> Result<Connection> {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        match Client::connect(socket, introduction.clone()) {
+        match Connection::connect(socket, introduction.clone()) {
             Ok(client) => return Ok(client),
             Err(e) if hub_is_missing(&e) && Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(25));

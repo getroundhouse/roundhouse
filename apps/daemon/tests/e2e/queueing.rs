@@ -4,7 +4,7 @@
 
 #![cfg(test)]
 
-use client_core::{Client, FileToSend, Written};
+use client_core::{Connection, FileToSend, Written};
 use protocol::attachment::MediaType;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, QueuedPrompt, Seq, SessionId, SessionStatus};
@@ -26,7 +26,7 @@ fn turn_ends(events: &[SessionEvent]) -> Vec<Seq> {
     events.iter().filter(|e| matches!(e.body, EventBody::TurnEnded { .. })).map(|e| e.seq).collect()
 }
 
-fn queue(client: &Client, session_id: &SessionId, id: &str, text: &str) -> Vec<QueuedPrompt> {
+fn queue(client: &Connection, session_id: &SessionId, id: &str, text: &str) -> Vec<QueuedPrompt> {
     client.session_queue(session_id, ClientMessageId::from(id), text).unwrap().queued
 }
 
@@ -76,7 +76,7 @@ fn prompts_are_queued_in_the_order_they_were_written_though_the_first_is_still_a
 /// Sends the second of two queued prompts, as the person does, and checks it went first, once the first has gone after
 /// it. A hub that was going to send the queue itself would have sent the first before this reached the session, since
 /// it decides as it takes the session on, ahead of anything a client asks of it.
-fn send_the_second_and_see_the_first_was_held(client: &Client, session_id: &SessionId, turns: usize) {
+fn send_the_second_and_see_the_first_was_held(client: &Connection, session_id: &SessionId, turns: usize) {
     client.session_send_queued(session_id, "q2".into()).unwrap();
     let events = wait_for_turn_end(client, session_id, turns);
     assert!(sent_at(&events, "q2").unwrap() < sent_at(&events, "q1").unwrap(), "held until the person sent from it");

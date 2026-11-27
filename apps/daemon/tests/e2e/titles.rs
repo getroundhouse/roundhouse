@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use client_core::Client;
+use client_core::Connection;
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{AttachmentId, Session, TitleSource};
 use protocol::prompt::Prompt;
@@ -14,7 +14,7 @@ use protocol::prompt::Prompt;
 use crate::support::{Stack, TIMEOUT, is_alive, patient_with_workers, wait_until, workspace};
 
 /// Has the fake agent give `title`, and hold the call for it, then prompts the chat, and waits for the call.
-fn prompt_for_a_held_title(stack: &Stack, client: &Client, chat: &Session, title: &str) -> std::path::PathBuf {
+fn prompt_for_a_held_title(stack: &Stack, client: &Connection, chat: &Session, title: &str) -> std::path::PathBuf {
     let state = stack.agent_state();
     std::fs::create_dir_all(&state).unwrap();
     std::fs::write(state.join("title"), title).unwrap();
@@ -26,7 +26,7 @@ fn prompt_for_a_held_title(stack: &Stack, client: &Client, chat: &Session, title
 
 /// Adds a file to the chat for a prompt to carry. An image is enough of a PNG for anything that only looks at how it
 /// starts, which is all the hub and the fake agent do.
-fn add(client: &Client, chat: &Session, name: &str, media_type: MediaType) -> Attachment {
+fn add(client: &Connection, chat: &Session, name: &str, media_type: MediaType) -> Attachment {
     let data = if media_type == MediaType::Png {
         let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
         png.resize(300, 7);
@@ -84,7 +84,7 @@ fn archiving_stops_a_title_call_under_way_and_what_it_started() {
 
     let (socket, id, (archived, archiving)) = (stack.socket(), made.id.clone(), std::sync::mpsc::channel());
     std::thread::spawn(move || {
-        let answer = Client::connect(&socket, "test").unwrap().workspace_archive(&id, true);
+        let answer = Connection::connect(&socket, "test").unwrap().workspace_archive(&id, true);
         archived.send(answer.map(drop).map_err(|e| e.to_string()))
     });
 

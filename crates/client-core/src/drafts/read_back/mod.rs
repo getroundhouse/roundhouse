@@ -4,7 +4,7 @@
 #[cfg(test)]
 use super::FilesFor;
 #[cfg(test)]
-use crate::{Client, ClientError};
+use crate::{ClientError, Connection};
 
 #[cfg(test)]
 mod tests;

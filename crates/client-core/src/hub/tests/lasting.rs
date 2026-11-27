@@ -10,7 +10,7 @@ use protocol::prompt::Prompt;
 
 use super::stand_ins::{TIMEOUT, doesnt_know, listing};
 use crate::stand_in_hub::{self, Does};
-use crate::{Client, ClientError, Hub, View, Written};
+use crate::{ClientError, Connection, Hub, View, Written};
 
 /// A stand-in hub on `socket` that holds what a test waits on, a list of its repositories, a prompt and a prompt
 /// queued, until `release` is sent something, then does with it what `then` says, with everything it hears.
@@ -18,7 +18,7 @@ fn hub_holding(
     socket: &Path,
     release: flume::Receiver<()>,
     then: fn() -> Does,
-) -> (Client, flume::Receiver<ClientRequest>) {
+) -> (Connection, flume::Receiver<ClientRequest>) {
     let heard = stand_in_hub::listen(socket, move |request| {
         if let ClientRequest::Subscribe(subscribe) = &request {
             listing(subscribe)
@@ -28,7 +28,7 @@ fn hub_holding(
             doesnt_know()
         }
     });
-    (Client::connect(socket, "test").unwrap(), heard)
+    (Connection::connect(socket, "test").unwrap(), heard)
 }
 
 /// What answers a list of repositories, and refuses a prompt, which answers it all the same.

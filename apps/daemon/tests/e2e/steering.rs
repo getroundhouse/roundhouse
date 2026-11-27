@@ -2,14 +2,14 @@
 
 #![cfg(test)]
 
-use client_core::Client;
+use client_core::Connection;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Seq, SessionId};
 
 use crate::support::{Gate, Stack, assistant_text, parent_of, read_all, signal, wait_for_turn_end, wait_until};
 
 /// Waits until the agent is running a tool, which is when a prompt sent now has to wait.
-pub(crate) fn wait_for_tool(client: &Client, session_id: &SessionId) {
+pub(crate) fn wait_for_tool(client: &Connection, session_id: &SessionId) {
     wait_until("a tool to start", || {
         read_all(client, session_id).iter().any(|e| {
             matches!(&e.body, EventBody::Assistant { blocks, .. }
@@ -25,7 +25,7 @@ fn position(events: &[SessionEvent], wanted: impl Fn(&EventBody) -> bool) -> Opt
 /// A prompt sent while the agent runs a long tool, which it hasn't taken yet.
 /// A prompt sent mid-turn, once the agent has read it. Recording it isn't enough, since the hub delivers it after: an
 /// agent that went away first would have the prompt delivered to the one that replaces it, which takes it.
-fn waiting_prompt(stack: &Stack, client: &Client, session_id: &SessionId) -> Seq {
+fn waiting_prompt(stack: &Stack, client: &Connection, session_id: &SessionId) -> Seq {
     client.session_prompt(session_id, "hang", None).unwrap();
     wait_for_tool(client, session_id);
     let (steered, _) = client.session_prompt(session_id, "say:never", None).unwrap();
@@ -42,7 +42,7 @@ fn wait_for_read(stack: &Stack, text: &str) {
     });
 }
 
-fn wait_for_drop(client: &Client, session_id: &SessionId, prompt: Seq) {
+fn wait_for_drop(client: &Connection, session_id: &SessionId, prompt: Seq) {
     wait_until("the prompt to be dropped", || {
         read_all(client, session_id)
             .iter()
@@ -93,7 +93,7 @@ fn stopping_drops_a_prompt_the_agent_hadnt_taken() {
     assert!(!assistant_text(&events).contains("never"));
 }
 
-fn agent_pid(client: &Client, session_id: &SessionId) -> u32 {
+fn agent_pid(client: &Connection, session_id: &SessionId) -> u32 {
     read_all(client, session_id)
         .iter()
         .find_map(|e| match e.body {

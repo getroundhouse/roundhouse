@@ -7,7 +7,7 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use client_core::{Client, HubAdmin};
+use client_core::{Connection, HubAdmin};
 use protocol::StampedBuild;
 use protocol::capability::settings::Settings;
 use protocol::client::HubStart;
@@ -34,7 +34,7 @@ fn a_hub_started_with_every_signal_blocked_still_works() {
         });
     }
     stack.hub = Some(command.spawn().unwrap().into());
-    wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
+    wait_until("the hub to accept connections", || Connection::connect(&stack.socket(), "test").is_ok());
     let client = stack.client();
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
 
@@ -131,7 +131,7 @@ fn a_hub_of_a_service_moves_its_log_aside_once_its_long_and_goes_on_to_a_new_one
 
     stack.hub = Some(command.spawn().unwrap().into());
 
-    wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
+    wait_until("the hub to accept connections", || Connection::connect(&stack.socket(), "test").is_ok());
     assert_eq!(std::fs::metadata(&aside).unwrap().len(), LONG, "nothing more is written to the one moved aside");
     assert_eq!(std::fs::metadata(&log).unwrap().permissions().mode() & 0o777, 0o600);
     assert!(std::fs::read_to_string(&log).unwrap().contains("hub.listening"), "its lines are in the new one");
@@ -168,7 +168,7 @@ fn a_hub_started_through_a_link_stays_on_its_version_when_the_link_moves() {
     process::testing::install_program(&stack.path("broken"), &new.join("roundhoused")).unwrap();
     symlink(&old, &current).unwrap();
     stack.hub = Some(stack.command_at(&current.join("roundhoused")).spawn().unwrap().into());
-    wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
+    wait_until("the hub to accept connections", || Connection::connect(&stack.socket(), "test").is_ok());
 
     std::fs::remove_file(&current).unwrap();
     symlink(&new, &current).unwrap();
@@ -204,7 +204,7 @@ fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone()
 
     // The same file, started by the stack, so the test has the hub's process to wait for once it's stopped.
     stack.hub = Some(stack.command_at(&copy).spawn().unwrap().into());
-    wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
+    wait_until("the hub to accept connections", || Connection::connect(&stack.socket(), "test").is_ok());
     // The update, with a daemon that can run neither a hub nor a worker.
     std::fs::write(stack.path("broken"), "#!/bin/sh\nexit 1\n").unwrap();
     process::testing::install_program(&stack.path("broken"), &app.join("roundhoused")).unwrap();

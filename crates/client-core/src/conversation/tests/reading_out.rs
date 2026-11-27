@@ -80,7 +80,7 @@ fn started() -> Box<ReplyOutcome> {
 
 /// A hub whose chat had `m0` begun before the subscription, `m1` streaming when its tail came, and after it the rest
 /// of `m0`, `m1` recorded and `m2` said, then the turn's end.
-fn hub(socket: &std::path::Path) -> (crate::Client, flume::Receiver<Told>) {
+fn hub(socket: &std::path::Path) -> (crate::Connection, flume::Receiver<Told>) {
     let (tell, told) = flume::unbounded();
     let client = stand_in_hub::connect(socket, move |request| {
         let frame = |subscription_id, event| HubFrame::Event { subscription_id, event };
@@ -121,7 +121,7 @@ fn hub(socket: &std::path::Path) -> (crate::Client, flume::Receiver<Told>) {
 /// Reading out the hub's chat, on a hub caught up on `client`, with a voice the test is given what's given to, and has
 /// say what it says, with the hub.
 fn reading_out(
-    client: &crate::Client,
+    client: &crate::Connection,
 ) -> (Hub, ReadingOut, flume::Receiver<ToVoice>, flume::Sender<FromVoice>, flume::Receiver<()>) {
     let (given, voice_was_given) = flume::unbounded();
     let (say, says) = flume::unbounded();

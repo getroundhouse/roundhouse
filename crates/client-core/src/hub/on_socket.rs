@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::Hub;
-use crate::Client;
+use crate::Connection;
 use crate::link::{Connect, Link, Lost, Refused, Waits};
 
 /// The hub on `socket` as a view holds it, for a test of what a view opens from it against a real hub, with the link
@@ -38,8 +38,10 @@ impl Connect for Socket {
     type With = ();
     type Failure = String;
 
-    fn connect(&mut self) -> Result<(Client, ()), Refused<String>> {
-        Client::connect(&self.0, "test").map(|client| (client, ())).map_err(|e| Refused::by(&e, e.to_string()))
+    fn connect(&mut self) -> Result<(Connection, ()), Refused<String>> {
+        Connection::connect(&self.0, "test")
+            .map(|connection| (connection, ()))
+            .map_err(|e| Refused::by(&e, e.to_string()))
     }
 
     fn lost(&self, lost: &Lost) -> String {

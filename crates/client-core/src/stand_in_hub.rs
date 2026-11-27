@@ -17,7 +17,7 @@ use protocol::client::{
 };
 use protocol::frame;
 
-use crate::Client;
+use crate::Connection;
 
 /// What the stand-in does with a request.
 pub enum Does {
@@ -128,9 +128,9 @@ pub fn starts(heard: &flume::Receiver<ClientRequest>) -> Vec<usize> {
 }
 
 /// Stands in for a hub on `socket`, doing with each request what `does` says, and connects to it.
-pub fn connect(socket: &Path, does: impl FnMut(ClientRequest) -> Does + Send + 'static) -> Client {
+pub fn connect(socket: &Path, does: impl FnMut(ClientRequest) -> Does + Send + 'static) -> Connection {
     listen(socket, does);
-    Client::connect(socket, "test").unwrap()
+    Connection::connect(socket, "test").unwrap()
 }
 
 /// Stands in for a hub on `socket`, doing with each request what `does` says, for the first client to connect, as

@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use desktop::app::Connection;
+use desktop::app::Linking;
 use gpui_kit::{HeadlessAppContext, PlatformTextSystem, px, size};
 
 use super::Driver;
@@ -59,7 +59,7 @@ pub(super) fn open(
     if wide {
         app.widen();
     }
-    app.wait("the app to connect", |view, _| !matches!(view.connection(), Connection::Connecting));
+    app.wait("the app to connect", |view, _| !matches!(view.linking(), Linking::Connecting));
     (dir, app)
 }
 

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, channel};
 
-use client_core::{Client, ClientError};
+use client_core::{ClientError, Connection};
 use protocol::capability::setup::ServerState;
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
@@ -46,7 +46,7 @@ impl Server {
 }
 
 /// A stack whose one chat has `server`, as `Linear_Northwind`.
-fn chat_with(server: &Server) -> (Stack, Client, SessionId) {
+fn chat_with(server: &Server) -> (Stack, Connection, SessionId) {
     let stack = Stack::start();
     let client = stack.client();
     add(&client, server.url.clone());
@@ -55,12 +55,12 @@ fn chat_with(server: &Server) -> (Stack, Client, SessionId) {
 }
 
 /// Waits until the chat's agent says the server is `state`.
-fn comes_to(client: &Client, chat: &SessionId, state: ServerState) {
+fn comes_to(client: &Connection, chat: &SessionId, state: ServerState) {
     let is = [("Linear_Northwind".to_string(), state)];
     wait_until("what comes of it", || states(client, chat) == is);
 }
 
-fn reload(client: &Client, chat: &SessionId) -> Result<(), ClientError> {
+fn reload(client: &Connection, chat: &SessionId) -> Result<(), ClientError> {
     client.session_reload_tool_server(chat, &"Linear_Northwind".into())
 }
 

@@ -7,7 +7,7 @@ use std::time::Instant;
 use parking_lot::Mutex;
 
 use super::thread::Follower;
-use crate::client::{Client, ClientError, Result, Subscription, SubscriptionItem};
+use crate::client::{ClientError, Connection, Result, Subscription, SubscriptionItem};
 
 /// What's followed, and how. It's made on the thread that follows it, so it needn't be sent between threads.
 pub(in crate::client) trait Source: 'static {
@@ -15,16 +15,16 @@ pub(in crate::client) trait Source: 'static {
 
     /// Subscribes, and catches up on anything the subscription won't send, such as a list of records. Runs
     /// to start with, after falling behind, and on each new connection.
-    fn resume(&mut self, client: &Client, held: &Mutex<Self::Held>) -> Result<Subscription>;
+    fn resume(&mut self, connection: &Connection, held: &Mutex<Self::Held>) -> Result<Subscription>;
 
     /// Takes in one item. Returns whether it changed what's held.
-    fn apply(&mut self, client: &Client, held: &Mutex<Self::Held>, item: SubscriptionItem) -> Result<bool>;
+    fn apply(&mut self, connection: &Connection, held: &Mutex<Self::Held>, item: SubscriptionItem) -> Result<bool>;
 
     /// Does what a reader asked for, such as fetching history, on `connection`, or without one while there's none, as
     /// a source that does what's asked from what it holds can. Returns whether it changed what's held. `tell` tells
     /// readers of a change made part way, such as a page put in place before the next is fetched, so they see each as
     /// it comes rather than once everything asked for is in.
-    fn asked(&mut self, connection: Option<&Client>, held: &Mutex<Self::Held>, tell: &dyn Fn()) -> Result<bool>;
+    fn asked(&mut self, connection: Option<&Connection>, held: &Mutex<Self::Held>, tell: &dyn Fn()) -> Result<bool>;
 
     /// There's a new connection, which may be to another hub, such as a newer one after a restart. Runs just before
     /// [`Source::resume`] does for it, or before it's let go on it, as [`Source::wanted_until`] says.
@@ -52,7 +52,7 @@ pub enum FollowError {
 pub(in crate::client) struct Shared<H> {
     pub(super) held: Mutex<H>,
     /// A new connection to carry on with.
-    pub(super) reconnect: Mutex<Option<Client>>,
+    pub(super) reconnect: Mutex<Option<Connection>>,
     pub(super) connected: AtomicBool,
     errors: Mutex<Vec<FollowError>>,
     /// Holds one signal at a time, so changes nobody has looked at yet gather into one.
@@ -128,18 +128,18 @@ pub(in crate::client) struct Giver<H> {
 /// Something followed that carries on over each new connection it's given, for as long as it's there, without being
 /// kept followed by what gives it them.
 pub(crate) trait Carried: Send {
-    /// Carries on on `client`, a new connection, as [`Following::reconnect`] does. Returns false, doing nothing, once
+    /// Carries on on `connection`, a new one, as [`Following::reconnect`] does. Returns false, doing nothing, once
     /// every handle on it has gone.
-    fn carry_on(&self, client: &Client) -> bool;
+    fn carry_on(&self, connection: &Connection) -> bool;
 
     /// Whether every handle on it has gone, so there's nothing to carry on.
     fn gone(&self) -> bool;
 }
 
 impl<H: Send + 'static> Carried for Giver<H> {
-    fn carry_on(&self, client: &Client) -> bool {
+    fn carry_on(&self, connection: &Connection) -> bool {
         let (Some(shared), Some(wake)) = (self.shared.upgrade(), self.wake.upgrade()) else { return false };
-        shared.reconnect_on(client);
+        shared.reconnect_on(connection);
         let _ = wake.try_send(());
         true
     }
@@ -164,7 +164,7 @@ impl<H: Send + 'static> Following<H> {
     /// Starts following on a thread of its own, so this doesn't wait for the hub, with the source `source` makes there,
     /// on `connection`, or on the first given to [`Following::reconnect`] if there's none yet.
     pub(in crate::client) fn start<S: Source<Held = H>>(
-        connection: Option<&Client>,
+        connection: Option<&Connection>,
         held: H,
         source: impl FnOnce() -> S + Send + 'static,
     ) -> Self {
@@ -224,8 +224,8 @@ impl<H: Send + 'static> Following<H> {
     }
 
     /// Carries on on a new connection, which isn't caught up on until the thread says so.
-    pub(in crate::client) fn reconnect(&self, client: &Client) {
-        self.shared.reconnect_on(client);
+    pub(in crate::client) fn reconnect(&self, connection: &Connection) {
+        self.shared.reconnect_on(connection);
         self.wake();
     }
 
@@ -261,14 +261,14 @@ impl<H: Send + 'static> Unstarted<H> {
     /// Starts following on a thread of its own, as [`Following::start`] does.
     pub(in crate::client) fn start<S: Source<Held = H>>(
         self,
-        connection: Option<&Client>,
+        connection: Option<&Connection>,
         source: impl FnOnce() -> S + Send + 'static,
     ) -> Following<H> {
         let Unstarted { follow, woken } = self;
-        let (client, shared) = (connection.cloned(), follow.shared.clone());
+        let (connection, shared) = (connection.cloned(), follow.shared.clone());
         let thread = move || {
             let source = source();
-            Follower { source, client, shared, woken, subscription: None, let_go: false }.run();
+            Follower { source, connection, shared, woken, subscription: None, let_go: false }.run();
         };
         if let Err(e) = std::thread::Builder::new().name("follow hub".to_string()).spawn(thread) {
             follow.shared.failed(FollowError::Following(ClientError::Io(e)));
@@ -278,12 +278,12 @@ impl<H: Send + 'static> Unstarted<H> {
 }
 
 impl<H> Shared<H> {
-    /// Has the thread carry on on `client` once it next wakes, which it isn't caught up on until the thread says so.
-    /// Under the lock [`Shared::caught_up_unless_newer`] decides under, so a resume on the connection before that ends
-    /// after this can't say it has caught up.
-    fn reconnect_on(&self, client: &Client) {
+    /// Has the thread carry on on `connection` once it next wakes, which it isn't caught up on until the thread says
+    /// so. Under the lock [`Shared::caught_up_unless_newer`] decides under, so a resume on the connection before that
+    /// ends after this can't say it has caught up.
+    fn reconnect_on(&self, connection: &Connection) {
         let mut next = self.reconnect.lock();
-        *next = Some(client.clone());
+        *next = Some(connection.clone());
         self.connected.store(false, Ordering::SeqCst);
     }
 

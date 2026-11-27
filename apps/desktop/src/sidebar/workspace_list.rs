@@ -1,6 +1,6 @@
 use super::{drag, fold, footer, heading, nav, project, row};
 use crate::app::TOP_STRIP;
-use crate::app::{AppView, Connection};
+use crate::app::{AppView, Linking};
 use crate::reorder;
 use crate::settings::Settings;
 use client_core::workspace_order::Sort;
@@ -243,7 +243,7 @@ pub(super) fn places(lines: &[Line]) -> Vec<Pixels> {
 }
 
 fn connected(app: &AppView) -> bool {
-    matches!(app.connection(), Connection::Ready)
+    matches!(app.linking(), Linking::Ready)
 }
 
 /// Whether the line is one of the project's that's being dragged, or is on its way to its place from where it was

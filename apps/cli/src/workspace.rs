@@ -1,13 +1,13 @@
 //! The workspace commands.
 
 use anyhow::{anyhow, bail};
-use client_core::Client;
+use client_core::Connection;
 use protocol::model::{BranchName, Workspace};
 
 use crate::args::WorkspaceCmd;
 use crate::run::short;
 
-pub(crate) fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyhow::Result<()> {
+pub(crate) fn workspace_command(client: &Connection, command: WorkspaceCmd) -> anyhow::Result<()> {
     match command {
         WorkspaceCmd::Create { repo, name, base } => {
             let repos = client.repo_list()?;
@@ -69,7 +69,7 @@ pub(crate) fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyho
     Ok(())
 }
 
-pub(crate) fn find_workspace(client: &Client, query: &str) -> anyhow::Result<Workspace> {
+pub(crate) fn find_workspace(client: &Connection, query: &str) -> anyhow::Result<Workspace> {
     let workspaces = client.workspace_list(true)?;
     let mut matches: Vec<_> = workspaces.iter().filter(|w| w.name == query || w.id.as_str() == query).collect();
     if matches.is_empty() {

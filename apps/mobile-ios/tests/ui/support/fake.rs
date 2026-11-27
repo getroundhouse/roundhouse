@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use client_core::fake_hub::{self, World};
-use client_core::{Client, RemoteHub};
+use client_core::{Connection, RemoteHub};
 use gpui_kit::TestAppContext;
 use mobile::{MemoryVault, Vault as _};
 use protocol::pairing::Fingerprint;
@@ -27,7 +27,7 @@ impl<'a> Phone<'a> {
         fake_hub::serve(&socket, world);
         let vault = Arc::new(MemoryVault::default());
         vault.save(&paired()).unwrap();
-        let connect = move |_: &RemoteHub| Client::connect(&socket, "roundhouse-ios");
+        let connect = move |_: &RemoteHub| Connection::connect(&socket, "roundhouse-ios");
         let phone = Phone::opening(cx, vault, |vault, opened, options, cx| {
             mobile::open_window_connecting(vault, opened, connect, options, cx)
         });

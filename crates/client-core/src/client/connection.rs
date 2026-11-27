@@ -178,14 +178,14 @@ impl Inner {
 
 /// Dropping the last clone disconnects, which also ends its subscriptions.
 #[derive(Clone)]
-pub struct Client {
+pub struct Connection {
     pub(super) inner: Arc<Inner>,
     pub(super) closer: Arc<Closer>,
 }
 
-impl Client {
+impl Connection {
     /// A connection that hasn't said hello, which a hub only answers a little on. See [`HubAdmin`](super::HubAdmin).
-    pub(super) fn open(socket: &Path) -> Result<Client> {
+    pub(super) fn open(socket: &Path) -> Result<Connection> {
         Self::from_transport(Transport::local(socket)?)
     }
 
@@ -194,7 +194,7 @@ impl Client {
         self.closer.is_local()
     }
 
-    pub(super) fn from_transport(transport: Transport) -> Result<Client> {
+    pub(super) fn from_transport(transport: Transport) -> Result<Connection> {
         let Transport { reader, writer, closer } = transport;
         let closer = Arc::new(closer);
         let inner = Arc::new(Inner {
@@ -214,7 +214,7 @@ impl Client {
         std::thread::Builder::new()
             .name("hub-client-reader".to_string())
             .spawn(move || read_frames(&for_reader, reader))?;
-        Ok(Client { inner, closer })
+        Ok(Connection { inner, closer })
     }
 
     /// Has this connection share `lasting` with every other of its hub's, from now on, which a hub's link does as it

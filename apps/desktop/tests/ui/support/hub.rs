@@ -4,8 +4,8 @@
 
 use std::process::Command;
 
-use client_core::Client;
-use desktop::app::Connection;
+use client_core::Connection;
+use desktop::app::Linking;
 use gpui_kit::{AppContext as _, ElementId};
 use local_hub::Daemon;
 
@@ -14,7 +14,7 @@ use super::{Stack, Ui, click};
 impl Stack {
     /// Kills the hub the way a crash would, with no chance to tidy up. Returns the pid it had.
     pub(crate) fn crash_hub(&self) -> u32 {
-        let pid = Client::connect(&self.hub.paths.socket, "test").unwrap().hub_status().unwrap().pid;
+        let pid = Connection::connect(&self.hub.paths.socket, "test").unwrap().hub_status().unwrap().pid;
         assert!(Command::new("kill").args(["-9", &pid.to_string()]).status().unwrap().success());
         pid
     }
@@ -38,16 +38,16 @@ impl Ui<'_> {
     /// [`without_a_daemon`](Stack::without_a_daemon).
     pub(crate) fn lose_the_hub(&mut self, stack: &Stack) {
         client_core::stop_hub(&stack.hub.paths.socket).unwrap();
-        self.wait("the app to find no hub", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
+        self.wait("the app to find no hub", |ui| matches!(ui.view().linking(), Linking::Failed(_)));
     }
 
     /// Waits for the app to be connected again, to a hub other than the one with this pid. It asks with
-    /// `Client::connect`, never `stack.client()`, which would start that hub itself if it asked before the app had
+    /// `Connection::connect`, never `stack.client()`, which would start that hub itself if it asked before the app had
     /// noticed the old one go. The test would then carry on while the app was still reconnecting.
     pub(crate) fn wait_for_new_hub(&mut self, stack: &Stack, pid: u32) {
         self.wait("a new hub", |ui| {
-            matches!(ui.view().connection(), Connection::Ready)
-                && Client::connect(&stack.hub.paths.socket, "test")
+            matches!(ui.view().linking(), Linking::Ready)
+                && Connection::connect(&stack.hub.paths.socket, "test")
                     .is_ok_and(|c| c.hub_status().is_ok_and(|s| s.pid != pid))
         });
     }

@@ -31,7 +31,8 @@ pub(crate) fn wrapped_step(at: usize, by: isize, len: usize) -> usize {
     (at + len).wrapping_add_signed(by) % len
 }
 
-pub enum Connection {
+/// How the window shows the app's link to its hub stands: connecting, connected and caught up, or why it isn't.
+pub enum Linking {
     Connecting,
     /// Connected, and caught up on the hub's records.
     Ready,
@@ -54,9 +55,9 @@ pub struct AppView {
     /// Showing in each pane a draft made elsewhere once one typed here has reached the hub, from the first connection
     /// on, before which nothing typed here has.
     pub(super) following_drafts: Option<Task<()>>,
-    /// What's shown of how the link stands. Set by [`Self::set_connection`], so the panes are told, and by
+    /// What's shown of how the link stands. Set by [`Self::set_linking`], so the panes are told, and by
     /// `link_changed` once a new connection is ready.
-    pub(super) connection: Connection,
+    pub(super) linking: Linking,
     /// Whether the window was in front when the panes were last told whether they're drawn.
     pub(super) in_front: bool,
     /// Client-core's copy of the hub's records, which `records` shows.
@@ -149,7 +150,7 @@ impl AppView {
             visible: true,
             presentation: Vec::new(),
             checkout,
-            connection: Connection::Connecting,
+            linking: Linking::Connecting,
             // Until the window says it's in front, so nothing is read that may not have been seen.
             in_front: false,
             restartable_hub: None,
@@ -220,16 +221,16 @@ impl AppView {
     }
 
     /// Whether the app is connected to a hub, or connecting, or why it isn't.
-    pub fn connection(&self) -> &Connection {
-        &self.connection
+    pub fn linking(&self) -> &Linking {
+        &self.linking
     }
 
     /// Has the app be connecting, or without a hub. Each pane holds what it would send until there's one again, and is
     /// told whether it's still drawn, which it is while connecting, with the window where it was last known to be,
     /// since this is often in the middle of updating it. A connection that's ready is told of by `refresh`, once the
     /// records have caught up with it.
-    pub(super) fn set_connection(&mut self, connection: Connection, cx: &mut Context<Self>) {
-        self.connection = connection;
+    pub(super) fn set_linking(&mut self, linking: Linking, cx: &mut Context<Self>) {
+        self.linking = linking;
         self.tell_tool_sign_in(cx);
         for pane in self.panes.values() {
             pane.update(cx, WorkspacePane::hub_went_away);
@@ -245,7 +246,7 @@ impl AppView {
 
     /// Whether the app is connected to a hub that has caught up, which is when it asks the hub anything.
     pub fn is_connected(&self) -> bool {
-        matches!(self.connection, Connection::Ready)
+        matches!(self.linking, Linking::Ready)
     }
 
     /// The hub the window shows, whichever connection there is to it, which everything in it asks.
@@ -285,7 +286,7 @@ impl AppView {
 
     /// None without a connection, when panes are kept but neither shown nor used.
     pub(super) fn selected_pane(&self) -> Option<Entity<WorkspacePane>> {
-        if !matches!(self.connection, Connection::Ready) {
+        if !matches!(self.linking, Linking::Ready) {
             return None;
         }
         self.selected().and_then(|id| self.panes.get(id).cloned())

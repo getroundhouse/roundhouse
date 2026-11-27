@@ -4,9 +4,9 @@
 use protocol::client::{accounts, sessions};
 use protocol::model::{Account, AccountId, AgentKind, HubSettings, LoginToken, Reserve, Session, SessionId};
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// Chooses the account chats of this agent kind are put on while they're on none. See
     /// [`accounts::AccountSetDefault`].
     pub fn account_set_default(&self, agent: AgentKind, account: &AccountId) -> Result<HubSettings> {

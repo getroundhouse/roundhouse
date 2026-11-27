@@ -11,7 +11,7 @@
 //! another client, as [`Drafts::from_elsewhere`] says.
 
 #[cfg(test)]
-use crate::{Client, FileToSend};
+use crate::{Connection, FileToSend};
 #[cfg(test)]
 use protocol::model::{Draft, DraftToKeep, NewWorkspaceDraftToKeep, Rev, Session, SessionId};
 

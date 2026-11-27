@@ -291,7 +291,7 @@ fn a_video_playing_in_the_tab_stops_where_it_was_on_a_new_connection(cx: &mut Te
 
     crate::catching_up::connect_again(&mut ui);
     ui.wait("the new connection to catch up", |ui| {
-        matches!(ui.view().connection(), desktop::app::Connection::Ready) && ui.labelled("Play").len() == 1
+        matches!(ui.view().linking(), desktop::app::Linking::Ready) && ui.labelled("Play").len() == 1
     });
 
     let (frame, decodes) = drawn(&ui);

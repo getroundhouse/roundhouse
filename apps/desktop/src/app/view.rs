@@ -10,7 +10,7 @@ use look::Typeset as _;
 use protocol::client::{HubStart, HubStatus};
 
 use super::restarts::restart_note;
-use super::{AppView, Connection, ConnectionFailure, corner, hub_source, hubs, title_bar, window_buttons};
+use super::{AppView, ConnectionFailure, Linking, corner, hub_source, hubs, title_bar, window_buttons};
 use crate::menus::System;
 use crate::names::{MACHINE, THIS_MACHINE};
 use crate::sides::{self, AtTheTop, Side};
@@ -75,17 +75,17 @@ impl AppView {
         if let Some(rows) = home {
             return crate::home::page(self, rows, cx).into_any_element();
         }
-        match self.connection() {
-            Connection::Connecting if self.pane_to_draw().is_none() => {
+        match self.linking() {
+            Linking::Connecting if self.pane_to_draw().is_none() => {
                 look::nothing_to_show("Connecting…").into_any_element()
             }
-            Connection::Failed(ConnectionFailure::Local(reason)) => failed(reason, cx),
-            Connection::Failed(failure) if self.pane_to_draw().is_none() => self.remote_failed(failure, cx),
-            Connection::AcrossABreak(status) => {
+            Linking::Failed(ConnectionFailure::Local(reason)) => failed(reason, cx),
+            Linking::Failed(failure) if self.pane_to_draw().is_none() => self.remote_failed(failure, cx),
+            Linking::AcrossABreak(status) => {
                 let may_restart = hub_source::may_restart(status, self.hub.build_number);
                 across_a_break(status, self.hub.build_version, may_restart, cx)
             }
-            Connection::Ready | Connection::Connecting | Connection::Failed(_) => match self.pane_to_draw() {
+            Linking::Ready | Linking::Connecting | Linking::Failed(_) => match self.pane_to_draw() {
                 Some(pane) => pane.into_any_element(),
                 None if self.records.repos().is_empty() => self.no_projects(cx),
                 None => empty_state(
@@ -130,8 +130,8 @@ impl AppView {
     /// hub to act through.
     pub(in crate::app) fn pane_to_draw(&self) -> Option<Entity<WorkspacePane>> {
         let drawn = matches!(
-            self.connection(),
-            Connection::Ready | Connection::Connecting | Connection::Failed(ConnectionFailure::Unreachable { .. })
+            self.linking(),
+            Linking::Ready | Linking::Connecting | Linking::Failed(ConnectionFailure::Unreachable { .. })
         );
         self.selected().filter(|_| drawn).and_then(|id| self.panes.get(id).cloned())
     }

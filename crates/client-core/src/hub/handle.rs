@@ -7,8 +7,8 @@ use protocol::model::{AttachmentId, CommitId, DeviceId, QueuedPrompt, Session, S
 
 use super::Kept;
 use crate::{
-    Client, ClientError, Commands, Drafts, FilesFor, IdleStop, LiveLog, OpenFile, OpenSession, OpenTerminal, ReadBack,
-    RecordsFeed, Reply, Result, View,
+    ClientError, Commands, Connection, Drafts, FilesFor, IdleStop, LiveLog, OpenFile, OpenSession, OpenTerminal,
+    ReadBack, RecordsFeed, Reply, Result, View,
 };
 use protocol::attachment::Attachment;
 
@@ -48,15 +48,15 @@ impl Hub {
     /// sent only on a connection that has caught up on the hub's records, so nothing acts on records the first list on
     /// a new one is about to replace. Before that it fails at once with [`ClientError::Disconnected`], as it does with
     /// no connection, and isn't sent later. Once sent, it runs to the end whatever the caller does next, as
-    /// [`Client::start`](crate::Client::start) says, and the record its reply carries is in the records by the time
-    /// the reply comes.
+    /// [`Connection::start`](crate::Connection::start) says, and the record its reply carries is in the records by the
+    /// time the reply comes.
     pub fn ask<R>(&self, request: R) -> Reply<R::Reply>
     where
         R: Request + Send + 'static,
         R::Reply: Send + 'static,
     {
         match self.ready() {
-            Ok(client) => client.start(move |client| client.call(request)),
+            Ok(connection) => connection.start(move |connection| connection.call(request)),
             Err(e) => Reply::now(Err(e)),
         }
     }
@@ -72,21 +72,21 @@ impl Hub {
         R::Reply: Send + 'static,
     {
         let kept = self.kept.drafts().flushed();
-        self.start(move |client| {
+        self.start(move |connection| {
             // An answer, whether it's kept or as far as it could get, so a hub that's gone can't hold this forever.
             let _ = kept.recv();
-            client.call(request)
+            connection.call(request)
         })
     }
 
-    /// Starts `call` on the connection that has caught up, on a thread of its own, as [`Client::start`] does, or
+    /// Starts `call` on the connection that has caught up, on a thread of its own, as [`Connection::start`] does, or
     /// fails at once without one, as [`Hub::ask`] says, for what `client-core` asks in more than one step.
     pub(crate) fn start<T: Send + 'static>(
         &self,
-        call: impl FnOnce(&Client) -> Result<T> + Send + 'static,
+        call: impl FnOnce(&Connection) -> Result<T> + Send + 'static,
     ) -> Reply<T> {
         match self.ready() {
-            Ok(client) => client.start(call),
+            Ok(connection) => connection.start(call),
             Err(e) => Reply::now(Err(e)),
         }
     }
@@ -124,7 +124,7 @@ impl Hub {
     /// be made says the connection was lost, and they're read again on the next, as [`ReadBack::came_back`] says.
     pub fn read_back(&self, kept_for: &FilesFor, files: Vec<Attachment>) -> ReadBack {
         match self.ready() {
-            Ok(client) => client.read_back(kept_for, files),
+            Ok(connection) => connection.read_back(kept_for, files),
             Err(_) => ReadBack::cut_off(files),
         }
     }
@@ -160,7 +160,7 @@ impl Hub {
     }
 
     /// The bytes of the file `id` in the chat `session_id`, waited for as [`Hub::call`] does, as
-    /// [`Client::attachment_read`] reads them.
+    /// [`Connection::attachment_read`] reads them.
     pub fn read_attachment(&self, session_id: &SessionId, id: &AttachmentId) -> Result<Vec<u8>> {
         self.ready()?.attachment_read(session_id, id)
     }
@@ -174,7 +174,7 @@ impl Hub {
     }
 
     /// The connection that has caught up, or the failure a request meets without one.
-    pub(crate) fn ready(&self) -> Result<Client> {
+    pub(crate) fn ready(&self) -> Result<Connection> {
         self.kept.ready().ok_or(ClientError::Disconnected)
     }
 
@@ -199,7 +199,7 @@ impl Hub {
 }
 
 /// Stops a hub if that cuts nothing off, as [`Hub::stop_if_idle`] made it.
-pub struct StopIfIdle(Result<Client>);
+pub struct StopIfIdle(Result<Connection>);
 
 impl StopIfIdle {
     /// Stops the hub, and waits for it to exit, as [`crate::stop_hub_if_idle`] says, on the caller's thread.
@@ -214,23 +214,23 @@ pub struct Round(u64);
 
 #[cfg(any(test, feature = "testing"))]
 impl Hub {
-    /// A hub with no link, on `client`, taken to have caught up at once, for a test of a view on a stand-in hub that
-    /// doesn't send its records, which a link would wait for.
-    pub fn caught_up_on(client: &Client) -> Hub {
+    /// A hub with no link, on `connection`, taken to have caught up at once, for a test of a view on a stand-in hub
+    /// that doesn't send its records, which a link would wait for.
+    pub fn caught_up_on(connection: &Connection) -> Hub {
         let hub = Hub { kept: Arc::new(Kept::new()) };
-        hub.kept.connected(client);
-        hub.kept.set_ready(Some(client.clone()));
+        hub.kept.connected(connection);
+        hub.kept.set_ready(Some(connection.clone()));
         hub
     }
 }
 
 #[cfg(any(test, feature = "testing"))]
 impl Hub {
-    /// Carries what's open on to `client`, as a link does a new connection, and takes it to have caught up at once, a
-    /// new round, for a test of a view on stand-in hubs.
-    pub fn carry_on_to(&self, client: &Client) {
+    /// Carries what's open on to `connection`, as a link does a new connection, and takes it to have caught up at once,
+    /// a new round, for a test of a view on stand-in hubs.
+    pub fn carry_on_to(&self, connection: &Connection) {
         self.kept.set_ready(None);
-        self.kept.connected(client);
-        self.kept.set_ready(Some(client.clone()));
+        self.kept.connected(connection);
+        self.kept.set_ready(Some(connection.clone()));
     }
 }

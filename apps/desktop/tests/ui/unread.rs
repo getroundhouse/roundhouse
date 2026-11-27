@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use desktop::app::Connection;
+use desktop::app::Linking;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::model::{Session, SessionId, WorkspaceId};
 
@@ -190,10 +190,10 @@ fn a_chat_marked_unread_stays_so_when_the_hub_is_lost_and_found_again(cx: &mut T
     mark_unread_from_its_tab(&mut ui, &workspace, &chat);
 
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
-    ui.wait("the app to find no hub", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
+    ui.wait("the app to find no hub", |ui| matches!(ui.view().linking(), Linking::Failed(_)));
     local_hub::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");
-    ui.wait("the hub to be back", |ui| matches!(ui.view().connection(), Connection::Ready));
+    ui.wait("the hub to be back", |ui| matches!(ui.view().linking(), Linking::Ready));
     for _ in 0..50 {
         ui.frame();
     }
@@ -246,7 +246,7 @@ fn a_chat_marked_unread_and_shown_again_while_the_hub_restarts_is_read_once_its_
             });
         });
 
-        assert!(matches!(ui.view().connection(), Connection::Connecting), "{shown:?}: still connecting");
+        assert!(matches!(ui.view().linking(), Linking::Connecting), "{shown:?}: still connecting");
         assert!(tab_unread(&ui, &later), "{shown:?}: nothing is read without a hub");
         ui.wait_for_new_hub(&stack, pid);
         ui.wait(&format!("{shown:?}: the hub to have it read"), |_| read_at_the_hub(&stack, &later));

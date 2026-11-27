@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Context as _;
 use client_core::link::{Connect, Lost, Refused};
-use client_core::{Client, ClientError, HubAdmin, IdleStop, Introduction, Restart};
+use client_core::{ClientError, Connection, HubAdmin, IdleStop, Introduction, Restart};
 use gpui_kit::Result;
 use local_hub::Daemon;
 use protocol::Build;
@@ -96,9 +96,9 @@ impl HubSource {
     /// word on whether it's idle, and one that's busy after all is kept. One restarting that's still finishing, as with
     /// a setup script running, is used until it goes, and then the app connects again. The panes stay, with what's
     /// typed in them. Also returns the hub's status as it connected.
-    fn connect_or_replace(&self) -> Result<(Client, Option<HubStatus>), ClientError> {
+    fn connect_or_replace(&self) -> Result<(Connection, Option<HubStatus>), ClientError> {
         if let Some(remote) = &self.remote {
-            return Client::connect_remote(remote, "desktop").map(|client| (client, None));
+            return Connection::connect_remote(remote, "desktop").map(|client| (client, None));
         }
         let mut client = self.connect_or_start()?;
         let mut status = client.hub_status()?;
@@ -120,7 +120,7 @@ impl HubSource {
     }
 
     /// Says in its hello which device this is, so the hub knows which has a chat's conversation.
-    fn connect_or_start(&self) -> Result<Client, ClientError> {
+    fn connect_or_start(&self) -> Result<Connection, ClientError> {
         let introduction = match super::this_device::this_device(&self.paths.data_dir) {
             Some(device) => Introduction::on("desktop", device),
             None => Introduction::from("desktop"),
@@ -135,7 +135,7 @@ impl Connect for HubSource {
     type With = Option<HubStatus>;
     type Failure = Unconnected;
 
-    fn connect(&mut self) -> Result<(Client, Option<HubStatus>), Refused<Unconnected>> {
+    fn connect(&mut self) -> Result<(Connection, Option<HubStatus>), Refused<Unconnected>> {
         let local = self.remote.is_none();
         self.connect_or_replace().map_err(|e| {
             if !local {

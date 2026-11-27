@@ -15,7 +15,7 @@ fn now_ms() -> i64 {
 }
 
 /// A hub that keeps each chat's draft, at revision 5, and says when each change it's sent says it was typed.
-fn stamping_hub(socket: &Path) -> (Client, flume::Receiver<Option<i64>>) {
+fn stamping_hub(socket: &Path) -> (Connection, flume::Receiver<Option<i64>>) {
     let (said, heard) = flume::unbounded();
     let client = stand_in_hub::connect(socket, move |request| {
         let ClientRequest::SessionDraft(drafts::SessionDraft { id, draft, typed_at_ms }) = request else {

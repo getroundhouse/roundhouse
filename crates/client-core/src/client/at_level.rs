@@ -9,7 +9,7 @@ use protocol::model::Level;
 
 use crate::client::follow::{Reach, Source};
 use crate::client::subscribing::Changing;
-use crate::client::{Client, Result, Subscription, SubscriptionItem};
+use crate::client::{Connection, Result, Subscription, SubscriptionItem};
 use crate::records::HubRecords;
 
 /// One of what a [`LevelSource`] follows, each at its own level: a workspace, or an issue or a pull request a chip
@@ -78,10 +78,10 @@ impl<L: AtLevel> Source for LevelSource<L> {
 
     /// Where the hub lists each before it answers, what's held of one followed with no list once it's answered, from
     /// the connection before, is let go of, as [`AtLevel::LISTED_BEFORE_ANSWER`] says.
-    fn resume(&mut self, client: &Client, held: &Mutex<L::Wanted>) -> Result<Subscription> {
+    fn resume(&mut self, connection: &Connection, held: &Mutex<L::Wanted>) -> Result<Subscription> {
         self.changing = None;
         let wanted = L::wanted(&held.lock());
-        let (subscription, _refused) = client.follow_all(Self::follows(&wanted))?;
+        let (subscription, _refused) = connection.follow_all(Self::follows(&wanted))?;
         self.followed_now(wanted);
         if L::LISTED_BEFORE_ANSWER {
             let mut listed = Vec::new();
@@ -91,7 +91,7 @@ impl<L: AtLevel> Source for LevelSource<L> {
                 {
                     listed.push(one);
                 }
-                self.apply(client, held, item)?;
+                self.apply(connection, held, item)?;
             }
             for one in self.followed.iter().filter(|one| !listed.contains(one)) {
                 self.records.change(|records| records.let_go_of(&one.clone().level()));
@@ -104,7 +104,7 @@ impl<L: AtLevel> Source for LevelSource<L> {
     /// Takes what one's level sends into the copy of the hub's records, which tells its own readers when that changes
     /// it. What's sent of one no longer followed, which was already on its way as it was let go of, is dropped, so
     /// nothing brings back what letting go of it let go of.
-    fn apply(&mut self, _: &Client, _: &Mutex<L::Wanted>, item: SubscriptionItem) -> Result<bool> {
+    fn apply(&mut self, _: &Connection, _: &Mutex<L::Wanted>, item: SubscriptionItem) -> Result<bool> {
         let Some(one) = item.level().and_then(L::at) else { return Ok(false) };
         if !self.followed.contains(&one) {
             return Ok(false);
@@ -127,13 +127,13 @@ impl<L: AtLevel> Source for LevelSource<L> {
     }
 
     /// Follows each wanted now, if that has changed, and lets go of the rest.
-    fn asked(&mut self, connection: Option<&Client>, held: &Mutex<L::Wanted>, _: &dyn Fn()) -> Result<bool> {
+    fn asked(&mut self, connection: Option<&Connection>, held: &Mutex<L::Wanted>, _: &dyn Fn()) -> Result<bool> {
         let wanted = L::wanted(&held.lock());
-        let (Some(client), Some(changing)) = (connection, &self.changing) else { return Ok(false) };
+        let (Some(connection), Some(changing)) = (connection, &self.changing) else { return Ok(false) };
         if wanted == self.followed {
             return Ok(false);
         }
-        changing.follow_only(client, Self::follows(&wanted))?;
+        changing.follow_only(connection, Self::follows(&wanted))?;
         self.followed_now(wanted);
         Ok(false)
     }

@@ -4,9 +4,9 @@
 use protocol::client::log;
 use protocol::model::{CompactionLine, PromptLine, SessionId};
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// Every prompt in the session, oldest first, as a line each.
     pub fn session_prompt_list(&self, id: &SessionId) -> Result<Vec<PromptLine>> {
         Ok(self.call(log::SessionPromptList { id: id.clone() })?.prompts)

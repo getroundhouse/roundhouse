@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use client_core::{Client, Subscription, SubscriptionItem};
+use client_core::{Connection, Subscription, SubscriptionItem};
 use protocol::client::HubNotice;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::Follow;
@@ -20,7 +20,7 @@ pub(crate) struct Observing {
 
 impl Observing {
     /// Follows `level`, which lists its observations at once.
-    pub(crate) fn at(client: &Client, level: Follow) -> Self {
+    pub(crate) fn at(client: &Connection, level: Follow) -> Self {
         Self { followed: client.follow(level).unwrap(), held: HashMap::new() }
     }
 
@@ -81,7 +81,7 @@ pub(crate) fn known<T>(observed: &Observed<T>) -> Option<&T> {
 
 /// The branches of the workspace `id`, as its level says them, once `holds` is true of them.
 pub(crate) fn branches_once(
-    client: &Client,
+    client: &Connection,
     id: &WorkspaceId,
     what: &str,
     holds: impl Fn(Option<&Branches>) -> bool,
@@ -94,6 +94,6 @@ pub(crate) fn branches_once(
 }
 
 /// What the hub's level says, as `pick` picks it out, which a client reads in the list of every record.
-pub(crate) fn at_the_hub<T>(client: &Client, pick: impl Fn(&Observation) -> Option<T>) -> Option<T> {
+pub(crate) fn at_the_hub<T>(client: &Connection, pick: impl Fn(&Observation) -> Option<T>) -> Option<T> {
     client.records().unwrap().observations.iter().find_map(pick)
 }

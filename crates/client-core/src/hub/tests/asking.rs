@@ -12,12 +12,12 @@ use protocol::prompt::Prompt;
 use super::stand_ins::{NEVER, TIMEOUT, Tries, doesnt_know, listing};
 use crate::link::{Link, LinkState, Waits};
 use crate::stand_in_hub::{self, Does};
-use crate::{Client, ClientError, DraftChange, Hub, NotTaken, Opening, View, Written};
+use crate::{ClientError, Connection, DraftChange, Hub, NotTaken, Opening, View, Written};
 use protocol::client::{ApiError, ErrorCode};
 
 /// A stand-in hub on `socket` that lists its records once `list` is sent something, and answers that it has no
 /// repositories, with everything it hears.
-fn hub_that_lists_after(socket: &Path, list: flume::Receiver<()>) -> (Client, flume::Receiver<ClientRequest>) {
+fn hub_that_lists_after(socket: &Path, list: flume::Receiver<()>) -> (Connection, flume::Receiver<ClientRequest>) {
     let heard = stand_in_hub::listen(socket, move |request| {
         if let ClientRequest::Subscribe(subscribe) = &request {
             let follows_the_hub = subscribe.start.iter().any(|start| start.follow == Follow::Hub);
@@ -32,12 +32,12 @@ fn hub_that_lists_after(socket: &Path, list: flume::Receiver<()>) -> (Client, fl
         }
         Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Repos(Repos { repos: Vec::new() }))))
     });
-    (Client::connect(socket, "test").unwrap(), heard)
+    (Connection::connect(socket, "test").unwrap(), heard)
 }
 
 /// A stand-in hub on `socket` that lists its records at once, and goes when it's asked for its repositories, which a
 /// test asks for to lose the connection, with everything it hears.
-fn hub_that_goes_when_asked(socket: &Path) -> (Client, flume::Receiver<ClientRequest>) {
+fn hub_that_goes_when_asked(socket: &Path) -> (Connection, flume::Receiver<ClientRequest>) {
     let heard = stand_in_hub::listen(socket, |request| {
         if let ClientRequest::Subscribe(subscribe) = &request {
             listing(subscribe)
@@ -47,7 +47,7 @@ fn hub_that_goes_when_asked(socket: &Path) -> (Client, flume::Receiver<ClientReq
             doesnt_know()
         }
     });
-    (Client::connect(socket, "test").unwrap(), heard)
+    (Connection::connect(socket, "test").unwrap(), heard)
 }
 
 /// Waits for `heard` to have had a request that starts following a terminal, and one that starts following a chat, in
@@ -125,7 +125,7 @@ fn a_request_asked_once_what_is_typed_is_kept_waits_for_it() {
             doesnt_know()
         }
     });
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     let link = Link::start_waiting(Tries::of(vec![Ok(client)]), Waits::retrying(NEVER, NEVER));
     let hub = link.hub();
     waiting::thread::until(TIMEOUT, "never caught up", || hub.caught_up());
@@ -189,7 +189,7 @@ fn a_hub_is_on_this_machine_as_its_newest_connection_said_once_that_has_gone() {
 
 /// A stand-in hub on `socket` that answers a file's diff in three pages, the second once `second` is sent something,
 /// with everything it hears.
-fn hub_paging_after(socket: &Path, second: flume::Receiver<()>) -> (Client, flume::Receiver<ClientRequest>) {
+fn hub_paging_after(socket: &Path, second: flume::Receiver<()>) -> (Connection, flume::Receiver<ClientRequest>) {
     let heard = stand_in_hub::listen(socket, move |request| {
         let page = |patch: &str, next_line| {
             let body = FileDiffBody::Patch { patch: patch.into(), next_line };
@@ -206,7 +206,7 @@ fn hub_paging_after(socket: &Path, second: flume::Receiver<()>) -> (Client, flum
             _ => Does::Answers(page("three\n", None)),
         }
     });
-    (Client::connect(socket, "test").unwrap(), heard)
+    (Connection::connect(socket, "test").unwrap(), heard)
 }
 
 /// Every page of a file's diff is read on the connection the first was, so a new connection while it's read doesn't

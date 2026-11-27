@@ -6,7 +6,7 @@
 #![cfg(test)]
 
 use client_core::fake_hub::{self, HubBuild, World};
-use desktop::app::{Agents, BuildLine, Connection, Updating};
+use desktop::app::{Agents, BuildLine, Linking, Updating};
 use gpui_kit::TestAppContext;
 
 use crate::support::{Stack, StandInHub, Ui, open_on_the_world};
@@ -19,11 +19,11 @@ fn a_hub_across_a_real_break_is_explained_and_can_be_restarted(cx: &mut TestAppC
 
     ui.wait(
         "the app to see the hub",
-        |ui| matches!(ui.view().connection(), Connection::AcrossABreak(status) if status.running_sessions == 2),
+        |ui| matches!(ui.view().linking(), Linking::AcrossABreak(status) if status.running_sessions == 2),
     );
     ui.click("restart-hub");
 
-    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready));
+    ui.wait("a new hub", |ui| matches!(ui.view().linking(), Linking::Ready));
     let status = stack.client().hub_status().unwrap();
     assert_ne!(status.pid, other.0.id());
     assert!(status.on_demand);
@@ -87,7 +87,7 @@ fn an_older_hub_that_goes_as_the_app_joins_it_leaves_the_app_on_its_own(cx: &mut
     let mut ui = Ui::open_without_waiting(cx, &stack);
 
     wait_for_the_apps_own_hub(&mut ui, &mut older);
-    ui.wait("the app to connect", |ui| matches!(ui.view().connection(), Connection::Ready));
+    ui.wait("the app to connect", |ui| matches!(ui.view().linking(), Linking::Ready));
     assert!(older.restarted(), "asked to restart, rather than to stop");
 }
 
@@ -167,7 +167,7 @@ fn an_older_hub_that_is_busy_once_asked_to_stop_is_kept(cx: &mut TestAppContext)
     ui.wait("the app to be back on the older hub after it refused", |ui| {
         let refused =
             client_core::HubAdmin::connect(&socket).is_ok_and(|hub| hub.status().unwrap().running_sessions == 1);
-        refused && matches!(ui.view().connection(), Connection::Ready)
+        refused && matches!(ui.view().linking(), Linking::Ready)
     });
     assert!(older.0.try_wait().unwrap().is_none());
     assert!(matches!(ui.build_line().update, Some(Updating::Finishing { .. })));
@@ -203,14 +203,14 @@ fn a_hub_started_by_hand_is_explained_and_left_alone(cx: &mut TestAppContext) {
     let mut other = stack.start_stand_in_hub(&["--not-on-demand"]);
     let mut ui = Ui::open_without_waiting(cx, &stack);
 
-    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection(), Connection::AcrossABreak(_)));
+    ui.wait("the app to see the hub", |ui| matches!(ui.view().linking(), Linking::AcrossABreak(_)));
 
     assert!(!ui.has("restart-hub"));
     assert!(other.0.try_wait().unwrap().is_none());
     // Whoever runs it stops it, and the app can then start one of its own.
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
     ui.click("try-hub-again");
-    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready));
+    ui.wait("a new hub", |ui| matches!(ui.view().linking(), Linking::Ready));
 }
 
 #[gpui_kit::test]
@@ -219,7 +219,7 @@ fn a_hub_newer_than_the_app_is_not_offered_for_restart(cx: &mut TestAppContext) 
     let _newer = stack.start_stand_in_hub(&["--newer"]);
     let mut ui = Ui::open_without_waiting(cx, &stack);
 
-    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection(), Connection::AcrossABreak(_)));
+    ui.wait("the app to see the hub", |ui| matches!(ui.view().linking(), Linking::AcrossABreak(_)));
 
     assert!(!ui.has("restart-hub"));
     assert!(ui.has("try-hub-again"));
@@ -230,12 +230,12 @@ fn restarting_a_hub_that_has_already_gone_still_connects(cx: &mut TestAppContext
     let stack = Stack::new();
     let _other = stack.start_stand_in_hub(&[]);
     let mut ui = Ui::open_without_waiting(cx, &stack);
-    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection(), Connection::AcrossABreak(_)));
+    ui.wait("the app to see the hub", |ui| matches!(ui.view().linking(), Linking::AcrossABreak(_)));
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
 
     ui.click("restart-hub");
 
-    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready));
+    ui.wait("a new hub", |ui| matches!(ui.view().linking(), Linking::Ready));
 }
 
 /// A hub installed as a service that has found a newer release offers to update, and says why it refused, as the fake

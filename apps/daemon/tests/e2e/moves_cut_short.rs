@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::thread;
 
-use client_core::Client;
+use client_core::Connection;
 use process::ProcessRecord;
 use protocol::model::{SetupStatus, Workspace, WorkspaceId, WorkspaceStatus};
 use protocol::paths::WORKER_RECORD_FILE;
@@ -22,7 +22,7 @@ fn held(started: &Path, go: &Gate) -> String {
 }
 
 /// A ready workspace whose archive script waits to be let go, the file that says it has started, and what lets it go.
-fn workspace_with_a_held_archive(stack: &Stack, client: &Client) -> (Workspace, PathBuf, Gate) {
+fn workspace_with_a_held_archive(stack: &Stack, client: &Connection) -> (Workspace, PathBuf, Gate) {
     let (started, go) = (stack.path("archive-started"), Gate::new(stack, "archive-go"));
     commit_settings(stack, &format!("[scripts]\narchive = \"{}\"\n", held(&started, &go)));
     let (made, _) = stack.workspace(client);
@@ -41,12 +41,12 @@ fn archive_until_the_script_runs(stack: &Stack, id: &WorkspaceId, started: &Path
     assert_eq!(workspace(&stack.client(), id).status, WorkspaceStatus::Archiving);
 }
 
-fn wait_for_workspace(client: &Client, id: &WorkspaceId, status: WorkspaceStatus) {
+fn wait_for_workspace(client: &Connection, id: &WorkspaceId, status: WorkspaceStatus) {
     wait_until(&format!("the workspace to be {status:?}"), || workspace(client, id).status == status);
 }
 
 /// The PID of the worker serving the workspace's instance, as it recorded itself.
-fn worker_of(stack: &Stack, client: &Client, id: &WorkspaceId) -> u32 {
+fn worker_of(stack: &Stack, client: &Connection, id: &WorkspaceId) -> u32 {
     let instance = stack.paths().instances_dir.join(workspace(client, id).instance_id.to_string());
     ProcessRecord::read(&instance.join(WORKER_RECORD_FILE)).expect("the worker's record").pid
 }

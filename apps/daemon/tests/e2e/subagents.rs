@@ -5,7 +5,7 @@
 #![cfg(test)]
 
 use client_core::session_log::{Row, SessionLog};
-use client_core::{Client, RecordsFeed, Subscription, View};
+use client_core::{Connection, RecordsFeed, Subscription, View};
 use protocol::capability::calls::Call;
 use protocol::client::subscriptions::{Follow, LogFrom};
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TaskOutcome};
@@ -14,7 +14,7 @@ use protocol::model::{Place, SessionId, Subagent, SubagentId, SubagentStatus, To
 use crate::support::{Follower, Gate, Stack, read_all, wait_for_turn_end, wait_until};
 
 /// The call that started the subagent, once it's in the log.
-fn subagent_call(client: &Client, session_id: &SessionId) -> ToolUseId {
+fn subagent_call(client: &Connection, session_id: &SessionId) -> ToolUseId {
     let mut call = None;
     wait_until("the subagent's call", || {
         call = read_all(client, session_id).iter().find_map(|event| match &event.body {
@@ -31,7 +31,7 @@ fn subagent_call(client: &Client, session_id: &SessionId) -> ToolUseId {
 
 /// The call that started the subagent, and the subagent, as the agent named it when it said it started, once that's
 /// in the log. The CLI names it by the task it runs as, which isn't the call.
-fn subagent(client: &Client, session_id: &SessionId) -> (ToolUseId, SubagentId) {
+fn subagent(client: &Connection, session_id: &SessionId) -> (ToolUseId, SubagentId) {
     let call = subagent_call(client, session_id);
     let mut id = None;
     wait_until("the subagent's start", || {
@@ -61,7 +61,7 @@ fn reported(follower: &Follower) -> bool {
 }
 
 /// Follows the agent's own events in session `id`, or the subagent `subagent`'s, from the first.
-fn follow_places(client: &Client, id: &SessionId, subagent: Option<&SubagentId>) -> Subscription {
+fn follow_places(client: &Connection, id: &SessionId, subagent: Option<&SubagentId>) -> Subscription {
     let from = LogFrom::Place { subagent: subagent.cloned(), place: Place::new(1) };
     client.follow(Follow::Session { id: id.clone(), from: Some(from) }).unwrap()
 }

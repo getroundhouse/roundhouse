@@ -1,6 +1,6 @@
 //! The calls an agent makes to tools over MCP, and what they came back with.
 
-use client_core::Client;
+use client_core::Connection;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::SessionId;
 
@@ -24,7 +24,7 @@ pub(crate) fn results(events: &[SessionEvent]) -> Vec<(String, bool)> {
 }
 
 /// Sends the chat a prompt, and returns what its calls came back with, once it's the `turn`th to end.
-pub(crate) fn run(client: &Client, chat: &SessionId, script: &str, turn: usize) -> Vec<(String, bool)> {
+pub(crate) fn run(client: &Connection, chat: &SessionId, script: &str, turn: usize) -> Vec<(String, bool)> {
     client.session_prompt(chat, script, None).unwrap();
     let events = wait_for_turn_end(client, chat, turn);
     let since = events.iter().rposition(|event| matches!(event.body, EventBody::UserPrompt { .. })).unwrap();

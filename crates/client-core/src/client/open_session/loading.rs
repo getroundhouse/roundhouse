@@ -1,5 +1,5 @@
 use super::super::follow::{Carried, FollowError, Following};
-use super::super::{Client, RecordsFeed};
+use super::super::{Connection, RecordsFeed};
 use super::search;
 use super::source::SessionSource;
 use crate::Hub;
@@ -51,7 +51,7 @@ impl OpenSession {
     /// subscription sends them, until every clone of this has gone. A view opens one from its [`Hub`].
     pub(crate) fn start(
         hub: &Hub,
-        connection: Option<&Client>,
+        connection: Option<&Connection>,
         records: &RecordsFeed,
         session: &Session,
         view: View,
@@ -66,7 +66,7 @@ impl OpenSession {
             session_id: session.id.clone(),
             view: view.clone(),
             placed: false,
-            read_from: connection.map(|client| client.hub_version().to_string()),
+            read_from: connection.map(|connection| connection.hub_version().to_string()),
             records: records.reach(),
         };
         source.records.change(|records| {
@@ -162,7 +162,7 @@ impl OpenSession {
         }
         let asking = search::Asking { session_id: self.session_id.clone(), view: self.view.clone(), needle, around };
         match self.hub.ready() {
-            Ok(client) => search::Job::start(&client, asking, &self.searches, self.follow.teller()),
+            Ok(connection) => search::Job::start(&connection, asking, &self.searches, self.follow.teller()),
             Err(e) => {
                 // As a search that fails on its thread says so, so a view hears of it.
                 self.follow.teller().tell();

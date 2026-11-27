@@ -7,7 +7,7 @@ use std::process::{Child, Stdio};
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use client_core::Client;
+use client_core::Connection;
 use process::testing::WholeEnvironment;
 use protocol::model::{Repo, Workspace};
 use protocol::paths::{ENV_HOME, ENV_LISTEN, ENV_WORKSPACES, Paths};
@@ -84,7 +84,7 @@ impl Stack {
         self.hub = Some(hub);
         let socket = &self.paths.socket;
         waiting::thread::until(TIMEOUT, "timed out waiting for the hub to start", || {
-            Client::connect(socket, "test").is_ok()
+            Connection::connect(socket, "test").is_ok()
         });
     }
 
@@ -100,8 +100,8 @@ impl Stack {
     }
 
     /// A client on the hub's own machine, for setting things up and checking them from outside the app.
-    pub(crate) fn client(&self) -> Client {
-        Client::connect(&self.paths.socket, "test").unwrap()
+    pub(crate) fn client(&self) -> Connection {
+        Connection::connect(&self.paths.socket, "test").unwrap()
     }
 
     /// What the hub's QR code holds now, which points only at loopback, where the hub listens, on the port it chose the

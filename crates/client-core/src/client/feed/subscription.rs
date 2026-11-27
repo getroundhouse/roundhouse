@@ -1,6 +1,6 @@
 use super::super::follow::{FollowError, Following, Reach, Source};
 use super::super::workspace_level::{FollowedWorkspace, Workspaces};
-use super::super::{Client, ClientError, GithubFeed, Result, Subscription, SubscriptionItem};
+use super::super::{ClientError, Connection, GithubFeed, Result, Subscription, SubscriptionItem};
 use crate::Agents;
 use crate::records::{HubRecords, Snapshot};
 use parking_lot::Mutex;
@@ -24,23 +24,23 @@ impl RecordsFeed {
     /// Starts following, on a thread of its own: follows the hub, and is caught up once the hub has said where its
     /// records stand.
     ///
-    /// Every record a reply on `client` carries is taken in too, as it comes, so whoever made the call needn't hand it
-    /// on, and what's shown needn't wait for the hub to say the same. So are the records of each session an
+    /// Every record a reply on `connection` carries is taken in too, as it comes, so whoever made the call needn't hand
+    /// it on, and what's shown needn't wait for the hub to say the same. So are the records of each session an
     /// [`OpenSession`](crate::OpenSession) handed this follows, as its subscription sends them.
-    pub fn start(client: &Client) -> RecordsFeed {
-        RecordsFeed::started(Some(client))
+    pub fn start(connection: &Connection) -> RecordsFeed {
+        RecordsFeed::started(Some(connection))
     }
 
     /// As [`RecordsFeed::start`], on `connection`, or with none until one is given to [`RecordsFeed::reconnect`], as a
     /// hub's are before its link has connected.
-    pub(crate) fn started(connection: Option<&Client>) -> RecordsFeed {
+    pub(crate) fn started(connection: Option<&Connection>) -> RecordsFeed {
         let records = Following::unstarted(HubRecords::default());
         let github = GithubFeed::start(connection, records.reach());
         let workspaces = Workspaces::start(connection, records.reach());
         let follow = records.start(connection, || RecordsSource);
         let feed = RecordsFeed { follow, github, workspaces };
-        if let Some(client) = connection {
-            client.inner.folding.reach(&feed.follow);
+        if let Some(connection) = connection {
+            connection.inner.folding.reach(&feed.follow);
         }
         feed
     }
@@ -74,13 +74,13 @@ impl RecordsFeed {
     /// does what the same hub says of GitHub, and following each workspace followed at its own level. The connection
     /// may be to another hub, or to one whose revisions started again, so the first list of each level on it replaces
     /// what's held of that level, as [`HubRecords::connected_again`] says. Call it before anything that follows a session
-    /// carries on on `client`, since what that takes in goes into the same copy.
-    pub(crate) fn reconnect(&self, client: &Client) {
+    /// carries on on `connection`, since what that takes in goes into the same copy.
+    pub(crate) fn reconnect(&self, connection: &Connection) {
         self.follow.quietly(HubRecords::connected_again);
-        client.inner.folding.reach(&self.follow);
-        self.follow.reconnect(client);
-        self.github.reconnect(client);
-        self.workspaces.reconnect(client);
+        connection.inner.folding.reach(&self.follow);
+        self.follow.reconnect(connection);
+        self.github.reconnect(connection);
+        self.workspaces.reconnect(connection);
     }
 
     /// Follows workspace `id` at its own level, as [`FollowedWorkspace`] says, until the handle this returns is dropped,
@@ -119,26 +119,26 @@ impl Source for RecordsSource {
 
     /// Follows the hub, and takes in where its records stand, which the hub sends first, before it returns, so it's
     /// caught up once it has.
-    fn resume(&mut self, client: &Client, held: &Mutex<HubRecords>) -> Result<Subscription> {
-        let subscription = client.follow(Follow::Hub)?;
+    fn resume(&mut self, connection: &Connection, held: &Mutex<HubRecords>) -> Result<Subscription> {
+        let subscription = connection.follow(Follow::Hub)?;
         // Asked for on each connection, since it may be to another hub, and taken in with the records, so a view that
         // has a chat's record has what its agent offers.
-        let agents = Agents::read(client)?;
+        let agents = Agents::read(connection)?;
         held.lock().set_agents(agents);
         for item in &subscription.items {
             if let SubscriptionItem::Listed(listed) = &item
                 && let Listed::Hub(_) = **listed
             {
-                self.apply(client, held, item)?;
+                self.apply(connection, held, item)?;
                 return Ok(subscription);
             }
-            self.apply(client, held, item)?;
+            self.apply(connection, held, item)?;
         }
         // Its channel closed before the list came, as when the connection goes.
         Err(ClientError::Disconnected)
     }
 
-    fn apply(&mut self, _: &Client, held: &Mutex<HubRecords>, item: SubscriptionItem) -> Result<bool> {
+    fn apply(&mut self, _: &Connection, held: &Mutex<HubRecords>, item: SubscriptionItem) -> Result<bool> {
         Ok(match item {
             SubscriptionItem::Listed(listed) => match *listed {
                 Listed::Hub(records) => held.lock().apply_list(*records),
@@ -155,7 +155,7 @@ impl Source for RecordsSource {
     }
 
     /// Everything it holds comes from the hub's level, which needs nothing asked.
-    fn asked(&mut self, _: Option<&Client>, _: &Mutex<HubRecords>, _: &dyn Fn()) -> Result<bool> {
+    fn asked(&mut self, _: Option<&Connection>, _: &Mutex<HubRecords>, _: &dyn Fn()) -> Result<bool> {
         Ok(false)
     }
 }

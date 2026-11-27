@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use super::handle::{Ask, Shared};
 use super::{Connect, LinkState, Lost, Refused, Waits};
-use crate::{Client, RecordsFeed};
+use crate::{Connection, RecordsFeed};
 
 pub(super) struct Linker<C: Connect> {
     connect: C,
@@ -20,8 +20,8 @@ pub(super) struct Linker<C: Connect> {
 
 /// Where the link has got to, between tries.
 enum Stand<F> {
-    /// Connected on `client`, catching up until `catching_up_until`, or caught up once that's `None`.
-    Connected { client: Client, catching_up_until: Option<Instant> },
+    /// Connected on `connection`, catching up until `catching_up_until`, or caught up once that's `None`.
+    Connected { connection: Connection, catching_up_until: Option<Instant> },
     /// The last try failed with `failure`, and the next is at `until`.
     Waiting { until: Instant, failure: F },
     /// The last try failed in a way only a person can fix.
@@ -106,7 +106,7 @@ impl<C: Connect> Linker<C> {
     fn due(&mut self, stand: Stand<C::Failure>) -> Stand<C::Failure> {
         match stand {
             Stand::Waiting { failure, .. } => self.try_now(Some(failure)),
-            Stand::Connected { client, .. } => self.given_up(&client, &Lost::CatchingUp),
+            Stand::Connected { connection, .. } => self.given_up(&connection, &Lost::CatchingUp),
             Stand::Stopped => Stand::Stopped,
         }
     }
@@ -120,17 +120,17 @@ impl<C: Connect> Linker<C> {
             return self.asked(ask);
         }
         match tried {
-            Ok((client, with)) => self.connected(client, with),
+            Ok((connection, with)) => self.connected(connection, with),
             Err(refused) => self.failed(refused),
         }
     }
 
-    fn connected(&mut self, client: Client, with: C::With) -> Stand<C::Failure> {
-        let feed = self.shared.kept.connected(&client);
+    fn connected(&mut self, connection: Connection, with: C::With) -> Stand<C::Failure> {
+        let feed = self.shared.kept.connected(&connection);
         self.feed.get_or_insert(feed);
         *self.shared.connected.lock() = Some(with);
         self.set(LinkState::CatchingUp);
-        Stand::Connected { client, catching_up_until: Some(Instant::now() + self.waits.catch_up()) }
+        Stand::Connected { connection, catching_up_until: Some(Instant::now() + self.waits.catch_up()) }
     }
 
     fn failed(&mut self, refused: Refused<C::Failure>) -> Stand<C::Failure> {
@@ -144,10 +144,10 @@ impl<C: Connect> Linker<C> {
         Stand::Waiting { until: Instant::now() + wait, failure: refused.failure }
     }
 
-    /// Gives up on `client`, closing it, so nothing waits on a reply that may never come, such as the feed, which
+    /// Gives up on `connection`, closing it, so nothing waits on a reply that may never come, such as the feed, which
     /// couldn't take the next connection until it had.
-    fn given_up(&mut self, client: &Client, lost: &Lost) -> Stand<C::Failure> {
-        client.disconnect();
+    fn given_up(&mut self, connection: &Connection, lost: &Lost) -> Stand<C::Failure> {
+        connection.disconnect();
         self.failed(Refused { failure: self.connect.lost(lost), again: lost.again() })
     }
 
@@ -162,30 +162,30 @@ impl<C: Connect> Linker<C> {
         let Some(feed) = &self.feed else { return stand };
         let errors = feed.take_errors();
         // Otherwise they're of a connection already given up on.
-        let Stand::Connected { client, catching_up_until } = stand else { return stand };
+        let Stand::Connected { connection, catching_up_until } = stand else { return stand };
         if feed.connected() {
             if catching_up_until.is_some() {
                 self.failures = 0;
-                self.set_caught_up(Some(client.clone()));
+                self.set_caught_up(Some(connection.clone()));
                 self.set(LinkState::Ready);
             }
             self.shared.errors.lock().extend(errors);
-            return Stand::Connected { client, catching_up_until: None };
+            return Stand::Connected { connection, catching_up_until: None };
         }
         if let Some(error) = errors.into_iter().next() {
-            return self.given_up(&client, &Lost::Following(error));
+            return self.given_up(&connection, &Lost::Following(error));
         }
         // A connection that caught up and isn't now has gone, as has one that closed while it caught up. Anything else
         // the feed says while a new one catches up, such as the last one going, is no reason to drop it.
-        if catching_up_until.is_none() || client.is_disconnected() {
-            client.disconnect();
+        if catching_up_until.is_none() || connection.is_disconnected() {
+            connection.disconnect();
             return self.try_now(None);
         }
-        Stand::Connected { client, catching_up_until }
+        Stand::Connected { connection, catching_up_until }
     }
 
     /// The connection that has caught up, or `None` while there isn't one, set before the state that says so.
-    fn set_caught_up(&self, ready: Option<Client>) {
+    fn set_caught_up(&self, ready: Option<Connection>) {
         self.shared.kept.set_ready(ready);
     }
 
@@ -200,7 +200,7 @@ impl<C: Connect> Linker<C> {
 
 /// Closes the connection `stand` has, if it has one.
 fn let_go<F>(stand: Stand<F>) {
-    if let Stand::Connected { client, .. } = stand {
-        client.disconnect();
+    if let Stand::Connected { connection, .. } = stand {
+        connection.disconnect();
     }
 }

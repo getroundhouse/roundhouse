@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use client_core::records::{HubRecords, Snapshot};
-use client_core::{Approval, Client, FileToSend, HubAdmin, Written};
+use client_core::{Approval, Connection, FileToSend, HubAdmin, Written};
 use local_hub::Daemon;
 use protocol::capability::approvals::Decision;
 use protocol::client::{HubStart, HubStatus, admin};
@@ -20,7 +20,7 @@ use crate::args::{Args, Cmd, HubCmd, RepoCmd};
 use crate::session::{find_session, follow, print_log, session_command};
 use crate::workspace::workspace_command;
 
-fn connect(paths: &Paths) -> anyhow::Result<Client> {
+fn connect(paths: &Paths) -> anyhow::Result<Connection> {
     let named = std::env::var_os(protocol::paths::ENV_DAEMON_BIN).map(PathBuf::from);
     let daemon = Daemon::find(named, crate::BUILD).context("finding the daemon next to this binary")?;
     local_hub::connect_or_start(paths, &daemon, "cli").context("connecting to the hub")
@@ -86,14 +86,14 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
 }
 
 /// The request waiting in `session` under `approval`.
-fn waiting(client: &Client, session: &Session, approval: &ApprovalId) -> anyhow::Result<SessionEvent> {
+fn waiting(client: &Connection, session: &Session, approval: &ApprovalId) -> anyhow::Result<SessionEvent> {
     client.waiting_request(session, approval)?.with_context(|| format!("no approval {approval} is waiting"))
 }
 
 /// What `roundhouse approve` decides of the request waiting under `approval`: a call allowed this once, or a plan
 /// approved, or either refused in the words `deny`.
 fn approving(
-    client: &Client,
+    client: &Connection,
     session: &Session,
     approval: &ApprovalId,
     deny: Option<String>,
@@ -109,7 +109,7 @@ fn approving(
     request.approve().with_context(|| format!("approval {approval} asks for more than a yes"))
 }
 
-fn repo_command(client: &Client, command: RepoCmd) -> anyhow::Result<()> {
+fn repo_command(client: &Connection, command: RepoCmd) -> anyhow::Result<()> {
     match command {
         RepoCmd::Add { path } => {
             let absolute = std::path::absolute(&path).with_context(|| format!("resolving {path}"))?;

@@ -1,7 +1,7 @@
 //! Fetches and follows the hub's history for the view an open session requests.
 
 use super::super::follow::{Reach, Source};
-use super::super::{Client, Result, Subscription, SubscriptionItem};
+use super::super::{Connection, Result, Subscription, SubscriptionItem};
 use super::View;
 use crate::records::HubRecords;
 use crate::session_log::{Position, SessionLog};
@@ -37,8 +37,8 @@ impl SessionSource {
     ///
     /// The build is what every hello already says, so the hub keeps nothing of its migrations for a client to compare.
     /// The cost is that every update reads each open chat's window again, once, though few updates rewrite an event.
-    fn read_again_on_another_build(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>) {
-        let build = client.hub_version();
+    fn read_again_on_another_build(&mut self, connection: &Connection, held: &Mutex<Arc<SessionLog>>) {
+        let build = connection.hub_version();
         match &self.read_from {
             Some(read_from) if read_from == build => {}
             Some(_) => {
@@ -50,11 +50,11 @@ impl SessionSource {
     }
 
     /// Asks how far the events go, the first time on each connection.
-    pub(super) fn place(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<()> {
+    pub(super) fn place(&mut self, connection: &Connection, held: &Mutex<Arc<SessionLog>>) -> Result<()> {
         if self.placed {
             return Ok(());
         }
-        let (_, last) = client.session_read_places(&self.session_id, self.subagent(), Place::new(1), 1)?;
+        let (_, last) = connection.session_read_places(&self.session_id, self.subagent(), Place::new(1), 1)?;
         change(held).reaches(last);
         self.placed = true;
         Ok(())
@@ -68,21 +68,21 @@ impl Source for SessionSource {
         self.placed = false;
     }
 
-    fn resume(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<Subscription> {
-        self.place(client, held)?;
-        self.read_again_on_another_build(client, held);
+    fn resume(&mut self, connection: &Connection, held: &Mutex<Arc<SessionLog>>) -> Result<Subscription> {
+        self.place(connection, held)?;
+        self.read_again_on_another_build(connection, held);
         // Events arrive in order with no gaps, so carrying on from one past the last misses nothing, whatever
         // was fetched meanwhile.
         let place = held.lock().received().next().place();
         let from = LogFrom::Place { subagent: self.subagent().cloned(), place };
-        let subscription = client.follow(Follow::Session { id: self.session_id.clone(), from: Some(from) })?;
+        let subscription = connection.follow(Follow::Session { id: self.session_id.clone(), from: Some(from) })?;
         change(held).retry_failed();
         Ok(subscription)
     }
 
     /// Takes in what the session's subscription sends: its log, into what's held, and its own records, into the copy of
     /// the hub's records.
-    fn apply(&mut self, _: &Client, held: &Mutex<Arc<SessionLog>>, item: SubscriptionItem) -> Result<bool> {
+    fn apply(&mut self, _: &Connection, held: &Mutex<Arc<SessionLog>>, item: SubscriptionItem) -> Result<bool> {
         let records = |change: &dyn Fn(&mut HubRecords) -> bool| {
             self.records.change(change);
         };
@@ -117,14 +117,19 @@ impl Source for SessionSource {
     /// Fetches the pages around where the view is looking that aren't loaded, nearest first, telling readers of each as
     /// it's put in place, then each request waiting on an answer that none of them holds, then the session's prompts
     /// if they haven't been listed, once there's a connection to fetch them on.
-    fn asked(&mut self, connection: Option<&Client>, held: &Mutex<Arc<SessionLog>>, tell: &dyn Fn()) -> Result<bool> {
-        let Some(client) = connection else { return Ok(false) };
+    fn asked(
+        &mut self,
+        connection: Option<&Connection>,
+        held: &Mutex<Arc<SessionLog>>,
+        tell: &dyn Fn(),
+    ) -> Result<bool> {
+        let Some(connection) = connection else { return Ok(false) };
         let pages = change(held).pages_to_fetch();
         let requests = change(held).requests_to_fetch();
         let fetched = !pages.is_empty() || !requests.is_empty();
         for range in pages {
             let start = range.start;
-            match read_range(client, &self.session_id, &self.view, range) {
+            match read_range(connection, &self.session_id, &self.view, range) {
                 Ok(events) => {
                     change(held).install_page(start, events);
                     tell();
@@ -137,7 +142,7 @@ impl Source for SessionSource {
         }
         // By its `seq`, from the whole log, whichever events this view holds.
         for seq in requests {
-            match client.session_read(&self.session_id, seq, 1, false) {
+            match connection.session_read(&self.session_id, seq, 1, false) {
                 Ok((events, _)) => change(held).install_request(seq, events.into_iter().next()),
                 Err(e) => {
                     change(held).fetch_failed();
@@ -145,8 +150,8 @@ impl Source for SessionSource {
                 }
             }
         }
-        let prompts = self.list_prompts(client, held)?;
-        Ok(self.list_compactions(client, held)? || prompts || fetched)
+        let prompts = self.list_prompts(connection, held)?;
+        Ok(self.list_compactions(connection, held)? || prompts || fetched)
     }
 }
 
@@ -155,11 +160,11 @@ impl SessionSource {
     /// nothing: every prompt the subscription won't send was recorded before this. A hub that fails to list them is
     /// asked again on a new connection, while the chat goes on either way. A subagent's events hold no prompts, so a
     /// view of them asks for none.
-    pub(super) fn list_prompts(&self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<bool> {
+    pub(super) fn list_prompts(&self, connection: &Connection, held: &Mutex<Arc<SessionLog>>) -> Result<bool> {
         if matches!(self.view, View::Subagent(_)) || !held.lock().wants_prompt_list() {
             return Ok(false);
         }
-        match client.session_prompt_list(&self.session_id) {
+        match connection.session_prompt_list(&self.session_id) {
             Ok(lines) => {
                 change(held).list_prompts(lines);
                 Ok(true)
@@ -175,11 +180,11 @@ impl SessionSource {
 impl SessionSource {
     /// Asks for the session's compactions, once, as [`SessionSource::list_prompts`] asks for its prompts, and for the
     /// same reasons. A subagent's compactions aren't in the chat, so a view of them asks for none.
-    pub(super) fn list_compactions(&self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<bool> {
+    pub(super) fn list_compactions(&self, connection: &Connection, held: &Mutex<Arc<SessionLog>>) -> Result<bool> {
         if matches!(self.view, View::Subagent(_)) || !held.lock().wants_compaction_list() {
             return Ok(false);
         }
-        match client.session_compaction_list(&self.session_id) {
+        match connection.session_compaction_list(&self.session_id) {
             Ok(lines) => {
                 change(held).list_compactions(lines);
                 Ok(true)
@@ -200,7 +205,7 @@ fn change(held: &Mutex<Arc<SessionLog>>) -> MappedMutexGuard<'_, SessionLog> {
 /// The events of `view` at these positions. A size limit can cut a read short, so this keeps going until the range is
 /// complete.
 pub(super) fn read_range(
-    client: &Client,
+    connection: &Connection,
     session_id: &SessionId,
     view: &View,
     range: std::ops::Range<Position>,
@@ -211,7 +216,7 @@ pub(super) fn read_range(
         // As many as there are rows from here to the end. 0, where no event is, has no row, so it adds none.
         let rows = from.row().unwrap_or(0)..range.end.row().unwrap_or(0);
         let limit = u32::try_from(rows.len()).unwrap_or(u32::MAX);
-        let page = client.session_read_places(session_id, view.subagent(), from.place(), limit)?.0;
+        let page = connection.session_read_places(session_id, view.subagent(), from.place(), limit)?.0;
         let Some(last) = page.last().map(Position::of) else { break };
         events.extend(page);
         from = last.next();

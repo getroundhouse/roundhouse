@@ -5,7 +5,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use client_core::Client;
+use client_core::Connection;
 use protocol::capability::settings::Settings;
 use protocol::event::EventBody;
 use protocol::model::{CacheTtl, ModelName, Observation, PromptCache, SessionId};
@@ -20,7 +20,7 @@ fn now_ms() -> i64 {
 /// cache as a turn ends, a moment after the chat's record says the turn has, so what's read between the two is the
 /// cache as it was before the turn.
 fn cache_once(
-    client: &Client,
+    client: &Connection,
     session: &SessionId,
     what: &str,
     as_expected: impl Fn(Option<&PromptCache>) -> bool,
@@ -39,7 +39,7 @@ fn cache_once(
 }
 
 /// What the cache holds of the chat's conversation, once the hub says it holds some.
-pub(crate) fn cache_held(client: &Client, session: &SessionId) -> PromptCache {
+pub(crate) fn cache_held(client: &Connection, session: &SessionId) -> PromptCache {
     cache_once(client, session, "the cache to hold the conversation", |cache| cache.is_some()).unwrap()
 }
 

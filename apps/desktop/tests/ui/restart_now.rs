@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use desktop::app::{Connection, UpdateQuestion};
+use desktop::app::{Linking, UpdateQuestion};
 use gpui_kit::TestAppContext;
 
 use crate::other_hubs::{on_its_own_build, wait_for_the_apps_own_hub};
@@ -78,7 +78,7 @@ fn an_update_can_be_finished_from_the_sidebar_while_agents_run_on_the_older_hub(
     // be the older hub's, whose card is still drawn. It's the app's own hub that's waited for.
     ui.wait("a new hub", |ui| {
         older.0.try_wait().unwrap().is_some()
-            && matches!(ui.view().connection(), Connection::Ready)
+            && matches!(ui.view().linking(), Linking::Ready)
             && on_its_own_build(&ui.build_line())
     });
     assert!(stack.client().hub_status().unwrap().on_demand, "the app started this one because it needed it");
@@ -97,7 +97,7 @@ fn not_now_leaves_the_older_hub_running(cx: &mut TestAppContext) {
 
     assert!(!ui.has_dialog());
     assert_eq!(ui.view().update_question, None);
-    assert!(matches!(ui.view().connection(), Connection::Ready));
+    assert!(matches!(ui.view().linking(), Linking::Ready));
     assert!(older.0.try_wait().unwrap().is_none());
     assert!(ui.has("finish-update"), "the card is as it was, so it can still be restarted later");
 
@@ -122,14 +122,14 @@ fn finishing_after_the_older_hub_has_gone_leaves_the_new_one_alone(cx: &mut Test
 
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
     ui.wait("the app's own hub", |ui| {
-        matches!(ui.view().connection(), Connection::Ready) && on_its_own_build(&ui.build_line())
+        matches!(ui.view().linking(), Linking::Ready) && on_its_own_build(&ui.build_line())
     });
     let pid = stack.client().hub_status().unwrap().pid;
     assert!(!ui.has_dialog(), "the dialog went with the hub it asked about");
     ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.finish_update_now(&said, cx)));
     ui.frame();
 
-    assert!(matches!(ui.view().connection(), Connection::Ready));
+    assert!(matches!(ui.view().linking(), Linking::Ready));
     assert_eq!(stack.client().hub_status().unwrap().pid, pid);
 }
 
@@ -148,9 +148,7 @@ fn finishing_now_asks_again_when_more_has_started_since_it_asked(cx: &mut TestAp
     ui.wait("the question again", |ui| question_detail(ui).is_some_and(|d| d.starts_with("This stops the 2 agents ")));
     assert!(older.0.try_wait().unwrap().is_none());
     ui.click("restart-now-confirm");
-    ui.wait("a new hub", |ui| {
-        older.0.try_wait().unwrap().is_some() && matches!(ui.view().connection(), Connection::Ready)
-    });
+    ui.wait("a new hub", |ui| older.0.try_wait().unwrap().is_some() && matches!(ui.view().linking(), Linking::Ready));
 }
 
 /// Presses Restart now in the sidebar, and returns what the dialog says that stops.

@@ -72,7 +72,7 @@ mod tests {
     use std::time::Duration;
 
     use client_core::stand_in_hub::{self, Does};
-    use client_core::{Client, Hub, Introduction};
+    use client_core::{Connection, Hub, Introduction};
     use fetching::serving::serve;
     use protocol::client::{ApiError, ClientRequest, ErrorCode, ReplyOutcome};
     use protocol::fixtures::session;
@@ -102,7 +102,7 @@ mod tests {
             Does::Nothing
         });
         let this = ClientDevice { id: "mac".into(), name: "Mac".into() };
-        let client = Client::connect(&dir.path().join("hub.sock"), Introduction::on("desktop", this)).unwrap();
+        let client = Connection::connect(&dir.path().join("hub.sock"), Introduction::on("desktop", this)).unwrap();
         let files = serve(Vec::new()).unwrap();
         let voices = Voices::fetched_from(dir.path().join("phonon"), "this Mac", files.base.clone());
         let mut conversations = Conversations::new(Hub::caught_up_on(&client));
@@ -134,7 +134,7 @@ mod tests {
             Does::Nothing
         });
         let this = ClientDevice { id: "mac".into(), name: "Mac".into() };
-        let client = Client::connect(&dir.path().join("hub.sock"), Introduction::on("desktop", this)).unwrap();
+        let client = Connection::connect(&dir.path().join("hub.sock"), Introduction::on("desktop", this)).unwrap();
         let files = serve(Vec::new()).unwrap();
         let voices = Voices::fetched_from(dir.path().join("phonon"), "this Mac", files.base.clone());
         let mut conversations = Conversations::new(Hub::caught_up_on(&client));

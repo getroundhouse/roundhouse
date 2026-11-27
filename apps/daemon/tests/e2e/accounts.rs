@@ -5,7 +5,7 @@
 
 #![cfg(test)]
 
-use client_core::{Client, SubscriptionItem};
+use client_core::{Connection, SubscriptionItem};
 use protocol::client::HubNotice;
 use protocol::event::EventBody;
 use protocol::model::{
@@ -62,23 +62,23 @@ pub(crate) fn log_out(stack: &Stack) {
 }
 
 /// The record of the account `id`.
-fn account(client: &Client, id: &AccountId) -> Option<Account> {
+fn account(client: &Connection, id: &AccountId) -> Option<Account> {
     client.records().unwrap().accounts.into_iter().find(|account| &account.id == id)
 }
 
 /// The record of the account the session names.
-pub(crate) fn named_account(client: &Client, session: &SessionId) -> Option<Account> {
+pub(crate) fn named_account(client: &Connection, session: &SessionId) -> Option<Account> {
     account(client, &client.session_get(session).unwrap().account?)
 }
 
 /// Waits until the session names Ada's account, and its record has the week's limit.
-pub(crate) fn wait_for_adas_week(client: &Client, session: &SessionId) {
+pub(crate) fn wait_for_adas_week(client: &Connection, session: &SessionId) {
     wait_for_adas_limits(client, session, &[the_week()]);
 }
 
 /// What the hub says is left of the account `id`'s limits, without when each was heard, or none while it hasn't heard
 /// of any.
-pub(crate) fn limits_of(client: &Client, id: &AccountId) -> Vec<UsageLimit> {
+pub(crate) fn limits_of(client: &Connection, id: &AccountId) -> Vec<UsageLimit> {
     let limits = support::at_the_hub(client, |observation| match observation {
         Observation::AccountLimits { account, limits, .. } if account == id => support::known(limits).cloned(),
         _ => None,
@@ -88,7 +88,7 @@ pub(crate) fn limits_of(client: &Client, id: &AccountId) -> Vec<UsageLimit> {
 }
 
 /// Waits until the session names Ada's account, and the hub says it has `limits`.
-fn wait_for_adas_limits(client: &Client, session: &SessionId, limits: &[UsageLimit]) {
+fn wait_for_adas_limits(client: &Connection, session: &SessionId, limits: &[UsageLimit]) {
     wait_until("the account to have its limits", || {
         named_account(client, session)
             .is_some_and(|account| Some(&account.id) == ada().id.as_ref() && limits_of(client, &account.id) == limits)

@@ -7,7 +7,7 @@ use protocol::client::{ApiError, CLIENT_PROTOCOL_VERSION, Hello, HelloReply, Hub
 use protocol::model::ClientDevice;
 use protocol::versions::Versions;
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
 /// What a client says of itself as it connects: what it is, such as `desktop`, and which device it runs on, if it has
 /// one of its own. A name alone, such as the command line's or a test's, says no device.
@@ -30,12 +30,12 @@ impl From<&str> for Introduction {
     }
 }
 
-impl Client {
+impl Connection {
     /// Connects, saying in its hello what it is and which device it's on, and checks the protocol version.
-    pub fn connect(socket: &Path, introduction: impl Into<Introduction>) -> Result<Client> {
-        let client = Client::open(socket)?;
-        client.hello(introduction.into())?;
-        Ok(client)
+    pub fn connect(socket: &Path, introduction: impl Into<Introduction>) -> Result<Connection> {
+        let connection = Connection::open(socket)?;
+        connection.hello(introduction.into())?;
+        Ok(connection)
     }
 
     pub(super) fn hello(&self, introduction: Introduction) -> Result<()> {

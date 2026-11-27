@@ -8,9 +8,9 @@ use protocol::client::devices;
 use protocol::model::DeviceId;
 use protocol::pairing::{Device, Pairing, PairingCode};
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     pub fn pairing_start(&self) -> Result<Pairing> {
         self.call(devices::PairingStart)
     }
@@ -30,7 +30,7 @@ impl Client {
 
 enum Slot {
     Connecting,
-    Waiting(Client),
+    Waiting(Connection),
     Cancelled,
 }
 
@@ -48,8 +48,8 @@ impl PairingWait {
         let shared = slot.clone();
         let on_spawn_error = tx.clone();
         let spawned = std::thread::Builder::new().name("pairing-wait".to_string()).spawn(move || {
-            let client = match Client::connect(&socket, "pairing-wait") {
-                Ok(client) => client,
+            let connection = match Connection::connect(&socket, "pairing-wait") {
+                Ok(connection) => connection,
                 Err(err) => {
                     let _ = tx.send(Err(err));
                     return;
@@ -58,12 +58,12 @@ impl PairingWait {
             {
                 let mut guard = shared.lock();
                 if matches!(*guard, Slot::Cancelled) {
-                    client.disconnect();
+                    connection.disconnect();
                     return;
                 }
-                *guard = Slot::Waiting(client.clone());
+                *guard = Slot::Waiting(connection.clone());
             }
-            let _ = tx.send(client.pairing_wait(&code));
+            let _ = tx.send(connection.pairing_wait(&code));
         });
         if let Err(err) = spawned {
             let _ = on_spawn_error.send(Err(err.into()));
@@ -79,8 +79,8 @@ impl PairingWait {
 impl Drop for PairingWait {
     fn drop(&mut self) {
         let previous = std::mem::replace(&mut *self.slot.lock(), Slot::Cancelled);
-        if let Slot::Waiting(client) = previous {
-            client.disconnect();
+        if let Slot::Waiting(connection) = previous {
+            connection.disconnect();
         }
     }
 }

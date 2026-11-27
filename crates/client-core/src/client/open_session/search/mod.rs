@@ -8,7 +8,7 @@ use super::View;
 #[cfg(test)]
 use crate::session_log::Position;
 #[cfg(test)]
-use crate::{Client, ClientError};
+use crate::{ClientError, Connection};
 #[cfg(test)]
 use protocol::event::SessionEvent;
 #[cfg(test)]

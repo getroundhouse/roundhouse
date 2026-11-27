@@ -15,7 +15,7 @@ use protocol::client::{ClientRequest, Request as _};
 use protocol::model::{Level, Records, Seq, SessionId};
 
 use super::connection::{Inner, subscription_channel};
-use super::{Client, ClientError, Ended, Result, SubscriptionItem};
+use super::{ClientError, Connection, Ended, Result, SubscriptionItem};
 
 /// Which channel each subscription ID's items go to, and each channel's sender, which is kept while its
 /// [`Subscription`] lasts, even while it follows nothing, so its channel closes only once the subscription ends, falls
@@ -101,7 +101,7 @@ impl Changing {
     /// Follows `wanted` from now on, in place of what it followed, stopping what it no longer wants and starting what's
     /// new in one request, with each start's own fields, such as where a session's log starts, as `wanted` says.
     /// Returns the starts the hub refused, which it follows nothing of until it's asked again.
-    pub(super) fn follow_only(&self, client: &Client, wanted: Vec<Follow>) -> Result<Vec<Refused>> {
+    pub(super) fn follow_only(&self, connection: &Connection, wanted: Vec<Follow>) -> Result<Vec<Refused>> {
         let (stop, start) = {
             let followed = self.followed.lock();
             let stop = (followed.iter())
@@ -111,12 +111,12 @@ impl Changing {
             let start = wanted.into_iter().filter(|follow| !followed.iter().any(|(_, level)| follow.level() == *level));
             (stop, start.collect::<Vec<_>>())
         };
-        self.change(client, stop, start)
+        self.change(connection, stop, start)
     }
 
     /// Stops following `stop`, and starts following `start`, in one request. Each start's items are taken from before
     /// the request goes, since they can come before its reply. Returns the starts the hub refused.
-    fn change(&self, client: &Client, stop: Vec<u64>, start: Vec<Follow>) -> Result<Vec<Refused>> {
+    fn change(&self, connection: &Connection, stop: Vec<u64>, start: Vec<Follow>) -> Result<Vec<Refused>> {
         if stop.is_empty() && start.is_empty() {
             return Ok(Vec::new());
         }
@@ -138,7 +138,7 @@ impl Changing {
             }
         }
         self.followed.lock().retain(|(id, _)| !stop.contains(id));
-        let asked = client.call(Subscribe { stop, start: starts });
+        let asked = connection.call(Subscribe { stop, start: starts });
         let mut channels = self.connection.subscriptions.lock();
         let refused = match asked {
             Ok(Subscribed { refused }) => refused,
@@ -175,7 +175,7 @@ impl Changing {
     }
 }
 
-impl Client {
+impl Connection {
     /// Follows `follow`. Fails with the hub's refusal, as with `NotFound` for what it doesn't have.
     pub fn follow(&self, follow: Follow) -> Result<Subscription> {
         let (subscription, refused) = self.follow_all(vec![follow])?;

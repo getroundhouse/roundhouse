@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use super::race::{self, Lost};
 use crate::client::transport::Transport;
-use crate::client::{Client, ClientError, Introduction, Result};
+use crate::client::{ClientError, Connection, Introduction, Result};
 use protocol::client::devices;
 
 /// Authentication and hello are small exchanges; a connected but unresponsive peer must not leave the UI joining
@@ -41,8 +41,8 @@ pub fn pair_with_timeout(link: &PairingLink, device_name: &str, timeout: Duratio
 }
 
 fn pair_with(link: &PairingLink, device_name: &str, timeout: Duration) -> Result<RemoteHub> {
-    let client = open(&link.hosts, &link.fingerprint, timeout)?;
-    let devices::Paired { device_id, token } = client.call_until(
+    let connection = open(&link.hosts, &link.fingerprint, timeout)?;
+    let devices::Paired { device_id, token } = connection.call_until(
         devices::Pair { code: link.code.clone(), device_name: device_name.to_string() },
         Some(Instant::now() + timeout),
     )?;
@@ -55,44 +55,48 @@ fn pair_with(link: &PairingLink, device_name: &str, timeout: Duration) -> Result
     })
 }
 
-impl Client {
+impl Connection {
     /// Connects to a hub over the network, as the device that paired with it, and checks the protocol version.
-    /// Tries every host at once, favouring them in order. Once connected, it's like any other `Client`, except that
+    /// Tries every host at once, favouring them in order. Once connected, it's like any other `Connection`, except that
     /// a hub refuses what only its own machine may ask, such as stopping it.
-    pub fn connect_remote(hub: &RemoteHub, introduction: impl Into<Introduction>) -> Result<Client> {
+    pub fn connect_remote(hub: &RemoteHub, introduction: impl Into<Introduction>) -> Result<Connection> {
         Self::connect_remote_with(hub, introduction.into(), OPERATION_TIMEOUT)
     }
 
-    fn connect_remote_with(hub: &RemoteHub, introduction: Introduction, timeout: Duration) -> Result<Client> {
-        let client = open(&hub.hosts, &hub.fingerprint, timeout)?;
+    fn connect_remote_with(hub: &RemoteHub, introduction: Introduction, timeout: Duration) -> Result<Connection> {
+        let connection = open(&hub.hosts, &hub.fingerprint, timeout)?;
         let deadline = Some(Instant::now() + timeout);
-        client.call_until(devices::Authenticate { token: hub.token.clone() }, deadline)?;
-        let _ = client.inner.device.set(hub.device_id.clone());
-        client.hello_until(introduction, deadline)?;
-        Ok(client)
+        connection.call_until(devices::Authenticate { token: hub.token.clone() }, deadline)?;
+        let _ = connection.inner.device.set(hub.device_id.clone());
+        connection.hello_until(introduction, deadline)?;
+        Ok(connection)
     }
 
     /// A connection over the network that hasn't authenticated, so a test can see what a hub does with one.
     #[cfg(any(test, feature = "testing"))]
-    pub fn open_remote(hosts: &[String], fingerprint: &Fingerprint) -> Result<Client> {
+    pub fn open_remote(hosts: &[String], fingerprint: &Fingerprint) -> Result<Connection> {
         open(hosts, fingerprint, OPERATION_TIMEOUT)
     }
 
     /// The same connection path with short operation budgets for controlled-peer tests.
     #[cfg(any(test, feature = "testing"))]
-    pub fn connect_remote_with_timeout(hub: &RemoteHub, client_name: &str, timeout: Duration) -> Result<Client> {
+    pub fn connect_remote_with_timeout(hub: &RemoteHub, client_name: &str, timeout: Duration) -> Result<Connection> {
         Self::connect_remote_with(hub, client_name.into(), timeout)
     }
 
     /// An unauthenticated test connection whose outgoing frames have the supplied budget.
     #[cfg(any(test, feature = "testing"))]
-    pub fn open_remote_with_timeout(hosts: &[String], fingerprint: &Fingerprint, timeout: Duration) -> Result<Client> {
+    pub fn open_remote_with_timeout(
+        hosts: &[String],
+        fingerprint: &Fingerprint,
+        timeout: Duration,
+    ) -> Result<Connection> {
         open(hosts, fingerprint, timeout)
     }
 }
 
-fn open(hosts: &[String], fingerprint: &Fingerprint, timeout: Duration) -> Result<Client> {
-    Client::from_transport(reach(hosts, fingerprint, timeout)?)
+fn open(hosts: &[String], fingerprint: &Fingerprint, timeout: Duration) -> Result<Connection> {
+    Connection::from_transport(reach(hosts, fingerprint, timeout)?)
 }
 
 /// A connection to whichever of these hosts first answers with the pinned key. If none does, it says the hub has

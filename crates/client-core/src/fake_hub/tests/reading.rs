@@ -17,7 +17,7 @@ use super::super::events::{subagent_ended, subagent_started, taken, task, text, 
 use super::super::{Following, World};
 use super::served::served;
 use crate::session_log::Row;
-use crate::{Client, ClientError, OpenSession, RecordsFeed, SubscriptionItem, View};
+use crate::{ClientError, Connection, OpenSession, RecordsFeed, SubscriptionItem, View};
 
 #[test]
 fn a_client_reads_what_the_world_holds_and_is_refused_a_change() {
@@ -316,7 +316,7 @@ fn a_session_s_records_go_into_the_copy_its_view_is_handed() {
         world.chat(&workspace, SessionStatus::Running, vec![subagent_started("toolu_1", "explore", "Look", "Look")]);
     let session = world.sessions.iter().find(|session| session.id == chat).unwrap().clone();
     let (dir, _client) = served(world);
-    let elsewhere = Client::connect(&dir.path().join("hub"), "test").unwrap();
+    let elsewhere = Connection::connect(&dir.path().join("hub"), "test").unwrap();
     let hub = Hub::caught_up_on(&elsewhere);
     let feed = hub.records().unwrap();
 
@@ -366,7 +366,7 @@ fn a_client_that_stops_following_a_session_lets_go_of_its_records() {
 }
 
 /// The records of the session `id`, as following it lists them first.
-fn session_records(client: &Client, id: &protocol::model::SessionId) -> SessionRecords {
+fn session_records(client: &Connection, id: &protocol::model::SessionId) -> SessionRecords {
     let followed = client.follow_session(id, protocol::model::Seq::new(1)).unwrap();
     match followed.items.recv_timeout(std::time::Duration::from_secs(10)) {
         Ok(SubscriptionItem::Listed(listed)) => {

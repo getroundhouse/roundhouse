@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use client_core::{Client, ClientError};
+use client_core::{ClientError, Connection};
 use protocol::client::ErrorCode;
 use protocol::client::tool_server_checks::ToolServerToCheck;
 use protocol::client::tool_server_saves::{SaveWhen, ToolServerSave, ToolServerSaveCancel};
@@ -13,7 +13,7 @@ use protocol::model::ToolServerAuthGiven;
 use protocol::pairing::Fingerprint;
 
 struct Running {
-    local: Client,
+    local: Connection,
     task: std::thread::JoinHandle<()>,
     dir: tempfile::TempDir,
 }
@@ -52,7 +52,7 @@ impl Running {
             runtime.shutdown_timeout(Duration::from_secs(1));
         });
         let local = waiting::thread::until_ok(Duration::from_secs(10), || {
-            Client::connect(&socket, "network-test").map_err(|error| format!("hub did not start: {error}"))
+            Connection::connect(&socket, "network-test").map_err(|error| format!("hub did not start: {error}"))
         });
         Self { local, task, dir }
     }
@@ -73,7 +73,7 @@ fn a_saved_device_and_server_key_survive_a_hub_restart() {
     let directory = running.stop();
 
     let again = Running::start_in(directory, address.port());
-    let client = Client::connect_remote(&remote, "reopened desktop").unwrap();
+    let client = Connection::connect_remote(&remote, "reopened desktop").unwrap();
     assert!(client.records().is_ok());
     assert_eq!(again.local.device_list().unwrap()[0].id, remote.device_id);
     again.stop();
@@ -91,7 +91,7 @@ fn paired_clients_read_records_but_cannot_administer_and_revocation_closes_them(
     let running = Running::start();
     let pairing = running.local.pairing_start().unwrap();
     let hub = client_core::pair(&pairing.link, "Test desktop").unwrap();
-    let remote = Client::connect_remote(&hub, "desktop").unwrap();
+    let remote = Connection::connect_remote(&hub, "desktop").unwrap();
 
     assert_eq!(remote.repo_list().unwrap(), running.local.repo_list().unwrap());
     assert_eq!(code(remote.hub_shutdown().unwrap_err()), ErrorCode::LocalOnly);
@@ -119,7 +119,7 @@ fn paired_clients_read_records_but_cannot_administer_and_revocation_closes_them(
     while remote.records().is_ok() {
         assert!(Instant::now() < deadline, "revoked connection stayed open");
     }
-    assert!(Client::connect_remote(&hub, "revoked").is_err());
+    assert!(Connection::connect_remote(&hub, "revoked").is_err());
     assert!(running.local.device_list().unwrap().is_empty());
     running.stop();
 }
@@ -128,11 +128,11 @@ fn paired_clients_read_records_but_cannot_administer_and_revocation_closes_them(
 fn an_unpaired_connection_and_a_different_server_key_are_refused() {
     let running = Running::start();
     let pairing = running.local.pairing_start().unwrap();
-    let unpaired = Client::open_remote(&pairing.link.hosts, &pairing.link.fingerprint).unwrap();
+    let unpaired = Connection::open_remote(&pairing.link.hosts, &pairing.link.fingerprint).unwrap();
     assert_eq!(code(unpaired.records().unwrap_err()), ErrorCode::Unauthorized);
 
     let wrong = Fingerprint::of_sha256([0; 32]);
-    let result = Client::open_remote(&pairing.link.hosts, &wrong);
+    let result = Connection::open_remote(&pairing.link.hosts, &wrong);
     assert!(matches!(result, Err(ClientError::FingerprintMismatch { .. })));
     assert!(running.local.device_list().unwrap().is_empty());
     running.stop();
@@ -145,8 +145,8 @@ impl client_core::link::Connect for Paired {
     type With = ();
     type Failure = String;
 
-    fn connect(&mut self) -> Result<(Client, ()), client_core::link::Refused<String>> {
-        Client::connect_remote(&self.0, "test")
+    fn connect(&mut self) -> Result<(Connection, ()), client_core::link::Refused<String>> {
+        Connection::connect_remote(&self.0, "test")
             .map(|client| (client, ()))
             .map_err(|e| client_core::link::Refused::by(&e, e.to_string()))
     }

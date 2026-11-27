@@ -3,7 +3,7 @@
 use gpui_kit::{Context, Window};
 use protocol::model::RepoId;
 
-use super::{AppView, Connection};
+use super::{AppView, Linking};
 use crate::home::{ArchiveFilter, Home};
 use client_core::workspace_order::Sort;
 
@@ -26,10 +26,10 @@ impl AppView {
     /// workspace stays drawn while the app connects to one again. Otherwise what there is to say about the hub shows
     /// in its place.
     pub(super) fn home_drawn(&self) -> bool {
-        let hub = match self.connection() {
-            Connection::Ready => true,
-            Connection::Connecting => self.pane_to_draw().is_some(),
-            Connection::Failed(_) | Connection::AcrossABreak(_) => false,
+        let hub = match self.linking() {
+            Linking::Ready => true,
+            Linking::Connecting => self.pane_to_draw().is_some(),
+            Linking::Failed(_) | Linking::AcrossABreak(_) => false,
         };
         self.home_showing() && !self.settings_open() && hub
     }

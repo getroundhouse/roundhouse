@@ -54,6 +54,6 @@ mod tests;
 
 mod app_view;
 pub(crate) use app_view::wrapped_step;
-pub use app_view::{AppView, Connection};
+pub use app_view::{AppView, Linking};
 #[cfg(any(test, feature = "testing"))]
 pub use app_view::{LOOK_AGAIN, SOUNDS_APART};

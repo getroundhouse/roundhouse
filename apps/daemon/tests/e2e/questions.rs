@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use client_core::Client;
+use client_core::Connection;
 use protocol::capability::approvals::Decision;
 use protocol::capability::asking::QuestionAnswer;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
@@ -35,7 +35,7 @@ fn recorded(events: &[SessionEvent], approval: &ApprovalId) -> Option<Decision> 
 /// Has the agent ask what `asking` says, in the chat's `turn`th turn, decides it with `decision`, and returns the
 /// question, and what that turn recorded.
 fn answered(
-    client: &Client,
+    client: &Connection,
     chat: &SessionId,
     turn: usize,
     asking: &str,

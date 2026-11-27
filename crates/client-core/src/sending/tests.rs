@@ -120,7 +120,7 @@ fn a_prompt_the_hub_refuses_stops_showing_though_nothing_waits_to_hear() {
 
 /// A hub that takes every file and prompt, sent or queued, after saying what it was, except that it says it hasn't got
 /// a file the first `missing` prompts carry.
-fn hub_that_says(socket: &Path, mut missing: usize) -> (Client, flume::Receiver<String>) {
+fn hub_that_says(socket: &Path, mut missing: usize) -> (Connection, flume::Receiver<String>) {
     let (said, heard) = flume::unbounded();
     let client = stand_in_hub::connect(socket, move |request| {
         // Only what these tests send is answered.

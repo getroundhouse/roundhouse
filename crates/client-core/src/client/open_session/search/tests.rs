@@ -87,12 +87,12 @@ fn queries_asked(requests: &[ClientRequest]) -> Vec<(&str, Option<&SubagentId>)>
         .collect()
 }
 
-fn connect(socket: &std::path::Path) -> Client {
-    Client::connect(socket, "test").unwrap()
+fn connect(socket: &std::path::Path) -> Connection {
+    Connection::connect(socket, "test").unwrap()
 }
 
 /// The chat's own events, followed by place, as the app follows them.
-fn own(client: &Client) -> OpenSession {
+fn own(client: &Connection) -> OpenSession {
     let hub = Hub::caught_up_on(client);
     hub.open_session(&session(), View::Own)
 }

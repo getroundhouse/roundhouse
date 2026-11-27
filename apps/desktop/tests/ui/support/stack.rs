@@ -1,9 +1,9 @@
 #![cfg(test)]
 
 use super::daemons;
-use client_core::Client;
+use client_core::Connection;
 use daemons::{binaries, hub_environment};
-use desktop::app::{AppView, BuildLine, Connection, HubSource};
+use desktop::app::{AppView, BuildLine, HubSource, Linking};
 use desktop::checkout::Checkout;
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt;
@@ -71,7 +71,7 @@ impl Stack {
     }
 
     /// A second client, for setting things up and checking them from outside the app.
-    pub(crate) fn client(&self) -> Client {
+    pub(crate) fn client(&self) -> Connection {
         local_hub::connect_or_start(&self.hub.paths, &self.hub.daemon, "test").unwrap()
     }
 
@@ -125,7 +125,7 @@ impl<'a> Ui<'a> {
     }
 
     pub(super) fn wait_to_connect(&mut self) {
-        self.wait("the app to connect", |ui| matches!(ui.view().connection(), Connection::Ready));
+        self.wait("the app to connect", |ui| matches!(ui.view().linking(), Linking::Ready));
     }
 
     /// What the line at the bottom of the sidebar says.

@@ -8,14 +8,14 @@ use std::time::Instant;
 use protocol::client::ErrorCode;
 
 use super::following::{FollowError, Shared, Source};
-use crate::client::{Client, ClientError, Ended, Subscription, SubscriptionItem};
+use crate::client::{ClientError, Connection, Ended, Subscription, SubscriptionItem};
 
 /// Its fields drop in order, so its source, which lets go of what it took in through its subscription, as a session's
 /// does of the session's own records, goes before the subscription does.
 pub(super) struct Follower<S: Source> {
     pub(super) source: S,
     /// `None` until there's been a connection.
-    pub(super) client: Option<Client>,
+    pub(super) connection: Option<Connection>,
     pub(super) shared: Arc<Shared<S::Held>>,
     pub(super) woken: flume::Receiver<()>,
     /// `None` while there's no connection to follow on, or while it's let go.
@@ -52,8 +52,8 @@ impl<S: Source> Follower<S> {
 
     /// Takes in an item, which only comes while there's a subscription, so a connection.
     fn apply(&mut self, item: SubscriptionItem) {
-        let Some(client) = &self.client else { return };
-        match self.source.apply(client, &self.shared.held, item) {
+        let Some(connection) = &self.connection else { return };
+        match self.source.apply(connection, &self.shared.held, item) {
             Ok(changed) => {
                 if changed {
                     self.shared.changed();
@@ -105,12 +105,12 @@ impl<S: Source> Follower<S> {
 
     fn woken(&mut self) {
         let reconnect = self.shared.reconnect.lock().take();
-        if let Some(client) = reconnect {
+        if let Some(connection) = reconnect {
             // What was asked before the next connection came is done without one, whether or not this has heard the
             // last go, so what that would send the hub, such as what was typed, isn't sent on the next, as typing over
             // a connection that's going isn't. A source that fetches leaves what was asked for the next.
             self.ask(false);
-            self.client = Some(client);
+            self.connection = Some(connection);
             self.subscription = None;
             self.source.reconnected();
             self.resume_if_wanted();
@@ -120,7 +120,7 @@ impl<S: Source> Follower<S> {
 
     /// Asks the source to do what was asked of it, on the connection if `connected`.
     fn ask(&mut self, connected: bool) {
-        let connection = self.client.as_ref().filter(|_| connected);
+        let connection = self.connection.as_ref().filter(|_| connected);
         match self.source.asked(connection, &self.shared.held, &|| self.shared.changed()) {
             Ok(true) => self.shared.changed(),
             Ok(false) => {}
@@ -132,8 +132,8 @@ impl<S: Source> Follower<S> {
     fn resume(&mut self) {
         self.subscription = None;
         self.let_go = false;
-        let Some(client) = &self.client else { return };
-        match self.source.resume(client, &self.shared.held) {
+        let Some(connection) = &self.connection else { return };
+        match self.source.resume(connection, &self.shared.held) {
             // Of a connection before the one handed over meanwhile, its subscription goes with it, and the thread
             // carries on on the newer once it wakes, as it's been woken to.
             Ok(subscription) => {

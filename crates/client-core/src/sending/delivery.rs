@@ -1,6 +1,6 @@
 use crate::Hub;
 use crate::attachments::FileToSend;
-use crate::client::{Client, ClientError, OpenSession, Place, Reply, Result, Shown, new_message_id};
+use crate::client::{ClientError, Connection, OpenSession, Place, Reply, Result, Shown, new_message_id};
 use protocol::model::{AttachmentId, ClientMessageId, QueuedPrompt, Seq, Session, SessionId};
 use protocol::prompt::Prompt;
 use protocol::prompt::PromptFrom;
@@ -36,12 +36,12 @@ pub struct NotTaken {
     pub prompt: Prompt<FileToSend>,
 }
 
-/// The reply to a prompt started with [`OpenSession::start_sending`] or [`Client::start_queueing`].
+/// The reply to a prompt started with [`OpenSession::start_sending`] or [`Connection::start_queueing`].
 pub struct Taking<T> {
     pub(super) reply: Reply<std::result::Result<T, NotTaken>>,
     /// What it said, and whether it was said out loud, for when the call never ran and took its files with it.
     pub(super) said: Prompt<FileToSend>,
-    /// A prompt being queued, which [`Client::queueing`] shows until this is received or let go of.
+    /// A prompt being queued, which [`Connection::queueing`] shows until this is received or let go of.
     pub(super) _shown: Option<Shown>,
 }
 
@@ -90,13 +90,13 @@ impl Drop for OnItsWay {
 }
 
 impl OpenSession {
-    /// Sends a prompt as [`Client::send_prompt`] does, on a thread of its own, as [`Client::start`] starts a call, in
-    /// its place in its chat's line from now, on the connection that has caught up, as [`crate::Hub::ask`] says.
-    /// Without one it's handed back at once. The chat shows it from now, on its way, as [`crate::SessionLog::pending`]
-    /// says, until the hub records it, or it's handed back.
+    /// Sends a prompt as [`Connection::send_prompt`] does, on a thread of its own, as [`Connection::start`] starts a
+    /// call, in its place in its chat's line from now, on the connection that has caught up, as [`crate::Hub::ask`]
+    /// says. Without one it's handed back at once. The chat shows it from now, on its way, as
+    /// [`crate::SessionLog::pending`] says, until the hub records it, or it's handed back.
     pub fn start_sending(&self, written: Written) -> Taking<(Seq, bool)> {
-        let client = match self.hub.ready() {
-            Ok(client) => client,
+        let connection = match self.hub.ready() {
+            Ok(connection) => connection,
             Err(error) => {
                 let said = written.prompt.carrying_too(Vec::new());
                 let reply = Reply::now(Ok(Err(NotTaken { error, prompt: written.prompt })));
@@ -106,8 +106,8 @@ impl OpenSession {
         self.add_pending(written.on_its_way());
         let client_msg_id = written.client_msg_id.clone();
         let mut on_its_way = OnItsWay { shown_in: self.clone(), client_msg_id, recorded: false };
-        client.start_in_line(self.session_id(), written, move |client, place, id, written| {
-            let sent = client.send_in_line(place, id, written);
+        connection.start_in_line(self.session_id(), written, move |connection, place, id, written| {
+            let sent = connection.send_in_line(place, id, written);
             on_its_way.ended(sent.is_ok());
             sent
         })
@@ -115,11 +115,11 @@ impl OpenSession {
 }
 
 impl Hub {
-    /// Queues a prompt as [`Client::start_queueing`] does, on the connection that has caught up, as [`Hub::ask`] says.
-    /// Without one it's handed back at once.
+    /// Queues a prompt as [`Connection::start_queueing`] does, on the connection that has caught up, as [`Hub::ask`]
+    /// says. Without one it's handed back at once.
     pub fn start_queueing(&self, id: &SessionId, written: Written) -> Taking<Session> {
         match self.ready() {
-            Ok(client) => client.start_queueing(id, written),
+            Ok(connection) => connection.start_queueing(id, written),
             Err(error) => {
                 let said = written.prompt.carrying_too(Vec::new());
                 let reply = Reply::now(Ok(Err(NotTaken { error, prompt: written.prompt })));
@@ -129,12 +129,12 @@ impl Hub {
     }
 }
 
-impl Client {
-    /// Queues a prompt as [`OpenSession::start_sending`] sends one, and [`Client::queueing`] shows it from now until
-    /// its reply is received, or the [`Taking`] let go of.
+impl Connection {
+    /// Queues a prompt as [`OpenSession::start_sending`] sends one, and [`Connection::queueing`] shows it from now
+    /// until its reply is received, or the [`Taking`] let go of.
     pub fn start_queueing(&self, id: &SessionId, written: Written) -> Taking<Session> {
         let shown = self.show_queueing(id, written.on_its_way());
-        Taking { _shown: Some(shown), ..self.start_in_line(id, written, Client::queue_in_line) }
+        Taking { _shown: Some(shown), ..self.start_in_line(id, written, Connection::queue_in_line) }
     }
 
     /// Adds each file the hub hasn't been given to the session, then sends the prompt that carries them once it's this
@@ -149,12 +149,12 @@ impl Client {
         &self,
         id: &SessionId,
         written: Written,
-        call: impl FnOnce(&Client, &Place, &SessionId, &Written) -> Result<T> + Send + 'static,
+        call: impl FnOnce(&Connection, &Place, &SessionId, &Written) -> Result<T> + Send + 'static,
     ) -> Taking<T> {
         let place = self.line_up(id);
         let (id, said) = (id.clone(), written.prompt.carrying_too(Vec::new()));
-        let reply = self.start(move |client| {
-            let taken = call(client, &place, &id, &written);
+        let reply = self.start(move |connection| {
+            let taken = call(connection, &place, &id, &written);
             Ok(taken.map_err(|error| NotTaken { error, prompt: written.prompt }))
         });
         Taking { reply, said, _shown: None }

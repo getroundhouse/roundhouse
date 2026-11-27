@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use client_core::{Client, SubscriptionItem};
+use client_core::{Connection, SubscriptionItem};
 use protocol::client::HubNotice;
 use protocol::client::listed::Listed;
 use protocol::client::subscriptions::Follow;
@@ -33,7 +33,7 @@ pub(crate) fn after_prompts(prompts: u64) -> ContextUsage {
     }
 }
 
-pub(crate) fn wait_for_context(client: &Client, session: &SessionId, context: &ContextUsage) {
+pub(crate) fn wait_for_context(client: &Connection, session: &SessionId, context: &ContextUsage) {
     let said = |observation: &Observation| match observation {
         Observation::SessionContext { session_id, context, .. } if session_id == session => known(context).cloned(),
         _ => None,

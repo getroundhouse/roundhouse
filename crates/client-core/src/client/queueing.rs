@@ -7,7 +7,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use protocol::model::{ClientMessageId, QueuedPrompt, Session, SessionId};
 
-use super::{Client, Lasting};
+use super::{Connection, Lasting};
 
 /// Each chat's prompts being queued from here, oldest first.
 #[derive(Default)]
@@ -20,7 +20,7 @@ pub(crate) struct Shown {
     client_msg_id: ClientMessageId,
 }
 
-impl Client {
+impl Connection {
     /// Shows `prompt` at the end of the chat's queue until what this returns goes.
     pub(crate) fn show_queueing(&self, session_id: &SessionId, prompt: QueuedPrompt) -> Shown {
         let client_msg_id = prompt.client_msg_id.clone();
@@ -29,8 +29,8 @@ impl Client {
         Shown { queueing, session_id: session_id.clone(), client_msg_id }
     }
 
-    /// What's being queued from here for `session` that isn't on its record yet, oldest first, for a client to show
-    /// at the end of its queue: each prompt [`Client::start_queueing`] was given, until its reply is received. One the
+    /// What's being queued from here for `session` that isn't on its record yet, oldest first, for a client to show at
+    /// the end of its queue: each prompt [`Connection::start_queueing`] was given, until its reply is received. One the
     /// record has shows there, and not again here.
     pub fn queueing(&self, session: &Session) -> Vec<QueuedPrompt> {
         self.lasting().queueing(session)
@@ -38,7 +38,7 @@ impl Client {
 }
 
 impl Lasting {
-    /// What's being queued for `session`, as [`Client::queueing`] says, from whichever connection it was queued on.
+    /// What's being queued for `session`, as [`Connection::queueing`] says, from whichever connection it was queued on.
     pub(crate) fn queueing(&self, session: &Session) -> Vec<QueuedPrompt> {
         let on_record = |prompt: &QueuedPrompt| session.queued.iter().any(|q| q.client_msg_id == prompt.client_msg_id);
         let queueing = self.queueing.0.lock();

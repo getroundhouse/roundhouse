@@ -14,7 +14,7 @@ use super::super::{FollowError, OpenSession, View};
 use super::{
     answered_simply, follows_session, refused, requests_until_unsubscribed, session, start_hub_answering, until,
 };
-use crate::{Client, ClientError};
+use crate::{ClientError, Connection};
 
 /// A hub that lists the session's prompts, and answers each ask for the list of compactions with the next of `lists`,
 /// and anything else as [`answered_simply`], on each connection it's given. It reports every request it's sent.
@@ -60,7 +60,7 @@ fn the_hubs_compactions_are_listed_once_its_subscription_has_started() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let heard = start_hub(&socket, vec![listed(vec![far_back(Seq::new(3))])]);
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
 
     let hub = Hub::caught_up_on(&client);
     let open = hub.open_session(&session(), View::Own);
@@ -82,7 +82,7 @@ fn a_hub_that_fails_to_list_compactions_goes_on_being_followed_and_is_asked_agai
     let socket = dir.path().join("hub.sock");
     let lists = vec![refused(ErrorCode::Internal, "the disk is full"), listed(vec![far_back(Seq::new(3))])];
     let heard = start_hub(&socket, lists);
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     let hub = Hub::caught_up_on(&client);
     let open = hub.open_session(&session(), View::Own);
     let mut errors = Vec::new();
@@ -100,7 +100,7 @@ fn a_hub_that_fails_to_list_compactions_goes_on_being_followed_and_is_asked_agai
     assert!(seqs(&open).is_empty());
 
     // Kept here too, so the connection is still open for the follower to let go of its subscription on.
-    let again = Client::connect(&socket, "test").unwrap();
+    let again = Connection::connect(&socket, "test").unwrap();
     hub.carry_on_to(&again);
     until("listed on the new connection", || seqs(&open) == [Seq::new(3)]);
 

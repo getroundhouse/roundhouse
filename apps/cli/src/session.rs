@@ -3,7 +3,7 @@
 use std::io::Write;
 
 use anyhow::bail;
-use client_core::{Agents, Client, Ended, SubscriptionItem};
+use client_core::{Agents, Connection, Ended, SubscriptionItem};
 use protocol::capability::settings::Effort;
 use protocol::capability::settings::Settings;
 use protocol::event::EventBody;
@@ -15,7 +15,7 @@ use crate::render;
 use crate::run::{held, short};
 use crate::workspace::find_workspace;
 
-pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::Result<()> {
+pub(crate) fn session_command(client: &Connection, command: SessionCmd) -> anyhow::Result<()> {
     match command {
         SessionCmd::New { workspace, agent, model, permission_mode, effort } => {
             let workspace = find_workspace(client, &workspace)?;
@@ -73,11 +73,11 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
 }
 
 /// One that names the hub's tool servers as the hub has them now, in `session`.
-fn printer(client: &Client, session: &SessionId) -> anyhow::Result<render::Printer> {
+fn printer(client: &Connection, session: &SessionId) -> anyhow::Result<render::Printer> {
     Ok(render::Printer::naming(held(client.records()?).tool_server_names(session)))
 }
 
-pub(crate) fn print_log(client: &Client, session: &str, from: Seq, limit: u32, raw: bool) -> anyhow::Result<()> {
+pub(crate) fn print_log(client: &Connection, session: &str, from: Seq, limit: u32, raw: bool) -> anyhow::Result<()> {
     let session = find_session(client, session)?;
     let (events, _) = client.session_read(&session.id, from, limit, raw)?;
     let mut printer = printer(client, &session.id)?;
@@ -111,7 +111,7 @@ pub(crate) fn effort_name(effort: &Effort) -> &str {
 }
 
 /// A session ID or prefix, or a workspace name for that workspace's newest session.
-pub(crate) fn find_session(client: &Client, query: &str) -> anyhow::Result<Session> {
+pub(crate) fn find_session(client: &Connection, query: &str) -> anyhow::Result<Session> {
     if let Ok(session) = client.session_get(&query.into()) {
         return Ok(session);
     }
@@ -137,7 +137,7 @@ pub(crate) fn find_session(client: &Client, query: &str) -> anyhow::Result<Sessi
 /// Prints a session from `from` on, and keeps following until told otherwise. Exits if the hub goes
 /// away. Running it again with `--from` picks up where it stopped.
 pub(crate) fn follow(
-    client: &Client,
+    client: &Connection,
     session_id: &SessionId,
     from: Seq,
     until_idle: bool,

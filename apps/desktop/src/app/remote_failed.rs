@@ -66,7 +66,7 @@ impl AppView {
         // The link is still this machine's hub's, so what it says next would show in its place.
         self.following = None;
         self.hub.remote = Some(hub);
-        self.set_connection(super::Connection::Failed(failure), cx);
+        self.set_linking(super::Linking::Failed(failure), cx);
         cx.notify();
     }
 }

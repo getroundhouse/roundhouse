@@ -3,9 +3,9 @@
 use protocol::client::admin;
 use protocol::model::AgentDescription;
 
-use super::{Client, Result};
+use super::{Connection, Result};
 
-impl Client {
+impl Connection {
     /// Each kind of agent the hub runs, as its adapter describes it, in the order a client offers them.
     /// [`Agents::read`](crate::Agents::read) is what a client holds of it.
     pub fn agent_list(&self) -> Result<Vec<AgentDescription>> {

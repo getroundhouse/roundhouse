@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use client_core::{Client, ClientError, RemoteHub, fake_hub, stand_in_hub};
+use client_core::{ClientError, Connection, RemoteHub, fake_hub, stand_in_hub};
 use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{
     AnyWindowHandle, Bounds, Edges, ElementId, Entity, GestureTuning, HeadlessAppContext, InputEvent as _, Pixels,
@@ -308,14 +308,14 @@ fn connecting_to(
     socket: PathBuf,
     reachable: Arc<AtomicBool>,
     fails: fn(&RemoteHub) -> ClientError,
-) -> impl Fn(&RemoteHub) -> Result<Client, ClientError> + Send + Sync + 'static {
+) -> impl Fn(&RemoteHub) -> Result<Connection, ClientError> + Send + Sync + 'static {
     move |hub| {
         if reachable.load(Ordering::Relaxed) { connect(&socket) } else { Err(fails(hub)) }
     }
 }
 
-fn connect(socket: &Path) -> Result<Client, ClientError> {
-    Client::connect(socket, "roundhouse-ios")
+fn connect(socket: &Path) -> Result<Connection, ClientError> {
+    Connection::connect(socket, "roundhouse-ios")
 }
 
 fn unreachable(hub: &RemoteHub) -> ClientError {

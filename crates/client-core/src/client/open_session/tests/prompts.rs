@@ -15,7 +15,7 @@ use super::{
     answered_simply, follows_session, refused, requests_until_unsubscribed, session, start_hub_answering, until,
 };
 use crate::stand_in_hub::refusing_every_start;
-use crate::{Client, ClientError};
+use crate::{ClientError, Connection};
 
 /// A session the hub has deleted, so it refuses to follow it.
 const GONE: &str = "gone";
@@ -61,7 +61,7 @@ fn the_hubs_prompts_are_listed_once_its_subscription_has_started() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let heard = start_hub(&socket, vec![listed(vec![PromptLine::new(Seq::new(3), "far back", 0)])]);
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
 
     let hub = Hub::caught_up_on(&client);
     let open = hub.open_session(&session(), View::Own);
@@ -86,7 +86,7 @@ fn a_hub_that_fails_to_list_prompts_goes_on_being_followed_and_is_asked_again_on
         listed(vec![PromptLine::new(Seq::new(3), "far back", 0)]),
     ];
     let heard = start_hub(&socket, lists);
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
     let hub = Hub::caught_up_on(&client);
     let open = hub.open_session(&session(), View::Own);
     let mut errors = Vec::new();
@@ -104,7 +104,7 @@ fn a_hub_that_fails_to_list_prompts_goes_on_being_followed_and_is_asked_again_on
     assert!(seqs(&open).is_empty());
 
     // Kept here too, so the connection is still open for the follower to let go of its subscription on.
-    let again = Client::connect(&socket, "test").unwrap();
+    let again = Connection::connect(&socket, "test").unwrap();
     hub.carry_on_to(&again);
     until("listed on the new connection", || seqs(&open) == [Seq::new(3)]);
 
@@ -120,7 +120,7 @@ fn a_session_thats_been_deleted_is_let_go_of_rather_than_reported() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let heard = start_hub(&socket, Vec::new());
-    let client = Client::connect(&socket, "test").unwrap();
+    let client = Connection::connect(&socket, "test").unwrap();
 
     let hub = Hub::caught_up_on(&client);
     let open = hub.open_session(&Session { id: GONE.into(), ..session() }, View::Own);

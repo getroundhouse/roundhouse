@@ -14,9 +14,9 @@ use protocol::model::{
     SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
 };
 
-use super::{Client, Result, hub_is_missing};
+use super::{Connection, Result, hub_is_missing};
 
-impl Client {
+impl Connection {
     pub fn hub_status(&self) -> Result<HubStatus> {
         self.call(admin::HubStatus)
     }

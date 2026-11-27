@@ -11,7 +11,7 @@ use super::given::Given;
 use super::window::{Ask, Replied, Step};
 use crate::client::follow::Giver;
 use crate::client::sent_call::SentCall;
-use crate::client::{Client, Result};
+use crate::client::{Connection, Result};
 
 /// A reply to wait for, or calls for the thread to make itself.
 pub(super) enum Waiting {
@@ -31,7 +31,7 @@ pub(super) enum Waiting {
     },
     /// The text of what's selected, a page at a time, to send to `reply` once it's all come.
     Copy {
-        client: Client,
+        connection: Connection,
         numbering: Numbering,
         range: TerminalRange,
         reply: flume::Sender<String>,
@@ -40,22 +40,22 @@ pub(super) enum Waiting {
 
 /// Sends what the window asked for, and gives back what has a reply to wait for. What fails to send is dropped, as
 /// typing over a connection that's gone is, and the window asks again for what it still lacks.
-pub(super) fn send(client: &Client, id: &TerminalId, ask: Ask) -> Result<Option<Waiting>> {
+pub(super) fn send(connection: &Connection, id: &TerminalId, ask: Ask) -> Result<Option<Waiting>> {
     let id = id.clone();
     Ok(Some(match ask {
         Ask::Typed(typed) => {
-            client.terminal_typed(&id, typed)?;
+            connection.terminal_typed(&id, typed)?;
             return Ok(None);
         }
         Ask::Rows { numbering, from, count } => {
-            Waiting::Rows { numbering, from, sent: client.send_call(TerminalRows { id, numbering, from, count })? }
+            Waiting::Rows { numbering, from, sent: connection.send_call(TerminalRows { id, numbering, from, count })? }
         }
         Ask::Fit { size, numbering, keep } => {
-            let sent = client.send_call(TerminalFit { id, size, numbering, keep: keep.clone() })?;
+            let sent = connection.send_call(TerminalFit { id, size, numbering, keep: keep.clone() })?;
             Waiting::Fit { size, asked: keep, sent }
         }
         Ask::Bounds { numbering, at, of, step } => {
-            Waiting::Bounds { step, sent: client.send_call(TerminalBounds { id, numbering, at, of })? }
+            Waiting::Bounds { step, sent: connection.send_call(TerminalBounds { id, numbering, at, of })? }
         }
     }))
 }
@@ -71,9 +71,9 @@ pub(super) fn start(id: TerminalId, waiting: flume::Receiver<Waiting>, giver: Gi
                 }
                 Waiting::Fit { size, asked, sent } => sent.reply().map(|reply| Replied::Fit { size, asked, reply }),
                 Waiting::Bounds { step, sent } => sent.reply().map(|reply| Replied::Bounds { step, reply }),
-                Waiting::Copy { client, numbering, range, reply } => {
+                Waiting::Copy { connection, numbering, range, reply } => {
                     // What fails copies nothing, as a copy with nothing selected does.
-                    if let Ok(text) = copied(&client, &id, numbering, range) {
+                    if let Ok(text) = copied(&connection, &id, numbering, range) {
                         let _ = reply.send(text);
                     }
                     continue;
@@ -89,11 +89,11 @@ pub(super) fn start(id: TerminalId, waiting: flume::Receiver<Waiting>, giver: Gi
 }
 
 /// The text of `range`, from every page of it, joined as the replies say.
-fn copied(client: &Client, id: &TerminalId, numbering: Numbering, range: TerminalRange) -> Result<String> {
+fn copied(connection: &Connection, id: &TerminalId, numbering: Numbering, range: TerminalRange) -> Result<String> {
     let mut text = String::new();
     let mut from = range.from;
     loop {
-        let page = client.terminal_text(id, numbering, TerminalRange { from, ..range }, false)?;
+        let page = connection.terminal_text(id, numbering, TerminalRange { from, ..range }, false)?;
         text.push_str(&page.text);
         let Some(rest) = page.rest else { return Ok(text) };
         if !page.joins {
