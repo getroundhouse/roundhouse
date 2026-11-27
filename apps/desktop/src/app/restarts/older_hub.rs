@@ -1,7 +1,8 @@
 use super::super::{AppView, Connection, ConnectionFailure, Unconnected, hub_source};
 use super::{asking, said};
-use gpui_kit::{App, AppContext as _, Context, Task};
+use gpui_kit::{App, Context, Task};
 use protocol::client::HubStatus;
+use protocol::client::admin;
 use std::path::Path;
 use std::time::Duration;
 
@@ -37,6 +38,15 @@ impl UpdateQuestion {
 /// that another client made.
 pub(in super::super) const LOOK_AGAIN: Duration = Duration::from_secs(30);
 
+/// Asking the older hub whether it's idle: at most one look under way, and at most one owed, asked for while that one
+/// was. The look under way may have read the hub before what made it idle, so once it's back without stopping the hub,
+/// it looks again, once, however many were asked for meanwhile, rather than a wait later.
+#[derive(Default)]
+pub(in super::super) struct Looking {
+    under_way: Option<Task<()>>,
+    owed: bool,
+}
+
 /// The hub the app is connected to, when it's an older one a client started, which this app may restart. A hub's build
 /// can't change while it runs, so this is only found when connecting.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,20 +65,25 @@ impl AppView {
     /// Only the hub knows about requests under way and setup scripts, so this asks it, and the hub has the last word as
     /// it stops, since a prompt can be sent between this seeing it idle and stopping it.
     pub(in super::super) fn finish_update_when_idle(&mut self, cx: &mut Context<Self>) {
-        let (Some(client), Some(OlderHub { pid, .. }), None) = (self.client(), self.restartable_hub, &self.looking)
-        else {
+        if self.looking.under_way.is_some() {
+            self.looking.owed = true;
             return;
-        };
+        }
+        let (true, Some(OlderHub { pid, .. })) = (self.is_connected(), self.restartable_hub) else { return };
         let build = self.hub.build_number;
-        self.looking = Some(cx.spawn(async move |this, cx| {
-            let status = cx.background_spawn(async move { client.hub_status() }).await;
+        let reading = self.linked.ask(admin::HubStatus);
+        self.looking.under_way = Some(cx.spawn(async move |this, cx| {
+            let status = reading.recv().await;
             let _ = this.update(cx, |t, cx| {
-                t.looking = None;
+                t.looking.under_way = None;
+                let owed = std::mem::take(&mut t.looking.owed);
                 let idle = status.is_ok_and(|s| s.pid == pid && hub_source::should_replace(&s, build));
                 // The dialog asking whether to restart now doesn't hold it up, since finishing an idle hub stops
                 // nothing, and the dialog goes with the hub.
                 if idle && t.still_finishing(pid) {
                     t.restart_hub_if_idle(cx);
+                } else if owed {
+                    t.finish_update_when_idle(cx);
                 }
             });
         }));
@@ -77,7 +92,7 @@ impl AppView {
     /// Whether the app is still connected to the older hub with this `pid`: the connection may have gone, and another
     /// hub started, while it asked or looked.
     pub(super) fn still_finishing(&self, pid: u32) -> bool {
-        self.client().is_some() && self.restartable_hub.is_some_and(|older| older.pid == pid)
+        self.is_connected() && self.restartable_hub.is_some_and(|older| older.pid == pid)
     }
 
     /// Looks every [`LOOK_AGAIN`] for whether the older hub has gone idle.
@@ -102,8 +117,11 @@ impl AppView {
     /// For an older hub that looked idle, which this says stops nothing, so the hub is asked to stop only if it still
     /// is. One that's busy after all is connected to again, and the update goes on waiting.
     pub(super) fn restart_hub_if_idle(&mut self, cx: &mut Context<Self>) {
-        let Some(client) = self.client() else { return };
-        self.stop_then_connect(cx, move |_| client_core::stop_hub_if_idle(&client).map(drop));
+        if !self.is_connected() {
+            return;
+        }
+        let stopping = self.linked.stop_if_idle();
+        self.stop_then_connect(cx, move |_| stopping.now().map(drop));
     }
 
     /// Has the app be connecting. A workspace already on screen stays there, as `view.rs` draws it, holding what it
@@ -198,12 +216,12 @@ impl AppView {
         cx: &mut Context<Self>,
         then: impl FnOnce(&mut Self, HubStatus, &mut Context<Self>) + 'static,
     ) {
-        let (Some(client), Some(OlderHub { pid, .. }), None) = (self.client(), self.restartable_hub, &self.asking)
-        else {
+        let (true, Some(OlderHub { pid, .. }), None) = (self.is_connected(), self.restartable_hub, &self.asking) else {
             return;
         };
+        let reading = self.linked.ask(admin::HubStatus);
         self.asking = Some(cx.spawn(async move |this, cx| {
-            let status = cx.background_spawn(async move { client.hub_status() }).await;
+            let status = reading.recv().await;
             let _ = this.update(cx, |t, cx| {
                 t.asking = None;
                 match status {

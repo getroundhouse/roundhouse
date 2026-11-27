@@ -303,7 +303,7 @@ impl WorkspacePane {
             let any = self.question(id, cx).is_some_and(|question| question.read(cx).has_typed(cx));
             Typed { any, unkept: self.keeper.unkept(&DraftKey::Decision(id.clone())) }
         };
-        let only_here = move |id: &SessionId| self.client.is_sending(id);
+        let only_here = move |id: &SessionId| self.linked.is_sending(id);
         let showing = std::iter::once_with(move || {
             // As `says_or_carries` says, without copying what's typed out of the composer.
             let text = self.composer.read(cx).text().chars().any(|c| !c.is_whitespace());

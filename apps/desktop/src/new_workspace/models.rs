@@ -18,10 +18,14 @@ impl NewWorkspaceDialog {
     /// Follows the list of models of the first chat's agent in the dialog's project, as `Lookup::follow` says. For
     /// whenever what it's for changes, or the hub's lists do.
     pub(crate) fn follow_models(&mut self, again: bool, cx: &mut Context<Self>) {
-        let Some(client) = self.keeping.client().cloned() else { return };
-        let (agent, records) = (self.base_agent().cloned(), self.offer.models.0.clone());
+        // Nothing is asked without a connection that has caught up, which the next round asks once there is.
+        if !self.keeping.hub().caught_up() {
+            return;
+        }
+        let (hub, agent, records) =
+            (self.keeping.hub().clone(), self.base_agent().cloned(), self.offer.models.0.clone());
         let target = ModelTarget::Project(self.repo.clone());
-        self.model_lookup.follow(&client, agent.as_ref(), target, &records, again, cx, |d| &mut d.model_lookup);
+        self.model_lookup.follow(&hub, agent.as_ref(), target, &records, again, cx, |d| &mut d.model_lookup);
     }
 
     /// Whether there's nothing to pick from yet, since the agent hasn't said what it offers.

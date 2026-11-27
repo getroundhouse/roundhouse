@@ -1,40 +1,12 @@
-//! Against a stand-in hub.
-#![cfg(unix)]
+//! How far making a workspace got, as the hub answers.
 
-use std::time::Duration;
-
-use client_core::stand_in_hub::{self, Does};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::capability::settings::Effort;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
+use protocol::client::{ApiError, ErrorCode};
 use protocol::fixtures;
 use protocol::model::{AgentKind, AttachmentId, Draft, ModelName, RepoId};
 
 use super::*;
-
-/// A hub that says what it was asked, in order, and answers as `answer` says, or with nothing.
-fn hub_that_says(
-    dir: &tempfile::TempDir,
-    mut answer: impl FnMut(&ClientRequest) -> Option<ReplyOutcome> + Send + 'static,
-) -> (Client, flume::Receiver<String>) {
-    let (said, heard) = flume::unbounded();
-    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
-        let _ = said.send(asked(&request));
-        match answer(&request) {
-            Some(outcome) => Does::Answers(Box::new(outcome)),
-            None => Does::Nothing,
-        }
-    });
-    (client, heard)
-}
-
-/// What a request asked, in a word or two.
-fn asked(request: &ClientRequest) -> String {
-    match request {
-        ClientRequest::NewWorkspaceCreate(_) => "create from the dialog".to_string(),
-        other => format!("{other:?}"),
-    }
-}
 
 /// A file the hub keeps for the dialog, which the dialog hadn't read back.
 fn on_the_hub() -> Attachment {
@@ -60,26 +32,20 @@ fn request() -> Request {
 
 /// How a hub that made it answers, with `unsent` and `unchosen` as it says, and a chat whose composer holds the prompt
 /// if `in_composer`.
-fn made(in_composer: bool, unsent: Option<UnsentPrompt>, unchosen: Option<ApiError>) -> ReplyOutcome {
+fn made(in_composer: bool, unsent: Option<UnsentPrompt>, unchosen: Option<ApiError>) -> NewWorkspaceMade {
     let mut session = fixtures::session("s");
     if in_composer {
         session.draft = Draft { text: "say:hi".to_string(), files: vec![on_the_hub()] };
     }
-    let made = NewWorkspaceMade { workspace: fixtures::workspace("w"), session, unchosen, unsent };
-    ReplyOutcome::Response(ClientResponse::NewWorkspaceMade(Box::new(made)))
+    NewWorkspaceMade { workspace: fixtures::workspace("w"), session, unchosen, unsent }
 }
 
 /// A hub that makes it, and couldn't send the prompt, which it put in the chat's composer if `in_composer`, and whose
 /// chat couldn't be given what was chosen if `unchosen`.
 fn made_by_the_hub(in_composer: bool, unchosen: bool) -> Made {
-    let dir = tempfile::tempdir().unwrap();
-    let (client, _) = hub_that_says(&dir, move |request| {
-        let ClientRequest::NewWorkspaceCreate(_) = request else { return None };
-        let unchosen = unchosen.then(|| ApiError::new(ErrorCode::InvalidRequest, "not that effort"));
-        let unsent = Some(UnsentPrompt { error: ApiError::new(ErrorCode::Internal, "it went wrong"), in_composer });
-        Some(made(in_composer, unsent, unchosen))
-    });
-    make(&client, request())
+    let unchosen = unchosen.then(|| ApiError::new(ErrorCode::InvalidRequest, "not that effort"));
+    let unsent = Some(UnsentPrompt { error: ApiError::new(ErrorCode::Internal, "it went wrong"), in_composer });
+    taken(request(), Ok(made(in_composer, unsent, unchosen)))
 }
 
 /// One the hub couldn't give the chat whole is still in the dialog, where it goes back, with the file the dialog hadn't
@@ -110,34 +76,9 @@ fn a_chat_the_hub_couldnt_give_what_was_chosen_says_so() {
 /// The hub may have made it before the connection went, so it's not said to have been refused.
 #[test]
 fn a_hub_that_goes_away_while_making_it_isnt_taken_for_one_that_refused() {
-    let dir = tempfile::tempdir().unwrap();
-    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), |request| match request {
-        ClientRequest::NewWorkspaceCreate(_) => Does::HangsUp,
-        _ => Does::Nothing,
-    });
-
-    let made = make(&client, request());
+    let made = taken(request(), Err(ClientError::Disconnected));
 
     let unsent = made.unsent.expect("it's given back");
     assert_eq!(unsent.failed, Step::Answer);
     assert!(unsent.given_back.is_some_and(|given_back| given_back.prompt.text == "say:hi"));
-}
-
-/// So the hub makes it from what was asked for, and has the files the dialog was given, not from what it kept before.
-#[test]
-fn the_hub_is_asked_to_make_it_only_once_it_keeps_what_was_asked_for() {
-    let dir = tempfile::tempdir().unwrap();
-    let (client, heard) = hub_that_says(&dir, |request| {
-        matches!(request, ClientRequest::NewWorkspaceCreate(_)).then(|| made(false, None, None))
-    });
-    let (kept, keeping) = flume::bounded(1);
-    let request = Request { kept: Some(keeping), ..request() };
-
-    let making = std::thread::spawn(move || make(&client, request));
-
-    let before = heard.recv_timeout(Duration::from_millis(200));
-    assert!(before.is_err(), "nothing is asked before it's kept, but {before:?} was");
-    kept.send(()).unwrap();
-    assert_eq!(heard.recv_timeout(Duration::from_secs(10)).unwrap(), "create from the dialog");
-    assert!(making.join().unwrap().unsent.is_none());
 }

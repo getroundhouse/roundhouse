@@ -3,18 +3,18 @@
 //! threads and async tasks can read. This keeps GPUI's executor out of it and leaves a path open
 //! for a native mobile client.
 //!
-//! A [`link::Link`] connects to a hub, connects again whenever the connection goes, and keeps a [`RecordsFeed`] on
-//! each connection, by one rule for every client, so an app only draws how it stands. The [`Hub`] it gives out is what a
+//! A [`link::Link`] connects to a hub, connects again whenever the connection goes, and keeps a [`RecordsFeed`] on each
+//! connection, by one rule for every client, so an app only draws how it stands. The [`Hub`] it gives out is what a
 //! view holds: it reads the records from it, asks the hub through it, and opens what it follows from it, and the link
 //! carries each on to every connection it makes.
 //!
-//! [`records`] holds what a client has of a hub's records, and [`session_log`] what it has of a
-//! session's history. [`RecordsFeed`] and [`OpenSession`] keep them current, each on a thread of its
-//! own, so a view only reads them, and [`OpenTerminal`] keeps a copy of what a terminal shows the
-//! same way, for a view to draw. [`RecordsFeed`] also takes in the record a call's reply carries, before the call
-//! returns. [`Approval`] says what an approval asks, and how to answer it, however old its request, [`calls`] what each
-//! tool call in a session's history is, [`refusals`] what the hub not doing what was asked means, and [`workspace_order`]
-//! the orders workspaces can be listed in, each the same for every client.
+//! [`records`] holds what a client has of a hub's records, and [`session_log`] what it has of a session's history.
+//! [`RecordsFeed`] and [`OpenSession`] keep them current, each on a thread of its own, so a view only reads them, and
+//! [`OpenTerminal`] keeps a copy of what a terminal shows the same way, for a view to draw. [`RecordsFeed`] also takes
+//! in the record a call's reply carries, before the call returns. [`Approval`] says what an approval asks, and how to
+//! answer it, however old its request, [`calls`] what each tool call in a session's history is, [`refusals`] what the
+//! hub not doing what was asked means, and [`workspace_order`] the orders workspaces can be listed in, each the same
+//! for every client.
 //!
 //! [`this_device`] is what an app keeps on the device it runs on, such as its preferences.
 
@@ -62,7 +62,7 @@ pub use attachments::{FileToSend, NotAttached};
 pub use drafts::{CameBack, DraftChange, DraftKey, Drafts, FilesFor, KeptDraft, NotReadBack, ReadBack};
 #[cfg(any(test, feature = "testing"))]
 pub use hub::OnSocket;
-pub use hub::{Hub, Round};
+pub use hub::{Hub, Round, StopIfIdle};
 pub use new_chat::new_chat_settings;
 pub use sending::{NotTaken, Taking, Written};
 

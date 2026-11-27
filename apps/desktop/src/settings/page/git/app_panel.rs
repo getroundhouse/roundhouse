@@ -5,7 +5,7 @@
 //! each frame. The panel keeps only the step it's at, with what that step waits on, which goes with it.
 
 use gpui_kit::{Context, Subscription, Task, Window};
-use protocol::client::github_apps::GithubManifestCode;
+use protocol::client::github_apps::{GithubAppManifestWrite, GithubManifestCode};
 use protocol::model::GithubAppId;
 
 use super::super::field::Field;
@@ -137,8 +137,8 @@ impl Kept {
             Ok(bound) => bound,
             Err(e) => return self.choose_again(&chosen, Some(app_words::couldnt_listen(&e)), window, cx),
         };
-        let (name, redirect) = (chosen.name.clone(), bound.redirect_url());
-        let writing = asking.client.start(move |client| client.github_app_manifest_write(&name, &redirect));
+        let (name, redirect_url) = (chosen.name.clone(), bound.redirect_url());
+        let writing = asking.hub.ask(GithubAppManifestWrite { name, redirect_url });
         let task = cx.spawn_in(window, async move |this, cx| {
             let answer = writing.recv().await;
             let _ = cx.update(|window, cx| this.update(cx, |this, cx| this.written(answer, bound, window, cx)));

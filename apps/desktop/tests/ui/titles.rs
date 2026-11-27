@@ -48,7 +48,7 @@ fn the_first_prompt_titles_the_workspace_and_a_rename_replaces_it(cx: &mut TestA
     ui.input("Never mind");
     ui.press("escape");
     assert!(!ui.has_dialog());
-    let started = ui.view().client().unwrap().commands();
+    let started = ui.view().hub().commands();
     started.finished().recv_timeout(Duration::from_secs(10)).unwrap();
     let stored = client.workspace_list(false).unwrap().into_iter().find(|w| w.id == workspace).unwrap();
     assert_eq!((stored.title.as_deref(), stored.name), (Some("Login bug"), name));
@@ -81,7 +81,7 @@ fn a_chat_is_renamed_from_its_tab(cx: &mut TestAppContext) {
     rename(&mut ui, &tab);
     ui.press("enter");
     assert!(!ui.has_dialog(), "Return alone keeps the title it has");
-    let started = ui.view().client().unwrap().commands();
+    let started = ui.view().hub().commands();
     started.finished().recv_timeout(Duration::from_secs(10)).unwrap();
     assert_eq!(client.session_get(&chat).unwrap().title.as_deref(), Some("First try"));
 }

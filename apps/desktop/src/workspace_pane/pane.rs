@@ -13,7 +13,7 @@ use crate::tool_sign_in::ToolSigningIn;
 use attaching::{Composed, Waiting};
 use client_core::records::InWorkspace;
 use client_core::tool_servers::ReloadRequest;
-use client_core::{Client, Drafts, Hub, RecordsFeed};
+use client_core::{Drafts, Hub, RecordsFeed, Round};
 use conversation::Conversations;
 use file_tab::FileTab;
 use gpui_kit::component::input::TextareaState;
@@ -89,7 +89,8 @@ pub struct WorkspacePane {
     /// The hub, which what's opened here, such as a terminal, is followed from over every connection, and what's
     /// moved to it is asked through.
     pub(super) linked: Hub,
-    pub(super) client: Client,
+    /// The hub's round when the pane last carried on on a connection, so it knows when the next has caught up.
+    pub(super) round: Round,
     /// Client-core's copy of the hub's records, which keeps the subagents of each chat the pane shows.
     pub(super) records: RecordsFeed,
     /// What's shown of the workspace's records, as of client-core's last change: its own, its sessions' and its
@@ -157,7 +158,8 @@ pub struct WorkspacePane {
 impl WorkspacePane {
     /// The pane for the workspace `shown` is part of, as the hub's records had it.
     pub(crate) fn new(of_hub: OfHub, shown: InWorkspace, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let OfHub { linked, client, records, conversations, tool_sign_in } = of_hub;
+        let OfHub { linked, records, conversations, tool_sign_in } = of_hub;
+        let round = linked.round();
         let keeper = linked.drafts();
         let (composer, on_enter) = composer::new_input(window, cx);
         let (about, on_event) = (Self::composer_about, Self::dictation_event);
@@ -170,7 +172,7 @@ impl WorkspacePane {
         let [needs_dictation, needs_speech] = crate::conversing::observe_needs(window, cx, Self::start_once_ready);
         let mut this = Self {
             linked,
-            client,
+            round,
             records,
             shown,
             showing_next: None,
@@ -253,18 +255,18 @@ impl WorkspacePane {
         self.chats.entry(id.clone()).or_default()
     }
 
-    /// Carries on on a new connection to the hub, keeping everything shown and typed, and reads the chat showing if
-    /// it's being read. What the hub reads from the worktree waits for [`Self::catch_up`], so a reconnect doesn't
-    /// start a worker for every pane at once. What's typed isn't sent until the connection has caught up, as
-    /// [`Self::hub_came_back`] says.
-    pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
-        self.model_lookup.reset();
-        self.client = client.clone();
+    /// Carries on once a new connection to the hub has caught up on its records, keeping everything shown and typed:
+    /// what's typed is sent again, the chat showing read if it's being read, and the files of a chat's draft read back,
+    /// since none of them could be while the hub was away. Until then, what's typed waits, as it does with no
+    /// connection, since the hub's first list on a new connection may be about to replace what the pane shows. What
+    /// the hub reads from the worktree waits for [`Self::catch_up`], so a new connection doesn't start a worker for
+    /// every pane at once. A hub that didn't know a tool server's reload may know it on this one.
+    fn came_back(&mut self, cx: &mut Context<Self>) {
+        self.hub = composer::Hub::Here;
         self.reload_request = ReloadRequest::Known;
         self.showing_changed(cx);
+        self.bring_back_files(cx);
         self.behind = true;
-        // What it draws of what the last connection said, such as which tool servers can be reloaded, changes.
-        cx.notify();
     }
 
     /// For when the pane is shown after a reconnect, to read again what it may have changed.
@@ -282,6 +284,10 @@ impl WorkspacePane {
 
     /// What client-core holds for this workspace now. Only what changed since the pane last looked is passed on.
     pub fn set_records(&mut self, shown: InWorkspace, cx: &mut Context<Self>) {
+        let round = self.linked.round();
+        if std::mem::replace(&mut self.round, round) != round {
+            self.came_back(cx);
+        }
         let earlier = std::mem::replace(&mut self.shown, shown);
         let (id, now) = (self.workspace().id.clone(), self.shown.all().clone());
         let changes = now.changes_since(earlier.all());

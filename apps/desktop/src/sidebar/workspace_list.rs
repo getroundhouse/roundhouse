@@ -243,7 +243,7 @@ pub(super) fn places(lines: &[Line]) -> Vec<Pixels> {
 }
 
 fn connected(app: &AppView) -> bool {
-    matches!(app.connection(), Connection::Ready(_))
+    matches!(app.connection(), Connection::Ready)
 }
 
 /// Whether the line is one of the project's that's being dragged, or is on its way to its place from where it was

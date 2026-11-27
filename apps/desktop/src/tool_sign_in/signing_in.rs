@@ -1,10 +1,11 @@
 //! The sign-in a hub's view has, if it has one: starting it, following it, opening its page again and putting it away.
 
 use client_core::tool_sign_ins::{Begun, begun, couldnt_finish, couldnt_start};
-use client_core::{Client, ClientError, new_tool_sign_in_id};
+use client_core::{ClientError, Hub, new_tool_sign_in_id};
 use gpui_kit::Context;
 use protocol::client::tool_sign_ins::{
-    REDIRECT_PORTS, SIGN_IN_WAITS, ToolSignInBegun, ToolSignInPage, ToolSignInReturned, redirect,
+    REDIRECT_PORTS, SIGN_IN_WAITS, ToolSignInBegun, ToolSignInCancel, ToolSignInFinish, ToolSignInPage,
+    ToolSignInReturned, ToolSignInStart, redirect,
 };
 use protocol::model::{ToolServer, ToolSignInId};
 
@@ -17,10 +18,8 @@ use crate::timers::Timers;
 /// Signing in to the hub's MCP servers from this device, one at a time.
 #[derive(Default)]
 pub(crate) struct ToolSigningIn {
-    /// The hub to ask, while there's one.
-    hub: Option<Client>,
-    /// How many connections to it there have been, which says which one something was sent on.
-    connection: u64,
+    /// The hub to ask, while the app is connected to it.
+    hub: Option<Hub>,
     under_way: Option<UnderWay>,
 }
 
@@ -58,12 +57,9 @@ impl ToolSigningIn {
         cx.notify();
     }
 
-    /// The hub to ask from now on is `hub`, if there's one. What the person was sent back with, which the last
-    /// connection lost, is sent on this one.
-    pub(crate) fn hub_is(&mut self, hub: Option<Client>, cx: &mut Context<Self>) {
-        if self.hub.is_none() && hub.is_some() {
-            self.connection += 1;
-        }
+    /// The hub to ask from now on is `hub`, while the app is connected to it. What the person was sent back with,
+    /// which a connection lost, is sent again once a new one has caught up, as the hub's round says.
+    pub(crate) fn hub_is(&mut self, hub: Option<Hub>, cx: &mut Context<Self>) {
         self.hub = hub;
         self.finish(cx);
     }
@@ -71,11 +67,10 @@ impl ToolSigningIn {
     /// Has the hub start the sign-in `id`, with the person sent back to a listener of this device's, or says why it
     /// can't be asked.
     fn ask_to_start(&self, id: &ToolSignInId, to: &SignInTo, cx: &mut Context<Self>) -> Result<Starting, String> {
-        let client = self.hub.clone().ok_or(words::NO_HUB)?;
+        let hub = self.hub.clone().ok_or(words::NO_HUB)?;
         let bound = Bound::first_free(&REDIRECT_PORTS).map_err(|e| words::couldnt_listen(&e))?;
-        let (asked, to, sent_back_to) = (id.clone(), to.asked(), redirect(bound.address().port()));
-        let starting = client.start(move |client| client.tool_sign_in_start(&asked, to, sent_back_to));
-        let id = id.clone();
+        let (id, to, redirect) = (id.clone(), to.asked(), redirect(bound.address().port()));
+        let starting = hub.ask(ToolSignInStart { id: id.clone(), to, redirect });
         // Not with the sign-in, so a start that's answered after it was put away is still cancelled.
         cx.spawn(async move |this, cx| {
             let answer = starting.recv().await;
@@ -142,22 +137,23 @@ impl ToolSigningIn {
         }
     }
 
-    /// Gives the hub what the person was sent back with, unless it has been on this connection, or there's no hub to
-    /// ask now, and then once there is. The hub answers the same again when it's sent twice.
+    /// Gives the hub what the person was sent back with, unless it has been since a connection last caught up, or
+    /// there's no hub to ask now, and then once there is. The hub answers the same again when it's sent twice.
     fn finish(&mut self, cx: &mut Context<Self>) {
-        let Some(client) = self.hub.clone() else { return };
+        let Some(hub) = self.hub.clone() else { return };
         let Some(UnderWay { id, stands: Stands::Finishing(finishing), .. }) = &mut self.under_way else { return };
-        if finishing.sent.as_ref().is_some_and(|(connection, _)| *connection == self.connection) {
+        let round = hub.round();
+        if finishing.sent.as_ref().is_some_and(|(sent_in, _)| *sent_in == round) {
             return;
         }
-        let (asked, returned) = (id.clone(), finishing.returned.clone());
-        let answered = client.start(move |client| client.tool_sign_in_finish(&asked, returned));
+        let returned = finishing.returned.clone();
+        let answered = hub.ask(ToolSignInFinish { id: id.clone(), returned });
         let id = id.clone();
         let answering = cx.spawn(async move |this, cx| {
             let answer = answered.recv().await;
             let _ = this.update(cx, |this, cx| this.finished(&id, answer, cx));
         });
-        finishing.sent = Some((self.connection, answering));
+        finishing.sent = Some((round, answering));
     }
 
     /// Takes in what the hub answered the finish of `id` with. One the connection lost is sent again on the next.
@@ -185,9 +181,9 @@ impl ToolSigningIn {
     /// Has the hub forget the sign-in `id`, with a hub to ask, and otherwise it does by itself once it has waited as
     /// long as one does.
     fn cancel_at_hub(&self, id: ToolSignInId) {
-        if let Some(client) = &self.hub {
+        if let Some(hub) = &self.hub {
             // Not waited for: nothing here goes by it, and it runs to the end whatever the window does.
-            drop(client.start(move |client| client.tool_sign_in_cancel(&id)));
+            drop(hub.ask(ToolSignInCancel { id }));
         }
     }
 }

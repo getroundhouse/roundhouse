@@ -27,6 +27,11 @@ impl<F> LinkState<F> {
         }
     }
 
+    /// Whether there's a connection, caught up or not.
+    pub fn is_connected(&self) -> bool {
+        matches!(self, LinkState::Ready(_) | LinkState::CatchingUp(_))
+    }
+
     /// The connection, whether or not it has caught up.
     pub fn connected(&self) -> Option<&Client> {
         match self {

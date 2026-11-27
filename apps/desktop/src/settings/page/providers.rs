@@ -11,6 +11,7 @@ use gpui_kit::{
     AnyElement, App, Context, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Task, Window,
     div, px,
 };
+use protocol::client::github_accounts::HubMachineLogins;
 use protocol::model::{GhLogin, GhLoginWorks, MachineLogins, ProviderName, SshLogin};
 
 use super::account_row::{self, COLUMN_WIDTH, Columns, Detail, Picture, Row, Tone};
@@ -75,7 +76,7 @@ enum Said {
 impl MachineRead {
     fn start(asking: Option<Asking>, cx: &mut Context<Self>) -> Self {
         let Some(asking) = asking else { return Self { said: Said::Unsaid, _reading: None } };
-        let reading = asking.client.start(client_core::Client::hub_machine_logins);
+        let reading = asking.hub.ask(HubMachineLogins);
         let task = cx.spawn(async move |this, cx| {
             let answer = reading.recv().await;
             let _ = this.update(cx, |this, cx| {

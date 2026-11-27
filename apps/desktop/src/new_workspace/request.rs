@@ -29,9 +29,6 @@ pub struct Request {
     /// dialog keeps, not what it shows, so its model and effort are `None` unless one was picked or kept, as the hub's
     /// copy says, and the hub can tell once the dialog says nothing else.
     pub made_of: NewWorkspaceDraftToKeep,
-    /// Answers once the hub keeps `made_of` as what's in the dialog, or once that's as far as it can get, so the hub
-    /// can make the workspace from what it keeps. `None` for a request that's not from the dialog.
-    pub kept: Option<flume::Receiver<()>>,
 }
 
 impl Request {
@@ -56,7 +53,7 @@ impl Request {
             mode,
         };
         let coming_back = Vec::new();
-        Self { repo, prompt, coming_back, agent, model, effort, mode, made_of, kept: None }
+        Self { repo, prompt, coming_back, agent, model, effort, mode, made_of }
     }
 
     /// Whether there's a prompt to send once the workspace is made, counting the files still coming back.

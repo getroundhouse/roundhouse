@@ -9,9 +9,9 @@ use super::{Connect, LinkState, Lost, Waits};
 use crate::hub::Kept;
 use crate::{Client, FollowError, Hub};
 
-/// The connection to one hub, made again on a thread of its own by [the rule every client
-/// follows](crate::link), and the [`Hub`] every view of it holds, kept over every connection. The thread stops once this
-/// has gone, and with it every connection the views' [`Hub`] holds.
+/// The connection to one hub, made again on a thread of its own by [the rule every client follows](crate::link), and
+/// the [`Hub`] every view of it holds, kept over every connection. The thread stops once this has gone, and with it
+/// every connection the views' [`Hub`] holds.
 pub struct Link<C: Connect> {
     shared: Arc<Shared<C>>,
     changed: flume::Receiver<()>,
@@ -106,6 +106,12 @@ impl<C: Connect> Link<C> {
     /// else the app has open to carry on on. Only the newest, since anything on one before it would only move on again.
     pub fn take_connection(&self) -> Option<(Client, C::With)> {
         self.shared.connection.lock().take()
+    }
+
+    /// What was read of the hub as the newest connection since this was last asked was made, such as its status, for
+    /// an app that goes by it. Only the newest, since anything of one before it is out of date.
+    pub fn take_connected(&self) -> Option<C::With> {
+        self.take_connection().map(|(_, with)| with)
     }
 
     /// What went wrong following the hub's records on a connection that had caught up, which the link carries on with.

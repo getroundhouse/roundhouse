@@ -8,7 +8,7 @@ use crate::tool_sign_in::ToolSigningIn;
 use crate::workspace_pane::WorkspacePane;
 use client_core::link::Link;
 use client_core::records::Snapshot;
-use client_core::{Client, Hub, RecordsFeed};
+use client_core::{Hub, RecordsFeed};
 use gpui_kit::{AnyWindowHandle, AppContext as _, Context, Entity, FocusHandle, ScrollHandle, Task, Window};
 use hub_source::HubSource;
 use protocol::client::HubStatus;
@@ -33,7 +33,8 @@ pub(crate) fn wrapped_step(at: usize, by: isize, len: usize) -> usize {
 
 pub enum Connection {
     Connecting,
-    Ready(Client),
+    /// Connected, and caught up on the hub's records.
+    Ready,
     Failed(ConnectionFailure),
     /// A hub is running, and there's a real protocol break between it and this app.
     AcrossABreak(HubStatus),
@@ -110,7 +111,7 @@ pub struct AppView {
     /// Looks every so often, while connected to an older hub, for whether it has gone idle, so the update can finish.
     pub(super) finishing: Option<Task<()>>,
     /// Asking the older hub whether it's idle.
-    pub(super) looking: Option<Task<()>>,
+    pub(super) looking: restarts::Looking,
     /// What the window shows of the hub beyond its records, once it has followed a hub's records.
     pub(super) shown: Option<super::pull_requests::Shown>,
     /// Draws the window again when what's said of a chat's cache next changes.
@@ -178,7 +179,7 @@ impl AppView {
             quitting: Quitting::No,
             asking: None,
             finishing: None,
-            looking: None,
+            looking: restarts::Looking::default(),
             shown: None,
             cache_clock: None,
             keeping: keeping_workers::KeepingWorkers::default(),
@@ -187,6 +188,7 @@ impl AppView {
             telling: notifying::Telling::default(),
             chat_to_show: None,
         };
+        quitting::wait_for(&this.linked, cx);
         this.follow_link(cx);
         this
     }
@@ -237,15 +239,18 @@ impl AppView {
 
     /// Tells a sign-in to an MCP server which hub to ask from now on, if there's one.
     pub(super) fn tell_tool_sign_in(&self, cx: &mut Context<Self>) {
-        let hub = self.client();
+        let hub = self.is_connected().then(|| self.linked.clone());
         self.tool_sign_in.update(cx, |signing_in, cx| signing_in.hub_is(hub, cx));
     }
 
-    pub fn client(&self) -> Option<Client> {
-        match &self.connection {
-            Connection::Ready(client) => Some(client.clone()),
-            _ => None,
-        }
+    /// Whether the app is connected to a hub that has caught up, which is when it asks the hub anything.
+    pub fn is_connected(&self) -> bool {
+        matches!(self.connection, Connection::Ready)
+    }
+
+    /// The hub the window shows, whichever connection there is to it, which everything in it asks.
+    pub fn hub(&self) -> &Hub {
+        &self.linked
     }
 
     /// Client-core's copy of the hub's records, once it's following a hub.
@@ -280,7 +285,7 @@ impl AppView {
 
     /// None without a connection, when panes are kept but neither shown nor used.
     pub(super) fn selected_pane(&self) -> Option<Entity<WorkspacePane>> {
-        if !matches!(self.connection, Connection::Ready(_)) {
+        if !matches!(self.connection, Connection::Ready) {
             return None;
         }
         self.selected().and_then(|id| self.panes.get(id).cloned())

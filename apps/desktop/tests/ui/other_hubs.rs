@@ -23,7 +23,7 @@ fn a_hub_across_a_real_break_is_explained_and_can_be_restarted(cx: &mut TestAppC
     );
     ui.click("restart-hub");
 
-    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
+    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready));
     let status = stack.client().hub_status().unwrap();
     assert_ne!(status.pid, other.0.id());
     assert!(status.on_demand);
@@ -87,7 +87,7 @@ fn an_older_hub_that_goes_as_the_app_joins_it_leaves_the_app_on_its_own(cx: &mut
     let mut ui = Ui::open_without_waiting(cx, &stack);
 
     wait_for_the_apps_own_hub(&mut ui, &mut older);
-    ui.wait("the app to connect", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
+    ui.wait("the app to connect", |ui| matches!(ui.view().connection(), Connection::Ready));
     assert!(older.restarted(), "asked to restart, rather than to stop");
 }
 
@@ -130,6 +130,26 @@ fn an_update_finishes_by_itself_once_nothing_else_is_under_way_on_the_older_hub(
     wait_for_the_apps_own_hub(&mut ui, &mut older);
 }
 
+/// A look asked for while another is under way isn't lost: the one under way read the hub while a request was, so it
+/// says it's busy, and the app looks again once it's back, so the update finishes then, with no wait for the next.
+#[gpui_kit::test]
+fn an_update_finishes_on_the_look_after_one_that_was_under_way_as_the_hub_went_idle(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    stack.hub.build_number = Some(2);
+    let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--requests", "1"]);
+    let mut ui = Ui::open(cx, &stack);
+    ui.bring_to_front();
+    older.hold_status();
+    ui.wait_out_a_look();
+    ui.wait("a look, under way", |_| older.holding_status());
+
+    older.set_requests(0);
+    ui.wait_out_a_look();
+    older.answer_status();
+
+    wait_for_the_apps_own_hub(&mut ui, &mut older);
+}
+
 /// A prompt sent between the app seeing the hub idle and stopping it starts an agent, which finishing the update by
 /// itself mustn't stop. The hub refuses, and the app carries on with it, and waits on the agent.
 #[gpui_kit::test]
@@ -147,7 +167,7 @@ fn an_older_hub_that_is_busy_once_asked_to_stop_is_kept(cx: &mut TestAppContext)
     ui.wait("the app to be back on the older hub after it refused", |ui| {
         let refused =
             client_core::HubAdmin::connect(&socket).is_ok_and(|hub| hub.status().unwrap().running_sessions == 1);
-        refused && matches!(ui.view().connection(), Connection::Ready(_))
+        refused && matches!(ui.view().connection(), Connection::Ready)
     });
     assert!(older.0.try_wait().unwrap().is_none());
     assert!(matches!(ui.build_line().update, Some(Updating::Finishing { .. })));
@@ -190,7 +210,7 @@ fn a_hub_started_by_hand_is_explained_and_left_alone(cx: &mut TestAppContext) {
     // Whoever runs it stops it, and the app can then start one of its own.
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
     ui.click("try-hub-again");
-    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
+    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready));
 }
 
 #[gpui_kit::test]
@@ -215,7 +235,7 @@ fn restarting_a_hub_that_has_already_gone_still_connects(cx: &mut TestAppContext
 
     ui.click("restart-hub");
 
-    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
+    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready));
 }
 
 /// A hub installed as a service that has found a newer release offers to update, and says why it refused, as the fake

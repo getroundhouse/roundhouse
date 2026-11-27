@@ -1,6 +1,5 @@
 //! What the bottom of the sidebar says about which build is running, and where updating it has got to.
 
-use client_core::Client;
 use client_core::records::Snapshot;
 use gpui_kit::App;
 use protocol::event::AgentTask;
@@ -11,8 +10,7 @@ use super::updating_hub::HubUpdateAsk;
 
 impl AppView {
     pub fn build_line(&self, cx: &App) -> BuildLine {
-        let client = self.client();
-        let hub = client.as_ref().map(Client::hub_version);
+        let hub = self.is_connected().then(|| self.linked.hub_version());
         // As the hub counts them, from what the sidebar already has, so it's current without asking.
         let restarting = self.restartable_hub.is_some_and(|older| older.restarting);
         let chats = self.records.every_session().map(|s| (s.status, s.background_tasks.as_slice()));
@@ -21,7 +19,7 @@ impl AppView {
         let may_restart = self.restartable_hub.is_some();
         let ready = crate::updates::ready(cx);
         let (records, asked) = (&self.records, self.hub_update_asked.as_ref());
-        BuildLine::new(self.hub.build_version, hub, may_restart, holding, ready, records, asked)
+        BuildLine::new(self.hub.build_version, hub.as_deref(), may_restart, holding, ready, records, asked)
     }
 }
 

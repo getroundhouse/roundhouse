@@ -91,7 +91,8 @@ fn serve_requests(world: &World, connection: u64, stream: UnixStream) {
 
 /// Whether `request` starts following the hub, whose list of its records follows the answer.
 fn follows_the_hub(request: &ClientRequest) -> bool {
-    matches!(request, ClientRequest::Subscribe(subscribe) if subscribe.start.iter().any(|start| start.follow == Follow::Hub))
+    let ClientRequest::Subscribe(subscribe) = request else { return false };
+    subscribe.start.iter().any(|start| start.follow == Follow::Hub)
 }
 
 /// Writes each of `frames` in turn, whole, and says whether the client was still there for all of them.

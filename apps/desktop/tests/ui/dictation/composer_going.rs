@@ -135,7 +135,7 @@ fn losing_the_hub_ends_it_since_the_composer_goes(cx: &mut TestAppContext) {
     assert!(!ui.cx.read_entity(&pane, desktop::workspace_pane::WorkspacePane::dictating));
     local_hub::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");
-    ui.wait("the hub to come back", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
+    ui.wait("the hub to come back", |ui| matches!(ui.view().connection(), Connection::Ready));
 
     assert_eq!(live(&mut ui), None, "the composer comes back with nothing being dictated");
     assert_eq!(ui.composer_text(), "");

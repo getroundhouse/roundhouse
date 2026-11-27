@@ -3,6 +3,7 @@
 //! answered, so nothing of it stays.
 
 use gpui_kit::{App, Context, Task, Window};
+use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::model::{GithubAccount, GithubAccountId, GithubToken};
 
 use super::super::field::Field;
@@ -69,7 +70,7 @@ impl Kept {
         let (Some(asking), Some(panel)) = (self.asking.clone(), self.token_panel_mut()) else { return };
         let token = GithubToken::new(panel.token.value(cx));
         let account = panel.renewing.as_ref().map(|renewing| renewing.id.clone());
-        let connecting = asking.client.start(move |client| client.github_account_connect(token, account));
+        let connecting = asking.hub.ask(GithubAccountConnect { token, id: account });
         panel.connecting = Some(cx.spawn_in(window, async move |this, cx| {
             let answer = connecting.recv().await;
             let _ = this.update_in(cx, |this, window, cx| this.answered(answer, window, cx));

@@ -134,15 +134,23 @@ pub(super) struct Inner {
     /// The device the hub takes this connection to be on, set before anyone else has it: the one it paired as, over the
     /// network, or the one its hello named.
     pub(super) device: OnceLock<DeviceId>,
-    pub(super) running: Arc<commands::Running>,
-    /// Each chat's prompts, in the order they were written.
-    pub(super) lines: Arc<lines::Lines>,
+    /// What lasts beyond one connection, which a [`Hub`](crate::Hub) has each of its connections share.
+    pub(super) lasting: Mutex<Lasting>,
     /// The files this connection has added to a session, or read back from one, so a prompt that carries one doesn't
     /// send its bytes again.
     pub(super) given: Mutex<HashSet<(SessionId, AttachmentId)>>,
+    pub(super) folding: Folding,
+}
+
+/// What a client keeps that lasts beyond one connection, so a [`Hub`](crate::Hub) has each of its connections share
+/// one: the calls started, which quitting waits for, each chat's line of prompts, and the prompts being queued.
+#[derive(Clone, Default)]
+pub(crate) struct Lasting {
+    pub(super) running: Arc<commands::Running>,
+    /// Each chat's prompts, in the order they were written.
+    pub(super) lines: Arc<lines::Lines>,
     /// Each chat's prompts being queued from here that the hub hasn't answered for yet.
     pub(super) queueing: Arc<queueing::Queueing>,
-    pub(super) folding: Folding,
 }
 
 impl Inner {
@@ -198,10 +206,8 @@ impl Client {
             disconnected: Mutex::new(false),
             hub_version: OnceLock::new(),
             device: OnceLock::new(),
-            running: Arc::default(),
-            lines: Arc::default(),
+            lasting: Mutex::default(),
             given: Mutex::default(),
-            queueing: Arc::default(),
             folding: Folding::default(),
         });
         let for_reader = inner.clone();
@@ -209,6 +215,16 @@ impl Client {
             .name("hub-client-reader".to_string())
             .spawn(move || read_frames(&for_reader, reader))?;
         Ok(Client { inner, closer })
+    }
+
+    /// Has this connection share `lasting` with every other of its hub's, from now on, which a hub's link does as it
+    /// carries what's open on to it.
+    pub(crate) fn share(&self, lasting: &Lasting) {
+        *self.inner.lasting.lock() = lasting.clone();
+    }
+
+    pub(super) fn lasting(&self) -> Lasting {
+        self.inner.lasting.lock().clone()
     }
 
     /// Which build the hub is, as it said when this connected.

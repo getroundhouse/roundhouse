@@ -55,7 +55,7 @@ fn main() {
             loop {
                 cx.background_executor().timer(Duration::from_millis(100)).await;
                 let ready = view.update(cx, |v: &mut AppView, cx| {
-                    if !matches!(v.connection(), Connection::Ready(_)) {
+                    if !matches!(v.connection(), Connection::Ready) {
                         return false;
                     }
                     if let Some(name) = &wanted
@@ -115,13 +115,15 @@ async fn click_each(handle: gpui_kit::AnyWindowHandle, targets: Vec<SharedString
 
 /// Adds a comment on the first line the workspace's diff adds.
 fn comment_on_the_first_change(view: &gpui_kit::Entity<AppView>, text: &str, cx: &mut gpui_kit::AsyncApp) {
-    let (pane, client) =
-        view.read_with(cx, |v: &AppView, _| (v.panes[v.selected().unwrap()].clone(), v.client().unwrap()));
+    let (pane, hub) = view.read_with(cx, |v: &AppView, _| (v.panes[v.selected().unwrap()].clone(), v.hub().clone()));
     let id = pane.read_with(cx, |p, _| p.workspace().id.clone());
-    let diff = client.workspace_diff(&id).unwrap();
+    let diff = hub.call(protocol::client::workspaces::WorkspaceDiff { id: id.clone() }).unwrap();
     if let Some((path, line)) = first_added_line(&diff.patch) {
-        let request = Some(client_core::new_request_id());
-        client.comment_add(&id, &path, protocol::model::DiffSide::New, line, text, request).unwrap();
+        let (side, text, client_request_id) =
+            (protocol::model::DiffSide::New, text.to_string(), Some(client_core::new_request_id()));
+        let comment =
+            protocol::client::comments::CommentAdd { workspace_id: id, path, side, line, text, client_request_id };
+        hub.call(comment).unwrap();
     }
 }
 

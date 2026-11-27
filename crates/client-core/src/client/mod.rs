@@ -60,6 +60,7 @@ mod tests;
 mod connection;
 mod frames;
 mod subscribing;
+pub(crate) use connection::Lasting;
 #[cfg(test)]
 use connection::SUBSCRIPTION_CAPACITY;
 pub use connection::hub_is_missing;

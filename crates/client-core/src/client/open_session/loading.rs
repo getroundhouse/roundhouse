@@ -45,9 +45,9 @@ pub struct OpenSession {
 
 impl OpenSession {
     /// Starts following the events `view` takes, on a thread of its own, so this doesn't wait for the hub, on
-    /// `connection`, or on the first `hub` carries it on to if there's none yet. Once it has subscribed, it asks for the
-    /// session's prompts, unless it follows a subagent, whose events hold none. `records`, the copy of the same hub's
-    /// records, holds the session's own records, its subagents, proposals and how its replies were heard, as its
+    /// `connection`, or on the first `hub` carries it on to if there's none yet. Once it has subscribed, it asks for
+    /// the session's prompts, unless it follows a subagent, whose events hold none. `records`, the copy of the same
+    /// hub's records, holds the session's own records, its subagents, proposals and how its replies were heard, as its
     /// subscription sends them, until every clone of this has gone. A view opens one from its [`Hub`].
     pub(crate) fn start(
         hub: &Hub,

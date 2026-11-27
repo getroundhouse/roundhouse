@@ -158,7 +158,7 @@ impl Waiting {
 /// What finishing holds: what the person was sent back with, until the hub has answered it.
 pub(crate) struct Finishing {
     pub(super) returned: ToolSignInReturned,
-    /// The connection it was last sent on, as [`ToolSigningIn`](super::ToolSigningIn) counts them, and the wait for the
+    /// The hub's round it was last sent in, as [`Hub::round`](client_core::Hub::round) says, and the wait for the
     /// answer.
-    pub(super) sent: Option<(u64, Task<()>)>,
+    pub(super) sent: Option<(client_core::Round, Task<()>)>,
 }

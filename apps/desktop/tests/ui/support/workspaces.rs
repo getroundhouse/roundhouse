@@ -39,7 +39,7 @@ impl<'a> Ui<'a> {
         let (hub, opens) = (stack.hub.clone(), desktop::Opens::WhereItWasLeft);
         (self.handle, self.view) = self.cx.update(|cx| desktop::open_main_window(hub, None, opens, cx)).unwrap();
         self.seen_approval = Seq::default();
-        self.wait("the app to connect", |ui| ui.view().client().is_some());
+        self.wait("the app to connect", |ui| ui.view().is_connected());
     }
 
     pub(crate) fn first_repo_id(&self) -> RepoId {

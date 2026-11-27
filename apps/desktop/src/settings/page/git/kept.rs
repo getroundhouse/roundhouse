@@ -2,6 +2,7 @@
 //! the hub last couldn't do. Which account is the default, how each login stands and how a sign-in goes are never kept
 //! here: each frame reads them from the hub's records and settings, as client-core keeps them.
 
+use protocol::client::github_accounts::{GithubAccountDisconnect, GithubAccountSetDefault};
 use std::collections::HashSet;
 
 use client_core::records::Snapshot;
@@ -144,7 +145,7 @@ impl Kept {
             return;
         };
         self.failed = None;
-        let choosing = asking.client.start(move |client| client.github_account_set_default(Some(account)));
+        let choosing = asking.hub.ask(GithubAccountSetDefault { account: Some(account) });
         self.choosing = Some(cx.spawn(async move |this, cx| {
             let answer = choosing.recv().await;
             let _ = this.update(cx, |this, cx| {
@@ -191,8 +192,7 @@ impl Kept {
             cx.notify();
             return;
         };
-        let asked = id.clone();
-        let disconnecting = asking.client.start(move |client| client.github_account_disconnect(&asked));
+        let disconnecting = asking.hub.ask(GithubAccountDisconnect { id: id.clone() });
         cx.spawn(async move |this, cx| {
             let answer = disconnecting.recv().await;
             let _ = this.update(cx, |this, cx| {

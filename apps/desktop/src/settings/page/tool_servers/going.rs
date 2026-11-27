@@ -112,7 +112,7 @@ impl Kept {
         // A server that's signed in to is added once that's approved.
         let Some(of) = form.to_save(cx) else { return };
         let (name, url) = (form.name.value(cx), form.url.value(cx));
-        let (saving, answer) = ToolServerSaving::start(&hub.client, of, when, name, url);
+        let (saving, answer) = ToolServerSaving::start(&hub.hub, of, when, name, url);
         let wait = cx.spawn_in(window, async move |this, cx| {
             let answer = answer.recv().await;
             let _ = this.update_in(cx, |this, window, cx| this.answered(answer, window, cx));

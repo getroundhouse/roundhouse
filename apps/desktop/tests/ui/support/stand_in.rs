@@ -27,6 +27,21 @@ impl StandInHub {
         self.write("stand-in-setups", setups);
     }
 
+    /// Has it hold back its answer to each status read from now on, until [`StandInHub::answer_status`].
+    pub(crate) fn hold_status(&self) {
+        std::fs::write(self.1.join("stand-in-status-held"), "").unwrap();
+    }
+
+    /// Whether it's holding back an answer to a status read.
+    pub(crate) fn holding_status(&self) -> bool {
+        self.1.join("stand-in-status-holding").exists()
+    }
+
+    /// Has it answer the status reads it holds back, with what it read as each was asked, and the rest at once.
+    pub(crate) fn answer_status(&self) {
+        std::fs::remove_file(self.1.join("stand-in-status-held")).unwrap();
+    }
+
     /// Whether it went for a restart, rather than to stop.
     pub(crate) fn restarted(&self) -> bool {
         self.1.join("stand-in-restarted").exists()

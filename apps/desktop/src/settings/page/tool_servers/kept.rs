@@ -3,6 +3,7 @@
 //! how it knows the person are never kept here: each frame reads them from the hub's records, as client-core keeps them.
 
 use gpui_kit::{App, Bounds, Context, Entity, FocusHandle, Pixels, ScrollHandle, Window};
+use protocol::client::tool_servers::ToolServerRemove;
 use protocol::model::{ToolServer, ToolServerId};
 
 use super::super::panel::Place;
@@ -136,12 +137,10 @@ impl Kept {
             return;
         };
         let asked = id.clone();
-        let answer = asking.client.start(move |client| match client.tool_server_remove(&asked) {
-            Err(e) if !e.is_not_found() => Err(e),
-            Ok(_) | Err(_) => Ok(()),
-        });
+        let answer = asking.hub.ask(ToolServerRemove { id: asked });
         cx.spawn(async move |this, cx| {
-            let answer = answer.recv().await;
+            // One that's gone already is as good as removed.
+            let answer = answer.recv().await.map(drop).or_else(|e| if e.is_not_found() { Ok(()) } else { Err(e) });
             let _ = this.update(cx, |this, cx| {
                 if let Err(e) = answer {
                     this.failed = Some((id, words::couldnt("remove it", &e)));

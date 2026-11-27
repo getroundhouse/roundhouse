@@ -85,7 +85,7 @@ impl AppView {
                 let may_restart = hub_source::may_restart(status, self.hub.build_number);
                 across_a_break(status, self.hub.build_version, may_restart, cx)
             }
-            Connection::Ready(_) | Connection::Connecting | Connection::Failed(_) => match self.pane_to_draw() {
+            Connection::Ready | Connection::Connecting | Connection::Failed(_) => match self.pane_to_draw() {
                 Some(pane) => pane.into_any_element(),
                 None if self.records.repos().is_empty() => self.no_projects(cx),
                 None => empty_state(
@@ -131,7 +131,7 @@ impl AppView {
     pub(in crate::app) fn pane_to_draw(&self) -> Option<Entity<WorkspacePane>> {
         let drawn = matches!(
             self.connection(),
-            Connection::Ready(_) | Connection::Connecting | Connection::Failed(ConnectionFailure::Unreachable { .. })
+            Connection::Ready | Connection::Connecting | Connection::Failed(ConnectionFailure::Unreachable { .. })
         );
         self.selected().filter(|_| drawn).and_then(|id| self.panes.get(id).cloned())
     }

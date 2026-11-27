@@ -4,6 +4,7 @@
 
 use client_core::records::Snapshot;
 use gpui_kit::{Context, Window};
+use protocol::client::github_apps::{GithubAppInstallationsConnect, GithubAppMake};
 use protocol::model::{GithubAccount, GithubAppId, GithubAppSlug};
 
 use super::app_panel::{AppStep, OnGithub};
@@ -26,7 +27,7 @@ impl Kept {
         let AppStep::OnGithub { stands: OnGithub::Making { code, failed }, .. } = &mut app.step else { return };
         *failed = None;
         let code = code.clone();
-        let making = asking.client.start(move |client| client.github_app_make(code));
+        let making = asking.hub.ask(GithubAppMake { code });
         app.waiting = Some(cx.spawn_in(window, async move |this, cx| {
             let answer = making.recv().await;
             // In the window it was asked in, which `update_in` would take to be whichever the page last used.
@@ -95,7 +96,7 @@ impl Kept {
         }
         (*looking, *failed) = (true, None);
         let id = *app;
-        let looking = asking.client.start(move |client| client.github_app_installations_connect(id));
+        let looking = asking.hub.ask(GithubAppInstallationsConnect { id });
         panel.waiting = Some(cx.spawn(async move |this, cx| {
             let answer = looking.recv().await;
             let _ = this.update(cx, |this, cx| {

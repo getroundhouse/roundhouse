@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use parking_lot::Mutex;
 
-use crate::client::Carried;
+use crate::client::{Carried, Lasting};
 use protocol::model::DeviceId;
 
 use crate::{Client, Drafts, RecordsFeed};
@@ -16,6 +16,11 @@ pub(crate) struct Kept {
     feed: RecordsFeed,
     /// Started with the link, and kept on whichever connection there is, catching up or not, as they've always been.
     drafts: Drafts,
+    /// What every connection shares: the calls started, which quitting waits for, each chat's line of prompts, and the
+    /// prompts being queued.
+    lasting: Lasting,
+    /// The build of the hub the newest connection reached, as its hello said, empty before there's been one.
+    hub_version: Mutex<String>,
     /// The device the newest connection is on, as the hub takes it, which a chat's conversation is on when its record
     /// names it.
     device: Mutex<Option<DeviceId>>,
@@ -48,6 +53,8 @@ impl Kept {
         Kept {
             feed: RecordsFeed::started(None),
             drafts: Drafts::started(None),
+            lasting: Lasting::default(),
+            hub_version: Mutex::new(String::new()),
             device: Mutex::new(None),
             rounds: Mutex::default(),
             connected_once: AtomicBool::new(false),
@@ -71,6 +78,14 @@ impl Kept {
     /// Whether the newest connection reached the hub on this machine, false before there's been one.
     pub(crate) fn on_this_machine(&self) -> bool {
         self.on_this_machine.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn lasting(&self) -> &Lasting {
+        &self.lasting
+    }
+
+    pub(crate) fn hub_version(&self) -> String {
+        self.hub_version.lock().clone()
     }
 
     pub(crate) fn drafts(&self) -> &Drafts {
@@ -100,6 +115,8 @@ impl Kept {
     /// Carries the records on to `client`, a new connection, then the drafts, then everything open, since what follows
     /// a session takes what it's sent into the records, as [`RecordsFeed::reconnect`] says. Returns the records.
     pub(crate) fn connected(&self, client: &Client) -> RecordsFeed {
+        client.share(&self.lasting);
+        client.hub_version().clone_into(&mut self.hub_version.lock());
         self.feed.reconnect(client);
         self.drafts.reconnect(client);
         *self.device.lock() = client.device().cloned();

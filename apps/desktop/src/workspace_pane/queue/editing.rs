@@ -5,6 +5,7 @@ use client_core::{ClientError, NotTaken, Written};
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{AppContext as _, Context, Entity, Subscription, Window};
 use protocol::client::ErrorCode;
+use protocol::client::queue::{SessionChangeQueued, SessionSendQueued, SessionUnqueue};
 use protocol::model::{ClientMessageId, QueuedPrompt, SessionId};
 use protocol::prompt::{Prompt, says_or_carries};
 
@@ -33,7 +34,7 @@ impl WorkspacePane {
         }
         let files = self.attached.take();
         self.emptied_by_sending(window, cx);
-        let queueing = self.client.start_queueing(&session_id, Written::new(Prompt::carrying(text, files)));
+        let queueing = self.linked.start_queueing(&session_id, Written::new(Prompt::carrying(text, files)));
         cx.spawn(async move |this, cx| {
             let queued = queueing.recv().await;
             let _ = this.update(cx, |t, cx| {
@@ -51,7 +52,7 @@ impl WorkspacePane {
     /// Sends a queued prompt now: into the turn the agent is working on, which steers it, or as a turn of its own.
     pub fn send_queued_now(&mut self, client_msg_id: ClientMessageId, cx: &mut Context<Self>) {
         let Some(session_id) = self.active.clone() else { return };
-        let sending = self.client.start(move |client| client.session_send_queued(&session_id, client_msg_id));
+        let sending = self.linked.ask(SessionSendQueued { id: session_id, client_msg_id });
         cx.spawn(async move |this, cx| {
             if let Err(e) = sending.recv().await {
                 let _ =
@@ -63,7 +64,7 @@ impl WorkspacePane {
 
     pub fn unqueue(&mut self, client_msg_id: ClientMessageId, cx: &mut Context<Self>) {
         let Some(session_id) = self.active.clone() else { return };
-        let removing = self.client.start(move |client| client.session_unqueue(&session_id, client_msg_id));
+        let removing = self.linked.ask(SessionUnqueue { id: session_id, client_msg_id });
         cx.spawn(async move |this, cx| {
             if let Err(e) = removing.recv().await {
                 let said = client_core::refusals::couldnt("take that out of the queue", &e);
@@ -115,7 +116,7 @@ impl WorkspacePane {
         text: String,
         cx: &mut Context<Self>,
     ) {
-        let changing = self.client.start(move |client| client.session_change_queued(&session_id, client_msg_id, &text));
+        let changing = self.linked.ask(SessionChangeQueued { id: session_id, client_msg_id, text });
         cx.spawn(async move |this, cx| {
             if let Err(e) = changing.recv().await {
                 let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::Error(not_changed(&e))));

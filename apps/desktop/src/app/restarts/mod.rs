@@ -10,5 +10,5 @@ pub(super) use said::{restart_note, unsent_note};
 mod older_hub;
 #[cfg(any(test, feature = "testing"))]
 pub(super) use older_hub::LOOK_AGAIN;
-pub(super) use older_hub::OlderHub;
 pub use older_hub::UpdateQuestion;
+pub(super) use older_hub::{Looking, OlderHub};

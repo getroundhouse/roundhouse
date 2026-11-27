@@ -2,8 +2,8 @@
 //! announces each change of it, so this only asks which list applies, follows that one in the records, and asks again
 //! when it's for somewhere else, when the hub has let go of it, or on Retry.
 
-use client_core::Client;
 use client_core::records::{ListOfModels, Snapshot};
+use client_core::{Hub, Round};
 use gpui_kit::{AnyElement, Context, IntoElement as _};
 use protocol::client::admin::{ModelTarget, ModelsFor};
 use protocol::model::{AgentDescription, ModelListKey, ModelLookup, Session};
@@ -20,10 +20,13 @@ pub struct FollowedModels {
     seen: bool,
     /// Counts what's asked, so an answer to what was asked before isn't taken.
     generation: u64,
+    /// The hub's round as of what was last asked, which a new one forgets, since a new connection's hub may hold other
+    /// lists, and what was asked on the one before may have been lost with it.
+    round: Option<Round>,
 }
 
 impl FollowedModels {
-    /// Forgets what was asked, as on a new connection, whose hub may hold other lists.
+    /// Forgets what was asked, as for another chat's login, which has a list of its own.
     pub fn reset(&mut self) {
         self.generation += 1;
         (self.asked, self.answer, self.seen) = (None, None, false);
@@ -35,7 +38,7 @@ impl FollowedModels {
     #[expect(clippy::too_many_arguments, reason = "what's asked, where it's held, and where the answer goes")]
     pub fn follow<T: 'static>(
         &mut self,
-        client: &Client,
+        hub: &Hub,
         agent: Option<&AgentDescription>,
         target: ModelTarget,
         records: &Snapshot,
@@ -43,6 +46,10 @@ impl FollowedModels {
         cx: &mut Context<T>,
         lookup: fn(&mut T) -> &mut Self,
     ) {
+        let round = hub.round();
+        if self.round.replace(round).is_some_and(|before| before != round) {
+            self.reset();
+        }
         let held = self.held(records);
         let Some(agent) = agent.filter(|agent| agent.discovers_models()) else {
             if self.asked.is_some() {
@@ -59,7 +66,7 @@ impl FollowedModels {
         self.reset();
         let generation = self.generation;
         self.asked = Some(request.clone());
-        let reading = client.start(move |client| client.models_for(ModelsFor { again, ..request }));
+        let reading = hub.ask(ModelsFor { again, ..request });
         cx.spawn(async move |this, cx| {
             let answer = reading.recv().await.map(|list| list.key).map_err(|e| e.to_string());
             let _ = this.update(cx, |owner, cx| {
@@ -78,7 +85,7 @@ impl FollowedModels {
     /// letting go of the list.
     pub fn follow_chat<T: 'static>(
         &mut self,
-        client: &Client,
+        hub: &Hub,
         records: &Snapshot,
         session: &Session,
         again: bool,
@@ -90,7 +97,7 @@ impl FollowedModels {
         if self.key().is_some_and(|key| session.account.is_some() && key.account != session.account) {
             self.reset();
         }
-        self.follow(client, agent, target, records, again, cx, lookup);
+        self.follow(hub, agent, target, records, again, cx, lookup);
     }
 
     /// What the chat `session`'s agent is offered where it runs, for its model picker, as

@@ -55,7 +55,7 @@ impl ChatView {
             return;
         }
         let Some(session) = showing else { return };
-        let marking = self.client.start(move |client| Mark::Read.chat(client, &session));
+        let marking = Mark::Read.chat(&self.hub, &session);
         cx.spawn(async move |this, cx| {
             if let Err(e) = marking.recv().await {
                 let said = Mark::Read.couldnt_mark_the_chat(&e);

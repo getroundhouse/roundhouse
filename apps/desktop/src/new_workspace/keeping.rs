@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 
-use client_core::{CameBack, Client, DraftChange, DraftKey, Drafts, FilesFor, Hub, KeptDraft, ReadBack};
+use client_core::{CameBack, DraftChange, DraftKey, Drafts, FilesFor, Hub, KeptDraft, ReadBack, Round};
 use gpui_kit::{App, Context, Window};
 use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, NewWorkspaceDraft, NewWorkspaceDraftToKeep};
@@ -13,11 +13,13 @@ use protocol::prompt::says_or_carries;
 use super::{DialogEvent, NewWorkspaceDialog};
 use crate::attached::read_back;
 
-/// What keeps the dialog on the hub, which its files are read back from, and the connection it asks the hub on.
+/// What keeps the dialog on the hub, which it asks and reads its files back from.
 pub(crate) struct Keeping {
     hub: Hub,
     keeper: Drafts,
-    client: Option<Client>,
+    /// The hub's round when the dialog last read back its files, so it reads back what it couldn't once the next
+    /// connection has caught up.
+    round: Round,
     /// The hub's record as it was last told of, to compare what's here with.
     kept: NewWorkspaceDraft,
     /// Files the record names that haven't been read back yet, in its order, which come before any here.
@@ -25,14 +27,14 @@ pub(crate) struct Keeping {
 }
 
 impl Keeping {
-    pub(crate) fn new(hub: Hub, client: Option<Client>) -> Self {
-        let keeper = hub.drafts();
-        Self { hub, keeper, client, kept: NewWorkspaceDraft::default(), restoring: Vec::new() }
+    pub(crate) fn new(hub: Hub) -> Self {
+        let (keeper, round) = (hub.drafts(), hub.round());
+        Self { hub, keeper, round, kept: NewWorkspaceDraft::default(), restoring: Vec::new() }
     }
 
-    /// The connection there is, which the dialog asks the hub on.
-    pub(super) fn client(&self) -> Option<&Client> {
-        self.client.as_ref()
+    /// The hub the dialog asks.
+    pub(super) fn hub(&self) -> &Hub {
+        &self.hub
     }
 }
 
@@ -145,16 +147,13 @@ impl NewWorkspaceDialog {
         cx.notify();
     }
 
-    /// Carries on on a new connection, asking it for the models it offers.
-    pub(crate) fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
-        self.model_lookup.reset();
-        self.keeping.client = Some(client.clone());
-        self.follow_models(false, cx);
-    }
-
-    /// For when a connection to the hub has caught up on its records, to read back any files that couldn't be before.
-    pub(crate) fn hub_came_back(&mut self, cx: &mut Context<Self>) {
-        self.bring_back(cx);
+    /// Reads back the files that couldn't be before, once a new connection to the hub has caught up on its records,
+    /// as the hub's round says. For each time the dialog is told what's changed.
+    pub(super) fn bring_back_on_a_new_round(&mut self, cx: &mut Context<Self>) {
+        let round = self.keeping.hub.round();
+        if std::mem::replace(&mut self.keeping.round, round) != round {
+            self.bring_back(cx);
+        }
     }
 
     /// Reads back the files the record names that aren't here, off the main thread.
@@ -181,12 +180,6 @@ impl NewWorkspaceDialog {
             self.keep(true, cx);
         }
         cx.notify();
-    }
-
-    /// Answers once what's handed to the keeper so far is kept, or once that's as far as it can get, such as without a
-    /// connection, which Create waits for, so the hub makes the workspace from what's asked for.
-    pub(super) fn kept_once_flushed(&self) -> flume::Receiver<()> {
-        self.keeping.keeper.flushed()
     }
 
     /// Stops reading back the files the record names that aren't here, as Create takes them with it, and returns them.

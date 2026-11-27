@@ -7,7 +7,7 @@
 
 use std::time::Instant;
 
-use client_core::{Client, Commands, Drafts};
+use client_core::{Commands, Drafts, Hub};
 use gpui_kit::{App, AppContext as _, Context, Global, WeakEntity, Window};
 
 use super::{AppView, restarts};
@@ -164,8 +164,8 @@ impl AppView {
     }
 }
 
-/// Has quitting wait for the commands started on `client`, rather than on the connection before it, and for `drafts`.
-pub(super) fn wait_for(client: &Client, drafts: Drafts, cx: &mut Context<AppView>) {
+/// Has quitting wait for what's asked of `hub`, on every connection, and for what's typed to be kept.
+pub(super) fn wait_for(hub: &Hub, cx: &mut Context<AppView>) {
     if !cx.has_global::<Started>() {
         let app: &mut App = cx;
         app.on_app_quit(|cx| {
@@ -184,7 +184,7 @@ pub(super) fn wait_for(client: &Client, drafts: Drafts, cx: &mut Context<AppView
     let id = cx.entity_id();
     let mut pending =
         cx.try_global::<Started>().map_or_else(std::collections::HashMap::new, |started| started.0.clone());
-    pending.insert(id, (client.commands(), drafts));
+    pending.insert(id, (hub.commands(), hub.drafts()));
     cx.set_global(Started(pending));
 }
 

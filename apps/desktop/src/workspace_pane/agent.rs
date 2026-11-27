@@ -24,8 +24,8 @@ impl WorkspacePane {
     /// or what the hub holds does, such as the chat's login, or the hub letting go of the list.
     pub(super) fn follow_models(&mut self, again: bool, cx: &mut Context<Self>) {
         let Some(session) = self.session().cloned() else { return };
-        let (client, records) = (self.client.clone(), self.records.snapshot());
-        self.model_lookup.follow_chat(&client, &records, &session, again, cx, |p| &mut p.model_lookup);
+        let records = self.records.snapshot();
+        self.model_lookup.follow_chat(&self.linked, &records, &session, again, cx, |p| &mut p.model_lookup);
     }
 
     /// Whether there's nothing to pick from yet, since the agent hasn't said what it offers.

@@ -46,7 +46,7 @@ impl Ui<'_> {
     /// noticed the old one go. The test would then carry on while the app was still reconnecting.
     pub(crate) fn wait_for_new_hub(&mut self, stack: &Stack, pid: u32) {
         self.wait("a new hub", |ui| {
-            matches!(ui.view().connection(), Connection::Ready(_))
+            matches!(ui.view().connection(), Connection::Ready)
                 && Client::connect(&stack.hub.paths.socket, "test")
                     .is_ok_and(|c| c.hub_status().is_ok_and(|s| s.pid != pid))
         });

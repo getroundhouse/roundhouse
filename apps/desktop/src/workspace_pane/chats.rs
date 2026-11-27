@@ -1,5 +1,6 @@
 //! Which chats a workspace has, which one is showing, and what each is called.
 
+use protocol::client::sessions::{SessionClose, SessionCreate, SessionEnsure, SessionRename, SessionReopen};
 use std::time::Duration;
 
 use client_core::ClientError;
@@ -33,7 +34,7 @@ impl WorkspacePane {
         }
         self.creating_chat = true;
         let (id, agent) = (self.workspace().id.clone(), self.new_chat_agent());
-        let finding = self.client.start(move |client| client.session_ensure(&id, agent));
+        let finding = self.linked.ask(SessionEnsure { workspace_id: id, agent });
         cx.spawn(async move |this, cx| {
             let found = finding.recv().await;
             let _ = this.update(cx, |t, cx| t.chat_created(found, cx));
@@ -57,9 +58,8 @@ impl WorkspacePane {
         self.creating_chat = true;
         let id = self.workspace().id.clone();
         let options = client_core::new_chat_settings(self.session(), agent);
-        let creating = self
-            .client
-            .start(move |client| client.session_create(&id, agent, options, Some(client_core::new_request_id())));
+        let client_request_id = Some(client_core::new_request_id());
+        let creating = self.linked.ask(SessionCreate { workspace_id: id, agent, settings: options, client_request_id });
         cx.spawn(async move |this, cx| {
             let created = creating.recv().await;
             let _ = this.update(cx, |t, cx| t.chat_created(created, cx));
@@ -207,7 +207,7 @@ impl WorkspacePane {
     }
 
     fn finish_closing(&mut self, id: SessionId, cx: &mut Context<Self>) {
-        let closing = self.client.start(move |client| client.session_close(&id));
+        let closing = self.linked.ask(SessionClose { id });
         cx.spawn(async move |this, cx| {
             let closed = closing.recv().await;
             let _ = this.update(cx, |_, cx| match closed {
@@ -220,7 +220,7 @@ impl WorkspacePane {
     }
 
     pub fn reopen_chat(&mut self, id: SessionId, cx: &mut Context<Self>) {
-        let reopening = self.client.start(move |client| client.session_reopen(&id));
+        let reopening = self.linked.ask(SessionReopen { id });
         cx.spawn(async move |this, cx| {
             let reopened = reopening.recv().await;
             let _ = this.update(cx, |t, cx| match reopened {
@@ -240,7 +240,7 @@ impl WorkspacePane {
     }
 
     fn rename_chat(&mut self, id: SessionId, title: String, cx: &mut Context<Self>) {
-        let renaming = self.client.start(move |client| client.session_rename(&id, &title));
+        let renaming = self.linked.ask(SessionRename { id, title });
         cx.spawn(async move |this, cx| {
             let renamed = renaming.recv().await;
             if let Err(e) = renamed {

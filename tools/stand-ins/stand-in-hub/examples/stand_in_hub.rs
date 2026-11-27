@@ -10,7 +10,8 @@
 //! that, or to turn out busy. With `--keeps-workers` it says it keeps its workers, and asked to restart, it goes once
 //! no setup script is running, as a hub does, as many as it says are until a test writes another number to
 //! [`SETUPS`], unless they're told to end as it's asked, and leaves [`RESTARTED`] to say it restarted rather than
-//! stopped.
+//! stopped. While a test leaves [`STATUS_HELD`] in its data directory, it reads its status as it's asked, and holds the
+//! answer back until the file has gone, saying so with [`STATUS_HOLDING`], so a client's read is under way.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
 
@@ -79,6 +80,10 @@ enum IfIdle {
 const RUNNING: &str = "stand-in-running";
 const REQUESTS: &str = "stand-in-requests";
 const SETUPS: &str = "stand-in-setups";
+
+/// While this is in its data directory, an answer to a status read waits, and it leaves the second there meanwhile.
+const STATUS_HELD: &str = "stand-in-status-held";
+const STATUS_HOLDING: &str = "stand-in-status-holding";
 
 /// What it leaves in its data directory as it goes for a restart.
 const RESTARTED: &str = "stand-in-restarted";
@@ -208,10 +213,7 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
                 let agents = ClientResponse::Agents(admin::Agents { agents: Vec::new() });
                 reply(&writer, request.id, ReplyOutcome::Response(agents));
             }
-            ClientRequest::HubStatus => {
-                let status = ClientResponse::HubStatus(status(args, paths));
-                reply(&writer, request.id, ReplyOutcome::Response(status));
-            }
+            ClientRequest::HubStatus => answer_status(&writer, request.id, args, paths),
             ClientRequest::HubShutdown => stop(&writer, request.id, paths),
             ClientRequest::HubRestart if args.keeps_workers => {
                 reply(&writer, request.id, ReplyOutcome::Response(ClientResponse::Ok));
@@ -248,6 +250,29 @@ fn restart(args: &Args, paths: &Paths) -> ! {
     }
     std::fs::write(paths.data_dir.join(RESTARTED), "").unwrap();
     go(paths);
+}
+
+/// Answers a status read with what it says now, at once, or once a test lets it go while it leaves [`STATUS_HELD`].
+fn answer_status(writer: &Writer, id: u64, args: &Args, paths: &Arc<Paths>) {
+    let status = ClientResponse::HubStatus(status(args, paths));
+    if !paths.data_dir.join(STATUS_HELD).exists() {
+        return reply(writer, id, ReplyOutcome::Response(status));
+    }
+    let (writer, paths) = (writer.clone(), paths.clone());
+    std::thread::spawn(move || {
+        hold_while_asked(&paths);
+        reply(&writer, id, ReplyOutcome::Response(status));
+    });
+}
+
+/// Waits while a test leaves [`STATUS_HELD`], saying so with [`STATUS_HOLDING`].
+#[expect(clippy::disallowed_methods, reason = "the pace the stand-in looks again whether a test has let it go")]
+fn hold_while_asked(paths: &Paths) {
+    std::fs::write(paths.data_dir.join(STATUS_HOLDING), "").unwrap();
+    while paths.data_dir.join(STATUS_HELD).exists() {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let _ = std::fs::remove_file(paths.data_dir.join(STATUS_HOLDING));
 }
 
 /// Says it's stopping, and goes.

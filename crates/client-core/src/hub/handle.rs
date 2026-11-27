@@ -3,12 +3,12 @@
 use std::sync::Arc;
 
 use protocol::client::Request;
-use protocol::model::{AttachmentId, CommitId, DeviceId, Session, SessionId, TerminalId, WorkspaceId};
+use protocol::model::{AttachmentId, CommitId, DeviceId, QueuedPrompt, Session, SessionId, TerminalId, WorkspaceId};
 
 use super::Kept;
 use crate::{
-    Client, ClientError, Drafts, FilesFor, LiveLog, OpenFile, OpenSession, OpenTerminal, ReadBack, RecordsFeed, Reply,
-    Result, View,
+    Client, ClientError, Commands, Drafts, FilesFor, IdleStop, LiveLog, OpenFile, OpenSession, OpenTerminal, ReadBack,
+    RecordsFeed, Reply, Result, View,
 };
 use protocol::attachment::Attachment;
 
@@ -91,6 +91,29 @@ impl Hub {
         }
     }
 
+    /// The calls asked of the hub, on every connection, which a client about to exit waits for with
+    /// [`Commands::finished`], as it does what's typed with [`Drafts::flushed`].
+    pub fn commands(&self) -> Commands {
+        self.kept.lasting().commands()
+    }
+
+    /// Whether a prompt written in the chat `session_id`, to send or to queue, is still on its way, so the hub hasn't
+    /// answered it, whichever connection it went on.
+    pub fn is_sending(&self, session_id: &SessionId) -> bool {
+        self.kept.lasting().is_sending(session_id)
+    }
+
+    /// What's being queued from here for `session` that isn't on its record yet, oldest first, as
+    /// [`Hub::start_queueing`] queues it, whichever connection it went on.
+    pub fn queueing(&self, session: &Session) -> Vec<QueuedPrompt> {
+        self.kept.lasting().queueing(session)
+    }
+
+    /// Which build the hub is, as the newest connection's hello said, empty before there's been one.
+    pub fn hub_version(&self) -> String {
+        self.kept.hub_version()
+    }
+
     /// What has the hub keep what's typed and not sent, for every view of it, on whichever connection there is,
     /// caught up or not, so nothing typed waits for a new one to catch up.
     pub fn drafts(&self) -> Drafts {
@@ -130,8 +153,8 @@ impl Hub {
         OpenFile::start(self, id, commit, path)
     }
 
-    /// Asks the hub `request` and waits for its reply, on the caller's thread, for one that can wait, such as one reading
-    /// a video a part at a time. It's sent only as [`Hub::ask`] says.
+    /// Asks the hub `request` and waits for its reply, on the caller's thread, for one that can wait, such as one
+    /// reading a video a part at a time. It's sent only as [`Hub::ask`] says.
     pub fn call<R: Request>(&self, request: R) -> Result<R::Reply> {
         self.ready()?.call(request)
     }
@@ -140,6 +163,14 @@ impl Hub {
     /// [`Client::attachment_read`] reads them.
     pub fn read_attachment(&self, session_id: &SessionId, id: &AttachmentId) -> Result<Vec<u8>> {
         self.ready()?.attachment_read(session_id, id)
+    }
+
+    /// What stops the hub if that cuts nothing off, on the connection that has caught up now, which the hub doesn't
+    /// count as one it would cut off, for once the link has stopped connecting, as
+    /// [`Link::connect_after`](crate::link::Link::connect_after) has it. Without one it fails at once, as
+    /// [`Hub::ask`] does.
+    pub fn stop_if_idle(&self) -> StopIfIdle {
+        StopIfIdle(self.ready())
     }
 
     /// The connection that has caught up, or the failure a request meets without one.
@@ -167,6 +198,16 @@ impl Hub {
     }
 }
 
+/// Stops a hub if that cuts nothing off, as [`Hub::stop_if_idle`] made it.
+pub struct StopIfIdle(Result<Client>);
+
+impl StopIfIdle {
+    /// Stops the hub, and waits for it to exit, as [`crate::stop_hub_if_idle`] says, on the caller's thread.
+    pub fn now(self) -> Result<IdleStop> {
+        crate::stop_hub_if_idle(&self.0?)
+    }
+}
+
 /// Which connection that has caught up a [`Hub`] is on, as [`Hub::round`] says.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Round(u64);
@@ -183,10 +224,11 @@ impl Hub {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 impl Hub {
-    /// Carries what's open on to `client`, as a link does a new connection, and takes it to have caught up at once.
-    pub(crate) fn carry_on_to(&self, client: &Client) {
+    /// Carries what's open on to `client`, as a link does a new connection, and takes it to have caught up at once, a
+    /// new round, for a test of a view on stand-in hubs.
+    pub fn carry_on_to(&self, client: &Client) {
         self.kept.set_ready(None);
         self.kept.connected(client);
         self.kept.set_ready(Some(client.clone()));

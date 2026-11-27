@@ -15,6 +15,7 @@ use gpui_kit::{
     SharedString, StatefulInteractiveElement as _, Styled, Window, div, relative,
 };
 use look::{InRegion as _, Region, Shaped as _, Typeset as _};
+use protocol::client::conversation::SessionConversationStart;
 use protocol::model::SessionId;
 use protocol::prompt::Prompt;
 
@@ -51,7 +52,7 @@ impl WorkspacePane {
             return;
         }
         window.focus(&self.composer.focus_handle(cx), cx);
-        let asking = self.client.start(move |client| client.session_conversation_start(&id).map(drop));
+        let asking = self.linked.ask(SessionConversationStart { id });
         cx.spawn(async move |this, cx| {
             if let Err(e) = asking.recv().await {
                 let couldnt = client_core::refusals::couldnt("turn conversation mode on", &e);

@@ -3,6 +3,7 @@
 //! and not in the app's settings. Its field is made anew once the hub has answered, so nothing of it stays.
 
 use gpui_kit::{App, Bounds, Context, FocusHandle, Pixels, ScrollHandle, Task, Window};
+use protocol::client::accounts::{AccountConnect, AccountDisconnect};
 use protocol::model::{Account, AccountId, AgentKind, LoginToken};
 
 use super::super::field::Field;
@@ -154,7 +155,7 @@ impl Kept {
             To::Account { id, name, .. } => (name.clone(), Some(id.clone())),
         };
         let (agent, renewing) = (panel.agent, account.is_some());
-        let connecting = asking.client.start(move |client| client.account_connect(agent, &name, token, account));
+        let connecting = asking.hub.ask(AccountConnect { agent, name, token, account });
         panel.connecting = Some(cx.spawn_in(window, async move |this, cx| {
             let answer = connecting.recv().await;
             let _ = this.update_in(cx, |this, window, cx| this.answered(answer, renewing, window, cx));
@@ -220,8 +221,7 @@ impl Kept {
             cx.notify();
             return;
         };
-        let asked = id.clone();
-        let disconnecting = asking.client.start(move |client| client.account_disconnect(&asked));
+        let disconnecting = asking.hub.ask(AccountDisconnect { id: id.clone() });
         cx.spawn(async move |this, cx| {
             let answer = disconnecting.recv().await;
             let _ = this.update(cx, |this, cx| {

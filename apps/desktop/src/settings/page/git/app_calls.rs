@@ -2,6 +2,7 @@
 //! again, and to remove an app, which asks first. Why the hub couldn't is said under the row it was asked from.
 
 use gpui_kit::{Context, Window};
+use protocol::client::github_apps::{GithubAppInstallationsConnect, GithubAppRemove};
 use protocol::model::GithubAppId;
 
 use super::kept::{Asked, Kept};
@@ -18,7 +19,7 @@ impl Kept {
             return;
         };
         self.failed = None;
-        let looking = asking.client.start(move |client| client.github_app_installations_connect(app));
+        let looking = asking.hub.ask(GithubAppInstallationsConnect { id: app });
         cx.spawn(async move |this, cx| {
             let answer = looking.recv().await;
             let _ = this.update(cx, |this, cx| {
@@ -64,7 +65,7 @@ impl Kept {
             cx.notify();
             return;
         };
-        let removing = asking.client.start(move |client| client.github_app_remove(id));
+        let removing = asking.hub.ask(GithubAppRemove { id });
         cx.spawn(async move |this, cx| {
             if let Err(e) = removing.recv().await {
                 let _ = this.update(cx, |this, cx| {

@@ -21,7 +21,7 @@ use crate::{
 impl AppView {
     /// Takes the shortcuts that can act now.
     pub(super) fn with_shortcuts(&self, root: Div, cx: &mut Context<Self>) -> Div {
-        let connected = self.client().is_some();
+        let connected = self.is_connected();
         // Settings, which stands in for the sidebar, leaves these out, so there's always one to hide.
         root.on_action(cx.listener(|_, _: &ToggleSidebar, _, cx| corner::toggle_sidebar(cx)))
             .when(connected && self.current_repo().is_some(), |root| {
