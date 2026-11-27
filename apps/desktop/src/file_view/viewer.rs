@@ -20,7 +20,9 @@ use tempfile::TempPath;
 use transcript::Document;
 
 /// The height of a line of a file, and of a line of a diff, so the two read alike.
-pub(crate) const LINE_HEIGHT: Pixels = look::CodeLines::File.height();
+pub(crate) fn line_height() -> Pixels {
+    look::CodeLines::File.height()
+}
 
 /// What the file view has to show for its file.
 pub(super) enum Contents {
@@ -201,7 +203,7 @@ impl FileView {
                 let line = lines.lines.get(index)?;
                 let text = StyledText::new(line.text.clone()).with_highlights(line.styles.iter().cloned());
                 let row = h_flex()
-                    .h(LINE_HEIGHT)
+                    .h(line_height())
                     .child(
                         div()
                             .flex_none()

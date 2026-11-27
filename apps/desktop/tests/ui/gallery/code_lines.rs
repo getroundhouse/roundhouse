@@ -34,7 +34,7 @@ const CODE: [&str; 4] =
 /// A block of `CODE` with its lines `lines` apart, found by its name.
 fn sample(lines: CodeLines, cx: &Context<Sheet>) -> AnyElement {
     let colors = look::colors(cx);
-    let [name, apart] = lines.written();
+    let [name, apart, _] = lines.written();
     let block = v_flex()
         .id(places::id(KIND, &name))
         .w(px(SAMPLE_WIDTH))

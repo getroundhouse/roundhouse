@@ -104,8 +104,8 @@ fn code_is_only_set_with_typeset_code() {
 
 #[test]
 fn the_specs_table_has_every_spacing_of_codes_lines_in_order() {
-    let table: Vec<[String; 2]> = spec_table::rows("**How far apart code's lines are, by where it's read.**");
+    let table: Vec<[String; 3]> = spec_table::rows("**How far apart code's lines are, by where it's read.**");
 
-    let spaced: Vec<[String; 2]> = CodeLines::ALL.iter().map(|lines| lines.written()).collect();
+    let spaced: Vec<[String; 3]> = CodeLines::ALL.iter().map(|lines| lines.written()).collect();
     assert_eq!(table, spaced, "docs/spec/look.md's table of code's line heights, against crates/look/src/typography");
 }

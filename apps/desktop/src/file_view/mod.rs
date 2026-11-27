@@ -18,4 +18,4 @@ mod video;
 mod viewer;
 use viewer::Contents;
 pub use viewer::FileView;
-pub(crate) use viewer::{LINE_HEIGHT, numbers_width};
+pub(crate) use viewer::{line_height, numbers_width};

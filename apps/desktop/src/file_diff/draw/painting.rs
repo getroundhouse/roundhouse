@@ -5,7 +5,7 @@ use super::super::layout::{Fold, Row, STEP};
 use super::super::selection::{DrawnLines, Selection};
 use super::super::sides::Sides;
 use super::code;
-use crate::file_view::{LINE_HEIGHT, numbers_width};
+use crate::file_view::{line_height, numbers_width};
 use crate::patch::LineKind;
 use code::Code;
 use gpui_kit::component::input::TextareaState;
@@ -56,7 +56,7 @@ pub(in super::super) fn row(ix: usize, row: &Row, drawing: &Drawing, cx: &App) -
         Row::Line { kind, old, new } => line(ix, *kind, *old, *new, drawing, cx),
         Row::Pair { old, new, same } => h_flex()
             .w_full()
-            .h(LINE_HEIGHT)
+            .h(line_height())
             .typeset_code(cx)
             .child(half(ix, true, *old, *new, *same, drawing, cx))
             .child(half(ix, false, *new, *new, *same, drawing, cx).line_left(cx))
@@ -92,7 +92,7 @@ fn line(ix: usize, kind: LineKind, old: Option<u32>, new: Option<u32>, drawing: 
     h_flex()
         .group(LINE)
         .w_full()
-        .h(LINE_HEIGHT)
+        .h(line_height())
         .typeset_code(cx)
         .when_some(background(kind, at, drawing, cx), Styled::bg)
         .child(number(old, drawing.numbers, cx))
@@ -197,7 +197,7 @@ fn add_button((side, line): (DiffSide, u32), marked: bool, drawing: &Drawing, cx
         .absolute()
         .top_0()
         .left_0()
-        .size(LINE_HEIGHT)
+        .size(line_height())
         .flex()
         .items_center()
         .justify_center()

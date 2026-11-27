@@ -11,7 +11,7 @@ use gpui_kit::{
 };
 
 use super::{Height, State};
-use crate::file_view::LINE_HEIGHT;
+use crate::file_view::line_height;
 
 /// Draws row `ix`.
 type DrawRow = Box<dyn FnMut(usize, &mut Window, &mut App) -> AnyElement>;
@@ -149,7 +149,7 @@ impl Element for ListElement {
             if phase != DispatchPhase::Bubble || !hitbox.should_handle_scroll(window) {
                 return;
             }
-            let delta = event.delta.pixel_delta(LINE_HEIGHT);
+            let delta = event.delta.pixel_delta(line_height());
             if delta.x.abs() <= delta.y.abs() {
                 return;
             }
