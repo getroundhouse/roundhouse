@@ -96,7 +96,11 @@ fn a_server_is_edited_under_its_row_and_its_new_name_is_for_agents_next_start(cx
     ui.wait("its name from another app", |ui| named(ui, "Elsewhere").is_some());
     type_in(&mut ui, "mcp-url", &elsewhere.url());
     save(&mut ui);
-    assert_eq!(url_of(&ui, "Elsewhere"), elsewhere.url(), "its name, which this app didn't change, stays");
+    // The panel goes on the hub's reply, which client-core has taken in by then, but the window can read its copy of
+    // the records before it has.
+    let saved = |ui: &Ui<'_>| ui.view().records().tool_server(&server).cloned().unwrap();
+    ui.wait("its new address", |ui| saved(ui).url.as_str() == elsewhere.url());
+    assert_eq!(saved(&ui).name.as_str(), "Elsewhere", "its name, which this app didn't change, stays");
     edit(&mut ui, &server);
     type_in(&mut ui, "mcp-name", "Northwind runbooks");
     stack.client().tool_server_remove(&server).unwrap();
