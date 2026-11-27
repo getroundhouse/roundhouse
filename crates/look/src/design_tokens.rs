@@ -10,7 +10,7 @@ use gpui_kit::{FontWeight, Pixels, phi, px};
 use crate::chips::INSIDE;
 use crate::motion::{FADE, PANEL, SCROLL};
 use crate::traits::Reach;
-use crate::typography::{CodeLines, INLINE_CODE, LIST_ITEM_GAP, MARKDOWN_HEADINGS, STRONG, Type, rem};
+use crate::typography::{CodeLines, INLINE_CODE, LIST_ITEM_GAP, MARKDOWN_HEADINGS, PARAGRAPH_GAP, STRONG, Type, rem};
 use crate::{
     BarSize, Colors, ControlSize, Corner, EDGE, IconSize, NamedColor, QUOTE_RULE, RowSize, Space, Strength, TAB_LINE,
 };
@@ -44,10 +44,11 @@ const HELD: &[&str] = &[
 /// wide, which macOS gives the system font.
 const THE_FONTS: &[&str] = &["font.family", "font.letterSpacing"];
 
-/// The names in the design that a test of their own holds, by their group, rather than their group's: what a chip, a
-/// part with an edge and a list have inside, inline code's size, and the styles of text that stands out.
+/// The names in the design that a test of their own holds, by their group, rather than their group's: what a chip and
+/// a part with an edge have inside, what's between paragraphs and a list's items, inline code's size, and the styles
+/// of text that stands out.
 const OF_THEIR_OWN: &[(&str, &[&str])] = &[
-    ("spacing", &["Chip", "ListItem", "Edged", "ChipStart", "ChipEnd"]),
+    ("spacing", &["Chip", "Paragraph", "ListItem", "Edged", "ChipStart", "ChipEnd"]),
     (
         "font.size",
         &[
@@ -209,13 +210,15 @@ fn a_chips_lengths_and_an_edged_parts_are_the_apps() {
     }
 }
 
-/// How far apart a list's items are, how big inline code is and how big Markdown's headings are, are the app's shares
-/// of the size of the body text they're in.
+/// How far apart paragraphs and a list's items are, how big inline code is and how big Markdown's headings are, are set
+/// by the text they're in, as the app sets them: a paragraph's by a rem, which sets the kit's text, and the rest as
+/// shares of the size of the body text they're in.
 #[test]
-fn what_is_a_share_of_body_text_is_the_apps_share_of_it() {
+fn what_is_set_by_the_text_is_as_the_app_sets_it() {
     for reach in Reach::ALL {
         let body = Type::Body.size_at(reach, rem(reach));
 
+        assert_eq!(tokens("spacing", reach)["Paragraph"], points(PARAGRAPH_GAP.to_pixels(rem(reach))), "{reach:?}");
         assert_eq!(tokens("spacing", reach)["ListItem"], points(body * LIST_ITEM_GAP), "{reach:?}");
         assert_eq!(tokens("font.size", reach)["InlineCode"], points(body * INLINE_CODE), "{reach:?}");
         for (level, share) in (1..).zip(MARKDOWN_HEADINGS) {

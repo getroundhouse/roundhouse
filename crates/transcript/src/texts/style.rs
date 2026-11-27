@@ -23,11 +23,12 @@ impl Style {
         context.with_style(style)
     }
 
-    /// `style`, with what's strong, its headings and their sizes, its inline code and its lists as this kind of text has
-    /// them.
+    /// `style`, with what's strong, its headings and their sizes, its inline code, its paragraphs and its lists as this
+    /// kind of text has them.
     fn styled(self, style: TextViewStyle) -> TextViewStyle {
         let style = style
             .with_inline_code_scale(look::INLINE_CODE)
+            .with_paragraph_gap(look::PARAGRAPH_GAP)
             .with_list_item_gap(look::LIST_ITEM_GAP)
             .with_heading_scales(look::MARKDOWN_HEADINGS);
         match self {
@@ -60,13 +61,13 @@ mod tests {
     }
 
     #[test]
-    fn inline_code_a_lists_items_and_headings_are_as_look_has_them() {
+    fn inline_code_paragraphs_a_lists_items_and_headings_are_as_look_has_them() {
         for kind in [Style::Markdown, Style::Thinking] {
             let given = TextViewStyle::default().with_inline_code_scale(1.).with_list_item_gap(1.);
-            let style = kind.styled(given.with_heading_scales([1.; 6]));
+            let style = kind.styled(given.with_paragraph_gap(gpui_kit::rems(1.)).with_heading_scales([1.; 6]));
 
-            let drawn = (style.inline_code_scale(), style.list_item_gap());
-            assert_eq!(drawn, (look::INLINE_CODE, look::LIST_ITEM_GAP));
+            let drawn = (style.inline_code_scale(), style.paragraph_gap(), style.list_item_gap());
+            assert_eq!(drawn, (look::INLINE_CODE, look::PARAGRAPH_GAP, look::LIST_ITEM_GAP));
             let headings: Vec<f32> = (1..=6).map(|level| style.heading_scale(level)).collect();
             assert_eq!(headings, look::MARKDOWN_HEADINGS);
         }
