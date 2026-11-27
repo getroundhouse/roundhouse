@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use super::workspace_build::{once_per_run, workspace_build};
+use super::workspace_build::{keep, once_per_run, workspace_build};
 
 /// One example, built once per test process, and once per nextest run, as [`once_per_run`] says.
 pub struct Example {
@@ -42,7 +42,7 @@ fn build(name: &str) -> PathBuf {
             .find(|message| message["reason"] == "compiler-artifact" && message["target"]["name"] == name)
             .and_then(|message| Some(PathBuf::from(message["executable"].as_str()?)))
             .unwrap_or_else(|| failed("find where Cargo built it", &"it didn't say"));
-        std::fs::write(&said, path.as_os_str().as_encoded_bytes()).unwrap_or_else(|e| failed("keep where", &e));
+        keep(&said, path.as_os_str().as_encoded_bytes()).unwrap_or_else(|e| failed("keep where", &e));
     });
     PathBuf::from(std::fs::read_to_string(&said).unwrap_or_else(|e| failed("read where", &e)))
 }

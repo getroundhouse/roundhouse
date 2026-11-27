@@ -70,9 +70,12 @@ fn choosing_another_agent_and_then_using_the_keyboard_keeps_each_chats_agent(cx:
         let agent = case.agent;
         let before = (ui.open_chats().len(), ui.active_chat());
         ui.pick_item("new-tab", case.item);
-        ui.wait(&format!("{agent:?}: the new chat"), |ui| {
-            ui.open_chats().len() == before.0 + 1 && ui.active_chat() != before.1
-        });
+        // The error bar's text isn't among what the window says it shows, so a chat the hub refused says why here.
+        ui.wait_saying(
+            &format!("{agent:?}: the new chat"),
+            |ui| ui.open_chats().len() == before.0 + 1 && ui.active_chat() != before.1,
+            |ui| format!("the app's error is {:?}", ui.view().error),
+        );
         let chosen = ui.active_chat();
         let (model, effort) = case.starts_on;
         assert_eq!(on(&client.session_get(&chosen).unwrap()), (agent, model, effort), "{agent:?}: the new chat");
