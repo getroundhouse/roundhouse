@@ -262,26 +262,24 @@ fn every_kind_of_text_in_the_design_is_as_big_as_the_apps() {
     }
 }
 
-/// How far apart the design's lines are, in points, is the app's: body text's is the golden ratio of its size, drawn to
-/// the nearest pixel at two to a point.
+/// How far apart the design's lines are, in points, is the app's: a kind's own, where it has them, or else what it takes
+/// where nothing it's in sets them, the golden ratio of its size, drawn to the nearest pixel at two to a point; and
+/// code's by where it's read.
 #[test]
 fn lines_of_text_are_as_far_apart_in_the_design_as_in_the_app() {
     for reach in Reach::ALL {
         let size = |kind: Type| kind.size_at(reach, rem(reach));
-        let body = px((f32::from(phi().to_pixels(size(Type::Body).into(), rem(reach))) * 2.).round() / 2.);
-        let of_its_own = |kind: Type| kind.line_at(reach).expect("lines of its own");
-        let lines = [
-            ("Body", Type::Body, body),
-            ("CodeFile", Type::Code, CodeLines::File.height()),
-            ("CodeChat", Type::Code, CodeLines::Chat.height()),
-            ("Key", Type::Key, of_its_own(Type::Key)),
-            ("KeyHeld", Type::KeyHeld, of_its_own(Type::KeyHeld)),
-        ];
+        let golden = |kind: Type| px((f32::from(phi().to_pixels(size(kind).into(), rem(reach))) * 2.).round() / 2.);
+        let kinds =
+            Type::ALL.iter().map(|&kind| (format!("{kind:?}"), kind, kind.line_at(reach).unwrap_or(golden(kind))));
+        let code = [("CodeFile", CodeLines::File), ("CodeChat", CodeLines::Chat)]
+            .map(|(name, lines)| (name.to_string(), Type::Code, lines.height()));
+        let lines: Vec<_> = kinds.chain(code).collect();
 
         let in_the_design = the_designs("font.lineHeight", reach);
         assert_eq!(in_the_design.len(), lines.len(), "{in_the_design:?}");
         for (name, kind, apart) in lines {
-            let over_the_size: f32 = in_the_design[name].parse().unwrap();
+            let over_the_size: f32 = in_the_design[&name].parse().unwrap();
             let drawn = over_the_size * f32::from(size(kind));
             let both = format!("{drawn} in the design, {apart:?} in the app");
             assert!((drawn - f32::from(apart)).abs() < 0.01, "{name} at {reach:?}: {both}");
@@ -302,6 +300,7 @@ fn every_kind_of_text_has_a_style_in_the_design_as_the_app_sets_it() {
             |named: &str| style.split(&format!("{named}: ")).nth(1).and_then(|rest| rest.split([',', ' ']).next());
 
         assert_eq!(part("fontSize"), Some(format!("font.size.{name}").as_str()), "{name}");
+        assert_eq!(part("lineHeight"), Some(format!("font.lineHeight.{name}").as_str()), "{name}");
         let weight = if weight == "Medium" { "font.weight.emphasis" } else { "font.weight.regular" };
         assert_eq!(part("fontWeight"), Some(weight), "{name}");
         assert_eq!(part("fontFamily") == Some("font.family.code"), font == "Code", "{name}'s font, {style}");

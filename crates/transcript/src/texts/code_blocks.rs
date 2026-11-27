@@ -15,11 +15,12 @@ use look::{RightClickMenu as _, Typeset as _};
 /// language and the button sit above the code rather than over it.
 const ROOM: Pixels = px(28.);
 
-/// How tall the line the language and the button are on is, which the button is centred on.
-const LINE: Pixels = px(14.);
+/// How tall the line the language and the button are on is, which the button is centred on, over the size of the
+/// language, a detail: 14px at a desk.
+const LINE: f32 = 1.17;
 
-/// How far down that line is from the block's top, where the kit draws a block's actions. With [`LINE`], its middle is
-/// where the middle of the kit's own line for a language is, which is 2px taller and 1px higher.
+/// How far down that line is from the block's top, where the kit draws a block's actions. With [`LINE`], at a desk its
+/// middle is where the middle of the kit's own line for a language is, which is 2px taller and 1px higher.
 const LINE_TOP: Pixels = px(8.);
 
 /// How far in the code is from the block's left edge, which is the kit's padding for it, so the language starts where
@@ -64,7 +65,7 @@ fn actions(block: &CodeBlock, _: &mut Window, cx: &mut App) -> AnyElement {
 /// The line above a block's code, set as the language is.
 fn line(cx: &App) -> gpui_kit::Div {
     h_flex()
-        .line_height(LINE)
+        .line_height(look::Type::Detail.lines(LINE))
         .typeset(look::Type::Detail)
         .font_family(look::Type::Detail.family(cx))
         .text_color(look::colors(cx).text_muted)

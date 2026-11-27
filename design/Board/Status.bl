@@ -8,11 +8,11 @@ canvas:
   writer: 1
 ---
 c7a5b4f8f8055dc1 al(h,x(c),y(c),pad(0:$spacing.none,8:$spacing.sm,0:$spacing.none,8:$spacing.sm)) comp p(0,0) s(hug:68.75,20) f[(209d95507c6651bc,tok(color.surface.raised,#26211E))] rd(4:$radius.InlineControl) "Status Exploring"
-  3a72af35029a84f9 t("Exploring",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) mref(3a72af35029a84f9) p(8,3) s(hug:52.75,hug:14) f[(f8c24a9ab855765e,tok(color.text.muted,#B8B1AC))] $typography.Detail "Words"
+  3a72af35029a84f9 t("Exploring",SF Pro Text,12,r,align(l),lh(1.625),ls(0px)) mref(3a72af35029a84f9) p(8,0.25) s(hug:52.75,hug:19.5) f[(f8c24a9ab855765e,tok(color.text.muted,#B8B1AC))] $typography.Detail "Words"
 5f4619443197c38a al(h,x(c),y(c),pad(0:$spacing.none,8:$spacing.sm,0:$spacing.none,8:$spacing.sm)) comp p(0,40) s(hug:51.03,20) f[(c26860519ed22ad8,tok(color.surface.raised,#26211E))] rd(4:$radius.InlineControl) "Status Ready"
-  9a5d51d14797d10d t("Ready",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) mref(9a5d51d14797d10d) p(8,3) s(hug:35.03,hug:14) f[(ac5261ea0e6775f6,tok(color.status.done,#6CC488))] $typography.Detail "Words"
+  9a5d51d14797d10d t("Ready",SF Pro Text,12,r,align(l),lh(1.625),ls(0px)) mref(9a5d51d14797d10d) p(8,0.25) s(hug:35.03,hug:19.5) f[(ac5261ea0e6775f6,tok(color.status.done,#6CC488))] $typography.Detail "Words"
 fcbac3605ea3f943 al(h,x(c),y(c),pad(0:$spacing.none,8:$spacing.sm,0:$spacing.none,8:$spacing.sm)) comp p(0,80) s(hug:110.27,20) f[(652d763d84403e0e,tok(color.surface.raised,#26211E))] rd(4:$radius.InlineControl) "Status Ready for review"
-  ec74c517cf3e99e0 t("Ready for review",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) mref(ec74c517cf3e99e0) p(8,3) s(hug:94.27,hug:14) f[(5619f92a23058092,tok(color.status.needs_you,#E9B24C))] $typography.Detail "Words"
+  ec74c517cf3e99e0 t("Ready for review",SF Pro Text,12,r,align(l),lh(1.625),ls(0px)) mref(ec74c517cf3e99e0) p(8,0.25) s(hug:94.27,hug:19.5) f[(5619f92a23058092,tok(color.status.needs_you,#E9B24C))] $typography.Detail "Words"
 ca83fec4407bf7a1 al(h,y(c),g(8:$spacing.sm)) p(0,-40) s(hug:68.75,hug:20) f[] "Title and status"
   18d5753a10b9d165 inst("Status Exploring") p(0,0) ext(68.75,20) "Status"
 bp:end
