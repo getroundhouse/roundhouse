@@ -37,6 +37,11 @@ pub(crate) struct Kept {
     /// How many connections have caught up.
     round: AtomicU64,
     opened: Mutex<Opened>,
+    /// Whether a test holds the link's thread back from taking up what it's asked, as [`Hub::hold_the_link`] does.
+    ///
+    /// [`Hub::hold_the_link`]: super::Hub::hold_the_link
+    #[cfg(any(test, feature = "testing"))]
+    pub(super) asks_held: (Mutex<bool>, parking_lot::Condvar),
 }
 
 /// What views have open, and the newest connection, which each follows on.
@@ -62,6 +67,18 @@ impl Kept {
             ready: Mutex::new(None),
             round: AtomicU64::new(0),
             opened: Mutex::default(),
+            #[cfg(any(test, feature = "testing"))]
+            asks_held: (Mutex::new(false), parking_lot::Condvar::new()),
+        }
+    }
+
+    /// Waits while a test holds the link's thread back from taking up what it's asked.
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) fn until_asks_let_go(&self) {
+        let (held, let_go) = &self.asks_held;
+        let mut held = held.lock();
+        while *held {
+            let_go.wait(&mut held);
         }
     }
 
