@@ -1,4 +1,5 @@
-//! A worker binary that misbehaves.
+//! A worker binary that misbehaves. A script stands in for it, which can't dial, so these hubs reach their local
+//! workers on their stdin and stdout, as a hub on Windows does.
 
 #![cfg(test)]
 
@@ -8,8 +9,14 @@ use std::time::Duration;
 
 use client_core::Connection;
 use hub::Timers;
+use protocol::testing::ENV_TEST_WORKERS_ON_STDIO;
 
 use crate::support::{Stack, TIMEOUT, assistant_text, patient_with_workers, signal, wait_for_turn_end, wait_until};
+
+/// The stack's hubs reach their workers on their stdin and stdout, as [`ENV_TEST_WORKERS_ON_STDIO`] says.
+fn on_stdio() -> (&'static str, String) {
+    (ENV_TEST_WORKERS_ON_STDIO, "1".to_string())
+}
 
 /// Runs the hub from a copy of its binary, so a test can replace what it starts next.
 fn hub_from_copy(stack: &mut Stack) -> PathBuf {
@@ -56,7 +63,7 @@ fn answer<T: Send + 'static>(call: impl FnOnce() -> T + Send + 'static) -> Optio
 
 #[test]
 fn a_worker_speaking_another_version_only_blocks_until_it_is_replaced() {
-    let mut stack = Stack::start();
+    let mut stack = Stack::start_with(vec![on_stdio()]);
     let exe = hub_from_copy(&mut stack);
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
@@ -86,7 +93,7 @@ cat > /dev/null"#,
 #[test]
 fn a_worker_that_never_answers_holds_up_neither_the_hub_nor_another_workspace() {
     let patient = Timers { hello_within: Duration::from_mins(10), ..patient_with_workers() };
-    let mut stack = Stack::start_with(vec![patient.env()]);
+    let mut stack = Stack::start_with(vec![patient.env(), on_stdio()]);
     let exe = hub_from_copy(&mut stack);
     let client = stack.client();
     let (hung, _) = stack.workspace(&client);
@@ -121,7 +128,7 @@ fn a_worker_that_never_answers_its_hello_is_given_up_on_and_ended() {
     // Long enough for every real worker this test starts, the last of them the first run of a binary just copied into
     // place, which macOS checks first.
     let hello = Duration::from_secs(3);
-    let mut stack = Stack::start_with(vec![Timers { hello_within: hello, ..patient_with_workers() }.env()]);
+    let mut stack = Stack::start_with(vec![Timers { hello_within: hello, ..patient_with_workers() }.env(), on_stdio()]);
     let exe = hub_from_copy(&mut stack);
     let client = stack.client();
     let (hung, _) = stack.workspace(&client);

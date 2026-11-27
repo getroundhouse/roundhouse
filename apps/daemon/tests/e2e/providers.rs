@@ -1,4 +1,4 @@
-//! Providers other than the local one, which a hub reaches through their adapters, and whose workers dial it.
+//! Providers other than the local one, which a hub reaches through their adapters.
 
 use std::time::Duration;
 

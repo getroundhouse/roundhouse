@@ -27,6 +27,9 @@ pub struct HubConfig {
     pub network_address: std::net::SocketAddr,
     /// Which relays the endpoint that workers dial uses.
     pub relays: dialing::Relays,
+    /// Whether the local provider's workers dial the hub, as [`LocalConfig::DIALS`] says where they do, or the hub
+    /// reaches them on their stdin and stdout, as a test's can.
+    pub local_workers_dial: bool,
     pub paths: Paths,
     /// The binary that runs a worker, which the local provider starts, and which the login shell runs to print the
     /// environment the profile gives, as [`process::PRINTS_ENVIRONMENT`] asks.
@@ -104,12 +107,13 @@ fn take_lock(paths: &Paths) -> Result<std::fs::File, HubError> {
     }
 }
 
-/// The local provider, and the others this hub's data directory names, whose adapters have as long to say hello as
-/// `timers` says.
+/// The local provider, whose workers run `worker_exe` and dial the hub if `dials`, and the others this hub's data
+/// directory names, whose adapters have as long to say hello as `timers` says.
 fn load_providers(
     build: Build,
     paths: &Paths,
     worker_exe: PathBuf,
+    dials: bool,
     machine: &MachineEnvironment,
     store: &Store,
     timers: &Timers,
@@ -119,6 +123,9 @@ fn load_providers(
         instances_dir: paths.instances_dir.clone(),
         workspaces_root: paths.workspaces_root.clone(),
         clones_dir: paths.clones_dir.clone(),
+        worker_logs_dir: paths.worker_logs_dir.clone(),
+        environment: machine.given(),
+        dials,
     }));
     let hub_id = store.hub_id().map_err(HubError::OpenDatabase)?;
     let hello_within = timers.adapter_hello_within;
@@ -142,7 +149,7 @@ pub enum Ended {
 /// Runs until asked to stop or signalled, or until `stops_with` returns, and says whether another hub is to start. Returns an error if another hub
 /// is using these paths.
 pub async fn run(config: HubConfig, stops_with: impl Future<Output = ()>) -> Result<Ended, HubError> {
-    let (update_feed, relays) = (config.update_feed, config.relays);
+    let (update_feed, relays, local_workers_dial) = (config.update_feed, config.relays, config.local_workers_dial);
     let HubConfig {
         network_address, build, paths, worker_exe, shell, home, path, start, agents, timers, github, ..
     } = config;
@@ -159,7 +166,7 @@ pub async fn run(config: HubConfig, stops_with: impl Future<Output = ()>) -> Res
     // Before anything the hub starts, a provider's adapter or a worker it carries on with, so none waits on a slow
     // profile within its own time limit.
     let machine = read_machine_environment(shell.as_deref(), home.as_deref(), &worker_exe, path.as_deref()).await;
-    let providers = load_providers(build, &paths, worker_exe, &machine, &store, &timers)?;
+    let providers = load_providers(build, &paths, worker_exe, local_workers_dial, &machine, &store, &timers)?;
     let github = Github::new(github);
     let dirs = HubDirs { network_address, relays, ..HubDirs::of(&paths) };
     let hub = Arc::new(Hub::new(build, store, dirs, providers, github, machine, agents, start, timers));

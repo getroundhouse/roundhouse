@@ -1,12 +1,24 @@
 use std::net::{Ipv4Addr, SocketAddr};
 
+use std::time::Duration;
+
 use iroh::endpoint::PortmapperConfig;
-use iroh::endpoint::{Connection, RecvStream, SendStream, presets};
+use iroh::endpoint::{Connection, IdleTimeout, QuicTransportConfig, RecvStream, SendStream, presets};
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode, RelayUrl};
 use protocol::dialing::{HubAddress, TicketSecret, WORKER_ALPN};
 use protocol::model::InstanceId;
 
 use crate::DialError;
+
+/// How often a worker that dials a hub with no relay, as one on the hub's own machine does, makes sure its connection
+/// is still there when nothing else crosses it.
+const KEEP_ALIVE_EVERY: Duration = Duration::from_secs(1);
+
+/// How long such a worker's connection goes without a word from the hub before the worker takes it for gone and dials
+/// again. A hub that's killed says nothing, and the next one can't end what the last had, so this is how a worker finds
+/// it has gone, and the next hub waits only five seconds for the workers the last one left to dial it. iroh's own 30
+/// seconds is for a path across networks, which can go quiet for a while and come back.
+const NO_RELAY_IDLE_WITHIN: Duration = Duration::from_secs(3);
 
 /// A worker its hub admitted, with the stream the hub did so on.
 pub struct Admitted {
@@ -37,12 +49,17 @@ impl WorkerEndpoint {
         }
         let relay = hub.relay.as_deref().map(str::parse::<RelayUrl>).transpose().map_err(|e| ticket(&e))?;
         let builder = Endpoint::builder(presets::Minimal);
-        let builder = match relay {
-            Some(relay) => {
-                addr = addr.with_relay_url(relay.clone());
-                builder.relay_mode(RelayMode::Custom(relay.into()))
-            }
-            None => builder.relay_mode(RelayMode::Disabled).portmapper_config(PortmapperConfig::Disabled),
+        let builder = if let Some(relay) = relay {
+            addr = addr.with_relay_url(relay.clone());
+            builder.relay_mode(RelayMode::Custom(relay.into()))
+        } else {
+            let idle = IdleTimeout::try_from(NO_RELAY_IDLE_WITHIN).map_err(|e| DialError::Bind(e.to_string()))?;
+            let transport =
+                QuicTransportConfig::builder().keep_alive_interval(KEEP_ALIVE_EVERY).max_idle_timeout(Some(idle));
+            builder
+                .relay_mode(RelayMode::Disabled)
+                .portmapper_config(PortmapperConfig::Disabled)
+                .transport_config(transport.build())
         };
         let mut builder = builder
             .bind_addr(SocketAddr::from((Ipv4Addr::UNSPECIFIED, port.unwrap_or(0))))

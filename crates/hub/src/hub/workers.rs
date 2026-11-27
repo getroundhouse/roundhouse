@@ -78,7 +78,7 @@ impl Hub {
         }
         jobs::step("starting the workspace's worker");
         // Whichever provider runs it, what its worker writes to stderr is kept here.
-        let log = self.worker_logs_dir.join(format!("{}.log", workspace.instance_id));
+        let log = protocol::paths::worker_log(&self.worker_logs_dir, &workspace.instance_id);
         let (id, instance_id) = (workspace.id.clone(), workspace.instance_id.clone());
         // Its worker is on the instance from the moment it starts, and not in the map until it's opened, so a start
         // dropped between leaves the next one to clear the instance first, and so does one that failed, which may not
@@ -113,7 +113,7 @@ impl Hub {
         let provider = self.provider(&workspace.provider)?;
         let gate = self.worker_gate(workspace_id);
         let mut cleared = gate.lock().await;
-        let log = self.worker_logs_dir.join(format!("{}.log", workspace.instance_id));
+        let log = protocol::paths::worker_log(&self.worker_logs_dir, &workspace.instance_id);
         let (id, instance_id) = (workspace.id.clone(), workspace.instance_id);
         let link = match WorkerLink::open(self.clone(), provider, id, instance_id, &log, Opening::LeftRunning).await {
             Ok(link) => link,

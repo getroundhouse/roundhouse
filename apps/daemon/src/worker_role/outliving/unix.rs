@@ -13,41 +13,12 @@ use crate::worker_role::{Given, config};
 /// included.
 const WITHOUT_A_HUB: Duration = Duration::from_mins(10);
 
-/// In the worker's state directory, where the socket is named relative to it. A worker that's stopping has removed its
-/// socket but still holds the instance, and this fails rather than waiting for it, since it may be stuck: the hub ends
-/// it, as it does whatever it finds on an instance that it doesn't know of.
+/// In the worker's state directory, where the socket is named relative to it, to a worker an earlier build left
+/// listening there. It starts none, so with none there it fails, and the hub ends whatever it finds on the instance.
+/// It goes at the next break of the worker protocol, as `docs/decisions/hub-speaks-previous-version.md` says.
 pub(crate) fn attach(given: &Given) -> anyhow::Result<()> {
-    let state_dir = &given.state_dir;
-    move_into(state_dir)?;
-    let exe = std::env::current_exe().context("finding this binary to start a worker with")?;
-    let socket = Path::new(protocol::paths::WORKER_SOCKET_FILE);
-    worker::attach(socket, || {
-        if worker::instance_claimed(state_dir)? {
-            return Err(std::io::Error::other("a worker that's stopping still holds the instance"));
-        }
-        start_listening(&exe, given)
-    })?;
-    Ok(())
-}
-
-/// In a session of its own, so nothing that ends its hub or this command reaches it. What it logs goes where this
-/// command's does, which is the hub's log for the workspace.
-fn start_listening(exe: &Path, given: &Given) -> std::io::Result<()> {
-    let mut command = std::process::Command::new(exe);
-    command
-        .args(["worker", "--listen", "--workspaces-root"])
-        .arg(&given.workspaces_root)
-        .arg("--state-dir")
-        .arg(&given.state_dir)
-        .arg("--clones-dir")
-        .arg(&given.clones_dir)
-        .current_dir(&given.state_dir)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null());
-    process::detach(&mut command);
-    let mut started = command.spawn()?;
-    // Should it stop while this command runs. Once this command has gone, the system reaps it.
-    std::thread::spawn(move || started.wait());
+    move_into(&given.state_dir)?;
+    worker::attach(Path::new(protocol::paths::WORKER_SOCKET_FILE))?;
     Ok(())
 }
 

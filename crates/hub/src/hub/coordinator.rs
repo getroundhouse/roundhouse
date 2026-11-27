@@ -45,9 +45,9 @@ use tokio::sync::{Mutex as AsyncMutex, Notify, watch};
 use tool_sign_in::{CLIENT_DOCUMENT, ToolSignIn};
 use tracing::{Span, warn};
 
-/// Whether a restart leaves the hub's workers running. On Windows the local provider's workers run on the hub's pipes,
-/// since there are no Unix sockets there to serve them on, so they stop with it.
-pub(super) const KEEPS_WORKERS: bool = cfg!(unix);
+/// Whether a restart leaves the hub's workers running, as it does wherever the local provider's workers dial the hub. On
+/// Windows they don't, and run on the hub's pipes, so they stop with it.
+pub(super) const KEEPS_WORKERS: bool = providers::local::LocalConfig::DIALS;
 
 pub(crate) struct Hub {
     pub(super) build: Build,
@@ -144,7 +144,7 @@ pub(crate) struct Hub {
     /// Asked to stop, which stops its workers and their agents, even once it was asked to restart.
     pub(super) stopping: AtomicBool,
     pub(crate) remote: crate::remote::Remote,
-    /// The endpoint workers dial, and the workers it has admitted.
+    /// The endpoints workers dial, and the workers they have admitted.
     pub(crate) dial: WorkerDial,
     pub(crate) clients: AtomicU32,
     pub(crate) requests: AtomicU32,
@@ -170,7 +170,7 @@ impl Hub {
         let observations = Arc::new(Observations::open(cache_file.clone(), &store));
         Self {
             remote: crate::remote::Remote::new(dirs.remote()),
-            dial: WorkerDial::new(dirs.data.join("worker-endpoint.json"), dirs.relays, store.clone()),
+            dial: WorkerDial::new(&dirs.data, dirs.relays, store.clone()),
             build,
             logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
             github_logins: Arc::new(GithubLogins::new(store.clone(), Arc::clone(&observations), &dirs.data, now_ms())),

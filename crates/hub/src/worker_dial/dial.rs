@@ -1,11 +1,14 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use dialing::{HubEndpoint, Relays};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::dialing::{Ticket, TicketSecret, WorkerTicket};
 use protocol::model::InstanceId;
+use protocol::paths::{LOOPBACK_WORKER_ENDPOINT_FILE, WORKER_ENDPOINT_FILE};
+use providers::WorkerReach;
 use tokio::sync::OnceCell;
 
 use super::Dialed;
@@ -13,39 +16,93 @@ use super::arrivals::Arrivals;
 use crate::remote::random_text;
 use crate::store::Store;
 
-/// The hub's endpoint, bound the first time it's wanted, so a hub whose workers all run on its own machine binds none,
-/// and the workers it has admitted.
+/// Which of the hub's endpoints a worker dials.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum Endpoint {
+    /// The one on loopback alone, with no relay and no port mapping, which the workers on the hub's own machine dial.
+    /// So a hub whose workers are all there reaches nothing beyond loopback.
+    Loopback,
+    /// The one on the hub's relays, which a worker on any machine can reach.
+    Relayed,
+}
+
+impl Endpoint {
+    /// The one a provider's workers dial, as `reach` says, or `None` for workers that don't.
+    pub(crate) fn dialed_by(reach: WorkerReach) -> Option<Self> {
+        match reach {
+            WorkerReach::Loopback => Some(Self::Loopback),
+            WorkerReach::Relayed => Some(Self::Relayed),
+            WorkerReach::Command => None,
+        }
+    }
+}
+
+/// The hub's two endpoints, each bound the first time it's wanted, so a hub that has made no ticket for a worker on
+/// another machine never reaches a relay, and one whose workers all run elsewhere binds no loopback one. Binding one
+/// leaves the other's connections as they are. Both admit workers to the same instances, by the same tickets and keys,
+/// and the workers they've admitted wait in one place.
 pub(crate) struct WorkerDial {
-    key_file: PathBuf,
-    relays: Relays,
+    loopback: OneEndpoint,
+    relayed: OneEndpoint,
     /// Whose instances' records say which worker to admit.
     store: Arc<Store>,
-    endpoint: OnceCell<Arc<HubEndpoint>>,
     arrivals: Arc<Arrivals>,
+    /// Set once the hub is letting go of its workers, as it stops, from when it refuses every worker that dials.
+    refusing: Arc<AtomicBool>,
+}
+
+/// One of the hub's endpoints, and where its key is kept.
+struct OneEndpoint {
+    key_file: PathBuf,
+    relays: Relays,
+    bound: OnceCell<Arc<HubEndpoint>>,
 }
 
 impl WorkerDial {
-    /// With its key at `key_file`, made the first time it binds.
-    pub(crate) fn new(key_file: PathBuf, relays: Relays, store: Arc<Store>) -> Self {
-        Self { key_file, relays, store, endpoint: OnceCell::new(), arrivals: Arc::default() }
+    /// With the keys in `dir`, each made the first time its endpoint binds, and the relayed one on `relays`.
+    pub(crate) fn new(dir: &Path, relays: Relays, store: Arc<Store>) -> Self {
+        let one = |file: &str, relays| OneEndpoint { key_file: dir.join(file), relays, bound: OnceCell::new() };
+        Self {
+            loopback: one(LOOPBACK_WORKER_ENDPOINT_FILE, Relays::None),
+            relayed: one(WORKER_ENDPOINT_FILE, relays),
+            store,
+            arrivals: Arc::default(),
+            refusing: Arc::default(),
+        }
     }
 
-    /// Binds the endpoint, if it isn't yet, and from then on admits the workers that dial it, until it's closed.
-    pub(crate) async fn listen(&self) -> Result<&Arc<HubEndpoint>, ApiError> {
-        self.endpoint
+    fn one(&self, endpoint: Endpoint) -> &OneEndpoint {
+        match endpoint {
+            Endpoint::Loopback => &self.loopback,
+            Endpoint::Relayed => &self.relayed,
+        }
+    }
+
+    /// Binds `endpoint`, if it isn't yet, and from then on admits the workers that dial it, until it's closed.
+    pub(crate) async fn listen(&self, endpoint: Endpoint) -> Result<&Arc<HubEndpoint>, ApiError> {
+        let one = self.one(endpoint);
+        one.bound
             .get_or_try_init(|| async {
-                let endpoint = Arc::new(HubEndpoint::bind(&self.key_file, self.relays).await?);
-                tokio::spawn(super::admitting::admit(endpoint.clone(), self.store.clone(), self.arrivals.clone()));
-                Ok::<_, dialing::DialError>(endpoint)
+                let bound = Arc::new(HubEndpoint::bind(&one.key_file, one.relays).await?);
+                let (store, arrivals, refusing) = (self.store.clone(), self.arrivals.clone(), self.refusing.clone());
+                tokio::spawn(super::admitting::admit(bound.clone(), store, arrivals, refusing));
+                Ok::<_, dialing::DialError>(bound)
             })
             .await
             .map_err(|e| ApiError::new(ErrorCode::Unavailable, format!("the hub's endpoint for workers: {e}")))
     }
 
-    /// A ticket for the instance's next worker, recorded on its record first, so the hub admits a worker that dials
-    /// with it, after a restart too, and none with any earlier ticket of the instance's that went unused.
-    pub(crate) async fn ticket(&self, instance_id: &InstanceId) -> Result<WorkerTicket, ApiError> {
-        let hub = self.listen().await?.address().await;
+    /// Whether `endpoint` is bound.
+    #[cfg(test)]
+    pub(crate) fn is_bound(&self, endpoint: Endpoint) -> bool {
+        self.one(endpoint).bound.initialized()
+    }
+
+    /// A ticket for the instance's next worker, which dials `endpoint`, recorded on its record first, so the hub admits
+    /// a worker that dials with it, after a restart too, and none with any earlier ticket of the instance's that went
+    /// unused.
+    pub(crate) async fn ticket(&self, instance_id: &InstanceId, endpoint: Endpoint) -> Result<WorkerTicket, ApiError> {
+        let hub = self.listen(endpoint).await?.address().await;
         let secret = TicketSecret::from(random_text::<32>()?);
         let (store, id, recorded) = (self.store.clone(), instance_id.clone(), secret.clone());
         let recorded = tokio::task::spawn_blocking(move || store.instance_ticket(&id, &recorded))
@@ -62,10 +119,19 @@ impl WorkerDial {
         self.arrivals.take(instance_id, within).await
     }
 
+    /// Refuses every worker that dials from now on, as the hub stops, before it leaves or stops its workers. A worker
+    /// the hub leaves for the next dials again as soon as its connection ends, and one admitted then would be cut off
+    /// as the hub goes, and dial the next hub only after that. Refused, it dials until the next hub is there.
+    pub(crate) fn refuse_more(&self) {
+        self.refusing.store(true, Ordering::SeqCst);
+    }
+
     /// Closes every worker's connection, as the hub stops, telling each so.
     pub(crate) async fn close(&self) {
-        if let Some(endpoint) = self.endpoint.get() {
-            endpoint.close().await;
+        for one in [&self.loopback, &self.relayed] {
+            if let Some(bound) = one.bound.get() {
+                bound.close().await;
+            }
         }
     }
 }

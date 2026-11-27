@@ -1,6 +1,7 @@
-//! Runs workers on this machine. Each one is a separate process, which the hub reaches with the command `connect`
-//! answers with, so a remote worker only changes the command. That's the daemon's own `worker --attach`, which starts
-//! the worker in a session of its own if none is serving the instance, so the worker can outlive its hub.
+//! Runs workers on this machine. Each one is a separate process, the daemon's own `worker --ticket`, started in a
+//! session of its own so it outlives its hub, which dials the hub at its endpoint on loopback, as every provider's
+//! worker dials the hub. On Windows, where a worker doesn't dial yet, the hub runs `worker --stdio`, the command
+//! `connect` answers with, and the worker stops with the hub.
 
 #[cfg(test)]
 use crate::{Feature, InstanceState, Provider, ProviderError};
@@ -19,6 +20,7 @@ use std::time::Duration;
 mod tests;
 
 mod provider;
+mod starting;
 
 #[cfg(test)]
 use provider::stop_orphans;

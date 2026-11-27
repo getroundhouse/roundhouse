@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use dialing::{HubEndpoint, Incoming, read_frame, remote_key, write_frame};
@@ -18,19 +19,34 @@ const ADMISSION_WITHIN: Duration = Duration::from_secs(10);
 const REFUSED: u32 = 1;
 
 /// Admits each worker that dials, each on a task of its own, so a slow one holds up no other, until the endpoint
-/// closes.
-pub(super) async fn admit(endpoint: Arc<HubEndpoint>, store: Arc<Store>, arrivals: Arc<Arrivals>) {
+/// closes, or refuses it once `refusing` is set.
+pub(super) async fn admit(
+    endpoint: Arc<HubEndpoint>,
+    store: Arc<Store>,
+    arrivals: Arc<Arrivals>,
+    refusing: Arc<AtomicBool>,
+) {
     while let Some(incoming) = endpoint.accept().await {
-        let (store, arrivals) = (store.clone(), arrivals.clone());
+        if refusing.load(Ordering::SeqCst) {
+            // Before its handshake, so the worker's dial fails, and it dials again, as when there's no hub.
+            incoming.refuse();
+            continue;
+        }
+        let (store, arrivals, refusing) = (store.clone(), arrivals.clone(), refusing.clone());
         tokio::spawn(async move {
-            if let Err(e) = admit_one(incoming, store, &arrivals).await {
+            if let Err(e) = admit_one(incoming, store, &arrivals, &refusing).await {
                 warn!(name: "dialed.failed", error = e.message, "A worker's connection to the hub failed");
             }
         });
     }
 }
 
-async fn admit_one(incoming: Incoming, store: Arc<Store>, arrivals: &Arrivals) -> Result<(), ApiError> {
+async fn admit_one(
+    incoming: Incoming,
+    store: Arc<Store>,
+    arrivals: &Arrivals,
+    refusing: &AtomicBool,
+) -> Result<(), ApiError> {
     let failed = |e: &dyn std::fmt::Display| ApiError::new(ErrorCode::Worker, e.to_string());
     let connection = incoming.await.map_err(|e| failed(&e))?;
     let key = remote_key(&connection);
@@ -45,6 +61,11 @@ async fn admit_one(incoming: Incoming, store: Arc<Store>, arrivals: &Arrivals) -
         return Err(ApiError::new(ErrorCode::Worker, format!("a worker said nothing within {ADMISSION_WITHIN:?}")));
     };
     let (mut send, recv, admission) = said?;
+    // One that dialed as the hub began to stop, before its ticket is used, so it can dial the next hub with it.
+    if refusing.load(Ordering::SeqCst) {
+        connection.close(REFUSED.into(), b"the hub is stopping");
+        return Ok(());
+    }
     let owned = key.clone();
     let admitted = tokio::task::spawn_blocking(move || store.admit_worker(&admission.secret, &owned))
         .await

@@ -4,7 +4,7 @@ use std::time::Duration;
 use dialing::{Connection, Relays, WorkerEndpoint};
 use protocol::client::{ErrorCode, Outcome};
 use protocol::dialing::{Admission, Admitted, Ticket};
-use protocol::model::InstanceId;
+use protocol::model::{InstanceId, ProviderName};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use super::*;
@@ -14,8 +14,8 @@ const WITHIN: Duration = Duration::from_secs(10);
 
 async fn listening(dir: &std::path::Path) -> WorkerDial {
     let store = Arc::new(store_with_session(dir));
-    let dial = WorkerDial::new(dir.join("worker-endpoint.json"), Relays::None, store);
-    dial.listen().await.unwrap();
+    let dial = WorkerDial::new(dir, Relays::None, store);
+    dial.listen(Endpoint::Loopback).await.unwrap();
     dial
 }
 
@@ -40,7 +40,7 @@ fn admitted_as(outcome: Outcome<Admitted>) -> InstanceId {
 async fn a_ticket_admits_one_worker_once_and_that_worker_again_by_its_key() {
     let dir = tempfile::tempdir().unwrap();
     let dial = listening(dir.path()).await;
-    let ticket = dial.ticket(&"w".into()).await.unwrap().read().unwrap();
+    let ticket = dial.ticket(&"w".into(), Endpoint::Loopback).await.unwrap().read().unwrap();
     let worker = WorkerEndpoint::bind(&ticket.hub, None, None).await.unwrap();
     let another = WorkerEndpoint::bind(&ticket.hub, None, None).await.unwrap();
 
@@ -63,8 +63,8 @@ async fn a_ticket_admits_one_worker_once_and_that_worker_again_by_its_key() {
 async fn a_newer_ticket_for_an_instance_leaves_the_one_before_admitting_none() {
     let dir = tempfile::tempdir().unwrap();
     let dial = listening(dir.path()).await;
-    let older = dial.ticket(&"w".into()).await.unwrap().read().unwrap();
-    let newer = dial.ticket(&"w".into()).await.unwrap().read().unwrap();
+    let older = dial.ticket(&"w".into(), Endpoint::Loopback).await.unwrap().read().unwrap();
+    let newer = dial.ticket(&"w".into(), Endpoint::Loopback).await.unwrap().read().unwrap();
     let worker = WorkerEndpoint::bind(&older.hub, None, None).await.unwrap();
 
     let (_, with_older) = dial_as(&worker, &older).await;
@@ -79,21 +79,55 @@ async fn an_instance_the_hub_has_no_record_of_gets_no_ticket() {
     let dir = tempfile::tempdir().unwrap();
     let dial = listening(dir.path()).await;
 
-    let ticket = dial.ticket(&"elsewhere".into()).await;
+    let ticket = dial.ticket(&"elsewhere".into(), Endpoint::Loopback).await;
 
     assert_eq!(ticket.unwrap_err().code, ErrorCode::NotFound);
 }
 
-/// So a hub whose workers all run on its own machine binds no endpoint as it starts, and reaches no relay.
+/// So a hub whose workers all run elsewhere binds no endpoint as it starts, and one whose workers all run on its own
+/// machine binds only the loopback one, and reaches no relay.
 #[tokio::test]
-async fn a_hub_knows_whether_any_worker_dials_it_from_its_instances_records() {
+async fn a_hub_knows_which_providers_workers_dial_it_from_its_instances_records() {
     let dir = tempfile::tempdir().unwrap();
     let store = Arc::new(store_with_session(dir.path()));
-    let dial = WorkerDial::new(dir.path().join("worker-endpoint.json"), Relays::None, store.clone());
+    let dial = WorkerDial::new(dir.path(), Relays::None, store.clone());
 
-    let before = store.has_dialing_workers().unwrap();
-    dial.ticket(&"w".into()).await.unwrap();
+    let before = store.providers_with_dialing_workers().unwrap();
+    dial.ticket(&"w".into(), Endpoint::Loopback).await.unwrap();
 
-    assert!(!before);
-    assert!(store.has_dialing_workers().unwrap());
+    assert!(before.is_empty());
+    assert_eq!(store.providers_with_dialing_workers().unwrap(), [ProviderName::from(ProviderName::LOCAL)]);
+    assert!(store.instance_dials(&"w".into()).unwrap());
+}
+
+/// The owner's: a hub whose workers all run on its own machine reaches nothing beyond loopback, with no relay, no
+/// port mapping and no address lookup, even where its endpoint for other machines' workers would use n0's relays.
+#[tokio::test]
+async fn a_ticket_for_a_worker_on_the_hubs_machine_names_loopback_alone_and_no_relay() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(store_with_session(dir.path()));
+    let dial = WorkerDial::new(dir.path(), Relays::N0, store);
+
+    let ticket = dial.ticket(&"w".into(), Endpoint::Loopback).await.unwrap().read().unwrap();
+
+    assert!(ticket.hub.relay.is_none(), "{:?}", ticket.hub);
+    assert!(!ticket.hub.direct.is_empty(), "{:?}", ticket.hub);
+    assert!(ticket.hub.direct.iter().all(|addr| addr.ip().is_loopback()), "{:?}", ticket.hub);
+    assert!(dial.is_bound(Endpoint::Loopback));
+    assert!(!dial.is_bound(Endpoint::Relayed), "nothing but loopback was bound");
+}
+
+/// Both endpoints admit by the same records, so a worker is admitted wherever it dials, by its ticket and then its key.
+#[tokio::test]
+async fn either_endpoint_admits_a_worker_by_a_ticket_the_other_made() {
+    let dir = tempfile::tempdir().unwrap();
+    let dial = listening(dir.path()).await;
+    let ticket = dial.ticket(&"w".into(), Endpoint::Loopback).await.unwrap().read().unwrap();
+    let relayed = dial.listen(Endpoint::Relayed).await.unwrap().address().await;
+    let worker = WorkerEndpoint::bind(&relayed, None, None).await.unwrap();
+
+    let (_connection, outcome) = dial_as(&worker, &Ticket { hub: relayed, ..ticket }).await;
+
+    assert_eq!(admitted_as(outcome), InstanceId::from("w"));
+    assert!(dial.worker(&"w".into(), WITHIN).await.is_some());
 }

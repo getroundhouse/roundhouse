@@ -71,8 +71,9 @@ impl Hub {
 
     /// Stops every worker and waits until what they said is recorded.
     pub(crate) async fn stop_all_workers(self: &Arc<Self>) {
-        // Refuse new workers first, so a client still connected can't start one behind this.
+        // Refuse new workers first, so a client still connected can't start one behind this, and refuse any that dials.
         self.shutting_down.store(true, Ordering::SeqCst);
+        self.dial.refuse_more();
         // Before their agents go, so the exit of one whose only work is a wait the next hub keeps cuts nothing off.
         let waiting = self.blocking(Store::sessions_waiting).await.unwrap_or_default();
         let sessions: Vec<_> =
@@ -108,6 +109,8 @@ impl Hub {
     /// a second hub.
     pub(crate) async fn leave_workers(self: &Arc<Self>) {
         self.shutting_down.store(true, Ordering::SeqCst);
+        // Before any is left, so one that dials again at once dials the next hub, not this one.
+        self.dial.refuse_more();
         let links: Vec<_> = self.workers.lock().values().cloned().collect();
         // One deadline for all of it, so several stuck workers don't add up.
         let deadline = tokio::time::Instant::now() + self.timers.shutdown_grace;

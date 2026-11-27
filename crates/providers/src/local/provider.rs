@@ -1,8 +1,9 @@
 use crate::{
     Capabilities, Feature, Instance, InstanceState, Provider, ProviderError, Size, WorkerBinary, WorkerCommand,
+    WorkerReach,
 };
 use async_trait::async_trait;
-use process::{ProcessRecord, Signal, signal_group};
+use process::{Environment, ProcessRecord, Signal, signal_group};
 use protocol::dialing::WorkerTicket;
 use protocol::model::{InstanceId, ProviderName};
 use protocol::paths::{AGENTS_DIR, WORKER_RECORD_FILE};
@@ -13,9 +14,6 @@ use tracing::{info, warn};
 /// How long what a killed worker left running, such as an agent, or a worker still running when the hub asks for it
 /// to be ended, gets to stop by itself, with all it started. An agent stops its own tools if given this.
 const ORPHAN_GRACE: Duration = Duration::from_secs(3);
-/// How the hub reaches a worker. Through its socket, so the worker can outlive its hub, but on Windows, where there's
-/// no Unix socket to serve it on, on the pipes of the hub, which it stops with.
-const TRANSPORT: &str = if cfg!(unix) { "--attach" } else { "--stdio" };
 /// How long a process sent SIGKILL gets to be gone.
 const KILLED_GRACE: Duration = Duration::from_secs(2);
 /// How long starting an instance, or ending its worker, takes at most. Either stops each process left there within its
@@ -23,13 +21,26 @@ const KILLED_GRACE: Duration = Duration::from_secs(2);
 const STARTS_OR_STOPS_WITHIN: Duration = Duration::from_secs(3 * (ORPHAN_GRACE.as_secs() + KILLED_GRACE.as_secs()));
 
 pub struct LocalConfig {
-    /// The binary that runs a worker, as `worker --attach` or `worker --stdio`.
+    /// The binary that runs a worker, as `worker --ticket` or `worker --stdio`.
     pub worker_exe: PathBuf,
     /// One directory per instance, holding its worker's records.
     pub instances_dir: PathBuf,
     pub workspaces_root: PathBuf,
     /// Where every worker keeps its clones, which they share.
     pub clones_dir: PathBuf,
+    /// Where each worker that dials writes its log, a file per instance, as `protocol::paths::worker_log` names it.
+    pub worker_logs_dir: PathBuf,
+    /// What a worker it starts is given over what it inherits from the hub, which is the machine's environment.
+    pub environment: Environment,
+    /// Whether its workers dial the hub, at its endpoint on loopback, and outlive it, as [`LocalConfig::DIALS`] says
+    /// for the hub's own, or the hub runs `worker --stdio` and they stop with it, as for a test's script.
+    pub dials: bool,
+}
+
+impl LocalConfig {
+    /// Whether the local provider's workers dial their hub here. Not on Windows: what claims an instance to serve it,
+    /// and a worker that dials, are built only for Unix, and nothing that checks Windows runs a worker there.
+    pub const DIALS: bool = cfg!(unix);
 }
 
 pub struct LocalProvider {
@@ -191,23 +202,31 @@ impl Provider for LocalProvider {
         create_dir(&self.instance_dir(instance_id))
     }
 
+    fn workers_reach(&self) -> WorkerReach {
+        if self.config.dials { WorkerReach::Loopback } else { WorkerReach::Command }
+    }
+
     /// Its workers run the hub's own executable, so there's none to put in place. A running instance is left as it
-    /// is, and one is running while a worker is. Ending that is the hub's to ask for, with `end_worker`. The hub gives
-    /// it no ticket, since it reaches its workers through `connect`, but an adapter that serves it, as a test's does,
-    /// passes on the one it's given, which goes unused.
+    /// is, and one is running while a worker is. Ending that is the hub's to ask for, with `end_worker`. Otherwise it
+    /// starts one that dials the hub with `ticket`, if its workers dial.
     async fn start(
         &self,
         instance_id: &InstanceId,
         _workers: &[WorkerBinary],
-        _ticket: Option<&WorkerTicket>,
+        ticket: Option<&WorkerTicket>,
     ) -> Result<(), ProviderError> {
         let dir = self.instance_dir(instance_id);
         create_dir(&dir)?;
-        if running_worker(&dir).await.is_none() {
-            // For when the hub was killed along with its worker, so `end_worker` never ran.
-            stop_orphans(&dir, ORPHAN_GRACE).await;
+        if running_worker(&dir).await.is_some() {
+            return Ok(());
         }
-        Ok(())
+        // For when the hub was killed along with its worker, so `end_worker` never ran.
+        stop_orphans(&dir, ORPHAN_GRACE).await;
+        if !self.config.dials {
+            return Ok(());
+        }
+        let ticket = ticket.ok_or(ProviderError::Unsupported("start a worker without a ticket"))?;
+        super::starting::start_dialing(&self.config, instance_id, &dir, ticket).await
     }
 
     async fn end_worker(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
@@ -258,17 +277,21 @@ impl Provider for LocalProvider {
         Ok(running)
     }
 
+    /// `worker --stdio` for a worker that doesn't dial, or, where they dial, `worker --attach`, which reaches one an
+    /// earlier build left listening on a socket in its state directory, and starts none. That one goes at the next
+    /// break of the worker protocol, as `docs/decisions/hub-speaks-previous-version.md` says.
     async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError> {
         let dir = self.instance_dir(instance_id);
         if !dir.is_dir() {
             return Err(ProviderError::NotFound(instance_id.clone()));
         }
         let text = |path: &Path| path.to_string_lossy().into_owned();
+        let transport = if self.config.dials { "--attach" } else { "--stdio" };
         Ok(WorkerCommand {
             program: text(&self.config.worker_exe),
             args: vec![
                 "worker".into(),
-                TRANSPORT.into(),
+                transport.into(),
                 "--workspaces-root".into(),
                 text(&self.config.workspaces_root),
                 "--state-dir".into(),

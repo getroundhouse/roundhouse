@@ -40,7 +40,7 @@ mod reading;
 #[cfg(test)]
 pub(crate) use at_once::ANSWERED_WITHIN;
 pub(crate) use at_once::answered_at_once;
-pub(crate) use reaching::{Opening, dials_its_hub};
+pub(crate) use reaching::Opening;
 
 #[cfg(test)]
 mod stand_in;

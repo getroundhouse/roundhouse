@@ -35,6 +35,9 @@ fn local(dir: &Path) -> Arc<dyn Provider> {
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
+        worker_logs_dir: dir.join("worker-logs"),
+        environment: process::Environment::NONE,
+        dials: false,
     }))
 }
 

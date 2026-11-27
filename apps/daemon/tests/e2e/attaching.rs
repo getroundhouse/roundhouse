@@ -1,4 +1,6 @@
-//! A worker that can outlive its hub, reached through `worker --attach`, as the local provider has the hub reach it.
+//! A worker an earlier build left listening on a socket, reached through `worker --attach`, as the local provider has
+//! the hub reach one, so an update doesn't end its agents. Nothing starts one any more, so a test starts it with
+//! `worker --listen`, as an earlier build's `--attach` did.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -28,8 +30,17 @@ impl Attached {
         Self::start_in(&dir.join("workspaces"), &dir.join("instance"))
     }
 
-    /// To the worker whose state directory is `state_dir`, starting one if none is serving it.
+    /// To the worker whose state directory is `state_dir`, starting one that listens there, as an earlier build did,
+    /// if none is.
     fn start_in(workspaces_root: &Path, state_dir: &Path) -> Self {
+        if !state_dir.join(WORKER_SOCKET_FILE).exists() {
+            start_listening(workspaces_root, state_dir);
+        }
+        Self::attach_in(workspaces_root, state_dir)
+    }
+
+    /// To the worker whose state directory is `state_dir`, without starting one.
+    fn attach_in(workspaces_root: &Path, state_dir: &Path) -> Self {
         let mut command = WholeEnvironment::for_a_test(&state_dir.with_file_name("home"))
             .command(crate::support::daemon())
             .args(["worker", "--attach", "--workspaces-root"])
@@ -91,18 +102,36 @@ impl Attached {
         assert!(matches!(answer, WorkerOutcome::Response(WorkerResponse::Hello(_))), "{answer:?}");
     }
 
-    /// As the next hub reaches the worker whose state directory is `state_dir`.
-    pub(crate) fn next_hub(workspaces_root: &Path, state_dir: &Path) -> Self {
-        let mut next = Self::start_in(workspaces_root, state_dir);
-        next.hello(true);
-        next
-    }
-
     /// As a hub that goes does, and returns once the command has exited.
     pub(crate) fn close(mut self) {
         drop(self.command.stdin.take());
         assert!(self.command.wait().unwrap().success());
     }
+}
+
+/// A worker that listens on a socket in `state_dir`, in a session of its own, as an earlier build's `--attach` started
+/// it, once it listens.
+pub(crate) fn start_listening(workspaces_root: &Path, state_dir: &Path) {
+    use std::os::unix::process::CommandExt as _;
+    std::fs::create_dir_all(state_dir).unwrap();
+    let mut started = WholeEnvironment::for_a_test(&state_dir.with_file_name("home"))
+        .command(crate::support::daemon())
+        .args(["worker", "--listen", "--workspaces-root"])
+        .arg(workspaces_root)
+        .arg("--state-dir")
+        .arg(state_dir)
+        .arg("--clones-dir")
+        .arg(workspaces_root.with_file_name("clones"))
+        .current_dir(state_dir)
+        .process_group(0)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    // Should it stop while the test runs, so it isn't left a zombie.
+    std::thread::spawn(move || started.wait());
+    wait_until("the worker to listen", || state_dir.join(WORKER_SOCKET_FILE).exists());
 }
 
 /// The worker serving the instance, as it recorded itself.
@@ -140,4 +169,17 @@ fn a_worker_reached_through_attach_stops_with_a_hub_that_didnt_ask_it_to_keep_ru
     attached.close();
 
     wait_until("the worker to stop", || !is_alive(worker.pid));
+}
+
+/// Nothing starts a worker that listens any more, since one that outlives its hub dials it.
+#[test]
+fn attach_starts_no_worker_where_none_listens() {
+    let dir = tempfile::tempdir().unwrap();
+    let attached = Attached::attach_in(&dir.path().join("workspaces"), &dir.path().join("instance"));
+
+    let mut command = attached.command;
+    let exited = command.wait().unwrap();
+
+    assert!(!exited.success(), "{exited:?}");
+    assert!(!dir.path().join("instance").join(WORKER_RECORD_FILE).exists(), "no worker started");
 }
