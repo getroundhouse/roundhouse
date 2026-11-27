@@ -132,8 +132,12 @@ spacing.control.Large: spacing.lg
 spacing.Chip: 6
 spacing.Paragraph { $default: 12, reach.handheld: 14.571428 }
 spacing.ListItem { $default: 3.5, reach.handheld: 4.25 }
-// A part's edge takes room in the app, and a stroke takes none here, so what has an edge is inset a pixel more.
-spacing.Edged: 17
+// A part's edge takes room in the app, and a stroke takes none here, so what has an edge is inset a pixel more: an
+// edged part's room is its step of space and the edge's pixel, such as an edged regular control's or a card's, 13.
+spacing.EdgedXSmall: 5
+spacing.EdgedSmall: 9
+spacing.EdgedMedium: 13
+spacing.EdgedLarge: 17
 spacing.ChipStart: 7
 spacing.ChipEnd: 9
 

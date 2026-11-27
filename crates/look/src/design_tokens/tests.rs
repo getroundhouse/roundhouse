@@ -1,12 +1,8 @@
-//! Holds the design system in `design/Styles/default.ds` to the app's values of the same names, both ways, so a colour,
-//! a space, a corner or a kind of text can't be one thing in the design and another in the app. Each is held at each
-//! reach, which the design has as a mode: a token that's the same at both has one value, and one that isn't has the
-//! desk's as its default and the handheld's beside it.
-
 use std::collections::{BTreeMap, BTreeSet};
 
 use gpui_kit::{FontWeight, Pixels, phi, px};
 
+use super::reading::{DESIGN, STEPS, scale, tokens};
 use crate::chips::INSIDE;
 use crate::motion::{FADE, PANEL, SCROLL};
 use crate::traits::Reach;
@@ -15,14 +11,11 @@ use crate::{
     BarSize, Colors, ControlSize, Corner, EDGE, IconSize, NamedColor, QUOTE_RULE, RowSize, Space, Strength, TAB_LINE,
 };
 
-/// The design system, whose tokens are lines such as `color.surface.prompt: #36251a`.
-const DESIGN: &str = include_str!("../../../design/Styles/default.ds");
-
 /// The film of a card opening, whose change is a line such as `#a to(#b) sec(0.2) ease(out,cubic)`.
-const FILM: &str = include_str!("../../../design/Screens/Desktop/Chats/Motion/Card opens.bm");
+const FILM: &str = include_str!("../../../../design/Screens/Desktop/Chats/Motion/Card opens.bm");
 
 /// One of the kit's icons, as each of them is drawn but for a few, such as `width="24"` and `stroke-width="2"`.
-const ICON: &str = include_str!("../../../third_party/gpui-kit/vendor/crates/assets/assets/icons/file-text.svg");
+const ICON: &str = include_str!("../../../../third_party/gpui-kit/vendor/crates/assets/assets/icons/file-text.svg");
 
 /// The groups a test here holds to the app's, each by what its tokens' names start with.
 const HELD: &[&str] = &[
@@ -48,7 +41,20 @@ const THE_FONTS: &[&str] = &["font.family", "font.letterSpacing"];
 /// a part with an edge have inside, what's between paragraphs and a list's items, inline code's size, and the styles
 /// of text that stands out.
 const OF_THEIR_OWN: &[(&str, &[&str])] = &[
-    ("spacing", &["Chip", "Paragraph", "ListItem", "Edged", "ChipStart", "ChipEnd"]),
+    (
+        "spacing",
+        &[
+            "Chip",
+            "Paragraph",
+            "ListItem",
+            "EdgedXSmall",
+            "EdgedSmall",
+            "EdgedMedium",
+            "EdgedLarge",
+            "ChipStart",
+            "ChipEnd",
+        ],
+    ),
     (
         "font.size",
         &[
@@ -70,57 +76,6 @@ fn the_designs(group: &str, reach: Reach) -> BTreeMap<String, String> {
     let mut tokens = tokens(group, reach);
     tokens.retain(|name, _| !only.contains(&name.as_str()));
     tokens
-}
-
-/// The tokens in the design whose names start with `group` and a dot, by the rest of their names, at `reach`: on a line
-/// such as `size.icon.Small: 12`, the same at both, and on one such as `size.icon.Small { $default: 12,
-/// reach.handheld: 14 }`, the default at a desk and the handheld's on a handheld.
-fn tokens(group: &str, reach: Reach) -> BTreeMap<String, String> {
-    let prefix = format!("{group}.");
-    let named = DESIGN.lines().filter_map(|line| {
-        let rest = line.strip_prefix(&prefix)?;
-        match rest.split_once(" { ") {
-            Some((name, modes)) if !name.contains(':') => Some((name, at(modes.strip_suffix(" }")?, reach)?)),
-            _ => rest.split_once(": "),
-        }
-    });
-    named.map(|(name, value)| (name.to_string(), resolved(value.trim()))).collect()
-}
-
-/// The value at `reach` of a token's `modes`, such as `$default: 12, reach.handheld: 14`: its own, or the default.
-fn at(modes: &str, reach: Reach) -> Option<&str> {
-    let mode = |key: &str| modes.split(", ").find_map(|mode| mode.strip_prefix(key));
-    let own = match reach {
-        Reach::Desk => None,
-        Reach::Handheld => mode("reach.handheld: "),
-    };
-    own.or_else(|| mode("$default: "))
-}
-
-/// What `value` is: itself, the colour it names, such as `amber`, or the colour of the palette's step it names, such as
-/// `grey.soft`. A step that isn't pinned, on a line such as `grey.soft { $default: #201b18 }`, is only known here if it's
-/// `mid`, which is the colour the palette is made from.
-fn resolved(value: &str) -> String {
-    let after = |start: String, end: &str| {
-        DESIGN.lines().find_map(|line| Some(line.strip_prefix(start.as_str())?.strip_suffix(end)?.to_string()))
-    };
-    let pinned = after(format!("{value} {{ $default: "), " }");
-    let made_from = value.strip_suffix(".mid").and_then(|palette| after(format!("{palette}: boldness(color("), "))"));
-    let of_its_own = after(format!("{value}: color("), ")");
-    let on_a_scale = value.split_once('.').and_then(|(name, step)| scale(name).get(step).cloned());
-    pinned.or(made_from).or(of_its_own).or(on_a_scale).unwrap_or_else(|| value.to_string())
-}
-
-/// The steps Brilliant names on a scale, from the smallest.
-const STEPS: [&str; 6] = ["xs", "sm", "md", "lg", "xl", "2xl"];
-
-/// The steps of the scale `name`, on a line such as `spacing: tshirt(number([4, 8]))`, by what Brilliant names them.
-fn scale(name: &str) -> BTreeMap<String, String> {
-    let start = format!("{name}: tshirt(number([");
-    let listed = DESIGN.lines().find_map(|line| line.strip_prefix(start.as_str())?.split_once("])"));
-    let values = listed.map_or_default(|(values, _)| values.split(", ").collect::<Vec<_>>());
-    assert!(values.len() <= STEPS.len(), "{name} has more steps than Brilliant's names this knows");
-    STEPS.iter().zip(values).map(|(step, value)| ((*step).to_string(), value.to_string())).collect()
 }
 
 /// What the design calls `role`: the section its group is, which is how Brilliant's page of roles is divided, and its
@@ -198,15 +153,19 @@ fn every_space_in_the_design_is_the_apps_step_in_its_place() {
 }
 
 /// The lengths beside the scale that the app makes of its own: a chip's, and what a part with an edge has inside, which
-/// is a pixel more than the app's, since its edge takes room in the app and none in the design.
+/// is its step of space and a pixel more, since its edge takes room in the app and none in the design.
 #[test]
 fn a_chips_lengths_and_an_edged_parts_are_the_apps() {
-    let small = Space::Small.size();
-    let large = Space::Large.size();
-    let lengths = [("Chip", INSIDE), ("ChipStart", INSIDE + EDGE), ("ChipEnd", small + EDGE), ("Edged", large + EDGE)];
+    let chip = [("Chip", INSIDE), ("ChipStart", INSIDE + EDGE), ("ChipEnd", Space::Small.size() + EDGE)];
+    let edged = [Space::XSmall, Space::Small, Space::Medium, Space::Large].map(|step| (step, step.size() + EDGE));
+    let edged = edged.map(|(step, length)| (format!("Edged{step:?}"), length));
+    let lengths: Vec<(String, Pixels)> =
+        chip.map(|(name, length)| (name.to_string(), length)).into_iter().chain(edged).collect();
 
-    for (reach, (name, length)) in Reach::ALL.into_iter().flat_map(|reach| lengths.map(|length| (reach, length))) {
-        assert_eq!(tokens("spacing", reach)[name], points(length), "{name} at {reach:?}");
+    for reach in Reach::ALL {
+        for (name, length) in &lengths {
+            assert_eq!(tokens("spacing", reach)[name], points(*length), "{name} at {reach:?}");
+        }
     }
 }
 
