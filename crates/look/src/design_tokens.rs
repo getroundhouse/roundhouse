@@ -273,7 +273,7 @@ fn lines_of_text_are_as_far_apart_in_the_design_as_in_the_app() {
         let kinds =
             Type::ALL.iter().map(|&kind| (format!("{kind:?}"), kind, kind.line_at(reach).unwrap_or(golden(kind))));
         let code = [("CodeFile", CodeLines::File), ("CodeChat", CodeLines::Chat)]
-            .map(|(name, lines)| (name.to_string(), Type::Code, lines.height()));
+            .map(|(name, lines)| (name.to_string(), Type::Code, lines.height_at(reach)));
         let lines: Vec<_> = kinds.chain(code).collect();
 
         let in_the_design = the_designs("font.lineHeight", reach);

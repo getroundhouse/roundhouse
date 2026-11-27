@@ -196,15 +196,15 @@ font.size.InlineCode { $default: 12.25, reach.handheld: 14.875 }
 
 // How far apart lines are, over the size of their text, where nothing they're in sets them: the golden ratio of the
 // size, as GPUI spaces text, to the nearest device pixel, such as body text's 22.5 at a desk and 27.5 on a handheld;
-// code's is `look::CodeLines`', which is the same at both; and what a key says and what's held with it are as tall as
+// code's by where it's read is `look::CodeLines`' at each; and what a key says and what's held with it are as tall as
 // the key.
 font.lineHeight.PageTitle: 1.625
 font.lineHeight.Heading { $default: 1.625, reach.handheld: 1.6176 }
 font.lineHeight.Body { $default: 1.6071, reach.handheld: 1.6176 }
 font.lineHeight.Detail { $default: 1.625, reach.handheld: 1.6333 }
 font.lineHeight.Code { $default: 1.625, reach.handheld: 1.6071 }
-font.lineHeight.CodeFile { $default: 1.6667, reach.handheld: 1.4286 }
-font.lineHeight.CodeChat { $default: 1.4167, reach.handheld: 1.2143 }
+font.lineHeight.CodeFile { $default: 1.6667, reach.handheld: 1.5714 }
+font.lineHeight.CodeChat { $default: 1.4167, reach.handheld: 1.3571 }
 font.lineHeight.Key: 1
 font.lineHeight.KeyHeld: 1.3333
 

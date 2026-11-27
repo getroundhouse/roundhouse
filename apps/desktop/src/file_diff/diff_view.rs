@@ -1,6 +1,6 @@
 use super::{draft, draw, layout, list, opened, selection, shown, sides, view};
 use crate::file_header::file_header;
-use crate::file_view::LINE_HEIGHT;
+use crate::file_view::line_height;
 use crate::image_diff::ImageDiff;
 use crate::patch::FilePatch;
 use crate::review::{Diffed, Review, ReviewEvent};
@@ -292,7 +292,7 @@ impl FileDiff {
         div()
             .relative()
             .size_full()
-            .line_height(LINE_HEIGHT)
+            .line_height(line_height())
             .on_mouse_down(MouseButton::Left, cx.listener(Self::select_from))
             .child(list)
             .child(Self::follow_the_pointer(cx))
@@ -323,7 +323,7 @@ impl FileDiff {
 /// How tall a row is drawn.
 fn height(row: &Row) -> Height {
     match row {
-        Row::Line { .. } | Row::Pair { .. } => Height::Fixed(LINE_HEIGHT),
+        Row::Line { .. } | Row::Pair { .. } => Height::Fixed(line_height()),
         Row::Fold(_) => Height::Fixed(FOLD.height()),
         Row::Comment(id) => Height::Measured(format!("comment-{id}").into()),
         Row::Draft => Height::Measured("draft".into()),

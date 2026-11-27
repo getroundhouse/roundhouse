@@ -26,7 +26,11 @@ use crate::scroll_area::ScrollArea;
 
 /// More than a block is for. Past this, the rest of a file is left to the diff and the editor.
 const SHOWN_LINES: usize = 300;
-const LINE_HEIGHT: Pixels = look::CodeLines::File.height();
+/// How far apart its lines are, as code's are where it's read line by line.
+fn line_height() -> Pixels {
+    look::CodeLines::File.height()
+}
+
 /// The room above and below the lines.
 const AROUND_LINES: look::Space = look::Space::XSmall;
 const NUMBERS_WIDTH: f32 = 44.0;
@@ -37,7 +41,7 @@ type Styles = Vec<(Range<usize>, HighlightStyle)>;
 /// How tall a block gets before it scrolls: a dozen lines and half of the next, and the room above the lines, so a
 /// dozen fit whole and anything longer shows that it scrolls.
 fn max_height() -> Pixels {
-    LINE_HEIGHT * 12.5 + AROUND_LINES.size()
+    line_height() * 12.5 + AROUND_LINES.size()
 }
 
 /// The lines of `sections`, the call's `part`, in a block that scrolls, with a gap between sections.
@@ -148,7 +152,7 @@ fn row(
     let (text, styles) = expand_tabs(&line.text, &styles);
     let text: SharedString = text.into();
     h_flex()
-        .h(LINE_HEIGHT)
+        .h(line_height())
         .flex_none()
         .border_l(px(BAR_WIDTH))
         .border_color(tint.unwrap_or(gpui_kit::transparent_black()))
@@ -187,7 +191,7 @@ fn expand_tabs(text: &str, styles: &[(Range<usize>, HighlightStyle)]) -> (String
 /// The faint mark between two sections of a file that aren't next to each other, where their numbers go.
 fn gap(cx: &App) -> AnyElement {
     h_flex()
-        .h(LINE_HEIGHT)
+        .h(line_height())
         .border_l(px(BAR_WIDTH))
         .border_color(gpui_kit::transparent_black())
         .child(
