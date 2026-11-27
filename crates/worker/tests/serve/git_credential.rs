@@ -180,15 +180,13 @@ exec sleep 100"#
     let mut frames = BufReader::new(hub_read).lines();
     let status = WorkerRequest::GitStatus(protocol::worker::GitStatus { path: own.display().to_string() });
 
-    send(&mut hub_write, [hello(), status, WorkerRequest::AgentStart(agent_start("s1", &own, None))]).await;
-    // In whatever order they finish, since each runs on a task of its own.
-    let mut answered = std::collections::BTreeMap::new();
-    while answered.len() < 3 {
-        if let WorkerFrame::Reply { id, outcome } = next_frame(&mut frames).await {
-            answered.insert(id, outcome);
-        }
-    }
-    let status = answered.remove(&1).unwrap();
+    send(&mut hub_write, [hello(), status]).await;
+    // Answered before an agent starts in the workspace, which makes its `.context/` and then that folder's
+    // `.gitignore`, so a status between the two would find the folder.
+    let status = reply(&mut frames, 1).await;
+    let start = WorkerRequest::AgentStart(agent_start("s1", &own, None));
+    hub_write.write_all(&frame::encode(&WorkerCall { id: 2, request: start }).unwrap()).await.unwrap();
+    reply(&mut frames, 2).await;
     let under_the_machine_s_own = started(dir.path(), 1).await;
     for (id, request) in (3..).zip([set(ada()), WorkerRequest::AgentStart(agent_start("s2", &own, None))]) {
         hub_write.write_all(&frame::encode(&WorkerCall { id, request }).unwrap()).await.unwrap();
