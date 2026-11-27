@@ -52,6 +52,14 @@ impl NamedColor {
 
 /// The brand's copper, whose hue the greys take, and which a prompt's bubble is washed with.
 const BRAND: Srgb = Srgb::from_hex(0xd0_8a5c);
+// Roles that mean different things but look alike take one colour, written once, so they change together until one
+// is given a colour of its own.
+/// The amber of what needs you, a warning, and a file that's changed.
+const AMBER: Srgb = Srgb::from_hex(0xe9_b24c);
+/// The green of what's done, what's added, and an open pull request.
+const GREEN: Srgb = Srgb::from_hex(0x6c_c488);
+/// The red of the agent stopping short, anything else going wrong, and what's removed.
+const RED: Srgb = Srgb::from_hex(0xee_6f64);
 /// The pane's stop, the darkest, so everything else is lighter than the page.
 const PAGE: Stop = Stop(0);
 /// How much of the brand's copper a prompt's bubble takes over the pane.
@@ -144,29 +152,29 @@ colors! {
     }
     "What happened" {
         /// The card that needs you, such as an approval.
-        needs_you = 0xe9b2_4cff,
+        needs_you = AMBER,
         /// A warning, such as setup that failed or one the agent's CLI gave.
-        warning = 0xe9b2_4cff,
+        warning = AMBER,
         /// Something ready, or done, such as dictation's model once it's prepared.
-        done = 0x6cc4_88ff,
+        done = GREEN,
         /// The agent stopped short: the turntable of its mark, and what the chat says of it, such as a turn that
         /// failed.
-        stopped = 0xee6f_64ff,
+        stopped = RED,
         /// Something else that went wrong, such as a call that failed, and the mark over a pane that can't show what
         /// it's for, such as with no hub.
-        error = 0xee6f_64ff,
+        error = RED,
         /// Lines and counts added to a file.
-        added = 0x6cc4_88ff,
+        added = GREEN,
         /// Lines and counts removed from a file.
-        removed = 0xee6f_64ff,
+        removed = RED,
         /// A file that's changed, and what changed in an image.
-        modified = 0xe9b2_4cff,
+        modified = AMBER,
     }
     // In GitHub's colours on a dark background, which the people Roundhouse is for already know, but for an open one,
     // which is the app's own green, so the app has one.
     "A pull request" {
         /// Open, in the green of what's added and what's done.
-        pr_open = 0x6cc4_88ff,
+        pr_open = GREEN,
         /// Merged.
         pr_merged = 0xa371_f7ff,
         /// Closed: muted, so it doesn't read as the agent stopping short.

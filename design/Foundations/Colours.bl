@@ -560,4 +560,8 @@ canvas:
           6e6fbf491c66e623 t("C4 · Names",SF Pro Text,14,m,align(l),lh(1.6071),ls(-0.1498px)) p(0,0) s(fill,hug:22.5) ext(288,) f[(dbc49c5def4b4936,tok(color.text,#EEE6E1))] $typography.Emphasis "Question"
           79e5c5baccd19dda t("row_hover went, since nothing drew it, and menu_hover is inline_code, for what it's behind. The outline's rows are washed as every row is.",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(0,26.5) s(fill,hug:90) ext(288,) f[(0ee160c0d1005d39,tok(color.text,#EEE6E1))] $typography.Body "Choice"
           197f9d82d0c50709 t("26 Nov · #2884",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) p(0,120.5) s(fill,hug:14) ext(288,) f[(c6113aca26394b27,tok(color.text.faint,#7C7671))] $typography.Detail "When"
+        7572d07f22c8ee24 al(v,g(4:$spacing.xs)) p(0,527) s(fill,hug:112) ext(288,) f[] "C5"
+          48dfbf426c54608b t("C5 · Shared colours",SF Pro Text,14,m,align(l),lh(1.6071),ls(-0.1498px)) p(0,0) s(fill,hug:22.5) ext(288,) f[(d74db6a550533a81,tok(color.text,#EEE6E1))] $typography.Emphasis "Question"
+          3b9cb6eb3e56eea6 t("Roles that look alike stay apart, and a colour they share is written once, so they change together until one is given its own.",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(0,26.5) s(fill,hug:67.5) ext(288,) f[(0bf59b6004dd2d36,tok(color.text,#EEE6E1))] $typography.Body "Choice"
+          54ba7a1aa8779beb t("26 Nov · #2885",SF Pro Text,12,r,align(l),lh(auto,1.17),ls(0px)) p(0,98) s(fill,hug:14) ext(288,) f[(18db79497396353a,tok(color.text.faint,#7C7671))] $typography.Detail "When"
 bp:end
