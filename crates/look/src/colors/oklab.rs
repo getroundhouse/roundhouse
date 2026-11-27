@@ -16,6 +16,13 @@ impl Oklab {
         self.b.atan2(self.a)
     }
 
+    /// The colour `share` of the way from this one to `to`, from 0 for this one to 1 for `to`, so the steps between
+    /// two colours look even.
+    pub(super) fn toward(self, to: Oklab, share: f64) -> Oklab {
+        let step = |from: f64, to: f64| from + share * (to - from);
+        Oklab { l: step(self.l, to.l), a: step(self.a, to.a), b: step(self.b, to.b) }
+    }
+
     /// The nearest colour a byte a channel can give, with what's beyond sRGB held to its edge.
     pub(super) fn srgb(self) -> Srgb {
         let Oklab { l, a, b } = self;

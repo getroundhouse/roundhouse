@@ -79,7 +79,7 @@ canvas:
         24f4c976b21cec1c al(h,y(c)) p(19,0) s(hug:280.02,22.5) f[] "Words"
           6980c7ee591d94e4 t("Draw each state of the badge in the gallery.",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(0,0) s(hug:280.02,hug:22.5) f[(49bad65aa52966fb,tok(color.text,#EEE6E1))] $typography.Body "Words"
     3ddfa10c4c2748fd al(h,y(c),g(8:$spacing.sm)) p(12,193.5) s(fill,hug:32) ext(824,) f[] "Buttons"
-      f3c13675faf7eb88 al(h,x(c),y(c),pad(0:$spacing.none,16:$spacing.control.Large,0:$spacing.none,16:$spacing.control.Large)) p(0,0) s(hug:117.09,32) sref(,32:$size.control.Large) f[(317e6b2fa6e59d62,tok(color.button.main,#F2EEE9))] rd(6:$radius.Control) "Approve plan"
+      f3c13675faf7eb88 al(h,x(c),y(c),pad(0:$spacing.none,16:$spacing.control.Large,0:$spacing.none,16:$spacing.control.Large)) p(0,0) s(hug:117.09,32) sref(,32:$size.control.Large) f[(317e6b2fa6e59d62,tok(color.button.main,#F5EEE9))] rd(6:$radius.Control) "Approve plan"
         a75d014e1e91b31f t("Approve plan",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(16,4.75) s(hug:85.09,hug:22.5) f[(0f2299a05875a065,tok(color.button.on_main,#1A1512))] $typography.Body "Words"
       93598f31d7347c96 al(h,x(c),y(c),pad(0:$spacing.none,17:$spacing.Edged,0:$spacing.none,17:$spacing.Edged)) p(125.09,0) s(hug:125.52,32) sref(,32:$size.control.Large) f[(90a82e92b7f5eb61,tok(color.button,#201B18))] st[(be15f2c107e52ef3,tok(color.edge.control_edge,#332D2A),w(1:$stroke.width.Edge),pos(i))] rd(6:$radius.Control) "Keep planning"
         20f57c964141ea69 t("Keep planning",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(17,4.75) s(hug:91.52,hug:22.5) f[(bb09fbab6d5857ab,tok(color.text,#EEE6E1))] $typography.Body "Words"

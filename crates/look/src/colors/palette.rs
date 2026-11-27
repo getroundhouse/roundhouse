@@ -1,7 +1,7 @@
 use gpui_kit::{App, Global, Hsla, rgba};
 
 use super::contrast::Contrast;
-use super::made::Made::{Grey, Text, Wash};
+use super::made::Made::{Grey, Text, Tint, Wash};
 use super::made::{Recipe, color};
 use super::ramp::{Chroma, Lightness, Ramp, Stop};
 use super::srgb::Srgb;
@@ -62,6 +62,8 @@ const GREEN: Srgb = Srgb::from_hex(0x6c_c488);
 const RED: Srgb = Srgb::from_hex(0xee_6f64);
 /// The pane's stop, the darkest, so everything else is lighter than the page.
 const PAGE: Stop = Stop(0);
+/// What to read's contrast on the pane, where body text reads best.
+const TEXT: Contrast = Contrast(92.0);
 /// How much of the brand's copper a prompt's bubble takes over the pane.
 const PROMPT: f64 = 0.18;
 /// What the dark theme's greys, text and prompt are made from, so tuning the palette is changing one of these: eleven
@@ -78,6 +80,7 @@ pub(super) const DARK: Recipe = Recipe {
     },
     page: PAGE,
     brand: BRAND,
+    text: TEXT,
 };
 
 colors! {
@@ -120,7 +123,7 @@ colors! {
     }
     "Text" {
         /// What to read.
-        text = Text(Contrast(92.0)),
+        text = Text(TEXT),
         /// What's secondary: details beside the main text, and a name that needs nothing from you.
         text_muted = Text(Contrast(60.0)),
         /// Quieter than muted: line numbers, meta, hints, and a mark with no pull request.
@@ -130,11 +133,11 @@ colors! {
         /// A button with an edge, such as a dialog's Cancel.
         button = Grey(Stop(4)),
         /// The one main action an area has, such as Send.
-        main = 0xf2ee_e9ff,
+        main = Text(Contrast(97.0)),
         /// The main action under the pointer.
-        main_hover = 0xffff_ffff,
+        main_hover = Text(Contrast(107.0)),
         /// The main action pressed.
-        main_pressed = 0xddd8_d2ff,
+        main_pressed = Text(Contrast(83.0)),
         /// What's on the main action, and on any other light fill, such as an action in its pull request's colour.
         on_main = Grey(Stop(2)),
     }
@@ -144,11 +147,11 @@ colors! {
         brand = BRAND,
         /// The brand's copper paled toward the text, which marks the tab showing, as the line under it, and, faint, the
         /// tab the pointer's over and what's found.
-        current = 0xd8c2_b3ff,
+        current = Tint(Contrast(72.0)),
         /// A link in text.
-        link = 0xdba2_7cff,
+        link = Tint(Contrast(58.0)),
         /// A link under the pointer.
-        link_hover = 0xe8b8_96ff,
+        link_hover = Tint(Contrast(69.0)),
     }
     "What happened" {
         /// The card that needs you, such as an approval.
