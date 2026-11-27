@@ -11,6 +11,7 @@ use gpui_kit::{
 };
 use look::{ButtonKind, Type, Typeset as _};
 use protocol::capability::settings::Settings;
+use protocol::client::sessions::SessionConfigure;
 use protocol::model::Session;
 
 use super::view::ChatView;
@@ -86,7 +87,7 @@ impl ChatView {
     /// Asks the hub to change what `session` runs with, and says so if it refuses.
     fn configure(&self, session: &Session, change: Settings, cx: &mut Context<Self>) {
         let id = session.id.clone();
-        let changing = self.client.start(move |client| client.session_configure(&id, change));
+        let changing = self.hub.ask(SessionConfigure { id, settings: change });
         cx.spawn(async move |this, cx| {
             if let Err(e) = changing.recv().await {
                 let said = couldnt("change that", &e);

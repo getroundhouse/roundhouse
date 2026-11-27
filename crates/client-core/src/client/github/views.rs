@@ -31,7 +31,7 @@ impl GithubFeed {
     }
 
     /// Carries on on a new connection, following again the chips shown.
-    pub fn reconnect(&self, client: &Client) {
+    pub(crate) fn reconnect(&self, client: &Client) {
         self.follow.reconnect(client);
     }
 

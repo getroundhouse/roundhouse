@@ -2,6 +2,7 @@
 //! read or unread, renaming it, a new title, and archiving it, which asks first, as a handheld's menu does of a row that
 //! removes something, since the phone can't bring a workspace back.
 
+use protocol::client::workspaces::{WorkspaceArchive, WorkspaceRegenerateTitle};
 use std::rc::Rc;
 
 use client_core::ClientError;
@@ -74,7 +75,7 @@ impl MobileApp {
     }
 
     fn mark_chats(&mut self, mark: Mark, chats: Vec<Session>, cx: &mut Context<Self>) {
-        let Some(hub) = self.hub(cx).filter(|_| self.client(cx).is_some()) else { return };
+        let Some(hub) = self.ready_hub(cx) else { return };
         let marking = mark.chats(&hub, chats);
         cx.spawn(async move |this, cx| {
             if let Err(e) = marking.recv().await {
@@ -88,13 +89,12 @@ impl MobileApp {
     /// Asks the hub to title the workspace again from what's been asked in it, which waits on a model. Asking again
     /// before the answer does nothing.
     fn regenerate_title(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
-        let Some(client) = self.client(cx) else { return };
+        let Some(hub) = self.ready_hub(cx) else { return };
         let Some(followed) = &mut self.followed else { return };
         if !followed.retitling.insert(id.clone()) {
             return;
         }
-        let target = id.clone();
-        let asking = client.start(move |client| client.workspace_regenerate_title(&target));
+        let asking = hub.ask(WorkspaceRegenerateTitle { id: id.clone() });
         cx.spawn(async move |this, cx| {
             let retitled = asking.recv().await;
             let _ = this.update(cx, |app, cx| {
@@ -121,14 +121,13 @@ impl MobileApp {
     /// Archives, and asks again before losing work the hub says it would. With no connection, the sheet stays, to be
     /// tried again once the hub's back.
     fn archive(&mut self, id: WorkspaceId, force: bool, cx: &mut Context<Self>) {
-        let Some(client) = self.client(cx) else {
+        let Some(hub) = self.ready_hub(cx) else {
             return self.say(client_core::refusals::couldnt("archive", &ClientError::Disconnected), cx);
         };
         self.ask(None, cx);
         let Some(followed) = &mut self.followed else { return };
         followed.archiving.insert(id.clone());
-        let target = id.clone();
-        let archiving = client.start(move |client| client.workspace_archive(&target, force));
+        let archiving = hub.ask(WorkspaceArchive { id: id.clone(), force });
         cx.spawn(async move |this, cx| {
             let archived = archiving.recv().await;
             let _ = this.update(cx, |app, cx| {

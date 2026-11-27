@@ -8,7 +8,7 @@ use client_core::link::{Connect, Link, Lost, Refused, Waits};
 use client_core::records::Snapshot;
 use client_core::{Client, ClientError, Drafts, Hub, OlderSide, RecordsFeed, RemoteHub};
 use client_ui::{NeedsUpdating, needs_updating};
-use gpui_kit::{Context, EventEmitter, Task};
+use gpui_kit::{Context, Task};
 use protocol::model::{Workspace, WorkspaceStatus};
 
 /// What the hub's list of clients calls the app.
@@ -40,9 +40,6 @@ pub(crate) enum LinkState {
     Refused(String),
 }
 
-/// A new connection, which whatever was following the last one carries on with.
-pub(crate) struct Reconnected(pub(crate) Client);
-
 pub(crate) struct HubLink {
     paired: RemoteHub,
     link: Link<PairedHub>,
@@ -50,10 +47,8 @@ pub(crate) struct HubLink {
     /// every connection.
     hub: Hub,
     state: LinkState,
-    /// The connection, while there is one that's caught up.
-    client: Option<Client>,
-    /// Shows a draft made elsewhere once one typed here has reached the hub.
-    _drafts_from_elsewhere: Task<()>,
+    /// Shows a draft made elsewhere once one typed here has reached the hub, from the first connection on.
+    drafts_from_elsewhere: Option<Task<()>>,
     _following: Task<()>,
 }
 
@@ -107,11 +102,8 @@ pub(crate) fn listed(workspace: &Workspace) -> bool {
 #[derive(Clone)]
 pub(crate) struct Ready {
     pub(crate) hub: Hub,
-    pub(crate) client: Client,
     pub(crate) feed: RecordsFeed,
 }
-
-impl EventEmitter<Reconnected> for HubLink {}
 
 impl HubLink {
     pub(crate) fn new(paired: RemoteHub, connect: ConnectTo, cx: &mut Context<Self>) -> HubLink {
@@ -126,16 +118,7 @@ impl HubLink {
             }
         });
         let hub = link.hub();
-        let drafts_from_elsewhere = show_drafts_from_elsewhere(&hub.drafts(), cx);
-        HubLink {
-            paired,
-            link,
-            hub,
-            state: LinkState::Connecting,
-            client: None,
-            _drafts_from_elsewhere: drafts_from_elsewhere,
-            _following: following,
-        }
+        HubLink { paired, link, hub, state: LinkState::Connecting, drafts_from_elsewhere: None, _following: following }
     }
 
     /// The hub as the phone paired with it.
@@ -151,9 +134,9 @@ impl HubLink {
         &self.state
     }
 
-    /// The connection, while there is one that's caught up.
-    pub(crate) fn client(&self) -> Option<Client> {
-        self.client.clone()
+    /// Whether there's a connection to the hub that has caught up, which is when the phone asks the hub anything.
+    pub(crate) fn is_ready(&self) -> bool {
+        self.state == LinkState::Ready
     }
 
     /// What client-core holds of the hub's records, once it has followed them at all.
@@ -161,10 +144,10 @@ impl HubLink {
         self.hub.records().map(|feed| feed.snapshot())
     }
 
-    /// The connection, the records and the drafts, while there's a connection that's caught up.
+    /// The hub and its records, while there's a connection that's caught up.
     pub(crate) fn ready(&self) -> Option<Ready> {
-        let (client, feed) = (self.client()?, self.hub.records()?);
-        Some(Ready { hub: self.hub.clone(), client, feed })
+        let feed = self.hub.records().filter(|_| self.is_ready())?;
+        Some(Ready { hub: self.hub.clone(), feed })
     }
 
     /// Connects again now, such as when the app comes back to the front, since a phone that slept may hold a
@@ -180,18 +163,17 @@ impl HubLink {
         drop(self.hub.drafts().flushed());
     }
 
-    /// Draws how the link stands, and what it has of the hub, and hands any new connection on.
+    /// Draws how the link stands, and what it has of the hub. Drafts made elsewhere are shown from the first
+    /// connection on, as the desktop app shows them.
     fn link_changed(&mut self, cx: &mut Context<Self>) {
-        if let Some((client, ())) = self.link.take_connection() {
-            cx.emit(Reconnected(client));
+        if self.link.take_connected().is_some() && self.drafts_from_elsewhere.is_none() {
+            self.drafts_from_elsewhere = Some(show_drafts_from_elsewhere(&self.hub.drafts(), cx));
         }
-        let state = self.link.state();
-        self.client = state.ready().cloned();
-        self.state = match state {
-            client_core::link::LinkState::Connecting(_) | client_core::link::LinkState::CatchingUp(_) => {
+        self.state = match self.link.state() {
+            client_core::link::LinkState::Connecting(_) | client_core::link::LinkState::CatchingUp => {
                 LinkState::Connecting
             }
-            client_core::link::LinkState::Ready(_) => LinkState::Ready,
+            client_core::link::LinkState::Ready => LinkState::Ready,
             client_core::link::LinkState::Waiting(Failure::HubOlder(why)) => LinkState::HubOlder(why),
             client_core::link::LinkState::Waiting(Failure::Other(why)) => LinkState::Unreachable(why),
             client_core::link::LinkState::Stopped(Failure::HubOlder(why) | Failure::Other(why)) => {

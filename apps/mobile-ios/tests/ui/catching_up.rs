@@ -35,3 +35,29 @@ fn a_prompt_sent_while_a_new_connection_catches_up_comes_back_to_the_composer(cx
     held.let_go();
     phone.wait("the phone to be connected again", |phone| phone.is_connected());
 }
+
+/// A workspace whose chat couldn't be found or started, such as on a hub that refused, is asked for its chat again once
+/// a new connection has caught up, and not while it catches up.
+#[gpui_kit::test]
+fn a_chat_that_couldn_t_be_found_is_asked_for_again_once_a_new_connection_has_caught_up(cx: &mut TestAppContext) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let id = world.workspace(&repo, "ledger");
+    let workspace = world.workspaces.iter().find(|w| w.id == id).unwrap().clone();
+    let (held, asked) = (world.held_list.clone(), world.asked.clone());
+    let (_hub, mut phone) = Phone::on_a_fake_hub(cx, world);
+    let row = gpui_kit::ElementId::Name(format!("workspace-{}", workspace.id).into());
+    phone.wait("the workspace", |phone| phone.has(row.clone()) && phone.is_connected());
+    phone.tap(row);
+    phone.wait("the chat, refused", |phone| phone.chat_says().is_some_and(|said| said.starts_with("Couldn't open")));
+    let before = asked.count("session_ensure");
+    held.hold();
+
+    phone.cx.update(|cx| phone.app.update(cx, MobileApp::connect_again));
+    waiting::thread::until(TIMEOUT, "the new connection's list to be held", || held.held() > 0);
+    phone.frame();
+    assert_eq!(asked.count("session_ensure"), before, "asked while the connection catches up");
+    held.let_go();
+
+    phone.wait("the chat, asked for again", |_| asked.count("session_ensure") > before);
+}

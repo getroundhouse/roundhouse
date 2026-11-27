@@ -1,5 +1,3 @@
-use crate::Client;
-
 /// How a link to a hub stands, for an app to draw, with `F`, its [`Connect`](super::Connect)'s failure, saying why it
 /// isn't connected.
 #[derive(Clone)]
@@ -9,9 +7,9 @@ pub enum LinkState<F> {
     /// holds none.
     Connecting(Option<F>),
     /// Connected, and catching up on the hub's records.
-    CatchingUp(Client),
+    CatchingUp,
     /// Connected, and caught up on the hub's records.
-    Ready(Client),
+    Ready,
     /// The last try failed, and another comes after a wait.
     Waiting(F),
     /// The last try failed in a way only a person can fix, so none comes until the link is asked to connect again.
@@ -19,24 +17,13 @@ pub enum LinkState<F> {
 }
 
 impl<F> LinkState<F> {
-    /// The connection, once it has caught up.
-    pub fn ready(&self) -> Option<&Client> {
-        match self {
-            LinkState::Ready(client) => Some(client),
-            LinkState::Connecting(_) | LinkState::CatchingUp(_) | LinkState::Waiting(_) | LinkState::Stopped(_) => None,
-        }
+    /// Whether it's connected, and caught up.
+    pub fn is_ready(&self) -> bool {
+        matches!(self, LinkState::Ready)
     }
 
-    /// Whether there's a connection, caught up or not.
+    /// Whether it's connected, whether or not it has caught up.
     pub fn is_connected(&self) -> bool {
-        matches!(self, LinkState::Ready(_) | LinkState::CatchingUp(_))
-    }
-
-    /// The connection, whether or not it has caught up.
-    pub fn connected(&self) -> Option<&Client> {
-        match self {
-            LinkState::Ready(client) | LinkState::CatchingUp(client) => Some(client),
-            LinkState::Connecting(_) | LinkState::Waiting(_) | LinkState::Stopped(_) => None,
-        }
+        matches!(self, LinkState::Ready | LinkState::CatchingUp)
     }
 }

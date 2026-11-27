@@ -16,7 +16,7 @@ use super::Panel;
 use super::open::{OneAtATime, Open, OpenChat};
 use super::workspace_menu::{Asking, Renaming};
 use crate::chat::{ChatEvent, ChatView};
-use crate::hub_link::{self, ConnectTo, HubLink, Reconnected};
+use crate::hub_link::{self, ConnectTo, HubLink};
 use crate::vault::Vault;
 
 /// How long the app can be away before coming back connects again. A phone suspends an app soon after it leaves the
@@ -99,7 +99,7 @@ pub(super) struct Followed {
     pub(super) retitling: HashSet<WorkspaceId>,
     /// Its workspaces asked to be archived, whose Archive is off until the hub has answered.
     pub(super) archiving: HashSet<WorkspaceId>,
-    _events: [Subscription; 2],
+    _events: Subscription,
 }
 
 /// A workspace being made, in this repository.
@@ -169,24 +169,17 @@ impl MobileApp {
         }
         let connect = self.connect.clone();
         let link = cx.new(|cx| HubLink::new(hub, connect, cx));
-        let events = [
-            cx.observe_in(&link, window, |app, link, window, cx| {
-                let (records, hub_here) = (link.read(cx).snapshot(), link.read(cx).client().is_some());
-                if let (Some(open), Some(records)) = (&app.open.chat, records) {
-                    open.chat.update(cx, |chat, cx| {
-                        chat.set_hub_here(hub_here, cx);
-                        chat.records_changed(&records, cx);
-                    });
-                }
-                app.reopen(window, cx);
-                cx.notify();
-            }),
-            cx.subscribe(&link, |app, _, Reconnected(client), cx| {
-                if let Some(open) = &app.open.chat {
-                    open.chat.update(cx, |chat, cx| chat.reconnect(client, cx));
-                }
-            }),
-        ];
+        let events = cx.observe_in(&link, window, |app, link, window, cx| {
+            let (records, hub_here) = (link.read(cx).snapshot(), link.read(cx).is_ready());
+            if let (Some(open), Some(records)) = (&app.open.chat, records) {
+                open.chat.update(cx, |chat, cx| {
+                    chat.set_hub_here(hub_here, cx);
+                    chat.records_changed(&records, cx);
+                });
+            }
+            app.reopen(window, cx);
+            cx.notify();
+        });
         let followed = Followed {
             link,
             reopens: true,
@@ -247,9 +240,10 @@ impl MobileApp {
         self.link().map(|link| link.read(cx).hub().clone())
     }
 
-    /// The connection to the hub, while there is one.
-    pub(super) fn client(&self, cx: &App) -> Option<client_core::Client> {
-        self.link().and_then(|link| link.read(cx).client())
+    /// The hub this phone paired with, while it has a connection to it that has caught up, which is when the phone
+    /// asks it anything.
+    pub(super) fn ready_hub(&self, cx: &App) -> Option<client_core::Hub> {
+        self.link().filter(|link| link.read(cx).is_ready()).map(|link| link.read(cx).hub().clone())
     }
 
     /// Says what went wrong, across the screen under its bar.
@@ -285,7 +279,7 @@ impl MobileApp {
     /// Whether it's connected to the hub, and caught up.
     #[cfg(any(test, feature = "testing"))]
     pub fn is_connected(&self, cx: &App) -> bool {
-        self.link().is_some_and(|link| link.read(cx).client().is_some())
+        self.link().is_some_and(|link| link.read(cx).is_ready())
     }
 
     /// How the link to the hub stands, with why its last try to connect failed, if it did, for a test that timed out

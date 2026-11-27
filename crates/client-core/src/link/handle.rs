@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 use super::linker::Linker;
 use super::{Connect, LinkState, Lost, Waits};
 use crate::hub::Kept;
-use crate::{Client, FollowError, Hub};
+use crate::{FollowError, Hub};
 
 /// The connection to one hub, made again on a thread of its own by [the rule every client follows](crate::link), and
 /// the [`Hub`] every view of it holds, kept over every connection. The thread stops once this has gone, and with it
@@ -22,8 +22,8 @@ pub(super) struct Shared<C: Connect> {
     pub(super) state: Mutex<LinkState<C::Failure>>,
     /// The records, the connection that has caught up and what's open, for every [`Hub`] this gives out.
     pub(super) kept: Arc<Kept>,
-    /// The newest connection the app hasn't taken, with what was read as it was made.
-    pub(super) connection: Mutex<Option<(Client, C::With)>>,
+    /// What was read of the hub as the newest connection the app hasn't heard of was made.
+    pub(super) connected: Mutex<Option<C::With>>,
     /// What went wrong following the hub's records on a connection that's caught up, for a person to hear about.
     pub(super) errors: Mutex<Vec<FollowError>>,
     /// Holds one signal at a time, so changes nobody has looked at yet gather into one.
@@ -62,7 +62,7 @@ impl<C: Connect> Link<C> {
         let shared = Arc::new(Shared {
             state: Mutex::new(LinkState::Connecting(None)),
             kept: Arc::new(Kept::new()),
-            connection: Mutex::new(None),
+            connected: Mutex::new(None),
             errors: Mutex::new(Vec::new()),
             signal,
         });
@@ -102,16 +102,10 @@ impl<C: Connect> Link<C> {
         Hub::of(self.shared.kept.clone())
     }
 
-    /// The newest connection since this was last asked, with what was read of the hub as it was made, for everything
-    /// else the app has open to carry on on. Only the newest, since anything on one before it would only move on again.
-    pub fn take_connection(&self) -> Option<(Client, C::With)> {
-        self.shared.connection.lock().take()
-    }
-
     /// What was read of the hub as the newest connection since this was last asked was made, such as its status, for
     /// an app that goes by it. Only the newest, since anything of one before it is out of date.
     pub fn take_connected(&self) -> Option<C::With> {
-        self.take_connection().map(|(_, with)| with)
+        self.shared.connected.lock().take()
     }
 
     /// What went wrong following the hub's records on a connection that had caught up, which the link carries on with.
