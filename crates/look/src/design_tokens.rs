@@ -192,7 +192,7 @@ fn every_space_in_the_design_is_the_apps_step_in_its_place() {
     assert_eq!(scale("spacing"), space);
     for reach in Reach::ALL {
         let at_a_controls_ends =
-            ControlSize::ALL.iter().map(|size| (format!("control.{size:?}"), points(size.padding_at(reach))));
+            ControlSize::ALL.iter().map(|size| (format!("control.{size:?}"), points(size.padding())));
         assert_eq!(the_designs("spacing", reach), the_apps(at_a_controls_ends), "{reach:?}");
     }
 }

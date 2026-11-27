@@ -7,21 +7,31 @@
 
 use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Styled, Window, canvas, px};
 
+use crate::IconSize;
+use crate::traits::Reach;
+
 /// The two sizes a mark comes in.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Size {
     /// In the sidebar.
     Row,
-    /// Beside text: chat tabs, Home's rows and the working line.
+    /// Beside text: chat tabs, Home's rows and the working line. It's as big as a large icon at each reach, as the
+    /// owner decided, since a large icon stands in the place a mark has, so a call's icon and the working line's mark
+    /// take one place, and the words after them line up.
     Inline,
 }
 
 impl Size {
     /// How wide a mark of this size is drawn, for lining things up with it.
     pub fn width(self) -> Pixels {
+        self.width_at(Reach::now())
+    }
+
+    /// The same at `reach`.
+    pub const fn width_at(self, reach: Reach) -> Pixels {
         match self {
             Size::Row => px(26.),
-            Size::Inline => px(16.),
+            Size::Inline => IconSize::Large.size_at(reach),
         }
     }
 }

@@ -5,9 +5,10 @@ use gpui_kit::{Pixels, px};
 use crate::named::named;
 
 named! {
-    /// How big an icon is, as wide as it's tall. One set among text, as one of its words, is about as big as the text,
-    /// and one that stands for what a row, a tab, a bar, a card or a call's line is, at its start, is as big as a mark
-    /// beside text. [`IconSizing::sized`] sizes an icon as one. An icon on a button is sized by the button's
+    /// How big an icon is, as wide as it's tall. One set among text, as one of its words, is as big as the text at the
+    /// app's own scale, as the owner decided: a detail's size among a detail's or code's, and body text's among body
+    /// text. One that stands for what a row, a tab, a bar, a card or a call's line is, at its start, is as big as a
+    /// mark beside text. [`IconSizing::sized`] sizes an icon as one. An icon on a button is sized by the button's
     /// [`ControlSize`](crate::ControlSize), which says which of these it is, and one inside a control about as tall as
     /// a line of text, such as the check in a checkbox, is small, so it has room inside it.
     IconSize {
@@ -48,8 +49,8 @@ impl IconSize {
                 IconSize::Large => px(16.),
             },
             Reach::Handheld => match self {
-                IconSize::Small => px(14.),
-                IconSize::Regular => px(18.),
+                IconSize::Small => px(15.),
+                IconSize::Regular => px(17.),
                 IconSize::Large => px(22.),
             },
         }
