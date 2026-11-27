@@ -134,9 +134,12 @@ impl<S: Source> Follower<S> {
         self.let_go = false;
         let Some(client) = &self.client else { return };
         match self.source.resume(client, &self.shared.held) {
+            // Of a connection before the one handed over meanwhile, its subscription goes with it, and the thread
+            // carries on on the newer once it wakes, as it's been woken to.
             Ok(subscription) => {
-                self.subscription = Some(subscription);
-                self.shared.set_connected(true);
+                if self.shared.caught_up_unless_newer() {
+                    self.subscription = Some(subscription);
+                }
             }
             // Deleted, which the records say too, so whoever reads it lets go of it rather than hearing it failed.
             Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => self.lost(None),

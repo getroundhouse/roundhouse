@@ -279,8 +279,11 @@ impl<H: Send + 'static> Unstarted<H> {
 
 impl<H> Shared<H> {
     /// Has the thread carry on on `client` once it next wakes, which it isn't caught up on until the thread says so.
+    /// Under the lock [`Shared::caught_up_unless_newer`] decides under, so a resume on the connection before that ends
+    /// after this can't say it has caught up.
     fn reconnect_on(&self, client: &Client) {
-        *self.reconnect.lock() = Some(client.clone());
+        let mut next = self.reconnect.lock();
+        *next = Some(client.clone());
         self.connected.store(false, Ordering::SeqCst);
     }
 
@@ -296,8 +299,17 @@ impl<H> Shared<H> {
         self.changed();
     }
 
-    pub(super) fn set_connected(&self, connected: bool) {
-        self.connected.store(connected, Ordering::SeqCst);
+    /// Says it has caught up on the connection the thread resumed on, unless a newer one has been handed over since,
+    /// which it hasn't caught up on until it resumes there. Returns whether it said so. Decided under the lock
+    /// [`Shared::reconnect_on`] takes, so neither order leaves it saying so of a connection before.
+    pub(super) fn caught_up_unless_newer(&self) -> bool {
+        let next = self.reconnect.lock();
+        if next.is_some() {
+            return false;
+        }
+        self.connected.store(true, Ordering::SeqCst);
+        drop(next);
         self.changed();
+        true
     }
 }
