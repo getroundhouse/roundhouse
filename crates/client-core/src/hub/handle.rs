@@ -226,6 +226,30 @@ impl Hub {
 
 #[cfg(any(test, feature = "testing"))]
 impl Hub {
+    /// Holds the link's thread back from taking up what it's next asked, such as to connect again, until what this
+    /// returns goes, for a test of what the window draws before the link has let go of the connection that had caught
+    /// up. Until it's asked, the link goes on as it does. Once it is, its thread waits here and does nothing else.
+    pub fn hold_the_link(&self) -> LinkHeld {
+        *self.kept.asks_held.0.lock() = true;
+        LinkHeld(Arc::clone(&self.kept))
+    }
+}
+
+/// The link's thread held back from what it's asked, as [`Hub::hold_the_link`] says, until this goes.
+#[cfg(any(test, feature = "testing"))]
+pub struct LinkHeld(Arc<Kept>);
+
+#[cfg(any(test, feature = "testing"))]
+impl Drop for LinkHeld {
+    fn drop(&mut self) {
+        let (held, let_go) = &self.0.asks_held;
+        *held.lock() = false;
+        let_go.notify_all();
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl Hub {
     /// Carries what's open on to `connection`, as a link does a new connection, and takes it to have caught up at once,
     /// a new round, for a test of a view on stand-in hubs.
     pub fn carry_on_to(&self, connection: &Connection) {

@@ -61,6 +61,13 @@ impl AppView {
             }
             Some(_) | None => {}
         }
+        if !self.linked.caught_up() {
+            // What's drawn from whether the hub has caught up, such as a dialog's Rename, reads it as it's drawn, so
+            // it's drawn again whenever the link has stopped being caught up, even where nothing shown of the link
+            // changes: Connecting was shown before the link knew, or its changes gathered into one, or a new
+            // connection is catching up. The panes aren't told again, and what's shown of the link stays.
+            cx.notify();
+        }
         if !matches!(self.linking, Linking::Ready) {
             return;
         }

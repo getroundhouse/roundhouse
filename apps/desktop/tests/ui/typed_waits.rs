@@ -86,6 +86,34 @@ fn a_workspace_s_rename_keeps_what_s_typed_while_a_new_connection_catches_up(cx:
     a_rename_waits(&mut ui, &asked, &held, "workspace_rename");
 }
 
+/// Rename is drawn off once the window hears the link has stopped being caught up, though the window showed Connecting,
+/// and drew Rename, before the link had: Try again shows Connecting at once, and the link's own change then shows
+/// nothing new. The workspace has no chat, so nothing else in the window changes to draw it again meanwhile.
+#[gpui_kit::test]
+fn rename_goes_off_once_the_link_stops_being_caught_up_after_connecting_was_shown(cx: &mut TestAppContext) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    let held = world.held_list.clone();
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("the workspace", |ui| ui.pane().is_some());
+    start_renaming(&mut ui, &format!("workspace-{workspace}"), "Kept while away");
+    assert!(ui.on("rename-confirm"), "while the hub is here");
+    let hub = ui.view().hub().clone();
+
+    // Drawn as Connecting shows, which is before the link has let go of the connection that had caught up.
+    let link = hub.hold_the_link();
+    held.hold();
+    connect_again(&mut ui);
+    assert!(ui.on("rename-confirm"), "the link hasn't let go yet");
+    drop(link);
+    crate::support::wait_until("the new connection's list to be held", || held.held() > 0);
+    ui.frame();
+
+    assert!(ui.off("rename-confirm"), "once the window has heard the link let go");
+}
+
 /// While it catches up, Enter in a queued prompt's editor leaves it open with what's typed, and nothing is asked of
 /// the hub. Once it has, Enter changes the prompt to what was typed.
 #[gpui_kit::test]

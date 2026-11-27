@@ -57,6 +57,8 @@ impl<C: Connect> Linker<C> {
             };
             stand = match self.next(deadline) {
                 Woke::Asked(ask) => {
+                    #[cfg(any(test, feature = "testing"))]
+                    self.shared.kept.until_asks_let_go();
                     // Asked to connect again, it doesn't trust the connection it has, which may have gone without a
                     // word, as a phone's does while it sleeps. One a hub is stopped on goes with the hub, and the
                     // stopping may need it.

@@ -10,6 +10,8 @@ mod on_socket;
 #[cfg(test)]
 mod tests;
 
+#[cfg(any(test, feature = "testing"))]
+pub use handle::LinkHeld;
 pub use handle::{Hub, Round, StopIfIdle};
 pub(crate) use kept::Kept;
 #[cfg(any(test, feature = "testing"))]

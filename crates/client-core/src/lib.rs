@@ -61,6 +61,8 @@ pub use approval::{Answered, Approval, Given, ToolUseAnswer, ToolUseAsked, claim
 pub use attachments::{FileToSend, NotAttached};
 pub use drafts::{CameBack, DraftChange, DraftKey, Drafts, FilesFor, KeptDraft, NotReadBack, ReadBack};
 #[cfg(any(test, feature = "testing"))]
+pub use hub::LinkHeld;
+#[cfg(any(test, feature = "testing"))]
 pub use hub::OnSocket;
 pub use hub::{Hub, Round, StopIfIdle};
 pub use new_chat::new_chat_settings;
