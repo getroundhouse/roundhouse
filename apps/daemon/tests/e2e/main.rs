@@ -20,6 +20,7 @@ mod compacting;
 mod connection;
 mod context;
 mod core_loop;
+mod dialing;
 mod drafts;
 mod environment;
 mod failing;

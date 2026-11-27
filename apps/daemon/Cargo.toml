@@ -16,6 +16,7 @@ anyhow.workspace = true
 clap.workspace = true
 hub.workspace = true
 logging.workspace = true
+private-files.workspace = true
 process.workspace = true
 protocol.workspace = true
 serde_json.workspace = true
@@ -25,10 +26,12 @@ update-feed.workspace = true
 worker.workspace = true
 
 [target.'cfg(unix)'.dependencies]
+# A worker dials its hub only where there are Unix sockets, as `worker_role::dialing` says.
+dialing.workspace = true
 libc.workspace = true
-private-files.workspace = true
 
 [dev-dependencies]
+dialing.workspace = true
 agents = { workspace = true, features = ["testing"] }
 process = { workspace = true, features = ["testing"] }
 client-core = { workspace = true, features = ["testing"] }

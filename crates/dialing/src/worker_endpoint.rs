@@ -1,11 +1,21 @@
 use std::net::{Ipv4Addr, SocketAddr};
 
 use iroh::endpoint::PortmapperConfig;
-use iroh::endpoint::{Connection, presets};
+use iroh::endpoint::{Connection, RecvStream, SendStream, presets};
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode, RelayUrl};
-use protocol::dialing::{HubAddress, WORKER_ALPN};
+use protocol::dialing::{HubAddress, TicketSecret, WORKER_ALPN};
+use protocol::model::InstanceId;
 
 use crate::DialError;
+
+/// A worker its hub admitted, with the stream the hub did so on.
+pub struct Admitted {
+    pub instance_id: InstanceId,
+    /// Held as long as the streams are, since the connection closes once it's dropped.
+    pub connection: Connection,
+    pub send: SendStream,
+    pub recv: RecvStream,
+}
 
 /// A worker's end, which dials its hub at the address its ticket names, with a key of its own that lasts as long as
 /// the process does, which the hub knows it by once it has been admitted.
@@ -47,6 +57,15 @@ impl WorkerEndpoint {
     /// A connection to the hub, which says nothing yet.
     pub async fn dial(&self) -> Result<Connection, DialError> {
         self.endpoint.connect(self.hub.clone(), WORKER_ALPN).await.map_err(|e| DialError::Dial(e.to_string()))
+    }
+
+    /// A connection to the hub that has admitted this worker with `secret`, or with the key it admitted it by before,
+    /// and the stream it did so on, which carries the worker protocol from then on.
+    pub async fn dial_admitted(&self, secret: &TicketSecret) -> Result<Admitted, DialError> {
+        let connection = self.dial().await?;
+        let (mut send, mut recv) = connection.open_bi().await.map_err(|e| DialError::Dial(e.to_string()))?;
+        let admitted = crate::admission::say(&mut send, &mut recv, secret.clone()).await?;
+        Ok(Admitted { connection, send, recv, instance_id: admitted.instance_id })
     }
 
     /// The key the hub knows it by, as iroh writes it.

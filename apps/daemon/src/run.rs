@@ -7,7 +7,8 @@ use std::process::ExitCode;
 use clap::{CommandFactory as _, FromArgMatches as _, Parser, Subcommand};
 use protocol::client::HubStart;
 
-use crate::worker_role::{self, Transport};
+use crate::worker_reach::WorkerReach;
+use crate::worker_role;
 use crate::{Config, hub_role, preflight, service_log, signals};
 
 #[derive(Parser)]
@@ -65,16 +66,11 @@ enum Role {
     /// Runs agents and git for a workspace. Started by a hub's provider.
     #[command(group(clap::ArgGroup::new("transport").required(true)))]
     Worker {
-        /// Speak the worker protocol on stdin and stdout, so the worker stops when its hub goes.
-        #[arg(long, group = "transport")]
-        stdio: bool,
-        /// Connect stdin and stdout to the instance's worker, starting one if none is serving it, so it can outlive
-        /// its hub. Not on Windows.
-        #[arg(long, group = "transport")]
-        attach: bool,
-        /// Serve the instance on a socket in the worker's state directory, as `--attach` starts it.
-        #[arg(long, group = "transport", hide = true)]
-        listen: bool,
+        #[command(flatten)]
+        reach: WorkerReach,
+        /// Where the worker writes its log, in place of stderr, added to the end.
+        #[arg(long)]
+        log: Option<PathBuf>,
         /// Where worktrees go.
         #[arg(long)]
         workspaces_root: PathBuf,
@@ -120,14 +116,31 @@ fn say_worker_versions() -> anyhow::Result<()> {
 /// Logs to stderr, whatever this runs as, because a worker's stdout is its protocol stream. A hub's and a worker's is
 /// their log's file, which a worker's delete writes to as well, unless they're run from a terminal. Anything else's is
 /// read by whoever ran it.
-fn start_log(role: &Role) -> Result<(), logging::AlreadyStarted> {
+fn start_log(role: &Role) -> anyhow::Result<()> {
     let directives = std::env::var(protocol::paths::ENV_LOG).ok();
     let log = logging::Log::new(logging::Levels::new(directives.as_deref()));
+    // A worker given a file of its own, as one that dials its hub from another machine is, which no hub keeps.
+    if let Role::Worker { log: Some(file), .. } = role {
+        return Ok(log.json_to(std::sync::Arc::new(open_log(file)?)).start()?);
+    }
     let has_a_file = match role {
         Role::Hub { .. } | Role::Worker { .. } | Role::Delete { .. } => !std::io::stderr().is_terminal(),
         Role::GitCredential { .. } | Role::WorkerVersions | Role::PrintEnvironment | Role::Preflight { .. } => false,
     };
-    if has_a_file { log.json_to(std::io::stderr) } else { log.text_to(std::io::stderr) }.start()
+    Ok(if has_a_file { log.json_to(std::io::stderr) } else { log.text_to(std::io::stderr) }.start()?)
+}
+
+/// The file at `path`, to add to the end of, making its directory first, which only this user can read.
+fn open_log(path: &std::path::Path) -> anyhow::Result<std::fs::File> {
+    use anyhow::Context as _;
+    if let Some(dir) = path.parent() {
+        private_files::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+    }
+    private_files::file_options()
+        .create(true)
+        .append(true)
+        .open(path)
+        .with_context(|| format!("opening {}", path.display()))
 }
 
 /// Deletes worktrees moved aside, and logs each it couldn't.
@@ -192,7 +205,8 @@ pub fn run(config: Config) -> anyhow::Result<ExitCode> {
         std::env::var_os(worker::ENV_ANTIGRAVITY_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
     // The command that reaches a worker runs nothing in a workspace, and passes them on to the worker it starts, which
     // forgets them itself.
-    if matches!(args.role, Role::Worker { attach: false, .. } | Role::Preflight { .. }) {
+    let attaches = matches!(&args.role, Role::Worker { reach, .. } if reach.attaches());
+    if matches!(args.role, Role::Worker { .. } | Role::Preflight { .. }) && !attaches {
         forget_hub_variables(config.also_forgotten);
     }
     // Only a hub says something by how it exits.
@@ -209,25 +223,18 @@ pub fn run(config: Config) -> anyhow::Result<ExitCode> {
         Role::WorkerVersions => say_worker_versions(),
         Role::PrintEnvironment => Ok(process::print_environment(std::env::vars_os(), &mut std::io::stdout().lock())?),
         Role::Delete { paths } => delete(&paths),
-        Role::Worker { stdio: _, attach, listen, workspaces_root, state_dir, clones_dir } => {
-            let transport = match (attach, listen) {
-                (true, _) => Transport::Attach,
-                (_, true) => Transport::Listen,
-                _ => Transport::Stdio,
-            };
-            worker_role::run(
-                transport,
-                worker_role::Given {
-                    workspaces_root,
-                    state_dir,
-                    clones_dir,
-                    claude_bin,
-                    codex_bin,
-                    antigravity_bin,
-                    config,
-                },
-            )
-        }
+        Role::Worker { reach, log: _, workspaces_root, state_dir, clones_dir } => worker_role::run(
+            reach.transport()?,
+            worker_role::Given {
+                workspaces_root,
+                state_dir,
+                clones_dir,
+                claude_bin,
+                codex_bin,
+                antigravity_bin,
+                config,
+            },
+        ),
     };
     ran.map(|()| ExitCode::SUCCESS)
 }
