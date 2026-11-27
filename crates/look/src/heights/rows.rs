@@ -12,9 +12,8 @@ named! {
     /// from there.
     RowSize {
         /// Used sparingly: a long list to look down, where more room would show less of it at once, such as a file in a
-        /// tree, a call's line in the chat, a page a search found or a closed chat in its menu, and the heading over
-        /// any list, and a line on its own, set apart from a list, such as a fold among a diff's lines or the build
-        /// line under the sidebar.
+        /// tree, a call's line in the chat or a page a search found, and the heading over any list, and a line on its
+        /// own, set apart from a list, such as a fold among a diff's lines or the build line under the sidebar.
         Small,
         /// Most lists, such as the places to go in a sidebar: the sidebar's own places, its projects and their
         /// workspaces, and Settings' pages.

@@ -13,7 +13,7 @@ named! {
     /// that's only an icon.
     ControlSize {
         /// Set in a line of text or a row one line tall: a row of a list, a tab, the heading over a list, a call's
-        /// line in the chat, a line of a card's text, the composer's bar, the find bar, setup's strip and a fold, and
+        /// line in the chat, a line of a card's text, the composer's bar, the find bar, a banner and a fold, and
         /// the window's own buttons in its corner, beside the Mac's. A switch's segments are small, so the switch, with
         /// the room around them, is as tall as a regular button.
         Small,
@@ -21,8 +21,8 @@ named! {
         /// or a card's or a page's own action, set apart from its text, such as the update card's, a comment's on a
         /// diff, a setting's or an account's, and the button over the chat back to its end.
         Regular,
-        /// On its own: a dialog's buttons, the one thing an empty pane says to do, and what answers a card in the chat,
-        /// such as approving a plan or retrying a request.
+        /// On its own: a dialog's buttons, a menu's rows, the one thing an empty pane says to do, and what answers a
+        /// card in the chat, such as approving a plan or retrying a request.
         Large,
     }
 }
