@@ -357,7 +357,7 @@ canvas:
         456c8d64c0cbce84 al(v,g(4:$spacing.xs)) p(0,494) s(fill,hug:162.5) ext(288,) f[] "S4"
           52633188b7801bd7 t("S4 · Whether a control's room counts its edge",SF Pro Text,14,m,align(l),lh(1.6071),ls(-0.1498px)) p(0,0) s(fill,hug:45) ext(288,) f[(0a625dc3437df241,tok(color.text,#EEE6E1))] $typography.Emphasis "Question"
           1f64b874c180e0cf t("Inside the edge, as the app draws it: an edged part's room is its step of space and the edge's pixel, 5, 9, 13 and 17px here, so its words are where the app puts them.",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(0,49) s(fill,hug:90) ext(288,) f[(e65ad125a908cf9d,tok(color.text,#EEE6E1))] $typography.Body "Choice"
-          a74bca35d479f33c t("27 Nov",SF Pro Text,12,r,align(l),lh(1.625),ls(0px)) p(0,143) s(fill,hug:19.5) ext(288,) f[(e0fb6af9ec911d0e,tok(color.text.faint,#7C7671))] $typography.Detail "When"
+          a74bca35d479f33c t("27 Nov · #2927",SF Pro Text,12,r,align(l),lh(1.625),ls(0px)) p(0,143) s(fill,hug:19.5) ext(288,) f[(e0fb6af9ec911d0e,tok(color.text.faint,#7C7671))] $typography.Detail "When"
         723f0f5c394793be al(v,g(4:$spacing.xs)) p(0,668.5) s(fill,hug:140) ext(288,) f[] "S5"
           dd68d22bdead0414 t("S5 · A small bar on a handheld",SF Pro Text,14,m,align(l),lh(1.6071),ls(-0.1498px)) p(0,0) s(fill,hug:22.5) ext(288,) f[(78d23a232bd900b4,tok(color.text,#EEE6E1))] $typography.Emphasis "Question"
           5b2c42745412ee19 t("40px, so it holds a small button with room above and below it, as at a desk. A banner, the one thing sized from it there, was already as tall.",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(0,26.5) s(fill,hug:90) ext(288,) f[(fc621ef5dfb3fac3,tok(color.text,#EEE6E1))] $typography.Body "Choice"
