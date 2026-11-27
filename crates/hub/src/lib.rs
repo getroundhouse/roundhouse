@@ -42,8 +42,9 @@ pub use crate::timers::Timers;
 pub use github::GithubConfig;
 #[cfg(any(test, feature = "testing"))]
 pub use github::{
-    Answer as GithubAnswer, Gate as GithubGate, PullRequestState as GithubPullRequestState,
-    PullRequests as GithubPullRequests, Script as GithubScript, StandIn as GithubStandIn,
+    Answer as GithubAnswer, Gate as GithubGate, Installed as GithubInstalled,
+    PullRequestState as GithubPullRequestState, PullRequests as GithubPullRequests, Script as GithubScript,
+    StandIn as GithubStandIn,
 };
 #[cfg(any(test, feature = "testing"))]
 pub use tool_sign_in::{

@@ -2,15 +2,36 @@
 //! with a JWT it checks against the public half of [`MADE_UP_APP_KEY`], as GitHub checks one against the app's, and a
 //! user by number, asked with no login, as an app's bot or any account whose own login can't be used is.
 
+use std::sync::Arc;
+
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use jiff::Timestamp;
+use parking_lot::Mutex;
 use ring::signature::{RSA_PKCS1_2048_8192_SHA256, UnparsedPublicKey};
 use serde::de::DeserializeOwned;
 
 use super::super::apps::{Claims, GithubAppKey};
 use super::script::Answering;
 use super::{Answer, MADE_UP_APP_KEY};
+
+/// Where an app is installed, as a test sets it, which the stand-in answers every look for its installations with: none
+/// to start with, and what [`Installed::set`] gives from then on, as GitHub answers once the person has installed it.
+#[derive(Clone)]
+pub struct Installed(Arc<Mutex<Answer>>);
+
+impl Default for Installed {
+    fn default() -> Self {
+        Self(Arc::new(Mutex::new(Answer::installations(&[]))))
+    }
+}
+
+impl Installed {
+    /// Every look from now on is answered with `installations`, made with [`Answer::installations`].
+    pub fn set(&self, installations: Answer) {
+        *self.0.lock() = installations;
+    }
+}
 
 /// The most GitHub takes between when a JWT says it was made and when it ends.
 const LONGEST_JWT_S: i64 = 10 * 60;
@@ -32,6 +53,9 @@ pub(super) fn as_the_app(answering: &mut Answering, head: &str) -> Option<Answer
         return Some(Answering::next(&mut answering.apps).unwrap_or_else(|| Answer::status(404, Vec::new())));
     }
     if line.starts_with("GET /app/installations?") || line.starts_with("GET /app/installations ") {
+        if let Some(installed) = &answering.installed {
+            return Some(installed.0.lock().clone());
+        }
         return Some(Answering::next(&mut answering.installations).unwrap_or_else(|| Answer::installations(&[])));
     }
     let installation =

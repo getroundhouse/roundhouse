@@ -10,7 +10,7 @@ use desktop::browsing::fetch;
 use desktop::github_app_browsing::{come_back, form};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, TestAppContext};
-use hub::{GithubAnswer, GithubScript};
+use hub::{GithubAnswer, GithubInstalled, GithubScript};
 use protocol::model::{GithubAccount, GithubLoginKind};
 
 use super::git::{default, in_git};
@@ -29,6 +29,14 @@ pub(super) fn making(listed: Vec<GithubAnswer>) -> GithubScript {
         minted: vec![(70, vec![GithubAnswer::installation_token("ghs_made_up_for_a_test", "2099-01-01T00:00:00Z")])],
         ..GithubScript::default()
     }
+}
+
+/// A script for making the app, with GitHub listing it as installed nowhere until the test sets where it is, as it is
+/// when the hub looks, since the hub looks by itself as it checks its logins, as well as when it's made and when it's
+/// checked again, so answers in turn could go to a look they aren't for.
+pub(super) fn installed_as_set() -> (GithubInstalled, GithubScript) {
+    let installed = GithubInstalled::default();
+    (installed.clone(), GithubScript { installed: Some(installed), ..making(Vec::new()) })
 }
 
 pub(super) fn nowhere() -> GithubAnswer {
@@ -94,7 +102,8 @@ fn on_github(ui: &mut Ui<'_>) -> String {
 #[gpui_kit::test]
 fn an_app_is_made_on_github_and_connected_as_the_window_comes_back_once_its_installed(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let _github = stack.start_hub_with_stand_in_github(making(vec![nowhere(), on_adalabs()]));
+    let (installed, script) = installed_as_set();
+    let _github = stack.start_hub_with_stand_in_github(script);
     let mut ui = making_an_app(cx, &stack);
     assert_eq!(says(&mut ui), "Agents act as its bot, rather than as you. Only the hub holds its key.");
     let first = "Choose where to make it, and its name";
@@ -129,6 +138,7 @@ fn an_app_is_made_on_github_and_connected_as_the_window_comes_back_once_its_inst
     ui.wait("the bot's name", |ui| says(ui) == named);
     assert_eq!(steps(&mut ui)[1], "Done: Made ada-roundhouse on GitHub");
     assert!(installation(&ui).is_none(), "GitHub listed it nowhere as it was made");
+    installed.set(on_adalabs());
     ui.click("git-install");
     assert_eq!(ui.cx.opened_url().as_deref(), Some("https://github.com/apps/ada-roundhouse/installations/new"));
 
@@ -160,7 +170,8 @@ fn an_app_is_made_on_github_and_connected_as_the_window_comes_back_once_its_inst
 #[gpui_kit::test]
 fn an_app_under_an_organization_is_made_at_its_form_and_check_again_asks_the_hub(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let _github = stack.start_hub_with_stand_in_github(making(vec![nowhere(), on_adalabs()]));
+    let (installed, script) = installed_as_set();
+    let _github = stack.start_hub_with_stand_in_github(script);
     let mut ui = making_an_app(cx, &stack);
     ui.input("ada-roundhouse");
     ui.click("git-app-under-organization");
@@ -183,6 +194,7 @@ fn an_app_under_an_organization_is_made_at_its_form_and_check_again_asks_the_hub
     come_back(&page, CODE);
     ui.wait("the install step", |ui| ui.has("git-check-again"));
 
+    installed.set(on_adalabs());
     ui.click("git-check-again");
 
     ui.wait("Done", |ui| ui.has("git-close"));

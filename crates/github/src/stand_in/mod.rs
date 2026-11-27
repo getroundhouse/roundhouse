@@ -9,6 +9,7 @@ mod answer;
 pub use answer::Answer;
 pub use waiting::Gate;
 mod apps;
+pub use apps::Installed;
 mod made_up_key;
 mod pull_requests;
 pub(crate) use made_up_key::MADE_UP_APP_KEY;
