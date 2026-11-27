@@ -2,7 +2,6 @@
 //! one can be made now, and what the hub keeps of it. It makes what the dialog asks for, and gives back a prompt for a
 //! workspace that couldn't be made.
 
-use client_core::Client;
 use gpui_kit::{App, AppContext as _, Context, Entity, WeakEntity, Window};
 use protocol::capability::approvals::ApprovalMode;
 use protocol::model::{RepoId, WorkspaceId};
@@ -32,10 +31,7 @@ impl AppView {
         if let Some(dialog) = &self.new_workspace {
             return dialog.clone();
         }
-        // The connection there is, even one still catching up, which a dialog made now would otherwise hear of only on
-        // the next, so it couldn't follow models until then.
-        let client = self.link.state().connected().cloned();
-        let (offer, keeping) = (self.offer(), Keeping::new(self.linked.clone(), client));
+        let (offer, keeping) = (self.offer(), Keeping::new(self.linked.clone()));
         let dialog = cx.new(|cx| NewWorkspaceDialog::new(repo, offer, keeping, window, cx));
         if let Some(kept) = self.feed().and_then(|feed| feed.snapshot().new_workspace_draft().cloned()) {
             dialog.update(cx, |dialog, cx| dialog.take_kept(kept, window, cx));
@@ -73,7 +69,7 @@ impl AppView {
         Offer { repos, can_create: self.can_create(), agents: self.records.agents().clone(), models }
     }
 
-    /// Tells the dialog what the hub keeps of it, as the records change, and as the keeper catches up, which can let
+    /// Tells the dialog what's offered, and what the hub keeps of it if it keeps anything, as the records change, and as the keeper catches up, which can let
     /// it show a change made elsewhere that it held back. Once the window can be updated, since this can come while
     /// it's being drawn.
     pub(in crate::app) fn show_kept_in_dialog(&self, cx: &mut Context<Self>) {
@@ -82,30 +78,19 @@ impl AppView {
         };
         let offer = self.offer();
         cx.defer(move |cx| {
-            let Some(kept) = feed.snapshot().new_workspace_draft().cloned() else { return };
+            let kept = feed.snapshot().new_workspace_draft().cloned();
             let _ = handle.update(cx, |_, window, cx| {
                 dialog.update(cx, |dialog, cx| {
                     dialog.set_offer(offer, cx);
-                    // Such as the hub letting go of the list it follows, as when the default login changes.
+                    // Such as the hub letting go of the list it follows, as when the default login changes, or a new
+                    // round, on a hub that may keep no record of the dialog.
                     dialog.follow_models(false, cx);
-                    dialog.take_kept(kept, window, cx);
+                    if let Some(kept) = kept {
+                        dialog.take_kept(kept, window, cx);
+                    }
                 });
             });
         });
-    }
-
-    /// Has the dialog carry on on a new connection.
-    pub(in crate::app) fn reconnect_dialog(&self, client: &Client, cx: &mut Context<Self>) {
-        if let Some(dialog) = &self.new_workspace {
-            dialog.update(cx, |dialog, cx| dialog.reconnect(client, cx));
-        }
-    }
-
-    /// Has the dialog read back what it couldn't before, once a new connection has caught up.
-    pub(in crate::app) fn dialog_came_back(&self, cx: &mut Context<Self>) {
-        if let Some(dialog) = &self.new_workspace {
-            dialog.update(cx, NewWorkspaceDialog::hub_came_back);
-        }
     }
 
     /// Tells the dialog what's changed since it was last told, each time the window draws.

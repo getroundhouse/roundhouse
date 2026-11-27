@@ -1,6 +1,6 @@
 use protocol::model::Session;
 
-use crate::{Client, ClientError, Result, refusals};
+use crate::{Client, ClientError, Hub, Reply, Result, refusals};
 
 /// What marking a chat does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -20,18 +20,25 @@ impl Mark {
         }
     }
 
-    /// Marks `chat` on the hub, from the copy of it that was shown, so a reply that has come since isn't read unseen.
-    pub fn chat(self, client: &Client, chat: &Session) -> Result<()> {
+    /// Marks `chat` on `hub`, from the copy of it that was shown, so a reply that has come since isn't read unseen, as
+    /// [`Hub::ask`] asks.
+    pub fn chat(self, hub: &Hub, chat: &Session) -> Reply<()> {
+        let chat = chat.clone();
+        hub.start(move |client| self.on(client, &chat))
+    }
+
+    /// Marks each of `chats` on `hub`, as [`Mark::chat`] does, stopping at the first the hub refuses.
+    pub fn chats(self, hub: &Hub, chats: Vec<Session>) -> Reply<()> {
+        hub.start(move |client| chats.iter().try_for_each(|chat| self.on(client, chat)))
+    }
+
+    /// Marks `chat` on `client`.
+    fn on(self, client: &Client, chat: &Session) -> Result<()> {
         let marked = match self {
             Mark::Read => client.session_mark_read(&chat.id, chat.reply_seq),
             Mark::Unread => client.session_mark_unread(&chat.id),
         };
         marked.map(drop)
-    }
-
-    /// Marks each of `chats`, as [`Mark::chat`] does, stopping at the first the hub refuses.
-    pub fn chats(self, client: &Client, chats: &[Session]) -> Result<()> {
-        chats.iter().try_for_each(|chat| self.chat(client, chat))
     }
 
     /// What to say when [`Mark::chat`] failed with `e`.

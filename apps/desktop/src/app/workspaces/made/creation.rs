@@ -1,5 +1,5 @@
 use crate::new_workspace::Request;
-use client_core::{Client, ClientError, FileToSend};
+use client_core::{ClientError, FileToSend};
 use protocol::attachment::Attachment;
 use protocol::capability::approvals::ApprovalMode;
 use protocol::client::ApiError;
@@ -68,14 +68,10 @@ impl Step {
     }
 }
 
-/// Has the hub make it from what it keeps of the dialog, once that's what's asked for. A refusal comes before anything
-/// is made, so all of it is given back.
-pub(in super::super) fn make(client: &Client, request: Request) -> Made {
-    if let Some(kept) = &request.kept {
-        // An answer either way, so a hub that's gone can't hold this forever.
-        let _ = kept.recv();
-    }
-    match client.new_workspace_create(&request.made_of, client_core::new_request_id()) {
+/// How far making it from what the hub keeps of the dialog got, as the hub answered `made`. A refusal comes before
+/// anything is made, so all of it is given back.
+pub(in super::super) fn taken(request: Request, made: Result<NewWorkspaceMade, ClientError>) -> Made {
+    match made {
         Ok(NewWorkspaceMade { workspace, session, unchosen, unsent }) => {
             let unsent = unsent_by_the_hub(request, unchosen, unsent);
             Made { workspace: Some(workspace), session: Some(session), unsent }

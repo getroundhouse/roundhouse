@@ -62,8 +62,10 @@ impl AppView {
     /// Marks chats as the sidebar's menu offered when it was drawn, from the copies it had then, so a reply that has
     /// come since, while the menu was open, is left as it is rather than read unseen, or the action turned around.
     pub fn mark_chats(&mut self, mark: Mark, chats: Vec<Session>, cx: &mut Context<Self>) {
-        let Some(client) = self.client() else { return };
-        let marking = client.start(move |client| mark.chats(client, &chats));
+        if !self.is_connected() {
+            return;
+        }
+        let marking = mark.chats(&self.linked, chats);
         cx.spawn(async move |this, cx| {
             if let Err(e) = marking.recv().await {
                 let said = mark.couldnt_mark_the_workspace(&e);

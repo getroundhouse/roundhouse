@@ -2,7 +2,7 @@
 //! what the page asked, and when.
 
 use client_core::stand_in_hub::{self, Does};
-use client_core::{Commands, RecordsFeed};
+use client_core::{Commands, Hub, RecordsFeed};
 use gpui_kit::{AppContext as _, Context, Entity, TestAppContext, Window, WindowHandle};
 use protocol::client::ClientRequest;
 
@@ -28,8 +28,9 @@ impl WithStandIn {
         cx.executor().allow_parking();
         let socket = tempfile::tempdir().unwrap();
         let client = stand_in_hub::connect(&socket.path().join("hub.sock"), does);
-        let commands = client.commands();
-        let asking = Asking { feed: RecordsFeed::start(&client), client };
+        let hub = Hub::caught_up_on(&client);
+        let asking = Asking { feed: RecordsFeed::start(&client), hub: hub.clone() };
+        let commands = hub.commands();
         let window = cx.add_window(|_, _| Blank);
         let kept = cx.new(|_| Kept::default());
         let nothing = records(Vec::new(), Vec::new(), None);

@@ -1,3 +1,4 @@
+use crate::Hub;
 use crate::attachments::FileToSend;
 use crate::client::{Client, ClientError, OpenSession, Place, Reply, Result, Shown, new_message_id};
 use protocol::model::{AttachmentId, ClientMessageId, QueuedPrompt, Seq, Session, SessionId};
@@ -89,10 +90,10 @@ impl Drop for OnItsWay {
 }
 
 impl OpenSession {
-    /// Sends a prompt as [`Client::send_prompt`] does, on a thread of its own, as [`Client::start`] starts a call, in its
-    /// place in its chat's line from now, on the connection that has caught up, as [`crate::Hub::ask`] says. Without one
-    /// it's handed back at once. The chat shows it from now, on its way, as [`crate::SessionLog::pending`] says, until
-    /// the hub records it, or it's handed back.
+    /// Sends a prompt as [`Client::send_prompt`] does, on a thread of its own, as [`Client::start`] starts a call, in
+    /// its place in its chat's line from now, on the connection that has caught up, as [`crate::Hub::ask`] says.
+    /// Without one it's handed back at once. The chat shows it from now, on its way, as [`crate::SessionLog::pending`]
+    /// says, until the hub records it, or it's handed back.
     pub fn start_sending(&self, written: Written) -> Taking<(Seq, bool)> {
         let client = match self.hub.ready() {
             Ok(client) => client,
@@ -110,6 +111,21 @@ impl OpenSession {
             on_its_way.ended(sent.is_ok());
             sent
         })
+    }
+}
+
+impl Hub {
+    /// Queues a prompt as [`Client::start_queueing`] does, on the connection that has caught up, as [`Hub::ask`] says.
+    /// Without one it's handed back at once.
+    pub fn start_queueing(&self, id: &SessionId, written: Written) -> Taking<Session> {
+        match self.ready() {
+            Ok(client) => client.start_queueing(id, written),
+            Err(error) => {
+                let said = written.prompt.carrying_too(Vec::new());
+                let reply = Reply::now(Ok(Err(NotTaken { error, prompt: written.prompt })));
+                Taking { reply, said, _shown: None }
+            }
+        }
     }
 }
 

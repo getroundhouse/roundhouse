@@ -5,7 +5,7 @@ use crate::status_box::StatusBox;
 use crate::tool_sign_in::ToolSigningIn;
 use crate::{CloseSettingsPanel, FindSetting};
 use client_core::records::Snapshot;
-use client_core::{Client, RecordsFeed};
+use client_core::{Hub, RecordsFeed};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::ScrollBounce;
 use gpui_kit::component::input::InputState;
@@ -40,7 +40,7 @@ pub(crate) struct OfHub {
 /// the answer comes, so what's read of it then needn't wait for the hub to say the same.
 #[derive(Clone)]
 pub(crate) struct Asking {
-    pub(crate) client: Client,
+    pub(crate) hub: Hub,
     pub(crate) feed: RecordsFeed,
 }
 

@@ -13,6 +13,7 @@ use gpui_kit::{
 };
 use look::{CardKind, IconSizing as _, Lined as _, Region, Typeset as _};
 use protocol::capability::setup::ServerName;
+use protocol::client::agent::SessionReloadToolServer;
 use protocol::model::ToolServerId;
 
 use super::super::composer::{Hub, Slot, middle};
@@ -68,7 +69,7 @@ impl WorkspacePane {
     /// it's starting and then what came of it, and what the hub refuses is said as the pane's other refusals are.
     fn reload_tool_server(&mut self, server: ServerName, cx: &mut Context<Self>) {
         let Some(session) = self.session().map(|session| session.id.clone()) else { return };
-        let asking = self.client.start(move |client| client.session_reload_tool_server(&session, &server));
+        let asking = self.linked.ask(SessionReloadToolServer { id: session, server });
         cx.spawn(async move |this, cx| {
             let Err(e) = asking.recv().await else { return };
             let _ = this.update(cx, |pane, cx| {

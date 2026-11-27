@@ -105,10 +105,9 @@ async fn jump(
     start: Instant,
     cx: &mut AsyncApp,
 ) {
-    let client = view.read_with(cx, |v: &AppView, _| v.client().unwrap());
-    let session = transcript.read_with(cx, |t, _| t.session_id().clone());
-    // Off the main thread, so the window goes on drawing while the hub answers.
-    let lines = cx.background_executor().spawn(async move { client.session_prompt_list(&session) }).await.unwrap();
+    let hub = view.read_with(cx, |v: &AppView, _| v.hub().clone());
+    let id = transcript.read_with(cx, |t, _| t.session_id().clone());
+    let lines = hub.ask(protocol::client::log::SessionPromptList { id }).recv().await.unwrap().prompts;
     // Where the outline puts it, which is where the agent took it, among the agent's own events.
     let row = transcript.read_with(cx, |t, _| t.prompt_row(&lines[prompt - 1]));
     eprintln!("PROBE prompt {prompt} of {} is in row {row}", lines.len());

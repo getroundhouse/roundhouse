@@ -1,11 +1,11 @@
 //! The workspace's setup script: its status line and its log.
 
 use gpui_kit::{
-    AnyElement, App, AppContext, Context, IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled,
-    div, px,
+    AnyElement, App, Context, IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled, div, px,
 };
 use look::Lined as _;
 use look::{InRegion as _, Region, Typeset as _};
+use protocol::client::workspaces::{WorkspaceRerunSetup, WorkspaceSetupLog};
 use protocol::model::SetupStatus;
 
 use super::{PaneEvent, WorkspacePane};
@@ -57,9 +57,9 @@ impl WorkspacePane {
     }
 
     pub(super) fn load_setup_log(&mut self, cx: &mut Context<Self>) {
-        let (client, id) = (self.client.clone(), self.workspace().id.clone());
+        let reading = self.linked.ask(WorkspaceSetupLog { id: self.workspace().id.clone() });
         cx.spawn(async move |this, cx| {
-            let log = cx.background_spawn(async move { client.workspace_setup_log(&id) }).await;
+            let log = reading.recv().await.map(|log| log.text);
             let _ = this.update(cx, |t, cx| {
                 if t.setup_log.is_some() {
                     t.setup_log = Some(log.unwrap_or_else(|e| format!("Couldn't read the log: {e}")));
@@ -72,7 +72,7 @@ impl WorkspacePane {
 
     pub fn rerun_setup(&mut self, cx: &mut Context<Self>) {
         let id = self.workspace().id.clone();
-        let starting = self.client.start(move |client| client.workspace_rerun_setup(&id));
+        let starting = self.linked.ask(WorkspaceRerunSetup { id });
         cx.spawn(async move |this, cx| {
             if let Err(e) = starting.recv().await {
                 let _ =

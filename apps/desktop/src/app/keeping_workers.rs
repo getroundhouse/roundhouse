@@ -6,10 +6,11 @@
 //! that leaves without its workspace's record changing, such as one the hub is ending as it starts. *Unconfirmed:* when
 //! it reads the status again.
 
+use protocol::client::admin;
 use std::time::Duration;
 
 use client_core::records::{Snapshot, WorkerBuild};
-use gpui_kit::{AppContext as _, Context, Task};
+use gpui_kit::{Context, Task};
 use protocol::client::HubStatus;
 use protocol::model::Workspace;
 
@@ -50,9 +51,10 @@ impl AppView {
 fn read_status_after(wait: Duration, cx: &mut Context<AppView>) -> Task<()> {
     cx.spawn(async move |this, cx| {
         cx.background_executor().timer(wait).await;
-        let Ok(Some(client)) = this.update(cx, |this, _| this.client()) else { return };
+        let asked = this.update(cx, |this, _| this.is_connected().then(|| this.linked.ask(admin::HubStatus)));
+        let Ok(Some(reading)) = asked else { return };
         // A hub that doesn't answer is going, and the app reads the next one's status as it connects to it.
-        let Ok(status) = cx.background_spawn(async move { client.hub_status() }).await else { return };
+        let Ok(status) = reading.recv().await else { return };
         let _ = this.update(cx, |this, cx| this.keep_workers_of(&status, cx));
     })
 }

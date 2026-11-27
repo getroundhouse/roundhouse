@@ -13,14 +13,31 @@ use crate::tool_server_checks::{Saved, saved};
 /// it's saved all the same, and its reply is its record.
 pub struct ToolServerSaving {
     saving: Arc<Saving>,
-    client: Client,
+    /// The connection the save went on, which its cancel goes on after it. `None` for one never sent.
+    client: Option<Client>,
 }
 
 impl ToolServerSaving {
     /// Starts adding `of`, or saving it, as `when` says, and returns the save, with its reply, which says what came of
     /// it for the server called `name` at `url`, as the person typed them. Once the hub has asked the server for its
     /// tools, that can take 15 seconds. A hub from before saves refuses it with `Unsupported`.
+    /// It's sent on the connection `hub` has that has caught up, and fails at once without one, as
+    /// [`Hub::ask`](crate::Hub::ask) says.
     pub fn start(
+        hub: &crate::Hub,
+        of: ToolServerToCheck,
+        when: SaveWhen,
+        name: String,
+        url: String,
+    ) -> (Self, Reply<Saved>) {
+        match hub.ready() {
+            Ok(client) => Self::on(&client, of, when, name, url),
+            Err(e) => (Self { saving: Arc::new(Saving::default()), client: None }, Reply::now(Err(e))),
+        }
+    }
+
+    /// As [`ToolServerSaving::start`], on `client`.
+    pub(crate) fn on(
         client: &Client,
         of: ToolServerToCheck,
         when: SaveWhen,
@@ -30,7 +47,7 @@ impl ToolServerSaving {
         let saving = Arc::new(Saving::default());
         let on = Arc::clone(&saving);
         let reply = client.start(move |client| on.save(client, of, when, &name, &url));
-        (Self { saving, client: client.clone() }, reply)
+        (Self { saving, client: Some(client.clone()) }, reply)
     }
 }
 
@@ -38,9 +55,9 @@ impl Drop for ToolServerSaving {
     /// Lets go of it on a thread of its own, since that waits for the hub to have had the cancel, and quitting waits
     /// for it, as for any call that changes something. One that has been answered has nothing to let go of.
     fn drop(&mut self) {
-        if self.saving.is_under_way() {
+        if let Some(client) = self.client.as_ref().filter(|_| self.saving.is_under_way()) {
             let saving = Arc::clone(&self.saving);
-            drop(self.client.start(move |client| saving.let_go(client)));
+            drop(client.start(move |client| saving.let_go(client)));
         }
     }
 }

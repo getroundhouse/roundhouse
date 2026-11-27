@@ -175,6 +175,7 @@ impl NewWorkspaceDialog {
     }
 
     pub(crate) fn set_offer(&mut self, offer: Offer, cx: &mut Context<Self>) {
+        self.bring_back_on_a_new_round(cx);
         if offer != self.offer {
             self.offer = offer;
             cx.notify();
@@ -209,7 +210,7 @@ impl NewWorkspaceDialog {
 
     /// Empties the dialog of what it was asked to make, and turns plan mode off, keeping the repository, model and
     /// effort for the next. The hub goes on keeping what's asked for, files and all, until the new workspace's first
-    /// chat has it, so it's kept at once rather than emptied, and the request says once it has been. Emptying the
+    /// chat has it, so it's kept at once rather than emptied, and the hub makes it once it has been. Emptying the
     /// prompt here isn't a change the hub hears of, since setting a field's text isn't typing.
     pub(crate) fn take_request(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Request {
         if self.base_agent().is_some_and(AgentDescription::discovers_models) {
@@ -217,7 +218,6 @@ impl NewWorkspaceDialog {
         }
         self.keep(true, cx);
         let made_of = self.to_keep(cx);
-        let kept = self.kept_once_flushed();
         let text = self.prompt.read(cx).text().to_string();
         self.dictation.update(cx, |field, cx| field.sent(dictation_ui::Within::default(), text.clone(), cx));
         self.prompt.update(cx, |field, cx| field.set_value("", window, cx));
@@ -228,7 +228,7 @@ impl NewWorkspaceDialog {
         cx.notify();
         let agent = self.chosen_agent.unwrap_or_else(|| self.offer.agents.for_new_chat());
         let prompt = Prompt::carrying(text, files);
-        Request { repo, prompt, coming_back, agent, model, effort, mode, made_of, kept: Some(kept) }
+        Request { repo, prompt, coming_back, agent, model, effort, mode, made_of }
     }
 
     /// Puts back a prompt for a workspace that couldn't be made, before anything typed or attached since, and plan

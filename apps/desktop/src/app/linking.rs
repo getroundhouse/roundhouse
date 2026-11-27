@@ -2,13 +2,11 @@
 //! link connects, and connects again whenever the connection goes, as `client_core::link` says, with the way
 //! [`HubSource`](super::HubSource) gives it, which starts this machine's hub when there's none.
 
-use client_core::Client;
 use client_core::link::LinkState;
 use gpui_kit::Context;
 use protocol::client::HubStatus;
 
-use super::{AppView, Connection, ConnectionFailure, Unconnected, hub_source, quitting, restarts};
-use crate::workspace_pane::WorkspacePane;
+use super::{AppView, Connection, ConnectionFailure, Unconnected, hub_source, restarts};
 
 impl AppView {
     /// Listens to the link, which tells of each change: how it stands, a new connection, the records, or an error.
@@ -36,27 +34,20 @@ impl AppView {
     }
 
     pub(super) fn link_changed(&mut self, cx: &mut Context<Self>) {
-        if let Some((client, status)) = self.link.take_connection() {
-            self.connected(&client, status.as_ref(), cx);
+        if let Some(status) = self.link.take_connected() {
+            self.connected(status.as_ref(), cx);
         }
         let state = self.link.state();
-        if state.connected().is_none() {
+        if !state.is_connected() {
             self.forget_the_hub(cx);
         }
         if failed_to_start(&state) {
             crate::updates::keep_without_the_hub(self.hub.build_version, cx);
         }
         match shown(state) {
-            Some(Connection::Ready(client)) => {
-                let back = !matches!(self.connection, Connection::Ready(_));
-                self.connection = Connection::Ready(client);
+            Some(Connection::Ready) => {
+                self.connection = Connection::Ready;
                 self.tell_tool_sign_in(cx);
-                if back {
-                    for pane in self.panes.values() {
-                        pane.update(cx, WorkspacePane::hub_came_back);
-                    }
-                    self.dialog_came_back(cx);
-                }
             }
             Some(connection) if !same(&self.connection, &connection) => {
                 // The hub said its status, so the app has heard which release it's on. One newer than the app, which
@@ -70,7 +61,7 @@ impl AppView {
             }
             Some(_) | None => {}
         }
-        if !matches!(self.connection, Connection::Ready(_)) {
+        if !matches!(self.connection, Connection::Ready) {
             return;
         }
         if let Some(error) = self.link.take_errors().first() {
@@ -81,19 +72,19 @@ impl AppView {
         }
     }
 
-    /// Carries everything open on to `client`, a new connection, which is ready once client-core has caught up on it,
-    /// so the sidebar never shows empty. `status` is the hub's, as it connected, for this machine's hub.
-    fn connected(&mut self, client: &Client, status: Option<&HubStatus>, cx: &mut Context<Self>) {
+    /// Takes in a new connection, which is ready once client-core has caught up on it, so the sidebar never shows
+    /// empty. Everything open carries on on it by itself, and each pane and the dialog let go of what they asked on the
+    /// last once it has caught up, as the hub's round says. `status` is the hub's, as it connected, for this machine's
+    /// hub.
+    fn connected(&mut self, status: Option<&HubStatus>, cx: &mut Context<Self>) {
         self.forget_the_hub(cx);
         // The link's changes gather into one, so the app may not have seen the last connection go. Until this one has
         // caught up, nothing is sent on either, and each pane holds what it would send.
-        if matches!(self.connection, Connection::Ready(_)) {
+        if matches!(self.connection, Connection::Ready) {
             self.set_connection(Connection::Connecting, cx);
         }
         // Of the hub before, if this is another, or of this one before it restarted on the release it was asked for.
         self.hub_update_asked = None;
-        // Quitting waits for what's started on this connection, and for what's typed to be kept.
-        quitting::wait_for(client, self.linked.drafts(), cx);
         if self.following_drafts.is_none() {
             self.following_drafts = Some(super::drafts::follow_drafts(&self.linked.drafts(), cx));
         }
@@ -102,11 +93,6 @@ impl AppView {
         {
             self.start_showing(&feed);
         }
-        // Every pane stays as it was, with whatever's typed in it, and carries on here.
-        for pane in self.panes.values() {
-            pane.update(cx, |p, cx| p.reconnect(client, cx));
-        }
-        self.reconnect_dialog(client, cx);
         let Some(status) = status else { return };
         self.keep_workers_of(status, cx);
         let build = self.hub.build_number;
@@ -118,7 +104,9 @@ impl AppView {
 
     /// Forgets what it knew of the hub it was connected to, which says nothing about the one it connects to next.
     fn forget_the_hub(&mut self, cx: &mut Context<Self>) {
-        (self.restartable_hub, self.finishing, self.looking) = (None, None, None);
+        (self.restartable_hub, self.finishing) = (None, None);
+        // Nor is a look owed on the hub it connects to next.
+        self.looking = restarts::Looking::default();
         self.drop_restart_question(cx);
     }
 }
@@ -130,7 +118,7 @@ fn shown(state: LinkState<Unconnected>) -> Option<Connection> {
     match state {
         LinkState::Connecting(None) => Some(Connection::Connecting),
         LinkState::CatchingUp(_) => None,
-        LinkState::Ready(client) => Some(Connection::Ready(client)),
+        LinkState::Ready(_) => Some(Connection::Ready),
         LinkState::Connecting(Some(unconnected))
         | LinkState::Waiting(unconnected)
         | LinkState::Stopped(unconnected) => Some(match unconnected {
@@ -152,9 +140,7 @@ fn same(shown: &Connection, next: &Connection) -> bool {
         (Connection::Connecting, Connection::Connecting) => true,
         (Connection::Failed(was), Connection::Failed(is)) => was == is,
         (Connection::AcrossABreak(was), Connection::AcrossABreak(is)) => was == is,
-        (Connection::Connecting | Connection::Ready(_) | Connection::Failed(_) | Connection::AcrossABreak(_), _) => {
-            false
-        }
+        (Connection::Connecting | Connection::Ready | Connection::Failed(_) | Connection::AcrossABreak(_), _) => false,
     }
 }
 

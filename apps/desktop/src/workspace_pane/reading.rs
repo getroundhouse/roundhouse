@@ -102,8 +102,7 @@ impl WorkspacePane {
     /// Marks a chat, from what client-core's copy says of it.
     pub(crate) fn mark(&mut self, session: &Session, mark: Mark, cx: &mut Context<Self>) {
         let (id, reply) = (session.id.clone(), session.reply_seq);
-        let marked = session.clone();
-        let marking = self.client.start(move |client| mark.chat(client, &marked));
+        let marking = mark.chat(&self.linked, session);
         cx.spawn(async move |this, cx| {
             let marked = marking.recv().await;
             let _ = this.update(cx, |t, cx| {

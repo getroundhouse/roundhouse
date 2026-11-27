@@ -1,6 +1,6 @@
 //! Asking a hub installed as a service to update itself to the release it found, from the card over the build line.
 
-use gpui_kit::{AppContext as _, Context};
+use gpui_kit::Context;
 use protocol::client::admin::HubUpdateTo;
 use protocol::model::Rev;
 
@@ -22,13 +22,15 @@ impl AppView {
     /// the card follows, and every other client's with it. Why it refused, if it does, goes on the card.
     pub fn update_hub(&mut self, cx: &mut Context<Self>) {
         let Some(Updating::Hub { next, updating: false, .. }) = self.build_line(cx).update else { return };
-        let Some(client) = self.client() else { return };
+        if !self.is_connected() {
+            return;
+        }
         let rev = self.records.hub_update().map_or(Rev::default(), |found| found.rev);
         self.hub_update_asked = Some(HubUpdateAsk::Asked { next: next.clone(), rev });
         cx.notify();
+        let asking = self.linked.ask(HubUpdateTo { version: next.clone() });
         cx.spawn(async move |this, cx| {
-            let version = next.clone();
-            let asked = cx.background_spawn(async move { client.call(HubUpdateTo { version }) }).await;
+            let asked = asking.recv().await;
             let Err(e) = asked else { return };
             let why = client_core::refusals::reason(&e);
             let _ = this.update(cx, |this, cx| {

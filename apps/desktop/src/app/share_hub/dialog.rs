@@ -1,10 +1,11 @@
 //! Creating a single-use pairing link on this computer's hub, showing its QR code and link, and confirming when a
 //! device connects.
 
+use protocol::client::devices::PairingStart;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use client_core::{Client, PairingWait};
+use client_core::{Hub, PairingWait};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -48,12 +49,12 @@ pub(crate) fn open(window: &mut Window, cx: &mut App) {
     look::open_dialog(window, cx, move |_, cx| ShareHub::dialog(&sharing, cx));
 }
 
-fn local_hub(cx: &App) -> Option<(Client, PathBuf)> {
+fn local_hub(cx: &App) -> Option<(Hub, PathBuf)> {
     let view = hubs::local_view(cx)?;
     let app = view.read(cx);
     // Pairing is local administration. Never send this request on a saved remote connection.
-    let client = app.client().filter(|_| app.hub.remote.is_none())?;
-    Some((client, app.hub.paths.socket.clone()))
+    let hub = app.hub().clone();
+    (app.is_connected() && app.hub.remote.is_none()).then(|| (hub, app.hub.paths.socket.clone()))
 }
 
 impl ShareHub {
@@ -65,13 +66,13 @@ impl ShareHub {
 
     fn generate(&mut self, cx: &mut Context<Self>) {
         self.closed(cx);
-        let Some((client, socket)) = local_hub(cx) else {
+        let Some((hub, socket)) = local_hub(cx) else {
             self.state = State::Failed("This hub is disconnected. Try again once it reconnects.".into());
             cx.notify();
             return;
         };
         self.state = State::Creating;
-        let creating = client.start(Client::pairing_start);
+        let creating = hub.ask(PairingStart);
         self.work = Some(cx.spawn(async move |this, cx| {
             let result = creating.recv().await;
             let _ = this.update(cx, |this, cx| this.started(result, socket, cx));

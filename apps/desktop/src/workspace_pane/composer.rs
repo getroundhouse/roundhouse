@@ -13,6 +13,7 @@ use gpui_kit::{
 use look::{InRegion as _, Region};
 use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::Settings;
+use protocol::client::sessions::SessionConfigure;
 use protocol::model::SessionId;
 use protocol::prompt::Prompt;
 
@@ -55,23 +56,10 @@ pub(super) fn new_input(window: &mut Window, cx: &mut Context<WorkspacePane>) ->
 
 impl WorkspacePane {
     /// For when the app starts connecting to a hub again, with this still on screen, so what's typed meanwhile isn't
-    /// lost. Until [`Self::hub_came_back`], nothing typed is sent, and it stays in the composer: the hub may be one
-    /// that's being stopped, which would take a prompt and then cut its agent off.
+    /// lost. Until a new connection has caught up, nothing typed is sent, and it stays in the composer: the hub may be
+    /// one that's being stopped, which would take a prompt and then cut its agent off.
     pub fn hub_went_away(&mut self, cx: &mut Context<Self>) {
         self.hub = Hub::Away;
-        cx.notify();
-    }
-
-    /// For when a connection to the hub has caught up on its records, after [`Self::hub_went_away`], so what's typed is
-    /// sent again, the chat showing read, and the files of a chat's draft read back. Until then, what's typed waits, as
-    /// it does with no connection, since the hub's first list on a new connection may be about to replace what the pane
-    /// shows.
-    pub fn hub_came_back(&mut self, cx: &mut Context<Self>) {
-        self.hub = Hub::Here;
-        // The chat showing is read now, if it's being read, which it wasn't while the hub was away.
-        self.showing_changed(cx);
-        // The files the hub kept with a chat's draft that couldn't be read back before.
-        self.bring_back_files(cx);
         cx.notify();
     }
 
@@ -130,7 +118,7 @@ impl WorkspacePane {
         cx: &mut Context<Self>,
         answered: impl FnOnce(&mut Self, Option<ApprovalMode>, &mut Context<Self>) + 'static,
     ) {
-        let changing = self.client.start(move |client| client.session_configure(&id, change));
+        let changing = self.linked.ask(SessionConfigure { id, settings: change });
         cx.spawn(async move |this, cx| {
             let changed = changing.recv().await;
             let _ = this.update(cx, |t, cx| {

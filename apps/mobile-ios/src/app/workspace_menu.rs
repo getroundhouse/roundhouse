@@ -74,8 +74,8 @@ impl MobileApp {
     }
 
     fn mark_chats(&mut self, mark: Mark, chats: Vec<Session>, cx: &mut Context<Self>) {
-        let Some(client) = self.client(cx) else { return };
-        let marking = client.start(move |client| mark.chats(client, &chats));
+        let Some(hub) = self.hub(cx).filter(|_| self.client(cx).is_some()) else { return };
+        let marking = mark.chats(&hub, chats);
         cx.spawn(async move |this, cx| {
             if let Err(e) = marking.recv().await {
                 let said = mark.couldnt_mark_the_workspace(&e);

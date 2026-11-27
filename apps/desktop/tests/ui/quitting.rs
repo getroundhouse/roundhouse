@@ -24,7 +24,7 @@ fn a_prompt_sent_just_before_quitting_reaches_the_hub(cx: &mut TestAppContext) {
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let chat = ui.active_chat();
-    let client = ui.view().client().unwrap();
+    let hub = ui.view().hub().clone();
     ui.input("say:hi");
 
     // Straight after, with nothing let run in between.
@@ -32,7 +32,7 @@ fn a_prompt_sent_just_before_quitting_reaches_the_hub(cx: &mut TestAppContext) {
     ui.cx.update(gpui_kit::App::shutdown);
 
     // The app's threads end once it has quit, so nothing it started may still be under way. The test's carry on.
-    assert!(client.commands().finished().try_recv().is_ok(), "quitting didn't wait for the prompt");
+    assert!(hub.commands().finished().try_recv().is_ok(), "quitting didn't wait for the prompt");
     let (events, _) = stack.client().session_read(&chat, Seq::default(), 1000, false).unwrap();
     let prompts: Vec<_> = events
         .iter()
@@ -193,7 +193,7 @@ fn quitting_waits_for_a_call_on_its_way_to_the_hub(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     let frozen = ui.freeze_hub(&stack);
-    let _reply = ui.view().client().unwrap().start(client_core::Client::hub_status);
+    let _reply = ui.view().hub().ask(protocol::client::admin::HubStatus);
     let thawing = frozen.thaw_after(Duration::from_millis(500));
 
     quit_from_the_menu(&mut ui);

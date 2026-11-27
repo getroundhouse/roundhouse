@@ -5,6 +5,7 @@
 use client_core::records::Snapshot;
 use gpui_kit::{Anchor, AnyElement, Context, IntoElement, SharedString, WeakEntity, Window};
 use look::HoldOpen;
+use protocol::client::sessions::SessionAssignAccount;
 use protocol::model::{Account, AccountId, AgentKind, Session, SessionId};
 
 use super::super::composer::Hub;
@@ -75,7 +76,7 @@ impl WorkspacePane {
     /// stops it, so the person is asked, and it's moved anyway if they say to.
     fn move_chat(&mut self, session: SessionId, to: Choice, force: bool, window: &mut Window, cx: &mut Context<Self>) {
         let (id, account) = (session.clone(), to.id.clone());
-        let moving = self.client.start(move |client| client.session_assign_account(&id, &account, force));
+        let moving = self.linked.ask(SessionAssignAccount { id, account, force });
         cx.spawn_in(window, async move |this, cx| {
             let moved = moving.recv().await;
             let _ = this.update_in(cx, |_, _, cx| {

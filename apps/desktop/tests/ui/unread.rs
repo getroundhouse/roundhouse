@@ -193,7 +193,7 @@ fn a_chat_marked_unread_stays_so_when_the_hub_is_lost_and_found_again(cx: &mut T
     ui.wait("the app to find no hub", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
     local_hub::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");
-    ui.wait("the hub to be back", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
+    ui.wait("the hub to be back", |ui| matches!(ui.view().connection(), Connection::Ready));
     for _ in 0..50 {
         ui.frame();
     }

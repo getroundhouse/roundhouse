@@ -1,6 +1,7 @@
 //! A pending request is local UI state; the selected account comes only from the hub record.
 
 use gpui_kit::{Context, Task};
+use protocol::client::accounts::{AccountSetAutomatic, AccountSetDefault};
 use protocol::model::{AccountId, AgentKind};
 
 use super::kept::Kept;
@@ -27,10 +28,10 @@ impl Kept {
             return;
         }
         self.choosing.error = None;
-        let choosing = asking.client.start(move |client| match &choice {
-            Choice::Account(account) => client.account_set_default(agent, account),
-            Choice::Automatic => client.account_set_automatic(agent),
-        });
+        let choosing = match choice {
+            Choice::Account(account) => asking.hub.ask(AccountSetDefault { agent, account }),
+            Choice::Automatic => asking.hub.ask(AccountSetAutomatic { agent }),
+        };
         self.choosing.pending = Some(cx.spawn(async move |this, cx| {
             let answer = choosing.recv().await;
             let _ = this.update(cx, |this, cx| {

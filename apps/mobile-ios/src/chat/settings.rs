@@ -21,8 +21,8 @@ impl ChatView {
     /// composer does. `again` asks even if it's been asked, as Retry does.
     pub(super) fn follow_models(&mut self, again: bool, cx: &mut Context<Self>) {
         let Some(session) = self.shown.as_ref().map(|shown| shown.session.clone()) else { return };
-        let (client, records) = (self.client.clone(), self.feed.snapshot());
-        self.models.follow_chat(&client, &records, &session, again, cx, |chat| &mut chat.models);
+        let records = self.feed.snapshot();
+        self.models.follow_chat(&self.hub, &records, &session, again, cx, |chat| &mut chat.models);
     }
 
     /// The `+` menu, the model picker, and plan mode while it's on, once there's a chat. While the agent is asked what

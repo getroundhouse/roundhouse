@@ -11,8 +11,9 @@ use client_core::fake_hub::events::{finished_turn, first_turn, text, turn, user_
 use desktop::app::AppView;
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::attachment::{Attachment, MediaType};
+use protocol::capability::settings::ModelCatalog;
 use protocol::event::EventBody;
-use protocol::model::{AttachmentId, FileContents, NewWorkspaceDraft, SessionStatus, WorktreeFiles};
+use protocol::model::{AgentKind, AttachmentId, FileContents, NewWorkspaceDraft, SessionStatus, WorktreeFiles};
 use protocol::prompt::{Prompt, PromptFrom};
 
 use crate::support::{FakeHub, Ui, one_chat, open_on_the_chat};
@@ -200,4 +201,51 @@ fn a_dialog_s_file_cut_off_as_the_connection_went_is_read_back_once_the_next_has
 
     ui.wait("the file, back in the dialog", |ui| ui.dialog_attached() == ["shot.png"]);
     assert_eq!(asked.count("new_workspace_draft_file_read"), 2, "read again once the next connection had caught up");
+}
+
+/// A chat's list of models, which a hub holds for each connection, is asked for again once a new connection has caught
+/// up, and not while it catches up, so the picker follows the list the new connection's hub holds.
+#[gpui_kit::test]
+fn a_chat_s_list_of_models_is_asked_for_again_once_a_new_connection_has_caught_up(cx: &mut TestAppContext) {
+    let (mut world, chat) = one_chat(SessionStatus::Idle, Vec::new());
+    world.sessions[0].agent = AgentKind::Codex;
+    world.agents = Some(agents::descriptions());
+    world.offer_models(AgentKind::Codex, &ModelCatalog::default());
+    let (held, asked) = (world.held_list.clone(), world.asked.clone());
+    let (_hub, mut ui) = open_on_the_chat(cx, world, &chat);
+    ui.wait("the chat's list asked for", |_| asked.count("models_for") > 0);
+    let before = asked.count("models_for");
+    held.hold();
+
+    connect_again(&mut ui);
+    crate::support::wait_until("the new connection's list to be held", || held.held() > 0);
+    throughout(&mut ui, "nothing is asked while the connection catches up", |_| asked.count("models_for") == before);
+    held.let_go();
+
+    ui.wait("the list, asked for again", |_| asked.count("models_for") > before);
+}
+
+/// The same for the new-workspace dialog's list of models, on a hub that keeps no record of the dialog, as one from
+/// before that record doesn't.
+#[gpui_kit::test]
+fn the_dialog_s_list_of_models_is_asked_for_again_once_a_new_connection_has_caught_up(cx: &mut TestAppContext) {
+    let (mut world, _) = one_chat(SessionStatus::Idle, Vec::new());
+    world.agents = Some(agents::descriptions());
+    world.offer_models(AgentKind::Codex, &ModelCatalog::default());
+    assert!(world.new_workspace_draft.is_none(), "a hub that keeps no record of the dialog");
+    let (held, asked) = (world.held_list.clone(), world.asked.clone());
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.open_new_workspace();
+    ui.pick_item("new-workspace-agent", "Codex");
+    ui.wait("the dialog's list asked for", |_| asked.count("models_for") > 0);
+    let before = asked.count("models_for");
+    held.hold();
+
+    connect_again(&mut ui);
+    crate::support::wait_until("the new connection's list to be held", || held.held() > 0);
+    throughout(&mut ui, "nothing is asked while the connection catches up", |_| asked.count("models_for") == before);
+    held.let_go();
+
+    ui.wait("the list, asked for again", |_| asked.count("models_for") > before);
 }

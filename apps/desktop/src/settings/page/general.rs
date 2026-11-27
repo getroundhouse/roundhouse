@@ -1,5 +1,6 @@
 //! General, the first page: how the app behaves wherever it is, and what its hub does whether or not the app is open.
 
+use protocol::client::admin::HubConfigure;
 use std::rc::Rc;
 
 use gpui_kit::assets::IconName as Lucide;
@@ -45,16 +46,16 @@ pub(super) fn page(hub: &OfHub) -> Page {
 /// A switch for one of the hub's own settings: on as `says` reads them, and flipped by asking the hub for the change
 /// `to` makes. It shows off and can't be flipped while there's no hub to ask, or until the hub has said.
 fn hub_switch(hub: &OfHub, says: fn(&HubSettings) -> Option<bool>, to: fn(bool) -> HubSettingsChange) -> Control {
-    let client = hub.asking.as_ref().map(|asking| asking.client.clone());
-    let is_on = client.as_ref().and(hub.records.hub_settings()).and_then(says);
+    let asked = hub.asking.as_ref().map(|asking| asking.hub.clone());
+    let is_on = asked.as_ref().and(hub.records.hub_settings()).and_then(says);
     Control::Switch {
         is_on: Box::new(move |_| is_on),
         set: Rc::new(move |on, _| {
-            let Some(client) = &client else { return };
+            let Some(asked) = &asked else { return };
             let change = to(on);
             // Nothing waits for the reply: the switch shows what the hub says, which it says to every client once it
             // has changed, and a hub that couldn't change it leaves the switch as it was.
-            drop(client.start(move |client| client.hub_configure(change)));
+            drop(asked.ask(HubConfigure { settings: change }));
         }),
     }
 }

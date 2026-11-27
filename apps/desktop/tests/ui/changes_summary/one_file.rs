@@ -138,11 +138,7 @@ fn a_file_its_worker_cant_read_says_so_and_is_asked_for_again_on_the_next_connec
         ui.cx.read_entity(&diff.file, desktop::file_diff::FileDiff::says_instead) == Some(COULDNT)
     });
     assert_eq!((read.lock().len(), asked.count("workspace_diff")), (1, 0), "refused, and nothing else read");
-    let (pane, client) = (ui.pane().unwrap(), ui.view().client().unwrap());
-    ui.cx.update_entity(&pane, |p, cx| {
-        p.reconnect(&client, cx);
-        p.catch_up(cx);
-    });
+    crate::catching_up::connect_again(&mut ui);
     ui.wait("the file's diff asked for again", |_| read.lock().len() == 2);
 }
 
@@ -285,11 +281,7 @@ fn the_file_tab_draws_what_one_file_s_diff_says_of_the_file(cx: &mut TestAppCont
     });
     ui.wait("unreadable.txt read again with the next summary", |_| reads_of("unreadable.txt") == 2);
     see(&mut ui, &diff, "unreadable.txt", Shows::Says(COULDNT));
-    let (pane, client) = (ui.pane().unwrap(), ui.view().client().unwrap());
-    ui.cx.update_entity(&pane, |p, cx| {
-        p.reconnect(&client, cx);
-        p.catch_up(cx);
-    });
+    crate::catching_up::connect_again(&mut ui);
     see(&mut ui, &diff, "unreadable.txt", Shows::Adds("read at last"));
     assert_eq!(reads_of("unreadable.txt"), 3);
 }

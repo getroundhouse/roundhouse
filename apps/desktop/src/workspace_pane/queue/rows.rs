@@ -38,7 +38,7 @@ impl WorkspacePane {
     /// or nothing when that's none. A held queue says so.
     pub(in crate::workspace_pane) fn queue_card(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let session = self.session()?;
-        let pending = self.client.queueing(session);
+        let pending = self.linked.queueing(session);
         if session.queued.is_empty() && pending.is_empty() {
             return None;
         }

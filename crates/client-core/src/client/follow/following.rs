@@ -125,8 +125,8 @@ pub(in crate::client) struct Giver<H> {
     wake: flume::WeakSender<()>,
 }
 
-/// Something followed that carries on over each new connection it's given, for as long as it's there, without being kept
-/// followed by what gives it them.
+/// Something followed that carries on over each new connection it's given, for as long as it's there, without being
+/// kept followed by what gives it them.
 pub(crate) trait Carried: Send {
     /// Carries on on `client`, a new connection, as [`Following::reconnect`] does. Returns false, doing nothing, once
     /// every handle on it has gone.

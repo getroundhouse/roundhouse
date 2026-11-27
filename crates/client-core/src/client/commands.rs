@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 
 use protocol::model::SessionId;
 
-use super::{Client, ClientError, Place, Result};
+use super::{Client, ClientError, Lasting, Place, Result};
 
 /// How many started calls are under way, and who's waiting for there to be none.
 #[derive(Default)]
@@ -63,12 +63,12 @@ impl Commands {
     }
 }
 
-/// Ends a started call however its thread ends, even by panicking, or by never starting.
-struct Ending(Client);
+/// Ends a started call however its thread ends, even by panicking, or by never starting, in the count it began in.
+struct Ending(Client, Arc<Running>);
 
 impl Drop for Ending {
     fn drop(&mut self) {
-        self.0.inner.running.end();
+        self.1.end();
     }
 }
 
@@ -110,8 +110,9 @@ impl Client {
         let (reply, replied) = Reply::channel();
         let failed = reply.clone();
         // Counted before this returns, so a `finished` asked for after it always waits for it.
-        self.inner.running.begin();
-        let ending = Ending(self.clone());
+        let running = self.lasting().running;
+        running.begin();
+        let ending = Ending(self.clone(), running);
         let spawned = std::thread::Builder::new().name("hub-client-call".to_string()).spawn(move || {
             let _ = reply.send(call(&ending.0));
             drop(ending);
@@ -125,17 +126,29 @@ impl Client {
     /// A place in the chat's line of prompts, taken now, on the caller's thread, so it's in the order the prompts were
     /// written rather than the order their threads start.
     pub(crate) fn line_up(&self, session_id: &SessionId) -> Place {
-        self.inner.lines.join(session_id)
+        self.lasting().lines.join(session_id)
     }
 
     /// Whether a prompt written in the chat, to send or to queue, is still on its way, so the hub hasn't answered it.
     pub fn is_sending(&self, session_id: &SessionId) -> bool {
-        self.inner.lines.holds(session_id)
+        self.lasting().is_sending(session_id)
     }
 
     /// The calls started on this connection, which can be waited for after it's gone.
     pub fn commands(&self) -> Commands {
-        Commands(self.inner.running.clone())
+        self.lasting().commands()
+    }
+}
+
+impl Lasting {
+    /// As [`Client::is_sending`] says, whichever connection the prompt went on.
+    pub(crate) fn is_sending(&self, session_id: &SessionId) -> bool {
+        self.lines.holds(session_id)
+    }
+
+    /// The calls started on every connection that shares this, which can be waited for after each has gone.
+    pub(crate) fn commands(&self) -> Commands {
+        Commands(self.running.clone())
     }
 }
 

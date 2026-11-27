@@ -10,16 +10,17 @@ use crate::workspace_pane::{OfHub, PaneEvent, WorkspacePane};
 use client_core::records::Snapshot;
 use gpui_kit::{AppContext as _, Context, PathPromptOptions, Window};
 use in_view::InView;
-use protocol::client::workspaces::WorkspaceRename;
+use protocol::client::new_workspace::NewWorkspaceCreate;
+use protocol::client::records::RepoAdd;
+use protocol::client::workspaces::{WorkspaceArchive, WorkspaceRegenerateTitle, WorkspaceRename, WorkspaceRestore};
 use protocol::model::{Repo, RepoId, WorkspaceId, WorkspaceStatus};
-use protocol::prompt::Prompt;
 
 impl AppView {
     /// Makes the selected workspace's pane if it has none, shows it, and focuses it.
     pub(in super::super) fn make_selected_pane(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(id) = self.selected().cloned() else { return };
         if !self.panes.contains_key(&id) {
-            let (Some(client), Some(shown)) = (self.client(), self.records.in_workspace(&id)) else { return };
+            let (true, Some(shown)) = (self.is_connected(), self.records.in_workspace(&id)) else { return };
             // Only for one the sidebar lists, which one being archived is until it's gone.
             if !crate::sidebar::lists(shown.workspace()) {
                 return;
@@ -27,7 +28,7 @@ impl AppView {
             let Some(records) = self.feed() else { return };
             let (conversations, tool_sign_in) = (self.conversations.clone(), self.tool_sign_in.clone());
             let linked = self.linked.clone();
-            let of_hub = OfHub { linked, client, records, conversations, tool_sign_in };
+            let of_hub = OfHub { linked, records, conversations, tool_sign_in };
             let pane = cx.new(|cx| WorkspacePane::new(of_hub, shown, window, cx));
             let (busy, retitling) = (self.busy.clone(), self.retitling.contains(&id));
             pane.update(cx, |pane, cx| {
@@ -108,7 +109,7 @@ impl AppView {
 
     /// Whether a workspace can be made now: there's a hub, and nothing else is being made, archived or restored.
     pub(super) fn can_create(&self) -> bool {
-        self.client().is_some() && self.busy.is_free()
+        self.is_connected() && self.busy.is_free()
     }
 
     /// Makes a workspace from what the dialog held, and sends its first chat the prompt, if there is one, with the
@@ -118,29 +119,21 @@ impl AppView {
     /// chat's composer, which is asked into plan mode if the prompt was to be planned. Returns the request, untouched,
     /// when a workspace can't be made now.
     pub fn create_workspace(&mut self, request: Request, cx: &mut Context<Self>) -> Result<(), Box<Request>> {
-        let Some(client) = self.client().filter(|_| self.can_create()) else { return Err(Box::new(request)) };
+        if !self.can_create() {
+            return Err(Box::new(request));
+        }
         let asked_from = self.in_view();
         self.set_busy(Busy::Creating(request.repo.clone()), cx);
         cx.notify();
-        // Kept in case the call never finishes, which takes the files with it. Those still coming back from the hub
-        // can be read back again.
-        let (typed, coming_back, to_start_in) =
-            (request.prompt.text.clone(), request.coming_back.clone(), request.mode);
-        let creating = client.start(move |client| Ok(made::make(client, request)));
+        // Once what Create had the hub keep is kept, so the hub makes the workspace from what was asked for.
+        let asked =
+            NewWorkspaceCreate { made_of: request.made_of.clone(), client_request_id: client_core::new_request_id() };
+        let creating = self.linked.ask_once_kept(asked);
         cx.spawn(async move |this, cx| {
-            let made = creating.recv().await;
+            let made = made::taken(request, creating.recv().await);
             let _ = this.update(cx, |t, cx| {
                 t.set_busy(Busy::Free, cx);
-                match made {
-                    Ok(made) => t.made(made, &asked_from, cx),
-                    // Making it stopped partway, so it may have been made.
-                    Err(e) => {
-                        t.show_error(client_core::refusals::couldnt("tell whether the workspace was made", &e), cx);
-                        let (prompt, in_the_dialog) = (Prompt::new(typed), false);
-                        let given_back = made::GivenBack { prompt, coming_back, in_the_dialog };
-                        t.give_back_to_dialog(given_back, to_start_in, cx);
-                    }
-                }
+                t.made(made, &asked_from, cx);
                 cx.notify();
             });
         })
@@ -200,7 +193,10 @@ impl AppView {
     }
 
     pub fn add_repository(&mut self, cx: &mut Context<Self>) {
-        let Some(client) = self.client().filter(|_| self.hub.remote.is_none()) else { return };
+        if !self.is_connected() || self.hub.remote.is_some() {
+            return;
+        }
+        let hub = self.linked.clone();
         let picked = cx.prompt_for_paths(PathPromptOptions {
             files: false,
             directories: true,
@@ -210,7 +206,7 @@ impl AppView {
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(paths))) = picked.await else { return };
             let Some(path) = paths.into_iter().next() else { return };
-            let added = client.start(move |client| client.repo_add(&path.to_string_lossy())).recv().await;
+            let added = hub.ask(RepoAdd { path: path.to_string_lossy().into_owned() }).recv().await;
             if let Err(e) = added {
                 let _ = this.update(cx, |t, cx| t.show_error(client_core::refusals::couldnt("add that", &e), cx));
             }
@@ -243,13 +239,14 @@ impl AppView {
     /// Asks the hub to title the workspace again from what's been asked in it, which waits on a model. Its row and its
     /// header say so meanwhile, and asking again before the answer does nothing.
     pub fn regenerate_title(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
-        let Some(client) = self.client() else { return };
+        if !self.is_connected() {
+            return;
+        }
         if !self.retitling.insert(id.clone()) {
             return;
         }
         self.tell_retitling(&id, cx);
-        let target = id.clone();
-        let asking = client.start(move |client| client.workspace_regenerate_title(&target));
+        let asking = self.linked.ask(WorkspaceRegenerateTitle { id: id.clone() });
         cx.spawn(async move |this, cx| {
             let retitled = asking.recv().await;
             let _ = this.update(cx, |t, cx| {
@@ -278,13 +275,11 @@ impl AppView {
     /// a workspace, so a key pressed twice archives once, nor for one that isn't ready, such as one already on its way
     /// out, whoever asked. Its record says it's being archived from the moment the hub has the request.
     pub fn archive(&mut self, id: WorkspaceId, force: bool, cx: &mut Context<Self>) {
-        let Some(client) = self.client() else { return };
-        if !self.busy.is_free() || self.status_of(&id) != Some(WorkspaceStatus::Ready) {
+        if !self.is_connected() || !self.busy.is_free() || self.status_of(&id) != Some(WorkspaceStatus::Ready) {
             return;
         }
         self.set_busy(Busy::Moving, cx);
-        let target = id.clone();
-        let archiving = client.start(move |client| client.workspace_archive(&target, force));
+        let archiving = self.linked.ask(WorkspaceArchive { id: id.clone(), force });
         cx.spawn(async move |this, cx| {
             let result = archiving.recv().await;
             let _ = this.update(cx, |t, cx| {
@@ -324,12 +319,11 @@ impl AppView {
     /// Restores an archived workspace. Does nothing while the app is making, archiving or restoring a workspace, nor
     /// for one that isn't archived, as [`AppView::archive`] doesn't.
     pub fn restore(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
-        let Some(client) = self.client() else { return };
-        if !self.busy.is_free() || self.status_of(&id) != Some(WorkspaceStatus::Archived) {
+        if !self.is_connected() || !self.busy.is_free() || self.status_of(&id) != Some(WorkspaceStatus::Archived) {
             return;
         }
         self.set_busy(Busy::Moving, cx);
-        let restoring = client.start(move |client| client.workspace_restore(&id));
+        let restoring = self.linked.ask(WorkspaceRestore { id });
         cx.spawn(async move |this, cx| {
             let result = restoring.recv().await;
             let _ = this.update(cx, |t, cx| {

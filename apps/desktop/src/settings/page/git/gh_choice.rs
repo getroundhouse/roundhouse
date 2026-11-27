@@ -4,6 +4,7 @@
 
 use client_core::records::Snapshot;
 use gpui_kit::{Context, Task, Window};
+use protocol::client::github_accounts::{GithubAccountConnectGh, HubGhLogin};
 use protocol::model::{GhLogin, GhLoginWorks, GithubLoginKind, GithubUsername};
 
 use super::kept::{Kept, Shows};
@@ -48,7 +49,7 @@ impl Kept {
     pub(super) fn open_choosing(&mut self, cx: &mut Context<Self>) {
         let mut panel = ChoosingPanel::default();
         if let Some(asking) = self.asking.clone() {
-            let reading = asking.client.start(client_core::Client::hub_gh_login);
+            let reading = asking.hub.ask(HubGhLogin);
             panel.reading = Some(cx.spawn(async move |this, cx| {
                 let answer = reading.recv().await;
                 let _ = this.update(cx, |this, cx| {
@@ -66,7 +67,7 @@ impl Kept {
     pub(super) fn use_gh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(asking) = self.asking.clone() else { return };
         let Some(panel) = self.choosing_panel_mut().filter(|panel| !panel.connecting()) else { return };
-        let connecting = asking.client.start(client_core::Client::github_account_connect_gh);
+        let connecting = asking.hub.ask(GithubAccountConnectGh);
         panel.refused = None;
         panel.connecting = Some(cx.spawn_in(window, async move |this, cx| {
             let answer = connecting.recv().await;

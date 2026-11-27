@@ -125,7 +125,7 @@ impl<'a> Ui<'a> {
     }
 
     pub(super) fn wait_to_connect(&mut self) {
-        self.wait("the app to connect", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
+        self.wait("the app to connect", |ui| matches!(ui.view().connection(), Connection::Ready));
     }
 
     /// What the line at the bottom of the sidebar says.
@@ -202,7 +202,7 @@ impl<'a> Ui<'a> {
     /// started by mistake would have done has been done.
     pub(crate) fn wait_for_every_call(&mut self) {
         self.frame();
-        let finished = self.view().client().unwrap().commands().finished();
+        let finished = self.view().hub().commands().finished();
         self.wait("every call to end", |_| finished.try_recv().is_ok());
         self.frame();
     }

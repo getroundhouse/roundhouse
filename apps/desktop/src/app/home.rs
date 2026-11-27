@@ -27,7 +27,7 @@ impl AppView {
     /// in its place.
     pub(super) fn home_drawn(&self) -> bool {
         let hub = match self.connection() {
-            Connection::Ready(_) => true,
+            Connection::Ready => true,
             Connection::Connecting => self.pane_to_draw().is_some(),
             Connection::Failed(_) | Connection::AcrossABreak(_) => false,
         };

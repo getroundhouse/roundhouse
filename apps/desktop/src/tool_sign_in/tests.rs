@@ -6,8 +6,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use client_core::Client;
 use client_core::stand_in_hub::{self, Does};
+use client_core::{Client, Hub};
 use gpui_kit::{AppContext as _, Entity, TestAppContext};
 use parking_lot::Mutex;
 use protocol::client::tool_sign_ins::{ToolSignInBegun, ToolSignInPage};
@@ -71,11 +71,11 @@ fn linear() -> SignInTo {
     SignInTo::New(NewServer { id: "t".into(), name: "Linear".into(), url })
 }
 
-fn signing_in(cx: &mut TestAppContext, hub: Client) -> Entity<ToolSigningIn> {
+fn signing_in(cx: &mut TestAppContext, hub: &Hub) -> Entity<ToolSigningIn> {
     // The hub answers on a real thread.
     cx.executor().allow_parking();
     let signing_in = cx.new(|_| ToolSigningIn::default());
-    signing_in.update(cx, |signing_in, cx| signing_in.hub_is(Some(hub), cx));
+    signing_in.update(cx, |signing_in, cx| signing_in.hub_is(Some(hub.clone()), cx));
     signing_in
 }
 
@@ -97,7 +97,8 @@ fn one_put_away_before_the_hub_answers_its_start_is_cancelled_once_it_has_and_op
     let (dir, heard) = (tempfile::tempdir().unwrap(), Heard::default());
     let (answer, answers) = flume::bounded(1);
     let after = move || Does::After(answers.clone(), Box::new(page()));
-    let signing_in = signing_in(cx, stand_in(&dir, "hub", &heard, after, || Does::Nothing));
+    let hub = Hub::caught_up_on(&stand_in(&dir, "hub", &heard, after, || Does::Nothing));
+    let signing_in = signing_in(cx, &hub);
     signing_in.update(cx, |signing_in, cx| signing_in.start(linear(), cx));
     until(cx, "the start", |_| heard.what() == ["start"]);
     let stands = |signing_in: &ToolSigningIn, _: &gpui_kit::App| {
@@ -122,8 +123,8 @@ fn one_put_away_before_the_hub_answers_its_start_is_cancelled_once_it_has_and_op
 #[gpui_kit::test]
 fn what_the_person_was_sent_back_with_is_sent_again_on_the_next_connection_once_one_loses_it(cx: &mut TestAppContext) {
     let (dir, heard) = (tempfile::tempdir().unwrap(), Heard::default());
-    let first = stand_in(&dir, "first", &heard, page, || Does::HangsUp);
-    let signing_in = signing_in(cx, first);
+    let hub = Hub::caught_up_on(&stand_in(&dir, "first", &heard, page, || Does::HangsUp));
+    let signing_in = signing_in(cx, &hub);
     signing_in.update(cx, |signing_in, cx| signing_in.start(linear(), cx));
     until_waiting(cx, &signing_in);
     let back = format!("{}?code=made-up&state=made-up", heard.said("start")[0]);
@@ -132,11 +133,12 @@ fn what_the_person_was_sent_back_with_is_sent_again_on_the_next_connection_once_
 
     until(cx, "the finish that's lost", |_| heard.what() == ["start", "finish"]);
     let second = stand_in(&dir, "second", &heard, page, || says(ClientResponse::ToolServer(tool_server("t"))));
+    hub.carry_on_to(&second);
     signing_in.update(cx, |signing_in, cx| {
         signing_in.hub_is(None, cx);
-        signing_in.hub_is(Some(second.clone()), cx);
+        signing_in.hub_is(Some(hub.clone()), cx);
         // As each change of what the window shows of the hub tells it.
-        signing_in.hub_is(Some(second), cx);
+        signing_in.hub_is(Some(hub.clone()), cx);
     });
     until(cx, "it to have signed in", |cx| signing_in.read_with(cx, |signing_in, _| signing_in.under_way().is_none()));
     assert_eq!(heard.said("finish"), ["code=made-up&state=made-up", "code=made-up&state=made-up"]);
@@ -146,7 +148,8 @@ fn what_the_person_was_sent_back_with_is_sent_again_on_the_next_connection_once_
 fn one_nobody_approves_in_time_says_so_and_is_cancelled(cx: &mut TestAppContext) {
     let (dir, heard) = (tempfile::tempdir().unwrap(), Heard::default());
     cx.update(|cx| cx.set_global(Timers { tool_sign_in_sends_back: Duration::from_millis(50), ..Timers::DEFAULT }));
-    let signing_in = signing_in(cx, stand_in(&dir, "hub", &heard, page, || Does::Nothing));
+    let hub = Hub::caught_up_on(&stand_in(&dir, "hub", &heard, page, || Does::Nothing));
+    let signing_in = signing_in(cx, &hub);
 
     signing_in.update(cx, |signing_in, cx| signing_in.start(linear(), cx));
 

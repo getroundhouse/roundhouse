@@ -145,9 +145,8 @@ fn a_hub_that_doesnt_know_it_is_asked_once_and_then_no_row_has_it_until_the_next
     ui.wait("none", |ui| ui.shown("mcp-reload-").is_empty());
     let why = "Couldn't reload it: this hub can't do that until it's updated";
     assert_eq!(ui.view().error.as_deref(), Some(why));
-    let (pane, client) = (ui.pane().unwrap(), ui.view().client().unwrap().clone());
-    ui.cx.update(|cx| pane.update(cx, |pane, cx| pane.reconnect(&client, cx)));
-    assert_eq!(ui.shown("mcp-reload-").len(), 3, "which can be another build's");
+    crate::catching_up::connect_again(&mut ui);
+    ui.wait("each, on the next connection, which can be another build's", |ui| ui.shown("mcp-reload-").len() == 3);
 }
 
 #[gpui_kit::test]

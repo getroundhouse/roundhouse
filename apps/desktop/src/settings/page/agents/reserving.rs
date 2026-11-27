@@ -13,6 +13,7 @@ use gpui_kit::{
     px,
 };
 use look::Typeset as _;
+use protocol::client::accounts::AccountSetReserve;
 use protocol::model::{Account, AccountId, Reserve};
 
 use super::super::panel::{Closes, button, buttons as buttons_row};
@@ -66,7 +67,7 @@ impl Kept {
             return;
         }
         let (account, chosen) = (reserving.account.clone(), reserving.chosen);
-        let saving = asking.client.start(move |client| client.account_set_reserve(&account, chosen));
+        let saving = asking.hub.ask(AccountSetReserve { account, reserve: chosen });
         reserving.refused = None;
         reserving.saving = Some(cx.spawn(async move |this, cx| {
             let answer = saving.recv().await;

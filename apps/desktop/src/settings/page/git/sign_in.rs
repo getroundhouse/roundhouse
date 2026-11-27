@@ -4,6 +4,7 @@
 
 use client_core::records::Snapshot;
 use gpui_kit::{Context, Window};
+use protocol::client::github_accounts::{GithubSignInCancel, GithubSignInStart};
 use protocol::model::{GithubSignIn, GithubSignInId};
 
 use super::Asking;
@@ -30,8 +31,7 @@ impl Kept {
             self.put_away.insert(shown.id.clone());
         }
         let id = client_core::new_github_sign_in_id();
-        let asked = id.clone();
-        let starting = asking.client.start(move |client| client.github_sign_in_start(&asked));
+        let starting = asking.hub.ask(GithubSignInStart { id: id.clone() });
         let started = id.clone();
         // Not with the panel, so a start whose panel goes before the hub answers is still cancelled once it has.
         cx.spawn(async move |this, cx| {
@@ -104,5 +104,5 @@ impl Kept {
 /// whatever that is, as when GitHub approved it meanwhile.
 fn cancel_at_hub(id: GithubSignInId, asking: &Asking) {
     // Not waited for: what it says is in the records, and it runs to the end whatever the page does.
-    drop(asking.client.start(move |client| client.github_sign_in_cancel(&id)));
+    drop(asking.hub.ask(GithubSignInCancel { id }));
 }

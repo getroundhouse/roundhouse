@@ -29,11 +29,11 @@ pub(super) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
     let (status_a11y, trailing) = switcher_trailing(app, selected.is_some(), background_attention, cx);
     let saved = crate::settings::get(cx).hubs;
     let local_connected = if app.hub.remote.is_none() {
-        app.client().is_some()
+        app.is_connected()
     } else {
         hubs::local_view(cx)
             .filter(|local| local.entity_id() != cx.entity_id())
-            .is_some_and(|local| local.read(cx).client().is_some())
+            .is_some_and(|local| local.read(cx).is_connected())
     };
     let data_dir = app.hub.paths.data_dir.clone();
     let menu_width = (Side::Left.width(cx) - LIST_PAD.size() * 2.).max(px(180.));
@@ -103,14 +103,14 @@ fn switcher_trailing(
         Connection::AcrossABreak(_) => {
             (Some("Update required".to_string()), Some(inline_detail("Update required", colors.warning)))
         }
-        Connection::Ready(_) | Connection::Connecting if background_attention > 0 => {
+        Connection::Ready | Connection::Connecting if background_attention > 0 => {
             let says = attention_words(background_attention);
             let badge = look::count(look::CountKind::NeedsALook, background_attention)
                 .said("hub-switcher-needs-a-look", says.clone())
                 .into_any_element();
             (Some(says), Some(badge))
         }
-        Connection::Ready(_) | Connection::Connecting => (None, None),
+        Connection::Ready | Connection::Connecting => (None, None),
     }
 }
 

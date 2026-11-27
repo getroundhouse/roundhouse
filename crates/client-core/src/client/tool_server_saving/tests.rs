@@ -87,7 +87,7 @@ fn a_save_let_go_of_before_its_sent_sends_nothing_and_one_let_go_of_after_has_it
     let early = Saving::default();
     early.let_go(&client).unwrap();
     let not_sent = early.save(&client, add(), SaveWhen::Listed, "Runbooks", URL).unwrap();
-    let (saving, reply) = ToolServerSaving::start(&client, add(), SaveWhen::Listed, "Runbooks".into(), URL.into());
+    let (saving, reply) = ToolServerSaving::on(&client, add(), SaveWhen::Listed, "Runbooks".into(), URL.into());
     heard.until("save Listed");
     drop(saving);
     heard.until("cancel");

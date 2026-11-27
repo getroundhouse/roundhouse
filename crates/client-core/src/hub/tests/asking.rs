@@ -1,64 +1,19 @@
-// Against stand-in hubs on Unix sockets.
-#![cfg(unix)]
+//! What's asked of the `Hub` and opened from it, on each connection, against stand-in hubs.
 
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 
-use parking_lot::Mutex;
-use protocol::client::listed::Listed;
 use protocol::client::records::{RepoList, Repos};
-use protocol::client::subscriptions::{Follow, Subscribe};
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
-
-use crate::link::{Connect, Link, LinkState, Lost, Refused, Waits};
-use crate::stand_in_hub::{self, Does};
-use crate::{Client, ClientError, DraftChange, NotTaken, Opening, View, Written};
+use protocol::client::subscriptions::Follow;
+use protocol::client::{ClientRequest, ClientResponse, ReplyOutcome};
+use protocol::model::{ChangedFileAt, FileDiff, FileDiffBody, FileVersion};
 use protocol::prompt::Prompt;
 
-const TIMEOUT: Duration = Duration::from_secs(10);
-/// Longer than any test runs, so the link tries again only when it's asked to.
-const NEVER: Duration = Duration::from_secs(600);
-
-/// Each try gets the next of these, in turn, and fails as a hub that can't be reached does once they've all been tried.
-#[derive(Clone)]
-struct Tries(Arc<Mutex<Vec<Result<Client, ClientError>>>>);
-
-impl Tries {
-    fn of(each: Vec<Result<Client, ClientError>>) -> Tries {
-        Tries(Arc::new(Mutex::new(each.into_iter().rev().collect())))
-    }
-}
-
-impl Connect for Tries {
-    type With = ();
-    type Failure = String;
-
-    fn connect(&mut self) -> Result<(Client, ()), Refused<String>> {
-        match self.0.lock().pop().unwrap_or(Err(ClientError::Disconnected)) {
-            Ok(client) => Ok((client, ())),
-            Err(error) => Err(Refused::by(&error, error.to_string())),
-        }
-    }
-
-    fn lost(&self, lost: &Lost) -> String {
-        lost.to_string()
-    }
-}
-
-/// What a hub does with `subscribe`: lists its records where it starts following the hub, and sends nothing of the
-/// rest, such as a terminal.
-fn listing(subscribe: &Subscribe) -> Does {
-    stand_in_hub::subscribed(subscribe, |subscription_id, follow| {
-        let listed = (*follow == Follow::Hub).then(|| Listed::Hub(Box::default()));
-        Vec::from_iter(listed.map(|listed| HubFrame::Listed { subscription_id, listed }))
-    })
-}
-
-/// What a hub does with what a test isn't about, such as the records asking which agents it offers.
-fn doesnt_know() -> Does {
-    Does::Answers(Box::new(ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "refused"))))
-}
+use super::stand_ins::{NEVER, TIMEOUT, Tries, doesnt_know, listing};
+use crate::link::{Link, LinkState, Waits};
+use crate::stand_in_hub::{self, Does};
+use crate::{Client, ClientError, DraftChange, Hub, NotTaken, Opening, View, Written};
+use protocol::client::{ApiError, ErrorCode};
 
 /// A stand-in hub on `socket` that lists its records once `list` is sent something, and answers that it has no
 /// repositories, with everything it hears.
@@ -230,4 +185,54 @@ fn a_hub_is_on_this_machine_as_its_newest_connection_said_once_that_has_gone() {
     waiting::thread::until(TIMEOUT, "the connection never went", || !hub.caught_up());
     assert!(!before_any, "nothing says where it is before a connection");
     assert!(hub.on_this_machine(), "on this machine, as the connection that went said");
+}
+
+/// A stand-in hub on `socket` that answers a file's diff in three pages, the second once `second` is sent something,
+/// with everything it hears.
+fn hub_paging_after(socket: &Path, second: flume::Receiver<()>) -> (Client, flume::Receiver<ClientRequest>) {
+    let heard = stand_in_hub::listen(socket, move |request| {
+        let page = |patch: &str, next_line| {
+            let body = FileDiffBody::Patch { patch: patch.into(), next_line };
+            let diff = FileDiff { base_commit: "c".into(), version: Some(FileVersion::from("v1".to_string())), body };
+            Box::new(ReplyOutcome::Response(ClientResponse::FileDiff(diff)))
+        };
+        if let ClientRequest::Subscribe(subscribe) = &request {
+            return listing(subscribe);
+        }
+        let ClientRequest::WorkspaceFileDiff(asked) = &request else { return doesnt_know() };
+        match asked.first_line {
+            0 => Does::Answers(page("one\n", Some(1))),
+            1 => Does::After(second.clone(), Box::new(Does::Answers(page("two\n", Some(2))))),
+            _ => Does::Answers(page("three\n", None)),
+        }
+    });
+    (Client::connect(socket, "test").unwrap(), heard)
+}
+
+/// Every page of a file's diff is read on the connection the first was, so a new connection while it's read doesn't
+/// make one patch of pages two connections read.
+#[test]
+fn every_page_of_a_file_s_diff_is_read_on_one_connection() {
+    let dir = tempfile::tempdir().unwrap();
+    let (release, second) = flume::bounded(1);
+    let (first, first_heard) = hub_paging_after(&dir.path().join("first.sock"), second.clone());
+    let (next, next_heard) = hub_paging_after(&dir.path().join("next.sock"), second);
+    let hub = Hub::caught_up_on(&first);
+    let at = ChangedFileAt { untracked: false, path: "f".into() };
+    let reading = {
+        let hub = hub.clone();
+        std::thread::spawn(move || hub.read_file_diff(&"w".into(), &at, None, None))
+    };
+    let is_page =
+        |request: &ClientRequest, line| matches!(request, ClientRequest::WorkspaceFileDiff(a) if a.first_line == line);
+    waiting::thread::until(TIMEOUT, "the second page was never asked", || {
+        first_heard.try_iter().any(|request| is_page(&request, 1))
+    });
+    hub.carry_on_to(&next);
+    release.send(()).unwrap();
+
+    let read = reading.join().unwrap().unwrap().unwrap();
+    assert_eq!(read.body, FileDiffBody::Patch { patch: "one\ntwo\nthree\n".into(), next_line: None });
+    let on_the_next = next_heard.try_iter().any(|request| matches!(request, ClientRequest::WorkspaceFileDiff(_)));
+    assert!(!on_the_next, "a page was read on the next connection");
 }
