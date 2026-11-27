@@ -3,6 +3,7 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// How the names of what Cargo sets for a package's own crate start, as it compiles it and as it runs its tests.
 const PACKAGES_OWN_PREFIXES: [&str; 3] = ["CARGO_PKG_", "CARGO_MANIFEST_", "CARGO_BIN_"];
@@ -74,9 +75,23 @@ pub fn the_examples(dir: &Path, name: &str, examples: &[&str]) -> PathBuf {
             .filter(|message| examples.iter().any(|example| message["target"]["name"] == *example))
             .find_map(|message| Some(PathBuf::from(message["executable"].as_str()?).parent()?.to_path_buf()))
             .unwrap_or_else(|| failed("find where Cargo built the examples", &"it didn't say"));
-        std::fs::write(&said, folder.as_os_str().as_encoded_bytes()).unwrap_or_else(|e| failed("keep the folder", &e));
+        keep(&said, folder.as_os_str().as_encoded_bytes()).unwrap_or_else(|e| failed("keep the folder", &e));
     });
     PathBuf::from(std::fs::read_to_string(&said).unwrap_or_else(|e| failed("read the folder", &e)))
+}
+
+/// Puts `contents` in the file `said`, whole, for a test to read where a build put what it built. Under `cargo test`,
+/// the tests of a binary build at once, so one can read the file as another writes it, and a write in place would let
+/// it read the file empty. Written beside it and renamed over it, the file holds the whole of one write or another.
+pub(super) fn keep(said: &Path, contents: &[u8]) -> std::io::Result<()> {
+    // Named for this process and this call, since the tests of a binary each keep the same file, at once.
+    static CALLS: AtomicU64 = AtomicU64::new(0);
+    let call = CALLS.fetch_add(1, Ordering::Relaxed);
+    let beside = said.with_extension(format!("{}-{call}.writing", std::process::id()));
+    std::fs::write(&beside, contents)?;
+    std::fs::rename(&beside, said).inspect_err(|_| {
+        let _ = std::fs::remove_file(&beside);
+    })
 }
 
 fn is_set_for_the_package(name: &str) -> bool {
