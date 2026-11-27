@@ -123,6 +123,8 @@ fn the_panel_says_the_server_is_asked_only_where_the_hub_asks_it_and_cancel_lets
     type_in(&mut ui, "mcp-name", "Northwind");
     ui.click("mcp-panel-go");
     assert!(ui.off("mcp-panel-go") && !ui.has("mcp-asking"));
+    // It's sent on a thread of its own, and one let go of before it's sent sends nothing, so the hub has it first.
+    crate::support::wait_until("the hub to have the save", || asked.count("tool_server_save") == 1);
     ui.click("mcp-cancel");
 
     ui.wait("it to be let go of", |_| asked.count("tool_server_save_cancel") == 1);
