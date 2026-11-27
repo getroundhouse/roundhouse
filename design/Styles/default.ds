@@ -208,15 +208,16 @@ font.lineHeight.CodeChat { $default: 1.4167, reach.handheld: 1.3571 }
 font.lineHeight.Key: 1
 font.lineHeight.KeyHeld: 1.3333
 
-// Over the size of the text, as macOS spaces its own system font, measured at each of its sizes at a desk. A handheld's
-// weren't measured, so they're a desk's, at each kind's size there.
+// Over the size of the text, as macOS spaces its own system font, measured at each of its sizes at a desk, and on a
+// handheld as Apple's tracking table for SF Pro has it at each kind's size there: -0.43pt at 17, -0.23pt at 15, none
+// at 12 and +0.17pt at 9. A page title's share at a desk gives the table's +0.38pt at 28.
 font.letterSpacing.PageTitle: 0.0135
-font.letterSpacing.Heading: -0.0194
-font.letterSpacing.Body: -0.0107
-font.letterSpacing.Detail: 0
+font.letterSpacing.Heading { $default: -0.0194, reach.handheld: -0.0253 }
+font.letterSpacing.Body { $default: -0.0107, reach.handheld: -0.0253 }
+font.letterSpacing.Detail { $default: 0, reach.handheld: -0.0153 }
 font.letterSpacing.Code: 0
-font.letterSpacing.Key: 0.0117
-font.letterSpacing.KeyHeld: 0.0293
+font.letterSpacing.Key { $default: 0.0117, reach.handheld: 0 }
+font.letterSpacing.KeyHeld { $default: 0.0293, reach.handheld: 0.0189 }
 
 // `look::Type`'s kinds, in its order, then what body text is when it stands out, and inline code.
 typography.PageTitle: { fontFamily: font.family.title, fontSize: font.size.PageTitle, fontWeight: font.weight.emphasis, letterSpacing: font.letterSpacing.PageTitle, lineHeight: font.lineHeight.PageTitle }
