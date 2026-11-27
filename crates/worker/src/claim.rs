@@ -40,32 +40,14 @@ pub fn claim_instance(state_dir: &Path) -> Result<InstanceClaim, ClaimError> {
     Ok(InstanceClaim { _lock: lock })
 }
 
-/// Claims the instance for a worker whose state directory is `state_dir`, and that serves it on a socket. `None` if
-/// another worker has it, which this leaves it to: one started at the same time, to serve the same hub, whose socket
-/// the command that started this one waits for. It can't be one that's stopping, since the command starts no worker
-/// while one holds the instance.
+/// Claims the instance for a worker whose state directory is `state_dir`, and that outlives its hub, as one that dials
+/// does. `None` if another worker has it, which this leaves it to: one already serving the hub, or started at the same
+/// time to serve it.
 #[cfg(unix)]
 pub fn claim_to_serve(state_dir: &Path) -> Result<Option<InstanceClaim>, ClaimError> {
     match claim_instance(state_dir) {
         Err(ClaimError::Taken(_)) => Ok(None),
         claimed => claimed.map(Some),
-    }
-}
-
-/// Whether a worker whose state directory is `state_dir` holds the instance, as one that's stopping does once it has
-/// removed its socket.
-#[cfg(unix)]
-pub fn instance_claimed(state_dir: &Path) -> io::Result<bool> {
-    let lock = match File::open(state_dir.join(WORKER_LOCK_FILE)) {
-        Ok(lock) => lock,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
-        Err(e) => return Err(e),
-    };
-    // Let go of at once, as the file closes.
-    match lock.try_lock() {
-        Ok(()) => Ok(false),
-        Err(TryLockError::WouldBlock) => Ok(true),
-        Err(TryLockError::Error(e)) => Err(e),
     }
 }
 
@@ -103,22 +85,6 @@ mod tests {
         let record = ProcessRecord::read(&dir.path().join(WORKER_RECORD_FILE)).unwrap();
         assert_eq!(record.pid, std::process::id());
         assert!(record.is_running());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn an_instance_reads_as_claimed_only_while_a_worker_holds_it() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(!instance_claimed(dir.path()).unwrap(), "never claimed");
-        let claim = claim_instance(dir.path()).unwrap();
-        assert!(instance_claimed(dir.path()).unwrap());
-        assert!(instance_claimed(dir.path()).unwrap(), "asking didn't let go of it");
-        drop(claim);
-        waiting::thread::until(Duration::from_secs(5), "still claimed once let go", || {
-            !instance_claimed(dir.path()).unwrap()
-        });
-        // Asking holds the lock for a moment, which a process another test is starting can hold on to a moment longer.
-        assert!(claim_once_let_go(dir.path()).is_ok(), "asking didn't keep it either");
     }
 
     /// As one started at the same time as another, to serve the same hub, finds the other has it.

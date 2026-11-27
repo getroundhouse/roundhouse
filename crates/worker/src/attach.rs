@@ -1,30 +1,20 @@
-//! What a hub runs to reach a worker that can outlive it: a command that connects its own stdin and stdout to the
-//! worker's socket, and starts the worker first if none is serving it. So the hub's end is a command's stdin and
-//! stdout, as for any worker, and when the hub goes, only the command goes with it.
+//! What a hub runs to reach a worker an earlier build left listening on a socket, which doesn't dial: a command that
+//! connects its own stdin and stdout to the worker's socket. So the hub's end is a command's stdin and stdout, and when
+//! the hub goes, only the command goes with it. Nothing starts a worker that listens any more.
+//!
+//! It goes at the next break of the worker protocol, as `docs/decisions/hub-speaks-previous-version.md` says of what
+//! the hub keeps for workers of an earlier build.
 
 use std::io::{self, Read, Write};
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
-use std::time::{Duration, Instant};
-
-/// How long a worker that was just started gets to serve its socket. As long as a hub waits for the worker's hello,
-/// which this wait is part of, since by then the hub has given up on it.
-const START_WAIT: Duration = Duration::from_secs(10);
 
 /// Copies this process's stdin to the worker serving `socket`, and what the worker sends to its stdout, until the
 /// worker closes the connection. Once stdin ends, the worker hears that nothing more is coming, and what it still
-/// sends is copied on, such as what its agents said as they stopped. `start` starts a worker to serve the socket, and
-/// is called if none is.
-pub fn attach(socket: &Path, start: impl FnOnce() -> io::Result<()>) -> io::Result<()> {
-    let stream = match UnixStream::connect(socket) {
-        Ok(stream) => stream,
-        Err(e) if unserved(&e) => {
-            start()?;
-            connect_within(socket, START_WAIT)?
-        }
-        Err(e) => return Err(e),
-    };
+/// sends is copied on, such as what its agents said as they stopped. Fails if no worker serves it.
+pub fn attach(socket: &Path) -> io::Result<()> {
+    let stream = UnixStream::connect(socket)?;
     let mut to_worker = stream.try_clone()?;
     // On a thread of its own, since reading stdin blocks. It's left behind once the worker has closed the connection.
     std::thread::spawn(move || {
@@ -49,25 +39,6 @@ fn relay(from: &mut impl Read, to: &mut impl Write) -> io::Result<()> {
             }
             Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
             Err(e) => return Err(e),
-        }
-    }
-}
-
-/// What connecting to a socket that nobody serves fails with: there's none, or one that a worker left behind.
-fn unserved(e: &io::Error) -> bool {
-    matches!(e.kind(), io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused)
-}
-
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the pace connecting looks again at while the worker it started begins to listen"
-)]
-fn connect_within(socket: &Path, wait: Duration) -> io::Result<UnixStream> {
-    let deadline = Instant::now() + wait;
-    loop {
-        match UnixStream::connect(socket) {
-            Err(e) if unserved(&e) && Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
-            connected => return connected,
         }
     }
 }

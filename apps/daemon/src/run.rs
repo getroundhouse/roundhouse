@@ -221,10 +221,10 @@ pub fn run(config: Config) -> anyhow::Result<ExitCode> {
     let claude_bin = std::env::var_os(worker::ENV_CLAUDE_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
     let antigravity_bin =
         std::env::var_os(worker::ENV_ANTIGRAVITY_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
-    // The command that reaches a worker runs nothing in a workspace, and passes them on to the worker it starts, which
-    // forgets them itself.
-    let attaches = matches!(&args.role, Role::Worker { reach, .. } if reach.attaches());
-    if matches!(args.role, Role::Worker { .. } | Role::Preflight { .. }) && !attaches {
+    // A worker that detaches runs nothing in a workspace, and passes them on to the worker it starts, which forgets them
+    // itself.
+    let detaches = matches!(args.role, Role::Worker { detach: true, .. });
+    if matches!(args.role, Role::Worker { .. } | Role::Preflight { .. }) && !detaches {
         forget_hub_variables(config.also_forgotten);
     }
     // Only a hub says something by how it exits.

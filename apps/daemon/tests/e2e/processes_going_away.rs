@@ -10,7 +10,6 @@ use hub::Timers;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, ExitReason, SessionEvent};
 use protocol::model::{Seq, SessionStatus};
-use protocol::paths::WORKER_SOCKET_FILE;
 
 use crate::support::{
     Follower, Stack, assert_gapless, assistant_text, is_alive, latest_started_pid, parent_of, pending_approval,
@@ -201,7 +200,7 @@ fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
     let hellos = Timers { hello_within: Duration::from_mins(10), ..Timers::FOR_TESTS };
     let mut stack = Stack::start_with(vec![patient_with_output().env(), hellos.env()]);
     let client = stack.client();
-    let (workspace, session) = stack.workspace(&client);
+    let (_, session) = stack.workspace(&client);
     let go = stack.path("late-output");
     client.session_prompt(&session.id, &format!("say:first; late:{}:ghost; hang", go.display()), None).unwrap();
     let mut agent_pid = 0;
@@ -213,12 +212,10 @@ fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
     let worker_pid = parent_of(agent_pid);
     drop(client);
 
-    // A hub stopping for good asks its worker to stop, and this one goes before it's done.
+    // A hub stopping for good asks its worker to stop, which stops its agent first, and this one goes before it's done.
     terminate(stack.hub_pid());
-    let socket = stack.paths().instances_dir.join(workspace.instance_id.to_string()).join(WORKER_SOCKET_FILE);
-    wait_until("the worker to start stopping", || !socket.exists());
-    stack.kill_hub();
     wait_until("the agent to stop", || !is_alive(agent_pid));
+    stack.kill_hub();
     assert!(is_alive(worker_pid), "the worker should still be waiting for its agent's last output");
     // Rather than waiting for a worker that may be stuck.
     stack.start_hub();

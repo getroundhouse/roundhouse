@@ -49,6 +49,18 @@ pub const AGENTS_DIR: &str = "agents";
 /// directory, and both it and what connects to it name the socket relative to it, since the whole path can be longer
 /// than a socket's may be, which is 103 bytes on macOS.
 pub const WORKER_SOCKET_FILE: &str = "worker.sock";
+/// The key of the hub's endpoint that the workers on its own machine dial, on loopback, and the port it keeps, in its
+/// data directory.
+pub const LOOPBACK_WORKER_ENDPOINT_FILE: &str = "loopback-worker-endpoint.json";
+/// The same of its endpoint on its relays, which the workers on other machines dial.
+pub const WORKER_ENDPOINT_FILE: &str = "worker-endpoint.json";
+
+/// The log of the instance's worker in `worker_logs_dir`, which is [`Paths::worker_logs_dir`]: what it writes to
+/// stderr when the hub reaches it by a command, and what it writes with `--log` when the local provider starts it.
+pub fn worker_log(worker_logs_dir: &Path, instance_id: &crate::model::InstanceId) -> PathBuf {
+    worker_logs_dir.join(format!("{instance_id}.log"))
+}
+
 /// Longer than any ID a client or worker makes, which is a UUID.
 const MAX_FILE_NAME_ID_CHARS: usize = 64;
 

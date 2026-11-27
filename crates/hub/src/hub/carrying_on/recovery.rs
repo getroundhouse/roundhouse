@@ -3,7 +3,7 @@ use crate::error::provider_failed;
 use crate::session::{CarriedOver, Item, LiveSession, Progress, Starting};
 use crate::spans;
 use crate::store::{Store, StoreError, cancelled_approval};
-use crate::worker_link::{WorkerLink, WorkerLinkId, dials_its_hub};
+use crate::worker_link::{WorkerLink, WorkerLinkId};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
@@ -11,6 +11,7 @@ use protocol::model::{
     InstanceId, ProviderName, RunCapabilities, RunId, Seq, SessionId, Workspace, WorkspaceId, WorkspaceStatus,
 };
 use protocol::worker::RunningAgent;
+use providers::ProviderError;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::task::JoinSet;
@@ -79,7 +80,8 @@ impl Hub {
     }
 
     /// Those of `workspaces` whose instance a worker may serve, which may be one an earlier hub left: one the hub
-    /// admitted a dialing worker to, which dials again, or one the local provider says a worker serves.
+    /// admitted a dialing worker to, which dials again, or one its provider says a worker serves, as the local one says
+    /// of a worker an earlier build left listening.
     pub(in super::super) async fn with_workers_running(&self, workspaces: &[Workspace]) -> Vec<WorkspaceId> {
         let mut by_provider: HashMap<&ProviderName, Vec<&Workspace>> = HashMap::new();
         for workspace in workspaces {
@@ -95,15 +97,17 @@ impl Hub {
         };
         for (name, workspaces) in by_provider {
             let listed = match self.provider(name) {
-                Ok(provider) if dials_its_hub(provider.as_ref()) => Ok(dialed.clone()),
                 Ok(provider) => match tokio::time::timeout(within, provider.workers_running()).await {
-                    Ok(listed) => listed.map(|running| running.into_iter().collect()).map_err(|e| provider_failed(&e)),
+                    Ok(Ok(listed)) => Ok(listed),
+                    // As every adapter answers, since the hub knows their workers by their dialing it.
+                    Ok(Err(ProviderError::Unsupported(_))) => Ok(Vec::new()),
+                    Ok(Err(e)) => Err(provider_failed(&e)),
                     Err(_) => Err(ApiError::new(ErrorCode::Worker, format!("no answer within {within:?}"))),
                 },
                 Err(e) => Err(e),
             };
-            let instances: HashSet<InstanceId> = match listed {
-                Ok(instances) => instances,
+            let listed: HashSet<InstanceId> = match listed {
+                Ok(listed) => listed.into_iter().collect(),
                 Err(e) => {
                     warn!(
                         name: "recovery.instances_unlisted",
@@ -111,10 +115,12 @@ impl Hub {
                         error = e.message,
                         "Couldn't list the instances an earlier hub left"
                     );
-                    continue;
+                    HashSet::new()
                 }
             };
-            let on_them = workspaces.into_iter().filter(|workspace| instances.contains(&workspace.instance_id));
+            let on_them = workspaces
+                .into_iter()
+                .filter(|workspace| dialed.contains(&workspace.instance_id) || listed.contains(&workspace.instance_id));
             running.extend(on_them.map(|workspace| workspace.id.clone()));
         }
         running

@@ -146,11 +146,24 @@ impl Store {
         Ok(())
     }
 
-    /// Whether any instance has a worker that dials the hub, or a ticket a worker could dial with.
-    pub fn has_dialing_workers(&self) -> Result<bool, StoreError> {
+    /// The providers of the instances that have a worker that dials the hub, or a ticket a worker could dial with, so a
+    /// hub that starts binds the endpoints they dial.
+    pub fn providers_with_dialing_workers(&self) -> Result<Vec<ProviderName>, StoreError> {
         let conn = lock(&self.reader);
-        let sql = "SELECT EXISTS (SELECT 1 FROM instances WHERE ticket IS NOT NULL OR worker_key IS NOT NULL)";
-        Ok(conn.query_row(sql, [], OneValue::read)?)
+        let sql = "SELECT DISTINCT provider FROM instances WHERE ticket IS NOT NULL OR worker_key IS NOT NULL \
+                   ORDER BY provider";
+        let mut statement = conn.prepare_cached(sql)?;
+        let rows = statement.query_map([], OneValue::read)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?.into_iter().map(ProviderName::from).collect())
+    }
+
+    /// Whether the instance's worker dials the hub: it has been given a ticket, or the hub has admitted it. A local
+    /// worker an earlier build left has neither, since it listens instead.
+    pub fn instance_dials(&self, id: &InstanceId) -> Result<bool, StoreError> {
+        let conn = lock(&self.reader);
+        let sql =
+            "SELECT EXISTS (SELECT 1 FROM instances WHERE id = ? AND (ticket IS NOT NULL OR worker_key IS NOT NULL))";
+        Ok(conn.query_row(sql, [id.as_str()], OneValue::read)?)
     }
 
     /// Once its provider says it's gone.

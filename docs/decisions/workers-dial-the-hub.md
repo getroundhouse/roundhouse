@@ -1,6 +1,6 @@
 # Every worker dials its hub, with a ticket the hub gives it, and no provider sits between them
 
-**Status:** Decided. Partly built: the workers of every provider but the local one dial the hub.
+**Status:** Decided. Partly built: every worker dials its hub but the local provider's on Windows.
 **First recorded:** 2026-11-22, in #2487.
 
 A worker opens its own connection to its hub, wherever it runs. When an instance starts, the hub gives its provider a ticket, which holds the hub's iroh key and a secret that admits one worker, once. The provider puts the worker and its ticket on the machine, and the worker dials the hub with the ticket, over QUIC through iroh. The hub never reaches a worker through its provider. So a provider only makes, starts, stops and destroys machines, and a worker's stream doesn't depend on its adapter. A worker the local provider runs on the hub's own machine dials the hub the same way, at a local address.

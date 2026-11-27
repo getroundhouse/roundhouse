@@ -14,7 +14,7 @@ use protocol::worker::{
     SetupDone, ToolsServing, WorkerRequest, WorkerResponse, WorkspaceReady,
 };
 use providers::{
-    Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand, WorkerEnvironment,
+    Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand, WorkerEnvironment, WorkerReach,
 };
 
 use super::super::Hub;
@@ -235,6 +235,11 @@ impl Provider for WithWorkers {
         });
         hub.workers.lock().insert(workspace.id, link);
         Ok(())
+    }
+
+    /// Reached by a command, which it refuses, since a stand-in neither dials nor has one.
+    fn workers_reach(&self) -> WorkerReach {
+        WorkerReach::Command
     }
 
     async fn start(&self, _: &InstanceId, _: &[WorkerBinary], _: Option<&WorkerTicket>) -> Result<(), ProviderError> {

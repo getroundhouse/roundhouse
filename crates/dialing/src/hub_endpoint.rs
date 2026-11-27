@@ -15,16 +15,26 @@ use crate::{DialError, key_file};
 const ONLINE_WITHIN: Duration = Duration::from_secs(5);
 
 /// How long the hub tries to bind the port its endpoint had before it takes another, which a worker that dials it
-/// again then reaches only through the relay.
+/// again then reaches only through the relay, or, on loopback, not at all.
 const BOUND_AGAIN_WITHIN: Duration = Duration::from_secs(2);
+
+/// The UDP ports a loopback endpoint binds, below the range any of the systems the hub runs on gives out for ephemeral
+/// ports: Linux's starts at 32768, and macOS's and Windows' at 49152. So no program's socket bound to any port takes
+/// one while the hub restarts, and a worker on the hub's machine, with no relay to fall back on, finds the hub where
+/// its ticket says. Above the ports a system keeps for its own services.
+pub(crate) const LOOPBACK_PORTS: std::ops::Range<u16> = 20_000..32_768;
+
+/// How many ports of [`LOOPBACK_PORTS`] a loopback endpoint tries before it gives up.
+const LOOPBACK_TRIES: u16 = 64;
 
 /// Which relays the hub's endpoint uses, which the tickets it makes name, so its workers use them too.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Relays {
     /// iroh's default, n0's public relays, until a hub can name its own.
     N0,
-    /// None, so every connection is direct, and the endpoint binds only to loopback, as a test's does, which keeps
-    /// it off the internet.
+    /// None, so every connection is direct, and the endpoint binds only to loopback, at a port in
+    /// [`LOOPBACK_PORTS`], which keeps it off the internet. The endpoint the hub's own machine's workers dial is
+    /// this, and a test's other endpoint too.
     None,
 }
 
@@ -44,10 +54,10 @@ impl HubEndpoint {
                 Ok(endpoint) => endpoint,
                 Err(e) => {
                     warn!(name: "endpoint.port_taken", port = kept, error = %e, "Couldn't bind the port the hub's endpoint had, so it takes another");
-                    bind(&key, relays, 0).await?
+                    bind_another(&key, relays).await?
                 }
             },
-            None => bind(&key, relays, 0).await?,
+            None => bind_another(&key, relays).await?,
         };
         let bound = endpoint.bound_sockets().iter().find(|socket| socket.is_ipv4()).map(SocketAddr::port);
         if bound != port {
@@ -93,6 +103,29 @@ async fn bind_again(key: &iroh::SecretKey, relays: Relays, port: u16) -> Result<
             Err(_) => tokio::time::sleep(Duration::from_millis(50)).await,
         }
     }
+}
+
+/// Binds a port of its own choosing: any the system gives, or, on loopback, the first of [`LOOPBACK_PORTS`] that's
+/// free, from one the key picks, so hubs with different keys mostly try different ones.
+async fn bind_another(key: &iroh::SecretKey, relays: Relays) -> Result<Endpoint, DialError> {
+    if relays == Relays::N0 {
+        return bind(key, relays, 0).await;
+    }
+    let ports = LOOPBACK_PORTS.end - LOOPBACK_PORTS.start;
+    let picked = key
+        .public()
+        .as_bytes()
+        .iter()
+        .fold(0u16, |picked, byte| picked.wrapping_mul(31).wrapping_add(u16::from(*byte)));
+    let mut last = None;
+    for tried in 0..LOOPBACK_TRIES {
+        let port = LOOPBACK_PORTS.start + picked.wrapping_add(tried) % ports;
+        match bind(key, relays, port).await {
+            Ok(endpoint) => return Ok(endpoint),
+            Err(e) => last = Some(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| DialError::Bind("no port to try".into())))
 }
 
 async fn bind(key: &iroh::SecretKey, relays: Relays, port: u16) -> Result<Endpoint, DialError> {

@@ -132,11 +132,19 @@ async fn a_runs_other_files_go_too() {
 }
 
 fn provider(dir: &Path) -> LocalProvider {
+    provider_dialing(dir, "/bin/roundhoused".into(), false)
+}
+
+/// One whose worker is `worker_exe`, and whose workers dial the hub if `dials`.
+fn provider_dialing(dir: &Path, worker_exe: PathBuf, dials: bool) -> LocalProvider {
     LocalProvider::new(LocalConfig {
-        worker_exe: "/bin/roundhoused".into(),
+        worker_exe,
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
+        worker_logs_dir: dir.join("worker-logs"),
+        environment: process::Environment::NONE.with("GIVEN", "the machine's"),
+        dials,
     })
 }
 
@@ -181,10 +189,66 @@ async fn connect_answers_with_the_hubs_own_worker_for_the_instance() {
     assert_eq!(command.program, "/bin/roundhoused");
     let state_dir = text(dir.path().join("instances/i"));
     let (workspaces, clones) = (text(dir.path().join("workspaces")), text(dir.path().join("clones")));
-    let transport = if cfg!(unix) { "--attach" } else { "--stdio" };
     let given = ["--workspaces-root", &workspaces, "--state-dir", &state_dir, "--clones-dir", &clones];
-    assert_eq!(command.args, [&["worker", transport][..], &given].concat());
+    assert_eq!(command.args, [&["worker", "--stdio"][..], &given].concat());
     assert_eq!(command.env, [], "the hub gives it the machine's environment");
+}
+
+/// Where its workers dial, the only one the hub reaches by a command is one an earlier build left listening.
+#[tokio::test]
+async fn where_workers_dial_connect_reaches_one_an_earlier_build_left_listening() {
+    let dir = tempfile::tempdir().unwrap();
+    let provider = provider_dialing(dir.path(), "/bin/roundhoused".into(), true);
+    let id: InstanceId = "i".into();
+    provider.create(&id, None, None).await.unwrap();
+
+    let command = provider.connect(&id).await.unwrap();
+
+    assert_eq!(provider.workers_reach(), crate::WorkerReach::Loopback);
+    assert_eq!(command.args[..2], ["worker", "--attach"]);
+}
+
+/// Any user on the machine can read a process's arguments, so the ticket goes on the worker's stdin, where only the
+/// worker reads it, and the worker is given the machine's environment and its log.
+#[tokio::test]
+async fn a_worker_that_dials_is_given_its_ticket_on_stdin_and_not_in_its_arguments() {
+    let dir = tempfile::tempdir().unwrap();
+    let said = dir.path().join("said");
+    let exe = dir.path().join("roundhoused");
+    let script = format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{0}.args'\ncat > '{0}.stdin'\nprintf '%s' \"$GIVEN\" > '{0}.env'\n",
+        said.display()
+    );
+    process::testing::write_program(&exe, script).unwrap();
+    let provider = provider_dialing(dir.path(), exe, true);
+    let id: InstanceId = "i".into();
+    provider.create(&id, None, None).await.unwrap();
+    let ticket = protocol::dialing::WorkerTicket::from("the-secret-ticket".to_string());
+
+    provider.start(&id, &[], Some(&ticket)).await.unwrap();
+
+    let args = std::fs::read_to_string(said.with_extension("args")).unwrap();
+    let args: Vec<&str> = args.lines().collect();
+    assert!(!args.iter().any(|arg| arg.contains("the-secret-ticket")), "{args:?}");
+    let after = |flag: &str| args.iter().position(|arg| *arg == flag).map(|at| args[at + 1]);
+    assert_eq!(after("--ticket"), Some("-"), "{args:?}");
+    assert!(args.contains(&"--detach"), "so it outlives the hub: {args:?}");
+    let log = dir.path().join("worker-logs/i.log");
+    assert_eq!(after("--log"), Some(log.to_str().unwrap()));
+    assert_eq!(std::fs::read_to_string(said.with_extension("stdin")).unwrap(), "the-secret-ticket");
+    assert_eq!(std::fs::read_to_string(said.with_extension("env")).unwrap(), "the machine's");
+}
+
+#[tokio::test]
+async fn a_worker_that_dials_isnt_started_without_a_ticket() {
+    let dir = tempfile::tempdir().unwrap();
+    let provider = provider_dialing(dir.path(), "/bin/roundhoused".into(), true);
+    let id: InstanceId = "i".into();
+    provider.create(&id, None, None).await.unwrap();
+
+    let started = provider.start(&id, &[], None).await;
+
+    assert!(matches!(started, Err(ProviderError::Unsupported(_))), "{started:?}");
 }
 
 /// A directory is never asleep, so every instance is running, and a worker is on the one it's recorded in.

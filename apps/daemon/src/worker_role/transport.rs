@@ -9,10 +9,9 @@ use std::path::PathBuf;
 pub(crate) enum Transport {
     /// The worker protocol on stdin and stdout, so the worker stops when its hub goes.
     Stdio,
-    /// Connects stdin and stdout to the instance's worker, and starts it first if none is serving it, so it can
-    /// outlive its hub. Not on Windows.
+    /// Connects stdin and stdout to the instance's worker, which an earlier build left listening. Not on Windows.
     Attach,
-    /// Serves the instance on a socket in the worker's state directory, as `Attach` starts it.
+    /// Serves the instance on a socket in the worker's state directory, as an earlier build's `Attach` started it.
     Listen,
     /// Dials the hub with a ticket, and again whenever the connection drops, so it outlives its hub. Not on Windows.
     #[cfg(unix)]

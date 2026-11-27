@@ -160,9 +160,8 @@ fn a_setup_script_stops_with_its_hub_and_with_a_killed_worker() {
     );
     client.workspace_rerun_setup(&workspace.id).unwrap();
     let script = wait_for_pid("the script to start again", &needle);
-    // SAFETY: kill(2) has no memory effects. This is the script's parent, the worker, by the chain below.
-    let group_leader = parent_of(script);
-    signal(parent_of(group_leader), libc::SIGKILL);
+    // The script's parent, which runs it as a group of its own.
+    signal(parent_of(script), libc::SIGKILL);
     wait_until("the script to be stopped", || !is_alive(script));
 }
 

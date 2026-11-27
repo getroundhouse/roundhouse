@@ -1,5 +1,5 @@
-//! A worker that dials its hub with a ticket, as a provider other than the local one starts it, against a stand-in
-//! for the hub's endpoint that admits it by hand.
+//! A worker that dials its hub with a ticket, as a provider starts it, against a stand-in for the hub's endpoint that
+//! admits it by hand.
 
 use std::path::Path;
 use std::process::{Child, Stdio};
@@ -58,6 +58,60 @@ async fn call(
             WorkerFrame::Reply { id: answering, outcome } if answering == id => return outcome,
             _ => {}
         }
+    }
+}
+
+/// A stand-in for the next hub, which binds the endpoint a hub's own machine's workers dial, with the key and the port
+/// the hub in `data_dir` keeps, so the worker an earlier hub left dials it again, as it would the next hub, and is
+/// admitted, whatever it says, and greeted as a hub that leaves it running would.
+pub(crate) struct NextHub {
+    runtime: tokio::runtime::Runtime,
+    hub: HubEndpoint,
+    _connection: dialing::Connection,
+    send: dialing::SendStream,
+    recv: dialing::RecvStream,
+}
+
+impl NextHub {
+    pub(crate) fn admitting(data_dir: &Path) -> Self {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let key_file = data_dir.join(protocol::paths::LOOPBACK_WORKER_ENDPOINT_FILE);
+        let (hub, connection, mut send, mut recv) = runtime.block_on(async {
+            let hub = HubEndpoint::bind(&key_file, Relays::None).await.unwrap();
+            let (connection, send, recv, _, _) = tokio::time::timeout(TIMEOUT, admit(&hub)).await.unwrap();
+            (hub, connection, send, recv)
+        });
+        let greeted = runtime.block_on(call(&mut send, &mut recv, 1, hello()));
+        assert!(matches!(greeted, WorkerOutcome::Response(WorkerResponse::Hello(_))), "{greeted:?}");
+        Self { runtime, hub, _connection: connection, send, recv }
+    }
+
+    /// The worker's reply to `request`, past whatever else it sends first, such as what its watches find.
+    pub(crate) fn call(&mut self, id: u64, request: WorkerRequest) -> WorkerOutcome {
+        let (send, recv) = (&mut self.send, &mut self.recv);
+        self.runtime.block_on(async { tokio::time::timeout(TIMEOUT, call(send, recv, id, request)).await.unwrap() })
+    }
+
+    /// What `wanted` finds in the first frame it finds anything in, of those the worker sends from now on.
+    pub(crate) fn frame_until<T>(&mut self, what: &str, wanted: impl Fn(WorkerFrame) -> Option<T>) -> T {
+        let recv = &mut self.recv;
+        let found = self.runtime.block_on(async {
+            tokio::time::timeout(TIMEOUT, async {
+                loop {
+                    if let Some(found) = wanted(read_frame::<WorkerFrame>(recv).await.unwrap()) {
+                        return found;
+                    }
+                }
+            })
+            .await
+        });
+        found.unwrap_or_else(|_| panic!("timed out waiting for {what}"))
+    }
+
+    /// As a hub that goes does, letting go of the endpoint, so the next one binds it.
+    pub(crate) fn close(mut self) {
+        let _ = self.send.finish();
+        self.runtime.block_on(self.hub.close());
     }
 }
 

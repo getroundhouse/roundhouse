@@ -1,13 +1,13 @@
 //! A provider gives a hub somewhere to run workers. Running on the same machine is one provider,
 //! and nothing in the hub treats it as special.
 //!
-//! [`Provider`] is the provider protocol in `protocol::provider` as a Rust trait, one method for each request, with
-//! the same rules: every request is safe to repeat, and a provider is never in a worker's stream. A worker a provider
-//! other than the local one starts dials the hub with its ticket. The local provider is the one the hub runs in itself,
-//! and it answers two more, which no adapter does: `connect`, the command the hub runs to reach its worker, and
-//! `workers_running`. *Not built:* its workers dialing too. "Workers and providers" in `docs/principles/parts.md` has the
-//! rules a provider follows, and `docs/decisions/provider-adapters-over-stdio.md` why an adapter is a program of its
-//! own.
+//! [`Provider`] is the provider protocol in `protocol::provider` as a Rust trait, one method for each request, with the
+//! same rules: every request is safe to repeat, and a provider is never in a worker's stream. A worker a provider
+//! starts dials the hub with its ticket, at the endpoint its [`WorkerReach`] says. The local provider is the one the
+//! hub runs in itself, and it answers three more, which no adapter does: `workers_reach`, `connect`, the command the
+//! hub runs to reach one of its workers that doesn't dial, and `workers_running`. "Workers and providers" in
+//! `docs/principles/parts.md` has the rules a provider follows, and `docs/decisions/provider-adapters-over-stdio.md`
+//! why an adapter is a program of its own.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
@@ -27,6 +27,19 @@ pub use protocol::provider::{
 
 /// The command the hub runs to reach one of the local provider's workers, whose stdin and stdout are its stream.
 pub type WorkerCommand = protocol::provider::Command;
+
+/// How the workers a provider starts reach the hub.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorkerReach {
+    /// They dial the hub's endpoint on its relays, which a worker on any machine can reach. Every adapter's.
+    Relayed,
+    /// They run on the hub's own machine and dial its endpoint on loopback, which uses no relay, so a hub whose workers
+    /// are all this reaches nothing beyond loopback. The local provider's.
+    Loopback,
+    /// They don't dial: the hub runs the command `connect` gives, whose stdin and stdout are the worker's stream, and
+    /// the worker stops with it. The local provider's on Windows, where a worker doesn't dial yet, and a test's.
+    Command,
+}
 
 pub use error::ProviderError;
 
@@ -50,11 +63,14 @@ pub trait Provider: Send + Sync {
         from: Option<&InstanceId>,
         size: Option<Size>,
     ) -> Result<(), ProviderError>;
+    /// How the workers it starts reach the hub. Only the local provider's differ from an adapter's.
+    fn workers_reach(&self) -> WorkerReach {
+        WorkerReach::Relayed
+    }
     /// Starts it, or does nothing to one that's running, whatever runs there. First puts in place the one of `workers`
     /// built for the instance's target, if it holds a different one. A worker it starts is given `ticket`, which it
-    /// dials the hub with. The hub gives every provider one but the local one, whose workers it reaches through
-    /// `connect`. *Not built:* the local provider's workers dialing too, as `docs/decisions/workers-dial-the-hub.md`
-    /// has it.
+    /// dials the hub with. The hub gives one to every provider whose workers dial, as [`Provider::workers_reach`]
+    /// says.
     async fn start(
         &self,
         instance_id: &InstanceId,
@@ -70,12 +86,14 @@ pub trait Provider: Send + Sync {
     async fn destroy(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
     async fn list(&self) -> Result<Vec<Instance>, ProviderError>;
     /// The command whose stdin and stdout are the worker's stream, which the hub runs. Can be asked again. Only the
-    /// local provider's, since every other provider's workers dial the hub.
+    /// local provider's, for a worker that doesn't dial: one whose [`WorkerReach`] is `Command`, or one an earlier
+    /// build left running, which listens.
     async fn connect(&self, _instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError> {
         Err(ProviderError::Unsupported("reach a worker but by its dialing the hub"))
     }
     /// The instances a worker serves, which may be one an earlier hub left, so a hub that starts carries on with it.
-    /// Only the local provider's, since the hub knows every other provider's workers by their dialing it.
+    /// Only the local provider's, since the hub knows a worker that dials it by its dialing, and an earlier build's
+    /// local workers listened instead.
     async fn workers_running(&self) -> Result<Vec<InstanceId>, ProviderError> {
         Err(ProviderError::Unsupported("say which workers run but by their dialing the hub"))
     }

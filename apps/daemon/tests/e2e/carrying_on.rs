@@ -10,7 +10,7 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{BranchName, Branches, Head, Seq, SetupStatus};
 use protocol::worker::{WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 
-use crate::attaching::Attached;
+use crate::dialing::NextHub;
 
 use crate::support::{
     self, Follower, Gate, Stack, assert_gapless, assistant_text, commit_settings, is_alive, pending_approval, read_all,
@@ -65,7 +65,7 @@ fn assert_one_agent_said_it_all_once(events: &[SessionEvent], said: &str) {
 fn a_restart_leaves_the_agent_at_work_and_the_next_hub_carries_on_with_it() {
     let mut stack = Stack::start();
     let client = stack.client();
-    let (_, session) = stack.workspace(&client);
+    let (workspace, session) = stack.workspace(&client);
     let (go, finished) = (stack.path("go"), stack.path("finished"));
     let script = format!("say:before; hang-until:{}; say:after; tool:touch {}", go.display(), finished.display());
     client.session_prompt(&session.id, &script, None).unwrap();
@@ -84,6 +84,10 @@ fn a_restart_leaves_the_agent_at_work_and_the_next_hub_carries_on_with_it() {
 
     let events = wait_for_turn_end(&stack.client(), &session.id, 1);
     assert_one_agent_said_it_all_once(&events, "beforeafter");
+    // Its worker dialed the next hub, at the address its ticket names, as it dialed the first.
+    let log =
+        std::fs::read_to_string(protocol::paths::worker_log(&stack.paths().worker_logs_dir, &workspace.instance_id));
+    assert_eq!(log.unwrap().matches("\"event\":\"hub.admitted\"").count(), 2);
 }
 
 /// A message the agent was writing as its hub went is whole in the next hub's tail, with what it wrote while there was
@@ -212,8 +216,7 @@ fn the_next_hub_hears_of_a_branch_checked_out_after_the_last_one_went() {
     drop(client);
 
     stack.kill_hub();
-    let instance = stack.paths().instances_dir.join(workspace.instance_id.to_string());
-    let mut stand_in = Attached::next_hub(&stack.path("workspaces"), &instance);
+    let mut stand_in = NextHub::admitting(&stack.paths().data_dir);
     support::git(Path::new(&workspace.path.unwrap()), &["switch", "-q", "-c", "next-thing"]);
     let next_thing = Head::Branch { name: BranchName::from("next-thing") };
     stand_in.frame_until("the watch the last hub asked for to read the branch", |frame| match frame {
@@ -295,14 +298,13 @@ fn a_worker_lets_go_of_what_its_hub_said_it_recorded() {
     std::fs::create_dir_all(stack.agent_state()).unwrap();
     std::fs::write(stack.agent_state().join("no-context"), "").unwrap();
     let client = stack.client();
-    let (workspace, session) = stack.workspace(&client);
+    let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:first", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     drop(client);
     restart(&mut stack);
 
-    let instance = stack.paths().instances_dir.join(workspace.instance_id.to_string());
-    let mut next = Attached::next_hub(&stack.path("workspaces"), &instance);
+    let mut next = NextHub::admitting(&stack.paths().data_dir);
     // What a worker kept comes straight after the hello's reply, so it would come before this one's.
     let running = next.call(2, WorkerRequest::RunningAgents);
     assert!(
@@ -311,4 +313,37 @@ fn a_worker_lets_go_of_what_its_hub_said_it_recorded() {
     );
     assert_eq!(next.call(3, WorkerRequest::Stop), WorkerOutcome::Response(WorkerResponse::Ok));
     next.close();
+}
+
+/// So an update doesn't end the agents of a worker an earlier build left listening on a socket, which doesn't dial: the
+/// first hub whose local workers dial still reaches it through `worker --attach`. This one has no agent, so the hub
+/// ends it once it has reached it, as it would a worker of its own build.
+#[test]
+fn a_local_worker_an_earlier_build_left_listening_is_reached_by_the_next_hub() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:first", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    drop(client);
+    // Which stops its worker, and forgets it dialed, as of an instance whose worker an earlier build started.
+    stack.stop_hub();
+    let instance = stack.paths().instances_dir.join(workspace.instance_id.to_string());
+    let record = instance.join(protocol::paths::WORKER_RECORD_FILE);
+    wait_until("the hub's worker to stop", || {
+        process::ProcessRecord::read(&record).is_none_or(|worker| !worker.is_running())
+    });
+    let logged_before = std::fs::metadata(stack.hub_log()).unwrap().len();
+
+    crate::attaching::start_listening(&stack.path("workspaces"), &instance);
+    let listening = process::ProcessRecord::read(&record).unwrap();
+    stack.start_hub();
+
+    let logged = || {
+        let logged = std::fs::read(stack.hub_log()).unwrap();
+        String::from_utf8_lossy(&logged[usize::try_from(logged_before).unwrap()..]).into_owned()
+    };
+    wait_until("the hub to reach the worker", || logged().contains("\"event\":\"recovery.worker_connected\""));
+    assert!(!logged().contains("recovery.worker_unreached"), "{}", logged());
+    wait_until("the hub to end the worker it had no use for", || !is_alive(listening.pid));
 }

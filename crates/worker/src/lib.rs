@@ -30,9 +30,9 @@ mod worktree_file;
 pub use agents::{ENV_ANTIGRAVITY_BIN, ENV_CLAUDE_BIN, ENV_CODEX_BIN};
 #[cfg(unix)]
 pub use attach::attach;
-pub use claim::{ClaimError, InstanceClaim, claim_instance};
 #[cfg(unix)]
-pub use claim::{claim_to_serve, instance_claimed};
+pub use claim::claim_to_serve;
+pub use claim::{ClaimError, InstanceClaim, claim_instance};
 pub use deleting::{Deleter, delete_trees};
 pub use git_credential::{CredentialHelper, answer_credential_request};
 pub use serve::{Config, serve};

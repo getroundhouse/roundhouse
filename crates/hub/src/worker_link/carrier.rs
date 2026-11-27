@@ -4,8 +4,8 @@ use tracing::warn;
 
 use crate::child_process::ChildProcess;
 
-/// What carries a worker's stream: the command the hub runs to reach one of the local provider's workers, or the
-/// connection a worker of any other provider dialed the hub on, which the hub holds until the worker has gone.
+/// What carries a worker's stream: the connection a worker dialed the hub on, which the hub holds until the worker has
+/// gone, or the command the hub runs to reach one of the local provider's workers that doesn't dial.
 pub(crate) enum Carrier {
     Command(ChildProcess),
     Dialed(dialing::Connection),
