@@ -24,5 +24,5 @@ pub(super) fn over_what_it_dims(behind: &'static str, on_tap: Option<OnTap>, she
         .flex_1()
         .w_full()
         .when_some(on_tap, |behind, on_tap| behind.on_click(move |event, window, cx| on_tap(event, window, cx)));
-    v_flex().absolute().inset_0().bg(colors(cx).dim).child(behind).child(sheet)
+    v_flex().absolute().inset_0().bg(colors(cx).dim()).child(behind).child(sheet)
 }

@@ -6,7 +6,7 @@ canvas:
   b128829190ca0f75 t("Index") s(hug,hug) f[(da796cb4c1d61176,tok(color.text))] $typography.PageTitle "Heading"
   95fab90d6cce0797 al(h,x(sb),y(c)) s(fill,28) f[] "Foundations/Colours"
     d8ca4e34e2a9d912 t("Foundations / Colours") s(hug,hug) f[(f8b131a7dc1b02db,tok(color.text))] $typography.Body "Name"
-    97865b231562cb5b inst("Status Exploring",canvas(Board/Status)) "Status"
+    97865b231562cb5b inst("Status Ready for review",canvas(Board/Status)) "Status"
   a4b25fe8acf76970 al(h,x(sb),y(c)) s(fill,28) f[] "Foundations/Space and shape"
     fa552c0472934dcf t("Foundations / Space and shape") s(hug,hug) f[(a5cdbff3ae60c7f0,tok(color.text))] $typography.Body "Name"
     cdd2b64f3c415fde inst("Status Exploring",canvas(Board/Status)) "Status"

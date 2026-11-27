@@ -3,6 +3,7 @@ use gpui_kit::component::button::{Button as KitButton, ButtonVariants as _};
 
 use crate::colors::Colors;
 use crate::named::named;
+use crate::theme::{PRESSED, UNDER_POINTER};
 
 named! {
     /// What a button is for, which says how it's drawn: each area's one main action, an ordinary button, one that
@@ -66,8 +67,8 @@ impl ButtonKind {
 }
 
 /// A button filled in a colour of its own, such as one that removes or a pull request's main action, under the pointer
-/// and pressed: its fill, a little faded, and faded more.
-#[expect(clippy::disallowed_methods, reason = "a filled button's own states, which its component settles")]
-pub(super) fn filled_states(fill: Hsla) -> (Hsla, Hsla) {
-    (fill.opacity(0.85), fill.opacity(0.7))
+/// and pressed: lighter, with the text's colour washed over its fill as the pointer washes what's under it, and darker,
+/// with the pane's washed over it as strongly as a press, as the main action is lighter and darker.
+pub(super) fn filled_states(fill: Hsla, colors: &Colors) -> (Hsla, Hsla) {
+    (fill.blend(UNDER_POINTER.of(colors.text)), fill.blend(PRESSED.of(colors.pane)))
 }

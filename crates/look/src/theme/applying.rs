@@ -83,7 +83,7 @@ fn surfaces(c: &Colors) -> Vec<(&'static str, String)> {
         ("secondary.active.background", hex(c.raised_pressed)),
         ("accent.background", hex(c.inline_code)),
         ("accent.foreground", hex(c.text)),
-        ("overlay", hex(c.dim)),
+        ("overlay", hex(c.dim())),
         ("popover.background", hex(c.raised)),
         ("popover.foreground", hex(c.text)),
         ("sidebar.background", hex(c.sidebar)),
@@ -105,8 +105,8 @@ fn surfaces(c: &Colors) -> Vec<(&'static str, String)> {
         ("list.active.background", hex(c.edge)),
         ("list.active.border", "#00000000".into()),
         ("scrollbar.background", "#00000000".into()),
-        ("scrollbar.thumb.background", hex(c.scroll_thumb)),
-        ("scrollbar.thumb.hover.background", hex(c.scroll_thumb_hover)),
+        ("scrollbar.thumb.background", hex(c.scroll_thumb())),
+        ("scrollbar.thumb.hover.background", hex(c.scroll_thumb_hover())),
         ("skeleton.background", hex(c.raised)),
     ]
 }

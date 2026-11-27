@@ -85,9 +85,6 @@ color.PR.draft: #8b949e
 color.PR.queued: #d29922
 
 // The window.
-color.window.dim: #00000099
-color.window.scroll_thumb: #ffffff1f
-color.window.scroll_thumb_hover: #ffffff33
 color.window.windows_close: #c42b1c
 color.window.on_windows_close: #ffffff
 

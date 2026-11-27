@@ -188,12 +188,6 @@ colors! {
         pr_queued = 0xd299_22ff,
     }
     "The window" {
-        /// Over everything behind a dialog.
-        dim = 0x0000_0099,
-        /// A scrollbar's thumb.
-        scroll_thumb = 0xffff_ff1f,
-        /// A scrollbar's thumb under the pointer.
-        scroll_thumb_hover = 0xffff_ff33,
         /// Windows' close button under the pointer, as Windows draws its own.
         windows_close = 0xc42b_1cff,
         /// The glyph on Windows' close button under the pointer.
@@ -253,6 +247,11 @@ const SELECTION: Strength = Strength::Strong;
 /// it, and the match being shown more strongly, so it stands out from the rest.
 const FOUND: Strength = Strength::Medium;
 const FOUND_HERE: Strength = Strength::XStrong;
+/// How strongly the shadow's black dims what's behind a dialog or a sheet: much, so it reads as out of reach.
+const DIM: Strength = Strength::XStrong;
+/// How strongly a scrollbar's thumb shows, in the text's colour, and under the pointer.
+const THUMB: Strength = Strength::Soft;
+const THUMB_UNDER_POINTER: Strength = Strength::Medium;
 
 impl Colors {
     /// Behind what's selected in text: the brand's copper, faint.
@@ -268,6 +267,21 @@ impl Colors {
     /// Behind the match being shown, in the brand's copper.
     pub fn found_here(&self) -> Hsla {
         FOUND_HERE.of(self.brand)
+    }
+
+    /// Over everything behind a dialog or a sheet: the shadow's black.
+    pub fn dim(&self) -> Hsla {
+        DIM.of(self.shadow)
+    }
+
+    /// A scrollbar's thumb, in the text's colour.
+    pub fn scroll_thumb(&self) -> Hsla {
+        THUMB.of(self.text)
+    }
+
+    /// A scrollbar's thumb under the pointer.
+    pub fn scroll_thumb_hover(&self) -> Hsla {
+        THUMB_UNDER_POINTER.of(self.text)
     }
 }
 
