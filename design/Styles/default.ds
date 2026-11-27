@@ -127,8 +127,10 @@ spacing.control.Small { $default: spacing.sm, reach.handheld: spacing.md }
 spacing.control.Regular { $default: spacing.md, reach.handheld: 14 }
 spacing.control.Large: spacing.lg
 
-// Lengths that aren't steps of `look::Space`: a chip's inside, and between a list's items, which is 0.25 of their text.
+// Lengths that aren't steps of `look::Space`: a chip's inside, and what the text sets, between paragraphs, which is
+// 0.75 of the rem that sets the kit's text, and between a list's items, which is 0.25 of their text.
 spacing.Chip: 6
+spacing.Paragraph { $default: 12, reach.handheld: 14.571428 }
 spacing.ListItem { $default: 3.5, reach.handheld: 4.25 }
 // A part's edge takes room in the app, and a stroke takes none here, so what has an edge is inset a pixel more.
 spacing.Edged: 17
