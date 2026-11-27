@@ -184,7 +184,8 @@ font.weight.regular: 400
 font.weight.emphasis: 500
 font.weight.strong: 600
 
-// `look::Type`'s sizes, and inline code's in body text: `look::INLINE_CODE` of it.
+// `look::Type`'s sizes, and inline code's and Markdown's headings' in body text: `look::INLINE_CODE` of it, and
+// `look::MARKDOWN_HEADINGS` at each level.
 font.size.PageTitle { $default: 24, reach.handheld: 28 }
 font.size.Heading { $default: 16, reach.handheld: 17 }
 font.size.Body { $default: 14, reach.handheld: 17 }
@@ -193,6 +194,12 @@ font.size.Code { $default: 12, reach.handheld: 14 }
 font.size.Key { $default: 10, reach.handheld: 12 }
 font.size.KeyHeld { $default: 7.5, reach.handheld: 9 }
 font.size.InlineCode { $default: 12.25, reach.handheld: 14.875 }
+font.size.MarkdownHeading1 { $default: 25.2, reach.handheld: 30.6 }
+font.size.MarkdownHeading2 { $default: 18.6667, reach.handheld: 22.6667 }
+font.size.MarkdownHeading3 { $default: 15.8667, reach.handheld: 19.2667 }
+font.size.MarkdownHeading4 { $default: 14, reach.handheld: 17 }
+font.size.MarkdownHeading5 { $default: 13.0667, reach.handheld: 15.8667 }
+font.size.MarkdownHeading6 { $default: 12.1333, reach.handheld: 14.7333 }
 
 // How far apart lines are, over the size of their text, where nothing they're in sets them: the golden ratio of the
 // size, as GPUI spaces text, to the nearest device pixel, such as body text's 22.5 at a desk and 27.5 on a handheld;

@@ -8,5 +8,5 @@ mod tests;
 mod code_lines;
 mod styles;
 pub use code_lines::CodeLines;
-pub use styles::{INLINE_CODE, LIST_ITEM_GAP, STRONG, Type, Typeset};
+pub use styles::{INLINE_CODE, LIST_ITEM_GAP, MARKDOWN_HEADINGS, STRONG, Type, Typeset};
 pub(crate) use styles::{mono_size, rem};

@@ -102,6 +102,24 @@ fn code_is_only_set_with_typeset_code() {
     let _ = div().typeset(Type::Code);
 }
 
+/// The spec's sizes for Markdown's headings and inline code are `look`'s shares of body text's size at each reach.
+#[test]
+fn the_specs_table_has_every_share_of_markdown_at_each_reach() {
+    let table: Vec<[String; 3]> =
+        spec_table::rows("**Markdown's headings and inline code, as shares of the text they're in,**");
+
+    let at = |share: f32, reach| {
+        let size = f32::from(Type::Body.set_at(reach).size.to_pixels(super::styles::rem(reach)) * share);
+        format!("{}px", (size * 100.).round() / 100.)
+    };
+    let headings = (1..).zip(super::MARKDOWN_HEADINGS).map(|(level, share)| (format!("Heading {level}"), share));
+    let shares: Vec<[String; 3]> = headings
+        .chain([("Inline code".to_string(), super::INLINE_CODE)])
+        .map(|(name, share)| [name, at(share, Reach::Desk), at(share, Reach::Handheld)])
+        .collect();
+    assert_eq!(table, shares, "docs/spec/look.md's table of Markdown's sizes, against crates/look/src/typography");
+}
+
 #[test]
 fn the_specs_table_has_every_spacing_of_codes_lines_in_order() {
     let table: Vec<[String; 3]> = spec_table::rows("**How far apart code's lines are, by where it's read.**");

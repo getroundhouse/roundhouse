@@ -133,7 +133,7 @@ pub use tooltips::shown_tooltip;
 pub use tooltips::{Tooltipped, tooltip_words};
 pub use top_bars::{TopBar, top_bar};
 pub use traits::{Input, Reach};
-pub use typography::{CodeLines, INLINE_CODE, LIST_ITEM_GAP, STRONG, Type, Typeset};
+pub use typography::{CodeLines, INLINE_CODE, LIST_ITEM_GAP, MARKDOWN_HEADINGS, STRONG, Type, Typeset};
 pub use videos::{VIDEO_LEAST_WIDTH, Video, VideoShows, length, video, video_bar_height};
 pub use word_changes::{LineChange, word_changes};
 pub use work::{Sign, Work};

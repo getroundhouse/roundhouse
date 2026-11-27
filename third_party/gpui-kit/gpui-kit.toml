@@ -42,4 +42,5 @@ patches = [
     "code-block-wrap",
     "inline-code-scale",
     "list-item-gap",
+    "heading-scales",
 ]

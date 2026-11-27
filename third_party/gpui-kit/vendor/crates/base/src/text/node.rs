@@ -3488,18 +3488,15 @@ fn body_font_size(node_cx: &NodeContext, window: &Window) -> Pixels {
     }
 }
 
-/// A heading's `(size scale, line height, section gap)`, the size relative to
-/// the body text and the gap above it relative to the heading itself.
-/// Hierarchy comes from weight rather than size: every level is semibold and
-/// the sizes step down gently from the body.
-fn heading_metrics(level: u8) -> (f32, f32, f32) {
+/// A heading's `(line height, section gap)`, the gap above it relative to the
+/// heading itself. Its size is the style's, in
+/// [`TextViewStyle::heading_scale`]. Hierarchy comes from weight rather than
+/// size: every level is semibold and the sizes step down gently from the body.
+fn heading_metrics(level: u8) -> (f32, f32) {
     match level {
-        1 => (1.8, 1.25, 1.1),
-        2 => (4. / 3., 1.35, 1.6),
-        3 => (17. / 15., 1.35, 1.4),
-        4 => (1., 1.35, 1.4),
-        5 => (14. / 15., 1.35, 1.4),
-        _ => (13. / 15., 1.35, 1.4),
+        1 => (1.25, 1.1),
+        2 => (1.35, 1.6),
+        _ => (1.35, 1.4),
     }
 }
 
@@ -3510,7 +3507,7 @@ const HEADING_BOTTOM_GAP: f32 = 0.35;
 /// refinement pins, which its gaps follow.
 fn heading_size(level: u8, node_cx: &NodeContext, window: &Window) -> Pixels {
     node_cx.style.heading(level).text.font_size.map_or_else(
-        || body_font_size(node_cx, window) * heading_metrics(level).0,
+        || body_font_size(node_cx, window) * node_cx.style.heading_scale(level),
         |size| size.to_pixels(window.rem_size()),
     )
 }
@@ -4579,7 +4576,7 @@ impl BlockNode {
                 children,
                 span,
             } => {
-                let (_, line_height, section_gap) = heading_metrics(*level);
+                let (line_height, section_gap) = heading_metrics(*level);
                 let refinement = node_cx.style.heading(*level);
                 let text_size = heading_size(*level, node_cx, window);
                 // The previous block already leaves a gap below itself, so

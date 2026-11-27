@@ -1,0 +1,135 @@
+diff --git a/crates/base/src/text/node.rs b/crates/base/src/text/node.rs
+index c05acdc..03e61d6 100644
+--- a/crates/base/src/text/node.rs
++++ b/crates/base/src/text/node.rs
+@@ -3487,18 +3487,15 @@ fn body_font_size(node_cx: &NodeContext, window: &Window) -> Pixels {
+     }
+ }
+ 
+-/// A heading's `(size scale, line height, section gap)`, the size relative to
+-/// the body text and the gap above it relative to the heading itself.
+-/// Hierarchy comes from weight rather than size: every level is semibold and
+-/// the sizes step down gently from the body.
+-fn heading_metrics(level: u8) -> (f32, f32, f32) {
++/// A heading's `(line height, section gap)`, the gap above it relative to the
++/// heading itself. Its size is the style's, in
++/// [`TextViewStyle::heading_scale`]. Hierarchy comes from weight rather than
++/// size: every level is semibold and the sizes step down gently from the body.
++fn heading_metrics(level: u8) -> (f32, f32) {
+     match level {
+-        1 => (1.8, 1.25, 1.1),
+-        2 => (4. / 3., 1.35, 1.6),
+-        3 => (17. / 15., 1.35, 1.4),
+-        4 => (1., 1.35, 1.4),
+-        5 => (14. / 15., 1.35, 1.4),
+-        _ => (13. / 15., 1.35, 1.4),
++        1 => (1.25, 1.1),
++        2 => (1.35, 1.6),
++        _ => (1.35, 1.4),
+     }
+ }
+ 
+@@ -3509,7 +3506,7 @@ const HEADING_BOTTOM_GAP: f32 = 0.35;
+ /// refinement pins, which its gaps follow.
+ fn heading_size(level: u8, node_cx: &NodeContext, window: &Window) -> Pixels {
+     node_cx.style.heading(level).text.font_size.map_or_else(
+-        || body_font_size(node_cx, window) * heading_metrics(level).0,
++        || body_font_size(node_cx, window) * node_cx.style.heading_scale(level),
+         |size| size.to_pixels(window.rem_size()),
+     )
+ }
+@@ -4578,7 +4575,7 @@ impl BlockNode {
+                 children,
+                 span,
+             } => {
+-                let (_, line_height, section_gap) = heading_metrics(*level);
++                let (line_height, section_gap) = heading_metrics(*level);
+                 let refinement = node_cx.style.heading(*level);
+                 let text_size = heading_size(*level, node_cx, window);
+                 // The previous block already leaves a gap below itself, so
+diff --git a/crates/base/src/text/style.rs b/crates/base/src/text/style.rs
+index 53c7ed3..486a090 100644
+--- a/crates/base/src/text/style.rs
++++ b/crates/base/src/text/style.rs
+@@ -21,6 +21,7 @@ pub struct TextViewStyle {
+     paragraph_gap: Rems,
+     list_item_gap: f32,
+     heading: Arc<dyn Fn(u8) -> StyleRefinement + Send + Sync + 'static>,
++    heading_scales: [f32; 6],
+     code_block: StyleRefinement,
+     table: StyleRefinement,
+     table_head: StyleRefinement,
+@@ -56,6 +57,7 @@ impl PartialEq for TextViewStyle {
+             && self.border == other.border
+             && (Arc::ptr_eq(&self.heading, &other.heading)
+                 || (1..=6).all(|level| (self.heading)(level) == (other.heading)(level)))
++            && self.heading_scales == other.heading_scales
+             && self.code_block == other.code_block
+             && self.table == other.table
+             && self.table_head == other.table_head
+@@ -103,6 +105,7 @@ impl TextViewStyle {
+             paragraph_gap: rems(0.75),
+             list_item_gap: 0.25,
+             heading: Arc::new(|_| StyleRefinement::default()),
++            heading_scales: [1.8, 4. / 3., 17. / 15., 1., 14. / 15., 13. / 15.],
+             code_block: StyleRefinement::default(),
+             table: StyleRefinement::default(),
+             table_head: StyleRefinement::default(),
+@@ -179,6 +182,21 @@ impl TextViewStyle {
+         self
+     }
+ 
++    /// Sets how big a heading is at each level, from 1 to 6, as a share of the
++    /// size of the body text.
++    ///
++    /// 1.8, 4/3, 17/15, 1, 14/15 and 13/15 by default. A font size given to
++    /// [`Self::with_heading`] takes precedence. A non-finite or non-positive
++    /// share leaves its level as it was.
++    pub fn with_heading_scales(mut self, scales: [f32; 6]) -> Self {
++        for (scale, given) in self.heading_scales.iter_mut().zip(scales) {
++            if given.is_finite() && given > 0. {
++                *scale = given;
++            }
++        }
++        self
++    }
++
+     /// Sets the style refinement for code blocks.
+     ///
+     /// Set `overflow.y` to `Overflow::Scroll` together with a max height to
+@@ -360,6 +378,12 @@ impl TextViewStyle {
+         (self.heading)(level)
+     }
+ 
++    /// How big a heading at `level` (1-6) is, as a share of the size of the
++    /// body text. A level past 6 is sized as 6.
++    pub fn heading_scale(&self, level: u8) -> f32 {
++        self.heading_scales[usize::from(level.clamp(1, 6)) - 1]
++    }
++
+     /// The style refinement for code blocks.
+     pub fn code_block(&self) -> &StyleRefinement {
+         &self.code_block
+@@ -631,6 +655,22 @@ mod tests {
+         assert!(style != base);
+     }
+ 
++    #[test]
++    fn heading_scales_default_to_the_kits_and_ignore_an_unusable_share() {
++        let base = TextViewStyle::default();
++        assert_eq!(base.heading_scale(1), 1.8);
++        assert_eq!(base.heading_scale(9), 13. / 15.);
++
++        let style = base
++            .clone()
++            .with_heading_scales([2., f32::NAN, 1.2, 0., 1., 0.9]);
++        assert_eq!(style.heading_scale(1), 2.);
++        assert_eq!(style.heading_scale(2), 4. / 3.);
++        assert_eq!(style.heading_scale(3), 1.2);
++        assert_eq!(style.heading_scale(4), 1.);
++        assert!(style != base);
++    }
++
+     #[test]
+     fn inline_code_falls_back_to_the_code_background() {
+         let style = TextViewStyle::default()
