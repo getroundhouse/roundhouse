@@ -39,7 +39,7 @@ The design is a Brilliant project in `design/`. It's branched, reviewed and merg
 
 | Folder | What it holds |
 |---|---|
-| `Foundations/` | A canvas for each of the foundations' tables in `docs/spec/look.md`, such as `Colours` |
+| `Foundations/` | A canvas for each of the foundations' sections in `docs/spec/look.md`, such as `Colours` |
 | `Components/` | A canvas for each of `look`'s components, named as its type is, such as `Chip`, with no folders in it |
 | `Patterns/` | A canvas for each pattern, named for what it's for |
 | `Screens/<client>/<area>/` | A canvas for each screen, in a folder for its client, such as `Desktop`, and in one named as the file of `docs/spec/` that has the screen, such as `Chats`. Each of its states is a frame, named as its image in the gallery |
@@ -48,7 +48,7 @@ The design is a Brilliant project in `design/`. It's branched, reviewed and merg
 
 - **A canvas holds one component, pattern or screen,** so that branches seldom change the same file.
 - **A canvas is placed and named before others use it.** A copy of a component names its master's canvas by path, so moving one rewrites every canvas with a copy of it, which conflicts with each branch that changed one of those.
-- **A film is in a `Motion/` folder beside the canvas it plays, and names that canvas by its path,** so that it's found with the part that moves. Brilliant plays a film only from a folder of that name, and writes one there only when it names its canvas by its path.
+- **A film is in a `Motion/` folder beside the canvas it plays, and names that canvas by its path,** so that it's found with the part that moves.
 - **A film's states are frames on the canvas of the part that moves,** beside the part's own.
 - **The design system has a value for each reach,** as `look` has, in a mode of its own, `reach`, whose values are `desk` and `handheld`. A token that's different on a handheld has both, and one that's the same has one. A handheld's screen sets its frame to the handheld with `ds(, reach(handheld))`, and what's in it takes the handheld's values, copies of components too. Its canvas isn't switched as a whole, since Brilliant doesn't lay out again what's already on it.
 - **What's drawn and what's built have the same names.** A token is named as `look` names it, a component and its kinds, sizes and states as `look`'s types are, and a screen's frame as its image in the gallery. So each can be found from the other, and checked against it.
@@ -61,7 +61,7 @@ The design is a Brilliant project in `design/`. It's branched, reviewed and merg
 
 ## Deciding
 
-Each canvas has a status badge at its top, a copy of one in `Board/Status` named `Status`, and the `Index` canvas lists every canvas with its status. Only the canvas's own badge has that name, so a badge shown in an option of `To decide` is named for the option. `cargo run -p design` writes the index from the badges, so that it's written again after a merge rather than merged, and a test refuses an index that isn't as the badges have it. The status isn't in a canvas's name, since other canvases find a component by its path.
+Each canvas has a status badge at its top, a copy of one in `Board/Status` named `Status`, and the `Index` canvas lists every canvas with its status. Only the canvas's own badge has that name, so a badge shown in an option of `To decide` is named for the option. `cargo run -p design` writes the index from the badges, and a test refuses an index that isn't as the badges have it. The status isn't in a canvas's name, since other canvases find a component by its path.
 
 | Status | Meaning |
 |---|---|
@@ -71,8 +71,9 @@ Each canvas has a status badge at its top, a copy of one in `Board/Status` named
 
 Only the owner marks a canvas ready, or agrees to changing one that is.
 
-- **An open question is drawn, with its options side by side,** made of the real components, in a `To decide` section at the top of the canvas of the part it's about. Each has an ID, what it's between, what each costs, and the one the agent recommends with its reasons.
-- **The owner decides there or in the chat.** The decision is applied to the design, and the question moves to the `Decided` section under it, with the choice and the reason.
+- **An open question is drawn, with its options side by side,** made of the real components, in a `To decide` section of the canvas of the part it's about: at its top, or in a foundation board's rail. Each has an ID, what it's between, what each costs, and the one the agent recommends with its reasons. A question for later is on the issue.
+- **The owner decides there or in the chat.** The decision is applied to the design, and the question becomes a line of the `Decided` log under `To decide`: its ID and name, the choice and why, the date and its PR. Its options' pictures go.
+- **A foundation's board says its approach and how its values are made, then shows each of the spec's groups in a specimen,** beside its rail, as `Foundations/Colours` does. A test refuses one that doesn't draw each of its tokens.
 - **The issue tracks the work.** It names the questions, and its closing comment says what was decided, so that it's found from GitHub.
 - **When the design contradicts itself, the spec or the code, don't pick a side.** Put it on the board.
 - **What the product does goes in the spec in words,** marked *Not built* until it is, as `docs/spec/README.md` says. The design shows it, and the spec says it.
@@ -82,7 +83,6 @@ Only the owner marks a canvas ready, or agrees to changing one that is.
 Read the part's own canvas, and what's open on its board, before writing code. Examples elsewhere only illustrate, and can be behind.
 
 - **Keep the design out of the code.** No comment names a canvas, a decision's ID, or how the code differs from a drawing. A difference is settled in the design.
-- **A PR that builds from the design shows the two together,** the drawing beside the gallery's image.
 - **A design merges before the code that's built from it,** in a PR of its own, unless the owner asks for one.
 
 ## What the app settles
@@ -106,6 +106,6 @@ Motion is shared between them. What moves, in what order, for how long and on wh
 - **Git merges canvases, as it merges code.** Where one conflicts, the branch that comes second takes `main`'s canvas and makes its change again in Brilliant.
 - **A canvas that two branches changed is laid out again and looked at** before it's committed, since a merge leaves sizes as they were on one side.
 - **The index is written again with `cargo run -p design`,** rather than its conflict being settled by hand.
-- **A test refuses a path to a canvas that isn't there,** in a copy of a component or in a film. A canvas added on a branch from before another moved still names the old path, and a copy whose canvas isn't there draws nothing, and nothing says so.
+- **A test refuses a path to a canvas that isn't there,** in a copy of a component or in a film, since a branch from before a canvas moved still names the old path, and the copy draws nothing.
 - **A test refuses a canvas that uses a token the design system doesn't have.** Brilliant draws the value the token last had and says nothing, so two branches that can't both stand would otherwise merge.
 - **A conflict in what was designed is the owner's to settle,** as any open question is, and never whichever side came last.

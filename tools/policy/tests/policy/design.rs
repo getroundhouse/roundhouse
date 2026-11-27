@@ -1,7 +1,8 @@
 //! The design system's tokens, which Brilliant's canvases name. A canvas whose token the design system no longer has is
 //! still drawn, with the value the token last had, and nothing says so. So a merge of two branches, one removing a token
 //! and the other using it, reads as fine. And Brilliant makes nine steps of a palette, which can be drawn with whether or
-//! not anyone chose them, so a canvas draws with roles alone.
+//! not anyone chose them, so a canvas draws with roles alone. A foundation's board draws every token it shows, so one
+//! added to the design system is seen where it's looked for.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -112,4 +113,52 @@ fn no_canvas_names_a_token_the_design_system_does_not_have() {
         .collect();
 
     assert!(missing.is_empty(), "tokens that design/Styles/default.ds doesn't have: {missing:#?}");
+}
+
+/// Each foundation's board, and how the names of the tokens it shows begin. It draws every one of them in its frame named
+/// `Values`, as `docs/standards/design.md` says. Its other frames, such as the heading and the rail, draw with some of
+/// the same tokens, so what they draw isn't counted.
+const BOARDS: [(&str, &[&str]); 3] = [
+    ("Foundations/Colours.bl", &["color.", "strength.", "shadow."]),
+    ("Foundations/Type.bl", &["font.", "typography."]),
+    ("Foundations/Space and shape.bl", &["spacing.", "radius.", "stroke.width.", "size."]),
+];
+
+/// The rows of the frame in `canvas` named `name`: its own, and the ones under it, which are indented further.
+fn frame(canvas: &str, name: &str) -> Option<String> {
+    let indent = |line: &str| line.len() - line.trim_start().len();
+    let quoted = format!("\"{name}\"");
+    let mut lines = canvas.lines().skip_while(|line| !line.trim_end().ends_with(&quoted));
+    let first = lines.next()?;
+    let under = lines.take_while(|line| indent(line) > indent(first));
+    Some(std::iter::once(first).chain(under).collect::<Vec<_>>().join("\n"))
+}
+
+#[test]
+fn a_frame_is_its_row_and_the_rows_under_it() {
+    let canvas = "1 al(v) \"Board\"\n  2 al(v) \"Values\"\n    3 r f[(4,tok(color.text,#eee6e1))]\n  5 al(v) \"Rail\"";
+
+    assert_eq!(
+        frame(canvas, "Values").as_deref(),
+        Some("  2 al(v) \"Values\"\n    3 r f[(4,tok(color.text,#eee6e1))]")
+    );
+    assert_eq!(frame(canvas, "Top"), None);
+}
+
+#[test]
+fn a_foundations_board_draws_every_token_it_shows_among_its_values() {
+    let names = defined(&fs::read_to_string(design().join("Styles/default.ds")).expect("the design system"));
+    let canvases = the_designs_canvases();
+
+    let missing: Vec<String> = BOARDS
+        .iter()
+        .flat_map(|&(board, shown)| {
+            let (_, text) = canvases.iter().find(|(file, _)| file == board).expect("the board's canvas");
+            let drawn = used(&frame(text, "Values").expect("the board's frame named Values"));
+            let missing = names.iter().filter(|name| shown.iter().any(|start| name.starts_with(start)));
+            missing.filter(|name| !drawn.contains(*name)).map(|name| format!("{board}: {name}")).collect::<Vec<_>>()
+        })
+        .collect();
+
+    assert!(missing.is_empty(), "draw each in its board's frame named Values: {missing:#?}");
 }
