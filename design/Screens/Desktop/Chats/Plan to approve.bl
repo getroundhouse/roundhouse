@@ -2,10 +2,11 @@ bp:v1
 canvas:
   backgroundEnabled: false
   writer: 1
-  gen: 1795628756917
+  gen: 1795628756920
 ---
 0a0e329168f372fe al(h,y(c),g(8:$spacing.sm)) p(0,-40) s(hug:110.27,20) f[] "Title and status"
-  e7aa734b41cc6ac3 inst("Status Ready for review",canvas(Board/Status)) mid(fcbac3605ea3f943) p(0,0) ext(110.27,20) "Status"
+  e7aa734b41cc6ac3 inst("Status Ready for review",canvas(Board/Status),emb,al(h,x(c),y(c),pad(0:$spacing.none,8:$spacing.sm,0:$spacing.none,8:$spacing.sm))) mid(fcbac3605ea3f943) p(0,0) s(hug:110.27,20) f[(652d763d84403e0e,tok(color.surface.raised,#26211E))] rd(4:$radius.InlineControl) "Status"
+    210ba1fd2697da6a t("Ready for review",SF Pro Text,12,r,align(l),lh(1.625),ls(0px)) mref(ec74c517cf3e99e0) p(8,0.25) s(hug:94.27,hug:19.5) f[(5619f92a23058092,tok(color.status.needs_you,#E9B24C))] $typography.Detail "Words"
 4e3f08bd06e7f193 al(v,g(16:$spacing.lg),pad(8:$spacing.sm,16:$spacing.lg,16:$spacing.lg,16:$spacing.lg)) p(0,0) s(880,473) f[(9e2e14c0eaba0800,tok(color.surface.pane,#140F0C))] "plan-approval"
   16d765508035e2a7 al(h,x(e)) p(16,8) s(fill,hug:46.5) ext(848,) f[] "Prompt row"
     9c927a9549f8d4c8 al(v,pad(12:$spacing.md,16:$spacing.lg,12:$spacing.md,16:$spacing.lg)) p(275.97,0) s(hug:572.03,hug:46.5) f[(b10d0507f041e8d6,tok(color.surface.prompt,#36251A))] rd(6:$radius.Control) "Prompt"
@@ -81,7 +82,7 @@ canvas:
     3ddfa10c4c2748fd al(h,y(c),g(8:$spacing.sm)) p(12,193.5) s(fill,hug:32) ext(824,) f[] "Buttons"
       f3c13675faf7eb88 al(h,x(c),y(c),pad(0:$spacing.none,16:$spacing.control.Large,0:$spacing.none,16:$spacing.control.Large)) p(0,0) s(hug:117.09,32) sref(,32:$size.control.Large) f[(317e6b2fa6e59d62,tok(color.button.main,#F5EEE9))] rd(6:$radius.Control) "Approve plan"
         a75d014e1e91b31f t("Approve plan",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(16,4.75) s(hug:85.09,hug:22.5) f[(0f2299a05875a065,tok(color.button.on_main,#1A1512))] $typography.Body "Words"
-      93598f31d7347c96 al(h,x(c),y(c),pad(0:$spacing.none,17:$spacing.Edged,0:$spacing.none,17:$spacing.Edged)) p(125.09,0) s(hug:125.52,32) sref(,32:$size.control.Large) f[(90a82e92b7f5eb61,tok(color.button,#201B18))] st[(be15f2c107e52ef3,tok(color.edge.control_edge,#332D2A),w(1:$stroke.width.Edge),pos(i))] rd(6:$radius.Control) "Keep planning"
+      93598f31d7347c96 al(h,x(c),y(c),pad(0:$spacing.none,17:$spacing.EdgedLarge,0:$spacing.none,17:$spacing.EdgedLarge)) p(125.09,0) s(hug:125.52,32) sref(,32:$size.control.Large) f[(90a82e92b7f5eb61,tok(color.button,#201B18))] st[(be15f2c107e52ef3,tok(color.edge.control_edge,#332D2A),w(1:$stroke.width.Edge),pos(i))] rd(6:$radius.Control) "Keep planning"
         20f57c964141ea69 t("Keep planning",SF Pro Text,14,r,align(l),lh(1.6071),ls(-0.1498px)) p(17,4.75) s(hug:91.52,hug:22.5) f[(bb09fbab6d5857ab,tok(color.text,#EEE6E1))] $typography.Body "Words"
 155400b383710424 fr p(0,553) s(400,220) f[(4cbc3d7f98d7b5e4,tok(color.surface.pane,#140F0C))] clip "01 Closed"
   8f9165f17ee44a6e al(v,g(12:$spacing.md),pad(12:$spacing.md)) p(16,16) s(368,46.5) f[(65af110f9cd3936b,solid(tok(color.status.needs_you,#E9B24C),o(0.09:$strength.XSoft)))] rd(10:$radius.Card) clip "Card"
