@@ -19,8 +19,6 @@ pub struct Timers {
     pub look_in_front_every: Duration,
     /// How long an agent that has exited has to let go of its output, as `agents::DrainGrace` says.
     pub agent_drain: Duration,
-    /// How long the hub connected has to go once another connects, before the other is refused.
-    pub hub_goes_within: Duration,
 }
 
 impl Timers {
@@ -37,10 +35,6 @@ impl Timers {
         // soon, is that second.
         look_in_front_every: Duration::from_secs(1),
         agent_drain: agents::DrainGrace::DEFAULT.0,
-        // A crash is noticed within milliseconds, and more on a busy machine. Well under the ten seconds a hub waits for
-        // an answer to its hello, since a hub starting a worker leaves one that refuses it, and ends one that doesn't
-        // answer. *Unconfirmed:* five seconds.
-        hub_goes_within: Duration::from_secs(5),
     };
 }
 
@@ -91,14 +85,12 @@ mod tests {
             (grace_secs, grace_nanos) in (any::<u64>(), 0..1_000_000_000u32),
             (look_secs, look_nanos) in (any::<u64>(), 0..1_000_000_000u32),
             (drain_secs, drain_nanos) in (any::<u64>(), 0..1_000_000_000u32),
-            (goes_secs, goes_nanos) in (any::<u64>(), 0..1_000_000_000u32),
         ) {
             let given = Timers {
                 wait_poll: Duration::new(secs, nanos),
                 terminal_stop_grace: Duration::new(grace_secs, grace_nanos),
                 look_in_front_every: Duration::new(look_secs, look_nanos),
                 agent_drain: Duration::new(drain_secs, drain_nanos),
-                hub_goes_within: Duration::new(goes_secs, goes_nanos),
             };
             let (name, value) = given.env();
 

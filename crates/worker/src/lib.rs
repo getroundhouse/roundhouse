@@ -37,5 +37,5 @@ pub use deleting::{Deleter, delete_trees};
 pub use git_credential::{CredentialHelper, answer_credential_request};
 pub use serve::{Config, serve};
 #[cfg(unix)]
-pub use serve::{DialFailed, listen, serve_dialing};
+pub use serve::{DialFailed, serve_dialing};
 pub use timers::Timers;

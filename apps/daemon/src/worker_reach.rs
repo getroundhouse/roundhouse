@@ -11,9 +11,6 @@ pub(crate) struct WorkerReach {
     /// state directory. Starts none. Not on Windows.
     #[arg(long, group = "transport")]
     attach: bool,
-    /// Serve the instance on a socket in the worker's state directory, as an earlier build's `--attach` started it.
-    #[arg(long, group = "transport", hide = true)]
-    listen: bool,
     /// Dial the hub with the ticket its provider was given, and again whenever the connection drops, so it can
     /// outlive its hub. `-` reads it from stdin, which no other user on the machine can, as they can a process's
     /// arguments. Not on Windows.
@@ -38,7 +35,6 @@ impl WorkerReach {
     pub(crate) fn transport(self, detach: bool) -> anyhow::Result<Transport> {
         Ok(match self {
             Self { attach: true, .. } => Transport::Attach,
-            Self { listen: true, .. } => Transport::Listen,
             #[cfg(unix)]
             Self { ticket: Some(ticket), port, advertise, .. } => {
                 Transport::Dial(crate::worker_role::Dial { ticket: ticket.into(), port, advertise, detach })

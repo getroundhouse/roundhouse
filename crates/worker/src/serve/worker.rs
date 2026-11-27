@@ -185,7 +185,8 @@ impl Worker {
 
 /// Serves the hub on `reader` and `writer`, which are the worker's stdin and stdout, until the hub closes them, then
 /// stops every agent and terminal and sends the hub what they said as they stopped. They're the hub's pipes, so a
-/// worker on them can't outlive its hub, and it stops whatever the hub asked. One that can is served by `listen`.
+/// worker on them can't outlive its hub, and it stops whatever the hub asked. One that can is served by
+/// `serve_dialing`.
 pub async fn serve<R, W>(reader: R, writer: W, config: Config)
 where
     R: AsyncRead + Send + Unpin + 'static,

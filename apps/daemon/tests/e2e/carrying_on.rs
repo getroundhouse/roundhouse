@@ -335,7 +335,7 @@ fn a_local_worker_an_earlier_build_left_listening_is_reached_by_the_next_hub() {
     });
     let logged_before = std::fs::metadata(stack.hub_log()).unwrap().len();
 
-    crate::attaching::start_listening(&stack.path("workspaces"), &instance);
+    crate::attaching::start_listening(crate::support::daemon(), &stack.path("workspaces"), &instance);
     let listening = process::ProcessRecord::read(&record).unwrap();
     stack.start_hub();
 

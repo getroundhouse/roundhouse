@@ -1,7 +1,7 @@
 //! A worker that dials its hub, rather than being reached by it, and dials again whenever the connection drops, so it
 //! outlives a hub that restarts, as `docs/decisions/workers-dial-the-hub.md` says. How it dials, over iroh with its
-//! ticket, is its caller's, so this crate needs no transport of its own. Only on Unix, as for a worker that listens,
-//! since what claims an instance is there only.
+//! ticket, is its caller's, so this crate needs no transport of its own. Only on Unix, since a worker that outlives
+//! its hub is built only there.
 
 use std::io;
 use std::time::Duration;
@@ -11,7 +11,6 @@ use tokio::time::Instant;
 use tracing::{info, warn};
 
 use super::connection::{self, Ended};
-use super::listen::without_hub;
 use super::{Config, Worker};
 
 /// The first pause before dialing again after a dial that failed, which doubles with each that fails after it, up to
@@ -91,4 +90,12 @@ where
         }
         None => Ok(()),
     }
+}
+
+/// Carries `worker` on without the hub that was connected, which asked it to keep running without it: nothing more
+/// goes to that hub, and no worktree's changes are watched, since each was watched for that hub, and the next hub says
+/// again what it wants.
+pub(super) async fn without_hub(worker: &Worker) {
+    worker.state.outbox.detach().await;
+    worker.state.watches.lock().stop_all_changes();
 }

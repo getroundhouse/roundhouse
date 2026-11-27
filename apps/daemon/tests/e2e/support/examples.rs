@@ -1,4 +1,4 @@
-//! The programs the tests run in place of others: the agent, and a provider's adapter.
+//! The programs the tests run in place of others: the agent, a provider's adapter, and a worker of an earlier build.
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -15,6 +15,12 @@ pub(super) fn fake_agent() -> &'static Path {
 pub(crate) fn daemon() -> &'static Path {
     static DAEMON: OnceLock<PathBuf> = OnceLock::new();
     DAEMON.get_or_init(|| example("daemon_for_tests"))
+}
+
+/// What stands in for a worker an earlier build left listening on a socket, which this build starts none of.
+pub(crate) fn earlier_worker() -> &'static Path {
+    static EARLIER: OnceLock<PathBuf> = OnceLock::new();
+    EARLIER.get_or_init(|| example("earlier_worker"))
 }
 
 /// What [`Stack::make_through_an_adapter`] runs.

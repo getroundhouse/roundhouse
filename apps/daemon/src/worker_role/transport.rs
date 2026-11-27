@@ -1,4 +1,4 @@
-use super::outliving;
+use super::attaching;
 use crate::Config;
 use crate::runtime::run_to_end;
 use anyhow::Context;
@@ -11,8 +11,6 @@ pub(crate) enum Transport {
     Stdio,
     /// Connects stdin and stdout to the instance's worker, which an earlier build left listening. Not on Windows.
     Attach,
-    /// Serves the instance on a socket in the worker's state directory, as an earlier build's `Attach` started it.
-    Listen,
     /// Dials the hub with a ticket, and again whenever the connection drops, so it outlives its hub. Not on Windows.
     #[cfg(unix)]
     Dial(super::Dial),
@@ -32,8 +30,7 @@ pub(crate) struct Given {
 pub(crate) fn run(transport: Transport, given: Given) -> anyhow::Result<()> {
     match transport {
         Transport::Stdio => on_stdio(given),
-        Transport::Attach => outliving::attach(&given),
-        Transport::Listen => outliving::listen(given),
+        Transport::Attach => attaching::attach(&given),
         #[cfg(unix)]
         Transport::Dial(how) => super::dialing::dial(given, how),
     }
