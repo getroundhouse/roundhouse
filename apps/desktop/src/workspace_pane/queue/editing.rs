@@ -92,7 +92,12 @@ impl WorkspacePane {
     }
 
     /// Keeps the change, unless it leaves the prompt saying nothing and carrying nothing, which keeps what was there.
+    /// While the hub is away, the editor stays open with what's typed, as the composer's Enter leaves what's typed, for
+    /// when it's back.
     pub(super) fn save_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.hub == Hub::Away {
+            return;
+        }
         let Some(Editing { session_id, was, input, .. }) = self.queue_edit.take() else { return };
         let text = input.read(cx).text().to_string();
         if says_or_carries(&text, was.prompt.files.len()) && text != was.prompt.text {

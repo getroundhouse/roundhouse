@@ -234,7 +234,7 @@ impl WorkspacePane {
     /// Asks what to call the chat, and renames it, starting from `current`.
     pub fn start_renaming_chat(&mut self, id: SessionId, current: &str, window: &mut Window, cx: &mut Context<Self>) {
         let this = cx.weak_entity();
-        rename::open(Renaming::Chat, current, window, cx, move |title, cx| {
+        rename::open(Renaming::Chat, self.linked.clone(), current, window, cx, move |title, cx| {
             let _ = this.update(cx, |t, cx| t.rename_chat(id.clone(), title, cx));
         });
     }

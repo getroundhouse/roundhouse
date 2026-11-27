@@ -224,16 +224,13 @@ impl AppView {
             return;
         };
         let this = cx.weak_entity();
-        rename::open(Renaming::Workspace, &current, window, cx, move |title, cx| {
+        rename::open(Renaming::Workspace, self.linked.clone(), &current, window, cx, move |title, cx| {
             let _ = this.update(cx, |t, cx| t.rename(id.clone(), title, cx));
         });
     }
 
-    /// Renames the workspace, which does nothing while there's no connection that has caught up to ask it on.
+    /// Renames the workspace, as the rename dialog asks once there's a connection that has caught up.
     pub(super) fn rename(&mut self, id: WorkspaceId, title: String, cx: &mut Context<Self>) {
-        if !self.linked.caught_up() {
-            return;
-        }
         let renaming = self.linked.ask(WorkspaceRename { id, title });
         cx.spawn(async move |this, cx| {
             if let Err(e) = renaming.recv().await {

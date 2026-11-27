@@ -76,6 +76,7 @@ mod tool_servers;
 mod tool_use;
 mod tools;
 mod turn_card;
+mod typed_waits;
 mod unread;
 mod updating;
 mod videos;
